@@ -50,6 +50,7 @@ def synthetic_archive():
     with tarfile.open(fileobj=output, mode="w:gz") as archive:
         entries = {
             "Baci-abcdef/vps-workers/bin/fixture-worker.sh": (b"#!/bin/sh\nprintf 'worker-ok\\n'\n", 0o755),
+            "Baci-abcdef/.github/scripts/gigl-dotenv.sh": (b"# dotenv reader\n", 0o644),
             "Baci-abcdef/vps-workers/jobs/run-cache-invalidation-cron.mjs": (b"export {};\n", 0o644),
             "Baci-abcdef/vps-workers/lib/fixture-helper.sh": (b"# helper\n", 0o644),
             "Baci-abcdef/vps-workers/config/worker.json": (b"{}\n", 0o644),

@@ -16,6 +16,11 @@ const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 20
 const jwk = { ...publicKey.export({ format: 'jwk' }), kid: 'test-key', use: 'sig', alg: 'RS256' };
 const audience = `https://github.com/${policy.repository}`;
 
+test('archive allowance covers the measured repository while remaining bounded', () => {
+  assert.ok(policy.maxBundleBytes >= 155_990_672);
+  assert.equal(policy.maxBundleBytes, 256 * 1024 * 1024);
+});
+
 function token(claimChanges = {}) {
   const header = Buffer.from(JSON.stringify({ alg: 'RS256', kid: 'test-key' })).toString('base64url');
   const claims = Buffer.from(JSON.stringify({
@@ -152,6 +157,14 @@ test('readiness authenticates exact main and returns no privileged environment d
     },
     fetchImpl: makeFetch({ jobChanges: { name: policy.readinessJob } }),
   }), /job workflow does not match/);
+});
+
+test('the publishing job can request readiness but cannot promote workers', async () => {
+  const oidcToken = token({ job_workflow_ref: `${policy.repository}/${policy.readinessWorkflow}@refs/heads/main` });
+  const fetchImpl = makeFetch({ jobChanges: { name: 'Deploy to Vercel' } });
+  const receipt = await authorize({ request: { operation: 'readiness', sourceSha: sha, oidcToken, githubToken: 'job-token' }, fetchImpl });
+  assert.equal(receipt.operation, 'readiness');
+  await assert.rejects(authorize({ request: { operation: 'promote', sourceSha: sha, oidcToken, githubToken: 'job-token' }, fetchImpl }), /job workflow does not match/);
 });
 
 test('GIGL capability smoke is restricted to the deploy workflow capability job', async () => {

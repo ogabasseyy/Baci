@@ -106,7 +106,7 @@ case "${mode}" in
     echo "Error: custom deployment id already exists for this project" >&2
     exit 1
     ;;
-  killed-137-after-create)
+  killed-137-after-create*)
     # Same, but exit 137 -- as timeout does when it escalates from TERM to
     # SIGKILL against a hung, TERM-resistant deploy.
     echo "Production: https://baci-hang.vercel.app"

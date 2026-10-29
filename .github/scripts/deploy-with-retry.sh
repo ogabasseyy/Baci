@@ -245,6 +245,15 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
         rm -f "$attempt_log"
         exit 0
       fi
+      if [ "$fatal_promote_failure" = "1" ]; then
+        # A runtime preflight failure is terminal even when its rollback was
+        # confirmed: starting another deploy would republish after the safety
+        # gate rejected this candidate. An unconfirmed rollback also requires
+        # operator reconciliation before any further publication.
+        rm -f "$attempt_log"
+        echo "Runtime preflight failed during killed-deploy recovery; refusing another deployment attempt." >&2
+        exit 1
+      fi
       echo "Could not promote ${last_deployment_target} after ${PROMOTE_ATTEMPTS} attempts; treating as a normal failure." >&2
     fi
     # No promotable deployment -- fall through to the duplicate-id check / retry.

@@ -44,7 +44,8 @@ check_layout() {
   [[ -d "$WORKER_ROOT/current/bin" ]] || fail "missing $WORKER_ROOT/current/bin"
   [[ -x "$WORKER_ROOT/current/bin/process-gigl-tracking.sh" ]] || fail 'GIGL wrapper is not executable'
   [[ -x "$WORKER_ROOT/current/bin/verify-gigl-tracking-worker-capability.sh" ]] || fail 'capability verifier is not executable'
-  require_root_owned_directory "$WORKER_ROOT" 'worker root'
+  [[ "$(stat -c '%U:%G:%a' "$WORKER_ROOT")" == 'root:baci-locks:710' ]] ||
+    fail 'worker root must be owned by root:baci-locks with mode 0710'
   require_root_owned_directory "$WORKER_ROOT/releases" 'worker releases directory'
   local active_release
   active_release="$(readlink -f -- "$WORKER_ROOT/current")"
@@ -55,14 +56,12 @@ check_layout() {
   [[ "$(stat -c '%U:%G:%a' "$WORKER_ROOT/runtime/worker.env")" == "$WORKER_USER:$WORKER_USER:600" ]] ||
     fail 'runtime env must be owned by baci-worker:baci-worker with mode 0600'
   [[ "$(id -gn "$WORKER_USER")" == "$WORKER_USER" ]] || fail 'baci-worker primary group must be baci-worker'
-  local path expected_mode
-  for path in "$WORKER_ROOT/locks" "$WORKER_ROOT/logs" "$WORKER_ROOT/home"; do
-    [[ -d "$path" ]] || fail "missing worker directory: $path"
-    expected_mode=750
-    [[ "$path" != "$WORKER_ROOT/home" ]] || expected_mode=700
-    [[ "$(stat -c '%U:%G:%a' "$path")" == "$WORKER_USER:$WORKER_USER:$expected_mode" ]] ||
-      fail "worker directory has unsafe ownership or mode: $path"
-  done
+  [[ "$(stat -c '%U:%G:%a' "$WORKER_ROOT/locks")" == 'root:baci-locks:710' ]] ||
+    fail 'worker locks directory must be owned by root:baci-locks with mode 0710'
+  [[ "$(stat -c '%U:%G:%a' "$WORKER_ROOT/logs")" == "$WORKER_USER:$WORKER_USER:750" ]] ||
+    fail 'worker logs directory has unsafe ownership or mode'
+  [[ "$(stat -c '%U:%G:%a' "$WORKER_ROOT/home")" == "$WORKER_USER:$WORKER_USER:700" ]] ||
+    fail 'worker home directory has unsafe ownership or mode'
   [[ -f "$WORKER_ROOT/locks/gigl-tracking.lock" && ! -L "$WORKER_ROOT/locks/gigl-tracking.lock" ]] ||
     fail 'new GIGL tracking lock must be a pre-created regular file'
   if id -nG "$WORKER_USER" | tr ' ' '\n' | grep -Eq '^(sudo|docker)$'; then

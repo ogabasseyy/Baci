@@ -4,7 +4,7 @@ import { WORKER_RELEASE_BROKER_POLICY } from './worker-release-broker.mjs';
 
 const REPOSITORY = 'ogabasseyy/Baci';
 const GITHUB_API = 'https://api.github.com';
-const MAX_BUNDLE_BYTES = 64 * 1024 * 1024;
+const MAX_BUNDLE_BYTES = WORKER_RELEASE_BROKER_POLICY.maxBundleBytes;
 const MAX_REPLY_BYTES = 4096;
 const SHA_RE = /^[0-9a-f]{40}$/;
 const OPERATIONS = new Set(['stage', 'preflight', 'readiness', 'gigl-capability', 'promote', 'health', 'rollback']);
@@ -24,7 +24,7 @@ async function readArchiveDigest({ sha, githubToken, fetchImpl }) {
   const location = new URL(response.headers.get('location') ?? '');
   if (location.protocol !== 'https:' || location.hostname !== 'codeload.github.com' ||
       location.pathname !== `/ogabasseyy/Baci/legacy.tar.gz/${sha}`) fail('unexpected GitHub archive redirect');
-  const archive = await fetchImpl(location, { redirect: 'error', signal: AbortSignal.timeout(30_000) });
+  const archive = await fetchImpl(location, { redirect: 'error', signal: AbortSignal.timeout(120_000) });
   if (!archive.ok || !archive.body) fail('GitHub source archive is unavailable');
   const declaredLength = Number(archive.headers.get('content-length'));
   if (Number.isFinite(declaredLength) && declaredLength > MAX_BUNDLE_BYTES) fail('source archive exceeds size limit');

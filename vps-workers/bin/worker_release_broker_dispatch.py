@@ -47,7 +47,7 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
             stdout=broker.subprocess.PIPE, stderr=broker.subprocess.DEVNULL, check=False, close_fds=True,
             cwd="/", env=child_env, timeout=broker.DISPATCHER_TIMEOUT_SECONDS,
         )
-        if completed.returncode != 0 or len(completed.stdout) > 90 * 1024 * 1024:
+        if completed.returncode != 0 or len(completed.stdout) > (broker.MAX_ARCHIVE_COMPRESSED_BYTES * 4 // 3 + 1024 * 1024):
             raise broker.BrokerProtocolError("coordinator authentication failed")
         try:
             verified = broker.json.loads(completed.stdout)
@@ -215,7 +215,7 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
         if not isinstance(encoded, str) or not broker.re.fullmatch(r"[0-9a-f]{64}", str(archive_digest)):
             raise broker.BrokerProtocolError("trusted dispatcher returned invalid archive identity")
         archive = broker.base64.b64decode(encoded, validate=True)
-        if len(archive) > 64 * 1024 * 1024 or broker.hashlib.sha256(archive).hexdigest() != archive_digest:
+        if len(archive) > broker.MAX_ARCHIVE_COMPRESSED_BYTES or broker.hashlib.sha256(archive).hexdigest() != archive_digest:
             raise broker.BrokerProtocolError("trusted dispatcher archive digest mismatch")
         count = _stage_archive(archive, releases_root, sha, worker_uid, worker_gid)
         return {"ok": True, "operation": "stage", "sourceSha": sha, "entryCount": count}

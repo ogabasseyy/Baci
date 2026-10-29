@@ -45,7 +45,7 @@ class WorkerReleaseReadinessTests(unittest.TestCase):
                 output = (
                     f"LoadState=loaded\nActiveState={'inactive' if unit == inactive_timer else 'active'}\nUnitFileState=enabled\n"
                     f"FragmentPath=/etc/systemd/system/{unit}\nUnit={service}\n"
-                    f"TimersCalendar={readiness.TIMER_SCHEDULES[unit]}\n"
+                    f"TimersCalendar=[{{ OnCalendar={readiness.TIMER_SCHEDULES[unit]}; next_elapse=Thu 2026-10-29 12:05:00 WAT; last_elapse=Thu 2026-10-29 12:00:00 WAT; result=success }}]\n"
                 )
             else:
                 active = "inactive" if unit == "baci-cache-invalidation-drain.service" else "active"
@@ -56,9 +56,11 @@ class WorkerReleaseReadinessTests(unittest.TestCase):
                     f"WorkingDirectory={readiness.WORKER_ROOT}/current\n"
                     f"ExecStart={{ path={readiness.WORKER_ROOT}/current/bin/{readiness.LONG_RUNNING_PROFILES.get(unit, ('', 'job'))[1]} }}\n"
                     f"Environment=HOME={readiness.WORKER_ROOT}/home NODE_ENV=production BACI_WORKER_PROFILE={profile} "
-                    f"BACI_REPO_DIR={readiness.WORKER_ROOT}/current BACI_WORKER_ENV={readiness.WORKER_ROOT}/runtime/worker.env"
+                    f"BACI_REPO_DIR={readiness.WORKER_ROOT}/current"
+                    + (f" BACI_WORKER_ENV={readiness.WORKER_ROOT}/runtime/worker.env" if unit != "baci-cache-invalidation-drain.service" else "")
                     + (" GIGL_ENV_FILE_AUTHORITATIVE=1" if unit == "baci-gigl-tracking.service" else "")
                     + "\n"
+                    + (f"EnvironmentFiles=[{{ path={readiness.WORKER_ROOT}/runtime/worker.env (ignore_errors=no) }}]\n" if unit == "baci-cache-invalidation-drain.service" else "")
                 )
             return subprocess.CompletedProcess(command, 0, output, "")
         return run
@@ -103,6 +105,44 @@ class WorkerReleaseReadinessTests(unittest.TestCase):
             with patch.object(readiness, "WORKER_ROOT", root):
                 with self.assertRaisesRegex(readiness.ReadinessRejected, "timer is inactive"):
                     readiness.collect_worker_readiness(SHA, runner=self.fake_runner(inactive_timer="baci-cache-invalidation-drain.timer"), root=root, owner_uid=os.getuid(), worker_gid=os.getgid(), lock_gid=os.getgid())
+
+    def test_rejects_timer_with_wrong_or_ambiguous_structured_calendar(self):
+        mutations = (
+            ("OnCalendar=*-*-* *:0/2:00;", "OnCalendar=*-*-* *:0/1:00;"),
+            ("result=success }]", "OnCalendar=*-*-* *:0/1:00; result=success }]"),
+        )
+        for old, new in mutations:
+            with self.subTest(mutation=new), tempfile.TemporaryDirectory() as temporary:
+                root = self.fixture(Path(temporary))
+                def wrong_calendar(command, **kwargs):
+                    result = self.fake_runner()(command, **kwargs)
+                    if command[-1] == "baci-cache-invalidation-drain.timer":
+                        result.stdout = result.stdout.replace(old, new)
+                    return result
+                with patch.object(readiness, "WORKER_ROOT", root):
+                    with self.assertRaisesRegex(readiness.ReadinessRejected, "timer is inactive or misconfigured"):
+                        readiness.collect_worker_readiness(SHA, runner=wrong_calendar, root=root, owner_uid=os.getuid(), worker_gid=os.getgid(), lock_gid=os.getgid())
+
+    def test_cache_worker_requires_exact_systemd_environment_file(self):
+        for environment_files in (
+            "",
+            f"[{{ path={readiness.WORKER_ROOT}/runtime/other.env (ignore_errors=no) }}]",
+            f"[{{ path={readiness.WORKER_ROOT}/runtime/worker.env (ignore_errors=yes) }}]",
+            f"[{{ path={readiness.WORKER_ROOT}/runtime/worker.env (ignore_errors=no) }}, {{ path=/tmp/extra.env (ignore_errors=no) }}]",
+        ):
+            with self.subTest(environment_files=environment_files), tempfile.TemporaryDirectory() as temporary:
+                root = self.fixture(Path(temporary))
+                def wrong_environment_file(command, **kwargs):
+                    result = self.fake_runner()(command, **kwargs)
+                    if command[-1] == "baci-cache-invalidation-drain.service":
+                        result.stdout = result.stdout.replace(
+                            f"EnvironmentFiles=[{{ path={readiness.WORKER_ROOT}/runtime/worker.env (ignore_errors=no) }}]",
+                            f"EnvironmentFiles={environment_files}",
+                        )
+                    return result
+                with patch.object(readiness, "WORKER_ROOT", root):
+                    with self.assertRaisesRegex(readiness.ReadinessRejected, "fixed isolated runtime environment file"):
+                        readiness.collect_worker_readiness(SHA, runner=wrong_environment_file, root=root, owner_uid=os.getuid(), worker_gid=os.getgid(), lock_gid=os.getgid())
 
     def test_rejects_legacy_pollers_in_crontab(self):
         with tempfile.TemporaryDirectory() as temporary:

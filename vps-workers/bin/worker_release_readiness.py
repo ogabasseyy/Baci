@@ -92,13 +92,26 @@ def _validate_worker_service(name: str, properties: dict[str, str]) -> None:
     if properties.get("User") != "baci-worker" or properties.get("Group") != "baci-worker" or properties.get("WorkingDirectory") != str(WORKER_ROOT / "current"):
         raise ReadinessRejected("worker unit identity or working directory is not isolated")
     environment = properties.get("Environment", "")
-    if f"BACI_WORKER_ENV={WORKER_ROOT}/runtime/worker.env" not in environment:
+    if name == "baci-cache-invalidation-drain.service":
+        # systemd's EnvironmentFiles show property is a structured array such
+        # as `[{ path=/srv/.../worker.env (ignore_errors=no) }]`. Require one
+        # exact file and fail closed on optional or additional files.
+        environment_files = properties.get("EnvironmentFiles", "")
+        expected_file = re.escape(f"{WORKER_ROOT}/runtime/worker.env")
+        if not re.fullmatch(rf"\[\{{\s*path={expected_file}\s+\(ignore_errors=no\)\s*\}}\]", environment_files):
+            raise ReadinessRejected("cache worker unit does not use the fixed isolated runtime environment file")
+    elif f"BACI_WORKER_ENV={WORKER_ROOT}/runtime/worker.env" not in environment:
         raise ReadinessRejected("worker unit does not use the fixed isolated runtime environment")
     command = properties.get("ExecStart", "")
     if str(WORKER_ROOT / "current") not in command:
         raise ReadinessRejected("worker unit does not execute from the installed release")
     if name == "baci-gigl-tracking.service" and "GIGL_ENV_FILE_AUTHORITATIVE=1" not in environment:
         raise ReadinessRejected("GIGL worker does not use the authoritative isolated environment")
+
+
+def _calendar_schedules(value: str) -> list[str]:
+    """Extract OnCalendar values from systemd's structured TimersCalendar."""
+    return [schedule.strip() for schedule in re.findall(r"(?:^|[\[{;\s])OnCalendar=([^;\]}]+)", value)]
 
 
 def _validate_long_running_service(name: str, properties: dict[str, str], root: Path) -> None:
@@ -193,8 +206,9 @@ def collect_worker_readiness(
 
     for timer, service in TIMER_UNITS.items():
         timer_properties = _show_unit(timer, runner)
+        schedules = _calendar_schedules(timer_properties.get("TimersCalendar", ""))
         if (timer_properties.get("ActiveState") != "active" or timer_properties.get("UnitFileState") != "enabled" or
-                timer_properties.get("Unit") != service or timer_properties.get("TimersCalendar") != TIMER_SCHEDULES[timer]):
+                timer_properties.get("Unit") != service or schedules != [TIMER_SCHEDULES[timer]]):
             raise ReadinessRejected("required baci-worker timer is inactive or misconfigured")
         service_properties = _show_unit(service, runner)
         _validate_worker_service(service, service_properties)

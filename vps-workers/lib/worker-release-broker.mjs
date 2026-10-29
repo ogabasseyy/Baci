@@ -9,7 +9,7 @@ export const WORKER_RELEASE_BROKER_POLICY = Object.freeze({
   runnerLabel: 'baci-release',
   branch: 'refs/heads/main',
   operations: Object.freeze(['stage', 'preflight', 'readiness', 'gigl-capability', 'promote', 'health', 'rollback']),
-  maxBundleBytes: 64 * 1024 * 1024,
+  maxBundleBytes: 256 * 1024 * 1024,
   authorizationDeadlineMs: 330_000,
   githubRequestTimeoutMs: 30_000,
   dispatcherTimeoutMs: 360_000,
@@ -79,10 +79,10 @@ function createDeadlineBudget({ clock = () => performance.now(), timeoutMs = WOR
     return value;
   };
   return {
-    signal() { return AbortSignal.timeout(Math.max(1, Math.ceil(Math.min(WORKER_RELEASE_BROKER_POLICY.githubRequestTimeoutMs, remaining())))); },
+    signal(timeoutMs = WORKER_RELEASE_BROKER_POLICY.githubRequestTimeoutMs) { return AbortSignal.timeout(Math.max(1, Math.ceil(Math.min(timeoutMs, remaining())))); },
     check: remaining,
-    async fetch(fetchImpl, input, options = {}) {
-      const response = await fetchImpl(input, { ...options, signal: this.signal() });
+    async fetch(fetchImpl, input, options = {}, timeoutMs = WORKER_RELEASE_BROKER_POLICY.githubRequestTimeoutMs) {
+      const response = await fetchImpl(input, { ...options, signal: this.signal(timeoutMs) });
       this.check();
       return response;
     },
@@ -130,10 +130,10 @@ async function authenticateJob({ oidcToken, githubToken, operation, fetchImpl, n
       run.status !== 'in_progress' || run.run_attempt !== Number(claims.run_attempt)) fail('coordinator run does not match signed job identity');
   const jobs = await githubJson(fetchImpl, `${GITHUB_API}/repos/${repo}/actions/runs/${claims.run_id}/attempts/${claims.run_attempt}/jobs?per_page=100`, githubToken, budget);
   const job = Array.isArray(jobs.jobs) ? jobs.jobs.find((candidate) => candidate.id === Number(claims.check_run_id)) : null;
-  const expectedJobName = readinessRequest
-    ? WORKER_RELEASE_BROKER_POLICY.readinessJob
-    : giglCapabilityRequest ? 'gigl-worker-capability' : 'Sync VPS workers';
-  if (!job || job.run_id !== run.id || job.name !== expectedJobName || job.status !== 'in_progress' || job.head_sha !== claims.sha ||
+  const expectedJobNames = readinessRequest
+    ? [WORKER_RELEASE_BROKER_POLICY.readinessJob, 'Deploy to Vercel']
+    : [giglCapabilityRequest ? 'gigl-worker-capability' : 'Sync VPS workers'];
+  if (!job || job.run_id !== run.id || !expectedJobNames.includes(job.name) || job.status !== 'in_progress' || job.head_sha !== claims.sha ||
       !Array.isArray(job.labels) || !job.labels.includes(WORKER_RELEASE_BROKER_POLICY.runnerLabel) || typeof job.runner_name !== 'string' || !job.runner_name) fail('signed OIDC check run is not the active worker job');
   const ref = await githubJson(fetchImpl, `${GITHUB_API}/repos/${repo}/git/ref/heads/main`, githubToken, budget);
   if (ref.object?.sha !== claims.sha) fail('coordinator SHA is no longer current main');
@@ -149,7 +149,7 @@ async function fetchCommitArchive(fetchImpl, githubToken, sha, budget) {
   const location = new URL(response.headers.get('location') ?? '');
   if (location.protocol !== 'https:' || location.hostname !== 'codeload.github.com' ||
       location.pathname !== `/ogabasseyy/Baci/legacy.tar.gz/${sha}`) fail('unexpected GitHub archive redirect');
-  const archiveResponse = await budget.fetch(fetchImpl, location, { redirect: 'error' });
+  const archiveResponse = await budget.fetch(fetchImpl, location, { redirect: 'error' }, 120_000);
   if (!archiveResponse.ok) fail(`GitHub source archive request failed (${archiveResponse.status})`);
   const declaredLength = Number(archiveResponse.headers.get('content-length'));
   if (Number.isFinite(declaredLength) && declaredLength > WORKER_RELEASE_BROKER_POLICY.maxBundleBytes) fail('source archive exceeds size limit');

@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { runWorkerReleaseCoordinator } from './worker-release-coordinator.mjs';
 
@@ -75,4 +77,16 @@ test('rejects invalid run identity before any lock or broker activity', async ()
   const { broker, calls } = mockBroker();
   await assert.rejects(runWorkerReleaseCoordinator({ env: { ...env, GITHUB_RUN_ATTEMPT: '0' }, broker, readLock: () => lock }), /identity is invalid/);
   assert.deepEqual(calls, []);
+});
+
+test('CLI invocation without injected options fails closed on missing identity', () => {
+  const result = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL('./worker-release-coordinator.mjs', import.meta.url))],
+    { encoding: 'utf8', env: { PATH: process.env.PATH ?? '' } },
+  );
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /worker release coordinator identity is invalid/);
+  assert.doesNotMatch(result.stderr, /Cannot read properties of undefined/);
 });

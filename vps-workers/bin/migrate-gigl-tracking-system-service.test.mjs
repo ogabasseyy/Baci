@@ -10,7 +10,7 @@ const original = readFileSync(new URL('./migrate-gigl-tracking-system-service.sh
 function fixture(t, {
   crontab,
   failSystemctl = '',
-  workerRootOwnerMode = '0:0:755',
+  workerRootOwnerMode = 'root:baci-locks:710',
   releasesOwnerMode = '0:990:750',
   activeReleaseOwnerMode = '0:990:550',
 } = {}) {
@@ -52,7 +52,7 @@ function fixture(t, {
 
   const mocks = {
     id: `#!/bin/sh\ncase "$1" in\n  -u) echo 0 ;;\n  -g) echo 990 ;;\n  -gn) echo baci-worker ;;\n  -nG) echo 'baci-worker' ;;\n  baci-worker) echo 'uid=990(baci-worker) gid=990(baci-worker)' ;;\n  *) exit 1 ;;\nesac\n`,
-    stat: `#!/bin/sh\n# Emulate path ownership/mode metadata used by layout and backup checks.\nif [ "$3" = -- ]; then target="$4"; else target="$3"; fi\ncase "$target" in\n  ${workerRoot}/runtime/worker.env) echo baci-worker:baci-worker:600 ;;\n  ${workerRoot}) echo "$(cat '${state}/worker-root-owner-mode')" ;;\n  ${workerRoot}/releases) echo "$(cat '${state}/releases-owner-mode')" ;;\n  ${releasePath}) echo "$(cat '${state}/active-release-owner-mode')" ;;\n  ${workerRoot}/locks|${workerRoot}/logs) echo baci-worker:baci-worker:750 ;;\n  ${workerRoot}/home) echo baci-worker:baci-worker:700 ;;\n  ${root}/backup-store) echo root:root:755 ;;\n  ${backupRoot}/gigl-*) echo root:root:700 ;;\n  ${backupRoot}) echo root:root:700 ;;\n  *) exec /usr/bin/stat "$@" ;;\nesac\n`,
+    stat: `#!/bin/sh\n# Emulate the provisioned root:baci-locks traversal layout and metadata checks.\nif [ "$3" = -- ]; then target="$4"; else target="$3"; fi\ncase "$target" in\n  ${workerRoot}/runtime/worker.env) echo baci-worker:baci-worker:600 ;;\n  ${workerRoot}) echo "$(cat '${state}/worker-root-owner-mode')" ;;\n  ${workerRoot}/releases) echo "$(cat '${state}/releases-owner-mode')" ;;\n  ${releasePath}) echo "$(cat '${state}/active-release-owner-mode')" ;;\n  ${workerRoot}/locks) echo root:baci-locks:710 ;;\n  ${workerRoot}/logs) echo baci-worker:baci-worker:750 ;;\n  ${workerRoot}/home) echo baci-worker:baci-worker:700 ;;\n  ${root}/backup-store) echo root:root:755 ;;\n  ${backupRoot}/gigl-*) echo root:root:700 ;;\n  ${backupRoot}) echo root:root:700 ;;\n  *) exec /usr/bin/stat "$@" ;;\nesac\n`,
     readlink: `#!/bin/sh\nif [ "$1" = -f ] && [ "$2" = '${workerRoot}/current' ]; then (cd -P "$2" && pwd); else exec /usr/bin/readlink "$@"; fi\n`,
     crontab: `#!/bin/sh\nset -eu\nif [ "$1" = -u ]; then shift 2; fi\nif [ "$1" = -l ]; then cat '${state}/crontab'; exit 0; fi\ncp "$1" '${state}/crontab'\n`,
     install: `#!/bin/sh\nset -eu\nshift 6\ncp "$1" "$2"\nchmod 0644 "$2"\n`,
@@ -121,7 +121,8 @@ test('migration waits for a running legacy poller before starting the new timer'
 
 test('migration rejects worker roots and release trees that violate broker ownership', (t) => {
   const cases = [
-    { workerRootOwnerMode: '1001:0:755', message: /worker root must be root-owned/ },
+    { workerRootOwnerMode: 'root:root:755', message: /worker root must be owned by root:baci-locks with mode 0710/ },
+    { workerRootOwnerMode: 'root:baci-locks:770', message: /worker root must be owned by root:baci-locks with mode 0710/ },
     { releasesOwnerMode: '1001:990:750', message: /worker releases directory must be root-owned/ },
     { activeReleaseOwnerMode: '1001:990:550', message: /active worker release must be root-owned/ },
     { releasesOwnerMode: '0:990:770', message: /worker releases directory must not be group- or world-writable/ },
@@ -133,6 +134,18 @@ test('migration rejects worker roots and release trees that violate broker owner
     assert.match(result.stderr, scenario.message);
     assert.deepEqual(awaitlessList(fx.unitDir), []);
   }
+});
+
+test('migration rejects an unsafe locks directory while accepting the provisioned root:baci-locks 0710 layout', (t) => {
+  const fx = fixture(t);
+  const statPath = join(fx.root, 'mock-bin', 'stat');
+  const stat = readFileSync(statPath, 'utf8');
+  writeFileSync(statPath, stat.replace('echo root:baci-locks:710 ;;', 'echo baci-worker:baci-worker:750 ;;'));
+  chmodSync(statPath, 0o755);
+  const result = fx.run('migrate');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /worker locks directory must be owned by root:baci-locks with mode 0710/);
+  assert.deepEqual(awaitlessList(fx.unitDir), []);
 });
 
 test('ambiguous legacy cron refuses before writing units or changing the crontab', (t) => {

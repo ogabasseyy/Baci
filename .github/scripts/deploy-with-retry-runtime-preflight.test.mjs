@@ -41,6 +41,62 @@ test('runtime preflight failure rolls back exact prior deployment and is never r
   }
 });
 
+test('killed deploy recovery stops after runtime preflight failure and confirmed rollback', () => {
+  const fake = makeFakeCommand('killed-137-after-create');
+  const overlap = writeCountingOverlapCheck(fake.tempDir, 'exit 0');
+  const health = healthCheck(fake.tempDir, 'if [ "$n" -eq 0 ]; then exit 1; fi; exit 0');
+  const curlCalls = writeFakeCurl(fake.binDir, fake.tempDir);
+  try {
+    const result = runScript(fake, ['fake-vercel', 'deploy'], {
+      DEPLOY_PROMOTE_OVERLAP_CHECK: overlap.checkPath,
+      DEPLOY_POST_PROMOTE_HEALTH_CHECK: health.path,
+      PROMOTE_ATTEMPTS: '1',
+      ...prevProdEnv,
+      CURL_BODY_2: '{"deploymentId":"dpl_candidate","deployment":{"url":"baci-hang.vercel.app"}}',
+      CURL_BODY_3: '{"deploymentId":"dpl_previous123","deployment":{"url":"baci-previous.vercel.app"}}',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /runtime preflight failure/);
+    assert.match(result.stderr, /refusing another deployment attempt/);
+    assert.equal(readFileSync(fake.attemptsFile, 'utf8').trim(), '1');
+    assert.equal(readFileSync(fake.promotedFile, 'utf8').trim(), 'https://baci-hang.vercel.app');
+    assert.equal(readFileSync(fake.rollbackFile, 'utf8').trim(), 'dpl_previous123');
+    assert.equal(readFileSync(fake.rollbackCountFile, 'utf8').trim(), '1');
+    assert.equal(readFileSync(health.calls, 'utf8').trim(), '1');
+    assert.equal(readFileSync(curlCalls, 'utf8').trim(), '3');
+  } finally {
+    rmSync(fake.tempDir, { recursive: true, force: true });
+  }
+});
+
+test('killed deploy recovery stops when runtime preflight rollback is unconfirmed', () => {
+  const fake = makeFakeCommand('killed-137-after-create-rollback-fails');
+  const overlap = writeCountingOverlapCheck(fake.tempDir, 'exit 0');
+  const health = healthCheck(fake.tempDir, 'exit 1');
+  writeFakeCurl(fake.binDir, fake.tempDir);
+  try {
+    const result = runScript(fake, ['fake-vercel', 'deploy'], {
+      DEPLOY_PROMOTE_OVERLAP_CHECK: overlap.checkPath,
+      DEPLOY_POST_PROMOTE_HEALTH_CHECK: health.path,
+      PROMOTE_ATTEMPTS: '1',
+      ...prevProdEnv,
+      CURL_BODY_2: '{"deploymentId":"dpl_candidate","deployment":{"url":"baci-hang.vercel.app"}}',
+      CURL_BODY_3: '{"deploymentId":"dpl_not_previous"}',
+      CURL_BODY_4: '{"deploymentId":"dpl_not_previous"}',
+      CURL_BODY_5: '{"deploymentId":"dpl_not_previous"}',
+    });
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /manually restore .* reconcile the release lock/);
+    assert.match(result.stderr, /refusing another deployment attempt/);
+    assert.equal(readFileSync(fake.attemptsFile, 'utf8').trim(), '1');
+    assert.equal(readFileSync(health.calls, 'utf8').trim(), '1');
+  } finally {
+    rmSync(fake.tempDir, { recursive: true, force: true });
+  }
+});
+
 test('withholds runtime probe and restores prior deployment when alias is stale after promote', () => {
   const fake = makeFakeCommand('success');
   const overlap = writeCountingOverlapCheck(fake.tempDir, 'exit 0');

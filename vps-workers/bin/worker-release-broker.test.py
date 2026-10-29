@@ -43,6 +43,12 @@ def directory(name):
 
 
 class BrokerSocketTests(unittest.TestCase):
+    def test_archive_bounds_cover_the_measured_repository(self):
+        import worker_release_broker as broker
+        self.assertGreaterEqual(broker.MAX_ARCHIVE_COMPRESSED_BYTES, 155_990_672)
+        self.assertGreaterEqual(broker.MAX_ARCHIVE_EXPANDED_BYTES, 296_260_046)
+        self.assertEqual(broker.MAX_ARCHIVE_COMPRESSED_BYTES, 256 * 1024 * 1024)
+
     def test_real_python_entrypoint_bootstraps_single_broker_facade(self):
         broker_script = Path(__file__).with_name("worker_release_broker.py")
         result = subprocess.run(
@@ -321,6 +327,7 @@ class AtomicStageTests(unittest.TestCase):
             entries = [
                 regular("repo/vps-workers/bin/process-domain-events.sh", wrapper, mode=0o755),
                 regular("repo/vps-workers/bin/run-web-script.sh", stub_runner, mode=0o755),
+                regular("repo/.github/scripts/gigl-dotenv.sh", b"# dotenv reader\n"),
                 regular("repo/vps-workers/jobs/run-cache-invalidation-cron.mjs", b"export {};\n"),
                 regular("repo/vps-workers/lib/gigl-tracking-scoped-env.sh", b"# scoped env\n"),
                 regular("repo/vps-workers/config/worker.json", b"{}\n"),
@@ -334,7 +341,7 @@ class AtomicStageTests(unittest.TestCase):
             current = Path(temp) / "current"
             current.symlink_to(Path("releases") / sha)
             for path in (
-                "bin/process-domain-events.sh", "bin/run-web-script.sh",
+                "bin/process-domain-events.sh", "bin/run-web-script.sh", "bin/gigl-dotenv.sh",
                 "jobs/run-cache-invalidation-cron.mjs", "lib/gigl-tracking-scoped-env.sh",
                 "config/worker.json", "systemd/baci-event-delivery-worker.service",
             ):

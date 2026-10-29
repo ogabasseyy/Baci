@@ -41,7 +41,7 @@ sys.modules["worker_release_broker"] = _broker_module
 from worker_release_readiness import ReadinessRejected, collect_worker_readiness
 
 from worker_release_broker_common import (
-    BrokerProtocolError, MAX_REQUEST_BYTES, MAX_REPLY_BYTES,
+    BrokerProtocolError, MAX_REQUEST_BYTES, MAX_REPLY_BYTES, MAX_ARCHIVE_COMPRESSED_BYTES,
     MAX_ARCHIVE_EXPANDED_BYTES, MAX_ARCHIVE_ENTRIES, MAX_EXTRACTION_SECONDS,
     DISPATCHER_TIMEOUT_SECONDS, BROKER_OPERATION_BUDGET_SECONDS,
     BROKER_CLIENT_TIMEOUT_SECONDS, WORKER_ROOT, TRUSTED_NODE,

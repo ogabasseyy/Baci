@@ -42,7 +42,7 @@ export async function runWorkerReleaseCoordinator({
   lockPath = PRODUCTION_RELEASE_LOCK_PATH,
   readLock = readProductionReleaseLock,
   broker,
-}) {
+} = {}) {
   const identity = identityFromEnvironment(env);
   assertLockOwner(readLock(lockPath), identity);
 

@@ -119,6 +119,11 @@ def _stage_archive(archive: bytes, releases_root: str, sha: str, worker_uid: int
                 if broker.os.path.lexists(target):
                     raise broker.BrokerProtocolError("release archive conflicts with the worker runtime layout")
                 broker.shutil.copytree(source, target, copy_function=broker.shutil.copy2)
+            dotenv = broker.os.path.join(destination, ".github", "scripts", "gigl-dotenv.sh")
+            target = broker.os.path.join(destination, "bin", "gigl-dotenv.sh")
+            if not broker.os.path.isfile(dotenv) or broker.os.path.islink(dotenv) or broker.os.path.lexists(target):
+                raise broker.BrokerProtocolError("release archive is missing the trusted dotenv reader")
+            broker.shutil.copy2(dotenv, target)
         broker._freeze_release_tree(destination, worker_gid)
         # releases_root is root-owned and not writable by the extractor identity;
         # the SHA name is therefore stable between the collision check and rename.

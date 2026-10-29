@@ -237,6 +237,11 @@ pnpm_link_created=1
 
 PYTHONPATH="$(cd "$(dirname "$0")/../../bin" && pwd)"
 export PYTHONPATH
+python3 - <<'PY'
+from worker_release_dependency_builder import _validate_offline_store
+_, excluded = _validate_offline_store()
+print(f"synthetic pnpm store validated; transient project indexes excluded: {len(excluded)}")
+PY
 builder_unit="baci-worker-deps-${sha:0:12}-${suffix}.service"
 unit_load_state="$(systemctl show -p LoadState --value "$builder_unit" 2>/dev/null || true)"
 if [ -n "$unit_load_state" ] && [ "$unit_load_state" != not-found ]; then

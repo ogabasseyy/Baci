@@ -13,6 +13,7 @@ import json
 import os
 import pwd
 import grp
+import re
 import shutil
 import stat
 import subprocess
@@ -127,17 +128,20 @@ def _builder_identity() -> tuple[int, int]:
     return user.pw_uid, group.gr_gid
 
 
-def _validate_offline_store(*, owner_uid: int = 0) -> None:
+def _validate_offline_store(*, owner_uid: int = 0) -> tuple[tuple[int, int], frozenset[str]]:
     try:
         info = PNPM_STORE.lstat()
     except OSError as exc:
         raise BuilderRejected("fixed offline pnpm store is unavailable") from exc
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != owner_uid or info.st_mode & 0o022:
         raise BuilderRejected("fixed offline pnpm store ownership or mode is unsafe")
+    root_identity = (info.st_dev, info.st_ino)
     entries = 0
     total_bytes = 0
+    excluded_project_indexes: set[str] = set()
     for current, directories, files in os.walk(PNPM_STORE, topdown=True, followlinks=False):
-        for name in directories + files:
+        relative_parent = Path(current).relative_to(PNPM_STORE).parts
+        for name in list(directories):
             path = Path(current) / name
             child = path.lstat()
             entries += 1
@@ -146,21 +150,45 @@ def _validate_offline_store(*, owner_uid: int = 0) -> None:
             if child.st_uid != owner_uid or child.st_mode & 0o022:
                 raise BuilderRejected("offline pnpm store contains an untrusted entry")
             if stat.S_ISDIR(child.st_mode):
+                relative = "/".join((*relative_parent, name))
+                if (len(relative_parent) == 1 and re.fullmatch(r"v[0-9]+", relative_parent[0])
+                        and name == "projects"):
+                    excluded_project_indexes.add(relative)
+                    directories.remove(name)
                 continue
+            raise BuilderRejected("offline pnpm store contains a symlink or special file")
+        for name in files:
+            path = Path(current) / name
+            child = path.lstat()
+            entries += 1
+            if entries > MAX_BUILD_SCRATCH_ENTRIES:
+                raise BuilderRejected("offline pnpm store has too many entries")
+            if child.st_uid != owner_uid or child.st_mode & 0o022:
+                raise BuilderRejected("offline pnpm store contains an untrusted entry")
             if not stat.S_ISREG(child.st_mode) or child.st_nlink < 1:
                 raise BuilderRejected("offline pnpm store contains a symlink or special file")
             total_bytes += child.st_size
             if total_bytes > MAX_BUILD_SCRATCH_BYTES:
                 raise BuilderRejected("offline pnpm store exceeds the private-copy size limit")
+    try:
+        after = PNPM_STORE.lstat()
+    except OSError as exc:
+        raise BuilderRejected("fixed offline pnpm store changed during validation") from exc
+    if ((after.st_dev, after.st_ino) != root_identity
+            or after.st_mtime_ns != info.st_mtime_ns or after.st_ctime_ns != info.st_ctime_ns):
+        raise BuilderRejected("fixed offline pnpm store changed during validation")
+    return root_identity, frozenset(excluded_project_indexes)
 
 
 def _copy_private_offline_store(scratch: Path, uid: int, gid: int) -> Path:
     """Copy the immutable shared store into a bounded, writable per-build tree."""
-    _validate_offline_store()
+    root_identity, excluded_project_indexes = _validate_offline_store()
     destination = scratch / "pnpm-store"
     copy_source_tree(PNPM_STORE, destination, max_bytes=MAX_BUILD_SCRATCH_BYTES,
                      max_entries=MAX_BUILD_SCRATCH_ENTRIES, preserve_executable=True,
-                     allow_hardlinks=True)
+                     allow_hardlinks=True,
+                     exclude_relative_directories=excluded_project_indexes,
+                     expected_root_identity=root_identity)
     for current, directories, files in os.walk(destination, topdown=False, followlinks=False):
         current_path = Path(current)
         for name in files:

@@ -129,7 +129,8 @@ class DependencyBuilderTests(unittest.TestCase):
             scratch = root / "scratch"
             scratch.mkdir(mode=0o700)
             with (patch.object(builder, "PNPM_STORE", shared),
-                  patch.object(builder, "_validate_offline_store") as validate):
+                  patch.object(builder, "_validate_offline_store",
+                               return_value=((shared.stat().st_dev, shared.stat().st_ino), frozenset())) as validate):
                 copy = builder._copy_private_offline_store(scratch, os.getuid(), os.getgid())
 
             cloned = copy / "files" / "ab" / "cli.mjs"
@@ -152,7 +153,8 @@ class DependencyBuilderTests(unittest.TestCase):
             scratch = root / "scratch"
             scratch.mkdir()
             with (patch.object(builder, "PNPM_STORE", shared),
-                  patch.object(builder, "_validate_offline_store"),
+                  patch.object(builder, "_validate_offline_store",
+                               return_value=((shared.stat().st_dev, shared.stat().st_ino), frozenset())),
                   patch.object(builder, "MAX_BUILD_SCRATCH_BYTES", 5)):
                 with self.assertRaisesRegex(builder.BuilderRejected, "size limit"):
                     builder._copy_private_offline_store(scratch, os.getuid(), os.getgid())
@@ -208,6 +210,55 @@ class DependencyBuilderTests(unittest.TestCase):
                 with patch.object(builder, "PNPM_STORE", store):
                     with self.assertRaises(builder.BuilderRejected):
                         builder._validate_offline_store(owner_uid=os.getuid())
+
+    def test_offline_store_validation_excludes_only_pnpm_project_link_indexes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            shared = root / "shared-store"
+            project_links = shared / "v11" / "projects"
+            package_files = shared / "v11" / "files"
+            project_links.mkdir(parents=True)
+            package_files.mkdir(parents=True)
+            (project_links / "abcdef").symlink_to(root / "removed-seed-project", target_is_directory=True)
+            (package_files / "package-content").write_text("content", encoding="utf-8")
+            with patch.object(builder, "PNPM_STORE", shared):
+                identity, excluded = builder._validate_offline_store(owner_uid=os.getuid())
+            self.assertEqual(identity, (shared.stat().st_dev, shared.stat().st_ino))
+            self.assertEqual(excluded, frozenset({"v11/projects"}))
+
+            scratch = root / "scratch"
+            scratch.mkdir()
+            with (patch.object(builder, "PNPM_STORE", shared),
+                  patch.object(builder, "_validate_offline_store",
+                               return_value=((shared.stat().st_dev, shared.stat().st_ino), excluded))):
+                private = builder._copy_private_offline_store(scratch, os.getuid(), os.getgid())
+            self.assertFalse((private / "v11" / "projects").exists())
+            self.assertEqual((private / "v11" / "files" / "package-content").read_text(), "content")
+
+    def test_private_store_copy_rejects_root_replacement_after_validation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            shared = root / "shared-store"
+            shared.mkdir()
+            (shared / "validated").write_text("trusted", encoding="utf-8")
+            validated_identity = (shared.stat().st_dev, shared.stat().st_ino)
+            replacement = root / "replacement"
+            replacement.mkdir()
+            (replacement / "unvalidated").write_text("must not copy", encoding="utf-8")
+            scratch = root / "scratch"
+            scratch.mkdir()
+
+            def validate_then_replace():
+                shared.rename(root / "validated-store")
+                replacement.rename(shared)
+                return validated_identity, frozenset()
+
+            with (patch.object(builder, "PNPM_STORE", shared),
+                  patch.object(builder, "_validate_offline_store", side_effect=validate_then_replace)):
+                with self.assertRaisesRegex(builder.BuilderRejected, "root changed after validation"):
+                    builder._copy_private_offline_store(scratch, os.getuid(), os.getgid())
+
+            self.assertFalse((scratch / "pnpm-store").exists())
 
     def test_offline_store_validation_enforces_entry_and_byte_budgets(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -496,7 +547,10 @@ class DependencyBuilderTests(unittest.TestCase):
                 fs.write_smoke_evidence(scratch, {"web_tsx": "passed", "worker_dotenv": "passed"})
 
             lock_path = root / "test-lock"
-            with patch.object(builder, "_validate_offline_store"), patch.object(builder, "_validate_build_roots"), patch.object(
+            with patch.object(builder, "_validate_offline_store",
+                              return_value=((store.stat().st_dev, store.stat().st_ino), frozenset())), patch.object(
+                builder, "_validate_build_roots"
+            ), patch.object(
                 builder, "BUILD_ROOT", build_root
             ), patch.object(builder, "BUILD_INPUT_ROOT", build_root), patch.object(
                 builder, "BUILD_RESULTS_ROOT", results

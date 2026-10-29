@@ -34,14 +34,24 @@ def _exclude_source_name(name: str) -> bool:
 
 def copy_source_tree(source: Path, destination: Path, *, max_bytes: int = 512 * 1024 * 1024,
                      max_entries: int = 200_000, preserve_executable: bool = False,
-                     allow_hardlinks: bool = False) -> None:
+                     allow_hardlinks: bool = False,
+                     exclude_relative_directories: frozenset[str] = frozenset(),
+                     expected_root_identity: tuple[int, int] | None = None) -> None:
     """Copy bounded regular content through no-follow dirfds, omitting credentials."""
     source_fd = os.open(source, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
-    destination.mkdir(mode=0o700, parents=True, exist_ok=False)
-    destination_fd = os.open(destination, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        source_info = os.fstat(source_fd)
+        if (expected_root_identity is not None
+                and (source_info.st_dev, source_info.st_ino) != expected_root_identity):
+            raise BuilderRejected("source root changed after validation")
+        destination.mkdir(mode=0o700, parents=True, exist_ok=False)
+        destination_fd = os.open(destination, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
+    except BaseException:
+        os.close(source_fd)
+        raise
     counters = {"bytes": 0, "entries": 0}
 
-    def visit(input_fd: int, output_fd: int) -> None:
+    def visit(input_fd: int, output_fd: int, relative_directory: str = "") -> None:
         before_dir = os.fstat(input_fd)
         for name in sorted(os.listdir(input_fd)):
             if _exclude_source_name(name):
@@ -52,6 +62,20 @@ def copy_source_tree(source: Path, destination: Path, *, max_bytes: int = 512 * 
             counters["entries"] += 1
             if counters["entries"] > max_entries:
                 raise BuilderRejected("source input has too many entries")
+            relative = f"{relative_directory}/{name}" if relative_directory else name
+            if relative in exclude_relative_directories:
+                if not stat.S_ISDIR(info.st_mode):
+                    raise BuilderRejected("excluded source subtree is not a real directory")
+                excluded_fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0), dir_fd=input_fd)
+                try:
+                    opened = os.fstat(excluded_fd)
+                    if ((info.st_dev, info.st_ino) != (opened.st_dev, opened.st_ino)
+                            or info.st_mtime_ns != opened.st_mtime_ns
+                            or info.st_ctime_ns != opened.st_ctime_ns):
+                        raise BuilderRejected("excluded source subtree changed while copying")
+                finally:
+                    os.close(excluded_fd)
+                continue
             if stat.S_ISDIR(info.st_mode):
                 child_in = os.open(name, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0), dir_fd=input_fd)
                 try:
@@ -61,7 +85,7 @@ def copy_source_tree(source: Path, destination: Path, *, max_bytes: int = 512 * 
                     os.mkdir(name, 0o700, dir_fd=output_fd)
                     child_out = os.open(name, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0), dir_fd=output_fd)
                     try:
-                        visit(child_in, child_out)
+                        visit(child_in, child_out, relative)
                     finally:
                         os.close(child_out)
                 finally:

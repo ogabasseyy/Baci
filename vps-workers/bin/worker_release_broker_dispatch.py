@@ -115,7 +115,8 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
             lock_path = broker.os.path.join(broker.WORKER_ROOT, "release.lock")
             state_path = broker.os.path.join(broker.WORKER_ROOT, "release-state.json")
             if operation == "recovery-status":
-                return recovery_status(source_sha=sha, quiescence=quiescence, state_path=state_path)
+                return recovery_status(source_sha=sha, quiescence=quiescence, state_path=state_path,
+                                       identity=identity)
             return recover(
                 verified={"sourceSha": sha, "runId": str(run_id), "runAttempt": run_attempt,
                           "jobId": str(job_id), "recoveryOf": recovery_of},

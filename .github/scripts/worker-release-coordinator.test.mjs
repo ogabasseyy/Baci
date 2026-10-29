@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { runWorkerReleaseCoordinator } from './worker-release-coordinator.mjs';
+import { operateWorkerRelease } from '../../vps-workers/lib/worker-release-broker-client.mjs';
 
 const identity = { runId: '1234', runAttempt: 2, sha: 'a'.repeat(40) };
 const env = { GITHUB_RUN_ID: identity.runId, GITHUB_RUN_ATTEMPT: '2', BACI_EXPECTED_APP_SHA: identity.sha };
@@ -48,6 +49,74 @@ test('runs the authenticated broker lifecycle in order and requires exact instal
   assert.deepEqual(calls.map(([operation]) => operation), ['recovery-status', 'stage', 'preflight', 'promote', 'health']);
   assert.ok(calls.every(([, args]) => args.sha === identity.sha));
   assert.equal(result.health.sourceSha, identity.sha);
+});
+
+test('same active coordinator owner recovers through the real client without a completed-attempt target', async () => {
+  const target = { run_id: identity.runId, run_attempt: identity.runAttempt, sha: identity.sha, job_id: '5678' };
+  const requests = [];
+  const broker = {
+    async operateWorkerRelease(args) {
+      if (args.operation === 'recovery-status') return operateWorkerRelease({
+        ...args, githubToken: 'test-token', oidcToken: 'signed-current-job-token',
+        exchangeImpl: async (_socket, request) => {
+          requests.push(request);
+          return { ok: true, operation: 'recovery-status', sourceSha: identity.sha, pending: true,
+            recoveryOf: target,
+            recoveryOwner: { run_id: identity.runId, run_attempt: identity.runAttempt,
+              sha: identity.sha, job_id: '5678' },
+            currentOwner: true, previousSha: 'b'.repeat(40), phase: 'recovery_required' };
+        },
+      });
+      if (args.operation === 'recover') return operateWorkerRelease({
+        ...args, githubToken: 'test-token', oidcToken: 'signed-current-job-token',
+        exchangeImpl: async (_socket, request) => {
+          requests.push(request);
+          return { ok: true, operation: 'recover', sourceSha: identity.sha, recovered: true,
+            rolledBackSha: target.sha, previousSha: 'b'.repeat(40), alreadyRestored: true,
+            runId: identity.runId, runAttempt: identity.runAttempt, jobId: '5678' };
+        },
+      });
+      if (args.operation === 'promote') return promoted;
+      if (args.operation === 'health') return health;
+      throw new Error(`unexpected operation ${args.operation}`);
+    },
+    async stageWorkerRelease() { return stage; },
+    async preflightWorkerRelease() { return preflight; },
+  };
+  const result = await runWorkerReleaseCoordinator({ env, broker, readLock: () => lock });
+  assert.equal(result.recovery.recovered, true);
+  assert.deepEqual(Object.keys(requests[0]).sort(), ['githubToken', 'oidcToken', 'operation', 'sourceSha']);
+  assert.equal(requests[0].operation, 'recovery-status');
+  assert.deepEqual(Object.keys(requests[1]).sort(), ['githubToken', 'oidcToken', 'operation', 'sourceSha']);
+  assert.equal(requests[1].operation, 'recover');
+});
+
+test('same run fence with another active job includes the prior-attempt target', async () => {
+  const target = { run_id: identity.runId, run_attempt: identity.runAttempt, sha: identity.sha, job_id: '5678' };
+  let recoverArgs;
+  const broker = {
+    async operateWorkerRelease(args) {
+      if (args.operation === 'recovery-status') return {
+        ok: true, operation: 'recovery-status', sourceSha: identity.sha, pending: true,
+        recoveryOf: target,
+        recoveryOwner: { run_id: identity.runId, run_attempt: identity.runAttempt,
+          sha: identity.sha, job_id: '5678' },
+        currentOwner: false, previousSha: 'b'.repeat(40), phase: 'recovery_required',
+      };
+      if (args.operation === 'recover') { recoverArgs = args; throw new Error('attempt proof unavailable'); }
+      throw new Error(`unexpected operation ${args.operation}`);
+    },
+  };
+  await assert.rejects(runWorkerReleaseCoordinator({ env, broker, readLock: () => lock }), /attempt proof unavailable/);
+  assert.deepEqual(recoverArgs.recoveryOf, target);
+});
+
+test('real client still rejects a malformed explicit recovery target', async () => {
+  await assert.rejects(operateWorkerRelease({
+    operation: 'recover', sha: identity.sha, recoveryOf: { run_id: identity.runId },
+    githubToken: 'test-token', oidcToken: 'signed-current-job-token',
+    exchangeImpl: async () => assert.fail('invalid recovery target must be rejected locally'),
+  }), /recovery target is invalid/);
 });
 
 test('stage, preflight, and ambiguous promote failures stop without later operations', async () => {

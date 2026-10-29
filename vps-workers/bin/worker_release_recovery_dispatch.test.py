@@ -90,7 +90,8 @@ class RecoveryDispatchTests(unittest.TestCase):
             "fence": {"run_id": "202", "run_attempt": 1, "sha": SHA_NEW, "job_id": "9002"},
         }
         with patch.object(broker, "_load_release_state", return_value=state):
-            receipt = status(source_sha=SHA_NEW, quiescence=FakeQuiescence(value), state_path="ignored")
+            receipt = status(source_sha=SHA_NEW, quiescence=FakeQuiescence(value), state_path="ignored",
+                             identity=FakeIdentity())
         self.assertEqual(receipt["recoveryOf"], {
             "run_id": "101", "run_attempt": 1, "sha": SHA_OLD, "job_id": "9001"
         })
@@ -98,6 +99,19 @@ class RecoveryDispatchTests(unittest.TestCase):
             "run_id": "202", "run_attempt": 1, "sha": SHA_NEW, "job_id": "9002"
         })
         self.assertEqual(receipt["previousSha"], SHA_PREVIOUS)
+        self.assertTrue(receipt["currentOwner"])
+
+    def test_status_current_owner_requires_exact_authenticated_job_id(self):
+        value = latch(recovered=True)
+        state = {"sha": SHA_OLD, "previous_sha": SHA_PREVIOUS, "status": "recovery_required",
+                 "fence": {"run_id": "202", "run_attempt": 1, "sha": SHA_NEW, "job_id": "9002"}}
+        with patch.object(broker, "_load_release_state", return_value=state):
+            exact = status(source_sha=SHA_NEW, quiescence=FakeQuiescence(value), state_path="ignored",
+                           identity=FakeIdentity(job_id="9002"))
+            other_job = status(source_sha=SHA_NEW, quiescence=FakeQuiescence(value), state_path="ignored",
+                               identity=FakeIdentity(job_id="9003"))
+        self.assertTrue(exact["currentOwner"])
+        self.assertFalse(other_job["currentOwner"])
 
     def test_latch_before_promoting_state_is_validated_as_pre_promotion_journal(self):
         value = latch()
@@ -108,7 +122,8 @@ class RecoveryDispatchTests(unittest.TestCase):
             "fence": {"run_id": "88", "run_attempt": 1, "sha": SHA_PREVIOUS},
         }
         with patch.object(broker, "_load_release_state", return_value=prior_state):
-            receipt = status(source_sha=SHA_NEW, quiescence=FakeQuiescence(value), state_path="ignored")
+            receipt = status(source_sha=SHA_NEW, quiescence=FakeQuiescence(value), state_path="ignored",
+                             identity=FakeIdentity())
         self.assertTrue(receipt["pending"])
         self.assertEqual(receipt["recoveryOf"]["sha"], SHA_OLD)
         self.assertEqual(receipt["previousSha"], SHA_PREVIOUS)
@@ -132,7 +147,8 @@ class RecoveryDispatchTests(unittest.TestCase):
         self.assertEqual(prior_state["previous_sha"], SHA_PREVIOUS)
 
         with patch.object(broker, "_load_release_state", return_value=prior_state):
-            receipt = status(source_sha=SHA_NEW, quiescence=FakeQuiescence(value), state_path="ignored")
+            receipt = status(source_sha=SHA_NEW, quiescence=FakeQuiescence(value), state_path="ignored",
+                             identity=FakeIdentity())
         self.assertTrue(receipt["pending"])
         self.assertEqual(receipt["recoveryOf"]["sha"], SHA_NEW)
         self.assertEqual(receipt["previousSha"], SHA_PREVIOUS)
@@ -234,7 +250,8 @@ class RecoveryDispatchTests(unittest.TestCase):
         }
         with patch.object(broker, "_load_release_state", return_value=mismatched):
             with self.assertRaises(broker.BrokerProtocolError):
-                status(source_sha=SHA_NEW, quiescence=FakeQuiescence(value), state_path="ignored")
+                status(source_sha=SHA_NEW, quiescence=FakeQuiescence(value), state_path="ignored",
+                       identity=FakeIdentity())
 
     def test_incomplete_legacy_snapshot_blocks_automatic_recovery(self):
         value = latch()
@@ -244,12 +261,14 @@ class RecoveryDispatchTests(unittest.TestCase):
             "fence": {"run_id": "101", "run_attempt": 1, "sha": SHA_OLD, "job_id": "9001"},
         }):
             with self.assertRaisesRegex(broker.BrokerProtocolError, "complete service restoration snapshot"):
-                status(source_sha=SHA_NEW, quiescence=FakeQuiescence(value), state_path="ignored")
+                status(source_sha=SHA_NEW, quiescence=FakeQuiescence(value), state_path="ignored",
+                       identity=FakeIdentity())
 
     def test_missing_latch_with_unresolved_state_fails_closed(self):
         with patch.object(broker, "_load_release_state", return_value={"status": "promoting"}):
             with self.assertRaises(broker.BrokerProtocolError):
-                status(source_sha=SHA_NEW, quiescence=FakeQuiescence(None), state_path="ignored")
+                status(source_sha=SHA_NEW, quiescence=FakeQuiescence(None), state_path="ignored",
+                       identity=FakeIdentity())
 
 
 if __name__ == "__main__":

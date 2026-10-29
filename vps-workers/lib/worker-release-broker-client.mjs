@@ -129,7 +129,7 @@ function validReceipt(payload, request) {
       owner && /^[1-9][0-9]{0,19}$/.test(String(owner.run_id)) &&
       Number.isSafeInteger(owner.run_attempt) && owner.run_attempt >= 1 &&
       /^[1-9][0-9]{0,19}$/.test(String(owner.job_id)) && SHA_RE.test(owner.sha ?? '') &&
-      SHA_RE.test(payload.previousSha ?? '') &&
+      typeof payload.currentOwner === 'boolean' && SHA_RE.test(payload.previousSha ?? '') &&
       ['quiescing', 'health_probe', 'restore', 'recovery_required'].includes(payload.phase);
   }
   if (request.operation === 'recover') {
@@ -197,7 +197,13 @@ export async function operateWorkerRelease({
     fetchImpl,
   });
   if (typeof signedToken !== 'string' || signedToken.length < 1 || signedToken.length > 16_384) fail('OIDC token is invalid');
-  if (operation === 'recover' && (!recoveryOf || Object.keys(recoveryOf).sort().join(',') !== 'job_id,run_attempt,run_id,sha')) fail('recovery target is invalid');
+  if (operation === 'recover' && recoveryOf !== undefined &&
+      (!recoveryOf || Object.keys(recoveryOf).sort().join(',') !== 'job_id,run_attempt,run_id,sha' ||
+       !/^[1-9][0-9]{0,19}$/.test(String(recoveryOf.run_id)) ||
+       !Number.isSafeInteger(recoveryOf.run_attempt) || recoveryOf.run_attempt < 1 ||
+       !/^[1-9][0-9]{0,19}$/.test(String(recoveryOf.job_id)) || !SHA_RE.test(recoveryOf.sha ?? ''))) {
+    fail('recovery target is invalid');
+  }
   const request = { operation, sourceSha: sha, oidcToken: signedToken, githubToken,
     ...(operation === 'recover' && recoveryOf ? { recoveryOf } : {}) };
   const receipt = await exchangeImpl(socketPath, request);

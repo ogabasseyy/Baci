@@ -61,7 +61,16 @@ def _state_is_pre_promotion(state: dict[str, Any] | None, latch: dict[str, Any])
     return False
 
 
-def status(*, source_sha: str, quiescence, state_path: str) -> dict[str, Any]:
+def _current_owner(latch: dict[str, Any], identity) -> bool:
+    authenticated = identity.fence()
+    fence = latch.get("fence")
+    return bool(isinstance(fence, dict)
+                and all(fence.get(key) == authenticated.get(key)
+                        for key in ("run_id", "run_attempt", "sha"))
+                and latch.get("job_id") == authenticated.get("job_id"))
+
+
+def status(*, source_sha: str, quiescence, state_path: str, identity) -> dict[str, Any]:
     latch = quiescence.recovery_latch()
     state = broker._load_release_state(state_path)
     if latch is None:
@@ -85,6 +94,7 @@ def status(*, source_sha: str, quiescence, state_path: str) -> dict[str, Any]:
         "recoveryOwner": {"run_id": latch["fence"]["run_id"],
                           "run_attempt": latch["fence"]["run_attempt"],
                           "sha": latch["fence"]["sha"], "job_id": latch.get("job_id")},
+        "currentOwner": _current_owner(latch, identity),
         "previousSha": latch.get("previous_sha"), "phase": latch.get("phase"),
     }
 

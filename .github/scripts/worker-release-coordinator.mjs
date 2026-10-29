@@ -71,12 +71,11 @@ export async function runWorkerReleaseCoordinator({
     const owner = recoveryStatus.recoveryOwner;
     if (!target || !owner || !SHA_RE.test(target.sha ?? '') || !SHA_RE.test(recoveryStatus.previousSha ?? '') ||
         !/^[1-9][0-9]{0,19}$/.test(String(target.run_id)) || !Number.isSafeInteger(target.run_attempt) ||
-        !/^[1-9][0-9]{0,19}$/.test(String(target.job_id))) {
+        !/^[1-9][0-9]{0,19}$/.test(String(target.job_id)) || typeof recoveryStatus.currentOwner !== 'boolean') {
       throw new Error('worker release recovery target receipt is invalid');
     }
-    const currentOwnsRecovery = owner.run_id === identity.runId && owner.run_attempt === identity.runAttempt && owner.sha === identity.sha;
     recovery = await authorizedBroker.operateWorkerRelease({
-      operation: 'recover', ...common, ...(!currentOwnsRecovery ? { recoveryOf: target } : {}),
+      operation: 'recover', ...common, ...(!recoveryStatus.currentOwner ? { recoveryOf: target } : {}),
     });
     if (recovery?.ok !== true || recovery.operation !== 'recover' || recovery.sourceSha !== identity.sha ||
         recovery.recovered !== true || recovery.rolledBackSha !== target.sha ||

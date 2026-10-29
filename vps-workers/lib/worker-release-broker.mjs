@@ -202,9 +202,14 @@ export async function authorizeBrokerRequest({ peerUid, expectedReleaseUid, work
   const expectedKeys = operation === 'stage'
     ? 'bundleSha256,githubToken,oidcToken,operation,sourceSha'
     : operation === 'recover'
-      ? 'githubToken,oidcToken,operation,recoveryOf,sourceSha'
+      ? null
       : 'githubToken,oidcToken,operation,sourceSha';
-  if (keys.join(',') !== expectedKeys) fail('request contains unsupported fields');
+  if (operation === 'recover') {
+    if (!['githubToken,oidcToken,operation,sourceSha',
+          'githubToken,oidcToken,operation,recoveryOf,sourceSha'].includes(keys.join(','))) {
+      fail('request contains unsupported fields');
+    }
+  } else if (keys.join(',') !== expectedKeys) fail('request contains unsupported fields');
   if (!SHA_RE.test(sourceSha ?? '')) fail('source SHA is invalid');
   if (operation === 'stage' && !/^[0-9a-f]{64}$/.test(bundleSha256 ?? '')) fail('bundle digest is invalid');
   const budget = createDeadlineBudget({ clock: deadlineClock });
@@ -219,17 +224,19 @@ export async function authorizeBrokerRequest({ peerUid, expectedReleaseUid, work
   let recoveryOf;
   if (operation === 'recover') {
     const target = request.recoveryOf;
-    if (!target || Object.keys(target).sort().join(',') !== 'job_id,run_attempt,run_id,sha') fail('recovery target fields are invalid');
-    try {
-      recoveryOf = await proveCompletedWorkerAttempt({
-        target,
-        repository: WORKER_RELEASE_BROKER_POLICY.repository,
-        workflowId: verifiedJob.run.workflow_id,
-        runnerLabel: WORKER_RELEASE_BROKER_POLICY.runnerLabel,
-        apiJson: async (pathname) => githubJson(fetchImpl, `${GITHUB_API}${pathname}`, githubToken, budget),
-      });
-    } catch (error) {
-      fail(error instanceof Error ? error.message : 'prior worker attempt cannot be proven terminal');
+    if (target !== undefined) {
+      if (!target || Object.keys(target).sort().join(',') !== 'job_id,run_attempt,run_id,sha') fail('recovery target fields are invalid');
+      try {
+        recoveryOf = await proveCompletedWorkerAttempt({
+          target,
+          repository: WORKER_RELEASE_BROKER_POLICY.repository,
+          workflowId: verifiedJob.run.workflow_id,
+          runnerLabel: WORKER_RELEASE_BROKER_POLICY.runnerLabel,
+          apiJson: async (pathname) => githubJson(fetchImpl, `${GITHUB_API}${pathname}`, githubToken, budget),
+        });
+      } catch (error) {
+        fail(error instanceof Error ? error.message : 'prior worker attempt cannot be proven terminal');
+      }
     }
   }
   validateIdentity({
@@ -264,7 +271,7 @@ export async function authorizeBrokerRequest({ peerUid, expectedReleaseUid, work
     workerUid,
     workerRoot: WORKER_RELEASE_BROKER_POLICY.workerRoot,
     ...(operation === 'stage' ? { sourceArchive: archive.bytes } : {}),
-    ...(operation === 'recover' ? { recoveryOf } : {}),
+    ...(operation === 'recover' && recoveryOf ? { recoveryOf } : {}),
   });
 }
 

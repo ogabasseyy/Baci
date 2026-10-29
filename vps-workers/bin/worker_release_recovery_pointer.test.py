@@ -55,6 +55,20 @@ class Identity:
         return {"run_id": "202", "run_attempt": 1, "sha": SHA_NEW, "job_id": "9002"}
 
 
+class CurrentOwnerIdentity:
+    def __init__(self, job_id="9001"):
+        self.job_id = job_id
+
+    def fence(self):
+        return {**FENCE, "job_id": self.job_id}
+
+
+class CurrentOwnerQuiescence(Quiescence):
+    def acquire(self, _fence, **kwargs):
+        self.acquire_kwargs = kwargs
+        return Lease()
+
+
 def _recover(current_sha: str, root: Path):
     releases = root / "releases"
     releases.mkdir()
@@ -74,6 +88,39 @@ def _recover(current_sha: str, root: Path):
 
 
 class RecoveryPointerTests(unittest.TestCase):
+    def test_same_active_owner_recovers_without_terminal_target_but_exact_job_is_required(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            releases = root / "releases"
+            releases.mkdir()
+            for sha in (SHA_OLD, SHA_PRIOR):
+                (releases / sha).mkdir()
+            current = root / "current"
+            current.symlink_to(f"releases/{SHA_OLD}")
+            quiescence = CurrentOwnerQuiescence()
+            verified = {"sourceSha": SHA_OLD, "runId": "101", "runAttempt": 1, "jobId": "9001"}
+            with patch.object(broker, "_load_release_state", return_value=STATE), \
+                 patch("worker_release_lifecycle.release_lock", return_value=nullcontext()), \
+                 patch.object(broker, "_record_promotion_failure") as record:
+                result = recover(
+                    verified=verified, identity=CurrentOwnerIdentity(), quiescence=quiescence,
+                    current_link=str(current), releases_root=str(releases),
+                    lock_path="unused", state_path="unused",
+                )
+            self.assertEqual(os.readlink(current), f"releases/{SHA_PRIOR}")
+            self.assertTrue(result["alreadyRestored"] is False)
+            self.assertIsNone(quiescence.acquire_kwargs["takeover_from"])
+            record.assert_called_once()
+
+            with patch.object(broker, "_load_release_state", return_value=STATE), \
+                 patch("worker_release_lifecycle.release_lock", return_value=nullcontext()):
+                with self.assertRaisesRegex(broker.BrokerProtocolError, "does not match the durable recovery owner"):
+                    recover(
+                        verified={**verified, "jobId": "9003"}, identity=CurrentOwnerIdentity("9003"),
+                        quiescence=quiescence, current_link=str(current), releases_root=str(releases),
+                        lock_path="unused", state_path="unused",
+                    )
+
     def test_unmocked_restore_moves_candidate_pointer_to_recorded_prior(self):
         with tempfile.TemporaryDirectory() as directory:
             current, state_patch, verified = _recover(SHA_OLD, Path(directory))

@@ -58,6 +58,16 @@ def snapshot_digest(root: Path, label: str) -> str:
     return digest.hexdigest()
 
 
+def materialized_snapshot_digest(release_root: Path, label: str) -> str:
+    combined = hashlib.sha256()
+    for root, component in (
+        (release_root / "apps" / "web" / "node_modules", "web"),
+        (release_root / "node_modules", "worker"),
+    ):
+        combined.update(bytes.fromhex(snapshot_digest(root, f"{label}-{component}")))
+    return combined.hexdigest()
+
+
 def main() -> int:
     if len(sys.argv) != 5:
         sys.stderr.write("dependency-smoke-failure category=invocation-or-privilege\n")
@@ -75,8 +85,7 @@ def main() -> int:
             raise SmokeFailure("node-runtime-unavailable", "/usr/bin/node")
         if not (web_root / "node_modules").is_dir() or not (release_root / "node_modules").is_dir():
             raise SmokeFailure("dependency-roots-missing")
-        before = snapshot_digest(release_root / "apps" / "web" / "node_modules", "web")
-        before += snapshot_digest(release_root / "node_modules", "worker")
+        before = materialized_snapshot_digest(release_root, "before")
         tsx = web_root / "node_modules" / ".bin" / "tsx"
         if not tsx.is_file() or not os.access(tsx, os.X_OK):
             raise SmokeFailure("tsx-entrypoint-unavailable", "apps/web/node_modules/.bin/tsx")
@@ -96,8 +105,7 @@ def main() -> int:
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                        check=True, timeout=30)
         stage = "snapshot-after"
-        after = snapshot_digest(release_root / "apps" / "web" / "node_modules", "web-after")
-        after += snapshot_digest(release_root / "node_modules", "worker-after")
+        after = materialized_snapshot_digest(release_root, "after")
         if before != after:
             raise SmokeFailure("snapshot-mutated")
     except SmokeFailure as exc:

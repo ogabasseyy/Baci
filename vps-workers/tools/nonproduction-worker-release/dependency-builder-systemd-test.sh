@@ -437,12 +437,24 @@ systemd-run --quiet --system --wait --pipe --collect --unit="$test_unit" \
 python3 - "$smoke_output" <<'PY'
 import json, sys
 from pathlib import Path
-result = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-if (not isinstance(result, dict) or set(result) != {"snapshot_sha256", "tsx", "dotenv"}
-        or result.get("tsx") != "passed" or result.get("dotenv") != "passed"
-        or not isinstance(result.get("snapshot_sha256"), str)
-        or len(result["snapshot_sha256"]) != 64
-        or any(char not in "0123456789abcdef" for char in result["snapshot_sha256"])):
+try:
+    result = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+except (OSError, UnicodeError, json.JSONDecodeError):
+    raise SystemExit("independent smoke returned non-JSON synthetic evidence")
+if not isinstance(result, dict):
+    raise SystemExit("independent smoke returned non-object synthetic evidence")
+hash_value = result.get("snapshot_sha256")
+valid = (set(result) == {"snapshot_sha256", "tsx", "dotenv"}
+        and result.get("tsx") == "passed" and result.get("dotenv") == "passed"
+        and isinstance(hash_value, str)
+        and len(hash_value) == 64
+        and all(char in "0123456789abcdef" for char in hash_value))
+if not valid:
+    keys = sorted(str(key)[:64] for key in result.keys())[:20]
+    hash_length = len(hash_value) if isinstance(hash_value, str) else -1
+    print(f"smoke-evidence-invalid keys={keys} sha256_length={hash_length} "
+          f"tsx_pass={result.get('tsx') == 'passed'} dotenv_pass={result.get('dotenv') == 'passed'}",
+          file=sys.stderr)
     raise SystemExit("independent smoke returned malformed or incomplete synthetic evidence")
 print("independent materialized-snapshot smoke passed")
 PY

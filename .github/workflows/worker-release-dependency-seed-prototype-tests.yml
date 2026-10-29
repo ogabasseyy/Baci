@@ -1,0 +1,32 @@
+name: Worker release dependency seed prototype tests
+
+on:
+  pull_request:
+    paths:
+      - 'vps-workers/tools/nonproduction-worker-release/dependency_seed_*.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency-seed-*.test.py'
+      - 'vps-workers/bin/worker_release_dependency_*.py'
+      - '.github/workflows/worker-release-dependency-seed-prototype-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-linux-root-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run disconnected seed prototype regressions as root
+        run: |
+          set -eu
+          test "$(id -u)" -ne 0
+          sudo /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-publisher.test.py -q
+          sudo /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-recovery.test.py -q
+          sudo /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-filesystem.test.py -q
+          sudo /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-cross-sha.test.py -q
+          sudo /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-transaction.test.py -q
+          /usr/bin/python3 -m py_compile vps-workers/tools/nonproduction-worker-release/dependency_seed_*.py

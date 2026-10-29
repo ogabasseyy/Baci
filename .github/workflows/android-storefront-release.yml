@@ -13,6 +13,8 @@ on:
       # Patch/lockfile changes rebuild ReactAndroid from source.
       - 'patches/**'
       - 'pnpm-lock.yaml'
+      - '.github/workflows/android-storefront-release.yml'
+      - '.github/scripts/refuse-superseded-android-build.sh'
     tags:
       - "v*-storefront"
   workflow_dispatch:
@@ -36,10 +38,10 @@ on:
           - production
 
 concurrency:
-  # Serialize storefront release runs only. Cross-app serialization is avoided
-  # because GitHub preserves only one pending run per concurrency group.
+  # Preserve each queued release; shared VPS resource ownership is job-scoped.
   group: android-storefront-release-${{ github.ref }}
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
@@ -61,6 +63,12 @@ jobs:
   build-and-deploy:
     name: Build Storefront AAB & Upload to Play Store
     runs-on: baci-android
+    # Both Android releases and production share one four-core VPS.
+    # queue:max preserves pending releases instead of replacing another app.
+    concurrency:
+      group: production-prebuilt-deploy
+      cancel-in-progress: false
+      queue: max
     # Patched ReactAndroid and Hermes compile from source for all four ABIs.
     # The measured cold source build exceeds a single 330-minute step. Give
     # native libraries and app packaging separate budgets, plus upload/cleanup.
@@ -71,6 +79,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Refuse superseded main release before build
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: bash .github/scripts/refuse-superseded-android-build.sh
 
       - name: Pre-run cleanup of stale secrets
         run: |

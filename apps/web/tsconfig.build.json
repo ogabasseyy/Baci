@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": ".next/cache/tsconfig.build.tsbuildinfo"
+  },
+  "exclude": [
+    "node_modules",
+    "supabase",
+    "supabase/**/*",
+    "scripts",
+    "src/scripts",
+    ".next/dev",
+    ".next/dev/**/*",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "**/__tests__/**",
+    "**/__mocks__/**"
+  ]
+}

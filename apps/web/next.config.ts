@@ -117,6 +117,10 @@ function getPostHogRewriteRules() {
 }
 
 const nextConfig: NextConfig = {
+  typescript: {
+    tsconfigPath: 'tsconfig.build.json',
+    ignoreBuildErrors: false,
+  },
   ...getHostedDraftStandaloneOutput(process.env),
   allowedDevOrigins: ['127.0.0.1'],
   deploymentId: NEXT_DEPLOYMENT_ID,

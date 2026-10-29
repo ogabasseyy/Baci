@@ -29,6 +29,8 @@ from worker_release_actual_dependency_resources import (
     MIN_FREE_BYTES,
     MIN_FREE_INODES,
     ResourceEntryLimitExceeded,
+    copy_verified_policy_cache,
+    make_policy_cache_seed_read_only,
 )
 from worker_release_dependency_diagnostics import (
     PnpmStepRejected,
@@ -449,12 +451,80 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         source = SCRIPT.read_text(encoding="utf-8")
         self.assertEqual(source.count("cache_max_bytes=EXPERIMENT_CACHE_BYTES"), 2)
         self.assertIn('"--experiment-cache-max-bytes", str(EXPERIMENT_CACHE_BYTES)', source)
+        self.assertEqual(source.count("validate_receipt(source, cache"), 2)
+        self.assertIn("make_policy_cache_seed_read_only(cache)", source)
+        self.assertIn('offline_env["PNPM_CONFIG_CACHE_DIR"] = str(build_cache)', source)
         self.assertIn('"monitored_scratch": 12 * 1024 * 1024 * 1024', source)
         self.assertEqual(experiment.policy.make_receipt.__kwdefaults__["cache_max_bytes"],
                          256 * 1024 * 1024)
         production_builder = (SCRIPT.parents[3] / "vps-workers/bin/worker_release_dependency_builder.py")
         builder_source = production_builder.read_text(encoding="utf-8")
         self.assertIn("max_entries=MAX_CACHE_ENTRIES, max_bytes=MAX_CACHE_BYTES", builder_source)
+
+    def test_verified_seed_is_separate_from_mutable_offline_cache(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source"
+            source.mkdir()
+            (source / ".baci-source-sha").write_text("a" * 40 + "\n", encoding="ascii")
+            for relative in experiment.policy.LOCKFILES:
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("lockVersion: '9.0'\nsettings:\n  injectWorkspacePackages: false\n",
+                                encoding="utf-8")
+            for relative in experiment.policy.POLICY_FILES:
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("minimumReleaseAge: 1440\ntrustPolicy: no-downgrade\n",
+                                encoding="utf-8")
+            seed = root / "verified-seed"
+            seed.mkdir(mode=0o700)
+            (seed / "metadata.json").write_text("verified registry metadata", encoding="utf-8")
+            receipt_path = root / "receipt.json"
+            receipt_path.write_text(json.dumps(experiment.policy.make_receipt(
+                source, seed, experiment.policy.EXPECTED_PNPM,
+                cache_max_bytes=experiment.EXPERIMENT_CACHE_BYTES)), encoding="utf-8")
+            receipt_path.chmod(0o400)
+
+            make_policy_cache_seed_read_only(seed)
+            mutable = root / "mutable-build-cache"
+            seed_digest = copy_verified_policy_cache(
+                seed, mutable, max_entries=experiment.policy.MAX_CACHE_ENTRIES,
+                max_bytes=experiment.EXPERIMENT_CACHE_BYTES,
+            )
+            self.assertEqual(seed_digest, experiment.policy._hash_tree(seed,
+                                                                        max_bytes=experiment.EXPERIMENT_CACHE_BYTES))
+            self.assertEqual((seed / "metadata.json").stat().st_mode & 0o222, 0)
+            self.assertNotEqual((mutable / "metadata.json").stat().st_mode & 0o200, 0)
+            (mutable / "metadata.json").write_text("pnpm offline mutation", encoding="utf-8")
+            experiment.policy.validate_receipt(
+                source, seed, receipt_path, expected_sha="a" * 40,
+                cache_max_bytes=experiment.EXPERIMENT_CACHE_BYTES,
+            )
+            with self.assertRaisesRegex(experiment.policy.BuilderRejected, "metadata cache changed"):
+                experiment.policy.validate_receipt(
+                    source, mutable, receipt_path, expected_sha="a" * 40,
+                    cache_max_bytes=experiment.EXPERIMENT_CACHE_BYTES,
+                )
+
+    def test_seed_readonly_rejects_hardlink_before_chmod_alias(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            seed = root / "seed"
+            seed.mkdir(mode=0o700)
+            nested = seed / "nested"
+            nested.mkdir(mode=0o700)
+            file = nested / "metadata.json"
+            file.write_text("metadata", encoding="utf-8")
+            alias = root / "outside-alias"
+            os.link(file, alias)
+            original_mode = file.stat().st_mode & 0o777
+
+            with self.assertRaisesRegex(RuntimeError, "aliased file inode"):
+                make_policy_cache_seed_read_only(seed)
+
+            self.assertEqual(file.stat().st_mode & 0o777, original_mode)
+            self.assertEqual(alias.stat().st_mode & 0o777, original_mode)
 
     def test_deployed_dependency_must_match_exact_source_lock_version(self):
         with tempfile.TemporaryDirectory() as temporary:

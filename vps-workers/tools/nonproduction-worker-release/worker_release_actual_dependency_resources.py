@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import stat
 import time
+import hmac
 from pathlib import Path
 
 MAX_TREE_BYTES = 12 * 1024 * 1024 * 1024
@@ -89,5 +90,47 @@ def enforce_resource_limits(root: Path, *, max_bytes: int = MAX_TREE_BYTES,
     return count, total
 
 
+def copy_verified_policy_cache(seed: Path, destination: Path, *, max_entries: int,
+                               max_bytes: int) -> str:
+    """Make a bounded mutable pnpm cache from the immutable receipt-bound seed."""
+    from worker_release_dependency_artifacts import copy_source_tree
+    from worker_release_dependency_policy_cache import _hash_tree
+
+    before = seed.lstat()
+    identity = (before.st_dev, before.st_ino)
+    seed_digest = _hash_tree(seed, max_bytes=max_bytes)
+    after = seed.lstat()
+    if ((after.st_dev, after.st_ino) != identity or after.st_mtime_ns != before.st_mtime_ns
+            or after.st_ctime_ns != before.st_ctime_ns):
+        raise RuntimeError("receipt-bound policy cache seed changed before copy")
+    copy_source_tree(seed, destination, max_bytes=max_bytes, max_entries=max_entries,
+                     preserve_executable=True, expected_root_identity=identity)
+    copied_digest = _hash_tree(destination, max_bytes=max_bytes)
+    if not hmac.compare_digest(seed_digest, copied_digest):
+        raise RuntimeError("mutable pnpm cache snapshot differs from verified seed")
+    return copied_digest
+
+
+def make_policy_cache_seed_read_only(seed: Path) -> None:
+    """Reject aliased inodes before chmod changes any cache file metadata."""
+    from worker_release_dependency_artifacts import make_read_only_input
+
+    root_info = seed.lstat()
+    if not stat.S_ISDIR(root_info.st_mode) or seed.is_symlink():
+        raise RuntimeError("receipt-bound policy cache seed is unsafe")
+    for current, directories, files in os.walk(seed, topdown=True, followlinks=False):
+        current_path = Path(current)
+        for name in directories:
+            info = (current_path / name).lstat()
+            if not stat.S_ISDIR(info.st_mode):
+                raise RuntimeError("receipt-bound policy cache seed contains a link or special entry")
+        for name in files:
+            info = (current_path / name).lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise RuntimeError("receipt-bound policy cache seed contains an aliased file inode")
+    make_read_only_input(seed)
+
+
 __all__ = ["MAX_TREE_BYTES", "MAX_TREE_ENTRIES", "MIN_FREE_BYTES", "MIN_FREE_INODES",
-           "ResourceEntryLimitExceeded", "enforce_resource_limits"]
+           "ResourceEntryLimitExceeded", "copy_verified_policy_cache", "enforce_resource_limits",
+           "make_policy_cache_seed_read_only"]

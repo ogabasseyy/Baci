@@ -41,6 +41,8 @@ from worker_release_actual_dependency_resources import (
     MAX_TREE_ENTRIES,
     MIN_FREE_BYTES,
     MIN_FREE_INODES,
+    copy_verified_policy_cache,
+    make_policy_cache_seed_read_only,
 )
 from worker_release_dependency_diagnostics import read_diagnostic
 from worker_release_actual_dependency_runtime import (
@@ -166,6 +168,13 @@ def _main() -> int:
             stage = "receipt-validation"
             policy.validate_receipt(source, cache, preverify_receipt, expected_sha=expected_sha,
                                     cache_max_bytes=EXPERIMENT_CACHE_BYTES)
+            stage = "build-cache-snapshot"
+            make_policy_cache_seed_read_only(cache)
+            build_cache = base / "pnpm-build-cache"
+            copy_verified_policy_cache(cache, build_cache,
+                                      max_entries=policy.MAX_CACHE_ENTRIES,
+                                      max_bytes=EXPERIMENT_CACHE_BYTES)
+            offline_env["PNPM_CONFIG_CACHE_DIR"] = str(build_cache)
             injection_settings = policy.lock_injection_settings(source)
             web_cmd = web_deploy_command(node, pnpm, store, output / "web", policy.TRUSTED_REGISTRY)
             run(web_cmd, cwd=source,

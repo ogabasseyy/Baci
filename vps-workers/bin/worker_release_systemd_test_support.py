@@ -3,6 +3,38 @@ from __future__ import annotations
 
 import subprocess
 
+_SYSTEMD_EXEC_FAILURES = {
+    203: "exec-setup-failure",
+    209: "stdout-setup-failure",
+    210: "chroot-setup-failure",
+    216: "group-setup-failure",
+    217: "user-setup-failure",
+    219: "cgroup-setup-failure",
+    222: "stderr-setup-failure",
+    225: "network-namespace-failure",
+    226: "filesystem-namespace-failure",
+    227: "no-new-privileges-failure",
+    228: "seccomp-setup-failure",
+    230: "personality-setup-failure",
+    232: "address-family-setup-failure",
+}
+
+
+def _exec_code_category(value: str) -> str:
+    return {"1": "exited", "exited": "exited",
+            "2": "killed", "killed": "killed",
+            "3": "dumped", "dumped": "dumped"}.get(value, "other")
+
+
+def _exec_status_category(value: str) -> str:
+    if value == "0":
+        return "zero"
+    if not value.isascii() or not value.isdigit():
+        return "unavailable"
+    if len(value) > 3:
+        return "application-or-other-failure"
+    return _SYSTEMD_EXEC_FAILURES.get(int(value), "application-or-other-failure")
+
 
 def systemd_system_manager_available(run=None) -> bool:
     """Probe manager reachability without requiring the host to be healthy."""
@@ -41,10 +73,9 @@ def systemd_unit_failure_summary(unit: str, run=None) -> str:
     main_pid = property_value("MainPID")
     pid = "zero" if main_pid == "0" else "positive" if main_pid.isdigit() else "unavailable"
     exec_status = property_value("ExecMainStatus")
-    status = "zero" if exec_status == "0" else "nonzero" if exec_status.isdigit() else "unavailable"
     return (f"load={category(property_value('LoadState'), {'loaded', 'not-found', 'masked', 'error'})} "
             f"active={category(property_value('ActiveState'), {'active', 'activating', 'deactivating', 'inactive', 'failed', 'maintenance'})} "
             f"result={category(property_value('Result'), {'success', 'resources', 'timeout', 'exit-code', 'signal', 'core-dump', 'watchdog', 'protocol', 'start-limit-hit', 'condition', 'exec-condition'})} "
             f"condition={category(property_value('ConditionResult'), {'yes', 'no'})} "
-            f"main_pid={pid} exec_code={category(property_value('ExecMainCode'), {'exited', 'killed', 'dumped'})} "
-            f"exec_status={status} cgroup={cgroup}")
+            f"main_pid={pid} exec_code={_exec_code_category(property_value('ExecMainCode'))} "
+            f"exec_status={_exec_status_category(exec_status)} cgroup={cgroup}")

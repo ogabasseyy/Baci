@@ -17,6 +17,7 @@ on:
       - 'vps-workers/bin/worker_release_systemd_extractor.test.py'
       - 'vps-workers/bin/worker_release_extractor_control_dac.test.py'
       - 'vps-workers/bin/worker_release_systemd_test_support.py'
+      - 'vps-workers/bin/worker_release_systemd_test_support.test.py'
       - 'vps-workers/bin/worker_release_archive_extract_child.py'
       - 'vps-workers/bin/provision-worker-source-extractor.py'
       - 'vps-workers/bin/worker_release_descriptor_cgroup.py'
@@ -45,5 +46,6 @@ jobs:
           sudo /usr/bin/python3 -B vps-workers/bin/worker_release_stage_journal.test.py
           sudo /usr/bin/python3 -B vps-workers/bin/worker_release_stage_journal_committed_recovery.test.py
           sudo /usr/bin/python3 -B vps-workers/bin/worker_release_stage_journal_resources.test.py
+          sudo /usr/bin/python3 -B vps-workers/bin/worker_release_systemd_test_support.test.py
           sudo env WORKER_RELEASE_EXTRACT_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_extractor_control_dac.test.py
           sudo env WORKER_RELEASE_EXTRACT_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_systemd_extractor.test.py

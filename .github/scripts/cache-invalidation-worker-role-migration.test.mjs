@@ -89,6 +89,12 @@ test('the production CREATEROLE postgres creator row is narrowly accepted', () =
         AND member.rolname = 'authenticator';
     `).trim();
     assert.equal(authenticatorMembers, '0');
+    const outgoingMembers = executeAs(bin, directory, 'supabase_admin', `
+      SELECT count(*) FROM pg_catalog.pg_auth_members AS am
+      JOIN pg_catalog.pg_roles AS member ON member.oid = am.member
+      WHERE member.rolname = 'cache_invalidation_worker';
+    `).trim();
+    assert.equal(outgoingMembers, '0', 'worker role has no memberships in other roles');
   });
 });
 
@@ -110,6 +116,7 @@ test('pre-existing unsafe attributes or any membership fail closed', () => {
     executeAs(bin, directory, 'supabase_admin', `
       CREATE ROLE postgres LOGIN CREATEROLE NOSUPERUSER NOCREATEDB NOREPLICATION NOBYPASSRLS;
       CREATE ROLE authenticator NOLOGIN;
+      CREATE ROLE service_role NOLOGIN;
       CREATE ROLE cache_invalidation_worker LOGIN NOINHERIT NOSUPERUSER
         NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT -1;
     `);
@@ -133,6 +140,18 @@ test('pre-existing unsafe attributes or any membership fail closed', () => {
       'postgres',
       roleSetup,
       'pre-existing cache_invalidation_worker has unexpected members'
+    );
+
+    executeAs(bin, directory, 'supabase_admin', `
+      REVOKE cache_invalidation_worker FROM authenticator;
+      GRANT service_role TO cache_invalidation_worker;
+    `);
+    expectRoleSetupFailure(
+      bin,
+      directory,
+      'postgres',
+      roleSetup,
+      'cache_invalidation_worker has unexpected role memberships'
     );
   });
 });
@@ -180,6 +199,8 @@ test('creator validation pins member and grantor predicates and the deploy trans
   assert.match(roleSetup, /grantor\.oid = membership\.grantor[\s\S]*?grantor\.rolsuper/);
   assert.match(roleSetup, /v_created[\s\S]*?v_member_count <> 0/);
   assert.match(roleSetup, /ELSIF v_member_count <> 0/);
+  assert.match(roleSetup, /membership\.member = 'cache_invalidation_worker'::regrole/);
+  assert.match(roleSetup, /v_outgoing_member_count <> 0/);
   assert.doesNotMatch(migration, /^-- disable-transaction/m);
   assert.doesNotMatch(migration, /ALTER ROLE cache_invalidation_worker[\s\S]*?NOSUPERUSER/);
   assert.doesNotMatch(migration, /GRANT cache_invalidation_worker TO (?:PUBLIC|authenticator)/);

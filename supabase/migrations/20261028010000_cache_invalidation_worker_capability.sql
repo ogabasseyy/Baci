@@ -8,6 +8,7 @@ DECLARE
   v_created boolean := false;
   v_role record;
   v_member_count integer;
+  v_outgoing_member_count integer;
   v_executor_is_superuser boolean;
   v_expected_creator_membership boolean;
 BEGIN
@@ -46,6 +47,15 @@ BEGIN
   SELECT count(*) INTO v_member_count
   FROM pg_catalog.pg_auth_members AS membership
   WHERE membership.roleid = 'cache_invalidation_worker'::regrole;
+
+  -- The worker may not inherit or SET ROLE to any other role. This is
+  -- separate from incoming creator/authenticator membership above.
+  SELECT count(*) INTO v_outgoing_member_count
+  FROM pg_catalog.pg_auth_members AS membership
+  WHERE membership.member = 'cache_invalidation_worker'::regrole;
+  IF v_outgoing_member_count <> 0 THEN
+    RAISE EXCEPTION 'cache_invalidation_worker has unexpected role memberships';
+  END IF;
 
   IF v_created AND v_executor_is_superuser THEN
     -- A local replay/bootstrap superuser does not receive an automatic

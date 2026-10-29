@@ -35,12 +35,12 @@ export function EmailForm({
   return (
     <form onSubmit={onSubmit} className="space-y-5">
       <div className="space-y-2">
-        <Label htmlFor="email" className="text-gray-700">
+        <Label htmlFor="email" className="text-store-background-text">
           Email address
         </Label>
         <div className="relative">
           <Mail
-            className="pointer-events-none absolute left-4 top-1/2 z-20 -translate-y-1/2 size-4 text-gray-400"
+            className="pointer-events-none absolute left-4 top-1/2 z-20 -translate-y-1/2 size-4 text-store-background-text/60"
             aria-hidden="true"
           />
           <Input
@@ -49,7 +49,7 @@ export function EmailForm({
             placeholder="you@example.com"
             value={email}
             onChange={(e) => onEmailChange(e.target.value)}
-            className="pl-11 h-12 bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 focus:border-gray-300 focus:ring-2 rounded-xl"
+            className="pl-11 h-12 bg-store-background border-store-border text-store-background-text placeholder:text-store-background-text focus:border-store-border focus:ring-2 rounded-xl"
             style={{ '--tw-ring-color': `${OGABASSEY_RED}40` } as React.CSSProperties}
             required
             autoFocus

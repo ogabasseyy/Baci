@@ -66,7 +66,8 @@ extracted from the verified target binary. If a production OTA already exists
 for the runtime, compare against its current manifest config as well. Current
 GitHub secrets can differ from those used for an older build; identical secret
 expressions in the workflows do not prove identical values. This comparison
-prints no config values:
+removes only the target binary's build-only TikTok plugin entry, whose options
+may contain a secret. It prints no config values:
 
 ```sh
 node - /absolute/path/to/verified-target-config.json /absolute/path/to/artifact/expo-config.json <<'NODE'
@@ -75,7 +76,15 @@ const { isDeepStrictEqual } = require('node:util');
 const [targetPath, updatePath] = process.argv.slice(2);
 const target = JSON.parse(readFileSync(targetPath, 'utf8'));
 const update = JSON.parse(readFileSync(updatePath, 'utf8'));
-if (!isDeepStrictEqual(target, update)) {
+const isTiktokPlugin = (plugin) =>
+  (Array.isArray(plugin) ? plugin[0] : plugin) === '@baci/tiktok-business/plugin';
+if ((update.plugins ?? []).some(isTiktokPlugin)) {
+  throw new Error('The update contains the build-only TikTok plugin.');
+}
+const publicTarget = Array.isArray(target.plugins)
+  ? { ...target, plugins: target.plugins.filter((plugin) => !isTiktokPlugin(plugin)) }
+  : target;
+if (!isDeepStrictEqual(publicTarget, update)) {
   console.error('Public Expo config differs from the target. Stop and review the drift.');
   process.exit(1);
 }
@@ -86,6 +95,14 @@ NODE
 Stop if the configs differ. Investigate and explicitly review every change
 before proceeding, especially the backend URL, public key, merchant and update
 settings; do not assume a mismatch is safe.
+
+The Expo config comparison does not cover values that Metro inlines directly
+into JavaScript. Compare the export's inlined production settings with trusted
+values from the target build, including the mobile-ad enable flags and ad-unit
+IDs. Obtain those values from verified build provenance or the target bundle;
+avoid printing them. Review any drift explicitly, and stop if the values cannot
+be established reliably. Matching workflow secret expressions is not evidence
+that their historical values match.
 
 First publish the prebuilt `dist` with `eas update --skip-bundler --input-dir`
 to an isolated, unmapped test branch. Point only a new test channel at that

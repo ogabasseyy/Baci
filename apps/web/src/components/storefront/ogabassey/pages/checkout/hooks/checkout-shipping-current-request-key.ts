@@ -1,6 +1,6 @@
 import { getCountryByCode } from '@/lib/countries';
 import type { CheckoutShippingQuotesOptions } from './checkout-shipping-quotes-options';
-import { buildQuoteRequestKey } from './checkout-shipping-request-key';
+import { buildCheckoutShippingQuoteRequestKey } from './build-checkout-shipping-quote-request-key';
 
 /** Match the loader's request identity before an address change can paint. */
 export function currentCheckoutShippingRequestKey(
@@ -35,7 +35,7 @@ export function currentCheckoutShippingRequestKey(
     city = parts[parts.length - 2] ?? '';
     state = parts[parts.length - 1] ?? '';
   }
-  return buildQuoteRequestKey(
+  return buildCheckoutShippingQuoteRequestKey(
     {
       address,
       city,

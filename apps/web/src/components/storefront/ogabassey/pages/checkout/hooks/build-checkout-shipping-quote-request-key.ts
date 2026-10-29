@@ -1,4 +1,4 @@
-interface QuoteKeyReceiver {
+interface QuoteRequestReceiver {
   address: string;
   city: string;
   state: string;
@@ -11,17 +11,17 @@ interface QuoteKeyReceiver {
   countryCode: string;
 }
 
-interface QuoteKeyItem {
+interface QuoteRequestItem {
   name: string;
   quantity: number;
   price: number;
   negotiatedPrice?: number;
 }
 
-/** Keep quote readiness tied to the same inputs sent by the loader. */
-export function buildQuoteRequestKey(
-  receiver: QuoteKeyReceiver,
-  cart: QuoteKeyItem[]
+/** Bind quote reuse and visible readiness to the same destination and economics. */
+export function buildCheckoutShippingQuoteRequestKey(
+  receiver: QuoteRequestReceiver,
+  cart: QuoteRequestItem[]
 ) {
   const address =
     receiver.deliveryPreference === 'pickup_station' && !receiver.address.trim()

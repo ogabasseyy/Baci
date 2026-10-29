@@ -73,4 +73,3 @@ export function getAdditionalDeviceCount(items: Array<Record<string, unknown>>) 
 
   return Math.max(0, totalDeviceCount - 1);
 }
-

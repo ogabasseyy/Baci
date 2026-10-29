@@ -1,5 +1,6 @@
 import type { ImeiServiceTierKey } from '@baci/shared/imei';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { enrichImeiDeviceResult } from '@/lib/imei-device-catalog';
 import {
   hashProviderResponse,
   type ImeiLookupErrorBody,
@@ -239,6 +240,7 @@ export async function cacheSuccessfulLookup({
 }) {
   const completeBody = {
     ...providerResult.body,
+    data: await enrichImeiDeviceResult(merchantId, providerResult.body.data),
     lookupId,
     status: 'complete' as const,
   };

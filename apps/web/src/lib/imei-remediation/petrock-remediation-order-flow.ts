@@ -8,6 +8,8 @@ import {
   retryPetrockStateWrite,
 } from '@/lib/imei-providers/petrock/retry-petrock-state-write';
 
+import { isPetrockRemediationOrderEligible } from './petrock-remediation-order-eligibility';
+
 type PetrockClient = ReturnType<typeof createPetrockClient>;
 
 interface RemediationOrderState {
@@ -111,6 +113,9 @@ export async function placePetrockRemediationOrder({
     customerId: string;
     id: string;
     merchantId: string;
+    eligibilityEvidence: unknown;
+    providerOrderId: string | null;
+    providerAttemptStartedAt: string | null;
     status: 'eligible' | 'paid' | 'payment_pending';
   };
   origin: string;
@@ -120,6 +125,9 @@ export async function placePetrockRemediationOrder({
     catalogCostUsd: number;
     catalogOrderFieldName: string;
     catalogSyncedAt: string;
+    carrier: string;
+    modelScope: unknown;
+    statusSegment: string;
     curatedProductId: string;
     orderFieldName: string;
     priceNgn: number;
@@ -128,6 +136,30 @@ export async function placePetrockRemediationOrder({
   };
   state: RemediationOrderState;
 }) {
+  // A saved/claimed paid row may already have advanced in another request.
+  if (order.providerOrderId || order.providerAttemptStartedAt)
+    return { kind: 'already_started' as const };
+  if (!isPetrockRemediationOrderEligible(order.eligibilityEvidence, product)) {
+    if (order.status === 'paid') {
+      const refunded = await state.failBeforeAcceptance({
+        customerMessage:
+          'This unlock is not eligible; your wallet was refunded.',
+        orderId: order.id,
+        reason: 'eligibility_evidence_invalid',
+      });
+      return {
+        kind: refunded ? ('failed' as const) : ('already_started' as const),
+      };
+    }
+    if (order.status === 'payment_pending') {
+      const reset = await state.resetPreparedQuote({
+        orderId: order.id,
+        reason: 'eligibility_evidence_invalid',
+      });
+      if (!reset) return { kind: 'already_started' as const };
+    }
+    return { kind: 'eligibility_failed' as const };
+  }
   const catalogAge = Date.now() - Date.parse(product.catalogSyncedAt);
   if (
     !product.active ||
@@ -140,12 +172,13 @@ export async function placePetrockRemediationOrder({
     !quoteCoversProviderCost({ fxRate, order, paymentCurrency, product })
   ) {
     if (order.status === 'paid') {
-      await state.failBeforeAcceptance({
+      const refunded = await state.failBeforeAcceptance({
         customerMessage:
           'This unlock could not be submitted, so your wallet was refunded.',
         orderId: order.id,
         reason: 'provider_preflight_failed',
       });
+      if (!refunded) return { kind: 'already_started' as const };
     } else if (order.status === 'payment_pending') {
       await state.resetPreparedQuote({
         orderId: order.id,
@@ -162,12 +195,13 @@ export async function placePetrockRemediationOrder({
     account.data.balance < product.catalogCostUsd
   ) {
     if (order.status === 'paid') {
-      await state.failBeforeAcceptance({
+      const refunded = await state.failBeforeAcceptance({
         customerMessage:
           'This unlock could not be submitted, so your wallet was refunded.',
         orderId: order.id,
         reason: 'provider_preflight_failed',
       });
+      if (!refunded) return { kind: 'already_started' as const };
     }
     return { kind: 'preflight_failed' as const };
   }
@@ -207,12 +241,14 @@ export async function placePetrockRemediationOrder({
       });
       return { kind: 'submission_unknown' as const };
     }
-    await state.failBeforeAcceptance({
+    const refunded = await state.failBeforeAcceptance({
       customerMessage: 'The carrier could not accept this unlock order.',
       orderId: order.id,
       reason: 'provider_submit_rejected',
     });
-    return { kind: 'failed' as const };
+    return {
+      kind: refunded ? ('failed' as const) : ('already_started' as const),
+    };
   }
 
   try {

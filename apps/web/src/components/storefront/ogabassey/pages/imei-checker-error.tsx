@@ -8,14 +8,18 @@ import { resolveStorefrontPathHref } from '@/lib/storefront-path-prefix';
 
 interface ImeiCheckerErrorProps {
   error: string;
+  needsSignIn?: boolean;
   needsWalletFunding: boolean;
 }
 
 export function ImeiCheckerError({
   error,
+  needsSignIn = false,
   needsWalletFunding,
 }: ImeiCheckerErrorProps) {
   const basePath = useMerchantSafe()?.basePath ?? '';
+  const checkerHref = resolveStorefrontPathHref(basePath, '/imei-check');
+  const loginHref = `${resolveStorefrontPathHref(basePath, '/account/login')}?redirect=${encodeURIComponent(checkerHref)}`;
 
   return (
     <div
@@ -30,6 +34,14 @@ export function ImeiCheckerError({
         <p className="text-sm text-[var(--store-danger-text,#b91c1c)]">
           {error}
         </p>
+        {needsSignIn ? (
+          <Link
+            className="inline-flex rounded-lg bg-[var(--store-primary)] px-3 py-2 text-sm font-bold text-[var(--store-primary-text,#ffffff)] hover:opacity-90"
+            href={loginHref as Route}
+          >
+            Sign in to continue
+          </Link>
+        ) : null}
         {needsWalletFunding ? (
           <Link
             className="inline-flex rounded-lg bg-[var(--store-primary)] px-3 py-2 text-sm font-bold text-[var(--store-primary-text,#ffffff)] hover:opacity-90"

@@ -57,6 +57,7 @@ export async function runPetrockReconciliation({ origin }: { origin: string }) {
 
       const result = await resolveClaimedPetrockLookup({
         attempt: lookup.reconcile_attempts,
+        merchantId: lookup.merchant_id,
         encryptionKey,
         lookup: {
           id: lookup.id,
@@ -97,6 +98,8 @@ export async function runPetrockReconciliation({ origin }: { origin: string }) {
       remediation.errored > 0 ||
       notifications.errored > 0
         ? 500
-        : 200,
+        : remediation.manualReview > 0
+          ? 503
+          : 200,
   };
 }

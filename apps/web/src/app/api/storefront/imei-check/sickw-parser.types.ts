@@ -1,3 +1,5 @@
+import type { ImeiDeviceProfile } from '@baci/shared/imei';
+
 export interface ImeiCheckResult {
   imei: string;
   device: string;
@@ -9,6 +11,7 @@ export interface ImeiCheckResult {
   blacklistStatus: string;
   carrier: string;
   deviceImage: string;
+  deviceProfile?: ImeiDeviceProfile;
   score: number;
   activationStatus?: string;
   serialNumber?: string;

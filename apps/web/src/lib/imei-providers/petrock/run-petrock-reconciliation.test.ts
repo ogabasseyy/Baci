@@ -73,6 +73,19 @@ describe('runPetrockReconciliation', () => {
     });
   });
 
+  it('signals a service failure when paid submissions require manual review', async () => {
+    mocks.reconcileRemediation.mockResolvedValue({
+      errored: 0,
+      manualReview: 1,
+    });
+    await expect(
+      runPetrockReconciliation({ origin: 'https://usebaci.com' })
+    ).resolves.toMatchObject({
+      status: 503,
+      body: { remediation: { manualReview: 1 } },
+    });
+  });
+
   it('skips when Petrock is not configured', async () => {
     mocks.getPetrockConfig.mockReturnValue(null);
 
@@ -160,3 +173,9 @@ describe('runPetrockReconciliation', () => {
     consoleError.mockRestore();
   });
 });
+
+vi.mock('@/lib/imei-device-catalog', () => ({
+  enrichImeiDeviceResult: vi.fn(
+    async (_merchantId: string, result: unknown) => result
+  ),
+}));

@@ -84,6 +84,7 @@ export const OgabasseyImeiChecker: React.FC<OgabasseyImeiCheckerProps> = ({
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsSignIn, setNeedsSignIn] = useState(false);
   const [needsWalletFunding, setNeedsWalletFunding] = useState(false);
   const [result, setResult] = useState<ImeiResult | null>(null);
   const [resultLookupId, setResultLookupId] = useState<string | null>(null);
@@ -155,11 +156,13 @@ export const OgabasseyImeiChecker: React.FC<OgabasseyImeiCheckerProps> = ({
     e.preventDefault();
     if (!isValidDeviceIdentifier(imei, identifier)) return;
     if (!merchantSlug) {
+      setNeedsSignIn(false);
       setError('This storefront is unavailable. Refresh and try again.');
       setNeedsWalletFunding(false);
       return;
     }
 
+    setNeedsSignIn(false);
     setIsLoading(true);
     setResult(null);
     setError(null);
@@ -219,6 +222,7 @@ export const OgabasseyImeiChecker: React.FC<OgabasseyImeiCheckerProps> = ({
       // hook's live value at response time — exactly the snapshot needed.
       setResultTier(currentTier);
     }
+    setNeedsSignIn(outcome.needsSignIn);
     setNeedsWalletFunding(outcome.needsWalletFunding);
     setIsLoading(false);
   };
@@ -237,6 +241,7 @@ export const OgabasseyImeiChecker: React.FC<OgabasseyImeiCheckerProps> = ({
             imei={imei}
             isLoading={isLoading}
             isPending={pendingLookup.pending !== null}
+            needsSignIn={needsSignIn}
             needsWalletFunding={needsWalletFunding}
             omitHero={omitHero}
             onCheck={handleCheck}

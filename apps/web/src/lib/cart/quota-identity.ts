@@ -4,12 +4,17 @@ import {
 } from '@baci/shared/cart';
 import type { NextRequest } from 'next/server';
 import { getTrustedClientIdentifier } from '@/lib/rate-limit';
+import { recordQuotaDenial } from './quota-denial-telemetry';
 import {
   type CartQuotaOperation,
   type CartQuotaResult,
   checkCartQuota,
   hashSubject,
 } from './request-quota';
+import {
+  type CartQuotaRequestContext,
+  createCartQuotaRequestContext,
+} from './request-quota-context';
 
 /**
  * Quota identity for anonymous cart operations.
@@ -46,6 +51,15 @@ export type AnonymousCartQuotaOperation =
   | 'create'
   | 'handoff_preview';
 
+export const CART_BOOTSTRAP_PRE_RESOLUTION_SCOPE = 'pre-resolution';
+export const CART_HANDOFF_PREVIEW_SCOPE = 'handoff-preview';
+
+type AnonymousQuotaIdentity =
+  | 'credential'
+  | 'missing_credential'
+  | 'invalid_credential'
+  | 'network_backstop';
+
 const NETWORK_BACKSTOP_OPERATION: Record<
   AnonymousCartQuotaOperation,
   CartQuotaOperation
@@ -71,14 +85,45 @@ const NETWORK_BACKSTOP_OPERATION: Record<
  */
 export async function checkAnonymousCartQuota(
   request: NextRequest,
-  input: { merchantId: string; operation: AnonymousCartQuotaOperation }
+  input: { merchantId: string; operation: AnonymousCartQuotaOperation },
+  requestContext?: CartQuotaRequestContext
 ): Promise<CartQuotaResult> {
+  const recordDenial = (
+    result: CartQuotaResult,
+    identity: AnonymousQuotaIdentity
+  ): CartQuotaResult => {
+    if (!result.allowed && process.env.NODE_ENV === 'production') {
+      // Only fixed categories are logged: no IP, credential, merchant or key.
+      recordQuotaDenial({
+        operation: input.operation,
+        identity,
+        scope:
+          input.merchantId === CART_BOOTSTRAP_PRE_RESOLUTION_SCOPE ||
+          input.merchantId === CART_HANDOFF_PREVIEW_SCOPE
+            ? 'pre_resolution'
+            : 'merchant',
+        degraded: result.degraded,
+      });
+    }
+    return result;
+  };
+  const quotaContext =
+    requestContext ??
+    createCartQuotaRequestContext(
+      input.operation === 'bootstrap' ? 'available' : 'required'
+    );
   const credential = request.headers.get(CART_CLIENT_CREDENTIAL_HEADER);
   if (!isValidCartClientCredential(credential)) {
-    return checkCartQuota({
-      ...input,
-      subject: getTrustedClientIdentifier(request),
-    });
+    return recordDenial(
+      await checkCartQuota(
+        {
+          ...input,
+          subject: getTrustedClientIdentifier(request),
+        },
+        quotaContext
+      ),
+      credential === null ? 'missing_credential' : 'invalid_credential'
+    );
   }
   // Backstop first: a denied network must not consume credential
   // budget, and — critically while the quota store is degraded to
@@ -86,12 +131,16 @@ export async function checkAnonymousCartQuota(
   // network stops creating new credential entries once its backstop
   // trips, so one host cannot poison the fallback capacity that
   // legitimate shoppers on the instance need.
-  const backstopQuota = await checkCartQuota({
-    merchantId: input.merchantId,
-    operation: NETWORK_BACKSTOP_OPERATION[input.operation],
-    subject: getTrustedClientIdentifier(request),
-  });
-  if (!backstopQuota.allowed) return backstopQuota;
+  const backstopQuota = await checkCartQuota(
+    {
+      merchantId: input.merchantId,
+      operation: NETWORK_BACKSTOP_OPERATION[input.operation],
+      subject: getTrustedClientIdentifier(request),
+    },
+    quotaContext
+  );
+  if (!backstopQuota.allowed)
+    return recordDenial(backstopQuota, 'network_backstop');
   if (backstopQuota.degraded) {
     // The shared store is down and counters live in bounded
     // per-instance memory (4,096 entries). Per-credential counters
@@ -99,13 +148,33 @@ export async function checkAnonymousCartQuota(
     // that capacity and deny every new shopper on the instance.
     // While degraded, the network identity (already counted by the
     // backstop, at its reduced degraded ceiling for bootstrap) is
-    // the identity; per-credential fairness resumes when Redis does.
+    // the identity; per-credential fairness resumes when the shared store does.
     return backstopQuota;
   }
-  return checkCartQuota({
-    ...input,
-    // Single derivation: the enforced subject is exactly the tested
-    // identity (prefix, lowercasing, hashing live in one place).
-    subject: getCartQuotaClientIdentity(request, input.merchantId),
-  });
+  const credentialQuota = await checkCartQuota(
+    {
+      ...input,
+      // Single derivation: the enforced subject is exactly the tested
+      // identity (prefix, lowercasing, hashing live in one place).
+      subject: getCartQuotaClientIdentity(request, input.merchantId),
+    },
+    quotaContext,
+    { skipMemoryFallback: input.operation === 'bootstrap' }
+  );
+  if (credentialQuota.degraded && input.operation === 'bootstrap') {
+    // A partial outage after a healthy backstop still needs the reduced
+    // network budget; rotating credentials must not create memory entries.
+    return recordDenial(
+      await checkCartQuota(
+        {
+          merchantId: input.merchantId,
+          operation: NETWORK_BACKSTOP_OPERATION.bootstrap,
+          subject: getTrustedClientIdentifier(request),
+        },
+        quotaContext
+      ),
+      'network_backstop'
+    );
+  }
+  return recordDenial(credentialQuota, 'credential');
 }

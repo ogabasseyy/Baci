@@ -6,12 +6,16 @@ import {
   cartSessionCookieName,
   readCookieFromRequest,
 } from '@/lib/cart/principal';
-import { checkAnonymousCartQuota } from '@/lib/cart/quota-identity';
+import {
+  CART_BOOTSTRAP_PRE_RESOLUTION_SCOPE,
+  checkAnonymousCartQuota,
+} from '@/lib/cart/quota-identity';
 import {
   createAnonMerchantFeatureLookup,
   readCartJsonBody,
   resolveCartMerchant,
 } from '@/lib/cart/request-context';
+import { createCartQuotaRequestContext } from '@/lib/cart/request-quota-context';
 import {
   cartErrorResponse,
   cartJsonResponse,
@@ -51,10 +55,15 @@ export async function POST(request: NextRequest) {
     // identity): unauthenticated callers must not drive merchant
     // resolution DB work unbounded before the merchant-scoped
     // bootstrap budget below can apply.
-    const preQuota = await checkAnonymousCartQuota(request, {
-      merchantId: 'pre-resolution',
-      operation: 'bootstrap',
-    });
+    const quotaContext = createCartQuotaRequestContext('available');
+    const preQuota = await checkAnonymousCartQuota(
+      request,
+      {
+        merchantId: CART_BOOTSTRAP_PRE_RESOLUTION_SCOPE,
+        operation: 'bootstrap',
+      },
+      quotaContext
+    );
     if (!preQuota.allowed) {
       return cartErrorResponse('quota_exceeded');
     }
@@ -78,10 +87,14 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse(merchant.error);
     }
 
-    const quota = await checkAnonymousCartQuota(request, {
-      merchantId: merchant.merchant.id,
-      operation: 'bootstrap',
-    });
+    const quota = await checkAnonymousCartQuota(
+      request,
+      {
+        merchantId: merchant.merchant.id,
+        operation: 'bootstrap',
+      },
+      quotaContext
+    );
     if (!quota.allowed) {
       return cartErrorResponse('quota_exceeded');
     }

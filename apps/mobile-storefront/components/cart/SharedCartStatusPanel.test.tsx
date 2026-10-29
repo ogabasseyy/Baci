@@ -5,11 +5,30 @@ import { sharedCartWriteRevision } from '@/stores/shared-cart-writer';
 import { SharedCartStatusPanel } from './SharedCartStatusPanel';
 
 const productId = '33333333-3333-4333-8333-333333333333';
+it('offers a neutral retry message and tells shoppers to add an absent item again', () => {
+  useCartStore.setState({ items: [] });
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    status: 'error',
+    code: 'quota_exceeded',
+    snapshot: null,
+    mergeConflicts: [],
+    refresh: jest.fn().mockResolvedValue(undefined),
+  });
+  const screen = render(<SharedCartStatusPanel />);
+  expect(
+    screen.getByText(/If an item did not appear, add it again later/)
+  ).toBeTruthy();
+  expect(screen.queryByText(/Too many cart requests/)).toBeNull();
+  expect(screen.getByRole('button', { name: 'Retry sync' })).toBeTruthy();
+  expect(useCartStore.getState().items).toEqual([]);
+});
 beforeEach(() => {
   useCartStore.setState({ items: [] });
   useNativeSharedCartStore.setState({
     enabled: true,
     status: 'error',
+    code: undefined,
     snapshot: null,
     metadataReady: false,
     mergeConflicts: [],
@@ -20,7 +39,7 @@ beforeEach(() => {
     chooseLegacy: null,
   });
 });
-it('explains quota exhaustion instead of a generic interruption', () => {
+it('explains how to recover a quota-denied sync', () => {
   useNativeSharedCartStore.setState({
     status: 'error',
     code: 'quota_exceeded',
@@ -28,7 +47,7 @@ it('explains quota exhaustion instead of a generic interruption', () => {
   const screen = render(<SharedCartStatusPanel />);
   expect(
     screen.getByText(
-      'Too many cart requests right now. Please wait a while, then retry. Your last confirmed items are saved.'
+      'Cart sync could not be completed. If an item did not appear, add it again later. Your last confirmed items are saved.'
     )
   ).toBeTruthy();
   expect(

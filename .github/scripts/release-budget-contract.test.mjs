@@ -14,7 +14,7 @@ const deploy = YAML.parse(readFileSync(new URL('../workflows/deploy.yml', import
 test('the run watcher covers the sequential workflow allowance plus slack', () => {
   const timeouts = {
     'vps-drain-readiness': 10,
-    'db-migrations': 50,
+    'db-migrations': 80,
     'gigl-worker-capability': 10,
     'deploy-production': 150,
   };
@@ -25,6 +25,6 @@ test('the run watcher covers the sequential workflow allowance plus slack', () =
   }
   assert.ok(
     RUN_WATCH_TIMEOUT_MS >= (sequential + 60) * 60 * 1000,
-    'watcher budget must cover the 220-min sequential allowance plus queue/approval slack',
+    'watcher budget must cover the 250-min sequential allowance plus queue/approval slack',
   );
 });

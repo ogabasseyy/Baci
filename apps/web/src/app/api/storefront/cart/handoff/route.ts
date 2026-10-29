@@ -7,7 +7,10 @@ import {
   rpcHandoffMerchantId,
   rpcPreviewHandoff,
 } from '@/lib/cart/handoff';
-import { checkAnonymousCartQuota } from '@/lib/cart/quota-identity';
+import {
+  CART_HANDOFF_PREVIEW_SCOPE,
+  checkAnonymousCartQuota,
+} from '@/lib/cart/quota-identity';
 import {
   type CartRequestContextDeps,
   checkCartQuota,
@@ -15,6 +18,7 @@ import {
   readCartJsonBody,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
+import { createCartQuotaRequestContext } from '@/lib/cart/request-quota-context';
 import { cartErrorResponse, cartJsonResponse } from '@/lib/cart/response';
 import {
   createCartPreviewClient,
@@ -155,10 +159,15 @@ export async function GET(request: NextRequest) {
     // handoff id is attacker-controlled before token validation, so
     // keying on it would let one caller mint a fresh bucket per
     // rotated id. Credential-keyed checks keep their network backstop.
-    const preQuota = await checkAnonymousCartQuota(request, {
-      merchantId: 'handoff-preview',
-      operation: 'handoff_preview',
-    });
+    const quotaContext = createCartQuotaRequestContext('required');
+    const preQuota = await checkAnonymousCartQuota(
+      request,
+      {
+        merchantId: CART_HANDOFF_PREVIEW_SCOPE,
+        operation: 'handoff_preview',
+      },
+      quotaContext
+    );
     if (!preQuota.allowed) {
       return cartErrorResponse('quota_exceeded');
     }
@@ -190,10 +199,14 @@ export async function GET(request: NextRequest) {
       // running the expensive preview RPC under only the fixed bucket.
       return cartErrorResponse('not_found');
     }
-    const quota = await checkAnonymousCartQuota(request, {
-      merchantId,
-      operation: 'handoff_preview',
-    });
+    const quota = await checkAnonymousCartQuota(
+      request,
+      {
+        merchantId,
+        operation: 'handoff_preview',
+      },
+      quotaContext
+    );
     if (!quota.allowed) {
       return cartErrorResponse('quota_exceeded');
     }

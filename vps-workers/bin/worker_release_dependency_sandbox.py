@@ -41,6 +41,7 @@ def systemd_command(source: Path, scratch: Path, expected_sha: str, uid: int, gi
     for key, value in (
         ("HOME", str(scratch / "home")), ("PATH", "/usr/bin:/bin"), ("CI", "true"),
         ("NODE_ENV", "production"), ("PNPM_CONFIG_IGNORE_SCRIPTS", "true"),
+        ("PNPM_CONFIG_PACKAGE_IMPORT_METHOD", "copy"),
         ("PNPM_CONFIG_FROZEN_LOCKFILE", "true"), ("PNPM_CONFIG_STORE_DIR", str(scratch / "pnpm-store")),
         ("PNPM_CONFIG_CACHE_DIR", str(scratch / "pnpm-cache")),
         ("PNPM_CONFIG_TRUST_LOCKFILE", "false"), ("PNPM_CONFIG_OFFLINE", "true"),
@@ -85,11 +86,11 @@ def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
     if version != EXPECTED_PNPM:
         raise BuilderRejected("installed pnpm version does not match repository pin")
     validate_receipt(working, private_cache, private_store / RECEIPT_NAME, version, expected_sha=expected_sha)
-    web_policy = subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--filter", "@baci/web", "--prod", "deploy", "--legacy", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store), str(web_output)), cwd=working, check=True, capture_output=True, text=True, timeout=240)
+    web_policy = subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "--filter", "@baci/web", "--prod", "deploy", "--legacy", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store), str(web_output)), cwd=working, check=True, capture_output=True, text=True, timeout=240)
     if "Lockfile passes supply-chain policies" not in web_policy.stdout:
         raise BuilderRejected("web offline deploy did not verify lockfile supply-chain policy")
     workers_root = working / "vps-workers"
-    worker_policy = subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store)), cwd=workers_root, check=True, capture_output=True, text=True, timeout=240)
+    worker_policy = subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store)), cwd=workers_root, check=True, capture_output=True, text=True, timeout=240)
     if "Lockfile passes supply-chain policies" not in worker_policy.stdout:
         raise BuilderRejected("worker offline install did not verify lockfile supply-chain policy")
     installed = workers_root / "node_modules"

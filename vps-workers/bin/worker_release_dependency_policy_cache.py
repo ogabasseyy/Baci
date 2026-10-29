@@ -31,6 +31,7 @@ POLICY_FLAGS = {
     "ignoreScripts": True,
     "ignorePnpmfile": True,
     "trustLockfile": False,
+    "packageImportMethod": "copy",
 }
 TRUSTED_REGISTRY = "https://registry.npmjs.org/"
 MAX_CACHE_BYTES = 256 * 1024 * 1024
@@ -221,6 +222,7 @@ def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/u
         "PNPM_CONFIG_TRUST_LOCKFILE": "false",
         "PNPM_CONFIG_OFFLINE": "false",
         "PNPM_CONFIG_REGISTRY": TRUSTED_REGISTRY,
+        "PNPM_CONFIG_PACKAGE_IMPORT_METHOD": "copy",
         "npm_config_registry": TRUSTED_REGISTRY,
         "npm_config_userconfig": "/dev/null",
         "npm_config_globalconfig": "/dev/null",
@@ -231,7 +233,7 @@ def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/u
         with tempfile.TemporaryDirectory(prefix="pnpm-policy-preverify-", dir=cache.parent) as output_root:
             commands = (
                 ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--filter", "@baci/web", "--prod", "deploy", "--legacy", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store), str(Path(output_root) / "web")), source),
-                ((node, pnpm, "--registry", TRUSTED_REGISTRY, "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store)), source / "vps-workers"),
+                ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store)), source / "vps-workers"),
             )
             for command, cwd in commands:
                 result = subprocess.run(command, cwd=cwd, env=env, check=True, capture_output=True, text=True, timeout=240)

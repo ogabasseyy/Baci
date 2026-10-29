@@ -73,6 +73,7 @@ class DependencyBuilderTests(unittest.TestCase):
         self.assertIn("PNPM_CONFIG_STORE_DIR=/scratch/pnpm-store", joined)
         self.assertIn("PNPM_CONFIG_CACHE_DIR=/scratch/pnpm-cache", joined)
         self.assertIn("PNPM_CONFIG_TRUST_LOCKFILE=false", joined)
+        self.assertIn("PNPM_CONFIG_PACKAGE_IMPORT_METHOD=copy", joined)
         self.assertIn(f"PNPM_CONFIG_REGISTRY={policy_cache.TRUSTED_REGISTRY}", joined)
         self.assertNotIn(str(builder.PNPM_STORE), joined)
         self.assertIn("PNPM_CONFIG_IGNORE_SCRIPTS=true", joined)
@@ -116,6 +117,7 @@ class DependencyBuilderTests(unittest.TestCase):
             web_deploy, web_cwd = calls[1]
             self.assertEqual(web_cwd, scratch / "source")
             self.assertIn("deploy", web_deploy)
+            self.assertIn("--package-import-method=copy", web_deploy)
             self.assertIn("--registry", web_deploy)
             self.assertIn(policy_cache.TRUSTED_REGISTRY, web_deploy)
             self.assertIn("--store-dir", web_deploy)
@@ -125,6 +127,7 @@ class DependencyBuilderTests(unittest.TestCase):
             self.assertEqual(worker_cwd, scratch / "source" / "vps-workers")
             self.assertEqual(worker_install[:3], (sandbox.PNPM, "--registry", policy_cache.TRUSTED_REGISTRY))
             self.assertIn("install", worker_install)
+            self.assertIn("--package-import-method=copy", worker_install)
             self.assertIn("--prod", worker_install)
             for required in ("--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir"):
                 self.assertIn(required, worker_install)
@@ -615,10 +618,12 @@ class DependencyBuilderTests(unittest.TestCase):
                 self.assertEqual(kwargs["env"]["PNPM_CONFIG_FROZEN_LOCKFILE"], "true")
                 if "install" in command:
                     self.assertIn("--frozen-lockfile", command)
+                    self.assertIn("--package-import-method=copy", command)
                 self.assertIn("--ignore-scripts", command)
                 self.assertIn("--ignore-pnpmfile", command)
                 self.assertNotIn("--config.trust-lockfile=true", command)
                 self.assertEqual(kwargs["env"]["PNPM_CONFIG_TRUST_LOCKFILE"], "false")
+                self.assertEqual(kwargs["env"]["PNPM_CONFIG_PACKAGE_IMPORT_METHOD"], "copy")
                 self.assertIn("--registry", command)
                 registry_index = command.index("--registry")
                 self.assertEqual(command[registry_index + 1], policy_cache.TRUSTED_REGISTRY)

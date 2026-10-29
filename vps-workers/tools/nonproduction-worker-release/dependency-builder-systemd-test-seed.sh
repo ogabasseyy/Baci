@@ -31,6 +31,15 @@ cp -a "$source_root/." "$seed_root/"
 python3 "$(dirname "$0")/../../bin/worker_release_dependency_policy_cache.py" \
   --preverify --source "$pnpm_workspace_root" --store "$store_root" --cache "$cache_root" \
   --pnpm "$pnpm_entrypoint" --node /usr/bin/node
+PYTHONPATH="$(dirname "$0")" PYTHONDONTWRITEBYTECODE=1 python3 -B - "$store_root" "$cache_root" <<'PY'
+import sys
+from pathlib import Path
+from dependency_builder_systemd_test_seed_diagnostics import safe_tree_category
+
+store, cache = map(Path, sys.argv[1:])
+print("synthetic seed tree categories: "
+      f"store={safe_tree_category(store)} cache={safe_tree_category(cache)}")
+PY
 chown -R root:root "$source_root"
 find "$source_root" -type d -exec chmod 0550 {} +
 find "$source_root" -type f -exec chmod 0440 {} +
@@ -76,7 +85,8 @@ mkdir -m 0755 -- "$helper_root"
 helper_created=1
 chown root:root "$helper_root"
 for module in worker_release_dependency_builder.py worker_release_dependency_artifacts.py \
-  worker_release_dependency_source.py worker_release_dependency_receipt_validation.py \
+  worker_release_dependency_source.py worker_release_dependency_reclamation.py \
+  worker_release_dependency_receipt_validation.py \
   worker_release_dependency_fs.py worker_release_dependency_sandbox.py \
   worker_release_dependency_seed_consumer.py \
   worker_release_dependency_policy_cache.py worker_release_dependency_registry_policy.py \

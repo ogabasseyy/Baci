@@ -249,7 +249,16 @@ def verify_runtime_candidates(payload: Path) -> dict[str, str]:
     env = {"PATH": "/usr/bin:/bin", "HOME": "/nonexistent", "NODE_ENV": "production"}
     try:
         result = subprocess.run((str(web_tsx), "--version"), cwd=web, env=env, check=True, capture_output=True, text=True, timeout=20)
-        subprocess.run(("/usr/bin/node", "--input-type=module", "-e", "import('dotenv').then(m => { if (typeof m.config !== 'function') process.exit(2) })"), cwd=payload / "root", env=env, check=True, capture_output=True, text=True, timeout=20)
+        worker_runtime_smoke = (
+            "Promise.all([import('dotenv'), import('@supabase/supabase-js'), "
+            "import('expo-server-sdk')]).then(([dotenv, supabase, expo]) => { "
+            "if (typeof dotenv.config !== 'function' || "
+            "typeof supabase.createClient !== 'function' || typeof expo.Expo !== 'function') "
+            "process.exit(2) })"
+        )
+        subprocess.run(("/usr/bin/node", "--input-type=module", "-e", worker_runtime_smoke),
+                       cwd=payload / "root", env=env, check=True, capture_output=True,
+                       text=True, timeout=30)
     except (OSError, subprocess.SubprocessError) as exc:
         raise BuilderRejected("dependency runtime smoke check failed") from exc
     if not result.stdout.strip():

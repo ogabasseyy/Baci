@@ -183,7 +183,7 @@ class DependencyBuilderTests(unittest.TestCase):
             source = root / "verified-source"
             source.mkdir()
             scratch = root / "scratch"
-            scratch.mkdir()
+            scratch.mkdir(mode=0o700)
             (scratch / "home").mkdir()
             (scratch / "pnpm-store").mkdir(mode=0o700)
             (scratch / "pnpm-cache").mkdir(mode=0o700)
@@ -197,6 +197,8 @@ class DependencyBuilderTests(unittest.TestCase):
             sandbox_uid = os.geteuid() if os.geteuid() != 0 else 1234
             sandbox_gid = os.getgid() if os.geteuid() != 0 else 1234
             if os.geteuid() == 0:
+                os.chown(scratch, sandbox_uid, sandbox_gid)
+                os.chown(scratch / "home", sandbox_uid, sandbox_gid)
                 os.chown(scratch / "pnpm-store", sandbox_uid, sandbox_gid)
                 os.chown(scratch / "pnpm-cache", sandbox_uid, sandbox_gid)
             calls = []
@@ -204,9 +206,15 @@ class DependencyBuilderTests(unittest.TestCase):
             receipt_validations = []
 
             def copy_source(_source, destination):
-                (destination / "vps-workers").mkdir(parents=True)
+                (destination / "apps/web").mkdir(parents=True, mode=0o700)
+                (destination / "vps-workers").mkdir(parents=True, mode=0o700)
                 (destination / "pnpm-lock.yaml").write_text("settings:\n  injectWorkspacePackages: false\n", encoding="utf-8")
                 (destination / "vps-workers/pnpm-lock.yaml").write_text("settings:\n  injectWorkspacePackages: false\n", encoding="utf-8")
+                if os.geteuid() == 0:
+                    os.chown(destination, sandbox_uid, sandbox_gid)
+                    os.chown(destination / "apps", sandbox_uid, sandbox_gid)
+                    os.chown(destination / "apps/web", sandbox_uid, sandbox_gid)
+                    os.chown(destination / "vps-workers", sandbox_uid, sandbox_gid)
 
             def run(command, *, cwd, **_kwargs):
                 calls.append((tuple(command), Path(cwd)))
@@ -215,7 +223,14 @@ class DependencyBuilderTests(unittest.TestCase):
                     return type("Result", (), {"stdout": sandbox.EXPECTED_PNPM + "\n"})()
                 if "@baci/web..." in command:
                     (scratch / "pnpm-cache" / "metadata.json").write_text("pnpm mutable update", encoding="utf-8")
+                    (scratch / "source/node_modules").mkdir(mode=0o700)
+                    (scratch / "source/apps/web/node_modules").mkdir(mode=0o700)
+                    if os.geteuid() == 0:
+                        os.chown(scratch / "source/node_modules", sandbox_uid, sandbox_gid)
+                        os.chown(scratch / "source/apps/web/node_modules", sandbox_uid, sandbox_gid)
                 if "deploy" in command:
+                    self.assertTrue((scratch / "source/node_modules").exists())
+                    self.assertTrue((scratch / "source/apps/web/node_modules").exists())
                     return type("Result", (), {"stdout": "Deploying production dependencies", "stderr": ""})()
                 if "@baci/web..." in command:
                     return type("Result", (), {
@@ -223,11 +238,27 @@ class DependencyBuilderTests(unittest.TestCase):
                     })()
                 if "install" in command and "--prod" in command:
                     self.assertEqual(Path(cwd), scratch / "source" / "vps-workers")
-                    (Path(cwd) / "node_modules").mkdir()
+                    self.assertFalse((scratch / "source/node_modules").exists(),
+                                     "web workspace tree must be reclaimed before worker installation")
+                    self.assertFalse((scratch / "source/apps/web/node_modules").exists(),
+                                     "all workspace install trees must be reclaimed before worker installation")
+                    (Path(cwd) / "node_modules").mkdir(mode=0o700)
+                    (Path(cwd) / "node_modules/dotenv").mkdir()
+                    (Path(cwd) / "node_modules/dotenv/index.js").write_text("module", encoding="utf-8")
+                    if os.geteuid() == 0:
+                        os.chown(Path(cwd) / "node_modules", sandbox_uid, sandbox_gid)
+                        os.chown(Path(cwd) / "node_modules/dotenv", sandbox_uid, sandbox_gid)
+                        os.chown(Path(cwd) / "node_modules/dotenv/index.js", sandbox_uid, sandbox_gid)
                     return type("Result", (), {
                         "stdout": "", "stderr": "✓ Lockfile passes supply-chain policies (1 entry in 2ms)"
                     })()
                 return type("Result", (), {"stdout": ""})()
+
+            def verify_after_reclamation(payload):
+                self.assertFalse((scratch / "source").exists())
+                self.assertFalse((scratch / "pnpm-store").exists())
+                self.assertFalse((scratch / "pnpm-cache").exists())
+                return {"web_tsx": "passed", "worker_dotenv": "passed"}
 
             with patch.dict(os.environ, {"HOME": str(scratch / "home")}), \
                  patch.object(sandbox, "SEED_OWNER_UID", os.geteuid()), \
@@ -236,9 +267,8 @@ class DependencyBuilderTests(unittest.TestCase):
                  patch.object(sandbox, "copy_source_tree", side_effect=copy_source), \
                  patch.object(sandbox, "run_bounded_capture", side_effect=_bounded_run_adapter(run)), \
                  patch.object(sandbox, "validate_receipt", side_effect=lambda *args, **kwargs: receipt_validations.append((args, kwargs))), \
-                 patch.object(sandbox, "verify_runtime_candidates", return_value={
-                     "web_tsx": "passed", "worker_dotenv": "passed"
-                 }), patch.object(sandbox, "write_smoke_evidence"):
+                 patch.object(sandbox, "verify_runtime_candidates", side_effect=verify_after_reclamation), \
+                 patch.object(sandbox, "write_smoke_evidence"):
                 sandbox.run_sandbox_worker(source, scratch, SHA)
 
             web_install, web_install_cwd = calls[1]
@@ -269,7 +299,9 @@ class DependencyBuilderTests(unittest.TestCase):
             self.assertIn(str(scratch / "pnpm-store"), worker_install)
             self.assertEqual(injection_settings[1:], ["false", "true", "false"])
             self.assertEqual((seed / "metadata.json").read_text(encoding="utf-8"), "verified seed")
-            self.assertEqual((scratch / "pnpm-cache" / "metadata.json").read_text(encoding="utf-8"), "pnpm mutable update")
+            self.assertFalse((scratch / "pnpm-cache").exists())
+            self.assertFalse((scratch / "pnpm-store").exists())
+            self.assertFalse((scratch / "source").exists())
             self.assertEqual(len(receipt_validations), 2)
             for args, kwargs in receipt_validations:
                 self.assertEqual(args[1], seed)
@@ -277,6 +309,7 @@ class DependencyBuilderTests(unittest.TestCase):
                 self.assertEqual(kwargs["cache_owner_uid"], os.geteuid())
             self.assertFalse((seed / policy_cache.RECEIPT_NAME).exists())
             self.assertTrue((scratch / "payload" / "root" / "node_modules").is_dir())
+            self.assertEqual((scratch / "payload/root/node_modules/dotenv/index.js").read_text(encoding="utf-8"), "module")
 
     def test_private_offline_store_is_an_independent_writable_copy(self):
         with tempfile.TemporaryDirectory() as temporary:

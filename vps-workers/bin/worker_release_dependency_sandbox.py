@@ -10,6 +10,9 @@ import time
 from pathlib import Path
 
 from worker_release_dependency_artifacts import BuilderRejected, copy_source_tree, validate_payload, verify_runtime_candidates
+from worker_release_dependency_reclamation import (
+    move_worker_install_tree, reclaim_workspace_node_modules, remove_verified_scratch_subtree,
+)
 from worker_release_dependency_fs import directory_usage, write_smoke_evidence
 from worker_release_dependency_policy_cache import RECEIPT_NAME, TRUSTED_REGISTRY, validate_receipt
 from worker_release_dependency_diagnostics import (
@@ -243,6 +246,9 @@ def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
                   env={**command_env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true"},
                   timeout=240)
     remove_workspace_self_link(web_output, working)
+    # deploy has consumed the workspace install tree. Reclaim it before the
+    # independent worker install so the two workspace trees do not overlap.
+    reclaim_workspace_node_modules(scratch, owner_uid=os.geteuid())
     workers_root = working / "vps-workers"
     worker_policy = run_pnpm_step("worker-install", (PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store)), cwd=workers_root,
                                   env={**command_env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": str(injection_settings["vps-workers/pnpm-lock.yaml"]).lower()},
@@ -257,7 +263,13 @@ def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
         raise BuilderRejected("worker dependency install did not produce a real node_modules directory")
     root_node_modules = scratch / "payload" / "root" / "node_modules"
     root_node_modules.parent.mkdir(mode=0o700, parents=True)
-    shutil.copytree(installed, root_node_modules, symlinks=True)
+    move_worker_install_tree(scratch, owner_uid=os.geteuid())
+    # The result now has private copies of both deploy outputs. Remove the
+    # mutable checkout and pnpm inputs before final checks; these then prove
+    # the candidate does not depend on source, store, or cache paths.
+    remove_verified_scratch_subtree(scratch, "source", owner_uid=os.geteuid())
+    remove_verified_scratch_subtree(scratch, "pnpm-store", owner_uid=os.geteuid())
+    remove_verified_scratch_subtree(scratch, "pnpm-cache", owner_uid=os.geteuid())
     validate_payload(scratch / "payload")
     evidence = verify_runtime_candidates(scratch / "payload")
     write_smoke_evidence(scratch, evidence)

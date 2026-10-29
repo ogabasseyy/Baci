@@ -18,6 +18,7 @@ on:
       - 'vps-workers/tools/nonproduction-worker-release/dependency-*'
       - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_fixture_pnpm_*.py'
       - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_systemd_test_source.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_systemd_test_seed_diagnostics.py'
       - '.github/workflows/worker-release-dependency-systemd-tests.yml'
   workflow_dispatch:
 
@@ -40,6 +41,9 @@ jobs:
           version: 11.7.0
       - name: Run dependency consumer and pinned-path regressions
         run: |
+          python3 vps-workers/bin/worker_release_dependency_runtime_smoke.test.py -q
+          python3 vps-workers/bin/worker_release_dependency_reclamation.test.py -q
+          PYTHONPATH=vps-workers/tools/nonproduction-worker-release python3 vps-workers/tools/nonproduction-worker-release/dependency_builder_systemd_test_seed_diagnostics.test.py -q
           python3 vps-workers/bin/worker_release_dependency_consumer.test.py -q
           python3 vps-workers/bin/worker_release_dependency_install.test.py -q
           python3 vps-workers/bin/worker_release_dependency_consumer_quiescence.test.py -q

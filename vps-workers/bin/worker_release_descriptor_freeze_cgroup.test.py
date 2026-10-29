@@ -16,7 +16,6 @@ import worker_release_descriptor_cgroup as cgroup_module
 
 
 class DescriptorFreezeCgroupIntegrationTests(unittest.TestCase):
-    @unittest.skipUnless(os.geteuid() == 0, "requires root to exercise isolated child identity")
     def test_dedicated_child_protocol_reaches_ready_before_exit(self):
         with tempfile.TemporaryDirectory() as temporary:
             marker = Path(temporary) / "marker"
@@ -25,8 +24,10 @@ class DescriptorFreezeCgroupIntegrationTests(unittest.TestCase):
                 assert process.stdin is not None
                 process.stdin.write(b"go\n")
                 process.stdin.flush()
+                process.stdin.close()
                 assert process.stdout is not None
                 self.assertEqual(process.stdout.readline(), b"READY\n")
+                process.stdout.close()
                 self.assertEqual(process.wait(timeout=2), 0)
                 self.assertEqual(marker.read_text(), "archive entry")
             finally:
@@ -179,21 +180,28 @@ class DescriptorFreezeCgroupIntegrationTests(unittest.TestCase):
 
 def _dedicated_child(uid, gid, marker, *, sleep_seconds=1, spawn_descendant=False):
     def drop_identity():
-        os.setgroups([])
-        os.setgid(gid)
-        os.setuid(uid)
+        if os.geteuid() == 0:
+            os.setgroups([])
+            os.setgid(gid)
+            os.setuid(uid)
+        elif (os.getuid(), os.getgid()) != (uid, gid):
+            raise RuntimeError("non-root test runner cannot switch child identity")
 
+    child_env = os.environ.copy()
+    child_env["FREEZE_TEST_MARKER"] = str(marker) if marker else ""
+    child_env["FREEZE_TEST_SLEEP"] = str(sleep_seconds)
+    child_env["FREEZE_TEST_DESCENDANT"] = "1" if spawn_descendant else "0"
     return subprocess.Popen(
         [sys.executable, "-c",
-         "import pathlib,subprocess,sys,time; sys.stdin.readline(); "
-         "pathlib.Path(sys.argv[0]).write_text('archive entry') if sys.argv[0] else None; "
-         "subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']) if sys.argv[2]=='descendant' else None; "
+         "import os,pathlib,subprocess,sys,time; sys.stdin.readline(); "
+         "pathlib.Path(os.environ['FREEZE_TEST_MARKER']).write_text('archive entry') "
+         "if os.environ['FREEZE_TEST_MARKER'] else None; "
+         "subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']) "
+         "if os.environ['FREEZE_TEST_DESCENDANT']=='1' else None; "
          "print('READY',flush=True); "
-         "time.sleep(float(sys.argv[1]))",
-         str(marker) if marker else "", str(sleep_seconds),
-         "descendant" if spawn_descendant else "none"],
+         "time.sleep(float(os.environ['FREEZE_TEST_SLEEP']))"],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-        preexec_fn=drop_identity,
+        preexec_fn=drop_identity, env=child_env,
     )
 
 

@@ -6,7 +6,10 @@ import {
   selectHeroAvifQualityForByteCap,
 } from '@/components/storefront/ogabassey/components/hero-mobile-image-config';
 import { DEFAULT_MEDIA_CDN_ORIGIN } from '@/config/cdn';
-import type { OgabasseyCdnImageProxyRequest } from '@/schemas/ogabassey-cdn-image-proxy';
+import {
+  ALLOWED_IMAGE_VERSION_QUERY_PATTERN,
+  type OgabasseyCdnImageProxyRequest,
+} from '@/schemas/ogabassey-cdn-image-proxy';
 
 const IMMUTABLE_IMAGE_CACHE_CONTROL =
   'public, max-age=31536000, s-maxage=31536000, immutable';
@@ -42,8 +45,12 @@ export function buildUpstreamOgabasseyTransformUrl(
     .split('/')
     .map((segment) => encodeURIComponent(segment))
     .join('/');
-  const query = searchParams?.toString();
-  return `${DEFAULT_MEDIA_CDN_ORIGIN}/image/${parts.join(',')}/${encodedAssetPath}${query ? `?${query}` : ''}`;
+  const versionParam = searchParams?.get('v');
+  const query =
+    versionParam && ALLOWED_IMAGE_VERSION_QUERY_PATTERN.test(versionParam)
+      ? `?v=${encodeURIComponent(versionParam)}`
+      : '';
+  return `${DEFAULT_MEDIA_CDN_ORIGIN}/image/${parts.join(',')}/${encodedAssetPath}${query}`;
 }
 
 export function getCandidateQualitiesForRequest(
@@ -69,6 +76,59 @@ function buildErrorResponse(message: string, status: 404 | 502): Response {
       status,
     }
   );
+}
+
+interface CandidateSuccess {
+  buffer: ArrayBuffer;
+  bytes: number;
+  contentType: string;
+  ok: true;
+  quality: number;
+}
+
+interface CandidateFailure {
+  ok: false;
+  status: 404 | 502;
+}
+
+type CandidateOutcome = CandidateFailure | CandidateSuccess;
+
+async function fetchCandidateVariant(
+  parsed: OgabasseyCdnImageProxyRequest,
+  fetcher: typeof fetch,
+  quality: number,
+  fallbackContentType: string,
+  searchParams?: URLSearchParams,
+  signal?: AbortSignal
+): Promise<CandidateOutcome> {
+  const upstreamUrl = buildUpstreamOgabasseyTransformUrl(
+    parsed.options,
+    parsed.assetPath,
+    quality,
+    searchParams
+  );
+  try {
+    const response = await fetcher(upstreamUrl, { signal });
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status === 404 ? 404 : 502,
+      };
+    }
+    const buffer = await response.arrayBuffer();
+    return {
+      buffer,
+      bytes: buffer.byteLength,
+      contentType: response.headers.get('content-type') || fallbackContentType,
+      ok: true,
+      quality,
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 502,
+    };
+  }
 }
 
 export async function fetchSameOriginOgabasseyImageResponse(
@@ -120,46 +180,45 @@ export async function fetchSameOriginOgabasseyImageResponse(
     });
   }
 
-  const settled = await Promise.all(
-    qualities.map(async (quality) => {
-      const upstreamUrl = buildUpstreamOgabasseyTransformUrl(
-        parsed.options,
-        parsed.assetPath,
-        quality,
-        searchParams
-      );
-      try {
-        const response = await fetcher(upstreamUrl);
-        if (!response.ok) {
-          return {
-            ok: false as const,
-            status: response.status === 404 ? (404 as const) : (502 as const),
-          };
-        }
-        const buffer = await response.arrayBuffer();
-        return {
-          buffer,
-          bytes: buffer.byteLength,
-          contentType:
-            response.headers.get('content-type') || fallbackContentType,
-          ok: true as const,
-          quality,
-        };
-      } catch {
-        return {
-          ok: false as const,
-          status: 502 as const,
-        };
-      }
-    })
+  // Start candidate quality requests concurrently so lower qualities are
+  // already in flight if quality=70 exceeds the 20 KB cap, but inspect them in
+  // descending quality order and return immediately as soon as a fitting
+  // candidate resolves without awaiting slower lower-quality variants.
+  const controller = new AbortController();
+  const candidatePromises = qualities.map((quality) =>
+    fetchCandidateVariant(
+      parsed,
+      fetcher,
+      quality,
+      fallbackContentType,
+      searchParams,
+      controller.signal
+    )
   );
 
-  const candidates = settled.filter((item) => item.ok);
+  const candidates: CandidateSuccess[] = [];
+  let failureStatus: 404 | 502 = 502;
+
+  for (const candidatePromise of candidatePromises) {
+    const outcome = await candidatePromise;
+    if (!outcome.ok) {
+      if (outcome.status === 404) {
+        failureStatus = 404;
+      }
+      continue;
+    }
+    candidates.push(outcome);
+    if (outcome.bytes <= MOBILE_HERO_LCP_MAX_BYTES) {
+      break;
+    }
+  }
+
+  controller.abort();
+
   if (candidates.length === 0) {
-    const failed = settled.find((item) => !item.ok);
     return buildErrorResponse(
       'Requested image variant not found',
-      failed && !failed.ok ? failed.status : 502
+      failureStatus
     );
   }
 
@@ -170,10 +229,6 @@ export async function fetchSameOriginOgabasseyImageResponse(
   const selected =
     candidates.find((item) => item.quality === selectedMeta?.quality) ??
     candidates[candidates.length - 1];
-
-  if (!selected) {
-    return buildErrorResponse('Unable to resolve image payload', 502);
-  }
 
   return new Response(selected.buffer, {
     headers: {

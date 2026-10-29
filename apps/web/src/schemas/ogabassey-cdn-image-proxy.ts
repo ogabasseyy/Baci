@@ -3,6 +3,13 @@ import { z } from 'zod';
 const ALLOWED_ASSET_PREFIX_PATTERN = /^core-assets\/(?:products|blog)\//;
 const ALLOWED_ASSET_EXTENSION_PATTERN = /\.(?:avif|jpe?g|png|webp)$/i;
 const FORBIDDEN_PATH_PATTERN = /(?:^|\/)\.\.(?:\/|$)|\\|\0|%(?:2e|2f|5c)/i;
+export const ALLOWED_IMAGE_VERSION_QUERY_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
+
+export const ogabasseyCdnImageProxySearchParamsSchema = z
+  .object({
+    v: z.string().regex(ALLOWED_IMAGE_VERSION_QUERY_PATTERN).optional(),
+  })
+  .strict();
 
 export const ogabasseyCdnImageTransformOptionsSchema = z.object({
   fit: z.enum(['inside', 'cover']).default('inside'),

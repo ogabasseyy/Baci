@@ -5,7 +5,7 @@ import { ogabasseyCdnImageProxyPathSchema } from '@/schemas/ogabassey-cdn-image-
 import { GET } from './route';
 
 describe('/cdn-image/[...path] same-origin route and 20 KB AVIF step-down', () => {
-  it('rejects malformed options or untrusted asset paths with 400', async () => {
+  it('rejects malformed options, untrusted asset paths, or non-allowlisted query params with 400', async () => {
     for (const invalidPath of [
       ['width=384,quality=70,format=avif', '../secret.avif'],
       ['width=384,quality=70,format=avif', 'other-bucket', 'item.avif'],
@@ -18,9 +18,31 @@ describe('/cdn-image/[...path] same-origin route and 20 KB AVIF step-down', () =
       );
       expect(response.status).toBe(400);
     }
+
+    for (const query of [
+      'bust=1',
+      'v=1&v=2',
+      'v=a%20b',
+      `v=${'a'.repeat(65)}`,
+    ]) {
+      const queryResponse = await GET(
+        new NextRequest(`https://ogabassey.com/cdn-image/test?${query}`),
+        {
+          params: Promise.resolve({
+            path: [
+              'width=384,quality=70,format=avif',
+              'core-assets',
+              'products',
+              'itel-battery.avif',
+            ],
+          }),
+        }
+      );
+      expect(queryResponse.status).toBe(400);
+    }
   });
 
-  it('serves a 384w AVIF image at quality=70 when <= 20,000 bytes and forwards version query params', async () => {
+  it('returns a fitting quality=70 AVIF immediately without waiting for pending lower-quality variants', async () => {
     const parsed = ogabasseyCdnImageProxyPathSchema.parse([
       'width=384,quality=70,format=avif',
       'core-assets',
@@ -28,12 +50,19 @@ describe('/cdn-image/[...path] same-origin route and 20 KB AVIF step-down', () =
       'itel-battery.avif',
     ]);
     const calls: string[] = [];
-    const fakeFetcher: typeof fetch = vi.fn(async (input) => {
-      calls.push(String(input));
-      return new Response(new Uint8Array(16_593), {
-        headers: { 'content-type': 'image/avif' },
-        status: 200,
-      });
+    const neverResolvingPromise = new Promise<Response>(() => undefined);
+    const fakeFetcher: typeof fetch = vi.fn((input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes('quality=70')) {
+        return Promise.resolve(
+          new Response(new Uint8Array(16_593), {
+            headers: { 'content-type': 'image/avif' },
+            status: 200,
+          })
+        );
+      }
+      return neverResolvingPromise;
     });
 
     const response = await fetchSameOriginOgabasseyImageResponse(
@@ -42,11 +71,9 @@ describe('/cdn-image/[...path] same-origin route and 20 KB AVIF step-down', () =
       new URLSearchParams('v=20260927')
     );
     expect(response.status).toBe(200);
-    expect(calls).toEqual([
-      'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/itel-battery.avif?v=20260927',
-      'https://cdn.ogabassey.com/image/width=384,quality=60,format=avif/core-assets/products/itel-battery.avif?v=20260927',
-      'https://cdn.ogabassey.com/image/width=384,quality=50,format=avif/core-assets/products/itel-battery.avif?v=20260927',
-    ]);
+    expect(calls[0]).toBe(
+      'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/itel-battery.avif?v=20260927'
+    );
     expect(response.headers.get('X-Hero-Effective-Quality')).toBe('70');
     expect(response.headers.get('Cache-Control')).toBe(
       'public, max-age=31536000, s-maxage=31536000, immutable'
@@ -54,30 +81,33 @@ describe('/cdn-image/[...path] same-origin route and 20 KB AVIF step-down', () =
     expect((await response.arrayBuffer()).byteLength).toBe(16_593);
   });
 
-  it('selects quality=60 concurrently when quality=70 exceeds 20,000 bytes', async () => {
+  it('selects quality=60 when quality=70 exceeds 20,000 bytes without waiting for a pending quality=50', async () => {
     const parsed = ogabasseyCdnImageProxyPathSchema.parse([
       'width=384,quality=70,format=avif',
       'core-assets',
       'products',
       'detailed-hero.avif',
     ]);
-    const calls: string[] = [];
-    const sizesByQuality: Record<string, number> = {
-      'quality=70': 24_800,
-      'quality=60': 18_200,
-      'quality=50': 14_100,
-    };
-    const fakeFetcher: typeof fetch = vi.fn(async (input) => {
+    const neverResolvingPromise = new Promise<Response>(() => undefined);
+    const fakeFetcher: typeof fetch = vi.fn((input) => {
       const url = String(input);
-      calls.push(url);
-      const matchedSize =
-        Object.entries(sizesByQuality).find(([token]) =>
-          url.includes(token)
-        )?.[1] ?? 15_000;
-      return new Response(new Uint8Array(matchedSize), {
-        headers: { 'content-type': 'image/avif' },
-        status: 200,
-      });
+      if (url.includes('quality=70')) {
+        return Promise.resolve(
+          new Response(new Uint8Array(24_800), {
+            headers: { 'content-type': 'image/avif' },
+            status: 200,
+          })
+        );
+      }
+      if (url.includes('quality=60')) {
+        return Promise.resolve(
+          new Response(new Uint8Array(18_200), {
+            headers: { 'content-type': 'image/avif' },
+            status: 200,
+          })
+        );
+      }
+      return neverResolvingPromise;
     });
 
     const response = await fetchSameOriginOgabasseyImageResponse(
@@ -85,11 +115,6 @@ describe('/cdn-image/[...path] same-origin route and 20 KB AVIF step-down', () =
       fakeFetcher
     );
     expect(response.status).toBe(200);
-    expect(calls).toEqual([
-      'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/detailed-hero.avif',
-      'https://cdn.ogabassey.com/image/width=384,quality=60,format=avif/core-assets/products/detailed-hero.avif',
-      'https://cdn.ogabassey.com/image/width=384,quality=50,format=avif/core-assets/products/detailed-hero.avif',
-    ]);
     expect(response.headers.get('X-Hero-Effective-Quality')).toBe('60');
     expect((await response.arrayBuffer()).byteLength).toBe(18_200);
   });
@@ -120,7 +145,7 @@ describe('/cdn-image/[...path] same-origin route and 20 KB AVIF step-down', () =
     expect(response.headers.get('Content-Length')).toBe('45000');
   });
 
-  it('still serves a valid candidate when another concurrent quality rung fails', async () => {
+  it('still serves a valid candidate when a higher-quality rung fails', async () => {
     const parsed = ogabasseyCdnImageProxyPathSchema.parse([
       'width=384,quality=70,format=avif',
       'core-assets',
@@ -129,7 +154,7 @@ describe('/cdn-image/[...path] same-origin route and 20 KB AVIF step-down', () =
     ]);
     const fakeFetcher: typeof fetch = vi.fn(async (input) => {
       const url = String(input);
-      if (url.includes('quality=50')) {
+      if (url.includes('quality=70')) {
         throw new Error('transient upstream timeout');
       }
       return new Response(new Uint8Array(15_400), {
@@ -143,6 +168,6 @@ describe('/cdn-image/[...path] same-origin route and 20 KB AVIF step-down', () =
       fakeFetcher
     );
     expect(response.status).toBe(200);
-    expect(response.headers.get('X-Hero-Effective-Quality')).toBe('70');
+    expect(response.headers.get('X-Hero-Effective-Quality')).toBe('60');
   });
 });

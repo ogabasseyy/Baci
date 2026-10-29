@@ -8,6 +8,7 @@ import io
 import os
 import pwd
 import socket
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -35,6 +36,20 @@ FENCE = {"repository": "ogabasseyy/Baci", "workflow": ".github/workflows/product
 RESOURCE_ROOT = supervisor.RESOURCE_ROOT
 
 
+def systemd_system_manager_available(run=None) -> bool:
+    """Probe manager reachability without requiring the host to be healthy."""
+    runner = run or subprocess.run
+    try:
+        result = runner(
+            ("systemctl", "--system", "show", "--property=Version", "--value"),
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, timeout=5, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
 def archive_bytes() -> bytes:
     stream = io.BytesIO()
     with tarfile.open(fileobj=stream, mode="w:gz") as archive:
@@ -48,6 +63,16 @@ def archive_bytes() -> bytes:
 
 
 class ExtractorUnitTests(unittest.TestCase):
+    def test_systemd_manager_probe_accepts_degraded_but_reachable_manager(self):
+        run = Mock(return_value=Mock(returncode=0, stdout="255\n"))
+        self.assertTrue(systemd_system_manager_available(run))
+        self.assertEqual(run.call_args.args[0],
+                         ("systemctl", "--system", "show", "--property=Version", "--value"))
+
+    def test_systemd_manager_probe_rejects_absent_manager(self):
+        self.assertFalse(systemd_system_manager_available(
+            Mock(return_value=Mock(returncode=1, stdout=""))))
+
     def test_apply_passes_file_record_to_shared_installer_without_missing_type_import(self):
         item = provisioner.File("fixture", b"content", 0o440, Path("/tmp/fixture"))
         runner = Mock()
@@ -187,8 +212,8 @@ class ExtractorUnitTests(unittest.TestCase):
                          "enabled only by the disposable root/systemd CI harness")
     def test_fixed_systemd_unit_extracts_exact_archive_and_freezes_journal_output(self):
         account = pwd.getpwnam(supervisor.EXTRACTOR)
-        if os.system("systemctl is-system-running >/dev/null 2>&1") != 0:
-            self.fail("CI requires a running systemd manager")
+        if not systemd_system_manager_available():
+            self.fail("CI requires a reachable systemd system manager")
         self.assertEqual(list(RESOURCE_ROOT.iterdir()), [], "unknown resource trees must block extraction")
         with tempfile.TemporaryDirectory(dir=Path.home()) as temporary:
             journal_root = Path(temporary)

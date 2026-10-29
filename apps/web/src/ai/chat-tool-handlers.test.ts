@@ -24,6 +24,7 @@ vi.mock('@/lib/storefront-search', () => ({
 import {
   handleAddToCart,
   handleCheckPaymentStatus,
+  handleCreateVirtualAccount,
   handleGetProductDetails,
   handleGetRecommendations,
   handleSearchProducts,
@@ -88,6 +89,25 @@ describe('chat tool handlers', () => {
     );
     vi.clearAllMocks();
     mocks.searchStorefrontProducts.mockReset();
+  });
+
+  it('does not create a pending order when virtual-account payments are unavailable', async () => {
+    const result = await handleCreateVirtualAccount(
+      {
+        amount: 100,
+        customerEmail: 'test@example.com',
+        customerName: 'Test Customer',
+        items: [
+          { productId: 'product-1', name: 'Product', price: 100, quantity: 1 },
+        ],
+      },
+      'test-session'
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('temporarily unavailable');
+    expect(result.orderId).toBeUndefined();
+    expect(mocks.createAgenticScopedSupabaseClient).not.toHaveBeenCalled();
   });
 
   it('searches active products across names, descriptions, brands, and categories with price filters', async () => {

@@ -25,7 +25,7 @@ const ACTION_REQUEST =
 const NON_CATALOG_REQUEST =
   /\b(?:negotiat\w*|discount\w*|haggl\w*|(?:last|final)\s+price|(?:reduce|lower)\s+(?:the\s+|your\s+)?(?:price|cost)|bargain|deal|warrant(?:y|ies)|instal{1,2}ments?)\b/i;
 const CONTEXTUAL_PRICE =
-  /^(?:how much(?:\s+(?:is|for)\s+(?:it|that|this))?|what(?:'s| is)\s+(?:the\s+)?(?:price|cost)(?:\s+(?:of|for))?\s+(?:it|that|this))[?!.\s]*$/i;
+  /^(?:how much(?:\s+(?:is|for)\s+(?:it|that|this))?|what(?:['’]s| is)\s+(?:the\s+)?(?:price|cost)(?:\s+(?:(?:of|for)\s+)?(?:it|that|this))?|(?:the\s+)?(?:price|cost))[?!.\s]*$/i;
 const SHOPPING_REQUEST =
   /\b(?:recommend|recommendation|suggest|looking for|buy|shop|price|cost|how much|phone|phones|smartphone|smartphones|iphone|pixel|laptop|laptops|macbook|tablet|tablets|ipad|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
 const FOLLOW_UP =
@@ -134,9 +134,11 @@ export function interpretFastCatalogIntent(
     SHOPPING_REQUEST.test(value) || ACCESSORY_SIGNAL.test(value);
   const priceFollowUp = CONTEXTUAL_PRICE.test(latest);
   if (priceFollowUp && !isShoppingRequest(previous)) return null;
-  const text =
-    (priceFollowUp || (FOLLOW_UP.test(latest) && !isShoppingRequest(latest))) &&
-    isShoppingRequest(previous)
+  const text = priceFollowUp
+    ? previous
+    : FOLLOW_UP.test(latest) &&
+        !isShoppingRequest(latest) &&
+        isShoppingRequest(previous)
       ? `${previous} ${latest}`
       : latest;
   if (!isShoppingRequest(text)) return null;

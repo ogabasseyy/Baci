@@ -114,6 +114,31 @@ describe('interpretFastCatalogIntent', () => {
     });
   });
 
+  it.each([
+    'What is the price?',
+    "What's the cost?",
+    'Price?',
+  ])('uses the previous named product for a short price follow-up: %s', (followUp) => {
+    expect(
+      interpretFastCatalogIntent(['Show me iPhone 16', followUp], categories)
+    ).toMatchObject({ kind: 'search', query: 'iPhone 16' });
+  });
+
+  it('asks which product a short price follow-up means after a broad search', () => {
+    expect(
+      interpretFastCatalogIntent(
+        ['Show me phones', 'What is the price?'],
+        categories
+      )
+    ).toMatchObject({ kind: 'clarify', reason: 'product' });
+  });
+
+  it('keeps the accessory in a short price follow-up', () => {
+    expect(
+      interpretFastCatalogIntent(['Show me a charger', 'Price?'], categories)
+    ).toMatchObject({ kind: 'search', query: 'charger', isAccessory: true });
+  });
+
   it('leaves an ungrounded or purchase follow-up to the existing chat flow', () => {
     expect(
       interpretFastCatalogIntent(['How much is it?'], categories)

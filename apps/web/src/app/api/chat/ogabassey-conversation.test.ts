@@ -151,6 +151,130 @@ describe('Ogabassey conversational providers', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('accepts an honest reply that says it cannot confirm what is in stock', async () => {
+    const text =
+      "I can't confirm what's in stock. Please check the storefront for current details.";
+    const fetchMock = vi.fn().mockResolvedValue(completion(text, 'gpt-6-luna'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await runOgabasseyConversation(options());
+
+    expect(await response?.text()).toBe(text);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('still rejects a stock claim following an honest disclaimer', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completion(
+          "I can't confirm what's in stock, but the headphones are in stock.",
+          'gpt-6-luna'
+        )
+      )
+      .mockResolvedValueOnce(
+        completion('Please check the storefront.', 'deepseek-flash')
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await runOgabasseyConversation(options());
+
+    expect(await response?.text()).toBe('Please check the storefront.');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not imply an unverified exchange policy', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        completion(
+          'A gift receipt can help if they prefer to exchange it.',
+          'gpt-6-luna'
+        )
+      )
+      .mockResolvedValueOnce(
+        completion(
+          'Please check with the store for current details.',
+          'deepseek-flash'
+        )
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await runOgabasseyConversation(options());
+
+    expect(await response?.text()).toBe(
+      'Please check with the store for current details.'
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    'I recommend headphones for your friend.',
+    'I suggest wireless headphones for your friend.',
+  ])('does not suggest an unverified generic accessory: %s', async (text) => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(completion(text, 'gpt-6-luna'))
+      .mockResolvedValueOnce(
+        completion('Please check the storefront for ideas.', 'deepseek-flash')
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await runOgabasseyConversation(options());
+
+    expect(await response?.text()).toBe(
+      'Please check the storefront for ideas.'
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks for gift preferences without suggesting items outside the catalog', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await runOgabasseyConversation({
+      ...options(),
+      messages: [{ role: 'user', content: 'Can you help me choose a gift?' }],
+    });
+
+    expect(await response?.text()).toMatch(/product|budget/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps a vague gift follow-up grounded in a catalog search', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await runOgabasseyConversation({
+      ...options(),
+      messages: [
+        { role: 'user', content: 'I need a gift for my friend' },
+        { role: 'assistant', content: 'What do they like?' },
+        { role: 'user', content: 'How should I decide?' },
+      ],
+    });
+
+    expect(await response?.text()).toMatch(/product|budget/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not invent gift ideas in a vague shopping follow-up', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await runOgabasseyConversation({
+      ...options(),
+      messages: [
+        { role: 'user', content: 'I am shopping for a friend.' },
+        { role: 'assistant', content: 'What do they like?' },
+        { role: 'user', content: 'How should I decide?' },
+      ],
+    });
+
+    expect(await response?.text()).toMatch(/product|budget/i);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('does not recommend an unverified branded accessory from model memory', async () => {
     const fetchMock = vi
       .fn()

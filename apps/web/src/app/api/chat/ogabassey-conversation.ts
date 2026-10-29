@@ -15,12 +15,18 @@ const CATALOG_FACT_REQUEST =
   /\b(?:recommend\w*|suggest\w*|products?|devices?|phones?|smartphones?|iphone\w*|ipad\w*|laptops?|macbooks?|tablets?|cameras?|watches|smartwatches?|speakers?|consoles?|televisions?|monitors?|galaxy\w*|apple|samsung|sony|nokia|oppo|vivo|huawei|tecno|infinix|xiaomi|redmi|pixel|itel|oraimo|anker|accessor(?:y|ies)|chargers?|cables?|adapters?|cases?|screen[\s-]*protectors?|earbuds?|headphones?|airpods|price|prices|cost|budget|cheap\w*|available|availability|stock|compatib\w*|storage|colour|color|black|white|blue|red|green)\b/i;
 const PRODUCT_REFERENCE = /\b(?:it|this|that|these|those|one|ones)\b/i;
 const PRODUCT_AMOUNT = /[₦$€£\d]|\b(?:enough|afford\w*|cheaper|less|more)\b/i;
+const SHOPPING_ADVICE_REQUEST =
+  /\b(?:gifts?|shopping|(?:a|the|birthday|christmas)\s+present)\b/i;
 const BUSINESS_FACT_REQUEST =
   /\b(?:address|location|located|opening\s+(?:time|hours)|closing\s+(?:time|hours)|(?:business|store|shop)\s+hours|when\s+do\s+you\s+(?:open|close)|phone\s+(?:number|no)|email(?:\s+address)?)\b/i;
 const UNGROUNDED_REPLY =
-  /[\p{N}₦$€£]|\b(?:naira|iphone|ipad|macbook|airpods|apple|samsung|galaxy|sony|nokia|oppo|vivo|huawei|tecno|infinix|xiaomi|redmi|pixel|itel|oraimo|anker|shipping|delivery|warranty|refund|in\s+(?:your|the)\s+cart|(?:added|removed)\s+(?:it|this|that|the\s+item)|in[\s-]+stock|out[\s-]+of[\s-]+stock|(?:is|are)\s+available|available\s+now|guaranteed|(?:is|are|works|fits)\s+compatible)\b/iu;
+  /[\p{N}₦$€£]|\b(?:naira|iphone|ipad|macbook|airpods|apple|samsung|galaxy|sony|nokia|oppo|vivo|huawei|tecno|infinix|xiaomi|redmi|pixel|itel|oraimo|anker|shipping|delivery|warranty|refund|returns?|exchang\w*|in\s+(?:your|the)\s+cart|(?:added|removed)\s+(?:it|this|that|the\s+item)|in[\s-]+stock|out[\s-]+of[\s-]+stock|(?:is|are)\s+available|available\s+now|guaranteed|(?:is|are|works|fits)\s+compatible)\b/iu;
 const UNVERIFIED_RECOMMENDATION =
   /\b(?:(?:i|we)\s+(?:(?:would|do)\s+)?(?:recommend|suggest)\s+(?:a|an|the|buying|getting)|you\s+(?:should|could)\s+(?:buy|get|choose|consider))\b/i;
+const UNVERIFIED_PRODUCT_RECOMMENDATION =
+  /\b(?:recommend|suggest)\b[^.!?\n]{0,60}\b(?:phones?|smartphones?|laptops?|tablets?|cameras?|watches|smartwatches?|speakers?|consoles?|televisions?|monitors?|accessor(?:y|ies)|chargers?|cables?|adapters?|cases?|screen[\s-]*protectors?|earbuds?|headphones?|headsets?|earphones?|power[\s-]*banks?)\b/i;
+const UNCONFIRMED_STOCK_STATEMENT =
+  /\b(?:can(?:not|['’]t)|unable\s+to)\s+(?:confirm|verify|check)\s+what(?:['’]s|\s+is)\s+in[\s-]+stock\b/gi;
 
 type ConversationMessage = {
   role: 'user' | 'assistant' | 'system';
@@ -120,6 +126,18 @@ export async function runOgabasseyConversation(options: {
     );
   }
 
+  if (
+    SHOPPING_ADVICE_REQUEST.test(last.content) ||
+    previousUsers.some((message) =>
+      SHOPPING_ADVICE_REQUEST.test(message.content)
+    )
+  ) {
+    return new Response(
+      'What type of product are you looking for, and what budget do you have in mind? I can check our catalog.',
+      { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+    );
+  }
+
   if (options.timeoutMs <= 0) return createStaticChatFallbackResponse();
 
   try {
@@ -151,8 +169,17 @@ export async function runOgabasseyConversation(options: {
         },
         deepseek: { thinking: { type: 'disabled' } },
       },
-      acceptResult: (text) =>
-        !UNGROUNDED_REPLY.test(text) && !UNVERIFIED_RECOMMENDATION.test(text),
+      acceptResult: (text) => {
+        const claimCheckText = text.replace(
+          UNCONFIRMED_STOCK_STATEMENT,
+          'cannot verify inventory'
+        );
+        return (
+          !UNGROUNDED_REPLY.test(claimCheckText) &&
+          !UNVERIFIED_RECOMMENDATION.test(text) &&
+          !UNVERIFIED_PRODUCT_RECOMMENDATION.test(text)
+        );
+      },
       onProviderError: (providerName, error) => {
         console.warn(
           'agentic_chat_provider',

@@ -23,9 +23,19 @@ Return useful shopping results promptly using the resolved storefront's public c
 ## Conversation provider continuation
 
 - For the resolved Ogabassey storefront in `auto` mode, keep the catalog path first. When configured, use GPT-6 Luna for general conversation and DeepSeek Flash as its backup, with bounded timeouts and no commerce tools. Other storefronts and explicit provider modes retain their existing paths.
+- Ask for a product type or budget when a gift or shopping request is too vague to search safely, instead of suggesting items that may not be in the catalog.
 - Keep order, payment, checkout, and related follow-ups on the existing guarded commerce path. Do not turn a failed or ambiguous action into a claimed success. For unsupported catalog questions or unverified product follow-ups, direct the shopper to the catalog or store support rather than inventing product details.
+- The existing virtual-account handler cannot generate an account. Return its unavailable response before creating a pending chat order; do not persist model-supplied prices for an unusable payment flow.
 - Storefront chat messages sent to the model providers require an accurate public disclosure. The proposed privacy-page copy names OpenAI and DeepSeek without making retention or compliance promises; confirm the effective page and owner review before release.
+
+## Local verification on 2026-10-29
+
+- The local `/api/chat` endpoint returned a live Luna response, then returned a live DeepSeek response when the primary key was deliberately invalidated for that local process. No production configuration was changed.
+- Read-only catalog checks returned phone, charger, and earbud cards from the resolved Ogabassey merchant. A separate public-data check matched the sampled products to active merchant records and parent prices. Variant cards require option selection; this does not establish a final option price or reserve stock.
+- A named-product price follow-up returned the same current catalog results. An unavailable case search gave a bounded uncertainty message. A mismatched tenant assertion returned 503.
+- In small synthetic tool-calling comparisons, both providers called the test catalog. DeepSeek also included an unrelated accessory and misstated a synthetic price; neither provider's raw tool results are used as customer-facing catalog recommendations in this change.
+- The existing Gemini billing account showed a negative balance. Order, payment, and other commerce-tool paths still depend on the existing provider and have not been verified with a working model. The local test created no real orders or payments.
 
 ## Release evidence still required
 
-Provision usable provider credentials through the owner's approved workflow, without placing secrets in the repository. In a non-production deployment, verify Luna and DeepSeek separately, force the primary to fail to exercise backup, and compare phone and accessory cards, prices, stock, compatibility guidance, follow-ups, and tenant isolation with the current catalog. Test general conversation, negotiation, commerce handoff, client cancellation, safe errors, and the privacy disclosure; record latency and cost. No real order or payment should be created during the smoke test. A release decision also requires checks and review for the exact final commit and PR base.
+The two test credentials are available only in the owner's approved local file and are not committed. In a non-production deployment, repeat provider, fallback, catalog, and tenant checks, including current selectable-option stock and price. Verify the remaining commerce-tool provider and exercise handoff, client cancellation, safe errors, and the privacy disclosure without creating real orders or payments. Record latency and cost. A release decision also requires checks and review for the exact final commit and PR base, plus explicit authorization for production configuration and deployment.

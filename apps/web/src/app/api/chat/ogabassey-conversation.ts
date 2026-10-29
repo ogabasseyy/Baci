@@ -1,0 +1,184 @@
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { generateTextWithChain } from '@/ai/generate-text-with-chain';
+import type { TextProvider } from '@/ai/text-provider-chain';
+import type { AiChatProvider } from '@/env';
+import { buildStorefrontDisplayData } from '@/lib/agentic/storefront-display-data';
+import { createStaticChatFallbackResponse } from './route-helpers';
+
+const PER_PROVIDER_TIMEOUT_MS = 10_000;
+const MAX_CHAIN_TIMEOUT_MS = 20_000;
+const COMMERCE_ACTION =
+  /\b(?:cart|checkout|orders?|payments?|paid|pay|transfer|bank|cancel\w*|refund\w*|returns?|exchange\w*|receipt|tracking|track|shipping|deliver\w*|warrant(?:y|ies)|instal{1,2}ments?|add\s+(?:it|this|that|them|these|those|one))\b/i;
+const NEGOTIATION =
+  /\b(?:negotiat\w*|discount\w*|haggl\w*|(?:last|final)\s+price|(?:reduce|lower)\s+(?:the\s+|your\s+)?(?:price|cost)|bargain|deal)\b/i;
+const CATALOG_FACT_REQUEST =
+  /\b(?:recommend\w*|suggest\w*|products?|devices?|phones?|smartphones?|iphone\w*|ipad\w*|laptops?|macbooks?|tablets?|cameras?|watches|smartwatches?|speakers?|consoles?|televisions?|monitors?|galaxy\w*|apple|samsung|sony|nokia|oppo|vivo|huawei|tecno|infinix|xiaomi|redmi|pixel|itel|oraimo|anker|accessor(?:y|ies)|chargers?|cables?|adapters?|cases?|screen[\s-]*protectors?|earbuds?|headphones?|airpods|price|prices|cost|budget|cheap\w*|available|availability|stock|compatib\w*|storage|colour|color|black|white|blue|red|green)\b/i;
+const PRODUCT_REFERENCE = /\b(?:it|this|that|these|those|one|ones)\b/i;
+const PRODUCT_AMOUNT = /[₦$€£\d]|\b(?:enough|afford\w*|cheaper|less|more)\b/i;
+const BUSINESS_FACT_REQUEST =
+  /\b(?:address|location|located|opening\s+(?:time|hours)|closing\s+(?:time|hours)|(?:business|store|shop)\s+hours|when\s+do\s+you\s+(?:open|close)|phone\s+(?:number|no)|email(?:\s+address)?)\b/i;
+const UNGROUNDED_REPLY =
+  /[\p{N}₦$€£]|\b(?:naira|iphone|ipad|macbook|airpods|apple|samsung|galaxy|sony|nokia|oppo|vivo|huawei|tecno|infinix|xiaomi|redmi|pixel|itel|oraimo|anker|shipping|delivery|warranty|refund|in\s+(?:your|the)\s+cart|(?:added|removed)\s+(?:it|this|that|the\s+item)|in[\s-]+stock|out[\s-]+of[\s-]+stock|(?:is|are)\s+available|available\s+now|guaranteed|(?:is|are|works|fits)\s+compatible)\b/iu;
+const UNVERIFIED_RECOMMENDATION =
+  /\b(?:(?:i|we)\s+(?:(?:would|do)\s+)?(?:recommend|suggest)\s+(?:a|an|the|buying|getting)|you\s+(?:should|could)\s+(?:buy|get|choose|consider))\b/i;
+
+type ConversationMessage = {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+};
+
+function getOgabasseyConversationProviders(): TextProvider[] {
+  const providers: TextProvider[] = [];
+  const openaiKey = process.env.OPENAI_API_KEY?.trim();
+  const deepseekKey = process.env.DEEPSEEK_API_KEY?.trim();
+
+  if (openaiKey) {
+    providers.push({
+      name: 'openai:gpt-6-luna',
+      model: createOpenAICompatible({
+        name: 'openai',
+        baseURL: 'https://api.openai.com/v1',
+        apiKey: openaiKey,
+        transformRequestBody: ({ max_tokens, ...body }) => ({
+          ...body,
+          ...(max_tokens === undefined
+            ? {}
+            : { max_completion_tokens: max_tokens }),
+        }),
+      }).chatModel('gpt-6-luna'),
+    });
+  }
+  if (deepseekKey) {
+    providers.push({
+      name: 'deepseek:deepseek-flash',
+      model: createOpenAICompatible({
+        name: 'deepseek',
+        baseURL: 'https://api.deepseek.com',
+        apiKey: deepseekKey,
+      }).chatModel('deepseek-flash'),
+    });
+  }
+  return providers;
+}
+
+/**
+ * Handles only general conversation after the authoritative catalog fast path.
+ * It never gives the new providers catalog or checkout tools: product cards and
+ * commerce actions remain on their existing server-owned paths.
+ */
+export async function runOgabasseyConversation(options: {
+  abortSignal: AbortSignal;
+  chatProvider: AiChatProvider;
+  merchantName: string;
+  merchantSlug: string;
+  messages: ConversationMessage[];
+  timeoutMs: number;
+}): Promise<Response | null> {
+  if (options.merchantSlug !== 'ogabassey' || options.chatProvider !== 'auto')
+    return null;
+
+  const last = options.messages.at(-1);
+  if (last?.role !== 'user') return null;
+  if (
+    options.messages
+      .filter((message) => message.role !== 'system')
+      .slice(-6)
+      .some((message) => COMMERCE_ACTION.test(message.content))
+  )
+    return null;
+
+  const providers = getOgabasseyConversationProviders();
+  if (providers.length === 0) return null;
+
+  if (NEGOTIATION.test(last.content)) {
+    return new Response(
+      'I can’t promise a discount here. Please contact the store about current offers.',
+      { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+    );
+  }
+
+  if (BUSINESS_FACT_REQUEST.test(last.content)) {
+    return new Response(
+      'Please check the store’s contact page or contact support for current details.',
+      { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+    );
+  }
+
+  // Unsupported catalog questions must not be answered from a model's memory
+  // or from untrusted client-supplied conversation history.
+  const previousUsers = options.messages
+    .filter((message) => message.role === 'user')
+    .slice(-4, -1);
+  const isProductFollowUp =
+    (PRODUCT_REFERENCE.test(last.content) ||
+      PRODUCT_AMOUNT.test(last.content)) &&
+    previousUsers.some((message) => CATALOG_FACT_REQUEST.test(message.content));
+  if (CATALOG_FACT_REQUEST.test(last.content) || isProductFollowUp) {
+    return new Response(
+      'I couldn’t confirm that product here. Please check the catalog or contact the store for current details.',
+      { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+    );
+  }
+
+  if (options.timeoutMs <= 0) return createStaticChatFallbackResponse();
+
+  try {
+    const result = await generateTextWithChain({
+      abortSignal: options.abortSignal,
+      chain: providers,
+      messages: options.messages
+        .filter((message) => message.role !== 'system')
+        .slice(-10)
+        .map((message) => ({
+          role: message.role as 'user' | 'assistant',
+          content: message.content.slice(0, 4_000),
+        })),
+      system:
+        `${buildStorefrontDisplayData(options.merchantName)} ` +
+        'Keep replies brief, friendly, and honest. You have no access to live inventory, ' +
+        'current prices, product compatibility, discounts, orders, checkout, or payments. ' +
+        'Never invent product recommendations, prices, availability, policies, or promises. ' +
+        'Do not claim to have performed an action. For current details or offers, direct ' +
+        'the customer to the storefront or store support.',
+      maxOutputTokens: 256,
+      perProviderTimeoutMs: PER_PROVIDER_TIMEOUT_MS,
+      overallTimeoutMs: Math.min(options.timeoutMs, MAX_CHAIN_TIMEOUT_MS),
+      providerOptions: {
+        openai: {
+          reasoningEffort: 'none',
+          store: false,
+          service_tier: 'default',
+        },
+        deepseek: { thinking: { type: 'disabled' } },
+      },
+      acceptResult: (text) =>
+        !UNGROUNDED_REPLY.test(text) && !UNVERIFIED_RECOMMENDATION.test(text),
+      onProviderError: (providerName, error) => {
+        console.warn(
+          'agentic_chat_provider',
+          JSON.stringify({
+            event: 'provider_error',
+            provider: providerName,
+            errorName:
+              error instanceof Error ? error.name.slice(0, 80) : 'UnknownError',
+            surface: 'ogabassey_conversation',
+          })
+        );
+      },
+    });
+    console.info(
+      'agentic_chat_provider',
+      JSON.stringify({
+        event: 'provider_success',
+        provider: result.providerName,
+        surface: 'ogabassey_conversation',
+      })
+    );
+    return new Response(result.text, {
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+  } catch (error) {
+    if (options.abortSignal.aborted) throw error;
+    return createStaticChatFallbackResponse();
+  }
+}

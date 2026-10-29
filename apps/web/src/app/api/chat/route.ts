@@ -22,8 +22,8 @@ import { headers } from 'next/headers';
 import z from 'zod';
 import { checkRateLimit } from '@/ai/provider';
 import { withChatTenantHeader } from '@/app/api/chat/chat-tenant';
-import { tryFastCatalogResponse } from '@/app/api/chat/fast-catalog-response';
 import { negotiateChatAgentUiResponse } from '@/app/api/chat/negotiate-chat-agent-ui-response';
+import { tryOgabasseyPreferredResponse } from '@/app/api/chat/ogabassey-preferred-response';
 import { executeAgenticChatToolForOllama } from '@/app/api/chat/ollama-chat-tool-runtime';
 import {
   bufferTextResponse,
@@ -156,11 +156,12 @@ export async function POST(req: Request) {
     }));
 
     const chatProvider = getAiChatProvider();
-    const fastResponse = await tryFastCatalogResponse(
+    const fastResponse = await tryOgabasseyPreferredResponse(
       req,
       sanitizedMessages,
       tenant,
-      chatProvider
+      chatProvider,
+      remainingRouteMs
     );
     if (fastResponse) return fastResponse;
     const shouldTryLlm = chatProvider === 'auto' || chatProvider === 'llm';

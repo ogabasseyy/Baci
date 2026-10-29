@@ -171,6 +171,18 @@ export async function runCheckoutOrderLifecycle({
     shippingAddress.state,
     merchantCountry
   );
+  const ready = {
+    billingAddress,
+    customerEmail: customer.email,
+    customerName: redvaultReview.customerName,
+    customerPhone: customer.phone,
+    currency: orderChargeCurrency,
+    orderId: order.id,
+    checkoutFingerprint: redvaultReview.checkoutFingerprint,
+    trackingToken: order.tracking_token,
+    total: order.total ?? fallbackTotal,
+    orderNumber: createdOrderNumber,
+  };
   const snapshot: PendingCheckoutOrderSnapshot = {
     orderId: order.id,
     orderNumber: order.order_number,
@@ -182,23 +194,15 @@ export async function runCheckoutOrderLifecycle({
     paymentMethod: reuse.paymentMethod,
     amountDueToGateway,
     createdAt: new Date().toISOString(),
+    ...(redvaultReview.enabled && submit.orderRequest.shared_cart && submitted.redvaultSummary
+      ? { redvaultReview: { ready, summary: submitted.redvaultSummary } }
+      : {}),
   };
   persistPendingCheckoutOrder(snapshot);
   onPendingSnapshot(snapshot);
 
   if (redvaultReview.enabled) {
-    redvaultReview.setReady({
-      billingAddress,
-      customerEmail: customer.email,
-      customerName: redvaultReview.customerName,
-      customerPhone: customer.phone,
-      currency: orderChargeCurrency,
-      orderId: order.id,
-      checkoutFingerprint: redvaultReview.checkoutFingerprint,
-      trackingToken: order.tracking_token,
-      total: order.total ?? fallbackTotal,
-      orderNumber: createdOrderNumber,
-    });
+    redvaultReview.setReady(ready);
     redvaultReview.releaseSubmission();
     return { kind: 'redvault_review' };
   }

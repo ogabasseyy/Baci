@@ -164,6 +164,7 @@ export const CheckoutPage: React.FC = () => {
       deliveryMethod: checkoutForm.deliveryMethod,
       giftWrappingCost,
       hasCheckoutCartItems,
+      recoverCart: isHydrated && sharedCartEnabled && !checkoutSharedCartRef,
       resumedOrder: summaryOrder,
       clearPendingCheckoutOrder,
       currencyCode,
@@ -286,7 +287,6 @@ export const CheckoutPage: React.FC = () => {
     },
     availability: {
       redvaultAvailable,
-      sharedCartActive: Boolean(checkoutSharedCartRef),
     },
   });
 

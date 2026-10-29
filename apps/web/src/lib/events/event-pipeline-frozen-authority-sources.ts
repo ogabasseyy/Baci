@@ -114,8 +114,11 @@ export const eventPipelineFrozenRoutes = {
   // confirmed airport retries now count as quote replays; notification,
   // payment, tenant authorization, and privileged-client authority are
   // unchanged.
+  // Re-pinned for REDVAULT shared-cart checkout: the route forwards the
+  // verified cart principal to the scoped binding RPC. No service-role or
+  // notification authority is added.
   'apps/web/src/app/api/orders/route.ts':
-    '3b336bbab6fb055aa0efd668fa5be82ee517fe553131ba3102403c9d856828e5',
+    '42aee47344a46e5ce892174c05f9b7668d50fe740feca853552c74480009662e',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

@@ -9,6 +9,8 @@ import {
   shouldClearStoredOrder,
 } from './pending-checkout-redvault-fence';
 import type { PaymentMethod } from './types';
+import type { RedvaultQuoteSummary } from './components/redvault/RedvaultPaymentOption';
+import type { RedvaultPreparedOrder } from './handlers/redvault-prepared-order-submit';
 
 export { buildPendingCheckoutFingerprint } from './checkout-fingerprint';
 
@@ -69,6 +71,11 @@ export interface PendingCheckoutOrderSnapshot {
   checkoutFingerprint: string;
   amountDueToGateway: number;
   createdAt: string;
+  /** Local presentation recovery for a reviewed, completed shared cart. */
+  redvaultReview?: {
+    ready: RedvaultPreparedOrder;
+    summary: RedvaultQuoteSummary;
+  };
 }
 
 export interface ReusedCheckoutOrder {

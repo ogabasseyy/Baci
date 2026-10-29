@@ -38,6 +38,7 @@ export interface DesktopOrderSummaryProps {
   remainingAmount: number;
   checkoutPayWithWallet: boolean;
   redvaultSummary: RedvaultQuoteSummary | null;
+  redvaultOrderReady: boolean;
   newsletterOptIn: boolean;
   setNewsletterOptIn: (value: boolean) => void;
   handlePlaceOrder: () => void | Promise<void>;
@@ -69,6 +70,7 @@ export function DesktopOrderSummary({
   remainingAmount,
   checkoutPayWithWallet,
   redvaultSummary,
+  redvaultOrderReady,
   newsletterOptIn,
   setNewsletterOptIn,
   handlePlaceOrder,
@@ -271,6 +273,8 @@ export function DesktopOrderSummary({
             'Get a Proforma Invoice'
           ) : paymentMethod === 'payforme' ? (
             'Send Payment Link'
+          ) : paymentMethod === 'uba_redvault' && redvaultOrderReady ? (
+            'Review and continue to UBA'
           ) : (
             'Place Order'
           )}

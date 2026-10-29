@@ -8,6 +8,8 @@ import { toast } from '@/hooks/use-toast';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
 import { calculateCartItemSubtotal } from '@/lib/checkout/cart-entitlement-sanitizer';
 import type { SharedCartOrderBinding } from '../types';
+import { checkoutFingerprintsMatch } from '../checkout-fingerprints-match';
+import { redvaultTerminalFingerprintMatches } from '../redvault-terminal-fingerprint';
 import { KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST } from '../utils';
 import { executeResumedDirectPayment } from '../handlers/direct-payment';
 import { submitPreparedCheckout } from '../handlers/submit-prepared-checkout';
@@ -141,6 +143,39 @@ export function useCheckoutOrderSubmission(context: CheckoutOrderSubmissionConte
       }
       toast({ title: 'Shipping rate expired', description: 'Please select a delivery option again.', variant: 'destructive' });
       processing.releaseSubmission();
+      return;
+    }
+
+    // The first REDVAULT click already bound the draft and closed the cart.
+    // Continue only that reviewed order on confirmation, never create an
+    // unbound replacement if continuation cannot handle it.
+    const redvaultReady = paymentSession.redvault.orderReady;
+    const terminalFingerprintMatches = Boolean(
+      redvaultReady &&
+      cart.sharedCartEnabled &&
+      !cart.sharedCartRef &&
+      cart.checkoutCart.length === 0 &&
+      redvaultTerminalFingerprintMatches(
+        redvaultReady.checkoutFingerprint,
+        prepared.identity.checkoutFingerprint
+      )
+    );
+    if (
+      (cart.sharedCartEnabled || cart.sharedCartRef) &&
+      paymentSession.method === 'uba_redvault' &&
+      redvaultReady &&
+      (terminalFingerprintMatches || checkoutFingerprintsMatch(
+        redvaultReady.checkoutFingerprint,
+        prepared.identity.checkoutFingerprint
+      ))
+    ) {
+      await submitPreparedCheckout(
+        { ...context, merchant },
+        terminalFingerprintMatches
+          ? { ...prepared, identity: { ...prepared.identity, checkoutFingerprint: redvaultReady.checkoutFingerprint } }
+          : prepared,
+        { redvaultPreparedOnly: true }
+      );
       return;
     }
 

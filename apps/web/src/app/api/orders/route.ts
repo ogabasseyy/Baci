@@ -555,7 +555,6 @@ export async function POST(request: NextRequest) {
       const rejection = validateRedvaultRequest({
         merchantId: merchant_id,
         hasVoucherItem,
-        hasSharedCart: Boolean(shared_cart),
         discountCode: body.discount_code,
         useWallet: use_wallet_credit,
         useSavings: use_savings_credit,
@@ -1619,15 +1618,13 @@ export async function POST(request: NextRequest) {
         use_savings_credit ||
         use_wallet_credit ||
         hasVoucherItem ||
-        shared_cart ||
         (negotiationDiscount?.totalDiscount ?? 0) > 0
       ) {
         return NextResponse.json(
           {
             code: 'REDVAULT_COMBINATION_UNSUPPORTED',
-            error: shared_cart
-              ? 'Choose a different payment method for this shared cart.'
-              : 'REDVAULT cannot be combined with another discount or redemption',
+            error:
+              'REDVAULT cannot be combined with another discount or redemption',
           },
           { status: 400 }
         );
@@ -2236,6 +2233,9 @@ export async function POST(request: NextRequest) {
         customerEmail: customer_email,
         merchantId: merchant_id,
         userId: resolvedUserId,
+        sharedCart: shared_cart
+          ? { binding: shared_cart, principalId: sharedCartPrincipalId }
+          : undefined,
       });
       // The REDVAULT draft reserves inventory through the standard
       // order-creation path. Run the same best-effort product cache

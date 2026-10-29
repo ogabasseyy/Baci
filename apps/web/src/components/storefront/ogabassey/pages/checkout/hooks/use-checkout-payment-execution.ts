@@ -124,6 +124,18 @@ export function useCheckoutPaymentExecution({
         giftWrappingCost: delivery.giftWrappingCost,
       },
     });
+  // A completed shared cart disappears from the cart display after the
+  // REDVAULT order is prepared. Keep its existing payment review visible;
+  // initialization still verifies the order and current pilot policy.
+  const redvaultAvailable =
+    redvaultAvailability.available ||
+    Boolean(
+      cart.sharedCartEnabled &&
+        !cart.sharedCartRef &&
+        cart.checkoutCart.length === 0 &&
+        payment.session.method === 'uba_redvault' &&
+        payment.session.redvault?.orderReady
+    );
   const { handlePlaceOrder } = useCheckoutOrderSubmission({
     account: {
       createAccount: form.account.createAccount,
@@ -170,9 +182,7 @@ export function useCheckoutPaymentExecution({
     },
     payment: {
       ...payment,
-      // Bound shared-cart orders have no REDVAULT path; offering it only
-      // defers a deterministic server rejection to submit time.
-      redvaultAvailable: redvaultAvailability.available && !cart.sharedCartRef,
+      redvaultAvailable,
     },
     resumed: {
       order: attempt.resumedOrder,
@@ -193,7 +203,7 @@ export function useCheckoutPaymentExecution({
     crypto,
     dva,
     handlePlaceOrder,
-    redvaultAvailable: redvaultAvailability.available && !cart.sharedCartRef,
+    redvaultAvailable,
     walletFundedTransfer,
   };
 }

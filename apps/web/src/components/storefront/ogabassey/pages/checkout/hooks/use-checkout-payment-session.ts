@@ -9,6 +9,7 @@ import type {
   RedvaultStatus,
 } from '../handlers/redvault-prepared-order-submit';
 import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
+import { readRedvaultReviewRecovery } from '../read-redvault-review-recovery';
 import { getRedvaultCompatibleCheckoutValues } from '../redvault-compatible-checkout-values';
 import type { PaymentMethod, PaymentTab } from '../types';
 
@@ -20,8 +21,10 @@ interface UseCheckoutPaymentSessionOptions {
   hasAuthenticatedUser: boolean;
   hasCheckoutCartItems: boolean;
   isOrderInFlightRef: { current: boolean };
+  merchantId?: string;
   merchantSlug?: string;
   pendingCheckoutOrder: PendingCheckoutOrderSnapshot | null;
+  recoverCart?: boolean;
   walletSessionUserId?: string;
   resumeOrderId: string | null;
   preferredGateway: 'credpal' | 'credit_direct' | null;
@@ -37,8 +40,10 @@ export function useCheckoutPaymentSession({
   hasAuthenticatedUser,
   hasCheckoutCartItems,
   isOrderInFlightRef,
+  merchantId,
   merchantSlug,
   pendingCheckoutOrder,
+  recoverCart = false,
   preferredGateway,
   resumeOrderId,
   resumedOrder,
@@ -62,6 +67,35 @@ export function useCheckoutPaymentSession({
     contact: '',
     note: '',
   });
+
+  useEffect(() => {
+    if (
+      !recoverCart ||
+      hasCheckoutCartItems ||
+      method ||
+      redvaultOrderReady ||
+      resumeOrderId ||
+      resumedOrder
+    )
+      return;
+    const recovery = readRedvaultReviewRecovery(
+      pendingCheckoutOrder,
+      merchantId
+    );
+    if (!recovery) return;
+    setMethod('uba_redvault');
+    setRedvaultSummary(recovery.summary);
+    setRedvaultOrderReady(recovery.ready);
+  }, [
+    recoverCart,
+    hasCheckoutCartItems,
+    method,
+    redvaultOrderReady,
+    resumeOrderId,
+    resumedOrder,
+    pendingCheckoutOrder,
+    merchantId,
+  ]);
   const walletRedemptionAllowed = hasCheckoutCartItems || !resumeOrderId;
   const updatePayWithWallet = (nextValue: boolean) => {
     if (walletRedemptionAllowed || !nextValue) {

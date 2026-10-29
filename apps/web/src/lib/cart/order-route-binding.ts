@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { OrderCreateInput } from '@/schemas/orders';
 import {
+  type OrderBindingErrorCode,
   type SubmitCartBoundOrderDeps,
   type SubmitCartBoundOrderInput,
   type SubmitCartBoundOrderResult,
@@ -118,11 +119,18 @@ export async function submitSharedCartOrderBinding(
     bound,
     failure:
       bound && !bound.ok && bound.code !== 'order_rejected'
-        ? NextResponse.json(sharedCartBindingFailureBody(bound.code), {
-            status: sharedCartBindingFailureStatus(bound.code),
-          })
+        ? sharedCartBindingFailure(bound.code)
         : null,
   };
+}
+
+/** Return the same shopper-facing cart failure for all checkout variants. */
+export function sharedCartBindingFailure(
+  code: OrderBindingErrorCode
+): NextResponse {
+  return NextResponse.json(sharedCartBindingFailureBody(code), {
+    status: sharedCartBindingFailureStatus(code),
+  });
 }
 
 function sharedCartBindingFailureStatus(code: string): number {

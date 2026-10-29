@@ -292,7 +292,7 @@ export function makeInput(
       formatCurrencyAuto: (amount: number) => `₦${amount}`,
     },
     actions: { onReturnToCart },
-    availability: { redvaultAvailable: false, sharedCartActive: false },
+    availability: { redvaultAvailable: false },
   };
   return defaults satisfies CheckoutScreenModelInput;
 }

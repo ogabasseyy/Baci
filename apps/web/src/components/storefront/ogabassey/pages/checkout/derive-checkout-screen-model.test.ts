@@ -14,16 +14,20 @@ import type { ResumedOrder } from './types';
 beforeEach(() => vi.clearAllMocks());
 
 describe('deriveCheckoutScreenModel', () => {
-  it('hides REDVAULT while a shared cart is active', () => {
+  it('offers eligible REDVAULT payment', () => {
     const input = makeInput();
-    input.availability = { redvaultAvailable: true, sharedCartActive: true };
-    expect(
-      deriveCheckoutScreenModel(input).steps.payment.redvaultAvailable
-    ).toBe(false);
-    input.availability = { redvaultAvailable: true, sharedCartActive: false };
+    input.availability = { redvaultAvailable: true };
     expect(
       deriveCheckoutScreenModel(input).steps.payment.redvaultAvailable
     ).toBe(true);
+  });
+
+  it('still hides REDVAULT when the payment method is unavailable', () => {
+    const input = makeInput();
+    input.availability = { redvaultAvailable: false };
+    expect(
+      deriveCheckoutScreenModel(input).steps.payment.redvaultAvailable
+    ).toBe(false);
   });
 
   it('projects fresh form, delivery, payment and action identities into the screen', () => {

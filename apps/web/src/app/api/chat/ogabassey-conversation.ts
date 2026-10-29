@@ -8,11 +8,13 @@ import { createStaticChatFallbackResponse } from './route-helpers';
 const PER_PROVIDER_TIMEOUT_MS = 6_000;
 const MAX_CHAIN_TIMEOUT_MS = 12_000;
 const COMMERCE_ACTION =
-  /\b(?:cart|checkout|orders?|payments?|paid|pay|transfer|bank|cancel\w*|refund\w*|returns?|exchange\w*|receipt|tracking|track|shipping|deliver\w*|warrant(?:y|ies)|instal{1,2}ments?|add\s+(?:it|this|that|them|these|those|one))\b/i;
+  /\b(?:cart|checkout|orders?|payments?|paid|pay|transfer|bank|cancel\w*|refund\w*|returns?|exchange\w*|receipt|tracking|track|shipping|parcel|package|arriv\w*|deliver\w*|warrant(?:y|ies)|instal{1,2}ments?|add\s+(?:it|this|that|them|these|those|one))\b/i;
 const NEGOTIATION =
   /\b(?:negotiat\w*|discount\w*|haggl\w*|(?:last|final)\s+price|(?:reduce|lower)\s+(?:the\s+|your\s+)?(?:price|cost)|bargain|deal)\b/i;
 const CATALOG_FACT_REQUEST =
   /\b(?:recommend\w*|suggest\w*|products?|devices?|phones?|smartphones?|iphone\w*|ipad\w*|laptops?|macbooks?|tablets?|cameras?|watches|smartwatches?|speakers?|consoles?|televisions?|monitors?|galaxy\w*|apple|samsung|sony|nokia|oppo|vivo|huawei|tecno|infinix|xiaomi|redmi|pixel|itel|oraimo|anker|accessor(?:y|ies)|chargers?|cables?|adapters?|cases?|screen[\s-]*protectors?|earbuds?|headphones?|airpods|price|prices|cost|budget|cheap\w*|available|availability|stock|compatib\w*|storage|colour|color|black|white|blue|red|green)\b/i;
+const GENERAL_AVAILABILITY_REQUEST =
+  /\b(?:do\s+you\s+(?:have|stock|carry|sell)|have\s+you\s+got)\b/i;
 const PRODUCT_REFERENCE = /\b(?:it|this|that|these|those|one|ones)\b/i;
 const PRODUCT_AMOUNT = /[₦$€£\d]|\b(?:enough|afford\w*|cheaper|less|more)\b/i;
 const SHOPPING_ADVICE_REQUEST =
@@ -22,11 +24,13 @@ const BUSINESS_FACT_REQUEST =
 const UNGROUNDED_REPLY =
   /[\p{N}₦$€£]|\b(?:naira|iphone|ipad|macbook|airpods|apple|samsung|galaxy|sony|nokia|oppo|vivo|huawei|tecno|infinix|xiaomi|redmi|pixel|itel|oraimo|anker|shipping|delivery|warranty|refund|returns?|exchang\w*|in\s+(?:your|the)\s+cart|(?:added|removed)\s+(?:it|this|that|the\s+item)|in[\s-]+stock|out[\s-]+of[\s-]+stock|(?:is|are)\s+available|available\s+now|guaranteed|(?:is|are|works|fits)\s+compatible)\b/iu;
 const UNVERIFIED_COMMERCE_ACTION =
-  /\b(?:cancel(?:l)?ed|refunded|charged|shipped|delivered|paid)\b|\b(?:order|payment|purchase|transfer|account|transaction|receipt|checkout|cart)\b[^.!?\n]{0,80}\b(?:confirmed|processed|completed|successful|received|placed|created|generated|issued|ready|activated|settled|approved|sent)\b|\b(?:confirmed|processed|completed|placed|created|generated|issued|opened|sent)\b[^.!?\n]{0,80}\b(?:order|payment|purchase|transfer|account|transaction|receipt|checkout|cart)\b|\b(?:i|we)(?:['’](?:ve|ll)|\s+(?:have|will|just))?\s+(?:did|done|handled|completed|processed|created|issued|sent)\s+(?:it|that|this)\b/i;
+  /\b(?:cancel(?:l)?ed|refunded|charged|shipped|delivered|arrived|paid)\b|\b(?:we|i|our store)\s+(?:sell|stock|carry|offer)\b|\b(?:we|i|our store)\s+have\s+(?!no\b|not\b|never\b)|\b(?:order|payment|purchase|transfer|account|transaction|receipt|checkout|cart)\b[^.!?\n]{0,80}\b(?:confirmed|processed|completed|successful|received|placed|created|generated|issued|ready|activated|settled|approved|sent)\b|\b(?:confirmed|processed|completed|placed|created|generated|issued|opened|sent)\b[^.!?\n]{0,80}\b(?:order|payment|purchase|transfer|account|transaction|receipt|checkout|cart)\b|\b(?:i|we)(?:['’](?:ve|ll)|\s+(?:have|will|just))?\s+(?:did|done|handled|completed|processed|created|issued|sent)\s+(?:it|that|this)\b/i;
 const UNVERIFIED_RECOMMENDATION =
   /\b(?:(?:i|we)\s+(?:(?:would|do)\s+)?(?:recommend|suggest)\s+(?:a|an|the|buying|getting)|you\s+(?:should|could)\s+(?:buy|get|choose|consider))\b/i;
 const UNVERIFIED_PRODUCT_RECOMMENDATION =
   /\b(?:recommend|suggest)\b[^.!?\n]{0,60}\b(?:phones?|smartphones?|laptops?|tablets?|cameras?|watches|smartwatches?|speakers?|consoles?|televisions?|monitors?|accessor(?:y|ies)|chargers?|cables?|adapters?|cases?|screen[\s-]*protectors?|earbuds?|headphones?|headsets?|earphones?|power[\s-]*banks?)\b/i;
+const UNVERIFIED_STORE_PURCHASE =
+  /\b(?:buy|purchase|order|get)\b[^.!?\n]{0,100}\b(?:from|at)\s+(?:us|our\s+(?:store|shop))\b|\b(?:ready|available)\s+(?:to|for)\s+(?:buy|purchase|order|sale)\b/i;
 const UNCONFIRMED_STOCK_STATEMENT =
   /\b(?:can(?:not|['’]t)|unable\s+to)\s+(?:confirm|verify|check)\s+what(?:['’]s|\s+is)\s+in[\s-]+stock\b/gi;
 
@@ -121,7 +125,11 @@ export async function runOgabasseyConversation(options: {
     (PRODUCT_REFERENCE.test(last.content) ||
       PRODUCT_AMOUNT.test(last.content)) &&
     previousUsers.some((message) => CATALOG_FACT_REQUEST.test(message.content));
-  if (CATALOG_FACT_REQUEST.test(last.content) || isProductFollowUp) {
+  if (
+    CATALOG_FACT_REQUEST.test(last.content) ||
+    GENERAL_AVAILABILITY_REQUEST.test(last.content) ||
+    isProductFollowUp
+  ) {
     return new Response(
       'I couldn’t confirm that product here. Please check the catalog or contact the store for current details.',
       { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
@@ -180,7 +188,8 @@ export async function runOgabasseyConversation(options: {
           !UNGROUNDED_REPLY.test(claimCheckText) &&
           !UNVERIFIED_COMMERCE_ACTION.test(text) &&
           !UNVERIFIED_RECOMMENDATION.test(text) &&
-          !UNVERIFIED_PRODUCT_RECOMMENDATION.test(text)
+          !UNVERIFIED_PRODUCT_RECOMMENDATION.test(text) &&
+          !UNVERIFIED_STORE_PURCHASE.test(text)
         );
       },
       onProviderError: (providerName, error) => {

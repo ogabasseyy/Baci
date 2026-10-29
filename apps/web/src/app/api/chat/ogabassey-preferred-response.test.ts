@@ -153,7 +153,9 @@ describe('Ogabassey preferred chat response', () => {
       () => 30_000
     );
     expect(legacy?.headers.get('x-baci-chat-action')).toBeNull();
-    expect(await legacy?.text()).toMatch(/account/i);
+    expect(await legacy?.text()).toContain(
+      'https://ogabassey.com/account/orders'
+    );
   });
 
   it('gives safe checkout guidance for a new purchase without falling back to Gemini', async () => {

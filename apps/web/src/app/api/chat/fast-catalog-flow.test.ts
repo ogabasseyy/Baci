@@ -74,6 +74,84 @@ describe('tryFastCatalogChat', () => {
     expect(mocks.products).not.toHaveBeenCalled();
   });
 
+  it('rechecks the prior customer product request and asks for a click on a cart follow-up', async () => {
+    mocks.categories.mockResolvedValue(categories);
+    mocks.products.mockResolvedValue([
+      {
+        id: 'p1',
+        name: 'iPhone 16',
+        slug: 'iphone-16',
+        brand: 'Apple',
+        category: 'Smartphones',
+        description: null,
+        image_url: null,
+        price: 100000,
+        status: 'active',
+        stock: 1,
+        manage_stock: false,
+        has_variants: false,
+      },
+    ]);
+    const result = await tryFastCatalogChat({
+      tenant,
+      signal: new AbortController().signal,
+      messages: [
+        { role: 'user', content: 'Show me iPhone 16' },
+        { role: 'assistant', content: 'Untrusted earlier product suggestions' },
+        { role: 'user', content: 'Add it to my cart' },
+      ],
+    });
+    expect(result?.events[0]?.products[0]?.name).toBe('iPhone 16');
+    expect(result?.text).toMatch(/add to cart/i);
+    expect(mocks.products).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.objectContaining({ query: 'iPhone 16' })
+    );
+  });
+
+  it('asks which product to add when no customer shopping request is available', async () => {
+    const result = await tryFastCatalogChat({
+      tenant,
+      signal: new AbortController().signal,
+      messages: messages('Add it to my cart'),
+    });
+    expect(result?.text).toMatch(/which product/i);
+    expect(mocks.products).not.toHaveBeenCalled();
+  });
+
+  it('retains a product request through a price follow-up before a cart follow-up', async () => {
+    mocks.categories.mockResolvedValue(categories);
+    mocks.products.mockResolvedValue([
+      {
+        id: 'p1',
+        name: 'iPhone 16',
+        slug: 'iphone-16',
+        brand: 'Apple',
+        category: 'Smartphones',
+        description: null,
+        image_url: null,
+        price: 100000,
+        status: 'active',
+        stock: 1,
+        manage_stock: false,
+        has_variants: false,
+      },
+    ]);
+    const result = await tryFastCatalogChat({
+      tenant,
+      signal: new AbortController().signal,
+      messages: [
+        { role: 'user', content: 'Show me iPhone 16' },
+        { role: 'assistant', content: 'Choose a product.' },
+        { role: 'user', content: 'How much is it?' },
+        { role: 'assistant', content: 'Check its price.' },
+        { role: 'user', content: 'Add it to my cart' },
+      ],
+    });
+    expect(result?.events[0]?.products[0]?.name).toBe('iPhone 16');
+    expect(result?.text).toMatch(/add to cart/i);
+  });
+
   it('does not change chat behavior for a different merchant', async () => {
     expect(
       await tryFastCatalogChat({
@@ -92,6 +170,16 @@ describe('tryFastCatalogChat', () => {
       signal: new AbortController().signal,
     });
     expect(result?.text).toMatch(/help/i);
+    expect(mocks.categories).not.toHaveBeenCalled();
+  });
+
+  it('leaves the conversation health prompt to the provider-backed path', async () => {
+    const result = await tryFastCatalogChat({
+      messages: messages('Can you help me today?'),
+      tenant,
+      signal: new AbortController().signal,
+    });
+    expect(result).toBeNull();
     expect(mocks.categories).not.toHaveBeenCalled();
   });
 
@@ -121,5 +209,6 @@ describe('tryFastCatalogChat', () => {
     const result = await pending;
     expect(result?.events).toEqual([]);
     expect(result?.text).toMatch(/couldn.t|unavailable/i);
+    expect(result?.unavailable).toBe(true);
   });
 });

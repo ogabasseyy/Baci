@@ -33,6 +33,7 @@ describe('buildFastCatalogReply', () => {
     expect(result?.text).toContain('iPhone 16');
     expect(result?.text).toContain('catalog marks these for gaming');
     expect(result?.text).not.toMatch(/best gaming|snapdragon|\b2024\b/i);
+    expect(result?.catalogChecked).toBe(true);
   });
 
   it('returns a safe message if the catalog lookup fails', async () => {
@@ -46,6 +47,17 @@ describe('buildFastCatalogReply', () => {
     expect(result?.events).toEqual([]);
     expect(result?.text).toMatch(/couldn.t|unable|unavailable/i);
     expect(result?.text).not.toContain('iPhone');
+    expect(result?.unavailable).toBe(true);
+  });
+
+  it('marks invalid presentation data as unavailable rather than a verified empty search', async () => {
+    const result = await buildFastCatalogReply(
+      ['Show me phones'],
+      categories,
+      async () => [{ ...product, price: Number.NaN }]
+    );
+    expect(result?.unavailable).toBe(true);
+    expect(result?.catalogChecked).toBeUndefined();
   });
 
   it('leaves order and payment questions to the existing route', async () => {
@@ -63,6 +75,8 @@ describe('buildFastCatalogReply', () => {
       async () => []
     );
     expect(result?.events).toEqual([]);
+    expect(result?.unavailable).toBeUndefined();
+    expect(result?.catalogChecked).toBe(true);
     expect(result?.text).not.toMatch(
       /(?:do not|don.t|no longer) (?:have|sell)/i
     );

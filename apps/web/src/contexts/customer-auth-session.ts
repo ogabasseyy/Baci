@@ -23,6 +23,7 @@ import {
 import { bumpCartSessionGeneration } from '@/hooks/cart/shared-cart-storage';
 import { clearCartStorage } from '@/hooks/use-cart';
 import type { Customer, CustomerUser, OtpState } from './customer-auth-context';
+import { fetchCustomerAuthMutation } from './customer-auth-mutation';
 import { retirePreviousAccountCartAuthority } from './customer-auth-retirement';
 import {
   clearCustomerAuthRollbackPending,
@@ -32,7 +33,10 @@ import {
   rollbackCustomerAuthSession,
   setRememberedCustomerUserId,
 } from './customer-auth-storage';
-import { publishCustomerIdentity } from './customer-live-identity';
+import {
+  invalidateCustomerIdentityObservers,
+  publishCustomerIdentity,
+} from './customer-live-identity';
 
 export { resetRememberedCustomerSessionsForTests };
 
@@ -91,6 +95,9 @@ export async function loadCustomerSession(
   { currentUserId, setUser, setCustomer, setIsLoading }: SessionSetters,
   isCancelled: () => boolean = () => false
 ): Promise<void> {
+  // Bootstrap can follow an OAuth redirect that changed a shared cookie.
+  // Invalidate conservatively until the new session is known.
+  invalidateCustomerIdentityObservers(merchantSlug);
   const previousUserId = getRememberedCustomerUserId(
     merchantSlug,
     currentUserId
@@ -180,6 +187,7 @@ export async function commitCustomerAuthSession(
     setOtpState: (otp: OtpState | null) => void;
   }
 ): Promise<boolean> {
+  invalidateCustomerIdentityObservers(merchantSlug);
   const previousUserId = getRememberedCustomerUserId(
     merchantSlug,
     currentUserId
@@ -239,13 +247,17 @@ export async function performCustomerLogout(
     revokedOk = true;
     let response: Response;
     try {
-      response = await fetch('/api/storefront/auth/logout', {
-        method: 'POST',
-        signal:
-          typeof AbortSignal.timeout === 'function'
-            ? AbortSignal.timeout(CART_REQUEST_TIMEOUT_MS)
-            : undefined,
-      });
+      response = await fetchCustomerAuthMutation(
+        merchantSlug,
+        '/api/storefront/auth/logout',
+        {
+          method: 'POST',
+          signal:
+            typeof AbortSignal.timeout === 'function'
+              ? AbortSignal.timeout(CART_REQUEST_TIMEOUT_MS)
+              : undefined,
+        }
+      );
     } catch (error) {
       console.error('Logout error:', error);
       throw new Error(

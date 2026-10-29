@@ -72,6 +72,19 @@ describe('Ogabassey conversational providers', () => {
     expect(body.messages[0].content).toContain('no access to live inventory');
   });
 
+  it('sends the health conversation prompt to the model', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(completion('Hello, how may I help?', 'gpt-6-luna'));
+    vi.stubGlobal('fetch', fetchMock);
+    const response = await runOgabasseyConversation({
+      ...options(),
+      messages: [{ role: 'user', content: 'Can you help me today?' }],
+    });
+    expect(await response?.text()).toContain('help');
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it('tries DeepSeek with thinking disabled when Luna fails', async () => {
     const fetchMock = vi
       .fn()

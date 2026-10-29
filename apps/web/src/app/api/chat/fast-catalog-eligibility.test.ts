@@ -46,6 +46,94 @@ describe('selectFastCatalogProducts', () => {
     ).toEqual([]);
   });
 
+  it('recognizes WiFi-only connectivity without confusing WiFi plus cellular', () => {
+    const choices = [
+      { ...variants[0], attributes: { connectivity: 'WiFi' } },
+      { ...variants[1], attributes: { connectivity: 'WiFi+Cellular' } },
+    ];
+    expect(
+      selectFastCatalogProducts([phone], choices, {
+        isPhoneCategory: true,
+        maxPrice: 150000,
+        wifiOnly: false,
+      })
+    ).toEqual([]);
+    expect(
+      selectFastCatalogProducts([phone], choices, {
+        isPhoneCategory: true,
+        maxPrice: 150000,
+        wifiOnly: true,
+      })
+    ).toEqual([phone]);
+    expect(
+      selectFastCatalogProducts([phone], choices, {
+        isPhoneCategory: true,
+        maxPrice: 250000,
+        wifiOnly: false,
+      })
+    ).toEqual([phone]);
+    const conflicting = [
+      {
+        ...variants[0],
+        attributes: { connectivity: 'WiFi', sim_type: 'Physical SIM' },
+      },
+    ];
+    expect(
+      selectFastCatalogProducts([phone], conflicting, {
+        isPhoneCategory: true,
+        wifiOnly: true,
+      })
+    ).toEqual([]);
+  });
+
+  it('uses parent SIM specifications for a simple WiFi-only phone', () => {
+    const simple = {
+      ...phone,
+      has_variants: false,
+      variant_model: 'legacy',
+      manage_stock: false,
+    };
+    const options = {
+      isPhoneCategory: true,
+      parentWifiOnlyIds: new Set([phone.id]),
+    };
+    expect(
+      selectFastCatalogProducts([simple], [], { ...options, wifiOnly: false })
+    ).toEqual([]);
+    expect(
+      selectFastCatalogProducts([simple], [], { ...options, wifiOnly: true })
+    ).toEqual([simple]);
+  });
+
+  it('inherits a WiFi-only parent specification only when the variant has no connectivity value', () => {
+    const opts = {
+      isPhoneCategory: true,
+      parentWifiOnlyIds: new Set([phone.id]),
+      wifiOnly: true,
+    };
+    expect(
+      selectFastCatalogProducts(
+        [phone],
+        [{ ...variants[0], attributes: { storage: '128 GB' } }],
+        opts
+      )
+    ).toEqual([phone]);
+    expect(
+      selectFastCatalogProducts(
+        [phone],
+        [{ ...variants[0], attributes: { connectivity: 'WiFi+Cellular' } }],
+        opts
+      )
+    ).toEqual([]);
+    expect(
+      selectFastCatalogProducts(
+        [phone],
+        [{ ...variants[0], attributes: { connectivity: 'WiFi+Cellular' } }],
+        { ...opts, wifiOnly: false }
+      )
+    ).toEqual([phone]);
+  });
+
   it('keeps a phone family when a cellular option meets the budget', () => {
     expect(
       selectFastCatalogProducts([phone], variants, {

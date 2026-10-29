@@ -14,6 +14,7 @@ describe('Ogabassey order action routing', () => {
     'I have sent my payment',
     'Track my package',
     'Where is my package?',
+    'Has my parcel arrived?',
     'I paid for my order',
     'I’ve paid',
     'I paid',

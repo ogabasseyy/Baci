@@ -11,6 +11,8 @@ type SearchIntent = Extract<FastCatalogIntent, { kind: 'search' }>;
 export interface FastCatalogReply {
   text: string;
   events: StorefrontAgentUiEvent[];
+  unavailable?: boolean;
+  catalogChecked?: boolean;
 }
 
 export async function buildFastCatalogReply(
@@ -37,9 +39,12 @@ export async function buildFastCatalogReply(
     const collector = createChatPresentationEventCollector();
     collector.capture('searchProducts', { products });
     const events = collector.getEvents();
+    if (products.length > 0 && events.length === 0)
+      throw new Error('Catalog presentation invalid');
     if (!events.length) {
       return {
         events: [],
+        catalogChecked: true,
         text: 'I couldn’t confirm a matching option in the items I checked. Try a different search or browse the store.',
       };
     }
@@ -60,12 +65,14 @@ export async function buildFastCatalogReply(
       : '';
     return {
       events,
+      catalogChecked: true,
       text: `Here are options from our catalog: ${names.join(', ')}.${note} Choose an option to check its current price and availability.${compatibility}`,
     };
   } catch {
     return {
       events: [],
       text: 'I couldn’t check the catalog right now. Please try again or browse the store.',
+      unavailable: true,
     };
   }
 }

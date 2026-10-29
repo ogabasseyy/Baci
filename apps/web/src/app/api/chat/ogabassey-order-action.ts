@@ -7,7 +7,7 @@ export function buildOgabasseyOrderAction(
   if (last?.role !== 'user') return null;
   const text = last.content;
   const orderSubject =
-    /\b(?:my\s+(?:orders?|package)|where\s+is\s+my\s+delivery|orders?\s*(?:#|number|status)|(?:track|tracking)\s+(?:my\s+)?(?:order|package|delivery)|(?:cancel|cancellation)\s+(?:my\s+|the\s+)?orders?)\b/i;
+    /\b(?:my\s+(?:orders?|package|parcel)|where\s+is\s+my\s+delivery|orders?\s*(?:#|number|status)|(?:track|tracking)\s+(?:my\s+)?(?:order|package|parcel|delivery)|(?:cancel|cancellation)\s+(?:my\s+|the\s+)?orders?)\b/i;
   const paymentSubject =
     /\b(?:my\s+payment|payment\s+status|(?:sent|made|completed)\s+(?:my\s+|the\s+)?payment|i(?:['’]ve| have)?\s+paid)\b/i;
   if (orderSubject.test(text) || paymentSubject.test(text)) return 'orders';

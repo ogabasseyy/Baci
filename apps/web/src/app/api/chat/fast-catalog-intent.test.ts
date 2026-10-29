@@ -9,6 +9,32 @@ const categories = [
 ];
 
 describe('interpretFastCatalogIntent', () => {
+  it('looks up products for alternative availability phrasing', () => {
+    expect(
+      interpretFastCatalogIntent(
+        ['Have you got a Nintendo Switch?'],
+        categories
+      )
+    ).toMatchObject({ kind: 'search', query: 'Nintendo Switch' });
+  });
+
+  it('does not search the product catalog for a return policy', () => {
+    expect(
+      interpretFastCatalogIntent(['Do you have a return policy?'], categories)
+    ).toBeNull();
+  });
+
+  it.each([
+    'How do I sell my iPhone?',
+    'Can I carry my laptop through the airport?',
+  ])('does not confuse a customer activity with a request to buy: %s', (question) => {
+    expect(interpretFastCatalogIntent([question], categories)).toBeNull();
+  });
+  it('looks up an unlisted product when the customer asks whether the store has it', () => {
+    expect(
+      interpretFastCatalogIntent(['Do you have Nintendo Switch?'], categories)
+    ).toMatchObject({ kind: 'search', query: 'Nintendo Switch' });
+  });
   it('treats gaming phones as a phone category request, not a gaming-accessory search', () => {
     expect(
       interpretFastCatalogIntent(['Best gaming phones'], categories)
@@ -314,6 +340,12 @@ describe('interpretFastCatalogIntent', () => {
       kind: 'clarify',
       reason: 'options',
     });
+  });
+
+  it('routes a selling question for an unfamiliar product through catalog search', () => {
+    expect(
+      interpretFastCatalogIntent(['Do you sell Xbox?'], categories)
+    ).toMatchObject({ kind: 'search', query: 'Xbox' });
   });
 
   it('recognizes an intent to order a phone as a catalog search', () => {

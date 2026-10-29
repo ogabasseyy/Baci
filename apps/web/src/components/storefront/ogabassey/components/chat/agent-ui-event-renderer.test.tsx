@@ -204,6 +204,19 @@ describe('AgentUiEventRenderer', () => {
     expect(screen.getByText('Choose options to see the price')).toBeDefined();
   });
 
+  it('shows the fixed price while sending a single-condition product to the PDP', () => {
+    render(<AgentUiEventRenderer events={[event({ condition: 'new' })]} />);
+
+    expect(screen.getByText('₦1,200,000')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Choose options' })).toHaveAttribute('href');
+    expect(screen.queryByRole('button', { name: /Add.*cart/ })).toBeNull();
+  });
+
+  it('does not round fractional catalog prices on product cards', () => {
+    render(<AgentUiEventRenderer events={[event({ price: 189_246.51, condition: 'new' })]} />);
+    expect(screen.getByText('₦189,246.51')).toBeInTheDocument();
+  });
+
   it('caps a request for five units at managed stock of two', async () => {
     render(
       <AgentUiEventRenderer events={[event({ quantity: 5, stock: 2 })]} />

@@ -15,6 +15,7 @@ import {
   performCustomerLogout,
 } from './customer-auth-session';
 import { publishCustomerIdentity } from './customer-live-identity';
+import { requestCustomerOtpVerification } from './customer-otp-verification';
 
 export interface CustomerUser {
   id: string;
@@ -195,15 +196,11 @@ export function CustomerAuthProvider({
     }
 
     try {
-      const response = await fetch('/api/storefront/auth/verify-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: otpState.email,
-          token: code,
-          merchantSlug,
-        }),
-      });
+      const response = await requestCustomerOtpVerification(
+        merchantSlug,
+        otpState.email,
+        code
+      );
 
       const data = await response.json();
 

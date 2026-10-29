@@ -1,4 +1,4 @@
-import { Text, View } from 'react-native';
+import { Linking, Text, View } from 'react-native';
 import { BRAND } from '@/constants/Colors';
 import { styles } from './styles';
 import type { ChatMessage } from './types';
@@ -14,6 +14,42 @@ interface ChatMessageRowProps {
   item: ChatMessage;
   santaMode: boolean;
   colors: ChatMessageTheme;
+}
+
+function trustedStorefrontLink(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === 'https:' &&
+      url.hostname === 'ogabassey.com' &&
+      !url.port &&
+      !url.username &&
+      !url.password
+    );
+  } catch {
+    return false;
+  }
+}
+
+function assistantMessageText(text: string) {
+  const parts = text.split(/(https?:\/\/[^\s<>"']+)/gi);
+  return parts.map((part, index) =>
+    trustedStorefrontLink(part) ? (
+      <Text
+        accessibilityRole="link"
+        // biome-ignore lint/suspicious/noArrayIndexKey: Message text is immutable.
+        key={`${index}:${part}`}
+        onPress={() => {
+          void Linking.openURL(part).catch(() => undefined);
+        }}
+        style={{ textDecorationLine: 'underline' }}
+      >
+        {part}
+      </Text>
+    ) : (
+      part
+    )
+  );
 }
 
 export function ChatMessageRow({
@@ -63,7 +99,7 @@ export function ChatMessageRow({
             { color: isUser ? '#FFFFFF' : colors.text },
           ]}
         >
-          {item.text}
+          {isUser ? item.text : assistantMessageText(item.text)}
         </Text>
       </View>
     </View>

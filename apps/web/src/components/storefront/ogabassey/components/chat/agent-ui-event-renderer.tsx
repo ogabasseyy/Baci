@@ -8,6 +8,7 @@ import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/merchant';
 import type { Product } from '@/lib/products';
+import { AUTO_FRACTION_OPTIONS } from '@/lib/currency';
 import { formatMerchantCurrency } from '@/lib/resolve-merchant-currency';
 import { getStorefrontProductHref } from '@/lib/storefront-product-href';
 import {
@@ -16,17 +17,20 @@ import {
   type StorefrontAgentUiProduct,
 } from '@/schemas/storefront-agent-ui-contract';
 
-function needsSelection(product: StorefrontAgentUiProduct): boolean {
-  // The PDP owns condition-aware cart options and minimum-order selection.
-  if (product.condition?.trim() || (product.minimumOrderQuantity ?? 1) > 1) {
-    return true;
-  }
+function priceRequiresSelection(product: StorefrontAgentUiProduct): boolean {
   return requiresProductSelection({
     available_conditions: product.availableConditions,
     has_condition_offers: product.hasConditionOffers,
     has_variants: product.hasVariants,
     variant_model: product.variantModel,
   });
+}
+
+function needsSelection(product: StorefrontAgentUiProduct): boolean {
+  // The PDP owns condition-aware cart options and minimum-order selection.
+  return Boolean(product.condition?.trim()) ||
+    (product.minimumOrderQuantity ?? 1) > 1 ||
+    priceRequiresSelection(product);
 }
 
 function canAddProduct(product: StorefrontAgentUiProduct): boolean {
@@ -180,7 +184,7 @@ export function AgentUiEventRenderer({ events }: AgentUiEventRendererProps) {
                         </p>
                       )}
                       <p className="mt-1 text-sm font-bold text-[var(--store-primary)]">
-                        {needsSelection(product)
+                        {priceRequiresSelection(product)
                           ? 'Choose options to see the price'
                           : formatMerchantCurrency(
                               product.price,
@@ -189,7 +193,7 @@ export function AgentUiEventRenderer({ events }: AgentUiEventRendererProps) {
                                 payout_currency:
                                   merchantContext?.merchant?.payout_currency,
                               },
-                              { maximumFractionDigits: 0 }
+                              AUTO_FRACTION_OPTIONS
                             )}
                       </p>
                     </div>

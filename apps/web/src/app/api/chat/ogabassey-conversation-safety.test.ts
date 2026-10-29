@@ -78,6 +78,8 @@ it.each([
   'I have processed your order.',
   'Your virtual account has been created.',
   'I have done it for you.',
+  'Your parcel has arrived.',
+  'Yes, we carry Xbox consoles.',
 ])('rejects an unverified commerce-action claim: %s', async (unsafe) => {
   const reply = (text: string) =>
     new Response(
@@ -160,6 +162,64 @@ it('does not accept a model claim that a cart action was completed', async () =>
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
+it('rejects an unverified assertion that an item is ready to buy', async () => {
+  const completion = (text: string) =>
+    new Response(
+      JSON.stringify({
+        id: 'mock',
+        created: 1_700_000_000,
+        model: 'model',
+        choices: [
+          {
+            index: 0,
+            finish_reason: 'stop',
+            message: { role: 'assistant', content: text },
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }),
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(
+      completion('Yes, the Nintendo Switch is ready to buy today.')
+    )
+    .mockResolvedValueOnce(completion('Please check the catalog.'));
+  vi.stubGlobal('fetch', fetchMock);
+  const response = await runOgabasseyConversation(options());
+  expect(await response?.text()).toBe('Please check the catalog.');
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+it('accepts a truthful explanation that the model has no inventory access', async () => {
+  const completion = new Response(
+    JSON.stringify({
+      id: 'mock',
+      created: 1_700_000_000,
+      model: 'gpt-6-luna',
+      choices: [
+        {
+          index: 0,
+          finish_reason: 'stop',
+          message: {
+            role: 'assistant',
+            content:
+              'I have no access to live inventory. Please check the catalog.',
+          },
+        },
+      ],
+      usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+    }),
+    { headers: { 'Content-Type': 'application/json' } }
+  );
+  const fetchMock = vi.fn().mockResolvedValue(completion);
+  vi.stubGlobal('fetch', fetchMock);
+  const response = await runOgabasseyConversation(options());
+  expect(await response?.text()).toContain('I have no access');
+  expect(fetchMock).toHaveBeenCalledOnce();
+});
+
 it('does not let a model recommend an unverified camera', async () => {
   const reply = (text: string) =>
     new Response(
@@ -187,6 +247,41 @@ it('does not let a model recommend an unverified camera', async () => {
   const result = await runOgabasseyConversation(options());
 
   expect(await result?.text()).toBe('Please check the catalog.');
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+it('rejects a model assertion that a specific product can be bought from the store', async () => {
+  const mockCompletion = (text: string, model: string) =>
+    new Response(
+      JSON.stringify({
+        id: 'mock',
+        created: 1_700_000_000,
+        model,
+        choices: [
+          {
+            index: 0,
+            finish_reason: 'stop',
+            message: { role: 'assistant', content: text },
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }),
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(
+      mockCompletion(
+        'You can buy a Nintendo Switch from us right now.',
+        'gpt-6-luna'
+      )
+    )
+    .mockResolvedValueOnce(
+      mockCompletion('Please check the catalog.', 'deepseek-flash')
+    );
+  vi.stubGlobal('fetch', fetchMock);
+  const response = await runOgabasseyConversation(options());
+  expect(await response?.text()).toBe('Please check the catalog.');
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 

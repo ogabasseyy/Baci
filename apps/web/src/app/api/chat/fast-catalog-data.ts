@@ -16,6 +16,7 @@ import {
   type FastCatalogIntent,
   normalizeAccessoryNouns,
 } from './fast-catalog-intent';
+import { isWifiOnlyConnectivity } from './fast-catalog-wifi';
 
 type SearchIntent = Extract<FastCatalogIntent, { kind: 'search' }>;
 
@@ -34,11 +35,11 @@ const productRowSchema = z
     status: z.string().nullable(),
     stock: z.number().nullable(),
     stock_quantity: z.number().nullable().optional(),
-    manage_stock: z.boolean(),
-    has_variants: z.boolean(),
-    has_condition_offers: z.boolean(),
+    manage_stock: z.boolean().nullable(),
+    has_variants: z.boolean().nullable(),
+    has_condition_offers: z.boolean().nullable(),
     available_conditions: z.array(z.unknown()).nullable().optional(),
-    variant_model: z.string(),
+    variant_model: z.string().nullable(),
     condition: z.string().nullable().optional(),
     product_key_specs: z.unknown().optional(),
   })
@@ -144,7 +145,7 @@ export async function loadFastCatalogProducts(
   let query = supabase
     .from('products')
     .select(
-      `${CHAT_PRODUCT_PROJECTION},merchant_id,category_id,product_key_specs(recommended_for)`
+      `${CHAT_PRODUCT_PROJECTION},merchant_id,category_id,product_key_specs(recommended_for,sim_type)`
     )
     .eq('merchant_id', merchantId)
     .eq('status', 'active')
@@ -154,26 +155,37 @@ export async function loadFastCatalogProducts(
   const { data, error } = await query.limit(ranked ? 50 : 200);
   if (error) throw new Error('Catalog unavailable');
   const rankedIds = ranked ? new Set(ranked.productIds) : null;
-  const rows = (data ?? [])
-    .flatMap((row) => {
-      const parsed = productRowSchema.safeParse(row);
-      return parsed.success ? [parsed.data] : [];
-    })
-    .filter(
-      (row) =>
-        row.merchant_id === merchantId &&
-        (!intent.categoryId || row.category_id === intent.categoryId) &&
-        row.status === 'active' &&
-        (!intent.phoneProtectiveAccessory ||
-          catalogNamesPhoneAccessory(row.name)) &&
-        (!intent.wirelessEarbudsOnly ||
-          catalogHasWirelessEarbudEvidence(row.name, row.description)) &&
-        (!rankedIds ||
-          (rankedIds.has(row.id) &&
-            catalogMatchesModel(intent.query, row.name, row.brand))) &&
-        (!intent.preference ||
-          catalogMatchesPreference(row.product_key_specs, intent.preference))
-    );
+  const parsedRows = (data ?? []).flatMap((row) => {
+    const parsed = productRowSchema.safeParse(row);
+    return parsed.success
+      ? [
+          {
+            ...parsed.data,
+            manage_stock: parsed.data.manage_stock ?? true,
+            has_variants: parsed.data.has_variants ?? false,
+            has_condition_offers: parsed.data.has_condition_offers ?? false,
+            variant_model: parsed.data.variant_model ?? 'legacy',
+          },
+        ]
+      : [];
+  });
+  if ((data?.length ?? 0) > 0 && parsedRows.length === 0)
+    throw new Error('Catalog response invalid');
+  const rows = parsedRows.filter(
+    (row) =>
+      row.merchant_id === merchantId &&
+      (!intent.categoryId || row.category_id === intent.categoryId) &&
+      row.status === 'active' &&
+      (!intent.phoneProtectiveAccessory ||
+        catalogNamesPhoneAccessory(row.name)) &&
+      (!intent.wirelessEarbudsOnly ||
+        catalogHasWirelessEarbudEvidence(row.name, row.description)) &&
+      (!rankedIds ||
+        (rankedIds.has(row.id) &&
+          catalogMatchesModel(intent.query, row.name, row.brand))) &&
+      (!intent.preference ||
+        catalogMatchesPreference(row.product_key_specs, intent.preference))
+  );
   const variantIds = rows
     .filter(
       (product) =>
@@ -230,15 +242,32 @@ export async function loadFastCatalogProducts(
       const parsed = variantRowSchema.safeParse(row);
       return parsed.success ? [parsed.data] : [];
     });
+    if (variantResult.data.length > 0 && variants.length === 0)
+      throw new Error('Catalog options invalid');
   }
   const phoneProductIds = new Set(
     rows
       .filter((row) => intent.phoneCategoryIds?.includes(row.category_id ?? ''))
       .map((row) => row.id)
   );
+  const parentWifiOnlyIds = new Set(
+    rows
+      .filter((row) => {
+        const specs = Array.isArray(row.product_key_specs)
+          ? row.product_key_specs[0]
+          : row.product_key_specs;
+        return (
+          !!specs &&
+          typeof specs === 'object' &&
+          isWifiOnlyConnectivity(specs as Record<string, unknown>)
+        );
+      })
+      .map((row) => row.id)
+  );
   return selectFastCatalogProducts(products, variants, {
     ...intent,
     phoneProductIds,
+    parentWifiOnlyIds,
   }).slice(0, 6);
 }
 

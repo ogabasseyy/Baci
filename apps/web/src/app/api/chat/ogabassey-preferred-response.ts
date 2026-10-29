@@ -1,5 +1,6 @@
 import type { AiChatProvider } from '@/env';
 import type { AgenticChatTenant } from '@/lib/agentic/agentic-chat-tenant';
+import { acceptsAgentUi } from './accepts-agent-ui';
 import { withChatTenantHeader } from './chat-tenant';
 import { tryFastCatalogResponse } from './fast-catalog-response';
 import { negotiateChatAgentUiResponse } from './negotiate-chat-agent-ui-response';
@@ -27,7 +28,10 @@ export async function tryOgabasseyPreferredResponse(
     const action = buildOgabasseyOrderAction(messages);
     if (action) {
       const response = new Response(
-        'You can securely view your order and payment status or request a cancellation from your account. Choose an order and confirm before any cancellation.',
+        'You can securely view your order and payment status or request a cancellation from your account. Choose an order and confirm before any cancellation.' +
+          (acceptsAgentUi(request)
+            ? ''
+            : '\n\nhttps://ogabassey.com/account/orders'),
         {
           headers: {
             'Content-Type': 'text/plain; charset=utf-8',

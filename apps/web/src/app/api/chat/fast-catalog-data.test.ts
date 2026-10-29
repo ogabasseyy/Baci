@@ -80,6 +80,50 @@ describe('loadFastCatalogProducts', () => {
     expect(mocks.query.eq).toHaveBeenCalledWith('status', 'active');
   });
 
+  it('handles nullable legacy flags using managed-stock semantics', async () => {
+    mocks.query.limit.mockResolvedValue({
+      data: [
+        {
+          ...row,
+          manage_stock: null,
+          has_variants: null,
+          has_condition_offers: null,
+          variant_model: null,
+        },
+      ],
+      error: null,
+    });
+    const products = await loadFastCatalogProducts('merchant-1', intent);
+    expect(products).toHaveLength(1);
+    expect(products[0].manage_stock).toBe(true);
+    mocks.query.limit.mockResolvedValue({
+      data: [
+        {
+          ...row,
+          manage_stock: null,
+          has_variants: null,
+          has_condition_offers: null,
+          variant_model: null,
+          stock_quantity: 0,
+          stock: 9,
+        },
+      ],
+      error: null,
+    });
+    expect(await loadFastCatalogProducts('merchant-1', intent)).toEqual([]);
+  });
+
+  it('uses a simple phone parent SIM specification for WiFi-only matching', async () => {
+    mocks.query.limit.mockResolvedValue({
+      data: [{ ...row, product_key_specs: { sim_type: 'Wi-Fi Only' } }],
+      error: null,
+    });
+    expect(await loadFastCatalogProducts('merchant-1', intent)).toEqual([]);
+    expect(
+      await loadFastCatalogProducts('merchant-1', { ...intent, wifiOnly: true })
+    ).toHaveLength(1);
+  });
+
   it('rejects unexpected rows from another merchant or category', async () => {
     mocks.query.limit.mockResolvedValue({
       data: [
@@ -232,7 +276,7 @@ describe('loadFastCatalogProducts', () => {
     );
   });
 
-  it('ignores malformed product and variant records rather than trusting them', async () => {
+  it('reports unavailable when all returned variant records are malformed', async () => {
     mocks.query.limit.mockResolvedValue({
       data: [
         { ...row, id: 'broken', price: 'invalid' },
@@ -252,7 +296,9 @@ describe('loadFastCatalogProducts', () => {
       ],
       error: null,
     });
-    expect(await loadFastCatalogProducts('merchant-1', intent)).toEqual([]);
+    await expect(loadFastCatalogProducts('merchant-1', intent)).rejects.toThrow(
+      /catalog/i
+    );
   });
 
   it('fails closed when an unrestricted search cannot identify the phone category', async () => {
@@ -267,14 +313,16 @@ describe('loadFastCatalogProducts', () => {
     expect(mocks.ranked).not.toHaveBeenCalled();
   });
 
-  it('does not treat missing selection or stock metadata as a simple available product', async () => {
+  it('does not treat absent selection or stock metadata as a simple available product', async () => {
     for (const invalid of [
-      { ...row, has_variants: null },
-      { ...row, has_condition_offers: null },
-      { ...row, manage_stock: null },
+      { ...row, has_variants: undefined },
+      { ...row, has_condition_offers: undefined },
+      { ...row, manage_stock: undefined },
     ]) {
       mocks.query.limit.mockResolvedValue({ data: [invalid], error: null });
-      expect(await loadFastCatalogProducts('merchant-1', intent)).toEqual([]);
+      await expect(
+        loadFastCatalogProducts('merchant-1', intent)
+      ).rejects.toThrow(/catalog/i);
     }
   });
 });

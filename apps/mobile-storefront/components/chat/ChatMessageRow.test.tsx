@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
+import { Linking } from 'react-native';
 import { ChatMessageRow } from './ChatMessageRow';
 import type { ChatMessage } from './types';
 
@@ -60,5 +61,49 @@ describe('ChatMessageRow', () => {
     );
 
     expect(UNSAFE_getByProps({ children: '🎅' })).toBeTruthy();
+  });
+
+  it('opens verified storefront product links in assistant messages', () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    const url = 'https://ogabassey.com/smartphones/iphone-16';
+    render(
+      <ChatMessageRow
+        item={{ ...baseMessage, text: `Choose a product: ${url}` }}
+        santaMode={false}
+        colors={colors}
+      />
+    );
+    fireEvent.press(screen.getByRole('link', { name: url }));
+    expect(open).toHaveBeenCalledWith(url);
+    open.mockRestore();
+  });
+
+  it('does not turn lookalike URLs into links', () => {
+    render(
+      <ChatMessageRow
+        item={{
+          ...baseMessage,
+          text: 'https://ogabassey.com.evil.example/product',
+        }}
+        santaMode={false}
+        colors={colors}
+      />
+    );
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('does not turn a user-provided storefront URL into a link', () => {
+    render(
+      <ChatMessageRow
+        item={{
+          ...baseMessage,
+          role: 'user',
+          text: 'https://ogabassey.com/account/orders',
+        }}
+        santaMode={false}
+        colors={colors}
+      />
+    );
+    expect(screen.queryByRole('link')).toBeNull();
   });
 });

@@ -45,19 +45,36 @@ def _run(*args: str, timeout: float = 10) -> str:
     return result.stdout.strip()
 
 
+def _credential_mismatch(status: str, uid: int, gid: int) -> str | None:
+    found = {}
+    try:
+        for line in status.splitlines():
+            if line.startswith(("Uid:", "Gid:", "Groups:")):
+                key, value = line.split(":", 1)
+                found[key] = tuple(int(item) for item in value.split())
+    except (ValueError, TypeError):
+        return "status-shape"
+    if found.get("Uid") != (uid, uid, uid, uid):
+        return "uid"
+    if found.get("Gid") != (gid, gid, gid, gid):
+        return "gid"
+    # systemd initializes supplementary memberships from the account database;
+    # SupplementaryGroups= only configures unit assignments, it does not replace
+    # those defaults. _identity() has already pinned that database list to [gid].
+    # Permit only that primary-group membership; any additional group fails closed.
+    if found.get("Groups") not in ((), (gid,)):
+        return "supplementary-groups"
+    return None
+
+
 def _pid_identity(pid: int, uid: int, gid: int) -> None:
     try:
         status = Path(f"/proc/{pid}/status").read_text(encoding="ascii")
     except OSError as error:
         raise ExtractorRejected("extractor process identity is unavailable") from error
-    found = {}
-    for line in status.splitlines():
-        if line.startswith(("Uid:", "Gid:", "Groups:")):
-            key, value = line.split(":", 1)
-            found[key] = tuple(int(item) for item in value.split())
-    if (found.get("Uid") != (uid, uid, uid, uid)
-            or found.get("Gid") != (gid, gid, gid, gid) or found.get("Groups") != ()):
-        raise ExtractorRejected("extractor process credentials differ from the fixed identity")
+    mismatch = _credential_mismatch(status, uid, gid)
+    if mismatch is not None:
+        raise ExtractorRejected(f"extractor process identity mismatch ({mismatch})")
 
 
 def _open_cgroup(control_group: str, transaction_id: str) -> tuple[int, os.stat_result]:

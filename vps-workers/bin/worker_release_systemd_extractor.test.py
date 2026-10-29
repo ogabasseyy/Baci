@@ -53,6 +53,21 @@ def archive_bytes() -> bytes:
 
 
 class ExtractorUnitTests(unittest.TestCase):
+    def test_process_identity_accepts_only_exact_uid_gid_and_primary_group(self):
+        uid, gid = 1201, 1202
+
+        def status(groups):
+            return (f"Uid:\t{uid}\t{uid}\t{uid}\t{uid}\n"
+                    f"Gid:\t{gid}\t{gid}\t{gid}\t{gid}\n"
+                    f"Groups:\t{groups}\n")
+
+        self.assertIsNone(supervisor._credential_mismatch(status(""), uid, gid))
+        self.assertIsNone(supervisor._credential_mismatch(status(str(gid)), uid, gid))
+        self.assertEqual(supervisor._credential_mismatch(status(f"{gid} 44"), uid, gid),
+                         "supplementary-groups")
+        self.assertEqual(supervisor._credential_mismatch(
+            status("").replace(f"{uid}\t{uid}\t{uid}\t{uid}", "1\t1\t1\t1"), uid, gid), "uid")
+
     def test_installed_helper_files_are_group_readable_and_child_is_executable(self):
         files = {item.relative: item for item in provisioner.install_files()}
         for name, mode in (("archive-child", 0o550), ("archive-reader", 0o440),

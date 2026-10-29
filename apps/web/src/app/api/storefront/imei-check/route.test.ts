@@ -376,8 +376,8 @@ describe('POST /api/storefront/imei-check', () => {
       active: true,
       currency: 'USD',
       order_field_name: 'IMEI',
-      price_usd: 0.019,
-      product_id: '1955',
+      price_usd: 0.06,
+      product_id: '716',
       synced_at: new Date().toISOString(),
     });
     mocks.mockPetrockSubmitOrder.mockReset();
@@ -694,7 +694,7 @@ describe('POST /api/storefront/imei-check', () => {
 
   it('returns 202 after an async-capable Petrock order is accepted', async () => {
     vi.stubEnv('PETROCK_ENABLED', 'true');
-    vi.stubEnv('PETROCK_ENABLED_TIERS', 'blacklist');
+    vi.stubEnv('PETROCK_ENABLED_TIERS', 'simLock');
     vi.stubEnv('PETROCK_API_TOKEN', 'petrock-token');
     vi.stubEnv(
       'IMEI_IDENTIFIER_ENCRYPTION_KEY',
@@ -707,7 +707,7 @@ describe('POST /api/storefront/imei-check', () => {
         clientCapabilities: ['imei-async-v1'],
         device: 'smartphone',
         imei: VALID_IMEI,
-        tier: 'blacklist',
+        tier: 'simLock',
       })
     );
 
@@ -725,7 +725,7 @@ describe('POST /api/storefront/imei-check', () => {
 
   it('fails Petrock preflight before debit when the catalog is stale', async () => {
     vi.stubEnv('PETROCK_ENABLED', 'true');
-    vi.stubEnv('PETROCK_ENABLED_TIERS', 'blacklist');
+    vi.stubEnv('PETROCK_ENABLED_TIERS', 'simLock');
     vi.stubEnv('PETROCK_API_TOKEN', 'petrock-token');
     vi.stubEnv(
       'IMEI_IDENTIFIER_ENCRYPTION_KEY',
@@ -735,8 +735,8 @@ describe('POST /api/storefront/imei-check', () => {
       active: true,
       currency: 'USD',
       order_field_name: 'IMEI',
-      price_usd: 0.019,
-      product_id: '1955',
+      price_usd: 0.06,
+      product_id: '716',
       synced_at: '2026-01-01T00:00:00.000Z',
     });
     const { POST } = await importRoute();
@@ -746,7 +746,7 @@ describe('POST /api/storefront/imei-check', () => {
         clientCapabilities: ['imei-async-v1'],
         device: 'smartphone',
         imei: VALID_IMEI,
-        tier: 'blacklist',
+        tier: 'simLock',
       })
     );
 
@@ -761,7 +761,7 @@ describe('POST /api/storefront/imei-check', () => {
 
   it('keeps a Petrock POST timeout pending without refunding', async () => {
     vi.stubEnv('PETROCK_ENABLED', 'true');
-    vi.stubEnv('PETROCK_ENABLED_TIERS', 'blacklist');
+    vi.stubEnv('PETROCK_ENABLED_TIERS', 'simLock');
     vi.stubEnv('PETROCK_API_TOKEN', 'petrock-token');
     vi.stubEnv(
       'IMEI_IDENTIFIER_ENCRYPTION_KEY',
@@ -779,7 +779,7 @@ describe('POST /api/storefront/imei-check', () => {
         clientCapabilities: ['imei-async-v1'],
         device: 'smartphone',
         imei: VALID_IMEI,
-        tier: 'blacklist',
+        tier: 'simLock',
       })
     );
 
@@ -1222,3 +1222,9 @@ describe('POST /api/storefront/imei-check', () => {
     expect(mocks.mockRequestSickwCheck).not.toHaveBeenCalled();
   });
 });
+
+vi.mock('@/lib/imei-device-catalog', () => ({
+  enrichImeiDeviceResult: vi.fn(
+    async (_merchantId: string, result: unknown) => result
+  ),
+}));

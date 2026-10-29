@@ -52,7 +52,7 @@ export const PETROCK_DARK_IMEI_SERVICE_TIERS = [
 
 export const PRIMARY_IMEI_SERVICE_TIERS = [
   'full',
-  'activation',
+  'basic',
   'blacklist',
   'carrier',
 ] as const satisfies readonly ImeiServiceTierKey[];
@@ -122,7 +122,7 @@ const PRIMARY_TIERS_BY_DEVICE: Record<
   ImeiDeviceCategory,
   readonly ImeiServiceTierKey[]
 > = {
-  smartphone: ['full', 'activation', 'blacklist', 'carrier'],
+  smartphone: ['full', 'basic', 'blacklist', 'carrier'],
   tablet: ['activation', 'icloud', 'mdm', 'gsxPremium'],
   laptop: ['macIcloud', 'activation', 'mdm', 'gsxPremium'],
   watch: ['activation', 'repairEligibility', 'gsxPremium'],

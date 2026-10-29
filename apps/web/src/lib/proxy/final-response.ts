@@ -23,7 +23,14 @@ export function buildFinalProxyResponse(
 ): NextResponse {
   const routeType = getRouteType(pathname);
   const isLocal = isLocalhost(hostname);
-  if (shouldPartitionStorefrontMetadataCache(pathname, hostname, routeType)) {
+  // Dev loopback has no CDN cache to partition. Next normalizes numeric
+  // loopback rewrite targets to localhost and externally self-proxies them.
+  // Keep verified request headers below without introducing that extra hop.
+  const devLoopback = isLocal && process.env.NODE_ENV !== 'production';
+  if (
+    !devLoopback &&
+    shouldPartitionStorefrontMetadataCache(pathname, hostname, routeType)
+  ) {
     const url = request.nextUrl.clone();
     setStorefrontMetadataCacheBucketSearchParam(url, request);
     return applySecurityHeaders(

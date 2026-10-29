@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef } from 'react';
 import { IMEI_BRAND_FILTERS, type ImeiBrandFilter } from '@baci/shared/imei';
+import { useRef } from 'react';
 
 interface ImeiCheckerBrandChipsProps {
   selectedBrand: ImeiBrandFilter;
@@ -49,12 +49,13 @@ export function ImeiCheckerBrandChips({
         const isSelected = brand.id === selectedBrand;
 
         return (
+          // biome-ignore lint/a11y/useSemanticElements: Custom chip radio implements the APG roving focus and keyboard pattern.
           <button
             aria-checked={isSelected}
-            className={`shrink-0 rounded-full border px-4 py-1.5 text-sm font-medium transition-all ${
+            className={`shrink-0 rounded-full border px-4 min-h-11 py-1.5 text-sm font-medium text-store-foreground transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current ${
               isSelected
-                ? 'border-[var(--store-primary)] bg-[var(--store-primary)]/10 text-[var(--store-primary)]'
-                : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                ? 'border-[var(--store-primary)] bg-[var(--store-primary)]/10'
+                : 'border-gray-200 bg-white hover:border-gray-300'
             }`}
             key={brand.id}
             onClick={() => onSelectBrand(brand.id)}

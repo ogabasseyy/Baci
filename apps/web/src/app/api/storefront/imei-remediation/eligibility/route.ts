@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import {
+  canAssessImeiNetworkUnlock,
   isValidDeviceIdentifier,
   normalizeDeviceIdentifier,
 } from '@baci/shared/imei';
@@ -105,6 +106,17 @@ export async function POST(request: NextRequest) {
   if (result.kind === 'not_found') {
     return NextResponse.json({ error: 'Lookup not found' }, { status: 404 });
   }
+  if (
+    (result.kind === 'checks_required' || result.kind === 'eligible') &&
+    !canAssessImeiNetworkUnlock(result.evidence)
+  ) {
+    return NextResponse.json({
+      offers: [],
+      reason: 'unlock_evidence_required',
+      status: 'suppressed',
+      success: true,
+    });
+  }
   if (result.kind === 'pending') {
     return NextResponse.json(
       {
@@ -134,7 +146,7 @@ export async function POST(request: NextRequest) {
       sourceLookupId: parsed.data.lookupId,
       supabaseAdmin,
     });
-    await submitNextPetrockEligibilityCheck({
+    const submission = await submitNextPetrockEligibilityCheck({
       client: createPetrockClient(config),
       identifier,
       order: assessment,
@@ -143,6 +155,14 @@ export async function POST(request: NextRequest) {
         readPetrockHouseCheckProduct(supabaseAdmin, productId),
       state: createPetrockEligibilityState(supabaseAdmin),
     });
+    if (submission.kind === 'suppressed') {
+      return NextResponse.json({
+        offers: [],
+        reason: submission.reason,
+        status: 'suppressed',
+        success: true,
+      });
+    }
     return NextResponse.json(
       {
         assessmentId: assessment.id,

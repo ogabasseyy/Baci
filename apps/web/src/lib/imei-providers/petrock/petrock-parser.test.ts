@@ -2,6 +2,40 @@ import { describe, expect, it } from 'vitest';
 import { parsePetrockReplay } from './petrock-parser';
 
 describe('parsePetrockReplay', () => {
+  it('retains provider colour and storage for matching and analytics', () => {
+    const result = parsePetrockReplay(
+      'Model: iPhone 17 Pro Max<br>Color: Silver<br>Storage: 512GB'
+    );
+    expect(result.deviceProfile).toMatchObject({
+      brand: 'Apple',
+      model: 'iPhone 17 Pro Max',
+      color: 'Silver',
+      storage: '512GB',
+    });
+  });
+
+  it('does not infer a clean blacklist from the live Apple info response', () => {
+    const result = parsePetrockReplay(
+      'Model: iPhone 17 Pro Max 512GB Silver<br>Color: Silver<br>Find My iPhone: <span style="color:red;">ON</span>'
+    );
+    expect(result).toMatchObject({
+      device: 'iPhone 17 Pro Max 512GB Silver',
+      icloudLock: 'ON',
+      blacklistStatus: 'Unknown',
+      status: 'Unknown',
+      verdictType: 'caution',
+    });
+  });
+
+  it('does not recommend buying from a model/FMI-only report', () => {
+    const result = parsePetrockReplay(
+      'Model: iPhone 17 Pro Max<br>Find My iPhone: OFF'
+    );
+    expect(result.status).toBe('Unknown');
+    expect(result.verdictType).toBe('caution');
+    expect(result.verdict).toContain('Blacklist status was not checked');
+  });
+
   it('parses font and span color markup plus Petrock label aliases', () => {
     const result = parsePetrockReplay(
       [
@@ -17,7 +51,7 @@ describe('parsePetrockReplay', () => {
       carrier: 'US AT&T',
       device: 'iPhone 17 Pro Max (A3525)',
       simLock: 'Locked',
-      status: 'Clean',
+      status: 'Unknown',
       verdictType: 'caution',
     });
   });
@@ -53,6 +87,17 @@ describe('parsePetrockReplay', () => {
       soldBy: 'Example Retailer',
       wifiMac: 'A1:B2:C3:D4:E5:F6',
     });
+  });
+
+  it.each([
+    'Not found',
+    'Unavailable',
+  ])('never calls an unverified blacklist %s safe', (status) => {
+    const result = parsePetrockReplay(
+      `Model: iPhone 17 Pro Max<br>Blacklist Status: ${status}`
+    );
+    expect(result.status).toBe('Unknown');
+    expect(result.verdictType).not.toBe('safe');
   });
 
   it('does not call an unrecognized replay clean', () => {

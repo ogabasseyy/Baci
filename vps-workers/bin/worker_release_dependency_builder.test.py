@@ -1112,6 +1112,9 @@ class DependencyBuilderTests(unittest.TestCase):
                 (payload / "web" / "node_modules.txt").write_text("candidate", encoding="utf-8")
                 (payload / "root" / "node_modules").mkdir(parents=True)
                 fs.write_smoke_evidence(scratch, {"web_tsx": "passed", "worker_dotenv": "passed"})
+                evidence = scratch / fs.SMOKE_NAME
+                if os.geteuid() == 0:
+                    os.chown(evidence, fake_uid, fake_gid)
 
             def make_seed(_source, _sha, scratch, input_copy, uid, gid):
                 seed = input_copy / "pnpm-cache-seed"

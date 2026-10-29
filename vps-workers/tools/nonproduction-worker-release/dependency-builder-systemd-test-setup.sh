@@ -13,6 +13,7 @@ build_root=/run/baci-worker-release-build
 store_root=/var/cache/baci-worker-release/pnpm-store
 cache_root=/var/cache/baci-worker-release/pnpm-cache
 cache_parent=/var/cache/baci-worker-release
+published_seed_root="$cache_parent/seeds"
 test_unit="baci-dependency-snapshot-${suffix}.service"
 lock_group_created=0
 builder_group_created=0
@@ -23,6 +24,7 @@ build_mounted=0
 store_created=0
 cache_parent_created=0
 policy_cache_created=0
+published_seed_root_created=0
 helper_created=0
 builder_unit_owned=0
 test_unit_owned=0
@@ -62,6 +64,7 @@ cleanup() {
   [ "$build_mounted" -eq 0 ] || umount "$build_root"
   [ "$store_created" -eq 0 ] || rm -rf -- "$store_root"
   [ "$policy_cache_created" -eq 0 ] || rm -rf -- "$cache_root"
+  [ "$published_seed_root_created" -eq 0 ] || rm -rf -- "$published_seed_root"
   [ "$cache_parent_created" -eq 0 ] || rmdir "$cache_parent"
   [ "$worker_user_created" -eq 0 ] || userdel baci-worker >/dev/null 2>&1
   [ "$worker_group_created" -eq 0 ] || groupdel baci-worker >/dev/null 2>&1
@@ -162,6 +165,10 @@ install -d -o root -g root -m 0755 "$store_root"
 store_created=1
 install -d -o root -g root -m 0755 "$cache_root"
 policy_cache_created=1
+if [ -e "$published_seed_root" ] || [ -L "$published_seed_root" ]; then
+  echo "refusing pre-existing per-SHA dependency seed root" >&2
+  exit 1
+fi
 
 if [ -e /srv/baci-workers ] || [ -e /srv ]; then
   if [ ! -d /srv ] || [ -e /srv/baci-workers ]; then

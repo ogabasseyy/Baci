@@ -42,6 +42,7 @@ from worker_release_dependency_registry_policy import (
 )
 from worker_release_dependency_diagnostics import (
     PnpmStepRejected,
+    has_fresh_policy_pass,
     has_policy_pass_marker,
     run_pnpm_checked,
     write_diagnostic,
@@ -218,6 +219,13 @@ def validate_receipt(source: Path, cache: Path, receipt_path: Path, pnpm_version
 def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/usr/bin/node",
               *, cache_max_bytes: int = MAX_CACHE_BYTES) -> None:
     _validate_registry_routing(source, POLICY_FILES, TRUSTED_REGISTRY)
+    _hash_tree(cache)
+    try:
+        cache_is_fresh = next(cache.iterdir(), None) is None
+    except OSError as exc:
+        raise BuilderRejected("fresh pnpm policy cache is unavailable") from exc
+    if not cache_is_fresh:
+        raise BuilderRejected("online policy preverification requires a fresh empty metadata cache")
     version = run_pnpm_checked((node, pnpm, "--version"), cwd=source,
                                timeout=15, stage="version check").stdout.strip()
     if version != EXPECTED_PNPM:
@@ -246,14 +254,20 @@ def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/u
         env["HOME"] = home
         with tempfile.TemporaryDirectory(prefix="pnpm-policy-preverify-", dir=cache.parent) as output_root:
             commands = (
+                ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "--filter", "@baci/web...", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store)), source),
                 ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "--filter", "@baci/web", "--prod", "deploy", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store), str(Path(output_root) / "web")), source),
                 ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store)), source / "vps-workers"),
             )
-            for stage, (command, cwd) in zip(("web-deploy", "worker-install"), commands, strict=True):
+            for stage, (command, cwd) in zip(("web-install", "web-deploy", "worker-install"), commands, strict=True):
                 result = run_pnpm_checked(command, cwd=cwd, env=env, timeout=240,
                                           stage=f"preverify {stage}")
-                if not has_policy_pass_marker(getattr(result, "stdout", "") or "",
-                                              getattr(result, "stderr", "") or ""):
+                stdout = getattr(result, "stdout", "") or ""
+                stderr = getattr(result, "stderr", "") or ""
+                evidence_ok = (
+                    has_fresh_policy_pass(stdout, stderr) if stage == "web-install"
+                    else has_fresh_policy_pass(stdout, stderr) or has_policy_pass_marker(stdout, stderr)
+                )
+                if stage != "web-deploy" and not evidence_ok:
                     raise PnpmStepRejected(f"preverify-{stage}", "policy-pass-marker-missing", 0)
     if before != _input_hashes(source):
         raise BuilderRejected("pnpm changed a lockfile or policy during preverification")

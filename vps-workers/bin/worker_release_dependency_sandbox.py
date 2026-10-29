@@ -12,6 +12,7 @@ from pathlib import Path
 from worker_release_dependency_artifacts import BuilderRejected, copy_source_tree, validate_payload, verify_runtime_candidates
 from worker_release_dependency_fs import directory_usage, write_smoke_evidence
 from worker_release_dependency_policy_cache import RECEIPT_NAME, TRUSTED_REGISTRY, validate_receipt
+from worker_release_dependency_diagnostics import has_policy_pass_marker
 
 SYSTEMD_RUN = "/usr/bin/systemd-run"
 SYSTEMCTL = "/usr/bin/systemctl"
@@ -173,13 +174,18 @@ def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
     if version != EXPECTED_PNPM:
         raise BuilderRejected("installed pnpm version does not match repository pin")
     validate_receipt(working, private_cache, private_store / RECEIPT_NAME, version, expected_sha=expected_sha)
-    web_policy = subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "--filter", "@baci/web", "--prod", "deploy", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store), str(web_output)), cwd=working, check=True, capture_output=True, text=True, timeout=240)
-    if "Lockfile passes supply-chain policies" not in web_policy.stdout:
-        raise BuilderRejected("web offline deploy did not verify lockfile supply-chain policy")
+    web_install = subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy",
+                                  "--filter", "@baci/web...", "install", "--prod", "--frozen-lockfile",
+                                  "--ignore-scripts", "--ignore-pnpmfile", "--offline",
+                                  "--store-dir", str(private_store)), cwd=working, check=True,
+                                 capture_output=True, text=True, timeout=240)
+    if not has_policy_pass_marker(web_install.stdout, web_install.stderr):
+        raise BuilderRejected("web offline install did not verify lockfile supply-chain policy")
+    subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "--filter", "@baci/web", "--prod", "deploy", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store), str(web_output)), cwd=working, check=True, capture_output=True, text=True, timeout=240)
     remove_workspace_self_link(web_output, working)
     workers_root = working / "vps-workers"
     worker_policy = subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store)), cwd=workers_root, check=True, capture_output=True, text=True, timeout=240)
-    if "Lockfile passes supply-chain policies" not in worker_policy.stdout:
+    if not has_policy_pass_marker(worker_policy.stdout, worker_policy.stderr):
         raise BuilderRejected("worker offline install did not verify lockfile supply-chain policy")
     validate_receipt(working, private_cache, private_store / RECEIPT_NAME, version,
                      expected_sha=expected_sha)

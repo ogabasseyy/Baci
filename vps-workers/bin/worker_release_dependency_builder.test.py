@@ -171,10 +171,19 @@ class DependencyBuilderTests(unittest.TestCase):
                 calls.append((tuple(command), Path(cwd)))
                 if command == (sandbox.PNPM, "--version"):
                     return type("Result", (), {"stdout": sandbox.EXPECTED_PNPM + "\n"})()
+                if "deploy" in command:
+                    return type("Result", (), {"stdout": "Deploying production dependencies", "stderr": ""})()
+                if "@baci/web..." in command:
+                    return type("Result", (), {
+                        "stdout": "✓ Lockfile passes supply-chain policies (1 entry in 1ms)", "stderr": ""
+                    })()
                 if "install" in command and "--prod" in command:
                     self.assertEqual(Path(cwd), scratch / "source" / "vps-workers")
                     (Path(cwd) / "node_modules").mkdir()
-                return type("Result", (), {"stdout": "Lockfile passes supply-chain policies\n"})()
+                    return type("Result", (), {
+                        "stdout": "", "stderr": "✓ Lockfile passes supply-chain policies (1 entry in 2ms)"
+                    })()
+                return type("Result", (), {"stdout": ""})()
 
             with patch.dict(os.environ, {"HOME": str(scratch / "home")}), \
                  patch.object(sandbox, "copy_source_tree", side_effect=copy_source), \
@@ -185,7 +194,13 @@ class DependencyBuilderTests(unittest.TestCase):
                  }), patch.object(sandbox, "write_smoke_evidence"):
                 sandbox.run_sandbox_worker(source, scratch, SHA)
 
-            web_deploy, web_cwd = calls[1]
+            web_install, web_install_cwd = calls[1]
+            self.assertEqual(web_install_cwd, scratch / "source")
+            self.assertIn("install", web_install)
+            self.assertIn("@baci/web...", web_install)
+            self.assertIn("--frozen-lockfile", web_install)
+            self.assertIn("--ignore-scripts", web_install)
+            web_deploy, web_cwd = calls[2]
             self.assertEqual(web_cwd, scratch / "source")
             self.assertIn("deploy", web_deploy)
             self.assertNotIn("--legacy", web_deploy)
@@ -196,7 +211,7 @@ class DependencyBuilderTests(unittest.TestCase):
             self.assertIn("--store-dir", web_deploy)
             self.assertIn(str(scratch / "pnpm-store"), web_deploy)
             self.assertIn("--ignore-pnpmfile", web_deploy)
-            worker_install, worker_cwd = calls[2]
+            worker_install, worker_cwd = calls[3]
             self.assertEqual(worker_cwd, scratch / "source" / "vps-workers")
             self.assertEqual(worker_install[:3], (sandbox.PNPM, "--registry", policy_cache.TRUSTED_REGISTRY))
             self.assertIn("install", worker_install)
@@ -681,14 +696,16 @@ class DependencyBuilderTests(unittest.TestCase):
                 if command[-1] == "--version":
                     return type("Result", (), {"stdout": "11.7.0\n"})()
                 (cache / "registry-metadata.json").write_text("verified", encoding="utf-8")
-                marker = "Lockfile passes supply-chain policies"
+                marker = "✓ Lockfile passes supply-chain policies (1 entry in 2ms)"
+                if "deploy" in command:
+                    return type("Result", (), {"stdout": "Deploying production dependencies", "stderr": ""})()
                 return (type("Result", (), {"stdout": "", "stderr": marker})()
-                        if len(calls) == 3 else type("Result", (), {"stdout": marker, "stderr": ""})())
+                        if len(calls) == 2 else type("Result", (), {"stdout": marker, "stderr": ""})())
 
             with patch.object(policy_cache.subprocess, "run", side_effect=run):
                 policy_cache.preverify(source, store, cache, "/fixed/pnpm")
             checks = [call for call in calls if "install" in call[0] or "deploy" in call[0]]
-            self.assertEqual(len(checks), 2)
+            self.assertEqual(len(checks), 3)
             for command, kwargs in checks:
                 self.assertEqual(command[0], "/usr/bin/node")
                 self.assertEqual(command[1], "/fixed/pnpm")
@@ -697,9 +714,15 @@ class DependencyBuilderTests(unittest.TestCase):
                 if "install" in command:
                     self.assertIn("--frozen-lockfile", command)
                     self.assertIn("--package-import-method=copy", command)
+                    if "@baci/web..." in command:
+                        self.assertIn("--prod", command)
+                    else:
+                        self.assertEqual(kwargs["cwd"], source / "vps-workers")
                 if "deploy" in command:
                     self.assertIn("--frozen-lockfile", command)
                     self.assertNotIn("--legacy", command)
+                    self.assertIn("@baci/web", command)
+                    self.assertNotIn("@baci/web...", command)
                 self.assertIn("--ignore-scripts", command)
                 self.assertIn("--ignore-pnpmfile", command)
                 self.assertNotIn("--config.trust-lockfile=true", command)
@@ -763,10 +786,28 @@ class DependencyBuilderTests(unittest.TestCase):
             ]):
                 with self.assertRaises(policy_cache.BuilderRejected) as raised:
                     policy_cache.preverify(source, store, cache, "/fixed/pnpm")
-            self.assertEqual(raised.exception.safe_stage, "preverify-web-deploy")
+            self.assertEqual(raised.exception.safe_stage, "preverify-web-install")
             self.assertEqual(raised.exception.safe_category, "policy-pass-marker-missing")
             self.assertEqual(raised.exception.exit_code, 0)
             self.assertFalse((store / policy_cache.RECEIPT_NAME).exists())
+
+    def test_online_preverification_requires_empty_metadata_cache(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = make_source(root)
+            for relative in policy_cache.POLICY_FILES:
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("minimumReleaseAge: 1440\ntrustPolicy: no-downgrade\n", encoding="utf-8")
+            store = root / "store"
+            store.mkdir()
+            cache = root / "cache"
+            cache.mkdir(mode=0o700)
+            (cache / "old-verification-cache").write_text("stale", encoding="utf-8")
+            with patch.object(policy_cache, "run_pnpm_checked") as run:
+                with self.assertRaisesRegex(policy_cache.BuilderRejected, "fresh empty metadata cache"):
+                    policy_cache.preverify(source, store, cache, "/fixed/pnpm")
+            run.assert_not_called()
 
     def test_policy_pass_marker_on_stderr_is_still_checked_without_relaxing_marker(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -780,11 +821,10 @@ class DependencyBuilderTests(unittest.TestCase):
             store.mkdir()
             cache = root / "cache"
             cache.mkdir(mode=0o700)
-            (cache / "registry-metadata.json").write_text("verified", encoding="utf-8")
             result = lambda stdout, stderr="": type("Result", (), {"stdout": stdout, "stderr": stderr})()
             with patch.object(policy_cache.subprocess, "run", side_effect=[
-                result("11.7.0\n"), result("", "Lockfile passes supply-chain policies"),
-                result("Lockfile passes supply-chain policies"),
+                result("11.7.0\n"), result("", "✓ Lockfile passes supply-chain policies (1 entry in 1ms)"),
+                result("Deploying production dependencies"), result("✓ Lockfile passes supply-chain policies (2 entries in 2ms)"),
             ]):
                 policy_cache.preverify(source, store, cache, "/fixed/pnpm")
             self.assertTrue((store / policy_cache.RECEIPT_NAME).is_file())
@@ -809,7 +849,7 @@ class DependencyBuilderTests(unittest.TestCase):
             ]):
                 with self.assertRaises(policy_cache.BuilderRejected) as caught:
                     policy_cache.preverify(source, store, cache, "/fixed/pnpm")
-            self.assertEqual(caught.exception.safe_stage, "preverify-web-deploy")
+            self.assertEqual(caught.exception.safe_stage, "preverify-web-install")
             self.assertEqual(caught.exception.safe_category, "registry-network")
             self.assertEqual(caught.exception.exit_code, 1)
             self.assertNotIn("synthetic-private-token", str(caught.exception))

@@ -12,7 +12,7 @@ from pathlib import Path
 from worker_release_dependency_artifacts import BuilderRejected
 
 DIAGNOSTIC_STAGES = frozenset({
-    "policy-preverify", "preverify-web-deploy", "preverify-worker-install",
+    "policy-preverify", "preverify-web-install", "preverify-worker-install",
 })
 DIAGNOSTIC_CATEGORIES = frozenset({
     "lockfile-trust-downgrade", "minimum-release-age", "frozen-lockfile-mismatch",
@@ -21,9 +21,18 @@ DIAGNOSTIC_CATEGORIES = frozenset({
     "filesystem-error", "preverify-timeout", "operation-error", "policy-pass-marker-missing",
     "registry-policy", "source-policy-invalid", "metadata-cache-bound", "metadata-cache-invalid",
     "pnpm-version-mismatch", "source-policy-mutated",
+    "policy-cache-not-fresh",
 })
 POLICY_PASS_MARKER = "Lockfile passes supply-chain policies"
 _ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
+_POLICY_PASS_FRESH = re.compile(
+    r"^\s*✓\s+Lockfile passes supply-chain policies \(([0-9]+) entr(?:y|ies) in ([0-9]+(?:\.[0-9]+)?)(ms|s)\)\s*$"
+)
+_POLICY_PASS_CACHED = re.compile(
+    r"^\s*✓\s+Lockfile passes supply-chain policies \(verified ([0-9]+(?:\.[0-9]+)?)(ms|s) ago\)\s*$"
+)
+MAX_RECENT_VERIFICATION_AGE_MS = 10 * 60 * 1000
+MAX_FRESH_VERIFICATION_ELAPSED_MS = 240 * 1000
 
 
 class PnpmStepRejected(BuilderRejected):
@@ -105,8 +114,8 @@ def pnpm_failure_category(output: str) -> str:
 def policy_rejection_category(message: str) -> tuple[str, str]:
     """Map fixed policy exception messages to closed stage/category pairs."""
     sample = message.lower()
-    if "pnpm preverify web-deploy did not report" in sample:
-        return "preverify-web-deploy", "policy-pass-marker-missing"
+    if "pnpm preverify web-install did not report" in sample:
+        return "preverify-web-install", "policy-pass-marker-missing"
     if "pnpm preverify worker-install did not report" in sample:
         return "preverify-worker-install", "policy-pass-marker-missing"
     if "pnpm version" in sample or "runtime differs" in sample:
@@ -115,6 +124,8 @@ def policy_rejection_category(message: str) -> tuple[str, str]:
         return "policy-preverify", "registry-policy"
     if "cache exceeds its byte limit" in sample:
         return "policy-preverify", "metadata-cache-bound"
+    if "requires a fresh empty metadata cache" in sample:
+        return "policy-preverify", "policy-cache-not-fresh"
     if "policy cache" in sample or "metadata cache" in sample:
         return "policy-preverify", "metadata-cache-invalid"
     if "changed a lockfile or policy" in sample:
@@ -124,13 +135,45 @@ def policy_rejection_category(message: str) -> tuple[str, str]:
     return "policy-preverify", "policy-rejected"
 
 
-def has_policy_pass_marker(stdout: str, stderr: str) -> bool:
-    """Require a standalone pnpm success line after removing terminal escapes."""
+def policy_pass_evidence(stdout: str, stderr: str) -> tuple[str, int] | None:
+    """Parse only pinned pnpm's bounded, standalone verification evidence lines."""
+    evidence: tuple[str, int] | None = None
     for output in (stdout, stderr):
         normalized = _ANSI_ESCAPE.sub("", output)
-        if any(line.strip() == POLICY_PASS_MARKER for line in normalized.splitlines()):
-            return True
-    return False
+        for line in normalized.splitlines():
+            fresh = _POLICY_PASS_FRESH.fullmatch(line)
+            if fresh and int(fresh.group(1)) > 0:
+                elapsed = float(fresh.group(2)) * (1000 if fresh.group(3) == "s" else 1)
+                current = ("fresh", int(elapsed))
+            else:
+                cached = _POLICY_PASS_CACHED.fullmatch(line)
+                if not cached:
+                    continue
+                age = float(cached.group(1)) * (1000 if cached.group(2) == "s" else 1)
+                current = ("cached", int(age))
+            # Multiple claims make the command output ambiguous. Even matching
+            # duplicates are rejected so callers rely on one unambiguous proof.
+            if evidence is not None:
+                return None
+            evidence = current
+    return evidence
+
+
+def has_policy_pass_marker(stdout: str, stderr: str, *,
+                           max_cached_age_ms: int = MAX_RECENT_VERIFICATION_AGE_MS) -> bool:
+    """Accept fresh evidence or a recent cache hit; callers bind cache by receipt."""
+    evidence = policy_pass_evidence(stdout, stderr)
+    return evidence is not None and (
+        (evidence[0] == "fresh" and evidence[1] <= MAX_FRESH_VERIFICATION_ELAPSED_MS)
+        or (evidence[0] == "cached" and evidence[1] <= max_cached_age_ms)
+    )
+
+
+def has_fresh_policy_pass(stdout: str, stderr: str) -> bool:
+    """Require the current command to perform, and report, a verification pass."""
+    evidence = policy_pass_evidence(stdout, stderr)
+    return (evidence is not None and evidence[0] == "fresh"
+            and evidence[1] <= MAX_FRESH_VERIFICATION_ELAPSED_MS)
 
 
 def run_pnpm_checked(command: tuple[str, ...], *, cwd, env=None, timeout: int, stage: str):

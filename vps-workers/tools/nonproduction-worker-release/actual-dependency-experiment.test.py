@@ -24,6 +24,7 @@ from worker_release_actual_dependency_guard import (
 )
 from worker_release_dependency_diagnostics import (
     PnpmStepRejected,
+    has_fresh_policy_pass,
     has_policy_pass_marker,
     policy_rejection_category,
     pnpm_failure_category,
@@ -52,10 +53,10 @@ class ActualDependencyExperimentTests(unittest.TestCase):
     def test_policy_child_diagnostic_is_closed_and_redacted(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "child-diagnostic.json"
-            write_diagnostic(path, "preverify-web-deploy", "lockfile-trust-downgrade", 1)
+            write_diagnostic(path, "preverify-web-install", "lockfile-trust-downgrade", 1)
             self.assertEqual(
                 read_diagnostic(path, owner_uid=os.geteuid()),
-                {"stage": "preverify-web-deploy", "category": "lockfile-trust-downgrade", "exit_code": 1},
+                {"stage": "preverify-web-install", "category": "lockfile-trust-downgrade", "exit_code": 1},
             )
             path.unlink()
             write_diagnostic(path, "attacker/path", "private token", 1)
@@ -79,17 +80,27 @@ class ActualDependencyExperimentTests(unittest.TestCase):
     def test_pnpm_failure_classifier_is_closed_and_step_error_does_not_echo_output(self):
         output = "ERR_PNPM_TRUST_DOWNGRADE private-token=must-not-escape"
         self.assertEqual(pnpm_failure_category(output), "lockfile-trust-downgrade")
-        error = PnpmStepRejected("preverify-web-deploy", pnpm_failure_category(output), 17)
+        error = PnpmStepRejected("preverify-web-install", pnpm_failure_category(output), 17)
         self.assertEqual((error.safe_stage, error.safe_category, error.exit_code),
-                         ("preverify-web-deploy", "lockfile-trust-downgrade", 17))
+                         ("preverify-web-install", "lockfile-trust-downgrade", 17))
         self.assertNotIn("private-token", str(error))
         self.assertEqual(
-            policy_rejection_category("pnpm preverify worker-install did not report lockfile supply-chain policy verification"),
-            ("preverify-worker-install", "policy-pass-marker-missing"),
+            policy_rejection_category("pnpm preverify web-install did not report lockfile supply-chain policy verification"),
+            ("preverify-web-install", "policy-pass-marker-missing"),
         )
 
     def test_policy_pass_marker_requires_exact_line_after_ansi_normalization(self):
-        self.assertTrue(has_policy_pass_marker("", "\x1b[32mLockfile passes supply-chain policies\x1b[0m\n"))
+        fresh = "\x1b[32m✓ Lockfile passes supply-chain policies (1 entry in 683ms)\x1b[0m\n"
+        recent = "✓ Lockfile passes supply-chain policies (verified 647ms ago)\n"
+        stale = "✓ Lockfile passes supply-chain policies (verified 601s ago)\n"
+        self.assertTrue(has_policy_pass_marker("", fresh))
+        self.assertTrue(has_fresh_policy_pass("", fresh))
+        self.assertTrue(has_policy_pass_marker(recent, ""))
+        self.assertFalse(has_fresh_policy_pass(recent, ""))
+        self.assertFalse(has_policy_pass_marker(stale, ""))
+        self.assertFalse(has_fresh_policy_pass(
+            "✓ Lockfile passes supply-chain policies (1 entry in 241s)\n", ""))
+        self.assertFalse(has_policy_pass_marker("✓ Lockfile passes supply-chain policies (0 entries in 2ms)\n", ""))
         self.assertFalse(has_policy_pass_marker("progress: Lockfile passes supply-chain policies passed", ""))
         self.assertFalse(has_policy_pass_marker("Lockfile passes supply-chain policies for package-x", ""))
 

@@ -312,6 +312,27 @@ describe('usePaymentGatewayController', () => {
     );
   });
 
+  it('keeps an interactive Paystack wallet checkout available when its load event stalls', async () => {
+    jest.useFakeTimers();
+    mockSearchParams = { ...walletParams };
+    const { result } = renderHook(() => usePaymentGatewayController());
+
+    act(() => result.current.handleLoadStart());
+    await act(async () => {
+      await result.current.handleWebViewMessage({
+        nativeEvent: {
+          data: JSON.stringify({ type: 'baci_payment_page_interactive' }),
+        },
+      });
+    });
+    expect(result.current.walletCheckoutInteractive).toBe(true);
+    act(() => jest.advanceTimersByTime(45_000));
+
+    expect(result.current.status).toBe('loading');
+    expect(result.current.walletCheckoutStalled).toBe(true);
+    expect(mockWaitForWalletTopUpConfirmation).not.toHaveBeenCalled();
+  });
+
   it('keeps stalled VTU checkout loading retryable instead of confirming unpaid transactions', () => {
     jest.useFakeTimers();
     mockSearchParams = { ...vtuParams };

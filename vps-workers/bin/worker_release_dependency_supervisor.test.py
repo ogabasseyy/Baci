@@ -78,7 +78,7 @@ class BuilderSupervisorContractTests(unittest.TestCase):
                                             unit_journal=journal)
                 with self.assertRaisesRegex(supervisor.BuilderSupervisorRejected,
                                             "noncanonical systemd command"):
-                    runner(("/bin/false",), scratch, unit)
+                    runner(("/bin/false", *expected[1:]), scratch, unit)
 
     def test_cgroup_v2_preflight_rejects_before_any_builder_launch(self):
         with tempfile.TemporaryDirectory() as temporary:

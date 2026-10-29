@@ -114,6 +114,11 @@ class AuthenticatedStagingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=Path.home()) as temporary:
             base = Path(temporary)
             worker_root = base / "worker"
+            # The builder journal is root-owned and only accepts a private
+            # 0700 test root (production uses the provisioned 0710 baci-locks
+            # root).  mkdir(parents=True) would create this intermediate
+            # directory as 0755 under the CI umask.
+            worker_root.mkdir(mode=0o700)
             (worker_root / "releases").mkdir(parents=True, mode=0o700)
             lock = worker_root / "release.lock"
             lock.touch(mode=0o600)

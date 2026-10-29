@@ -1,3 +1,4 @@
+import { getImeiBlacklistState } from '@baci/shared/imei';
 import { parseProviderLabelMap } from '@/app/api/storefront/imei-check/label-map-parser';
 import { parseSickwResponse } from '@/app/api/storefront/imei-check/sickw-parser';
 import type { ImeiCheckResult } from '@/app/api/storefront/imei-check/sickw-parser.types';
@@ -14,7 +15,20 @@ const PETROCK_LABEL_ALIASES: Readonly<Record<string, string>> = {
 };
 
 export function parsePetrockReplay(replay: string): Partial<ImeiCheckResult> {
-  return parseSickwResponse(
+  const result = parseSickwResponse(
     parseProviderLabelMap(replay, PETROCK_LABEL_ALIASES)
   );
+  // Keep the provider-specific explanation while preserving stronger warnings.
+  if (
+    getImeiBlacklistState(result.blacklistStatus) === 'unknown' &&
+    result.status === 'Unknown' &&
+    result.verdict?.startsWith('INCOMPLETE DATA')
+  ) {
+    return {
+      ...result,
+      verdict:
+        'Blacklist status was not checked. Verify the remaining checks before buying.',
+    };
+  }
+  return result;
 }

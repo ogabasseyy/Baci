@@ -26,6 +26,15 @@ const input = {
     customerId: 'customer-1',
     id: 'order-1',
     merchantId: 'merchant-1',
+    eligibilityEvidence: {
+      blacklistStatus: 'Clean',
+      simLock: 'Locked',
+      carrier: 'AT&T',
+      device: 'iPhone 17 Pro Max',
+      financeStatus: 'Clean',
+    },
+    providerOrderId: null,
+    providerAttemptStartedAt: null,
     status: 'eligible' as const,
   },
   origin: 'https://ogabassey.com',
@@ -35,6 +44,9 @@ const input = {
     catalogCostUsd: 75,
     catalogOrderFieldName: 'IMEI',
     catalogSyncedAt: new Date().toISOString(),
+    carrier: 'AT&T',
+    modelScope: { kind: 'generic' },
+    statusSegment: 'clean',
     curatedProductId: '22222222-2222-4222-8222-222222222222',
     orderFieldName: 'IMEI',
     providerProductId: 'unlock-product',
@@ -44,6 +56,29 @@ const input = {
 };
 
 describe('placePetrockRemediationOrder submission outcomes', () => {
+  it('does not report a refund when a provider receipt wins the rejection race', async () => {
+    const orderState = state();
+    orderState.failBeforeAcceptance.mockResolvedValue(false);
+    const result = await placePetrockRemediationOrder({
+      ...input,
+      client: {
+        getAccount: vi.fn().mockResolvedValue({
+          data: { balance: 100, currency: 'USD' },
+          ok: true,
+          rawText: '{}',
+        }),
+        submitOrder: vi.fn().mockResolvedValue({
+          kind: 'http',
+          message: 'rejected',
+          ok: false,
+          status: 400,
+        }),
+      },
+      state: orderState,
+    });
+    expect(result.kind).toBe('already_started');
+  });
+
   it('holds funds and marks an ambiguous POST timeout without refunding', async () => {
     const orderState = state();
     const result = await placePetrockRemediationOrder({

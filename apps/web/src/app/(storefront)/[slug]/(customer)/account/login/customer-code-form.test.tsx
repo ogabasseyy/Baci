@@ -1,0 +1,57 @@
+import { fireEvent, render, screen } from '@testing-library/react';
+import { expect, it, vi } from 'vitest';
+import { CustomerCodeForm } from './customer-code-form';
+
+it('passes code changes and actions to the caller and blocks changes during verification', () => {
+  const onDifferentEmail = vi.fn();
+  const handleCodeChange = vi.fn();
+  const props = {
+    code: ['', '', '', '', '', ''],
+    error: '',
+    isVerifying: false,
+    isSending: false,
+    codeInputRefs: { current: [] as (HTMLInputElement | null)[] },
+    handlePaste: vi.fn(),
+    handleCodeChange,
+    handleKeyDown: vi.fn(),
+    handleResendCode: vi.fn(async () => {}),
+    onDifferentEmail,
+  };
+  const { rerender } = render(<CustomerCodeForm {...props} />);
+  expect(
+    screen.getByRole('group', { name: 'Verification code' })
+  ).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Digit 1 of 6'), {
+    target: { value: '123456' },
+  });
+  expect(handleCodeChange).toHaveBeenCalledWith(0, '123456');
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Use a different email' })
+  );
+  expect(onDifferentEmail).toHaveBeenCalledOnce();
+  rerender(<CustomerCodeForm {...props} isSending />);
+  expect(screen.getByLabelText('Digit 1 of 6')).toBeDisabled();
+  rerender(<CustomerCodeForm {...props} isVerifying />);
+  expect(screen.getByRole('button', { name: 'Resend code' })).toBeDisabled();
+  expect(
+    screen.getByRole('button', { name: 'Use a different email' })
+  ).toBeDisabled();
+});
+
+it('disables resending while the customer cooldown is active', () => {
+  const props = {
+    code: ['', '', '', '', '', ''],
+    error: '',
+    isVerifying: false,
+    isSending: false,
+    resendCooldownSeconds: 23,
+    codeInputRefs: { current: [] as (HTMLInputElement | null)[] },
+    handlePaste: vi.fn(),
+    handleCodeChange: vi.fn(),
+    handleKeyDown: vi.fn(),
+    handleResendCode: vi.fn(async () => {}),
+    onDifferentEmail: vi.fn(),
+  };
+  render(<CustomerCodeForm {...props} />);
+  expect(screen.getByRole('button', { name: /resend code/i })).toBeDisabled();
+});

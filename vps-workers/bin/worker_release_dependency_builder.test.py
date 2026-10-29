@@ -51,6 +51,75 @@ def make_source(root: Path) -> Path:
 
 
 class DependencyBuilderTests(unittest.TestCase):
+    def test_web_deploy_removes_only_verified_workspace_self_link(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            working = root / "source"
+            package = working / "apps/web"
+            package.mkdir(parents=True)
+            (package / "package.json").write_text('{"name":"@baci/web"}\n', encoding="utf-8")
+            output = root / "payload/web"
+            link = output / "node_modules/.pnpm/node_modules/@baci/web"
+            link.parent.mkdir(parents=True)
+            link.symlink_to(os.path.relpath(package, link.parent), target_is_directory=True)
+
+            sandbox.remove_workspace_self_link(output, working)
+            self.assertFalse(link.exists())
+            self.assertTrue(package.is_dir())
+
+    def test_web_deploy_rejects_unexpected_workspace_self_link_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            working = root / "source"
+            package = working / "apps/web"
+            package.mkdir(parents=True)
+            (package / "package.json").write_text('{"name":"@baci/web"}\n', encoding="utf-8")
+            external = root / "attacker"
+            external.mkdir()
+            output = root / "payload/web"
+            link = output / "node_modules/.pnpm/node_modules/@baci/web"
+            link.parent.mkdir(parents=True)
+            link.symlink_to(os.path.relpath(external, link.parent), target_is_directory=True)
+
+            with self.assertRaisesRegex(sandbox.BuilderRejected, "unexpected target"):
+                sandbox.remove_workspace_self_link(output, working)
+            self.assertTrue(link.is_symlink())
+
+    def test_web_deploy_self_link_cleanup_rejects_symlinked_parent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            working = root / "source"
+            (working / "apps/web").mkdir(parents=True)
+            (working / "apps/web/package.json").write_text('{"name":"@baci/web"}\n', encoding="utf-8")
+            external = root / "outside"
+            (external / ".pnpm/node_modules/@baci").mkdir(parents=True)
+            (external / ".pnpm/node_modules/@baci/web").symlink_to(working / "apps/web", target_is_directory=True)
+            output = root / "payload/web"
+            output.mkdir(parents=True)
+            (output / "node_modules").symlink_to(external, target_is_directory=True)
+
+            with self.assertRaisesRegex(sandbox.BuilderRejected, "parent is unsafe"):
+                sandbox.remove_workspace_self_link(output, working)
+            self.assertTrue((external / ".pnpm/node_modules/@baci/web").is_symlink())
+
+    def test_web_deploy_self_link_cleanup_rejects_manifest_symlink(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            working = root / "source"
+            package = working / "apps/web"
+            package.mkdir(parents=True)
+            external_manifest = root / "external-package.json"
+            external_manifest.write_text('{"name":"@baci/web"}\n', encoding="utf-8")
+            (package / "package.json").symlink_to(external_manifest)
+            output = root / "payload/web"
+            link = output / "node_modules/.pnpm/node_modules/@baci/web"
+            link.parent.mkdir(parents=True)
+            link.symlink_to(os.path.relpath(package, link.parent), target_is_directory=True)
+
+            with self.assertRaisesRegex(sandbox.BuilderRejected, "package metadata is unavailable"):
+                sandbox.remove_workspace_self_link(output, working)
+            self.assertTrue(link.is_symlink())
+
     def test_systemd_sandbox_uses_fixed_commands_and_blocks_worker_state(self):
         command = builder._systemd_command(Path("/input"), Path("/scratch"), SHA, 1234, 1234, "test.service")
         joined = " ".join(command)

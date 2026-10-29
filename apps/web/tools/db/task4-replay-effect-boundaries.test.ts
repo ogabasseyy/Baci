@@ -24,7 +24,7 @@ const task4Paths = [
   'apps/web/tools/db/run-replay-command.ts',
   'apps/web/tools/db/supabase-replay-command-diagnostic.ts',
   'apps/web/tools/db/run-replay-command.test.ts',
-  'apps/web/tools/db/run-replay-command-diagnostics.test.ts',
+  'apps/web/tools/db/supabase-replay-command-diagnostic.test.ts',
   'apps/web/tools/db/run-replay-command-effects.test.ts',
   'apps/web/tools/db/run-supabase-history-replay.ts',
   'apps/web/tools/db/run-supabase-history-replay.test.ts',
@@ -43,7 +43,7 @@ const task4Paths = [
   'apps/web/tools/db/task4-replay-effect-boundaries.test.ts',
 ] as const;
 const task4ManifestSha256 =
-  '6348ee3965877f10d042618864c9604ac2f3387418313e1c44911be072ed89cc';
+  'f75d0f53b369cd9a4c60017aa03e55d5d5b88006279b996a3c1ea65fb3453950';
 
 function physicalLineCount(filePath: string): number {
   const body = readFileSync(path.join(workspaceRoot, filePath), 'utf8');

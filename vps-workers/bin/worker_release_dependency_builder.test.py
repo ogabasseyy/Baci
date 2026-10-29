@@ -610,6 +610,8 @@ class DependencyBuilderTests(unittest.TestCase):
             checks = [call for call in calls if "install" in call[0] or "deploy" in call[0]]
             self.assertEqual(len(checks), 2)
             for command, kwargs in checks:
+                self.assertEqual(command[0], "/usr/bin/node")
+                self.assertEqual(command[1], "/fixed/pnpm")
                 self.assertEqual(kwargs["env"]["PNPM_CONFIG_FROZEN_LOCKFILE"], "true")
                 if "install" in command:
                     self.assertIn("--frozen-lockfile", command)

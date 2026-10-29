@@ -207,8 +207,9 @@ printf '%s\n' "$sha" >"$source_root/.baci-source-sha"
 
 pnpm_launcher="$(command -v pnpm)"
 pnpm_entrypoint="$(find_pinned_pnpm_entrypoint "$pnpm_launcher")"
-if [ ! -x "$pnpm_entrypoint" ] || [ "$(/usr/bin/node "$pnpm_entrypoint" --version)" != '11.7.0' ]; then
-  echo "pinned pnpm entrypoint is not executable under the workflow Node runtime" >&2
+if [ ! -f "$pnpm_entrypoint" ] || [ -L "$pnpm_entrypoint" ] || \
+   [ "$(/usr/bin/node "$pnpm_entrypoint" --version 2>/dev/null || true)" != '11.7.0' ]; then
+  echo "pinned pnpm entrypoint is unavailable under the workflow Node runtime: $pnpm_entrypoint" >&2
   exit 1
 fi
 /usr/bin/node "$pnpm_entrypoint" --version | grep -Fx '11.7.0'
@@ -217,7 +218,7 @@ fi
 cp -a "$source_root/." "$seed_root/"
 python3 "$(dirname "$0")/../../bin/worker_release_dependency_policy_cache.py" \
   --preverify --source "$seed_root" --store "$store_root" --cache "$cache_root" \
-  --pnpm "$pnpm_entrypoint"
+  --pnpm "$pnpm_entrypoint" --node /usr/bin/node
 rm -rf -- "$seed_root"
 chown -R root:root "$source_root"
 find "$source_root" -type d -exec chmod 0550 {} +
@@ -252,7 +253,7 @@ if [ -e /usr/bin/pnpm ] || [ -L /usr/bin/pnpm ]; then
   exit 1
 fi
 pnpm_package_root="${pnpm_entrypoint%/bin/pnpm.cjs}"
-if [ ! -d "$pnpm_package_root" ] || [ ! -x "$pnpm_entrypoint" ]; then
+if [ ! -d "$pnpm_package_root" ] || [ ! -f "$pnpm_entrypoint" ] || [ -L "$pnpm_entrypoint" ]; then
   echo "workflow pnpm package is unavailable" >&2
   exit 1
 fi

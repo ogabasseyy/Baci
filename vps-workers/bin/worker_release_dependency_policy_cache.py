@@ -205,9 +205,10 @@ def validate_receipt(source: Path, cache: Path, receipt_path: Path, pnpm_version
     return value
 
 
-def preverify(source: Path, store: Path, cache: Path, pnpm: str) -> None:
+def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/usr/bin/node") -> None:
     _validate_registry_routing(source, POLICY_FILES, TRUSTED_REGISTRY)
-    version = subprocess.run((pnpm, "--version"), cwd=source, check=True, capture_output=True, text=True, timeout=15).stdout.strip()
+    version = subprocess.run((node, pnpm, "--version"), cwd=source, check=True,
+                             capture_output=True, text=True, timeout=15).stdout.strip()
     if version != EXPECTED_PNPM:
         raise BuilderRejected("pnpm runtime differs from pinned dependency policy version")
     env = {
@@ -229,8 +230,8 @@ def preverify(source: Path, store: Path, cache: Path, pnpm: str) -> None:
         env["HOME"] = home
         with tempfile.TemporaryDirectory(prefix="pnpm-policy-preverify-", dir=cache.parent) as output_root:
             commands = (
-                ((pnpm, "--registry", TRUSTED_REGISTRY, "--filter", "@baci/web", "--prod", "deploy", "--legacy", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store), str(Path(output_root) / "web")), source),
-                ((pnpm, "--registry", TRUSTED_REGISTRY, "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store)), source / "vps-workers"),
+                ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--filter", "@baci/web", "--prod", "deploy", "--legacy", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store), str(Path(output_root) / "web")), source),
+                ((node, pnpm, "--registry", TRUSTED_REGISTRY, "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store)), source / "vps-workers"),
             )
             for command, cwd in commands:
                 result = subprocess.run(command, cwd=cwd, env=env, check=True, capture_output=True, text=True, timeout=240)
@@ -266,11 +267,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--store", type=Path, required=True)
     parser.add_argument("--cache", type=Path, required=True)
     parser.add_argument("--pnpm", default="/usr/bin/pnpm")
+    parser.add_argument("--node", default="/usr/bin/node")
     args = parser.parse_args(argv)
     try:
         if not args.preverify:
             parser.error("--preverify is required")
-        preverify(args.source, args.store, args.cache, args.pnpm)
+        preverify(args.source, args.store, args.cache, args.pnpm, args.node)
         print("synthetic dependency policy preverification passed")
         return 0
     except (BuilderRejected, OSError, subprocess.SubprocessError) as exc:

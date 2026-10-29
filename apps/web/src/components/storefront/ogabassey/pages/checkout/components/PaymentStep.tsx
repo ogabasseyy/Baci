@@ -86,6 +86,7 @@ export function PaymentStep({
   setPaymentMethod,
   isProcessing,
   isPayForMeValid,
+  isDeliveryValid,
   newsletterOptIn,
   setNewsletterOptIn,
   handlePlaceOrder,
@@ -217,6 +218,7 @@ export function PaymentStep({
           }
           disabled={
             isProcessing ||
+            !isDeliveryValid ||
             (remainingAmount > 0 && !hasAvailableSelectedPaymentMethod) ||
             (paymentMethod === 'uba_redvault' &&
               (redvaultStatus === 'pending' || redvaultStatus === 'held')) ||

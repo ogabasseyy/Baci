@@ -1,10 +1,10 @@
 import {
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCheckoutSubmissionState,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useMerchantSafe,
   usePersistedState,
@@ -101,7 +101,7 @@ it('attaches the guest checkout to the new account before REDVAULT initializatio
       return Response.json({});
     });
 
-  render(<CheckoutPage />);
+  renderCheckoutWithStoreRates();
   fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
   fireEvent.click(screen.getByRole('button', { name: /contact information/i }));
@@ -114,7 +114,7 @@ it('attaches the guest checkout to the new account before REDVAULT initializatio
   fireEvent.click(
     screen.getByRole('button', { name: /continue to delivery/i })
   );
-  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  await continueToPaymentAfterPickupCheck();
   fireEvent.click(await screen.findByRole('radio', { name: /pay with uba/i }));
   fireEvent.click(
     screen
@@ -188,10 +188,10 @@ it('still clears a non-REDVAULT snapshot when switching methods', async () => {
       return Response.json({ states: ['Lagos'], locations: [] });
     });
 
-  render(<CheckoutPage />);
+  renderCheckoutWithStoreRates();
   fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  await continueToPaymentAfterPickupCheck();
   fireEvent.click(await screen.findByRole('radio', { name: /pay with uba/i }));
 
   expect(clearPendingCheckoutOrder).toHaveBeenCalled();

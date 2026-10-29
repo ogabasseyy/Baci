@@ -34,6 +34,7 @@ interface DeriveCheckoutOrderSummaryPresentationInput {
   handlePlaceOrder: () => void | Promise<void>;
   isProcessing: boolean;
   isPayForMeValid: boolean;
+  isDeliveryValid: boolean;
   merchantId: string;
   merchantCountry: string | null;
   payoutCurrency: string | null;
@@ -63,6 +64,7 @@ export function deriveCheckoutOrderSummaryPresentation({
   handlePlaceOrder,
   isProcessing,
   isPayForMeValid,
+  isDeliveryValid,
   merchantId,
   merchantCountry,
   payoutCurrency,
@@ -131,6 +133,7 @@ export function deriveCheckoutOrderSummaryPresentation({
     handlePlaceOrder,
     isProcessing,
     isPayForMeValid,
+    isDeliveryValid,
   };
 
   return {

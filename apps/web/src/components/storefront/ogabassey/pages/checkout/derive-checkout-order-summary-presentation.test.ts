@@ -55,6 +55,7 @@ function buildPresentation(
     handlePlaceOrder: vi.fn(),
     isProcessing: false,
     isPayForMeValid: true,
+    isDeliveryValid: true,
     merchantId: 'merchant-1',
     merchantCountry: 'NG',
     payoutCurrency: 'NGN',

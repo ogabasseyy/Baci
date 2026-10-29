@@ -4,6 +4,7 @@ import type { PendingCheckoutOrderSnapshot } from './pending-checkout-order';
 const kobo = z.number().int().nonnegative().safe();
 const reviewSchema = z.object({
   ready: z.object({
+    cartId: z.string().min(1).optional(),
     orderId: z.string().min(1),
     orderNumber: z.string().optional(),
     trackingToken: z.string().min(1),
@@ -40,8 +41,13 @@ export function readRedvaultReviewRecovery(
   pending: PendingCheckoutOrderSnapshot | null,
   merchantId: string | undefined
 ) {
-  if (!pending || !merchantId || pending.merchantId !== merchantId ||
-      pending.paymentMethod !== 'uba_redvault') return null;
+  if (
+    !pending ||
+    !merchantId ||
+    pending.merchantId !== merchantId ||
+    pending.paymentMethod !== 'uba_redvault'
+  )
+    return null;
   const parsed = reviewSchema.safeParse(pending.redvaultReview);
   if (!parsed.success) return null;
   const { ready, summary } = parsed.data;
@@ -53,14 +59,26 @@ export function readRedvaultReviewRecovery(
     ready.checkoutFingerprint !== pending.checkoutFingerprint ||
     Math.round(ready.total * 100) !== summary.payableKobo ||
     Math.round(pending.amountDueToGateway * 100) !== summary.payableKobo
-  ) return null;
+  )
+    return null;
   try {
-    const fingerprint: unknown = JSON.parse(ready.checkoutFingerprint.slice('uba_redvault:'.length));
-    if (!fingerprint || typeof fingerprint !== 'object' || Array.isArray(fingerprint)) return null;
+    const fingerprint: unknown = JSON.parse(
+      ready.checkoutFingerprint.slice('uba_redvault:'.length)
+    );
+    if (
+      !fingerprint ||
+      typeof fingerprint !== 'object' ||
+      Array.isArray(fingerprint)
+    )
+      return null;
     const fields = fingerprint as Record<string, unknown>;
-    if (fields.merchantId !== merchantId ||
-        fields.customerEmail !== ready.customerEmail.trim().toLowerCase() ||
-        !Array.isArray(fields.items) || fields.items.length === 0) return null;
+    if (
+      fields.merchantId !== merchantId ||
+      fields.customerEmail !== ready.customerEmail.trim().toLowerCase() ||
+      !Array.isArray(fields.items) ||
+      fields.items.length === 0
+    )
+      return null;
   } catch {
     return null;
   }

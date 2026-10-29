@@ -1,22 +1,22 @@
 import {
-  CHECKOUT_FUNNEL_EVENTS,
   buildCheckoutFunnelProperties,
+  CHECKOUT_FUNNEL_EVENTS,
   getCheckoutPaymentIntent,
   resolveFinalizedCheckoutPaymentMethod,
 } from '@baci/shared/contracts';
-import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
-import { buildCheckoutBillingAddress } from '../build-checkout-billing-address';
-import { persistPendingCheckoutOrder } from '../persist-pending-checkout-order';
 import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
+import { buildCheckoutBillingAddress } from '../build-checkout-billing-address';
 import type { RedvaultQuoteSummary } from '../components/redvault/RedvaultPaymentOption';
+import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
+import { persistPendingCheckoutOrder } from '../persist-pending-checkout-order';
 import type { PaymentMethod } from '../types';
+import { recoverPendingCheckoutOrder } from './recover-pending-checkout-order';
 import type {
   CheckoutPaymentOrder,
   CheckoutWalletRedemption,
   SubmitCheckoutOrderOptions,
   SubmittedCheckoutOrder,
 } from './submit-checkout-order';
-import { recoverPendingCheckoutOrder } from './recover-pending-checkout-order';
 import { submitCheckoutOrder } from './submit-checkout-order';
 
 export type CheckoutOrderReuseOptions = Parameters<
@@ -26,10 +26,7 @@ export type CheckoutOrderRecoveryContext = Parameters<
   typeof recoverPendingCheckoutOrder
 >[0]['context'];
 
-type SubmitOptions = Omit<
-  SubmitCheckoutOrderOptions,
-  'resolvedPendingOrder'
->;
+type SubmitOptions = Omit<SubmitCheckoutOrderOptions, 'resolvedPendingOrder'>;
 
 export interface CheckoutOrderLifecycleOptions {
   reuse: CheckoutOrderReuseOptions;
@@ -62,6 +59,7 @@ export interface CheckoutOrderLifecycleOptions {
     customerName: string;
     checkoutFingerprint: string;
     setReady: (ready: {
+      cartId?: string;
       billingAddress: ReturnType<typeof buildCheckoutBillingAddress>;
       customerEmail: string;
       customerName: string;
@@ -172,6 +170,9 @@ export async function runCheckoutOrderLifecycle({
     merchantCountry
   );
   const ready = {
+    ...(submit.orderRequest.shared_cart
+      ? { cartId: submit.orderRequest.shared_cart.cart_id }
+      : {}),
     billingAddress,
     customerEmail: customer.email,
     customerName: redvaultReview.customerName,
@@ -194,7 +195,9 @@ export async function runCheckoutOrderLifecycle({
     paymentMethod: reuse.paymentMethod,
     amountDueToGateway,
     createdAt: new Date().toISOString(),
-    ...(redvaultReview.enabled && submit.orderRequest.shared_cart && submitted.redvaultSummary
+    ...(redvaultReview.enabled &&
+    submit.orderRequest.shared_cart &&
+    submitted.redvaultSummary
       ? { redvaultReview: { ready, summary: submitted.redvaultSummary } }
       : {}),
   };

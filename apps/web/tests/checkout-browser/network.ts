@@ -25,6 +25,8 @@ export const test = base.extend<{
       let manualCheckoutFlowVisited = false;
       let manualCheckoutProviderErrorCount = 0;
       let manualCheckout503ConsoleCount = 0;
+      let redvaultSharedPickupVisited = false;
+      let redvaultEmptyQuote400Count = 0;
       const remainingAllowedErrors = [...allowedConsoleErrors];
       page.on('framenavigated', () => {
         const qaScenario = new URL(page.url()).searchParams.get('qa');
@@ -38,6 +40,8 @@ export const test = base.extend<{
           manualApiIntegrationVisited = true;
         if (qaScenario === 'manual-checkout-flow')
           manualCheckoutFlowVisited = true;
+        if (qaScenario === 'redvault-shared-pickup')
+          redvaultSharedPickupVisited = true;
       });
       const manualApiScenario = () =>
         [
@@ -50,6 +54,12 @@ export const test = base.extend<{
         if (message.type() !== 'error') return;
         const expectedIndex = remainingAllowedErrors.indexOf(message.text());
         if (expectedIndex >= 0) remainingAllowedErrors.splice(expectedIndex, 1);
+        else if (
+          redvaultSharedPickupVisited &&
+          redvaultEmptyQuote400Count < 3 &&
+          /Failed to load resource:.*400/.test(message.text())
+        )
+          redvaultEmptyQuote400Count++;
         else if (
           manualApiIntegrationVisited &&
           manualApi400ConsoleCount < 5 &&

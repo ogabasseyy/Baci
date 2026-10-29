@@ -32,11 +32,8 @@ export const CheckoutPage: React.FC = () => {
   } = useCart();
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant;
-
   const merchantCountry = (merchant?.country?.trim() || 'NG').toUpperCase();
-
   const { formatCurrencyAuto, currencySymbol, currencyCode } = useCurrency();
-
   const hasPriceNegotiation = hasStorefrontPriceNegotiation(merchant);
   const {
     checkoutCart,
@@ -54,16 +51,13 @@ export const CheckoutPage: React.FC = () => {
   } = checkoutPaymentRails(merchant, currencyCode);
   const basePath = merchantContext?.basePath;
   const router = useRouter();
-
   const getHref = (path: string) =>
     path.startsWith('http')
       ? path
       : `${basePath || ''}${path === '/' ? '' : path}`;
-
   const searchParams = useSearchParams();
   const auth = useAuthSafe();
   const user = auth?.user;
-
   const checkoutFormSession = useCheckoutFormSession({ isHydrated, user });
   const {
     form: checkoutFormState,
@@ -273,7 +267,13 @@ export const CheckoutPage: React.FC = () => {
       financial: { paymentSession, summaryAmounts },
       execution: { crypto, dva, handlePlaceOrder, walletFundedTransfer },
     },
-    display: { checkoutDisplay, checkoutCart, isHydrated },
+    display: {
+      checkoutDisplay,
+      checkoutCart,
+      isHydrated,
+      sharedCartEnabled,
+      sharedCartRef: checkoutSharedCartRef,
+    },
     identity: {
       merchant,
       user,

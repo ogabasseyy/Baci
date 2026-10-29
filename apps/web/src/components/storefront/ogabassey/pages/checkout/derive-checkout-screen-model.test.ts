@@ -92,6 +92,27 @@ describe('deriveCheckoutScreenModel', () => {
     });
     expect(model.summary.presentation.discount.visible).toBe(false);
     expect(model.summary.presentation.discount.cartTotal).toBe(215_000);
+
+    // Only an existing order with a selected direct gateway and no active cart
+    // may proceed without a newly validated delivery destination.
+    resumed.sessions.delivery.validation.isValid = false;
+    resumed.sessions.attempt.preferredGateway = 'credpal';
+    const cart = resumed.display.checkoutCart;
+    resumed.display.checkoutCart = [];
+    const directPayment = deriveCheckoutScreenModel(resumed);
+    expect(directPayment.steps.payment.isDeliveryValid).toBe(true);
+    expect(directPayment.summary.presentation.desktop.isDeliveryValid).toBe(
+      true
+    );
+    resumed.display.checkoutCart = cart;
+    const freshOrder = deriveCheckoutScreenModel(resumed);
+    expect(freshOrder.steps.payment.isDeliveryValid).toBe(false);
+    expect(freshOrder.summary.presentation.desktop.isDeliveryValid).toBe(false);
+    resumed.display.checkoutCart = [];
+    resumed.sessions.attempt.preferredGateway = null;
+    expect(
+      deriveCheckoutScreenModel(resumed).steps.payment.isDeliveryValid
+    ).toBe(false);
   });
 
   it('preserves wallet amount and selection callback identities', () => {
@@ -106,5 +127,88 @@ describe('deriveCheckoutScreenModel', () => {
       setPayWithWallet
     );
     expect(model.summary.payment.total).toBe(107_500);
+  });
+
+  it('keeps a completed shared-cart UBA review actionable without a new empty-cart delivery quote', () => {
+    const input = makeInput();
+    const fingerprint = `uba_redvault:${JSON.stringify({
+      merchantId: 'merchant-1',
+      customerEmail: 'ada@example.test',
+      items: [{ product_id: 'product-1' }],
+    })}`;
+    const ready = {
+      orderId: 'order-1',
+      trackingToken: 'tracking-proof',
+      customerEmail: 'ada@example.test',
+      customerName: 'Ada Okon',
+      customerPhone: '+2348031234567',
+      checkoutFingerprint: fingerprint,
+      billingAddress: { line1: 'Store', city: 'Lagos', country: 'NG' },
+      currency: 'NGN',
+      total: 102.5,
+    };
+    const pending = {
+      orderId: ready.orderId,
+      trackingToken: ready.trackingToken,
+      merchantId: 'merchant-1',
+      customerEmail: ready.customerEmail,
+      customerPhone: ready.customerPhone,
+      checkoutFingerprint: fingerprint,
+      paymentMethod: 'uba_redvault',
+      amountDueToGateway: 102.5,
+      createdAt: '2026-10-29T00:00:00.000Z',
+      redvaultReview: {
+        ready,
+        summary: {
+          productSubtotalKobo: 10_000,
+          eligibleSubtotalKobo: 10_000,
+          ineligibleSubtotalKobo: 0,
+          discountKobo: 500,
+          assuranceFeeKobo: 0,
+          taxKobo: 750,
+          shippingKobo: 0,
+          giftWrappingKobo: 0,
+          payableKobo: 10_250,
+          mixedBasket: false,
+        },
+      },
+    };
+    input.display.checkoutCart = [];
+    input.display.sharedCartEnabled = true;
+    input.display.sharedCartRef = null;
+    input.sessions.delivery.validation.isValid = false;
+    input.sessions.attempt.pendingCheckoutOrder = pending;
+    input.sessions.financial.paymentSession = {
+      ...paymentSession,
+      method: 'uba_redvault',
+      redvault: { ...paymentSession.redvault, orderReady: ready },
+    };
+
+    const model = deriveCheckoutScreenModel(input);
+    expect(model.steps.payment.isDeliveryValid).toBe(true);
+    expect(model.summary.presentation.desktop.isDeliveryValid).toBe(true);
+    expect(model.steps.delivery.session.validation.isValid).toBe(true);
+
+    input.sessions.attempt.pendingCheckoutOrder = {
+      ...pending,
+      trackingToken: 'different-proof',
+    };
+    expect(deriveCheckoutScreenModel(input).steps.payment.isDeliveryValid).toBe(
+      false
+    );
+    expect(
+      deriveCheckoutScreenModel(input).steps.delivery.session.validation.isValid
+    ).toBe(false);
+
+    input.sessions.attempt.pendingCheckoutOrder = pending;
+    input.display.sharedCartRef = { cartId: 'new-cart', version: 1 };
+    expect(deriveCheckoutScreenModel(input).steps.payment.isDeliveryValid).toBe(
+      false
+    );
+    input.display.sharedCartRef = null;
+    input.display.sharedCartEnabled = false;
+    expect(deriveCheckoutScreenModel(input).steps.payment.isDeliveryValid).toBe(
+      false
+    );
   });
 });

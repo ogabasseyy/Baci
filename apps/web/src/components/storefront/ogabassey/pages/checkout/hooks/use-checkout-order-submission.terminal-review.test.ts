@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { cancelStaleCheckoutOrder } from '../cancel-stale-checkout-order';
+import { submitPreparedCheckout } from '../handlers/submit-prepared-checkout';
 import { prepareCheckoutOrderSubmission } from '../prepare-checkout-order-submission';
 import { useCheckoutOrderSubmission } from './use-checkout-order-submission';
 
@@ -11,59 +12,247 @@ vi.mock('../cancel-stale-checkout-order', () => ({
 vi.mock('../prepare-checkout-order-submission', () => ({
   prepareCheckoutOrderSubmission: vi.fn(),
 }));
+vi.mock('../handlers/submit-prepared-checkout', () => ({
+  submitPreparedCheckout: vi.fn().mockResolvedValue(undefined),
+}));
 
-it('releases the reviewed draft when checkout details change after its cart completes', async () => {
+beforeEach(() => vi.clearAllMocks());
+
+it.each([
+  true,
+  false,
+])('releases the reviewed draft after details change with delivery validity %s', async (isValid) => {
   const before = `uba_redvault:${JSON.stringify({
-    merchantId: 'merchant-1', customerEmail: 'ada@example.test',
-    customerName: 'ada okon', items: [{ product_id: 'product-1' }],
+    merchantId: 'merchant-1',
+    customerEmail: 'ada@example.test',
+    customerName: 'ada okon',
+    items: [{ product_id: 'product-1' }],
   })}`;
   const after = `uba_redvault:${JSON.stringify({
-    merchantId: 'merchant-1', customerEmail: 'ada@example.test',
-    customerName: 'ada changed', items: [],
+    merchantId: 'merchant-1',
+    customerEmail: 'ada@example.test',
+    customerName: 'ada changed',
+    items: [],
   })}`;
   const ready = {
-    orderId: 'order-1', orderNumber: 'UBA-1', trackingToken: 'tracking-proof',
-    customerEmail: 'ada@example.test', customerName: 'Ada Okon',
-    customerPhone: '+2348031234567', checkoutFingerprint: before,
+    orderId: 'order-1',
+    orderNumber: 'UBA-1',
+    trackingToken: 'tracking-proof',
+    customerEmail: 'ada@example.test',
+    customerName: 'Ada Okon',
+    customerPhone: '+2348031234567',
+    checkoutFingerprint: before,
     billingAddress: { line1: 'Store', city: 'Lagos', country: 'NG' },
-    currency: 'NGN', total: 102.5,
+    currency: 'NGN',
+    total: 102.5,
   };
   const summary = {
-    productSubtotalKobo: 10_000, eligibleSubtotalKobo: 10_000,
-    ineligibleSubtotalKobo: 0, discountKobo: 500, assuranceFeeKobo: 0,
-    taxKobo: 750, shippingKobo: 0, giftWrappingKobo: 0,
-    payableKobo: 10_250, mixedBasket: false,
+    productSubtotalKobo: 10_000,
+    eligibleSubtotalKobo: 10_000,
+    ineligibleSubtotalKobo: 0,
+    discountKobo: 500,
+    assuranceFeeKobo: 0,
+    taxKobo: 750,
+    shippingKobo: 0,
+    giftWrappingKobo: 0,
+    payableKobo: 10_250,
+    mixedBasket: false,
   };
   const pending = {
-    orderId: ready.orderId, trackingToken: ready.trackingToken,
-    merchantId: 'merchant-1', customerEmail: ready.customerEmail,
-    customerPhone: ready.customerPhone, checkoutFingerprint: before,
-    paymentMethod: 'uba_redvault', amountDueToGateway: 102.5,
-    createdAt: '2026-10-29T00:00:00.000Z', redvaultReview: { ready, summary },
+    orderId: ready.orderId,
+    trackingToken: ready.trackingToken,
+    merchantId: 'merchant-1',
+    customerEmail: ready.customerEmail,
+    customerPhone: ready.customerPhone,
+    checkoutFingerprint: before,
+    paymentMethod: 'uba_redvault',
+    amountDueToGateway: 102.5,
+    createdAt: '2026-10-29T00:00:00.000Z',
+    redvaultReview: { ready, summary },
   };
   const inFlight = { current: false };
   const clearPending = vi.fn();
-  const releaseSubmission = vi.fn(() => { inFlight.current = false; });
+  const releaseSubmission = vi.fn(() => {
+    inFlight.current = false;
+  });
   const context = {
     account: { waitForResolvedCustomerAuth: vi.fn().mockResolvedValue(false) },
-    cart: { cart: [], checkoutCart: [], checkoutCartTotal: 0, sharedCartEnabled: true, sharedCartRef: null },
-    contact: { customerEmail: ready.customerEmail, customerPhone: ready.customerPhone, firstName: 'Ada', lastName: 'Changed' },
-    delivery: { session: { cost: 0, quotes: { selectedId: '', matchesSelectedMethod: false, items: [] }, address: { addresses: [], selectedId: null, isNewMode: true } }, method: 'pickup', merchantCountry: 'NG', giftWrappingCost: 0 },
+    cart: {
+      cart: [],
+      checkoutCart: [],
+      checkoutCartTotal: 0,
+      sharedCartEnabled: true,
+      sharedCartRef: null,
+    },
+    contact: {
+      customerEmail: ready.customerEmail,
+      customerPhone: ready.customerPhone,
+      firstName: 'Ada',
+      lastName: 'Changed',
+    },
+    delivery: {
+      session: {
+        cost: 0,
+        validation: { isValid },
+        quotes: { selectedId: '', matchesSelectedMethod: false, items: [] },
+        address: { addresses: [], selectedId: null, isNewMode: true },
+      },
+      method: 'pickup',
+      merchantCountry: 'NG',
+      giftWrappingCost: 0,
+    },
     merchant: { id: 'merchant-1', slug: 'ada-store' },
     navigation: { setCurrentStep: vi.fn(), setCompletedSteps: vi.fn() },
     order: { pending, clearPending },
-    payment: { session: { method: 'uba_redvault', total: 0, wallet: { remainingAmount: 0, amountUsed: 0 }, redvault: { status: 'idle', orderReady: ready, setOrderReady: vi.fn(), setSummary: vi.fn() }, checkoutValues: { useWalletCredit: false } }, redvaultAvailable: true },
+    payment: {
+      session: {
+        method: 'uba_redvault',
+        total: 0,
+        wallet: { remainingAmount: 0, amountUsed: 0 },
+        redvault: {
+          status: 'idle',
+          orderReady: ready,
+          setOrderReady: vi.fn(),
+          setSummary: vi.fn(),
+        },
+        checkoutValues: { useWalletCredit: false },
+      },
+      redvaultAvailable: true,
+    },
     resumed: { order: null, preferredGateway: null },
-    processing: { tryBeginSubmission: vi.fn(() => { inFlight.current = true; return true; }), isOrderInFlightRef: inFlight, setIsProcessing: vi.fn(), releaseSubmission },
+    processing: {
+      tryBeginSubmission: vi.fn(() => {
+        inFlight.current = true;
+        return true;
+      }),
+      isOrderInFlightRef: inFlight,
+      setIsProcessing: vi.fn(),
+      releaseSubmission,
+    },
   };
   vi.mocked(prepareCheckoutOrderSubmission).mockReturnValue({
-    kind: 'ready', delivery: {}, identity: { checkoutFingerprint: after, items: [] },
+    kind: 'ready',
+    delivery: {},
+    identity: { checkoutFingerprint: after, items: [] },
   } as never);
 
-  const { result } = renderHook(() => useCheckoutOrderSubmission(context as never));
+  const { result } = renderHook(() =>
+    useCheckoutOrderSubmission(context as never)
+  );
   await act(async () => result.current.handlePlaceOrder());
 
   expect(cancelStaleCheckoutOrder).toHaveBeenCalledOnce();
   expect(clearPending).toHaveBeenCalledOnce();
   expect(releaseSubmission).toHaveBeenCalledOnce();
+});
+
+it('continues the same reviewed UBA order when an empty-cart quote is unavailable', async () => {
+  const fields = {
+    merchantId: 'merchant-1',
+    customerEmail: 'ada@example.test',
+    customerName: 'ada okon',
+  };
+  const before = `uba_redvault:${JSON.stringify({ ...fields, items: [{ product_id: 'product-1' }] })}`;
+  const after = `uba_redvault:${JSON.stringify({ ...fields, items: [] })}`;
+  const ready = {
+    orderId: 'order-1',
+    trackingToken: 'tracking-proof',
+    customerEmail: 'ada@example.test',
+    customerName: 'Ada Okon',
+    customerPhone: '+2348031234567',
+    checkoutFingerprint: before,
+    billingAddress: { line1: 'Store', city: 'Lagos', country: 'NG' },
+    currency: 'NGN',
+    total: 102.5,
+  };
+  const summary = {
+    productSubtotalKobo: 10_000,
+    eligibleSubtotalKobo: 10_000,
+    ineligibleSubtotalKobo: 0,
+    discountKobo: 500,
+    assuranceFeeKobo: 0,
+    taxKobo: 750,
+    shippingKobo: 0,
+    giftWrappingKobo: 0,
+    payableKobo: 10_250,
+    mixedBasket: false,
+  };
+  const pending = {
+    orderId: ready.orderId,
+    trackingToken: ready.trackingToken,
+    merchantId: 'merchant-1',
+    customerEmail: ready.customerEmail,
+    customerPhone: ready.customerPhone,
+    checkoutFingerprint: before,
+    paymentMethod: 'uba_redvault',
+    amountDueToGateway: 102.5,
+    createdAt: '2026-10-29T00:00:00.000Z',
+    redvaultReview: { ready, summary },
+  };
+  const context = {
+    account: { waitForResolvedCustomerAuth: vi.fn().mockResolvedValue(false) },
+    cart: {
+      cart: [],
+      checkoutCart: [],
+      checkoutCartTotal: 0,
+      sharedCartEnabled: true,
+      sharedCartRef: null,
+    },
+    contact: {
+      customerEmail: ready.customerEmail,
+      customerPhone: ready.customerPhone,
+      firstName: 'Ada',
+      lastName: 'Okon',
+    },
+    delivery: {
+      session: {
+        cost: 0,
+        validation: { isValid: false },
+        quotes: { selectedId: '', matchesSelectedMethod: false, items: [] },
+        address: { addresses: [], selectedId: null, isNewMode: true },
+      },
+      method: 'pickup',
+      merchantCountry: 'NG',
+      giftWrappingCost: 0,
+    },
+    merchant: { id: 'merchant-1', slug: 'ada-store' },
+    navigation: { setCurrentStep: vi.fn(), setCompletedSteps: vi.fn() },
+    order: { pending, clearPending: vi.fn() },
+    payment: {
+      session: {
+        method: 'uba_redvault',
+        total: 0,
+        wallet: { remainingAmount: 0, amountUsed: 0 },
+        redvault: { status: 'idle', orderReady: ready },
+        checkoutValues: { useWalletCredit: false },
+      },
+      redvaultAvailable: true,
+    },
+    resumed: { order: null, preferredGateway: null },
+    processing: {
+      tryBeginSubmission: vi.fn(() => true),
+      isOrderInFlightRef: { current: false },
+      setIsProcessing: vi.fn(),
+      releaseSubmission: vi.fn(),
+    },
+  };
+  vi.mocked(prepareCheckoutOrderSubmission).mockReturnValue({
+    kind: 'ready',
+    delivery: {},
+    identity: { checkoutFingerprint: after, items: [] },
+  } as never);
+
+  const { result } = renderHook(() =>
+    useCheckoutOrderSubmission(context as never)
+  );
+  await act(async () => result.current.handlePlaceOrder());
+
+  expect(submitPreparedCheckout).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({
+      identity: expect.objectContaining({ checkoutFingerprint: before }),
+    }),
+    { redvaultPreparedOnly: true }
+  );
+  expect(cancelStaleCheckoutOrder).not.toHaveBeenCalled();
 });

@@ -1,11 +1,11 @@
 import {
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCaptureClientEvent,
   openCredPalCheckout,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useCart,
   useMerchantSafe,
@@ -105,10 +105,10 @@ it('routes pending CredPal applications to success without a paid conversion', a
     } as never);
   });
 
-  render(<CheckoutPage />);
+  renderCheckoutWithStoreRates();
   fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  await continueToPaymentAfterPickupCheck();
   fireEvent.click(screen.getByRole('button', { name: /pay in installments/i }));
   const paymentRadio = screen
     .getAllByRole('radio', { name: /credpal/i })

@@ -1,6 +1,12 @@
 import { getRedis } from '@/lib/redis';
+import {
+  type CartQuotaRequestContext,
+  createCartQuotaRequestContext,
+} from './request-quota-context';
+import { incrementSupabaseQuotaCounter } from './supabase-quota-counter';
+import { SupabaseQuotaCounterError } from './supabase-quota-error';
 
-// Window-counter machinery for cart quotas: the shared Redis counter
+// Window-counter machinery for cart quotas: the selected shared counter
 // plus the bounded per-instance memory fallback used when the shared
 // store is degraded. Policy (budgets, fail-closed operations) lives
 // in request-quota.ts.
@@ -78,7 +84,7 @@ export function incrementMemoryCounter(
 }
 
 export interface WindowCounterResult extends WindowCounter {
-  /** True when the count came from per-instance memory, not shared Redis. */
+  /** True when the shared store is unavailable or invalid. */
   degraded: boolean;
 }
 
@@ -91,24 +97,64 @@ export interface WindowCounterResult extends WindowCounter {
 const QUOTA_DEGRADATION_WARN_INTERVAL_MS = 60_000;
 let lastQuotaDegradationWarnAt = 0;
 
-function warnQuotaDegraded(): void {
+function warnQuotaDegraded(
+  backend: 'redis' | 'supabase',
+  reason: string
+): void {
   const now = Date.now();
   if (now - lastQuotaDegradationWarnAt < QUOTA_DEGRADATION_WARN_INTERVAL_MS) {
     return;
   }
   lastQuotaDegradationWarnAt = now;
-  console.warn(
-    'Cart quota store degraded: Redis unavailable, using per-instance memory counters'
-  );
+  console.warn('Cart quota store degraded', { backend, reason });
 }
 
 export async function incrementWindowCounter(
   key: string,
   windowMs: number,
   allowMemoryFallback = true,
-  counterStore: Map<string, WindowCounter> = memoryCounters
+  counterStore: Map<string, WindowCounter> = memoryCounters,
+  requestContext: CartQuotaRequestContext = createCartQuotaRequestContext(
+    allowMemoryFallback ? 'available' : 'required'
+  )
 ): Promise<WindowCounterResult> {
-  const redis = getRedis();
+  const backend = process.env.CART_QUOTA_BACKEND?.trim() || 'redis';
+  if (backend !== 'redis' && backend !== 'supabase') {
+    throw new Error('Invalid cart quota backend');
+  }
+
+  if (backend === 'supabase') {
+    if (!requestContext.degraded && requestContext.remainingMs > 0) {
+      const startedAt = Date.now();
+      try {
+        return await incrementSupabaseQuotaCounter(
+          key,
+          windowMs,
+          requestContext.remainingMs
+        );
+      } catch (error) {
+        // A timeout can have committed. Do not retry or switch durable stores.
+        requestContext.degraded = true;
+        warnQuotaDegraded(
+          'supabase',
+          error instanceof SupabaseQuotaCounterError
+            ? error.reason
+            : 'unavailable'
+        );
+      } finally {
+        requestContext.remainingMs = Math.max(
+          0,
+          requestContext.remainingMs - Math.max(0, Date.now() - startedAt)
+        );
+      }
+    } else {
+      requestContext.degraded = true;
+      warnQuotaDegraded('supabase', 'deadline_exhausted');
+    }
+  }
+
+  const redis =
+    backend === 'redis' && !requestContext.degraded ? getRedis() : null;
   if (redis) {
     try {
       // Return count and remaining TTL from the same script so the
@@ -143,10 +189,12 @@ export async function incrementWindowCounter(
         resetTime: Date.now() + msRemaining,
       };
     } catch {
-      warnQuotaDegraded();
+      requestContext.degraded = true;
+      warnQuotaDegraded('redis', 'unavailable');
     }
-  } else {
-    warnQuotaDegraded();
+  } else if (backend === 'redis') {
+    requestContext.degraded = true;
+    warnQuotaDegraded('redis', 'unavailable');
   }
   if (!allowMemoryFallback) {
     // Requests already denied by degradation policy must not consume

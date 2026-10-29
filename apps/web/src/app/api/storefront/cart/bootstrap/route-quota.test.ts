@@ -9,8 +9,12 @@ import { getCart } from '@/lib/cart/service';
 import { POST } from './route';
 
 const mockGetRedis = vi.hoisted(() => vi.fn(() => null as unknown));
+const mockSupabaseCounter = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/redis', () => ({ getRedis: mockGetRedis }));
+vi.mock('@/lib/cart/supabase-quota-counter', () => ({
+  incrementSupabaseQuotaCounter: mockSupabaseCounter,
+}));
 
 /** Healthy shared store: per-key counting fake Redis. */
 function useHealthyRedis(): void {
@@ -96,6 +100,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   mockGetRedis.mockReturnValue(null);
   __resetCartQuotaStoreForTesting();
   if (savedSecret === undefined) {
@@ -138,6 +143,20 @@ function postBootstrap(init: {
 describe('POST /api/storefront/cart/bootstrap quota', () => {
   // The unit environment has no Redis, so the per-instance degraded
   // bootstrap ceiling is the bound these route tests observe.
+  it('uses one failed Supabase attempt across both bootstrap scopes', async () => {
+    vi.stubEnv('CART_QUOTA_BACKEND', 'supabase');
+    mockSupabaseCounter.mockRejectedValue(new Error('unavailable'));
+    const response = await postBootstrap({
+      body: {},
+      headers: {
+        'x-baci-client-credential': '11111111-1111-4111-8111-111111111111',
+      },
+    });
+    expect(response.status).toBe(201);
+    expect(mockSupabaseCounter).toHaveBeenCalledTimes(1);
+    expect(mockGetRedis).not.toHaveBeenCalled();
+  });
+
   it('bounds anonymous bootstraps per merchant and client', async () => {
     let response = await postBootstrap({ body: {} });
     expect(response.status).toBe(201);

@@ -97,6 +97,11 @@ it('lets a processing customer leave and retry without creating another account'
   render(<PiggyvestWalletSetupPanel {...props} setup={pending} />);
   expect(screen.queryByLabelText('BVN')).toBeNull();
   expect(screen.queryByLabelText('Phone number')).toBeNull();
+  expect(
+    screen.getByText(
+      'We’re still checking your account. If setup does not finish, contact support so we can verify your wallet.'
+    )
+  ).toBeOnTheScreen();
   fireEvent.press(
     screen.getByRole('button', { name: 'Refresh PiggyVest account' })
   );
@@ -106,9 +111,15 @@ it('lets a processing customer leave and retry without creating another account'
   expect(props.onClose).toHaveBeenCalledTimes(1);
 });
 it('keeps unavailable status distinct from a nonexistent account and permits retry', () => {
-  const failed = setup('unavailable');
+  const failed = { ...setup('unavailable'), hasCheckError: true };
   render(<PiggyvestWalletSetupPanel {...props} setup={failed} />);
   expect(screen.queryByLabelText('BVN')).toBeNull();
+  expect(
+    screen.getByText(
+      'We could not check your account. Try again, or contact support if this continues.'
+    )
+  ).toBeOnTheScreen();
+  expect(screen.queryByText(/We’re still checking your account/)).toBeNull();
   fireEvent.press(
     screen.getByRole('button', { name: 'Refresh PiggyVest account' })
   );

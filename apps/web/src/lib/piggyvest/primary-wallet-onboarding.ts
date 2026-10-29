@@ -90,6 +90,19 @@ export async function onboardPiggyvestPrimaryWallet(
     claimToken: claim.claimToken,
   };
 
+  if (claim.reclaimed) {
+    // A timeout does not prove that the first create failed. PiggyVest's
+    // returnIfExist may match on email, phone, or BVN, so an existing-customer
+    // response alone cannot prove this local user owns that wallet. Preserve
+    // the uncertain intent until independent provider evidence is available.
+    try {
+      await input.storage.recordUncertain(claimedScope);
+    } catch {
+      return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
+    }
+    return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
+  }
+
   try {
     const result = piggyvestPrimaryWalletCreationSchema.safeParse(
       await input.createCustomer(providerRequest)
@@ -98,26 +111,13 @@ export async function onboardPiggyvestPrimaryWallet(
       await input.storage.recordUncertain(claimedScope);
       return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
     }
-    if (!result.data.new_customer && claim.reclaimed !== true) {
+    if (!result.data.new_customer) {
       // An explicit existing-customer response is an ownership verdict,
       // not transport ambiguity: record it as terminally rejected so a
       // retry can never reclaim this intent and adopt the unrelated
       // provider wallet behind the reviewer's back.
       await input.storage.recordRejected(claimedScope);
       return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
-    }
-    // A reclaimed intent retries the same fingerprinted request, so when
-    // the provider's idempotent creation returns the existing customer,
-    // adopt those identifiers instead of stranding the wallet unknown.
-    if (!result.data.new_customer) {
-      const adopted = await input.storage.recordAccepted({
-        ...claimedScope,
-        providerCustomerId: result.data.customer_id,
-        providerWalletId: result.data.wallet_id,
-      });
-      return adopted
-        ? { status: 'pending' }
-        : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
     }
     const recorded = await input.storage.recordAccepted({
       ...claimedScope,

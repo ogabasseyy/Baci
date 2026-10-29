@@ -144,7 +144,7 @@ describe('primary wallet onboarding', () => {
     expect(input.storage.recordRejected).not.toHaveBeenCalled();
   });
 
-  it('adopts the existing provider customer when retrying a reclaimed uncertain intent', async () => {
+  it('does not repeat a provider create after an uncertain dispatch', async () => {
     const input = fixture();
     input.storage.claim.mockResolvedValue({
       status: 'claimed',
@@ -152,21 +152,30 @@ describe('primary wallet onboarding', () => {
       claimToken: 'claim',
       reclaimed: true,
     });
-    input.createCustomer.mockResolvedValue({
-      customer_id: 'customer-fixture',
-      wallet_id: 'wallet-fixture',
-      new_customer: false,
-    });
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
-      status: 'pending',
+      status: 'conflict',
+      code: 'OWNERSHIP_REVIEW_REQUIRED',
     });
-    expect(input.storage.recordAccepted).toHaveBeenCalledWith(
-      expect.objectContaining({
-        providerCustomerId: 'customer-fixture',
-        providerWalletId: 'wallet-fixture',
-      })
-    );
-    expect(input.storage.recordUncertain).not.toHaveBeenCalled();
+    expect(input.createCustomer).not.toHaveBeenCalled();
+    expect(input.storage.recordAccepted).not.toHaveBeenCalled();
+    expect(input.storage.recordUncertain).toHaveBeenCalledOnce();
+  });
+
+  it('does not contact the provider if preserving a reclaimed intent fails', async () => {
+    const input = fixture();
+    input.storage.claim.mockResolvedValue({
+      status: 'claimed',
+      intentId: 'intent',
+      claimToken: 'claim',
+      reclaimed: true,
+    });
+    input.storage.recordUncertain.mockRejectedValue(new Error('database down'));
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'unavailable',
+      code: 'STORAGE_UNAVAILABLE',
+    });
+    expect(input.createCustomer).not.toHaveBeenCalled();
+    expect(input.storage.recordAccepted).not.toHaveBeenCalled();
   });
 
   it('marks an ambiguous provider timeout without retrying creation', async () => {

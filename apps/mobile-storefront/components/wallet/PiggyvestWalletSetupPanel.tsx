@@ -85,8 +85,9 @@ export function PiggyvestWalletSetupPanel({
               accessibilityRole="alert"
               style={[styles.body, { color: colors.textSecondary }]}
             >
-              We’re still checking your account. No deposit has been confirmed
-              yet.
+              {setup?.hasCheckError
+                ? 'We could not check your account. Try again, or contact support if this continues.'
+                : 'We’re still checking your account. If setup does not finish, contact support so we can verify your wallet.'}
             </Text>
           ) : null}
           <Pressable

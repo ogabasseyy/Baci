@@ -10,31 +10,72 @@ import { requiresOgabasseyProductSelection } from '../product-selection';
 import { useV2Comparison } from '../providers/v2-comparison-context';
 import { useV2Saved } from '../providers/v2-saved-context';
 import type { Product } from '../types';
+import { ProductCardImage } from './product-card-image';
 import { ProductCardListView } from './product-card-list-view';
-import {
-  hasVisibleRating,
-  ProductCardBadge,
-  ProductCardImage,
-  stripHtml,
-} from './product-card-media';
 
 interface ProductCardProps {
   product: Product;
   onAddToCart: (e: React.MouseEvent, product: Product) => void;
   isAdded: boolean;
   viewMode?: 'grid' | 'list';
-  /**
-   * Overrides the card's built-in `content-visibility` reservation. The
-   * category grid passes computed, responsive `contain-intrinsic-size`
-   * reservations in FILTERED (unbounded, single-page) mode and an empty string
-   * in PAGINATED (bounded, above-the-fold) mode so first-screen cards are never
-   * deferred. Left undefined elsewhere, the card keeps its default reservation.
-   */
+  /** Overrides built-in `content-visibility` reservation (empty string disables deferral on first-screen paginated cards). */
   contentVisibilityClassName?: string;
   /** First-screen category candidates must not wait for lazy-load layout. */
   imagePriority?: boolean;
 }
 
+/** Strips HTML tags iteratively to prevent bypass via nested tags like `<<script>script>`. */
+function stripHtml(html: string): string {
+  if (!html) return '';
+  let result = html;
+  let prev = '';
+  while (result !== prev) {
+    prev = result;
+    result = result.replace(/<[^>]*>/g, '');
+  }
+  return result;
+}
+
+/** Only real, finite, positive ratings earn a star row. */
+function hasVisibleRating(rating: number | undefined): rating is number {
+  return typeof rating === 'number' && Number.isFinite(rating) && rating > 0;
+}
+
+const PLATFORM_LABELS: Record<string, string> = {
+  'Nintendo Switch': 'Switch',
+  'PlayStation 4': 'PS4',
+  'PlayStation 5': 'PS5',
+};
+
+/** Resolves the platform or condition badge styling and display text for a product card. */
+function resolveProductCardBadge(
+  product: Product
+): { colorClass: string; label: string } | null {
+  const platform = product.variant_attributes?.Platform;
+  if (!platform && !product.condition) return null;
+  const badgeText = platform
+    ? Array.isArray(platform)
+      ? 'Multi-Platform'
+      : String(platform)
+    : String(product.condition || '');
+  const lower = badgeText.toLowerCase();
+  const colorClass = platform
+    ? /playstation|ps5|ps4/.test(lower)
+      ? 'bg-blue-600'
+      : lower.includes('xbox')
+        ? 'bg-green-600'
+        : /nintendo|switch/.test(lower)
+          ? 'bg-red-600'
+          : lower.includes('multi')
+            ? 'bg-purple-600'
+            : 'bg-amber-500'
+    : product.condition === 'New'
+      ? 'bg-emerald-500'
+      : 'bg-amber-500';
+  return { colorClass, label: PLATFORM_LABELS[badgeText] ?? badgeText };
+}
+
+/** Renders the OgaBassey storefront product card in grid or list view. */
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
   onAddToCart,
@@ -83,11 +124,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({
   const productForUrl = { ...product, id: String(product.id) };
   const productHref = asRoute(`${basePath}${getProductUrl(productForUrl)}`);
   const requiresSelection = requiresOgabasseyProductSelection(product);
+  const badge = resolveProductCardBadge(product);
+  const showRating = hasVisibleRating(product.rating);
+  const plainDescription = stripHtml(product.description || '');
 
   if (viewMode !== 'grid') {
     return (
       <ProductCardListView
+        badge={badge}
         contentVisibilityClasses={contentVisibilityClasses}
+        descriptionPreview={
+          plainDescription.substring(0, 150) || 'No description available.'
+        }
         handleCartClick={handleCartClick}
         imagePriority={imagePriority}
         isComparing={isComparing}
@@ -98,6 +146,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         productHref={productHref}
         requiresSelection={requiresSelection}
         showPlusOne={showPlusOne}
+        showRating={showRating}
         toggleCompare={toggleCompare}
         toggleLike={toggleLike}
       />
@@ -119,10 +168,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </span>
       </Link>
 
-      <ProductCardBadge
-        product={product}
-        className="absolute top-1.5 left-1.5 md:top-2 md:left-2 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide shadow-md z-30"
-      />
+      {badge && (
+        <div
+          className={`absolute top-1.5 left-1.5 md:top-2 md:left-2 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide shadow-md z-30 ${badge.colorClass}`}
+        >
+          {badge.label}
+        </div>
+      )}
 
       <div className="ogabassey-product-card-image-surface relative aspect-square mb-3 md:mb-4 bg-gray-50 rounded-2xl flex items-center justify-center overflow-hidden z-10 pointer-events-none">
         <ProductCardImage
@@ -208,7 +260,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
       </div>
 
       <div className="flex flex-col flex-1 pointer-events-none px-1 pt-1">
-        {hasVisibleRating(product.rating) && (
+        {showRating && (
           <div className="flex items-center gap-1 mb-1.5">
             {[...Array(5)].map((_, i) => (
               <Star
@@ -228,8 +280,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         </h3>
 
         <p className="text-gray-500 text-xs mb-3 line-clamp-2 leading-relaxed hidden md:block">
-          {stripHtml(product.description || '').substring(0, 100) ||
-            'No description available.'}
+          {plainDescription.substring(0, 100) || 'No description available.'}
         </p>
 
         <div className="mt-auto pt-2">

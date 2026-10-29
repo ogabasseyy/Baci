@@ -1,17 +1,14 @@
 import { ArrowRightLeft, Heart, ShoppingCart, Star } from 'lucide-react';
+import type { Route } from 'next';
 import Link from 'next/link';
 import type React from 'react';
-import type { Route } from 'next';
 import type { Product } from '../types';
-import {
-  hasVisibleRating,
-  ProductCardBadge,
-  ProductCardImage,
-  stripHtml,
-} from './product-card-media';
+import { ProductCardImage } from './product-card-image';
 
 export interface ProductCardListViewProps {
+  badge: { colorClass: string; label: string } | null;
   contentVisibilityClasses: string;
+  descriptionPreview: string;
   handleCartClick: (e: React.MouseEvent) => void;
   imagePriority?: boolean;
   isComparing: boolean;
@@ -22,12 +19,18 @@ export interface ProductCardListViewProps {
   productHref: Route;
   requiresSelection: boolean;
   showPlusOne: boolean;
+  showRating: boolean;
   toggleCompare: (e: React.MouseEvent) => void;
   toggleLike: (e: React.MouseEvent) => void;
 }
 
+/**
+ * Renders the horizontal list-view card variant for OgaBassey catalog grids.
+ */
 export const ProductCardListView: React.FC<ProductCardListViewProps> = ({
+  badge,
   contentVisibilityClasses,
+  descriptionPreview,
   handleCartClick,
   imagePriority = false,
   isComparing,
@@ -38,6 +41,7 @@ export const ProductCardListView: React.FC<ProductCardListViewProps> = ({
   productHref,
   requiresSelection,
   showPlusOne,
+  showRating,
   toggleCompare,
   toggleLike,
 }) => (
@@ -62,10 +66,13 @@ export const ProductCardListView: React.FC<ProductCardListViewProps> = ({
         imagePriority={imagePriority}
         className="object-cover md:group-hover:scale-110 transition-transform duration-500"
       />
-      <ProductCardBadge
-        product={product}
-        className="absolute top-2 left-2 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide z-10"
-      />
+      {badge && (
+        <div
+          className={`absolute top-2 left-2 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wide z-10 ${badge.colorClass}`}
+        >
+          {badge.label}
+        </div>
+      )}
     </div>
 
     <div className="flex flex-col flex-1 justify-center pointer-events-none pr-8">
@@ -73,7 +80,7 @@ export const ProductCardListView: React.FC<ProductCardListViewProps> = ({
         <h3 className="font-bold text-lg text-gray-900 md:group-hover:text-primary transition-colors line-clamp-1">
           {product.name}
         </h3>
-        {hasVisibleRating(product.rating) && (
+        {showRating && (
           <div
             className="hidden md:flex items-center gap-0.5"
             title={`${product.rating} out of 5 stars`}
@@ -93,8 +100,7 @@ export const ProductCardListView: React.FC<ProductCardListViewProps> = ({
       </div>
 
       <p className="text-gray-500 text-sm mb-3 line-clamp-3">
-        {stripHtml(product.description || '').substring(0, 150) ||
-          'No description available.'}
+        {descriptionPreview}
       </p>
 
       <div className="mt-auto flex items-center justify-between">

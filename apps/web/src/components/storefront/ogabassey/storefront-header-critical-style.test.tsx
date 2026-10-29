@@ -26,16 +26,13 @@ it('anchors mobile navigation before an external stylesheet can arrive', () => {
   for (const style of document.querySelectorAll('style')) {
     postcss
       .parse(style.textContent ?? '')
-      .walkRules(
-        '.ogabassey-mobile-footer.ogabassey-mobile-footer--hidden',
-        (rule) => {
-          rule.walkDecls((decl) => {
-            hiddenValues[decl.prop] = decl.value;
-          });
-        }
-      );
+      .walkRules('.ogabassey-mobile-footer--hidden', (rule) => {
+        rule.walkDecls((decl) => {
+          hiddenValues[decl.prop] = decl.value;
+        });
+      });
   }
-  expect(hiddenValues.transform).toBe('translateY(100%)');
+  expect(hiddenValues.transform).toBe('translateY(110%)');
 });
 
 it('provides first-render icon geometry without loading an external sheet', () => {

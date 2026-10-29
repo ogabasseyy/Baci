@@ -38,6 +38,85 @@ function show(quotes: ShippingQuote[], loading = false) {
 }
 
 describe('DoorDeliveryQuoteOptions', () => {
+  it('does not display a stale GIG quote after its destination location is cleared', () => {
+    render(
+      <DoorDeliveryQuoteOptions
+        {...callbacks}
+        isLoadingQuotes={false}
+        doorDeliveryQuotes={[quote]}
+        stationPickupQuote={undefined}
+        selectedQuoteId={quote.id}
+        needsGiglLocation
+      />
+    );
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Confirm location for GIG delivery'
+    );
+  });
+  it('explains missing GIG coordinates while keeping merchant rate recovery available', () => {
+    render(
+      <DoorDeliveryQuoteOptions
+        {...callbacks}
+        isLoadingQuotes={false}
+        doorDeliveryQuotes={[]}
+        stationPickupQuote={undefined}
+        selectedQuoteId=""
+        needsGiglLocation
+      />
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Confirm location for GIG delivery'
+    );
+    expect(
+      screen.getByRole('button', { name: 'Refresh delivery rates' })
+    ).toBeEnabled();
+  });
+  it('keeps an available merchant quote usable without a GIG location', () => {
+    render(
+      <DoorDeliveryQuoteOptions
+        {...callbacks}
+        isLoadingQuotes={false}
+        doorDeliveryQuotes={[
+          {
+            ...quote,
+            provider: 'MERCHANT',
+            carrierName: 'Store',
+            displayName: 'Store delivery',
+          },
+        ]}
+        stationPickupQuote={undefined}
+        selectedQuoteId=""
+        needsGiglLocation
+      />
+    );
+    expect(screen.getByRole('radio', { name: /Store delivery/ })).toBeEnabled();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+  it('offers retry when pickup rates exist but home coverage could not be checked', () => {
+    const onRefreshRates = vi.fn();
+    render(
+      <DoorDeliveryQuoteOptions
+        {...callbacks}
+        onRefreshRates={onRefreshRates}
+        isLoadingQuotes={false}
+        doorDeliveryQuotes={[]}
+        stationPickupQuote={{
+          ...quote,
+          isStationPickup: true,
+          homeDeliveryCoverage: 'unavailable',
+        }}
+        selectedQuoteId=""
+      />
+    );
+    expect(
+      screen.getByText('Home delivery could not be confirmed.')
+    ).toBeVisible();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Retry home delivery' })
+    );
+    expect(onRefreshRates).toHaveBeenCalledOnce();
+  });
   it.each([
     1, 2,
   ])('renders %i rate rows without reserving empty space', (count) => {
@@ -61,7 +140,9 @@ describe('DoorDeliveryQuoteOptions', () => {
         'bg-store-background-text',
         'text-store-background'
       );
-      expect(screen.getByText('GIGL')).not.toHaveClass('text-store-primary-text');
+      expect(screen.getByText('GIGL')).not.toHaveClass(
+        'text-store-primary-text'
+      );
     });
   });
   it('shows loading without a stale rate', () => {
@@ -71,7 +152,9 @@ describe('DoorDeliveryQuoteOptions', () => {
   });
   it('lets the shopper retry when no delivery rate is available', () => {
     show([]);
-    fireEvent.click(screen.getByRole('button'));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Refresh delivery rates' })
+    );
     expect(callbacks.onRefreshRates).toHaveBeenCalled();
   });
 });

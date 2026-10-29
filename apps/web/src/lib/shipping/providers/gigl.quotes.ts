@@ -1,3 +1,4 @@
+import { isNigeriaRecoveryPin } from '../is-nigeria-recovery-pin';
 import { quoteProviderFailure } from '../quote-provider-failure';
 import type { QuoteRequest, ShippingQuote } from '../types';
 import type { GiglApiClient } from './gigl.auth';
@@ -7,6 +8,7 @@ import {
   isGiglAbortError,
   PickupOptions,
 } from './gigl.constants';
+import { getGiglHomeDeliveryCoverage } from './gigl.delivery-coverage';
 import { fetchGiglQuote } from './gigl.fetch-quote';
 import { getGiglInternationalQuotes } from './gigl.international';
 import {
@@ -25,6 +27,21 @@ export function getGiglQuotes(
 ): Promise<ShippingQuote[]> {
   if (request.shipmentType === 'international') {
     return getGiglInternationalQuotes(apiClient, io, request);
+  }
+  const { latitude, longitude } = request.receiver;
+  if (
+    typeof latitude !== 'number' ||
+    typeof longitude !== 'number' ||
+    !isNigeriaRecoveryPin(latitude, longitude)
+  ) {
+    return Promise.resolve(
+      quoteProviderFailure.mark(
+        [],
+        new Error(
+          'Confirm the destination location before requesting GIGL rates'
+        )
+      )
+    );
   }
   return getQuotesWithinTimeout(
     apiClient,
@@ -46,6 +63,7 @@ async function getQuotesWithinTimeout(
       GIGL_QUOTE_TIMEOUT_MS,
       signal
     );
+    signal.throwIfAborted();
     const senderStation = request.sender
       ? await stationsService.findStationForCity(
           request.sender.city,
@@ -83,6 +101,22 @@ async function getQuotesWithinTimeout(
       0
     );
     const isPickupOnly = request.deliveryPreference === 'pickup_station';
+    const homeDeliveryCoverage = isPickupOnly
+      ? undefined
+      : await getGiglHomeDeliveryCoverage(
+          apiClient,
+          tokenData,
+          request.receiver,
+          signal,
+          io.log
+        );
+    const withCoverage = (quotes: ShippingQuote[]) => {
+      if (homeDeliveryCoverage) {
+        for (const quote of quotes)
+          quote.homeDeliveryCoverage = homeDeliveryCoverage;
+      }
+      return quotes;
+    };
     const fetchSelections = (
       station: GiglStation,
       selections: GiglQuoteSelection[],
@@ -134,10 +168,13 @@ async function getQuotesWithinTimeout(
     }
     const pickupController = new AbortController();
     const pickupSignal = AbortSignal.any([signal, pickupController.signal]);
-    const homeQuotesPromise = fetchSelections(
-      receiverStation,
-      createGiglQuoteSelections(PickupOptions.HomeDelivery)
-    );
+    const homeQuotesPromise =
+      homeDeliveryCoverage === undefined || homeDeliveryCoverage === 'supported'
+        ? fetchSelections(
+            receiverStation,
+            createGiglQuoteSelections(PickupOptions.HomeDelivery)
+          )
+        : Promise.resolve([]);
     const prefetchedPickupQuotes = fetchSelections(
       receiverStation,
       createGiglQuoteSelections(PickupOptions.ServiceCentre),
@@ -162,7 +199,7 @@ async function getQuotesWithinTimeout(
     );
     if (hasRoadHome) {
       pickupController.abort();
-      return homeQuotes;
+      return withCoverage(homeQuotes);
     }
     let pickupResolution = receiverResolution;
     let pickupStation = receiverStation;
@@ -241,7 +278,7 @@ async function getQuotesWithinTimeout(
         throw batchFailure;
       }
     }
-    return allQuotes;
+    return withCoverage(allQuotes);
   } catch (error) {
     if (signal.aborted || isGiglAbortError(error)) {
       io.log('warn', 'GIGL quote timed out', {

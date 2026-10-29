@@ -47,6 +47,8 @@ export function createCheckoutStepSession({
       session: {
         address: {
           addresses: [],
+          shippingStates: [],
+          hasDeliveryCoordinates: false,
           selectedId: 0,
           isNewMode: true,
           setIsNewMode: vi.fn(),
@@ -54,6 +56,8 @@ export function createCheckoutStepSession({
           handlers: {
             onSelectAddress: vi.fn(),
             onStreetChange: vi.fn(),
+            onCityChange: vi.fn(),
+            onStateChange: vi.fn(),
             onSelectPlace: vi.fn(),
           },
         },
@@ -85,6 +89,7 @@ export function createCheckoutStepSession({
       },
       isProcessing: false,
       isPayForMeValid: false,
+      isDeliveryValid: true,
       isInitializingDva: false,
       newsletterOptIn: false,
       setNewsletterOptIn,

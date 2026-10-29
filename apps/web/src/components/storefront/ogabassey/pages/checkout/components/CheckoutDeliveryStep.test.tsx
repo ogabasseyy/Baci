@@ -20,6 +20,8 @@ const props = (
     onToggleAddressMode: vi.fn(),
     onSelectAddress: vi.fn(),
     onStreetChange: vi.fn(),
+    onCityChange: vi.fn(),
+    onStateChange: vi.fn(),
     onSelectPlace: vi.fn(),
   },
   completed: false,
@@ -43,6 +45,11 @@ it('keeps delivery navigation gated until the address and delivery choice are va
   expect(
     screen.getByRole('button', { name: 'Continue to Payment' })
   ).toBeDisabled();
+  expect(
+    screen.getByRole('button', { name: 'Continue to Payment' })
+  ).toHaveAccessibleDescription(
+    'Enter your street address, city and state to see delivery options.'
+  );
 
   fireEvent.change(screen.getByLabelText('Delivery Address'), {
     target: { value: '12 Allen Avenue' },

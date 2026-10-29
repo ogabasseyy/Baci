@@ -36,6 +36,7 @@ it('renders every GIGL pickup station quote and lets the shopper choose one', as
       newAddressStreet: 'GRA Phase 2',
       newAddressState: 'Rivers',
       newAddressCity: 'Port Harcourt',
+      deliveryCoordinates: { latitude: 4.8156, longitude: 7.0498 },
       currentStep: 'delivery',
       completedSteps: { contact: true, delivery: false },
     },

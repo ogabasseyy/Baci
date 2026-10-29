@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef } from 'react';
 import type { PlaceDetails } from '@/components/address-autocomplete';
 import type { SavedCheckoutAddress } from '../components/DeliveryAddressFields';
 import { inferAddressLocationFromInput } from '../utils';
@@ -12,6 +13,8 @@ type CheckoutFormSetFields = ReturnType<
 interface UseCheckoutDeliveryAddressHandlersOptions {
   clearInferredLocationDebounce: () => void;
   merchantCountry: string;
+  newAddressCity?: string;
+  newAddressState?: string;
   resetQuotesForAddressChange: () => void;
   scheduleInferredLocationUpdate: (location: {
     city: string;
@@ -29,6 +32,8 @@ interface UseCheckoutDeliveryAddressHandlersOptions {
 export function useCheckoutDeliveryAddressHandlers({
   clearInferredLocationDebounce,
   merchantCountry,
+  newAddressCity = '',
+  newAddressState = '',
   resetQuotesForAddressChange,
   scheduleInferredLocationUpdate,
   setFields,
@@ -38,7 +43,9 @@ export function useCheckoutDeliveryAddressHandlers({
   setSelectedAddressId,
   shippingStates,
 }: UseCheckoutDeliveryAddressHandlersOptions) {
+  const manualLocality = useRef(false);
   const onSelectAddress = (address: SavedCheckoutAddress) => {
+    manualLocality.current = false;
     setSelectedAddressId(address.id);
     setIsNewAddressMode(false);
     clearInferredLocationDebounce();
@@ -52,6 +59,20 @@ export function useCheckoutDeliveryAddressHandlers({
   };
 
   const onStreetChange = (street: string) => {
+    // Explicit locality fields remain authoritative while correcting the street.
+    // A cleared address starts a fresh destination, including its locality.
+    if (
+      street.trim() &&
+      (manualLocality.current ||
+        newAddressCity.trim() ||
+        newAddressState.trim())
+    ) {
+      clearInferredLocationDebounce();
+      resetQuotesForAddressChange();
+      setFields({ newAddressStreet: street, deliveryCoordinates: null });
+      return;
+    }
+    manualLocality.current = false;
     setFields({
       newAddressStreet: street,
       newAddressCity: '',
@@ -84,6 +105,7 @@ export function useCheckoutDeliveryAddressHandlers({
   };
 
   const onSelectPlace = (place: PlaceDetails) => {
+    manualLocality.current = false;
     clearInferredLocationDebounce();
     resetQuotesForAddressChange();
     setFields({
@@ -101,5 +123,24 @@ export function useCheckoutDeliveryAddressHandlers({
     });
   };
 
-  return { onSelectAddress, onSelectPlace, onStreetChange };
+  const onCityChange = (city: string) => {
+    manualLocality.current = true;
+    clearInferredLocationDebounce();
+    resetQuotesForAddressChange();
+    setFields({ newAddressCity: city, deliveryCoordinates: null });
+  };
+  const onStateChange = (state: string) => {
+    manualLocality.current = true;
+    clearInferredLocationDebounce();
+    resetQuotesForAddressChange();
+    setFields({ newAddressState: state, deliveryCoordinates: null });
+  };
+
+  return {
+    onSelectAddress,
+    onSelectPlace,
+    onStreetChange,
+    onCityChange,
+    onStateChange,
+  };
 }

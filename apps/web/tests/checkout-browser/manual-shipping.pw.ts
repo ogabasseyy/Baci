@@ -24,9 +24,36 @@ test('manual shipping fixture renders and selects the real local door quote', as
       response.request().method() === 'POST' &&
       response.request().postDataJSON().receiver.address.includes('12 Broad')
   );
+  await page.route('**/api/places/autocomplete?**', (route) =>
+    route.fulfill({
+      json: {
+        predictions: [
+          {
+            provider: 'geoapify',
+            placeId: 'geoapify:manual-shipping-fixture',
+            mainText: '12 Broad Street',
+            secondaryText: 'Lagos Island, Lagos',
+            fullText: '12 Broad Street, Lagos Island, Lagos',
+            details: {
+              formattedAddress: '12 Broad Street, Lagos Island, Lagos',
+              city: 'Lagos Island',
+              state: 'Lagos',
+              country: 'Nigeria',
+              location: { latitude: 6.4541, longitude: 3.3947 },
+            },
+          },
+        ],
+      },
+    })
+  );
   const address = page.getByRole('textbox', { name: /Delivery Address/ });
   await address.fill('12 Broad Street, Lagos Island, Lagos');
-  await expect(page.getByText('Detected: Lagos Island, Lagos')).toBeVisible();
+  await page
+    .getByRole('button', { name: /12 Broad Street.*Lagos Island/ })
+    .click();
+  await expect(
+    page.getByText('City and state: Lagos Island, Lagos')
+  ).toBeVisible();
 
   const response = await quoteResponse;
   expect(response.status()).toBe(200);

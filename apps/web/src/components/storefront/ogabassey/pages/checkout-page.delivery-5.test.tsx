@@ -47,6 +47,7 @@ it('hides the free legacy pickup tab when a merchant pickup exists behind a GIGL
       newAddressStreet: '2 Olaide Tomori Street',
       newAddressState: 'Lagos',
       newAddressCity: 'Ikeja',
+      deliveryCoordinates: { latitude: 6.5964, longitude: 3.3421 },
       currentStep: 'delivery',
       completedSteps: { contact: true, delivery: false },
     },
@@ -122,9 +123,10 @@ it('hides the free legacy pickup tab when a merchant pickup exists behind a GIGL
       ).toBe(true);
     });
 
-    // The provider-aware pickup_station tab (GIGL copy, since the first
-    // station quote is a GIGL station) reveals for the merchant pickup...
-    const pickupStationTab = await screen.findByText('Pickup Stations (GIGL)');
+    // Mixed providers use a neutral group name; each option identifies its owner.
+    const pickupStationTab = await screen.findByRole('button', {
+      name: /Pickup locations.*Store or service centre/,
+    });
 
     // ...but the hardcoded ZERO-FEE legacy in-store pickup tab is suppressed.
     // Its "Collect at store" subtitle uniquely identifies that tab.

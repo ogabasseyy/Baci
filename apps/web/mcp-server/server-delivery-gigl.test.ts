@@ -3,7 +3,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { expect, it } from 'vitest';
 import { mcpServerTestSupport } from './server-test-support';
 
-it('quotes through the real MCP transport, anonymous catalog and GIG HTTP provider without booking or writes', async () => {
+it('returns unavailable for city-only MCP destinations without GIG requests, booking or writes', async () => {
   const requests: string[] = [];
   let variantPolicy = 'off';
   let variantStock = 5;
@@ -56,11 +56,13 @@ it('quotes through the real MCP transport, anonymous catalog and GIG HTTP provid
     await client.connect(new StreamableHTTPClientTransport(new URL(`${server.baseUrl}/mcp`)));
     const result = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: 'Lagos', city: 'Ikeja', delivery_preference: 'door', items: [{ product_id: 'bfab9f45-7c2e-4744-be8e-9540af062406', quantity: 2, weight_kg: 0.4 }] } });
     expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toMatchObject({ status: 'quoted', fee: 1100, quote_available: true, quotes: [{ provider: 'GIGL', fee: 1100, delivery_type: 'door' }, { provider: 'GIGL', fee: 1100, delivery_type: 'door' }] });
-    expect(shipmentBodies[0]).toMatchObject({ SenderStationId: 4, ReceiverStationId: 4, ShipmentItems: [{ ItemName: 'Camera', Value: 66700, Quantity: 2, Weight: 0.4 }] });
+    // City/state is not a doorstep pin. The MCP contract must not price a
+    // station centroid as the shopper's destination.
+    expect(result.structuredContent).toMatchObject({ status: 'unavailable', fee: null, quote_available: false, quotes: [] });
+    expect(shipmentBodies).toHaveLength(0);
     const selectedVariant = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: 'Lagos', city: 'Ikeja', delivery_preference: 'door', items: [{ product_id: '21d0d133-cd4b-43c0-b21e-b4610c524c50', variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168', quantity: 1 }] } });
-    expect(selectedVariant.structuredContent).toMatchObject({ status: 'quoted', fee: 1100 });
-    expect(shipmentBodies.at(-1)).toMatchObject({ ShipmentItems: [{ ItemName: 'Phone fixture', Value: 80000, Quantity: 1, Weight: 1 }] });
+    expect(selectedVariant.structuredContent).toMatchObject({ status: 'unavailable', fee: null });
+    expect(shipmentBodies).toHaveLength(0);
     variantPolicy = 'serialized_strict';
     variantStock = 0;
     parentManageStock = false;
@@ -75,7 +77,7 @@ it('quotes through the real MCP transport, anonymous catalog and GIG HTTP provid
     variantPolicy = 'serialized_then_unlimited';
     variantStock = 0;
     const unlimited = await client.callTool({ name: 'get_delivery_fee_info', arguments: { state: 'Lagos', city: 'Ikeja', items: [{ product_id: '21d0d133-cd4b-43c0-b21e-b4610c524c50', variant_id: 'c985e013-7c2b-4655-a560-4085f27cd168', quantity: 2 }] } });
-    expect(unlimited.structuredContent).toMatchObject({ status: 'quoted' });
+    expect(unlimited.structuredContent).toMatchObject({ status: 'unavailable' });
     variantPolicy = 'off';
     parentManageStock = null;
     const pricedBeforeNull = shipmentBodies.length;
@@ -97,13 +99,10 @@ it('quotes through the real MCP transport, anonymous catalog and GIG HTTP provid
       'POST /rest/v1/rpc/resolve_storefront_public_snapshot_v2',
       'POST /rest/v1/rpc/get_storefront_shipping_sender',
       'POST /rest/v1/rpc/get_storefront_pdp_core_v2',
-      'POST /login',
-      'GET /localstations/get',
-      'POST /price/v3',
     ]);
     expect(requests.filter((request) => !allowedRequests.has(request))).toEqual([]);
-    expect(requests.filter((request) => request === 'POST /login')).toHaveLength(1);
-    expect(requests.filter((request) => request === 'GET /localstations/get')).toHaveLength(1);
+    expect(requests.filter((request) => request === 'POST /login')).toHaveLength(0);
+    expect(requests.filter((request) => request === 'GET /localstations/get')).toHaveLength(0);
     expect(requests.filter((request) => request === 'POST /rest/v1/rpc/get_mcp_guest_cart')).toHaveLength(1);
   } finally {
     try {

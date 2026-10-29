@@ -14,7 +14,7 @@
     "format": "biome format --write .",
     "analyze": "next experimental-analyze --output",
     "docs": "node --experimental-loader=./tools/typedoc-typescript6.mjs ../../node_modules/typedoc/bin/typedoc",
-    "typecheck": "next typegen && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp && pnpm typecheck:builder-mcp && pnpm typecheck:builder-publication",
+    "typecheck": "next typegen && tsc --noEmit --checkers 1 && pnpm typecheck:tools-workers && pnpm typecheck:mcp && pnpm typecheck:builder-mcp && pnpm typecheck:builder-publication",
     "typecheck:mcp": "tsc --noEmit -p tsconfig.mcp.json",
     "typecheck:tools-workers": "tsc --noEmit -p tsconfig.tools-workers.json",
     "test": "vitest run",

@@ -10,32 +10,18 @@ import {
   Mail,
   Sparkles,
   Truck,
-  User,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import {
-  FormProvider,
-  useForm,
-  useFormContext,
-  useWatch,
-} from 'react-hook-form';
-import {
-  type Country as CountryCode,
-  isValidPhoneNumber,
-} from 'react-phone-number-input';
+import { FormProvider, useForm } from 'react-hook-form';
 import z from 'zod';
-import { AddressAutocomplete } from '@/components/address-autocomplete';
 import { trackPlatformPurchase } from '@/components/analytics/platform-analytics-provider';
 import { CheckoutThemeProvider } from '@/components/checkout-theme-provider';
 import { OrderSummary } from '@/components/order-summary';
 import { CheckoutProgress } from '@/components/storefront/checkout/checkout-progress';
 import { DiscountCodeInput } from '@/components/storefront/checkout/discount-code-input';
-import {
-  SelectedShippingDisplay,
-  ShippingOptions,
-} from '@/components/storefront/checkout/shipping-options';
+import { SelectedShippingDisplay } from '@/components/storefront/checkout/shipping-options';
 import { ThemedButton, ThemedInput } from '@/components/themed';
 import { Button } from '@/components/ui/button';
 import {
@@ -45,7 +31,6 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { PhoneInput } from '@/components/ui/phone-input';
 import { MerchantProvider } from '@/hooks/merchant/merchant-provider';
 import { useCart } from '@/hooks/use-cart';
 import {
@@ -57,12 +42,13 @@ import { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { apiPost } from '@/lib/api-client';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
-import { calculateCartCatalogSubtotal } from '@/lib/checkout/cart-entitlement-sanitizer';
-import { getCountryByCode } from '@/lib/countries';
 import { trackEvent } from '@/lib/event-tracking';
 import { trackServerSideBeginCheckout } from '@/lib/server-side-analytics';
-import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { createClient } from '@/lib/supabase/client';
+import {
+  type ShippingFormValues,
+  checkoutShippingSchema as shippingSchema,
+} from '@/schemas/checkout-shipping';
 import type { ShippingQuote } from '@/types/shipping-quote';
 import {
   beginLegacyCheckoutKey,
@@ -70,6 +56,7 @@ import {
 } from './begin-legacy-checkout-key';
 import type { LegacyCheckoutKeyInput } from './build-legacy-checkout-fingerprint';
 import { buildCheckoutShippingSelectionPayload } from './checkout-order-shipping-payload';
+import { CheckoutShippingStep } from './checkout-shipping-step';
 import { clearLegacyCheckoutIdempotencyKey } from './clear-legacy-checkout-idempotency-key';
 import { createCheckoutOrder } from './create-checkout-order';
 import { handoffLegacyCreditDirectSuccess } from './credit-direct-success';
@@ -84,24 +71,6 @@ const DEFAULT_SHIPPING_FEE = Number.parseFloat(
 );
 const PAYMENT_REFERENCE_UPDATE_ATTEMPTS = 3;
 const PAYMENT_REFERENCE_UPDATE_RETRY_DELAY_MS = 400;
-
-const shippingSchema = z.object({
-  firstName: z
-    .string()
-    .min(2, { message: 'First name must be at least 2 characters.' }),
-  lastName: z
-    .string()
-    .min(2, { message: 'Last name must be at least 2 characters.' }),
-  email: z.email({ error: 'Please enter a valid email address.' }),
-  phone: z.string().refine(isValidPhoneNumber, {
-    message: 'Please enter a valid phone number.',
-  }),
-  address: z.string().min(5, { message: 'Please enter a valid address.' }),
-  city: z.string().min(2, { message: 'Please enter a city.' }),
-  state: z.string().min(2, { message: 'Please enter a state.' }),
-});
-
-type ShippingFormValues = z.infer<typeof shippingSchema>;
 
 // OTP Auth schema for customer authentication
 const otpAuthSchema = z.object({
@@ -355,6 +324,12 @@ async function prepareCheckout(
             address: input.data.address,
             city: input.data.city,
             state: input.data.state,
+            ...(input.data.latitude != null && input.data.longitude != null
+              ? {
+                  latitude: input.data.latitude,
+                  longitude: input.data.longitude,
+                }
+              : {}),
           },
           shippingSelection: buildCheckoutShippingSelectionPayload(
             input.selectedShippingQuote,
@@ -726,237 +701,6 @@ function Step0_Auth({
   );
 }
 
-function Step1_Shipping({
-  onShippingSelect,
-  selectedQuote,
-}: {
-  onShippingSelect: (quote: ShippingQuote | null, sessionId: string) => void;
-  selectedQuote: ShippingQuote | null;
-}) {
-  const { control, setValue } = useFormContext<ShippingFormValues>();
-  const { merchant } = useMerchant();
-  const { cart } = useCart();
-
-  const cartSubtotal = calculateCartCatalogSubtotal(
-    cart,
-    hasStorefrontPriceNegotiation(merchant)
-  );
-
-  const country = merchant?.country ? getCountryByCode(merchant.country) : null;
-  const isNigerian = country?.code === 'NG' || !country;
-
-  // Use useWatch instead of watch - watch doesn't trigger re-renders in nested components!
-  const watchCity = useWatch({ control, name: 'city' });
-  const watchState = useWatch({ control, name: 'state' });
-  const watchAddress = useWatch({ control, name: 'address' });
-  const watchPhone = useWatch({ control, name: 'phone' });
-  const watchFirstName = useWatch({ control, name: 'firstName' });
-  const watchLastName = useWatch({ control, name: 'lastName' });
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <FormField
-          control={control}
-          name="firstName"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>First Name</FormLabel>
-              <FormControl>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                  <ThemedInput
-                    placeholder="John"
-                    {...field}
-                    className="pl-10"
-                    id="firstName"
-                    name="firstName"
-                    autoComplete="given-name"
-                  />
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={control}
-          name="lastName"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Last Name (Surname)</FormLabel>
-              <FormControl>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                  <ThemedInput
-                    placeholder="Doe"
-                    {...field}
-                    className="pl-10"
-                    id="lastName"
-                    name="lastName"
-                    autoComplete="family-name"
-                  />
-                </div>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      </div>
-      <FormField
-        control={control}
-        name="email"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Email</FormLabel>
-            <FormControl>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <ThemedInput
-                  type="email"
-                  placeholder="you@example.com"
-                  {...field}
-                  className="pl-10"
-                  id="shipping-email"
-                  name="shipping-email"
-                  autoComplete="email"
-                />
-              </div>
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-      <FormField
-        control={control}
-        name="phone"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Phone Number</FormLabel>
-            <FormControl>
-              <PhoneInput
-                placeholder="Enter phone number"
-                defaultCountry={(country?.code as CountryCode) || 'NG'}
-                value={field.value}
-                onChange={field.onChange}
-                id="phone"
-                autoComplete="tel"
-                limitMaxLength={true}
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-
-      {/* Address Input - Use Nigerian autocomplete for Nigerian merchants */}
-      <FormField
-        control={control}
-        name="address"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Delivery Address</FormLabel>
-            <FormControl>
-              <AddressAutocomplete
-                {...field}
-                useThemedInput={true}
-                showIcon={true}
-                placeholder="Enter your full address"
-                country={country?.code}
-                onChange={(val) => field.onChange(val)}
-                onSelect={(place) => {
-                  field.onChange(place.formattedAddress);
-                  // If Google Maps returns Lagos as both city and state, clear city to force user input
-                  if (place.city === 'Lagos' && place.state === 'Lagos') {
-                    setValue('city', '', {
-                      shouldValidate: false,
-                      shouldDirty: true,
-                    });
-                  } else {
-                    setValue('city', place.city, {
-                      shouldValidate: false,
-                      shouldDirty: true,
-                    });
-                  }
-                  setValue('state', place.state, {
-                    shouldValidate: false,
-                    shouldDirty: true,
-                  });
-                }}
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-
-      {/* City and State - Auto-filled from address but editable */}
-      <div className="grid grid-cols-2 gap-4">
-        <FormField
-          control={control}
-          name="city"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>City</FormLabel>
-              <FormControl>
-                <ThemedInput
-                  placeholder="e.g. Ikeja, Lekki, Yaba"
-                  autoComplete="new-password"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={control}
-          name="state"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>State</FormLabel>
-              <FormControl>
-                <ThemedInput
-                  placeholder="e.g. Lagos"
-                  autoComplete="new-password"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      </div>
-
-      {/* Shipping Options - Show when address is complete */}
-      {watchCity && watchState && isNigerian && (
-        <div className="pt-4 border-t">
-          <h3 className="text-lg font-medium mb-4 flex items-center gap-2">
-            <Truck className="size-5" />
-            Shipping Options
-          </h3>
-          <ShippingOptions
-            merchantId={merchant?.id || ''}
-            receiverCity={watchCity}
-            receiverState={watchState}
-            receiverAddress={watchAddress}
-            receiverPhone={watchPhone}
-            receiverName={`${watchFirstName} ${watchLastName}`}
-            cartItems={cart.map((item) => ({
-              name: item.name,
-              quantity: item.quantity,
-              price: item.price,
-            }))}
-            cartSubtotal={cartSubtotal}
-            onSelect={onShippingSelect}
-            selectedQuoteId={selectedQuote?.id}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
 interface PaymentGatewaySettings {
   paystackEnabled: boolean;
   korapayEnabled: boolean;
@@ -1277,12 +1021,18 @@ function CheckoutPageContent() {
     mode: 'onSubmit', // Only validate on submit - best practice for checkout
   });
 
-  const { handleAuthSuccess, handleGuestCheckout, pageLoading, setStep, step } =
-    useCheckoutCustomerLifecycle(
-      merchantSlug,
-      shippingForm.setValue,
-      shippingForm.getValues
-    );
+  const {
+    addressRevision,
+    handleAuthSuccess,
+    handleGuestCheckout,
+    pageLoading,
+    setStep,
+    step,
+  } = useCheckoutCustomerLifecycle(
+    merchantSlug,
+    shippingForm.setValue,
+    shippingForm.getValues
+  );
 
   useEffect(() => {
     // Redirect if cart is empty after initial load
@@ -1633,7 +1383,8 @@ function CheckoutPageContent() {
                       {step === 1 && (
                         <FormProvider {...shippingForm}>
                           <form className="space-y-6">
-                            <Step1_Shipping
+                            <CheckoutShippingStep
+                              key={addressRevision}
                               onShippingSelect={handleShippingSelect}
                               selectedQuote={selectedShippingQuote}
                             />

@@ -9,6 +9,7 @@ vi.hoisted(() => {
 
 import { quoteProviderFailure } from '../quote-provider-failure';
 import { GiglApiClient } from './gigl.auth';
+import { mockGiglFetchWithCoverage } from './gigl.coverage-test-support';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
 import {
@@ -44,10 +45,7 @@ function mockGiglFetchSequence(
 
 function buildQuoteHarness(generateQuoteId?: () => string) {
   const log = vi.fn();
-  const safeFetch = (
-    url: string,
-    options?: RequestInit & { timeout?: number }
-  ) => fetch(url, options);
+  const safeFetch = mockGiglFetchWithCoverage;
   const apiClient = new GiglApiClient({ safeFetch, log });
   const stationsService = new GiglStationsService(apiClient);
   const quoteIds = ['quote-1', 'quote-2', 'quote-3', 'quote-4'];

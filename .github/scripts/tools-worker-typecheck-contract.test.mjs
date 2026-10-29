@@ -36,7 +36,7 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
   const { webFilter, webFilterIndex, workflow } = await readWebFilter();
 
   assert.notEqual(webFilterIndex, -1);
-  assert.equal(pkg.scripts.typecheck, 'next typegen && tsc --noEmit && pnpm typecheck:tools-workers && pnpm typecheck:mcp && pnpm typecheck:builder-mcp && pnpm typecheck:builder-publication');
+  assert.equal(pkg.scripts.typecheck, 'next typegen && tsc --noEmit --checkers 1 && pnpm typecheck:tools-workers && pnpm typecheck:mcp && pnpm typecheck:builder-mcp && pnpm typecheck:builder-publication');
   assert.equal(pkg.scripts['typecheck:tools-workers'], 'tsc --noEmit -p tsconfig.tools-workers.json');
   assert.equal(pkg.scripts['typecheck:mcp'], 'tsc --noEmit -p tsconfig.mcp.json');
   for (const project of ['builder-mcp', 'builder-publication']) {

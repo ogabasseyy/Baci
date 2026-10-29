@@ -10,6 +10,7 @@ export function DeliveryMethodTabs({
   merchantSlug,
   stationPickupQuote,
   hasMerchantPickupQuote,
+  hasMixedPickupLocations = false,
   onSelect,
 }: {
   deliveryMethod: DeliveryMethod;
@@ -17,6 +18,7 @@ export function DeliveryMethodTabs({
   merchantSlug?: string;
   stationPickupQuote: ShippingQuote | undefined;
   hasMerchantPickupQuote: boolean;
+  hasMixedPickupLocations?: boolean;
   onSelect: (method: DeliveryMethod) => void;
 }) {
   return (
@@ -70,7 +72,9 @@ export function DeliveryMethodTabs({
             method === 'door'
               ? 'By Road'
               : method === 'pickup_station'
-                ? pickupStationCopy.methodLabel
+                ? hasMixedPickupLocations
+                  ? 'Pickup locations'
+                  : pickupStationCopy.methodLabel
                 : method === 'pickup'
                   ? 'Store Pickup'
                   : 'By Air';
@@ -78,7 +82,9 @@ export function DeliveryMethodTabs({
             method === 'door'
               ? 'To your address'
               : method === 'pickup_station'
-                ? pickupStationCopy.methodSubtitle
+                ? hasMixedPickupLocations
+                  ? 'Store or service centre'
+                  : pickupStationCopy.methodSubtitle
                 : method === 'pickup'
                   ? 'Collect at store'
                   : 'Via air cargo';
@@ -88,6 +94,7 @@ export function DeliveryMethodTabs({
               type="button"
               key={method}
               onClick={() => onSelect(method)}
+              aria-pressed={deliveryMethod === method}
               className={`flex-1 flex flex-col items-center justify-center p-3 sm:p-4 rounded-xl border-2 transition-all gap-1 min-w-[100px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-store-primary focus-visible:ring-offset-2 ${
                 deliveryMethod === method
                   ? 'border-store-primary bg-store-primary/5 text-store-primary'

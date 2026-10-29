@@ -46,9 +46,25 @@ export function CheckoutDeliveryStep({
       <DeliveryAddressFields {...addressFields} />
       {deliveryOptions && <DeliveryOptions {...deliveryOptions} />}
       <div className="pt-2">
+        {!isDeliveryValid && (
+          <p
+            id="checkout-delivery-help"
+            className="mb-3 text-sm text-store-background-text/75"
+          >
+            {!addressFields.addressReady &&
+            deliveryOptions?.tabs.deliveryMethod === 'door'
+              ? 'Enter your street address, city and state for home delivery.'
+              : !addressFields.addressReady && !deliveryOptions
+                ? 'Enter your street address, city and state to see delivery options.'
+                : 'Choose an available delivery option above to continue.'}
+          </p>
+        )}
         <button
           className="w-full md:w-auto px-6 py-3 bg-store-primary text-white font-bold rounded-xl hover:bg-store-primary/90 transition-colors flex items-center justify-center gap-2 shadow-lg hover:shadow-store-primary/20 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed disabled:shadow-none"
           disabled={!isDeliveryValid}
+          aria-describedby={
+            !isDeliveryValid ? 'checkout-delivery-help' : undefined
+          }
           onClick={onContinue}
           type="button"
         >

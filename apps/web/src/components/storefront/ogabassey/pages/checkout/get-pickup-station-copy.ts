@@ -1,5 +1,5 @@
-import type { ShippingQuote } from './types';
 import { isMerchantQuote } from './is-merchant-quote';
+import type { ShippingQuote } from './types';
 
 /** Provider-aware copy for the shared station-pickup surfaces. */
 export interface PickupStationCopy {
@@ -17,6 +17,7 @@ export interface PickupStationCopy {
   doorUnavailableBody: string;
   /** CTA on the door-unavailable pickup affordance. */
   chooseButtonLabel: string;
+  canRetryHomeDelivery: boolean;
 }
 
 const GIGL_PICKUP_STATION_COPY: PickupStationCopy = {
@@ -29,6 +30,7 @@ const GIGL_PICKUP_STATION_COPY: PickupStationCopy = {
   doorUnavailableBody:
     'Choose Pickup Stations (GIGL) to collect from a nearby service centre.',
   chooseButtonLabel: 'Choose Pickup Stations (GIGL)',
+  canRetryHomeDelivery: false,
 };
 
 const MERCHANT_PICKUP_STATION_COPY: PickupStationCopy = {
@@ -39,6 +41,7 @@ const MERCHANT_PICKUP_STATION_COPY: PickupStationCopy = {
   doorUnavailableTitle: 'Pick up your order in person.',
   doorUnavailableBody: 'Collect your order from the pickup location below.',
   chooseButtonLabel: 'Choose Store Pickup',
+  canRetryHomeDelivery: false,
 };
 
 /**
@@ -47,9 +50,19 @@ const MERCHANT_PICKUP_STATION_COPY: PickupStationCopy = {
  * `isStationPickup: true`), so the only difference is neutral, non-GIGL wording.
  */
 export function getPickupStationCopy(
-  quote: ShippingQuote | undefined,
+  quote: ShippingQuote | undefined
 ): PickupStationCopy {
-  return quote && isMerchantQuote(quote)
-    ? MERCHANT_PICKUP_STATION_COPY
-    : GIGL_PICKUP_STATION_COPY;
+  if (quote && isMerchantQuote(quote)) return MERCHANT_PICKUP_STATION_COPY;
+  if (quote?.homeDeliveryCoverage === 'unsupported')
+    return GIGL_PICKUP_STATION_COPY;
+  return {
+    ...GIGL_PICKUP_STATION_COPY,
+    doorUnavailableTitle:
+      quote?.homeDeliveryCoverage === 'supported'
+        ? 'Home-delivery rates are temporarily unavailable.'
+        : 'Home delivery could not be confirmed.',
+    doorUnavailableBody:
+      'Try home delivery again, or choose a GIGL pickup station below.',
+    canRetryHomeDelivery: true,
+  };
 }

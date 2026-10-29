@@ -9,6 +9,7 @@ vi.hoisted(() => {
 
 import { quoteProviderFailure } from '../quote-provider-failure';
 import { GiglApiClient } from './gigl.auth';
+import { mockGiglFetchWithCoverage } from './gigl.coverage-test-support';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
 import {
@@ -45,8 +46,7 @@ describe('GIGL domestic quote failures', () => {
         .mockResolvedValueOnce(new Response('unavailable', { status: 503 }))
     );
     const log = vi.fn();
-    const safeFetch = (url: string, options?: RequestInit) =>
-      fetch(url, options);
+    const safeFetch = mockGiglFetchWithCoverage;
     const apiClient = new GiglApiClient({ safeFetch, log });
     const stationsService = new GiglStationsService(apiClient);
 

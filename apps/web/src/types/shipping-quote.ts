@@ -1,4 +1,5 @@
 import type { QuoteProviderCode } from '@/lib/shipping/types';
+import type { HomeDeliveryCoverage } from '@/schemas/gigl-address-validation';
 
 export interface ShippingQuote {
   id: string;
@@ -15,6 +16,7 @@ export interface ShippingQuote {
   pickupIncluded: boolean;
   insuranceIncluded: boolean;
   isStationPickup?: boolean;
+  homeDeliveryCoverage?: HomeDeliveryCoverage;
   stationName?: string;
   stationAddress?: string;
   // Collection directions for a pickup point (e.g. merchant pickup

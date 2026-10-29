@@ -26,10 +26,16 @@ type DeliverySession = Pick<FullDeliverySession, 'options'> & {
     | 'isNewMode'
     | 'selectedId'
     | 'setIsNewMode'
+    | 'shippingStates'
+    | 'hasDeliveryCoordinates'
   > & {
     handlers: Pick<
       FullDeliverySession['address']['handlers'],
-      'onSelectAddress' | 'onSelectPlace' | 'onStreetChange'
+      | 'onSelectAddress'
+      | 'onSelectPlace'
+      | 'onStreetChange'
+      | 'onCityChange'
+      | 'onStateChange'
     >;
   };
   method: Pick<FullDeliverySession['method'], 'selected'>;
@@ -82,6 +88,7 @@ export interface CheckoutStepCompositionSession {
     session: PaymentSession;
     isProcessing: boolean;
     isPayForMeValid: boolean;
+    isDeliveryValid: boolean;
     isInitializingDva: boolean;
     newsletterOptIn: boolean;
     setNewsletterOptIn: (value: boolean) => void;
@@ -184,11 +191,14 @@ export function CheckoutStepComposition({
           newAddressCity: delivery.address.city,
           newAddressState: delivery.address.state,
           merchantCountry: delivery.address.merchantCountry,
+          shippingStates: address.shippingStates,
           addressReady:
             delivery.address.isHydrated && address.isNewDeliveryAddressReady,
           onToggleAddressMode: () => address.setIsNewMode(!address.isNewMode),
           onSelectAddress: address.handlers.onSelectAddress,
           onStreetChange: address.handlers.onStreetChange,
+          onCityChange: address.handlers.onCityChange,
+          onStateChange: address.handlers.onStateChange,
           onSelectPlace: address.handlers.onSelectPlace,
         }}
         deliveryOptions={options}
@@ -209,7 +219,7 @@ export function CheckoutStepComposition({
         setPaymentMethod={paymentSession.selectMethod}
         isProcessing={payment.isProcessing}
         isPayForMeValid={payment.isPayForMeValid}
-        isDeliveryValid={validation.isValid}
+        isDeliveryValid={payment.isDeliveryValid}
         payForMeDetails={paymentSession.payForMe.details}
         setPayForMeDetails={paymentSession.payForMe.setDetails}
         dva={{ isInitializingDva: payment.isInitializingDva }}

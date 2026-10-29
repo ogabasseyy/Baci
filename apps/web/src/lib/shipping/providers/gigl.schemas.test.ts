@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { giglSchemas } from './gigl.schemas';
 
 describe('giglSchemas', () => {
+  it.each([
+    '200',
+    '401',
+    '503',
+  ])('normalizes documented string status %s', (status) => {
+    expect(giglSchemas.envelopeObject.parse({ status, data: {} }).status).toBe(
+      Number(status)
+    );
+  });
   it('preserves documented tracking identifiers and UTC timestamps', () => {
     const event = giglSchemas.trackingEvent.parse({
       MobileShipmentTrackingId: 3738770,

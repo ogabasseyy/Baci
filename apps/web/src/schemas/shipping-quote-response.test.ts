@@ -18,6 +18,19 @@ const shippingQuote = {
 } as const;
 
 describe('shippingQuoteApiResponseSchema', () => {
+  it.each([
+    'supported',
+    'unsupported',
+    'unavailable',
+  ])('preserves explicit home delivery coverage (%s) for the checkout', (homeDeliveryCoverage) => {
+    const result = normalizeShippingQuoteResponsePayload({
+      quotes: [{ ...shippingQuote, homeDeliveryCoverage }],
+    });
+    expect(result.quotes[0]).toHaveProperty(
+      'homeDeliveryCoverage',
+      homeDeliveryCoverage
+    );
+  });
   it('parses the nested quote response envelope', () => {
     expect(
       normalizeShippingQuoteResponsePayload({

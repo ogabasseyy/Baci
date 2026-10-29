@@ -34,7 +34,9 @@ it('detects the selected address without fetching unused city lists on state cha
   try {
     render(<CheckoutPage />);
     await waitFor(() =>
-      expect(screen.getByText('Detected: Ikeja, Lagos')).toBeInTheDocument()
+      expect(
+        screen.getByText('City and state: Ikeja, Lagos')
+      ).toBeInTheDocument()
     );
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/shipping/locations',
@@ -44,7 +46,7 @@ it('detects the selected address without fetching unused city lists on state cha
       screen.getByRole('button', { name: 'Select address place' })
     );
     await waitFor(() =>
-      expect(screen.getByText('Detected: Wuse, FCT')).toBeInTheDocument()
+      expect(screen.getByText('City and state: Wuse, FCT')).toBeInTheDocument()
     );
     await act(async () => {});
     const cityRequests = fetchMock.mock.calls.filter(([input]) =>

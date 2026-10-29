@@ -32,6 +32,8 @@ export interface CheckoutShippingValues {
   address: string;
   city: string;
   state: string;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 type CheckoutIdentity = {
@@ -136,6 +138,7 @@ export function useCheckoutCustomerLifecycle(
   );
   const [isGuestCheckout, setIsGuestCheckout] = useState(false);
   const [step, setStep] = useState(0);
+  const [addressRevision, setAddressRevision] = useState(0);
 
   // Bumped by handleAuthSuccess so an in-flight identity reload cannot
   // overwrite a fresher OTP-verified user/customer when it resolves late.
@@ -215,11 +218,8 @@ export function useCheckoutCustomerLifecycle(
     };
   }, [merchantSlug]);
 
-  // Values this hook wrote via prefill. On an identity switch, fields
-  // still holding their applied value revert to blank so the previous
-  // merchant/user record cannot leak into the new form; fields the
-  // shopper edited since (current value differs) are left alone unless
-  // the new identity's prefill writes them (prior overwrite behavior).
+  // Clear untouched prefill on identity changes. Preserve shopper edits unless
+  // the new identity explicitly replaces them; destination writes clear the pin.
   const appliedPrefillRef = useRef<
     Partial<Record<keyof CheckoutShippingValues, string>>
   >({});
@@ -227,11 +227,30 @@ export function useCheckoutCustomerLifecycle(
   useEffect(() => {
     const applied = appliedPrefillRef.current;
     const next: Partial<Record<keyof CheckoutShippingValues, string>> = {};
+    let destinationChanged = false;
+    const setDestinationValue: UseFormSetValue<CheckoutShippingValues> = (
+      name,
+      value,
+      options
+    ) => {
+      if (
+        ['address', 'city', 'state'].includes(name) &&
+        getValues(name) !== value
+      ) {
+        destinationChanged = true;
+        setValue('latitude', null);
+        setValue('longitude', null);
+      }
+      setValue(name, value, options);
+    };
     for (const name of Object.keys(
       applied
     ) as (keyof CheckoutShippingValues)[]) {
       if (getValues(name) === applied[name]) {
-        setValue(name, '', { shouldValidate: true, shouldDirty: true });
+        setDestinationValue(name, '', {
+          shouldValidate: true,
+          shouldDirty: true,
+        });
       }
     }
     const setAndTrack: UseFormSetValue<CheckoutShippingValues> = (
@@ -239,19 +258,19 @@ export function useCheckoutCustomerLifecycle(
       value,
       options
     ) => {
-      setValue(name, value, options);
+      setDestinationValue(name, value, options);
       if (typeof value === 'string') next[name] = value;
     };
     applyCheckoutCustomerPrefill({ user, customerData }, setAndTrack);
     appliedPrefillRef.current = next;
+    if (destinationChanged) setAddressRevision((revision) => revision + 1);
   }, [user, customerData, setValue, getValues]);
 
   const handleAuthSuccess = (
     authenticatedUser: SupabaseUser,
     customer?: CheckoutCustomerData
   ) => {
-    // Supersede any in-flight identity reload: its late resolution must
-    // not overwrite these OTP-verified values.
+    // Supersede late identity reloads with these OTP-verified values.
     identityGenerationRef.current += 1;
     setUser(authenticatedUser);
     // An auth success without a customer record must drop the previous
@@ -270,6 +289,7 @@ export function useCheckoutCustomerLifecycle(
   };
 
   return {
+    addressRevision,
     handleAuthSuccess,
     handleGuestCheckout,
     isGuestCheckout,

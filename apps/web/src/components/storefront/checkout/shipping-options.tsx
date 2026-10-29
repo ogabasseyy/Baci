@@ -15,6 +15,8 @@ interface ShippingOptionsProps {
   receiverAddress: string;
   receiverPhone: string;
   receiverName: string;
+  receiverLatitude?: number;
+  receiverLongitude?: number;
   cartItems: {
     name: string;
     quantity: number;
@@ -34,6 +36,8 @@ export function ShippingOptions({
   receiverAddress,
   receiverPhone,
   receiverName,
+  receiverLatitude,
+  receiverLongitude,
   cartItems,
   cartSubtotal,
   onSelect,
@@ -47,6 +51,8 @@ export function ShippingOptions({
     receiverAddress,
     receiverPhone,
     receiverName,
+    receiverLatitude,
+    receiverLongitude,
     cartItems,
     cartSubtotal,
     onSelect,
@@ -98,7 +104,13 @@ export function ShippingOptions({
         )}
       >
         <Package className="size-8 mx-auto mb-2 opacity-50" />
-        <p>Enter your address to see shipping options</p>
+        <p>
+          {!receiverCity || !receiverState
+            ? 'Enter your address to see shipping options'
+            : receiverLatitude === undefined || receiverLongitude === undefined
+              ? 'Select an address suggestion to confirm the location for GIG delivery. If suggestions are unavailable, contact the store for delivery assistance.'
+              : 'No delivery rates are available right now. Contact the store for delivery assistance.'}
+        </p>
       </div>
     );
   }

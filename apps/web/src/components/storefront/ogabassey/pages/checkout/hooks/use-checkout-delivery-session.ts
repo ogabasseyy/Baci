@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { loadShippingStates } from '../checkout-page-data-loaders';
 import { isAirportDeliveryReady } from '../is-airport-delivery-ready';
 import { resolveMerchantDeliveryMethod } from '../resolve-merchant-delivery-method';
+import type { DeliveryMethod } from '../types';
 import {
   calculateDeliveryCost,
   createSelectDeliveryMethod,
@@ -14,15 +16,13 @@ import {
   isMerchantQuote,
   isStationPickupQuote,
 } from '../utils';
-import type { useCheckoutFormState } from './use-checkout-form-state';
 import type { CheckoutShippingQuotesOptions } from './checkout-shipping-quotes-options';
 import { useAirportQuoteRecovery } from './use-airport-quote-recovery';
-import { useCheckoutAddressInference } from './use-checkout-address-inference';
+import type { useCheckoutAddressInference } from './use-checkout-address-inference';
 import { useCheckoutDeliveryAddressHandlers } from './use-checkout-delivery-address-handlers';
 import { useCheckoutDeliveryOptions } from './use-checkout-delivery-options';
+import type { useCheckoutFormState } from './use-checkout-form-state';
 import { useCheckoutShippingQuotes } from './use-checkout-shipping-quotes';
-import { loadShippingStates } from '../checkout-page-data-loaders';
-import type { DeliveryMethod } from '../types';
 
 type CheckoutForm = ReturnType<typeof useCheckoutFormState>;
 type CheckoutFields = CheckoutForm['values'];
@@ -30,10 +30,7 @@ type CheckoutFields = CheckoutForm['values'];
 interface UseCheckoutDeliverySessionOptions
   extends Omit<
     CheckoutShippingQuotesOptions,
-    | 'addresses'
-    | 'selectedAddressId'
-    | 'isNewAddressMode'
-    | 'setDeliveryMethod'
+    'addresses' | 'selectedAddressId' | 'isNewAddressMode' | 'setDeliveryMethod'
   > {
   airportType: CheckoutFields['airportType'];
   airportRequiresQuote: CheckoutFields['airportRequiresQuote'];
@@ -93,6 +90,8 @@ export function useCheckoutDeliverySession({
   const addressHandlers = useCheckoutDeliveryAddressHandlers({
     clearInferredLocationDebounce,
     merchantCountry: shippingInput.merchantCountry,
+    newAddressCity: shippingInput.newAddressCity,
+    newAddressState: shippingInput.newAddressState,
     resetQuotesForAddressChange: quotes.resetQuotesForAddressChange,
     scheduleInferredLocationUpdate,
     setFields: shippingInput.setCheckoutFields,
@@ -126,6 +125,10 @@ export function useCheckoutDeliverySession({
     setSelectedQuoteId: quotes.setSelectedQuoteId,
     shippingQuotes: quotes.shippingQuotes,
   });
+  const hasDeliveryCoordinates = Boolean(
+    Number.isFinite(shippingInput.deliveryCoordinates?.latitude) &&
+      Number.isFinite(shippingInput.deliveryCoordinates?.longitude)
+  );
   const deliveryOptions = useCheckoutDeliveryOptions({
     airportRequiresQuote,
     airportType,
@@ -133,20 +136,21 @@ export function useCheckoutDeliverySession({
     city: shippingInput.newAddressCity,
     deliveryMethod: shippingInput.deliveryMethod,
     doorDeliveryQuotes,
-    fetchShippingQuotes: () => {
-      if (quotes.isNewDeliveryAddressReady) {
-        quotes.fetchShippingQuotes(
-          shippingInput.newAddressStreet,
-          shippingInput.newAddressState,
-          shippingInput.newAddressCity,
-          shippingInput.customerPhone,
-          shippingInput.firstName,
-          shippingInput.lastName,
-          shippingInput.customerEmail
-        );
-      }
+    fetchShippingQuotes: (deliveryPreference) => {
+      quotes.fetchShippingQuotes(
+        shippingInput.newAddressStreet,
+        shippingInput.newAddressState,
+        shippingInput.newAddressCity,
+        shippingInput.customerPhone,
+        shippingInput.firstName,
+        shippingInput.lastName,
+        shippingInput.customerEmail,
+        deliveryPreference
+      );
     },
     hasMerchantPickupQuote,
+    needsGiglLocation:
+      shippingInput.merchantCountry === 'NG' && !hasDeliveryCoordinates,
     isHydrated: shippingInput.isHydrated,
     isLoadingQuotes: quotes.isLoadingQuotes,
     isNewAddressMode,
@@ -193,9 +197,19 @@ export function useCheckoutDeliverySession({
   const rawIsDeliveryValid = (() => {
     if (!shippingInput.deliveryMethod) return false;
     if (eligibleDeliveryMethod !== shippingInput.deliveryMethod) return false;
+    if (
+      selectedQuote?.provider === 'GIGL' &&
+      !hasDeliveryCoordinates &&
+      ['door', 'pickup_station', 'airport'].includes(
+        shippingInput.deliveryMethod
+      )
+    )
+      return false;
     if (shippingInput.deliveryMethod === 'door') {
       return Boolean(
-        quotes.selectedQuoteId && selectedQuoteMatchesDeliveryMethod
+        (!isNewAddressMode || quotes.isNewDeliveryAddressReady) &&
+          quotes.selectedQuoteId &&
+          selectedQuoteMatchesDeliveryMethod
       );
     }
     if (shippingInput.deliveryMethod === 'pickup_station') {
@@ -241,6 +255,7 @@ export function useCheckoutDeliverySession({
       isNewMode: isNewAddressMode,
       setIsNewMode: setIsNewAddressMode,
       shippingStates,
+      hasDeliveryCoordinates,
       isLoadingLocations,
       isNewDeliveryAddressReady: quotes.isNewDeliveryAddressReady,
       handlers: addressHandlers,

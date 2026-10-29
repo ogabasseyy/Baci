@@ -99,7 +99,7 @@ it('debounces inferred manual address location updates before mutating checkout 
   }
 });
 
-it('clears inferred city/state when manual address parsing no longer succeeds', async () => {
+it('preserves visible city/state when the customer corrects the street without a parseable locality', async () => {
   vi.useFakeTimers();
   const setValue = vi.fn();
   const setValues = vi.fn();
@@ -166,14 +166,22 @@ it('clears inferred city/state when manual address parsing no longer succeeds', 
       newAddressState: 'Lagos',
     });
 
+    setValues.mockClear();
     fireEvent.change(screen.getByTestId('address-input'), {
       target: { value: 'Lekki, Nigeria' },
     });
-
-    expect(setValues).toHaveBeenCalledWith({
-      newAddressCity: '',
-      newAddressState: '',
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
     });
+    expect(screen.getByLabelText('City / Town')).toHaveValue('Lekki');
+    expect(screen.getByLabelText('State')).toHaveValue('Lagos');
+    expect(setValues).toHaveBeenCalledWith({
+      newAddressStreet: 'Lekki, Nigeria',
+      deliveryCoordinates: null,
+    });
+    expect(setValues).not.toHaveBeenCalledWith(
+      expect.objectContaining({ newAddressCity: '' })
+    );
   } finally {
     fetchMock.mockRestore();
     vi.useRealTimers();

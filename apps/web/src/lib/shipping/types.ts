@@ -1,3 +1,4 @@
+import type { HomeDeliveryCoverage } from '@/schemas/gigl-address-validation';
 import type { NormalizedShipmentStatus } from './tracking-types';
 
 export type { DeliveryTier, ProviderConfig } from './shipping-config';
@@ -131,6 +132,7 @@ export interface ShippingQuote {
 
   // Station pickup (for areas without home delivery)
   isStationPickup?: boolean;
+  homeDeliveryCoverage?: HomeDeliveryCoverage;
   stationId?: number;
   stationName?: string;
   stationAddress?: string;

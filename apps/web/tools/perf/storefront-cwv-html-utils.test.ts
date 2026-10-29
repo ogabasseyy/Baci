@@ -28,7 +28,7 @@ describe('storefront-cwv-html-utils', () => {
 
   it('extracts hidden Suspense sections regardless of attribute order or nesting', () => {
     const html =
-      '<div id="S:1" hidden><div class="inner"><source srcset="/a.avif 640w"/></div></div>';
+      '<div id="S:1" hidden><div class="inner"><source srcset="/a.avif 640w"/></div><picture data-ogabassey-mobile-hero-bg-extension="true"><source srcset="/bg.avif 640w"/></picture></div>';
     expect(extractHiddenSuspenseSections(html)).toEqual([
       '<div class="inner"><source srcset="/a.avif 640w"/></div>',
     ]);

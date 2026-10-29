@@ -37,6 +37,7 @@ describe('NotFound', () => {
     const stylesheet = container.querySelector('style')?.textContent ?? '';
     expect(stylesheet).toContain('@media (max-width: 520px)');
     expect(stylesheet).toContain('.baci-system-error-button:hover');
+    expect(stylesheet).not.toContain('\n');
   });
 
   it('renders the Baci logo', () => {

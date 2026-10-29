@@ -66,6 +66,13 @@ class DependencySnapshotSmokeTests(unittest.TestCase):
             2,
         )
 
+    def test_linux_fixture_callback_validates_exact_sandbox_owner_uid(self):
+        fixture = SCRIPT.with_name("dependency-builder-systemd-test.sh").read_text(encoding="utf-8")
+        self.assertIn("def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=None):", fixture)
+        self.assertIn('argument.startswith("--uid=")', fixture)
+        self.assertIn("owner_uid != expected_owner_uid", fixture)
+        self.assertIn("dependency builder did not forward the exact non-root sandbox owner", fixture)
+
     def test_linux_fixture_stages_dependency_diagnostics_helper_and_workflow_tracks_it(self):
         fixture = SCRIPT.with_name("dependency-builder-systemd-test.sh").read_text(encoding="utf-8")
         workflow = SCRIPT.parents[3] / ".github/workflows/worker-release-dependency-systemd-tests.yml"

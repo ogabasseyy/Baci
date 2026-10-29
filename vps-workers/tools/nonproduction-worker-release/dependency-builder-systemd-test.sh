@@ -327,7 +327,7 @@ helper_root = Path(sys.argv[5])
 from worker_release_dependency_builder import uuid
 uuid.uuid4 = lambda: SimpleNamespace(hex=sys.argv[4])
 
-def run_fixture_sandbox(command, scratch, unit, *, usage_root=None):
+def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=None):
     # The production helper intentionally discards child output. This fixture
     # has only synthetic inputs and no secrets, so capture a small, redacted
     # diagnostic from its exact transient unit when it fails.
@@ -342,6 +342,10 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None):
     )
     if usage_root is None or Path(usage_root) != dependency_builder.BUILD_ROOT:
         raise RuntimeError("dependency builder did not forward the fixed build usage root")
+    uid_argument = next((argument for argument in command if argument.startswith("--uid=")), None)
+    expected_owner_uid = int(uid_argument.split("=", 1)[1]) if uid_argument else None
+    if owner_uid is None or owner_uid == 0 or owner_uid != expected_owner_uid:
+        raise RuntimeError("dependency builder did not forward the exact non-root sandbox owner")
     bounded_root = Path(usage_root)
     deadline = time.monotonic() + dependency_sandbox.MAX_BUILD_SECONDS + 15
     process = subprocess.Popen(

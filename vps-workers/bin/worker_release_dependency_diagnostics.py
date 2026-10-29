@@ -2,11 +2,11 @@
 """Redacted, fixed-category diagnostics for pnpm preverification failures."""
 from __future__ import annotations
 
-import subprocess
 import json
 import os
 import re
 import stat
+from decimal import Decimal, InvalidOperation, ROUND_CEILING
 from pathlib import Path
 
 from worker_release_dependency_artifacts import BuilderRejected
@@ -27,14 +27,15 @@ DIAGNOSTIC_CATEGORIES = frozenset({
     "registry-policy", "source-policy-invalid", "metadata-cache-bound", "metadata-cache-invalid",
     "pnpm-version-mismatch", "source-policy-mutated",
     "policy-cache-not-fresh",
+    "pnpm-output-limit",
 })
 POLICY_PASS_MARKER = "Lockfile passes supply-chain policies"
 _ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
 _POLICY_PASS_FRESH = re.compile(
-    r"^\s*✓\s+Lockfile passes supply-chain policies \(([0-9]+) entr(?:y|ies) in ([0-9]+(?:\.[0-9]+)?)(ms|s)\)\s*$"
+    r"^\s*✓\s+Lockfile passes supply-chain policies \(([0-9]+) entr(?:y|ies) in (.+)\)\s*$"
 )
 _POLICY_PASS_CACHED = re.compile(
-    r"^\s*✓\s+Lockfile passes supply-chain policies \(verified ([0-9]+(?:\.[0-9]+)?)(ms|s) ago\)\s*$"
+    r"^\s*✓\s+Lockfile passes supply-chain policies \(verified ([0-9]+(?:\.[0-9]+)?(?:ms|s|m|h|d|y)) ago\)\s*$"
 )
 MAX_RECENT_VERIFICATION_AGE_MS = 10 * 60 * 1000
 MAX_FRESH_VERIFICATION_ELAPSED_MS = 240 * 1000
@@ -68,12 +69,15 @@ def policy_evidence_summary(stdout: str, stderr: str) -> dict[str, object]:
                 line_shapes.append(summarize_line_shape(prefix, suffix))
             fresh = _POLICY_PASS_FRESH.fullmatch(line)
             cached = _POLICY_PASS_CACHED.fullmatch(line)
-            if fresh and int(fresh.group(1)) > 0:
-                elapsed = float(fresh.group(2)) * (1000 if fresh.group(3) == "s" else 1)
-                evidence = ("fresh", int(elapsed))
+            elapsed = _parse_pretty_ms(fresh.group(2)) if fresh else None
+            if (fresh and len(fresh.group(1)) <= 9 and int(fresh.group(1)) > 0
+                    and elapsed is not None):
+                evidence = ("fresh", elapsed)
             elif cached:
-                age = float(cached.group(1)) * (1000 if cached.group(2) == "s" else 1)
-                evidence = ("cached", int(age))
+                age = _parse_pretty_ms(cached.group(1), compact=True)
+                if age is None:
+                    continue
+                evidence = ("cached", age)
             else:
                 continue
             recognized += 1
@@ -205,22 +209,62 @@ def policy_pass_evidence(stdout: str, stderr: str) -> tuple[str, int] | None:
     for output in (stdout, stderr):
         normalized = _ANSI_ESCAPE.sub("", output)
         for line in normalized.splitlines():
+            if POLICY_PASS_MARKER not in line:
+                continue
+            # Any marker-bearing line must be a single valid claim. Do not
+            # accept a good line alongside malformed or duplicate output.
+            if evidence is not None:
+                return None
             fresh = _POLICY_PASS_FRESH.fullmatch(line)
-            if fresh and int(fresh.group(1)) > 0:
-                elapsed = float(fresh.group(2)) * (1000 if fresh.group(3) == "s" else 1)
-                current = ("fresh", int(elapsed))
+            elapsed = _parse_pretty_ms(fresh.group(2)) if fresh else None
+            if fresh:
+                if (len(fresh.group(1)) > 9 or int(fresh.group(1)) <= 0
+                        or elapsed is None):
+                    return None
+                current = ("fresh", elapsed)
             else:
                 cached = _POLICY_PASS_CACHED.fullmatch(line)
                 if not cached:
-                    continue
-                age = float(cached.group(1)) * (1000 if cached.group(2) == "s" else 1)
-                current = ("cached", int(age))
-            # Multiple claims make the command output ambiguous. Even matching
-            # duplicates are rejected so callers rely on one unambiguous proof.
-            if evidence is not None:
-                return None
+                    return None
+                age = _parse_pretty_ms(cached.group(1), compact=True)
+                if age is None:
+                    return None
+                current = ("cached", age)
             evidence = current
     return evidence
+
+
+_PRETTY_MS_PART = re.compile(r"([0-9]+(?:\.[0-9]+)?)(ms|s|m|h|d|y)")
+_PRETTY_MS_FACTORS = {"ms": 1, "s": 1000, "m": 60_000, "h": 3_600_000,
+                      "d": 86_400_000, "y": 31_536_000_000}
+
+
+def _parse_pretty_ms(value: str, *, compact: bool = False) -> int | None:
+    """Parse pinned pretty-ms units with strict order and no unrecognized text."""
+    if len(value) > 96:
+        return None
+    parts = value.split(" ")
+    if not parts or len(parts) > (1 if compact else 6):
+        return None
+    total = Decimal(0)
+    previous_rank = -1
+    seen: set[str] = set()
+    ranks = {unit: index for index, unit in enumerate(("y", "d", "h", "m", "s", "ms"))}
+    for part in parts:
+        match = _PRETTY_MS_PART.fullmatch(part)
+        if not match:
+            return None
+        amount, unit = match.groups()
+        if (len(amount) > 12 or unit in seen or ranks[unit] <= previous_rank
+                or ("." in amount and (unit != "s" or compact))):
+            return None
+        try:
+            total += Decimal(amount) * _PRETTY_MS_FACTORS[unit]
+        except InvalidOperation:
+            return None
+        seen.add(unit)
+        previous_rank = ranks[unit]
+    return int(total.to_integral_value(rounding=ROUND_CEILING))
 
 
 def has_policy_pass_marker(stdout: str, stderr: str, *,
@@ -241,12 +285,5 @@ def has_fresh_policy_pass(stdout: str, stderr: str) -> bool:
 
 
 def run_pnpm_checked(command: tuple[str, ...], *, cwd, env=None, timeout: int, stage: str):
-    try:
-        return subprocess.run(command, cwd=cwd, env=env, check=True, capture_output=True,
-                              text=True, timeout=timeout)
-    except subprocess.CalledProcessError as exc:
-        category = pnpm_failure_category((exc.stdout or "") + "\n" + (exc.stderr or ""))
-        safe_stage = f"preverify-{stage.split()[-1]}"
-        raise PnpmStepRejected(safe_stage, category, exc.returncode) from None
-    except subprocess.TimeoutExpired as exc:
-        raise BuilderRejected(f"pnpm {stage} timed out") from None
+    from worker_release_pnpm_exec import run_pnpm_checked as run_checked
+    return run_checked(command, cwd=cwd, env=env, timeout=timeout, stage=stage)

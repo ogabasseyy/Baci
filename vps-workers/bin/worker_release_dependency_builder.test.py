@@ -9,6 +9,26 @@ from pathlib import Path
 from unittest.mock import patch
 
 
+def _bounded_run_adapter(fake_run):
+    def invoke(command, **kwargs):
+        try:
+            result = fake_run(command, **kwargs, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as error:
+            result = error
+        return subprocess.CompletedProcess(
+            command, getattr(result, "returncode", 0),
+            getattr(result, "stdout", None) or getattr(result, "output", None) or "",
+            getattr(result, "stderr", None) or "",
+        )
+    return invoke
+
+
+def _bounded_run_adapter_mock(results):
+    remaining = iter(results)
+    return lambda *_args, **_kwargs: _bounded_run_adapter(lambda *a, **k: next(remaining))(
+        *_args, **_kwargs)
+
+
 SCRIPT = Path(__file__).with_name("worker_release_dependency_builder.py")
 SPEC = importlib.util.spec_from_file_location("worker_release_dependency_builder", SCRIPT)
 assert SPEC and SPEC.loader
@@ -191,7 +211,7 @@ class DependencyBuilderTests(unittest.TestCase):
 
             with patch.dict(os.environ, {"HOME": str(scratch / "home")}), \
                  patch.object(sandbox, "copy_source_tree", side_effect=copy_source), \
-                 patch.object(sandbox.subprocess, "run", side_effect=run), \
+                 patch.object(sandbox, "run_bounded_capture", side_effect=_bounded_run_adapter(run)), \
                  patch.object(sandbox, "validate_receipt"), \
                  patch.object(sandbox, "verify_runtime_candidates", return_value={
                      "web_tsx": "passed", "worker_dotenv": "passed"
@@ -712,7 +732,8 @@ class DependencyBuilderTests(unittest.TestCase):
                 return (type("Result", (), {"stdout": "", "stderr": marker})()
                         if len(calls) == 2 else type("Result", (), {"stdout": marker, "stderr": ""})())
 
-            with patch.object(policy_cache.subprocess, "run", side_effect=run):
+            with patch("worker_release_pnpm_exec.run_bounded_capture",
+                       side_effect=_bounded_run_adapter(run)):
                 policy_cache.preverify(source, store, cache, "/fixed/pnpm")
             checks = [call for call in calls if "install" in call[0] or "deploy" in call[0]]
             self.assertEqual(len(checks), 3)
@@ -816,7 +837,7 @@ class DependencyBuilderTests(unittest.TestCase):
                 store.mkdir()
                 cache = root / "cache"
                 cache.mkdir()
-                with patch.object(policy_cache.subprocess, "run") as run:
+                with patch("worker_release_pnpm_exec.run_bounded_capture") as run:
                     with self.assertRaisesRegex(policy_cache.BuilderRejected, "source"):
                         policy_cache.preverify(source, store, cache, "/fixed/pnpm")
                     run.assert_not_called()
@@ -833,10 +854,10 @@ class DependencyBuilderTests(unittest.TestCase):
             store.mkdir()
             cache = root / "cache"
             cache.mkdir()
-            with patch.object(policy_cache.subprocess, "run", side_effect=[
+            with patch("worker_release_pnpm_exec.run_bounded_capture", side_effect=_bounded_run_adapter_mock([
                 type("Result", (), {"stdout": "11.7.0\n"})(),
                 type("Result", (), {"stdout": "progress: Lockfile passes supply-chain policies (message text only)"})(),
-            ]):
+            ])):
                 with self.assertRaises(policy_cache.BuilderRejected) as raised:
                     policy_cache.preverify(source, store, cache, "/fixed/pnpm")
             self.assertEqual(raised.exception.safe_stage, "preverify-web-install")
@@ -875,10 +896,10 @@ class DependencyBuilderTests(unittest.TestCase):
             cache = root / "cache"
             cache.mkdir(mode=0o700)
             result = lambda stdout, stderr="": type("Result", (), {"stdout": stdout, "stderr": stderr})()
-            with patch.object(policy_cache.subprocess, "run", side_effect=[
+            with patch("worker_release_pnpm_exec.run_bounded_capture", side_effect=_bounded_run_adapter_mock([
                 result("11.7.0\n"), result("", "✓ Lockfile passes supply-chain policies (1 entry in 1ms)"),
                 result("Deploying production dependencies"), result("✓ Lockfile passes supply-chain policies (2 entries in 2ms)"),
-            ]):
+            ])):
                 policy_cache.preverify(source, store, cache, "/fixed/pnpm")
             self.assertTrue((store / policy_cache.RECEIPT_NAME).is_file())
 
@@ -897,9 +918,9 @@ class DependencyBuilderTests(unittest.TestCase):
             failure = subprocess.CalledProcessError(
                 1, ["synthetic"], output="synthetic credential marker", stderr="ECONNRESET synthetic-private-token"
             )
-            with patch.object(policy_cache.subprocess, "run", side_effect=[
+            with patch("worker_release_pnpm_exec.run_bounded_capture", side_effect=_bounded_run_adapter_mock([
                 type("Result", (), {"stdout": "11.7.0\n"})(), failure,
-            ]):
+            ])):
                 with self.assertRaises(policy_cache.BuilderRejected) as caught:
                     policy_cache.preverify(source, store, cache, "/fixed/pnpm")
             self.assertEqual(caught.exception.safe_stage, "preverify-web-install")

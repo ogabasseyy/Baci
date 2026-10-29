@@ -19,6 +19,13 @@ from worker_release_dependency_diagnostics import (
     read_diagnostic,
 )
 from worker_release_dependency_lock_settings import lock_injection_settings
+from worker_release_bounded_process import (
+    MAX_STREAM_BYTES,
+    OutputLimitExceeded,
+    ProcessCleanupTimedOut,
+    ProcessTimedOut,
+    run_bounded_capture,
+)
 
 SYSTEMD_RUN = "/usr/bin/systemd-run"
 SYSTEMCTL = "/usr/bin/systemctl"
@@ -30,15 +37,21 @@ WORKER_RELEASES = Path("/srv/baci-workers/releases")
 WORKER_LOCKS = Path("/srv/baci-workers/locks")
 
 
-def run_pnpm_step(stage: str, command: tuple[str, ...], *, cwd: Path, env: dict[str, str], timeout: int):
+def run_pnpm_step(stage: str, command: tuple[str, ...], *, cwd: Path, env: dict[str, str],
+                  timeout: int, max_stream_bytes: int = MAX_STREAM_BYTES):
     try:
-        return subprocess.run(command, cwd=cwd, env=env, check=True, capture_output=True,
-                              text=True, timeout=timeout)
-    except subprocess.CalledProcessError as exc:
-        output = f"{exc.stdout or ''}\n{exc.stderr or ''}"
-        raise PnpmStepRejected(stage, pnpm_failure_category(output), exc.returncode) from None
-    except subprocess.TimeoutExpired as exc:
+        result = run_bounded_capture(command, cwd=cwd, env=env, timeout=timeout,
+                                     max_stream_bytes=max_stream_bytes)
+    except OutputLimitExceeded:
+        raise PnpmStepRejected(stage, "pnpm-output-limit", 125) from None
+    except ProcessTimedOut:
         raise PnpmStepRejected(stage, "preverify-timeout", 124) from None
+    except ProcessCleanupTimedOut:
+        raise PnpmStepRejected(stage, "operation-error", 125) from None
+    if result.returncode != 0:
+        output = f"{result.stdout or ''}\n{result.stderr or ''}"
+        raise PnpmStepRejected(stage, pnpm_failure_category(output), result.returncode) from None
+    return result
 MAX_BUILD_SECONDS = 300
 MAX_BUILD_SCRATCH_BYTES = 1536 * 1024 * 1024
 MAX_ENTRIES = 200_000
@@ -187,12 +200,13 @@ def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
     (scratch / "home").mkdir(mode=0o700, exist_ok=True)
     web_output = scratch / "payload" / "web"
     web_output.parent.mkdir(mode=0o700, exist_ok=True)
-    version = subprocess.run((PNPM, "--version"), cwd=working, check=True, capture_output=True, text=True, timeout=15).stdout.strip()
+    command_env = os.environ.copy()
+    version = run_pnpm_step("policy-preverify", (PNPM, "--version"), cwd=working,
+                            env=command_env, timeout=15, max_stream_bytes=64 * 1024).stdout.strip()
     if version != EXPECTED_PNPM:
         raise BuilderRejected("installed pnpm version does not match repository pin")
     validate_receipt(working, private_cache, private_store / RECEIPT_NAME, version, expected_sha=expected_sha)
     injection_settings = lock_injection_settings(working)
-    command_env = os.environ.copy()
     web_install = run_pnpm_step("web-install", (PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy",
                                   "--filter", "@baci/web...", "install", "--prod", "--frozen-lockfile",
                                   "--ignore-scripts", "--ignore-pnpmfile", "--offline",

@@ -11,6 +11,8 @@ on:
       - '**/package.json'
       - '**/.npmrc'
       - 'vps-workers/bin/worker_release_dependency_*.py'
+      - 'vps-workers/bin/worker_release_bounded_process.py'
+      - 'vps-workers/bin/worker_release_pnpm_exec.py'
       - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.py'
       - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.test.py'
       - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_dependency_guard.py'

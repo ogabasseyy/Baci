@@ -11,9 +11,10 @@ LENGTH_BUCKETS = frozenset({"0", "1", "2", "3-8", "9+"})
 POLICY_EVIDENCE_CLASSES = frozenset({"absent", "ambiguous", "malformed", "fresh", "cached", "stale"})
 _CHECKMARK_PREFIX = re.compile(r"\s*✓\s+")
 _FRESH_SUFFIX = re.compile(
-    r"\s*\(([0-9]+) entr(?:y|ies) in ([0-9]+(?:\.[0-9]+)?)(ms|s)\)\s*"
+    r"\s*\(([0-9]{1,9}) entr(?:y|ies) in ((?:[0-9]+(?:\.[0-9]+)?(?:ms|s|m|h|d|y))"
+    r"(?: [0-9]+(?:\.[0-9]+)?(?:ms|s|m|h|d|y))*)\)\s*"
 )
-_CACHED_SUFFIX = re.compile(r"\s*\(verified ([0-9]+(?:\.[0-9]+)?)(ms|s) ago\)\s*")
+_CACHED_SUFFIX = re.compile(r"\s*\(verified ([0-9]+)(ms|s|m|h|d|y) ago\)\s*")
 
 
 def _length_bucket(value: str) -> str:
@@ -51,6 +52,8 @@ def summarize_line_shape(prefix: str, suffix: str) -> dict[str, str]:
         "prefix_length_bucket": _length_bucket(prefix),
         "suffix_category": suffix_category,
         "suffix_length_bucket": _length_bucket(suffix),
+        "time_has_minutes": bool(fresh and re.search(r"(?:^| )\d+(?:\.\d+)?m(?: |$)", fresh.group(2))),
+        "time_has_decimal": bool(fresh and "." in fresh.group(2)),
     }
 
 
@@ -64,11 +67,14 @@ def validate_evidence_summary(value: dict[str, object]) -> dict[str, object]:
         raise ValueError("policy evidence summary is invalid")
     for shape in value["line_shapes"]:
         if (not isinstance(shape, dict) or set(shape) != {
-                "prefix_category", "prefix_length_bucket", "suffix_category", "suffix_length_bucket"}
+                "prefix_category", "prefix_length_bucket", "suffix_category", "suffix_length_bucket",
+                "time_has_minutes", "time_has_decimal"}
                 or shape["prefix_category"] not in PREFIX_CATEGORIES
                 or shape["suffix_category"] not in SUFFIX_CATEGORIES
                 or shape["prefix_length_bucket"] not in LENGTH_BUCKETS
-                or shape["suffix_length_bucket"] not in LENGTH_BUCKETS):
+                or shape["suffix_length_bucket"] not in LENGTH_BUCKETS
+                or type(shape["time_has_minutes"]) is not bool
+                or type(shape["time_has_decimal"]) is not bool):
             raise ValueError("policy evidence line shape is invalid")
     return value
 
@@ -81,6 +87,7 @@ def format_policy_line_shapes(evidence: dict[str, object]) -> str:
     return " line_shape=" + ";".join(
         f"{shape['prefix_category']}:{shape['prefix_length_bucket']}/"
         f"{shape['suffix_category']}:{shape['suffix_length_bucket']}"
+        f":minutes={int(shape['time_has_minutes'])}:decimal={int(shape['time_has_decimal'])}"
         for shape in shapes
     )
 

@@ -255,6 +255,7 @@ for module in worker_release_dependency_builder.py worker_release_dependency_art
   worker_release_dependency_policy_cache.py worker_release_dependency_registry_policy.py \
   worker_release_dependency_lock_settings.py \
   worker_release_dependency_input_cache.py worker_release_dependency_diagnostics.py \
+  worker_release_bounded_process.py worker_release_pnpm_exec.py \
   worker_release_dependency_evidence_shape.py \
   worker_release_dependency_policy_cli.py; do
   install -o root -g root -m 0444 "$(dirname "$0")/../../bin/$module" "$helper_root/$module"

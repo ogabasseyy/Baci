@@ -24,13 +24,26 @@ class SandboxPnpmDiagnosticsTests(unittest.TestCase):
             1, ("pnpm", "deploy"), output="registry private-token=not-for-logs",
             stderr="ERR_PNPM_LOCKFILE_CONFIG_MISMATCH private-token=not-for-logs",
         )
-        with patch("worker_release_dependency_sandbox.subprocess.run", side_effect=failure):
+        completed = subprocess.CompletedProcess(failure.cmd, 1, failure.stdout, failure.stderr)
+        with patch("worker_release_dependency_sandbox.run_bounded_capture", return_value=completed):
             with self.assertRaises(PnpmStepRejected) as caught:
                 run_pnpm_step("web-deploy", ("pnpm", "deploy"), cwd=Path("/tmp"), env={}, timeout=5)
         self.assertEqual((caught.exception.safe_stage, caught.exception.safe_category, caught.exception.exit_code),
                          ("web-deploy", "frozen-lockfile-mismatch", 1))
         self.assertIsNone(caught.exception.__cause__)
         self.assertTrue(caught.exception.__suppress_context__)
+        self.assertNotIn("private-token", str(caught.exception))
+
+    def test_output_limit_maps_to_fixed_offline_diagnostic(self):
+        from worker_release_bounded_process import OutputLimitExceeded
+
+        with patch("worker_release_dependency_sandbox.run_bounded_capture",
+                   side_effect=OutputLimitExceeded(b"private-token", b"private-token")):
+            with self.assertRaises(PnpmStepRejected) as caught:
+                run_pnpm_step("worker-install", ("pnpm", "install"), cwd=Path("/tmp"),
+                              env={}, timeout=5)
+        self.assertEqual((caught.exception.safe_category, caught.exception.exit_code),
+                         ("pnpm-output-limit", 125))
         self.assertNotIn("private-token", str(caught.exception))
 
     def test_systemd_failure_reads_only_validated_safe_diagnostic(self):

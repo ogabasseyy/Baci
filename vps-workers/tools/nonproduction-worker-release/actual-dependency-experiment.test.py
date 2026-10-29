@@ -121,6 +121,8 @@ class ActualDependencyExperimentTests(unittest.TestCase):
                                                                 "prefix_length_bucket": "2",
                                                                 "suffix_category": "other",
                                                                 "suffix_length_bucket": "3-8",
+                                                                "time_has_minutes": False,
+                                                                "time_has_decimal": False,
                                                             }]})), \
                  redirect_stderr(error_output):
                 result = experiment.policy_cli.main([
@@ -135,10 +137,11 @@ class ActualDependencyExperimentTests(unittest.TestCase):
                              "recognized_lines": 0, "line_shapes": [{
                                  "prefix_category": "checkmark", "prefix_length_bucket": "2",
                                  "suffix_category": "other", "suffix_length_bucket": "3-8",
+                                 "time_has_minutes": False, "time_has_decimal": False,
                              }]},
             })
             self.assertIn("category=dependency-resolution", error_output.getvalue())
-            self.assertIn("line_shape=checkmark:2/other:3-8", error_output.getvalue())
+            self.assertIn("line_shape=checkmark:2/other:3-8:minutes=0:decimal=0", error_output.getvalue())
             self.assertNotIn("dependency-resolution failed", error_output.getvalue())
             self.assertNotIn("/fixed/pnpm", error_output.getvalue())
 

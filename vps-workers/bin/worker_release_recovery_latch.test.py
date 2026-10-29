@@ -143,6 +143,29 @@ class RecoveryLatchTests(unittest.TestCase):
                     uid=self.uid, gid=self.gid, state_gid=self.gid)
         self.assertTrue(service_allowed("scheduled", path=self.latch, uid=self.uid, gid=self.gid))
 
+    def test_clear_accepts_state_fence_with_durable_job_id_binding(self):
+        create_latch(FENCE, PRIOR, path=self.latch, job_id="7001",
+                     active_services=list(SERVICES), uid=self.uid, gid=self.gid)
+        self.write_state("rolled_back", fence={**FENCE, "job_id": "7001"})
+        clear_latch(path=self.latch, fence=FENCE, state_path=self.state,
+                    uid=self.uid, gid=self.gid, state_gid=self.gid)
+        self.assertIsNone(load_latch(self.latch, uid=self.uid, gid=self.gid))
+
+    def test_clear_rejects_stale_terminal_state_sha_or_previous_sha(self):
+        for key, stale in (("sha", "c" * 40), ("previous_sha", "d" * 40)):
+            with self.subTest(key=key):
+                self.make_latch()
+                self.write_state("rolled_back")
+                state = json.loads(self.state.read_text(encoding="utf-8"))
+                state[key] = stale
+                self.state.write_text(json.dumps(state), encoding="utf-8")
+                self.state.chmod(0o600)
+                with self.assertRaisesRegex(LatchError, "cannot be confirmed"):
+                    clear_latch(path=self.latch, fence=FENCE, state_path=self.state,
+                                uid=self.uid, gid=self.gid, state_gid=self.gid)
+                self.assertIsNotNone(load_latch(self.latch, uid=self.uid, gid=self.gid))
+                self.latch.unlink()
+
 
 if __name__ == "__main__":
     unittest.main()

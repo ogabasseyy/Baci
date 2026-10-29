@@ -220,10 +220,12 @@ def clear_latch(*, path: Path = LATCH_PATH, fence: dict[str, Any], state_path: P
     state = _read_json(state_path, uid=uid, gid=state_gid, mode=0o600)
     state_fence = state.get("fence") if state else None
     if (latch is None or latch["fence"] != fence or state is None or not isinstance(state_fence, dict)
+            or state.get("sha") != latch.get("release_sha")
+            or state.get("previous_sha") != latch.get("previous_sha")
             or any(state_fence.get(key) != fence.get(key) for key in ("run_id", "run_attempt", "sha"))
             or (latch.get("job_id") is not None and state_fence.get("job_id") != latch["job_id"])):
         raise LatchError("worker recovery cannot be confirmed")
-    if state.get("status") not in ("healthy", "rolled_back") or state.get("fence") != fence:
+    if state.get("status") not in ("healthy", "rolled_back"):
         raise LatchError("worker release is not safe to resume")
     path.unlink()
     directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)

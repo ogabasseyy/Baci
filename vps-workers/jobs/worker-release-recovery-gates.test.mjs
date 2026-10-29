@@ -44,4 +44,14 @@ describe('worker release recovery launch gates', () => {
     assert.match(brokerUnit, /gate_socket="\$gate_dir\/health\.sock"/);
     assert.match(brokerUnit, /ReadWritePaths=.*\/run\/baci-worker-release-gate/);
   });
+
+  it('uses shipped pointer restoration and durable latch clearing in its recovery fixture', () => {
+    const harness = readFileSync(join(workerRoot, 'tools', 'worker-release-systemd-fault-test.sh'), 'utf8');
+    assert.match(harness, /create_latch\(fence, "b" \* 40/);
+    assert.match(harness, /restore_recorded_prior\(/);
+    assert.match(harness, /clear_latch\(path=latch_path/);
+    assert.match(harness, /_lease = SimpleNamespace\(_state="active", _fence=manager\._fence\)/);
+    assert.doesNotMatch(harness, /rm -f "\$latch"/);
+    assert.match(harness, /Coordinator terminal-proof\/authentication is tested/);
+  });
 });

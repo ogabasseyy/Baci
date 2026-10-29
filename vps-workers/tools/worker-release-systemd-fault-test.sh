@@ -26,6 +26,11 @@ runtime_dir="${tmp}/gate-run"
 socket="${runtime_dir}/health.sock"
 auth="${tmp}/authorized"
 data_dir="${tmp}/worker-data"
+releases_dir="${tmp}/releases"
+current_link="${tmp}/current"
+release_state="${tmp}/release-state.json"
+candidate_sha="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+previous_sha="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 challenged="${data_dir}/challenged"
 slow="${tmp}/slow-gate"
 started="${data_dir}/worker-started"
@@ -93,13 +98,16 @@ install -o root -g baci-locks -m 0550 \
   "$helper_dir/worker-release-launch-gate"
 for module in worker_release_quiesce_lease.py worker_release_quiesce_lease_identity.py \
   worker_release_quiesce_locks.py worker_release_quiesce_lease_runtime.py \
-  worker_release_quiesce_lease_core.py worker_release_quiesce_lease_manager.py; do
+  worker_release_quiesce_lease_core.py worker_release_quiesce_lease_manager.py \
+  worker_release_lifecycle.py worker_release_recovery_lifecycle.py; do
   install -o root -g root -m 0444 "$(dirname "$0")/../bin/$module" "$helper_dir/$module"
 done
 install -d -o root -g baci-locks -m 0710 "$latch_dir"
 install -d -o root -g baci-worker -m 0710 "$runtime_dir"
 install -d -o root -g baci-worker -m 0770 "$data_dir"
 chmod 0711 "$tmp"
+install -d -o root -g root -m 0755 "$releases_dir/$candidate_sha" "$releases_dir/$previous_sha"
+ln -s "releases/$candidate_sha" "$current_link"
 
 cat >"$tmp/gate.py" <<'PY'
 import os, signal, sys, time, threading, runpy
@@ -112,9 +120,9 @@ if mode == "broker":
     from worker_release_quiesce_gate import HealthGateServer
     manager = object.__new__(WorkerQuiesceLeaseManager)
     manager._guard = threading.Lock()
-    manager._lease = SimpleNamespace(_state="active")
-    manager._phase = "quiescing"
     manager._fence = load_latch(Path(latch), uid=0, gid=int(lock_gid))["fence"]
+    manager._lease = SimpleNamespace(_state="active", _fence=manager._fence)
+    manager._phase = "quiescing"
     manager.latch_path = Path(latch)
     manager.lock_gid = int(lock_gid)
     try:
@@ -170,7 +178,7 @@ from pathlib import Path
 from worker_release_recovery_latch import SERVICES, create_latch
 path, gid = Path(sys.argv[1]), int(sys.argv[2])
 fence = {"run_id": "1", "run_attempt": 1, "sha": "a" * 40}
-create_latch(fence, None, path=path, job_id="2", active_services=list(SERVICES), uid=0, gid=gid)
+create_latch(fence, "b" * 40, path=path, job_id="2", active_services=list(SERVICES), uid=0, gid=gid)
 PY
 cat >"${unit_dir}/${broker}" <<EOF
 [Unit]
@@ -264,8 +272,42 @@ if [ -e "$started" ]; then
   exit 1
 fi
 
-# Simulate authenticated RESTORE clearing the durable latch, then assert one poller.
-rm -f "$latch"
+# Exercise the shipped pointer-restore and durable latch-clear primitives with
+# synthetic state. Coordinator terminal-proof/authentication is tested
+# separately; this disposable systemd test verifies the actual restore/clear path.
+PYTHONPATH="$helper_dir" /usr/bin/python3 - "$latch" "$release_state" "$current_link" "$releases_dir" "$lock_gid" <<'PY'
+import json, os, sys
+from contextlib import contextmanager
+from pathlib import Path
+from worker_release_recovery_lifecycle import restore_recorded_prior
+from worker_release_recovery_latch import clear_latch, load_latch
+
+class Lease:
+    @contextmanager
+    def operation(self):
+        yield
+    def require_active(self):
+        pass
+
+latch_path, state_path, current, releases = map(Path, sys.argv[1:5])
+gid = int(sys.argv[5])
+latch = load_latch(latch_path, uid=0, gid=gid)
+fence = latch["fence"]
+result = restore_recorded_prior(
+    current_link=current, releases_root=releases,
+    release_sha=latch["release_sha"], previous_sha=latch["previous_sha"],
+    quiescence_lease=Lease(),
+)
+assert result["sha"] == latch["previous_sha"]
+state = {"version": 1, "status": "rolled_back", "sha": latch["release_sha"],
+         "previous_sha": latch["previous_sha"], "fence": {**fence, "job_id": latch["job_id"]}}
+state_path.write_text(json.dumps(state), encoding="utf-8")
+os.chmod(state_path, 0o600)
+clear_latch(path=latch_path, fence=fence, state_path=state_path,
+            uid=0, gid=gid, state_gid=0)
+assert not latch_path.exists()
+assert os.readlink(current) == f"releases/{latch['previous_sha']}"
+PY
 systemctl start "$core"
 systemctl is-active --quiet "$core"
 if [ "$(wc -l <"$started")" -ne 1 ]; then

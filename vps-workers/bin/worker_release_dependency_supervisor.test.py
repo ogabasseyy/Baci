@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import os
 import pwd
+import re
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -16,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import worker_release_dependency_supervisor as supervisor
 import worker_release_dependency_builder as dependency_builder
+import worker_release_dependency_sandbox as sandbox
+import worker_release_dependency_supervisor_contract as unit_contract
 from worker_release_dependency_supervisor_cgroup import drain_until_proven, postspawn_drain
 from worker_release_descriptor_cgroup import (
     CgroupProofRejected, require_process_member,
@@ -27,143 +31,6 @@ from worker_release_dependency_supervisor_journal import (
 
 FENCE = {"repository": "org/repo", "workflow": "release.yml", "ref": "refs/heads/main",
          "sha": "a" * 40, "run_id": "1", "run_attempt": 1, "job_id": "2"}
-
-
-def execute_canonical_unit(command, script: str, process_factory):
-    """Keep shipped canonical sandbox arguments and replace only payload argv."""
-    actual = tuple(command)
-    builder_entrypoint = str(Path(supervisor.__file__).with_name(
-        "worker_release_dependency_builder.py"))
-    entrypoint_index = actual.index(builder_entrypoint)
-    safe_command = (*actual[:entrypoint_index - 1], "/usr/bin/python3", "-c", script)
-    return process_factory(safe_command, stdin=subprocess.DEVNULL,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           env={"PATH": "/usr/bin:/bin"})
-
-
-@unittest.skipUnless(os.geteuid() == 0 and sys.platform.startswith("linux")
-                     and os.environ.get("WORKER_RELEASE_BUILDER_SYSTEMD_REQUIRE") == "1",
-                     "requires disposable root/systemd/cgroup-v2 workflow")
-class BuilderSupervisorSystemdTests(unittest.TestCase):
-    def setUp(self):
-        systemctl = shutil.which("systemctl")
-        if systemctl is None:
-            self.fail("CI requires systemctl")
-        try:
-            state = subprocess.run((systemctl, "is-system-running"), check=False,
-                                   stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                   stderr=subprocess.DEVNULL, timeout=5, text=True).stdout.strip()
-            version = subprocess.run((systemctl, "show", "--property=Version", "--value"),
-                                     check=True, stdin=subprocess.DEVNULL,
-                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                     timeout=5, text=True).stdout.strip()
-            supervisor.preflight_cgroup_root(supervisor.CGROUP_ROOT)
-        except (OSError, subprocess.SubprocessError, CgroupProofRejected) as error:
-            self.fail(f"CI requires a responsive systemd manager and cgroup v2: {error}")
-        if state not in ("running", "degraded") or not version:
-            self.fail(f"CI systemd manager is unavailable (state={state or 'empty'})")
-        self.builder = pwd.getpwnam("nobody")
-        self.temp = tempfile.TemporaryDirectory(dir="/run")
-        self.root = Path(self.temp.name)
-        self.root.chmod(0o711)
-        self.scratch = self.root / "scratch"
-        self.scratch.mkdir(mode=0o700)
-        os.chown(self.scratch, self.builder.pw_uid, self.builder.pw_gid)
-        self.source = self.root / "source"
-        self.source.mkdir(mode=0o555)
-        os.chown(self.source, 0, 0)
-        (self.root / "pnpm-cache-seed").mkdir(mode=0o555)
-        receipt = self.root / ".baci-policy-verification.json"
-        receipt.write_text("{}")
-        receipt.chmod(0o444)
-        self.worker_root = self.root / "worker"
-        self.worker_root.mkdir(mode=0o700)
-
-    def tearDown(self):
-        self.temp.cleanup()
-
-    def run_unit(self, script: str, *, cap: int = supervisor.MAX_SCRATCH_BYTES):
-        unit = f"baci-worker-deps-{'a' * 12}-{'b' * 32}.service"
-        with BuilderUnitJournal(self.worker_root, owner_uid=0) as journal:
-            journal.begin(FENCE, unit, self.source, self.scratch,
-                          self.builder.pw_uid, self.builder.pw_gid)
-            canonical = __import__("worker_release_dependency_sandbox").systemd_command(
-                self.source, self.scratch, "a" * 40, self.builder.pw_uid,
-                self.builder.pw_gid, unit)
-            with (patch.object(supervisor, "MAX_SCRATCH_BYTES", cap),
-                  patch.object(supervisor, "_spawn_unit",
-                               side_effect=lambda _cmd, **kwargs: execute_canonical_unit(
-                                   canonical, script,
-                                   lambda argv, **kw: subprocess.Popen(argv, **kw)))):
-                supervisor.supervise_builder_unit(
-                    self.source, self.scratch, "a" * 40, self.builder.pw_uid,
-                    self.builder.pw_gid, unit, usage_root=self.scratch,
-                    unit_journal=journal,
-                )
-
-    def test_success_returns_only_after_unit_cgroup_is_empty(self):
-        self.run_unit("import time; time.sleep(2)")
-        self.assertEqual(list(self.scratch.iterdir()), [])
-
-    def test_bound_violation_kills_descendant_and_proves_cgroup_empty(self):
-        script = (
-            "import subprocess,time,pathlib,os; time.sleep(1); "
-            "subprocess.Popen(['/usr/bin/python3','-c','import time; time.sleep(60)']); "
-            "pathlib.Path('" + str(self.scratch / "oversize") + "').write_bytes(b'xx'); "
-            "time.sleep(60)"
-        )
-        with self.assertRaisesRegex(supervisor.BuilderSupervisorRejected, "scratch exceeded"):
-            self.run_unit(script, cap=1)
-        self.assertEqual(list(self.scratch.iterdir()), [])
-
-    def test_recovery_requires_terminal_proof_and_drains_recorded_unit(self):
-        unit = f"baci-worker-deps-{'a' * 12}-{'c' * 32}.service"
-        script = "import subprocess,time; subprocess.Popen(['/usr/bin/python3','-c','import time; time.sleep(60)']); time.sleep(60)"
-        command = list(__import__("worker_release_dependency_sandbox").systemd_command(
-            self.source, self.scratch, "a" * 40, self.builder.pw_uid,
-            self.builder.pw_gid, unit))
-        builder_entrypoint = str(Path(supervisor.__file__).with_name(
-            "worker_release_dependency_builder.py"))
-        command = command[:command.index(builder_entrypoint) - 1] + [
-            "/usr/bin/python3", "-c", script,
-        ]
-        command.remove("--wait")
-        command.remove("--pipe")
-        with BuilderUnitJournal(self.worker_root, owner_uid=0) as journal:
-            journal.begin({"repository": "org/repo", "workflow": "release.yml",
-                           "ref": "refs/heads/main", "sha": "a" * 40, "run_id": "1",
-                           "run_attempt": 1, "job_id": "2"}, unit, self.source, self.scratch,
-                          self.builder.pw_uid, self.builder.pw_gid)
-            started = subprocess.run(command, check=True, stdin=subprocess.DEVNULL,
-                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
-            self.assertEqual(started.returncode, 0)
-            fence = {"repository": "org/repo", "workflow": "release.yml",
-                     "ref": "refs/heads/main", "sha": "a" * 40, "run_id": "1",
-                     "run_attempt": 1, "job_id": "2"}
-            with self.assertRaisesRegex(BuilderJournalRejected, "terminal-run proof"):
-                recover_recorded_builder(journal, fence,
-                                         terminal_attempt_proven=lambda _fence: False)
-            self.assertEqual(supervisor._systemctl("show", "--property=ActiveState", "--value", unit),
-                             "active")
-            control_group = supervisor._systemctl(
-                "show", "--property=ControlGroup", "--value", unit,
-            )
-            self.assertEqual(control_group, supervisor._control_group(unit))
-            cgroup_fd, cgroup_info = open_unit_cgroup(supervisor.CGROUP_ROOT, unit)
-            try:
-                main_pid = int(supervisor._systemctl(
-                    "show", "--property=MainPID", "--value", unit,
-                ))
-                self.assertGreater(main_pid, 0)
-                require_process_member(cgroup_fd, cgroup_info.st_dev,
-                                       cgroup_info.st_ino, main_pid)
-            finally:
-                os.close(cgroup_fd)
-            result = recover_recorded_builder(journal, fence,
-                                              terminal_attempt_proven=lambda _fence: True)
-            self.assertEqual(result, "drained")
-            self.assertEqual(journal.read()["phase"], "drained")
-
 
 class BuilderSupervisorContractTests(unittest.TestCase):
     def test_unit_name_is_bound_to_sha_prefix_and_random_transaction(self):
@@ -207,8 +74,8 @@ class BuilderSupervisorContractTests(unittest.TestCase):
                                                       os.getuid(), os.getgid(),
                                                       input_root=None, result_dir=None)
                 run.assert_called_once_with(source, scratch, sha, os.getuid(),
-                                            os.getgid(),
-                                            unit, usage_root=root)
+                                            os.getgid(), unit, usage_root=root,
+                                            unit_journal=journal)
                 with self.assertRaisesRegex(supervisor.BuilderSupervisorRejected,
                                             "noncanonical systemd command"):
                     runner(("/bin/false",), scratch, unit)

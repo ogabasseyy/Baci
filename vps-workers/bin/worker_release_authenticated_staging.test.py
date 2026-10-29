@@ -22,7 +22,10 @@ from worker_release_authenticated_staging import (
 from worker_release_dependency_artifacts import payload_manifest, sha256_file
 from worker_release_dependency_fs import write_manifest
 from worker_release_lifecycle import AuthenticatedRun
+from worker_release_descriptor_cgroup import CgroupProofRejected
+from worker_release_dependency_supervisor_cgroup import preflight_cgroup_root
 from worker_release_systemd_extractor import EXTRACTOR, RESOURCE_ROOT
+from worker_release_systemd_test_support import systemd_system_manager_available
 
 SHA = "a" * 40
 
@@ -99,8 +102,12 @@ class AuthenticatedStagingTests(unittest.TestCase):
                          os.environ.get("WORKER_RELEASE_STAGE_REQUIRE_SYSTEMD") == "1",
                          "requires the disposable root/systemd integration workflow")
     def test_dispatch_archive_extractor_consumer_and_journal_complete_as_one_stage(self):
-        if os.system("systemctl is-system-running >/dev/null 2>&1") != 0:
-            self.fail("CI requires a running systemd manager")
+        if not systemd_system_manager_available():
+            self.fail("CI requires a reachable systemd system manager")
+        try:
+            preflight_cgroup_root(Path("/sys/fs/cgroup"))
+        except (OSError, CgroupProofRejected) as error:
+            self.fail(f"CI requires a usable cgroup v2 system.slice: {error}")
         account = pwd.getpwnam(EXTRACTOR)
         if list(RESOURCE_ROOT.iterdir()):
             self.fail("unclaimed extractor resources must block the stage")

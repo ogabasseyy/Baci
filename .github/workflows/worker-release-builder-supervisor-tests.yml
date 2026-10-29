@@ -5,6 +5,7 @@ on:
     paths:
       - 'vps-workers/bin/worker_release_dependency_supervisor.py'
       - 'vps-workers/bin/worker_release_dependency_supervisor.test.py'
+      - 'vps-workers/bin/worker_release_dependency_supervisor_systemd_test.py'
       - 'vps-workers/bin/worker_release_dependency_supervisor_journal.py'
       - 'vps-workers/bin/worker_release_dependency_supervisor_journal.test.py'
       - 'vps-workers/bin/worker_release_dependency_supervisor_lifecycle.py'
@@ -36,5 +37,6 @@ jobs:
         run: |
           sudo /usr/bin/python3 -B vps-workers/bin/worker_release_dependency_supervisor_journal.test.py -v
           sudo /usr/bin/python3 -B vps-workers/bin/worker_release_dependency_supervisor_lifecycle.test.py -v
-          sudo env WORKER_RELEASE_BUILDER_SYSTEMD_REQUIRE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_dependency_supervisor.test.py -v
+          sudo /usr/bin/python3 -B vps-workers/bin/worker_release_dependency_supervisor.test.py -v
+          sudo env WORKER_RELEASE_BUILDER_SYSTEMD_REQUIRE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_dependency_supervisor_systemd_test.py -v
           sudo /usr/bin/python3 -B vps-workers/bin/worker_release_dependency_builder.test.py -v

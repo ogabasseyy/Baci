@@ -200,6 +200,11 @@ def supervise_builder_unit(source: Path, scratch: Path, expected_sha: str, uid: 
             unit_quiesced = True
             if failure is not None:
                 raise failure
+            exit_code = process.returncode
+            if exit_code is not None and exit_code != 0:
+                raise BuilderSupervisorRejected(
+                    f"builder systemd-run exited before cgroup pin (status {exit_code})"
+                )
             raise BuilderSupervisorRejected("builder cgroup was not pinned before completion")
         if failure is not None:
             _drain_until_proven(unit, cgroup_fd, cgroup_info, process,

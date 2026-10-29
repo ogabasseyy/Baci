@@ -22,7 +22,10 @@ from worker_release_runtime_verifier import (
     validate_runtime_receipt,
     verify_materialized_candidate,
 )
-from worker_release_runtime_verifier_test_support import cleanup_candidate_after_verifier
+from worker_release_runtime_verifier_test_support import (
+    classify_namespace_failure, cleanup_candidate_after_verifier,
+    emit_namespace_failure_diagnostic,
+)
 from worker_release_runtime_diagnostics import BoundedLauncherStderr
 
 SHA = "a" * 40
@@ -219,7 +222,13 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             self.assertEqual(properties["ProtectSystem"], "strict")
             self.assertEqual(properties["ProtectProc"], "invisible")
             self.assertEqual(properties["PrivateTmp"], "no")
-            self.assertEqual(properties["InaccessiblePaths"], "/root /home /run /var/run /tmp /var/tmp /dev/shm /etc /srv /opt /usr/local /var/log /var/cache /var/spool /var/backups")
+            self.assertEqual(properties["InaccessiblePaths"], "/run /tmp /var/tmp /dev/shm /etc /srv /opt /usr/local /var/log /var/cache /var/spool /var/backups")
+            inaccessible = properties["InaccessiblePaths"].split()
+            self.assertEqual(len(inaccessible), len(set(inaccessible)))
+            self.assertNotIn("/root", inaccessible)  # supplied by ProtectHome
+            self.assertNotIn("/home", inaccessible)  # supplied by ProtectHome
+            self.assertNotIn("/var/run", inaccessible)  # aliases /run on Ubuntu
+            self.assertIn("/srv", inaccessible)  # keep the worker tree masked
             self.assertEqual(properties["SupplementaryGroups"], "")
             self.assertEqual(properties["Group"], str(self.acl_gid))
             self.assertEqual(properties["BindReadOnlyPaths"],
@@ -264,6 +273,14 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             verify_materialized_candidate(
                 self.candidate, identity(), archive_sha256=ARCHIVE,
                 owner_uid=os.geteuid(), owner_gid=os.getgid())
+
+    def test_namespace_diagnostic_is_fixed_category_without_journal_text(self):
+        category = classify_namespace_failure(
+            "Failed to set up mount namespacing: /srv/baci-workers/releases/private-sha: "
+            "permission denied token=should-not-appear")
+        self.assertEqual(category, "namespace-path-worker-root-mask")
+        self.assertNotIn("private-sha", category)
+        self.assertNotIn("should-not-appear", category)
 
     @patch("worker_release_runtime_verifier._run_fixed_smokes")
     def test_untrusted_run_identity_fails_before_smoke(self, smokes):
@@ -312,10 +329,25 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
                 shutil.rmtree(candidate / "apps" / "web" / "node_modules")
                 install_payload(payload, candidate, owner_uid=os.geteuid())
             freeze(candidate, worker_gid)
-            with patch("worker_release_candidate_pin.RELEASES_ROOT", releases):
-                receipt = verify_materialized_candidate(
-                    candidate, identity(), archive_sha256=ARCHIVE,
-                    owner_uid=os.geteuid(), owner_gid=worker_gid)
+            observed_units = []
+            from worker_release_runtime_verifier import _unit_name as real_unit_name
+
+            def remember_unit(*args):
+                unit = real_unit_name(*args)
+                observed_units.append(unit)
+                return unit
+
+            with patch("worker_release_candidate_pin.RELEASES_ROOT", releases), \
+                    patch("worker_release_runtime_verifier._unit_name", side_effect=remember_unit):
+                try:
+                    receipt = verify_materialized_candidate(
+                        candidate, identity(), archive_sha256=ARCHIVE,
+                        owner_uid=os.geteuid(), owner_gid=worker_gid)
+                except RuntimeVerificationRejected as error:
+                    if "(exit=226)" in str(error):
+                        for unit in observed_units:
+                            emit_namespace_failure_diagnostic(unit)
+                    raise
                 self.assertTrue(validate_runtime_receipt(
                     receipt, candidate, identity(), ARCHIVE,
                     owner_uid=os.geteuid(), owner_gid=worker_gid))

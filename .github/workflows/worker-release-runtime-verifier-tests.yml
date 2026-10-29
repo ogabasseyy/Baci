@@ -61,25 +61,36 @@ jobs:
         run: pnpm --dir vps-workers install --prod --frozen-lockfile --ignore-scripts
       - name: Provision disposable trusted candidate parent and Node runtime
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install --yes nodejs
-          sudo groupadd --system baci-worker
-          sudo groupadd --system baci-worker-runtime-verify
-          sudo useradd --system --gid baci-worker-runtime-verify --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin baci-worker-runtime-verify
+          sudo groupadd --system baci-worker || { echo 'runtime fixture setup failed: create worker group' >&2; exit 1; }
+          sudo groupadd --system baci-worker-runtime-verify || { echo 'runtime fixture setup failed: create verifier group' >&2; exit 1; }
+          sudo useradd --system --gid baci-worker-runtime-verify --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin baci-worker-runtime-verify || { echo 'runtime fixture setup failed: create verifier user' >&2; exit 1; }
           sudo install -d -o root -g root -m 0755 /etc/baci-workers
           sudo install -d -o root -g root -m 0755 /srv/baci-workers
           sudo install -d -o root -g baci-worker -m 0750 /srv/baci-workers/releases
           sudo install -d -o root -g root -m 0755 /srv/baci-workers/runtime
           sudo install -d -o root -g root -m 0755 /srv/baci-workers/locks
           sudo install -d -o root -g root -m 0711 /var/lib/baci-worker-runtime-views
-          test "$(stat -c '%u:%g:%a' /srv/baci-workers/releases)" = "0:$(getent group baci-worker | cut -d: -f3):750"
-          test "$(stat -c '%u:%g:%a' /var/lib/baci-worker-runtime-views)" = '0:0:711'
-          test -z "$(getent group baci-worker-runtime-verify | cut -d: -f4)"
-          test "$(getent passwd baci-worker-runtime-verify | cut -d: -f6,7)" = '/nonexistent,/usr/sbin/nologin'
-          test "$(id -G baci-worker-runtime-verify)" = "$(getent group baci-worker-runtime-verify | cut -d: -f3)"
-          test -x /usr/bin/systemd-run
-          test -x /usr/bin/systemctl
-          test -x /usr/bin/node
+          require_value() {
+            label="$1" expected="$2" actual="$3"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "runtime fixture setup failed: $label" >&2
+              exit 1
+            fi
+          }
+          require_value 'release root ownership/mode' "0:$(getent group baci-worker | cut -d: -f3):750" "$(stat -c '%u:%g:%a' /srv/baci-workers/releases)"
+          require_value 'runtime-view root ownership/mode' '0:0:711' "$(stat -c '%u:%g:%a' /var/lib/baci-worker-runtime-views)"
+          require_value 'verifier group membership is empty' '' "$(getent group baci-worker-runtime-verify | cut -d: -f4)"
+          require_value 'verifier account home and shell' '/nonexistent,/usr/sbin/nologin' "$(getent passwd baci-worker-runtime-verify | cut -d: -f6,7)"
+          require_value 'verifier has only its primary group' "$(getent group baci-worker-runtime-verify | cut -d: -f3)" "$(id -G baci-worker-runtime-verify)"
+          for executable in /usr/bin/systemd-run /usr/bin/systemctl /usr/bin/node; do
+            if [[ ! -x "$executable" ]]; then
+              echo "runtime fixture setup failed: required executable missing ($(basename "$executable"))" >&2
+              exit 1
+            fi
+          done
       - name: Run candidate pinning and sandbox contract regressions
         run: |
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_verifier.test.py -v

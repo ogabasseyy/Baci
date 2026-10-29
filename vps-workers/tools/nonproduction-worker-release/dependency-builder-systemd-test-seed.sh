@@ -6,7 +6,24 @@
 # only the modern deploy command enables injection.
 (cd "$source_root" && PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES=false pnpm install --lockfile-only --ignore-scripts)
 (cd "$source_root/vps-workers" && PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES=false pnpm install --lockfile-only --ignore-scripts)
+
+# The source snapshot is the authenticated workspace, not pnpm's mutable
+# install workspace. lockfile-only can still leave node_modules metadata behind;
+# its symlinks are intentionally forbidden by the immutable source validator.
+# Put an explicit generated symlink in that location so this fixture keeps
+# exercising the cleanup contract even when a pnpm version leaves no metadata.
+mkdir -p -- "$source_root/node_modules/.bin"
+ln -s -- "$test_root" "$source_root/node_modules/.bin/generated-fixture-entry"
+find "$source_root" -name node_modules -prune -exec rm -rf -- {} +
+if find "$source_root" -name node_modules -print -quit | grep -q .; then
+  echo "generated pnpm install metadata remains in synthetic source snapshot" >&2
+  exit 1
+fi
 cp -a "$source_root/." "$seed_root/"
+if find "$seed_root" -name node_modules -print -quit | grep -q .; then
+  echo "synthetic immutable source snapshot contains generated pnpm metadata" >&2
+  exit 1
+fi
 python3 "$(dirname "$0")/../../bin/worker_release_dependency_policy_cache.py" \
   --preverify --source "$seed_root" --store "$store_root" --cache "$cache_root" \
   --pnpm "$pnpm_entrypoint" --node /usr/bin/node

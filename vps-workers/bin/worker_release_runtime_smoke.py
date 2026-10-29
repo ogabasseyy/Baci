@@ -50,7 +50,9 @@ def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callab
         "MemoryMax": str(512 * 1024 * 1024), "CPUQuota": "100%",
         "RuntimeMaxSec": str(max_seconds), "LimitNOFILE": "256",
         "LimitFSIZE": str(max_output_bytes), "UMask": "0077",
-        "InaccessiblePaths": "/root /home /run /var/run /tmp /var/tmp /dev/shm /etc /srv /opt /usr/local /var/log /var/cache /var/spool /var/backups",
+        # ProtectHome already masks /root and /home. Avoid duplicate mount
+        # entries and /var/run's alias of /run in the explicit path list.
+        "InaccessiblePaths": "/run /tmp /var/tmp /dev/shm /etc /srv /opt /usr/local /var/log /var/cache /var/spool /var/backups",
     }
     worker_imports = (
         "try { const fs = await import('node:fs'); "

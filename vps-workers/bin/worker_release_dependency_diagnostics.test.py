@@ -1,11 +1,21 @@
 import unittest
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
 
 from worker_release_dependency_diagnostics import (
     MAX_FRESH_VERIFICATION_ELAPSED_MS,
     MAX_RECENT_VERIFICATION_AGE_MS,
+    PnpmStepRejected,
     has_fresh_policy_pass,
     has_policy_pass_marker,
     policy_pass_evidence,
+    policy_evidence_summary,
+    read_diagnostic,
+    write_diagnostic,
+    run_pnpm_checked,
 )
 
 
@@ -45,6 +55,52 @@ class PolicyPassEvidenceTests(unittest.TestCase):
         self.assertIsNone(policy_pass_evidence(stale + fresh, ""))
         self.assertIsNone(policy_pass_evidence(fresh, stale))
         self.assertIsNone(policy_pass_evidence(fresh, fresh))
+
+    def test_safe_policy_evidence_summary_classifications(self):
+        fresh = "✓ Lockfile passes supply-chain policies (1 entry in 5ms)\n"
+        stale = "✓ Lockfile passes supply-chain policies (verified 601s ago)\n"
+        malformed = "progress: Lockfile passes supply-chain policies"
+        self.assertEqual(policy_evidence_summary("", ""), {
+            "classification": "absent", "phrase_lines": 0, "recognized_lines": 0,
+        })
+        self.assertEqual(policy_evidence_summary(fresh, ""), {
+            "classification": "fresh", "phrase_lines": 1, "recognized_lines": 1,
+        })
+        self.assertEqual(policy_evidence_summary(stale, ""), {
+            "classification": "stale", "phrase_lines": 1, "recognized_lines": 1,
+        })
+        self.assertEqual(policy_evidence_summary(malformed, ""), {
+            "classification": "malformed", "phrase_lines": 1, "recognized_lines": 0,
+        })
+        self.assertEqual(policy_evidence_summary(fresh, fresh)["classification"], "ambiguous")
+
+    def test_policy_evidence_metadata_round_trips_only_as_closed_fields(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "diagnostic.json"
+            evidence = {"classification": "absent", "phrase_lines": 0, "recognized_lines": 0}
+            write_diagnostic(path, "preverify-web-install", "policy-pass-marker-missing", 0, evidence)
+            self.assertEqual(read_diagnostic(path, owner_uid=os.geteuid()), {
+                "stage": "preverify-web-install",
+                "category": "policy-pass-marker-missing",
+                "exit_code": 0,
+                "evidence": evidence,
+            })
+            path.unlink()
+            with self.assertRaises(ValueError):
+                write_diagnostic(path, "preverify-web-install", "policy-pass-marker-missing", 0,
+                                 {"classification": "secret=bad", "phrase_lines": 0, "recognized_lines": 0})
+            self.assertIsNone(read_diagnostic(path, owner_uid=os.geteuid()))
+
+    def test_checked_pnpm_failure_suppresses_raw_subprocess_cause(self):
+        raw = subprocess.CalledProcessError(
+            7, ("pnpm", "install"), output="private-token", stderr="ERR_PNPM_TRUST_DOWNGRADE private-token"
+        )
+        with patch("worker_release_dependency_diagnostics.subprocess.run", side_effect=raw):
+            with self.assertRaises(PnpmStepRejected) as caught:
+                run_pnpm_checked(("pnpm", "install"), cwd=".", timeout=1, stage="preverify web-install")
+        self.assertEqual(caught.exception.safe_category, "lockfile-trust-downgrade")
+        self.assertIsNone(caught.exception.__cause__)
+        self.assertTrue(caught.exception.__suppress_context__)
 
 
 if __name__ == "__main__":

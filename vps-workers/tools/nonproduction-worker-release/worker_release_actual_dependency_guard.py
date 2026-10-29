@@ -23,7 +23,7 @@ STAGES = frozenset({
     "source-lock-validation", "web-deploy", "deploy-graph-validation", "workspace-self-link-cleanup",
     "worker-install", "receipt-validation", "payload-validation", "payload-materialization",
     "independent-smoke", "materialized-tree-validation", "resource-scan", "experiment",
-    "preverify-web-install", "preverify-worker-install",
+    "preverify-web-install", "preverify-worker-install", "web-install",
 })
 
 
@@ -32,10 +32,12 @@ class _TransientEntryRace(Exception):
 
 
 class MonitorFailure(RuntimeError):
-    def __init__(self, stage: str, category: str, exit_code: int | None = None):
+    def __init__(self, stage: str, category: str, exit_code: int | None = None,
+                 evidence: dict[str, object] | None = None):
         self.stage = stage if stage in STAGES else "experiment"
         self.category = category
         self.exit_code = exit_code
+        self.evidence = evidence
         super().__init__(self.stage)
 
 
@@ -83,6 +85,10 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
         else:
             category = "operation-error"
     suffix = f" exit={exit_code}" if isinstance(exit_code, int) else ""
+    if isinstance(error, MonitorFailure) and error.evidence is not None:
+        evidence = error.evidence
+        suffix += (f" evidence={evidence['classification']} phrase_lines={evidence['phrase_lines']}"
+                   f" recognized_lines={evidence['recognized_lines']}")
     return f"experiment failure stage={stage} category={category}{suffix}"
 
 

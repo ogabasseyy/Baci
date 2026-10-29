@@ -44,21 +44,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (BuilderRejected, OSError, subprocess.SubprocessError) as exc:
         if isinstance(exc, PnpmStepRejected):
             stage, category, exit_code = exc.safe_stage, exc.safe_category, exc.exit_code
+            evidence = exc.evidence
         elif isinstance(exc, subprocess.TimeoutExpired):
             stage, category, exit_code = "policy-preverify", "preverify-timeout", None
+            evidence = None
         elif isinstance(exc, OSError):
             stage, category, exit_code = "policy-preverify", "filesystem-error", None
+            evidence = None
         else:
             stage, category = policy_rejection_category(str(exc))
             exit_code = None
+            evidence = None
         if args.diagnostic_file is not None:
             try:
-                write_diagnostic(args.diagnostic_file, stage, category, exit_code)
+                write_diagnostic(args.diagnostic_file, stage, category, exit_code, evidence)
             except OSError:
                 pass
         message = f"experiment failure stage={stage} category={category}"
         if exit_code is not None:
             message += f" exit={exit_code}"
+        if evidence is not None:
+            message += (f" evidence={evidence['classification']} phrase_lines={evidence['phrase_lines']}"
+                        f" recognized_lines={evidence['recognized_lines']}")
         print(message, file=sys.stderr)
         return 1
     except Exception:

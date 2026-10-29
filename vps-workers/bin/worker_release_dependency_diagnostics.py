@@ -12,7 +12,7 @@ from pathlib import Path
 from worker_release_dependency_artifacts import BuilderRejected
 
 DIAGNOSTIC_STAGES = frozenset({
-    "policy-preverify", "preverify-web-install", "preverify-worker-install",
+    "policy-preverify", "preverify-web-install", "preverify-worker-install", "web-install", "web-deploy", "worker-install",
 })
 DIAGNOSTIC_CATEGORIES = frozenset({
     "lockfile-trust-downgrade", "minimum-release-age", "frozen-lockfile-mismatch",
@@ -33,21 +33,72 @@ _POLICY_PASS_CACHED = re.compile(
 )
 MAX_RECENT_VERIFICATION_AGE_MS = 10 * 60 * 1000
 MAX_FRESH_VERIFICATION_ELAPSED_MS = 240 * 1000
+POLICY_EVIDENCE_CLASSES = frozenset({"absent", "ambiguous", "malformed", "fresh", "cached", "stale"})
 
 
 class PnpmStepRejected(BuilderRejected):
-    def __init__(self, stage: str, category: str, exit_code: int):
+    def __init__(self, stage: str, category: str, exit_code: int,
+                 evidence: dict[str, object] | None = None):
         self.safe_stage = stage if stage in DIAGNOSTIC_STAGES else "policy-preverify"
         self.safe_category = category if category in DIAGNOSTIC_CATEGORIES else "pnpm-exit"
         self.exit_code = exit_code
+        self.evidence = evidence
         super().__init__(self.safe_stage)
 
 
-def write_diagnostic(path: Path, stage: str, category: str, exit_code: int | None) -> None:
+def policy_evidence_summary(stdout: str, stderr: str) -> dict[str, object]:
+    """Return bounded structural facts about policy output, never output text."""
+    phrase_lines = 0
+    recognized = 0
+    first_evidence: tuple[str, int] | None = None
+    for output in (stdout, stderr):
+        normalized = _ANSI_ESCAPE.sub("", output)
+        for line in normalized.splitlines():
+            if POLICY_PASS_MARKER not in line:
+                continue
+            phrase_lines += 1
+            fresh = _POLICY_PASS_FRESH.fullmatch(line)
+            cached = _POLICY_PASS_CACHED.fullmatch(line)
+            if fresh and int(fresh.group(1)) > 0:
+                elapsed = float(fresh.group(2)) * (1000 if fresh.group(3) == "s" else 1)
+                evidence = ("fresh", int(elapsed))
+            elif cached:
+                age = float(cached.group(1)) * (1000 if cached.group(2) == "s" else 1)
+                evidence = ("cached", int(age))
+            else:
+                continue
+            recognized += 1
+            if first_evidence is None:
+                first_evidence = evidence
+    if phrase_lines == 0:
+        classification = "absent"
+    elif phrase_lines > 1 or recognized > 1:
+        classification = "ambiguous"
+    elif recognized == 0:
+        classification = "malformed"
+    elif first_evidence is None or (
+        first_evidence[0] == "fresh" and first_evidence[1] > MAX_FRESH_VERIFICATION_ELAPSED_MS
+    ) or (
+        first_evidence[0] == "cached" and first_evidence[1] > MAX_RECENT_VERIFICATION_AGE_MS
+    ):
+        classification = "stale"
+    else:
+        classification = first_evidence[0]
+    return {
+        "classification": classification,
+        "phrase_lines": min(phrase_lines, 255),
+        "recognized_lines": min(recognized, 255),
+    }
+
+
+def write_diagnostic(path: Path, stage: str, category: str, exit_code: int | None,
+                     evidence: dict[str, object] | None = None) -> None:
     safe_stage = stage if stage in DIAGNOSTIC_STAGES else "policy-preverify"
     safe_category = category if category in DIAGNOSTIC_CATEGORIES else "operation-error"
     value = {"stage": safe_stage, "category": safe_category,
              "exit_code": exit_code if isinstance(exit_code, int) and 0 <= exit_code <= 255 else None}
+    if evidence is not None:
+        value["evidence"] = _validate_evidence_summary(evidence)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
         payload = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode("ascii")
@@ -74,17 +125,29 @@ def read_diagnostic(path: Path, *, owner_uid: int) -> dict[str, object] | None:
             return None
         raw = os.read(fd, 513)
         value = json.loads(raw)
-        if (not isinstance(value, dict) or set(value) != {"stage", "category", "exit_code"}
+        if (not isinstance(value, dict) or set(value) not in (
+                {"stage", "category", "exit_code"}, {"stage", "category", "exit_code", "evidence"})
                 or value["stage"] not in DIAGNOSTIC_STAGES
                 or value["category"] not in DIAGNOSTIC_CATEGORIES
                 or (value["exit_code"] is not None and (type(value["exit_code"]) is not int
                     or not 0 <= value["exit_code"] <= 255))):
             return None
+        if "evidence" in value:
+            value["evidence"] = _validate_evidence_summary(value["evidence"])
         return value
     except (OSError, ValueError, TypeError):
         return None
     finally:
         os.close(fd)
+
+
+def _validate_evidence_summary(value: dict[str, object]) -> dict[str, object]:
+    if (not isinstance(value, dict) or set(value) != {"classification", "phrase_lines", "recognized_lines"}
+            or value["classification"] not in POLICY_EVIDENCE_CLASSES
+            or type(value["phrase_lines"]) is not int or not 0 <= value["phrase_lines"] <= 255
+            or type(value["recognized_lines"]) is not int or not 0 <= value["recognized_lines"] <= 255):
+        raise ValueError("policy evidence summary is invalid")
+    return value
 
 
 def pnpm_failure_category(output: str) -> str:
@@ -183,6 +246,6 @@ def run_pnpm_checked(command: tuple[str, ...], *, cwd, env=None, timeout: int, s
     except subprocess.CalledProcessError as exc:
         category = pnpm_failure_category((exc.stdout or "") + "\n" + (exc.stderr or ""))
         safe_stage = f"preverify-{stage.split()[-1]}"
-        raise PnpmStepRejected(safe_stage, category, exc.returncode) from exc
+        raise PnpmStepRejected(safe_stage, category, exc.returncode) from None
     except subprocess.TimeoutExpired as exc:
-        raise BuilderRejected(f"pnpm {stage} timed out") from exc
+        raise BuilderRejected(f"pnpm {stage} timed out") from None

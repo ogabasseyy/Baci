@@ -46,6 +46,7 @@ from worker_release_dependency_diagnostics import (
     PnpmStepRejected,
     has_fresh_policy_pass,
     has_policy_pass_marker,
+    policy_evidence_summary,
     run_pnpm_checked,
     write_diagnostic,
 )
@@ -267,7 +268,8 @@ def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/u
                     else has_fresh_policy_pass(stdout, stderr) or has_policy_pass_marker(stdout, stderr)
                 )
                 if stage != "web-deploy" and not evidence_ok:
-                    raise PnpmStepRejected(f"preverify-{stage}", "policy-pass-marker-missing", 0)
+                    raise PnpmStepRejected(f"preverify-{stage}", "policy-pass-marker-missing", 0,
+                                            evidence=policy_evidence_summary(stdout, stderr))
     if before != _input_hashes(source):
         raise BuilderRejected("pnpm changed a lockfile or policy during preverification")
     receipt = make_receipt(source, cache, version, cache_max_bytes=cache_max_bytes)

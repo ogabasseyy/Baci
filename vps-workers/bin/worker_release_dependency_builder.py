@@ -55,6 +55,7 @@ from worker_release_dependency_input_cache import (
     copy_private_policy_cache as _copy_policy_cache,
     validate_offline_store as _validate_store,
 )
+from worker_release_dependency_diagnostics import PnpmStepRejected, write_diagnostic
 
 
 BUILDER_USER = "baci-release-build"
@@ -251,7 +252,7 @@ def build(source_arg: str, expected_sha: str, *, runner=None) -> tuple[dict[str,
         }
         command = _systemd_command(source_copy, scratch, expected_sha, uid, gid, unit)
         if runner is None:
-            run_sandbox(command, scratch, unit, usage_root=BUILD_ROOT)
+            run_sandbox(command, scratch, unit, usage_root=BUILD_ROOT, owner_uid=uid)
         else:
             runner(command, scratch, unit)
         smoke = read_smoke_evidence(scratch, uid)
@@ -287,6 +288,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps({"requested_commit_sha": manifest["requested_commit_sha"], "exact_sha_provenance_verified": False, "runtime_ready": False, "artifact_directory": str(result_dir), "manifest": str(result_dir / MANIFEST_NAME)}, sort_keys=True))
         return 0
     except (BuilderRejected, OSError, subprocess.SubprocessError) as exc:
+        if isinstance(exc, PnpmStepRejected):
+            if args.sandbox_worker: write_diagnostic(Path(args.sandbox_worker[1]) / ".baci-pnpm-error.json", exc.safe_stage, exc.safe_category, exc.exit_code, exc.evidence)
+            print(f"dependency build rejected stage={exc.safe_stage} category={exc.safe_category} exit={exc.exit_code}", file=sys.stderr)
+            return 1
         print(f"dependency build rejected: {exc}", file=sys.stderr)
         return 1
 

@@ -12,7 +12,12 @@ from pathlib import Path
 from worker_release_dependency_artifacts import BuilderRejected, copy_source_tree, validate_payload, verify_runtime_candidates
 from worker_release_dependency_fs import directory_usage, write_smoke_evidence
 from worker_release_dependency_policy_cache import RECEIPT_NAME, TRUSTED_REGISTRY, validate_receipt
-from worker_release_dependency_diagnostics import has_policy_pass_marker
+from worker_release_dependency_diagnostics import (
+    PnpmStepRejected,
+    has_policy_pass_marker,
+    pnpm_failure_category,
+    read_diagnostic,
+)
 from worker_release_dependency_lock_settings import lock_injection_settings
 
 SYSTEMD_RUN = "/usr/bin/systemd-run"
@@ -23,6 +28,17 @@ EXPECTED_PNPM = "11.7.0"
 WORKER_RUNTIME = Path("/srv/baci-workers/runtime")
 WORKER_RELEASES = Path("/srv/baci-workers/releases")
 WORKER_LOCKS = Path("/srv/baci-workers/locks")
+
+
+def run_pnpm_step(stage: str, command: tuple[str, ...], *, cwd: Path, env: dict[str, str], timeout: int):
+    try:
+        return subprocess.run(command, cwd=cwd, env=env, check=True, capture_output=True,
+                              text=True, timeout=timeout)
+    except subprocess.CalledProcessError as exc:
+        output = f"{exc.stdout or ''}\n{exc.stderr or ''}"
+        raise PnpmStepRejected(stage, pnpm_failure_category(output), exc.returncode) from None
+    except subprocess.TimeoutExpired as exc:
+        raise PnpmStepRejected(stage, "preverify-timeout", 124) from None
 MAX_BUILD_SECONDS = 300
 MAX_BUILD_SCRATCH_BYTES = 1536 * 1024 * 1024
 MAX_ENTRIES = 200_000
@@ -177,22 +193,22 @@ def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
     validate_receipt(working, private_cache, private_store / RECEIPT_NAME, version, expected_sha=expected_sha)
     injection_settings = lock_injection_settings(working)
     command_env = os.environ.copy()
-    web_install = subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy",
+    web_install = run_pnpm_step("web-install", (PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy",
                                   "--filter", "@baci/web...", "install", "--prod", "--frozen-lockfile",
                                   "--ignore-scripts", "--ignore-pnpmfile", "--offline",
-                                  "--store-dir", str(private_store)), cwd=working, check=True,
+                                  "--store-dir", str(private_store)), cwd=working,
                                  env={**command_env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": str(injection_settings["pnpm-lock.yaml"]).lower()},
-                                 capture_output=True, text=True, timeout=240)
+                                 timeout=240)
     if not has_policy_pass_marker(web_install.stdout, web_install.stderr):
         raise BuilderRejected("web offline install did not verify lockfile supply-chain policy")
-    subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "--filter", "@baci/web", "--prod", "deploy", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store), str(web_output)), cwd=working, check=True,
-                   env={**command_env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true"},
-                   capture_output=True, text=True, timeout=240)
+    run_pnpm_step("web-deploy", (PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "--filter", "@baci/web", "--prod", "deploy", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store), str(web_output)), cwd=working,
+                  env={**command_env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true"},
+                  timeout=240)
     remove_workspace_self_link(web_output, working)
     workers_root = working / "vps-workers"
-    worker_policy = subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store)), cwd=workers_root, check=True,
-                                   env={**command_env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": str(injection_settings["vps-workers/pnpm-lock.yaml"]).lower()},
-                                   capture_output=True, text=True, timeout=240)
+    worker_policy = run_pnpm_step("worker-install", (PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store)), cwd=workers_root,
+                                  env={**command_env, "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": str(injection_settings["vps-workers/pnpm-lock.yaml"]).lower()},
+                                  timeout=240)
     if not has_policy_pass_marker(worker_policy.stdout, worker_policy.stderr):
         raise BuilderRejected("worker offline install did not verify lockfile supply-chain policy")
     validate_receipt(working, private_cache, private_store / RECEIPT_NAME, version,
@@ -214,7 +230,8 @@ def stop_unit(unit: str) -> None:
     subprocess.run((SYSTEMCTL, "stop", unit), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
 
 
-def run_sandbox(command: tuple[str, ...], scratch: Path, unit: str, *, usage_root: Path | None = None) -> None:
+def run_sandbox(command: tuple[str, ...], scratch: Path, unit: str, *, usage_root: Path | None = None,
+                owner_uid: int | None = None) -> None:
     process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={"PATH": "/usr/bin:/bin"})
     deadline = time.monotonic() + MAX_BUILD_SECONDS + 15
     try:
@@ -225,6 +242,11 @@ def run_sandbox(command: tuple[str, ...], scratch: Path, unit: str, *, usage_roo
                 raise BuilderRejected("dependency build exceeded its wall-clock limit")
             time.sleep(0.25)
         if process.returncode != 0:
+            record = read_diagnostic(scratch / ".baci-pnpm-error.json",
+                                     owner_uid=os.geteuid() if owner_uid is None else owner_uid)
+            if record is not None:
+                raise PnpmStepRejected(str(record["stage"]), str(record["category"]),
+                                        int(record["exit_code"] or 1), record.get("evidence"))
             raise subprocess.CalledProcessError(process.returncode, command)
     except BuilderRejected:
         stop_unit(unit)

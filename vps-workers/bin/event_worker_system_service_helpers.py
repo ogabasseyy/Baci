@@ -17,9 +17,9 @@ UNIT_SOURCE_DIR = Path(__file__).resolve().parents[1] / "systemd"
 BACKUP_ROOT = Path("/var/lib/baci-workers/event-unit-migration")
 SERVICES = ("baci-domain-event-router", "baci-event-delivery-worker", "baci-quiz-finalization")
 REVIEWED_UNIT_SHA256 = {
- "baci-domain-event-router.service": "28846146cc63a70e0816d25d64311eaa0fa43abb8bd7f98802b964578cc734fe",
- "baci-event-delivery-worker.service": "4f50889c6abe833ba61226862c957ff20bb1aac1b07302faf23c66c0ed728e0c",
- "baci-quiz-finalization.service": "11fbe38c82a3a5fc21fb56bf6e037494ea068ff7ca27df6dfcc1ea6df65097ca",
+ "baci-domain-event-router.service": "1305e7134cb22566cf61d2a2dbca2806b294dfd517dee9d1d4d6a6a530f7510e",
+ "baci-event-delivery-worker.service": "38b99b94aa3cf7c980d8f0480cb060dc2af73faed1fc6d5b310521273119ae1a",
+ "baci-quiz-finalization.service": "f2f4ae4dfabcc5e8d40e798d2fc043925ab2f23cc88ee4f07034be710ed552e3",
 }
 LOCKS = {"baci-domain-event-router": "process-domain-events.lock", "baci-event-delivery-worker": "process-event-deliveries.lock", "baci-quiz-finalization": "quiz-finalize.lock"}
 

@@ -1,12 +1,12 @@
 import {
   CHECKOUT_IDEMPOTENCY_STORAGE_KEY,
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCaptureCheckoutFunnelEventOnce,
   mockCheckoutSubmissionState,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   submitPickupPayOnDeliveryOrder,
   useCart,
@@ -99,12 +99,10 @@ it('does not record completion for a zero-due order the server left unpaid', asy
     });
 
   try {
-    render(<CheckoutPage />);
+    renderCheckoutWithStoreRates();
     fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-    fireEvent.click(
-      screen.getByRole('button', { name: /continue to payment/i })
-    );
+    await continueToPaymentAfterPickupCheck();
     const gatewayRadio = (
       await screen.findAllByRole('radio', { name: /paystack/i })
     ).find((radio) => radio.getAttribute('value') === 'paystack');

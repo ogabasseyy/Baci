@@ -23,8 +23,18 @@ describe('remediation cron transition', () => {
     const workerLock = row.indexOf('vercel-error-remediator.lock');
     const globalLock = row.indexOf('error-remediator-global.lock');
     const gate = row.indexOf('worker-release-launch-gate scheduled');
-    const node = row.indexOf('exec /usr/local/bin/node');
-    assert.ok(workerLock >= 0 && globalLock > workerLock && gate > globalLock && node > gate);
+    const node = row.indexOf(`exec ${process.execPath}`);
+    const globalExec = row.indexOf('exec flock -F');
+    const nestedShell = row.indexOf('/bin/bash -lc', globalExec);
+    assert.ok(
+      workerLock >= 0 &&
+        globalExec > workerLock &&
+        globalLock > globalExec &&
+        nestedShell > globalLock &&
+        gate > nestedShell &&
+        node > gate,
+      `expected worker flock, global flock, launch gate, then Node in order: ${row}`
+    );
   });
 
   it('times out with a diagnostic when a legacy lock remains held', () => {

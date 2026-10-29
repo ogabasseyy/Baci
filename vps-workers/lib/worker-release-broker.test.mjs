@@ -53,6 +53,16 @@ function makeFetch({ runChanges = {}, jobChanges = {}, branchSha = sha } = {}) {
       id: 1234, workflow_id: 987, path: policy.workflow, event: 'push', head_branch: 'main',
       head_sha: sha, status: 'in_progress', run_attempt: 2, ...runChanges,
     });
+    if (url.endsWith('/actions/runs/1111')) return Response.json({
+      id: 1111, workflow_id: 987, path: policy.workflow, event: 'push', head_branch: 'main',
+      head_sha: 'b'.repeat(40), status: 'completed', run_attempt: 1,
+    });
+    if (url.endsWith('/actions/runs/1111/attempts/1/jobs?per_page=100')) return Response.json({
+      jobs: [{
+        id: 2222, run_id: 1111, name: 'Sync VPS workers', status: 'completed',
+        head_sha: 'b'.repeat(40), labels: ['baci-release'], runner_name: 'baci-release-01',
+      }],
+    });
     if (url.endsWith('/attempts/2/jobs?per_page=100')) return Response.json({ jobs: [{
       id: 5678, run_id: 1234, name: 'Sync VPS workers', status: 'in_progress', head_sha: sha,
       labels: ['baci-release'], runner_name: 'baci-release-01', ...jobChanges,
@@ -198,6 +208,43 @@ test('GIGL capability smoke is restricted to the deploy workflow capability job'
   }), /active worker job/);
 });
 
+test('recovery status and recovery require the authenticated worker coordinator', async () => {
+  const statusRequest = {
+    operation: 'recovery-status', sourceSha: sha, oidcToken: token(), githubToken: 'job-token',
+  };
+  const statusReceipt = await authorize({ request: statusRequest });
+  assert.equal(statusReceipt.operation, 'recovery-status');
+  assert.equal(statusReceipt.sourceSha, sha);
+  assert.equal('githubToken' in statusReceipt, false);
+  await assert.rejects(
+    authorize({ peerUid: 0, request: statusRequest }),
+    /unauthorized peer/
+  );
+  await assert.rejects(authorize({
+    request: {
+      ...statusRequest,
+      oidcToken: token({ job_workflow_ref: `${policy.repository}/${policy.readinessWorkflow}@refs/heads/main` }),
+    },
+    fetchImpl: makeFetch({ jobChanges: { name: policy.readinessJob } }),
+  }), /job workflow does not match/);
+
+  const recoveryRequest = {
+    operation: 'recover', sourceSha: sha, oidcToken: token(), githubToken: 'job-token',
+    recoveryOf: { run_id: '1111', run_attempt: 1, sha: 'b'.repeat(40), job_id: '2222' },
+  };
+  const recoveryReceipt = await authorize({ request: recoveryRequest });
+  assert.equal(recoveryReceipt.operation, 'recover');
+  assert.deepEqual(recoveryReceipt.recoveryOf, recoveryRequest.recoveryOf);
+  assert.equal('sourceArchive' in recoveryReceipt, false);
+  assert.equal('githubToken' in recoveryReceipt, false);
+  await assert.rejects(authorize({
+    request: { ...recoveryRequest, recoveryOf: { ...recoveryRequest.recoveryOf, job_id: '3333' } },
+  }), /coordinator job is ambiguous/);
+  await assert.rejects(authorize({
+    request: { ...recoveryRequest, recoveryOf: { ...recoveryRequest.recoveryOf, shell: 'true' } },
+  }), /recovery target fields are invalid/);
+});
+
 test('refuses any peer other than the configured release UID and invalid account config', async () => {
   await assert.rejects(authorize({ peerUid: 0 }), /unauthorized peer/);
   await assert.rejects(authorize({ peerUid: 2002 }), /unauthorized peer/);
@@ -220,7 +267,10 @@ test('rejects unknown operations, malformed source SHA, and extra caller-control
 });
 
 test('only the fixed operation set is exposed', () => {
-  assert.deepEqual(policy.operations, ['stage', 'preflight', 'readiness', 'gigl-capability', 'promote', 'health', 'rollback']);
+  assert.deepEqual(policy.operations, [
+    'stage', 'preflight', 'readiness', 'gigl-capability', 'recovery-status', 'recover',
+    'promote', 'health', 'rollback',
+  ]);
   assert.equal(policy.operations.includes('systemctl'), false);
   assert.equal(policy.operations.includes('exec'), false);
 });

@@ -90,11 +90,25 @@ describe('GIGL direct worker cost contract', () => {
     assert.match(coordinatorScript, /operation: 'rollback'/);
     assert.match(
       brokerDispatch,
-      /lease = quiescence\.acquire\(identity\.fence\(\)\)/
+      /quiescence = WorkerQuiesceLeaseManager\(worker_uid=worker_uid, worker_gid=worker_gid\)/
+    );
+    assert.match(
+      brokerDispatch,
+      /lease = quiescence\.acquire\(identity\.fence\(\), previous_sha=prior\)/
     );
     assert.match(
       brokerDispatch,
       /lease = quiescence\.require_active\(identity\.fence\(\)\)/
+    );
+    assert.match(brokerDispatch, /operation in \("recovery-status", "recover"\)/);
+    assert.match(brokerDispatch, /return recovery_status\(source_sha=sha, quiescence=quiescence/);
+    assert.match(
+      brokerDispatch,
+      /return recover\([\s\S]*identity=identity, quiescence=quiescence/
+    );
+    assert.match(
+      coordinatorScript,
+      /recovery-status[\s\S]*operation: 'recover'[\s\S]*recoveryOf: target/
     );
     assert.match(
       quiesceAdapter,

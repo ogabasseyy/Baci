@@ -34,6 +34,16 @@ def _metadata_from_stat(item: os.stat_result) -> tuple[int, ...]:
             item.st_nlink, item.st_size, item.st_mtime_ns, item.st_ctime_ns)
 
 
+def _ancestor_identity(metadata: tuple[int, ...]) -> tuple[int, ...]:
+    """Return path identity fields unaffected by sibling entry changes.
+
+    Trusted roots may also contain separately journaled build results. Creating
+    or removing those siblings changes directory size/link count/timestamps,
+    but does not replace the pinned source path or any ancestor inode.
+    """
+    return metadata[:5]
+
+
 def _open_path_chain(path: Path, *, owner_uid: int) -> tuple[list[int], list[tuple[str, tuple[int, ...]]]]:
     if not path.is_absolute() or path != Path(os.path.normpath(str(path))):
         raise BuilderRejected("source snapshot path must be absolute and normalized")
@@ -134,7 +144,12 @@ def _assert_path_identity(path: Path, trusted_root: Path, owner_uid: int,
                           identities: list[tuple[str, tuple[int, ...]]]) -> None:
     fds, current = _open_path_chain(trusted_root, owner_uid=owner_uid)
     try:
-        if current != identities[:-1]:
+        if (len(current) != len(identities) - 1
+                or any(name != expected_name
+                       or _ancestor_identity(actual_metadata)
+                       != _ancestor_identity(expected_metadata)
+                       for (name, actual_metadata), (expected_name, expected_metadata)
+                       in zip(current, identities[:-1]))):
             raise BuilderRejected("source snapshot ancestor path changed during build")
         opened = os.open(path.name, _DIR_FLAGS, dir_fd=fds[-1])
         try:

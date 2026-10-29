@@ -23,6 +23,7 @@ on:
       - 'vps-workers/bin/worker_release_dependency_supervisor_lifecycle.py'
       - 'vps-workers/bin/worker_release_dependency_supervisor_lifecycle.test.py'
       - 'vps-workers/bin/worker_release_source_snapshot.py'
+      - 'vps-workers/bin/worker_release_source_snapshot.test.py'
       - 'vps-workers/bin/worker_release_result_root.py'
       - 'vps-workers/bin/worker_release_lifecycle.py'
       - 'vps-workers/bin/worker_release_broker.py'
@@ -95,6 +96,7 @@ jobs:
           [[ "$fixture_identity" == "$(stat -c '%d:%i:%u:%g:%a' "$fixture")" ]]
           [[ -z "$(find "$fixture" -mindepth 1 -maxdepth 1 -print -quit)" ]]
           /usr/bin/python3 -B vps-workers/bin/provision-worker-source-extractor.py --apply
+          /usr/bin/python3 -B vps-workers/bin/worker_release_source_snapshot.test.py
           /usr/bin/python3 -B vps-workers/bin/worker_release_source_view_journal.test.py
           /usr/bin/python3 -B vps-workers/bin/worker_release_authenticated_staging.test.py
           WORKER_RELEASE_STAGE_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_authenticated_staging.test.py

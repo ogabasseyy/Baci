@@ -52,6 +52,15 @@ class PinnedSourceSnapshotTests(unittest.TestCase):
         with self.assertRaisesRegex(BuilderRejected, "pin is closed"):
             pinned.verify_unchanged()
 
+    def test_sibling_result_directory_changes_do_not_invalidate_snapshot_path(self):
+        with self._pin() as pinned:
+            sibling = self.anchor / ".source-view-build-result"
+            sibling.mkdir(mode=0o700)
+            (sibling / "output").write_text("builder output\n")
+            pinned.verify_unchanged()
+            shutil.rmtree(sibling)
+            pinned.verify_unchanged()
+
     def test_content_change_after_build_is_detected_even_when_modes_are_restored(self):
         with self._pin() as pinned:
             file = self.snapshot / "pkg" / "package.json"

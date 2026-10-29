@@ -2,12 +2,15 @@ import { expect, it } from 'vitest';
 import { eventPipelineCartCredentialPaths as paths } from './event-pipeline-cart-credential-paths';
 
 it('records only exact cart scoped-signing paths, not service factories', () => {
-  expect(paths).toHaveLength(17);
+  expect(paths).toHaveLength(24);
   expect(new Set(paths.map((p) => JSON.stringify(p))).size).toBe(paths.length);
   for (const path of paths) {
-    if (path[0] !== 'apps/web/src/lib/agentic/ucp-canonical-cart.ts')
+    if (
+      path[0] !== 'apps/web/src/lib/agentic/ucp-canonical-cart.ts' &&
+      path[0] !== 'apps/web/src/scripts/probe-cart-quota.ts'
+    )
       expect(path[0]).toMatch(
-        /^apps\/web\/src\/(app\/api\/storefront\/cart\/|lib\/cart\/(?:scoped-client|realtime-access|device-session|account-link|legacy-canonical-bridge|legacy-scoped-client)\.ts)/
+        /^apps\/web\/src\/(app\/api\/storefront\/cart\/|lib\/cart\/(?:scoped-client|realtime-access|device-session|account-link|legacy-canonical-bridge|legacy-scoped-client|account-request|quota-identity|request-context|request-quota|request-quota-counter|supabase-quota-counter)\.ts)/
       );
     expect(path.slice(-3)).toEqual([
       path.includes('apps/web/src/lib/cart/legacy-scoped-client.ts')

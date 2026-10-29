@@ -50,11 +50,11 @@ export function assertVercelAccess(readAlias = readServingDeploymentId) {
   }
 }
 
-// Covers the sequential job allowance (10 + 50 + 10 + 150 = 220 min:
+// Covers the sequential job allowance (10 + 80 + 10 + 150 = 250 min:
 // vps-drain-readiness, db-migrations, gigl-worker-capability,
 // deploy-production) plus queue and environment-approval slack, so
 // a healthy slow release is never abandoned while it may publish.
-export const RUN_WATCH_TIMEOUT_MS = 300 * 60 * 1000;
+export const RUN_WATCH_TIMEOUT_MS = 330 * 60 * 1000;
 // Worker deploy + verify steps are single-digit minutes when healthy;
 // 30 minutes bounds a hung deploy.sh or SSH session loudly.
 export const WORKER_STEP_TIMEOUT_MS = 30 * 60 * 1000;

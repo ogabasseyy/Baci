@@ -1,4 +1,8 @@
 import { createHash } from 'node:crypto';
+import {
+  type CartQuotaRequestContext,
+  createCartQuotaRequestContext,
+} from './request-quota-context';
 
 import {
   __resetQuotaCountersForTesting,
@@ -50,7 +54,7 @@ export interface CartQuotaResult {
   limit: number;
   remaining: number;
   resetTime: number;
-  /** True when the count came from the degraded per-instance store. */
+  /** True when the shared quota store is degraded. */
   degraded: boolean;
 }
 
@@ -179,13 +183,15 @@ const DEGRADED_LIMITS: Partial<Record<CartQuotaOperation, number>> = {
 };
 
 /**
- * Tenant/principal-scoped cart quotas reusing the Redis window-counter
- * primitive. Complements the proxy per-IP rate limit with budgets that
+ * Tenant/principal-scoped cart quotas using a shared window counter.
+ * Complements the proxy per-IP rate limit with budgets that
  * survive carrier-NAT sharing and bind anonymous creation to one
  * merchant and client.
  */
 export async function checkCartQuota(
-  input: CartQuotaInput
+  input: CartQuotaInput,
+  requestContext?: CartQuotaRequestContext,
+  options?: { skipMemoryFallback?: boolean }
 ): Promise<CartQuotaResult> {
   const budget = CART_QUOTA_BUDGETS[input.operation];
   const requiresSharedStore =
@@ -194,10 +200,14 @@ export async function checkCartQuota(
   const counter = await incrementWindowCounter(
     quotaKey(input),
     budget.windowMs,
-    !requiresSharedStore,
+    !requiresSharedStore && !options?.skipMemoryFallback,
     input.operation.startsWith('bootstrap')
       ? bootstrapMemoryCounters
-      : memoryCounters
+      : memoryCounters,
+    requestContext ??
+      createCartQuotaRequestContext(
+        requiresSharedStore ? 'required' : 'available'
+      )
   );
   const failClosed = counter.degraded && requiresSharedStore;
   const degradedLimit = DEGRADED_LIMITS[input.operation];

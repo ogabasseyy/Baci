@@ -20,10 +20,12 @@ class StageResources:
     KINDS = ("source", "result")
 
     def __init__(self, root: Path | None, root_fd: int | None, owner_uid: int,
-                 stage_uid: int, stage_gid: int, write: Callable[[dict[str, Any]], None]):
+                 resource_uid: int, stage_uid: int, stage_gid: int,
+                 write: Callable[[dict[str, Any]], None]):
         self.root = root
         self.fd = root_fd
         self.owner_uid = owner_uid
+        self.resource_uid = resource_uid
         self.stage_uid = stage_uid
         self.stage_gid = stage_gid
         self.write = write
@@ -31,11 +33,13 @@ class StageResources:
     def journal_fields(self, sha: str, txid: str) -> dict[str, Any]:
         if self.fd is None:
             return {"resource_root_dev": None, "resource_root_ino": None,
+                    "resource_root_uid": None,
                     **{f"{kind}_{field}": None for kind in self.KINDS
                        for field in ("name", "dev", "ino")},
                     **{f"{kind}_state": "disabled" for kind in self.KINDS}}
         info = os.fstat(self.fd)
-        fields = {"resource_root_dev": info.st_dev, "resource_root_ino": info.st_ino}
+        fields = {"resource_root_dev": info.st_dev, "resource_root_ino": info.st_ino,
+                  "resource_root_uid": info.st_uid}
         for kind in self.KINDS:
             fields.update({f"{kind}_name": f".{sha}.{kind}.{txid}",
                            f"{kind}_dev": None, f"{kind}_ino": None,
@@ -51,11 +55,12 @@ class StageResources:
         fd = -1
         try:
             fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self.fd)
-            os.fchown(fd, self.owner_uid, self.stage_gid)
+            resource_gid = os.fstat(self.fd).st_gid
+            os.fchown(fd, self.resource_uid, resource_gid)
             os.fchmod(fd, 0o700)
             os.fsync(fd)
             info = os.fstat(fd)
-            if (info.st_uid != self.owner_uid or info.st_gid != self.stage_gid
+            if (info.st_uid != self.resource_uid or info.st_gid != resource_gid
                     or stat.S_IMODE(info.st_mode) != 0o700):
                 reject("stage resource root ownership or mode is unsafe")
             value[f"{kind}_dev"], value[f"{kind}_ino"] = info.st_dev, info.st_ino
@@ -82,7 +87,7 @@ class StageResources:
                 reject("unrecorded stage resource is not eligible for cleanup")
             root_gid = os.fstat(self.fd).st_gid
             fd = self._open_exact(name, expected_dev=None, expected_ino=None,
-                                  expected_uid=self.owner_uid,
+                                  expected_uid=self.resource_uid,
                                   expected_gid=(root_gid, self.stage_gid))
             try:
                 info = os.fstat(fd)
@@ -98,11 +103,10 @@ class StageResources:
                 reject("stage resource journal identity is incomplete")
             if (entry.st_dev, entry.st_ino) != (dev, ino):
                 reject("stage resource inode changed")
+            expected_uid, expected_gid = self._expected_owner(kind, state)
             fd = self._open_exact(name, expected_dev=dev, expected_ino=ino,
-                                  expected_uid=self.owner_uid)
+                                  expected_uid=expected_uid, expected_gid=expected_gid)
             try:
-                if os.fstat(fd).st_gid != self.stage_gid:
-                    reject("stage resource group changed")
                 self._check_tree_bounds(fd)
             finally:
                 os.close(fd)
@@ -145,8 +149,40 @@ class StageResources:
         return (value[f"{kind}_name"], value[f"{kind}_dev"], value[f"{kind}_ino"],
                 value[f"{kind}_state"])
 
+    def begin_transfer(self, value: dict[str, Any]) -> None:
+        name, dev, ino, state = self._fields(value, "source")
+        if state != "created" or dev is None or ino is None:
+            reject("source resource is not ready for ownership transfer")
+        fd = self._open_exact(name, expected_dev=dev, expected_ino=ino,
+                              expected_uid=self.resource_uid)
+        os.close(fd)
+        value["source_state"] = "transfer"
+        self.write(value)
+
+    def mark_frozen(self, value: dict[str, Any]) -> None:
+        name, dev, ino, state = self._fields(value, "source")
+        if state != "transfer" or dev is None or ino is None:
+            reject("source resource is not in ownership transfer")
+        fd = self._open_exact(name, expected_dev=dev, expected_ino=ino,
+                              expected_uid=self.resource_uid, expected_gid=self.stage_gid)
+        try:
+            if stat.S_IMODE(os.fstat(fd).st_mode) != 0o550:
+                reject("frozen source resource mode is unsafe")
+        finally:
+            os.close(fd)
+        value["source_state"] = "frozen"
+        self.write(value)
+
+    def _expected_owner(self, kind: str, state: str) -> tuple[int | tuple[int, ...], int | tuple[int, ...]]:
+        if kind == "source" and state == "frozen":
+            return self.resource_uid, self.stage_gid
+        if kind == "source" and state == "transfer":
+            return self.resource_uid, (os.fstat(self.fd).st_gid, self.stage_gid)
+        return self.resource_uid, os.fstat(self.fd).st_gid
+
     def _open_exact(self, name: str, *, expected_dev: int | None, expected_ino: int | None,
-                    expected_uid: int, expected_gid: int | tuple[int, ...] | None = None) -> int:
+                    expected_uid: int | tuple[int, ...],
+                    expected_gid: int | tuple[int, ...] | None = None) -> int:
         try:
             fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self.fd)
         except OSError as error:
@@ -154,7 +190,8 @@ class StageResources:
         info = os.fstat(fd)
         expected_group = self.stage_gid if expected_gid is None else expected_gid
         allowed_groups = ((expected_group,) if isinstance(expected_group, int) else expected_group)
-        if (not stat.S_ISDIR(info.st_mode) or info.st_uid != expected_uid
+        allowed_uids = ((expected_uid,) if isinstance(expected_uid, int) else expected_uid)
+        if (not stat.S_ISDIR(info.st_mode) or info.st_uid not in allowed_uids
                 or info.st_gid not in allowed_groups or info.st_mode & 0o022
                 or (expected_dev is not None and (info.st_dev, info.st_ino) != (expected_dev, expected_ino))):
             os.close(fd)

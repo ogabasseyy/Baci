@@ -227,7 +227,8 @@ class StageJournalTests(unittest.TestCase):
             journal.commit()
 
         with self.journal() as journal:
-            result = journal.recover(terminal_attempt_proven=lambda _fence: False)
+            result = journal.recover(terminal_attempt_proven=lambda _fence: True,
+                                     resources_quiesced=lambda _fence: True)
 
         self.assertEqual(result, "committed")
         self.assertEqual((final / "release-file").read_text(), "verified")

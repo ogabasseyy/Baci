@@ -64,6 +64,7 @@ def validate(value: dict[str, Any], *, stage_uid: int, stage_gid: int) -> None:
     expected = {"schema", "phase", "transaction_id", "fence", "archive_sha256",
                 "incoming_name", "release_name", "stage_uid", "stage_gid",
                 "incoming_dev", "incoming_ino", "resource_root_dev", "resource_root_ino",
+                "resource_root_uid",
                 "source_name", "source_dev", "source_ino", "source_state",
                 "result_name", "result_dev", "result_ino", "result_state"}
     if set(value) != expected or value.get("schema") != 1 or value.get("phase") not in PHASES:
@@ -103,11 +104,15 @@ def validate(value: dict[str, Any], *, stage_uid: int, stage_gid: int) -> None:
 
 
 def _validate_resource_fields(value: dict[str, Any], *, sha: str, txid: str) -> None:
-    root_dev, root_ino = value["resource_root_dev"], value["resource_root_ino"]
+    root_dev, root_ino, root_uid = (value["resource_root_dev"], value["resource_root_ino"],
+                                   value["resource_root_uid"])
     if (root_dev is None) != (root_ino is None) or (root_dev is not None and
             (not isinstance(root_dev, int) or root_dev < 0 or not isinstance(root_ino, int) or root_ino <= 0)):
         reject("stage resource root identity is invalid")
     enabled = root_dev is not None
+    if (root_uid is not None) != enabled or (root_uid is not None and
+            (not isinstance(root_uid, int) or isinstance(root_uid, bool) or root_uid < 0)):
+        reject("stage resource root owner is invalid")
     for kind in ("source", "result"):
         name, dev, ino, state = (value[f"{kind}_name"], value[f"{kind}_dev"],
                                  value[f"{kind}_ino"], value[f"{kind}_state"])
@@ -115,12 +120,16 @@ def _validate_resource_fields(value: dict[str, Any], *, sha: str, txid: str) -> 
             if (name, dev, ino, state) != (None, None, None, "disabled"):
                 reject("disabled stage resource has an identity")
             continue
-        if name != f".{sha}.{kind}.{txid}" or state not in ("reserved", "created", "removed"):
+        allowed_states = ("reserved", "created", "removed")
+        if kind == "source":
+            allowed_states += ("transfer", "frozen")
+        if name != f".{sha}.{kind}.{txid}" or state not in allowed_states:
             reject("stage resource name or state is invalid")
         if (dev is None) != (ino is None) or (dev is not None and
                 (not isinstance(dev, int) or dev < 0 or not isinstance(ino, int) or ino <= 0)):
             reject("stage resource inode identity is invalid")
-        if (state == "reserved" and dev is not None) or (state == "created" and dev is None):
+        if ((state == "reserved" and dev is not None)
+                or (state in ("created", "transfer", "frozen") and dev is None)):
             reject("stage resource state lacks its expected inode")
 
 

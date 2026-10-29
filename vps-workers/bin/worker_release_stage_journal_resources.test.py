@@ -112,6 +112,66 @@ class StageResourceJournalTests(unittest.TestCase):
 
         self.assertFalse(source.exists())
 
+    @_fixtures.unittest.skipUnless(os.geteuid() == 0, "cross-identity ownership requires root")
+    def test_extractor_owned_resource_transfer_crash_is_cleanable_after_quiescence(self):
+        import pwd
+
+        extractor = pwd.getpwnam("nobody")
+        worker_gid = os.getgid() + 12345
+        os.chown(self.resource_root, extractor.pw_uid, extractor.pw_gid)
+        self.resource_root.chmod(0o700)
+        kwargs = dict(owner_uid=0, stage_uid=extractor.pw_uid, stage_gid=worker_gid,
+                      resource_root=self.resource_root, resource_uid=extractor.pw_uid)
+        with _fixtures.StageJournal(self.root, **kwargs) as journal:
+            record = journal.begin(_fixtures.FENCE, _fixtures.DIGEST)
+            source = journal.create_source_snapshot()
+            file = source / "source"
+            file.write_text("frozen source")
+            file.chmod(0o440)
+            os.chown(file, extractor.pw_uid, extractor.pw_gid)
+            journal.begin_source_transfer()
+            os.chown(source, extractor.pw_uid, worker_gid)
+            source.chmod(0o550)
+            inode = source.stat().st_ino
+
+        with _fixtures.StageJournal(self.root, **kwargs) as journal:
+            self.assertEqual(journal._require_journal()["source_state"], "transfer")
+            journal.recover(terminal_attempt_proven=lambda fence: fence == _fixtures.FENCE,
+                            resources_quiesced=lambda fence: fence == _fixtures.FENCE)
+        self.assertFalse(source.exists())
+        self.assertEqual(record["source_ino"], inode)
+
+    @_fixtures.unittest.skipUnless(os.geteuid() == 0, "cross-identity ownership requires root")
+    def test_frozen_resource_state_survives_restart_and_removes_exact_inode(self):
+        import pwd
+
+        extractor = pwd.getpwnam("nobody")
+        worker_gid = os.getgid() + 23456
+        os.chown(self.resource_root, extractor.pw_uid, extractor.pw_gid)
+        self.resource_root.chmod(0o700)
+        kwargs = dict(owner_uid=0, stage_uid=extractor.pw_uid, stage_gid=worker_gid,
+                      resource_root=self.resource_root, resource_uid=extractor.pw_uid)
+        with _fixtures.StageJournal(self.root, **kwargs) as journal:
+            journal.begin(_fixtures.FENCE, _fixtures.DIGEST)
+            source = journal.create_source_snapshot()
+            file = source / "source"
+            file.write_text("frozen")
+            file.chmod(0o440)
+            os.chown(file, extractor.pw_uid, extractor.pw_gid)
+            journal.begin_source_transfer()
+            os.chown(file, extractor.pw_uid, worker_gid)
+            os.chown(source, extractor.pw_uid, worker_gid)
+            source.chmod(0o550)
+            journal.mark_source_frozen()
+            inode = source.stat().st_ino
+
+        with _fixtures.StageJournal(self.root, **kwargs) as journal:
+            self.assertEqual(journal._require_journal()["source_state"], "frozen")
+            journal.recover(terminal_attempt_proven=lambda fence: fence == _fixtures.FENCE,
+                            resources_quiesced=lambda fence: fence == _fixtures.FENCE)
+        self.assertFalse(source.exists())
+        self.assertGreater(inode, 0)
+
     def test_incoming_cleanup_requires_quiescence_even_without_resource_root(self):
         with self.journal() as journal:
             journal.begin(_fixtures.FENCE, _fixtures.DIGEST)

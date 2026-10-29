@@ -20,17 +20,20 @@ from worker_release_stage_journal_io import (
 from worker_release_result_root import PinnedResultRoot, pin_result_root
 from worker_release_stage_journal_resources import StageResources
 from worker_release_stage_journal_recovery import recover as _recover_stage
+from worker_release_stage_journal_resource_api import StageJournalResourceAPI
 
 
-class StageJournal:
+class StageJournal(StageJournalResourceAPI):
     """Root-owned journal for one staged incoming release transaction."""
 
     def __init__(self, worker_root: Path, *, owner_uid: int = 0, stage_uid: int | None = None,
-                 stage_gid: int | None = None, resource_root: Path | None = None):
+                 stage_gid: int | None = None, resource_root: Path | None = None,
+                 resource_uid: int | None = None):
         self.root = Path(worker_root)
         self.owner_uid = owner_uid
         self.stage_uid = owner_uid if stage_uid is None else stage_uid
         self.stage_gid = os.getgid() if stage_gid is None else stage_gid
+        self.resource_uid = owner_uid if resource_uid is None else resource_uid
         if os.geteuid() != owner_uid:
             _reject("stage journal must be managed by its trusted owner")
         _trusted_directory(self.root, owner_uid)
@@ -46,11 +49,12 @@ class StageJournal:
             if opened.st_uid != owner_uid or opened.st_mode & 0o022:
                 _reject("release staging directory changed during open")
             if resource_root is not None:
-                self._resources_pin = pin_result_root(Path(resource_root), owner_uid=owner_uid)
+                self._resources_pin = pin_result_root(Path(resource_root), owner_uid=self.resource_uid)
             self.resources = StageResources(
                 Path(resource_root) if resource_root is not None else None,
                 self._resources_pin.fd if self._resources_pin is not None else None,
-                owner_uid, self.stage_uid, self.stage_gid, lambda value: self._write(value),
+                owner_uid, self.resource_uid, self.stage_uid, self.stage_gid,
+                lambda value: self._write(value),
             )
         except BaseException:
             self.close()
@@ -94,6 +98,8 @@ class StageJournal:
         info = os.fstat(self._resources_pin.fd)
         if (info.st_dev, info.st_ino) != (value.get("resource_root_dev"), value.get("resource_root_ino")):
             _reject("stage resource root inode changed")
+        if info.st_uid != value.get("resource_root_uid"):
+            _reject("stage resource root ownership changed")
 
     def begin(self, fence: dict[str, Any], archive_sha256: str) -> dict[str, Any]:
         if self._resources_pin is not None:
@@ -127,31 +133,6 @@ class StageJournal:
         self._verify_resource_root(value)
         self._write(value, create=True)
         return dict(value)
-
-    def create_source_snapshot(self) -> Path:
-        value = self._require_journal()
-        self._verify_resource_root(value)
-        result = self.resources.create(value, "source")
-        self._verify_resource_root(value)
-        return result
-
-    def create_builder_result(self) -> Path:
-        """Record the result directory inode before a builder writes into it."""
-        value = self._require_journal()
-        self._verify_resource_root(value)
-        result = self.resources.create(value, "result")
-        self._verify_resource_root(value)
-        return result
-
-    def remove_source_snapshot(self) -> None:
-        value = self._require_journal()
-        self._verify_resource_root(value)
-        self.resources.remove(value, "source")
-
-    def remove_builder_result(self) -> None:
-        value = self._require_journal()
-        self._verify_resource_root(value)
-        self.resources.remove(value, "result")
 
     def create_incoming(self) -> Path:
         value = self._require_journal()

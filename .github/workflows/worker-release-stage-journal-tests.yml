@@ -7,9 +7,22 @@ on:
       - 'vps-workers/bin/worker_release_stage_journal_io.py'
       - 'vps-workers/bin/worker_release_stage_journal_resources.py'
       - 'vps-workers/bin/worker_release_stage_journal_recovery.py'
+      - 'vps-workers/bin/worker_release_stage_journal_resource_api.py'
       - 'vps-workers/bin/worker_release_stage_journal.test.py'
+      - 'vps-workers/bin/worker_release_stage_journal_committed_recovery.test.py'
       - 'vps-workers/bin/worker_release_stage_journal_resources.test.py'
       - 'vps-workers/bin/worker_release_result_root.py'
+      - 'vps-workers/bin/worker_release_systemd_extractor.py'
+      - 'vps-workers/bin/worker_release_systemd_contract.py'
+      - 'vps-workers/bin/worker_release_systemd_extractor.test.py'
+      - 'vps-workers/bin/worker_release_archive_extract_child.py'
+      - 'vps-workers/bin/provision-worker-source-extractor.py'
+      - 'vps-workers/bin/worker_release_descriptor_cgroup.py'
+      - 'vps-workers/bin/worker_release_descriptor_freeze.py'
+      - 'vps-workers/bin/worker_release_descriptor_process.py'
+      - 'vps-workers/bin/worker_release_source_snapshot.py'
+      - 'vps-workers/systemd/baci-worker-source-extract@.service'
+      - 'vps-workers/systemd/baci-worker-source-extract.tmpfiles'
       - '.github/workflows/worker-release-stage-journal-tests.yml'
   workflow_dispatch:
 
@@ -19,12 +32,15 @@ permissions:
 jobs:
   disposable-root-journal-tests:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Run isolated journal regressions as root
         run: |
+          sudo /usr/bin/python3 -B vps-workers/bin/provision-worker-source-extractor.py --apply
           sudo /usr/bin/python3 -B vps-workers/bin/worker_release_stage_journal.test.py
+          sudo /usr/bin/python3 -B vps-workers/bin/worker_release_stage_journal_committed_recovery.test.py
           sudo /usr/bin/python3 -B vps-workers/bin/worker_release_stage_journal_resources.test.py
+          sudo env WORKER_RELEASE_EXTRACT_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_systemd_extractor.test.py

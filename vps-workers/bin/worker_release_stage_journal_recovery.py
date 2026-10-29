@@ -9,12 +9,6 @@ from worker_release_stage_journal_io import reject
 def recover(journal, *, terminal_attempt_proven: Callable[[dict[str, Any]], bool],
             current_link: str, resources_quiesced: Callable[[dict[str, Any]], bool] | None) -> str:
     value = journal._require_journal()
-    if value["phase"] == "committed":
-        journal._verify_directory(value["release_name"], value, expected_uid=journal.owner_uid,
-                                  expected_gid=journal.stage_gid)
-        journal._verify_committed_tree(value)
-        journal._unlink_journal()
-        return "committed"
     if terminal_attempt_proven(value["fence"]) is not True:
         reject("stage recovery requires proof that the owning run attempt is terminal")
     if resources_quiesced is None or resources_quiesced(value["fence"]) is not True:
@@ -22,15 +16,17 @@ def recover(journal, *, terminal_attempt_proven: Callable[[dict[str, Any]], bool
     if journal._current_sha(current_link) == value["fence"]["sha"]:
         reject("refusing to discard the active release")
     journal._verify_resource_root(value)
+    if value["phase"] == "committed":
+        journal.resources.assert_removed(value)
+        journal._verify_directory(value["release_name"], value, expected_uid=journal.owner_uid,
+                                  expected_gid=journal.stage_gid)
+        journal._verify_committed_tree(value)
+        journal._unlink_journal()
+        return "committed"
     incoming_exists = journal._exists(value["incoming_name"])
     final_exists = journal._exists(value["release_name"])
     if incoming_exists and final_exists:
         reject("both incoming and published release paths exist")
-    resource_exists = any(
-        journal.resources._exists(journal.resources._fields(value, kind)[0])
-        for kind in journal.resources.KINDS
-        if value.get(f"{kind}_state") != "disabled"
-    )
     journal.resources.recover(value, quiescence_proven=True)
     if incoming_exists:
         if value["incoming_ino"] is None:

@@ -240,15 +240,21 @@ def verify_runtime_candidates(payload: Path) -> dict[str, str]:
     worker_node_modules = payload / "root" / "node_modules"
     dotenv = worker_node_modules / "dotenv"
     try:
-        web_tsx.resolve(strict=True).relative_to(payload.resolve(strict=True))
+        tsx_cli = web_tsx.resolve(strict=True)
+        tsx_cli.relative_to(payload.resolve(strict=True))
         dotenv.resolve(strict=True).relative_to(payload.resolve(strict=True))
     except (OSError, RuntimeError, ValueError) as exc:
         raise BuilderRejected("web tsx or worker dotenv dependency is absent or escapes payload") from exc
-    if not web_tsx.is_file() or not os.access(web_tsx, os.X_OK) or not dotenv.is_dir():
+    if not tsx_cli.is_file() or not dotenv.is_dir():
         raise BuilderRejected("web tsx or worker dotenv dependency is not runnable")
     env = {"PATH": "/usr/bin:/bin", "HOME": "/nonexistent", "NODE_ENV": "production"}
     try:
-        result = subprocess.run((str(web_tsx), "--version"), cwd=web, env=env, check=True, capture_output=True, text=True, timeout=20)
+        # The builder's dedicated filesystem is mounted noexec. Invoke the
+        # already-contained JS CLI through the fixed Node runtime so package
+        # code remains subject to the systemd sandbox rather than mount flags.
+        result = subprocess.run(("/usr/bin/node", str(tsx_cli), "--version"),
+                                cwd=web, env=env, check=True, capture_output=True,
+                                text=True, timeout=20)
         worker_runtime_smoke = (
             "Promise.all([import('dotenv'), import('@supabase/supabase-js'), "
             "import('expo-server-sdk')]).then(([dotenv, supabase, expo]) => { "

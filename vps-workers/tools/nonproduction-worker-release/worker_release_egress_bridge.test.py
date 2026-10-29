@@ -160,6 +160,33 @@ class EgressProtocolTests(unittest.TestCase):
         self.assertFalse(bridge_thread.is_alive())
         self.assertFalse(broker_thread.is_alive())
 
+    def test_relay_flushes_data_before_forwarding_peer_half_close(self):
+        from worker_release_egress_protocol import relay_tunnel
+
+        app, bridge = socket.socketpair()
+        upstream, registry = socket.socketpair()
+        failures = []
+
+        def relay():
+            try:
+                relay_tunnel(bridge, upstream, idle_timeout=2, total_timeout=5)
+            except Exception as error:
+                failures.append(error)
+
+        thread = threading.Thread(target=relay, daemon=True)
+        thread.start()
+        app.settimeout(2)
+        registry.sendall(b"response-before-fin")
+        registry.close()
+        self.assertEqual(app.recv(128), b"response-before-fin")
+        app.shutdown(socket.SHUT_WR)
+        self.assertEqual(app.recv(1), b"")
+        thread.join(timeout=2)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(failures, [])
+        for sock in (app, bridge, upstream):
+            sock.close()
+
 
 if __name__ == "__main__":
     unittest.main()

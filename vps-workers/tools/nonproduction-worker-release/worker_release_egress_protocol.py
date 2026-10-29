@@ -134,11 +134,12 @@ def relay_tunnel(left, right, *, max_bytes=MAX_TUNNEL_BYTES,
     for sock in sockets:
         sock.setblocking(False)
     readers = set(sockets)
+    shutdown_pending = set()
     buffers = {left: bytearray(), right: bytearray()}
     total = 0
     started = time.monotonic()
     last_activity = started
-    while readers or buffers[left] or buffers[right]:
+    while readers or buffers[left] or buffers[right] or shutdown_pending:
         now = time.monotonic()
         if now - started >= total_timeout or now - last_activity >= idle_timeout:
             raise EgressRejected("egress tunnel time bound exceeded")
@@ -154,10 +155,13 @@ def relay_tunnel(left, right, *, max_bytes=MAX_TUNNEL_BYTES,
             if not chunk:
                 readers.discard(source)
                 destination = right if source is left else left
-                try:
-                    destination.shutdown(socket.SHUT_WR)
-                except OSError:
-                    pass
+                if buffers[destination]:
+                    shutdown_pending.add(destination)
+                else:
+                    try:
+                        destination.shutdown(socket.SHUT_WR)
+                    except OSError:
+                        pass
                 continue
             total += len(chunk)
             if total > max_bytes:
@@ -174,6 +178,12 @@ def relay_tunnel(left, right, *, max_bytes=MAX_TUNNEL_BYTES,
                 raise EgressRejected("egress tunnel write failed")
             del buffers[destination][:sent]
             last_activity = time.monotonic()
+            if not buffers[destination] and destination in shutdown_pending:
+                shutdown_pending.discard(destination)
+                try:
+                    destination.shutdown(socket.SHUT_WR)
+                except OSError:
+                    pass
 
 
 

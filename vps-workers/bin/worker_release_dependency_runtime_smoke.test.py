@@ -37,6 +37,11 @@ class WorkerDependencyRuntimeSmokeTests(unittest.TestCase):
 
             self.assertEqual(evidence, {"web_tsx": "passed", "worker_dotenv": "passed"})
             self.assertEqual(run.call_count, 2)
+            tsx_command = run.call_args_list[0].args[0]
+            self.assertEqual(tsx_command[:2], ("/usr/bin/node", str(
+                (payload / "web/node_modules/tsx/cli.mjs").resolve())))
+            self.assertEqual(tsx_command[-1], "--version")
+            self.assertEqual(run.call_args_list[0].kwargs["cwd"], payload / "web")
             command = run.call_args_list[1].args[0]
             self.assertEqual(command[:3], ("/usr/bin/node", "--input-type=module", "-e"))
             for module_name in ("dotenv", "@supabase/supabase-js", "expo-server-sdk"):

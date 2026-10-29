@@ -262,10 +262,18 @@ class DependencyBuilderTests(unittest.TestCase):
                 self.assertFalse((scratch / "pnpm-cache").exists())
                 return {"web_tsx": "passed", "worker_dotenv": "passed"}
 
+            original_mkdir = os.mkdir
+
+            def sandbox_mkdir(path, mode=0o777, *, dir_fd=None):
+                original_mkdir(path, mode, dir_fd=dir_fd)
+                if host_uid == 0 and Path(path) in {scratch / "payload", scratch / "payload/root"}:
+                    os.chown(path, sandbox_uid, sandbox_gid)
+
             with patch.dict(os.environ, {"HOME": str(scratch / "home")}), \
                  patch.object(sandbox, "SEED_OWNER_UID", host_uid), \
                  patch.object(sandbox.os, "geteuid", return_value=sandbox_uid), \
                  patch.object(sandbox.os, "getgid", return_value=sandbox_gid), \
+                 patch.object(sandbox.os, "mkdir", side_effect=sandbox_mkdir), \
                  patch.object(sandbox, "copy_source_tree", side_effect=copy_source), \
                  patch.object(sandbox, "run_bounded_capture", side_effect=_bounded_run_adapter(run)), \
                  patch.object(sandbox, "validate_receipt", side_effect=lambda *args, **kwargs: receipt_validations.append((args, kwargs))), \

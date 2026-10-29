@@ -30,6 +30,37 @@ case "$operation" in
       ln -s "$HERMESC_SRC" "$HERMESC_DST"
       chmod +x "$HERMESC_DST/linux64-bin/hermesc" 2>/dev/null || true
     fi
+    # GitHub renamed the Hermes archive's root from facebook-hermes-* to
+    # meta-hermes-*. RN 0.86 only strips the former, leaving CMakeLists.txt
+    # one directory too deep. Keep accepting both archive names.
+    HERMES_GRADLE="$GITHUB_WORKSPACE/node_modules/react-native/ReactAndroid/hermes-engine/build.gradle.kts"
+    node - "$HERMES_GRADLE" <<'NODE'
+const fs = require('node:fs');
+const file = process.argv[2];
+const original = 'if (this.path.startsWith("facebook-hermes-")) {';
+const updated = 'if (this.path.startsWith("facebook-hermes-") || this.path.startsWith("meta-hermes-")) {';
+const content = fs.readFileSync(file, 'utf8');
+const count = (text) => content.split(text).length - 1;
+if (count(updated) === 1 && count(original) === 0) process.exit(0);
+if (count(original) !== 1 || count(updated) !== 0) {
+  throw new Error('Unexpected Hermes archive extraction rule');
+}
+// Replace the file atomically: pnpm may hard-link dependency files to its
+// shared store, which must not be modified by this release-only workaround.
+const temporary = `${file}.${process.pid}.tmp`;
+let wroteTemporary = false;
+try {
+  fs.writeFileSync(temporary, content.replace(original, updated), {
+    mode: fs.statSync(file).mode & 0o777,
+    flag: 'wx',
+  });
+  wroteTemporary = true;
+  fs.renameSync(temporary, file);
+  wroteTemporary = false;
+} finally {
+  if (wroteTemporary) fs.rmSync(temporary, { force: true });
+}
+NODE
     ;;
   link-cmdline-tools-latest)
     SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/.android/sdk}}"

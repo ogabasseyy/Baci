@@ -213,6 +213,13 @@ class BuilderUnitJournal:
             supplied = None if info is None else (info.st_dev, info.st_ino)
             if (recorded is None and supplied is None) or recorded == supplied:
                 return
+            if supplied is None:
+                # The caller may supply None only after proving systemd has
+                # collected the exact unit cgroup. Clear the now-stale inode
+                # while replaying a durable drained transition.
+                record.update(cgroup_dev=None, cgroup_ino=None)
+                self._write(record)
+                return
             raise BuilderJournalRejected("drained builder journal cgroup identity changed")
         if record["phase"] not in ("prepared", "running"):
             raise BuilderJournalRejected("builder journal cannot record drained state")
@@ -221,6 +228,9 @@ class BuilderUnitJournal:
                     != (info.st_dev, info.st_ino)):
                 raise BuilderJournalRejected("builder journal cgroup inode changed")
             record.update(cgroup_dev=info.st_dev, cgroup_ino=info.st_ino)
+        else:
+            # None is recorded only after the caller's collected-unit proof.
+            record.update(cgroup_dev=None, cgroup_ino=None)
         record["phase"] = "drained"
         self._write(record)
 
@@ -263,8 +273,7 @@ def recover_recorded_builder(journal: BuilderUnitJournal, fence: dict[str, objec
                                  deadline=recovery_deadline, query=bounded_query,
                                  trusted_root=trusted_root)
         except (OSError, RuntimeError) as error: raise BuilderJournalRejected("builder recovery collected-unit proof failed") from error
-        if record["phase"] != "drained":
-            journal.mark_drained(None)
+        journal.mark_drained(None)
         return "drained"
     except OSError as error:
         raise BuilderJournalRejected("builder recovery cannot open the cgroup hierarchy") from error

@@ -110,6 +110,22 @@ def _drain_unpinned_until_proven(unit: str, process: subprocess.Popen, *,
                     journal=journal, uid=uid, trusted_root=trusted_root)
 
 
+def _prove_successful_unit_cgroup(unit: str, fd: int, info: os.stat_result,
+                                  process: subprocess.Popen, *, deadline: float,
+                                  uid: int, trusted_root):
+    """Return the cgroup identity, or prove its exact systemd-collected absence."""
+    try:
+        require_empty_cgroup(fd, info.st_dev, info.st_ino)
+    except FileNotFoundError:
+        # systemd can collect a completed transient cgroup between wait() and
+        # the final descriptor read. ENOENT alone proves nothing; the drain
+        # helper rechecks unit state, exact system.slice absence, and UID scans.
+        _drain_until_proven(unit, fd, info, process, deadline=deadline,
+                            journal=None, uid=uid, trusted_root=trusted_root)
+        return None
+    return info
+
+
 def supervise_builder_unit(source: Path, scratch: Path, expected_sha: str, uid: int,
                            gid: int, unit: str, *, usage_root: Path,
                            unit_journal=None) -> None:
@@ -232,9 +248,12 @@ def supervise_builder_unit(source: Path, scratch: Path, expected_sha: str, uid: 
             raise BuilderSupervisorRejected("builder systemd unit failed")
         _validate_live_unit(unit, expected_path, uid, gid, source, scratch) if _systemctl(
             "show", "--property=LoadState", "--value", unit) == "loaded" else None
-        require_empty_cgroup(cgroup_fd, cgroup_info.st_dev, cgroup_info.st_ino)
+        drained_identity = _prove_successful_unit_cgroup(
+            unit, cgroup_fd, cgroup_info, process, deadline=cleanup_deadline,
+            uid=uid, trusted_root=trusted_root,
+        )
         if unit_journal is not None:
-            unit_journal.mark_drained(cgroup_info)
+            unit_journal.mark_drained(drained_identity)
         unit_quiesced = True
     except BuilderQuiescenceUnproven:
         raise

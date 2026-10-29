@@ -64,6 +64,23 @@ class BuilderUnitJournalTests(unittest.TestCase):
             journal.clear(FENCE, resources_removed=lambda item: item["scratch_ino"] == self.scratch.stat().st_ino)
             self.assertIsNone(journal.read())
 
+    def test_collected_unit_proof_replaces_pinned_inode_with_absence(self):
+        with BuilderUnitJournal(self.worker_root, owner_uid=os.getuid()) as journal:
+            journal.begin(FENCE, UNIT, self.source, self.scratch, self.uid, self.gid)
+            cgroup = SimpleNamespace(st_dev=7, st_ino=8)
+            journal.mark_running(cgroup)
+            journal.mark_drained(cgroup)
+            # Caller reaches this transition only after proving the exact unit
+            # was collected and the exact cgroup path is absent.
+            journal.mark_drained(None)
+            record = journal.read()
+            self.assertEqual(record["phase"], "drained")
+            self.assertIsNone(record["cgroup_dev"])
+            self.assertIsNone(record["cgroup_ino"])
+            journal.mark_drained(None)
+            with self.assertRaisesRegex(BuilderJournalRejected, "identity changed"):
+                journal.mark_drained(cgroup)
+
     def test_unresolved_journal_prevents_a_second_builder_unit(self):
         with BuilderUnitJournal(self.worker_root, owner_uid=os.getuid()) as journal:
             journal.begin(FENCE, UNIT, self.source, self.scratch, self.uid, self.gid)
@@ -122,6 +139,9 @@ class BuilderUnitJournalTests(unittest.TestCase):
     def test_only_missing_unit_child_with_not_found_load_state_is_recoverable(self):
         with BuilderUnitJournal(self.worker_root, owner_uid=os.getuid()) as journal:
             journal.begin(FENCE, UNIT, self.source, self.scratch, self.uid, self.gid)
+            cgroup = SimpleNamespace(st_dev=7, st_ino=8)
+            journal.mark_running(cgroup)
+            journal.mark_drained(cgroup)
             deadlines = []
             def bounded(_systemctl, deadline, _rejected, *_args):
                 deadlines.append(deadline)
@@ -141,7 +161,10 @@ class BuilderUnitJournalTests(unittest.TestCase):
                     proof_query("show", f"--property={prop}", "--value", UNIT)
                 self.assertEqual(deadlines, [proof_deadline] * 6)
             self.assertEqual(result, "drained")
-            self.assertEqual(journal.read()["phase"], "drained")
+            record = journal.read()
+            self.assertEqual(record["phase"], "drained")
+            self.assertIsNone(record["cgroup_dev"])
+            self.assertIsNone(record["cgroup_ino"])
 
     def test_missing_unit_cgroup_requires_collected_unit_process_proof(self):
         with BuilderUnitJournal(self.worker_root, owner_uid=os.getuid()) as journal:

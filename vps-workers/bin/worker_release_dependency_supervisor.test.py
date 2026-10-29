@@ -192,6 +192,37 @@ class BuilderSupervisorContractTests(unittest.TestCase):
 
 
 class QuarantineTests(unittest.TestCase):
+    def test_success_path_accepts_cgroup_collection_only_after_drain_proof(self):
+        unit = f"baci-worker-deps-{'a' * 12}-{'b' * 32}.service"
+        with tempfile.TemporaryFile() as stream:
+            info = os.fstat(stream.fileno())
+            process = Mock()
+            trusted_root = (1, 2, 3, 4)
+            with patch.object(supervisor, "require_empty_cgroup",
+                              side_effect=FileNotFoundError("cgroup.events")), patch.object(
+                supervisor, "_drain_until_proven") as drain:
+                result = supervisor._prove_successful_unit_cgroup(
+                    unit, stream.fileno(), info, process, deadline=10,
+                    uid=812, trusted_root=trusted_root)
+            self.assertIsNone(result)
+            drain.assert_called_once_with(unit, stream.fileno(), info, process,
+                                          deadline=10, journal=None, uid=812,
+                                          trusted_root=trusted_root)
+
+    def test_success_path_does_not_mask_non_enoent_cgroup_proof_failures(self):
+        unit = f"baci-worker-deps-{'a' * 12}-{'b' * 32}.service"
+        with tempfile.TemporaryFile() as stream:
+            info = os.fstat(stream.fileno())
+            proof_error = CgroupProofRejected("cgroup proof malformed")
+            with patch.object(supervisor, "require_empty_cgroup", side_effect=proof_error), patch.object(
+                supervisor, "_drain_until_proven") as drain:
+                with self.assertRaises(CgroupProofRejected) as caught:
+                    supervisor._prove_successful_unit_cgroup(
+                        unit, stream.fileno(), info, Mock(), deadline=10,
+                        uid=812, trusted_root=(1, 2, 3, 4))
+            self.assertIs(caught.exception, proof_error)
+            drain.assert_not_called()
+
     def test_unexpected_postspawn_proof_error_is_quarantined(self):
         with patch.object(supervisor, "_drain_until_proven",
                           side_effect=CgroupProofRejected("descriptor changed")):

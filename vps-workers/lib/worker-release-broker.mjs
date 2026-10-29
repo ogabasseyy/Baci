@@ -137,7 +137,8 @@ async function authenticateJob({ oidcToken, githubToken, operation, fetchImpl, n
   if (!job || job.run_id !== run.id || !expectedJobNames.includes(job.name) || job.status !== 'in_progress' || job.head_sha !== claims.sha ||
       !Array.isArray(job.labels) || !job.labels.includes(WORKER_RELEASE_BROKER_POLICY.runnerLabel) || typeof job.runner_name !== 'string' || !job.runner_name) fail('signed OIDC check run is not the active worker job');
   const ref = await githubJson(fetchImpl, `${GITHUB_API}/repos/${repo}/git/ref/heads/main`, githubToken, budget);
-  if (ref.object?.sha !== claims.sha) fail('coordinator SHA is no longer current main');
+  const allowInFlightRecovery = ['health', 'rollback'].includes(operation);
+  if (!allowInFlightRecovery && ref.object?.sha !== claims.sha) fail('coordinator SHA is no longer current main');
   return { claims, run, job, currentMainSha: ref.object.sha };
 }
 
@@ -208,7 +209,13 @@ export async function authorizeBrokerRequest({ peerUid, expectedReleaseUid, work
   if (operation === 'stage' && !/^[0-9a-f]{64}$/.test(bundleSha256 ?? '')) fail('bundle digest is invalid');
   const budget = createDeadlineBudget({ clock: deadlineClock });
   const verifiedJob = await authenticateJob({ oidcToken, githubToken, operation, fetchImpl, now, budget });
-  if (verifiedJob.currentMainSha !== sourceSha) fail('source SHA is not current main');
+  // A promotion already in flight must still be health-checked or rolled back
+  // if main advances during the deployment. The privileged Python dispatcher
+  // separately requires the exact persisted run fence/state for both actions.
+  // All new mutations and stage/readiness operations remain pinned to main.
+  if (!['health', 'rollback'].includes(operation) && verifiedJob.currentMainSha !== sourceSha) {
+    fail('source SHA is not current main');
+  }
   let recoveryOf;
   if (operation === 'recover') {
     const target = request.recoveryOf;

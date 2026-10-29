@@ -107,6 +107,12 @@ class WorkerQuiesceLeaseTests(unittest.TestCase):
         lease = manager.acquire(FENCE)
         self.assertIs(manager.acquire(FENCE), lease)
         self.assertIs(manager.require_active(FENCE), lease)
+        # Broker lifecycle code passes the full authenticated identity on its
+        # abort path; lease checks normalize it to the reduced lease key.
+        self.assertTrue(manager.is_active_for({**FENCE, "job_id": "5678",
+                                               "repository": "ogabasseyy/Baci",
+                                               "workflow": "deploy.yml",
+                                               "ref": "refs/heads/main"}))
         self.assertTrue(lease.active)
         self.assertFalse(self.marker.exists())
         with self.assertRaisesRegex(QuiesceLeaseRejected, "another authenticated release"):

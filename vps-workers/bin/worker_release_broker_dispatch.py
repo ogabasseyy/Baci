@@ -8,6 +8,38 @@ def _health_after_restart(lease, probe):
     lease.start_health()
     return probe()
 
+
+def _latch_matches_authenticated_fence(latch, fence):
+    """Compare the latch's deliberately reduced fence to authenticated identity."""
+    if not isinstance(latch, dict) or not isinstance(latch.get("fence"), dict):
+        return False
+    latched = latch["fence"]
+    if any(latched.get(key) != fence.get(key) for key in ("run_id", "run_attempt", "sha")):
+        return False
+    # The durable latch stores the authenticated job id beside its reduced
+    # run fence; missing or empty IDs cannot authorize state-less recovery.
+    job_id = latch.get("job_id")
+    return (isinstance(job_id, str) and bool(job_id)
+            and isinstance(fence.get("job_id"), str) and bool(fence["job_id"])
+            and job_id == fence["job_id"])
+
+
+def _release_state_matches_fence(operation, state, sha, fence, latch):
+    """Permit lifecycle actions only for the exact persisted deployment fence."""
+    latch_recovery = _latch_matches_authenticated_fence(latch, fence)
+    if state is None:
+        return operation == "rollback" and latch_recovery
+    return state.get("fence") == fence and state.get("sha") == sha
+
+
+def _latched_operation_is_allowed(operation, latch, active, fence):
+    """Gate broker operations consistently when a durable latch outlives its lease."""
+    if operation in ("recovery-status", "recover") or not latch:
+        return True
+    if not _latch_matches_authenticated_fence(latch, fence):
+        return False
+    return active or operation == "rollback"
+
 def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid: int) -> Callable[[int, dict[str, Any]], dict[str, Any]]:
     """Build fixed release operations; commands and filesystem targets are constants."""
     if broker.os.geteuid() != 0 or release_uid <= 0 or worker_uid <= 0 or worker_gid < 0 or release_uid == worker_uid:
@@ -64,12 +96,13 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
         if not broker.re.fullmatch(r"[0-9a-f]{40}", sha) or operation != request.get("operation") or not broker.re.fullmatch(r"[1-9][0-9]{0,19}", str(run_id)) or not isinstance(run_attempt, int) or run_attempt < 1 or not broker.re.fullmatch(r"[1-9][0-9]{0,19}", str(job_id)):
             raise broker.BrokerProtocolError("trusted dispatcher returned invalid source identity")
         recovery_of = verified.get("recoveryOf")
-        fence = {"run_id": str(run_id), "run_attempt": run_attempt, "sha": sha}
+        lease_fence = {"run_id": str(run_id), "run_attempt": run_attempt, "sha": sha}
+        authenticated_fence = {**lease_fence, "job_id": str(job_id)}
         if operation in ("stage", "readiness", "gigl-capability", "recovery-status", "recover", "promote", "health", "rollback"):
             latch = quiescence.recovery_latch()
-            if latch and not quiescence.is_active_for(fence):
-                if operation not in ("recovery-status", "recover") and (operation != "rollback" or latch.get("fence") != fence):
-                    raise broker.BrokerProtocolError("worker release recovery latch blocks this operation")
+            active = quiescence.is_active_for(lease_fence)
+            if not _latched_operation_is_allowed(operation, latch, active, authenticated_fence):
+                raise broker.BrokerProtocolError("worker release recovery latch blocks this operation")
         if operation in ("recovery-status", "recover"):
             from worker_release_recovery_dispatch import recover, status as recovery_status
             from worker_release_lifecycle import AuthenticatedRun
@@ -200,9 +233,8 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
                                 "jobId": str(job_id)}
                     state = broker._load_release_state(state_path)
                     existing_latch = quiescence.recovery_latch()
-                    latch_recovery = bool(existing_latch and existing_latch.get("fence") == identity.fence())
-                    if (state is None and not (operation == "rollback" and latch_recovery)) or (
-                        state is not None and (state.get("fence") != identity.fence() or state.get("sha") != sha)
+                    if not _release_state_matches_fence(
+                        operation, state, sha, identity.fence(), existing_latch
                     ):
                         raise LifecycleRejected("release state does not match authenticated run and SHA")
                     if operation == "health":
@@ -226,7 +258,7 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
                                 "healthy": True, "runId": str(run_id), "runAttempt": run_attempt,
                                 "jobId": str(job_id)}
                     latch = quiescence.recovery_latch()
-                    recovery = bool(latch and latch.get("fence") == identity.fence())
+                    recovery = _latch_matches_authenticated_fence(latch, identity.fence())
                     if state is not None and state.get("fence") != identity.fence():
                         raise LifecycleRejected("release recovery belongs to another authenticated run")
                     prior = state.get("previous_sha") if state is not None else None

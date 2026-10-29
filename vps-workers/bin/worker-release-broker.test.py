@@ -18,6 +18,10 @@ from worker_release_broker import BrokerProtocolError, BROKER_CLIENT_TIMEOUT_SEC
 from worker_release_lifecycle import LifecycleRejected, ReleaseHealthProbeError, ReleaseHealthRejected
 from worker_release_staging import _close_inherited_descriptors, _drop_extractor_privileges
 from worker_release_gigl import _acquire_gigl_tracking_lock
+from worker_release_broker_dispatch import (
+    _latch_matches_authenticated_fence, _latched_operation_is_allowed,
+    _release_state_matches_fence,
+)
 
 
 def make_archive(entries):
@@ -43,6 +47,49 @@ def directory(name):
 
 
 class BrokerSocketTests(unittest.TestCase):
+    def test_health_and_rollback_require_the_exact_persisted_run_fence(self):
+        sha = "a" * 40
+        fence = {"run_id": "123", "run_attempt": 2, "sha": sha}
+        identity = {**fence, "repository": "ogabasseyy/Baci", "workflow": "deploy.yml",
+                    "ref": "refs/heads/main", "job_id": "456"}
+        state = {"sha": sha, "fence": identity, "status": "promoted"}
+        # Production latches persist only the release run fence; job_id is a
+        # sibling field, so full-dict equality would reject a valid recovery.
+        latch = {"fence": fence, "job_id": "456", "previous_sha": "b" * 40}
+        self.assertTrue(_latch_matches_authenticated_fence(latch, identity))
+        self.assertTrue(_release_state_matches_fence("health", state, sha, identity, latch))
+        self.assertTrue(_release_state_matches_fence("rollback", state, sha, identity, latch))
+
+        other_attempt = {**fence, "run_attempt": 3}
+        other_identity = {**identity, "run_attempt": 3}
+        self.assertFalse(_release_state_matches_fence("health", state, sha, other_identity, latch))
+        self.assertFalse(_release_state_matches_fence("rollback", state, sha, other_identity, latch))
+        self.assertFalse(_release_state_matches_fence("rollback", None, sha, other_identity, latch))
+        self.assertTrue(_release_state_matches_fence("rollback", None, sha, identity, latch))
+        self.assertFalse(_release_state_matches_fence("health", None, sha, identity, latch))
+        self.assertFalse(_latch_matches_authenticated_fence({**latch, "job_id": "789"}, identity))
+        self.assertFalse(_latch_matches_authenticated_fence({"fence": fence}, identity))
+        self.assertFalse(_latch_matches_authenticated_fence({**latch, "job_id": ""}, identity))
+        self.assertFalse(_latch_matches_authenticated_fence({"fence": {**fence, "sha": "c" * 40}}, identity))
+
+    def test_inactive_manager_allows_only_matching_latch_rollback(self):
+        sha = "d" * 40
+        fence = {"run_id": "321", "run_attempt": 4, "sha": sha, "job_id": "654"}
+        latch = {"fence": {key: fence[key] for key in ("run_id", "run_attempt", "sha")},
+                 "job_id": fence["job_id"], "previous_sha": "e" * 40}
+        # This is the dispatch gate used when the lease manager has no live lease.
+        self.assertTrue(_latched_operation_is_allowed("rollback", latch, False, fence))
+        self.assertFalse(_latched_operation_is_allowed("health", latch, False, fence))
+        self.assertFalse(_latched_operation_is_allowed("rollback", latch, False, {**fence, "job_id": "999"}))
+        self.assertFalse(_latched_operation_is_allowed("rollback", latch, False, {**fence, "run_attempt": 5}))
+        self.assertTrue(_latched_operation_is_allowed("recovery-status", latch, False, fence))
+        self.assertTrue(_latched_operation_is_allowed("recover", latch, False, fence))
+        self.assertTrue(_latched_operation_is_allowed("health", latch, True, fence))
+        self.assertFalse(_latched_operation_is_allowed("health", latch, True, {**fence, "job_id": "999"}))
+        self.assertFalse(_latched_operation_is_allowed("rollback", latch, True, {**fence, "job_id": "999"}))
+        self.assertTrue(_latched_operation_is_allowed("recovery-status", latch, True, {**fence, "job_id": "999"}))
+        self.assertTrue(_latched_operation_is_allowed("recover", latch, True, {**fence, "job_id": "999"}))
+
     def test_archive_bounds_cover_the_measured_repository(self):
         import worker_release_broker as broker
         self.assertGreaterEqual(broker.MAX_ARCHIVE_COMPRESSED_BYTES, 155_990_672)

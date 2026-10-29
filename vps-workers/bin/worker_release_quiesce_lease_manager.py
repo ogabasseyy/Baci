@@ -192,9 +192,13 @@ class WorkerQuiesceLeaseManager:
                 self._gate_failed()
 
     def is_active_for(self, fence):
+        try:
+            key = config._identity_key(fence)
+        except (TypeError, ValueError, config.QuiesceLeaseRejected):
+            return False
         with self._guard:
             lease = self._lease
-            return bool(lease and lease._fence == fence and lease.active)
+            return bool(lease and lease.key == key and lease.active)
 
     def recovery_latch(self):
         try:

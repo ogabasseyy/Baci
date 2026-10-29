@@ -259,6 +259,27 @@ test('refuses live API mismatches, stale main, or a caller digest not matching G
   await assert.rejects(authorize({ request: { ...validRequest, bundleSha256: 'c'.repeat(64) } }), /does not match GitHub source/);
 });
 
+test('allows only authenticated in-flight health and rollback requests to survive a main advance', async () => {
+  const branchSha = 'c'.repeat(40);
+  for (const operation of ['health', 'rollback']) {
+    const result = await authorize({
+      request: { operation, sourceSha: sha, oidcToken: token(), githubToken: 'job-token' },
+      fetchImpl: makeFetch({ branchSha }),
+    });
+    assert.equal(result.operation, operation);
+    assert.equal(result.sourceSha, sha);
+    assert.equal(result.runId, '1234');
+    assert.equal(result.jobId, '5678');
+  }
+
+  for (const operation of ['stage', 'preflight', 'promote']) {
+    const request = operation === 'stage'
+      ? { operation, sourceSha: sha, bundleSha256: digest, oidcToken: token(), githubToken: 'job-token' }
+      : { operation, sourceSha: sha, oidcToken: token(), githubToken: 'job-token' };
+    await assert.rejects(authorize({ request, fetchImpl: makeFetch({ branchSha }) }), /no longer current main/);
+  }
+});
+
 test('rejects unknown operations, malformed source SHA, and extra caller-controlled fields', async () => {
   await assert.rejects(authorize({ request: { ...validRequest, operation: 'shell' } }), /unknown operation/);
   await assert.rejects(authorize({ request: { ...validRequest, sourceSha: '../main' } }), /SHA is invalid/);

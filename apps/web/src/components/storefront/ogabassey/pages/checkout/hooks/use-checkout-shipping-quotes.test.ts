@@ -1,4 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { useLayoutEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CheckoutShippingQuotesOptions } from './checkout-shipping-quotes-options';
 import { useCheckoutShippingQuotes } from './use-checkout-shipping-quotes';
@@ -67,6 +68,55 @@ describe('useCheckoutShippingQuotes', () => {
     vi.stubGlobal('fetch', mockFetch);
   });
   afterEach(() => vi.unstubAllGlobals());
+  it.each([
+    true,
+    false,
+  ])('invalidates door readiness before painting pickup for new-address mode %s', async (isNewAddressMode) => {
+    const pending = deferredResponse();
+    mockFetch
+      .mockResolvedValueOnce(response('door'))
+      .mockReturnValueOnce(pending.promise);
+    const input = {
+      ...options(),
+      isNewAddressMode,
+      selectedAddressId: 17,
+      addresses: [
+        {
+          id: 17,
+          label: 'Home',
+          address: '12 Allen Avenue, Ikeja, Lagos',
+          phone: '+2348000000000',
+          isDefault: true,
+        },
+      ],
+    };
+    const committedReadiness: boolean[] = [];
+    const { result, rerender } = renderHook(
+      (props) => {
+        const quotes = useCheckoutShippingQuotes(props);
+        useLayoutEffect(() => {
+          committedReadiness.push(quotes.hasResolvedQuotes);
+        });
+        return quotes;
+      },
+      { initialProps: input }
+    );
+    await waitFor(() => expect(result.current.hasResolvedQuotes).toBe(true));
+    committedReadiness.length = 0;
+
+    rerender({ ...input, deliveryMethod: 'pickup' });
+
+    expect(committedReadiness[0]).toBe(false);
+    expect(result.current.hasResolvedQuotes).toBe(false);
+    expect(result.current.isLoadingQuotes).toBe(true);
+    await act(async () => pending.resolve(response('pickup')));
+    expect(result.current.hasResolvedQuotes).toBe(true);
+    expect(result.current.isLoadingQuotes).toBe(false);
+
+    rerender({ ...input, deliveryMethod: 'pickup_station' });
+    expect(result.current.hasResolvedQuotes).toBe(true);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
   it.each([
     ['pickup', 'pickup_station'],
     ['pickup_station', 'pickup_station'],

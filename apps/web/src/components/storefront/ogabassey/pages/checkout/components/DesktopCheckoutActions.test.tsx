@@ -2,6 +2,26 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { DesktopCheckoutActions } from './DesktopCheckoutActions';
 
+it('keeps the processing order button named and disabled for assistive technology', () => {
+  render(
+    <DesktopCheckoutActions
+      hasUser
+      newsletterOptIn={false}
+      setNewsletterOptIn={vi.fn()}
+      handlePlaceOrder={vi.fn()}
+      isProcessing
+      isDeliveryValid
+      remainingAmount={1000}
+      paymentMethod="paystack"
+      isPayForMeValid
+    />
+  );
+
+  expect(
+    screen.getByRole('button', { name: 'Processing order' })
+  ).toBeDisabled();
+});
+
 it('requires validated delivery before allowing the desktop order action', () => {
   const props = {
     hasUser: true,

@@ -50,6 +50,7 @@ export function DesktopCheckoutActions({
       <button
         type="button"
         onClick={handlePlaceOrder}
+        aria-label={isProcessing ? 'Processing order' : undefined}
         disabled={
           isProcessing ||
           !isDeliveryValid ||

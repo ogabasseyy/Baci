@@ -57,7 +57,11 @@ export function useCheckoutShippingQuotes({
       matched?.providerRateId?.trim() || ''
     );
   };
-  const [resolvedQuoteRequestKey, setResolvedQuoteRequestKey] = useState('');
+  const [resolvedQuoteRequest, setResolvedQuoteRequest] = useState<{
+    key: string;
+    deliveryPreference: 'door' | 'pickup_station';
+  } | null>(null);
+  const resolvedQuoteRequestKey = resolvedQuoteRequest?.key ?? '';
   const quoteRequestSequence = useRef(0);
   const quoteAbortController = useRef<AbortController | null>(null);
   const resetQuotesForAddressChange = (options?: {
@@ -65,7 +69,7 @@ export function useCheckoutShippingQuotes({
   }) => {
     invalidatePendingQuoteRequests(quoteRequestSequence, quoteAbortController);
     setIsLoadingQuotes(false);
-    setResolvedQuoteRequestKey('');
+    setResolvedQuoteRequest(null);
     resetDeliveryQuotesForAddressChange({
       setDeliveryMethod,
       setSelectedQuoteId,
@@ -112,7 +116,8 @@ export function useCheckoutShippingQuotes({
             preferredSelectedQuoteId: selectedQuoteId || undefined,
             preferredProviderRateId: selectedProviderRateId || undefined,
             requestSequence: quoteRequestSequence,
-            setResolvedQuoteRequestKey,
+            setResolvedQuoteRequestKey: (key) =>
+              setResolvedQuoteRequest(key ? { key, deliveryPreference } : null),
             setIsLoadingQuotes,
             setSelectedQuoteId,
             setSelectedProviderRateId: (providerRateId: string) =>
@@ -130,6 +135,13 @@ export function useCheckoutShippingQuotes({
     state: newAddressState,
     country: getCountryByCode(merchantCountry)?.name ?? 'Nigeria',
   });
+  const currentDeliveryPreference =
+    deliveryMethod === 'pickup'
+      ? 'pickup_station'
+      : checkoutShippingQuoteDeliveryPreference({
+          deliveryMethod,
+          isStreetReady: !isNewAddressMode || isNewDeliveryAddressReady,
+        });
 
   // Refresh is keyed by address/cart inputs; callback identities must not trigger new quotes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: preserve input-keyed refresh semantics
@@ -170,12 +182,7 @@ export function useCheckoutShippingQuotes({
             firstName,
             lastName,
             customerEmail,
-            deliveryMethod === 'pickup'
-              ? 'pickup_station'
-              : checkoutShippingQuoteDeliveryPreference({
-                  deliveryMethod,
-                  isStreetReady: isNewDeliveryAddressReady,
-                }),
+            currentDeliveryPreference,
             false
           );
         } else {
@@ -203,10 +210,7 @@ export function useCheckoutShippingQuotes({
                 firstName,
                 lastName,
                 customerEmail,
-                deliveryMethod === 'pickup' ||
-                  deliveryMethod === 'pickup_station'
-                  ? 'pickup_station'
-                  : 'door',
+                currentDeliveryPreference,
                 false
               );
             }
@@ -243,7 +247,9 @@ export function useCheckoutShippingQuotes({
   return {
     shippingQuotes,
     isLoadingQuotes,
-    hasResolvedQuotes: Boolean(resolvedQuoteRequestKey),
+    hasResolvedQuotes:
+      Boolean(resolvedQuoteRequestKey) &&
+      resolvedQuoteRequest?.deliveryPreference === currentDeliveryPreference,
     selectedQuoteId,
     setSelectedQuoteId,
     resetQuotesForAddressChange,

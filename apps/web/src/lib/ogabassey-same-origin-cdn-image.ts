@@ -3,6 +3,7 @@ import {
   MOBILE_HERO_LCP_MAX_BYTES,
   MOBILE_HERO_MIN_SRCSET_WIDTH,
   MOBILE_HERO_QUALITY_STEPS,
+  selectHeroAvifQualityForByteCap,
 } from '@/components/storefront/ogabassey/components/hero-mobile-image-config';
 import { DEFAULT_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 import type { OgabasseyCdnImageProxyRequest } from '@/schemas/ogabassey-cdn-image-proxy';
@@ -25,7 +26,8 @@ const MIME_BY_FORMAT: Record<
 export function buildUpstreamOgabasseyTransformUrl(
   options: OgabasseyCdnImageProxyRequest['options'],
   assetPath: string,
-  overrideQuality?: number
+  overrideQuality?: number,
+  searchParams?: URLSearchParams
 ): string {
   const parts = [`width=${options.width}`];
   if (options.height !== undefined) {
@@ -36,7 +38,8 @@ export function buildUpstreamOgabasseyTransformUrl(
   if (options.fit === 'cover') {
     parts.push('fit=cover');
   }
-  return `${DEFAULT_MEDIA_CDN_ORIGIN}/image/${parts.join(',')}/${assetPath}`;
+  const query = searchParams?.toString();
+  return `${DEFAULT_MEDIA_CDN_ORIGIN}/image/${parts.join(',')}/${assetPath}${query ? `?${query}` : ''}`;
 }
 
 export function getCandidateQualitiesForRequest(
@@ -54,71 +57,127 @@ export function getCandidateQualitiesForRequest(
   return [options.quality];
 }
 
+function buildErrorResponse(message: string, status: 404 | 502): Response {
+  return NextResponse.json(
+    { error: message },
+    {
+      headers: { 'Cache-Control': SHORT_ERROR_CACHE_CONTROL },
+      status,
+    }
+  );
+}
+
 export async function fetchSameOriginOgabasseyImageResponse(
   parsed: OgabasseyCdnImageProxyRequest,
-  fetcher: typeof fetch = fetch
+  fetcher: typeof fetch = fetch,
+  searchParams?: URLSearchParams
 ): Promise<Response> {
   const qualities = getCandidateQualitiesForRequest(parsed.options);
   const enforceByteCap = qualities.length > 1;
-  let lastBytes: ArrayBuffer | null = null;
-  let lastContentType = MIME_BY_FORMAT[parsed.options.format];
-  let effectiveQuality = parsed.options.quality;
+  const fallbackContentType = MIME_BY_FORMAT[parsed.options.format];
 
-  for (const quality of qualities) {
+  if (!enforceByteCap) {
+    const quality = qualities[0] ?? parsed.options.quality;
     const upstreamUrl = buildUpstreamOgabasseyTransformUrl(
       parsed.options,
       parsed.assetPath,
-      quality
+      quality,
+      searchParams
     );
-    let response: Response;
+    let upstreamResponse: Response;
     try {
-      response = await fetcher(upstreamUrl);
+      upstreamResponse = await fetcher(upstreamUrl);
     } catch {
-      return NextResponse.json(
-        { error: 'Upstream image service unavailable' },
-        {
-          headers: { 'Cache-Control': SHORT_ERROR_CACHE_CONTROL },
-          status: 502,
-        }
+      return buildErrorResponse('Upstream image service unavailable', 502);
+    }
+
+    if (!upstreamResponse.ok) {
+      return buildErrorResponse(
+        'Requested image variant not found',
+        upstreamResponse.status === 404 ? 404 : 502
       );
     }
 
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: 'Requested image variant not found' },
-        {
-          headers: { 'Cache-Control': SHORT_ERROR_CACHE_CONTROL },
-          status: response.status === 404 ? 404 : 502,
-        }
-      );
+    const headers = new Headers({
+      'Cache-Control': IMMUTABLE_IMAGE_CACHE_CONTROL,
+      'CDN-Cache-Control': 'public, max-age=31536000, immutable',
+      'Content-Type':
+        upstreamResponse.headers.get('content-type') || fallbackContentType,
+      'X-Hero-Effective-Quality': String(quality),
+    });
+    const upstreamLength = upstreamResponse.headers.get('content-length');
+    if (upstreamLength) {
+      headers.set('Content-Length', upstreamLength);
     }
 
-    const buffer = await response.arrayBuffer();
-    lastBytes = buffer;
-    lastContentType =
-      response.headers.get('content-type') ||
-      MIME_BY_FORMAT[parsed.options.format];
-    effectiveQuality = quality;
-
-    if (!enforceByteCap || buffer.byteLength <= MOBILE_HERO_LCP_MAX_BYTES) {
-      break;
-    }
+    return new Response(upstreamResponse.body, {
+      headers,
+      status: 200,
+    });
   }
 
-  if (!lastBytes) {
-    return NextResponse.json(
-      { error: 'Unable to resolve image payload' },
-      { status: 502 }
+  const settled = await Promise.all(
+    qualities.map(async (quality) => {
+      const upstreamUrl = buildUpstreamOgabasseyTransformUrl(
+        parsed.options,
+        parsed.assetPath,
+        quality,
+        searchParams
+      );
+      try {
+        const response = await fetcher(upstreamUrl);
+        if (!response.ok) {
+          return {
+            ok: false as const,
+            status: response.status === 404 ? (404 as const) : (502 as const),
+          };
+        }
+        const buffer = await response.arrayBuffer();
+        return {
+          buffer,
+          bytes: buffer.byteLength,
+          contentType:
+            response.headers.get('content-type') || fallbackContentType,
+          ok: true as const,
+          quality,
+        };
+      } catch {
+        return {
+          ok: false as const,
+          status: 502 as const,
+        };
+      }
+    })
+  );
+
+  const candidates = settled.filter((item) => item.ok);
+  if (candidates.length === 0) {
+    const failed = settled.find((item) => !item.ok);
+    return buildErrorResponse(
+      'Requested image variant not found',
+      failed && !failed.ok ? failed.status : 502
     );
   }
 
-  return new Response(lastBytes, {
+  const selectedMeta = selectHeroAvifQualityForByteCap(
+    candidates,
+    MOBILE_HERO_LCP_MAX_BYTES
+  );
+  const selected =
+    candidates.find((item) => item.quality === selectedMeta?.quality) ??
+    candidates[candidates.length - 1];
+
+  if (!selected) {
+    return buildErrorResponse('Unable to resolve image payload', 502);
+  }
+
+  return new Response(selected.buffer, {
     headers: {
       'Cache-Control': IMMUTABLE_IMAGE_CACHE_CONTROL,
       'CDN-Cache-Control': 'public, max-age=31536000, immutable',
-      'Content-Length': String(lastBytes.byteLength),
-      'Content-Type': lastContentType,
-      'X-Hero-Effective-Quality': String(effectiveQuality),
+      'Content-Length': String(selected.bytes),
+      'Content-Type': selected.contentType,
+      'X-Hero-Effective-Quality': String(selected.quality),
     },
     status: 200,
   });

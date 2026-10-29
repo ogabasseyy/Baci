@@ -5,7 +5,7 @@ import {
 } from './ogabassey-same-origin-cdn-image';
 
 describe('ogabassey-same-origin-cdn-image', () => {
-  it('builds upstream CDN URLs with optional quality overrides', () => {
+  it('builds upstream CDN URLs with optional quality overrides and search parameters', () => {
     const options = {
       fit: 'inside' as const,
       format: 'avif' as const,
@@ -25,10 +25,11 @@ describe('ogabassey-same-origin-cdn-image', () => {
       buildUpstreamOgabasseyTransformUrl(
         options,
         'core-assets/products/redmi.jpg',
-        60
+        60,
+        new URLSearchParams('v=20260927')
       )
     ).toBe(
-      'https://cdn.ogabassey.com/image/width=384,quality=60,format=avif/core-assets/products/redmi.jpg'
+      'https://cdn.ogabassey.com/image/width=384,quality=60,format=avif/core-assets/products/redmi.jpg?v=20260927'
     );
   });
 

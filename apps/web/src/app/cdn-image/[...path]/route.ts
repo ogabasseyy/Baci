@@ -9,7 +9,7 @@ interface CdnImageRouteContext {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   context: CdnImageRouteContext
 ): Promise<Response> {
   const { path } = await context.params;
@@ -22,5 +22,9 @@ export async function GET(
     );
   }
 
-  return fetchSameOriginOgabasseyImageResponse(parsed.data);
+  return fetchSameOriginOgabasseyImageResponse(
+    parsed.data,
+    fetch,
+    request.nextUrl.searchParams
+  );
 }

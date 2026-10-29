@@ -20,7 +20,7 @@ describe('/cdn-image/[...path] same-origin route and 20 KB AVIF step-down', () =
     }
   });
 
-  it('serves a 384w AVIF image at quality=70 immediately when <= 20,000 bytes', async () => {
+  it('serves a 384w AVIF image at quality=70 when <= 20,000 bytes and forwards version query params', async () => {
     const parsed = ogabasseyCdnImageProxyPathSchema.parse([
       'width=384,quality=70,format=avif',
       'core-assets',
@@ -38,11 +38,14 @@ describe('/cdn-image/[...path] same-origin route and 20 KB AVIF step-down', () =
 
     const response = await fetchSameOriginOgabasseyImageResponse(
       parsed,
-      fakeFetcher
+      fakeFetcher,
+      new URLSearchParams('v=20260927')
     );
     expect(response.status).toBe(200);
     expect(calls).toEqual([
-      'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/itel-battery.avif',
+      'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/itel-battery.avif?v=20260927',
+      'https://cdn.ogabassey.com/image/width=384,quality=60,format=avif/core-assets/products/itel-battery.avif?v=20260927',
+      'https://cdn.ogabassey.com/image/width=384,quality=50,format=avif/core-assets/products/itel-battery.avif?v=20260927',
     ]);
     expect(response.headers.get('X-Hero-Effective-Quality')).toBe('70');
     expect(response.headers.get('Cache-Control')).toBe(
@@ -51,7 +54,7 @@ describe('/cdn-image/[...path] same-origin route and 20 KB AVIF step-down', () =
     expect((await response.arrayBuffer()).byteLength).toBe(16_593);
   });
 
-  it('steps 384w AVIF quality down 70 -> 60 -> 50 when higher qualities exceed 20,000 bytes', async () => {
+  it('selects quality=60 concurrently when quality=70 exceeds 20,000 bytes', async () => {
     const parsed = ogabasseyCdnImageProxyPathSchema.parse([
       'width=384,quality=70,format=avif',
       'core-assets',
@@ -85,8 +88,61 @@ describe('/cdn-image/[...path] same-origin route and 20 KB AVIF step-down', () =
     expect(calls).toEqual([
       'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/detailed-hero.avif',
       'https://cdn.ogabassey.com/image/width=384,quality=60,format=avif/core-assets/products/detailed-hero.avif',
+      'https://cdn.ogabassey.com/image/width=384,quality=50,format=avif/core-assets/products/detailed-hero.avif',
     ]);
     expect(response.headers.get('X-Hero-Effective-Quality')).toBe('60');
     expect((await response.arrayBuffer()).byteLength).toBe(18_200);
+  });
+
+  it('streams non-byte-capped desktop requests directly without buffering arrayBuffer()', async () => {
+    const parsed = ogabasseyCdnImageProxyPathSchema.parse([
+      'width=640,quality=70,format=avif',
+      'core-assets',
+      'products',
+      'desktop-hero.avif',
+    ]);
+    const upstreamResponse = new Response(new Uint8Array(45_000), {
+      headers: {
+        'content-length': '45000',
+        'content-type': 'image/avif',
+      },
+      status: 200,
+    });
+    const arrayBufferSpy = vi.spyOn(upstreamResponse, 'arrayBuffer');
+    const fakeFetcher: typeof fetch = vi.fn(async () => upstreamResponse);
+
+    const response = await fetchSameOriginOgabasseyImageResponse(
+      parsed,
+      fakeFetcher
+    );
+    expect(response.status).toBe(200);
+    expect(arrayBufferSpy).not.toHaveBeenCalled();
+    expect(response.headers.get('Content-Length')).toBe('45000');
+  });
+
+  it('still serves a valid candidate when another concurrent quality rung fails', async () => {
+    const parsed = ogabasseyCdnImageProxyPathSchema.parse([
+      'width=384,quality=70,format=avif',
+      'core-assets',
+      'products',
+      'resilient-hero.avif',
+    ]);
+    const fakeFetcher: typeof fetch = vi.fn(async (input) => {
+      const url = String(input);
+      if (url.includes('quality=50')) {
+        throw new Error('transient upstream timeout');
+      }
+      return new Response(new Uint8Array(15_400), {
+        headers: { 'content-type': 'image/avif' },
+        status: 200,
+      });
+    });
+
+    const response = await fetchSameOriginOgabasseyImageResponse(
+      parsed,
+      fakeFetcher
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('X-Hero-Effective-Quality')).toBe('70');
   });
 });

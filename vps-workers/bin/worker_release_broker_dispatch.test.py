@@ -184,6 +184,7 @@ class BrokerDrainTests(unittest.TestCase):
             finish_dispatch = threading.Event()
             dispatched = []
             server_errors = []
+            expected_uid = os.getuid() if os.getuid() != 0 else 1001
 
             def dispatch(peer_uid, request):
                 dispatched.append(request["sequence"])
@@ -196,13 +197,15 @@ class BrokerDrainTests(unittest.TestCase):
             def serve():
                 try:
                     broker.serve_forever(
-                        listener, expected_release_uid=os.getuid(), dispatch=dispatch,
+                        listener, expected_release_uid=expected_uid, dispatch=dispatch,
                         stop_event=stop_event, accept_poll_seconds=0.05,
                     )
                 except BaseException as error:
                     server_errors.append(error)
 
             server = threading.Thread(target=serve)
+            peer_patch = patch.object(broker, "_peer_uid", return_value=expected_uid)
+            peer_patch.start()
             server.start()
             first = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             second = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -237,6 +240,7 @@ class BrokerDrainTests(unittest.TestCase):
                 second.close()
                 listener.close()
                 server.join(2)
+                peer_patch.stop()
 
 
 if __name__ == "__main__":

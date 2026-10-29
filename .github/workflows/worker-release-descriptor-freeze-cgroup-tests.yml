@@ -6,6 +6,7 @@ on:
       - 'vps-workers/bin/worker_release_descriptor_freeze.py'
       - 'vps-workers/bin/worker_release_descriptor_freeze.test.py'
       - 'vps-workers/bin/worker_release_descriptor_freeze_cgroup.test.py'
+      - 'vps-workers/bin/worker_release_descriptor_cgroup_test_support.py'
       - 'vps-workers/bin/worker_release_descriptor_cgroup.py'
       - 'vps-workers/bin/worker_release_descriptor_process.py'
       - 'vps-workers/tools/worker-release-descriptor-freeze-cgroup-ci.py'

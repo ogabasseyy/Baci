@@ -229,12 +229,9 @@ jobs:
     runs-on: ubuntu-24.04
     environment:
       name: production
-    # 50 minutes covers all three hook-reload probes' unanimity
-    # windows on the first deploy (later deploys skip each probe in
-    # seconds once its isolate migration is recorded), with headroom
-    # so a slow triple-probe path fails by the probe's explicit error
-    # rather than by job timeout.
-    timeout-minutes: 50
+    # Four reload probes plus the first cron run can take 72 minutes.
+    # Headroom lets each check report its own error before the job times out.
+    timeout-minutes: 80
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
@@ -287,10 +284,25 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
         run: .github/scripts/probe-guest-cart-hook-reload.sh
+      - name: Apply pending migrations through the cart-quota scope hook
+        env:
+          MIGRATION_PHASE: predeploy
+          MIGRATION_MAX_VERSION: 20261027051250
+        run: .github/scripts/apply-pending-migrations.sh
+      - name: Probe cart-quota hook reload acknowledgement
+        env:
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        run: .github/scripts/probe-cart-quota-hook-reload.sh
       - name: Apply remaining pending migrations via Management API
         env:
           MIGRATION_PHASE: predeploy
         run: .github/scripts/apply-pending-migrations.sh
+      - name: Verify cart quota cleanup is running
+        # This deliberately gates every production deploy, even while Redis
+        # remains selected. The live backend flag belongs to Vercel and is not
+        # authoritative in this job; an independent variable could drift.
+        run: .github/scripts/verify-cart-quota-maintenance.sh
       - name: Verify GIGL worker least-privilege final state
         # Production is currently mid-rollout (worker role LOGIN-capable with
         # a password, hook and isolate grant pending on this PR's migrations).

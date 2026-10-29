@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { VerifiedCartCustomer } from './verified-customer';
 import 'server-only';
@@ -173,6 +174,29 @@ export function createCartPreviewClient(
       cart_handoff_id: handoffId,
       iat: issuedAt,
       exp: issuedAt + CART_SCOPED_TOKEN_TTL_SECONDS,
+    },
+    options.signer ?? getAgenticJwtSigningMaterial()
+  );
+  return buildScopedClient(token, options);
+}
+
+/** Counter-only authority: one hashed key/window, no cart/customer claims. */
+export function createCartQuotaScopedClient(
+  key: string,
+  windowMs: number,
+  options: CartScopedClientOptions = {}
+): SupabaseClient {
+  if (!Number.isInteger(windowMs) || windowMs < 1000 || windowMs > 3_600_000)
+    throw new Error('Invalid cart quota window');
+  const issuedAt = Math.floor((options.now ?? new Date()).getTime() / 1000);
+  const token = signScopedSupabaseJwt(
+    {
+      aud: 'authenticated',
+      role: 'commerce_cart_quota',
+      cart_quota_key: createHash('sha256').update(key).digest('hex'),
+      cart_quota_window_ms: windowMs,
+      iat: issuedAt,
+      exp: issuedAt + 60,
     },
     options.signer ?? getAgenticJwtSigningMaterial()
   );

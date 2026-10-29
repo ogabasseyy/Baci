@@ -75,7 +75,7 @@ export function SharedCartStatusPanel() {
           ? 'You have a saved cart and items on this device. Choose which cart to use.'
           : state.status === 'error'
             ? state.code === 'quota_exceeded'
-              ? 'Too many cart requests right now. Please wait a while, then retry. Your last confirmed items are saved.'
+              ? 'Cart sync could not be completed. If an item did not appear, add it again later. Your last confirmed items are saved.'
               : 'Cart sync was interrupted. Your last confirmed items are saved.'
             : !state.snapshot
               ? items.length

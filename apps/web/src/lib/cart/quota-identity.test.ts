@@ -277,3 +277,29 @@ describe('checkAnonymousCartQuota', () => {
     expect(denied.allowed).toBe(false);
   });
 });
+
+it('keeps the network fallback bound when Redis fails only on the credential counter', async () => {
+  vi.stubEnv('NODE_ENV', 'production');
+  vi.stubEnv('VERCEL', '1');
+  mockGetRedis.mockReturnValue({
+    createScript: () => ({
+      eval: async (keys: string[]) => {
+        if (keys[0]?.includes('bootstrap_network_backstop'))
+          return [1, 3_600_000];
+        throw new Error('credential counter unavailable');
+      },
+    }),
+  });
+  let allowed = true;
+  for (let attempt = 0; attempt < 21; attempt++) {
+    const result = await checkAnonymousCartQuota(
+      requestWith({
+        'x-real-ip': '192.0.2.12',
+        'x-baci-client-credential': rotatedCredential(attempt),
+      }),
+      { merchantId: MERCHANT_ID, operation: 'bootstrap' }
+    );
+    allowed = result.allowed;
+  }
+  expect(allowed).toBe(false);
+});

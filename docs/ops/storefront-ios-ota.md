@@ -25,9 +25,11 @@ Dispatch the workflow on `main` with the full reviewed source SHA, runtime,
 build number and verified TikTok capability. The selected source must embed
 `EXPO_PUBLIC_BUILD_SHA` so the exported bundle can be checked against that
 revision. To roll back to older source without this marker, create and review
-a forward revert that retains it. Download the verified artifact
-from that run. It contains the
-public Expo config, export, source maps and provenance. The workflow rejects a
+a forward revert that retains it. Download the verified artifact from that
+run. It contains the public Expo config, export, source maps and provenance.
+The artifact expires after one day. If it expires, rerun the workflow with
+the same inputs and use the new run's verification-log provenance digest.
+The workflow rejects a
 runtime or merchant mismatch, missing required client configuration and known
 build-only secrets in the artifact. Do not add the TikTok app secret to the
 export step: Expo's public config includes plugin options.
@@ -39,14 +41,11 @@ write the artifact's `expo-config.json` as `{ "expo": <config> }` in `app.json`.
 Confirm Expo resolves the same public config in that temporary project. Set
 `EAS_SKIP_AUTO_FINGERPRINT=1` for publication: the temporary project's native
 tree is incomplete, so its automatically calculated fingerprint would be
-misleading. This does not replace the native compatibility checks above. From a
-checkout of current `main` that contains the verifier, recheck the downloaded
-artifact with the following command (the target source commit may predate the
-verifier):
-
+misleading. This does not replace the native compatibility checks above.
 Obtain the `Provenance SHA-256` value from the successful workflow attempt's
 verification log, using GitHub as the trusted source. Do not derive the
-trusted value from the downloaded artifact. Then run:
+trusted value from the downloaded artifact. From a checkout of current `main`
+that contains the verifier (the target source commit may predate it), run:
 
 ```sh
 node .github/scripts/verify-storefront-ota-export.mjs \

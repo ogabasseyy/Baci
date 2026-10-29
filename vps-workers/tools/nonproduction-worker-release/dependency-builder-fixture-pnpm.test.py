@@ -18,17 +18,30 @@ SPEC.loader.exec_module(fixture)
 class FixturePnpmDiagnosticTests(unittest.TestCase):
     def test_trust_failure_without_hint_is_reported_as_unreported(self):
         output = (
-            'ERR_PNPM_TRUST_DOWNGRADE High-risk trust downgrade for "secret-package@9.9.9" '
+            'ERR_PNPM_TRUST_DOWNGRADE High-risk trust downgrade for "tsx@4.22.4" '
+            '(possible package takeover) '
             'token=must-not-leak'
         )
         summary = fixture.summarize_failure(output)
         self.assertEqual(summary, {
             "schema": 1,
             "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
+            "fixture_package": "tsx",
             "trust_evidence_transition": "unreported",
         })
-        self.assertNotIn("secret-package", repr(summary))
         self.assertNotIn("must-not-leak", repr(summary))
+
+    def test_trust_headline_only_classifies_fixed_fixture_allowlist(self):
+        for package, expected in (("dotenv@16.6.1", "dotenv"),
+                                  ("attacker@1.2.3", "unknown"),
+                                  ("tsx@4.22.5", "unknown")):
+            with self.subTest(package=package):
+                result = fixture.summarize_failure(
+                    f'ERR_PNPM_TRUST_DOWNGRADE High-risk trust downgrade for "{package}" '
+                    "(possible package takeover)"
+                )
+                self.assertEqual(result["fixture_package"], expected)
+                self.assertEqual(result["trust_evidence_transition"], "unreported")
 
     def test_trust_transition_variants_are_exact_and_allowlisted(self):
         cases = {
@@ -100,16 +113,19 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             fixture._write_diagnostic(accepted, {
                 "schema": 1,
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
+                "fixture_package": "unknown",
                 "trust_evidence_transition": "trusted-publisher-to-none",
             })
             self.assertEqual(fixture.read_diagnostic(accepted, owner_uid=accepted.stat().st_uid), {
                 "schema": 1,
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
+                "fixture_package": "unknown",
                 "trust_evidence_transition": "trusted-publisher-to-none",
             })
             self.assertIsNone(fixture.read_diagnostic(accepted, owner_uid=accepted.stat().st_uid + 1))
             target = root / "target"
             target.write_text('{"schema":1,"error_code":"OTHER_PNPM_ERROR",'
+                              '"fixture_package":"not-applicable",'
                               '"trust_evidence_transition":"not-applicable","raw":"secret"}')
             target.chmod(0o600)
             self.assertIsNone(fixture.read_diagnostic(target, owner_uid=target.stat().st_uid))
@@ -130,6 +146,7 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             fixture._write_diagnostic(candidate, {
                 "schema": 1,
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
+                "fixture_package": "unknown",
                 "trust_evidence_transition": "trusted-publisher-to-none",
             })
             self.assertEqual(fixture.read_scratch_diagnostic(

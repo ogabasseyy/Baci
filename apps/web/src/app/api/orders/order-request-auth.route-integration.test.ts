@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { describe, expect, it, vi } from 'vitest';
 import { authenticateApiRequest } from '@/lib/api-auth';
+import type * as OrderRouteBinding from '@/lib/cart/order-route-binding';
 import { resolveSharedCartOrderAuthority } from '@/lib/cart/order-route-binding';
 import { POST } from './route';
 
@@ -14,7 +15,7 @@ vi.mock('@/lib/geo-privacy', () => ({
 }));
 
 vi.mock('@/lib/cart/order-route-binding', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/cart/order-route-binding')>()),
+  ...(await importOriginal<typeof OrderRouteBinding>()),
   resolveSharedCartOrderAuthority: vi.fn(),
 }));
 

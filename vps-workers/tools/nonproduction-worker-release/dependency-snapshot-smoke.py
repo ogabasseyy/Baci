@@ -59,14 +59,18 @@ def snapshot_digest(root: Path, label: str) -> str:
 
 
 def main() -> int:
-    if len(sys.argv) != 2 or os.geteuid() == 0:
+    if len(sys.argv) != 5:
         sys.stderr.write("dependency-smoke-failure category=invocation-or-privilege\n")
         return 64
     release_root = Path(sys.argv[1])
+    expected_uid, expected_gid, forbidden_gid = map(int, sys.argv[2:5])
     web_root = release_root / "apps" / "web"
     stage = "snapshot-before"
     environment = {"PATH": "/usr/bin:/bin", "HOME": "/nonexistent", "NODE_ENV": "production"}
     try:
+        if (os.geteuid() != expected_uid or os.getegid() != expected_gid
+                or forbidden_gid in os.getgroups()):
+            raise SmokeFailure("identity-or-group-boundary")
         if not os.path.isfile("/usr/bin/node") or not os.access("/usr/bin/node", os.X_OK):
             raise SmokeFailure("node-runtime-unavailable", "/usr/bin/node")
         if not (web_root / "node_modules").is_dir() or not (release_root / "node_modules").is_dir():

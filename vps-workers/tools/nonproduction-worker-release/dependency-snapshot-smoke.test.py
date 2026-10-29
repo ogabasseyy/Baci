@@ -33,8 +33,9 @@ class DependencySnapshotSmokeTests(unittest.TestCase):
             web.mkdir(parents=True)
             (web / "tsx").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             (root / "node_modules/dotenv").mkdir(parents=True)
-            argv = [str(SCRIPT), str(root)]
+            argv = [str(SCRIPT), str(root), "1001", "1002", "1003"]
             with patch.object(smoke.sys, "argv", argv), patch.object(smoke.os, "geteuid", return_value=1001), \
+                 patch.object(smoke.os, "getegid", return_value=1002), patch.object(smoke.os, "getgroups", return_value=[]), \
                  patch.object(smoke.os.path, "isfile", return_value=True), patch.object(smoke.os, "access", return_value=True), \
                  patch.object(smoke.subprocess, "run", side_effect=subprocess.CalledProcessError(17, ["synthetic-secret-command"])):
                 from contextlib import redirect_stderr
@@ -44,6 +45,20 @@ class DependencySnapshotSmokeTests(unittest.TestCase):
                     result = smoke.main()
             self.assertEqual(result, 1)
             self.assertEqual(output.getvalue(), "dependency-smoke-failure category=tsx-execution-exit-17\n")
+
+    def test_smoke_rejects_lock_group_membership(self):
+        argv = [str(SCRIPT), "/synthetic/release", "1001", "1002", "1003"]
+        with patch.object(smoke.sys, "argv", argv), patch.object(smoke.os, "geteuid", return_value=1001), \
+             patch.object(smoke.os, "getegid", return_value=1002), patch.object(smoke.os, "getgroups", return_value=[1003]), \
+             patch.object(smoke.subprocess, "run") as run:
+            from contextlib import redirect_stderr
+            from io import StringIO
+            output = StringIO()
+            with redirect_stderr(output):
+                result = smoke.main()
+        self.assertEqual(result, 1)
+        self.assertEqual(output.getvalue(), "dependency-smoke-failure category=identity-or-group-boundary\n")
+        run.assert_not_called()
 
 
 if __name__ == "__main__":

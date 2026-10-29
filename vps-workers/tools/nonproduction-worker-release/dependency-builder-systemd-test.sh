@@ -179,7 +179,8 @@ release_root="$test_root/release"
 sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 install -d -o root -g root -m 0700 "$source_root/apps/web" "$source_root/vps-workers" \
   "$seed_root" "$release_root/apps/web"
-chmod 0755 "$release_root" "$release_root/apps" "$release_root/apps/web"
+chown root:baci-worker "$release_root" "$release_root/apps" "$release_root/apps/web"
+chmod 0750 "$release_root" "$release_root/apps" "$release_root/apps/web"
 cat >"$source_root/package.json" <<'JSON'
 {"name":"dependency-build-fixture","private":true,"packageManager":"pnpm@11.7.0"}
 JSON
@@ -378,6 +379,28 @@ dependency_builder.run_sandbox = run_fixture_sandbox
 manifest, result_dir = dependency_builder.build(str(source), sha)
 payload = _verify_candidate(manifest, result_dir, source, sha, os.geteuid())
 install_payload(payload, release, owner_uid=os.geteuid())
+# Match the production release access boundary: root owns immutable files,
+# baci-worker is the read/execute group, and the builder stays outside it.
+worker_gid = __import__("grp").getgrnam("baci-worker").gr_gid
+for base in (release / "apps" / "web" / "node_modules", release / "node_modules"):
+    for current, directories, files in os.walk(base, topdown=True, followlinks=False):
+        for name in directories + files:
+            path = Path(current) / name
+            info = path.lstat()
+            if os.path.isdir(path) and not path.is_symlink():
+                if (info.st_uid != 0 or info.st_mode & 0o022
+                        or (info.st_mode & 0o777) != 0o550):
+                    raise RuntimeError("synthetic release directory mode or ownership drifted")
+            elif os.path.isfile(path) and not path.is_symlink() and info.st_nlink == 1:
+                if (info.st_uid != 0 or info.st_mode & 0o022
+                        or (info.st_mode & 0o777) not in (0o440, 0o550)):
+                    raise RuntimeError("synthetic release file mode or ownership drifted")
+            else:
+                raise RuntimeError("synthetic materialized release contains a non-regular entry")
+            os.chown(path, 0, worker_gid, follow_symlinks=False)
+        os.chown(current, 0, worker_gid, follow_symlinks=False)
+os.chown(release / "apps", 0, worker_gid)
+os.chown(release / "apps" / "web", 0, worker_gid)
 print("dependency candidate materialized")
 PY
 
@@ -389,7 +412,7 @@ if [ -n "$unit_load_state" ] && [ "$unit_load_state" != not-found ]; then
 fi
 test_unit_owned=1
 systemd-run --quiet --system --wait --pipe --collect --unit="$test_unit" \
-  --uid="$(id -u baci-release-build)" --gid="$(id -g baci-release-build)" \
+  --uid="$(id -u baci-release-build)" --gid="$(id -g baci-worker)" \
   --property=ProtectSystem=strict --property=ProtectHome=true --property=PrivateTmp=true \
   --property=PrivateDevices=true --property=PrivateNetwork=true --property=NoNewPrivileges=true \
   --property=PrivateUsers=true --property=RestrictSUIDSGID=true --property=LockPersonality=true \
@@ -399,7 +422,8 @@ systemd-run --quiet --system --wait --pipe --collect --unit="$test_unit" \
   --property="ReadOnlyPaths=$release_root" \
   --property="InaccessiblePaths=/srv/baci-workers/runtime /srv/baci-workers/releases /srv/baci-workers/locks" \
   --setenv=PATH=/usr/bin:/bin --setenv=HOME=/nonexistent --setenv=NODE_ENV=production \
-  /usr/bin/python3 "$helper_root/dependency-snapshot-smoke.py" "$release_root" >"$smoke_output"
+  /usr/bin/python3 "$helper_root/dependency-snapshot-smoke.py" "$release_root" \
+  "$(id -u baci-release-build)" "$(id -g baci-worker)" "$(id -g baci-locks)" >"$smoke_output"
 python3 - "$smoke_output" <<'PY'
 import json, sys
 from pathlib import Path

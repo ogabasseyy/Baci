@@ -1,15 +1,11 @@
 import { NextResponse } from 'next/server';
 import {
   MOBILE_HERO_LCP_MAX_BYTES,
-  MOBILE_HERO_MIN_SRCSET_WIDTH,
-  MOBILE_HERO_QUALITY_STEPS,
   selectHeroAvifQualityForByteCap,
 } from '@/components/storefront/ogabassey/components/hero-mobile-image-config';
-import { DEFAULT_MEDIA_CDN_ORIGIN } from '@/config/cdn';
-import {
-  ALLOWED_IMAGE_VERSION_QUERY_PATTERN,
-  type OgabasseyCdnImageProxyRequest,
-} from '@/schemas/ogabassey-cdn-image-proxy';
+import { buildUpstreamOgabasseyTransformUrl } from '@/lib/build-upstream-ogabassey-transform-url';
+import { getCandidateQualitiesForRequest } from '@/lib/get-candidate-qualities-for-request';
+import type { OgabasseyCdnImageProxyRequest } from '@/schemas/ogabassey-cdn-image-proxy';
 
 const IMMUTABLE_IMAGE_CACHE_CONTROL =
   'public, max-age=31536000, s-maxage=31536000, immutable';
@@ -25,48 +21,6 @@ const MIME_BY_FORMAT: Record<
   png: 'image/png',
   webp: 'image/webp',
 };
-
-export function buildUpstreamOgabasseyTransformUrl(
-  options: OgabasseyCdnImageProxyRequest['options'],
-  assetPath: string,
-  overrideQuality?: number,
-  searchParams?: URLSearchParams
-): string {
-  const parts = [`width=${options.width}`];
-  if (options.height !== undefined) {
-    parts.push(`height=${options.height}`);
-  }
-  parts.push(`quality=${overrideQuality ?? options.quality}`);
-  parts.push(`format=${options.format}`);
-  if (options.fit === 'cover') {
-    parts.push('fit=cover');
-  }
-  const encodedAssetPath = assetPath
-    .split('/')
-    .map((segment) => encodeURIComponent(segment))
-    .join('/');
-  const versionParam = searchParams?.get('v');
-  const query =
-    versionParam && ALLOWED_IMAGE_VERSION_QUERY_PATTERN.test(versionParam)
-      ? `?v=${encodeURIComponent(versionParam)}`
-      : '';
-  return `${DEFAULT_MEDIA_CDN_ORIGIN}/image/${parts.join(',')}/${encodedAssetPath}${query}`;
-}
-
-export function getCandidateQualitiesForRequest(
-  options: OgabasseyCdnImageProxyRequest['options']
-): readonly number[] {
-  if (
-    options.format === 'avif' &&
-    options.width <= MOBILE_HERO_MIN_SRCSET_WIDTH
-  ) {
-    const stepsBelowOrEqual = MOBILE_HERO_QUALITY_STEPS.filter(
-      (step) => step <= options.quality
-    );
-    return stepsBelowOrEqual.length > 0 ? stepsBelowOrEqual : [options.quality];
-  }
-  return [options.quality];
-}
 
 function buildErrorResponse(message: string, status: 404 | 502): Response {
   return NextResponse.json(

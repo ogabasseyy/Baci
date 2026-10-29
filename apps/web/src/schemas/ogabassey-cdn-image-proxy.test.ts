@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  ogabasseyCdnImageProxyPathSchema,
-  ogabasseyCdnImageProxySearchParamsSchema,
-} from './ogabassey-cdn-image-proxy';
+import { ogabasseyCdnImageProxyPathSchema } from './ogabassey-cdn-image-proxy';
 
 describe('ogabasseyCdnImageProxyPathSchema', () => {
   it('accepts a valid transform segment followed by allowed asset path segments', () => {
@@ -47,19 +44,6 @@ describe('ogabasseyCdnImageProxyPathSchema', () => {
         'products',
         'tecno.avif',
       ]).success
-    ).toBe(false);
-  });
-
-  it('allowlists only a bounded v query parameter', () => {
-    expect(ogabasseyCdnImageProxySearchParamsSchema.safeParse({}).success).toBe(
-      true
-    );
-    expect(
-      ogabasseyCdnImageProxySearchParamsSchema.safeParse({ v: '20260927' })
-        .success
-    ).toBe(true);
-    expect(
-      ogabasseyCdnImageProxySearchParamsSchema.safeParse({ bust: '1' }).success
     ).toBe(false);
   });
 });

@@ -2,7 +2,7 @@ import { DEFAULT_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 
 const OGABASSEY_CDN_HOSTNAME = new URL(DEFAULT_MEDIA_CDN_ORIGIN).hostname;
 const OGABASSEY_IMAGE_TRANSFORM_PREFIX = '/image/';
-export const OGABASSEY_SAME_ORIGIN_IMAGE_TRANSFORM_PREFIX = '/cdn-image/';
+const OGABASSEY_SAME_ORIGIN_IMAGE_TRANSFORM_PREFIX = '/cdn-image/';
 
 /**
  * Rewrites an OgaBassey CDN transform URL (`https://cdn.ogabassey.com/image/...`)
@@ -30,26 +30,4 @@ export function toOgabasseySameOriginTransformUrl(url: string): string {
     OGABASSEY_IMAGE_TRANSFORM_PREFIX.length
   );
   return `${OGABASSEY_SAME_ORIGIN_IMAGE_TRANSFORM_PREFIX}${remainder}${parsed.search}${parsed.hash}`;
-}
-
-export function toOgabasseySameOriginSrcSet(
-  srcSet: string | null | undefined
-): string | null | undefined {
-  if (!srcSet) {
-    return srcSet;
-  }
-  return srcSet
-    .split(/,\s+/)
-    .map((candidate) => {
-      const trimmed = candidate.trim();
-      if (!trimmed) {
-        return trimmed;
-      }
-      const [candidateUrl, ...descriptors] = trimmed.split(/\s+/);
-      return [
-        toOgabasseySameOriginTransformUrl(candidateUrl),
-        ...descriptors,
-      ].join(' ');
-    })
-    .join(', ');
 }

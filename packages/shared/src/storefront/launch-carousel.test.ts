@@ -83,13 +83,15 @@ describe('selectLaunchProducts', () => {
     // Mirrors the real call: the targeted pinned fetch is prepended to the
     // recency window, then deduped — even when a pin also appears in the window.
     const pinnedRows: TestProduct[] = [
-      p('samsung-galaxy-a27-5g'),
-      p('itel-power-80-128gb-4gb'),
+      p('iphone-duo'),
+      p('redmi-note-17-pro-max-5g'),
     ];
     const windowRows: TestProduct[] = [
-      p('itel-power-80-128gb-4gb'),
-      p('xiaomi-17t-pro'),
-      p('xiaomi-17t'),
+      p('redmi-note-17-pro-max-5g'),
+      p('samsung-galaxy-z-flip8'),
+      p('samsung-galaxy-s26-fe'),
+      p('samsung-galaxy-a08'),
+      p('iphone-18-pro-max'),
       p('macbook'),
     ];
 
@@ -98,14 +100,14 @@ describe('selectLaunchProducts', () => {
       limit: LAUNCH_CAROUSEL_LIMIT,
     });
 
-    // All pins lead in pin order (power80 deduped from the window), then the
-    // remaining window items.
+    // All pins lead in pin order (redmi deduped from the window), capped at 6.
     expect(result.map((i) => i.slug)).toEqual([
-      'samsung-galaxy-a27-5g',
-      'xiaomi-17t-pro',
-      'xiaomi-17t',
-      'itel-power-80-128gb-4gb',
-      'macbook',
+      'iphone-duo',
+      'samsung-galaxy-z-flip8',
+      'samsung-galaxy-s26-fe',
+      'samsung-galaxy-a08',
+      'redmi-note-17-pro-max-5g',
+      'iphone-18-pro-max',
     ]);
   });
 
@@ -179,11 +181,13 @@ describe('launch carousel constants', () => {
     expect(LAUNCH_CAROUSEL_LIMIT).toBeLessThanOrEqual(8);
   });
 
-  it('pins the named launch devices', () => {
-    expect(OGABASSEY_PINNED_LAUNCH_SLUGS).toContain('samsung-galaxy-a27-5g');
-    expect(OGABASSEY_PINNED_LAUNCH_SLUGS).toContain('xiaomi-17t-pro');
-    expect(OGABASSEY_PINNED_LAUNCH_SLUGS).toContain('xiaomi-17t');
-    expect(OGABASSEY_PINNED_LAUNCH_SLUGS).toContain('itel-power-80-128gb-4gb');
+  it('pins the named launch devices led by iPhone Duo', () => {
+    expect(OGABASSEY_PINNED_LAUNCH_SLUGS[0]).toBe('iphone-duo');
+    expect(OGABASSEY_PINNED_LAUNCH_SLUGS).toContain('samsung-galaxy-z-flip8');
+    expect(OGABASSEY_PINNED_LAUNCH_SLUGS).toContain('samsung-galaxy-s26-fe');
+    expect(OGABASSEY_PINNED_LAUNCH_SLUGS).toContain('samsung-galaxy-a08');
+    expect(OGABASSEY_PINNED_LAUNCH_SLUGS).toContain('redmi-note-17-pro-max-5g');
+    expect(OGABASSEY_PINNED_LAUNCH_SLUGS).toContain('iphone-18-pro-max');
   });
 });
 
@@ -255,5 +259,38 @@ describe('effectiveLaunchPins', () => {
     const candidates = [dp('newbie', '2026-06-25T00:00:00Z')];
 
     expect(effectiveLaunchPins(candidates, ['a27'], '')).toEqual(['a27']);
+  });
+
+  it('excludes non-device categories (batteries, power stations, cases, accessories) from auto-promoting ahead of pins', () => {
+    const candidates = [
+      {
+        slug: 'itel-16kwh-battery',
+        created_at: '2026-10-30T00:00:00Z',
+        category: 'Lithium Batteries',
+      },
+      {
+        slug: 'itel-power-tank',
+        created_at: '2026-10-30T00:00:00Z',
+        category: 'Portable Power Stations',
+      },
+      {
+        slug: 'fold8-case',
+        created_at: '2026-10-30T00:00:00Z',
+        category: 'Accessories',
+      },
+      {
+        slug: 'galaxy-s27-ultra',
+        created_at: '2026-10-30T00:00:00Z',
+        category: 'Smartphones',
+      },
+    ];
+
+    expect(
+      effectiveLaunchPins(
+        candidates,
+        ['iphone-duo'],
+        '2026-10-29T00:00:00.000Z'
+      )
+    ).toEqual(['galaxy-s27-ultra', 'iphone-duo']);
   });
 });

@@ -2,10 +2,8 @@ import { getImageProps } from 'next/image';
 import { rewriteOgabasseyTransformUrlFormat } from '@/lib/ogabassey-cdn-image-url';
 import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loader';
 import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
-import {
-  toOgabasseySameOriginSrcSet,
-  toOgabasseySameOriginTransformUrl,
-} from '@/lib/ogabassey-same-origin-hero-url';
+import { toOgabasseySameOriginTransformUrl } from '@/lib/ogabassey-same-origin-hero-url';
+import { toOgabasseySameOriginSrcSet } from '@/lib/ogabassey-same-origin-srcset';
 import {
   capSrcSetWidthRungs,
   MOBILE_HERO_IMAGE_HEIGHT,

@@ -29,6 +29,35 @@ export function sortByNewestCreated<T>(rows: readonly T[]): T[] {
   });
 }
 
+function hasFirstPartyCdnImage(image: string | null | undefined): boolean {
+  if (!image) {
+    return false;
+  }
+  return (
+    image.startsWith('/cdn-image/') ||
+    image.startsWith('https://cdn.ogabassey.com/')
+  );
+}
+
+function preferFirstPartyCdnLeadProduct<T extends { image?: string | null }>(
+  items: readonly T[]
+): T[] {
+  if (items.length <= 1 || hasFirstPartyCdnImage(items[0]?.image)) {
+    return [...items];
+  }
+  const cdnLeadIndex = items.findIndex((item) =>
+    hasFirstPartyCdnImage(item.image)
+  );
+  if (cdnLeadIndex <= 0) {
+    return [...items];
+  }
+  return [
+    items[cdnLeadIndex],
+    ...items.slice(0, cdnLeadIndex),
+    ...items.slice(cdnLeadIndex + 1),
+  ];
+}
+
 export function selectOgabasseyLaunchProducts({
   launchCandidateRows,
   pinnedProductRows,
@@ -50,11 +79,13 @@ export function selectOgabasseyLaunchProducts({
     OGABASSEY_PINNED_LAUNCH_SLUGS,
     OGABASSEY_LAUNCH_PINS_SINCE
   );
-  const launchSubset = selectLaunchProducts(
-    [...pinnedProducts, ...carouselProducts].filter(
-      (product) => Boolean(product.slug) && Boolean(product.image)
-    ),
-    { pinned: launchPins, limit: LAUNCH_CAROUSEL_LIMIT }
+  const launchSubset = preferFirstPartyCdnLeadProduct(
+    selectLaunchProducts(
+      [...pinnedProducts, ...carouselProducts].filter(
+        (product) => Boolean(product.slug) && Boolean(product.image)
+      ),
+      { pinned: launchPins, limit: LAUNCH_CAROUSEL_LIMIT }
+    )
   );
 
   // Launch items feed the server-built hero slides and home JSON-LD only —

@@ -1,9 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { fetchSameOriginOgabasseyImageResponse } from '@/lib/ogabassey-same-origin-cdn-image';
-import {
-  ogabasseyCdnImageProxyPathSchema,
-  ogabasseyCdnImageProxySearchParamsSchema,
-} from '@/schemas/ogabassey-cdn-image-proxy';
+import { ogabasseyCdnImageProxyPathSchema } from '@/schemas/ogabassey-cdn-image-proxy';
+import { ogabasseyCdnImageProxySearchParamsSchema } from '@/schemas/ogabassey-cdn-image-query';
 
 interface CdnImageRouteContext {
   params: Promise<{

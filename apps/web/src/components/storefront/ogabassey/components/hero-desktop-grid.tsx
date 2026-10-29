@@ -3,10 +3,8 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loader';
 import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
-import {
-  toOgabasseySameOriginSrcSet,
-  toOgabasseySameOriginTransformUrl,
-} from '@/lib/ogabassey-same-origin-hero-url';
+import { toOgabasseySameOriginTransformUrl } from '@/lib/ogabassey-same-origin-hero-url';
+import { toOgabasseySameOriginSrcSet } from '@/lib/ogabassey-same-origin-srcset';
 import { asRoute } from '@/lib/routes';
 import {
   capSrcSetWidthRungs,

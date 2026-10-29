@@ -141,4 +141,35 @@ describe('CategoryRecentCarousel', () => {
 
     expect(screen.queryByText(/no image phone/i)).not.toBeInTheDocument();
   });
+
+  it('hoists pinned launch slugs and prefers a CDN-backed slide at slide 0', () => {
+    const pinnedProducts = [
+      {
+        id: 'flip8',
+        name: 'Samsung Galaxy Z Flip8',
+        slug: 'samsung-galaxy-z-flip8',
+        price: '₦1,800,000',
+        image: 'https://images.samsung.com/flip8.jpg',
+      },
+      {
+        id: 's26fe',
+        name: 'Samsung Galaxy S26 FE',
+        slug: 'samsung-galaxy-s26-fe',
+        price: '₦950,000',
+        image:
+          'https://cdn.ogabassey.com/core-assets/products/samsung-galaxy-s26-fe-new.avif',
+      },
+    ] as unknown as Product[];
+
+    render(
+      <CategoryRecentCarousel
+        categoryName="Smartphones"
+        products={pinnedProducts}
+      />
+    );
+
+    const links = screen.getAllByRole('link');
+    expect(links[0]).toHaveAttribute('href', '/p/samsung-galaxy-s26-fe');
+    expect(links[1]).toHaveAttribute('href', '/p/samsung-galaxy-z-flip8');
+  });
 });

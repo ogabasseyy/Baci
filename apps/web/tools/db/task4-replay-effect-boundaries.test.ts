@@ -22,7 +22,9 @@ const task4Paths = [
   'apps/web/tools/db/persist-supabase-history-fixtures.ts',
   'apps/web/tools/db/persist-supabase-history-fixtures.test.ts',
   'apps/web/tools/db/run-replay-command.ts',
+  'apps/web/tools/db/supabase-replay-command-diagnostic.ts',
   'apps/web/tools/db/run-replay-command.test.ts',
+  'apps/web/tools/db/run-replay-command-diagnostics.test.ts',
   'apps/web/tools/db/run-replay-command-effects.test.ts',
   'apps/web/tools/db/run-supabase-history-replay.ts',
   'apps/web/tools/db/run-supabase-history-replay.test.ts',
@@ -41,7 +43,7 @@ const task4Paths = [
   'apps/web/tools/db/task4-replay-effect-boundaries.test.ts',
 ] as const;
 const task4ManifestSha256 =
-  'c0f4199c6aebf10946f6d8d91039c603f9a152fb03ffbc2ef5a43bfca0266798';
+  '6348ee3965877f10d042618864c9604ac2f3387418313e1c44911be072ed89cc';
 
 function physicalLineCount(filePath: string): number {
   const body = readFileSync(path.join(workspaceRoot, filePath), 'utf8');
@@ -63,8 +65,8 @@ describe('Task 4 replay effect module boundaries', () => {
       (filePath) => !existsSync(path.join(workspaceRoot, filePath))
     );
 
-    expect(task4Paths).toHaveLength(34);
-    expect(new Set(task4Paths).size).toBe(34);
+    expect(task4Paths).toHaveLength(36);
+    expect(new Set(task4Paths).size).toBe(36);
     expect(
       createHash('sha256')
         .update(`${task4Paths.join('\n')}\n`)

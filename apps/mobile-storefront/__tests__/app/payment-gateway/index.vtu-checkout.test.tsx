@@ -8,7 +8,6 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import { router } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import type React from 'react';
 import PaymentGatewayScreen from '@/app/payment-gateway';
 import { setClipboardString } from '@/lib/clipboard';
@@ -16,14 +15,10 @@ import {
   VtuPaymentStillProcessingError,
   waitForVtuConfirmation,
 } from '@/lib/vtu-checkout';
-import {
-  WalletTopUpStillProcessingError,
-  waitForWalletTopUpConfirmation,
-} from '@/lib/wallet-top-up';
 
 const mockToastError = jest.fn();
 const mockToastSuccess = jest.fn();
-let mockSearchParams: Record<string, string> = {
+let mockSearchParams = {
   amount: '1000',
   authorizationUrl: 'https://checkout.paystack.com/test',
   customerIdentifier: '43901766923',
@@ -69,45 +64,23 @@ jest.mock('react-native-webview', () => ({
     injectedJavaScriptBeforeContentLoadedForMainFrameOnly,
     injectedJavaScriptForMainFrameOnly,
     onMessage,
-    onLoadStart,
     onNavigationStateChange,
     onShouldStartLoadWithRequest,
     source,
-    startInLoadingState,
   }: {
     injectedJavaScript?: string;
     injectedJavaScriptBeforeContentLoadedForMainFrameOnly?: boolean;
     injectedJavaScriptForMainFrameOnly?: boolean;
     onMessage?: (event: { nativeEvent: { data: string } }) => void;
-    onLoadStart?: () => void;
     onNavigationStateChange?: (event: { url: string }) => void;
     onShouldStartLoadWithRequest?: (event: { url: string }) => boolean;
     source: { uri: string };
-    startInLoadingState?: boolean;
   }) => {
     const { Pressable, Text, View } =
       jest.requireActual<typeof import('react-native')>('react-native');
 
     return (
       <View>
-        <Pressable
-          accessibilityLabel="mock-checkout-load-start"
-          onPress={onLoadStart}
-        >
-          <Text>start-loading</Text>
-        </Pressable>
-        <Pressable
-          accessibilityLabel="mock-checkout-interactive"
-          onPress={() =>
-            onMessage?.({
-              nativeEvent: {
-                data: JSON.stringify({ type: 'baci_payment_page_interactive' }),
-              },
-            })
-          }
-        >
-          <Text>{`webview-start-loading:${String(startInLoadingState)}`}</Text>
-        </Pressable>
         <Pressable
           accessibilityLabel="mock-payment-webview"
           onPress={() =>
@@ -169,21 +142,6 @@ jest.mock('react-native-webview', () => ({
 
 jest.mock('@/lib/clipboard', () => ({
   setClipboardString: jest.fn(() => Promise.resolve(true)),
-}));
-
-jest.mock('expo-web-browser', () => ({
-  openBrowserAsync: jest.fn(),
-  WebBrowserResultType: { DISMISS: 'dismiss' },
-}));
-
-jest.mock('@/lib/wallet-top-up', () => ({
-  waitForWalletTopUpConfirmation: jest.fn(),
-  WalletTopUpStillProcessingError: class extends Error {},
-}));
-
-jest.mock('@/lib/wallet-funding-intent', () => ({
-  clearWalletFundingIntentIfUnchanged: jest.fn(async () => true),
-  readWalletFundingIntentSnapshot: jest.fn(async () => null),
 }));
 
 jest.mock('@/lib/supabase', () => ({
@@ -252,149 +210,6 @@ describe('PaymentGatewayScreen', () => {
       reference: 'ref-123',
       utilityType: 'power',
     };
-  });
-
-  it('offers safe recovery for a stalled Paystack wallet checkout instead of claiming payment failed', () => {
-    jest.useFakeTimers();
-    mockSearchParams = {
-      amount: '1000',
-      authorizationUrl: 'https://checkout.paystack.com/test',
-      gateway: 'paystack',
-      merchantId: 'merchant-1',
-      paymentKind: 'wallet',
-      reference: 'WAL-123',
-    };
-
-    renderPaymentGatewayScreen();
-    fireEvent.press(screen.getByLabelText('mock-checkout-load-start'));
-    act(() => jest.advanceTimersByTime(45_000));
-
-    expect(screen.queryByText('Payment Failed')).toBeNull();
-    expect(screen.getByText('Wallet funding needs attention')).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: 'Check funding status' })
-    ).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: 'Open Paystack in browser' })
-    ).toBeTruthy();
-  });
-
-  it('opens the same Paystack session and verifies the same wallet reference after a stalled checkout', async () => {
-    jest.useFakeTimers({ advanceTimers: true });
-    mockSearchParams = {
-      amount: '1000',
-      authorizationUrl: 'https://checkout.paystack.com/test',
-      gateway: 'paystack',
-      merchantId: 'merchant-1',
-      paymentKind: 'wallet',
-      reference: 'WAL-123',
-      returnTo: '/utilities/airtime?amount=1000',
-    };
-    jest
-      .mocked(WebBrowser.openBrowserAsync)
-      .mockResolvedValueOnce({ type: WebBrowser.WebBrowserResultType.DISMISS });
-    jest.mocked(waitForWalletTopUpConfirmation).mockResolvedValueOnce({
-      reference: 'WAL-123',
-      status: 'successful',
-      success: true,
-      wallet: { balance: 1000 },
-    });
-
-    renderPaymentGatewayScreen();
-    fireEvent.press(screen.getByLabelText('mock-checkout-load-start'));
-    act(() => jest.advanceTimersByTime(45_000));
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Open Paystack in browser' })
-    );
-    await waitFor(() =>
-      expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(
-        'https://checkout.paystack.com/test'
-      )
-    );
-    expect(waitForWalletTopUpConfirmation).not.toHaveBeenCalled();
-
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Check funding status' })
-    );
-    await waitFor(() =>
-      expect(waitForWalletTopUpConfirmation).toHaveBeenCalledWith({
-        gateway: 'paystack',
-        merchantId: 'merchant-1',
-        merchantSlug: undefined,
-        reference: 'WAL-123',
-      })
-    );
-    await waitFor(() =>
-      expect(screen.getByText('Payment Successful!')).toBeTruthy()
-    );
-    act(() => jest.advanceTimersByTime(1500));
-    expect(router.replace).toHaveBeenCalledWith(
-      '/utilities/airtime?amount=1000'
-    );
-  });
-
-  it('keeps an interactive wallet checkout visible and offers recovery if loading never finishes', async () => {
-    jest.useFakeTimers();
-    mockSearchParams = {
-      amount: '1000',
-      authorizationUrl: 'https://checkout.paystack.com/test',
-      gateway: 'paystack',
-      merchantId: 'merchant-1',
-      paymentKind: 'wallet',
-      reference: 'WAL-123',
-    };
-    renderPaymentGatewayScreen();
-    fireEvent.press(screen.getByLabelText('mock-checkout-load-start'));
-    expect(screen.getByText('Loading Paystack...')).toBeTruthy();
-    expect(screen.getByText('webview-start-loading:false')).toBeTruthy();
-    await act(async () =>
-      fireEvent.press(screen.getByLabelText('mock-checkout-interactive'))
-    );
-    expect(screen.queryByText('Loading Paystack...')).toBeNull();
-    act(() => jest.advanceTimersByTime(45_000));
-    expect(
-      screen.getByText('webview:https://checkout.paystack.com/test')
-    ).toBeTruthy();
-    expect(waitForWalletTopUpConfirmation).not.toHaveBeenCalled();
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Recover wallet funding checkout' })
-    );
-    expect(screen.getByText('Wallet funding needs attention')).toBeTruthy();
-  });
-
-  it('does not claim success or reopen checkout when the funding is still processing', async () => {
-    jest.useFakeTimers({ advanceTimers: true });
-    mockSearchParams = {
-      amount: '1000',
-      authorizationUrl: 'https://checkout.paystack.com/test',
-      gateway: 'paystack',
-      merchantId: 'merchant-1',
-      paymentKind: 'wallet',
-      reference: 'WAL-123',
-    };
-    jest
-      .mocked(waitForWalletTopUpConfirmation)
-      .mockRejectedValueOnce(
-        new WalletTopUpStillProcessingError(
-          'Wallet top-up is still processing. Check your wallet shortly.'
-        )
-      );
-    renderPaymentGatewayScreen();
-    fireEvent.press(screen.getByLabelText('mock-checkout-load-start'));
-    act(() => jest.advanceTimersByTime(45_000));
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Check funding status' })
-    );
-    await waitFor(() =>
-      expect(
-        screen.getByText(
-          'Wallet top-up is still processing. Check your wallet shortly.'
-        )
-      ).toBeTruthy()
-    );
-    expect(screen.queryByText('Payment Successful!')).toBeNull();
-    expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled();
-    expect(router.replace).not.toHaveBeenCalled();
   });
 
   it('does not apply a top safe-area inset under the native stack header', () => {

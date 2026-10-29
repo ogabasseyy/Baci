@@ -404,7 +404,11 @@ python3 - "$smoke_output" <<'PY'
 import json, sys
 from pathlib import Path
 result = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-assert result == {"snapshot_sha256": result["snapshot_sha256"], "tsx": "passed", "dotenv": "passed"}
-assert len(result["snapshot_sha256"]) == 64
+if (not isinstance(result, dict) or set(result) != {"snapshot_sha256", "tsx", "dotenv"}
+        or result.get("tsx") != "passed" or result.get("dotenv") != "passed"
+        or not isinstance(result.get("snapshot_sha256"), str)
+        or len(result["snapshot_sha256"]) != 64
+        or any(char not in "0123456789abcdef" for char in result["snapshot_sha256"])):
+    raise SystemExit("independent smoke returned malformed or incomplete synthetic evidence")
 print("independent materialized-snapshot smoke passed")
 PY

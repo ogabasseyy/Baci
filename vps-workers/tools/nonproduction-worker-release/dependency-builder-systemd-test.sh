@@ -97,6 +97,16 @@ worker_group_created=1
 useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin --gid baci-worker --groups baci-locks baci-worker
 worker_user_created=1
 
+builder_uid="$(id -u baci-release-build)"
+worker_gid="$(getent group baci-worker | cut -d: -f3)"
+lock_gid="$(getent group baci-locks | cut -d: -f3)"
+for identity_value in "$builder_uid" "$worker_gid" "$lock_gid"; do
+  if [[ ! "$identity_value" =~ ^[0-9]+$ ]] || [ "$identity_value" -eq 0 ]; then
+    echo "disposable identity lookup did not return a nonzero numeric ID" >&2
+    exit 1
+  fi
+done
+
 if ! command -v node >/dev/null; then
   echo "Node is unavailable on the disposable runner" >&2
   exit 1
@@ -412,7 +422,7 @@ if [ -n "$unit_load_state" ] && [ "$unit_load_state" != not-found ]; then
 fi
 test_unit_owned=1
 systemd-run --quiet --system --wait --pipe --collect --unit="$test_unit" \
-  --uid="$(id -u baci-release-build)" --gid="$(id -g baci-worker)" \
+  --uid="$builder_uid" --gid="$worker_gid" \
   --property=ProtectSystem=strict --property=ProtectHome=true --property=PrivateTmp=true \
   --property=PrivateDevices=true --property=PrivateNetwork=true --property=NoNewPrivileges=true \
   --property=PrivateUsers=true --property=RestrictSUIDSGID=true --property=LockPersonality=true \
@@ -423,7 +433,7 @@ systemd-run --quiet --system --wait --pipe --collect --unit="$test_unit" \
   --property="InaccessiblePaths=/srv/baci-workers/runtime /srv/baci-workers/releases /srv/baci-workers/locks" \
   --setenv=PATH=/usr/bin:/bin --setenv=HOME=/nonexistent --setenv=NODE_ENV=production \
   /usr/bin/python3 "$helper_root/dependency-snapshot-smoke.py" "$release_root" \
-  "$(id -u baci-release-build)" "$(id -g baci-worker)" "$(id -g baci-locks)" >"$smoke_output"
+  "$builder_uid" "$worker_gid" "$lock_gid" >"$smoke_output"
 python3 - "$smoke_output" <<'PY'
 import json, sys
 from pathlib import Path

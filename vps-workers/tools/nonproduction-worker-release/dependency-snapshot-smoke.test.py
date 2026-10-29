@@ -14,6 +14,15 @@ SPEC.loader.exec_module(smoke)
 
 
 class DependencySnapshotSmokeTests(unittest.TestCase):
+    def test_linux_fixture_uses_numeric_group_lookups_for_systemd_arguments(self):
+        fixture = SCRIPT.with_name("dependency-builder-systemd-test.sh").read_text(encoding="utf-8")
+        self.assertIn('worker_gid="$(getent group baci-worker | cut -d: -f3)"', fixture)
+        self.assertIn('lock_gid="$(getent group baci-locks | cut -d: -f3)"', fixture)
+        self.assertIn('--gid="$worker_gid"', fixture)
+        self.assertIn('"$builder_uid" "$worker_gid" "$lock_gid"', fixture)
+        self.assertNotIn("id -g baci-worker", fixture)
+        self.assertNotIn("id -g baci-locks", fixture)
+
     def test_snapshot_layout_failure_reports_only_category_and_relative_path(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

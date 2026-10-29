@@ -1,0 +1,24 @@
+name: Worker release egress prototype systemd tests
+
+on:
+  pull_request:
+    paths:
+      - 'vps-workers/tools/nonproduction-worker-release/worker_release_egress_*.py'
+      - '.github/workflows/worker-release-egress-prototype-systemd-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-egress-systemd:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run egress protocol unit regressions
+        run: /usr/bin/python3 -B vps-workers/tools/nonproduction-worker-release/worker_release_egress_proxy.test.py -v
+      - name: Run real PrivateNetwork and AF_UNIX peer integration
+        run: sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/tools/nonproduction-worker-release/worker_release_egress_systemd_integration.py

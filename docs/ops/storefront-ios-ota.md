@@ -105,13 +105,43 @@ be established reliably. Matching workflow secret expressions is not evidence
 that their historical values match.
 
 First publish the prebuilt `dist` with `eas update --skip-bundler --input-dir`
-to an isolated, unmapped test branch. Point only a new test channel at that
-branch, verify the manifest's platform, runtime, config and bundle hash, and
-test an appropriate build without making a real payment. After review and
-verification, publish the same artifact to the existing production channel;
-do not change its branch mapping to the test branch. Verify the production
-manifest and remove only the temporary test channel and branch. OTA prompts
-require the customer to accept the update and reload the app.
+to an isolated test branch. Point a new `ota-test-*` channel at that branch and
+verify the manifest's platform, runtime, config and bundle hash. The released
+production binary cannot receive this channel: it embeds `production`, and the
+app has no channel switcher. Do not mistake a production-channel response for
+an installed-app test of the candidate.
+
+Build a separate release-mode iOS Simulator app from the target binary's native
+source revision and exact dependency lockfile, using the same production native
+configuration and public environment. Use a clean, isolated checkout: Expo
+prebuild and the test-channel plist change native files there. After prebuild,
+extract `Payload/Ogabassey.app/Expo.plist` from the verified target IPA and use
+the current `main` helper to create a new plist. The helper refuses an existing
+output and preserves every target setting except the channel:
+
+```sh
+python3 .github/scripts/prepare-storefront-ota-test-plist.py \
+  --source /absolute/path/to/verified-target-Expo.plist \
+  --output /absolute/path/to/new-test-Expo.plist \
+  --runtime "$TARGET_RUNTIME" --channel "$TEST_CHANNEL" \
+  --source-channel production --updates-url "$VERIFIED_UPDATES_URL"
+```
+
+Copy the generated test plist to `ios/Ogabassey/Supporting/Expo.plist` in the
+isolated test checkout, then build the `Ogabassey` scheme in Release mode for
+`iphonesimulator` with code signing disabled. Inspect the built app's
+`Expo.plist`: updates must be enabled and its project URL, runtime and channel
+must match the verified target and the new test channel. Use a dedicated test
+simulator without an existing Ogabassey installation or customer session.
+Install the test build, verify it fetches and runs the candidate update, and
+exercise the relevant flow without making a real payment. Stop if a compatible
+test build or its settings cannot be verified.
+
+After review and verification, publish the same artifact to the existing
+production channel; do not change its branch mapping to the test branch.
+Verify the production manifest and remove only the temporary test channel and
+branch. OTA prompts require the customer to accept the update and reload the
+app.
 
 Upload the generated source maps to the configured error-tracking providers
 using their existing production credentials; see [PostHog observability](../posthog-observability.md).

@@ -52,7 +52,7 @@ jobs:
             echo 'Selected source does not embed the build SHA. Create a reviewed forward revert instead of exporting this older revision.' >&2
             exit 1
           fi
-          node --test .github/scripts/prepare-storefront-ota-public-config.test.mjs .github/scripts/storefront-ota-config-validation.test.mjs .github/scripts/storefront-ota-constants.test.mjs .github/scripts/storefront-ota-digest-collection.test.mjs .github/scripts/storefront-ota-digest-validation.test.mjs .github/scripts/storefront-ota-metadata-validation.test.mjs .github/scripts/storefront-ota-secret-scan.test.mjs .github/scripts/storefront-ota-sha256.test.mjs .github/scripts/storefront-ota-public-config.test.mjs .github/scripts/verify-storefront-ota-export.test.mjs
+          node --test .github/scripts/prepare-storefront-ota-public-config.test.mjs .github/scripts/prepare-storefront-ota-test-plist.test.mjs .github/scripts/storefront-ota-config-validation.test.mjs .github/scripts/storefront-ota-constants.test.mjs .github/scripts/storefront-ota-digest-collection.test.mjs .github/scripts/storefront-ota-digest-validation.test.mjs .github/scripts/storefront-ota-metadata-validation.test.mjs .github/scripts/storefront-ota-secret-scan.test.mjs .github/scripts/storefront-ota-sha256.test.mjs .github/scripts/storefront-ota-public-config.test.mjs .github/scripts/verify-storefront-ota-export.test.mjs
           cp .github/scripts/storefront-ota-config-validation.mjs "$RUNNER_TEMP/"
           cp .github/scripts/storefront-ota-constants.mjs "$RUNNER_TEMP/"
           cp .github/scripts/storefront-ota-digest-collection.mjs "$RUNNER_TEMP/"

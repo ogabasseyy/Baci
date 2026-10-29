@@ -346,7 +346,7 @@ for account in baci-worker bassey; do
   runuser -u "$account" -- env \
     PYTHONPATH="$helper_dir" GATE_SCRIPT="$helper_dir/worker-release-launch-gate" \
     LATCH_PATH="$permission_root/locks/release-recovery-latch.json" GATE_SOCKET="$permission_root/missing.sock" \
-    /usr/bin/python3 -c 'import os, runpy; from pathlib import Path; import worker_release_recovery_latch as recovery; original = recovery.service_allowed; recovery.service_allowed = lambda service: original(service, path=Path(os.environ["LATCH_PATH"]), socket_path=Path(os.environ["GATE_SOCKET"]), uid=0, gid=__import__("grp").getgrnam("baci-locks").gr_gid); gate = runpy.run_path(os.environ["GATE_SCRIPT"], run_name="worker_gate_test"); assert gate["main"](["scheduled"]) == 0; assert gate["main"](["unit", "baci-domain-event-router"]) == 1'
+    /usr/bin/python3 -c 'import os, runpy; from pathlib import Path; import worker_release_recovery_latch as recovery; original = recovery.service_allowed; recovery.service_allowed = lambda service: original(service, path=Path(os.environ["LATCH_PATH"]), socket_path=Path(os.environ["GATE_SOCKET"]), uid=0, gid=__import__("grp").getgrnam("baci-locks").gr_gid); gate = runpy.run_path(os.environ["GATE_SCRIPT"], run_name="worker_gate_test"); assert gate["main"](["scheduled"]) == 1, "scheduled ExecCondition must deny while recovery latch exists"; assert gate["main"](["unit", "baci-domain-event-router"]) == 1, "core unit must deny without broker gate"'
   set +e
   runuser -u "$account" -- env PYTHONPATH="$helper_dir" \
     "$helper_dir/worker-release-launch-gate" invalid

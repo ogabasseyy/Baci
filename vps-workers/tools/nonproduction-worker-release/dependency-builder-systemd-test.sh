@@ -189,11 +189,21 @@ if [ -e /usr/bin/pnpm ] || [ -L /usr/bin/pnpm ]; then
   echo "refusing pre-existing /usr/bin/pnpm on disposable runner" >&2
   exit 1
 fi
-pnpm_entrypoint="$(readlink -f "$(command -v pnpm)")"
-case "$pnpm_entrypoint" in
-  */pnpm/bin/pnpm.cjs) ;;
-  *) echo "workflow pnpm entrypoint has an unexpected layout" >&2; exit 1 ;;
-esac
+pnpm_launcher="$(command -v pnpm)"
+pnpm_launcher_resolved="$(readlink -f "$pnpm_launcher")"
+pnpm_bin_dir="$(dirname "$pnpm_launcher")"
+pnpm_install_root="$(cd "$pnpm_bin_dir/.." && pwd -P)"
+pnpm_candidates=()
+while IFS= read -r -d '' candidate; do
+  if [ "$(/usr/bin/node "$candidate" --version 2>/dev/null || true)" = '11.7.0' ]; then
+    pnpm_candidates+=("$candidate")
+  fi
+done < <(find "$pnpm_install_root" -type f -path '*/pnpm/bin/pnpm.cjs' -print0)
+if [ "${#pnpm_candidates[@]}" -ne 1 ]; then
+  echo "could not locate one pinned pnpm package under ${pnpm_install_root}; resolved launcher: ${pnpm_launcher_resolved}" >&2
+  exit 1
+fi
+pnpm_entrypoint="${pnpm_candidates[0]}"
 pnpm_package_root="${pnpm_entrypoint%/bin/pnpm.cjs}"
 if [ ! -d "$pnpm_package_root" ] || [ ! -f "$pnpm_entrypoint" ]; then
   echo "workflow pnpm package is unavailable" >&2

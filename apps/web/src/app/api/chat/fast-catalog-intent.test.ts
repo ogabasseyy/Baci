@@ -61,6 +61,27 @@ describe('interpretFastCatalogIntent', () => {
     ).toBeNull();
   });
 
+  it('leaves price negotiations and discount questions to the existing chat flow', () => {
+    for (const message of [
+      'What is your last price for iPhone 16?',
+      'Can you reduce the price of iPhone 16 Pro?',
+      'Do you offer a discount on AirPods?',
+      'Can I pay in installments for a phone?',
+      'What warranty comes with this phone?',
+    ]) {
+      expect(interpretFastCatalogIntent([message], categories)).toBeNull();
+    }
+  });
+
+  it('uses the catalog for a direct best-price question', () => {
+    expect(
+      interpretFastCatalogIntent(
+        ['What is the best price for iPhone 16?'],
+        categories
+      )
+    ).toMatchObject({ kind: 'search', query: 'iPhone 16' });
+  });
+
   it('asks for clarification instead of dropping an unparseable budget', () => {
     expect(
       interpretFastCatalogIntent(

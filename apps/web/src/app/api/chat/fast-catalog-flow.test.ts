@@ -56,14 +56,20 @@ describe('tryFastCatalogChat', () => {
     );
   });
 
-  it('does not read the catalog or intercept payment and order questions', async () => {
-    expect(
-      await tryFastCatalogChat({
-        messages: messages('I paid for my phone order'),
-        tenant,
-        signal: new AbortController().signal,
-      })
-    ).toBeNull();
+  it('does not read the catalog or intercept payment, order, or negotiation questions', async () => {
+    for (const message of [
+      'I paid for my phone order',
+      'What is your last price for iPhone 16?',
+      'Can you reduce the price of iPhone 16 Pro?',
+    ]) {
+      expect(
+        await tryFastCatalogChat({
+          messages: messages(message),
+          tenant,
+          signal: new AbortController().signal,
+        })
+      ).toBeNull();
+    }
     expect(mocks.categories).not.toHaveBeenCalled();
     expect(mocks.products).not.toHaveBeenCalled();
   });

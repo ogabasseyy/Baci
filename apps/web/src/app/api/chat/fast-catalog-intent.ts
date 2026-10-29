@@ -22,6 +22,8 @@ export type FastCatalogIntent =
 
 const ACTION_REQUEST =
   /\b(?:order|orders|payment|payments|paid|pay|transfer|cancel|refund|receipt|delivery|deliver|shipping|track|tracking|cart|checkout|support|buy\s+(?:it|that|this))\b/i;
+const NON_CATALOG_REQUEST =
+  /\b(?:negotiat\w*|discount\w*|haggl\w*|(?:last|final)\s+price|(?:reduce|lower)\s+(?:the\s+|your\s+)?(?:price|cost)|bargain|deal|warrant(?:y|ies)|instal{1,2}ments?)\b/i;
 const CONTEXTUAL_PRICE =
   /^(?:how much(?:\s+(?:is|for)\s+(?:it|that|this))?|what(?:'s| is)\s+(?:the\s+)?(?:price|cost)(?:\s+(?:of|for))?\s+(?:it|that|this))[?!.\s]*$/i;
 const SHOPPING_REQUEST =
@@ -120,7 +122,12 @@ export function interpretFastCatalogIntent(
   categories: FastCatalogCategory[]
 ): FastCatalogIntent | null {
   const latest = userMessages.at(-1)?.trim() ?? '';
-  if (!latest || ACTION_REQUEST.test(latest)) return null;
+  if (
+    !latest ||
+    ACTION_REQUEST.test(latest) ||
+    NON_CATALOG_REQUEST.test(latest)
+  )
+    return null;
 
   const previous = userMessages.at(-2) ?? '';
   const isShoppingRequest = (value: string) =>

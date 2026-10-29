@@ -4,6 +4,7 @@ import {
   type ChatProductResult,
   createChatProductResult,
 } from '@/ai/chat-product-result';
+import { resolveSerializedAnchorStock } from '@/lib/serialized-anchor-stock';
 import { searchStorefrontProducts } from '@/lib/storefront-search';
 import { createPublicClient } from '@/lib/supabase/public';
 import {
@@ -159,25 +160,59 @@ export async function loadFastCatalogProducts(
         (!intent.preference ||
           catalogMatchesPreference(row.product_key_specs, intent.preference))
     );
-  const products = rows.map(createChatProductResult);
-  if (ranked) {
-    const order = new Map(ranked.productIds.map((id, index) => [id, index]));
-    products.sort((a, b) => (order.get(a.id) ?? 50) - (order.get(b.id) ?? 50));
-  }
-  const variantIds = products
+  const variantIds = rows
     .filter(
       (product) =>
         product.has_variants || product.variant_model === 'sku_matrix'
     )
     .map((product) => product.id);
-  let variants: FastCatalogVariant[] = [];
-  if (variantIds.length) {
-    const result = await supabase.rpc('get_storefront_product_variants', {
-      p_product_ids: variantIds,
+  const variantIdSet = new Set(variantIds);
+  const simpleIds = rows
+    .filter((product) => !variantIdSet.has(product.id))
+    .map((product) => product.id);
+  const anchorBatches = [];
+  for (let index = 0; index < simpleIds.length; index += 100) {
+    anchorBatches.push(simpleIds.slice(index, index + 100));
+  }
+  const [anchorResults, variantResult] = await Promise.all([
+    Promise.all(
+      anchorBatches.map((productIds) =>
+        resolveSerializedAnchorStock({ supabase, merchantId, productIds })
+      )
+    ),
+    variantIds.length
+      ? supabase.rpc('get_storefront_product_variants', {
+          p_product_ids: variantIds,
+        })
+      : null,
+  ]);
+  if (anchorResults.some((result) => result.failed))
+    throw new Error('Catalog availability unavailable');
+  const anchors = new Map(
+    anchorResults.flatMap((result) => [...result.projections])
+  );
+  const products = rows.map((row) => {
+    if (variantIdSet.has(row.id)) return createChatProductResult(row);
+    const anchor = anchors.get(row.id.toLowerCase());
+    // Cart-link transfer and order creation enforce stock_quantity. A missing
+    // or zero scalar must not make a managed product look purchasable.
+    const stock = anchor?.stockQuantity ?? row.stock_quantity ?? 0;
+    return createChatProductResult({
+      ...row,
+      manage_stock: anchor?.manageStock ?? row.manage_stock,
+      stock,
+      stock_quantity: stock,
     });
-    if (result.error || !Array.isArray(result.data))
+  });
+  if (ranked) {
+    const order = new Map(ranked.productIds.map((id, index) => [id, index]));
+    products.sort((a, b) => (order.get(a.id) ?? 50) - (order.get(b.id) ?? 50));
+  }
+  let variants: FastCatalogVariant[] = [];
+  if (variantResult) {
+    if (variantResult.error || !Array.isArray(variantResult.data))
       throw new Error('Catalog options unavailable');
-    variants = result.data.flatMap((row) => {
+    variants = variantResult.data.flatMap((row) => {
       const parsed = variantRowSchema.safeParse(row);
       return parsed.success ? [parsed.data] : [];
     });

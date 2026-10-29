@@ -8,6 +8,7 @@ vi.hoisted(() => {
 });
 
 import { GiglApiClient } from './gigl.auth';
+import { mockGiglFetchWithCoverage } from './gigl.coverage-test-support';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
 import {
@@ -34,10 +35,7 @@ function mockGiglFetchSequence(...responses: Response[]) {
 
 function buildQuoteHarness() {
   const log = vi.fn();
-  const safeFetch = (
-    url: string,
-    options?: RequestInit & { timeout?: number }
-  ) => fetch(url, options);
+  const safeFetch = mockGiglFetchWithCoverage;
   const apiClient = new GiglApiClient({ safeFetch, log });
   const stationsService = new GiglStationsService(apiClient);
 

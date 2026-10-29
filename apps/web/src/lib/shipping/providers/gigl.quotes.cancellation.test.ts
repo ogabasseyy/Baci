@@ -10,6 +10,7 @@ vi.hoisted(() => {
 
 import { quoteProviderFailure } from '../quote-provider-failure';
 import { GiglApiClient } from './gigl.auth';
+import { mockGiglFetchWithCoverage } from './gigl.coverage-test-support';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
 import {
@@ -22,10 +23,7 @@ import {
 
 function buildHarness() {
   const log = vi.fn();
-  const safeFetch = (
-    url: string,
-    options?: RequestInit & { timeout?: number }
-  ) => fetch(url, options);
+  const safeFetch = mockGiglFetchWithCoverage;
   const apiClient = new GiglApiClient({ safeFetch, log });
   const stationsService = new GiglStationsService(apiClient);
 
@@ -89,7 +87,7 @@ describe('GIGL quote cancellation telemetry', () => {
     );
   });
 
-  it('marks an empty aborted selection run as a timeout instead of no-coverage', async () => {
+  it('marks an already aborted quote request as a timeout instead of no-coverage', async () => {
     // Phase 1 warms the token cache so phase 2 reaches the selection flow.
     vi.stubGlobal(
       'fetch',
@@ -136,7 +134,7 @@ describe('GIGL quote cancellation telemetry', () => {
     );
     expect(harness.log).toHaveBeenCalledWith(
       'warn',
-      'GIGL quote selection timed out',
+      'GIGL quote timed out',
       expect.objectContaining({ timeoutMs: 100 })
     );
   });

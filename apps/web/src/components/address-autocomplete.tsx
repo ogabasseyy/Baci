@@ -10,8 +10,8 @@ import {
   type PlacePrediction,
 } from '@/lib/google-places';
 import { cn } from '@/lib/utils';
-import { AddressAutocompleteAttribution } from './address-autocomplete-attribution';
 import { AddressAutocompleteDropdown } from './address-autocomplete-dropdown';
+import { AddressAutocompleteFeedback } from './address-autocomplete-feedback';
 import { loadPredictions } from './address-autocomplete-predictions';
 import { selectAddressPrediction } from './address-autocomplete-selection';
 import { useAddressAutocompleteStatus } from './address-autocomplete-status';
@@ -26,6 +26,7 @@ export function AddressAutocomplete({
   useThemedInput = false,
   showIcon = false,
   country,
+  selectionRevision = 0,
   onError,
   className,
   ...props
@@ -50,6 +51,16 @@ export function AddressAutocomplete({
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
   const predictionRequestId = useRef(0);
   const placeDetailsRequestId = useRef(0);
+  const [previousRevision, setPreviousRevision] = useState(selectionRevision);
+  if (selectionRevision !== previousRevision) {
+    setPreviousRevision(selectionRevision);
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    predictionRequestId.current += 1;
+    placeDetailsRequestId.current += 1;
+    setPredictions([]);
+    setIsOpen(false);
+    setIsLoading(false);
+  }
   // Sync internal value with the controlled prop during render (prev-prop
   // compare) so users never see a stale frame between commits.
   const [prevValue, setPrevValue] = useState(value);
@@ -279,17 +290,10 @@ export function AddressAutocomplete({
           onSelect={handlePredictionSelect}
         />
       </div>
-      {selectedAddress?.provider === 'geoapify' && (
-        <div className="mt-2">
-          <AddressAutocompleteAttribution provider="geoapify" />
-        </div>
-      )}
-      {suggestionsFailed && (
-        <p role="status" className="mt-2 text-xs text-muted-foreground">
-          Address suggestions are unavailable. You can enter your full address,
-          including city and state, manually.
-        </p>
-      )}
+      <AddressAutocompleteFeedback
+        provider={selectedAddress?.provider}
+        suggestionsFailed={suggestionsFailed}
+      />
     </div>
   );
 }

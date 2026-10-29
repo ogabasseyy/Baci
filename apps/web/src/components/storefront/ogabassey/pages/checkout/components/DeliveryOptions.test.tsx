@@ -18,6 +18,7 @@ const props = (): ComponentProps<typeof DeliveryOptions> => ({
     stationPickupQuotes: [],
     selectedQuoteId: '',
     setSelectedQuoteId: vi.fn(),
+    onRefreshRates: vi.fn(),
   },
   airport: {
     airportType: 'delivery',
@@ -50,6 +51,11 @@ it('shows only the currently selected delivery method details', () => {
     screen.getByRole('heading', { name: 'Main Office Pickup' })
   ).toBeVisible();
   expect(
+    screen.getByText(
+      '1st Floor Taiyelolu Towers, 2 Olaide Tomori St, Ikeja, Lagos'
+    )
+  ).toBeVisible();
+  expect(
     screen.queryByText(/no nearby GIG Logistics pickup station/i)
   ).not.toBeInTheDocument();
   rerender(
@@ -62,6 +68,6 @@ it('shows only the currently selected delivery method details', () => {
     screen.queryByRole('heading', { name: 'Main Office Pickup' })
   ).not.toBeInTheDocument();
   expect(
-    screen.getByText(/no nearby GIG Logistics pickup station/i)
+    screen.getByText(/Pickup station rates are unavailable/i)
   ).toBeVisible();
 });

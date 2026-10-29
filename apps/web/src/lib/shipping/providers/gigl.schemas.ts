@@ -22,7 +22,16 @@ const optionalNumberSchema = z
 
 const envelopeObject = z
   .object({
-    status: optionalNumberSchema,
+    status: z
+      .union([
+        z.number(),
+        z
+          .string()
+          .regex(/^[1-5]\d{2}$/)
+          .transform(Number),
+      ])
+      .nullish()
+      .transform((value) => value ?? undefined),
     success: z.boolean().optional(),
     message: optionalStringSchema,
     data: z.unknown().optional(),

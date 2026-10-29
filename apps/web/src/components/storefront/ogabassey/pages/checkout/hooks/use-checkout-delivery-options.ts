@@ -22,8 +22,9 @@ interface UseCheckoutDeliveryOptionsInput {
   doorDeliveryQuotes: ComponentProps<
     typeof DoorDeliveryQuoteOptions
   >['doorDeliveryQuotes'];
-  fetchShippingQuotes: () => void;
+  fetchShippingQuotes: (preference: 'door' | 'pickup_station') => void;
   hasMerchantPickupQuote: boolean;
+  needsGiglLocation?: boolean;
   isHydrated: boolean;
   isLoadingQuotes: boolean;
   isNewAddressMode: boolean;
@@ -57,6 +58,7 @@ export function useCheckoutDeliveryOptions({
   doorDeliveryQuotes,
   fetchShippingQuotes,
   hasMerchantPickupQuote,
+  needsGiglLocation = false,
   isHydrated,
   isLoadingQuotes,
   isNewAddressMode,
@@ -85,6 +87,9 @@ export function useCheckoutDeliveryOptions({
     return null;
   }
 
+  const hasMixedPickupLocations =
+    hasMerchantPickupQuote &&
+    stationPickupQuotes.some((quote) => quote.provider === 'GIGL');
   return {
     tabs: {
       deliveryMethod,
@@ -92,6 +97,7 @@ export function useCheckoutDeliveryOptions({
       merchantSlug,
       stationPickupQuote,
       hasMerchantPickupQuote,
+      hasMixedPickupLocations,
       onSelect: selectDeliveryMethod,
     },
     station: {
@@ -100,6 +106,9 @@ export function useCheckoutDeliveryOptions({
       stationPickupQuotes,
       selectedQuoteId,
       setSelectedQuoteId,
+      onRefreshRates: () => fetchShippingQuotes('pickup_station'),
+      needsGiglLocation,
+      hasMixedPickupLocations,
     },
     airport: {
       airportType,
@@ -120,6 +129,7 @@ export function useCheckoutDeliveryOptions({
       },
     },
     door: {
+      needsGiglLocation,
       isLoadingQuotes,
       doorDeliveryQuotes,
       stationPickupQuote,
@@ -129,7 +139,7 @@ export function useCheckoutDeliveryOptions({
         setSelectedQuoteId(quoteId);
         setDeliveryMethod('pickup_station');
       },
-      onRefreshRates: fetchShippingQuotes,
+      onRefreshRates: () => fetchShippingQuotes('door'),
     },
   };
 }

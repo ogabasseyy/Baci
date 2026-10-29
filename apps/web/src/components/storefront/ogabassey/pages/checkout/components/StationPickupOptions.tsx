@@ -3,20 +3,33 @@ import { formatAmountInCurrency } from '@/lib/resolve-merchant-currency';
 import type { ShippingQuote } from '@/types/shipping-quote';
 import { SmartQuoteLoader } from '../../../components/SmartQuoteLoader';
 import { getPickupStationCopy } from '../utils';
+import { GiglLocationNotice } from './GiglLocationNotice';
 
 export function StationPickupOptions({
   isLoadingQuotes,
-  stationPickupQuote,
-  stationPickupQuotes,
+  stationPickupQuote: primaryQuote,
+  stationPickupQuotes: quotes,
   selectedQuoteId,
   setSelectedQuoteId,
+  onRefreshRates,
+  needsGiglLocation = false,
+  hasMixedPickupLocations = false,
 }: {
   isLoadingQuotes: boolean;
   stationPickupQuote: ShippingQuote | undefined;
   stationPickupQuotes: ShippingQuote[];
   selectedQuoteId: string;
   setSelectedQuoteId: (id: string) => void;
+  onRefreshRates: () => void;
+  needsGiglLocation?: boolean;
+  hasMixedPickupLocations?: boolean;
 }) {
+  const stationPickupQuotes = needsGiglLocation
+    ? quotes.filter((quote) => quote.provider !== 'GIGL')
+    : quotes;
+  const stationPickupQuote = needsGiglLocation
+    ? stationPickupQuotes[0]
+    : primaryQuote;
   return isLoadingQuotes ? (
     <SmartQuoteLoader />
   ) : stationPickupQuotes.length > 0 ? (
@@ -27,7 +40,9 @@ export function StationPickupOptions({
     // "Store Pickup") via getPickupStationCopy.
     <fieldset className="m-0 mt-4 min-w-0 border-0 p-0 animate-in fade-in">
       <legend className="mb-3 text-xs font-bold uppercase tracking-wide text-store-background-text/70">
-        {getPickupStationCopy(stationPickupQuote).detailHeading}
+        {hasMixedPickupLocations
+          ? 'Pickup locations'
+          : getPickupStationCopy(stationPickupQuote).detailHeading}
       </legend>
       <div className="space-y-3">
         {stationPickupQuotes.map((quote) => (
@@ -51,6 +66,11 @@ export function StationPickupOptions({
                 <span className="text-sm font-bold text-store-background-text">
                   {quote.displayName}
                 </span>
+                {hasMixedPickupLocations && (
+                  <p className="mt-1 text-xs font-bold text-store-primary">
+                    {getPickupStationCopy(quote).methodLabel}
+                  </p>
+                )}
                 <p className="mt-0.5 text-xs text-store-background-text/65">
                   {quote.stationAddress ||
                     getPickupStationCopy(quote).detailFallback}
@@ -74,8 +94,24 @@ export function StationPickupOptions({
       </div>
     </fieldset>
   ) : (
-    <div className="mt-4 rounded-xl border border-store-background-text/10 bg-store-background p-4 text-sm text-store-background-text/65">
-      No nearby GIG Logistics pickup station is available for this address yet.
-    </div>
+    <>
+      {needsGiglLocation && <GiglLocationNotice />}
+      <div
+        role="status"
+        className="mt-4 rounded-xl border border-store-background-text/10 bg-store-background p-4 text-sm text-store-background-text/65"
+      >
+        <p>
+          Pickup station rates are unavailable. Try again, or choose another
+          available delivery method.
+        </p>
+        <button
+          type="button"
+          onClick={onRefreshRates}
+          className="mt-3 font-bold text-store-primary underline"
+        >
+          Retry pickup station rates
+        </button>
+      </div>
+    </>
   );
 }

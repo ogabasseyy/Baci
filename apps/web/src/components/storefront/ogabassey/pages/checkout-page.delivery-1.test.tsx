@@ -6,7 +6,6 @@ import {
   it,
   render,
   screen,
-  toast,
   useCart,
   useMerchantSafe,
   usePersistedForm,
@@ -85,19 +84,12 @@ it('blocks order creation when door delivery has no selected quote', async () =>
   render(<CheckoutPage />);
 
   fireEvent.click(screen.getByText(/pay on delivery/i));
-  const placeOrderButton = screen
-    .getAllByRole('button', { name: /place order/i })
-    .find((button) => !button.hasAttribute('disabled'));
-  expect(placeOrderButton).toBeDefined();
-  fireEvent.click(placeOrderButton as HTMLButtonElement);
-
-  await waitFor(() => {
-    expect(toast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'Select Delivery Option',
-      })
-    );
-  });
+  for (const button of screen.getAllByRole('button', {
+    name: /place order/i,
+  })) {
+    expect(button).toBeDisabled();
+    fireEvent.click(button);
+  }
   expect(
     fetchMock.mock.calls.some(([url]) => String(url) === '/api/orders')
   ).toBe(false);

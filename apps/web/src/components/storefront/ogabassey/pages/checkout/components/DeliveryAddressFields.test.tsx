@@ -23,6 +23,8 @@ const props = (): ComponentProps<typeof DeliveryAddressFields> => ({
   onToggleAddressMode: vi.fn(),
   onSelectAddress: vi.fn(),
   onStreetChange: vi.fn(),
+  onCityChange: vi.fn(),
+  onStateChange: vi.fn(),
   onSelectPlace: vi.fn(),
 });
 
@@ -44,6 +46,19 @@ it('exposes an autofill address input to guests and confirms the detected locati
   expect(address).toHaveAttribute('autocomplete', 'street-address');
   fireEvent.change(address, { target: { value: '10 Test Street' } });
   expect(callbacks.onStreetChange).toHaveBeenCalledWith('10 Test Street');
-  expect(screen.getByText('Detected: Ikeja, Lagos')).toBeVisible();
+  expect(screen.getByText('City and state: Ikeja, Lagos')).toBeVisible();
   expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+});
+
+it('keeps a selected provider state alias visible when using the local state list', () => {
+  render(
+    <DeliveryAddressFields
+      {...props()}
+      signedIn={false}
+      newAddressState="FCT"
+      shippingStates={[]}
+    />
+  );
+  expect(screen.getByRole('combobox', { name: 'State' })).toHaveValue('FCT');
+  expect(screen.getByRole('option', { name: 'Lagos' })).toBeInTheDocument();
 });

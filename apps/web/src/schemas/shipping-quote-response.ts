@@ -4,6 +4,7 @@ import {
   SHIPPING_PROVIDER_CODES,
 } from '@/lib/shipping/types';
 import type { ShippingQuote } from '@/types/shipping-quote';
+import { homeDeliveryCoverageSchema } from './gigl-address-validation';
 
 interface NormalizedShippingQuoteResponse {
   quotes: ShippingQuote[];
@@ -58,6 +59,9 @@ const shippingQuoteSchema = z
     pickupIncluded: z.boolean(),
     insuranceIncluded: z.boolean(),
     isStationPickup: nullableOptionalBooleanSchema,
+    homeDeliveryCoverage: homeDeliveryCoverageSchema
+      .nullish()
+      .transform((value) => value ?? undefined),
     stationName: nullableOptionalStringSchema,
     stationAddress: nullableOptionalStringSchema,
     stationInstructions: nullableOptionalStringSchema,
@@ -89,6 +93,9 @@ const shippingQuoteSchema = z
     }
     if (quote.isStationPickup !== undefined) {
       normalized.isStationPickup = quote.isStationPickup;
+    }
+    if (quote.homeDeliveryCoverage !== undefined) {
+      normalized.homeDeliveryCoverage = quote.homeDeliveryCoverage;
     }
     if (quote.stationName !== undefined) {
       normalized.stationName = quote.stationName;

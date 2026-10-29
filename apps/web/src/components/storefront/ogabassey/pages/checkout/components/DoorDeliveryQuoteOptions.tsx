@@ -9,6 +9,7 @@ import {
   getStationPickupAddressText,
   isMerchantQuote,
 } from '../utils';
+import { GiglLocationNotice } from './GiglLocationNotice';
 
 interface DoorDeliveryQuoteOptionsProps {
   isLoadingQuotes: boolean;
@@ -18,23 +19,36 @@ interface DoorDeliveryQuoteOptionsProps {
   onSelectQuote: (quoteId: string) => void;
   onSelectStationPickup: (quoteId: string) => void;
   onRefreshRates: () => void;
+  needsGiglLocation?: boolean;
 }
 
 /** Quote rows determine the height, keeping the next checkout action adjacent. */
 export function DoorDeliveryQuoteOptions({
   isLoadingQuotes,
-  doorDeliveryQuotes,
-  stationPickupQuote,
+  doorDeliveryQuotes: quotes,
+  stationPickupQuote: pickupQuote,
   selectedQuoteId,
   onSelectQuote,
   onSelectStationPickup,
   onRefreshRates,
+  needsGiglLocation = false,
 }: DoorDeliveryQuoteOptionsProps) {
+  const doorDeliveryQuotes = needsGiglLocation
+    ? quotes.filter((quote) => quote.provider !== 'GIGL')
+    : quotes;
+  const stationPickupQuote =
+    needsGiglLocation && pickupQuote?.provider === 'GIGL'
+      ? undefined
+      : pickupQuote;
   return (
     <div className="mt-6 border-t border-store-background-text/10 pt-4">
-      <label className="block text-xs font-bold text-store-background-text/80 uppercase tracking-wide mb-3">
+      <p className="block text-xs font-bold text-store-background-text/80 uppercase tracking-wide mb-3">
         Select Delivery Option
-      </label>
+      </p>
+      {!isLoadingQuotes &&
+        needsGiglLocation &&
+        !doorDeliveryQuotes.length &&
+        !stationPickupQuote && <GiglLocationNotice />}
 
       <div className="space-y-3">
         {isLoadingQuotes ? (
@@ -115,6 +129,16 @@ export function DoorDeliveryQuoteOptions({
                 <p className="mt-1 text-xs text-store-background-text/65">
                   {getPickupStationCopy(stationPickupQuote).doorUnavailableBody}
                 </p>
+                {getPickupStationCopy(stationPickupQuote)
+                  .canRetryHomeDelivery && (
+                  <button
+                    type="button"
+                    onClick={onRefreshRates}
+                    className="mt-3 text-xs font-bold text-store-primary underline"
+                  >
+                    Retry home delivery
+                  </button>
+                )}
                 <p className="mt-3 text-xs font-medium text-store-background-text">
                   {getStationPickupAddressText(stationPickupQuote) ||
                     stationPickupQuote.displayName}
@@ -143,6 +167,7 @@ export function DoorDeliveryQuoteOptions({
         ) : (
           <button
             type="button"
+            aria-label="Refresh delivery rates"
             onClick={onRefreshRates}
             className="w-full bg-linear-to-r from-store-primary/5 to-store-primary/10 border-2 border-dashed border-store-primary/30 rounded-xl p-5 flex flex-col items-center gap-3 hover:border-store-primary/50 hover:shadow-md transition-all group cursor-pointer"
           >
@@ -151,11 +176,11 @@ export function DoorDeliveryQuoteOptions({
             </div>
             <div className="text-center">
               <h4 className="text-sm font-bold text-store-background-text">
-                🚚 Oops! Rates took a detour
+                Delivery rates are unavailable.
               </h4>
               <p className="text-xs text-store-primary mt-1">
-                Our delivery partners are a bit slow today. Tap here to try
-                again!
+                Check your address details, then try again or choose another
+                delivery method.
               </p>
             </div>
             <span className="text-xs font-bold text-store-primary bg-store-primary/10 px-3 py-1 rounded-full group-hover:bg-store-primary/20 transition-colors">

@@ -1,0 +1,24 @@
+name: Worker release stage journal tests
+
+on:
+  pull_request:
+    paths:
+      - 'vps-workers/bin/worker_release_stage_journal.py'
+      - 'vps-workers/bin/worker_release_stage_journal_io.py'
+      - 'vps-workers/bin/worker_release_stage_journal.test.py'
+      - '.github/workflows/worker-release-stage-journal-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-root-journal-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run isolated journal regressions as root
+        run: sudo /usr/bin/python3 vps-workers/bin/worker_release_stage_journal.test.py

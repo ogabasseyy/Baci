@@ -67,6 +67,42 @@ describe('applySupabaseReplaySql', () => {
     );
   });
 
+  it('preserves only allowlisted permission categories from replay diagnostics', async () => {
+    const apply = vi.fn(async () => {
+      throw new Error(
+        'psql failed: non-zero-exit (line=20,sqlstate=42501,permission=relation_access_denied)'
+      );
+    });
+
+    await expect(
+      applySupabaseReplaySql(apply, {
+        kind: 'migration',
+        ordinal: 2045,
+        sqlPath: '/owned/replay/secret.sql',
+      })
+    ).rejects.toThrow(
+      /^Replay migration application failed at ordinal 2045: non-zero-exit \(line=20,sqlstate=42501,permission=relation_access_denied\)$/
+    );
+  });
+
+  it('drops unknown permission categories from replay diagnostics', async () => {
+    const apply = vi.fn(async () => {
+      throw new Error(
+        'psql failed: non-zero-exit (line=20,sqlstate=42501,permission=private_object_secret)'
+      );
+    });
+
+    await expect(
+      applySupabaseReplaySql(apply, {
+        kind: 'migration',
+        ordinal: 2045,
+        sqlPath: '/owned/replay/secret.sql',
+      })
+    ).rejects.toThrow(
+      /^Replay migration application failed at ordinal 2045: non-zero-exit \(line=20,sqlstate=42501\)$/
+    );
+  });
+
   it.each([
     [
       'migration',

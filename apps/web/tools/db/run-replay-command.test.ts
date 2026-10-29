@@ -11,6 +11,16 @@ const temporaryRoots: string[] = [];
 const runNode = (run: ReplayCommand, script: string) =>
   run(process.execPath, ['-e', script]);
 
+async function rejectedError(promise: Promise<unknown>): Promise<Error> {
+  try {
+    await promise;
+  } catch (error) {
+    if (error instanceof Error) return error;
+    throw error;
+  }
+  throw new Error('Expected promise to reject');
+}
+
 afterEach(async () => {
   await Promise.all(
     temporaryRoots
@@ -93,19 +103,72 @@ describe('createReplayCommand', () => {
     );
   });
 
-  it('reports only the SQL line and SQLSTATE from a failed psql command', async () => {
+  it('reports a safe permission category without copying PostgreSQL error text', async () => {
     const root = await temporaryRoot();
     const psql = path.join(root, 'psql');
     await writeFile(
       psql,
-      "#!/bin/sh\nprintf 'psql:/owned/replay/secret.sql:42: ERROR:  42501: permission denied\\nidentity@example.test postgresql://user:password@localhost/db\\n' >&2\nexit 1\n",
+      "#!/bin/sh\nprintf 'psql:/owned/replay/secret.sql:42: ERROR:  42501: permission denied for table repair_devices\\nidentity@example.test postgresql://user:password@localhost/db\\n' >&2\nexit 1\n",
       { mode: 0o700 }
     );
     const runCommand = replayCommandRuntime.create(root);
 
-    await expect(runCommand(psql, [])).rejects.toThrow(
-      /^psql failed: non-zero-exit \(line=42,sqlstate=42501\)$/
+    const failure = await rejectedError(runCommand(psql, []));
+    expect(failure).toMatchObject({
+      message:
+        'psql failed: non-zero-exit (line=42,sqlstate=42501,permission=relation_access_denied)',
+    });
+    expect(failure.message).not.toMatch(
+      /repair_devices|secret\.sql|identity@example|password|permission denied for table/
     );
+  });
+
+  it.each([
+    ['must be owner of function save_x_ads_settings', 'owner_required'],
+    ['permission denied for schema private', 'schema_access_denied'],
+    [
+      'permission denied for sequence private.sequence_name',
+      'sequence_access_denied',
+    ],
+    [
+      'permission denied for table private.secret_table',
+      'relation_access_denied',
+    ],
+    ['permission denied', 'permission_denied'],
+  ])('classifies PostgreSQL 42501 category without object data', async (message, category) => {
+    const root = await temporaryRoot();
+    const psql = path.join(root, 'psql');
+    await writeFile(
+      psql,
+      `#!/bin/sh\nprintf '%s\\n' ${JSON.stringify(`psql:/owned/replay/secret.sql:20: ERROR:  42501: ${message}\npassword=private-value`)} >&2\nexit 1\n`,
+      { mode: 0o700 }
+    );
+    const runCommand = replayCommandRuntime.create(root);
+    const failure = await rejectedError(runCommand(psql, []));
+
+    expect(failure).toMatchObject({
+      message: `psql failed: non-zero-exit (line=20,sqlstate=42501,permission=${category})`,
+    });
+    expect(failure.message).not.toMatch(
+      /secret\.sql|private|password|private-value/
+    );
+  });
+
+  it('does not classify arbitrary 42501 details or expose them', async () => {
+    const root = await temporaryRoot();
+    const psql = path.join(root, 'psql');
+    await writeFile(
+      psql,
+      "#!/bin/sh\nprintf 'psql:/owned/replay/secret.sql:20: ERROR:  42501: private provider secret=never-show-this\\n' >&2\nexit 1\n",
+      { mode: 0o700 }
+    );
+    const runCommand = replayCommandRuntime.create(root);
+    const failure = await rejectedError(runCommand(psql, []));
+
+    expect(failure).toMatchObject({
+      message: 'psql failed: non-zero-exit (line=20,sqlstate=42501)',
+    });
+    expect(failure.message).not.toContain('never-show-this');
   });
 
   it.each([
@@ -169,7 +232,7 @@ describe('createReplayCommand', () => {
     child.emit('close', 1);
 
     await expect(failure).rejects.toThrow(
-      /^psql failed: non-zero-exit \(line=42,sqlstate=42501\)$/
+      /^psql failed: non-zero-exit \(line=42,sqlstate=42501,permission=permission_denied\)$/
     );
   });
 

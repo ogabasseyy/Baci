@@ -44,6 +44,34 @@ function sanitizedCommandName(command: string): string {
   return /^[A-Za-z0-9._-]+$/.test(basename) ? basename : 'command';
 }
 
+function safePermissionCategory(message: string): string | undefined {
+  const normalized = message.trim().toLowerCase();
+  if (
+    /^must be owner of (?:table|relation|schema|function|procedure|sequence|type)\b/.test(
+      normalized
+    )
+  )
+    return 'owner_required';
+  if (/^permission denied for schema\b/.test(normalized))
+    return 'schema_access_denied';
+  if (
+    /^permission denied for (?:table|relation|view|materialized view)\b/.test(
+      normalized
+    )
+  )
+    return 'relation_access_denied';
+  if (/^permission denied for (?:function|procedure)\b/.test(normalized))
+    return 'routine_access_denied';
+  if (/^permission denied for column\b/.test(normalized))
+    return 'column_access_denied';
+  if (/^permission denied for sequence\b/.test(normalized))
+    return 'sequence_access_denied';
+  if (/^permission denied to set role\b/.test(normalized))
+    return 'role_membership_denied';
+  if (/^permission denied\b/.test(normalized)) return 'permission_denied';
+  return undefined;
+}
+
 function boundedPsqlDiagnostic(
   command: string,
   stderr: readonly Buffer[]
@@ -63,7 +91,18 @@ function boundedPsqlDiagnostic(
   ).exec(output);
   const line = Number(match?.[1]);
   if (!Number.isSafeInteger(line) || line < 1) return '';
-  return ` (line=${line}${match?.[2] ? `,sqlstate=${match[2]}` : ''})`;
+  const sqlstate = match?.[2];
+  const errorMessage = new RegExp(
+    `^${escapedCommandName}:[^\\r\\n]*:${line}:[ \\t]+(?:ERROR|error):[ \\t]+(?:(?:[0-9A-Z]{5}):[ \\t]*)?([^\\r\\n]*)`,
+    'm'
+  ).exec(output)?.[1];
+  // Classify only fixed PostgreSQL privilege/ownership phrases. Never copy
+  // the server message, object name, detail, hint, or context into the error.
+  const permissionCategory =
+    sqlstate === '42501' && errorMessage
+      ? safePermissionCategory(errorMessage)
+      : undefined;
+  return ` (line=${line}${sqlstate ? `,sqlstate=${sqlstate}` : ''}${permissionCategory ? `,permission=${permissionCategory}` : ''})`;
 }
 
 function commandFailure(

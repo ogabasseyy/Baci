@@ -11,6 +11,7 @@ import {
   requestUsesDeviceProof,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
+import { createCartQuotaRequestContext } from '@/lib/cart/request-quota-context';
 import {
   cartErrorResponse,
   cartJsonResponse,
@@ -190,11 +191,15 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse('invalid_request');
     }
 
-    const quota = await checkCartQuota({
-      merchantId: context.merchant.id,
-      operation: 'create',
-      subject: context.principal.principalId,
-    });
+    const quotaContext = createCartQuotaRequestContext('required');
+    const quota = await checkCartQuota(
+      {
+        merchantId: context.merchant.id,
+        operation: 'create',
+        subject: context.principal.principalId,
+      },
+      quotaContext
+    );
     if (!quota.allowed) {
       return cartErrorResponse('quota_exceeded');
     }
@@ -204,10 +209,14 @@ export async function POST(request: NextRequest) {
     // credential keys it per shopper (shared-egress shoppers do not
     // share this bound), always backed by the non-rotatable network
     // backstop; legacy clients use network identity alone.
-    const clientQuota = await checkAnonymousCartQuota(request, {
-      merchantId: context.merchant.id,
-      operation: 'create',
-    });
+    const clientQuota = await checkAnonymousCartQuota(
+      request,
+      {
+        merchantId: context.merchant.id,
+        operation: 'create',
+      },
+      quotaContext
+    );
     if (!clientQuota.allowed) {
       return cartErrorResponse('quota_exceeded');
     }

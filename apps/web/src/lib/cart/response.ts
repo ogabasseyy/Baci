@@ -62,7 +62,8 @@ const ROUTE_MESSAGES: Record<
   merchant_mismatch: 'This cart session belongs to a different store.',
   merchant_unresolved: 'We could not find this store.',
   missing_proof: 'Connect to the cart before making changes.',
-  quota_exceeded: 'Too many cart requests. Wait a moment and try again.',
+  quota_exceeded:
+    'We could not complete this cart request. Please try again later.',
 };
 
 function routeErrorMessage(code: CartRouteErrorCode): string {

@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "09631c0a58f07ecef453517e9194381446b56337",
+  "originMainSha": "819f03ff860cb50310ad7f62b87902ac35e18998",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
   "routeTreeSha256": "5648729f561fcb54b6b158dff22e8a9284e06c493e3f937f0e6b00bcec89c546",
-  "routingProxyInputSha256": "8a52c819e6f70cfdde9093fa1f3efadbad7faca2d6e3b4156ffbec4cacda66b3",
+  "routingProxyInputSha256": "3be0373f925ef647aaeac2f88aea2c0a04f5b8ec3f1cb536eb0c10f0cb9bf577",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -911,6 +911,18 @@
       "routePattern": "/api/storefront/cart/checkout",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/cart/checkout/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/cart/checkout/reconcile/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/cart/checkout/reconcile",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/cart/checkout/reconcile/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -8634,5 +8646,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "7194fb40f3da4a84ed3f715660ece0352eaacd49474741f3a962f232c0755e75"
+  "inventorySha256": "078daea0530265fa1700ee5885b01e91ae4a0e01723b444f00523ef63e87cfe5"
 }

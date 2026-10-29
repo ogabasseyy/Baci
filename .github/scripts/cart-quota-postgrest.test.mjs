@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { createHash, createHmac } from 'node:crypto';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 
@@ -149,12 +150,18 @@ test('real PostgREST confines a signed quota token and serializes increments', {
       try { await fetch(proxyOrigin); proxyReady = true; break; } catch { await new Promise((resolve) => setTimeout(resolve, 100)); }
     }
     assert.ok(proxyReady, 'local REST proxy started');
-    const operator = spawnSync('pnpm', [
-      '--filter', '@baci/web', 'exec', 'tsx', 'src/scripts/probe-cart-quota.ts', '--execute',
+    // The operator probe must not depend on a pnpm launcher that can stall in CI.
+    const fakeBin = join(dir, 'fake-bin');
+    mkdirSync(fakeBin);
+    writeFileSync(join(fakeBin, 'pnpm'), '#!/bin/sh\nexec sleep 60\n', { mode: 0o700 });
+    const webRoot = fileURLToPath(new URL('../../apps/web/', import.meta.url));
+    const webRequire = createRequire(new URL('../../apps/web/package.json', import.meta.url));
+    const operator = spawnSync(process.execPath, [
+      webRequire.resolve('tsx/cli'), 'src/scripts/probe-cart-quota.ts', '--execute',
     ], {
-      cwd: fileURLToPath(new URL('../../', import.meta.url)),
+      cwd: webRoot,
       env: {
-        PATH: process.env.PATH,
+        PATH: `${fakeBin}${delimiter}${process.env.PATH}`,
         NODE_OPTIONS: '--conditions=react-server',
         NODE_ENV: 'development',
         NEXT_PUBLIC_SUPABASE_URL: proxyOrigin,
@@ -165,7 +172,8 @@ test('real PostgREST confines a signed quota token and serializes increments', {
       encoding: 'utf8',
       timeout: 20000,
     });
-    assert.equal(operator.status, 0, operator.stderr);
+    const operatorFailure = operator.error?.code ?? operator.signal ?? `exit ${operator.status}`;
+    assert.equal(operator.status, 0, `operator probe failed (${operatorFailure}): ${(operator.stderr ?? '').replaceAll(secret, '[redacted]')}`);
     assert.match(operator.stdout, /counter and scope probe passed/);
     assert.ok(!operator.stdout.includes(secret));
     assert.ok(!operator.stderr.includes(secret));

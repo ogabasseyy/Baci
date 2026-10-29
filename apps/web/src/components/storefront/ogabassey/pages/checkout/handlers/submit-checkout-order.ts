@@ -122,14 +122,32 @@ export async function submitCheckoutOrder({
   }
 
   const idempotencyKey = await getIdempotencyKey();
-  const response = await request('/api/orders', {
+  const requestOptions: RequestInit = {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Idempotency-Key': idempotencyKey,
     },
     body: JSON.stringify(orderRequest),
-  });
+  };
+  const canRetryBoundRedvault =
+    paymentMethod === 'uba_redvault' &&
+    orderRequest.payment_method === 'uba_redvault' &&
+    Boolean(orderRequest.shared_cart) &&
+    idempotencyKey.trim().length > 0 &&
+    !orderRequest.items.some(
+      (item) => item.voucher_award_id || item.voucher_token
+    );
+  let response: Response;
+  try {
+    response = await request('/api/orders', requestOptions);
+  } catch (error) {
+    // This bound RPC verifies and replays the same draft for the same
+    // session and key. Retry only a transport failure, never a payment
+    // initialization or a voucher path that drops the idempotency key.
+    if (!(error instanceof TypeError) || !canRetryBoundRedvault) throw error;
+    response = await request('/api/orders', requestOptions);
+  }
 
   if (!response.ok) {
     const errorData = await readOrderError(response);

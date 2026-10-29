@@ -8,6 +8,26 @@ export type CancelStaleCheckoutOrderResult =
 
 type CancelFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
+async function isConfirmedCancellation(
+  response: Response,
+  requireNewCancellation: boolean
+): Promise<boolean> {
+  try {
+    const body: unknown = await response.json();
+    return (
+      typeof body === 'object' &&
+      body !== null &&
+      'success' in body &&
+      body.success === true &&
+      'cancelled' in body &&
+      typeof body.cancelled === 'boolean' &&
+      (!requireNewCancellation || body.cancelled === true)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Cancels a stale checkout order before the lane recreates it: an ordinary
  * order abandoned for REDVAULT, or a prepared REDVAULT order whose checkout
@@ -32,6 +52,7 @@ export async function cancelStaleCheckoutOrder({
   orderId,
   reason,
   trackingToken,
+  requireNewCancellation = false,
   accountFetch = fetchWithCsrf,
   guestFetch = fetch,
 }: {
@@ -39,6 +60,8 @@ export async function cancelStaleCheckoutOrder({
   orderId: string;
   reason: string;
   trackingToken?: string;
+  /** Keep a stricter fence when an earlier cancellation is not sufficient proof. */
+  requireNewCancellation?: boolean;
   accountFetch?: CancelFetch;
   guestFetch?: CancelFetch;
 }): Promise<CancelStaleCheckoutOrderResult> {
@@ -51,7 +74,10 @@ export async function cancelStaleCheckoutOrder({
           body: JSON.stringify({ reason }),
         }
       );
-      if (response.ok) return 'cancelled';
+      if (response.ok)
+        return (await isConfirmedCancellation(response, requireNewCancellation))
+          ? 'cancelled'
+          : 'failed';
       if (response.status === 409) return 'live';
       if (response.status !== 404) return 'failed';
       if (!trackingToken) return 'gone';
@@ -67,7 +93,10 @@ export async function cancelStaleCheckoutOrder({
         body: JSON.stringify({ tracking_token: trackingToken, reason }),
       }
     );
-    if (response.ok) return 'cancelled';
+    if (response.ok)
+      return (await isConfirmedCancellation(response, requireNewCancellation))
+        ? 'cancelled'
+        : 'failed';
     if (response.status === 409) return 'live';
     if (response.status === 404) {
       // An attached order 404s on the guest route; without a session that

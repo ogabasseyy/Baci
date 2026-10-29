@@ -12,6 +12,7 @@ import { checkoutFingerprintsMatch } from '../checkout-fingerprints-match';
 import { redvaultTerminalFingerprintMatches } from '../redvault-terminal-fingerprint';
 import { KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST } from '../utils';
 import { executeResumedDirectPayment } from '../handlers/direct-payment';
+import { recoverTerminalRedvaultReviewForContext } from '../handlers/recover-terminal-redvault-review';
 import { submitPreparedCheckout } from '../handlers/submit-prepared-checkout';
 import { prepareCheckoutOrderSubmission } from '../prepare-checkout-order-submission';
 import type { CheckoutOrderSubmissionContext } from './checkout-order-submission-types';
@@ -178,6 +179,10 @@ export function useCheckoutOrderSubmission(context: CheckoutOrderSubmissionConte
       );
       return;
     }
+
+    if (await recoverTerminalRedvaultReviewForContext(
+      context, merchant.id, prepared.identity.checkoutFingerprint
+    )) return;
 
     // Shared carts review the authoritative cart first; the order submit
     // binds to the returned session and generation. A stale review

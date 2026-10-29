@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-29T13:46:13+00:00",
-  "source_revision": "ab4276b1c288c80c1dc3f8e7aa74edb0c153f1ab",
-  "evidence_digest": "8616652320d63a8159f83ebc590300f5db5e7866ed0e67ba1af5be03e8c51d09",
-  "claims_digest": "3617f27e71d76d8eb58e600aa3036e2656feb9424e90d5ea6e02a88acba61edc",
-  "review_scope": "Source evidence only. Re-reviewed the support-chat health source and tests on the synchronized base: catalog and conversation probes run concurrently, and the Ogabassey probe checks tenant and catalog markers. Other cited evidence is unchanged from the prior audit. OAuth connected discovery excludes legacy link tools; anonymous compatibility, PKCE/encrypted grants, resource-specific transport and refresh receipts remain as previously reviewed. Existing claims include merchant onboarding email suppression, preferences, event permissions and worker isolation. No production capability promotion; deployment and transaction readiness require separate verification. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged.",
+  "reviewed_at": "2026-10-29T16:11:54+00:00",
+  "source_revision": "737c8ab90f0f58d22d230b1fb573369be9b138a3",
+  "evidence_digest": "65b53fd6acff5147369e73d7d861da08a71204fd78ee50d7c49182997feccf25",
+  "claims_digest": "034bfe63db3a8bd36f7e25f3bf2c1fe0a19d388fb9b600927c5c60408e751d7d",
+  "review_scope": "Source evidence only. Re-reviewed the support-chat health source and tests on the synchronized base: catalog and conversation probes run concurrently, and the Ogabassey probe checks tenant and catalog markers. All cited source evidence remains unchanged after the latest main sync. OAuth connected discovery excludes legacy link tools; anonymous compatibility, PKCE/encrypted grants, resource-specific transport and refresh receipts remain as previously reviewed. Existing claims include merchant onboarding email suppression, preferences, event permissions and worker isolation. No production capability promotion; deployment and transaction readiness require separate verification. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged.",
   "capabilities": [
     {
       "id": "payments",

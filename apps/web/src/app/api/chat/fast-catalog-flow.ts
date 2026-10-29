@@ -55,20 +55,34 @@ export async function tryFastCatalogChat(options: {
   const searchMessages = addFollowUp
     ? userMessages.slice(-7, -1)
     : userMessages;
-  if (
-    addFollowUp &&
-    !interpretFastCatalogIntent(searchMessages, [], options.tenant.currencyCode)
-  ) {
+  const preflight = interpretFastCatalogIntent(
+    searchMessages,
+    [],
+    options.tenant.currencyCode,
+    { categoriesLoaded: false }
+  );
+  if (addFollowUp && !preflight) {
     return {
       events: [],
       text: 'Which product would you like to add? Please tell me its name.',
     };
   }
-  if (
-    !interpretFastCatalogIntent(searchMessages, [], options.tenant.currencyCode)
-  )
-    return null;
+  if (!preflight) return null;
   if (options.signal.aborted) return UNAVAILABLE;
+  if (
+    !addFollowUp &&
+    preflight.kind === 'clarify' &&
+    (preflight.reason === 'more-results' ||
+      preflight.reason === 'more-needs-search' ||
+      preflight.reason === 'product-details')
+  ) {
+    return buildFastCatalogReply(
+      searchMessages,
+      [],
+      async () => [],
+      options.tenant.currencyCode
+    );
+  }
 
   try {
     return await withTimeout(

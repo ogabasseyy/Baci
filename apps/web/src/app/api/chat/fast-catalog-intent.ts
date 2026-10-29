@@ -1,5 +1,9 @@
 import { analyzeFastCatalogBudget } from './fast-catalog-budget';
 import { resolveCatalogContext } from './fast-catalog-context';
+import {
+  createCompleteSearchVerifier,
+  parseCatalogContinuation,
+} from './fast-catalog-continuation';
 import * as catalogLanguage from './fast-catalog-language';
 
 export interface FastCatalogCategory {
@@ -16,7 +20,11 @@ export type FastCatalogIntent =
         | 'product'
         | 'max-budget'
         | 'currency'
-        | 'ambiguous-budget';
+        | 'ambiguous-budget'
+        | 'more-results'
+        | 'more-needs-search'
+        | 'more-verify-category'
+        | 'product-details';
     }
   | {
       kind: 'search';
@@ -111,9 +119,26 @@ function searchText(text: string): string {
 export function interpretFastCatalogIntent(
   userMessages: string[],
   categories: FastCatalogCategory[],
-  currencyCode?: string
+  currencyCode?: string,
+  options: { categoriesLoaded?: boolean } = {}
 ): FastCatalogIntent | null {
   const latest = userMessages.at(-1)?.trim() ?? '';
+  const verifier = createCompleteSearchVerifier({
+    categoriesLoaded: options.categoriesLoaded !== false,
+    currencyCode,
+    isSearch: (value) => {
+      const intent = interpretFastCatalogIntent(
+        [value],
+        categories,
+        currencyCode
+      );
+      return (
+        intent?.kind === 'search' &&
+        intent.maxPrice !== undefined &&
+        !!intent.categoryId
+      );
+    },
+  });
   const isShoppingRequest = (value: string) =>
     SHOPPING_REQUEST.test(value) || ACCESSORY_SIGNAL.test(value);
   const isRefinement = (value: string) =>
@@ -129,8 +154,17 @@ export function interpretFastCatalogIntent(
     isPriceFollowUp: (value) => CONTEXTUAL_PRICE.test(value),
     isRefinement,
     isBoundary: catalogLanguage.isCatalogBoundary,
+    isCompleteSearch: verifier.isCompleteSearch,
+    getContinuationRequest: parseCatalogContinuation,
   });
   if (!context) return null;
+  const continuation = parseCatalogContinuation(latest);
+  if (verifier.needsCategoryVerification())
+    return { kind: 'clarify', reason: 'more-verify-category' };
+  if (context.requiresFreshSearch)
+    return { kind: 'clarify', reason: 'more-needs-search' };
+  if (continuation?.kind === 'product-details')
+    return { kind: 'clarify', reason: 'product-details' };
   const { text, priceFollowUp } = context;
   const latestBudget = analyzeFastCatalogBudget(latest, currencyCode);
   const contextualBudget = analyzeFastCatalogBudget(text, currencyCode);
@@ -146,6 +180,12 @@ export function interpretFastCatalogIntent(
     return { kind: 'clarify', reason: 'ambiguous-budget' };
   if (catalogLanguage.hasNegatedBudget(text))
     return { kind: 'clarify', reason: 'options' };
+  if (
+    /\bmore\s+(?:storage|ram|memory|capacity|like|expensive|costly)\b/i.test(
+      text
+    )
+  )
+    return { kind: 'clarify', reason: 'options' };
   if (latestBudget.unsupportedCurrency || contextualBudget.unsupportedCurrency)
     return { kind: 'clarify', reason: 'currency' };
   if (latestBudget.invalid || contextualBudget.invalid)
@@ -160,6 +200,8 @@ export function interpretFastCatalogIntent(
   // Clarify whether Max is a model or a price limit before searching.
   if (contextualBudget.ambiguousMax)
     return { kind: 'clarify', reason: 'max-budget' };
+  if (continuation?.kind === 'more-results')
+    return { kind: 'clarify', reason: 'more-results' };
 
   const category = resolveCategory(text, categories);
   const priceLimit = latestBudget.price ?? contextualBudget.price;

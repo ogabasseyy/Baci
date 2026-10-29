@@ -33,15 +33,21 @@ export async function buildFastCatalogReply(
       text:
         intent.reason === 'max-budget'
           ? 'Does “Max” refer to the product name or your budget? Please send the product name and use “under” for the budget.'
-          : intent.reason === 'ambiguous-budget'
-            ? 'I can’t tell whether that word is a currency or part of your product request. Please send a new message with the product and budget in the store’s currency, such as “phones at most 5000”.'
-            : intent.reason === 'currency'
-              ? 'Please reply with your maximum in the store’s currency, for example “at most 5000”. I can’t convert currencies here.'
-              : intent.reason === 'product'
-                ? 'Which product do you mean? Please tell me its name so I can check the catalog.'
-                : intent.reason === 'options'
-                  ? 'I can’t confirm that condition or product option here. Please browse the store and check the available options on the product page.'
-                  : 'Please send a new message with the product type and, if you have a budget, say “at most” followed by the amount.',
+          : intent.reason === 'more-results'
+            ? 'I can’t show another page of results in this chat. Please browse the store or refine the product, brand or budget.'
+            : intent.reason === 'more-needs-search'
+              ? 'I can’t show another page in this chat. Please send a new search with the product, budget and any must-have conditions, or browse the store.'
+              : intent.reason === 'product-details'
+                ? 'Which product would you like details about, and what would you like to know?'
+                : intent.reason === 'ambiguous-budget'
+                  ? 'I can’t tell whether that word is a currency or part of your product request. Please send a new message with the product and budget in the store’s currency, such as “phones at most 5000”.'
+                  : intent.reason === 'currency'
+                    ? 'Please reply with your maximum in the store’s currency, for example “at most 5000”. I can’t convert currencies here.'
+                    : intent.reason === 'product'
+                      ? 'Which product do you mean? Please tell me its name so I can check the catalog.'
+                      : intent.reason === 'options'
+                        ? 'I can’t confirm that condition or product option here. Please browse the store and check the available options on the product page.'
+                        : 'Please send a new message with the product type and, if you have a budget, say “at most” followed by the amount.',
     };
   }
 

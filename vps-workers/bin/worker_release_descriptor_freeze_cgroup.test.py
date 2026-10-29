@@ -16,6 +16,24 @@ import worker_release_descriptor_cgroup as cgroup_module
 
 
 class DescriptorFreezeCgroupIntegrationTests(unittest.TestCase):
+    @unittest.skipUnless(os.geteuid() == 0, "requires root to exercise isolated child identity")
+    def test_dedicated_child_protocol_reaches_ready_before_exit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            marker = Path(temporary) / "marker"
+            process = _dedicated_child(os.geteuid(), os.getegid(), marker, sleep_seconds=0.01)
+            try:
+                assert process.stdin is not None
+                process.stdin.write(b"go\n")
+                process.stdin.flush()
+                assert process.stdout is not None
+                self.assertEqual(process.stdout.readline(), b"READY\n")
+                self.assertEqual(process.wait(timeout=2), 0)
+                self.assertEqual(marker.read_text(), "archive entry")
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+
     @unittest.skipUnless(os.geteuid() == 0 and os.environ.get("WORKER_RELEASE_TEST_CGROUP_PATH"),
                          "requires root and a disposable dedicated cgroup v2 fixture")
     def test_freezes_tree_after_reaped_dedicated_uid_archive_writer(self):
@@ -168,10 +186,10 @@ def _dedicated_child(uid, gid, marker, *, sleep_seconds=1, spawn_descendant=Fals
     return subprocess.Popen(
         [sys.executable, "-c",
          "import pathlib,subprocess,sys,time; sys.stdin.readline(); "
-         "pathlib.Path(sys.argv[1]).write_text('archive entry') if sys.argv[1] else None; "
-         "subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']) if sys.argv[3]=='descendant' else None; "
+         "pathlib.Path(sys.argv[0]).write_text('archive entry') if sys.argv[0] else None; "
+         "subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']) if sys.argv[2]=='descendant' else None; "
          "print('READY',flush=True); "
-         "time.sleep(float(sys.argv[2]))",
+         "time.sleep(float(sys.argv[1]))",
          str(marker) if marker else "", str(sleep_seconds),
          "descendant" if spawn_descendant else "none"],
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,

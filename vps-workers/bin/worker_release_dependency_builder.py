@@ -177,6 +177,23 @@ def _remove_private_tree(path: Path) -> None:
     shutil.rmtree(path)
 
 
+def _finish_build_attempt(scratch: Path | None, input_copy: Path | None,
+                          result_dir: Path | None, *, success: bool,
+                          preserve_for_recovery: bool, lock_fd: int) -> None:
+    """Remove only quiesced attempt data and always release the orchestration lock."""
+    try:
+        if preserve_for_recovery:
+            return
+        if scratch is not None and scratch.exists():
+            _remove_private_tree(scratch)
+        if input_copy is not None and input_copy.exists():
+            _remove_private_tree(input_copy)
+        if not success and result_dir is not None and result_dir.exists():
+            _remove_private_tree(result_dir)
+    finally:
+        os.close(lock_fd)
+
+
 def build(source_arg: str, expected_sha: str, *, runner=None) -> tuple[dict[str, object], Path]:
     if not _is_root():
         raise BuilderRejected("sandbox orchestration must run as root")
@@ -189,6 +206,7 @@ def build(source_arg: str, expected_sha: str, *, runner=None) -> tuple[dict[str,
     scratch = input_copy = result_dir = None
     unit = f"baci-worker-deps-{expected_sha[:12]}-{uuid.uuid4().hex}.service"
     success = False
+    preserve_for_recovery = False
     try:
         scratch = Path(tempfile.mkdtemp(prefix=f"{expected_sha}.", dir=BUILD_ROOT))
         os.chown(scratch, uid, gid)
@@ -215,10 +233,19 @@ def build(source_arg: str, expected_sha: str, *, runner=None) -> tuple[dict[str,
             "vps-workers/pnpm-lock.yaml": sha256_file(source_copy / "vps-workers" / "pnpm-lock.yaml"),
         }
         command = _systemd_command(source_copy, scratch, expected_sha, uid, gid, unit)
-        if runner is None:
-            run_sandbox(command, scratch, unit, usage_root=BUILD_ROOT, owner_uid=uid)
-        else:
-            runner(command, scratch, unit)
+        try:
+            if runner is None:
+                run_sandbox(command, scratch, unit, usage_root=BUILD_ROOT, owner_uid=uid)
+            else:
+                runner(command, scratch, unit)
+        except Exception as error:
+            # If the supervisor cannot prove that every process is gone, its
+            # input/output trees remain journaled for exact recovery. Removing
+            # them while a process may still hold them would race active writes.
+            from worker_release_dependency_supervisor import BuilderQuiescenceUnproven
+            if isinstance(error, BuilderQuiescenceUnproven):
+                preserve_for_recovery = True
+            raise
         smoke = read_smoke_evidence(scratch, uid)
         snapshot = snapshot_payload(scratch, result_dir, uid)
         directory_usage(BUILD_ROOT, max_entries=MAX_BUILD_SCRATCH_ENTRIES, max_bytes=MAX_BUILD_SCRATCH_BYTES)
@@ -227,13 +254,9 @@ def build(source_arg: str, expected_sha: str, *, runner=None) -> tuple[dict[str,
         success = True
         return manifest, result_dir
     finally:
-        if scratch is not None and scratch.exists():
-            _remove_private_tree(scratch)
-        if input_copy is not None and input_copy.exists():
-            _remove_private_tree(input_copy)
-        if not success and result_dir is not None and result_dir.exists():
-            _remove_private_tree(result_dir)
-        os.close(lock_fd)
+        _finish_build_attempt(scratch, input_copy, result_dir, success=success,
+                              preserve_for_recovery=preserve_for_recovery,
+                              lock_fd=lock_fd)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

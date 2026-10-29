@@ -1,0 +1,37 @@
+name: Worker release dependency builder supervisor tests
+
+on:
+  pull_request:
+    paths:
+      - 'vps-workers/bin/worker_release_dependency_supervisor.py'
+      - 'vps-workers/bin/worker_release_dependency_supervisor.test.py'
+      - 'vps-workers/bin/worker_release_dependency_supervisor_journal.py'
+      - 'vps-workers/bin/worker_release_dependency_supervisor_journal.test.py'
+      - 'vps-workers/bin/worker_release_dependency_supervisor_contract.py'
+      - 'vps-workers/bin/worker_release_dependency_supervisor_cgroup.py'
+      - 'vps-workers/bin/worker_release_dependency_sandbox.py'
+      - 'vps-workers/bin/worker_release_dependency_builder.py'
+      - 'vps-workers/bin/worker_release_dependency_builder.test.py'
+      - 'vps-workers/bin/worker_release_bounded_process.py'
+      - 'vps-workers/bin/worker_release_dependency_policy_cache.py'
+      - 'vps-workers/bin/worker_release_dependency_fs.py'
+      - 'vps-workers/bin/worker_release_descriptor_cgroup.py'
+      - '.github/workflows/worker-release-builder-supervisor-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-builder-cgroup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run fixed builder supervisor unit and cgroup tests
+        run: |
+          sudo /usr/bin/python3 -B vps-workers/bin/worker_release_dependency_supervisor_journal.test.py -v
+          sudo env WORKER_RELEASE_BUILDER_SYSTEMD_REQUIRE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_dependency_supervisor.test.py -v
+          sudo /usr/bin/python3 -B vps-workers/bin/worker_release_dependency_builder.test.py -v

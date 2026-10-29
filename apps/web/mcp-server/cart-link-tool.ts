@@ -6,7 +6,7 @@ import { prepareCartHandoff } from './cart-handoff';
 
 // Shared cart-link registration, extracted from server.ts (which is far over
 // the 300-line module budget): the input schema, the handoff handler, and
-// the dual registration of the renamed tool plus its deprecated alias.
+// the accurately named link-preparation tool.
 export function registerCartLinkTools(
   server: McpServer,
   options: {
@@ -67,17 +67,6 @@ export function registerCartLinkTools(
   server.registerTool(
     'prepare_storefront_cart_link',
     cartLinkToolConfig,
-    prepareCartLink
-  );
-  // Temporary compatibility alias for the pre-rename tool name: callers with
-  // a cached tools/list entry or a hardcoded name keep working after upgrade.
-  server.registerTool(
-    'add_to_cart',
-    {
-      ...cartLinkToolConfig,
-      title: 'Add to Cart (Deprecated Alias)',
-      description: `Deprecated alias of prepare_storefront_cart_link. ${cartLinkToolConfig.description}`,
-    },
     prepareCartLink
   );
 }

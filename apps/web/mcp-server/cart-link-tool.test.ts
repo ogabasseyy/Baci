@@ -32,11 +32,10 @@ function setup() {
   return { handlers, configs };
 }
 
-it('registers the tool under both the current and alias names', () => {
+it('registers only the accurately named link preparation tool', () => {
   const { handlers, configs } = setup();
 
   expect([...handlers.keys()].sort()).toEqual([
-    'add_to_cart',
     'prepare_storefront_cart_link',
   ]);
   for (const config of configs.values()) {
@@ -71,7 +70,7 @@ it('defaults an omitted quantity to 1', async () => {
   const { handlers } = setup();
   prepare.mockResolvedValue({ structuredContent: { success: true } });
 
-  await handlers.get('add_to_cart')?.({ product_id: 'prod-1' });
+  await handlers.get('prepare_storefront_cart_link')?.({ product_id: 'prod-1' });
 
   expect(prepare).toHaveBeenCalledWith(
     expect.objectContaining({ quantity: 1 })

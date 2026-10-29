@@ -86,8 +86,8 @@ export const STOREFRONT_CWV_GUARD_BUDGETS: StorefrontCwvGuardBudgets = {
     baseOrigin: 'https://ogabassey.com',
     forbidDataGifHeroSrc: true,
     maxHeadImagePreloads: 1,
-    maxHtmlBytes: 380_000,
-    maxInlineRscBytes: 240_000,
+    maxHtmlBytes: 325_000,
+    maxInlineRscBytes: 190_000,
     requireHeroOutsideHiddenSuspense: true,
     requirePreloadMatchesImgSrcSet: true,
   },
@@ -97,7 +97,7 @@ export const STOREFRONT_CWV_GUARD_BUDGETS: StorefrontCwvGuardBudgets = {
     maxTotalBrotliBytes: 260_000,
   },
   css: {
-    forbidListingFullStyleLoader: false,
+    forbidListingFullStyleLoader: true,
     maxRenderBlockingStylesheets: {
       home: 2,
       category: 2,
@@ -106,6 +106,6 @@ export const STOREFRONT_CWV_GUARD_BUDGETS: StorefrontCwvGuardBudgets = {
       blogPost: 3,
     },
     requireAuthorityHubLcpCopyLock: false,
-    requireFooterLockInCriticalCss: false,
+    requireFooterLockInCriticalCss: true,
   },
 };

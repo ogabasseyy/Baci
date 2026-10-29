@@ -89,6 +89,12 @@ describe('evaluate-storefront-cwv-guards', () => {
     expect(result.hasDataGifHeroSrc).toBe(false);
     expect(result.heroInsideHiddenSuspense).toBe(false);
     expect(result.heroUrls.length).toBeGreaterThan(0);
+    expect(
+      STOREFRONT_CWV_GUARD_BUDGETS.homepageHtml.maxHtmlBytes
+    ).toBeLessThanOrEqual(325_000);
+    expect(
+      STOREFRONT_CWV_GUARD_BUDGETS.homepageHtml.maxInlineRscBytes
+    ).toBeLessThanOrEqual(190_000);
   });
 
   it('passes real storefront CSS source guards for all 5 monitored routes at current baseline', () => {

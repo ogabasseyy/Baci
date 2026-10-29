@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-26T05:47:06.000000+00:00",
-  "source_revision": "f8fa3bb0797e6297d049e550b906de3202829f23",
-  "evidence_digest": "f8546b1bc70506e8601032769875de38ae45621c8ed1c4622a498e3113c15511",
-  "claims_digest": "8e0349a127d17699dcfb6f2c5d3f3e0a2617a5599673af61c4141d69b3f13ba9",
-  "review_scope": "Source evidence only. OAuth connected discovery excludes legacy link tools; anonymous compatibility preserved. PKCE/encrypted grants, resource-specific transport and refresh receipts unchanged. Other capability claims retain the newly merged main audit, including merchant onboarding email suppression, preferences, event permissions and worker isolation. No new production capability promotion. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged.",
+  "reviewed_at": "2026-10-29T10:56:51.000000+00:00",
+  "source_revision": "79094e3d89384b77d6005b53486bac5155cbae6e",
+  "evidence_digest": "8532c57486d4bde73d6571edea51f216189bb74d1e747825a0367da0e0aa4a7e",
+  "claims_digest": "23831ce8cab0c963b02da00cf4d97f433b87ede03444bdc55fc7e42f737e6376",
+  "review_scope": "Source evidence only. Re-reviewed the storefront support-chat health changes against the recorded source revision: catalog and conversation probes run concurrently, and the Ogabassey probe checks tenant and catalog lookup markers. Other claims carry forward from the previous review where their cited sources are unchanged. OAuth connected discovery excludes legacy link tools; anonymous compatibility preserved. PKCE/encrypted grants, resource-specific transport and refresh receipts unchanged. Other capability claims retain the newly merged main audit, including merchant onboarding email suppression, preferences, event permissions and worker isolation. No new production capability promotion; deployment and transaction readiness require separate verification. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged.",
   "capabilities": [
     {
       "id": "payments",

@@ -78,6 +78,43 @@ describe('ChatMessageRow', () => {
     open.mockRestore();
   });
 
+  it('keeps sentence punctuation out of storefront link targets', () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    const phone = 'https://ogabassey.com/smartphones/iphone-16';
+    const charger = 'https://ogabassey.com/accessories/charger';
+    render(
+      <ChatMessageRow
+        item={{ ...baseMessage, text: `See (${phone}), or ${charger}.` }}
+        santaMode={false}
+        colors={colors}
+      />
+    );
+    expect(
+      screen.getByText(`See (${phone}), or ${charger}.`)
+    ).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole('link', { name: phone }));
+    fireEvent.press(screen.getByRole('link', { name: charger }));
+    expect(open).toHaveBeenNthCalledWith(1, phone);
+    expect(open).toHaveBeenNthCalledWith(2, charger);
+    open.mockRestore();
+  });
+
+  it('preserves balanced parentheses in a storefront link', () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    const url = 'https://ogabassey.com/search?q=charger(20W)';
+    render(
+      <ChatMessageRow
+        item={{ ...baseMessage, text: `See (${url}).` }}
+        santaMode={false}
+        colors={colors}
+      />
+    );
+    expect(screen.getByText(`See (${url}).`)).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole('link', { name: url }));
+    expect(open).toHaveBeenCalledWith(url);
+    open.mockRestore();
+  });
+
   it('does not turn lookalike URLs into links', () => {
     render(
       <ChatMessageRow

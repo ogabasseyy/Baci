@@ -165,13 +165,6 @@ elif [ "$(/usr/bin/node --version)" != "$(node --version)" ]; then
   echo "fixed /usr/bin/node does not match the workflow-pinned runtime" >&2
   exit 1
 fi
-if [ ! -x /usr/bin/pnpm ]; then
-  ln -s "$(command -v pnpm)" /usr/bin/pnpm
-  pnpm_link_created=1
-elif [ "$(/usr/bin/pnpm --version)" != '11.7.0' ]; then
-  echo "fixed /usr/bin/pnpm does not match the workflow-pinned runtime" >&2
-  exit 1
-fi
 chown -R root:root "$store_root"
 chmod -R a-w "$store_root"
 
@@ -188,6 +181,49 @@ for module in worker_release_dependency_builder.py worker_release_dependency_art
 done
 install -o root -g root -m 0555 "$(dirname "$0")/dependency-snapshot-smoke.py" \
   "$helper_root/dependency-snapshot-smoke.py"
+
+# The action installs pnpm under the runner's home directory. That path is
+# intentionally hidden from the transient service by ProtectHome=true, so
+# stage the exact pinned package and use a system-visible wrapper.
+if [ -e /usr/bin/pnpm ] || [ -L /usr/bin/pnpm ]; then
+  echo "refusing pre-existing /usr/bin/pnpm on disposable runner" >&2
+  exit 1
+fi
+pnpm_entrypoint="$(readlink -f "$(command -v pnpm)")"
+case "$pnpm_entrypoint" in
+  */pnpm/bin/pnpm.cjs) ;;
+  *) echo "workflow pnpm entrypoint has an unexpected layout" >&2; exit 1 ;;
+esac
+pnpm_package_root="${pnpm_entrypoint%/bin/pnpm.cjs}"
+if [ ! -d "$pnpm_package_root" ] || [ ! -f "$pnpm_entrypoint" ]; then
+  echo "workflow pnpm package is unavailable" >&2
+  exit 1
+fi
+cp -a -- "$pnpm_package_root" "$helper_root/pnpm"
+chown -R root:root "$helper_root/pnpm"
+find "$helper_root/pnpm" -type d -exec chmod 0555 {} +
+find "$helper_root/pnpm" -type f -exec chmod 0444 {} +
+while IFS= read -r -d '' link; do
+  target="$(readlink -f "$link")" || {
+    echo "staged pnpm package contains a broken link" >&2
+    exit 1
+  }
+  case "$target" in
+    "$helper_root/pnpm"/*) ;;
+    *) echo "staged pnpm package contains an external link" >&2; exit 1 ;;
+  esac
+done < <(find "$helper_root/pnpm" -type l -print0)
+if [ "$(/usr/bin/node "$helper_root/pnpm/bin/pnpm.cjs" --version)" != '11.7.0' ]; then
+  echo "staged pnpm package does not match the workflow version pin" >&2
+  exit 1
+fi
+cat >/usr/bin/pnpm <<EOF
+#!/bin/sh
+exec /usr/bin/node "$helper_root/pnpm/bin/pnpm.cjs" "\$@"
+EOF
+chown root:root /usr/bin/pnpm
+chmod 0555 /usr/bin/pnpm
+pnpm_link_created=1
 
 PYTHONPATH="$(cd "$(dirname "$0")/../../bin" && pwd)"
 export PYTHONPATH

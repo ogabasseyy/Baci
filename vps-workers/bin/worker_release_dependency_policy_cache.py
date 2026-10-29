@@ -32,6 +32,7 @@ POLICY_FLAGS = {
     "ignorePnpmfile": True,
     "trustLockfile": False,
     "packageImportMethod": "copy",
+    "injectWorkspacePackages": True,
 }
 TRUSTED_REGISTRY = "https://registry.npmjs.org/"
 MAX_CACHE_BYTES = 256 * 1024 * 1024
@@ -41,7 +42,7 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 from worker_release_dependency_registry_policy import (
     validate_registry_routing as _validate_registry_routing,
 )
-from worker_release_dependency_diagnostics import pnpm_failure_category as _pnpm_failure_category
+from worker_release_dependency_diagnostics import run_pnpm_checked
 
 
 def _sha256_regular_file(path: Path, *, owner_uid: int | None = None, max_bytes: int = 64 * 1024 * 1024) -> str:
@@ -209,18 +210,15 @@ def validate_receipt(source: Path, cache: Path, receipt_path: Path, pnpm_version
 
 def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/usr/bin/node") -> None:
     _validate_registry_routing(source, POLICY_FILES, TRUSTED_REGISTRY)
-    try:
-        version = subprocess.run((node, pnpm, "--version"), cwd=source, check=True,
-                                 capture_output=True, text=True, timeout=15).stdout.strip()
-    except subprocess.CalledProcessError as exc:
-        category = _pnpm_failure_category((exc.stdout or "") + "\n" + (exc.stderr or ""))
-        raise BuilderRejected(f"pnpm version check failed (exit {exc.returncode}; category={category})") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise BuilderRejected("pnpm version check timed out") from exc
+    version = run_pnpm_checked((node, pnpm, "--version"), cwd=source,
+                               timeout=15, stage="version check").stdout.strip()
     if version != EXPECTED_PNPM:
         raise BuilderRejected("pnpm runtime differs from pinned dependency policy version")
     env = {
-        "PATH": "/usr/bin:/bin",
+        # Keep child lifecycle-disabled pnpm helpers able to resolve the same
+        # explicit Node runtime used to invoke pnpm (also supports CI runners
+        # where Node is not installed at /usr/bin/node).
+        "PATH": f"{Path(node).absolute().parent}:/usr/bin:/bin",
         "CI": "true",
         "PNPM_CONFIG_CACHE_DIR": str(cache),
         "PNPM_CONFIG_STORE_DIR": str(store),
@@ -230,6 +228,7 @@ def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/u
         "PNPM_CONFIG_OFFLINE": "false",
         "PNPM_CONFIG_REGISTRY": TRUSTED_REGISTRY,
         "PNPM_CONFIG_PACKAGE_IMPORT_METHOD": "copy",
+        "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true",
         "npm_config_registry": TRUSTED_REGISTRY,
         "npm_config_userconfig": "/dev/null",
         "npm_config_globalconfig": "/dev/null",
@@ -239,18 +238,12 @@ def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/u
         env["HOME"] = home
         with tempfile.TemporaryDirectory(prefix="pnpm-policy-preverify-", dir=cache.parent) as output_root:
             commands = (
-                ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--filter", "@baci/web", "--prod", "deploy", "--legacy", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store), str(Path(output_root) / "web")), source),
+                ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "--filter", "@baci/web", "--prod", "deploy", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store), str(Path(output_root) / "web")), source),
                 ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store)), source / "vps-workers"),
             )
             for stage, (command, cwd) in zip(("web-deploy", "worker-install"), commands, strict=True):
-                try:
-                    result = subprocess.run(command, cwd=cwd, env=env, check=True,
-                                            capture_output=True, text=True, timeout=240)
-                except subprocess.CalledProcessError as exc:
-                    category = _pnpm_failure_category((exc.stdout or "") + "\n" + (exc.stderr or ""))
-                    raise BuilderRejected(f"pnpm preverify {stage} failed (exit {exc.returncode}; category={category})") from exc
-                except subprocess.TimeoutExpired as exc:
-                    raise BuilderRejected(f"pnpm preverify {stage} timed out") from exc
+                result = run_pnpm_checked(command, cwd=cwd, env=env, timeout=240,
+                                          stage=f"preverify {stage}")
                 if "Lockfile passes supply-chain policies" not in result.stdout:
                     raise BuilderRejected(f"pnpm preverify {stage} did not report lockfile supply-chain policy verification")
     if before != _input_hashes(source):

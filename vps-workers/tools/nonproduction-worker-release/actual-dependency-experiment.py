@@ -29,17 +29,18 @@ import worker_release_dependency_install as installer
 import worker_release_dependency_input_cache as input_cache
 import worker_release_dependency_policy_cache as policy
 import worker_release_dependency_sandbox as sandbox
+from worker_release_actual_dependency_guard import (
+    assert_deployed_package_matches_lock,
+    enforce_resource_limits,
+    run_monitored,
+    web_deploy_command,
+)
 
 
-def run(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], timeout: int, stage: str) -> subprocess.CompletedProcess[str]:
-    try:
-        return subprocess.run(command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                              text=True, timeout=timeout, check=True)
-    except subprocess.CalledProcessError as exc:
-        raise RuntimeError(f"{stage} failed with exit {exc.returncode}") from exc
-    except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"{stage} timed out") from exc
+def run(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], timeout: int,
+        stage: str, resource_root: Path) -> None:
+    run_monitored(command, cwd=cwd, env=env, timeout=timeout, stage=stage,
+                  resource_root=resource_root)
 
 
 def pinned_pnpm(node: str) -> str:
@@ -108,7 +109,7 @@ def load_smoke_module():
     return module
 
 
-def independent_smoke(release: Path, node: str, smoke) -> str:
+def independent_smoke(release: Path, node: str, smoke, resource_root: Path) -> str:
     before = hashlib.sha256()
     before.update(bytes.fromhex(smoke.snapshot_digest(release / "apps/web/node_modules", "web")))
     before.update(bytes.fromhex(smoke.snapshot_digest(release / "node_modules", "worker")))
@@ -116,12 +117,14 @@ def independent_smoke(release: Path, node: str, smoke) -> str:
     tsx = release / "apps/web/node_modules/.bin/tsx"
     if not tsx.is_file() or not os.access(tsx, os.X_OK):
         raise RuntimeError("materialized web tsx entrypoint is unavailable")
-    run((str(tsx), "--version"), cwd=release / "apps/web", env=environment, timeout=30, stage="materialized web tsx smoke")
+    run((str(tsx), "--version"), cwd=release / "apps/web", env=environment, timeout=30,
+        stage="materialized web tsx smoke", resource_root=resource_root)
     dotenv = release / "node_modules/dotenv"
     if not dotenv.is_dir():
         raise RuntimeError("materialized worker dotenv package is unavailable")
     run((node, "--input-type=module", "-e", "import('dotenv').then(m => { if (typeof m.config !== 'function') process.exit(2) })"),
-        cwd=release, env=environment, timeout=30, stage="materialized worker dotenv smoke")
+        cwd=release, env=environment, timeout=30, stage="materialized worker dotenv smoke",
+        resource_root=resource_root)
     after = hashlib.sha256()
     after.update(bytes.fromhex(smoke.snapshot_digest(release / "apps/web/node_modules", "web-after")))
     after.update(bytes.fromhex(smoke.snapshot_digest(release / "node_modules", "worker-after")))
@@ -148,20 +151,41 @@ def main() -> int:
     try:
         with tempfile.TemporaryDirectory(prefix="baci-actual-dependency-experiment-") as temporary:
             base = Path(temporary)
+            enforce_resource_limits(base)
             archive = base / "checkout.tar"
-            subprocess.run(("git", "archive", "--format=tar", "--output", str(archive), "HEAD"), cwd=ROOT, check=True)
+            git = shutil.which("git")
+            if not git:
+                raise RuntimeError("git executable is unavailable")
+            run((git, "archive", "--format=tar", "--output", str(archive), "HEAD"), cwd=ROOT,
+                env={"PATH": f"{Path(git).parent}:/usr/bin:/bin"}, timeout=120,
+                stage="checkout archive", resource_root=base)
+            if archive.stat().st_size > 512 * 1024 * 1024:
+                raise RuntimeError("source archive exceeds configured size bound")
             source = base / "source"
             source.mkdir(mode=0o700)
             with tarfile.open(archive, "r:") as tar:
-                tar.extractall(source, filter="data")
+                members = tar.getmembers()
+                if len(members) > 500_000 or sum(member.size for member in members if member.isfile()) > 512 * 1024 * 1024:
+                    raise RuntimeError("source archive exceeds configured expansion bound")
+                tar.extractall(source, members=members, filter="data")
+            enforce_resource_limits(base)
             source_size = tree_size(source, max_entries=500_000, max_bytes=512 * 1024 * 1024)[1]
             (source / ".baci-source-sha").write_text(expected_sha + "\n", encoding="ascii")
             store = base / "pnpm-store"
             store.mkdir(mode=0o700)
             cache = base / "pnpm-cache"
             cache.mkdir(mode=0o700)
+            home = base / "home"
+            home.mkdir(mode=0o700)
             preverify_started = time.monotonic()
-            policy.preverify(source, store, cache, pnpm, node)
+            preverify_command = (
+                sys.executable, str(BIN / "worker_release_dependency_policy_cache.py"), "--preverify",
+                "--source", str(source), "--store", str(store), "--cache", str(cache),
+                "--pnpm", pnpm, "--node", node,
+            )
+            run(preverify_command, cwd=ROOT,
+                env={"PATH": f"{Path(node).parent}:/usr/bin:/bin", "HOME": str(home), "CI": "true"},
+                timeout=600, stage="online dependency policy preverification", resource_root=base)
             input_cache.validate_offline_store(store, owner_uid=os.geteuid(),
                                                max_entries=200_000,
                                                max_bytes=1536 * 1024 * 1024)
@@ -179,6 +203,7 @@ def main() -> int:
                 "PNPM_CONFIG_IGNORE_SCRIPTS": "true",
                 "PNPM_CONFIG_IGNORE_PNPMFILE": "true",
                 "PNPM_CONFIG_TRUST_LOCKFILE": "false",
+                "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true",
                 "PNPM_CONFIG_PACKAGE_IMPORT_METHOD": "copy",
                 "PNPM_CONFIG_OFFLINE": "true",
                 "PNPM_CONFIG_REGISTRY": policy.TRUSTED_REGISTRY,
@@ -186,16 +211,19 @@ def main() -> int:
                 "npm_config_userconfig": "/dev/null",
                 "npm_config_globalconfig": "/dev/null",
             }
-            (base / "home").mkdir(mode=0o700)
             preverify_receipt = store / policy.RECEIPT_NAME
             policy.validate_receipt(source, cache, preverify_receipt, expected_sha=expected_sha)
-            web_cmd = (node, pnpm, "--registry", policy.TRUSTED_REGISTRY, "--filter", "@baci/web", "--prod", "deploy",
-                       "--legacy", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(store), str(output / "web"))
-            run(web_cmd, cwd=source, env=offline_env, timeout=900, stage="offline real web deploy")
+            web_cmd = web_deploy_command(node, pnpm, store, output / "web", policy.TRUSTED_REGISTRY)
+            run(web_cmd, cwd=source, env=offline_env, timeout=900,
+                stage="offline real web deploy", resource_root=base)
+            deployed_vercel_functions = assert_deployed_package_matches_lock(
+                output / "web", source / "pnpm-lock.yaml", "@vercel/functions"
+            )
             sandbox.remove_workspace_self_link(output / "web", source)
             worker_cmd = (node, pnpm, "--registry", policy.TRUSTED_REGISTRY, "--package-import-method=copy", "install",
                           "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(store))
-            run(worker_cmd, cwd=source / "vps-workers", env=offline_env, timeout=900, stage="offline real standalone worker install")
+            run(worker_cmd, cwd=source / "vps-workers", env=offline_env, timeout=900,
+                stage="offline real standalone worker install", resource_root=base)
             policy.validate_receipt(source, cache, preverify_receipt, expected_sha=expected_sha)
             input_cache.validate_offline_store(store, owner_uid=os.geteuid(),
                                                max_entries=200_000,
@@ -206,17 +234,20 @@ def main() -> int:
                 raise RuntimeError("offline standalone worker install produced no real node_modules directory")
             (output / "root").mkdir()
             shutil.copytree(worker_modules, output / "root" / "node_modules", symlinks=True)
+            enforce_resource_limits(base)
             entries, payload_bytes = artifacts.validate_payload(output)
             release = base / "release"
             (release / "apps" / "web").mkdir(parents=True, mode=0o700)
             installer.install_payload(output, release, owner_uid=os.geteuid())
-            smoke_hash = independent_smoke(release, node, load_smoke_module())
+            enforce_resource_limits(base)
+            smoke_hash = independent_smoke(release, node, load_smoke_module(), base)
             materialized_count, materialized_bytes = tree_size(release, max_entries=200_000,
                                                                 max_bytes=1024 * 1024 * 1024)
             report = {
                 "experiment": "actual-checkout-offline-dependencies",
                 "checkout_sha": expected_sha,
                 "lockfile_sha256": lock_hashes,
+                "deployed_lock_graph_check": {"@vercel/functions": deployed_vercel_functions},
                 "source_bytes": source_size,
                 "pnpm_store_entries": store_count,
                 "pnpm_store_bytes": store_bytes,

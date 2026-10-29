@@ -143,6 +143,7 @@ class DependencyBuilderTests(unittest.TestCase):
         self.assertIn("PNPM_CONFIG_STORE_DIR=/scratch/pnpm-store", joined)
         self.assertIn("PNPM_CONFIG_CACHE_DIR=/scratch/pnpm-cache", joined)
         self.assertIn("PNPM_CONFIG_TRUST_LOCKFILE=false", joined)
+        self.assertIn("PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES=true", joined)
         self.assertIn("PNPM_CONFIG_PACKAGE_IMPORT_METHOD=copy", joined)
         self.assertIn(f"PNPM_CONFIG_REGISTRY={policy_cache.TRUSTED_REGISTRY}", joined)
         self.assertNotIn(str(builder.PNPM_STORE), joined)
@@ -187,6 +188,8 @@ class DependencyBuilderTests(unittest.TestCase):
             web_deploy, web_cwd = calls[1]
             self.assertEqual(web_cwd, scratch / "source")
             self.assertIn("deploy", web_deploy)
+            self.assertNotIn("--legacy", web_deploy)
+            self.assertIn("--frozen-lockfile", web_deploy)
             self.assertIn("--package-import-method=copy", web_deploy)
             self.assertIn("--registry", web_deploy)
             self.assertIn(policy_cache.TRUSTED_REGISTRY, web_deploy)
@@ -654,6 +657,8 @@ class DependencyBuilderTests(unittest.TestCase):
                 policy_cache.validate_receipt(source, cache, receipt_path)
 
     def test_policy_preverify_runs_both_lockfiles_with_scripts_and_trust_bypass_disabled(self):
+        policy_source = SCRIPT.with_name("worker_release_dependency_policy_cache.py").read_text(encoding="utf-8")
+        self.assertEqual(policy_source.count('"PNPM_CONFIG_FROZEN_LOCKFILE": "true"'), 1)
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = make_source(root)
@@ -686,13 +691,18 @@ class DependencyBuilderTests(unittest.TestCase):
                 self.assertEqual(command[0], "/usr/bin/node")
                 self.assertEqual(command[1], "/fixed/pnpm")
                 self.assertEqual(kwargs["env"]["PNPM_CONFIG_FROZEN_LOCKFILE"], "true")
+                self.assertIn("/usr/bin", kwargs["env"]["PATH"].split(":"))
                 if "install" in command:
                     self.assertIn("--frozen-lockfile", command)
                     self.assertIn("--package-import-method=copy", command)
+                if "deploy" in command:
+                    self.assertIn("--frozen-lockfile", command)
+                    self.assertNotIn("--legacy", command)
                 self.assertIn("--ignore-scripts", command)
                 self.assertIn("--ignore-pnpmfile", command)
                 self.assertNotIn("--config.trust-lockfile=true", command)
                 self.assertEqual(kwargs["env"]["PNPM_CONFIG_TRUST_LOCKFILE"], "false")
+                self.assertEqual(kwargs["env"]["PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES"], "true")
                 self.assertEqual(kwargs["env"]["PNPM_CONFIG_PACKAGE_IMPORT_METHOD"], "copy")
                 self.assertIn("--registry", command)
                 registry_index = command.index("--registry")
@@ -703,6 +713,8 @@ class DependencyBuilderTests(unittest.TestCase):
             self.assertTrue(receipt.is_file())
             validated = policy_cache.validate_receipt(source, cache, receipt)
             self.assertEqual(validated["effectiveFlags"], policy_cache.POLICY_FLAGS)
+            self.assertTrue(validated["effectiveFlags"]["injectWorkspacePackages"])
+            self.assertFalse(validated["effectiveFlags"]["trustLockfile"])
             self.assertEqual(validated["registryRouting"], {"default": policy_cache.TRUSTED_REGISTRY, "scoped": "none"})
 
     def test_preverify_rejects_archive_owned_registry_overrides(self):
@@ -774,6 +786,13 @@ class DependencyBuilderTests(unittest.TestCase):
             self.assertNotIn("synthetic-private-token", str(caught.exception))
             self.assertNotIn("synthetic credential marker", str(caught.exception))
             self.assertFalse((store / policy_cache.RECEIPT_NAME).exists())
+
+    def test_trust_downgrade_has_specific_redacted_category(self):
+        from worker_release_dependency_diagnostics import pnpm_failure_category
+
+        output = 'ERR_PNPM_TRUST_DOWNGRADE High-risk trust downgrade for "@fixture/pkg@1.2.3" private-token'
+        self.assertEqual(pnpm_failure_category(output), "lockfile-trust-downgrade")
+        self.assertNotIn("private-token", pnpm_failure_category(output))
 
     def test_policy_cache_hash_rejects_links_and_writable_entries(self):
         with tempfile.TemporaryDirectory() as temporary:

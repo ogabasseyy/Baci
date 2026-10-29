@@ -6,6 +6,7 @@ import shutil
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent))
 _path = Path(__file__).with_name("worker_release_dependency_consumer.test.py")
@@ -73,6 +74,32 @@ class SnapshotMutationTests(unittest.TestCase):
         finally:
             self.result_root.chmod(0o700)
         self.assertEqual(called, [])
+
+    def test_candidate_child_replacement_after_pin_fails_closed(self):
+        archive = _fixtures.archive_bytes()
+        snapshot = self.make_snapshot(archive)
+        build = self.make_builder()
+        original_pin = _fixtures.consumer.pin_result_directory
+        moved = self.result_root / "candidate-original"
+
+        def pin_then_replace(parent, path, *, owner_uid):
+            pinned = original_pin(parent, path, owner_uid=owner_uid)
+            Path(path).rename(moved)
+            Path(path).mkdir(mode=0o700)
+            return pinned
+
+        try:
+            with patch.object(_fixtures.consumer, "pin_result_directory", side_effect=pin_then_replace):
+                with self.assertRaisesRegex(_fixtures.consumer.BuilderRejected, "directory path changed"):
+                    self.run_consumer(build, archive=archive, snapshot=snapshot)
+            self.assertTrue((moved / "payload").is_dir())
+            self.assertFalse((self.release / "node_modules").exists())
+        finally:
+            replacement = self.result_root / "candidate"
+            if replacement.exists():
+                replacement.rmdir()
+            if moved.exists():
+                moved.rename(replacement)
 
     def test_source_mutation_during_builder_rejects_candidate_before_install(self):
         snapshot = self.make_snapshot(_fixtures.archive_bytes())

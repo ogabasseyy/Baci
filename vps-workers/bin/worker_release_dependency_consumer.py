@@ -5,6 +5,9 @@ authenticated identity, matching dispatcher archive binding, and a frozen
 source snapshot supplied by its trusted caller. It verifies the builder's
 root-owned manifest and payload, then materializes contained symlinks as
 regular files before adding dependencies to a frozen incoming release.
+The builder callback must be a trusted root supervisor for a distinct-UID
+build sandbox; no hostile process may share the consumer's owner UID during
+candidate validation, installation, or cleanup.
 """
 from __future__ import annotations
 
@@ -12,7 +15,6 @@ import base64
 import hashlib
 import os
 import re
-import shutil
 import stat
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,7 +30,7 @@ from worker_release_dependency_artifacts import (
 )
 from worker_release_dependency_install import install_payload
 from worker_release_lifecycle import AuthenticatedRun
-from worker_release_result_root import pin_result_root
+from worker_release_result_root import pin_result_directory, pin_result_root
 from worker_release_source_snapshot import PinnedSourceSnapshot, pin_source_snapshot
 
 EXPECTED_SMOKE = {"web_tsx": "passed", "worker_dotenv": "passed"}
@@ -61,25 +63,6 @@ def _trusted_directory(path: Path, *, uid: int, writable_mask: int = 0o022) -> N
     info = path.lstat()
     if (not stat.S_ISDIR(info.st_mode) or info.st_uid != uid or info.st_mode & writable_mask):
         raise BuilderRejected("dependency integration directory is not trusted")
-
-
-def _remove_tree(path: Path) -> None:
-    """Remove only a root-owned private builder result tree after consumption."""
-    if not path.exists() and not path.is_symlink():
-        return
-    info = path.lstat()
-    if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid():
-        raise BuilderRejected("private builder result cleanup target changed")
-    for current, directories, _files in os.walk(path, topdown=True, followlinks=False):
-        os.chmod(current, 0o700, follow_symlinks=False)
-        for name in directories:
-            child = Path(current) / name
-            child_info = child.lstat()
-            if stat.S_ISDIR(child_info.st_mode):
-                os.chmod(child, 0o700, follow_symlinks=False)
-    if not shutil.rmtree.avoids_symlink_attacks:
-        raise BuilderRejected("safe descriptor-based builder result cleanup is unavailable")
-    shutil.rmtree(path)
 
 
 def _validate_source_snapshot(snapshot: BrokerFrozenSourceSnapshot, archive: BrokerFetchedArchive,
@@ -248,6 +231,8 @@ def build_and_install_dependencies(
     constrained extractor, then frozen before this call. The snapshot object
     and SHA marker are consistency checks, not authentication. This function
     does not extract untrusted bytes as root or make a candidate launchable.
+    The builder callback must satisfy the trusted-supervisor, distinct-UID
+    contract stated in this module's docstring.
     """
     identity = _validated_identity(identity)
     archive = _archive_from_dispatch_response(dispatcher_response, identity, expected_bundle_sha256)
@@ -256,22 +241,27 @@ def build_and_install_dependencies(
     pinned_source: PinnedSourceSnapshot | None = None
     manifest: dict[str, object] | None = None
     result_dir: Path | None = None
+    candidate_pin = None
     try:
         pinned_source = _validate_source_snapshot(source_snapshot, archive, identity, owner_uid=owner_uid)
         source = pinned_source.path
         manifest, result_dir = builder(str(source), identity.sha)
         result_pin.verify_unchanged()
         result_dir = Path(result_dir)
-        if result_dir.parent != result_root or result_dir.is_symlink():
-            raise BuilderRejected("dependency candidate is outside the fixed result root")
+        candidate_pin = pin_result_directory(result_pin, result_dir, owner_uid=owner_uid)
+        result_dir = candidate_pin.path
+        candidate_pin.verify_unchanged()
         manifest_file = _read_manifest(result_dir, owner_uid=owner_uid)
+        candidate_pin.verify_unchanged()
         if manifest_file != manifest:
             raise BuilderRejected("dependency candidate returned manifest does not match its persisted manifest")
         payload = _verify_candidate(manifest_file, result_dir, source, identity.sha, owner_uid)
+        candidate_pin.verify_unchanged()
         # A successful builder result is not accepted if the pinned snapshot
         # changed or its pathname was replaced while the builder ran.
         pinned_source.verify_unchanged()
         result_pin.verify_unchanged()
+        candidate_pin.verify_unchanged()
         install_payload(payload, release_root, owner_uid=owner_uid)
         return {
             "source_sha": identity.sha,
@@ -281,13 +271,19 @@ def build_and_install_dependencies(
         }
     finally:
         try:
-            if result_dir is not None and result_dir.parent == result_root:
+            if candidate_pin is not None:
                 result_pin.verify_unchanged()
-                _remove_tree(result_dir)
+                candidate_pin.remove()
         finally:
-            if pinned_source is not None:
-                pinned_source.close()
-            result_pin.close()
+            try:
+                if candidate_pin is not None:
+                    candidate_pin.close()
+            finally:
+                try:
+                    if pinned_source is not None:
+                        pinned_source.close()
+                finally:
+                    result_pin.close()
 
 
 __all__ = ["build_and_install_dependencies"]

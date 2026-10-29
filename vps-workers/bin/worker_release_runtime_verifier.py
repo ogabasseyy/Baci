@@ -126,7 +126,10 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
         preflight_cgroup_root(CGROUP_ROOT)
     except Exception as error:
         raise RuntimeVerificationRejected("required cgroup v2 runtime boundary is unavailable") from error
-    invocation = [SYSTEMD_RUN, "--quiet", "--no-block", "--collect", f"--unit={unit}"]
+    # Keep failed units inspectable until Result/ExecMainStatus are read. The
+    # default inactive collection mode removes the exact transient unit after
+    # the explicit drain transitions it to inactive.
+    invocation = [SYSTEMD_RUN, "--quiet", "--no-block", f"--unit={unit}"]
     invocation.extend(f"--property={key}={value}" for key, value in properties.items())
     invocation.extend(("--property=RemainAfterExit=yes", "--property=StandardOutput=null",
                        "--property=StandardError=null", f"--property=WorkingDirectory={cwd}",
@@ -176,8 +179,18 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
                 else:
                     failure = f"fixed runtime check {check_index} exited unsuccessfully"
                 break
-            if active in ("failed", "inactive") or load != "loaded":
-                failure = f"fixed runtime check {check_index} did not reach successful exit"
+            if load != "loaded":
+                failure = f"fixed runtime check {check_index} unit disappeared before terminal verification"
+                break
+            if active == "failed":
+                status = _systemctl("show", "--property=ExecMainStatus", "--value", unit)
+                if re.fullmatch(r"(?:0|[1-9][0-9]{0,2})", status) and int(status) <= 255:
+                    failure = f"fixed runtime check {check_index} failed (exit={status})"
+                else:
+                    failure = f"fixed runtime check {check_index} failed"
+                break
+            if active == "inactive":
+                failure = f"fixed runtime check {check_index} became inactive before verification"
                 break
             time.sleep(POLL_SECONDS)
         if not completed and failure is None:
@@ -192,9 +205,28 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
                 launcher_unproven = True
         if process is not None:
             try:
+                def drain_query(*args: str, timeout: float = 1) -> str:
+                    value = _systemctl(*args, timeout=timeout)
+                    # drain_unpinned_until_proven calls this only after its
+                    # cgroup lookup proved the exact unit cgroup absent. A
+                    # failed unit remains loaded after --collect is removed,
+                    # so clear that terminal systemd state only after the
+                    # empty-cgroup proof, then require exact unload.
+                    if (args == ("show", "--property=LoadState", "--value", unit)
+                            and value == "loaded"):
+                        active = _systemctl("show", "--property=ActiveState", "--value", unit,
+                                            timeout=timeout)
+                        if active in ("inactive", "failed"):
+                            _systemctl("reset-failed", unit, timeout=timeout)
+                            value = _systemctl(*args, timeout=timeout)
+                            if value != "not-found":
+                                raise RuntimeVerificationRejected(
+                                    "terminal runtime unit could not be unloaded after drain proof")
+                    return value
+
                 drain_unpinned_until_proven(
                     unit, process, root=CGROUP_ROOT, systemctl=SYSTEMCTL,
-                    query=lambda *args, timeout=1: _systemctl(*args, timeout=timeout),
+                    query=drain_query,
                     rejected=RuntimeVerificationRejected,
                     deadline=time.monotonic() + MAX_CLEANUP_SECONDS,
                     unproven=RuntimeVerificationQuiescenceUnproven,

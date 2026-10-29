@@ -115,10 +115,73 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                                 {"PrivateNetwork": "yes"}, 1)
         launch_args = spawn.call_args.args[0]
         self.assertIn("--no-block", launch_args)
+        self.assertNotIn("--collect", launch_args)
         self.assertIn("--property=RemainAfterExit=yes", launch_args)
         self.assertIn("--property=StandardOutput=null", launch_args)
         self.assertIn("--property=StandardError=null", launch_args)
         drain.assert_called_once()
+
+    @patch("worker_release_runtime_verifier.drain_unpinned_until_proven")
+    @patch("worker_release_runtime_verifier.preflight_cgroup_root")
+    @patch("worker_release_runtime_verifier._systemctl")
+    @patch("worker_release_runtime_verifier._spawn_unit")
+    def test_failed_unit_is_reset_only_after_drain_proves_cgroup_absent(
+            self, spawn, systemctl, _preflight, drain):
+        from worker_release_runtime_verifier import _execute_fixed_unit
+
+        class Launcher:
+            returncode = 0
+
+            @staticmethod
+            def wait(timeout=None):
+                return 0
+
+            @staticmethod
+            def poll():
+                return 0
+
+        spawn.return_value = Launcher()
+        unit = "baci-worker-runtime-ffffffffffffffff-aaaaaaaaaaaa-0.service"
+        state = {"load": "loaded"}
+
+        def show(*args, timeout=1):
+            prop = next(item.split("=", 1)[1] for item in args if item.startswith("--property="))
+            if prop == "LoadState":
+                return state["load"]
+            if prop == "ActiveState":
+                return "failed"
+            if prop == "SubState":
+                return "failed"
+            if prop == "ExecMainStatus":
+                return "21"
+            raise AssertionError(f"unexpected property {prop}")
+
+        def fake_systemctl(*args, timeout=1):
+            if args[0] == "reset-failed":
+                state["load"] = "not-found"
+                return ""
+            return show(*args, timeout=timeout)
+
+        def drain_after_absent_cgroup(_unit, _process, **kwargs):
+            # The real drain helper reaches its query only after the exact
+            # cgroup lookup returned UnitCgroupAbsent.
+            self.assertEqual(kwargs["query"]("show", "--property=LoadState", "--value", unit),
+                             "not-found")
+
+        systemctl.side_effect = fake_systemctl
+        drain.side_effect = drain_after_absent_cgroup
+        with patch("worker_release_runtime_verifier.sys.platform", "linux"), \
+                patch("worker_release_runtime_verifier.os.geteuid", return_value=0), \
+                patch("worker_release_runtime_verifier.SYSTEMD_RUN", "/usr/bin/true"), \
+                patch("worker_release_runtime_verifier.SYSTEMCTL", "/usr/bin/true"):
+            with self.assertRaisesRegex(RuntimeVerificationRejected, "exit=21"):
+                _execute_fixed_unit(unit, self.candidate, ("/usr/bin/false",), {}, 1)
+        reset_index = next(i for i, call in enumerate(systemctl.call_args_list)
+                           if call.args[:2] == ("reset-failed", unit))
+        failed_state_index = next(i for i, call in enumerate(systemctl.call_args_list)
+                                  if call.args[:3] == ("show", "--property=ActiveState", "--value"))
+        self.assertLess(failed_state_index, reset_index)
+        self.assertEqual(state["load"], "not-found")
 
     @patch("worker_release_runtime_verifier.drain_unpinned_until_proven")
     @patch("worker_release_runtime_verifier.preflight_cgroup_root")
@@ -206,6 +269,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
         if not Path("/usr/bin/node").is_file():
             self.fail("disposable Linux verifier job requires /usr/bin/node")
         from worker_release_runtime_verifier import _execute_fixed_unit
+        from worker_release_runtime_verifier import _systemctl
         from worker_release_dependency_supervisor_cgroup import drain_unpinned_until_proven
         releases = Path("/srv/baci-workers/releases")
         candidate = releases / f".{SHA}.incoming.{uuid.uuid4().hex}"
@@ -238,11 +302,30 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                 else:
                     self.fail("timed-out descendant smoke unexpectedly succeeded")
                 drain.assert_called_once()
+                self.assertEqual(
+                    _systemctl("show", "--property=LoadState", "--value", unit), "not-found")
         except RuntimeVerificationQuiescenceUnproven as error:
             unproven_error = error
             raise
         finally:
             cleanup_candidate_after_verifier(candidate, unproven_error)
+
+    @unittest.skipUnless(os.geteuid() == 0 and sys.platform.startswith("linux")
+                         and os.environ.get("WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD") == "1",
+                         "requires disposable root/systemd CI")
+    def test_actual_failed_unit_is_unloaded_after_cgroup_proof(self):
+        from worker_release_runtime_verifier import _execute_fixed_unit, _systemctl
+
+        unit = f"baci-worker-runtime-{uuid.uuid4().hex[:16]}-{uuid.uuid4().hex[:12]}-0.service"
+        with patch("worker_release_runtime_verifier.MAX_CLEANUP_SECONDS", 10):
+            with self.assertRaisesRegex(RuntimeVerificationRejected, "exit=1"):
+                _execute_fixed_unit(unit, self.candidate, ("/usr/bin/false",),
+                                    {"User": "65534", "Group": "65534",
+                                     "PrivateNetwork": "yes", "ProtectSystem": "strict",
+                                     "ReadOnlyPaths": str(self.candidate),
+                                     "TasksMax": "16"}, 1)
+        self.assertEqual(_systemctl("show", "--property=LoadState", "--value", unit),
+                         "not-found")
 
 
 if __name__ == "__main__":

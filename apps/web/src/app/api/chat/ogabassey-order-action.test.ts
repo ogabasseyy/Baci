@@ -37,6 +37,42 @@ describe('Ogabassey order action routing', () => {
   });
 
   it.each([
+    'Yes',
+    'Okay',
+    'Go ahead',
+  ])('offers the secure order panel for an affirmative follow-up: %s', (reply) => {
+    expect(
+      buildOgabasseyOrderAction([
+        user('Please cancel my order'),
+        assistant('Choose an order in your account.'),
+        user(reply),
+      ])
+    ).toBe('orders');
+  });
+
+  it('does not use an older order request to intercept a later cart confirmation', () => {
+    expect(
+      buildOgabasseyOrderAction([
+        user('Track my order'),
+        assistant('You can view your orders.'),
+        user('Show me iPhone 16'),
+        assistant('Shall I add it to your cart?'),
+        user('Yes'),
+      ])
+    ).toBeNull();
+  });
+
+  it('does not reopen order controls after an unrelated question', () => {
+    expect(
+      buildOgabasseyOrderAction([
+        user('Track my order'),
+        assistant('Are you having a good day?'),
+        user('Yes'),
+      ])
+    ).toBeNull();
+  });
+
+  it.each([
     'Order me an iPhone 16',
     'Which charger is compatible?',
     'What are your delivery fees?',

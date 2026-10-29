@@ -5,7 +5,7 @@ export interface FastCatalogCategory {
 }
 
 export type FastCatalogIntent =
-  | { kind: 'clarify'; reason?: 'options' | 'product' }
+  | { kind: 'clarify'; reason?: 'options' | 'product' | 'max-budget' }
   | {
       kind: 'search';
       categoryId?: string;
@@ -45,6 +45,29 @@ const TABLET_SIGNAL = /\b(?:tablets?|ipad)\b/i;
 const ACCESSORY_SIGNAL =
   /\b(?:airpods|earbuds?|headphones?|headsets?|earphones?|chargers?|cables?|adapters?|power[\s-]*banks?|cases?|screen[\s-]*protectors?|speakers?)\b/i;
 
+// Preserve "Max" in named models while allowing it as a budget cue after
+// generic product requests and use-case descriptions.
+function isProductModelMax(text: string, index: number): boolean {
+  const prefix = text.slice(0, index);
+  if (
+    /\b(?:phones?|smartphones?|iphones?|laptops?|macbooks?|tablets?|ipads?|earbuds?|headphones?|chargers?|accessor(?:y|ies)|products?|devices?)\s+(?:for|with)\s+[\p{L}\p{N}\s,'’-]{1,80}$/iu.test(
+      prefix
+    )
+  )
+    return false;
+  const previousWord = prefix.match(/[\p{L}\p{N}-]+\s*$/u)?.[0].trim();
+  return (
+    !!previousWord &&
+    !/^(?:a|an|the|my|your|our|with|at|for|of|is|be|have|has|need|want|max|limit|under|below|within|budget|price|cost|spend|phones?|smartphones?|laptops?|tablets?|earbuds?|headphones?|chargers?|accessor(?:y|ies)|products?|devices?)$/i.test(
+      previousWord
+    )
+  );
+}
+
+function isBudgetMatch(text: string, match: string, index: number): boolean {
+  return !/^max\b/i.test(match) || !isProductModelMax(text, index);
+}
+
 export function normalizeAccessoryNouns(value: string): string {
   return value.replace(
     /\b(?:chargers|cables|adapters|cases|headphones|headsets|earphones|earbuds|speakers|banks|protectors)\b/gi,
@@ -83,7 +106,9 @@ function resolveCategory(text: string, categories: FastCatalogCategory[]) {
 function getMaximumPrice(
   text: string
 ): { amount: number; exclusive: boolean } | undefined {
-  const match = text.match(MAX_PRICE);
+  const match = [...text.matchAll(new RegExp(MAX_PRICE.source, 'gi'))].find(
+    (candidate) => isBudgetMatch(text, candidate[0], candidate.index)
+  );
   if (!match) return undefined;
   const amount = Number(match[1].replaceAll(',', ''));
   const multiplier = /^(?:m|million)$/i.test(match[2] ?? '')
@@ -104,7 +129,11 @@ function searchText(text: string): string {
   return normalizeAccessoryNouns(text)
     .replace(/\biphones\b/gi, 'iPhone')
     .replace(/\bi['’](?:m|d|ll|ve)\b/gi, ' ')
-    .replace(new RegExp(MAX_PRICE.source, 'gi'), ' ')
+    .replace(
+      new RegExp(MAX_PRICE.source, 'gi'),
+      (match, _amount, _suffix, index, source) =>
+        isBudgetMatch(source, match, index) ? ' ' : match
+    )
     .replace(
       /\b(?:(?:not|no|without|avoid|exclude|except|never|don'?t)\s+)?wi[\s-]*fi[\s-]*only\b/gi,
       ' '
@@ -151,6 +180,18 @@ export function interpretFastCatalogIntent(
       ? `${previous} ${latest}`
       : latest;
   if (!isShoppingRequest(text)) return null;
+  // Clarify whether Max is a model or a price limit before searching.
+  if (
+    [...text.matchAll(new RegExp(MAX_PRICE.source, 'gi'))].some(
+      (match) =>
+        /^max\b/i.test(match[0]) &&
+        isProductModelMax(text, match.index) &&
+        (/₦|\bngn|\bn(?=\d)/i.test(match[0]) ||
+          !!match[2] ||
+          Number(match[1].replaceAll(',', '')) >= 1000)
+    )
+  )
+    return { kind: 'clarify', reason: 'max-budget' };
 
   const category = resolveCategory(text, categories);
   const priceLimit = getMaximumPrice(latest) ?? getMaximumPrice(text);
@@ -190,7 +231,10 @@ export function interpretFastCatalogIntent(
       signal.test(text)
     ).length > 1 ||
     /\b(?:between|over|above|at least|more than)\b/i.test(text) ||
-    (BUDGET_WORD.test(text) && priceLimit === undefined)
+    (priceLimit === undefined &&
+      [...text.matchAll(new RegExp(BUDGET_WORD.source, 'gi'))].some((match) =>
+        isBudgetMatch(text, match[0], match.index)
+      ))
   ) {
     return { kind: 'clarify' };
   }

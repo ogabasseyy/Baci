@@ -109,6 +109,70 @@ describe('tryFastCatalogChat', () => {
     );
   });
 
+  it('rechecks the customer product request when they accept a cart suggestion', async () => {
+    mocks.categories.mockResolvedValue(categories);
+    mocks.products.mockResolvedValue([
+      {
+        id: 'p1',
+        name: 'iPhone 16',
+        slug: 'iphone-16',
+        brand: 'Apple',
+        category: 'Smartphones',
+        description: null,
+        image_url: null,
+        price: 100_000,
+        status: 'active',
+        stock: 1,
+        manage_stock: false,
+        has_variants: false,
+      },
+    ]);
+    const result = await tryFastCatalogChat({
+      tenant,
+      signal: new AbortController().signal,
+      messages: [
+        { role: 'user', content: 'Show me iPhone 16' },
+        { role: 'assistant', content: 'Shall I add a Samsung to your cart?' },
+        { role: 'user', content: 'Yes' },
+      ],
+    });
+    expect(result?.events[0]?.products[0]?.name).toBe('iPhone 16');
+    expect(result?.text).toMatch(/add to cart/i);
+    expect(result?.text).toMatch(/earlier search/i);
+    expect(result?.text).not.toMatch(/added .*cart/i);
+    expect(mocks.products).toHaveBeenCalledWith(
+      'merchant-1',
+      expect.objectContaining({ query: 'iPhone 16' })
+    );
+  });
+
+  it('does not infer a product from an assistant-only cart suggestion', async () => {
+    const result = await tryFastCatalogChat({
+      tenant,
+      signal: new AbortController().signal,
+      messages: [
+        { role: 'assistant', content: 'Shall I add an iPhone to your cart?' },
+        { role: 'user', content: 'Yes' },
+      ],
+    });
+    expect(result?.text).toMatch(/which product/i);
+    expect(mocks.products).not.toHaveBeenCalled();
+  });
+
+  it('does not treat an unrelated affirmative as a cart request', async () => {
+    const result = await tryFastCatalogChat({
+      tenant,
+      signal: new AbortController().signal,
+      messages: [
+        { role: 'user', content: 'Show me iPhone 16' },
+        { role: 'assistant', content: 'Are you having a good day?' },
+        { role: 'user', content: 'Yes' },
+      ],
+    });
+    expect(result).toBeNull();
+    expect(mocks.products).not.toHaveBeenCalled();
+  });
+
   it('asks which product to add when no customer shopping request is available', async () => {
     const result = await tryFastCatalogChat({
       tenant,

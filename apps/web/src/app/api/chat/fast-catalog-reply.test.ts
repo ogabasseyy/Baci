@@ -94,6 +94,31 @@ describe('buildFastCatalogReply', () => {
     expect(load).not.toHaveBeenCalled();
   });
 
+  it('asks customers to distinguish a Max model from their budget', async () => {
+    const load = vi.fn(async () => [product]);
+    const result = await buildFastCatalogReply(
+      ['Do you have iPhone 15 max ₦500k?'],
+      categories,
+      load
+    );
+    expect(result?.events).toEqual([]);
+    expect(result?.text).toMatch(/max.*product name.*budget/i);
+    expect(result?.text).toMatch(/under/i);
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('searches the clarified product within the stated budget', async () => {
+    const load = vi.fn(async () => [product]);
+    await buildFastCatalogReply(
+      ['Do you have iPhone 15 max ₦500k?', 'iPhone 15 under ₦500k'],
+      categories,
+      load
+    );
+    expect(load).toHaveBeenCalledWith(
+      expect.objectContaining({ query: 'iPhone 15', maxPrice: 500_000 })
+    );
+  });
+
   it('tells customers to check accessory compatibility', async () => {
     const result = await buildFastCatalogReply(
       ['Show me chargers'],

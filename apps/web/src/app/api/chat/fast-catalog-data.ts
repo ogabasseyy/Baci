@@ -1,4 +1,3 @@
-import z from 'zod';
 import { CHAT_PRODUCT_PROJECTION } from '@/ai/chat-product-projection';
 import {
   type ChatProductResult,
@@ -7,6 +6,10 @@ import {
 import { resolveSerializedAnchorStock } from '@/lib/serialized-anchor-stock';
 import { searchStorefrontProducts } from '@/lib/storefront-search';
 import { createPublicClient } from '@/lib/supabase/public';
+import {
+  fastCatalogProductRowSchema,
+  fastCatalogVariantRowSchema,
+} from '@/schemas/fast-catalog';
 import {
   type FastCatalogVariant,
   selectFastCatalogProducts,
@@ -19,52 +22,6 @@ import {
 import { isWifiOnlyConnectivity } from './fast-catalog-wifi';
 
 type SearchIntent = Extract<FastCatalogIntent, { kind: 'search' }>;
-
-const productRowSchema = z
-  .object({
-    id: z.string().min(1),
-    merchant_id: z.string().min(1),
-    category_id: z.string().nullable(),
-    name: z.string().min(1),
-    brand: z.string().nullable(),
-    category: z.string().nullable(),
-    description: z.string().nullable(),
-    images: z.unknown(),
-    price: z.number().finite(),
-    slug: z.string().nullable().optional(),
-    status: z.string().nullable(),
-    stock: z.number().nullable(),
-    stock_quantity: z.number().nullable().optional(),
-    manage_stock: z.boolean().nullable(),
-    has_variants: z.boolean().nullable(),
-    has_condition_offers: z.boolean().nullable(),
-    available_conditions: z.array(z.unknown()).nullable().optional(),
-    variant_model: z.string().nullable(),
-    condition: z.string().nullable().optional(),
-    product_key_specs: z.unknown().optional(),
-  })
-  .passthrough();
-
-const variantRowSchema = z
-  .object({
-    id: z.string().min(1),
-    product_id: z.string().min(1),
-    attributes: z.record(z.string(), z.unknown()).nullable().optional(),
-    price_override: z
-      .union([z.number().finite(), z.string()])
-      .nullable()
-      .optional(),
-    stock_quantity: z.number().finite().nullable().optional(),
-    available_units: z.number().finite().nullable().optional(),
-    effective_policy: z.string().nullable().optional(),
-    condition: z.string().nullable().optional(),
-    status: z.string().nullable().optional(),
-    is_active: z.boolean().nullable().optional(),
-    is_inventory_anchor: z.boolean().nullable().optional(),
-    archived_at: z.string().nullable().optional(),
-    deleted_at: z.string().nullable().optional(),
-  })
-  .passthrough();
 
 function catalogMatchesPreference(specs: unknown, preference: string): boolean {
   const record = Array.isArray(specs) ? specs[0] : specs;
@@ -156,7 +113,7 @@ export async function loadFastCatalogProducts(
   if (error) throw new Error('Catalog unavailable');
   const rankedIds = ranked ? new Set(ranked.productIds) : null;
   const parsedRows = (data ?? []).flatMap((row) => {
-    const parsed = productRowSchema.safeParse(row);
+    const parsed = fastCatalogProductRowSchema.safeParse(row);
     return parsed.success
       ? [
           {
@@ -239,7 +196,7 @@ export async function loadFastCatalogProducts(
     if (variantResult.error || !Array.isArray(variantResult.data))
       throw new Error('Catalog options unavailable');
     variants = variantResult.data.flatMap((row) => {
-      const parsed = variantRowSchema.safeParse(row);
+      const parsed = fastCatalogVariantRowSchema.safeParse(row);
       return parsed.success ? [parsed.data] : [];
     });
     if (variantResult.data.length > 0 && variants.length === 0)

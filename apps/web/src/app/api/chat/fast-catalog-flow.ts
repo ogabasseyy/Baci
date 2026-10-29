@@ -8,6 +8,7 @@ import {
   buildFastCatalogReply,
   type FastCatalogReply,
 } from './fast-catalog-reply';
+import { isOgabasseyAffirmativeReply } from './ogabassey-affirmative-reply';
 import { withTimeout } from './route-helpers';
 
 const FAST_CATALOG_TIMEOUT_MS = 9_000;
@@ -41,10 +42,16 @@ export async function tryFastCatalogChat(options: {
       text: 'Hello! How can I help you find a product today?',
     };
   }
+  const previous = options.messages.at(-2);
   const addFollowUp =
     /\b(?:add|put)\s+(?:it|this|that|them|these|those|one)\s+(?:to|in|into)\s+(?:my\s+|the\s+)?cart\b/i.test(
       latest
-    );
+    ) ||
+    (isOgabasseyAffirmativeReply(latest) &&
+      previous?.role === 'assistant' &&
+      /\b(?:add|put)\b[^?!.]{0,100}\b(?:cart|basket)\b/i.test(
+        previous.content
+      ));
   const searchMessages = addFollowUp
     ? userMessages.slice(-4, -1)
     : userMessages;
@@ -71,7 +78,7 @@ export async function tryFastCatalogChat(options: {
         if (!reply || !addFollowUp || !reply.events.length) return reply;
         return {
           ...reply,
-          text: `${reply.text} Choose Add to cart on a product card or open the product page to select options.`,
+          text: `${reply.text} These options match your earlier search. Choose Add to cart on a product card or open the product page to select options.`,
         };
       })(),
       FAST_CATALOG_TIMEOUT_MS,

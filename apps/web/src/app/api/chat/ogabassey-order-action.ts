@@ -1,3 +1,5 @@
+import { isOgabasseyAffirmativeReply } from './ogabassey-affirmative-reply';
+
 /** Only proposes customer-controlled account UI; no model output or order IDs
  * are used to authorize a read or mutation. */
 export function buildOgabasseyOrderAction(
@@ -14,7 +16,16 @@ export function buildOgabasseyOrderAction(
 
   // Only a customer-supplied earlier request can supply referential context.
   // The resulting UI still requires the customer to select and confirm an order.
+  const previous = messages.at(-2);
+  const affirmativeOrderFollowUp =
+    isOgabasseyAffirmativeReply(text) &&
+    previous?.role === 'assistant' &&
+    /\b(?:orders?|payment|cancel\w*|account|track\w*|parcel|package)\b/i.test(
+      previous.content
+    ) &&
+    !/\b(?:cart|basket)\b/i.test(previous.content);
   if (
+    affirmativeOrderFollowUp ||
     /\b(?:cancel|track|status|payment)\b.{0,30}\b(?:it|this|that|them)\b/i.test(
       text
     )
@@ -22,8 +33,11 @@ export function buildOgabasseyOrderAction(
     const previousUsers = messages
       .filter((message) => message.role === 'user')
       .slice(-3, -1);
+    const relevantUsers = affirmativeOrderFollowUp
+      ? previousUsers.slice(-1)
+      : previousUsers;
     if (
-      previousUsers.some(
+      relevantUsers.some(
         (message) =>
           orderSubject.test(message.content) ||
           paymentSubject.test(message.content)

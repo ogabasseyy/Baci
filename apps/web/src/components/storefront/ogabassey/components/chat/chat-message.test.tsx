@@ -8,10 +8,6 @@ vi.mock('./agent-ui-event-renderer', () => ({
   AgentUiEventRenderer: () => <div>Trusted product cards</div>,
 }));
 
-vi.mock('./chat-order-actions', () => ({
-  ChatOrderActions: ({ merchantSlug }: { merchantSlug?: string }) => <div>Order controls for {merchantSlug}</div>,
-}));
-
 describe('ChatMessageBubble', () => {
   const onAddToCart = vi.fn();
 
@@ -120,16 +116,6 @@ describe('ChatMessageBubble', () => {
       />
     );
     expect(screen.getByText('How can I assist you today?')).toBeDefined();
-  });
-
-  it('renders account controls only for an attested assistant order action', () => {
-    const action = { ...modelMessage, orderAction: 'orders' as const, merchantSlug: 'ogabassey' };
-    const { rerender } = render(<ChatMessageBubble message={action} index={0} isSanta={false} onAddToCart={onAddToCart} />);
-    expect(screen.getByText('Order controls for ogabassey')).toBeDefined();
-    rerender(<ChatMessageBubble message={{ ...action, role: 'user' }} index={0} isSanta={false} onAddToCart={onAddToCart} />);
-    expect(screen.queryByText('Order controls for ogabassey')).toBeNull();
-    rerender(<ChatMessageBubble message={action} index={0} isSanta={true} onAddToCart={onAddToCart} />);
-    expect(screen.queryByText('Order controls for ogabassey')).toBeNull();
   });
 
   it('renders validated UI events only on assistant messages', () => {

@@ -146,7 +146,7 @@ export function ChatOrderPanel({
   return (
     <section
       aria-label="Secure order actions"
-      className="mt-3 border-t border-gray-200 pt-3 text-sm"
+      className="mt-3 border-t border-[var(--store-border)] pt-3 text-sm"
     >
       <button
         type="button"
@@ -231,11 +231,7 @@ export function ChatOrderPanel({
             ['pending', 'processing'].includes(order.shipping_status ?? '') ? (
             <button
               type="button"
-              disabled={
-                submitting ||
-                scope.cancellationUncertain ||
-                scope.isCancellationBlocked(order.id)
-              }
+              disabled={submitting || scope.isCancellationBlocked(order.id)}
               onClick={() => setConfirming(order.id)}
               className="mt-2 block underline"
             >

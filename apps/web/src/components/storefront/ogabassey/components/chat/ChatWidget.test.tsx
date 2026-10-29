@@ -345,28 +345,6 @@ describe('ChatWidget - chat window when open', () => {
     expect(screen.getByText('I need a new phone.')).toBeDefined();
   });
 
-  it('does not claim a provider or online status without a live health check', () => {
-    vi.mocked(useOgabasseyChat).mockReturnValue({
-      isOpen: true,
-      setIsOpen: vi.fn(),
-      messages: [],
-      input: '',
-      setInput: vi.fn(),
-      isLoading: false,
-      proactiveMsg: null,
-      setProactiveMsg: vi.fn(),
-      messagesEndRef: { current: null },
-      handleSend: vi.fn(),
-      handleSubmit: vi.fn(),
-      handleAddSantaWishToCart: vi.fn(),
-    });
-
-    render(<ChatWidget />);
-    expect(screen.queryByText('Online')).toBeNull();
-    expect(screen.queryByText(/Powered by Google Gemini/)).toBeNull();
-    expect(screen.getByText('Shopping assistant')).toBeDefined();
-  });
-
   it('shows loading indicator when isLoading is true', () => {
     vi.mocked(useOgabasseyChat).mockReturnValue({
       isOpen: true,

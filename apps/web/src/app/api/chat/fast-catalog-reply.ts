@@ -26,11 +26,13 @@ export async function buildFastCatalogReply(
     return {
       events: [],
       text:
-        intent.reason === 'product'
-          ? 'Which product do you mean? Please tell me its name so I can check the catalog.'
-          : intent.reason === 'options'
-            ? 'I can’t confirm that condition or product option here. Please browse the store and check the available options on the product page.'
-            : 'Please tell me the product type and, if you have one, your maximum budget as a number.',
+        intent.reason === 'max-budget'
+          ? 'Does “Max” refer to the product name or your budget? Please send the product name and use “under” for the budget.'
+          : intent.reason === 'product'
+            ? 'Which product do you mean? Please tell me its name so I can check the catalog.'
+            : intent.reason === 'options'
+              ? 'I can’t confirm that condition or product option here. Please browse the store and check the available options on the product page.'
+              : 'Please tell me the product type and, if you have one, your maximum budget as a number.',
     };
   }
 

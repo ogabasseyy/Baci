@@ -4,6 +4,7 @@ import { acceptsAgentUi } from './accepts-agent-ui';
 import { withChatTenantHeader } from './chat-tenant';
 import { tryFastCatalogResponse } from './fast-catalog-response';
 import { negotiateChatAgentUiResponse } from './negotiate-chat-agent-ui-response';
+import { hasRecentCommerceContext } from './ogabassey-commerce-context';
 import { runOgabasseyConversation } from './ogabassey-conversation';
 import { buildOgabasseyOrderAction } from './ogabassey-order-action';
 import {
@@ -117,7 +118,19 @@ export async function tryOgabasseyPreferredResponse(
     messages,
     timeoutMs: remainingRouteMs(),
   });
-  const response = conversation ?? createStaticChatFallbackResponse();
+  const response =
+    conversation ??
+    (hasRecentCommerceContext(messages)
+      ? new Response(
+          'For a new purchase, use your cart and checkout. For an existing order or delivery help, open your account orders or contact the store. Please do not share personal or payment details in chat.',
+          {
+            headers: {
+              'Content-Type': 'text/plain; charset=utf-8',
+              'Cache-Control': 'no-store',
+            },
+          }
+        )
+      : createStaticChatFallbackResponse());
   if (response.headers.get('x-baci-chat-fallback') === 'static') {
     console.warn(
       'agentic_chat_provider',

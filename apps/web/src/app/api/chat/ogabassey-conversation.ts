@@ -3,12 +3,11 @@ import { generateTextWithChain } from '@/ai/generate-text-with-chain';
 import type { TextProvider } from '@/ai/text-provider-chain';
 import type { AiChatProvider } from '@/env';
 import { buildStorefrontDisplayData } from '@/lib/agentic/storefront-display-data';
+import { hasRecentCommerceContext } from './ogabassey-commerce-context';
 import { createStaticChatFallbackResponse } from './route-helpers';
 
 const PER_PROVIDER_TIMEOUT_MS = 6_000;
 const MAX_CHAIN_TIMEOUT_MS = 12_000;
-const COMMERCE_ACTION =
-  /\b(?:cart|checkout|orders?|payments?|paid|pay|transfer|bank|cancel\w*|refund\w*|returns?|exchange\w*|receipt|tracking|track|shipping|parcel|package|arriv\w*|deliver\w*|warrant(?:y|ies)|instal{1,2}ments?|add\s+(?:it|this|that|them|these|those|one))\b/i;
 const NEGOTIATION =
   /\b(?:negotiat\w*|discount\w*|haggl\w*|(?:last|final)\s+price|(?:reduce|lower)\s+(?:the\s+|your\s+)?(?:price|cost)|bargain|deal)\b/i;
 const CATALOG_FACT_REQUEST =
@@ -91,13 +90,7 @@ export async function runOgabasseyConversation(options: {
 
   const last = options.messages.at(-1);
   if (last?.role !== 'user') return null;
-  if (
-    options.messages
-      .filter((message) => message.role !== 'system')
-      .slice(-6)
-      .some((message) => COMMERCE_ACTION.test(message.content))
-  )
-    return null;
+  if (hasRecentCommerceContext(options.messages)) return null;
 
   const providers = getOgabasseyConversationProviders();
   if (providers.length === 0) return null;

@@ -23,7 +23,6 @@ export function useChatAccountScope(merchantSlug: string) {
   const generation = useRef(0);
   const cancellationPending = useRef(false);
   const cancellationOrderId = useRef<string | null>(null);
-  const uncertainOrderId = useRef<string | null>(null);
   const isMounted = useRef(false);
   const [revision, setRevision] = useState(0);
   const [status, setStatus] = useState<'starting' | 'ready' | 'unavailable'>(
@@ -38,10 +37,7 @@ export function useChatAccountScope(merchantSlug: string) {
     const advance = () => {
       generation.current += 1;
       if (mounted) {
-        if (cancellationPending.current) {
-          uncertainOrderId.current = cancellationOrderId.current;
-          setCancellationUncertain(true);
-        }
+        setCancellationUncertain(cancellationPending.current);
         setRevision(generation.current);
       }
     };
@@ -78,20 +74,17 @@ export function useChatAccountScope(merchantSlug: string) {
     startCancellation: (orderId: string) => {
       if (
         cancellationPending.current ||
-        uncertainOrderId.current ||
         !startChatCancellation(merchantSlug, orderId)
       )
         return false;
       cancellationPending.current = true;
       cancellationOrderId.current = orderId;
       setCancellationBusy(true);
-      setCancellationUncertain(false);
       return true;
     },
     finishCancellation: (token: number, confirmed: boolean) => {
       cancellationPending.current = false;
       if (!confirmed || generation.current !== token) {
-        uncertainOrderId.current = cancellationOrderId.current;
         if (isMounted.current) setCancellationUncertain(true);
       }
       if (cancellationOrderId.current)
@@ -107,26 +100,11 @@ export function useChatAccountScope(merchantSlug: string) {
       orders: ReadonlyArray<{ id: string; shipping_status: string | null }>
     ) => {
       reconcileChatCancellations(merchantSlug, orders);
-      if (
-        !cancellationPending.current &&
-        uncertainOrderId.current &&
-        orders.some(
-          (order) =>
-            order.id === uncertainOrderId.current &&
-            order.shipping_status === 'cancelled'
-        )
-      ) {
-        uncertainOrderId.current = null;
-        setCancellationUncertain(false);
-      }
       const blocked = orders.find((order) => {
         const state = chatCancellationState(merchantSlug, order.id);
         return state === 'pending' || state === 'uncertain';
       });
-      if (blocked) {
-        uncertainOrderId.current = blocked.id;
-        setCancellationUncertain(true);
-      }
+      setCancellationUncertain(Boolean(blocked));
     },
     isCancellationBlocked: (orderId: string) =>
       !!chatCancellationState(merchantSlug, orderId),

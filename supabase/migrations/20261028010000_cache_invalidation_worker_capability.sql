@@ -4,36 +4,90 @@
 -- observed by the pre-activation sample gate and separately activated by an
 -- owner-approved gate.
 DO $$
+DECLARE
+  v_created boolean := false;
+  v_role record;
+  v_member_count integer;
+  v_executor_is_superuser boolean;
+  v_expected_creator_membership boolean;
 BEGIN
+  -- The production Management API executes migrations as `postgres`, which
+  -- is CREATEROLE but not SUPERUSER. Pin the executor identity and fail closed
+  -- if this migration is run through a different authority boundary.
+  IF current_user <> 'postgres' THEN
+    RAISE EXCEPTION 'cache_invalidation_worker requires the postgres migration executor';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM pg_catalog.pg_roles
     WHERE rolname = 'cache_invalidation_worker'
   ) THEN
     CREATE ROLE cache_invalidation_worker NOLOGIN NOINHERIT NOSUPERUSER
-      NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+      NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT -1;
+    v_created := true;
+  END IF;
+
+  SELECT rolsuper, rolcreatedb, rolcreaterole, rolreplication,
+    rolbypassrls, rolcanlogin, rolinherit, rolconnlimit
+  INTO v_role
+  FROM pg_catalog.pg_roles
+  WHERE rolname = 'cache_invalidation_worker';
+
+  IF v_role.rolsuper OR v_role.rolcreatedb OR v_role.rolcreaterole
+    OR v_role.rolreplication OR v_role.rolbypassrls OR v_role.rolcanlogin
+    OR v_role.rolinherit OR v_role.rolconnlimit <> -1 THEN
+    RAISE EXCEPTION 'cache_invalidation_worker has unsafe role attributes';
+  END IF;
+
+  SELECT rolsuper INTO v_executor_is_superuser
+  FROM pg_catalog.pg_roles
+  WHERE rolname = current_user;
+
+  SELECT count(*) INTO v_member_count
+  FROM pg_catalog.pg_auth_members AS membership
+  WHERE membership.roleid = 'cache_invalidation_worker'::regrole;
+
+  IF v_created AND v_executor_is_superuser THEN
+    -- A local replay/bootstrap superuser does not receive an automatic
+    -- membership row when creating a role.
+    IF v_member_count <> 0 THEN
+      RAISE EXCEPTION 'new cache_invalidation_worker has unexpected members';
+    END IF;
+  ELSIF v_created THEN
+    -- PostgreSQL gives a CREATEROLE creator one ADMIN membership row for a
+    -- role it creates. Keep that row non-inheriting and non-settable, and
+    -- accept it only when its grantor is verified to be a superuser. This
+    -- leaves authenticator and every other role outside the capability.
+    SELECT count(*) = 1 AND bool_and(
+      membership.member = current_user::regrole
+      AND membership.admin_option
+      AND NOT membership.inherit_option
+      AND NOT membership.set_option
+      AND EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_roles AS grantor
+        WHERE grantor.oid = membership.grantor
+          AND grantor.rolsuper
+      )
+    ) INTO v_expected_creator_membership
+    FROM pg_catalog.pg_auth_members AS membership
+    WHERE membership.roleid = 'cache_invalidation_worker'::regrole;
+
+    IF v_member_count <> 1 OR NOT coalesce(v_expected_creator_membership, false) THEN
+      RAISE EXCEPTION 'new cache_invalidation_worker has unexpected creator membership state';
+    END IF;
+  ELSIF v_member_count <> 0 THEN
+    -- Existing roles are accepted only if they were provisioned without any
+    -- memberships; the creator exception above never applies retroactively.
+    RAISE EXCEPTION 'pre-existing cache_invalidation_worker has unexpected members';
   END IF;
 END
 $$;
 
-ALTER ROLE cache_invalidation_worker
-  NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
-  NOREPLICATION NOBYPASSRLS CONNECTION LIMIT -1 PASSWORD NULL;
 GRANT USAGE ON SCHEMA public TO cache_invalidation_worker;
 -- Ensure a pre-existing role cannot use the new function grants before the
 -- request-scope hook has been installed and observed.
 REVOKE cache_invalidation_worker FROM authenticator;
-
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM pg_catalog.pg_auth_members
-    WHERE roleid = 'cache_invalidation_worker'::regrole
-      AND member <> 'authenticator'::regrole
-  ) THEN
-    RAISE EXCEPTION 'cache_invalidation_worker has an unexpected member';
-  END IF;
-END
-$$;
 
 -- Preserve the existing bounded claim policy and permit the dedicated worker
 -- role to call this exact RPC. The function remains SECURITY DEFINER and its

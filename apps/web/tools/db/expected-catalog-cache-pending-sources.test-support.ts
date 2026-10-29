@@ -67,7 +67,7 @@ export const EXPECTED_CATALOG_CACHE_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261028010000_cache_invalidation_worker_capability.sql',
-    sha256: '924c591376b903f0e1e54e760271ee5799ccb5176f30c59d12d26d43a46b5886',
+    sha256: 'd66360c9af63e9980769207d36f974e32ea4e94ae6d625e0deac76a5cc9ab3e6',
   },
   {
     repositoryPath:

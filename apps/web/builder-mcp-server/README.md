@@ -33,7 +33,7 @@ the web business-type template registry into the standalone process. Regenerate
 only when the canonical schemas change:
 
 ```sh
-BACI_GENERATE_BUILDER_CONTRACTS=1 pnpm --filter @baci/web exec vitest run tools/builder-contracts/contracts.test.ts
+BACI_GENERATE_BUILDER_CONTRACTS=1 pnpm --filter @baci/web exec vitest run tools/builder-contracts/contracts.test.ts && pnpm exec biome format --write apps/web/builder-mcp-server/contracts.json
 ```
 
 The same test, without that flag, checks parity and writes nothing. Runtime web

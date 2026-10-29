@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -27,6 +27,7 @@ describe('remediation committed-branch retry', () => {
           branch: args[args.indexOf('-b') + 1],
           directory: args[2],
         };
+        mkdirSync(retainedWorktree.directory);
       }
       if (command === 'git' && args.join(' ') === 'worktree list --porcelain') {
         return {

@@ -12,6 +12,7 @@ import { assertConfiguredDockerImageAvailable } from './remediation-docker-image
 import { createRemediationDraftPrReconciler } from './remediation-draft-pr-reconciliation.mjs';
 import { buildRemediationEnvironments } from './remediation-environments.mjs';
 import { evaluateMergePolicy } from './remediation-policy.mjs';
+import { checkVerifiedRemediationChanges } from './remediation-post-verification-policy.mjs';
 import { runRemediationCodexPhases } from './remediation-research-gate.mjs';
 import { writeRemediationResultArtifact } from './remediation-result-artifact.mjs';
 import { findRetainedRemediationWorktree } from './remediation-retained-worktree.mjs';
@@ -206,10 +207,10 @@ export function runRemediationAutofix({
     });
     const status = runChecked(
       'git',
-      ['status', '--porcelain'],
+      ['status', '--porcelain=v1', '-z', '-uall'],
       worktreeGitCommandOptions
     );
-    if (!status.trim()) {
+    if (parseRemediationStatusFiles(status).length === 0) {
       cleanupCompletedWorktree = true;
       return { branch, resultPath, type: 'no_changes', worktreeDir };
     }
@@ -242,6 +243,25 @@ export function runRemediationAutofix({
       worktreeCommandOptions,
       worktreeDir,
     });
+    const verifiedChanges = checkVerifiedRemediationChanges({
+      runChecked,
+      worktreeGitCommandOptions,
+    });
+    if (verifiedChanges.type === 'no_changes') {
+      cleanupCompletedWorktree = true;
+      return { branch, resultPath, type: 'no_changes', worktreeDir };
+    }
+    if (verifiedChanges.type === 'policy_blocked') {
+      if (retainedWorktreeDir) cleanupCompletedWorktree = true;
+      return {
+        branch,
+        changedFiles: verifiedChanges.changedFiles,
+        reasons: verifiedChanges.reasons,
+        resultPath,
+        type: 'policy_blocked',
+        worktreeDir,
+      };
+    }
     runChecked('git', ['add', '-A'], worktreeGitCommandOptions);
     runChecked(
       'git',
@@ -262,7 +282,7 @@ export function runRemediationAutofix({
     cleanupCompletedWorktree = true;
     return {
       branch,
-      changedFiles,
+      changedFiles: verifiedChanges.changedFiles,
       prUrl,
       resultPath,
       type: 'pr_opened',

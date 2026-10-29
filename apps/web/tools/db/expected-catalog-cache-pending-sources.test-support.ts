@@ -74,4 +74,9 @@ export const EXPECTED_CATALOG_CACHE_PENDING_SOURCES = [
       'supabase/migrations/20261028020000_cache_invalidation_worker_request_scope.sql',
     sha256: '04c05e44bffc6a580652790155685005f124e58c583f50ccedebfc6867e60cf1',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261029010000_restore_commerce_cart_quota_request_scope.sql',
+    sha256: '97618c7b19c397e956a0330002d77b2f8e0a5dbc38ed4af07321b2a6bb2a7c10',
+  },
 ] as const;

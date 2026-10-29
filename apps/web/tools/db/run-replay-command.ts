@@ -109,7 +109,10 @@ function boundedPsqlDiagnostic(
   const tapFailure = /^\s*not ok\s+(\d+)(?:\s|$)/m.exec(tapOutput)?.[1];
   const tapIndex = tapFailure ? Number(tapFailure) : undefined;
   const safeTapIndex =
-    Number.isSafeInteger(tapIndex) && tapIndex! > 0 && tapIndex! <= 100_000
+    tapIndex !== undefined &&
+    Number.isSafeInteger(tapIndex) &&
+    tapIndex > 0 &&
+    tapIndex <= 100_000
       ? tapIndex
       : undefined;
   return ` (line=${line}${sqlstate ? `,sqlstate=${sqlstate}` : ''}${permissionCategory ? `,permission=${permissionCategory}` : ''}${safeTapIndex ? `,tap=${safeTapIndex}` : ''})`;

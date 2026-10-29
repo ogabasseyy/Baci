@@ -113,6 +113,23 @@ describe('check-gigl-enforcement-migration-names', () => {
     assert.equal(result.status, 0, result.stderr);
   });
 
+  it('allows only the exact append-only cart quota scope repair', () => {
+    const result = runCheck({
+      '20261029010000_restore_commerce_cart_quota_request_scope.sql':
+        'CREATE OR REPLACE FUNCTION public.enforce_gigl_tracking_worker_request_scope() RETURNS void AS $$ BEGIN END; $$ LANGUAGE plpgsql;\n',
+    });
+    assert.equal(result.status, 0, result.stderr);
+  });
+
+  it('does not extend the exact repair exception to adjacent quota migrations', () => {
+    const result = runCheck({
+      '20261029010001_restore_commerce_cart_quota_followup.sql':
+        'CREATE OR REPLACE FUNCTION public.enforce_gigl_tracking_worker_request_scope() RETURNS void AS $$ BEGIN END; $$ LANGUAGE plpgsql;\n',
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /20261029010001_restore_commerce_cart_quota_followup\.sql/);
+  });
+
   it('does not extend the exception to adjacent generic cache migrations', () => {
     const result = runCheck({
       '20261028020001_cache_invalidation_worker_followup.sql':

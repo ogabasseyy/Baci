@@ -20,6 +20,10 @@ test('tracks the shared-hook cache migration through GIGL worker capability smok
     trackingPaths,
     /^  - 'supabase\/migrations\/20261028020000_cache_invalidation_worker_request_scope\.sql'$/m
   );
+  assert.match(
+    trackingPaths,
+    /^  - 'supabase\/migrations\/20261029010000_restore_commerce_cart_quota_request_scope\.sql'$/m
+  );
 });
 
 function manualContext(overrides = {}) {

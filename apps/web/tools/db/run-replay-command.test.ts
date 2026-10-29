@@ -134,7 +134,9 @@ describe('createReplayCommand', () => {
     const runCommand = replayCommandRuntime.create(root);
     const failure = await rejectedError(runCommand(psql, []));
 
-    expect(failure.message).toBe('psql failed: non-zero-exit (line=110,sqlstate=P0001,tap=34)');
+    expect(failure.message).toBe(
+      'psql failed: non-zero-exit (line=110,sqlstate=P0001,tap=34)'
+    );
     expect(failure.message).not.toMatch(/fixture|description|secret|not ok/);
   });
 

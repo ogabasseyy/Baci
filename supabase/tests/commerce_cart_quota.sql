@@ -1,8 +1,14 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 SET search_path = public, extensions;
-SELECT plan(34);
+SELECT plan(37);
 GRANT USAGE ON SCHEMA extensions TO commerce_cart_quota;
+
+SELECT ok(
+  position('commerce_cart_quota_request_scope_v1' IN pg_get_functiondef('public.enforce_gigl_tracking_worker_request_scope()'::regprocedure)) > 0
+    AND position('request_role = ''cache_invalidation_worker''' IN pg_get_functiondef('public.enforce_gigl_tracking_worker_request_scope()'::regprocedure)) > 0,
+  'shared request guard retains both quota and cache worker scopes'
+);
 
 SELECT ok(EXISTS(SELECT 1 FROM pg_roles WHERE rolname='commerce_cart_quota' AND NOT rolcanlogin AND NOT rolbypassrls), 'quota role cannot log in or bypass RLS');
 SELECT ok(NOT has_schema_privilege('anon','cart_quota','USAGE'), 'anon cannot access private counter schema');
@@ -89,6 +95,11 @@ SELECT set_config('request.path','/rpc/get_mcp_guest_cart',true);
 SELECT lives_ok('SELECT public.enforce_gigl_tracking_worker_request_scope()','existing MCP guest cart worker request remains allowed');
 SELECT set_config('request.path','/rpc/increment_commerce_cart_quota',true);
 SELECT throws_ok('SELECT public.enforce_gigl_tracking_worker_request_scope()','42501','Guest cart worker request is outside its capability scope','existing MCP guest cart worker isolation remains enforced');
+SELECT set_config('request.jwt.claims', '{"role":"cache_invalidation_worker"}',true);
+SELECT set_config('request.path','/rpc/claim_cache_invalidations',true);
+SELECT lives_ok('SELECT public.enforce_gigl_tracking_worker_request_scope()','cache invalidation worker remains allowed by the shared guard');
+SELECT set_config('request.path','/rpc/increment_commerce_cart_quota',true);
+SELECT throws_ok('SELECT public.enforce_gigl_tracking_worker_request_scope()','42501','Cache invalidation worker request is outside its capability scope','cache worker remains confined to its own RPCs');
 SELECT set_config('request.jwt.claims', '{"role":"authenticated"}',true);
 SELECT set_config('request.path','/rpc/ordinary_authenticated_rpc',true);
 SELECT lives_ok('SELECT public.enforce_gigl_tracking_worker_request_scope()','ordinary authenticated requests remain allowed by the guard');

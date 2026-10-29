@@ -110,7 +110,11 @@ export function mapStorefrontProductsToOgabasseyProducts(
     const condition: ConditionLabel = product.has_condition_offers
       ? 'New & Used'
       : mapCondition(product.condition);
-    const altImagePayloads = includeGalleryImages
+    const hasColorSwatches = Boolean(
+      product.colors && product.colors.length > 1
+    );
+    const retainGalleryImages = includeGalleryImages || hasColorSwatches;
+    const altImagePayloads = retainGalleryImages
       ? slimImagePayloads(imagePayloads)
       : [];
     const primaryStorage = product.storage_options?.[0];
@@ -123,7 +127,7 @@ export function mapStorefrontProductsToOgabasseyProducts(
       rawPrice: product.price,
       image,
       ...(imageAlt ? { image_alt: imageAlt } : {}),
-      ...(includeGalleryImages && altImagePayloads.length > 0
+      ...(retainGalleryImages && altImagePayloads.length > 0
         ? { image_payloads: altImagePayloads }
         : {}),
       description:
@@ -145,13 +149,11 @@ export function mapStorefrontProductsToOgabasseyProducts(
         ? { has_condition_offers: true }
         : {}),
       ...(product.brand ? { brand: product.brand } : {}),
-      ...(includeGalleryImages &&
-      product.colors &&
-      product.colors.length > 0
+      ...(product.colors && product.colors.length > 0
         ? { colors: product.colors }
         : {}),
       ...(primaryStorage ? { storage: primaryStorage } : {}),
-      ...(includeGalleryImages ? { images } : {}),
+      ...(retainGalleryImages ? { images } : {}),
     };
   });
 }

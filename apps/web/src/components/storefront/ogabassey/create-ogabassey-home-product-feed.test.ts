@@ -203,7 +203,7 @@ describe('createOgabasseyHomeProductFeed', () => {
         brand: undefined,
         category_id: undefined,
         category_slug: undefined,
-        colors: ['Titanium Black', 'Titanium Gray'],
+        colors: undefined,
         storage_options: undefined,
         images: [
           { url: '/s26-front.jpg', alt: 'Samsung Galaxy S26 Ultra', order: 0 },
@@ -229,5 +229,29 @@ describe('createOgabasseyHomeProductFeed', () => {
     expect(result[0]).not.toHaveProperty('categorySlug');
     expect(result[0]).not.toHaveProperty('colors');
     expect(result[0]).not.toHaveProperty('storage');
+  });
+
+  it('retains colors and gallery images when a homepage product provides multiple color swatches', () => {
+    const products = [
+      createStorefrontProduct({
+        id: 'product-with-swatches',
+        name: 'iPhone 17 Pro',
+        slug: 'iphone-17-pro',
+        price: 1950000,
+        colors: ['Black Titanium', 'Natural Titanium'],
+        images: [
+          { url: '/iphone-black.jpg', alt: 'Black Titanium', order: 0 },
+          { url: '/iphone-natural.jpg', alt: 'Natural Titanium', order: 1 },
+        ],
+      }),
+    ];
+
+    const result = createOgabasseyHomeProductFeed(products);
+
+    expect(result[0].colors).toEqual(['Black Titanium', 'Natural Titanium']);
+    expect(result[0].images).toEqual([
+      '/iphone-black.jpg',
+      '/iphone-natural.jpg',
+    ]);
   });
 });

@@ -88,7 +88,11 @@ it.each([
     ).toBe(true);
   });
   fireEvent.click(
-    await screen.findByRole('button', { name: /review and continue to uba/i })
+    (
+      await screen.findAllByRole('button', {
+        name: /review and continue to uba/i,
+      })
+    )[0]
   );
   await waitFor(() => {
     expect(
@@ -206,7 +210,11 @@ it('records a payment start with the init reference when REDVAULT opens', async 
       ).toBe(true);
     });
     fireEvent.click(
-      await screen.findByRole('button', { name: /review and continue to uba/i })
+      (
+        await screen.findAllByRole('button', {
+          name: /review and continue to uba/i,
+        })
+      )[0]
     );
 
     // Successful initialization records the start with the init

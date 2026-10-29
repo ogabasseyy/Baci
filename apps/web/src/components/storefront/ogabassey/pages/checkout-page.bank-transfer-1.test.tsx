@@ -239,7 +239,7 @@ it('persists the REDVAULT fence before returning to the review step', async () =
 
   // The review step renders only after order creation returns; the fence
   // must already be persisted so a reload cannot lose it.
-  await screen.findByRole('button', { name: /review and continue to uba/i });
+  await screen.findAllByRole('button', { name: /review and continue to uba/i });
   const snapshot = window.sessionStorage.getItem(
     CHECKOUT_PENDING_ORDER_STORAGE_KEY
   );

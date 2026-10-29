@@ -1,8 +1,16 @@
 import { z } from 'zod';
+import { peekCartCookieEpoch } from '@/hooks/cart/cart-cross-tab-lock';
+import { isCartSessionRetiring } from '@/hooks/cart/cart-session-write-fence';
 import type { PendingCheckoutOrderSnapshot } from './pending-checkout-order';
 
 const kobo = z.number().int().nonnegative().safe();
 const reviewSchema = z.object({
+  recoveryFence: z
+    .object({
+      merchantSlug: z.string().nullable(),
+      epoch: z.string().nullable(),
+    })
+    .optional(),
   ready: z.object({
     cartId: z.string().min(1).optional(),
     orderId: z.string().min(1),
@@ -51,6 +59,14 @@ export function readRedvaultReviewRecovery(
   const parsed = reviewSchema.safeParse(pending.redvaultReview);
   if (!parsed.success) return null;
   const { ready, summary } = parsed.data;
+  const fence = parsed.data.recoveryFence;
+  if (
+    fence &&
+    (isCartSessionRetiring(fence.merchantSlug) ||
+      peekCartCookieEpoch(fence.merchantSlug) === undefined ||
+      peekCartCookieEpoch(fence.merchantSlug) !== fence.epoch)
+  )
+    return null;
   if (
     ready.orderId !== pending.orderId ||
     ready.trackingToken !== pending.trackingToken ||

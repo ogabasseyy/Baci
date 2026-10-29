@@ -17,7 +17,8 @@ export async function handleSharedRedvaultReview(
   if (
     ready &&
     cart.sharedCartRef &&
-    ready.cartId !== cart.sharedCartRef.cartId
+    ready.cartId !== cart.sharedCartRef.cartId &&
+    (cart.checkoutCart.length > 0 || !ready.cartId)
   ) {
     toast({
       title: 'Previous UBA checkout still open',
@@ -31,7 +32,6 @@ export async function handleSharedRedvaultReview(
   const terminalMatches = Boolean(
     ready &&
       cart.sharedCartEnabled &&
-      !cart.sharedCartRef &&
       cart.checkoutCart.length === 0 &&
       redvaultTerminalFingerprintMatches(
         ready.checkoutFingerprint,

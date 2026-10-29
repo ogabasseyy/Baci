@@ -158,7 +158,7 @@ export const CheckoutPage: React.FC = () => {
       deliveryMethod: checkoutForm.deliveryMethod,
       giftWrappingCost,
       hasCheckoutCartItems,
-      recoverCart: isHydrated && sharedCartEnabled && !checkoutSharedCartRef,
+      recoverCart: isHydrated && sharedCartEnabled && checkoutCart.length === 0,
       resumedOrder: summaryOrder,
       clearPendingCheckoutOrder,
       currencyCode,

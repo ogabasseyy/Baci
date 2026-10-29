@@ -13,6 +13,7 @@ import { prepareCheckoutOrderSubmission } from '../prepare-checkout-order-submis
 import type { SharedCartOrderBinding } from '../types';
 import { KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST } from '../utils';
 import { beginCheckoutOrderSubmission } from './begin-checkout-order-submission';
+import { buildSharedCartPrepareInput } from './build-shared-cart-prepare-input';
 import type { CheckoutOrderSubmissionContext } from './checkout-order-submission-types';
 
 /** Own submit validation, resume dispatch, issue recovery, and fresh-order handoff. */
@@ -189,11 +190,7 @@ export function useCheckoutOrderSubmission(
         return;
       }
       const review = await prepareSharedCartCheckout(
-        {
-          cartId: cart.sharedCartRef.cartId,
-          expectedVersion: cart.sharedCartRef.version,
-          operationId: crypto.randomUUID(),
-        },
+        buildSharedCartPrepareInput(cart.sharedCartRef, paymentSession.method),
         merchant?.slug
       );
       if (!review.ok) {

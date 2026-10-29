@@ -27,6 +27,9 @@ export const test = base.extend<{
       let manualCheckout503ConsoleCount = 0;
       let redvaultSharedPickupVisited = false;
       let redvaultEmptyQuote400Count = 0;
+      let redvaultLostResponseScenario = false;
+      let redvaultLostCheckoutErrors = 0;
+      let redvaultLostNetworkErrors = 0;
       const remainingAllowedErrors = [...allowedConsoleErrors];
       page.on('framenavigated', () => {
         const qaScenario = new URL(page.url()).searchParams.get('qa');
@@ -42,6 +45,11 @@ export const test = base.extend<{
           manualCheckoutFlowVisited = true;
         if (qaScenario === 'redvault-shared-pickup')
           redvaultSharedPickupVisited = true;
+        if (
+          qaScenario === 'redvault-shared-pickup' &&
+          new URL(page.url()).searchParams.has('lost')
+        )
+          redvaultLostResponseScenario = true;
       });
       const manualApiScenario = () =>
         [
@@ -60,6 +68,20 @@ export const test = base.extend<{
           /Failed to load resource:.*400/.test(message.text())
         )
           redvaultEmptyQuote400Count++;
+        else if (
+          redvaultLostResponseScenario &&
+          redvaultLostCheckoutErrors < 1 &&
+          message.text().startsWith('Checkout error: TypeError:')
+        )
+          redvaultLostCheckoutErrors++;
+        else if (
+          redvaultLostResponseScenario &&
+          redvaultLostNetworkErrors < 2 &&
+          /Failed to load resource:.*(ERR_FAILED|Load failed|CFNetwork)/.test(
+            message.text()
+          )
+        )
+          redvaultLostNetworkErrors++;
         else if (
           manualApiIntegrationVisited &&
           manualApi400ConsoleCount < 5 &&

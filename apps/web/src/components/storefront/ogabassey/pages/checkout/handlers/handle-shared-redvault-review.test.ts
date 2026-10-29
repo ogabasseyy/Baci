@@ -35,7 +35,11 @@ it.each([
   } as never;
 
   if (!context.merchant) throw new Error('Missing fixture merchant');
-  const handled = await handleSharedRedvaultReview(context, context.merchant, prepared);
+  const handled = await handleSharedRedvaultReview(
+    context,
+    context.merchant,
+    prepared
+  );
 
   expect(handled).toBe(true);
   expect(submitPreparedCheckout).toHaveBeenCalledTimes(expected ? 1 : 0);
@@ -43,4 +47,49 @@ it.each([
   expect(context.processing.releaseSubmission).toHaveBeenCalledTimes(
     expected ? 0 : 1
   );
+});
+
+it('continues the old review when a replacement cart exists but has no items', async () => {
+  const context = createContext();
+  context.cart.sharedCartEnabled = true;
+  context.cart.sharedCartRef = { cartId: 'replacement-cart', version: 1 };
+  context.cart.checkoutCart = [];
+  context.payment.session.method = 'uba_redvault';
+  context.payment.session.redvault.orderReady = {
+    cartId: 'reviewed-cart',
+    checkoutFingerprint: `uba_redvault:${JSON.stringify({ merchantId: 'm', items: [{ id: 'phone' }] })}`,
+  } as never;
+  const prepared = {
+    kind: 'ready',
+    identity: {
+      checkoutFingerprint: `uba_redvault:${JSON.stringify({ merchantId: 'm', items: [] })}`,
+    },
+  } as never;
+  if (!context.merchant) throw new Error('Missing fixture merchant');
+  expect(
+    await handleSharedRedvaultReview(context, context.merchant, prepared)
+  ).toBe(true);
+  expect(submitPreparedCheckout).toHaveBeenCalledOnce();
+});
+
+it('blocks a legacy review with no cart identity even when the replacement cart is empty', async () => {
+  const context = createContext();
+  context.cart.sharedCartEnabled = true;
+  context.cart.sharedCartRef = { cartId: 'replacement-cart', version: 1 };
+  context.cart.checkoutCart = [];
+  context.payment.session.method = 'uba_redvault';
+  context.payment.session.redvault.orderReady = {
+    checkoutFingerprint: `uba_redvault:${JSON.stringify({ merchantId: 'm', items: [{ id: 'phone' }] })}`,
+  } as never;
+  const prepared = {
+    kind: 'ready',
+    identity: {
+      checkoutFingerprint: `uba_redvault:${JSON.stringify({ merchantId: 'm', items: [] })}`,
+    },
+  } as never;
+  if (!context.merchant) throw new Error('Missing fixture merchant');
+  expect(
+    await handleSharedRedvaultReview(context, context.merchant, prepared)
+  ).toBe(true);
+  expect(submitPreparedCheckout).not.toHaveBeenCalled();
 });

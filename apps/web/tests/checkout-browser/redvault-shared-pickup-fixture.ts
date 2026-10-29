@@ -1,7 +1,11 @@
 import type { Page } from '@playwright/test';
 
 /** Isolated shared-cart fixture; all order and payment responses are synthetic. */
-export async function seedRedvaultSharedPickup(page: Page, baseURL: string) {
+export async function seedRedvaultSharedPickup(
+  page: Page,
+  baseURL: string,
+  options: { lostOrderResponses?: number } = {}
+) {
   const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
   const cartId = '22222222-2222-4222-8222-222222222222';
   const lineId = 'aaaaaaaa-aaaa-4aaa-8aaa-000000000001';
@@ -60,6 +64,13 @@ export async function seedRedvaultSharedPickup(page: Page, baseURL: string) {
 
   const calls = {
     orders: 0,
+    createdOrders: 0,
+    orderRequests: [] as Array<{
+      body: string | null;
+      key: string | undefined;
+    }>,
+    recoveryHeaders: [] as Array<string | undefined>,
+    prepareBodies: [] as Record<string, unknown>[],
     cancellations: 0,
     initializations: 0,
     emptyQuotes: 0,
@@ -157,10 +168,12 @@ export async function seedRedvaultSharedPickup(page: Page, baseURL: string) {
         ],
       });
     if (url.origin !== baseURL) return route.fallback();
-    if (url.pathname === '/api/storefront/cart/checkout')
+    if (url.pathname === '/api/storefront/cart/checkout') {
+      calls.prepareBodies.push(request.postDataJSON());
       return route.fulfill({
         json: { replayed: false, sessionReused: false, snapshot: review },
       });
+    }
     if (url.pathname === '/api/storefront/cart')
       return route.fulfill({
         json: {
@@ -187,9 +200,27 @@ export async function seedRedvaultSharedPickup(page: Page, baseURL: string) {
     }
     if (url.pathname === '/api/orders' && request.method() === 'POST') {
       calls.orders += 1;
+      const submittedRequest = {
+        body: request.postData(),
+        key: request.headers()['idempotency-key'],
+      };
+      calls.orderRequests.push(submittedRequest);
+      calls.recoveryHeaders.push(request.headers()['x-checkout-recovery']);
+      if (!submitted) calls.createdOrders += 1;
+      else if (
+        JSON.stringify(submittedRequest) !==
+        JSON.stringify(calls.orderRequests[0])
+      ) {
+        return route.fulfill({
+          status: 409,
+          json: { error: 'Different checkout attempt' },
+        });
+      }
       submitted = true;
+      if (calls.orders <= (options.lostOrderResponses ?? 0))
+        return route.abort('failed');
       return route.fulfill({
-        status: 201,
+        status: calls.orders === 1 ? 201 : 200,
         json: {
           order: {
             id: '44444444-4444-4444-8444-444444444444',

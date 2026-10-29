@@ -2,6 +2,7 @@ import { toast } from '@/hooks/use-toast';
 import { cancelStaleCheckoutOrder } from '../cancel-stale-checkout-order';
 import type { RedvaultQuoteSummary } from '../components/redvault/RedvaultPaymentOption';
 import type { CheckoutOrderSubmissionContext } from '../hooks/checkout-order-submission-types';
+import { isTerminalRedvaultReview } from '../is-terminal-redvault-review';
 import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
 import { readRedvaultReviewRecovery } from '../read-redvault-review-recovery';
 import { redvaultTerminalFingerprintMatches } from '../redvault-terminal-fingerprint';
@@ -29,10 +30,15 @@ export async function recoverTerminalRedvaultReview(
   options: TerminalRedvaultRecoveryOptions
 ): Promise<boolean> {
   if (
-    !options.sharedCartEnabled ||
-    options.sharedCartRef ||
-    !options.checkoutCartEmpty
-  ) return false;
+    !isTerminalRedvaultReview({
+      merchantId: options.merchantId,
+      pendingOrder: options.pendingOrder,
+      sharedCartEnabled: options.sharedCartEnabled,
+      sharedCartRef: options.sharedCartRef,
+      checkoutItemCount: options.checkoutCartEmpty ? 0 : 1,
+    })
+  )
+    return false;
 
   const review = readRedvaultReviewRecovery(
     options.pendingOrder,
@@ -45,7 +51,8 @@ export async function recoverTerminalRedvaultReview(
       review.ready.checkoutFingerprint,
       options.checkoutFingerprint
     )
-  ) return false;
+  )
+    return false;
 
   options.setIsProcessing(true);
   let verdict: Awaited<ReturnType<typeof cancelStaleCheckoutOrder>> = 'failed';
@@ -72,14 +79,16 @@ export async function recoverTerminalRedvaultReview(
     options.setSummary(null);
     toast({
       title: 'Checkout review cancelled',
-      description: 'Please add your items to your cart again to continue with the updated details.',
+      description:
+        'Please add your items to your cart again to continue with the updated details.',
     });
   } else {
     toast({
       title: 'Order still processing',
-      description: verdict === 'live'
-        ? 'Your previous UBA payment is still being processed. Please wait before starting another checkout.'
-        : 'We could not release your previous order. Please try again.',
+      description:
+        verdict === 'live'
+          ? 'Your previous UBA payment is still being processed. Please wait before starting another checkout.'
+          : 'We could not release your previous order. Please try again.',
       variant: 'destructive',
     });
   }

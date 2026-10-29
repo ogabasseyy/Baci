@@ -76,4 +76,20 @@ describe('readRedvaultReviewRecovery', () => {
   it('does not restore the order in another merchant context', () => {
     expect(readRedvaultReviewRecovery(pending, 'other-merchant')).toBeNull();
   });
+  it('does not restore a fenced review after the cart authority epoch changes', () => {
+    const key = 'baci-cart-authority-epoch:store';
+    localStorage.setItem(key, 'epoch-one');
+    const stored = {
+      ...pending,
+      redvaultReview: {
+        ready,
+        summary,
+        recoveryFence: { merchantSlug: 'store', epoch: 'epoch-one' },
+      },
+    };
+    expect(readRedvaultReviewRecovery(stored, 'merchant-1')).not.toBeNull();
+    localStorage.setItem(key, 'epoch-two');
+    expect(readRedvaultReviewRecovery(stored, 'merchant-1')).toBeNull();
+    localStorage.removeItem(key);
+  });
 });

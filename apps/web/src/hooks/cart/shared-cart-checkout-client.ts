@@ -92,6 +92,13 @@ export type PrepareSharedCartCheckoutResult =
       currentVersion: number | null;
     };
 
+type SharedCartCheckoutInput = {
+  cartId: string;
+  expectedVersion: number;
+  operationId: string;
+  recoveryForRedvault?: boolean;
+};
+
 export function reviewOf(value: unknown): SharedCartCheckoutReview | null {
   const snapshot = parseSnapshot(value);
   if (!snapshot) return null;
@@ -114,11 +121,7 @@ export function reviewOf(value: unknown): SharedCartCheckoutReview | null {
  * live version so the caller refreshes instead of submitting stale.
  */
 export function prepareSharedCartCheckout(
-  input: {
-    cartId: string;
-    expectedVersion: number;
-    operationId: string;
-  },
+  input: SharedCartCheckoutInput,
   merchantSlug?: string | null
 ): Promise<PrepareSharedCartCheckoutResult> {
   return runBoundedCartSessionWrite<PrepareSharedCartCheckoutResult>(
@@ -137,7 +140,7 @@ export function prepareSharedCartCheckout(
   );
 }
 async function requestSharedCartCheckout(
-  input: { cartId: string; expectedVersion: number; operationId: string },
+  input: SharedCartCheckoutInput,
   merchantSlug: string | null | undefined,
   signal: AbortSignal
 ): Promise<PrepareSharedCartCheckoutResult> {
@@ -157,6 +160,7 @@ async function requestSharedCartCheckout(
           cartId: input.cartId,
           expectedVersion: input.expectedVersion,
           operationId: input.operationId,
+          ...(input.recoveryForRedvault ? { recoveryForRedvault: true } : {}),
         }),
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',

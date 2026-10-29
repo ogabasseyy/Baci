@@ -139,6 +139,24 @@ describe('recoverTerminalRedvaultReview', () => {
     expect(cancelStaleCheckoutOrder).not.toHaveBeenCalled();
   });
 
+  it('can cancel a cart-bound review after an empty replacement cart is created', async () => {
+    vi.mocked(cancelStaleCheckoutOrder).mockResolvedValue('cancelled');
+    const input = options({
+      sharedCartRef: { cartId: 'new-cart', version: 1 },
+      pendingOrder: {
+        ...pending,
+        redvaultReview: {
+          ...pending.redvaultReview,
+          ready: { ...ready, cartId: 'source-cart' },
+        },
+      },
+    });
+
+    expect(await recoverTerminalRedvaultReview(input as never)).toBe(true);
+    expect(cancelStaleCheckoutOrder).toHaveBeenCalledOnce();
+    expect(input.clearPending).toHaveBeenCalledOnce();
+  });
+
   it.each([
     { sharedCartRef: { cartId: 'new-cart', version: 1 } },
     { checkoutCartEmpty: false },

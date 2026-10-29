@@ -1,5 +1,8 @@
 import type { NextRequest } from 'next/server';
+import { z } from 'zod';
+import { authenticateApiRequest } from '@/lib/api-auth';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
+import { checkoutRecoveryAudience } from '@/lib/cart/checkout-recovery-proof';
 import { prepareCartCheckout } from '@/lib/cart/checkout-transition';
 import { upgradeLegacySessionPrincipal } from '@/lib/cart/grant-operations';
 import {
@@ -13,6 +16,7 @@ import {
   cartErrorResponse,
   cartJsonResponse,
   setCartSessionCookie,
+  setCheckoutRecoveryCookie,
 } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import {
@@ -68,6 +72,26 @@ export async function POST(request: NextRequest) {
     const parsedBody = sharedCartPrepareRequestSchema.safeParse(rawBody.body);
     if (!parsedBody.success) {
       return cartErrorResponse('invalid_request');
+    }
+
+    // Only browser REDVAULT checkouts need recovery authority after a
+    // lost order response. Bind that authority to the server-verified
+    // customer session as well as the reviewed cart and checkout.
+    let recoveryUserId: string | null | undefined;
+    if (
+      parsedBody.data.recoveryForRedvault &&
+      !requestUsesDeviceProof(request)
+    ) {
+      const auth = await authenticateApiRequest(request, {
+        requireVerifiedGuest: true,
+      });
+      if (
+        (auth.error && auth.error !== 'Not authenticated') ||
+        (auth.user && !z.uuid().safeParse(auth.user.id).success)
+      ) {
+        return cartErrorResponse('temporarily_unavailable');
+      }
+      recoveryUserId = auth.user?.id ?? null;
     }
 
     const quota = await checkCartQuota({
@@ -147,6 +171,49 @@ export async function POST(request: NextRequest) {
       });
       return cartErrorResponse('temporarily_unavailable');
     }
+    let recoveryProof: string | undefined;
+    let recoveryMaxAge = 0;
+    if (recoveryUserId !== undefined) {
+      try {
+        const expiry = Math.min(
+          Date.parse(result.sessionExpiresAt),
+          Date.parse(result.grantExpiresAt)
+        );
+        if (
+          !Number.isFinite(expiry) ||
+          expiry <= Date.now() ||
+          result.snapshot.cartId !== principal.cartId ||
+          result.snapshot.merchantId !== context.merchant.id ||
+          !z.uuid().safeParse(result.snapshot.checkoutSessionId).success
+        ) {
+          return cartErrorResponse('temporarily_unavailable');
+        }
+        const expiryIso = new Date(expiry).toISOString();
+        recoveryProof = issueCartSessionProof(
+          {
+            allowedOperations: principal.allowedOperations,
+            cartId: principal.cartId,
+            grantId: principal.grantId,
+            grantExpiresAt: expiryIso,
+            merchantId: context.merchant.id,
+            principalId: principal.principalId,
+            scope: 'session',
+          },
+          {
+            environment: getCartProofEnvironment(),
+            audience: checkoutRecoveryAudience(
+              result.snapshot.checkoutSessionId,
+              recoveryUserId
+            ),
+          }
+        );
+        recoveryMaxAge = cartSessionCookieMaxAge(expiryIso);
+        if (recoveryMaxAge <= 0)
+          return cartErrorResponse('temporarily_unavailable');
+      } catch {
+        return cartErrorResponse('temporarily_unavailable');
+      }
+    }
     const response = cartJsonResponse({
       ...(requestUsesDeviceProof(request) ? { proof } : {}),
       replayed: result.replayed,
@@ -157,6 +224,14 @@ export async function POST(request: NextRequest) {
     const cookieMaxAge = cartSessionCookieMaxAge(proofExpiresAt);
     if (proof && cookieMaxAge > 0) {
       setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
+    }
+    if (recoveryProof) {
+      setCheckoutRecoveryCookie(
+        response,
+        context.merchant.id,
+        recoveryProof,
+        recoveryMaxAge
+      );
     }
     return response;
   } catch (error) {

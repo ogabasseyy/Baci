@@ -2,6 +2,8 @@
 
 import { useEffect, useEffectEvent, useState } from 'react';
 import type { DiscountResult } from '@/components/storefront/checkout/discount-code-input';
+import { getCartCookieEpoch } from '@/hooks/cart/cart-cross-tab-lock';
+import { subscribeCartSessionGeneration } from '@/hooks/cart/shared-cart-storage';
 import { loadWalletBalance } from '../checkout-page-data-loaders';
 import type { RedvaultQuoteSummary } from '../components/redvault/RedvaultPaymentOption';
 import type {
@@ -67,6 +69,22 @@ export function useCheckoutPaymentSession({
     contact: '',
     note: '',
   });
+
+  useEffect(() => {
+    const fence = pendingCheckoutOrder?.redvaultReview?.recoveryFence;
+    if (!fence) return;
+    // Install the cross-tab epoch listener before subscribing to changes.
+    getCartCookieEpoch(fence.merchantSlug);
+    const validateFence = () => {
+      if (!readRedvaultReviewRecovery(pendingCheckoutOrder, merchantId)) {
+        setRedvaultOrderReady(null);
+        setRedvaultSummary(null);
+      }
+    };
+    const unsubscribe = subscribeCartSessionGeneration(validateFence);
+    validateFence();
+    return unsubscribe;
+  }, [pendingCheckoutOrder, merchantId]);
 
   useEffect(() => {
     if (

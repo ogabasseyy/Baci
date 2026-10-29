@@ -15,10 +15,11 @@ export function isTerminalRedvaultReview({
   sharedCartRef: { cartId: string; version: number } | null | undefined;
   checkoutItemCount: number;
 }): boolean {
+  const recovery = readRedvaultReviewRecovery(pendingOrder, merchantId);
   return Boolean(
     sharedCartEnabled &&
-      !sharedCartRef &&
       checkoutItemCount === 0 &&
-      readRedvaultReviewRecovery(pendingOrder, merchantId)
+      recovery &&
+      (!sharedCartRef || recovery.ready.cartId)
   );
 }

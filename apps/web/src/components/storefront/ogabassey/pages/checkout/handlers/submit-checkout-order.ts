@@ -44,6 +44,10 @@ export interface SubmitCheckoutOrderOptions {
   onPendingOrderInvalidated: () => Promise<void>;
   onShippingRateRejected: () => void;
   getOrderErrorMessage: (errorData: CheckoutOrderErrorData) => string;
+  onBeforeBoundRedvaultSend?: (attempt: {
+    idempotencyKey: string;
+    orderRequest: ReturnType<typeof buildCheckoutOrderRequest>;
+  }) => void;
   request?: typeof fetch;
 }
 
@@ -99,6 +103,7 @@ export async function submitCheckoutOrder({
   onPendingOrderInvalidated,
   onShippingRateRejected,
   getOrderErrorMessage,
+  onBeforeBoundRedvaultSend,
   request = fetch,
   resolvedPendingOrder,
 }: SubmitCheckoutOrderOptions): Promise<SubmittedCheckoutOrder> {
@@ -138,6 +143,14 @@ export async function submitCheckoutOrder({
     !orderRequest.items.some(
       (item) => item.voucher_award_id || item.voucher_token
     );
+  if (canRetryBoundRedvault) {
+    if (!onBeforeBoundRedvaultSend) {
+      throw new Error(
+        'UBA checkout recovery is unavailable. Please try again.'
+      );
+    }
+    onBeforeBoundRedvaultSend({ idempotencyKey, orderRequest });
+  }
   let response: Response;
   try {
     response = await request('/api/orders', requestOptions);
@@ -146,7 +159,14 @@ export async function submitCheckoutOrder({
     // session and key. Retry only a transport failure, never a payment
     // initialization or a voucher path that drops the idempotency key.
     if (!(error instanceof TypeError) || !canRetryBoundRedvault) throw error;
-    response = await request('/api/orders', requestOptions);
+    response = await request('/api/orders', {
+      ...requestOptions,
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+        'X-Checkout-Recovery': '1',
+      },
+    });
   }
 
   if (!response.ok) {

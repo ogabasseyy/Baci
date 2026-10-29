@@ -75,6 +75,7 @@ export interface PendingCheckoutOrderSnapshot {
   redvaultReview?: {
     ready: RedvaultPreparedOrder;
     summary: RedvaultQuoteSummary;
+    recoveryFence?: { merchantSlug: string | null; epoch: string | null };
   };
 }
 

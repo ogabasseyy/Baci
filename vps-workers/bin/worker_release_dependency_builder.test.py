@@ -2,6 +2,7 @@ import importlib.util
 import json
 import os
 import stat
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -748,6 +749,30 @@ class DependencyBuilderTests(unittest.TestCase):
             ]):
                 with self.assertRaisesRegex(policy_cache.BuilderRejected, "did not report"):
                     policy_cache.preverify(source, store, cache, "/fixed/pnpm")
+            self.assertFalse((store / policy_cache.RECEIPT_NAME).exists())
+
+    def test_policy_preverify_reports_fixed_stage_and_category_without_raw_output(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = make_source(root)
+            for relative in policy_cache.POLICY_FILES:
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("minimumReleaseAge: 1440\ntrustPolicy: no-downgrade\n", encoding="utf-8")
+            store = root / "store"
+            store.mkdir()
+            cache = root / "cache"
+            cache.mkdir()
+            failure = subprocess.CalledProcessError(
+                1, ["synthetic"], output="synthetic credential marker", stderr="ECONNRESET synthetic-private-token"
+            )
+            with patch.object(policy_cache.subprocess, "run", side_effect=[
+                type("Result", (), {"stdout": "11.7.0\n"})(), failure,
+            ]):
+                with self.assertRaisesRegex(policy_cache.BuilderRejected, "web-deploy failed .*registry-network") as caught:
+                    policy_cache.preverify(source, store, cache, "/fixed/pnpm")
+            self.assertNotIn("synthetic-private-token", str(caught.exception))
+            self.assertNotIn("synthetic credential marker", str(caught.exception))
             self.assertFalse((store / policy_cache.RECEIPT_NAME).exists())
 
     def test_policy_cache_hash_rejects_links_and_writable_entries(self):

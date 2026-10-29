@@ -59,6 +59,13 @@ class DependencySnapshotSmokeTests(unittest.TestCase):
         self.assertNotIn("id -g baci-worker", fixture)
         self.assertNotIn("id -g baci-locks", fixture)
 
+    def test_linux_fixture_stages_dependency_diagnostics_helper_and_workflow_tracks_it(self):
+        fixture = SCRIPT.with_name("dependency-builder-systemd-test.sh").read_text(encoding="utf-8")
+        workflow = SCRIPT.parents[3] / ".github/workflows/worker-release-dependency-systemd-tests.yml"
+        workflow_text = workflow.read_text(encoding="utf-8")
+        self.assertIn("worker_release_dependency_diagnostics.py", fixture)
+        self.assertIn("vps-workers/bin/worker_release_dependency_*.py", workflow_text)
+
     def test_snapshot_layout_failure_reports_only_category_and_relative_path(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

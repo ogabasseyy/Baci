@@ -41,6 +41,7 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 from worker_release_dependency_registry_policy import (
     validate_registry_routing as _validate_registry_routing,
 )
+from worker_release_dependency_diagnostics import pnpm_failure_category as _pnpm_failure_category
 
 
 def _sha256_regular_file(path: Path, *, owner_uid: int | None = None, max_bytes: int = 64 * 1024 * 1024) -> str:
@@ -208,8 +209,14 @@ def validate_receipt(source: Path, cache: Path, receipt_path: Path, pnpm_version
 
 def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/usr/bin/node") -> None:
     _validate_registry_routing(source, POLICY_FILES, TRUSTED_REGISTRY)
-    version = subprocess.run((node, pnpm, "--version"), cwd=source, check=True,
-                             capture_output=True, text=True, timeout=15).stdout.strip()
+    try:
+        version = subprocess.run((node, pnpm, "--version"), cwd=source, check=True,
+                                 capture_output=True, text=True, timeout=15).stdout.strip()
+    except subprocess.CalledProcessError as exc:
+        category = _pnpm_failure_category((exc.stdout or "") + "\n" + (exc.stderr or ""))
+        raise BuilderRejected(f"pnpm version check failed (exit {exc.returncode}; category={category})") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise BuilderRejected("pnpm version check timed out") from exc
     if version != EXPECTED_PNPM:
         raise BuilderRejected("pnpm runtime differs from pinned dependency policy version")
     env = {
@@ -235,10 +242,17 @@ def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/u
                 ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--filter", "@baci/web", "--prod", "deploy", "--legacy", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store), str(Path(output_root) / "web")), source),
                 ((node, pnpm, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy", "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--store-dir", str(store)), source / "vps-workers"),
             )
-            for command, cwd in commands:
-                result = subprocess.run(command, cwd=cwd, env=env, check=True, capture_output=True, text=True, timeout=240)
+            for stage, (command, cwd) in zip(("web-deploy", "worker-install"), commands, strict=True):
+                try:
+                    result = subprocess.run(command, cwd=cwd, env=env, check=True,
+                                            capture_output=True, text=True, timeout=240)
+                except subprocess.CalledProcessError as exc:
+                    category = _pnpm_failure_category((exc.stdout or "") + "\n" + (exc.stderr or ""))
+                    raise BuilderRejected(f"pnpm preverify {stage} failed (exit {exc.returncode}; category={category})") from exc
+                except subprocess.TimeoutExpired as exc:
+                    raise BuilderRejected(f"pnpm preverify {stage} timed out") from exc
                 if "Lockfile passes supply-chain policies" not in result.stdout:
-                    raise BuilderRejected("pnpm did not report a lockfile supply-chain policy verification")
+                    raise BuilderRejected(f"pnpm preverify {stage} did not report lockfile supply-chain policy verification")
     if before != _input_hashes(source):
         raise BuilderRejected("pnpm changed a lockfile or policy during preverification")
     receipt = make_receipt(source, cache, version)

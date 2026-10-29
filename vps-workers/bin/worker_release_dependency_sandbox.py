@@ -146,7 +146,8 @@ def remove_workspace_self_link(web_output: Path, working: Path) -> None:
 def systemd_command(source: Path, scratch: Path, expected_sha: str, uid: int, gid: int, unit: str) -> tuple[str, ...]:
     properties = (
         "ProtectSystem=strict", "ProtectHome=true", "PrivateTmp=true", "PrivateDevices=true",
-        "NoNewPrivileges=true", "PrivateUsers=true", "RestrictSUIDSGID=true", "LockPersonality=true",
+        "NoNewPrivileges=true", "PrivateUsers=true", "ProtectControlGroups=true",
+        "RestrictSUIDSGID=true", "LockPersonality=true",
         "UMask=0077", "KillMode=control-group", f"RuntimeMaxSec={MAX_BUILD_SECONDS}s",
         "MemoryMax=2G", "CPUQuota=200%", "TasksMax=128", "LimitFSIZE=1073741824", "LimitNOFILE=4096",
         f"ReadOnlyPaths={source} {source.parent / 'pnpm-cache-seed'} {source.parent / RECEIPT_NAME}",

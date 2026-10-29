@@ -6,6 +6,7 @@ on:
       - 'vps-workers/bin/worker_release_dependency_supervisor.py'
       - 'vps-workers/bin/worker_release_dependency_supervisor.test.py'
       - 'vps-workers/bin/worker_release_dependency_supervisor_systemd_test.py'
+      - 'vps-workers/bin/worker_release_dependency_systemd_startup.py'
       - 'vps-workers/bin/worker_release_dependency_supervisor_journal.py'
       - 'vps-workers/bin/worker_release_dependency_supervisor_journal.test.py'
       - 'vps-workers/bin/worker_release_dependency_supervisor_lifecycle.py'

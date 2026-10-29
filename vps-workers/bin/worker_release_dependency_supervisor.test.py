@@ -33,6 +33,13 @@ FENCE = {"repository": "org/repo", "workflow": "release.yml", "ref": "refs/heads
          "sha": "a" * 40, "run_id": "1", "run_attempt": 1, "job_id": "2"}
 
 class BuilderSupervisorContractTests(unittest.TestCase):
+    def test_canonical_builder_unit_enables_control_group_protection(self):
+        command = sandbox.systemd_command(
+            Path("/run/input/source"), Path("/run/build/scratch"), "a" * 40,
+            os.getuid(), os.getgid(), "baci-worker-deps-" + "a" * 12 + "-" + "b" * 32 + ".service",
+        )
+        self.assertIn("ProtectControlGroups=true", command)
+
     def test_unit_name_is_bound_to_sha_prefix_and_random_transaction(self):
         self.assertEqual(
             supervisor._control_group("baci-worker-deps-aaaaaaaaaaaa-" + "b" * 32 + ".service"),

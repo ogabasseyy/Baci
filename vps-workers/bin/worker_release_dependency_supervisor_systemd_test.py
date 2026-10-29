@@ -8,7 +8,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from contextlib import ExitStack
 from pathlib import Path
@@ -19,18 +18,17 @@ sys.path.insert(0, str(Path(__file__).parent))
 import worker_release_dependency_supervisor as supervisor
 import worker_release_dependency_sandbox as sandbox
 import worker_release_dependency_supervisor_contract as unit_contract
-from worker_release_descriptor_cgroup import CgroupProofRejected, require_process_member
+from worker_release_descriptor_cgroup import require_process_member
 from worker_release_dependency_supervisor_cgroup import open_unit_cgroup
 from worker_release_dependency_supervisor_journal import (
     BuilderJournalRejected, BuilderUnitJournal, recover_recorded_builder,
 )
+from worker_release_dependency_systemd_startup import (
+    SystemdStartupRejected, wait_for_systemd,
+)
 
 FENCE = {"repository": "org/repo", "workflow": "release.yml", "ref": "refs/heads/main",
          "sha": "a" * 40, "run_id": "1", "run_attempt": 1, "job_id": "2"}
-
-
-class SystemdStartupRejected(RuntimeError):
-    """The disposable manager did not become ready within its fixed test budget."""
 
 
 class SystemdStartupWaitTests(unittest.TestCase):
@@ -70,6 +68,16 @@ class SystemdStartupWaitTests(unittest.TestCase):
         self.assertEqual(preflights[0], 3)
         self.assertGreater(now[0], 0)
 
+    def test_starting_is_allowed_after_bounded_probe_window(self):
+        now = [0.0]
+        query = lambda kind, _timeout: (1, "starting") if kind == "state" else (0, "systemd 255")
+        state, _version = wait_for_systemd(
+            query, lambda: None, timeout=2, poll=0.25, starting_grace=1,
+            clock=lambda: now[0], sleep=lambda duration: now.__setitem__(0, now[0] + duration),
+        )
+        self.assertEqual(state, "starting")
+        self.assertGreaterEqual(now[0], 1)
+
     def test_timeout_fails_closed_when_manager_never_reaches_ready_state(self):
         now = [0.0]
         calls = [0]
@@ -86,39 +94,6 @@ class SystemdStartupWaitTests(unittest.TestCase):
                              clock=lambda: now[0], sleep=sleep)
         self.assertGreaterEqual(calls[0], 4)
         self.assertGreaterEqual(now[0], 1)
-
-
-def wait_for_systemd(query, preflight, *, timeout=30, poll=0.25,
-                     clock=time.monotonic, sleep=time.sleep):
-    deadline = clock() + timeout
-    last_state, last_reason = "unavailable", "manager-unreachable"
-    while (remaining := deadline - clock()) > 0:
-        try:
-            state_status, state = query("state", min(5.0, remaining))
-            version_status, version = query("version", min(5.0, remaining))
-            if state in ("starting", "initializing", "running", "degraded", "maintenance",
-                         "offline", "stopping"):
-                last_state = state
-            else:
-                last_state = "unexpected"
-            if version_status != 0 or not version:
-                last_reason = "manager-not-reachable"
-            else:
-                preflight()
-                expected_status = {"running": 0, "degraded": 1}.get(state)
-                if expected_status is not None and state_status == expected_status:
-                    return state, version
-                last_reason = "manager-starting" if state in ("starting", "initializing") else "manager-not-ready"
-        except (OSError, subprocess.SubprocessError, CgroupProofRejected, RuntimeError):
-            last_reason = "cgroup-preflight-unavailable"
-        remaining = deadline - clock()
-        if remaining > 0:
-            sleep(min(poll, remaining))
-    raise SystemdStartupRejected(
-        f"systemd did not reach ready/degraded state within {timeout}s "
-        f"(state={last_state}, reason={last_reason})"
-    )
-
 
 def execute_canonical_unit(command, script: str, process_factory):
     """Keep shipped canonical sandbox arguments and replace only payload argv."""

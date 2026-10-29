@@ -32,4 +32,12 @@ test('OTA export uses the same public values as the iOS native release', async (
       assert.equal(otaEnv[name], value, `OTA production value differs for ${name}`);
     }
   }
+  for (const name of Object.keys(otaEnv)) {
+    if (
+      (name.startsWith('EXPO_PUBLIC_') || name.startsWith('STOREFRONT_')) &&
+      name !== 'EXPO_PUBLIC_BUILD_SHA'
+    ) {
+      assert.ok(Object.hasOwn(nativeEnv, name), `OTA sets ${name}, which the native release does not set`);
+    }
+  }
 });

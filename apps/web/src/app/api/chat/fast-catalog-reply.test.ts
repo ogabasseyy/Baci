@@ -107,6 +107,44 @@ describe('buildFastCatalogReply', () => {
     expect(load).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['Show me phones under 500 USD', 'NGN'],
+    ['Show me phones under 500k naira', 'USD'],
+  ])('asks for a store-currency budget without searching: %s', async (text, currency) => {
+    const load = vi.fn(async () => [product]);
+    const result = await buildFastCatalogReply(
+      [text],
+      categories,
+      load,
+      currency
+    );
+    expect(result?.text).toMatch(/store.s currency/i);
+    expect(result?.text).toMatch(/can.t convert/i);
+    expect(result?.text).toMatch(/at most 5000/i);
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('tells customers to include the product when restarting an unsupported range', async () => {
+    const load = vi.fn(async () => [product]);
+    const result = await buildFastCatalogReply(
+      ['Show phones between 100k and 500k', 'At most 300k'],
+      categories,
+      load,
+      'NGN'
+    );
+    expect(result?.text).toMatch(/new message.*product type.*at most/i);
+    expect(load).not.toHaveBeenCalled();
+    await buildFastCatalogReply(
+      ['Show phones between 100k and 500k', 'Phones at most 300k'],
+      categories,
+      load,
+      'NGN'
+    );
+    expect(load).toHaveBeenCalledWith(
+      expect.objectContaining({ maxPrice: 300_000, exclusiveMaxPrice: false })
+    );
+  });
+
   it('searches the clarified product within the stated budget', async () => {
     const load = vi.fn(async () => [product]);
     await buildFastCatalogReply(

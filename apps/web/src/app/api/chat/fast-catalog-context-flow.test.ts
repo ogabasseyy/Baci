@@ -41,6 +41,53 @@ beforeEach(() => {
   ]);
 });
 
+it('searches the tenant catalog with the naira budget and no currency label in the product query', async () => {
+  const result = await tryFastCatalogChat({
+    tenant,
+    signal: new AbortController().signal,
+    messages: [{ role: 'user', content: 'Show me phones under 500,000 naira' }],
+  });
+  expect(result?.events[0]?.products[0]?.name).toBe('iPhone 16');
+  expect(mocks.products).toHaveBeenCalledWith(
+    'merchant-1',
+    expect.objectContaining({
+      query: '',
+      maxPrice: 500_000,
+      exclusiveMaxPrice: true,
+    })
+  );
+});
+
+it('does not search when an explicit naira budget differs from the tenant currency', async () => {
+  const result = await tryFastCatalogChat({
+    tenant: { ...tenant, currencyCode: 'USD' },
+    signal: new AbortController().signal,
+    messages: [{ role: 'user', content: 'Show me phones under 500,000 naira' }],
+  });
+  expect(result?.text).toMatch(/store.s currency/i);
+  expect(mocks.products).not.toHaveBeenCalled();
+});
+
+it('resumes the same tenant product search after an explicit budget correction', async () => {
+  const result = await tryFastCatalogChat({
+    tenant,
+    signal: new AbortController().signal,
+    messages: [
+      { role: 'user', content: 'Show iPhone 16 under 500 USD' },
+      {
+        role: 'assistant',
+        content: 'Please enter a budget in the store currency.',
+      },
+      { role: 'user', content: 'At most 500k naira' },
+    ],
+  });
+  expect(result?.events[0]?.products[0]?.name).toBe('iPhone 16');
+  expect(mocks.products).toHaveBeenCalledWith(
+    'merchant-1',
+    expect.objectContaining({ query: 'iPhone 16', maxPrice: 500_000 })
+  );
+});
+
 it('rechecks the customer model and latest limit after repeated refinements', async () => {
   const result = await tryFastCatalogChat({
     tenant,

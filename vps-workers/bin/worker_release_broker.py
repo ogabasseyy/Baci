@@ -27,6 +27,7 @@ import shutil
 import time
 import signal
 import tempfile
+import threading
 from typing import Callable, BinaryIO, Any
 
 # Helper modules import the facade by its canonical name. Register the live
@@ -123,13 +124,37 @@ def serve_forever(
     *,
     expected_release_uid: int,
     dispatch: Callable[[int, dict[str, Any]], dict[str, Any]],
+    stop_event: threading.Event | None = None,
+    accept_poll_seconds: float = 0.25,
 ) -> None:
     if expected_release_uid <= 0 or not isinstance(expected_release_uid, int):
         raise ValueError("invalid trusted release UID")
-    while True:
-        connection, _address = listener.accept()
-        with connection:
-            serve_connection(connection, expected_release_uid=expected_release_uid, dispatch=dispatch)
+    if (stop_event is not None and not isinstance(stop_event, threading.Event)):
+        raise ValueError("broker stop signal must be a threading event")
+    if (type(accept_poll_seconds) not in (int, float) or
+            not 0.01 <= accept_poll_seconds <= 5):
+        raise ValueError("broker accept polling interval is invalid")
+    previous_timeout = listener.gettimeout()
+    listener.settimeout(accept_poll_seconds)
+    try:
+        while stop_event is None or not stop_event.is_set():
+            try:
+                connection, _address = listener.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                if stop_event is not None and stop_event.is_set():
+                    return
+                raise
+            with connection:
+                # A connection queued before SIGTERM is not admitted once the
+                # drain signal has been observed. A request already being
+                # dispatched is allowed to finish before this loop exits.
+                if stop_event is not None and stop_event.is_set():
+                    return
+                serve_connection(connection, expected_release_uid=expected_release_uid, dispatch=dispatch)
+    finally:
+        listener.settimeout(previous_timeout)
 
 
 from worker_release_staging import (
@@ -204,10 +229,21 @@ def run_service(release_uid: int, worker_uid: int, worker_gid: int, socket_path:
     if socket_path != "/run/baci-worker-release/broker.sock":
         raise ValueError("broker socket path is fixed")
     listener = bind_broker_socket(socket_path, release_gid=release_gid)
+    stop_event = threading.Event()
+
+    def request_shutdown(_signum, _frame):
+        stop_event.set()
+
+    old_handlers = {}
     try:
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            old_handlers[signum] = signal.signal(signum, request_shutdown)
         dispatch = make_fixed_release_dispatch(release_uid=release_uid, worker_uid=worker_uid, worker_gid=worker_gid)
-        serve_forever(listener, expected_release_uid=release_uid, dispatch=dispatch)
+        serve_forever(listener, expected_release_uid=release_uid, dispatch=dispatch,
+                      stop_event=stop_event)
     finally:
+        for signum, handler in old_handlers.items():
+            signal.signal(signum, handler)
         listener.close()
         try:
             os.unlink(socket_path)

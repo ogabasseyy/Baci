@@ -92,7 +92,7 @@ class RuntimeViewRecoveryTests(unittest.TestCase):
     def test_recovery_refuses_nonempty_mountpoint_without_clearing_record(self):
         (self.view.candidate_path / "mounted-content").write_text("still mounted")
         with patch("worker_release_runtime_view_recovery._prove_unit_gone"):
-            with self.assertRaisesRegex(RuntimeViewRecoveryRejected, "failed closed"):
+            with self.assertRaisesRegex(RuntimeViewRecoveryRejected, "mountpoint is not empty"):
                 recover_runtime_view(self.record, view_root=self.views)
         self.assertEqual(list_all_runtime_view_records(self.views), (self.record,))
 

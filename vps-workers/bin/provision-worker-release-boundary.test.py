@@ -20,9 +20,16 @@ sys.modules[SPEC.name] = provision
 SPEC.loader.exec_module(provision)
 
 from provision_worker_release_install import ensure_root_directory, read_trusted_source
+from worker_release_broker_common import BROKER_CLIENT_TIMEOUT_SECONDS
 
 
 class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
+    def test_broker_stop_timeout_allows_inflight_client_budget_to_drain(self):
+        configured = next(line for line in provision.UNIT.splitlines()
+                         if line.startswith("TimeoutStopSec="))
+        timeout_seconds = int(configured.split("=", 1)[1].removesuffix("s"))
+        self.assertGreaterEqual(timeout_seconds, BROKER_CLIENT_TIMEOUT_SECONDS + 60)
+
     def test_broker_unit_write_allowlist_is_exact_and_includes_only_fixed_runtime_roots(self):
         lines = [line for line in provision.UNIT.splitlines()
                  if line.startswith("ReadWritePaths=")]

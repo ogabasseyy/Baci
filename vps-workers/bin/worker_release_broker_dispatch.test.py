@@ -4,8 +4,11 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
+import socket
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -168,6 +171,72 @@ class AuthenticatedStageDispatchTests(unittest.TestCase):
                     release_uid=1001, worker_uid=1002, worker_gid=81)
                 receipt = fixed(1001, {"operation": "recovery-status", "sourceSha": self.sha})
             self.assertEqual(receipt["stageRecovery"], {"pending": True, "target": target})
+
+
+class BrokerDrainTests(unittest.TestCase):
+    def test_shutdown_finishes_admitted_mutation_and_drops_queued_request(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            listener.bind(str(Path(temporary) / "broker.sock"))
+            listener.listen(4)
+            stop_event = threading.Event()
+            dispatch_started = threading.Event()
+            finish_dispatch = threading.Event()
+            dispatched = []
+            server_errors = []
+
+            def dispatch(peer_uid, request):
+                dispatched.append(request["sequence"])
+                if request["sequence"] == 1:
+                    dispatch_started.set()
+                    if not finish_dispatch.wait(3):
+                        raise TimeoutError("test dispatch did not receive release signal")
+                return {"ok": True, "sequence": request["sequence"]}
+
+            def serve():
+                try:
+                    broker.serve_forever(
+                        listener, expected_release_uid=os.getuid(), dispatch=dispatch,
+                        stop_event=stop_event, accept_poll_seconds=0.05,
+                    )
+                except BaseException as error:
+                    server_errors.append(error)
+
+            server = threading.Thread(target=serve)
+            server.start()
+            first = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            second = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                first.connect(listener.getsockname())
+                first.sendall(b'{"sequence":1}\n')
+                self.assertTrue(dispatch_started.wait(2),
+                                f"first mutation was not admitted; server errors={server_errors!r}")
+                second.connect(listener.getsockname())
+                second.sendall(b'{"sequence":2}\n')
+                stop_event.set()
+                finish_dispatch.set()
+                first.settimeout(2)
+                response = b""
+                while not response.endswith(b"\n"):
+                    chunk = first.recv(4096)
+                    if not chunk:
+                        break
+                    response += chunk
+                server.join(2)
+                self.assertFalse(server.is_alive(), "broker did not exit after draining")
+                listener.close()
+                self.assertEqual(json.loads(response), {"ok": True, "sequence": 1})
+                self.assertEqual(dispatched, [1], "queued request ran after drain began")
+                self.assertEqual(server_errors, [])
+                second.settimeout(2)
+                self.assertEqual(second.recv(4096), b"")
+            finally:
+                stop_event.set()
+                finish_dispatch.set()
+                first.close()
+                second.close()
+                listener.close()
+                server.join(2)
 
 
 if __name__ == "__main__":

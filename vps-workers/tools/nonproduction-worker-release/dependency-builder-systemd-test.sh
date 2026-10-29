@@ -395,10 +395,10 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
         owner_uid=expected_owner_uid,
     )
     error_code = fixture_detail["error_code"] if fixture_detail else "diagnostic-unavailable"
-    prior_regression = (str(fixture_detail["prior_trust_evidence_regression"]).lower()
-                        if fixture_detail else "unknown")
+    evidence_transition = (fixture_detail["trust_evidence_transition"]
+                           if fixture_detail else "diagnostic-unavailable")
     print(f"dependency fixture transient unit failed exit={process.returncode} "
-          f"fixture_error={error_code} prior_trust_evidence_regression={prior_regression}",
+          f"fixture_error={error_code} trust_evidence_transition={evidence_transition}",
           file=sys.stderr)
     raise subprocess.CalledProcessError(process.returncode, fixture_command)
 

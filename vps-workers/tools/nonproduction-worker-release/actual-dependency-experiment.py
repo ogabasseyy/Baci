@@ -37,6 +37,11 @@ from worker_release_actual_dependency_guard import (
     run_monitored,
     web_deploy_command,
 )
+from worker_release_actual_dependency_resources import (
+    MAX_TREE_ENTRIES,
+    MIN_FREE_BYTES,
+    MIN_FREE_INODES,
+)
 from worker_release_dependency_diagnostics import read_diagnostic
 from worker_release_actual_dependency_runtime import (
     independent_smoke,
@@ -224,6 +229,11 @@ def _main() -> int:
                     "metadata_cache": EXPERIMENT_CACHE_BYTES,
                     "store": EXPERIMENT_STORE_BYTES,
                     "monitored_scratch": 12 * 1024 * 1024 * 1024,
+                },
+                "resource_guards": {
+                    "monitored_entry_limit": MAX_TREE_ENTRIES,
+                    "minimum_free_bytes": MIN_FREE_BYTES,
+                    "minimum_free_inodes": MIN_FREE_INODES,
                 },
                 "lifecycle_scripts": "disabled",
             }

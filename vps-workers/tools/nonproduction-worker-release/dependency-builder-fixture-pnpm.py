@@ -12,21 +12,30 @@ from typing import Sequence
 
 FIXTURE_ERROR_NAME = ".fixture-pnpm-diagnostic.json"
 _ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
+_TRUST_TRANSITIONS = {
+    "trusted publisher|provenance attestation": "trusted-publisher-to-provenance",
+    "trusted publisher|no trust evidence": "trusted-publisher-to-none",
+    "provenance attestation|no trust evidence": "provenance-to-none",
+}
+_TRUST_TRANSITION = re.compile(
+    r"earlier versions had (trusted publisher|provenance attestation), "
+    r"but this version has (trusted publisher|provenance attestation|no trust evidence)"
+)
 
 
 def summarize_failure(output: str) -> dict[str, object]:
     """Return only a bounded, non-sensitive classification of fixture output."""
     sample = _ANSI.sub("", output[:1_048_576]).lower()
     trust_failure = "err_pnpm_trust_downgrade" in sample
-    prior_evidence = any(phrase in sample for phrase in (
-        "earlier-published version had stronger trust evidence",
-        "earlier versions had trusted publisher",
-        "earlier versions had provenance",
-    ))
+    normalized = re.sub(r"\s+", " ", sample)
+    match = _TRUST_TRANSITION.search(normalized) if trust_failure else None
+    transition = "unrecognized" if "earlier versions had" in normalized else "unreported"
+    if match:
+        transition = _TRUST_TRANSITIONS.get("|".join(match.groups()), "unrecognized")
     return {
         "schema": 1,
         "error_code": "ERR_PNPM_TRUST_DOWNGRADE" if trust_failure else "OTHER_PNPM_ERROR",
-        "prior_trust_evidence_regression": bool(trust_failure and prior_evidence),
+        "trust_evidence_transition": transition if trust_failure else "not-applicable",
     }
 
 
@@ -120,10 +129,6 @@ def read_diagnostic(path: Path, *, owner_uid: int) -> dict[str, object] | None:
         parent_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
                             | getattr(os, "O_NOFOLLOW", 0))
     except OSError:
-        if scratch_fd is not None:
-            os.close(scratch_fd)
-        if root_fd is not None:
-            os.close(root_fd)
         return None
     try:
         return _read_diagnostic_at(parent_fd, path.name, owner_uid=owner_uid)
@@ -143,12 +148,17 @@ def _read_diagnostic_at(directory_fd: int, name: str, *, owner_uid: int) -> dict
             return None
         value = json.loads(os.read(fd, 257))
         if (not isinstance(value, dict) or set(value) != {
-                "schema", "error_code", "prior_trust_evidence_regression"}
+                "schema", "error_code", "trust_evidence_transition"}
                 or value["schema"] != 1
                 or value["error_code"] not in {"ERR_PNPM_TRUST_DOWNGRADE", "OTHER_PNPM_ERROR"}
-                or type(value["prior_trust_evidence_regression"]) is not bool
-                or (value["prior_trust_evidence_regression"]
-                    and value["error_code"] != "ERR_PNPM_TRUST_DOWNGRADE")):
+                or value["trust_evidence_transition"] not in {
+                    "trusted-publisher-to-provenance", "trusted-publisher-to-none",
+                    "provenance-to-none", "unreported", "unrecognized", "not-applicable",
+                }
+                or (value["error_code"] == "ERR_PNPM_TRUST_DOWNGRADE"
+                    and value["trust_evidence_transition"] == "not-applicable")
+                or (value["error_code"] == "OTHER_PNPM_ERROR"
+                    and value["trust_evidence_transition"] != "not-applicable")):
             return None
         return value
     except (OSError, ValueError, TypeError):

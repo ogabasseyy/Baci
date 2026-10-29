@@ -19,9 +19,16 @@ experiment = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(experiment)
 from worker_release_actual_dependency_guard import (
     MonitorFailure,
+    ResourceEntryLimitExceeded,
     enforce_resource_limits,
     failure_diagnostic,
     run_monitored,
+)
+from worker_release_actual_dependency_resources import (
+    MAX_TREE_BYTES,
+    MAX_TREE_ENTRIES,
+    MIN_FREE_BYTES,
+    MIN_FREE_INODES,
 )
 from worker_release_dependency_diagnostics import (
     PnpmStepRejected,
@@ -329,6 +336,34 @@ class ActualDependencyExperimentTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "free-inode reserve"):
                     enforce_resource_limits(root, max_bytes=100, min_free_bytes=0, min_free_inodes=2)
 
+    def test_entry_cap_reports_bounded_observed_count(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for index in range(3):
+                (root / f"entry-{index}").touch()
+            with self.assertRaises(ResourceEntryLimitExceeded) as raised:
+                enforce_resource_limits(root, max_entries=2, min_free_bytes=0, min_free_inodes=0)
+            self.assertEqual((raised.exception.entries_seen, raised.exception.limit), (3, 2))
+            self.assertEqual(
+                failure_diagnostic("resource-scan", raised.exception),
+                "experiment failure stage=resource-scan category=entry-cap "
+                "entries_seen=3 entry_limit=2",
+            )
+
+    def test_monitored_entry_cap_preserves_only_bounded_count_metadata(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            failure = ResourceEntryLimitExceeded(500_001, 500_000)
+            with patch("worker_release_actual_dependency_guard.enforce_resource_limits",
+                       side_effect=failure), patch("worker_release_actual_dependency_guard.subprocess.Popen") as popen:
+                with self.assertRaises(MonitorFailure) as raised:
+                    run_monitored(("synthetic",), cwd=root, env={}, timeout=10,
+                                  stage="policy-preverify", resource_root=root)
+            popen.assert_not_called()
+            self.assertEqual(failure_diagnostic("experiment", raised.exception),
+                             "experiment failure stage=policy-preverify category=entry-cap "
+                             "entries_seen=500001 entry_limit=500000")
+
     def test_process_deadline_kills_entire_child_group(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -402,6 +437,10 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         self.assertEqual(experiment.policy.MAX_EXPERIMENT_CACHE_BYTES, 4 * 1024 * 1024 * 1024)
         self.assertEqual(experiment.EXPERIMENT_CACHE_BYTES, 4 * 1024 * 1024 * 1024)
         self.assertEqual(experiment.EXPERIMENT_STORE_BYTES, 4 * 1024 * 1024 * 1024)
+        self.assertEqual(MAX_TREE_BYTES, 12 * 1024 * 1024 * 1024)
+        self.assertEqual(MAX_TREE_ENTRIES, 1_000_000)
+        self.assertEqual(MIN_FREE_BYTES, 2 * 1024 * 1024 * 1024)
+        self.assertEqual(MIN_FREE_INODES, 20_000)
         source = SCRIPT.read_text(encoding="utf-8")
         self.assertIn('"--experiment-cache-max-bytes", str(EXPERIMENT_CACHE_BYTES)', source)
         self.assertIn('"monitored_scratch": 12 * 1024 * 1024 * 1024', source)

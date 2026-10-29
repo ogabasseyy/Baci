@@ -16,24 +16,42 @@ SPEC.loader.exec_module(fixture)
 
 
 class FixturePnpmDiagnosticTests(unittest.TestCase):
-    def test_trust_failure_summary_contains_only_boolean_and_fixed_code(self):
+    def test_trust_failure_without_hint_is_reported_as_unreported(self):
         output = (
             'ERR_PNPM_TRUST_DOWNGRADE High-risk trust downgrade for "secret-package@9.9.9" '
-            'Earlier-published version had stronger trust evidence; token=must-not-leak'
+            'token=must-not-leak'
         )
         summary = fixture.summarize_failure(output)
         self.assertEqual(summary, {
             "schema": 1,
             "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
-            "prior_trust_evidence_regression": True,
+            "trust_evidence_transition": "unreported",
         })
         self.assertNotIn("secret-package", repr(summary))
         self.assertNotIn("must-not-leak", repr(summary))
 
+    def test_trust_transition_variants_are_exact_and_allowlisted(self):
+        cases = {
+            "Earlier versions had trusted publisher, but this version has provenance attestation.":
+                "trusted-publisher-to-provenance",
+            "Earlier versions had trusted publisher, but this version has no trust evidence.":
+                "trusted-publisher-to-none",
+            "Earlier versions had provenance attestation, but this version has no trust evidence.":
+                "provenance-to-none",
+        }
+        for hint, expected in cases.items():
+            with self.subTest(expected=expected):
+                result = fixture.summarize_failure(f"ERR_PNPM_TRUST_DOWNGRADE\nhint: {hint}")
+                self.assertEqual(result["trust_evidence_transition"], expected)
+        unknown = fixture.summarize_failure(
+            "ERR_PNPM_TRUST_DOWNGRADE Earlier versions had custom signing, now unknown"
+        )
+        self.assertEqual(unknown["trust_evidence_transition"], "unrecognized")
+
     def test_unknown_failure_does_not_preserve_package_or_error_text(self):
         summary = fixture.summarize_failure("ERR_PNPM_META_FETCH_FAIL private-package@7 token=secret")
         self.assertEqual(summary["error_code"], "OTHER_PNPM_ERROR")
-        self.assertFalse(summary["prior_trust_evidence_regression"])
+        self.assertEqual(summary["trust_evidence_transition"], "not-applicable")
         self.assertNotIn("private-package", repr(summary))
 
     def test_success_output_keeps_only_version_and_policy_marker(self):
@@ -82,17 +100,17 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             fixture._write_diagnostic(accepted, {
                 "schema": 1,
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
-                "prior_trust_evidence_regression": True,
+                "trust_evidence_transition": "trusted-publisher-to-none",
             })
             self.assertEqual(fixture.read_diagnostic(accepted, owner_uid=accepted.stat().st_uid), {
                 "schema": 1,
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
-                "prior_trust_evidence_regression": True,
+                "trust_evidence_transition": "trusted-publisher-to-none",
             })
             self.assertIsNone(fixture.read_diagnostic(accepted, owner_uid=accepted.stat().st_uid + 1))
             target = root / "target"
             target.write_text('{"schema":1,"error_code":"OTHER_PNPM_ERROR",'
-                              '"prior_trust_evidence_regression":false,"raw":"secret"}')
+                              '"trust_evidence_transition":"not-applicable","raw":"secret"}')
             target.chmod(0o600)
             self.assertIsNone(fixture.read_diagnostic(target, owner_uid=target.stat().st_uid))
             link = root / "link"
@@ -112,7 +130,7 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             fixture._write_diagnostic(candidate, {
                 "schema": 1,
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
-                "prior_trust_evidence_regression": True,
+                "trust_evidence_transition": "trusted-publisher-to-none",
             })
             self.assertEqual(fixture.read_scratch_diagnostic(
                 scratch, build_root=root, expected_sha=sha, owner_uid=os.geteuid(),

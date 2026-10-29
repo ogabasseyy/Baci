@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import grp
 import pwd
 import re
 import shutil
@@ -33,6 +34,64 @@ FENCE = {"repository": "org/repo", "workflow": "release.yml", "ref": "refs/heads
          "sha": "a" * 40, "run_id": "1", "run_attempt": 1, "job_id": "2"}
 
 class BuilderSupervisorContractTests(unittest.TestCase):
+    def _valid_unit_properties(self):
+        source = Path("/run/input/source")
+        scratch = Path("/run/build/scratch")
+        uid, gid = os.getuid(), os.getgid()
+        values = {
+            "ControlGroup": "/system.slice/example.service",
+            "SupplementaryGroups": "", "Delegate": "no", "KillMode": "control-group",
+            "NoNewPrivileges": "yes", "PrivateNetwork": "yes", "ProtectSystem": "strict",
+            "ProtectHome": "yes", "PrivateTmp": "yes", "PrivateDevices": "yes",
+            "PrivateUsers": "yes", "ProtectControlGroups": "yes", "ProtectKernelTunables": "yes",
+            "ProtectKernelModules": "yes", "ProtectKernelLogs": "yes", "ProtectProc": "invisible",
+            "ProcSubset": "pid", "RestrictSUIDSGID": "yes", "RestrictRealtime": "yes",
+            "LockPersonality": "yes", "TasksMax": "128",
+            "MemoryMax": str(2 * 1024 * 1024 * 1024), "CPUQuotaPerSecUSec": "2s",
+            "RuntimeMaxUSec": "5min", "LimitFSIZE": str(1024 * 1024 * 1024), "UMask": "0077",
+            "ReadOnlyPaths": f"{source} {source.parent / 'pnpm-cache-seed'} {source.parent / unit_contract.RECEIPT_NAME}",
+            "ReadWritePaths": str(scratch),
+            "InaccessiblePaths": f"{sandbox.WORKER_RUNTIME} {sandbox.WORKER_RELEASES} {sandbox.WORKER_LOCKS}",
+            "RestrictAddressFamilies": "AF_UNIX AF_INET AF_INET6",
+            "User": pwd.getpwuid(uid).pw_name, "Group": grp.getgrgid(gid).gr_name,
+            "LimitNOFILE": "4096",
+        }
+        return values, source, scratch, uid, gid
+
+    def test_unit_contract_accepts_exact_systemd_duration_renderings(self):
+        values, source, scratch, uid, gid = self._valid_unit_properties()
+
+        def query(*args):
+            property_arg = next((arg for arg in args if arg.startswith("--property=")), None)
+            if property_arg is not None:
+                return values[property_arg.split("=", 1)[1]]
+            raise AssertionError(f"unexpected systemctl query: {args!r}")
+
+        unit_contract.validate_builder_unit(query, "example.service", values["ControlGroup"],
+                                            uid, gid, source, scratch)
+
+    def test_unit_contract_rejects_wider_or_unlimited_quota_and_runtime(self):
+        for property_name, unsafe_value in (
+            ("CPUQuotaPerSecUSec", "3s"),
+            ("CPUQuotaPerSecUSec", "infinity"),
+            ("RuntimeMaxUSec", "6min"),
+            ("RuntimeMaxUSec", "infinity"),
+        ):
+            with self.subTest(property_name=property_name, unsafe_value=unsafe_value):
+                values, source, scratch, uid, gid = self._valid_unit_properties()
+                values[property_name] = unsafe_value
+
+                def query(*args):
+                    property_arg = next((arg for arg in args if arg.startswith("--property=")), None)
+                    if property_arg is not None:
+                        return values[property_arg.split("=", 1)[1]]
+                    raise AssertionError(f"unexpected systemctl query: {args!r}")
+
+                with self.assertRaisesRegex(unit_contract.BuilderUnitContractRejected,
+                                            property_name):
+                    unit_contract.validate_builder_unit(
+                        query, "example.service", values["ControlGroup"], uid, gid, source, scratch)
+
     def test_systemd_address_family_rendering_is_order_independent_but_exact(self):
         # systemd renders this set in its own canonical order; order is not policy.
         self.assertTrue(unit_contract._address_families_match("AF_INET AF_INET6 AF_UNIX"))

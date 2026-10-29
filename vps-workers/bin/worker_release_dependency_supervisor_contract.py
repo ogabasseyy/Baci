@@ -35,7 +35,9 @@ def validate_builder_unit(query: Callable[..., str], unit: str, cgroup_path: str
         "ProcSubset": "pid", "RestrictSUIDSGID": "yes", "RestrictRealtime": "yes",
         "LockPersonality": "yes",
         "TasksMax": "128", "MemoryMax": str(2 * 1024 * 1024 * 1024),
-        "CPUQuotaPerSecUSec": "2000000", "RuntimeMaxUSec": str(MAX_BUILD_SECONDS * 1_000_000),
+        # `systemctl show --value` renders usec properties as human durations.
+        # Keep these exact so a wider quota or unbounded runtime fails closed.
+        "CPUQuotaPerSecUSec": "2s", "RuntimeMaxUSec": "5min",
         "LimitFSIZE": str(1024 * 1024 * 1024), "UMask": "0077",
         "ReadOnlyPaths": f"{source} {source.parent / 'pnpm-cache-seed'} {source.parent / RECEIPT_NAME}",
         "ReadWritePaths": str(scratch),

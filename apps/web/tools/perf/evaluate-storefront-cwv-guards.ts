@@ -61,7 +61,9 @@ export function evaluateHomepageHtmlGuard(
 
   const hiddenSections = extractHiddenSuspenseSections(html);
   const heroInsideHiddenSuspense = hiddenSections.some((s) =>
-    /(?:<source\b[^>]*srcset=|<picture\b|\bfetchpriority=["']high["'])/i.test(s)
+    /(?:<source\b[^>]*srcset=|\bfetchpriority=["']high["']|\bdata-ogabassey-mobile-hero=["'])/i.test(
+      s
+    )
   );
   if (budget.requireHeroOutsideHiddenSuspense && heroInsideHiddenSuspense) {
     failures.push('Hero <picture>/<source> found inside hidden Suspense slot');

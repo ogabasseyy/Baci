@@ -97,7 +97,7 @@ export const STOREFRONT_CWV_GUARD_BUDGETS: StorefrontCwvGuardBudgets = {
     maxTotalBrotliBytes: 260_000,
   },
   css: {
-    forbidListingFullStyleLoader: false,
+    forbidListingFullStyleLoader: true,
     maxRenderBlockingStylesheets: {
       home: 2,
       category: 2,
@@ -106,6 +106,6 @@ export const STOREFRONT_CWV_GUARD_BUDGETS: StorefrontCwvGuardBudgets = {
       blogPost: 3,
     },
     requireAuthorityHubLcpCopyLock: false,
-    requireFooterLockInCriticalCss: false,
+    requireFooterLockInCriticalCss: true,
   },
 };

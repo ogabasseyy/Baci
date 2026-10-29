@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import type Colors from '@/constants/Colors';
@@ -20,6 +21,7 @@ export interface WalletFundPhoneSubmitResult {
 
 interface WalletFundPhonePromptProps {
   colors: WalletColors;
+  insideBottomSheet?: boolean;
   onSubmit: (phone: string) => Promise<WalletFundPhoneSubmitResult>;
 }
 
@@ -29,8 +31,10 @@ const SAVE_FAILED = 'Could not save your phone number. Please try again.';
 
 export function WalletFundPhonePrompt({
   colors,
+  insideBottomSheet = false,
   onSubmit,
 }: WalletFundPhonePromptProps) {
+  const WalletInput = insideBottomSheet ? BottomSheetTextInput : TextInput;
   const [phone, setPhone] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -75,7 +79,7 @@ export function WalletFundPhonePrompt({
       <Text style={[styles.label, { color: colors.textSecondary }]}>
         PHONE NUMBER
       </Text>
-      <BottomSheetTextInput
+      <WalletInput
         accessibilityLabel="Phone number"
         style={[
           styles.input,
@@ -88,9 +92,7 @@ export function WalletFundPhonePrompt({
         value={phone}
         onChangeText={(value) => {
           setPhone(value);
-          if (error) {
-            setError(null);
-          }
+          if (error) setError(null);
         }}
         editable={!isSaving}
         keyboardType="phone-pad"

@@ -22,8 +22,8 @@ import { quarantineAndAck } from './quarantine-and-ack';
 
 /**
  * Provider delivery contract (17 Sep 2026, quarantine slice 18 Sep 2026):
- * - At-least-once: up to 10 automatic retries, plus manual resends.
- *   The inbox collapses redeliveries on `event_id`.
+ * - At-least-once: up to 10 automatic retries. Do not assume a monthly
+ *   interest delivery can be manually resent. The inbox deduplicates events.
  * - 2xx only after the event is durably recorded. A 5xx asks the
  *   provider to retry; anything else ends delivery.
  * - Signature is hex(HMAC-SHA512(secret, raw_body)) in
@@ -33,11 +33,10 @@ import { quarantineAndAck } from './quarantine-and-ack';
  * - No secret configured -> 503 (fail closed; nothing is accepted).
  * - Bad/missing signature -> 200 without processing (docs behavior;
  *   forged traffic must not consume the 10 retries).
- * - Authentic but unparseable/unknown/conflicting event, or a delivery
- *   signed by a key family unauthorized for legacy handling -> quarantine
- *   (durable receipt of a non-retryable observation) -> 200. Retries
- *   cannot fix these, so they must not burn the 10 attempts; nothing
- *   quarantined ever touches financial state.
+ * - Authentic unknown or unparseable deliveries need replayable raw capture
+ *   before 200; if capture is unavailable, return 503 for redelivery. Other
+ *   conflicting or unauthorized-family events go to quarantine; nothing
+ *   quarantined touches financial state.
  * - Completed processing -> 200.
  * - Inbox/quarantine write fails -> 503 so the provider retries.
  */

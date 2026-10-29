@@ -277,39 +277,6 @@ describe('POST event intake', () => {
     });
   });
 
-  it('quarantines authentic unknown events and acks without processing', async () => {
-    vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    const { query, upsert } = chainable({
-      data: [{ body_digest: 'synthetic-digest' }],
-      error: null,
-    });
-    const from = vi.fn(() => query);
-    mocks.createServiceClient.mockReturnValue({ from });
-    const rawBody = JSON.stringify({
-      ...inflowEvent,
-      eventType: 'wallet.transfer.success',
-    });
-
-    const response = await POST(createRequest(rawBody, signPayload(rawBody)));
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      received: true,
-      quarantined: true,
-    });
-    expect(from).toHaveBeenCalledWith('piggyvest_event_quarantine');
-    expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        reason: 'unknown-event',
-        event_type: 'wallet.transfer.success',
-      }),
-      { onConflict: 'body_digest', ignoreDuplicates: true }
-    );
-    const persisted = upsert.mock.calls[0]?.[0];
-    expect(JSON.stringify(persisted)).not.toContain('9000000001');
-    expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
-  });
-
   it.each([
     { amount: 1 },
     { transaction_id: 'provider-txn-synthetic-002' },
@@ -334,29 +301,6 @@ describe('POST event intake', () => {
       quarantined: true,
     });
     expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
-  });
-
-  it('returns 503 when the quarantine write fails so the provider redelivers', async () => {
-    vi.stubEnv('PVB_SECRET_KEY', SECRET);
-    mocks.createServiceClient.mockReturnValue({
-      from: vi.fn(
-        () =>
-          chainable({ data: null, error: { message: 'synthetic db outage' } })
-            .query
-      ),
-    });
-    const rawBody = JSON.stringify({
-      ...inflowEvent,
-      eventType: 'wallet.transfer.success',
-    });
-
-    const response = await POST(createRequest(rawBody, signPayload(rawBody)));
-
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
-      error: 'Event intake unavailable',
-      code: 'PIGGYVEST_INBOX_ERROR',
-    });
   });
 
   it('processes duplicate deliveries so crashed credits still land', async () => {

@@ -14,6 +14,7 @@ import { WalletSetupProfileGate } from './WalletSetupProfileGate';
 interface Props {
   colors: (typeof Colors)['light'];
   merchantId: string;
+  insideBottomSheet?: boolean;
   needsPhone: boolean;
   onSubmitPhone: (phone: string) => Promise<WalletFundPhoneSubmitResult>;
   setup?: ReturnType<typeof usePiggyvestWalletSetup>;
@@ -23,6 +24,7 @@ interface Props {
 export function PiggyvestWalletSetupPanel({
   colors,
   merchantId,
+  insideBottomSheet = false,
   needsPhone,
   onSubmitPhone,
   setup,
@@ -55,7 +57,11 @@ export function PiggyvestWalletSetupPanel({
         </Pressable>
       </View>
       {needsPhone ? (
-        <WalletFundPhonePrompt colors={colors} onSubmit={onSubmitPhone} />
+        <WalletFundPhonePrompt
+          colors={colors}
+          insideBottomSheet={insideBottomSheet}
+          onSubmit={onSubmitPhone}
+        />
       ) : checking ? (
         <View
           accessible
@@ -107,10 +113,15 @@ export function PiggyvestWalletSetupPanel({
           </Pressable>
         </View>
       ) : setup?.state === 'not_started' ? (
-        <WalletSetupProfileGate colors={colors} merchantId={merchantId}>
+        <WalletSetupProfileGate
+          colors={colors}
+          merchantId={merchantId}
+          insideBottomSheet={insideBottomSheet}
+        >
           <PiggyvestWalletSetupForm
             colors={colors}
             merchantId={merchantId}
+            insideBottomSheet={insideBottomSheet}
             onSubmit={setup.submit}
           />
         </WalletSetupProfileGate>

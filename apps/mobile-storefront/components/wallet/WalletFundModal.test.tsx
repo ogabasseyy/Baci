@@ -43,6 +43,7 @@ describe('WalletFundModal', () => {
         colors={Colors.dark}
         creditWatch={creditWatch}
         embedded={embedded}
+        hostedByBottomSheet={embedded}
         showFundPanel
       />
     );
@@ -70,6 +71,22 @@ describe('WalletFundModal', () => {
       return style?.width === 36 && style?.height === 4;
     });
     expect(innerHandles).toHaveLength(0);
+  });
+
+  it('renders the phone prompt safely when embedded without a parent sheet', () => {
+    const props = createWalletContentProps();
+    render(
+      <WalletFundModal
+        {...props}
+        creditWatch={creditWatch}
+        embedded
+        fundingAccount={null}
+        needsPhone
+        showFundPanel
+      />
+    );
+    expect(screen.getByLabelText('Phone number')).toBeOnTheScreen();
+    expect(screen.queryByTestId('bottom-sheet-text-input')).toBeNull();
   });
 
   it('shows the primary setup only while the server confirms the capability', () => {

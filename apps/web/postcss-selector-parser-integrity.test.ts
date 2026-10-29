@@ -125,26 +125,30 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
     const entry = join(root, packageMain(root));
     const script = [
       `const parser = require(${JSON.stringify(entry)})`,
-      'const times = []',
-      `for (const n of [${SMALL_FLAT_CLASSES}, ${LARGE_FLAT_CLASSES}]) {`,
-      `  const flat = '.a' + '.b'.repeat(n) + '#c'`,
-      '  let best = Infinity',
-      '  for (let i = 0; i < 3; i++) {',
-      '    const start = performance.now()',
-      '    const out = parser().processSync(flat)',
-      '    if (out !== flat) process.exit(2)',
-      '    best = Math.min(best, performance.now() - start)',
+      `const sizes = [${SMALL_FLAT_CLASSES}, ${LARGE_FLAT_CLASSES}]`,
+      `const inputs = new Map(sizes.map(n => [n, '.a' + '.b'.repeat(n) + '#c']))`,
+      'parser().processSync(inputs.get(sizes[0]))',
+      'const ratios = []',
+      'for (let round = 0; round < 5; round++) {',
+      '  const times = new Map()',
+      '  const order = round % 2 === 0 ? sizes : [...sizes].reverse()',
+      '  for (const n of order) {',
+      '    const start = process.cpuUsage()',
+      '    const out = parser().processSync(inputs.get(n))',
+      '    if (out !== inputs.get(n)) process.exit(2)',
+      '    const cpu = process.cpuUsage(start)',
+      '    times.set(n, cpu.user + cpu.system)',
       '  }',
-      '  times.push(best)',
+      '  ratios.push(times.get(sizes[1]) / Math.max(times.get(sizes[0]), 1))',
       '}',
-      'console.log(JSON.stringify(times))',
+      'ratios.sort((a, b) => a - b)',
+      'console.log(JSON.stringify(ratios))',
     ].join('\n');
     // Scaling gate, not an absolute cutoff: doubling the input must
     // roughly double the time (linear), not quadruple it (quadratic).
-    // Best-of-3 per size shrugs off GC pauses; the ratio is
-    // runner-speed independent, so slow CI cannot flake it. Measured:
-    // patched ~2.2x, pristine ~4x at these sizes. The 60s child ceiling
-    // is an anti-hang backstop only (patched finishes in ~1s).
+    // Paired CPU measurements alternate order so unrelated work does not
+    // inflate wall-clock samples. The median retains the strict <3 bound;
+    // the 60s wall-clock child ceiling remains an anti-hang backstop.
     const result = spawnSync(process.execPath, ['-e', script], {
       timeout: 60000,
     });
@@ -153,18 +157,11 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
       signal: result.signal,
       status: result.status,
     }).toEqual({ error: undefined, signal: null, status: 0 });
-    const [small, large] = JSON.parse(result.stdout.toString()) as [
-      number,
-      number,
-    ];
-    // Sub-millisecond monotonic clock (no 1ms Date.now buckets, no
-    // wall-clock adjustments); the 1µs floor is a div-by-zero guard
-    // only — real small runs are ms-scale, so it never binds. Raw
-    // timings ride on the failure message for loaded-runner triage.
-    const ratio = large / Math.max(small, 1e-3);
+    const ratios = JSON.parse(result.stdout.toString()) as number[];
+    const ratio = ratios[Math.floor(ratios.length / 2)];
     expect(
       ratio,
-      `scaling ratio ${ratio} exceeds 3 (small=${small}ms large=${large}ms)`
+      `median CPU scaling ratio ${ratio} exceeds 3 (samples=${ratios.join(', ')})`
     ).toBeLessThan(3);
   }, 70_000);
 });

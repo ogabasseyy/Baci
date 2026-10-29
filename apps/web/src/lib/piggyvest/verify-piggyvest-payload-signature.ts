@@ -18,7 +18,7 @@ export function verifyPiggyvestPayloadSignature({
   signature: string | null;
   secret: string | undefined;
 }): boolean {
-  if (!secret?.trim() || !signature || !/^[a-f0-9]{128}$/.test(signature)) {
+  if (!secret?.trim() || !signature || !/^[a-f0-9]{128}$/i.test(signature)) {
     return false;
   }
 

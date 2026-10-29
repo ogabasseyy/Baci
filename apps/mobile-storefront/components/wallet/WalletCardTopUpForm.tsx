@@ -5,6 +5,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import type Colors from '@/constants/Colors';
@@ -18,6 +19,7 @@ type WalletColors = (typeof Colors)['light'];
 
 interface WalletCardTopUpFormProps {
   colors: WalletColors;
+  insideBottomSheet?: boolean;
   fundAmount: string;
   isFundPending: boolean;
   onChangeFundAmount: (value: string) => void;
@@ -26,11 +28,13 @@ interface WalletCardTopUpFormProps {
 
 export function WalletCardTopUpForm({
   colors,
+  insideBottomSheet = false,
   fundAmount,
   isFundPending,
   onChangeFundAmount,
   onConfirmFund,
 }: WalletCardTopUpFormProps) {
+  const WalletInput = insideBottomSheet ? BottomSheetTextInput : TextInput;
   const previewBlocked = isHostedStagingWalletTopUpBlocked();
   const amount = Number(fundAmount);
   const disabled =
@@ -66,7 +70,7 @@ export function WalletCardTopUpForm({
         ]}
       >
         <Text style={[styles.currency, { color: colors.text }]}>₦</Text>
-        <BottomSheetTextInput
+        <WalletInput
           accessibilityLabel="Wallet top-up amount"
           value={fundAmount
             .replace(/[^\d]/g, '')

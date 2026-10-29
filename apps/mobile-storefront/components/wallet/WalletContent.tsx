@@ -231,7 +231,12 @@ export function WalletContent(props: WalletContentProps) {
           walletBalance={spendableBalance}
           usesWalletBankTransfer={!!props.primarySetup}
         />
-        <WalletFundModal {...props} embedded creditWatch={creditWatch} />
+        <WalletFundModal
+          {...props}
+          embedded
+          hostedByBottomSheet
+          creditWatch={creditWatch}
+        />
       </DraggableModalSheet>
       <WalletSavingsDeviceSwapModal
         colors={colors}

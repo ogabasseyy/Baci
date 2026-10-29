@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { primaryBankInboxFixture } from '@/lib/piggyvest/primary-wallet-bank-inbox.test-fixture';
 
 type SecretUnionModule = typeof import('@/lib/piggyvest/webhook-secret-union');
 
@@ -140,11 +141,28 @@ it('fails closed when a legacy-only key signs an explicit interest payout', asyn
   expect(mocks.processEvent).not.toHaveBeenCalled();
 });
 
+it.each([
+  ['{"eventType":"future-interest-event"}', 'legacy'],
+  ['{ malformed', 'legacy'],
+  ['{"eventType":"future-interest-event"}', 'bank'],
+  ['{ malformed', 'custody'],
+  ['{"eventType":"bank-transfer.inflow.success"}', 'bank'],
+])('requests redelivery of unknown %s signed by %s instead of digest-only acknowledgement', async (body, family) => {
+  mocks.families = [family];
+  const response = await POST(signedRequest(body));
+
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({
+    received: false,
+    code: 'PIGGYVEST_INTEREST_RECONCILIATION_PENDING',
+  });
+  expect(mocks.capture).not.toHaveBeenCalled();
+  expect(mocks.processEvent).not.toHaveBeenCalled();
+});
+
 it('keeps shared-family bank events out of the interest capture path', async () => {
   mocks.families = ['interest', 'bank'];
-  const bankBody = JSON.stringify({
-    eventType: 'bank-transfer.inflow.success',
-  });
+  const bankBody = JSON.stringify(primaryBankInboxFixture.event);
   await POST(signedRequest(bankBody));
 
   expect(mocks.capture).not.toHaveBeenCalled();

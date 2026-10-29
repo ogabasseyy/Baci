@@ -30,7 +30,11 @@ function classifyRawWebhook(rawBody: Uint8Array): RawWebhookClassification {
   const eventType = 'eventType' in decoded ? decoded.eventType : undefined;
   if (eventType === 'interest-payout.success')
     return { kind: 'explicit-interest' };
-  if (typeof eventType === 'string' && knownEventTypes.has(eventType))
+  if (
+    typeof eventType === 'string' &&
+    knownEventTypes.has(eventType) &&
+    piggyvestWebhookEventSchema.safeParse(decoded).success
+  )
     return { kind: 'known-other' };
   return { kind: 'unknown' };
 }
@@ -71,7 +75,12 @@ export async function captureInterestRawDelivery(input: {
     // A provider may use one key for both families, but it must be explicitly
     // configured for interest capture too. The legacy inbox stores redacted
     // fields, not replayable signed bytes; falling through would lose them.
-    return classification.kind === 'explicit-interest'
+    // Unknown signed envelopes could be a changed interest payload, even
+    // when a key is currently configured for another family. Request
+    // redelivery and alert rather than falsely acknowledge them;
+    // provider retries are finite and are not a substitute for durable capture.
+    return classification.kind === 'explicit-interest' ||
+      classification.kind === 'unknown'
       ? retryableCaptureFailure()
       : null;
   }

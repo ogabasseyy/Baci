@@ -1,13 +1,20 @@
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { BRAND, type default as Colors, palette } from '@/constants/Colors';
 import { PiggyvestPrimaryWalletSchemas } from '@/schemas/piggyvest-primary-wallet';
 
 interface Props {
   colors: (typeof Colors)['light'];
   merchantId: string;
+  insideBottomSheet?: boolean;
   onSubmit: (input: {
     merchantId: string;
     bvn: string;
@@ -18,8 +25,10 @@ interface Props {
 export function PiggyvestWalletSetupForm({
   colors,
   merchantId,
+  insideBottomSheet = false,
   onSubmit,
 }: Props) {
+  const WalletInput = insideBottomSheet ? BottomSheetTextInput : TextInput;
   const [bvn, setBvn] = useState('');
   const [showBvn, setShowBvn] = useState(false);
   const [consent, setConsent] = useState(false);
@@ -92,7 +101,7 @@ export function PiggyvestWalletSetupForm({
           backgroundColor: colors.muted,
         }}
       >
-        <BottomSheetTextInput
+        <WalletInput
           accessibilityLabel="BVN"
           value={bvn}
           onChangeText={(value) => setBvn(value.replace(/\D/g, ''))}

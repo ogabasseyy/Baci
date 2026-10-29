@@ -31,7 +31,13 @@ function renderPrompt(
     async () => ({ success: true })
   )
 ) {
-  render(<WalletFundPhonePrompt colors={Colors.light} onSubmit={onSubmit} />);
+  render(
+    <WalletFundPhonePrompt
+      colors={Colors.light}
+      insideBottomSheet
+      onSubmit={onSubmit}
+    />
+  );
   return { onSubmit };
 }
 

@@ -1,4 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
+import { primaryBankInboxFixture } from '@/lib/piggyvest/primary-wallet-bank-inbox.test-fixture';
+import { deferredEvent } from '@/lib/piggyvest/webhook-processor.test-fixtures';
 import type { PiggyvestWebhookKeyFamily } from '@/lib/piggyvest/webhook-secret-union';
 
 const mocks = vi.hoisted(() => ({ inbox: vi.fn() }));
@@ -21,6 +23,16 @@ function input(body: string, families: readonly PiggyvestWebhookKeyFamily[]) {
   } as const;
 }
 
+const bankBody = JSON.stringify(primaryBankInboxFixture.event);
+const legacyBody = JSON.stringify(deferredEvent);
+const custodyBody = JSON.stringify({
+  eventId: 'synthetic-custody',
+  eventType: 'wallet-transfer.outflow.success',
+  eventCategory: 'wallet-transfer',
+  customer_id: 'synthetic-customer',
+  eventData: {},
+});
+
 it.each<[string, string, readonly PiggyvestWebhookKeyFamily[]]>([
   [
     'shared-family unknown shape',
@@ -41,41 +53,25 @@ it.each<[string, string, readonly PiggyvestWebhookKeyFamily[]]>([
 });
 
 it.each<[string, string, readonly PiggyvestWebhookKeyFamily[]]>([
-  [
-    'bank event with bank authority',
-    '{"eventType":"bank-transfer.inflow.success"}',
-    ['interest', 'bank'],
-  ],
-  [
-    'bank event with legacy authority',
-    '{"eventType":"bank-transfer.inflow.success"}',
-    ['interest', 'legacy'],
-  ],
+  ['bank event with bank authority', bankBody, ['interest', 'bank']],
+  ['bank event with legacy authority', bankBody, ['interest', 'legacy']],
   [
     'custody event with custody authority',
-    '{"eventType":"wallet-transfer.outflow.success"}',
+    custodyBody,
     ['interest', 'custody'],
   ],
   [
     'known legacy event with legacy authority',
-    '{"eventType":"create-wallet.success"}',
+    legacyBody,
     ['interest', 'legacy'],
   ],
-  [
-    'known bank event with interest authority only',
-    '{"eventType":"bank-transfer.inflow.success"}',
-    ['interest'],
-  ],
+  ['known bank event with interest authority only', bankBody, ['interest']],
   [
     'known custody event with interest authority only',
-    '{"eventType":"wallet-transfer.outflow.success"}',
+    custodyBody,
     ['interest'],
   ],
-  [
-    'known legacy event with interest authority only',
-    '{"eventType":"create-wallet.success"}',
-    ['interest'],
-  ],
+  ['known legacy event with interest authority only', legacyBody, ['interest']],
 ])('leaves %s on its existing family route', async (_label, body, families) => {
   expect(await captureInterestRawDelivery(input(body, families))).toBeNull();
   expect(mocks.inbox).not.toHaveBeenCalled();
@@ -95,6 +91,20 @@ it('captures explicit interest payouts before validating their envelope', async 
   expect(response?.status).toBe(200);
   expect(mocks.inbox).toHaveBeenCalledWith({
     rawBody,
+    signature: 'synthetic-hmac',
+  });
+});
+
+it('captures a malformed known event when the interest key is shared', async () => {
+  mocks.inbox.mockResolvedValue('quarantined');
+  const body =
+    '{"eventType":"bank-transfer.inflow.success","private":"opaque"}';
+  const response = await captureInterestRawDelivery(
+    input(body, ['interest', 'bank'])
+  );
+  expect(response?.status).toBe(200);
+  expect(mocks.inbox).toHaveBeenCalledWith({
+    rawBody: Buffer.from(body),
     signature: 'synthetic-hmac',
   });
 });
@@ -134,12 +144,20 @@ it('does not acknowledge an unknown payload under a shared key when raw capture 
   });
 });
 
-it('does not capture any bytes without verified interest-family authority', async () => {
-  expect(
-    await captureInterestRawDelivery(
-      input('{"eventType":"unknown"}', ['legacy'])
-    )
-  ).toBeNull();
+it.each<[string, readonly PiggyvestWebhookKeyFamily[]]>([
+  ['{"eventType":"unknown"}', ['legacy']],
+  ['{ malformed', ['legacy']],
+  ['{"eventType":"unknown"}', ['bank']],
+  ['{ malformed', ['custody']],
+  ['{"eventType":"bank-transfer.inflow.success"}', ['bank']],
+  ['{"eventType":"create-wallet.success"}', ['legacy']],
+])('does not acknowledge unknown authenticated bytes without replayable capture: %s (%s)', async (body, families) => {
+  const response = await captureInterestRawDelivery(input(body, families));
+  expect(response?.status).toBe(503);
+  expect(await response?.json()).toEqual({
+    received: false,
+    code: 'PIGGYVEST_INTEREST_RECONCILIATION_PENDING',
+  });
   expect(mocks.inbox).not.toHaveBeenCalled();
 });
 

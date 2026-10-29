@@ -1,4 +1,5 @@
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DraggableModalSheet } from '@/components/ui/DraggableModalSheet';
 import { BRAND } from '@/constants/Colors';
@@ -30,7 +31,11 @@ type WalletFundModalProps = Pick<
   | 'onSubmitPhone'
   | 'showFundPanel'
   | 'primarySetup'
-> & { creditWatch: WalletCreditWatch; embedded?: boolean };
+> & {
+  creditWatch: WalletCreditWatch;
+  embedded?: boolean;
+  hostedByBottomSheet?: boolean;
+};
 
 export function WalletFundModal({
   canCreateFundingAccount,
@@ -52,8 +57,13 @@ export function WalletFundModal({
   showFundPanel,
   primarySetup,
   embedded = false,
+  hostedByBottomSheet = false,
 }: WalletFundModalProps) {
   const insets = useSafeAreaInsets();
+  const insideBottomSheet = !embedded || hostedByBottomSheet;
+  const SheetScrollView = insideBottomSheet
+    ? BottomSheetScrollView
+    : ScrollView;
   const primaryCapability = usePiggyvestPrimaryCapability(merchantId);
   function closePanel() {
     primarySetup?.acknowledgeReady();
@@ -79,7 +89,7 @@ export function WalletFundModal({
       onClose={closePanel}
     >
       {showFundPanel ? (
-        <BottomSheetScrollView
+        <SheetScrollView
           contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
@@ -89,6 +99,7 @@ export function WalletFundModal({
             <PiggyvestWalletSetupPanel
               colors={colors}
               merchantId={merchantId}
+              insideBottomSheet={insideBottomSheet}
               needsPhone={needsPhone}
               onSubmitPhone={onSubmitPhone}
               setup={primarySetup}
@@ -98,6 +109,7 @@ export function WalletFundModal({
             <WalletFundPanel
               canCreateFundingAccount={canCreateFundingAccount}
               colors={colors}
+              insideBottomSheet={insideBottomSheet}
               createFundingAccountUnavailableMessage={
                 createFundingAccountUnavailableMessage
               }
@@ -116,7 +128,7 @@ export function WalletFundModal({
               celebrateAccountReady={primarySetup?.justCreated}
             />
           )}
-        </BottomSheetScrollView>
+        </SheetScrollView>
       ) : null}
     </DraggableModalSheet>
   );

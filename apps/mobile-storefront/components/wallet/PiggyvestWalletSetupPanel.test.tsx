@@ -1,7 +1,12 @@
+import BottomSheet from '@gorhom/bottom-sheet';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { usePiggyvestWalletSetup } from '@/hooks/use-piggyvest-wallet-setup';
 import { PiggyvestWalletSetupPanel } from './PiggyvestWalletSetupPanel';
+
+jest.mock('@gorhom/bottom-sheet', () =>
+  require('./wallet-bottom-sheet.test-utils')
+);
 
 let mockPhone: string | null = '08012345678';
 jest.mock('@/stores/auth-store', () => ({
@@ -69,9 +74,22 @@ it('does not allow account creation before the authoritative initial check settl
 it('shows account creation only after setup is confirmed not started', () => {
   render(<PiggyvestWalletSetupPanel {...props} setup={setup('not_started')} />);
   expect(screen.getByLabelText('BVN')).toBeOnTheScreen();
+  expect(screen.queryByTestId('bottom-sheet-text-input')).toBeNull();
   expect(
     screen.getByRole('button', { name: 'Create account number' })
   ).toBeOnTheScreen();
+});
+it('uses the sheet-aware BVN input when its caller confirms sheet ownership', () => {
+  render(
+    <BottomSheet>
+      <PiggyvestWalletSetupPanel
+        {...props}
+        insideBottomSheet
+        setup={setup('not_started')}
+      />
+    </BottomSheet>
+  );
+  expect(screen.getByTestId('bottom-sheet-text-input')).toBeOnTheScreen();
 });
 it('lets a processing customer leave and retry without creating another account', () => {
   mockPhone = null;

@@ -43,20 +43,22 @@ describe('smol-toml integrity (GHSA-r4xh-jqrq-34v2)', () => {
     const script = [
       `const {parse} = require(${JSON.stringify(entry)})`,
       'const ratios = []',
+      'const documents = new Map()',
+      `for (const n of [${SMALL_LINES}, ${LARGE_LINES}]) {`,
+      `  let doc = ''`,
+      `  for (let i = 0; i < n; i++) doc += 'k' + i + ' = 1\\n'`,
+      '  documents.set(n, doc)',
+      '}',
+      `parse(documents.get(${SMALL_LINES}))`,
       'for (let round = 0; round < 5; round++) {',
       `  const sizes = round % 2 === 0 ? [${SMALL_LINES}, ${LARGE_LINES}] : [${LARGE_LINES}, ${SMALL_LINES}]`,
       '  const times = new Map()',
       '  for (const n of sizes) {',
-      `    let doc = ''`,
-      `    for (let i = 0; i < n; i++) doc += 'k' + i + ' = 1\\n'`,
-      '    let best = Infinity',
-      '    for (let i = 0; i < 3; i++) {',
-      '      const start = performance.now()',
-      '      const out = parse(doc)',
-      '      if (out.k0 !== 1) process.exit(2)',
-      '      best = Math.min(best, performance.now() - start)',
-      '    }',
-      '    times.set(n, best)',
+      '    const start = process.cpuUsage()',
+      '    const out = parse(documents.get(n))',
+      '    if (out.k0 !== 1) process.exit(2)',
+      '    const cpu = process.cpuUsage(start)',
+      '    times.set(n, cpu.user + cpu.system)',
       '  }',
       `  ratios.push(times.get(${LARGE_LINES}) / Math.max(times.get(${SMALL_LINES}), 1e-3))`,
       '}',
@@ -65,10 +67,10 @@ describe('smol-toml integrity (GHSA-r4xh-jqrq-34v2)', () => {
     ].join('\n');
     // Scaling gate, not an absolute cutoff: doubling the input must
     // roughly double the time (linear), not quadruple it (quadratic).
-    // Best-of-3 paired measurements alternate order to reduce sensitivity
-    // to transient load/GC pauses. The median ratio preserves the same
-    // strict bound while rejecting one-off timing spikes. The 60s child
-    // ceiling remains an anti-hang backstop for vulnerable builds.
+    // CPU time excludes pauses while other jobs run. Measurements alternate
+    // size order, and the median of five paired ratios keeps
+    // the strict bound while reducing sensitivity to GC and scheduling.
+    // The 60s wall-clock child ceiling remains an anti-hang backstop.
     const result = spawnSync(process.execPath, ['-e', script], {
       timeout: 60000,
     });

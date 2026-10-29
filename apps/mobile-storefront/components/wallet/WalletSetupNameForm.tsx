@@ -1,11 +1,12 @@
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { BRAND, type default as Colors, palette } from '@/constants/Colors';
 import { WalletProfileNamesSchema } from '@/schemas/wallet-profile-names';
 
 type Props = {
   colors: (typeof Colors)['light'];
+  insideBottomSheet?: boolean;
   firstName?: string;
   lastName?: string;
   onSave: (names: {
@@ -16,10 +17,12 @@ type Props = {
 
 export function WalletSetupNameForm({
   colors,
+  insideBottomSheet = false,
   firstName = '',
   lastName = '',
   onSave,
 }: Props) {
+  const WalletInput = insideBottomSheet ? BottomSheetTextInput : TextInput;
   const [first, setFirst] = useState(firstName);
   const [last, setLast] = useState(lastName);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +71,7 @@ export function WalletSetupNameForm({
         Add your name before we verify your identity and create your account
         number.
       </Text>
-      <BottomSheetTextInput
+      <WalletInput
         accessibilityLabel="First name"
         placeholder="First name"
         placeholderTextColor={colors.placeholder}
@@ -80,7 +83,7 @@ export function WalletSetupNameForm({
         editable={!busy}
         style={inputStyle}
       />
-      <BottomSheetTextInput
+      <WalletInput
         accessibilityLabel="Last name"
         placeholder="Last name"
         placeholderTextColor={colors.placeholder}

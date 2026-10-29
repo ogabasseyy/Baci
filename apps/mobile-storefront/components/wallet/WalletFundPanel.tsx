@@ -31,6 +31,7 @@ const CARD_TOGGLE_LABEL = 'Fund with card instead';
 interface WalletFundPanelProps {
   canCreateFundingAccount: boolean;
   colors: WalletColors;
+  insideBottomSheet?: boolean;
   createFundingAccountUnavailableMessage?: string;
   creditWatch: WalletCreditWatch;
   fundAmount: string;
@@ -52,6 +53,7 @@ interface WalletFundPanelProps {
 export function WalletFundPanel({
   canCreateFundingAccount,
   colors,
+  insideBottomSheet = false,
   createFundingAccountUnavailableMessage,
   creditWatch,
   fundAmount,
@@ -204,7 +206,11 @@ export function WalletFundPanel({
       ) : needsPhone ? (
         // No account yet and the only blocker is a missing phone — collect it
         // here (takes priority over the spinner/message branches below).
-        <WalletFundPhonePrompt colors={colors} onSubmit={onSubmitPhone} />
+        <WalletFundPhonePrompt
+          colors={colors}
+          insideBottomSheet={insideBottomSheet}
+          onSubmit={onSubmitPhone}
+        />
       ) : autoCreateFailed ? (
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
           {SETUP_FAILED}
@@ -230,6 +236,7 @@ export function WalletFundPanel({
       {cardEntryVisible ? (
         <WalletCardTopUpForm
           colors={colors}
+          insideBottomSheet={insideBottomSheet}
           fundAmount={fundAmount}
           isFundPending={isFundPending}
           onChangeFundAmount={onChangeFundAmount}

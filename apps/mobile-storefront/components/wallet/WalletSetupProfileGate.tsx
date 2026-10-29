@@ -8,10 +8,12 @@ import { WalletSetupNameForm } from './WalletSetupNameForm';
 export function WalletSetupProfileGate({
   colors,
   merchantId,
+  insideBottomSheet = false,
   children,
 }: {
   colors: (typeof Colors)['light'];
   merchantId: string;
+  insideBottomSheet?: boolean;
   children: ReactNode;
 }) {
   const customer = useAuthStore((state) => state.customer);
@@ -26,6 +28,7 @@ export function WalletSetupProfileGate({
       <WalletSetupNameForm
         key={customer.id}
         colors={colors}
+        insideBottomSheet={insideBottomSheet}
         firstName={customer.first_name}
         lastName={customer.last_name}
         onSave={updateProfile}
@@ -36,6 +39,7 @@ export function WalletSetupProfileGate({
       <WalletFundPhonePrompt
         key={customer.id}
         colors={colors}
+        insideBottomSheet={insideBottomSheet}
         onSubmit={(phone) => updateProfile({ phone })}
       />
     );

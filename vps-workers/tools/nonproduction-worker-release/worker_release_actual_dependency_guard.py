@@ -11,13 +11,11 @@ import time
 from pathlib import Path
 from worker_release_dependency_diagnostics import format_policy_line_shapes
 from worker_release_dependency_evidence_shape import safe_errno_category, validate_os_error
-
-MAX_TREE_BYTES = 12 * 1024 * 1024 * 1024
-MAX_TREE_ENTRIES = 500_000
-MIN_FREE_BYTES = 2 * 1024 * 1024 * 1024
-MIN_FREE_INODES = 20_000
-SCAN_RETRIES = 3
-SCAN_RETRY_SECONDS = 0.1
+from worker_release_actual_dependency_resources import (
+    MAX_TREE_ENTRIES,
+    ResourceEntryLimitExceeded,
+    enforce_resource_limits,
+)
 POLL_SECONDS = 1.0
 STAGES = frozenset({
     "checkout-identity", "runtime-pin", "pnpm-pin", "resource-preflight", "source-archive",
@@ -29,31 +27,34 @@ STAGES = frozenset({
 })
 
 
-class _TransientEntryRace(Exception):
-    pass
-
-
 class MonitorFailure(RuntimeError):
     def __init__(self, stage: str, category: str, exit_code: int | None = None,
                  evidence: dict[str, object] | None = None,
-                 os_error: dict[str, object] | None = None):
+                 os_error: dict[str, object] | None = None,
+                 entries_seen: int | None = None, entry_limit: int | None = None):
         self.stage = stage if stage in STAGES else "experiment"
         self.category = category
         self.exit_code = exit_code
         self.evidence = evidence
         self.os_error = os_error
+        self.entries_seen = entries_seen
+        self.entry_limit = entry_limit
         super().__init__(self.stage)
 
 
 def failure_diagnostic(stage: str, error: BaseException) -> str:
     """Render fixed diagnostics only; never include exception or command text."""
+    entry_metadata = None
     if isinstance(error, MonitorFailure):
         stage, category, exit_code = error.stage, error.category, error.exit_code
         os_error = error.os_error
+        entry_metadata = error.entries_seen, error.entry_limit
     else:
         stage = stage if stage in STAGES else "experiment"
         exit_code = None
         os_error = None
+        if isinstance(error, ResourceEntryLimitExceeded):
+            entry_metadata = error.entries_seen, error.limit
         if isinstance(error, subprocess.CalledProcessError):
             category, exit_code = "subprocess-exit", error.returncode
         elif isinstance(error, subprocess.TimeoutExpired):
@@ -104,6 +105,11 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
             suffix += f" substage={os_error['substage']}"
         except (TypeError, ValueError):
             pass
+    if entry_metadata is not None:
+        entries_seen, entry_limit = entry_metadata
+        if (type(entries_seen) is int and 1 <= entries_seen <= MAX_TREE_ENTRIES + 1
+                and type(entry_limit) is int and 1 <= entry_limit <= MAX_TREE_ENTRIES):
+            suffix += f" entries_seen={entries_seen} entry_limit={entry_limit}"
     return f"experiment failure stage={stage} category={category}{suffix}"
 
 
@@ -141,75 +147,6 @@ def web_deploy_command(node: str, pnpm: str, store: Path, target: Path, registry
     return (node, pnpm, "--registry", registry, "--package-import-method=copy",
             "--filter", "@baci/web", "--prod", "deploy", "--frozen-lockfile",
             "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(store), str(target))
-
-
-def enforce_resource_limits(root: Path, *, max_bytes: int = MAX_TREE_BYTES,
-                             max_entries: int = MAX_TREE_ENTRIES,
-                             min_free_bytes: int = MIN_FREE_BYTES,
-                             min_free_inodes: int = MIN_FREE_INODES,
-                             live_sample: bool = False) -> tuple[int, int]:
-    try:
-        root_info = root.lstat()
-    except FileNotFoundError as exc:
-        raise RuntimeError("experiment resource root disappeared") from exc
-    if not stat.S_ISDIR(root_info.st_mode) or root.is_symlink():
-        raise RuntimeError("experiment resource root is unsafe")
-    root_identity = (root_info.st_dev, root_info.st_ino)
-
-    def on_walk_error(error: OSError) -> None:
-        if isinstance(error, FileNotFoundError):
-            if live_sample:
-                return
-            raise _TransientEntryRace() from error
-        raise error
-
-    for attempt in range(1 if live_sample else SCAN_RETRIES):
-        count = total = 0
-        try:
-            for current, directories, files in os.walk(root, topdown=True, followlinks=False,
-                                                       onerror=on_walk_error):
-                current_path = Path(current)
-                for name in directories + files:
-                    path = current_path / name
-                    try:
-                        info = path.lstat()
-                    except FileNotFoundError as exc:
-                        if live_sample:
-                            # A child may atomically replace or remove entries while
-                            # sampled. The root itself was checked above; pre/post
-                            # calls remain strict and verify a stable complete tree.
-                            continue
-                        raise _TransientEntryRace() from exc
-                    count += 1
-                    if count > max_entries:
-                        raise RuntimeError("experiment resource entry cap exceeded")
-                    if stat.S_ISREG(info.st_mode):
-                        total += info.st_size
-                        if total > max_bytes:
-                            raise RuntimeError("experiment disk cap exceeded")
-                    elif not (stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode)):
-                        raise RuntimeError("experiment contains an unsupported filesystem entry")
-                directories[:] = [name for name in directories if not (current_path / name).is_symlink()]
-            break
-        except _TransientEntryRace as exc:
-            if attempt + 1 == SCAN_RETRIES:
-                raise RuntimeError("experiment tree changed repeatedly during resource scan") from exc
-            time.sleep(SCAN_RETRY_SECONDS * (attempt + 1))
-    try:
-        final_root = root.lstat()
-    except FileNotFoundError as exc:
-        raise RuntimeError("experiment resource root disappeared") from exc
-    if (not stat.S_ISDIR(final_root.st_mode) or root.is_symlink()
-            or (final_root.st_dev, final_root.st_ino) != root_identity):
-        raise RuntimeError("experiment resource root changed")
-    space = os.statvfs(root)
-    free_bytes = space.f_bavail * space.f_frsize
-    free_inodes = space.f_favail
-    if free_bytes < min_free_bytes:
-        raise RuntimeError("experiment free-space reserve reached")
-    if free_inodes < min_free_inodes:
-        raise RuntimeError("experiment free-inode reserve reached")
-    return count, total
 
 
 def _signal_group(pgid: int, signum: int) -> None:
@@ -251,7 +188,10 @@ def run_monitored(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], t
         try:
             enforce_resource_limits(resource_root)
         except Exception as exc:
-            raise MonitorFailure(stage, _resource_category(exc)) from exc
+            kwargs = {}
+            if isinstance(exc, ResourceEntryLimitExceeded):
+                kwargs = {"entries_seen": exc.entries_seen, "entry_limit": exc.limit}
+            raise MonitorFailure(stage, _resource_category(exc), **kwargs) from exc
 
     check_resources()
     try:
@@ -274,7 +214,10 @@ def run_monitored(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], t
             try:
                 enforce_resource_limits(resource_root, live_sample=True)
             except Exception as exc:
-                raise MonitorFailure(stage, _resource_category(exc)) from exc
+                kwargs = {}
+                if isinstance(exc, ResourceEntryLimitExceeded):
+                    kwargs = {"entries_seen": exc.entries_seen, "entry_limit": exc.limit}
+                raise MonitorFailure(stage, _resource_category(exc), **kwargs) from exc
             time.sleep(poll_seconds)
     except BaseException:
         _terminate_group(process)

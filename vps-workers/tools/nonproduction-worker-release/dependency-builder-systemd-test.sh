@@ -262,6 +262,9 @@ for module in worker_release_dependency_builder.py worker_release_dependency_art
 done
 install -o root -g root -m 0555 "$(dirname "$0")/dependency-snapshot-smoke.py" \
   "$helper_root/dependency-snapshot-smoke.py"
+install -o root -g root -m 0444 "$(dirname "$0")/dependency-builder-fixture-pnpm.py" \
+  "$helper_root/dependency-builder-fixture-pnpm.py"
+python3 "$(dirname "$0")/dependency-builder-fixture-pnpm.test.py"
 
 # The action installs pnpm under the runner's home directory. That path is
 # intentionally hidden from the transient service by ProtectHome=true, so
@@ -295,7 +298,8 @@ if [ "$(/usr/bin/node "$helper_root/pnpm/bin/pnpm.cjs" --version)" != '11.7.0' ]
 fi
 cat >/usr/bin/pnpm <<EOF
 #!/bin/sh
-exec /usr/bin/node "$helper_root/pnpm/bin/pnpm.cjs" "\$@"
+exec /usr/bin/python3 "$helper_root/dependency-builder-fixture-pnpm.py" \
+  "$helper_root/pnpm/bin/pnpm.cjs" "\$@"
 EOF
 chown root:root /usr/bin/pnpm
 chmod 0555 /usr/bin/pnpm
@@ -316,7 +320,7 @@ if [ -n "$unit_load_state" ] && [ "$unit_load_state" != not-found ]; then
 fi
 builder_unit_owned=1
 python3 - "$source_root" "$release_root" "$sha" "$suffix" "$helper_root" <<'PY'
-import os, re, subprocess, sys, time
+import importlib.util, os, re, subprocess, sys, time
 from pathlib import Path
 from types import SimpleNamespace
 import worker_release_dependency_builder as dependency_builder
@@ -326,6 +330,12 @@ from worker_release_dependency_install import install_payload
 
 source, release, sha = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
 helper_root = Path(sys.argv[5])
+diagnostic_module_path = helper_root / "dependency-builder-fixture-pnpm.py"
+diagnostic_spec = importlib.util.spec_from_file_location("fixture_pnpm_diagnostic", diagnostic_module_path)
+if diagnostic_spec is None or diagnostic_spec.loader is None:
+    raise RuntimeError("fixture pnpm diagnostic helper is unavailable")
+diagnostic_module = importlib.util.module_from_spec(diagnostic_spec)
+diagnostic_spec.loader.exec_module(diagnostic_module)
 from worker_release_dependency_builder import uuid
 uuid.uuid4 = lambda: SimpleNamespace(hex=sys.argv[4])
 
@@ -383,6 +393,22 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
     result = subprocess.CompletedProcess(fixture_command, process.returncode, stdout, stderr)
     if result.returncode == 0:
         return
+    store_argument = next((index for index, value in enumerate(command) if value == "--store-dir"), None)
+    fixture_detail = None
+    if store_argument is not None and store_argument + 1 < len(command):
+        fixture_store = Path(command[store_argument + 1])
+        fixture_detail = diagnostic_module.read_diagnostic(
+            fixture_store.parent / diagnostic_module.FIXTURE_ERROR_NAME,
+            owner_uid=expected_owner_uid,
+        )
+    if fixture_detail is not None:
+        print(
+            "fixture pnpm detail "
+            f"error_code={fixture_detail['error_code']} "
+            "prior_trust_evidence_regression="
+            f"{str(fixture_detail['prior_trust_evidence_regression']).lower()}",
+            file=sys.stderr,
+        )
     diagnostic = (result.stderr + "\n" + result.stdout)[-4096:]
     for pattern, replacement in (
         (r"(?i)(bearer\s+)[^\s,;]+", r"\1[redacted]"),

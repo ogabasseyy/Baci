@@ -1,0 +1,103 @@
+from __future__ import annotations
+
+import importlib.util
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "bin"))
+MODULE_PATH = Path(__file__).with_name("dependency-builder-fixture-pnpm.py")
+SPEC = importlib.util.spec_from_file_location("dependency_builder_fixture_pnpm", MODULE_PATH)
+assert SPEC and SPEC.loader
+fixture = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(fixture)
+
+
+class FixturePnpmDiagnosticTests(unittest.TestCase):
+    def test_trust_failure_summary_contains_only_boolean_and_fixed_code(self):
+        output = (
+            'ERR_PNPM_TRUST_DOWNGRADE High-risk trust downgrade for "secret-package@9.9.9" '
+            'Earlier-published version had stronger trust evidence; token=must-not-leak'
+        )
+        summary = fixture.summarize_failure(output)
+        self.assertEqual(summary, {
+            "schema": 1,
+            "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
+            "prior_trust_evidence_regression": True,
+        })
+        self.assertNotIn("secret-package", repr(summary))
+        self.assertNotIn("must-not-leak", repr(summary))
+
+    def test_unknown_failure_does_not_preserve_package_or_error_text(self):
+        summary = fixture.summarize_failure("ERR_PNPM_META_FETCH_FAIL private-package@7 token=secret")
+        self.assertEqual(summary["error_code"], "OTHER_PNPM_ERROR")
+        self.assertFalse(summary["prior_trust_evidence_regression"])
+        self.assertNotIn("private-package", repr(summary))
+
+    def test_success_output_keeps_only_version_and_policy_marker(self):
+        output = fixture.safe_success_output(
+            "11.7.0\nProgress: resolved 100, token=secret\n",
+            "✓ Lockfile passes supply-chain policies (12 entries in 2.1s)\nwarning: ignored"
+        )
+        self.assertEqual(output.splitlines(), [
+            "11.7.0", "✓ Lockfile passes supply-chain policies (12 entries in 2.1s)",
+        ])
+        self.assertNotIn("secret", output)
+
+    def test_marker_suffix_is_strictly_parsed_and_secret_suffix_is_rejected(self):
+        valid = fixture.safe_success_output(
+            "", "✓ Lockfile passes supply-chain policies (12 entries in 2.1s)"
+        )
+        self.assertEqual(valid, "✓ Lockfile passes supply-chain policies (12 entries in 2.1s)")
+        tainted = fixture.safe_success_output(
+            "", "✓ Lockfile passes supply-chain policies (12 entries in 2.1s) token=must-not-leak"
+        )
+        self.assertEqual(tainted, "")
+        self.assertNotIn("must-not-leak", tainted)
+
+    def test_cached_marker_preserves_cached_kind_and_age(self):
+        output = fixture.safe_success_output(
+            "", "✓ Lockfile passes supply-chain policies (verified 2s ago)"
+        )
+        self.assertEqual(output, "✓ Lockfile passes supply-chain policies (verified 2s ago)")
+        self.assertNotIn("entries in", output)
+
+    def test_multiple_or_malformed_markers_fail_closed(self):
+        multiple = fixture.safe_success_output(
+            "✓ Lockfile passes supply-chain policies (12 entries in 2s)\n"
+            "✓ Lockfile passes supply-chain policies (verified 1s ago)", ""
+        )
+        malformed = fixture.safe_success_output(
+            "", "✓ Lockfile passes supply-chain policies (verified 1s ago) injected"
+        )
+        self.assertEqual(multiple, "")
+        self.assertEqual(malformed, "")
+
+    def test_diagnostic_reader_rejects_symlink_and_extra_fields(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            accepted = root / "accepted"
+            fixture._write_diagnostic(accepted, {
+                "schema": 1,
+                "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
+                "prior_trust_evidence_regression": True,
+            })
+            self.assertEqual(fixture.read_diagnostic(accepted, owner_uid=accepted.stat().st_uid), {
+                "schema": 1,
+                "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
+                "prior_trust_evidence_regression": True,
+            })
+            self.assertIsNone(fixture.read_diagnostic(accepted, owner_uid=accepted.stat().st_uid + 1))
+            target = root / "target"
+            target.write_text('{"schema":1,"error_code":"OTHER_PNPM_ERROR",'
+                              '"prior_trust_evidence_regression":false,"raw":"secret"}')
+            target.chmod(0o600)
+            self.assertIsNone(fixture.read_diagnostic(target, owner_uid=target.stat().st_uid))
+            link = root / "link"
+            link.symlink_to(target)
+            self.assertIsNone(fixture.read_diagnostic(link, owner_uid=target.stat().st_uid))
+
+
+if __name__ == "__main__":
+    unittest.main()

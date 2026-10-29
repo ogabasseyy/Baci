@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+"""Secretless pnpm observer used only by the disposable systemd fixture."""
+from __future__ import annotations
+
+import json
+import os
+import re
+import stat
+import sys
+from pathlib import Path
+from typing import Sequence
+
+FIXTURE_ERROR_NAME = ".fixture-pnpm-diagnostic.json"
+_ANSI = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
+
+
+def summarize_failure(output: str) -> dict[str, object]:
+    """Return only a bounded, non-sensitive classification of fixture output."""
+    sample = _ANSI.sub("", output[:1_048_576]).lower()
+    trust_failure = "err_pnpm_trust_downgrade" in sample
+    prior_evidence = any(phrase in sample for phrase in (
+        "earlier-published version had stronger trust evidence",
+        "earlier versions had trusted publisher",
+        "earlier versions had provenance",
+    ))
+    return {
+        "schema": 1,
+        "error_code": "ERR_PNPM_TRUST_DOWNGRADE" if trust_failure else "OTHER_PNPM_ERROR",
+        "prior_trust_evidence_regression": bool(trust_failure and prior_evidence),
+    }
+
+
+def safe_success_output(stdout: str, stderr: str) -> str:
+    """Keep exact version output and a strictly parsed canonical policy marker."""
+    output = _ANSI.sub("", f"{stdout}\n{stderr}")
+    version_lines = [line.strip() for line in output.splitlines() if line.strip() == "11.7.0"]
+    marker_lines = [line for line in output.splitlines()
+                    if "Lockfile passes supply-chain policies" in line]
+    if len(version_lines) > 1 or len(marker_lines) > 1:
+        return ""
+    lines = list(version_lines)
+    if marker_lines:
+        from worker_release_dependency_diagnostics import (
+            MAX_FRESH_VERIFICATION_ELAPSED_MS,
+            MAX_RECENT_VERIFICATION_AGE_MS,
+            _POLICY_PASS_CACHED,
+            _POLICY_PASS_FRESH,
+            _parse_pretty_ms,
+        )
+
+        marker = marker_lines[0]
+        fresh = _POLICY_PASS_FRESH.fullmatch(marker)
+        cached = _POLICY_PASS_CACHED.fullmatch(marker)
+        if fresh and len(fresh.group(1)) <= 9 and int(fresh.group(1)) > 0:
+            elapsed = _parse_pretty_ms(fresh.group(2))
+            if elapsed is None or elapsed > MAX_FRESH_VERIFICATION_ELAPSED_MS:
+                return ""
+            count = int(fresh.group(1))
+            noun = "entry" if count == 1 else "entries"
+            lines.append(
+                f"✓ Lockfile passes supply-chain policies ({count} {noun} in {fresh.group(2)})"
+            )
+        elif cached:
+            age = _parse_pretty_ms(cached.group(1), compact=True)
+            if age is None or age > MAX_RECENT_VERIFICATION_AGE_MS:
+                return ""
+            lines.append(
+                f"✓ Lockfile passes supply-chain policies (verified {cached.group(1)} ago)"
+            )
+        else:
+            return ""
+    return "\n".join(lines)
+
+
+def _diagnostic_path(argv: Sequence[str]) -> Path | None:
+    try:
+        index = argv.index("--store-dir")
+        store = Path(argv[index + 1])
+        info = store.lstat()
+    except (ValueError, IndexError, OSError):
+        return None
+    if (store.name != "pnpm-store" or not stat.S_ISDIR(info.st_mode)
+            or store.is_symlink() or info.st_uid != os.geteuid()):
+        return None
+    parent = store.parent
+    try:
+        parent_info = parent.lstat()
+    except OSError:
+        return None
+    if (not parent.name.startswith("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.")
+            or not stat.S_ISDIR(parent_info.st_mode) or parent_info.st_uid != os.geteuid()
+            or parent_info.st_mode & 0o077):
+        return None
+    return parent / FIXTURE_ERROR_NAME
+
+
+def _write_diagnostic(path: Path | None, value: dict[str, object]) -> None:
+    if path is None:
+        return
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    except FileExistsError:
+        return
+    try:
+        payload = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode("ascii")
+        view = memoryview(payload)
+        while view:
+            written = os.write(fd, view)
+            if written <= 0:
+                raise OSError("short write")
+            view = view[written:]
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def read_diagnostic(path: Path, *, owner_uid: int) -> dict[str, object] | None:
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError:
+        return None
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != owner_uid or info.st_nlink != 1
+                or info.st_mode & 0o077 or info.st_size > 256):
+            return None
+        value = json.loads(os.read(fd, 257))
+        if (not isinstance(value, dict) or set(value) != {
+                "schema", "error_code", "prior_trust_evidence_regression"}
+                or value["schema"] != 1
+                or value["error_code"] not in {"ERR_PNPM_TRUST_DOWNGRADE", "OTHER_PNPM_ERROR"}
+                or type(value["prior_trust_evidence_regression"]) is not bool
+                or (value["prior_trust_evidence_regression"]
+                    and value["error_code"] != "ERR_PNPM_TRUST_DOWNGRADE")):
+            return None
+        return value
+    except (OSError, ValueError, TypeError):
+        return None
+    finally:
+        os.close(fd)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if len(args) < 1:
+        return 125
+    entrypoint, *pnpm_args = args
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    try:
+        from worker_release_bounded_process import run_bounded_capture
+        result = run_bounded_capture(("/usr/bin/node", entrypoint, *pnpm_args),
+                                     cwd=Path.cwd(), env=os.environ,
+                                     timeout=240, max_stream_bytes=1_048_576)
+    except Exception:
+        print("PNPM_FIXTURE_COMMAND_FAILED", file=sys.stderr)
+        return 125
+    if result.returncode == 0:
+        output = safe_success_output(result.stdout, result.stderr)
+        if output:
+            print(output)
+        return 0
+    summary = summarize_failure(f"{result.stdout}\n{result.stderr}")
+    _write_diagnostic(_diagnostic_path(pnpm_args), summary)
+    if summary["error_code"] == "ERR_PNPM_TRUST_DOWNGRADE":
+        print("ERR_PNPM_TRUST_DOWNGRADE", file=sys.stderr)
+    else:
+        print("PNPM_FIXTURE_COMMAND_FAILED", file=sys.stderr)
+    return min(max(result.returncode, 1), 255)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

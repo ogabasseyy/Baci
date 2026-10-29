@@ -20,7 +20,7 @@ export interface CheckoutScreenModelInput {
     form: CheckoutFormSession;
     attempt: Pick<
       CheckoutAttemptSession,
-      'resumeOrderId' | 'resumedOrder' | 'isProcessing'
+      'resumeOrderId' | 'resumedOrder' | 'preferredGateway' | 'isProcessing'
     >;
     delivery: CheckoutDeliverySession;
     financial: Pick<
@@ -69,6 +69,15 @@ export function deriveCheckoutScreenModel({
   const { merchant, user } = identity;
   const { handlePlaceOrder } = execution;
   const isPayForMeValid = paymentSession.payForMe.isValid;
+  // Direct payment for an already-created order has no fresh shipment to quote.
+  // Keep this exception identical to the submission hook's direct-payment path.
+  const isDeliveryValid =
+    delivery.validation.isValid ||
+    Boolean(
+      attempt.resumedOrder &&
+        attempt.preferredGateway &&
+        display.checkoutCart.length === 0
+    );
   const productIds = display.checkoutCart.map((item) => item.id);
 
   const presentation = deriveCheckoutOrderSummaryPresentation({
@@ -96,6 +105,7 @@ export function deriveCheckoutScreenModel({
     handlePlaceOrder,
     isProcessing: attempt.isProcessing,
     isPayForMeValid,
+    isDeliveryValid,
     merchantId: merchant?.id || '',
     merchantCountry: merchant?.country ?? 'NG',
     payoutCurrency: merchant?.payout_currency ?? null,
@@ -127,6 +137,7 @@ export function deriveCheckoutScreenModel({
       session: paymentSession,
       isProcessing: attempt.isProcessing,
       isPayForMeValid,
+      isDeliveryValid,
       isInitializingDva: execution.dva.isInitializingDva,
       newsletterOptIn: values.newsletterOptIn,
       setNewsletterOptIn: form.form.setNewsletterOptIn,

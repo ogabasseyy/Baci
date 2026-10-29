@@ -1,4 +1,5 @@
 import { normalizeShippingQuoteResponse } from '@/lib/shipping/quote-response';
+import { isNigeriaRecoveryPin } from '@/lib/shipping/is-nigeria-recovery-pin';
 import { findQuoteByStableIdentity } from '../find-quote-by-stable-identity';
 import { isCheckoutDeliveryAddressReady } from '../is-checkout-delivery-address-ready';
 import { shouldFetchCheckoutShippingQuotes } from '../should-fetch-checkout-shipping-quotes';
@@ -162,6 +163,12 @@ export async function loadCheckoutShippingQuotes(
         'x-baci-client': 'web-storefront',
       },
       body: JSON.stringify({
+        merchant_rates_only:
+          requestReceiver.countryCode === 'NG' &&
+          !isNigeriaRecoveryPin(
+            requestReceiver.latitude ?? Number.NaN,
+            requestReceiver.longitude ?? Number.NaN
+          ),
         deliveryPreference: requestReceiver.deliveryPreference,
         merchantId: requestReceiver.merchantId || undefined,
         receiver: {

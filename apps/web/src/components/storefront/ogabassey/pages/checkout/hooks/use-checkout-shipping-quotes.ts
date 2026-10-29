@@ -137,6 +137,7 @@ export function useCheckoutShippingQuotes({
     if (!isHydrated) return;
     if (
       deliveryMethod === 'door' ||
+      deliveryMethod === 'pickup' ||
       deliveryMethod === 'pickup_station' ||
       deliveryMethod === 'airport'
     ) {
@@ -150,6 +151,7 @@ export function useCheckoutShippingQuotes({
           newAddressCity.trim() && newAddressState.trim()
         );
         if (
+          (deliveryMethod === 'pickup' && hasCityState) ||
           shouldFetchCheckoutShippingQuotes({
             deliveryMethod,
             isStreetReady: isNewDeliveryAddressReady,
@@ -168,10 +170,12 @@ export function useCheckoutShippingQuotes({
             firstName,
             lastName,
             customerEmail,
-            checkoutShippingQuoteDeliveryPreference({
-              deliveryMethod,
-              isStreetReady: isNewDeliveryAddressReady,
-            }),
+            deliveryMethod === 'pickup'
+              ? 'pickup_station'
+              : checkoutShippingQuoteDeliveryPreference({
+                  deliveryMethod,
+                  isStreetReady: isNewDeliveryAddressReady,
+                }),
             false
           );
         } else {
@@ -236,6 +240,7 @@ export function useCheckoutShippingQuotes({
   return {
     shippingQuotes,
     isLoadingQuotes,
+    hasResolvedQuotes: Boolean(resolvedQuoteRequestKey),
     selectedQuoteId,
     setSelectedQuoteId,
     resetQuotesForAddressChange,

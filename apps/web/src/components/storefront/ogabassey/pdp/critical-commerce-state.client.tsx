@@ -19,7 +19,7 @@ import {
   pickInitialSelectedAttributes,
 } from './critical-commerce-selection';
 import { buildCriticalInitialVariantIntent } from './critical-commerce-initial-intent';
-import { completeCriticalSelectionChange } from './complete-critical-variant-selection';
+import { completeCriticalSelectionChange } from './complete-critical-selection-change';
 import { useCriticalRouteOfferState } from './critical-commerce-route-offer';
 import {
   OgabasseyPdpCriticalCommerceContext,

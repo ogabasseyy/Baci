@@ -166,24 +166,24 @@ def independent_smoke(release: Path, node: str, smoke, resource_root: Path) -> s
     if not tsx.is_file() or not os.access(tsx, os.X_OK):
         raise RuntimeError("materialized web tsx entrypoint is unavailable")
     run_monitored((str(tsx), "--version"), cwd=release / "apps/web", env=environment, timeout=30,
-                  stage="independent-smoke", resource_root=resource_root)
+                  stage="independent-smoke-tsx", resource_root=resource_root)
     dotenv = release / "node_modules/dotenv"
     if not dotenv.is_dir():
         raise RuntimeError("materialized worker dotenv package is unavailable")
     run_monitored((node, "--input-type=module", "-e",
-                   "import('dotenv').then(m => { if (typeof m.config !== 'function') process.exit(2) })"),
-                  cwd=release, env=environment, timeout=30, stage="independent-smoke",
+                   "try { const m = await import('dotenv'); if (typeof m.config !== 'function') process.exit(23); } catch (error) { process.exit(error?.code === 'ERR_MODULE_NOT_FOUND' ? 21 : 22); }"),
+                  cwd=release, env=environment, timeout=30, stage="independent-smoke-dotenv",
                   resource_root=resource_root)
     worker_sdk_smoke = (
-        "import { createClient } from '@supabase/supabase-js';"
-        "import { Expo } from 'expo-server-sdk';"
-        "const client = createClient('https://example.invalid', 'synthetic-smoke-key');"
-        "const expo = new Expo({ accessToken: 'synthetic-smoke-token' });"
-        "if (typeof client.from !== 'function' ||"
-        " typeof expo.sendPushNotificationsAsync !== 'function') process.exit(2);"
+        "try { const [supabase, expoSdk] = await Promise.all([import('@supabase/supabase-js'), import('expo-server-sdk')]);"
+        "if (typeof supabase.createClient !== 'function' || typeof expoSdk.Expo !== 'function') process.exit(23);"
+        "const client = supabase.createClient('https://example.invalid', 'synthetic-smoke-key');"
+        "const expo = new expoSdk.Expo({ accessToken: 'synthetic-smoke-token' });"
+        "if (typeof client.from !== 'function' || typeof expo.sendPushNotificationsAsync !== 'function') process.exit(24);"
+        "} catch (error) { process.exit(error?.code === 'ERR_MODULE_NOT_FOUND' ? 21 : 22); }"
     )
     run_monitored((node, "--input-type=module", "-e", worker_sdk_smoke), cwd=release,
-                  env=environment, timeout=30, stage="independent-smoke",
+                  env=environment, timeout=30, stage="independent-smoke-worker-sdk",
                   resource_root=resource_root)
     after = hashlib.sha256()
     after.update(bytes.fromhex(smoke.snapshot_digest(release / "apps/web/node_modules", "web-after")))

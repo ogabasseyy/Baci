@@ -119,6 +119,11 @@ class ActualDependencyExperimentTests(unittest.TestCase):
             failure_diagnostic("web-deploy", MonitorFailure("web-deploy", "process-exit", 23)),
             "experiment failure stage=web-deploy category=process-exit exit=23",
         )
+        self.assertEqual(
+            failure_diagnostic("independent-smoke", MonitorFailure(
+                "independent-smoke-worker-sdk", "process-exit", 21)),
+            "experiment failure stage=independent-smoke-worker-sdk category=process-exit exit=21",
+        )
 
     def test_early_runtime_failures_have_safe_fixed_categories(self):
         self.assertEqual(

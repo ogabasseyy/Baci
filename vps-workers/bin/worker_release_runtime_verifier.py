@@ -28,9 +28,10 @@ from worker_release_dependency_supervisor_cgroup import (
     drain_unpinned_until_proven, preflight_cgroup_root,
 )
 from worker_release_lifecycle import AuthenticatedRun, LifecycleRejected
+from worker_release_runtime_diagnostics import BoundedLauncherStderr, MAX_CAPTURE_BYTES
+from worker_release_runtime_smoke import run_fixed_smokes
 
 VERIFIER_VERSION = "materialized-worker-runtime-v1"
-MAX_CAPTURE_BYTES = 4096
 MAX_CHECK_SECONDS = 35
 MAX_LAUNCH_SECONDS = 5
 MAX_CLEANUP_SECONDS = 30
@@ -82,9 +83,12 @@ def _systemctl(*args: str, timeout: float = 1) -> str:
 
 def _spawn_unit(command: tuple[str, ...]) -> subprocess.Popen:
     try:
-        return subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL, env={"PATH": "/usr/bin:/bin"},
-                                start_new_session=True, close_fds=True)
+        process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.PIPE, env={"PATH": "/usr/bin:/bin"},
+                                   start_new_session=True, close_fds=True)
+        if process.stderr is not None:
+            process._baci_stderr_capture = BoundedLauncherStderr(process.stderr)
+        return process
     except OSError as error:
         raise RuntimeVerificationRejected("systemd runtime unit launch failed") from error
 
@@ -141,7 +145,9 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
                 launcher_unproven = True
             failure = "transient unit launch timed out"
         if failure is None and process.returncode != 0:
-            failure = "transient unit launch was rejected"
+            capture = getattr(process, "_baci_stderr_capture", None)
+            category = capture.category() if capture is not None else "unit-launch-rejected"
+            failure = f"transient unit launch was rejected ({category})"
         deadline = time.monotonic() + MAX_CHECK_SECONDS
         completed = False
         while failure is None and time.monotonic() < deadline:
@@ -204,41 +210,11 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
 
 def _run_fixed_smokes(candidate: Path, fence_digest: str) -> tuple[str, ...]:
     """Execute only fixed package checks in bounded, drained systemd units."""
-    if not sys.platform.startswith("linux") or os.geteuid() != 0:
-        raise RuntimeVerificationRejected("runtime verifier requires Linux root broker")
-    if not Path(SYSTEMD_RUN).is_file() or not Path(SYSTEMCTL).is_file():
-        raise RuntimeVerificationRejected("systemd runtime verifier is unavailable")
-    web = candidate / "apps" / "web"
-    tsx = web / "node_modules" / ".bin" / "tsx"
-    workers = candidate / "vps-workers"
-    if (not tsx.is_file() or not os.access(tsx, os.X_OK) or not workers.is_dir()
-            or not (candidate / "node_modules").is_dir()):
-        raise RuntimeVerificationRejected("candidate is missing fixed runtime smoke targets")
-    properties = {
-        "User": "65534", "Group": "65534", "SupplementaryGroups": "",
-        "NoNewPrivileges": "yes", "PrivateNetwork": "yes", "ProtectSystem": "strict",
-        "ProtectHome": "yes", "PrivateTmp": "no", "PrivateDevices": "yes",
-        "PrivateUsers": "yes", "ProtectControlGroups": "yes",
-        "ProtectKernelTunables": "yes", "ProtectKernelModules": "yes",
-        "ProtectKernelLogs": "yes", "ProtectProc": "invisible", "ProcSubset": "pid",
-        "RestrictSUIDSGID": "yes", "RestrictRealtime": "yes",
-        "CapabilityBoundingSet": "", "AmbientCapabilities": "",
-        "RestrictAddressFamilies": "AF_UNIX", "TasksMax": "32",
-        "MemoryMax": str(512 * 1024 * 1024), "CPUQuotaPerSecUSec": "1000000",
-        "RuntimeMaxSec": str(MAX_CHECK_SECONDS), "LimitNOFILE": "256",
-        "LimitFSIZE": str(MAX_CAPTURE_BYTES), "UMask": "0077",
-        "ReadOnlyPaths": str(candidate),
-        "InaccessiblePaths": "/root /home /run /var/run /tmp /var/tmp /dev/shm /etc/baci-workers /srv/baci-workers/runtime /srv/baci-workers/locks",
-    }
-    commands = (
-        (web, ("/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "NODE_ENV=production", str(tsx), "--version")),
-        (workers, ("/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "NODE_ENV=production",
-                   "/usr/bin/node", "--input-type=module", "-e",
-                   "import('dotenv').then(m => { if (typeof m.config !== 'function') process.exit(2) })")),
+    return run_fixed_smokes(
+        candidate, fence_digest, execute_unit=_execute_fixed_unit, unit_name=_unit_name,
+        rejected=RuntimeVerificationRejected, max_seconds=MAX_CHECK_SECONDS,
+        max_output_bytes=MAX_CAPTURE_BYTES, systemd_run=SYSTEMD_RUN, systemctl=SYSTEMCTL,
     )
-    for index, (cwd, command) in enumerate(commands):
-        _execute_fixed_unit(_unit_name(fence_digest, index), cwd, command, properties, index + 1)
-    return ("web_tsx_version", "worker_dotenv_import")
 
 
 def verify_materialized_candidate(candidate: Path, identity: AuthenticatedRun, *,
@@ -284,7 +260,7 @@ def validate_runtime_receipt(receipt: object, candidate: Path, identity: Authent
             or not _DIGEST_RE.fullmatch(archive_sha256)
             or not isinstance(receipt, RuntimeVerificationReceipt) or receipt._seal is not _RECEIPT_SEAL
             or receipt.verifier_version != VERIFIER_VERSION
-            or receipt.checks != ("web_tsx_version", "worker_dotenv_import")
+            or receipt.checks != ("web_tsx_version", "worker_production_dependency_imports")
             or receipt.archive_sha256 != archive_sha256
             or receipt.fence != tuple(sorted(identity.fence().items()))):
         return False

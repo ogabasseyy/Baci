@@ -187,9 +187,11 @@ class DependencySnapshotSmokeTests(unittest.TestCase):
                 (web / "tsx").write_text("synthetic", encoding="utf-8")
                 (root / "node_modules/dotenv").mkdir(parents=True)
                 commands = []
+                stages = []
 
                 def monitored(command, **kwargs):
                     commands.append(command)
+                    stages.append(kwargs["stage"])
 
                 with patch.object(runtime, "run_monitored", side_effect=monitored), \
                      patch.object(runtime.os, "access", return_value=True):
@@ -197,10 +199,15 @@ class DependencySnapshotSmokeTests(unittest.TestCase):
                         root, "/usr/bin/node", SimpleNamespace(snapshot_digest=lambda *_: "a" * 64), root,
                     )
                 self.assertEqual(len(commands), 3)
+                self.assertEqual(stages, [
+                    "independent-smoke-tsx", "independent-smoke-dotenv", "independent-smoke-worker-sdk",
+                ])
                 sdk_code = commands[2][-1]
                 self.assertIn("@supabase/supabase-js", sdk_code)
                 self.assertIn("expo-server-sdk", sdk_code)
                 self.assertIn("example.invalid", sdk_code)
+                self.assertIn("ERR_MODULE_NOT_FOUND' ? 21 : 22", sdk_code)
+                self.assertIn("process.exit(23)", sdk_code)
         finally:
             sys.path.remove(str(bin_dir))
 

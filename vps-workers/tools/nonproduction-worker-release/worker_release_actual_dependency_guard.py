@@ -22,7 +22,8 @@ STAGES = frozenset({
     "source-lock-validation", "web-deploy", "deploy-graph-validation", "workspace-self-link-cleanup",
     "worker-install", "receipt-validation", "payload-hardlink-normalization", "payload-export",
     "payload-validation", "payload-materialization",
-    "independent-smoke", "materialized-tree-validation", "resource-scan", "experiment",
+    "independent-smoke", "independent-smoke-tsx", "independent-smoke-dotenv",
+    "independent-smoke-worker-sdk", "materialized-tree-validation", "resource-scan", "experiment",
     "preverify-web-install", "preverify-worker-install", "web-install",
 })
 RESOURCE_CHECKS = frozenset({"unsupported-filesystem-entry"})

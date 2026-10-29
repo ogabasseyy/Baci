@@ -18,6 +18,17 @@ from dependency_builder_fixture_pnpm_diagnostics import (
     read_scratch_diagnostic,
 )
 
+
+def _pnpm_command(entrypoint: str, pnpm_args: Sequence[str]) -> tuple[str, ...]:
+    """Use structured errors for synthetic deploy diagnostics only.
+
+    The reporter choice does not alter resolution or trust policy. It makes
+    pnpm 11.7's error event carry the bounded package headline/hint that the
+    fixture classifier hashes and allowlists; no raw output is emitted.
+    """
+    reporter = ("--reporter=ndjson",) if "deploy" in pnpm_args else ()
+    return ("/usr/bin/node", entrypoint, *reporter, *pnpm_args)
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if len(args) < 1:
@@ -26,7 +37,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     try:
         from worker_release_bounded_process import run_bounded_capture
-        result = run_bounded_capture(("/usr/bin/node", entrypoint, *pnpm_args),
+        result = run_bounded_capture(_pnpm_command(entrypoint, pnpm_args),
                                      cwd=Path.cwd(), env=os.environ,
                                      timeout=240, max_stream_bytes=1_048_576)
     except Exception:

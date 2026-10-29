@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import io
 import shutil
 import sys
 import tempfile
@@ -20,6 +21,7 @@ from worker_release_runtime_verifier import (
     verify_materialized_candidate,
 )
 from worker_release_runtime_verifier_test_support import cleanup_candidate_after_verifier
+from worker_release_runtime_diagnostics import BoundedLauncherStderr
 
 SHA = "a" * 40
 ARCHIVE = "b" * 64
@@ -67,6 +69,16 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             '{"name":"dotenv","type":"module","exports":"./index.js"}\n')
         (self.candidate / "node_modules" / "dotenv" / "index.js").write_text(
             "export function config() { return {}; }\n")
+        (self.candidate / "node_modules" / "@supabase" / "supabase-js").mkdir(parents=True)
+        (self.candidate / "node_modules" / "@supabase" / "supabase-js" / "package.json").write_text(
+            '{"name":"@supabase/supabase-js","type":"module","exports":"./index.js"}\n')
+        (self.candidate / "node_modules" / "@supabase" / "supabase-js" / "index.js").write_text(
+            "export function createClient() {}\n")
+        (self.candidate / "node_modules" / "expo-server-sdk").mkdir()
+        (self.candidate / "node_modules" / "expo-server-sdk" / "package.json").write_text(
+            '{"name":"expo-server-sdk","type":"module","exports":"./index.js"}\n')
+        (self.candidate / "node_modules" / "expo-server-sdk" / "index.js").write_text(
+            "export class Expo {}\n")
         freeze(self.candidate, os.getgid())
 
     def tearDown(self):
@@ -82,7 +94,7 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         self.temporary.cleanup()
 
     @patch("worker_release_runtime_verifier._run_fixed_smokes",
-           return_value=("web_tsx_version", "worker_dotenv_import"))
+           return_value=("web_tsx_version", "worker_production_dependency_imports"))
     def test_receipt_is_bound_to_exact_run_archive_inode_and_tree(self, _smokes):
         receipt = verify_materialized_candidate(
             self.candidate, identity(), archive_sha256=ARCHIVE,
@@ -102,7 +114,7 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             owner_uid=os.geteuid(), owner_gid=os.getgid()))
 
     @patch("worker_release_runtime_verifier._run_fixed_smokes",
-           return_value=("web_tsx_version", "worker_dotenv_import"))
+           return_value=("web_tsx_version", "worker_production_dependency_imports"))
     def test_candidate_mutation_after_receipt_invalidates_it(self, _smokes):
         receipt = verify_materialized_candidate(
             self.candidate, identity(), archive_sha256=ARCHIVE,
@@ -116,7 +128,7 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             owner_uid=os.geteuid(), owner_gid=os.getgid()))
 
     @patch("worker_release_runtime_verifier._run_fixed_smokes",
-           return_value=("web_tsx_version", "worker_dotenv_import"))
+           return_value=("web_tsx_version", "worker_production_dependency_imports"))
     def test_candidate_links_and_unbound_names_fail_before_smoke(self, smokes):
         target = self.candidate / "node_modules" / "dotenv" / "index.js"
         os.chmod(target.parent, 0o700)
@@ -143,7 +155,7 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
                 patch("worker_release_runtime_verifier.SYSTEMD_RUN", "/usr/bin/true"), \
                 patch("worker_release_runtime_verifier.SYSTEMCTL", "/usr/bin/true"):
             checks = _run_fixed_smokes(self.candidate, "f" * 64)
-        self.assertEqual(checks, ("web_tsx_version", "worker_dotenv_import"))
+        self.assertEqual(checks, ("web_tsx_version", "worker_production_dependency_imports"))
         self.assertEqual(execute.call_count, 2)
         all_args = ""
         for call in execute.call_args_list:
@@ -162,6 +174,17 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             all_args += " ".join(command)
         self.assertNotIn("DATABASE_URL", all_args)
         self.assertNotIn("SUPABASE_SERVICE_ROLE_KEY", all_args)
+        self.assertIn("@supabase/supabase-js", all_args)
+        self.assertIn("expo-server-sdk", all_args)
+        self.assertIn("synthetic-smoke-key", all_args)
+        self.assertIn("synthetic-smoke-token", all_args)
+
+    def test_launcher_stderr_is_reduced_to_fixed_category(self):
+        capture = BoundedLauncherStderr(io.BytesIO(
+            b"Unknown assignment 'MemoryMax' for unit; private-token=must-not-escape"))
+        self.assertEqual(capture.category(), "unit-property-rejected")
+        self.assertNotIn("private-token", capture.category())
+        self.assertNotIn("MemoryMax", capture.category())
 
     @patch("worker_release_runtime_verifier._run_fixed_smokes",
            side_effect=RuntimeVerificationRejected("fixed runtime check failed"))
@@ -200,6 +223,23 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         shutil.copytree(self.candidate, candidate, copy_function=shutil.copy2)
         unproven_error = None
         try:
+            worker_modules = Path(__file__).resolve().parents[1] / "node_modules"
+            for dependency in ("dotenv/package.json", "@supabase/supabase-js/package.json",
+                               "expo-server-sdk/package.json"):
+                if not (worker_modules / dependency).is_file():
+                    self.fail("disposable Linux verifier job must install locked worker runtime dependencies")
+            from worker_release_dependency_install import install_payload
+            with tempfile.TemporaryDirectory(prefix="runtime-verifier-payload-", dir=releases) as payload_dir:
+                payload = Path(payload_dir)
+                (payload / "root").mkdir()
+                (payload / "web" / "node_modules" / ".bin").mkdir(parents=True)
+                shutil.copytree(worker_modules, payload / "root" / "node_modules", symlinks=True)
+                web_tsx = payload / "web" / "node_modules" / ".bin" / "tsx"
+                shutil.copy2(candidate / "apps" / "web" / "node_modules" / ".bin" / "tsx", web_tsx)
+                shutil.rmtree(candidate / "node_modules")
+                shutil.rmtree(candidate / "apps" / "web" / "node_modules")
+                install_payload(payload, candidate, owner_uid=os.geteuid())
+            freeze(candidate, os.getgid())
             with patch("worker_release_candidate_pin.RELEASES_ROOT", releases):
                 receipt = verify_materialized_candidate(
                     candidate, identity(), archive_sha256=ARCHIVE,

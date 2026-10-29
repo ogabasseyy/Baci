@@ -15,6 +15,7 @@ on:
       - 'vps-workers/bin/worker_release_pnpm_exec.py'
       - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.py'
       - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.test.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency-snapshot-smoke.test.py'
       - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-tree-size.test.py'
       - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-payload-diagnostics.test.py'
       - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_dependency_guard.py'
@@ -48,7 +49,9 @@ jobs:
         with:
           version: 11.7.0
       - name: Validate experiment harness
-        run: python3 vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.test.py -q
+        run: |
+          python3 vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.test.py -q
+          python3 vps-workers/tools/nonproduction-worker-release/dependency-snapshot-smoke.test.py -q
       - name: Preverify and build both real lockfiles offline
         env:
           EXPECTED_CHECKOUT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}

@@ -26,6 +26,32 @@ SPEC.loader.exec_module(fixture)
 
 
 class FixturePnpmDiagnosticTests(unittest.TestCase):
+    def test_ndjson_reporter_is_limited_to_synthetic_deploy_invocation(self):
+        deploy = fixture._pnpm_command("/trusted/pnpm.cjs", ("--filter", "@baci/web", "deploy"))
+        install = fixture._pnpm_command("/trusted/pnpm.cjs", ("install", "--offline"))
+        self.assertEqual(deploy, ("/usr/bin/node", "/trusted/pnpm.cjs", "--reporter=ndjson",
+                                  "--filter", "@baci/web", "deploy"))
+        self.assertEqual(install, ("/usr/bin/node", "/trusted/pnpm.cjs", "install", "--offline"))
+
+    def test_ndjson_trust_error_is_reduced_to_coordinate_hash_and_transition(self):
+        output = (
+            '{"level":"error","name":"pnpm","code":"ERR_PNPM_TRUST_DOWNGRADE",'
+            '"hint":"Trust checks are based solely on publish date. Earlier versions had '
+            'provenance attestation, but this version has no trust evidence.",'
+            '"err":{"message":"High-risk trust downgrade for \\"private-dep@3.4.5\\" '
+            '(possible package takeover)"}}'
+        )
+        summary = fixture.summarize_failure(output, pnpm_args=("--filter", "@baci/web", "deploy"),
+                                            env={"PNPM_CONFIG_OFFLINE": "true",
+                                                 "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true"})
+        self.assertEqual(summary["error_code"], "ERR_PNPM_TRUST_DOWNGRADE")
+        self.assertEqual(summary["trust_evidence_transition"], "provenance-to-none")
+        self.assertEqual(summary["trust_headline_state"], "recognized")
+        self.assertEqual(summary["package_coordinate_sha256"],
+                         hashlib.sha256(b"private-dep@3.4.5").hexdigest())
+        self.assertEqual(summary["fixture_package"], "unknown")
+        self.assertNotIn("private-dep", repr(summary))
+
     def test_observer_imports_sibling_modules_when_loaded_from_staged_directory(self):
         module_names = ("dependency_builder_fixture_pnpm_classification",
                         "dependency_builder_fixture_pnpm_diagnostics")

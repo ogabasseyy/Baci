@@ -72,6 +72,23 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
                 stage_fixture_modules(source, destination,
                                        owner_uid=os.geteuid(), owner_gid=os.getegid())
 
+    def test_staging_accepts_runner_writable_checkout_ancestor_but_keeps_copy_private(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as temporary:
+            root = Path(temporary)
+            writable_ancestor = root / "runner-work"
+            writable_ancestor.mkdir()
+            writable_ancestor.chmod(0o775)
+            source = self._fixture_source(writable_ancestor / "checkout")
+            destination_parent = root / "protected"
+            destination_parent.mkdir()
+            destination = destination_parent / "fixture"
+            staged_client = stage_fixture_modules(
+                source, destination, owner_uid=os.geteuid(), owner_gid=os.getegid())
+            self.assertEqual(staged_client.read_text(encoding="ascii"),
+                             "fixed fixture module 4\n")
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o711)
+            self.assertEqual(staged_client.stat().st_mode & 0o777, 0o444)
+
 
 if __name__ == "__main__":
     unittest.main()

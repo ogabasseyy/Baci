@@ -18,13 +18,23 @@ MAX_FIXTURE_FILE_BYTES = 256 * 1024
 _DIR_FLAGS = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
 
 
-def _open_absolute_directory(path: Path) -> int:
+def _open_absolute_directory(path: Path, *, allow_writable_ancestors: bool = False) -> int:
     fd = os.open("/", _DIR_FLAGS)
     try:
-        for component in path.absolute().parts[1:]:
+        parts = path.absolute().parts[1:]
+        for index, component in enumerate(parts):
             child = os.open(component, _DIR_FLAGS, dir_fd=fd)
             info = os.fstat(child)
-            if not stat.S_ISDIR(info.st_mode) or info.st_mode & 0o022:
+            is_final = index == len(parts) - 1
+            # CI checkouts may sit under runner-writable ancestors. Keep the
+            # final source root private and pin every traversal with dirfds;
+            # destination ancestry may only be writable when sticky (e.g.
+            # /tmp), so another identity cannot replace our private child.
+            writable_ancestor = bool(info.st_mode & 0o022) and not is_final
+            safe_sticky_ancestor = writable_ancestor and bool(info.st_mode & stat.S_ISVTX)
+            safe_source_ancestor = writable_ancestor and allow_writable_ancestors
+            if (not stat.S_ISDIR(info.st_mode)
+                    or (info.st_mode & 0o022 and (is_final or not (safe_sticky_ancestor or safe_source_ancestor)))):
                 os.close(child)
                 raise RuntimeError("fixture source path is writable by another identity")
             os.close(fd)
@@ -53,7 +63,7 @@ def stage_fixture_modules(source_root: Path, destination_root: Path, *,
     """Copy only fixed root-readable fixture modules into a protected temp tree."""
     if os.geteuid() != owner_uid:
         raise RuntimeError("fixture staging caller identity is invalid")
-    source_fd = _open_absolute_directory(Path(source_root))
+    source_fd = _open_absolute_directory(Path(source_root), allow_writable_ancestors=True)
     destination_root.mkdir(mode=0o711)
     os.chown(destination_root, owner_uid, owner_gid)
     os.chmod(destination_root, 0o711)

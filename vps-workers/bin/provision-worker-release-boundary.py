@@ -60,6 +60,7 @@ ExecStart=/usr/local/lib/baci-worker-broker/start-broker.sh
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=1200s
+KillMode=mixed
 UMask=0077
 NoNewPrivileges=yes
 PrivateTmp=yes

@@ -45,14 +45,21 @@ from worker_release_broker_common import (
     BrokerProtocolError, MAX_REQUEST_BYTES, MAX_REPLY_BYTES, MAX_ARCHIVE_COMPRESSED_BYTES,
     MAX_ARCHIVE_EXPANDED_BYTES, MAX_ARCHIVE_ENTRIES, MAX_EXTRACTION_SECONDS,
     DISPATCHER_TIMEOUT_SECONDS, BROKER_OPERATION_BUDGET_SECONDS,
-    BROKER_CLIENT_TIMEOUT_SECONDS, WORKER_ROOT, TRUSTED_NODE,
+    BROKER_CLIENT_TIMEOUT_SECONDS, BROKER_REQUEST_TIMEOUT_SECONDS, WORKER_ROOT, TRUSTED_NODE,
     TRUSTED_DISPATCHER, TRUSTED_HEALTH_CHECK,
 )
 
 
 def _read_one_request(connection: socket.socket) -> dict[str, Any]:
     data = bytearray()
+    deadline = time.monotonic() + BROKER_REQUEST_TIMEOUT_SECONDS
     while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise BrokerProtocolError("request deadline exceeded")
+        # socket timeouts are per recv call; resetting a fresh idle timeout
+        # would let an authenticated slow-trickle peer hold the broker forever.
+        connection.settimeout(min(BROKER_REQUEST_TIMEOUT_SECONDS, remaining))
         chunk = connection.recv(min(4096, MAX_REQUEST_BYTES + 1 - len(data)))
         if not chunk:
             raise BrokerProtocolError("incomplete request")

@@ -124,7 +124,8 @@ class RuntimeCandidateAclTests(unittest.TestCase):
 
     def test_verifier_gid_reads_only_the_acl_granted_candidate(self):
         granted_gid = grant_candidate_acl(
-            self.candidate, expected_sha=SHA, owner_uid=0, owner_gid=WORKER_GID)
+            self.candidate, expected_sha=SHA, owner_uid=0, owner_gid=WORKER_GID,
+            releases_root=self.releases)
         self.assertEqual(granted_gid, self.verify_gid)
         self.assertEqual(stat.S_IMODE(self.candidate.stat().st_mode), 0o550)
         with pin_candidate(self.candidate, expected_sha=SHA, owner_uid=0,
@@ -163,7 +164,8 @@ class RuntimeCandidateAclTests(unittest.TestCase):
             os.close(descriptor)
         with self.assertRaisesRegex(RuntimeAclRejected, "unexpected access ACL"):
             grant_candidate_acl(self.candidate, expected_sha=SHA,
-                                owner_uid=0, owner_gid=WORKER_GID)
+                                owner_uid=0, owner_gid=WORKER_GID,
+                                releases_root=self.releases)
 
 
 if __name__ == "__main__":

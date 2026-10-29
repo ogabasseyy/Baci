@@ -30,6 +30,9 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
         timeout_seconds = int(configured.split("=", 1)[1].removesuffix("s"))
         self.assertGreaterEqual(timeout_seconds, BROKER_CLIENT_TIMEOUT_SECONDS + 60)
 
+    def test_broker_initial_stop_signal_only_targets_main_process(self):
+        self.assertIn("KillMode=mixed", provision.UNIT.splitlines())
+
     def test_broker_unit_write_allowlist_is_exact_and_includes_only_fixed_runtime_roots(self):
         lines = [line for line in provision.UNIT.splitlines()
                  if line.startswith("ReadWritePaths=")]

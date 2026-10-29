@@ -9,6 +9,7 @@ import sys
 import tarfile
 import tempfile
 import threading
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -169,6 +170,33 @@ class BrokerSocketTests(unittest.TestCase):
         for payload in (b"x" * 25_000 + b"\n", b'{"op":1}\n{}\n', b'[]\n'):
             result = self.exchange(os.getuid(), payload, lambda *_: {"ok": True})
             self.assertEqual(result, {"ok": False, "error": "rejected"})
+
+    def test_slow_trickle_request_has_one_absolute_deadline(self):
+        server, client = socket.socketpair()
+        dispatched = []
+        worker = threading.Thread(target=serve_connection, kwargs={
+            "connection": server,
+            "expected_release_uid": 1001,
+            "dispatch": lambda *_: dispatched.append(True) or {"ok": True},
+        })
+        with (patch("worker_release_broker.BROKER_REQUEST_TIMEOUT_SECONDS", 0.25),
+              patch("worker_release_broker._peer_uid", return_value=1001)):
+            worker.start()
+            client.sendall(b"{")
+            # Bytes arrive more frequently than the former idle timeout, but
+            # cannot extend the absolute request deadline.
+            deadline = time.monotonic() + 0.7
+            while worker.is_alive() and time.monotonic() < deadline:
+                try:
+                    client.sendall(b" ")
+                except OSError:
+                    break
+                time.sleep(0.04)
+        worker.join(timeout=1)
+        client.close()
+        server.close()
+        self.assertFalse(worker.is_alive(), "slow trickle kept broker request open")
+        self.assertEqual(dispatched, [])
 
 
 class GiglCapabilityBrokerTests(unittest.TestCase):

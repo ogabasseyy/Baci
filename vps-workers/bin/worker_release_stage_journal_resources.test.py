@@ -24,6 +24,20 @@ class StageResourceJournalTests(unittest.TestCase):
     begin = _fixtures.StageJournalTests.begin
     recover_owned = _fixtures.StageJournalTests.recover_owned
 
+    def test_transfer_preflight_uses_resource_root_group_before_stage_group_chown(self):
+        resource_gid = self.resource_root.stat().st_gid
+        stage_gid = resource_gid + 12345
+        with _fixtures.StageJournal(self.root, owner_uid=self.owner, stage_gid=stage_gid,
+                                    resource_root=self.resource_root) as journal:
+            journal.begin(_fixtures.FENCE, _fixtures.DIGEST)
+            source = journal.create_source_snapshot()
+            self.assertEqual(source.stat().st_gid, resource_gid)
+            journal.begin_source_transfer()
+            self.assertEqual(journal._require_journal()["source_state"], "transfer")
+            journal.recover(terminal_attempt_proven=lambda fence: fence == _fixtures.FENCE,
+                            resources_quiesced=lambda fence: fence == _fixtures.FENCE)
+        self.assertFalse(source.exists())
+
     def test_incoming_identity_and_mode_are_fsynced_before_journal_phase_advance(self):
         synced_directories = set()
         real_fsync, original_write = os.fsync, _fixtures.StageJournal._write

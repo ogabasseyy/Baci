@@ -99,7 +99,7 @@ class StageResources:
             # to remove only an empty directory with exact owner/mode by rmdir.
             os.rmdir(name, dir_fd=self.fd)
         else:
-            if state not in ("created", "removed") or dev is None or ino is None:
+            if state not in ("created", "transfer", "frozen", "removed") or dev is None or ino is None:
                 reject("stage resource journal identity is incomplete")
             if (entry.st_dev, entry.st_ino) != (dev, ino):
                 reject("stage resource inode changed")
@@ -154,7 +154,8 @@ class StageResources:
         if state != "created" or dev is None or ino is None:
             reject("source resource is not ready for ownership transfer")
         fd = self._open_exact(name, expected_dev=dev, expected_ino=ino,
-                              expected_uid=self.resource_uid)
+                              expected_uid=self.resource_uid,
+                              expected_gid=os.fstat(self.fd).st_gid)
         os.close(fd)
         value["source_state"] = "transfer"
         self.write(value)

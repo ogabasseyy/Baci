@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-29T16:37:48.885474+00:00",
-  "source_revision": "3b170ad836cbd3a28a92f482553f933f3c2708a2",
-  "evidence_digest": "6275f0e0f38b038ccb7025d4cfda95843edbf5dc920dd34697910ec44f0246b3",
-  "claims_digest": "b5eefafdc44d65bf915c6e59b4c06dae1cc24bf9af484abd28c74a8a1434448f",
+  "reviewed_at": "2026-10-29T17:16:29.921238+00:00",
+  "source_revision": "a0802dd663e3fb168b2c067dde24bff707a16fa1",
+  "evidence_digest": "b03d742dc8cf1c28d1cc1cfa53d8ba7354102dae664f79b92efbdcb10c40fab6",
+  "claims_digest": "1b95adf05bee74a5fa996600b91ba007d1d7d47208c01a699b14b35e3c5c6069",
   "review_scope": "Source evidence only. Re-reviewed the Shopping MCP access map after retiring the misleading link-only add_to_cart alias. Anonymous discovery retains prepare_storefront_cart_link; connected discovery excludes it. After rebasing, all register and access-map citations were checked unchanged from the prior reviewed tree through the current main baseline. PKCE/encrypted grants, resource-specific transport and refresh receipts remain as previously reviewed. No new production capability promotion. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged.",
   "capabilities": [
     {

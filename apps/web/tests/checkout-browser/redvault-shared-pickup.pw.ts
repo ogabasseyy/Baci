@@ -133,6 +133,50 @@ test.describe('shared UBA checkout after a lost order response', () => {
     expect(calls.initializations).toBe(1);
   });
 
+  test('reconciles an older uncertain order without creating another', async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    if (!baseURL) throw new Error('Checkout fixture requires a local base URL');
+    await context.addCookies([
+      { name: 'csrf-token', value: 'fixture-csrf-token', url: baseURL },
+    ]);
+    const calls = await seedRedvaultSharedPickup(page, baseURL, {
+      lostOrderResponses: 2,
+    });
+    await page.goto('/checkout-shared?qa=redvault-shared-pickup&lost=1');
+    await page.getByRole('radio', { name: /Pay with UBA/i }).press('Space');
+    await page
+      .getByRole('button', { name: 'Place Order', exact: true })
+      .filter({ visible: true })
+      .first()
+      .click();
+    await expect(
+      page.getByText('Checkout Failed', { exact: true }).first()
+    ).toBeVisible();
+    await page.evaluate(() => {
+      const key =
+        'baci:uba-uncertain-checkout:6b5cb8a4-5575-456c-b936-8cdfae30db74';
+      const raw = sessionStorage.getItem(key);
+      if (!raw) throw new Error('Missing uncertain checkout fixture');
+      const attempt = JSON.parse(raw);
+      attempt.createdAt = Date.now() - 31 * 60_000;
+      sessionStorage.setItem(key, JSON.stringify(attempt));
+    });
+    await page.reload();
+    const confirm = page
+      .getByRole('button', { name: 'Review and continue to UBA' })
+      .filter({ visible: true })
+      .first();
+    await expect(confirm).toBeEnabled({ timeout: 15_000 });
+    expect(calls.orders).toBe(2);
+    expect(calls.createdOrders).toBe(1);
+    expect(calls.reconciliations).toBe(1);
+    expect(calls.reconciliationCsrf).toEqual(['fixture-csrf-token']);
+    expect(calls.initializations).toBe(0);
+  });
+
   test('hides the review if another tab retires the cart authority', async ({
     page,
     context,

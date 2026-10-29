@@ -1,11 +1,14 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { beginCartSessionRetirement } from '@/hooks/cart/cart-session-write-fence';
 import { bumpCartSessionGeneration } from '@/hooks/cart/shared-cart-storage';
+import { fetchWithCsrf } from '@/lib/api-client';
 import {
   readRedvaultUncertainAttempt,
   saveRedvaultUncertainAttempt,
 } from '../redvault-uncertain-attempt';
 import { recoverRedvaultUncertainAttempt } from './recover-redvault-uncertain-attempt';
+
+vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: vi.fn() }));
 
 const merchantId = '11111111-1111-4111-8111-111111111111';
 const cartId = '22222222-2222-4222-8222-222222222222';
@@ -73,6 +76,19 @@ const response = {
 beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
+  vi.clearAllMocks();
+});
+
+it('uses the CSRF-aware client for recovery when no request override is supplied', async () => {
+  saveRedvaultUncertainAttempt(attempt);
+  vi.mocked(fetchWithCsrf).mockResolvedValueOnce(Response.json(response));
+  expect(
+    await recoverRedvaultUncertainAttempt({ merchantId, pendingOrder: null })
+  ).toMatchObject({ kind: 'recovered' });
+  expect(fetchWithCsrf).toHaveBeenCalledWith(
+    '/api/orders',
+    expect.objectContaining({ method: 'POST' })
+  );
 });
 
 it('replays the exact saved request and persists a review before clearing the attempt', async () => {
@@ -147,6 +163,81 @@ it('never overwrites an unresolved request with a changed checkout', () => {
   expect(stored.kind === 'pending' && stored.attempt.idempotencyKey).toBe(
     'attempt-key'
   );
+});
+
+it('allows a fresh review only after the server retires the exact expired checkout', async () => {
+  saveRedvaultUncertainAttempt(attempt);
+  const key = `baci:uba-uncertain-checkout:${merchantId}`;
+  const stored = JSON.parse(sessionStorage.getItem(key) ?? 'null');
+  stored.createdAt = Date.now() - 31 * 60_000;
+  sessionStorage.setItem(key, JSON.stringify(stored));
+
+  const request = vi.fn<typeof fetch>().mockResolvedValue(
+    Response.json({
+      kind: 'retired',
+      cartId,
+      checkoutSessionId: sessionId,
+      checkoutGeneration: 1,
+    })
+  );
+
+  expect(
+    await recoverRedvaultUncertainAttempt({
+      merchantId,
+      merchantSlug: 'store',
+      pendingOrder: null,
+      request,
+    })
+  ).toEqual({ kind: 'retired' });
+  expect(readRedvaultUncertainAttempt(merchantId)).toEqual({ kind: 'none' });
+});
+
+it('restores an already submitted UBA order after the checkout window expires', async () => {
+  saveRedvaultUncertainAttempt(attempt);
+  const key = `baci:uba-uncertain-checkout:${merchantId}`;
+  const stored = JSON.parse(sessionStorage.getItem(key) ?? 'null');
+  stored.createdAt = Date.now() - 31 * 60_000;
+  sessionStorage.setItem(key, JSON.stringify(stored));
+  const request = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(Response.json({ kind: 'submitted', ...response }));
+
+  expect(
+    await recoverRedvaultUncertainAttempt({
+      merchantId,
+      merchantSlug: 'store',
+      pendingOrder: null,
+      request,
+    })
+  ).toMatchObject({ kind: 'recovered', snapshot: { orderId: 'order-1' } });
+  expect(readRedvaultUncertainAttempt(merchantId)).toEqual({ kind: 'none' });
+});
+
+it('keeps an uncertain attempt when retirement names a different checkout', async () => {
+  saveRedvaultUncertainAttempt(attempt);
+  const key = `baci:uba-uncertain-checkout:${merchantId}`;
+  const stored = JSON.parse(sessionStorage.getItem(key) ?? 'null');
+  stored.createdAt = Date.now() - 31 * 60_000;
+  sessionStorage.setItem(key, JSON.stringify(stored));
+  const request = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(
+      Response.json({
+        kind: 'retired',
+        cartId,
+        checkoutSessionId: 'other',
+        checkoutGeneration: 1,
+      })
+    );
+
+  expect(
+    await recoverRedvaultUncertainAttempt({
+      merchantId,
+      pendingOrder: null,
+      request,
+    })
+  ).toEqual({ kind: 'unavailable' });
+  expect(readRedvaultUncertainAttempt(merchantId).kind).toBe('pending');
 });
 
 it('does not replay over a different pending order', async () => {

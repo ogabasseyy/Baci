@@ -11,6 +11,7 @@ import {
   cartErrorResponse,
   cartJsonResponse,
   setCartSessionCookie,
+  setCheckoutReconciliationCookie,
   setCheckoutRecoveryCookie,
 } from '@/lib/cart/response';
 import { verifyCartSessionProofForRevocation } from '@/lib/cart/session-proof';
@@ -18,6 +19,15 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { cartRevokeRequestSchema } from '@/schemas/cart-account';
+
+function clearCheckoutCookies(
+  response: ReturnType<typeof cartErrorResponse>,
+  merchantId: string
+) {
+  setCheckoutRecoveryCookie(response, merchantId, '', 0);
+  setCheckoutReconciliationCookie(response, merchantId, '', 0);
+}
+
 /** Device-scoped revocation never clears shared cart contents or other device grants. */
 export async function POST(request: NextRequest): Promise<Response> {
   try {
@@ -45,7 +55,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     if (!context.ok) {
       const response = cartErrorResponse(context.error);
       if (context.merchant) {
-        setCheckoutRecoveryCookie(response, context.merchant.id, '', 0);
+        clearCheckoutCookies(response, context.merchant.id);
       }
       if (
         (context.error === 'invalid_proof' ||
@@ -74,24 +84,24 @@ export async function POST(request: NextRequest): Promise<Response> {
     });
     if (!quota.allowed) {
       const response = cartErrorResponse('quota_exceeded');
-      setCheckoutRecoveryCookie(response, context.merchant.id, '', 0);
+      clearCheckoutCookies(response, context.merchant.id);
       return response;
     }
     const body = await readCartJsonBody(request);
     if (!body.ok || !cartRevokeRequestSchema.safeParse(body.body).success) {
       const response = cartErrorResponse('invalid_request');
-      setCheckoutRecoveryCookie(response, context.merchant.id, '', 0);
+      clearCheckoutCookies(response, context.merchant.id);
       return response;
     }
     const result = await revokeCartDeviceGrants(context.principal);
     if (!result.ok) {
       const response = cartErrorResponse(result.code);
-      setCheckoutRecoveryCookie(response, context.merchant.id, '', 0);
+      clearCheckoutCookies(response, context.merchant.id);
       return response;
     }
     const response = cartJsonResponse({ revoked: true });
     setCartSessionCookie(response, context.merchant.id, '', 0);
-    setCheckoutRecoveryCookie(response, context.merchant.id, '', 0);
+    clearCheckoutCookies(response, context.merchant.id);
     return response;
   } catch {
     return cartErrorResponse('temporarily_unavailable');

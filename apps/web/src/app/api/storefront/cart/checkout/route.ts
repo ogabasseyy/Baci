@@ -16,10 +16,12 @@ import {
   cartErrorResponse,
   cartJsonResponse,
   setCartSessionCookie,
+  setCheckoutReconciliationCookie,
   setCheckoutRecoveryCookie,
 } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import {
+  CART_REVOCATION_GRACE_SECONDS,
   cartSessionCookieMaxAge,
   issueCartSessionProof,
   verifyCartSessionProof,
@@ -231,6 +233,12 @@ export async function POST(request: NextRequest) {
         context.merchant.id,
         recoveryProof,
         recoveryMaxAge
+      );
+      setCheckoutReconciliationCookie(
+        response,
+        context.merchant.id,
+        recoveryProof,
+        recoveryMaxAge + CART_REVOCATION_GRACE_SECONDS
       );
     }
     return response;

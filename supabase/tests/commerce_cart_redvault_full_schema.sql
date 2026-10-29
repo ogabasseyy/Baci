@@ -149,5 +149,90 @@ BEGIN
   END IF;
 END;
 $$;
+
+-- Recovery of a submitted order stays bound to the original user, grant and
+-- idempotency key, while an unsubmitted session can be retired atomically.
+CREATE TEMP TABLE redvault_reconciliation_case(cart_id uuid, grant_id uuid, session_id uuid) ON COMMIT DROP;
+INSERT INTO redvault_reconciliation_case VALUES (extensions.gen_random_uuid(), extensions.gen_random_uuid(), extensions.gen_random_uuid());
+INSERT INTO public.commerce_carts(id,merchant_id,expires_at)
+SELECT cart_id,'6b5cb8a4-5575-456c-b936-8cdfae30db74',now()+interval '1 day' FROM redvault_reconciliation_case;
+INSERT INTO public.commerce_cart_grants(id,merchant_id,cart_id,principal_id,expires_at)
+SELECT grant_id,'6b5cb8a4-5575-456c-b936-8cdfae30db74',cart_id,'reconcile-fixture',now()-interval '1 minute' FROM redvault_reconciliation_case;
+INSERT INTO public.commerce_cart_checkout_sessions(id,merchant_id,cart_id,checkout_generation,cart_version_reviewed,principal_id,preparing_grant_id,expires_at)
+SELECT session_id,'6b5cb8a4-5575-456c-b936-8cdfae30db74',cart_id,1,1,'reconcile-fixture',grant_id,now()-interval '1 minute' FROM redvault_reconciliation_case;
+SELECT set_config('request.jwt.claims',jsonb_build_object(
+  'role','commerce_cart_shopper','cart_scope','checkout_recovery','exp',floor(extract(epoch FROM now()+interval '1 minute')),
+  'cart_merchant_id','6b5cb8a4-5575-456c-b936-8cdfae30db74','cart_id',cart_id,'cart_grant_id',grant_id,
+  'cart_principal_id','reconcile-fixture','cart_recovery_session_id',session_id,'cart_recovery_generation',1,
+  'cart_recovery_version',1,'cart_recovery_email','redvault-cart@example.invalid','cart_recovery_user_id','guest',
+  'cart_recovery_key_hash',encode(extensions.digest('redvault-cart-full-schema','sha256'),'hex')
+)::text,true) FROM redvault_reconciliation_case;
+SET LOCAL ROLE commerce_cart_shopper;
+DO $$
+DECLARE result jsonb;
+BEGIN
+  result := public.commerce_cart_reconcile_redvault_checkout();
+  IF result->>'kind' IS DISTINCT FROM 'retired' THEN RAISE EXCEPTION 'reconciliation_did_not_retire'; END IF;
+  IF public.commerce_cart_reconcile_redvault_checkout()->>'kind' IS DISTINCT FROM 'retired' THEN RAISE EXCEPTION 'retirement_not_idempotent'; END IF;
+  PERFORM set_config('request.jwt.claims',(current_setting('request.jwt.claims')::jsonb || jsonb_build_object('cart_scope','session'))::text,true);
+  IF public.commerce_cart_reconcile_redvault_checkout()->>'kind' IS DISTINCT FROM 'unavailable' THEN RAISE EXCEPTION 'ordinary_cart_scope_accepted'; END IF;
+END $$;
+RESET ROLE;
+DO $$
+BEGIN
+  IF (SELECT status FROM public.commerce_cart_checkout_sessions WHERE id=(SELECT session_id FROM redvault_reconciliation_case)) IS DISTINCT FROM 'retired' THEN RAISE EXCEPTION 'retirement_not_persisted'; END IF;
+  IF has_function_privilege('anon','public.commerce_cart_reconcile_redvault_checkout()','EXECUTE') OR has_function_privilege('authenticated','public.commerce_cart_reconcile_redvault_checkout()','EXECUTE') THEN RAISE EXCEPTION 'reconciliation_overgranted'; END IF;
+END $$;
+-- Even if an earlier-started order reaches the database after reconciliation,
+-- the real bound-order RPC must refuse the retired checkout session.
+UPDATE public.commerce_cart_grants SET expires_at=now()+interval '1 day'
+WHERE id=(SELECT grant_id FROM redvault_reconciliation_case);
+GRANT SELECT ON redvault_reconciliation_case TO authenticated;
+SELECT set_config('request.jwt.claims',jsonb_build_object(
+  'role','authenticated','storefront_redvault_customer_email','redvault-cart@example.invalid',
+  'storefront_order_context','route','storefront_order_merchant_id','6b5cb8a4-5575-456c-b936-8cdfae30db74'
+)::text,true);
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE c redvault_cart_case%ROWTYPE; r redvault_reconciliation_case%ROWTYPE; args jsonb;
+BEGIN
+  SELECT * INTO STRICT c FROM redvault_cart_case;
+  SELECT * INTO STRICT r FROM redvault_reconciliation_case;
+  args := jsonb_build_object(
+    'p_merchant_id','6b5cb8a4-5575-456c-b936-8cdfae30db74',
+    'p_cart_id',r.cart_id,'p_cart_version',1,'p_cart_principal_id','reconcile-fixture',
+    'p_customer_email','redvault-cart@example.invalid','p_payment_method','uba_redvault',
+    'p_checkout_idempotency_key','redvault-cart-full-schema','p_items',c.submitted,
+    'p_redvault_order',c.order_payload,'p_redvault_quote',c.quote,
+    'p_redvault_route_proof',public.redvault_private_pilot_test_route_proof(c.order_payload,c.quote)
+  );
+  BEGIN
+    PERFORM public.create_storefront_order_with_cart_binding('redvault',r.session_id,1,args);
+    RAISE EXCEPTION 'retired_checkout_submitted';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'cart_checkout_stale' THEN RAISE; END IF;
+  END;
+END $$;
+RESET ROLE;
+SELECT set_config('request.jwt.claims',jsonb_build_object(
+  'role','commerce_cart_shopper','cart_scope','checkout_recovery','exp',floor(extract(epoch FROM now()+interval '1 minute')),
+  'cart_merchant_id','6b5cb8a4-5575-456c-b936-8cdfae30db74','cart_id',cart_id,'cart_grant_id',grant_id,
+  'cart_principal_id','redvault-fixture','cart_recovery_session_id',session_id,'cart_recovery_generation',1,
+  'cart_recovery_version',1,'cart_recovery_email','redvault-cart@example.invalid','cart_recovery_user_id','guest',
+  'cart_recovery_key_hash',encode(extensions.digest('redvault-cart-full-schema','sha256'),'hex')
+)::text,true) FROM redvault_cart_case;
+SELECT set_config('test.redvault_expected_order',(first_result->'order'->>'id'),true) FROM redvault_cart_case;
+SET LOCAL ROLE commerce_cart_shopper;
+DO $$
+DECLARE claims jsonb := current_setting('request.jwt.claims')::jsonb; result jsonb;
+BEGIN
+  result := public.commerce_cart_reconcile_redvault_checkout();
+  IF result->>'kind' IS DISTINCT FROM 'submitted' OR result->>'orderId' IS DISTINCT FROM current_setting('test.redvault_expected_order') THEN RAISE EXCEPTION 'submitted_reconciliation_mismatch'; END IF;
+  PERFORM set_config('request.jwt.claims',(claims || jsonb_build_object('cart_recovery_key_hash',repeat('0',64)))::text,true);
+  IF public.commerce_cart_reconcile_redvault_checkout()->>'kind' IS DISTINCT FROM 'unavailable' THEN RAISE EXCEPTION 'wrong_recovery_key_accepted'; END IF;
+  PERFORM set_config('request.jwt.claims',(claims || jsonb_build_object('cart_recovery_user_id','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'))::text,true);
+  IF public.commerce_cart_reconcile_redvault_checkout()->>'kind' IS DISTINCT FROM 'unavailable' THEN RAISE EXCEPTION 'wrong_recovery_user_accepted'; END IF;
+END $$;
+RESET ROLE;
 ROLLBACK;
 \echo 'Full-schema REDVAULT shared-cart and free store-pickup regression passed; no provider request.'

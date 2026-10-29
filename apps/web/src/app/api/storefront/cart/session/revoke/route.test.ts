@@ -237,5 +237,8 @@ it('clears only the resolved merchant cookie after idempotent scoped revocation'
   expect(response.status).toBe(200);
   expect(response.headers.get('cache-control')).toContain('no-store');
   expect(response.headers.get('set-cookie')).toContain('Max-Age=0');
+  expect(response.headers.get('set-cookie')).toContain(
+    'baci-checkout-reconcile-m=;'
+  );
   expect(revokeCartDeviceGrants).toHaveBeenCalledWith(principal);
 });

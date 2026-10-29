@@ -59,6 +59,11 @@ export async function beginCheckoutOrderSubmission(
         title: 'Previous UBA review restored',
         description: 'Please review it before continuing.',
       });
+    } else if (result.kind === 'retired') {
+      toast({
+        title: 'Previous checkout closed',
+        description: 'Please review your cart and try checkout again.',
+      });
     } else {
       toast({
         title: 'Previous UBA checkout needs attention',

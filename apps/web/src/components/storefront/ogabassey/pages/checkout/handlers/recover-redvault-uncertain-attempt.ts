@@ -12,6 +12,7 @@ import {
   isCartDeviceRevocationPending,
 } from '@/hooks/cart/shared-cart-session-revoke-client';
 import { getCartSessionGeneration } from '@/hooks/cart/shared-cart-storage';
+import { fetchWithCsrf } from '@/lib/api-client';
 import { parseRedvaultOrderQuote } from '../parse-redvault-order-quote';
 import { persistPendingCheckoutOrder } from '../persist-pending-checkout-order';
 import { readRedvaultReviewRecovery } from '../read-redvault-review-recovery';
@@ -19,9 +20,10 @@ import {
   clearRedvaultUncertainAttempt,
   readRedvaultUncertainAttempt,
 } from '../redvault-uncertain-attempt';
+import { reconcileRedvaultUncertainAttempt } from './reconcile-redvault-uncertain-attempt';
 
 type RecoveryResult =
-  | { kind: 'none' | 'unavailable' }
+  | { kind: 'none' | 'retired' | 'unavailable' }
   | { kind: 'recovered'; snapshot: PendingCheckoutOrderSnapshot };
 
 /** Replay only the previously approved order request; never initialize payment. */
@@ -29,13 +31,13 @@ export async function recoverRedvaultUncertainAttempt({
   merchantId,
   merchantSlug,
   pendingOrder,
-  request = fetch,
+  request = fetchWithCsrf,
   signal,
 }: {
   merchantId: string;
   merchantSlug?: string;
   pendingOrder: PendingCheckoutOrderSnapshot | null;
-  request?: typeof fetch;
+  request?: (url: string, init?: RequestInit) => Promise<Response>;
   signal?: AbortSignal;
 }): Promise<RecoveryResult> {
   const stored = readRedvaultUncertainAttempt(merchantId);
@@ -68,7 +70,7 @@ async function recoverLocked(
   merchantId: string,
   merchantSlug: string | undefined,
   pendingOrder: PendingCheckoutOrderSnapshot | null,
-  request: typeof fetch,
+  request: (url: string, init?: RequestInit) => Promise<Response>,
   signal: AbortSignal
 ): Promise<RecoveryResult> {
   const generation = getCartSessionGeneration(merchantSlug);
@@ -104,22 +106,45 @@ async function recoverLocked(
   }
 
   const age = Date.now() - attempt.createdAt;
-  if (age < -60_000 || age > 30 * 60_000) return { kind: 'unavailable' };
-  try {
-    const response = await request('/api/orders', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Idempotency-Key': attempt.idempotencyKey,
-        'X-Checkout-Recovery': '1',
-      },
-      body: JSON.stringify(attempt.orderRequest),
+  if (age < -60_000) return { kind: 'unavailable' };
+  let payload: unknown;
+  if (age <= 30 * 60_000) {
+    try {
+      const response = await request('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': attempt.idempotencyKey,
+          'X-Checkout-Recovery': '1',
+        },
+        body: JSON.stringify(attempt.orderRequest),
+        signal,
+      });
+      if (response.status === 200 || response.status === 201)
+        payload = await response.json();
+    } catch {
+      // Reconcile the session before allowing any fresh checkout.
+    }
+  }
+  if (!isCurrent()) return { kind: 'unavailable' };
+  if (!payload) {
+    const outcome = await reconcileRedvaultUncertainAttempt({
+      attempt,
+      merchantSlug,
+      request,
       signal,
     });
     if (!isCurrent()) return { kind: 'unavailable' };
-    if (response.status !== 200 && response.status !== 201)
-      return { kind: 'unavailable' };
-    const payload: unknown = await response.json();
+    if (outcome.kind === 'retired') {
+      clearRedvaultUncertainAttempt(merchantId, attempt.idempotencyKey);
+      if (readRedvaultUncertainAttempt(merchantId).kind !== 'none')
+        return { kind: 'unavailable' };
+      return { kind: 'retired' };
+    }
+    if (outcome.kind !== 'submitted') return { kind: 'unavailable' };
+    payload = outcome.payload;
+  }
+  try {
     if (!isCurrent()) return { kind: 'unavailable' };
     if (
       !payload ||

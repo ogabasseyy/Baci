@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { checkoutReconciliationCookieName } from '@/lib/cart/checkout-reconciliation-proof';
 import {
   checkoutRecoveryAudience,
   checkoutRecoveryCookieName,
@@ -104,6 +105,12 @@ it('issues a short-lived HttpOnly proof scoped to the verified shopper and prepa
   const match = cookies.match(new RegExp(`${name}=([^;,]+)`));
   expect(match).not.toBeNull();
   expect(cookies).toContain('HttpOnly');
+  const reconciliationCookie = response.cookies.get(
+    checkoutReconciliationCookieName(merchantId)
+  );
+  expect(reconciliationCookie?.value).toBe(match?.[1]);
+  expect(reconciliationCookie?.httpOnly).toBe(true);
+  expect(reconciliationCookie?.maxAge).toBeGreaterThan(24 * 60 * 60);
   const proof = decodeURIComponent(match?.[1] ?? '');
   const verified = verifyCartSessionProof(proof, {
     secret,
@@ -127,6 +134,9 @@ it('issues a short-lived HttpOnly proof scoped to the verified shopper and prepa
 it('does not issue a recovery proof for ordinary checkout or an indeterminate auth failure', async () => {
   expect((await prepare(false)).headers.get('set-cookie') ?? '').not.toContain(
     checkoutRecoveryCookieName(merchantId)
+  );
+  expect((await prepare(false)).headers.get('set-cookie') ?? '').not.toContain(
+    checkoutReconciliationCookieName(merchantId)
   );
   mocks.user = null;
   mocks.authError = 'Authentication failed';

@@ -74,6 +74,8 @@ export async function seedRedvaultSharedPickup(
     cancellations: 0,
     initializations: 0,
     emptyQuotes: 0,
+    reconciliations: 0,
+    reconciliationCsrf: [] as Array<string | undefined>,
   };
   let submitted = false;
   const cart = {
@@ -146,6 +148,15 @@ export async function seedRedvaultSharedPickup(
     payable_kobo: 10_250,
     mixed_basket: false,
   };
+  const order = {
+    id: '44444444-4444-4444-8444-444444444444',
+    order_number: 'TEST-1001',
+    total: 102.5,
+    currency: 'NGN',
+    payment_status: 'unpaid',
+    payment_method: 'uba_redvault',
+    tracking_token: 'fixture-tracking-token',
+  };
 
   await page.route('**/*', async (route) => {
     const request = route.request();
@@ -168,6 +179,22 @@ export async function seedRedvaultSharedPickup(
         ],
       });
     if (url.origin !== baseURL) return route.fallback();
+    if (url.pathname === '/api/storefront/cart/checkout/reconcile') {
+      calls.reconciliations += 1;
+      calls.reconciliationCsrf.push(request.headers()['x-csrf-token']);
+      if (!request.headers()['x-csrf-token'])
+        return route.fulfill({ status: 403, json: { error: 'Missing CSRF' } });
+      return route.fulfill({
+        json: submitted
+          ? { kind: 'submitted', order, redvault: { quote: summary } }
+          : {
+              kind: 'retired',
+              cartId,
+              checkoutSessionId: sessionId,
+              checkoutGeneration: 1,
+            },
+      });
+    }
     if (url.pathname === '/api/storefront/cart/checkout') {
       calls.prepareBodies.push(request.postDataJSON());
       return route.fulfill({
@@ -222,15 +249,7 @@ export async function seedRedvaultSharedPickup(
       return route.fulfill({
         status: calls.orders === 1 ? 201 : 200,
         json: {
-          order: {
-            id: '44444444-4444-4444-8444-444444444444',
-            order_number: 'TEST-1001',
-            total: 102.5,
-            currency: 'NGN',
-            payment_status: 'unpaid',
-            payment_method: 'uba_redvault',
-            tracking_token: 'fixture-tracking-token',
-          },
+          order,
           redvault: { status: 'pending', quote: summary },
         },
       });

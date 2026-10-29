@@ -56,6 +56,11 @@ export function useRedvaultUncertainRecovery(options: {
             title: 'Previous UBA review restored',
             description: 'Please review it before continuing.',
           });
+        } else if (result.kind === 'retired') {
+          toast({
+            title: 'Previous checkout closed',
+            description: 'Please review your cart and try checkout again.',
+          });
         } else if (result.kind === 'unavailable') {
           toast({
             title: 'Previous UBA checkout needs attention',

@@ -1,5 +1,6 @@
 import type { CartErrorCode } from '@baci/shared/cart';
 import { NextResponse } from 'next/server';
+import { checkoutReconciliationCookieName } from './checkout-reconciliation-proof';
 import { checkoutRecoveryCookieName } from './checkout-recovery-proof';
 import { safeCartErrorMessage } from './mutation-errors';
 import { cartSessionCookieName } from './principal';
@@ -131,6 +132,22 @@ export function setCheckoutRecoveryCookie(
   maxAgeSeconds: number
 ): void {
   response.cookies.set(checkoutRecoveryCookieName(merchantId), proof, {
+    httpOnly: true,
+    maxAge: maxAgeSeconds,
+    path: '/',
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  });
+}
+
+/** Kept beyond checkout expiry only for the narrow reconciliation endpoint. */
+export function setCheckoutReconciliationCookie(
+  response: NextResponse,
+  merchantId: string,
+  proof: string,
+  maxAgeSeconds: number
+): void {
+  response.cookies.set(checkoutReconciliationCookieName(merchantId), proof, {
     httpOnly: true,
     maxAge: maxAgeSeconds,
     path: '/',

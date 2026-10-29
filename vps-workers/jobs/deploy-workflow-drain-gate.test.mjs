@@ -19,6 +19,18 @@ function jobBlock(name, nextName) {
   return workflow.slice(start, end);
 }
 
+function isBehavioralTrackingEntry(entry) {
+  return (
+    /gigl|tracking/i.test(entry) &&
+    !/\.test[.-]/.test(entry) &&
+    !entry.split('/').includes('__pycache__') &&
+    !entry.endsWith('.pyc') &&
+    !entry.startsWith('docs/') &&
+    !entry.startsWith('logs/') &&
+    !entry.startsWith('locks/')
+  );
+}
+
 describe('production worker and cache-invalidation rollout gates', () => {
   it('runs migrations on manual dispatch after successful readiness despite skipped changes', () => {
     const migrations = jobBlock('db-migrations', 'gigl-worker-capability');
@@ -303,13 +315,7 @@ describe('production worker and cache-invalidation rollout gates', () => {
     ]);
     const entries = readdirSync(workerRoot, { recursive: true });
     const discovered = entries.filter(
-      (entry) =>
-        /gigl|tracking/i.test(entry) &&
-        !/\.test[.-]/.test(entry) &&
-        !entry.startsWith('docs/') &&
-        !entry.startsWith('logs/') &&
-        !entry.startsWith('locks/') &&
-        !excluded.has(entry)
+      (entry) => isBehavioralTrackingEntry(entry) && !excluded.has(entry)
     );
 
     assert.ok(
@@ -326,5 +332,18 @@ describe('production worker and cache-invalidation rollout gates', () => {
         `tracking filter omits vps-workers/${entry}`
       );
     }
+  });
+
+  it('ignores generated Python bytecode when checking tracked worker sources', () => {
+    assert.equal(
+      isBehavioralTrackingEntry(
+        'bin/__pycache__/worker_release_gigl.cpython-313.pyc'
+      ),
+      false
+    );
+    assert.equal(
+      isBehavioralTrackingEntry('bin/worker_release_gigl.py'),
+      true
+    );
   });
 });

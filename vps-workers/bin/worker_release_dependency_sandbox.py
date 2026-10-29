@@ -147,7 +147,9 @@ def systemd_command(source: Path, scratch: Path, expected_sha: str, uid: int, gi
     properties = (
         "ProtectSystem=strict", "ProtectHome=true", "PrivateTmp=true", "PrivateDevices=true",
         "NoNewPrivileges=true", "PrivateUsers=true", "ProtectControlGroups=true",
-        "RestrictSUIDSGID=true", "LockPersonality=true",
+        "ProtectKernelTunables=true", "ProtectKernelModules=true", "ProtectKernelLogs=true",
+        "ProtectProc=invisible", "ProcSubset=pid", "RestrictSUIDSGID=true",
+        "RestrictRealtime=true", "LockPersonality=true",
         "UMask=0077", "KillMode=control-group", f"RuntimeMaxSec={MAX_BUILD_SECONDS}s",
         "MemoryMax=2G", "CPUQuota=200%", "TasksMax=128", "LimitFSIZE=1073741824", "LimitNOFILE=4096",
         f"ReadOnlyPaths={source} {source.parent / 'pnpm-cache-seed'} {source.parent / RECEIPT_NAME}",

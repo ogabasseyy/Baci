@@ -147,7 +147,10 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
         if failure is None and process.returncode != 0:
             capture = getattr(process, "_baci_stderr_capture", None)
             category = capture.category() if capture is not None else "unit-launch-rejected"
-            failure = f"transient unit launch was rejected ({category})"
+            property_hint = (capture.property_hint(tuple(properties))
+                             if capture is not None and category == "unit-property-rejected" else None)
+            safe_property = f" property={property_hint}" if property_hint is not None else ""
+            failure = f"transient unit launch was rejected ({category}){safe_property}"
         deadline = time.monotonic() + MAX_CHECK_SECONDS
         completed = False
         while failure is None and time.monotonic() < deadline:

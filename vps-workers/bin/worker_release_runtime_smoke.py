@@ -36,7 +36,7 @@ def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callab
         "RestrictSUIDSGID": "yes", "RestrictRealtime": "yes",
         "CapabilityBoundingSet": "", "AmbientCapabilities": "",
         "RestrictAddressFamilies": "AF_UNIX", "TasksMax": "32",
-        "MemoryMax": str(512 * 1024 * 1024), "CPUQuotaPerSecUSec": "1000000",
+        "MemoryMax": str(512 * 1024 * 1024), "CPUQuota": "100%",
         "RuntimeMaxSec": str(max_seconds), "LimitNOFILE": "256",
         "LimitFSIZE": str(max_output_bytes), "UMask": "0077",
         "ReadOnlyPaths": str(candidate),

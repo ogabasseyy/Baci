@@ -183,6 +183,8 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         capture = BoundedLauncherStderr(io.BytesIO(
             b"Unknown assignment 'MemoryMax' for unit; private-token=must-not-escape"))
         self.assertEqual(capture.category(), "unit-property-rejected")
+        self.assertEqual(capture.property_hint(("CPUQuota", "MemoryMax")), "MemoryMax")
+        self.assertIsNone(capture.property_hint(("CPUQuota",)))
         self.assertNotIn("private-token", capture.category())
         self.assertNotIn("MemoryMax", capture.category())
 

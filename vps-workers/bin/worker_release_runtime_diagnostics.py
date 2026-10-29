@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+import re
 
 MAX_CAPTURE_BYTES = 4096
 
@@ -40,6 +41,13 @@ class BoundedLauncherStderr:
         if any(value in text for value in ("failed to start transient", "job failed", "failed to start")):
             return "unit-start-rejected"
         return "unit-launch-rejected"
+
+    def property_hint(self, allowed_properties: tuple[str, ...]) -> str | None:
+        """Return a property only when it is one of the fixed submitted keys."""
+        self._thread.join(timeout=1)
+        text = bytes(self._prefix).decode("utf-8", errors="replace").lower()
+        return next((name for name in allowed_properties
+                     if re.search(rf"\b{re.escape(name.lower())}\b", text)), None)
 
 
 __all__ = ["BoundedLauncherStderr", "MAX_CAPTURE_BYTES"]

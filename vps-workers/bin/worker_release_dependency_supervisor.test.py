@@ -38,7 +38,14 @@ class BuilderSupervisorContractTests(unittest.TestCase):
             Path("/run/input/source"), Path("/run/build/scratch"), "a" * 40,
             os.getuid(), os.getgid(), "baci-worker-deps-" + "a" * 12 + "-" + "b" * 32 + ".service",
         )
-        self.assertIn("ProtectControlGroups=true", command)
+        required = (
+            "ProtectControlGroups=true", "ProtectKernelTunables=true",
+            "ProtectKernelModules=true", "ProtectKernelLogs=true",
+            "ProtectProc=invisible", "ProcSubset=pid", "RestrictRealtime=true",
+        )
+        for property_value in required:
+            with self.subTest(property_value=property_value):
+                self.assertIn(property_value, command)
 
     def test_unit_name_is_bound_to_sha_prefix_and_random_transaction(self):
         self.assertEqual(

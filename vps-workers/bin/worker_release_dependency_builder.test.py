@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -148,6 +149,7 @@ class DependencyBuilderTests(unittest.TestCase):
         self.assertIn("--uid=1234", command)
         self.assertIn("--gid=1234", command)
         self.assertIn("ReadOnlyPaths=/input", joined)
+        self.assertIn("/pnpm-cache-seed", joined)
         self.assertIn("ReadWritePaths=/scratch", joined)
         self.assertIn("InaccessiblePaths=/srv/baci-workers/runtime /srv/baci-workers/releases /srv/baci-workers/locks", joined)
         self.assertIn("ProtectSystem=strict", joined)
@@ -182,8 +184,13 @@ class DependencyBuilderTests(unittest.TestCase):
             (scratch / "home").mkdir()
             (scratch / "pnpm-store").mkdir(mode=0o700)
             (scratch / "pnpm-cache").mkdir(mode=0o700)
+            seed = root / "pnpm-cache-seed"
+            seed.mkdir(mode=0o700)
+            (seed / "metadata.json").write_text("verified seed", encoding="utf-8")
+            seed.chmod(0o500)
             calls = []
             injection_settings = []
+            receipt_validations = []
 
             def copy_source(_source, destination):
                 (destination / "vps-workers").mkdir(parents=True)
@@ -195,6 +202,8 @@ class DependencyBuilderTests(unittest.TestCase):
                 injection_settings.append(_kwargs.get("env", {}).get("PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES"))
                 if command == (sandbox.PNPM, "--version"):
                     return type("Result", (), {"stdout": sandbox.EXPECTED_PNPM + "\n"})()
+                if "@baci/web..." in command:
+                    (scratch / "pnpm-cache" / "metadata.json").write_text("pnpm mutable update", encoding="utf-8")
                 if "deploy" in command:
                     return type("Result", (), {"stdout": "Deploying production dependencies", "stderr": ""})()
                 if "@baci/web..." in command:
@@ -210,9 +219,10 @@ class DependencyBuilderTests(unittest.TestCase):
                 return type("Result", (), {"stdout": ""})()
 
             with patch.dict(os.environ, {"HOME": str(scratch / "home")}), \
+                 patch.object(sandbox, "SEED_OWNER_UID", os.geteuid()), \
                  patch.object(sandbox, "copy_source_tree", side_effect=copy_source), \
                  patch.object(sandbox, "run_bounded_capture", side_effect=_bounded_run_adapter(run)), \
-                 patch.object(sandbox, "validate_receipt"), \
+                 patch.object(sandbox, "validate_receipt", side_effect=lambda *args, **kwargs: receipt_validations.append((args, kwargs))), \
                  patch.object(sandbox, "verify_runtime_candidates", return_value={
                      "web_tsx": "passed", "worker_dotenv": "passed"
                  }), patch.object(sandbox, "write_smoke_evidence"):
@@ -245,6 +255,13 @@ class DependencyBuilderTests(unittest.TestCase):
                 self.assertIn(required, worker_install)
             self.assertIn(str(scratch / "pnpm-store"), worker_install)
             self.assertEqual(injection_settings[1:], ["false", "true", "false"])
+            self.assertEqual((seed / "metadata.json").read_text(encoding="utf-8"), "verified seed")
+            self.assertEqual((scratch / "pnpm-cache" / "metadata.json").read_text(encoding="utf-8"), "pnpm mutable update")
+            self.assertEqual(len(receipt_validations), 2)
+            for args, kwargs in receipt_validations:
+                self.assertEqual(args[1], seed)
+                self.assertEqual(args[2], seed / policy_cache.RECEIPT_NAME)
+                self.assertEqual(kwargs["cache_owner_uid"], os.geteuid())
             self.assertTrue((scratch / "payload" / "root" / "node_modules").is_dir())
 
     def test_private_offline_store_is_an_independent_writable_copy(self):
@@ -723,6 +740,35 @@ class DependencyBuilderTests(unittest.TestCase):
             with self.assertRaisesRegex(policy_cache.BuilderRejected, "metadata cache changed"):
                 policy_cache.validate_receipt(source, cache, receipt_path)
 
+    def test_writable_pnpm_cache_mutation_does_not_mutate_or_replace_verified_seed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = make_source(root)
+            for relative in policy_cache.POLICY_FILES:
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("minimumReleaseAge: 1440\ntrustPolicy: no-downgrade\n", encoding="utf-8")
+            seed = root / "pnpm-cache-seed"
+            seed.mkdir(mode=0o700)
+            (seed / "metadata.json").write_text("verified metadata", encoding="utf-8")
+            receipt = root / "receipt.json"
+            receipt.write_text(json.dumps(policy_cache.make_receipt(source, seed, "11.7.0")), encoding="utf-8")
+            receipt.chmod(0o400)
+            writable = root / "pnpm-cache"
+            shutil.copytree(seed, writable)
+            (writable / "metadata.json").write_text("pnpm's normal mutable cache update", encoding="utf-8")
+
+            validated = policy_cache.validate_receipt(
+                source, seed, receipt, owner_uid=os.geteuid(),
+                cache_owner_uid=os.geteuid(), expected_sha=SHA,
+            )
+            self.assertEqual(validated["metadataCacheSha256"], policy_cache._hash_tree(seed))
+            with self.assertRaisesRegex(policy_cache.BuilderRejected, "metadata cache changed"):
+                policy_cache.validate_receipt(
+                    source, writable, receipt, owner_uid=os.geteuid(),
+                    cache_owner_uid=os.geteuid(), expected_sha=SHA,
+                )
+
     def test_policy_preverify_runs_both_lockfiles_with_scripts_and_trust_bypass_disabled(self):
         policy_source = SCRIPT.with_name("worker_release_dependency_policy_cache.py").read_text(encoding="utf-8")
         self.assertEqual(policy_source.count('"PNPM_CONFIG_FROZEN_LOCKFILE": "true"'), 1)
@@ -1018,6 +1064,11 @@ class DependencyBuilderTests(unittest.TestCase):
                 (payload / "root" / "node_modules").mkdir(parents=True)
                 fs.write_smoke_evidence(scratch, {"web_tsx": "passed", "worker_dotenv": "passed"})
 
+            def make_seed(_cache, _receipt, input_copy, **_kwargs):
+                seed = input_copy / "pnpm-cache-seed"
+                seed.mkdir(mode=0o500)
+                return seed
+
             lock_path = root / "test-lock"
             with patch.object(builder, "_validate_offline_store",
                               return_value=((store.stat().st_dev, store.stat().st_ino), frozenset())), patch.object(
@@ -1029,7 +1080,8 @@ class DependencyBuilderTests(unittest.TestCase):
             ), patch.object(builder, "PNPM_STORE", store
             ), patch.object(builder, "PNPM_CACHE", root / "policy-cache"
             ), patch.object(builder, "validate_receipt"
-            ), patch.object(builder, "_copy_private_policy_cache", side_effect=lambda scratch, *_: (scratch / "pnpm-cache").mkdir(mode=0o700)
+            ), patch.object(builder, "_copy_policy_cache_seed", side_effect=make_seed
+            ), patch.object(builder, "_copy_private_policy_cache", side_effect=lambda _seed, scratch, *_: (scratch / "pnpm-cache").mkdir(mode=0o700)
             ), patch.object(builder, "_is_root", return_value=True), patch.object(
                 builder, "_acquire_build_lock", side_effect=lambda: os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
             ), patch.object(

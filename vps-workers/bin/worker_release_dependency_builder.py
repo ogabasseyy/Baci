@@ -25,7 +25,6 @@ from typing import Sequence
 from worker_release_dependency_artifacts import (
     BuilderRejected,
     MANIFEST_NAME,
-    SHA_RE,
     copy_source_tree,
     make_read_only_input,
     payload_manifest,
@@ -53,15 +52,16 @@ from worker_release_dependency_policy_cache import (
 from worker_release_dependency_input_cache import (
     copy_private_offline_store as _copy_offline_store,
     copy_private_policy_cache as _copy_policy_cache,
+    copy_policy_cache_seed as _copy_policy_cache_seed,
     validate_offline_store as _validate_store,
 )
 from worker_release_dependency_diagnostics import PnpmStepRejected, write_diagnostic
+from worker_release_dependency_source import safe_source as _safe_source
 
 
 BUILDER_USER = "baci-release-build"
 BUILDER_GROUP = "baci-release-build"
 LOCK_GROUP = "baci-locks"
-WORKER_ROOT = Path("/srv/baci-workers")
 PNPM_STORE = Path("/var/cache/baci-worker-release/pnpm-store")
 PNPM_CACHE = Path("/var/cache/baci-worker-release/pnpm-cache")
 BUILD_ROOT = Path("/run/baci-worker-release-build")
@@ -72,46 +72,6 @@ MAX_BUILD_SCRATCH_ENTRIES = 200_000
 MIN_BUILD_FILESYSTEM_BYTES = 3 * 1024 * 1024 * 1024
 MAX_BUILD_FILESYSTEM_BYTES = 4 * 1024 * 1024 * 1024
 MAX_SOURCE_BYTES = 512 * 1024 * 1024
-def _safe_source(source: Path, expected_sha: str) -> Path:
-    if not SHA_RE.fullmatch(expected_sha):
-        raise BuilderRejected("expected commit SHA is invalid")
-    try:
-        source_info = source.lstat()
-    except OSError as exc:
-        raise BuilderRejected("source root is unavailable") from exc
-    if not stat.S_ISDIR(source_info.st_mode):
-        raise BuilderRejected("source root must be a real directory")
-    source = source.resolve(strict=True)
-    if not source.is_dir():
-        raise BuilderRejected("source root must be a real directory")
-    if source == WORKER_ROOT or WORKER_ROOT in source.parents:
-        raise BuilderRejected("source tree must be outside the production worker root")
-    # This marker is a consistency check only. It is not proof of OIDC or source
-    # provenance; the broker must supply and verify a signed attestation before
-    # this builder can be connected to release staging.
-    marker = source / ".baci-source-sha"
-    try:
-        marker_fd = os.open(marker, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    except OSError as exc:
-        raise BuilderRejected("source SHA marker is unavailable or unsafe") from exc
-    try:
-        marker_info = os.fstat(marker_fd)
-        marker_bytes = os.read(marker_fd, 65)
-        marker_after = os.fstat(marker_fd)
-        if not stat.S_ISREG(marker_info.st_mode) or marker_info.st_nlink != 1 or marker_info.st_size > 64 or marker_info.st_size != len(marker_bytes) or marker_info.st_mtime_ns != marker_after.st_mtime_ns or marker_info.st_ctime_ns != marker_after.st_ctime_ns:
-            raise BuilderRejected("source SHA marker is not a stable bounded regular file")
-    finally:
-        os.close(marker_fd)
-    try:
-        marker_value = marker_bytes.decode("ascii").strip()
-    except UnicodeDecodeError as exc:
-        raise BuilderRejected("source SHA marker is malformed") from exc
-    if marker_value != expected_sha:
-        raise BuilderRejected("source SHA marker does not match requested release")
-    required = (source / "pnpm-lock.yaml", source / "vps-workers" / "pnpm-lock.yaml")
-    if any(not item.is_file() or item.is_symlink() for item in required):
-        raise BuilderRejected("required frozen lockfiles are missing or unsafe")
-    return source
 
 
 def _is_root() -> bool:
@@ -155,9 +115,9 @@ def _copy_private_offline_store(scratch: Path, uid: int, gid: int) -> Path:
                                max_bytes=MAX_BUILD_SCRATCH_BYTES)
 
 
-def _copy_private_policy_cache(scratch: Path, uid: int, gid: int) -> Path:
-    """Copy the metadata cache consumed by pnpm's offline supply-chain pass."""
-    return _copy_policy_cache(PNPM_CACHE, scratch, uid, gid,
+def _copy_private_policy_cache(seed: Path, scratch: Path, uid: int, gid: int) -> Path:
+    """Copy the immutable verified seed into pnpm's writable private cache."""
+    return _copy_policy_cache(seed, scratch, uid, gid,
                               max_entries=MAX_CACHE_ENTRIES, max_bytes=MAX_CACHE_BYTES)
 
 
@@ -238,11 +198,15 @@ def build(source_arg: str, expected_sha: str, *, runner=None) -> tuple[dict[str,
         source_copy = input_copy / "source"
         copy_source_tree(source, source_copy, max_bytes=MAX_SOURCE_BYTES)
         make_read_only_input(source_copy)
+        seed_cache = _copy_policy_cache_seed(
+            PNPM_CACHE, PNPM_STORE / RECEIPT_NAME, input_copy,
+            max_entries=MAX_CACHE_ENTRIES, max_bytes=MAX_CACHE_BYTES,
+        )
         input_copy.chmod(0o555)
         _copy_private_offline_store(scratch, uid, gid)
-        _copy_private_policy_cache(scratch, uid, gid)
-        validate_receipt(source_copy, scratch / "pnpm-cache", scratch / "pnpm-store" / RECEIPT_NAME,
-                         owner_uid=uid, expected_sha=expected_sha)
+        _copy_private_policy_cache(seed_cache, scratch, uid, gid)
+        validate_receipt(source_copy, seed_cache, seed_cache / RECEIPT_NAME,
+                         owner_uid=0, cache_owner_uid=0, expected_sha=expected_sha)
         directory_usage(BUILD_ROOT, max_entries=MAX_BUILD_SCRATCH_ENTRIES, max_bytes=MAX_BUILD_SCRATCH_BYTES)
         (scratch / "home").mkdir(mode=0o700)
         os.chown(scratch / "home", uid, gid)

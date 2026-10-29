@@ -6,7 +6,7 @@ import re
 import stat
 from pathlib import Path
 
-from worker_release_dependency_artifacts import BuilderRejected, copy_source_tree
+from worker_release_dependency_artifacts import BuilderRejected, copy_source_tree, make_read_only_input
 from worker_release_dependency_evidence_shape import OFFLINE_STORE_SUBTYPES
 from worker_release_dependency_policy_cache import MAX_CACHE_BYTES, MAX_CACHE_ENTRIES, _hash_tree
 
@@ -125,6 +125,68 @@ def copy_private_policy_cache(
                      expected_root_identity=identity)
     _make_private_writable(destination, uid, gid, store_label="pnpm policy cache")
     return destination
+
+
+def copy_policy_cache_seed(
+    cache: Path,
+    receipt_source: Path,
+    input_root: Path,
+    *,
+    max_entries: int = MAX_CACHE_ENTRIES,
+    max_bytes: int = MAX_CACHE_BYTES,
+) -> Path:
+    """Create a root-owned read-only metadata seed and colocated receipt."""
+    seed = input_root / "pnpm-cache-seed"
+    copy_source_tree(cache, seed, max_bytes=max_bytes, max_entries=max_entries)
+    _copy_seed_receipt(receipt_source, seed)
+    make_read_only_input(seed)
+    return seed
+
+
+def _copy_seed_receipt(receipt_source: Path, seed: Path) -> None:
+    try:
+        source_fd = os.open(receipt_source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as exc:
+        raise BuilderRejected("fixed pnpm policy receipt is unavailable") from exc
+    destination_fd = -1
+    try:
+        before = os.fstat(source_fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_uid != 0 or before.st_nlink != 1
+                or before.st_mode & 0o022 or before.st_size > 32_768):
+            raise BuilderRejected("fixed pnpm policy receipt inode is unsafe")
+        destination_fd = os.open(seed / receipt_source.name,
+                                 os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                                 | getattr(os, "O_NOFOLLOW", 0), 0o444)
+        copied = 0
+        while chunk := os.read(source_fd, min(16_384, 32_769 - copied)):
+            copied += len(chunk)
+            if copied > 32_768:
+                raise BuilderRejected("fixed pnpm policy receipt exceeds its size limit")
+            view = memoryview(chunk)
+            while view:
+                written = os.write(destination_fd, view)
+                if written <= 0:
+                    raise BuilderRejected("pnpm policy receipt snapshot write failed")
+                view = view[written:]
+        after = os.fstat(source_fd)
+        if (copied != before.st_size or
+                (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) !=
+                (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
+            raise BuilderRejected("fixed pnpm policy receipt changed while copying")
+        os.fsync(destination_fd)
+    except BaseException:
+        if destination_fd >= 0:
+            os.close(destination_fd)
+            destination_fd = -1
+        try:
+            os.unlink(seed / receipt_source.name)
+        except FileNotFoundError:
+            pass
+        raise
+    finally:
+        if destination_fd >= 0:
+            os.close(destination_fd)
+        os.close(source_fd)
 
 
 def _make_private_writable(destination: Path, uid: int, gid: int, *, store_label: str) -> None:

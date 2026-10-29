@@ -8,6 +8,8 @@ on:
       - 'vps-workers/bin/worker_release_bounded_process.test.py'
       - 'vps-workers/bin/worker_release_pnpm_exec.py'
       - 'vps-workers/bin/worker_release_dependency_policy_cache.py'
+      - 'vps-workers/bin/worker_release_dependency_source.py'
+      - 'vps-workers/bin/worker_release_dependency_receipt_validation.py'
       - 'vps-workers/bin/worker_release_dependency_registry_policy.py'
       - 'vps-workers/bin/worker_release_archive.py'
       - 'vps-workers/bin/worker_release_broker_common.py'

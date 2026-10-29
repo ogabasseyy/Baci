@@ -30,13 +30,16 @@ STAGES = frozenset({
     "independent-smoke", "materialized-tree-validation", "resource-scan", "experiment",
     "preverify-web-install", "preverify-worker-install", "web-install",
 })
+RESOURCE_CHECKS = frozenset({"unsupported-filesystem-entry"})
+TREE_CHECKS = frozenset({"unsafe-entry-or-entry-limit", "shared-file-inode"})
 
 
 class MonitorFailure(RuntimeError):
     def __init__(self, stage: str, category: str, exit_code: int | None = None,
                  evidence: dict[str, object] | None = None,
                  os_error: dict[str, object] | None = None,
-                 entries_seen: int | None = None, entry_limit: int | None = None):
+                 entries_seen: int | None = None, entry_limit: int | None = None,
+                 resource_check: str | None = None):
         self.stage = stage if stage in STAGES else "experiment"
         self.category = category
         self.exit_code = exit_code
@@ -44,6 +47,7 @@ class MonitorFailure(RuntimeError):
         self.os_error = os_error
         self.entries_seen = entries_seen
         self.entry_limit = entry_limit
+        self.resource_check = resource_check if resource_check in RESOURCE_CHECKS else None
         super().__init__(self.stage)
 
 
@@ -53,10 +57,13 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
     store_subtype = getattr(error, "safe_subtype", None)
     if store_subtype not in OFFLINE_STORE_SUBTYPES:
         store_subtype = None
+    resource_check = None
+    tree_check = None
     if isinstance(error, MonitorFailure):
         stage, category, exit_code = error.stage, error.category, error.exit_code
         os_error = error.os_error
         entry_metadata = error.entries_seen, error.entry_limit
+        resource_check = error.resource_check
     else:
         stage = stage if stage in STAGES else "experiment"
         exit_code = None
@@ -73,6 +80,11 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
             category = "invalid-result"
         elif isinstance(error, RuntimeError):
             message = str(error)
+            tree_checks = {
+                "measured tree contains an unsafe entry or exceeds entry bound": "unsafe-entry-or-entry-limit",
+                "measured tree contains a shared file inode": "shared-file-inode",
+            }
+            tree_check = tree_checks.get(message)
             categories = (
                 ("launcher is unavailable", "runtime-unavailable"),
                 ("could not identify exactly one", "runtime-pin-invalid"),
@@ -123,6 +135,10 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
             suffix += f" entries_seen={entries_seen} entry_limit={entry_limit}"
     if store_subtype is not None:
         suffix += f" store_check={store_subtype}"
+    if resource_check is not None:
+        suffix += f" resource_check={resource_check}"
+    if tree_check in TREE_CHECKS:
+        suffix += f" tree_check={tree_check}"
     return f"experiment failure stage={stage} category={category}{suffix}"
 
 
@@ -179,7 +195,7 @@ def _terminate_group(process: subprocess.Popen) -> None:
         pass
 
 
-def _resource_category(error: BaseException) -> str:
+def _resource_category(error: BaseException) -> tuple[str, str | None]:
     message = str(error)
     categories = (
         ("disk cap", "disk-cap"),
@@ -192,7 +208,12 @@ def _resource_category(error: BaseException) -> str:
         ("resource root disappeared", "resource-root-disappeared"),
         ("unsupported filesystem", "filesystem-entry-invalid"),
     )
-    return next((label for marker, label in categories if marker in message), "resource-scan-error")
+    category = next((label for marker, label in categories if marker in message), "resource-scan-error")
+    resource_check = (
+        "unsupported-filesystem-entry"
+        if message == "experiment contains an unsupported filesystem entry" else None
+    )
+    return category, resource_check
 
 
 def run_monitored(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], timeout: int,
@@ -204,7 +225,8 @@ def run_monitored(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], t
             kwargs = {}
             if isinstance(exc, ResourceEntryLimitExceeded):
                 kwargs = {"entries_seen": exc.entries_seen, "entry_limit": exc.limit}
-            raise MonitorFailure(stage, _resource_category(exc), **kwargs) from exc
+            category, resource_check = _resource_category(exc)
+            raise MonitorFailure(stage, category, resource_check=resource_check, **kwargs) from exc
 
     check_resources()
     try:
@@ -230,7 +252,8 @@ def run_monitored(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], t
                 kwargs = {}
                 if isinstance(exc, ResourceEntryLimitExceeded):
                     kwargs = {"entries_seen": exc.entries_seen, "entry_limit": exc.limit}
-                raise MonitorFailure(stage, _resource_category(exc), **kwargs) from exc
+                category, resource_check = _resource_category(exc)
+                raise MonitorFailure(stage, category, resource_check=resource_check, **kwargs) from exc
             time.sleep(poll_seconds)
     except BaseException:
         _terminate_group(process)

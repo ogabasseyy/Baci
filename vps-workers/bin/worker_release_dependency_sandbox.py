@@ -32,6 +32,7 @@ SYSTEMCTL = "/usr/bin/systemctl"
 PYTHON = "/usr/bin/python3"
 PNPM = "/usr/bin/pnpm"
 EXPECTED_PNPM = "11.7.0"
+SEED_OWNER_UID = 0
 WORKER_RUNTIME = Path("/srv/baci-workers/runtime")
 WORKER_RELEASES = Path("/srv/baci-workers/releases")
 WORKER_LOCKS = Path("/srv/baci-workers/locks")
@@ -148,7 +149,7 @@ def systemd_command(source: Path, scratch: Path, expected_sha: str, uid: int, gi
         "NoNewPrivileges=true", "PrivateUsers=true", "RestrictSUIDSGID=true", "LockPersonality=true",
         "UMask=0077", "KillMode=control-group", f"RuntimeMaxSec={MAX_BUILD_SECONDS}s",
         "MemoryMax=2G", "CPUQuota=200%", "TasksMax=128", "LimitFSIZE=1073741824", "LimitNOFILE=4096",
-        f"ReadOnlyPaths={source}", f"ReadWritePaths={scratch}",
+        f"ReadOnlyPaths={source} {source.parent / 'pnpm-cache-seed'}", f"ReadWritePaths={scratch}",
         f"InaccessiblePaths={WORKER_RUNTIME} {WORKER_RELEASES} {WORKER_LOCKS}",
         "PrivateNetwork=true", "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
     )
@@ -176,7 +177,12 @@ def systemd_command(source: Path, scratch: Path, expected_sha: str, uid: int, gi
 def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
     if os.geteuid() == 0 or os.environ.get("HOME") != str(scratch / "home"):
         raise BuilderRejected("sandbox worker identity or environment is invalid")
-    if source.is_symlink() or not source.is_dir():
+    try:
+        source_info = source.lstat()
+    except OSError as exc:
+        raise BuilderRejected("sandbox source is unavailable") from exc
+    if (not stat.S_ISDIR(source_info.st_mode) or source_info.st_uid != SEED_OWNER_UID
+            or source_info.st_mode & 0o022):
         raise BuilderRejected("sandbox source is not a real directory")
     private_store = scratch / "pnpm-store"
     try:
@@ -195,6 +201,18 @@ def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
     if (not stat.S_ISDIR(cache_info.st_mode) or cache_info.st_uid != os.geteuid()
             or cache_info.st_gid != os.getgid() or cache_info.st_mode & 0o077):
         raise BuilderRejected("per-build offline pnpm policy cache ownership or mode is unsafe")
+    seed_cache = source.parent / "pnpm-cache-seed"
+    try:
+        input_root_info = source.parent.lstat()
+        seed_info = seed_cache.lstat()
+    except OSError as exc:
+        raise BuilderRejected("immutable pnpm policy seed is unavailable") from exc
+    if (not stat.S_ISDIR(input_root_info.st_mode) or input_root_info.st_uid != SEED_OWNER_UID
+            or input_root_info.st_mode & 0o022
+            or not stat.S_ISDIR(seed_info.st_mode) or seed_info.st_uid != SEED_OWNER_UID
+            or seed_info.st_mode & 0o222):
+        raise BuilderRejected("immutable pnpm policy seed ownership or mode is unsafe")
+    seed_receipt = seed_cache / RECEIPT_NAME
     working = scratch / "source"
     copy_source_tree(source, working)
     (scratch / "home").mkdir(mode=0o700, exist_ok=True)
@@ -205,7 +223,9 @@ def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
                             env=command_env, timeout=15, max_stream_bytes=64 * 1024).stdout.strip()
     if version != EXPECTED_PNPM:
         raise BuilderRejected("installed pnpm version does not match repository pin")
-    validate_receipt(working, private_cache, private_store / RECEIPT_NAME, version, expected_sha=expected_sha)
+    validate_receipt(working, seed_cache, seed_receipt, version,
+                     owner_uid=SEED_OWNER_UID, cache_owner_uid=SEED_OWNER_UID,
+                     expected_sha=expected_sha)
     injection_settings = lock_injection_settings(working)
     web_install = run_pnpm_step("web-install", (PNPM, "--registry", TRUSTED_REGISTRY, "--package-import-method=copy",
                                   "--filter", "@baci/web...", "install", "--prod", "--frozen-lockfile",
@@ -225,7 +245,8 @@ def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
                                   timeout=240)
     if not has_policy_pass_marker(worker_policy.stdout, worker_policy.stderr):
         raise BuilderRejected("worker offline install did not verify lockfile supply-chain policy")
-    validate_receipt(working, private_cache, private_store / RECEIPT_NAME, version,
+    validate_receipt(working, seed_cache, seed_receipt, version,
+                     owner_uid=SEED_OWNER_UID, cache_owner_uid=SEED_OWNER_UID,
                      expected_sha=expected_sha)
     installed = workers_root / "node_modules"
     if not installed.is_dir() or installed.is_symlink():

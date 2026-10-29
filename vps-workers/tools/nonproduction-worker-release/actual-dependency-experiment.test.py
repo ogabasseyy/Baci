@@ -19,6 +19,7 @@ experiment = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(experiment)
 from worker_release_actual_dependency_guard import (
     MonitorFailure,
+    _resource_category,
     enforce_resource_limits,
     failure_diagnostic,
     run_monitored,
@@ -46,6 +47,51 @@ from worker_release_dependency_evidence_shape import OFFLINE_STORE_SUBTYPES
 
 
 class ActualDependencyExperimentTests(unittest.TestCase):
+    def test_resource_scan_emits_only_allowlisted_filesystem_subtype(self):
+        category, subtype = _resource_category(
+            RuntimeError("experiment contains an unsupported filesystem entry /private/secret")
+        )
+        self.assertEqual(category, "filesystem-entry-invalid")
+        self.assertIsNone(subtype)
+
+        category, subtype = _resource_category(
+            RuntimeError("experiment contains an unsupported filesystem entry")
+        )
+        self.assertEqual(category, "filesystem-entry-invalid")
+        self.assertEqual(subtype, "unsupported-filesystem-entry")
+        diagnostic = failure_diagnostic(
+            "offline-store-validation",
+            MonitorFailure("offline-store-validation", category, resource_check=subtype),
+        )
+        self.assertEqual(
+            diagnostic,
+            "experiment failure stage=offline-store-validation category=filesystem-entry-invalid "
+            "resource_check=unsupported-filesystem-entry",
+        )
+        self.assertNotIn("/private/secret", diagnostic)
+
+    def test_offline_store_tree_diagnostic_identifies_only_fixed_failure_kind(self):
+        self.assertEqual(
+            failure_diagnostic(
+                "offline-store-validation",
+                RuntimeError("measured tree contains a shared file inode"),
+            ),
+            "experiment failure stage=offline-store-validation category=filesystem-entry-invalid "
+            "tree_check=shared-file-inode",
+        )
+        self.assertEqual(
+            failure_diagnostic(
+                "offline-store-validation",
+                RuntimeError("measured tree contains an unsafe entry or exceeds entry bound"),
+            ),
+            "experiment failure stage=offline-store-validation category=filesystem-entry-invalid "
+            "tree_check=unsafe-entry-or-entry-limit",
+        )
+        self.assertEqual(
+            failure_diagnostic("offline-store-validation", RuntimeError("private path /secret")),
+            "experiment failure stage=offline-store-validation category=runtime-error",
+        )
+
     def test_filesystem_diagnostic_exposes_errno_category_but_not_exception_text(self):
         secret = "/private/runner/path"
         output = failure_diagnostic("policy-preverify", OSError(errno.ENOSPC, secret))

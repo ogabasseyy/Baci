@@ -8,7 +8,6 @@ checked the authenticated immutable source and fixed policy.
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json
 import os
 import re
@@ -50,6 +49,7 @@ from worker_release_dependency_diagnostics import (
     write_diagnostic,
 )
 from worker_release_pnpm_exec import run_pnpm_checked
+from worker_release_dependency_receipt_validation import validate_receipt as _validate_receipt
 def _sha256_regular_file(path: Path, *, owner_uid: int | None = None, max_bytes: int = 64 * 1024 * 1024) -> str:
     try:
         fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
@@ -184,34 +184,13 @@ def make_receipt(source: Path, cache: Path, pnpm_version: str, *, cache_owner: i
 
 def validate_receipt(source: Path, cache: Path, receipt_path: Path, pnpm_version: str = EXPECTED_PNPM,
                      *, owner_uid: int | None = None, expected_sha: str | None = None,
-                     cache_max_bytes: int = MAX_CACHE_BYTES) -> dict[str, object]:
-    owner = os.geteuid() if owner_uid is None else owner_uid
-    try:
-        fd = os.open(receipt_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-        before = os.fstat(fd)
-        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid != owner
-                or before.st_mode & 0o022 or before.st_size > 32_768):
-            raise BuilderRejected("pnpm policy verification receipt is unsafe")
-        raw = os.read(fd, 32_769)
-        after = os.fstat(fd)
-        if (len(raw) > 32_768 or len(raw) != before.st_size
-                or (before.st_dev, before.st_ino, before.st_mtime_ns, before.st_ctime_ns) != (after.st_dev, after.st_ino, after.st_mtime_ns, after.st_ctime_ns)):
-            raise BuilderRejected("pnpm policy verification receipt changed while reading")
-        value = json.loads(raw.decode("utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise BuilderRejected("pnpm policy verification receipt is unavailable or malformed") from exc
-    finally:
-        if "fd" in locals():
-            os.close(fd)
-    expected = make_receipt(source, cache, pnpm_version, cache_owner=owner,
-                            cache_max_bytes=cache_max_bytes)
-    if value != expected:
-        if isinstance(value, dict) and value.get("metadataCacheSha256") != expected["metadataCacheSha256"]:
-            raise BuilderRejected("pnpm policy verification receipt metadata cache changed")
-        raise BuilderRejected("pnpm policy verification receipt does not match exact lockfiles and policy")
-    if expected_sha is not None and not hmac.compare_digest(str(value["sourceSha"]), expected_sha):
-        raise BuilderRejected("pnpm policy verification receipt does not match expected source SHA")
-    return value
+                     cache_max_bytes: int = MAX_CACHE_BYTES,
+                     cache_owner_uid: int | None = None) -> dict[str, object]:
+    return _validate_receipt(
+        source, cache, receipt_path, pnpm_version, make_receipt=make_receipt,
+        owner_uid=owner_uid, expected_sha=expected_sha,
+        cache_max_bytes=cache_max_bytes, cache_owner_uid=cache_owner_uid,
+    )
 
 
 def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/usr/bin/node",

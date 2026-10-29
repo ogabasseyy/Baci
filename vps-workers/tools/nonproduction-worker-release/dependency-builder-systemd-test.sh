@@ -251,6 +251,7 @@ mkdir -m 0755 -- "$helper_root"
 helper_created=1
 chown root:root "$helper_root"
 for module in worker_release_dependency_builder.py worker_release_dependency_artifacts.py \
+  worker_release_dependency_source.py worker_release_dependency_receipt_validation.py \
   worker_release_dependency_fs.py worker_release_dependency_sandbox.py \
   worker_release_dependency_policy_cache.py worker_release_dependency_registry_policy.py \
   worker_release_dependency_lock_settings.py \

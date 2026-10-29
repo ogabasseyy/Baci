@@ -22,7 +22,10 @@ with different values. Supply the verified value to the workflow. It preserves
 this client capability without placing the TikTok build secret in the manifest.
 
 Dispatch the workflow on `main` with the full reviewed source SHA, runtime,
-build number and verified TikTok capability. Download its verified artifact
+build number and verified TikTok capability. The selected source must embed
+`EXPO_PUBLIC_BUILD_SHA` so the exported bundle can be checked against that
+revision. To roll back to older source without this marker, create and review
+a forward revert that retains it. Download the verified artifact
 from that run. It contains the
 public Expo config, export, source maps and provenance. The workflow rejects a
 runtime or merchant mismatch, missing required client configuration and known
@@ -33,7 +36,10 @@ For publication, use a clean checkout at the artifact's `sourceSha`. Create an
 ignored temporary project under `apps/mobile-storefront/.expo/`, copy the
 storefront `package.json` and `eas.json`, symlink its `config` directory, and
 write the artifact's `expo-config.json` as `{ "expo": <config> }` in `app.json`.
-Confirm Expo resolves the same public config in that temporary project. From a
+Confirm Expo resolves the same public config in that temporary project. Set
+`EAS_SKIP_AUTO_FINGERPRINT=1` for publication: the temporary project's native
+tree is incomplete, so its automatically calculated fingerprint would be
+misleading. This does not replace the native compatibility checks above. From a
 checkout of current `main` that contains the verifier, recheck the downloaded
 artifact with the following command (the target source commit may predate the
 verifier):

@@ -62,6 +62,32 @@ reviewed source revision in EAS provenance. Keep the artifact and temporary
 files restricted to authorized operators; the source maps contain application
 source.
 
+Before publishing, compare the export's full public Expo config with the config
+extracted from the verified target binary. If a production OTA already exists
+for the runtime, compare against its current manifest config as well. Current
+GitHub secrets can differ from those used for an older build; identical secret
+expressions in the workflows do not prove identical values. This comparison
+prints no config values:
+
+```sh
+node - /absolute/path/to/verified-target-config.json /absolute/path/to/artifact/expo-config.json <<'NODE'
+const { readFileSync } = require('node:fs');
+const { isDeepStrictEqual } = require('node:util');
+const [targetPath, updatePath] = process.argv.slice(2);
+const target = JSON.parse(readFileSync(targetPath, 'utf8'));
+const update = JSON.parse(readFileSync(updatePath, 'utf8'));
+if (!isDeepStrictEqual(target, update)) {
+  console.error('Public Expo config differs from the target. Stop and review the drift.');
+  process.exit(1);
+}
+console.log('Public Expo config matches the target.');
+NODE
+```
+
+Stop if the configs differ. Investigate and explicitly review every change
+before proceeding, especially the backend URL, public key, merchant and update
+settings; do not assume a mismatch is safe.
+
 First publish the prebuilt `dist` with `eas update --skip-bundler --input-dir`
 to an isolated, unmapped test branch. Point only a new test channel at that
 branch, verify the manifest's platform, runtime, config and bundle hash, and

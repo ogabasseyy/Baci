@@ -298,7 +298,7 @@ if [ -n "$unit_load_state" ] && [ "$unit_load_state" != not-found ]; then
 fi
 builder_unit_owned=1
 python3 - "$source_root" "$release_root" "$sha" "$suffix" "$helper_root" <<'PY'
-import os, re, subprocess, sys
+import os, re, subprocess, sys, time
 from pathlib import Path
 from types import SimpleNamespace
 import worker_release_dependency_builder as dependency_builder
@@ -310,7 +310,7 @@ helper_root = Path(sys.argv[5])
 from worker_release_dependency_builder import uuid
 uuid.uuid4 = lambda: SimpleNamespace(hex=sys.argv[4])
 
-def run_fixture_sandbox(command, scratch, unit):
+def run_fixture_sandbox(command, scratch, unit, *, usage_root=None):
     # The production helper intentionally discards child output. This fixture
     # has only synthetic inputs and no secrets, so capture a small, redacted
     # diagnostic from its exact transient unit when it fails.
@@ -323,17 +323,41 @@ def run_fixture_sandbox(command, scratch, unit):
         else argument
         for argument in command
     )
-    result = subprocess.run(
+    if usage_root is None or Path(usage_root) != dependency_builder.BUILD_ROOT:
+        raise RuntimeError("dependency builder did not forward the fixed build usage root")
+    bounded_root = Path(usage_root)
+    deadline = time.monotonic() + dependency_builder.MAX_BUILD_SECONDS + 15
+    process = subprocess.Popen(
         fixture_command,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env={"PATH": "/usr/bin:/bin"},
-        timeout=330,
-        check=False,
         text=True,
         errors="replace",
     )
+    try:
+        while process.poll() is None:
+            dependency_builder.directory_usage(
+                bounded_root,
+                max_entries=dependency_builder.MAX_BUILD_SCRATCH_ENTRIES,
+                max_bytes=dependency_builder.MAX_BUILD_SCRATCH_BYTES,
+            )
+            if time.monotonic() >= deadline:
+                subprocess.run(("/usr/bin/systemctl", "kill", "--kill-whom=all", "--signal=SIGKILL", unit),
+                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=10, check=False)
+                raise subprocess.TimeoutExpired(fixture_command, dependency_builder.MAX_BUILD_SECONDS + 15)
+            time.sleep(0.25)
+        stdout, stderr = process.communicate()
+    except BaseException:
+        if process.poll() is None:
+            subprocess.run(("/usr/bin/systemctl", "kill", "--kill-whom=all", "--signal=SIGKILL", unit),
+                           stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=10, check=False)
+            process.wait(timeout=15)
+        raise
+    result = subprocess.CompletedProcess(fixture_command, process.returncode, stdout, stderr)
     if result.returncode == 0:
         return
     diagnostic = (result.stderr + "\n" + result.stdout)[-4096:]

@@ -237,7 +237,9 @@ def build(source_arg: str, expected_sha: str, *, runner=None) -> tuple[dict[str,
             if runner is None:
                 run_sandbox(command, scratch, unit, usage_root=BUILD_ROOT, owner_uid=uid)
             else:
-                runner(command, scratch, unit)
+                from worker_release_dependency_supervisor_lifecycle import invoke_builder_runner
+                invoke_builder_runner(runner, command, scratch, unit,
+                                      input_root=input_copy, result_dir=result_dir)
         except Exception as error:
             # If the supervisor cannot prove that every process is gone, its
             # input/output trees remain journaled for exact recovery. Removing

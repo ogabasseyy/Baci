@@ -10,6 +10,13 @@ from worker_release_dependency_policy_cache import RECEIPT_NAME
 from worker_release_dependency_sandbox import WORKER_LOCKS, WORKER_RELEASES, WORKER_RUNTIME
 
 MAX_BUILD_SECONDS = 300
+_REQUIRED_ADDRESS_FAMILIES = frozenset({"AF_UNIX", "AF_INET", "AF_INET6"})
+
+
+def _address_families_match(actual: str) -> bool:
+    """Compare systemd's rendered list without relying on its token order."""
+    families = actual.split()
+    return len(families) == len(_REQUIRED_ADDRESS_FAMILIES) and frozenset(families) == _REQUIRED_ADDRESS_FAMILIES
 
 
 class BuilderUnitContractRejected(RuntimeError):
@@ -26,7 +33,7 @@ def validate_builder_unit(query: Callable[..., str], unit: str, cgroup_path: str
         "PrivateUsers": "yes", "ProtectControlGroups": "yes", "ProtectKernelTunables": "yes",
         "ProtectKernelModules": "yes", "ProtectKernelLogs": "yes", "ProtectProc": "invisible",
         "ProcSubset": "pid", "RestrictSUIDSGID": "yes", "RestrictRealtime": "yes",
-        "LockPersonality": "yes", "RestrictAddressFamilies": "AF_UNIX AF_INET AF_INET6",
+        "LockPersonality": "yes",
         "TasksMax": "128", "MemoryMax": str(2 * 1024 * 1024 * 1024),
         "CPUQuotaPerSecUSec": "2000000", "RuntimeMaxUSec": str(MAX_BUILD_SECONDS * 1_000_000),
         "LimitFSIZE": str(1024 * 1024 * 1024), "UMask": "0077",
@@ -42,6 +49,10 @@ def validate_builder_unit(query: Callable[..., str], unit: str, cgroup_path: str
     for key, value in expected.items():
         if query("show", f"--property={key}", "--value", unit) != value:
             raise BuilderUnitContractRejected(f"builder unit {key} differs from fixed policy")
+    if not _address_families_match(
+            query("show", "--property=RestrictAddressFamilies", "--value", unit)):
+        raise BuilderUnitContractRejected(
+            "builder unit RestrictAddressFamilies differs from fixed policy")
     for key, allowed in identity_options.items():
         if query("show", f"--property={key}", "--value", unit) not in allowed:
             raise BuilderUnitContractRejected(f"builder unit {key} differs from fixed policy")

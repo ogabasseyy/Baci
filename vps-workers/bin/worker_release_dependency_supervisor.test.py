@@ -33,6 +33,15 @@ FENCE = {"repository": "org/repo", "workflow": "release.yml", "ref": "refs/heads
          "sha": "a" * 40, "run_id": "1", "run_attempt": 1, "job_id": "2"}
 
 class BuilderSupervisorContractTests(unittest.TestCase):
+    def test_systemd_address_family_rendering_is_order_independent_but_exact(self):
+        # systemd renders this set in its own canonical order; order is not policy.
+        self.assertTrue(unit_contract._address_families_match("AF_INET AF_INET6 AF_UNIX"))
+        self.assertFalse(unit_contract._address_families_match("AF_INET AF_UNIX"))
+        self.assertFalse(unit_contract._address_families_match(
+            "AF_INET AF_INET6 AF_UNIX AF_NETLINK"))
+        self.assertFalse(unit_contract._address_families_match(
+            "AF_INET AF_INET6 AF_UNIX AF_UNIX"))
+
     def test_canonical_builder_unit_enables_control_group_protection(self):
         command = sandbox.systemd_command(
             Path("/run/input/source"), Path("/run/build/scratch"), "a" * 40,

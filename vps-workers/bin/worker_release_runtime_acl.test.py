@@ -57,13 +57,17 @@ class RuntimeAclContractTests(unittest.TestCase):
                      "requires Linux root and POSIX ACL support")
 class RuntimeCandidateAclTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(dir=Path.home())
+        # /root is intentionally private on the Linux CI runner; the verifier
+        # UID must be able to traverse trusted ancestors to the ACL-scoped tree.
+        self.temporary = tempfile.TemporaryDirectory(dir="/run")
         self.root = Path(self.temporary.name)
+        os.chmod(self.root, 0o711)
         verifier = pwd.getpwnam(VERIFY_USER)
         self.verify_uid = verifier.pw_uid
         self.verify_gid = verifier.pw_gid
         self.releases = self.root / "releases"
         self.releases.mkdir(mode=0o711)
+        os.chmod(self.releases, 0o711)
         self.candidate = self.releases / f".{SHA}.incoming.{uuid.uuid4().hex}"
         self.candidate.mkdir(mode=0o750)
         (self.candidate / "nested").mkdir(mode=0o750)

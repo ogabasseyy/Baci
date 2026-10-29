@@ -194,9 +194,11 @@ class DependencyBuilderTests(unittest.TestCase):
             receipt_path = root / policy_cache.RECEIPT_NAME
             receipt_path.write_text("synthetic receipt", encoding="utf-8")
             receipt_path.chmod(0o400)
-            sandbox_uid = os.geteuid() if os.geteuid() != 0 else 1234
-            sandbox_gid = os.getgid() if os.geteuid() != 0 else 1234
-            if os.geteuid() == 0:
+            host_uid = os.geteuid()
+            host_gid = os.getgid()
+            sandbox_uid = host_uid if host_uid != 0 else 1234
+            sandbox_gid = host_gid if host_uid != 0 else 1234
+            if host_uid == 0:
                 os.chown(scratch, sandbox_uid, sandbox_gid)
                 os.chown(scratch / "home", sandbox_uid, sandbox_gid)
                 os.chown(scratch / "pnpm-store", sandbox_uid, sandbox_gid)
@@ -210,7 +212,7 @@ class DependencyBuilderTests(unittest.TestCase):
                 (destination / "vps-workers").mkdir(parents=True, mode=0o700)
                 (destination / "pnpm-lock.yaml").write_text("settings:\n  injectWorkspacePackages: false\n", encoding="utf-8")
                 (destination / "vps-workers/pnpm-lock.yaml").write_text("settings:\n  injectWorkspacePackages: false\n", encoding="utf-8")
-                if os.geteuid() == 0:
+                if host_uid == 0:
                     os.chown(destination, sandbox_uid, sandbox_gid)
                     os.chown(destination / "apps", sandbox_uid, sandbox_gid)
                     os.chown(destination / "apps/web", sandbox_uid, sandbox_gid)
@@ -225,7 +227,7 @@ class DependencyBuilderTests(unittest.TestCase):
                     (scratch / "pnpm-cache" / "metadata.json").write_text("pnpm mutable update", encoding="utf-8")
                     (scratch / "source/node_modules").mkdir(mode=0o700)
                     (scratch / "source/apps/web/node_modules").mkdir(mode=0o700)
-                    if os.geteuid() == 0:
+                    if host_uid == 0:
                         os.chown(scratch / "source/node_modules", sandbox_uid, sandbox_gid)
                         os.chown(scratch / "source/apps/web/node_modules", sandbox_uid, sandbox_gid)
                 if "deploy" in command:
@@ -245,7 +247,7 @@ class DependencyBuilderTests(unittest.TestCase):
                     (Path(cwd) / "node_modules").mkdir(mode=0o700)
                     (Path(cwd) / "node_modules/dotenv").mkdir()
                     (Path(cwd) / "node_modules/dotenv/index.js").write_text("module", encoding="utf-8")
-                    if os.geteuid() == 0:
+                    if host_uid == 0:
                         os.chown(Path(cwd) / "node_modules", sandbox_uid, sandbox_gid)
                         os.chown(Path(cwd) / "node_modules/dotenv", sandbox_uid, sandbox_gid)
                         os.chown(Path(cwd) / "node_modules/dotenv/index.js", sandbox_uid, sandbox_gid)
@@ -261,7 +263,7 @@ class DependencyBuilderTests(unittest.TestCase):
                 return {"web_tsx": "passed", "worker_dotenv": "passed"}
 
             with patch.dict(os.environ, {"HOME": str(scratch / "home")}), \
-                 patch.object(sandbox, "SEED_OWNER_UID", os.geteuid()), \
+                 patch.object(sandbox, "SEED_OWNER_UID", host_uid), \
                  patch.object(sandbox.os, "geteuid", return_value=sandbox_uid), \
                  patch.object(sandbox.os, "getgid", return_value=sandbox_gid), \
                  patch.object(sandbox, "copy_source_tree", side_effect=copy_source), \

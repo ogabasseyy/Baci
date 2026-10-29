@@ -49,13 +49,15 @@ from worker_release_dependency_evidence_shape import OFFLINE_STORE_SUBTYPES
 
 class ActualDependencyExperimentTests(unittest.TestCase):
     def test_extracted_tree_size_suite_is_part_of_experiment_gate(self):
-        suite = Path(__file__).with_name("actual-dependency-tree-size.test.py")
-        result = subprocess.run(
-            (sys.executable, str(suite), "-q"), cwd=suite.parent,
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, timeout=30, check=False,
-        )
-        self.assertEqual(result.returncode, 0, "extracted tree-size regression suite failed")
+        for name in ("actual-dependency-tree-size.test.py",
+                     "actual-dependency-payload-diagnostics.test.py"):
+            suite = Path(__file__).with_name(name)
+            result = subprocess.run(
+                (sys.executable, str(suite), "-q"), cwd=suite.parent,
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL, timeout=30, check=False,
+            )
+            self.assertEqual(result.returncode, 0, f"{name} regression suite failed")
 
     def test_resource_scan_emits_only_allowlisted_filesystem_subtype(self):
         category, subtype = _resource_category(

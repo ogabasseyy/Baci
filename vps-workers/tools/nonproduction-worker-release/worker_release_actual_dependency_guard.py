@@ -32,6 +32,26 @@ STAGES = frozenset({
 })
 RESOURCE_CHECKS = frozenset({"unsupported-filesystem-entry"})
 TREE_CHECKS = frozenset({"unsafe-entry-or-entry-limit", "shared-file-inode"})
+PAYLOAD_CHECKS = frozenset({
+    "root-invalid", "path-invalid", "symlink-invalid", "symlink-escape",
+    "entry-mode-invalid", "shared-file-inode", "special-file", "size-bound",
+    "entry-bound", "entry-read-failed", "entry-changed",
+})
+PAYLOAD_REJECTIONS = {
+    "payload root must be a real directory": ("root-invalid", "payload-invalid"),
+    "dependency payload contains a non-portable path": ("path-invalid", "payload-invalid"),
+    "dependency payload contains an unsafe path": ("path-invalid", "payload-invalid"),
+    "dependency payload contains a non-portable symlink": ("symlink-invalid", "payload-invalid"),
+    "dependency symlink escapes payload root": ("symlink-escape", "payload-invalid"),
+    "dependency symlink is broken, cyclic, or escapes payload": ("symlink-invalid", "payload-invalid"),
+    "dependency symlink target is not a regular file or directory": ("symlink-invalid", "payload-invalid"),
+    "dependency payload directory has unsafe write or set-id bits": ("entry-mode-invalid", "payload-invalid"),
+    "dependency payload file has unsafe write or set-id bits": ("entry-mode-invalid", "payload-invalid"),
+    "dependency payload contains a shared hardlinked file": ("shared-file-inode", "payload-invalid"),
+    "dependency payload contains a special file": ("special-file", "payload-invalid"),
+    "dependency payload exceeds size limit": ("size-bound", "payload-invalid"),
+    "dependency payload has too many entries": ("entry-bound", "payload-invalid"),
+}
 
 
 class MonitorFailure(RuntimeError):
@@ -59,6 +79,7 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
         store_subtype = None
     resource_check = None
     tree_check = None
+    payload_check = None
     if isinstance(error, MonitorFailure):
         stage, category, exit_code = error.stage, error.category, error.exit_code
         os_error = error.os_error
@@ -80,6 +101,9 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
             category = "invalid-result"
         elif isinstance(error, RuntimeError):
             message = str(error)
+            payload_rejection = PAYLOAD_REJECTIONS.get(message)
+            if payload_rejection is not None:
+                payload_check, category = payload_rejection
             tree_checks = {
                 "measured tree contains an unsafe entry or exceeds entry bound": "unsafe-entry-or-entry-limit",
                 "measured tree contains a shared file inode": "shared-file-inode",
@@ -109,7 +133,8 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
                 ("receipt", "policy-receipt"),
                 ("timed out", "deadline"),
             )
-            category = next((label for marker, label in categories if marker in message), "runtime-error")
+            if payload_check is None:
+                category = next((label for marker, label in categories if marker in message), "runtime-error")
             if store_subtype is not None:
                 category = "filesystem-entry-invalid"
         else:
@@ -139,6 +164,8 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
         suffix += f" resource_check={resource_check}"
     if tree_check in TREE_CHECKS:
         suffix += f" tree_check={tree_check}"
+    if payload_check in PAYLOAD_CHECKS:
+        suffix += f" payload_check={payload_check}"
     return f"experiment failure stage={stage} category={category}{suffix}"
 
 

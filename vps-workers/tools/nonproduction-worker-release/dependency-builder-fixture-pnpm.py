@@ -61,12 +61,25 @@ def summarize_failure(output: str) -> dict[str, object]:
     transition = "unrecognized" if "earlier versions had" in normalized else "unreported"
     if match:
         transition = _TRUST_TRANSITIONS.get("|".join(match.groups()), "unrecognized")
+    headline_state = (
+        "recognized" if headline else
+        "present-unparsed" if "high-risk trust downgrade for" in normalized else
+        "absent"
+    )
+    hint_state = (
+        "recognized" if transition in _TRUST_TRANSITIONS.values() else
+        "unrecognized" if match else
+        "intro-unparsed" if "earlier versions had" in normalized else
+        "absent"
+    )
     return {
         "schema": 1,
         "error_code": "ERR_PNPM_TRUST_DOWNGRADE" if trust_failure else "OTHER_PNPM_ERROR",
         "fixture_package": fixture_package,
         "package_coordinate_sha256": coordinate_hash,
         "trust_evidence_transition": transition if trust_failure else "not-applicable",
+        "trust_headline_state": headline_state if trust_failure else "not-applicable",
+        "trust_hint_state": hint_state if trust_failure else "not-applicable",
     }
 
 
@@ -175,27 +188,43 @@ def _read_diagnostic_at(directory_fd: int, name: str, *, owner_uid: int) -> dict
     try:
         info = os.fstat(fd)
         if (not stat.S_ISREG(info.st_mode) or info.st_uid != owner_uid or info.st_nlink != 1
-                or info.st_mode & 0o077 or info.st_size > 256):
+                or info.st_mode & 0o077 or info.st_size > 512):
             return None
-        value = json.loads(os.read(fd, 257))
+        value = json.loads(os.read(fd, 513))
         if (not isinstance(value, dict) or set(value) != {
                 "schema", "error_code", "fixture_package", "package_coordinate_sha256",
-                "trust_evidence_transition"}
+                "trust_evidence_transition", "trust_headline_state", "trust_hint_state"}
                 or value["schema"] != 1
                 or value["error_code"] not in {"ERR_PNPM_TRUST_DOWNGRADE", "OTHER_PNPM_ERROR"}
-                or value["fixture_package"] not in {"tsx", "dotenv", "unknown", "not-applicable"}
+                or value["fixture_package"] not in {
+                    "tsx", "dotenv", "esbuild", "fsevents", "esbuild-platform-binary",
+                    "unknown", "not-applicable"}
                 or value["package_coordinate_sha256"] not in {"unreported", "not-applicable"}
                 and not re.fullmatch(r"[0-9a-f]{64}", str(value["package_coordinate_sha256"]))
                 or value["trust_evidence_transition"] not in {
                     "trusted-publisher-to-provenance", "trusted-publisher-to-none",
                     "provenance-to-none", "unreported", "unrecognized", "not-applicable",
                 }
+                or value["trust_headline_state"] not in {
+                    "recognized", "present-unparsed", "absent", "not-applicable"}
+                or value["trust_hint_state"] not in {
+                    "recognized", "unrecognized", "intro-unparsed", "absent", "not-applicable"}
+                or (value["trust_hint_state"] == "recognized"
+                    and value["trust_evidence_transition"] not in _TRUST_TRANSITIONS.values())
+                or (value["trust_hint_state"] in {"unrecognized", "intro-unparsed"}
+                    and value["trust_evidence_transition"] != "unrecognized")
+                or (value["trust_hint_state"] == "absent"
+                    and value["trust_evidence_transition"] != "unreported")
                 or (value["error_code"] == "ERR_PNPM_TRUST_DOWNGRADE"
                     and (value["trust_evidence_transition"] == "not-applicable"
+                         or value["trust_headline_state"] == "not-applicable"
+                         or value["trust_hint_state"] == "not-applicable"
                          or value["fixture_package"] == "not-applicable"
                          or value["package_coordinate_sha256"] == "not-applicable"))
                 or (value["error_code"] == "OTHER_PNPM_ERROR"
                     and (value["trust_evidence_transition"] != "not-applicable"
+                         or value["trust_headline_state"] != "not-applicable"
+                         or value["trust_hint_state"] != "not-applicable"
                          or value["fixture_package"] != "not-applicable"
                          or value["package_coordinate_sha256"] != "not-applicable"))):
             return None

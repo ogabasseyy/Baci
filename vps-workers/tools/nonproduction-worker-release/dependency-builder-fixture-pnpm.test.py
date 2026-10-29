@@ -30,6 +30,8 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             "fixture_package": "tsx",
             "package_coordinate_sha256": hashlib.sha256(b"tsx@4.22.4").hexdigest(),
             "trust_evidence_transition": "unreported",
+            "trust_headline_state": "recognized",
+            "trust_hint_state": "absent",
         })
         self.assertNotIn("must-not-leak", repr(summary))
 
@@ -49,6 +51,7 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
                 self.assertEqual(result["fixture_package"], expected)
                 self.assertEqual(len(result["package_coordinate_sha256"]), 64)
                 self.assertEqual(result["trust_evidence_transition"], "unreported")
+                self.assertEqual(result["trust_headline_state"], "recognized")
 
     def test_json_escaped_pnpm_headline_produces_coordinate_hash_only(self):
         summary = fixture.summarize_failure(
@@ -59,6 +62,7 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
         self.assertEqual(summary["fixture_package"], "unknown")
         self.assertEqual(summary["package_coordinate_sha256"],
                          hashlib.sha256(b"private-dep@3.4.5").hexdigest())
+        self.assertEqual(summary["trust_headline_state"], "recognized")
         self.assertNotIn("private-dep", repr(summary))
 
     def test_trust_transition_variants_are_exact_and_allowlisted(self):
@@ -74,10 +78,59 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             with self.subTest(expected=expected):
                 result = fixture.summarize_failure(f"ERR_PNPM_TRUST_DOWNGRADE\nhint: {hint}")
                 self.assertEqual(result["trust_evidence_transition"], expected)
+                self.assertEqual(result["trust_hint_state"], "recognized")
         unknown = fixture.summarize_failure(
             "ERR_PNPM_TRUST_DOWNGRADE Earlier versions had custom signing, now unknown"
         )
         self.assertEqual(unknown["trust_evidence_transition"], "unrecognized")
+        self.assertEqual(unknown["trust_hint_state"], "intro-unparsed")
+
+    def test_writer_diagnostics_round_trip_all_fixture_package_enum_values(self):
+        examples = (
+            ("tsx@4.22.4", "tsx"), ("dotenv@16.6.1", "dotenv"),
+            ("esbuild@0.28.1", "esbuild"), ("fsevents@2.3.3", "fsevents"),
+            ("@esbuild/linux-x64@0.28.1", "esbuild-platform-binary"),
+            ("other@1.2.3", "unknown"),
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            for index, (coordinate, expected_package) in enumerate(examples):
+                with self.subTest(expected_package=expected_package):
+                    output = (
+                        "ERR_PNPM_TRUST_DOWNGRADE High-risk trust downgrade for "
+                        f'"{coordinate}" (possible package takeover) Earlier versions had '
+                        "trusted publisher, but this version has no trust evidence."
+                    )
+                    result = fixture.summarize_failure(output)
+                    self.assertEqual(result["fixture_package"], expected_package)
+                    path = Path(temporary) / f"diagnostic-{index}"
+                    fixture._write_diagnostic(path, result)
+                    self.assertEqual(fixture.read_diagnostic(path, owner_uid=os.geteuid()), result)
+
+    def test_reader_rejects_inconsistent_hint_and_transition(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "diagnostic"
+            invalid = {
+                "schema": 1,
+                "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
+                "fixture_package": "unknown",
+                "package_coordinate_sha256": "0" * 64,
+                "trust_evidence_transition": "trusted-publisher-to-none",
+                "trust_headline_state": "recognized",
+                "trust_hint_state": "intro-unparsed",
+            }
+            fixture._write_diagnostic(path, invalid)
+            self.assertIsNone(fixture.read_diagnostic(path, owner_uid=os.geteuid()))
+
+    def test_safe_states_distinguish_missing_and_unparsed_headline_without_text(self):
+        missing = fixture.summarize_failure("ERR_PNPM_TRUST_DOWNGRADE unrelated safe text")
+        malformed = fixture.summarize_failure(
+            'ERR_PNPM_TRUST_DOWNGRADE High-risk trust downgrade for “secret@9.8”'
+        )
+        self.assertEqual(missing["trust_headline_state"], "absent")
+        self.assertEqual(missing["trust_hint_state"], "absent")
+        self.assertEqual(malformed["trust_headline_state"], "present-unparsed")
+        self.assertEqual(malformed["trust_hint_state"], "absent")
+        self.assertNotIn("secret", repr(malformed))
 
     def test_unknown_failure_does_not_preserve_package_or_error_text(self):
         summary = fixture.summarize_failure("ERR_PNPM_META_FETCH_FAIL private-package@7 token=secret")
@@ -134,6 +187,8 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
                 "fixture_package": "unknown",
                 "package_coordinate_sha256": "0" * 64,
                 "trust_evidence_transition": "trusted-publisher-to-none",
+                "trust_headline_state": "recognized",
+                "trust_hint_state": "recognized",
             })
             self.assertEqual(fixture.read_diagnostic(accepted, owner_uid=accepted.stat().st_uid), {
                 "schema": 1,
@@ -141,6 +196,8 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
                 "fixture_package": "unknown",
                 "package_coordinate_sha256": "0" * 64,
                 "trust_evidence_transition": "trusted-publisher-to-none",
+                "trust_headline_state": "recognized",
+                "trust_hint_state": "recognized",
             })
             self.assertIsNone(fixture.read_diagnostic(accepted, owner_uid=accepted.stat().st_uid + 1))
             target = root / "target"
@@ -170,6 +227,8 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
                 "fixture_package": "unknown",
                 "package_coordinate_sha256": "0" * 64,
                 "trust_evidence_transition": "trusted-publisher-to-none",
+                "trust_headline_state": "recognized",
+                "trust_hint_state": "recognized",
             })
             self.assertEqual(fixture.read_scratch_diagnostic(
                 scratch, build_root=root, expected_sha=sha, owner_uid=os.geteuid(),

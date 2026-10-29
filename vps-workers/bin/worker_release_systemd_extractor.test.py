@@ -62,6 +62,18 @@ class ExtractorUnitTests(unittest.TestCase):
                 self.assertEqual(files[name].mode, mode)
         self.assertEqual(files["systemd-contract"].group, "root")
 
+    def test_socket_connect_mount_is_writable_while_directory_mutation_remains_denied(self):
+        properties = contract.expected_properties(
+            extractor=supervisor.EXTRACTOR, resource_root=supervisor.RESOURCE_ROOT,
+            control_root=supervisor.CONTROL_ROOT,
+        )
+        self.assertEqual(properties["ReadWritePaths"],
+                         f"{supervisor.RESOURCE_ROOT} {supervisor.CONTROL_ROOT}")
+        self.assertEqual(properties["ReadOnlyPaths"], "/usr/local/lib/baci-worker-broker")
+        tmpfiles = next(item for item in provisioner.install_files()
+                        if item.relative == "extract-tmpfiles").content.decode()
+        self.assertIn("d /run/baci-worker-release-extract/control 0710 root baci-release-extractor -", tmpfiles)
+
     def test_helper_path_requires_root_owned_traversable_ancestors(self):
         helper = Path("/usr/local/lib/baci-worker-broker")
         blocked = helper.parent
@@ -255,13 +267,14 @@ class ExtractorUnitTests(unittest.TestCase):
             with StageJournal(journal_root, owner_uid=0, stage_uid=account.pw_uid,
                               stage_gid=os.getgid(), resource_root=RESOURCE_ROOT,
                               resource_uid=account.pw_uid) as journal:
-                journal.begin(FENCE, digest)
+                journal_state = journal.begin(FENCE, digest)
+                transaction_id = journal_state["transaction_id"]
                 try:
                     receipt = supervisor.extract_frozen_source(journal, bundle, digest)
                 except Exception as error:
                     self.fail(f"extractor unit failed ({type(error).__name__}); "
                               f"systemd state: {systemd_unit_failure_summary(
-                                  f'{supervisor.UNIT_PREFIX}{journal.transaction_id}.service')}")
+                                  f'{supervisor.UNIT_PREFIX}{transaction_id}.service')}")
                 source = receipt["snapshot"]
                 self.assertEqual(receipt["source_sha"], SHA)
                 self.assertEqual((source / "pnpm-lock.yaml").read_bytes(), b"root lock\n")

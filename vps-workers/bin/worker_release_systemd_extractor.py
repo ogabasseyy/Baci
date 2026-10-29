@@ -245,16 +245,19 @@ def extract_frozen_source(journal, archive: bytes, expected_archive_sha256: str)
                 "archive_entries": entries, "frozen_entries": tree["entries"],
                 "frozen_bytes": tree["bytes"], "snapshot": source}
     except BaseException:
-        try:
-            _run("systemctl", "stop", unit)
-        except ExtractorRejected:
-            pass
+        cgroup_error = None
         if cgroup_fd < 0:
             try:
                 control_group = _run("systemctl", "show", "-p", "ControlGroup", "--value", unit)
                 cgroup_fd, cgroup_info = _open_cgroup(control_group, txid)
             except Exception as error:
-                raise ExtractorRejected("extractor cgroup could not be located after failure") from error
+                cgroup_error = error
+        try:
+            _run("systemctl", "stop", unit)
+        except ExtractorRejected:
+            pass
+        if cgroup_error is not None:
+            raise ExtractorRejected("extractor cgroup could not be pinned before cleanup") from cgroup_error
         if cgroup_fd >= 0:
             try:
                 require_empty_cgroup(cgroup_fd, cgroup_info.st_dev, cgroup_info.st_ino)

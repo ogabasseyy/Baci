@@ -25,8 +25,8 @@ def expected_properties(*, extractor: str, resource_root: Path,
         "RestrictRealtime": "yes", "RestrictSUIDSGID": "yes", "UMask": "0077",
         "MemoryMax": "805306368", "TasksMax": "16", "CPUQuotaPerSecUSec": "1s",
         "StandardOutput": "null", "StandardError": "null",
-        "ReadWritePaths": str(resource_root),
-        "ReadOnlyPaths": f"/usr/local/lib/baci-worker-broker {control_root}",
+        "ReadWritePaths": f"{resource_root} {control_root}",
+        "ReadOnlyPaths": "/usr/local/lib/baci-worker-broker",
         "InaccessiblePaths": "/srv/baci-workers /etc /root /home",
     }
 

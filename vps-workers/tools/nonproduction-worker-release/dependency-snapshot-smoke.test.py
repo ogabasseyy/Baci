@@ -7,6 +7,13 @@ from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).with_name("dependency-snapshot-smoke.py")
+
+
+def read_systemd_fixture() -> str:
+    entrypoint = SCRIPT.with_name("dependency-builder-systemd-test.sh")
+    paths = [entrypoint]
+    paths.extend(sorted(entrypoint.parent.glob("dependency-builder-systemd-test-*.sh")))
+    return "\n".join(path.read_text(encoding="utf-8") for path in paths)
 SPEC = importlib.util.spec_from_file_location("dependency_snapshot_smoke", SCRIPT)
 assert SPEC and SPEC.loader
 smoke = importlib.util.module_from_spec(SPEC)
@@ -80,7 +87,7 @@ class DependencySnapshotSmokeTests(unittest.TestCase):
         self.assertEqual(digest.call_count, 2)
 
     def test_linux_fixture_uses_numeric_group_lookups_for_systemd_arguments(self):
-        fixture = SCRIPT.with_name("dependency-builder-systemd-test.sh").read_text(encoding="utf-8")
+        fixture = read_systemd_fixture()
         self.assertIn('worker_gid="$(getent group baci-worker | cut -d: -f3)"', fixture)
         self.assertIn('lock_gid="$(getent group baci-locks | cut -d: -f3)"', fixture)
         self.assertIn('--gid="$worker_gid"', fixture)
@@ -89,7 +96,7 @@ class DependencySnapshotSmokeTests(unittest.TestCase):
         self.assertNotIn("id -g baci-locks", fixture)
 
     def test_linux_fixture_generates_lockfiles_like_real_repository(self):
-        fixture = SCRIPT.with_name("dependency-builder-systemd-test.sh").read_text(encoding="utf-8")
+        fixture = read_systemd_fixture()
         self.assertEqual(
             fixture.count("PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES=false pnpm install --lockfile-only"),
             2,
@@ -98,14 +105,14 @@ class DependencySnapshotSmokeTests(unittest.TestCase):
         self.assertIn('"expo-server-sdk":"6.1.0"', fixture)
 
     def test_linux_fixture_callback_validates_exact_sandbox_owner_uid(self):
-        fixture = SCRIPT.with_name("dependency-builder-systemd-test.sh").read_text(encoding="utf-8")
+        fixture = read_systemd_fixture()
         self.assertIn("def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=None):", fixture)
         self.assertIn('argument.startswith("--uid=")', fixture)
         self.assertIn("owner_uid != expected_owner_uid", fixture)
         self.assertIn("dependency builder did not forward the exact non-root sandbox owner", fixture)
 
     def test_linux_fixture_stages_dependency_diagnostics_helper_and_workflow_tracks_it(self):
-        fixture = SCRIPT.with_name("dependency-builder-systemd-test.sh").read_text(encoding="utf-8")
+        fixture = read_systemd_fixture()
         workflow = SCRIPT.parents[3] / ".github/workflows/worker-release-dependency-systemd-tests.yml"
         workflow_text = workflow.read_text(encoding="utf-8")
         self.assertIn("worker_release_dependency_diagnostics.py", fixture)

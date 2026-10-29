@@ -10,6 +10,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "bin"))
 MODULE_PATH = Path(__file__).with_name("dependency-builder-fixture-pnpm.py")
+
+
+def systemd_fixture_source() -> str:
+    paths = [MODULE_PATH.with_name("dependency-builder-systemd-test.sh")]
+    paths.extend(sorted(MODULE_PATH.parent.glob("dependency-builder-systemd-test-*.sh")))
+    return "\n".join(path.read_text(encoding="utf-8") for path in paths)
+
+
 SPEC = importlib.util.spec_from_file_location("dependency_builder_fixture_pnpm", MODULE_PATH)
 assert SPEC and SPEC.loader
 fixture = importlib.util.module_from_spec(SPEC)
@@ -316,7 +324,7 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             ))
 
     def test_harness_reads_diagnostic_from_builder_scratch_not_outer_command_args(self):
-        harness = MODULE_PATH.with_name("dependency-builder-systemd-test.sh").read_text(encoding="utf-8")
+        harness = systemd_fixture_source()
         self.assertIn("read_scratch_diagnostic(", harness)
         self.assertIn('fixture_detail["fixture_stage"]', harness)
         self.assertIn('fixture_detail["fixture_network"]', harness)
@@ -330,6 +338,14 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
         self.assertIn("stderr=subprocess.DEVNULL", harness)
         self.assertNotIn('diagnostic = (result.stderr + "\\n" + result.stdout)', harness)
         self.assertNotIn("print(diagnostic, file=sys.stderr)", harness)
+
+    def test_split_systemd_fixture_modules_stay_under_review_limit(self):
+        paths = [MODULE_PATH.with_name("dependency-builder-systemd-test.sh")]
+        paths.extend(MODULE_PATH.parent.glob("dependency-builder-systemd-test-*.sh"))
+        paths.extend((MODULE_PATH, MODULE_PATH.with_name("dependency_builder_fixture_pnpm_classification.py"),
+                      MODULE_PATH.with_name("dependency_builder_fixture_pnpm_diagnostics.py")))
+        oversized = [path.name for path in paths if len(path.read_text(encoding="utf-8").splitlines()) > 300]
+        self.assertEqual(oversized, [])
 
 
 if __name__ == "__main__":

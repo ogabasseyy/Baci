@@ -40,7 +40,7 @@ from worker_release_actual_dependency_guard import (
 )
 from worker_release_actual_dependency_limits import (
     EXPERIMENT_PAYLOAD_BYTES, configure_experiment_payload_limits,
-    inspect_materialization_budget,
+    inspect_materialization_budget, reclaim_experiment_tree,
 )
 from worker_release_actual_dependency_runner import run, run_policy_preverify as _run_policy_preverify
 from worker_release_actual_dependency_resources import (MAX_TREE_BYTES, MAX_TREE_ENTRIES, MIN_FREE_BYTES,
@@ -103,6 +103,7 @@ def _main() -> int:
             enforce_resource_limits(base)
             source_size = tree_size(source, max_entries=500_000, max_bytes=512 * 1024 * 1024)[1]
             (source / ".baci-source-sha").write_text(expected_sha + "\n", encoding="ascii")
+            reclaim_experiment_tree(archive, scratch_root=base)
             store = base / "pnpm-store"
             store.mkdir(mode=0o700)
             cache = base / "pnpm-cache"
@@ -196,7 +197,15 @@ def _main() -> int:
             if not worker_modules.is_dir() or worker_modules.is_symlink():
                 raise RuntimeError("offline standalone worker install produced no real node_modules directory")
             (output / "root").mkdir()
-            shutil.copytree(worker_modules, output / "root" / "node_modules", symlinks=True)
+            worker_payload = output / "root" / "node_modules"
+            if (os.path.lexists(worker_payload)
+                    or worker_modules.stat().st_dev != worker_payload.parent.stat().st_dev):
+                raise RuntimeError("offline worker dependencies cannot be moved into the payload")
+            os.rename(worker_modules, worker_payload)
+            # No pnpm command remains. Drop the large mutable source installs,
+            # offline store and policy cache before copying the payload again.
+            for completed_phase_tree in (store, cache, build_cache, source, home):
+                reclaim_experiment_tree(completed_phase_tree, scratch_root=base)
             enforce_resource_limits(base)
             stage = "payload-export"
             export_root = base / "payload-export"
@@ -224,6 +233,10 @@ def _main() -> int:
             exported_output = dependency_fs.snapshot_payload(
                 base, export_root, os.geteuid(), before_entry=check_export_budget,
             )
+            enforce_resource_limits(base)
+            # Export is a regular, independently validated snapshot. The pnpm
+            # deploy tree is no longer needed once it has been copied here.
+            reclaim_experiment_tree(output, scratch_root=base)
             enforce_resource_limits(base)
             stage = "payload-validation"
             configure_experiment_payload_limits()

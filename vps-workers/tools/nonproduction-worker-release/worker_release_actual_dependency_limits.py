@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import stat
 from pathlib import Path
 
@@ -94,6 +95,47 @@ def inspect_materialization_budget(payload: Path, *, byte_limit: int) -> tuple[s
         if result:
             return result, min(entries, entry_limit + 1), min(expanded_bytes, byte_limit + 1)
     return "within-bounds", entries, expanded_bytes
+
+
+def reclaim_experiment_tree(path: Path, *, scratch_root: Path) -> None:
+    """Remove one experiment-owned scratch child after its phase has ended."""
+    path = Path(path)
+    scratch_root = Path(scratch_root).resolve(strict=True)
+    if path.parent.resolve(strict=True) != scratch_root or path.name not in {
+        "source", "pnpm-store", "pnpm-cache", "pnpm-build-cache", "payload", "checkout.tar", "home",
+    }:
+        raise RuntimeError("experiment scratch reclamation target is invalid")
+    info = path.lstat()
+    if info.st_uid != os.geteuid():
+        raise RuntimeError("experiment scratch reclamation owner is invalid")
+    if stat.S_ISDIR(info.st_mode):
+        if not shutil.rmtree.avoids_symlink_attacks:
+            raise RuntimeError("safe experiment scratch reclamation is unavailable")
+        def restore_owned_directory_permissions(error: OSError) -> None:
+            raise RuntimeError("experiment scratch directory cannot be safely inspected") from error
+
+        for current, directories, _files in os.walk(path, topdown=True, followlinks=False,
+                                                     onerror=restore_owned_directory_permissions):
+            current_path = Path(current)
+            fd = os.open(current_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC)
+            try:
+                current_info = os.fstat(fd)
+                if not stat.S_ISDIR(current_info.st_mode) or current_info.st_uid != os.geteuid():
+                    raise RuntimeError("experiment scratch directory owner is invalid")
+                os.fchmod(fd, stat.S_IMODE(current_info.st_mode) | 0o700)
+            finally:
+                os.close(fd)
+            for name in directories:
+                child_info = (current_path / name).lstat()
+                if stat.S_ISDIR(child_info.st_mode) and child_info.st_uid != os.geteuid():
+                    raise RuntimeError("experiment scratch directory owner is invalid")
+        shutil.rmtree(path)
+    elif stat.S_ISREG(info.st_mode) and info.st_nlink == 1:
+        path.unlink()
+    else:
+        raise RuntimeError("experiment scratch reclamation target type is invalid")
+    if os.path.lexists(path):
+        raise RuntimeError("experiment scratch reclamation did not complete")
 
 
 def configure_experiment_payload_limits(smoke=None, *, materialization_limit: int | None = None) -> None:

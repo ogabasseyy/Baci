@@ -552,6 +552,36 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         self.assertEqual(experiment.artifacts.MAX_PAYLOAD_BYTES, production_payload_limit)
         self.assertEqual(experiment.installer.MAX_MATERIALIZED_BYTES, production_materialized_limit)
 
+    def test_reclaim_experiment_tree_removes_only_owned_direct_scratch_children(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cache = root / "pnpm-cache"
+            cache.mkdir()
+            outside = root / "outside"
+            outside.mkdir()
+            marker = outside / "preserve"
+            marker.write_text("outside", encoding="utf-8")
+            (cache / "linked").symlink_to(outside, target_is_directory=True)
+            (cache / "nested").mkdir()
+            (cache / "nested" / "readonly").write_text("temporary", encoding="utf-8")
+            (cache / "nested" / "readonly").chmod(0o400)
+            (cache / "nested").chmod(0o500)
+            cache.chmod(0o500)
+            experiment.reclaim_experiment_tree(cache, scratch_root=root)
+            self.assertFalse(cache.exists())
+            self.assertEqual(marker.read_text(encoding="utf-8"), "outside")
+            with self.assertRaisesRegex(RuntimeError, "target is invalid"):
+                experiment.reclaim_experiment_tree(outside, scratch_root=root)
+
+    def test_payload_phases_reclaim_large_inputs_before_materialization(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("os.rename(worker_modules, worker_payload)", source)
+        self.assertNotIn("shutil.copytree(worker_modules", source)
+        self.assertIn("(store, cache, build_cache, source, home)", source)
+        self.assertIn("reclaim_experiment_tree(output, scratch_root=base)", source)
+        self.assertLess(source.index("reclaim_experiment_tree(output, scratch_root=base)"),
+                        source.index("stage = \"payload-materialization\""))
+
     def test_verified_seed_is_separate_from_mutable_offline_cache(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -83,7 +83,8 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
     def test_worker_health_check_binds_active_pointer_and_fixed_services(self):
         health = next(file for file in provision.install_files() if file.relative == "health-check").content.decode()
         self.assertIn("readonly root='/srv/baci-workers'", health)
-        self.assertIn('[[ "$(readlink "$root/current")" == "$expected" ]]', health)
+        self.assertIn('[[ "$(readlink "$root/current")" == "releases/$expected" ]]', health)
+        self.assertIn('[[ -d "$root/releases/$expected" && ! -L "$root/releases/$expected" ]]', health)
         self.assertIn("baci-domain-event-router baci-event-delivery-worker baci-quiz-finalization", health)
         self.assertNotIn('"$@"', health)
 

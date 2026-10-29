@@ -17,13 +17,13 @@ worker_root="${BACI_WORKER_ROOT:-/srv/baci-workers}"
   fail 'installed worker root is invalid'
 
 current_sha="$(readlink "$worker_root/current" 2>/dev/null || true)"
-[[ "$current_sha" =~ ^[0-9a-f]{40}$ && "$current_sha" == "$expected_sha" ]] ||
+[[ "$current_sha" == "releases/$expected_sha" ]] ||
   fail 'installed worker SHA does not match the authenticated release'
 
 script_dir="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 release_root="$(dirname -- "$script_dir")"
 identity_script="$release_root/.github/scripts/resolve-isolated-gigl-latch-identity.sh"
-smoke_script="$worker_root/bin/verify-gigl-tracking-worker-capability.sh"
+smoke_script="$worker_root/current/bin/verify-gigl-tracking-worker-capability.sh"
 worker_env="$worker_root/runtime/worker.env"
 [ -f "$identity_script" ] || fail 'installed identity helper is missing'
 [ -x "$smoke_script" ] || fail 'installed capability verifier is missing'
@@ -55,4 +55,4 @@ current_sha_after="$(readlink "$worker_root/current" 2>/dev/null || true)"
 # The fingerprint crosses only the host-local pipe to the root broker, which
 # persists the latch atomically. The trusted dispatcher strips this field.
 printf '{"smokePassed":true,"scope":"%s","installedSha":"%s","credentialFingerprint":"%s"}\n' \
-  "${identity_after%% *}" "$current_sha" "${identity_after#* }"
+  "${identity_after%% *}" "$expected_sha" "${identity_after#* }"

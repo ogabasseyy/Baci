@@ -105,12 +105,14 @@ def _current_target(current_link: Path, releases_root: Path) -> str | None:
         target = os.readlink(current_link)
     except FileNotFoundError:
         return None
-    if not SHA_RE.fullmatch(target):
+    match = re.fullmatch(r"releases/([0-9a-f]{40})", target)
+    if match is None:
         raise LifecycleRejected("current release pointer is invalid")
-    release = releases_root / target
+    sha = match.group(1)
+    release = releases_root / sha
     if not release.is_dir() or release.is_symlink():
         raise LifecycleRejected("current release target is unavailable")
-    return target
+    return sha
 
 
 def _atomic_pointer(current_link: Path, releases_root: Path, sha: str) -> None:
@@ -121,7 +123,9 @@ def _atomic_pointer(current_link: Path, releases_root: Path, sha: str) -> None:
         raise LifecycleRejected("staged release is unavailable")
     temp_link = current_link.parent / f".current.{os.getpid()}.tmp"
     try:
-        os.symlink(sha, temp_link)
+        # current lives beside releases/, so a bare SHA would resolve to
+        # <worker-root>/<sha> instead of <worker-root>/releases/<sha>.
+        os.symlink(os.path.relpath(release, current_link.parent), temp_link)
         os.replace(temp_link, current_link)
         directory_fd = os.open(current_link.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
         try:

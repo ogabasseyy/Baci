@@ -157,9 +157,9 @@ def collect_worker_readiness(
                 not stat.S_ISDIR(releases_info.st_mode) or stat.S_ISLNK(releases_info.st_mode) or
                 (releases_info.st_uid, releases_info.st_gid, stat.S_IMODE(releases_info.st_mode)) != (owner_uid, expected_gid, 0o750) or
                 not stat.S_ISLNK(pointer_info.st_mode) or pointer_info.st_uid != owner_uid or
-                target != expected_sha):
+                target != f"releases/{expected_sha}"):
             raise ReadinessRejected("isolated worker root or current release pointer is invalid")
-        release = releases_root / target
+        release = releases_root / expected_sha
         release_info = release.lstat()
         if (not stat.S_ISDIR(release_info.st_mode) or stat.S_ISLNK(release_info.st_mode) or
                 (release_info.st_uid, release_info.st_gid, stat.S_IMODE(release_info.st_mode)) != (owner_uid, expected_gid, 0o550)):

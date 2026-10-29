@@ -2,6 +2,14 @@
 import worker_release_broker as broker
 import io, os, re, shutil, signal, stat, time
 
+
+def _drop_extractor_privileges(worker_uid: int, worker_gid: int, lock_gid: int) -> None:
+    """Keep only the provisioned traversal group before changing identity."""
+    broker.os.setgroups([lock_gid])
+    broker.os.setgid(worker_gid)
+    broker.os.setuid(worker_uid)
+
+
 def _assert_root_owned_executable(path: str) -> None:
     metadata = broker.os.stat(path, follow_symlinks=False)
     if not broker.stat.S_ISREG(metadata.st_mode) or metadata.st_uid != 0 or metadata.st_mode & 0o022:
@@ -11,15 +19,19 @@ def _assert_root_owned_executable(path: str) -> None:
 
 
 def _run_as_worker_extractor(archive_bytes: bytes, destination: str, worker_uid: int, worker_gid: int) -> int:
-    """Fork a one-shot child, drop all groups/UID/GID, then parse untrusted tar."""
+    """Fork a one-shot child, retain only baci-locks, then drop UID/GID and parse tar."""
+    try:
+        lock_gid = broker.grp.getgrnam("baci-locks").gr_gid
+    except KeyError as error:
+        raise broker.BrokerProtocolError("required worker lock group is unavailable") from error
     read_fd, write_fd = broker.os.pipe()
     child = broker.os.fork()
     if child == 0:
         try:
             broker.os.close(read_fd)
-            broker.os.setgroups([])
-            broker.os.setgid(worker_gid)
-            broker.os.setuid(worker_uid)
+            # /srv/baci-workers is root:baci-locks 0710. The extractor needs
+            # this one provisioned supplementary group to traverse it.
+            _drop_extractor_privileges(worker_uid, worker_gid, lock_gid)
             count = broker.extract_github_tarball(broker.io.BytesIO(archive_bytes), destination)
             broker.os.write(write_fd, str(count).encode("ascii"))
             broker.os._exit(0)
@@ -93,6 +105,20 @@ def _stage_archive(archive: bytes, releases_root: str, sha: str, worker_uid: int
         broker.os.chown(destination, worker_uid, worker_gid)
         broker.os.chmod(destination, 0o700)
         count = broker._run_as_worker_extractor(archive, destination, worker_uid, worker_gid)
+        # Worker services consume a root-level runtime layout, while the
+        # repository archive nests these directories under vps-workers/.
+        repository_workers = broker.os.path.join(destination, "vps-workers")
+        if broker.os.path.isdir(repository_workers) and not broker.os.path.islink(repository_workers):
+            for entry in ("bin", "jobs", "lib", "config", "systemd"):
+                source = broker.os.path.join(repository_workers, entry)
+                target = broker.os.path.join(destination, entry)
+                if not broker.os.path.lexists(source):
+                    continue
+                if not broker.os.path.isdir(source) or broker.os.path.islink(source):
+                    raise broker.BrokerProtocolError("repository worker layout contains an unsafe directory")
+                if broker.os.path.lexists(target):
+                    raise broker.BrokerProtocolError("release archive conflicts with the worker runtime layout")
+                broker.shutil.copytree(source, target, copy_function=broker.shutil.copy2)
         broker._freeze_release_tree(destination, worker_gid)
         # releases_root is root-owned and not writable by the extractor identity;
         # the SHA name is therefore stable between the collision check and rename.

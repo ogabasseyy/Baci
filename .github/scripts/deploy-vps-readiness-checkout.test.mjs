@@ -126,7 +126,8 @@ test('uses a minimal sparse checkout for exact-SHA worker readiness', async () =
     checkout.with['sparse-checkout'],
     '.github/scripts/check-worker-release-readiness.mjs\n' +
       '.github/scripts/verify-coordinated-release.sh\n' +
-      'vps-workers/lib/worker-release-broker-client.mjs\n'
+      'vps-workers/lib/worker-release-broker-client.mjs\n' +
+      'vps-workers/lib/worker-release-broker.mjs\n'
   );
   assert.equal(checkout.with['sparse-checkout-cone-mode'], false);
   assert.equal(
@@ -135,6 +136,19 @@ test('uses a minimal sparse checkout for exact-SHA worker readiness', async () =
   );
   assert.deepEqual(Object.keys(readiness.outputs).sort(), ['installed_sha', 'worker_units_ready']);
   assert.equal(readiness.steps.some((step) => step.run?.includes('/home/bassey/')), false);
+  const finalReadiness = workflow.jobs['deploy-production'].steps.find(
+    (step) => step.name === 'Verify exact worker SHA before lock release'
+  );
+  assert.equal(finalReadiness.run, 'node .github/scripts/check-worker-release-readiness.mjs');
+  assert.equal(finalReadiness.env.BACI_EXPECTED_APP_SHA, '${{ inputs.expected_release_sha }}');
+  assert.equal(finalReadiness.env.GITHUB_TOKEN, '${{ github.token }}');
+  assert.equal(
+    workflow.jobs['deploy-production'].steps.some((step) =>
+      step.run === 'vps-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke'
+    ),
+    false,
+    'final worker verification must use the authenticated broker receipt'
+  );
 });
 
 test('keeps the post-migration capability smoke bound to the caller SHA', async () => {

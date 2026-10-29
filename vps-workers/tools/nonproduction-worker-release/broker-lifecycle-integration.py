@@ -15,6 +15,7 @@ import os
 import pwd
 import socket
 import stat
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -47,10 +48,18 @@ def observed_dispatch(peer, request):
 def synthetic_archive():
     output = io.BytesIO()
     with tarfile.open(fileobj=output, mode="w:gz") as archive:
-        payload = b"synthetic worker fixture\n"
-        info = tarfile.TarInfo("fixture-root/worker.txt")
-        info.size = len(payload)
-        archive.addfile(info, io.BytesIO(payload))
+        entries = {
+            "Baci-abcdef/vps-workers/bin/fixture-worker.sh": (b"#!/bin/sh\nprintf 'worker-ok\\n'\n", 0o755),
+            "Baci-abcdef/vps-workers/jobs/run-cache-invalidation-cron.mjs": (b"export {};\n", 0o644),
+            "Baci-abcdef/vps-workers/lib/fixture-helper.sh": (b"# helper\n", 0o644),
+            "Baci-abcdef/vps-workers/config/worker.json": (b"{}\n", 0o644),
+            "Baci-abcdef/vps-workers/systemd/fixture-worker.service": (b"[Service]\n", 0o644),
+        }
+        for name, (payload, mode) in entries.items():
+            info = tarfile.TarInfo(name)
+            info.size = len(payload)
+            info.mode = mode
+            archive.addfile(info, io.BytesIO(payload))
     return output.getvalue()
 
 
@@ -198,7 +207,7 @@ def main():
             os.chown(release, 0, args.worker_gid)
             os.chown(release / "worker.txt", 0, args.worker_gid)
         current = worker_root / "current"
-        current.symlink_to(SHA_OLD)
+        current.symlink_to(Path("releases") / SHA_OLD)
 
         socket_path = root / "broker.sock"
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -268,12 +277,20 @@ def main():
                 )
                 if staged.get("ok") is not True or staged.get("entryCount") < 1:
                     raise AssertionError(f"synthetic stage failed: {staged}")
-                staged_path = releases / SHA_NEW / "worker.txt"
-                if staged_path.read_bytes() != b"synthetic worker fixture\n":
-                    raise AssertionError("staged synthetic source content differs")
-                if staged_path.stat().st_uid != 0 or stat.S_IMODE(staged_path.stat().st_mode) != 0o440:
-                    raise AssertionError("staged file is not root-owned and immutable to worker")
-                print("PASS authenticated synthetic archive stages with immutable ownership")
+                staged_release = releases / SHA_NEW
+                staged_path = staged_release / "bin" / "fixture-worker.sh"
+                for path in (
+                    staged_path,
+                    staged_release / "jobs/run-cache-invalidation-cron.mjs",
+                    staged_release / "lib/fixture-helper.sh",
+                    staged_release / "config/worker.json",
+                    staged_release / "systemd/fixture-worker.service",
+                ):
+                    if not path.is_file():
+                        raise AssertionError(f"worker runtime path was not materialized: {path}")
+                if staged_path.stat().st_uid != 0 or stat.S_IMODE(staged_path.stat().st_mode) != 0o550:
+                    raise AssertionError("staged worker executable is not root-owned and immutable to worker")
+                print("PASS GitHub-shaped worker archive stages at the expected runtime paths")
 
                 preflight = broker_roundtrip(
                     listener, args.release_uid, make_request("preflight"),
@@ -289,8 +306,14 @@ def main():
                 )
                 if promoted.get("ok") is not True or promoted.get("previousSha") != SHA_OLD:
                     raise AssertionError(f"promotion failed: {promoted}")
-                if os.readlink(current) != SHA_NEW:
+                if os.readlink(current) != f"releases/{SHA_NEW}":
                     raise AssertionError("promotion did not atomically switch the current pointer")
+                worker_run = subprocess.run(
+                    [str(current / "bin/fixture-worker.sh")], capture_output=True,
+                    text=True, check=True,
+                )
+                if worker_run.stdout != "worker-ok\n":
+                    raise AssertionError("staged worker executable did not run from current/bin")
                 state_path = worker_root / "release-state.json"
                 state = json.loads(state_path.read_text())
                 if state.get("status") != "promoted" or state.get("sha") != SHA_NEW:
@@ -316,7 +339,7 @@ def main():
                 )
                 if rollback.get("ok") is not True or rollback.get("sourceSha") != SHA_OLD:
                     raise AssertionError(f"rollback failed: {rollback}")
-                if os.readlink(current) != SHA_OLD:
+                if os.readlink(current) != f"releases/{SHA_OLD}":
                     raise AssertionError("rollback did not restore the exact recorded prior SHA")
                 state = json.loads(state_path.read_text())
                 if state.get("status") != "rolled_back" or state.get("sha") != SHA_NEW:

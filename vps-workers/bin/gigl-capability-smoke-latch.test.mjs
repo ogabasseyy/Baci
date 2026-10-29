@@ -8,6 +8,7 @@ import {
   readFileSync,
   rmSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -32,14 +33,13 @@ function fixture({ smokeStatus = 0, identityChanges = false } = {}) {
   const bin = join(releaseRoot, 'bin');
   const identityDir = join(releaseRoot, '.github/scripts');
   mkdirSync(join(workerRoot, 'locks'), { recursive: true });
-  mkdirSync(join(workerRoot, 'bin'), { recursive: true });
   mkdirSync(releasesRoot, { recursive: true });
   mkdirSync(bin, { recursive: true });
   mkdirSync(identityDir, { recursive: true });
   const installedHelper = join(bin, 'gigl-capability-smoke-latch.sh');
   writeFileSync(installedHelper, readFileSync(script));
   chmodSync(installedHelper, 0o755);
-  symlinkSync(sha, join(workerRoot, 'current'));
+  symlinkSync(`releases/${sha}`, join(workerRoot, 'current'));
   mkdirSync(join(workerRoot, 'runtime'), { recursive: true });
   writeFileSync(join(workerRoot, 'runtime/worker.env'), 'GIGL_ENABLED=true\n');
   writeFileSync(join(workerRoot, '.gigl-capability-smoke-ok'), `disabled:${'c'.repeat(40)}:${fingerprint}\n`);
@@ -61,7 +61,7 @@ else
 fi
 `);
 
-  const smoke = join(workerRoot, 'bin/verify-gigl-tracking-worker-capability.sh');
+  const smoke = join(releaseRoot, 'bin/verify-gigl-tracking-worker-capability.sh');
   const smokeRecord = join(root, 'smoke-record');
   executable(smoke, `#!/usr/bin/env bash
 set -euo pipefail
@@ -152,5 +152,16 @@ test('rejects caller-selected command arguments', () => {
   const result = value.run({}, ['--anything']);
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /unexpected arguments/);
+  assert.equal(readFileSync(value.latch, 'utf8'), value.previousLatch);
+});
+
+test('rejects a legacy bare SHA current pointer', () => {
+  const value = setup();
+  const current = join(value.workerRoot, 'current');
+  unlinkSync(current);
+  symlinkSync(sha, current);
+  const result = value.run();
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /does not match the authenticated release/);
   assert.equal(readFileSync(value.latch, 'utf8'), value.previousLatch);
 });

@@ -7,7 +7,11 @@ const sha = 'a'.repeat(40);
 test('requests the broker-owned capability smoke and reports only safe metadata', async () => {
   let request;
   const output = await runGiglCapabilitySmoke({
-    env: { BACI_EXPECTED_APP_SHA: sha },
+    env: {
+      BACI_EXPECTED_APP_SHA: sha, GH_TOKEN: 'github-token',
+      ACTIONS_ID_TOKEN_REQUEST_URL: 'https://oidc.invalid/request',
+      ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'oidc-request-token',
+    },
     broker: async (value) => {
       request = value;
       return {
@@ -16,8 +20,12 @@ test('requests the broker-owned capability smoke and reports only safe metadata'
       };
     },
   });
-  assert.deepEqual(request, { operation: 'gigl-capability', sha });
+  assert.deepEqual(request, {
+    operation: 'gigl-capability', sha, githubToken: 'github-token',
+    oidcRequestUrl: 'https://oidc.invalid/request', oidcRequestToken: 'oidc-request-token',
+  });
   assert.equal(output, `GIGL capability smoke and latch passed for installed worker ${sha} (enabled).\n`);
+  assert.doesNotMatch(output, /github-token|oidc-request-token/);
 });
 
 test('rejects an invalid SHA or mismatched and unsafe broker receipts', async () => {

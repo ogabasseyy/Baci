@@ -7,7 +7,13 @@ export async function checkWorkerReleaseReadiness({ env = process.env, broker = 
   const sha = env.BACI_EXPECTED_APP_SHA ?? env.GITHUB_SHA;
   if (!/^[0-9a-f]{40}$/.test(sha ?? '')) throw new Error('worker readiness expected SHA is invalid');
 
-  const receipt = await broker({ operation: 'readiness', sha });
+  const receipt = await broker({
+    operation: 'readiness',
+    sha,
+    ...(env.GITHUB_TOKEN || env.GH_TOKEN ? { githubToken: env.GITHUB_TOKEN ?? env.GH_TOKEN } : {}),
+    ...(env.ACTIONS_ID_TOKEN_REQUEST_URL ? { oidcRequestUrl: env.ACTIONS_ID_TOKEN_REQUEST_URL } : {}),
+    ...(env.ACTIONS_ID_TOKEN_REQUEST_TOKEN ? { oidcRequestToken: env.ACTIONS_ID_TOKEN_REQUEST_TOKEN } : {}),
+  });
   if (receipt.ready !== true || receipt.sourceSha !== sha || receipt.installedSha !== sha) {
     throw new Error('broker worker readiness receipt does not match the exact release SHA');
   }

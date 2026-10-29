@@ -27,7 +27,7 @@ class WorkerReleaseLifecycleTests(unittest.TestCase):
         (self.releases / SHA_OLD).mkdir()
         (self.releases / SHA_NEW).mkdir()
         self.current = self.root / "current"
-        self.current.symlink_to(SHA_OLD)
+        self.current.symlink_to(Path("releases") / SHA_OLD)
         self.identity = AuthenticatedRun(
             repository="ogabasseyy/Baci",
             workflow=".github/workflows/production-release.yml",
@@ -69,7 +69,7 @@ class WorkerReleaseLifecycleTests(unittest.TestCase):
                 identity=self.identity,
                 health_check=lambda _sha: True,
             )
-        self.assertEqual(os.readlink(self.current), SHA_OLD)
+        self.assertEqual(os.readlink(self.current), f"releases/{SHA_OLD}")
 
     def test_promotion_switches_pointer_only_with_active_lease(self):
         class Lease:
@@ -89,12 +89,13 @@ class WorkerReleaseLifecycleTests(unittest.TestCase):
             quiescence_lease=lease,
         )
         self.assertEqual(result["previous_sha"], SHA_OLD)
-        self.assertEqual(os.readlink(self.current), SHA_NEW)
+        self.assertEqual(os.readlink(self.current), f"releases/{SHA_NEW}")
+        self.assertEqual(self.current.resolve(strict=True), self.releases.resolve() / SHA_NEW)
         self.assertEqual(lease.entered, 1, "direct lifecycle callers must enter the lease operation guard")
 
     def test_rollback_refuses_without_fixed_quiescence_lease(self):
         self.current.unlink()
-        self.current.symlink_to(SHA_NEW)
+        self.current.symlink_to(Path("releases") / SHA_NEW)
         with self.assertRaisesRegex(LifecycleRejected, "quiescence lease is required"):
             rollback_release(
                 current_link=self.current,
@@ -103,7 +104,7 @@ class WorkerReleaseLifecycleTests(unittest.TestCase):
                 promoted_sha=SHA_NEW,
                 previous_sha=SHA_OLD,
             )
-        self.assertEqual(os.readlink(self.current), SHA_NEW)
+        self.assertEqual(os.readlink(self.current), f"releases/{SHA_NEW}")
 
     def test_rollback_restores_only_authenticated_current_release_with_active_lease(self):
         class Lease:
@@ -113,18 +114,18 @@ class WorkerReleaseLifecycleTests(unittest.TestCase):
             def require_active(self):
                 return None
         self.current.unlink()
-        self.current.symlink_to(SHA_NEW)
+        self.current.symlink_to(Path("releases") / SHA_NEW)
         result = rollback_release(
             current_link=self.current, releases_root=self.releases,
             identity=self.identity, promoted_sha=SHA_NEW, previous_sha=SHA_OLD,
             quiescence_lease=Lease(),
         )
         self.assertEqual(result["sha"], SHA_OLD)
-        self.assertEqual(os.readlink(self.current), SHA_OLD)
+        self.assertEqual(os.readlink(self.current), f"releases/{SHA_OLD}")
 
     def test_health_requires_authenticated_sha_to_remain_current(self):
         self.current.unlink()
-        self.current.symlink_to(SHA_NEW)
+        self.current.symlink_to(Path("releases") / SHA_NEW)
         result = check_release_health(
             current_link=self.current,
             releases_root=self.releases,
@@ -133,7 +134,7 @@ class WorkerReleaseLifecycleTests(unittest.TestCase):
         )
         self.assertTrue(result["healthy"])
         self.current.unlink()
-        self.current.symlink_to(SHA_OLD)
+        self.current.symlink_to(Path("releases") / SHA_OLD)
         with self.assertRaises(LifecycleRejected):
             check_release_health(
                 current_link=self.current,
@@ -153,6 +154,17 @@ class WorkerReleaseLifecycleTests(unittest.TestCase):
         with self.assertRaises(OSError):
             with release_lock(lock_path, expected_owner_uid=os.geteuid()):
                 pass
+
+    def test_bare_sha_pointer_is_rejected(self):
+        self.current.unlink()
+        self.current.symlink_to(SHA_OLD)
+        with self.assertRaisesRegex(LifecycleRejected, "pointer is invalid"):
+            check_release_health(
+                current_link=self.current,
+                releases_root=self.releases,
+                identity=self.identity,
+                health_check=lambda _sha: True,
+            )
 
 
 if __name__ == "__main__":

@@ -9,12 +9,15 @@ import sys
 import tarfile
 import tempfile
 import threading
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 from pathlib import Path
 
 from worker_release_broker import BrokerProtocolError, BROKER_CLIENT_TIMEOUT_SECONDS, BROKER_OPERATION_BUDGET_SECONDS, DISPATCHER_TIMEOUT_SECONDS, extract_github_tarball, serve_connection, _stage_archive, _freeze_release_tree, _validate_staged_release, _load_release_state, _record_promotion_failure, _record_promotion_success, _promotion_restore_confirmed, _run_gigl_capability_smoke, _validate_gigl_release_sha
 from worker_release_lifecycle import LifecycleRejected, ReleaseHealthProbeError, ReleaseHealthRejected
+from worker_release_staging import _drop_extractor_privileges
+from worker_release_gigl import _acquire_gigl_tracking_lock
 
 
 def make_archive(entries):
@@ -115,6 +118,14 @@ class BrokerSocketTests(unittest.TestCase):
 
 
 class GiglCapabilityBrokerTests(unittest.TestCase):
+    def test_extractor_retains_only_provisioned_lock_group(self):
+        calls = []
+        with patch("worker_release_staging.broker.os.setgroups", side_effect=lambda value: calls.append(("groups", value))), \
+                patch("worker_release_staging.broker.os.setgid", side_effect=lambda value: calls.append(("gid", value))), \
+                patch("worker_release_staging.broker.os.setuid", side_effect=lambda value: calls.append(("uid", value))):
+            _drop_extractor_privileges(2002, 2003, 2004)
+        self.assertEqual(calls, [("groups", [2004]), ("gid", 2003), ("uid", 2002)])
+
     def test_gigl_operation_requires_installed_sha_to_equal_authenticated_sha(self):
         sha = "a" * 40
         self.assertEqual(_validate_gigl_release_sha(sha, sha), sha)
@@ -130,7 +141,8 @@ class GiglCapabilityBrokerTests(unittest.TestCase):
             "smokePassed": True, "scope": "enabled",
             "installedSha": sha, "credentialFingerprint": fingerprint,
         }).encode()
-        with patch("worker_release_broker._assert_root_owned_executable") as assert_executable, \
+        with patch("worker_release_broker.grp.getgrnam", return_value=type("Group", (), {"gr_gid": 2345})()), \
+                patch("worker_release_broker._assert_root_owned_executable") as assert_executable, \
                 patch("worker_release_broker.subprocess.run", return_value=subprocess.CompletedProcess([], 0, output, b"")) as run:
             result = _run_gigl_capability_smoke("/srv/baci-workers", 2002, 2003, sha)
         assert_executable.assert_called_once_with("/srv/baci-workers/current/bin/gigl-capability-smoke-latch.sh")
@@ -138,7 +150,7 @@ class GiglCapabilityBrokerTests(unittest.TestCase):
         self.assertEqual(args[0], ["/srv/baci-workers/current/bin/gigl-capability-smoke-latch.sh"])
         self.assertEqual(kwargs["user"], 2002)
         self.assertEqual(kwargs["group"], 2003)
-        self.assertEqual(kwargs["extra_groups"], ())
+        self.assertEqual(kwargs["extra_groups"], (2345,))
         self.assertEqual(kwargs["env"], {
             "PATH": "/usr/bin:/bin", "HOME": "/srv/baci-workers",
             "BACI_WORKER_ROOT": "/srv/baci-workers", "BACI_EXPECTED_APP_SHA": sha,
@@ -163,6 +175,33 @@ class GiglCapabilityBrokerTests(unittest.TestCase):
                 ):
                     with self.assertRaises(BrokerProtocolError):
                         _run_gigl_capability_smoke("/srv/baci-workers", 2002, 2003, sha)
+
+    def test_gigl_lock_accepts_only_provisioned_root_shared_inode(self):
+        with tempfile.TemporaryDirectory(prefix="baci-gigl-lock-") as temp:
+            lock_dir = Path(temp) / "locks"
+            lock_dir.mkdir()
+            lock_path = lock_dir / "gigl-tracking.lock"
+            lock_path.touch(mode=0o660)
+            metadata = SimpleNamespace(
+                st_mode=stat.S_IFREG | 0o660, st_uid=0, st_gid=2345, st_nlink=1,
+            )
+            with patch("worker_release_gigl.broker.grp.getgrnam", return_value=SimpleNamespace(gr_gid=2345)), \
+                    patch("worker_release_gigl.broker.os.fstat", return_value=metadata), \
+                    patch("worker_release_gigl.broker.fcntl.flock"):
+                fd = _acquire_gigl_tracking_lock(temp)
+                os.close(fd)
+
+            for invalid in (
+                SimpleNamespace(st_mode=stat.S_IFREG | 0o660, st_uid=0, st_gid=2346, st_nlink=1),
+                SimpleNamespace(st_mode=stat.S_IFREG | 0o660, st_uid=2002, st_gid=2345, st_nlink=1),
+                SimpleNamespace(st_mode=stat.S_IFREG | 0o640, st_uid=0, st_gid=2345, st_nlink=1),
+                SimpleNamespace(st_mode=stat.S_IFREG | 0o660, st_uid=0, st_gid=2345, st_nlink=2),
+            ):
+                with self.subTest(metadata=invalid), \
+                        patch("worker_release_gigl.broker.grp.getgrnam", return_value=SimpleNamespace(gr_gid=2345)), \
+                        patch("worker_release_gigl.broker.os.fstat", return_value=invalid):
+                    with self.assertRaisesRegex(BrokerProtocolError, "lock is invalid"):
+                        _acquire_gigl_tracking_lock(temp)
 
     def test_broker_persists_only_atomic_0600_latch_metadata(self):
         from worker_release_broker import _write_gigl_capability_latch
@@ -271,6 +310,42 @@ class AtomicStageTests(unittest.TestCase):
             self.assertEqual((releases / sha / "worker.mjs").read_bytes(), b"ready")
             self.assertEqual((releases / sha / "worker.mjs").stat().st_mode & 0o777, 0o440)
             self.assertFalse((releases / f".{sha}.incoming").exists())
+
+    def test_github_archive_materializes_and_executes_worker_runtime_paths(self):
+        with tempfile.TemporaryDirectory(prefix="baci-broker-layout-") as temp:
+            releases = Path(temp) / "releases"
+            releases.mkdir()
+            sha = "e" * 40
+            wrapper = Path(__file__).with_name("process-domain-events.sh").read_bytes()
+            stub_runner = b'#!/bin/sh\nprintf "%s|%s" "$1" "$2" > "$BACI_TEST_MARKER"\n'
+            entries = [
+                regular("repo/vps-workers/bin/process-domain-events.sh", wrapper, mode=0o755),
+                regular("repo/vps-workers/bin/run-web-script.sh", stub_runner, mode=0o755),
+                regular("repo/vps-workers/jobs/run-cache-invalidation-cron.mjs", b"export {};\n"),
+                regular("repo/vps-workers/lib/gigl-tracking-scoped-env.sh", b"# scoped env\n"),
+                regular("repo/vps-workers/config/worker.json", b"{}\n"),
+                regular("repo/vps-workers/systemd/baci-event-delivery-worker.service", b"[Service]\n"),
+            ]
+            archive = make_archive(entries).getvalue()
+            with patch("worker_release_broker._run_as_worker_extractor", side_effect=lambda raw, path, _uid, _gid: extract_github_tarball(io.BytesIO(raw), path)), \
+                    patch("worker_release_broker._freeze_release_tree", side_effect=lambda path, gid: _freeze_release_tree(path, gid, owner_uid=os.getuid())):
+                _stage_archive(archive, str(releases), sha, os.getuid(), os.getgid())
+            release = releases / sha
+            current = Path(temp) / "current"
+            current.symlink_to(Path("releases") / sha)
+            for path in (
+                "bin/process-domain-events.sh", "bin/run-web-script.sh",
+                "jobs/run-cache-invalidation-cron.mjs", "lib/gigl-tracking-scoped-env.sh",
+                "config/worker.json", "systemd/baci-event-delivery-worker.service",
+            ):
+                self.assertTrue((current / path).is_file(), path)
+            marker = Path(temp) / "wrapper-executed"
+            subprocess.run(
+                [str(current / "bin/process-domain-events.sh")], check=True,
+                env={**os.environ, "BACI_TEST_MARKER": str(marker)},
+            )
+            self.assertEqual(marker.read_text(), "process-domain-events|src/scripts/process-domain-events.ts")
+            self.assertEqual((release / "bin/process-domain-events.sh").stat().st_mode & 0o777, 0o550)
 
     def test_failed_extraction_cleans_partial_stage_and_allows_retry(self):
         with tempfile.TemporaryDirectory(prefix="baci-broker-stage-fail-") as temp:

@@ -7,7 +7,13 @@ const SHA_RE = /^[0-9a-f]{40}$/;
 export async function runGiglCapabilitySmoke({ env = process.env, broker = operateWorkerRelease } = {}) {
   const sha = env.BACI_EXPECTED_APP_SHA ?? env.GITHUB_SHA;
   if (!SHA_RE.test(sha ?? '')) throw new Error('GIGL capability smoke expected SHA is invalid');
-  const receipt = await broker({ operation: 'gigl-capability', sha });
+  const receipt = await broker({
+    operation: 'gigl-capability',
+    sha,
+    ...(env.GITHUB_TOKEN || env.GH_TOKEN ? { githubToken: env.GITHUB_TOKEN ?? env.GH_TOKEN } : {}),
+    ...(env.ACTIONS_ID_TOKEN_REQUEST_URL ? { oidcRequestUrl: env.ACTIONS_ID_TOKEN_REQUEST_URL } : {}),
+    ...(env.ACTIONS_ID_TOKEN_REQUEST_TOKEN ? { oidcRequestToken: env.ACTIONS_ID_TOKEN_REQUEST_TOKEN } : {}),
+  });
   if (receipt.operation !== 'gigl-capability' || receipt.sourceSha !== sha ||
       receipt.smokePassed !== true || receipt.latched !== true ||
       !['enabled', 'disabled'].includes(receipt.scope) ||

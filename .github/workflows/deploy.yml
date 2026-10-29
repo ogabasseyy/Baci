@@ -2,6 +2,35 @@ name: Deploy to Vercel
 
 on:
   workflow_call:
+    secrets:
+      CACHE_INVALIDATION_WORKER_TOKEN:
+        required: false
+      CLOUDFLARE_API_TOKEN:
+        required: false
+      CLOUDFLARE_ZONE_ID:
+        required: false
+      CRON_SECRET:
+        required: false
+      NEXT_PUBLIC_SUPABASE_ANON_KEY:
+        required: false
+      NEXT_PUBLIC_SUPABASE_URL:
+        required: false
+      QUIZ_RPC_SERVER_SECRET:
+        required: false
+      SUPABASE_ACCESS_TOKEN:
+        required: false
+      SUPABASE_PROJECT_REF:
+        required: false
+      TURBO_TEAM:
+        required: false
+      TURBO_TOKEN:
+        required: false
+      VERCEL_ORG_ID:
+        required: false
+      VERCEL_PROJECT_ID:
+        required: false
+      VERCEL_TOKEN:
+        required: false
     inputs:
       coordination_id:
         description: Coordinator run identity for release correlation
@@ -105,6 +134,7 @@ jobs:
             .github/scripts/check-worker-release-readiness.mjs
             .github/scripts/verify-coordinated-release.sh
             vps-workers/lib/worker-release-broker-client.mjs
+            vps-workers/lib/worker-release-broker.mjs
           sparse-checkout-cone-mode: false
       - name: Verify coordinated release identity before production work
         env:
@@ -614,7 +644,8 @@ jobs:
       - name: Verify exact worker SHA before lock release
         env:
           BACI_EXPECTED_APP_SHA: ${{ inputs.expected_release_sha }}
-        run: vps-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/scripts/check-worker-release-readiness.mjs
       - name: Verify live production alias and release lock
         id: live-alias-verification
         run: node .github/scripts/production-release-lock.mjs finalize-published

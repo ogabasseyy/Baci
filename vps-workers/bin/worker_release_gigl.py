@@ -13,11 +13,15 @@ def _run_gigl_capability_smoke(worker_root: str, worker_uid: int, worker_gid: in
         "BACI_WORKER_ROOT": worker_root, "BACI_EXPECTED_APP_SHA": installed_sha,
     }
     try:
+        lock_gid = broker.grp.getgrnam("baci-locks").gr_gid
+    except KeyError as error:
+        raise broker.BrokerProtocolError("required worker lock group is unavailable") from error
+    try:
         completed = broker.subprocess.run(
             [helper], stdin=broker.subprocess.DEVNULL, stdout=broker.subprocess.PIPE,
             stderr=broker.subprocess.DEVNULL, check=False, close_fds=True,
             cwd="/", env=worker_env, timeout=240,
-            user=worker_uid, group=worker_gid, extra_groups=(),
+            user=worker_uid, group=worker_gid, extra_groups=(lock_gid,),
         )
     except (OSError, broker.subprocess.TimeoutExpired) as error:
         raise broker.BrokerProtocolError("GIGL capability smoke could not complete") from error
@@ -83,9 +87,12 @@ def _validate_gigl_release_sha(installed_sha: str | None, authenticated_sha: str
 def _acquire_gigl_tracking_lock(worker_root: str) -> int:
     path = broker.os.path.join(worker_root, "locks", "gigl-tracking.lock")
     try:
+        lock_gid = broker.grp.getgrnam("baci-locks").gr_gid
         fd = broker.os.open(path, broker.os.O_RDWR | getattr(broker.os, "O_NOFOLLOW", 0))
         metadata = broker.os.fstat(fd)
-        if not broker.stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o022:
+        if (not broker.stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1 or
+                metadata.st_uid != 0 or metadata.st_gid != lock_gid or
+                broker.stat.S_IMODE(metadata.st_mode) != 0o660):
             broker.os.close(fd)
             raise broker.BrokerProtocolError("GIGL tracking lock is invalid")
         deadline = broker.time.monotonic() + 180

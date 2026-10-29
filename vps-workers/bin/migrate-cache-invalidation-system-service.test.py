@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -38,6 +39,51 @@ class FakeResponse:
 
 
 class CacheSchedulerMigrationTests(unittest.TestCase):
+    def layout_fixture(self, base: Path, *, pointer: str = "releases/" + "a" * 40):
+        root = base / "worker"
+        worker_gid = os.getgid()
+        lock_gid = os.getgid()
+        worker_uid = os.getuid()
+        for path, mode in (
+            (root, 0o710), (root / "releases", 0o750), (root / "locks", 0o710),
+            (root / "logs", 0o750), (root / "shared", 0o750), (root / "home", 0o700),
+        ):
+            path.mkdir(parents=True, exist_ok=True)
+            path.chmod(mode)
+        release = root / "releases" / ("a" * 40)
+        (release / "jobs").mkdir(parents=True)
+        (release / "jobs/run-cache-invalidation-cron.mjs").write_text("// fixture\n")
+        release.chmod(0o550)
+        (root / "current").symlink_to(pointer)
+        lock = root / "locks/cache-invalidations.lock"
+        lock.touch()
+        lock.chmod(0o660)
+        account = SimpleNamespace(pw_uid=worker_uid, pw_gid=worker_gid, pw_shell="/usr/sbin/nologin", pw_name="baci-worker")
+        return root, account, worker_uid, worker_gid, lock_gid
+
+    def test_layout_accepts_provisioned_lock_namespace_and_canonical_release_pointer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, account, uid, gid, lock_gid = self.layout_fixture(Path(temporary))
+            with patch.object(migration.pwd, "getpwnam", return_value=account):
+                self.assertEqual(migration._validate_layout(root, worker_uid=uid, worker_gid=gid,
+                                                            lock_gid=lock_gid, owner_uid=uid), (uid, gid))
+
+    def test_layout_rejects_legacy_bare_sha_pointer_and_unsafe_cache_lock(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, account, uid, gid, lock_gid = self.layout_fixture(Path(temporary), pointer="a" * 40)
+            with patch.object(migration.pwd, "getpwnam", return_value=account):
+                with self.assertRaisesRegex(migration.MigrationError, "release pointer is unsafe"):
+                    migration._validate_layout(root, worker_uid=uid, worker_gid=gid,
+                                               lock_gid=lock_gid, owner_uid=uid)
+
+            (root / "current").unlink()
+            (root / "current").symlink_to(Path("releases") / ("a" * 40))
+            (root / "locks/cache-invalidations.lock").chmod(0o664)
+            with patch.object(migration.pwd, "getpwnam", return_value=account):
+                with self.assertRaisesRegex(migration.MigrationError, "lock ownership or mode is unsafe"):
+                    migration._validate_layout(root, worker_uid=uid, worker_gid=gid,
+                                               lock_gid=lock_gid, owner_uid=uid)
+
     def test_units_are_isolated_bounded_and_keep_the_two_minute_cadence(self):
         service = (SCRIPT.parents[1] / "systemd" / migration.SERVICE).read_text()
         timer = (SCRIPT.parents[1] / "systemd" / migration.TIMER).read_text()

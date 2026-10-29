@@ -98,6 +98,22 @@ test('the app workflow is callable only and refuses a bare direct publication pa
   assert.match(deploy.jobs['deploy-production'].outputs.production_published, /live-alias-verification\.outcome/);
 });
 
+test('the release coordinator passes only declared deploy workflow secrets', () => {
+  const deploy = workflow('deploy.yml');
+  const coordinator = workflow('production-release.yml');
+  const declared = Object.keys(deploy.on.workflow_call.secrets).sort();
+  const mapped = Object.keys(coordinator.jobs.deploy.secrets).sort();
+  const referencedNames = [...new Set(
+    [...readFileSync(new URL('../workflows/deploy.yml', import.meta.url), 'utf8').matchAll(/secrets\.([A-Z0-9_]+)/g)]
+      .map((match) => match[1]),
+  )].sort();
+
+  assert.deepEqual(mapped, declared);
+  assert.deepEqual(declared, referencedNames);
+  assert.ok(Object.values(deploy.on.workflow_call.secrets).every((secret) => secret.required === false));
+  assert.doesNotMatch(readFileSync(new URL('../workflows/production-release.yml', import.meta.url), 'utf8'), /secrets:\s*inherit/);
+});
+
 test('worker exemption requires the OIDC verifier and exact run-bound check run', () => {
   const deploy = readFileSync(new URL('../../vps-workers/lib/check-deploy-workflow-inflight.sh', import.meta.url), 'utf8');
   assert.match(deploy, /authorize-coordinator-worker\.mjs/);

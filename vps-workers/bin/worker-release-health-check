@@ -7,7 +7,7 @@ readonly expected="${1:-}"
 [[ "$expected" =~ ^[0-9a-f]{40}$ ]] || exit 2
 [[ -d "$root" && ! -L "$root" ]] || exit 1
 [[ -L "$root/current" ]] || exit 1
-[[ "$(readlink "$root/current")" == "$expected" ]] || exit 1
+[[ "$(readlink "$root/current")" == "releases/$expected" ]] || exit 1
 [[ -d "$root/releases/$expected" && ! -L "$root/releases/$expected" ]] || exit 1
 
 # These fixed services are the first release-managed system units. Missing or

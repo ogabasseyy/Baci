@@ -83,7 +83,8 @@ def _verify_cache_role_preflight(secret: str, base_url: str, *, opener=urllib.re
         raise MigrationError("cache worker capability preflight is not ready")
 
 
-def _validate_layout(root: Path = ROOT, *, worker_uid: int | None = None, worker_gid: int | None = None) -> tuple[int, int]:
+def _validate_layout(root: Path = ROOT, *, worker_uid: int | None = None, worker_gid: int | None = None,
+                     lock_gid: int | None = None, owner_uid: int = 0) -> tuple[int, int]:
     try:
         account = pwd.getpwnam(WORKER)
     except KeyError as error:
@@ -91,12 +92,18 @@ def _validate_layout(root: Path = ROOT, *, worker_uid: int | None = None, worker
     uid = account.pw_uid if worker_uid is None else worker_uid
     gid = account.pw_gid if worker_gid is None else worker_gid
     try:
+        expected_lock_gid = grp.getgrnam("baci-locks").gr_gid if lock_gid is None else lock_gid
+    except KeyError as error:
+        raise MigrationError("dedicated baci-locks group is unavailable") from error
+    try:
         if account.pw_gid != gid or account.pw_shell != "/usr/sbin/nologin":
             raise MigrationError("dedicated baci-worker identity is misconfigured")
         if account.pw_name in {"root", "bassey"}:
             raise MigrationError("dedicated baci-worker identity is misconfigured")
-        for path, expected in ((root, (0, gid, 0o750)), (root / "releases", (0, gid, 0o750)),
-                               (root / "locks", (0, gid, 0o750)), (root / "logs", (uid, gid, 0o750)),
+        for path, expected in ((root, (owner_uid, expected_lock_gid, 0o710)),
+                               (root / "releases", (owner_uid, gid, 0o750)),
+                               (root / "locks", (owner_uid, expected_lock_gid, 0o710)),
+                               (root / "logs", (uid, gid, 0o750)),
                                (root / "shared", (uid, gid, 0o750)), (root / "home", (uid, gid, 0o700))):
             info = path.lstat()
             if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode) or (info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode)) != expected:
@@ -104,14 +111,15 @@ def _validate_layout(root: Path = ROOT, *, worker_uid: int | None = None, worker
         current = root / "current"
         pointer = current.lstat()
         target = os.readlink(current)
-        if not stat.S_ISLNK(pointer.st_mode) or pointer.st_uid != 0 or not re.fullmatch(r"[0-9a-f]{40}", target):
+        match = re.fullmatch(r"releases/([0-9a-f]{40})", target)
+        if not stat.S_ISLNK(pointer.st_mode) or pointer.st_uid != owner_uid or match is None:
             raise MigrationError("isolated worker release pointer is unsafe")
-        release = root / "releases" / target
-        resolved = release.resolve(strict=True)
-        if resolved.parent != (root / "releases") or not resolved.is_dir():
+        sha = match.group(1)
+        release = root / "releases" / sha
+        release_info = release.lstat()
+        if not stat.S_ISDIR(release_info.st_mode) or stat.S_ISLNK(release_info.st_mode):
             raise MigrationError("isolated worker release target is unsafe")
-        release_info = resolved.lstat()
-        if (release_info.st_uid, release_info.st_gid, stat.S_IMODE(release_info.st_mode)) != (0, gid, 0o550):
+        if (release_info.st_uid, release_info.st_gid, stat.S_IMODE(release_info.st_mode)) != (owner_uid, gid, 0o550):
             raise MigrationError("isolated worker release ownership or mode is unsafe")
         if not (current / "jobs/run-cache-invalidation-cron.mjs").is_file():
             raise MigrationError("cache HTTP scheduler is missing from the active worker release")
@@ -125,7 +133,9 @@ def _validate_layout(root: Path = ROOT, *, worker_uid: int | None = None, worker
         if not lock_file.is_file() or lock_file.is_symlink():
             raise MigrationError("isolated cache scheduler lock is missing or unsafe")
         lock_info = lock_file.lstat()
-        if (lock_info.st_uid, lock_info.st_gid, stat.S_IMODE(lock_info.st_mode)) != (0, gid, 0o660):
+        if (not stat.S_ISREG(lock_info.st_mode) or lock_info.st_nlink != 1 or
+                (lock_info.st_uid, lock_info.st_gid, stat.S_IMODE(lock_info.st_mode)) !=
+                (owner_uid, expected_lock_gid, 0o660)):
             raise MigrationError("isolated cache scheduler lock ownership or mode is unsafe")
     except OSError as error:
         raise MigrationError("isolated worker layout is unavailable") from error

@@ -30,7 +30,7 @@ class WorkerReleaseReadinessTests(unittest.TestCase):
         os.chmod(root, 0o710)
         os.chmod(root / "releases", 0o750)
         os.chmod(release, 0o550)
-        (root / "current").symlink_to(SHA)
+        (root / "current").symlink_to(Path("releases") / SHA)
         (root / "release-state.json").write_text(json.dumps({"version": 1, "status": "healthy", "sha": SHA}), encoding="utf-8")
         os.chmod(root / "release-state.json", 0o600)
         return root
@@ -87,6 +87,15 @@ class WorkerReleaseReadinessTests(unittest.TestCase):
                 readiness.collect_worker_readiness("not-a-sha", root=root)
             with self.assertRaisesRegex(readiness.ReadinessRejected, "pointer is invalid"):
                 readiness.collect_worker_readiness("b" * 40, root=root, owner_uid=os.getuid(), worker_gid=os.getgid(), lock_gid=os.getgid())
+
+    def test_rejects_legacy_bare_sha_current_pointer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = self.fixture(Path(temporary))
+            (root / "current").unlink()
+            (root / "current").symlink_to(SHA)
+            with patch.object(readiness, "WORKER_ROOT", root):
+                with self.assertRaisesRegex(readiness.ReadinessRejected, "pointer is invalid"):
+                    readiness.collect_worker_readiness(SHA, runner=self.fake_runner(), root=root, owner_uid=os.getuid(), worker_gid=os.getgid(), lock_gid=os.getgid())
 
     def test_rejects_inactive_timer_or_legacy_cron_even_when_release_is_healthy(self):
         with tempfile.TemporaryDirectory() as temporary:

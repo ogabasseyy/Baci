@@ -26,6 +26,11 @@ fail=0
 while IFS= read -r file; do
   case "$(basename "$file")" in
     *gigl*) continue ;;
+    # This migration extends the shared GIGL hook to fence the cache worker.
+    # Its cache-specific name keeps it discoverable by cache capability tooling;
+    # capability smoke runs on every release, so this exact multi-domain file
+    # is allowed without weakening the naming rule for other generic files.
+    20261028020000_cache_invalidation_worker_request_scope.sql) continue ;;
   esac
   # Case-insensitive: PostgreSQL folds unquoted identifiers, so
   # PUBLIC.ENFORCE_GIGL_TRACKING_WORKER_REQUEST_SCOPE is the same

@@ -3,6 +3,12 @@ from typing import Any, Callable
 import worker_release_broker as broker
 import stat
 
+def _health_after_restart(lease, probe):
+    """Restart the stopped services before probing, retaining the release lock."""
+    lease.require_active()
+    lease.release()
+    return probe()
+
 def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid: int) -> Callable[[int, dict[str, Any]], dict[str, Any]]:
     """Build fixed release operations; commands and filesystem targets are constants."""
     if broker.os.geteuid() != 0 or release_uid <= 0 or worker_uid <= 0 or worker_gid < 0 or release_uid == worker_uid:
@@ -172,14 +178,12 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
                         raise LifecycleRejected("release state does not match authenticated run and SHA")
                     if operation == "health":
                         lease = quiescence.require_active(identity.fence())
-                        with lease.operation():
-                            result = check_release_health(
+                        result = _health_after_restart(lease, lambda: check_release_health(
                                 current_link=current_link, releases_root=releases_root,
                                 identity=identity, health_check=health_check,
-                            )
+                            ))
                         state["status"] = "healthy"
                         broker._write_release_state(state_path, state)
-                        lease.release()
                         return {"ok": True, "operation": operation, "sourceSha": sha,
                                 "healthy": True, "runId": str(run_id), "runAttempt": run_attempt,
                                 "jobId": str(job_id)}

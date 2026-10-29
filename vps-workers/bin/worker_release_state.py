@@ -8,13 +8,15 @@ def _read_current_sha(current_link: str, releases_root: str) -> str | None:
         target = broker.os.readlink(current_link)
     except FileNotFoundError:
         return None
-    if not broker.re.fullmatch(r"[0-9a-f]{40}", target):
+    match = broker.re.fullmatch(r"releases/([0-9a-f]{40})", target)
+    if match is None:
         raise broker.BrokerProtocolError("current release pointer is invalid")
-    release = broker.os.path.join(releases_root, target)
+    sha = match.group(1)
+    release = broker.os.path.join(releases_root, sha)
     metadata = broker.os.lstat(release)
     if not broker.stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != 0:
         raise broker.BrokerProtocolError("current release target ownership is invalid")
-    return target
+    return sha
 
 
 def _load_release_state(path: str) -> dict[str, Any] | None:

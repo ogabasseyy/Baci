@@ -10,8 +10,17 @@ const deploymentWorkflow = YAML.parse(
 const coordinatorWorkflow = YAML.parse(
   readFileSync(new URL('../workflows/production-release.yml', import.meta.url), 'utf8')
 );
+const deployFilters = readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8');
 const publication = deploymentWorkflow.jobs['deploy-production'];
 const releaseSha = 'a'.repeat(40);
+
+test('tracks the shared-hook cache migration through GIGL worker capability smoke', () => {
+  const trackingPaths = deployFilters.match(/^tracking:\n(?<paths>(?:[ \t].*\n)+)/m)?.groups?.paths ?? '';
+  assert.match(
+    trackingPaths,
+    /^  - 'supabase\/migrations\/20261028020000_cache_invalidation_worker_request_scope\.sql'$/m
+  );
+});
 
 function manualContext(overrides = {}) {
   return {

@@ -17,8 +17,8 @@ from worker_release_dependency_diagnostics import (
     policy_evidence_summary,
     read_diagnostic,
     write_diagnostic,
-    run_pnpm_checked,
 )
+from worker_release_pnpm_exec import run_pnpm_checked
 from worker_release_dependency_evidence_shape import safe_errno_category
 
 
@@ -151,6 +151,26 @@ class PolicyPassEvidenceTests(unittest.TestCase):
                                   "line_shapes": []})
             self.assertIsNone(read_diagnostic(path, owner_uid=os.geteuid()))
 
+    def test_errno_sidecar_round_trips_bounded_number_and_fixed_substage(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "diagnostic.json"
+            write_diagnostic(path, "policy-preverify", "filesystem-error", None,
+                             os_error={"errno": 28, "substage": "preverify-filesystem"})
+            self.assertEqual(read_diagnostic(path, owner_uid=os.geteuid()), {
+                "stage": "policy-preverify", "category": "filesystem-error", "exit_code": None,
+                "os_error": {"errno": 28, "substage": "preverify-filesystem"},
+            })
+            path.unlink()
+            write_diagnostic(path, "policy-preverify", "filesystem-error", None,
+                             os_error={"errno": None, "substage": "pnpm-launch"})
+            self.assertEqual(read_diagnostic(path, owner_uid=os.geteuid())["os_error"], {
+                "errno": None, "substage": "pnpm-launch",
+            })
+            path.unlink()
+            with self.assertRaises(ValueError):
+                write_diagnostic(path, "policy-preverify", "filesystem-error", None,
+                                 os_error={"errno": 256, "substage": "raw path /secret"})
+
     def test_checked_pnpm_failure_suppresses_raw_subprocess_cause(self):
         raw = subprocess.CalledProcessError(
             7, ("pnpm", "install"), output="private-token", stderr="ERR_PNPM_TRUST_DOWNGRADE private-token"
@@ -174,6 +194,25 @@ class PolicyPassEvidenceTests(unittest.TestCase):
         self.assertEqual((caught.exception.safe_category, caught.exception.exit_code),
                          ("pnpm-output-limit", 125))
         self.assertNotIn("private-token", str(caught.exception))
+
+    def test_pnpm_launch_oserror_gets_fixed_substage_only(self):
+        from worker_release_bounded_process import ProcessLaunchError
+
+        raw = ProcessLaunchError(2)
+        with patch("worker_release_pnpm_exec.run_bounded_capture", side_effect=raw):
+            with self.assertRaises(OSError) as caught:
+                run_pnpm_checked(("pnpm", "install"), cwd=".", timeout=1,
+                                  stage="preverify web-install")
+        self.assertEqual(caught.exception.safe_substage, "pnpm-launch")
+        self.assertNotIn("/private/path", str(caught.exception.safe_substage))
+
+    def test_other_pnpm_oserror_keeps_filesystem_fallback_substage(self):
+        raw = OSError(5, "private filesystem detail", "/private/path")
+        with patch("worker_release_pnpm_exec.run_bounded_capture", side_effect=raw):
+            with self.assertRaises(OSError) as caught:
+                run_pnpm_checked(("pnpm", "install"), cwd=".", timeout=1,
+                                  stage="preverify web-install")
+        self.assertFalse(hasattr(caught.exception, "safe_substage"))
 
 
 if __name__ == "__main__":

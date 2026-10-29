@@ -320,7 +320,7 @@ if [ -n "$unit_load_state" ] && [ "$unit_load_state" != not-found ]; then
 fi
 builder_unit_owned=1
 python3 - "$source_root" "$release_root" "$sha" "$suffix" "$helper_root" <<'PY'
-import importlib.util, os, re, subprocess, sys, time
+import importlib.util, os, subprocess, sys, time
 from pathlib import Path
 from types import SimpleNamespace
 import worker_release_dependency_builder as dependency_builder
@@ -363,11 +363,9 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
     process = subprocess.Popen(
         fixture_command,
         stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         env={"PATH": "/usr/bin:/bin"},
-        text=True,
-        errors="replace",
     )
     try:
         while process.poll() is None:
@@ -382,7 +380,7 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
                                stderr=subprocess.DEVNULL, timeout=10, check=False)
                 raise subprocess.TimeoutExpired(fixture_command, dependency_sandbox.MAX_BUILD_SECONDS + 15)
             time.sleep(0.25)
-        stdout, stderr = process.communicate()
+        process.wait()
     except BaseException:
         if process.poll() is None:
             subprocess.run(("/usr/bin/systemctl", "kill", "--kill-whom=all", "--signal=SIGKILL", unit),
@@ -390,37 +388,19 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
                            stderr=subprocess.DEVNULL, timeout=10, check=False)
             process.wait(timeout=15)
         raise
-    result = subprocess.CompletedProcess(fixture_command, process.returncode, stdout, stderr)
-    if result.returncode == 0:
+    if process.returncode == 0:
         return
-    store_argument = next((index for index, value in enumerate(command) if value == "--store-dir"), None)
-    fixture_detail = None
-    if store_argument is not None and store_argument + 1 < len(command):
-        fixture_store = Path(command[store_argument + 1])
-        fixture_detail = diagnostic_module.read_diagnostic(
-            fixture_store.parent / diagnostic_module.FIXTURE_ERROR_NAME,
-            owner_uid=expected_owner_uid,
-        )
-    if fixture_detail is not None:
-        print(
-            "fixture pnpm detail "
-            f"error_code={fixture_detail['error_code']} "
-            "prior_trust_evidence_regression="
-            f"{str(fixture_detail['prior_trust_evidence_regression']).lower()}",
-            file=sys.stderr,
-        )
-    diagnostic = (result.stderr + "\n" + result.stdout)[-4096:]
-    for pattern, replacement in (
-        (r"(?i)(bearer\s+)[^\s,;]+", r"\1[redacted]"),
-        (r"(?i)((?:access[_-]?token|refresh[_-]?token|password|secret)=)[^\s,;]+", r"\1[redacted]"),
-        (r"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b", "[redacted]"),
-        (r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "[redacted]"),
-    ):
-        diagnostic = re.sub(pattern, replacement, diagnostic)
-    print(f"dependency fixture transient unit failed: {unit} (exit {result.returncode})", file=sys.stderr)
-    if diagnostic.strip():
-        print(diagnostic, file=sys.stderr)
-    raise subprocess.CalledProcessError(result.returncode, fixture_command)
+    fixture_detail = diagnostic_module.read_scratch_diagnostic(
+        scratch, build_root=dependency_builder.BUILD_ROOT, expected_sha=sha,
+        owner_uid=expected_owner_uid,
+    )
+    error_code = fixture_detail["error_code"] if fixture_detail else "diagnostic-unavailable"
+    prior_regression = (str(fixture_detail["prior_trust_evidence_regression"]).lower()
+                        if fixture_detail else "unknown")
+    print(f"dependency fixture transient unit failed exit={process.returncode} "
+          f"fixture_error={error_code} prior_trust_evidence_regression={prior_regression}",
+          file=sys.stderr)
+    raise subprocess.CalledProcessError(process.returncode, fixture_command)
 
 dependency_builder.run_sandbox = run_fixture_sandbox
 manifest, result_dir = dependency_builder.build(str(source), sha)

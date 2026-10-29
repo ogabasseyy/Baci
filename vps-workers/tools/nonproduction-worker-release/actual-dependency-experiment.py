@@ -62,7 +62,8 @@ def run_policy_preverify(command: tuple[str, ...], *, cwd: Path, env: dict[str, 
         if record is not None and exc.category == "process-exit":
             raise MonitorFailure(str(record["stage"]), str(record["category"]),
                                  record["exit_code"] if isinstance(record["exit_code"], int)
-                                 else exc.exit_code, record.get("evidence")) from exc
+                                 else exc.exit_code, record.get("evidence"),
+                                 record.get("os_error")) from exc
         raise
 
 

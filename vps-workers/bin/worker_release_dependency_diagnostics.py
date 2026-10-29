@@ -15,6 +15,7 @@ from worker_release_dependency_evidence_shape import (
     safe_errno_category,
     summarize_line_shape,
     validate_evidence_summary as _validate_evidence_summary,
+    validate_os_error,
 )
 
 DIAGNOSTIC_STAGES = frozenset({
@@ -110,13 +111,16 @@ def policy_evidence_summary(stdout: str, stderr: str) -> dict[str, object]:
 
 
 def write_diagnostic(path: Path, stage: str, category: str, exit_code: int | None,
-                     evidence: dict[str, object] | None = None) -> None:
+                     evidence: dict[str, object] | None = None,
+                     os_error: dict[str, object] | None = None) -> None:
     safe_stage = stage if stage in DIAGNOSTIC_STAGES else "policy-preverify"
     safe_category = category if category in DIAGNOSTIC_CATEGORIES else "operation-error"
     value = {"stage": safe_stage, "category": safe_category,
              "exit_code": exit_code if isinstance(exit_code, int) and 0 <= exit_code <= 255 else None}
     if evidence is not None:
         value["evidence"] = _validate_evidence_summary(evidence)
+    if os_error is not None:
+        value["os_error"] = validate_os_error(os_error)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
         payload = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode("ascii")
@@ -143,15 +147,19 @@ def read_diagnostic(path: Path, *, owner_uid: int) -> dict[str, object] | None:
             return None
         raw = os.read(fd, 513)
         value = json.loads(raw)
-        if (not isinstance(value, dict) or set(value) not in (
-                {"stage", "category", "exit_code"}, {"stage", "category", "exit_code", "evidence"})
-                or value["stage"] not in DIAGNOSTIC_STAGES
+        allowed = {"stage", "category", "exit_code"}
+        if not isinstance(value, dict) or not allowed.issubset(value) or set(value) - (
+                allowed | {"evidence", "os_error"}):
+            return None
+        if (value["stage"] not in DIAGNOSTIC_STAGES
                 or value["category"] not in DIAGNOSTIC_CATEGORIES
                 or (value["exit_code"] is not None and (type(value["exit_code"]) is not int
                     or not 0 <= value["exit_code"] <= 255))):
             return None
         if "evidence" in value:
             value["evidence"] = _validate_evidence_summary(value["evidence"])
+        if "os_error" in value:
+            value["os_error"] = validate_os_error(value["os_error"])
         return value
     except (OSError, ValueError, TypeError):
         return None
@@ -286,8 +294,3 @@ def has_fresh_policy_pass(stdout: str, stderr: str) -> bool:
     evidence = policy_pass_evidence(stdout, stderr)
     return (evidence is not None and evidence[0] == "fresh"
             and evidence[1] <= MAX_FRESH_VERIFICATION_ELAPSED_MS)
-
-
-def run_pnpm_checked(command: tuple[str, ...], *, cwd, env=None, timeout: int, stage: str):
-    from worker_release_pnpm_exec import run_pnpm_checked as run_checked
-    return run_checked(command, cwd=cwd, env=env, timeout=timeout, stage=stage)

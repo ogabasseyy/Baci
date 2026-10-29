@@ -33,6 +33,15 @@ class ProcessCleanupTimedOut(BoundedCaptureError):
     pass
 
 
+class ProcessLaunchError(OSError):
+    """Sanitized Popen failure with a fixed launch-origin diagnostic."""
+
+    safe_substage = "pnpm-launch"
+
+    def __init__(self, error_number: int | None):
+        super().__init__(error_number, "bounded child launch failed")
+
+
 def _kill_process_group(process: subprocess.Popen[bytes]) -> None:
     try:
         os.killpg(process.pid, signal.SIGKILL)
@@ -81,11 +90,14 @@ def run_bounded_capture(
         return info is not None and info.si_pid == process.pid
 
     try:
-        process = subprocess.Popen(
-            command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True,
-            start_new_session=True,
-        )
+        try:
+            process = subprocess.Popen(
+                command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, close_fds=True,
+                start_new_session=True,
+            )
+        except OSError as exc:
+            raise ProcessLaunchError(exc.errno) from None
         assert process.stdout is not None and process.stderr is not None
         stdout_fd, stderr_fd = process.stdout.fileno(), process.stderr.fileno()
         streams = {stdout_fd: process.stdout, stderr_fd: process.stderr}

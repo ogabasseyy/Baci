@@ -16,7 +16,7 @@ from worker_release_dependency_diagnostics import (
     policy_rejection_category,
     write_diagnostic,
 )
-from worker_release_dependency_evidence_shape import safe_errno_category
+from worker_release_dependency_evidence_shape import safe_errno_category, safe_errno_number
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -47,19 +47,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         if isinstance(exc, PnpmStepRejected):
             stage, category, exit_code = exc.safe_stage, exc.safe_category, exc.exit_code
             evidence = exc.evidence
+            os_error = None
         elif isinstance(exc, subprocess.TimeoutExpired):
             stage, category, exit_code = "policy-preverify", "preverify-timeout", None
             evidence = None
+            os_error = None
         elif isinstance(exc, OSError):
             stage, category, exit_code = "policy-preverify", safe_errno_category(exc.errno), None
             evidence = None
+            substage = getattr(exc, "safe_substage", "preverify-filesystem")
+            if substage not in {"preverify-filesystem", "pnpm-launch"}:
+                substage = "preverify-filesystem"
+            os_error = {"errno": safe_errno_number(exc.errno), "substage": substage}
         else:
             stage, category = policy_rejection_category(str(exc))
             exit_code = None
             evidence = None
+            os_error = None
         if args.diagnostic_file is not None:
             try:
-                write_diagnostic(args.diagnostic_file, stage, category, exit_code, evidence)
+                write_diagnostic(args.diagnostic_file, stage, category, exit_code, evidence, os_error)
             except OSError:
                 pass
         message = f"experiment failure stage={stage} category={category}"
@@ -69,6 +76,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             message += (f" evidence={evidence['classification']} phrase_lines={evidence['phrase_lines']}"
                         f" recognized_lines={evidence['recognized_lines']}")
             message += format_policy_line_shapes(evidence)
+        if os_error is not None:
+            errno_value = os_error["errno"]
+            message += f" errno={errno_value if errno_value is not None else 'unknown'}"
+            message += f" substage={os_error['substage']}"
         print(message, file=sys.stderr)
         return 1
     except Exception:

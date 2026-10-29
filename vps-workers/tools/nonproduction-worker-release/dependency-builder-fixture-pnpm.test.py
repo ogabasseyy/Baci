@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 import tempfile
 import unittest
@@ -97,6 +98,56 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             link = root / "link"
             link.symlink_to(target)
             self.assertIsNone(fixture.read_diagnostic(link, owner_uid=target.stat().st_uid))
+
+    def test_observer_store_path_and_harness_reader_share_exact_scratch_location(self):
+        sha = "a" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scratch = root / f"{sha}.fixture"
+            scratch.mkdir(mode=0o700)
+            (scratch / "pnpm-store").mkdir(mode=0o700)
+            candidate = fixture._diagnostic_path(["install", "--store-dir",
+                                                  str(scratch / "pnpm-store")])
+            self.assertEqual(candidate, scratch / fixture.FIXTURE_ERROR_NAME)
+            fixture._write_diagnostic(candidate, {
+                "schema": 1,
+                "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
+                "prior_trust_evidence_regression": True,
+            })
+            self.assertEqual(fixture.read_scratch_diagnostic(
+                scratch, build_root=root, expected_sha=sha, owner_uid=os.geteuid(),
+                build_root_uid=os.geteuid(),
+            )["error_code"], "ERR_PNPM_TRUST_DOWNGRADE")
+
+    def test_scratch_reader_rejects_wrong_sha_mode_and_location(self):
+        sha = "a" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scratch = root / f"{sha}.fixture"
+            scratch.mkdir(mode=0o700)
+            self.assertIsNone(fixture.read_scratch_diagnostic(
+                scratch, build_root=root, expected_sha="b" * 40, owner_uid=os.geteuid(),
+                build_root_uid=os.geteuid(),
+            ))
+            scratch.chmod(0o750)
+            self.assertIsNone(fixture.read_scratch_diagnostic(
+                scratch, build_root=root, expected_sha=sha, owner_uid=os.geteuid(),
+                build_root_uid=os.geteuid(),
+            ))
+            self.assertIsNone(fixture.read_scratch_diagnostic(
+                scratch, build_root=root / "wrong", expected_sha=sha, owner_uid=os.geteuid(),
+                build_root_uid=os.geteuid(),
+            ))
+
+    def test_harness_reads_diagnostic_from_builder_scratch_not_outer_command_args(self):
+        harness = MODULE_PATH.with_name("dependency-builder-systemd-test.sh").read_text(encoding="utf-8")
+        self.assertIn("read_scratch_diagnostic(", harness)
+        self.assertIn("scratch, build_root=dependency_builder.BUILD_ROOT", harness)
+        self.assertNotIn('store_argument = next((index for index, value in enumerate(command)', harness)
+        self.assertIn("stdout=subprocess.DEVNULL", harness)
+        self.assertIn("stderr=subprocess.DEVNULL", harness)
+        self.assertNotIn('diagnostic = (result.stderr + "\\n" + result.stdout)', harness)
+        self.assertNotIn("print(diagnostic, file=sys.stderr)", harness)
 
 
 if __name__ == "__main__":

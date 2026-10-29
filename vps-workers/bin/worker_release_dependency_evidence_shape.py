@@ -10,6 +10,7 @@ SUFFIX_CATEGORIES = frozenset({
 })
 LENGTH_BUCKETS = frozenset({"0", "1", "2", "3-8", "9+"})
 POLICY_EVIDENCE_CLASSES = frozenset({"absent", "ambiguous", "malformed", "fresh", "cached", "stale"})
+OS_ERROR_SUBSTAGES = frozenset({"preverify-filesystem", "pnpm-launch"})
 _ERRNO_CATEGORIES = {
     errno.ENOSPC: "filesystem-no-space",
     errno.EACCES: "filesystem-permission",
@@ -42,6 +43,19 @@ def _length_bucket(value: str) -> str:
 def safe_errno_category(error_number: int | None) -> str:
     """Map OS error numbers to a closed category without echoing path/text."""
     return _ERRNO_CATEGORIES.get(error_number, "filesystem-error")
+
+
+def safe_errno_number(error_number: int | None) -> int | None:
+    return error_number if type(error_number) is int and 1 <= error_number <= 255 else None
+
+
+def validate_os_error(value: object) -> dict[str, object]:
+    if (not isinstance(value, dict) or set(value) != {"errno", "substage"}
+            or (value["errno"] is not None
+                and (type(value["errno"]) is not int or not 1 <= value["errno"] <= 255))
+            or value["substage"] not in OS_ERROR_SUBSTAGES):
+        raise ValueError("filesystem diagnostic is invalid")
+    return value
 
 
 def summarize_line_shape(prefix: str, suffix: str) -> dict[str, str]:
@@ -112,5 +126,5 @@ def format_policy_line_shapes(evidence: dict[str, object]) -> str:
     )
 
 
-__all__ = ["format_policy_line_shapes", "safe_errno_category", "summarize_line_shape",
-           "validate_evidence_summary"]
+__all__ = ["format_policy_line_shapes", "safe_errno_category", "safe_errno_number",
+           "summarize_line_shape", "validate_evidence_summary", "validate_os_error"]

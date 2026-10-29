@@ -10,7 +10,7 @@ import subprocess
 import time
 from pathlib import Path
 from worker_release_dependency_diagnostics import format_policy_line_shapes
-from worker_release_dependency_evidence_shape import safe_errno_category
+from worker_release_dependency_evidence_shape import safe_errno_category, validate_os_error
 
 MAX_TREE_BYTES = 12 * 1024 * 1024 * 1024
 MAX_TREE_ENTRIES = 500_000
@@ -35,11 +35,13 @@ class _TransientEntryRace(Exception):
 
 class MonitorFailure(RuntimeError):
     def __init__(self, stage: str, category: str, exit_code: int | None = None,
-                 evidence: dict[str, object] | None = None):
+                 evidence: dict[str, object] | None = None,
+                 os_error: dict[str, object] | None = None):
         self.stage = stage if stage in STAGES else "experiment"
         self.category = category
         self.exit_code = exit_code
         self.evidence = evidence
+        self.os_error = os_error
         super().__init__(self.stage)
 
 
@@ -47,9 +49,11 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
     """Render fixed diagnostics only; never include exception or command text."""
     if isinstance(error, MonitorFailure):
         stage, category, exit_code = error.stage, error.category, error.exit_code
+        os_error = error.os_error
     else:
         stage = stage if stage in STAGES else "experiment"
         exit_code = None
+        os_error = None
         if isinstance(error, subprocess.CalledProcessError):
             category, exit_code = "subprocess-exit", error.returncode
         elif isinstance(error, subprocess.TimeoutExpired):
@@ -92,6 +96,14 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
         suffix += (f" evidence={evidence['classification']} phrase_lines={evidence['phrase_lines']}"
                    f" recognized_lines={evidence['recognized_lines']}")
         suffix += format_policy_line_shapes(evidence)
+    if os_error is not None:
+        try:
+            os_error = validate_os_error(os_error)
+            number = os_error["errno"]
+            suffix += f" errno={number if number is not None else 'unknown'}"
+            suffix += f" substage={os_error['substage']}"
+        except (TypeError, ValueError):
+            pass
     return f"experiment failure stage={stage} category={category}{suffix}"
 
 

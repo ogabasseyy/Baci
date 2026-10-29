@@ -17,6 +17,15 @@ import worker_release_bounded_process as capture_module
 
 
 class BoundedProcessCaptureTests(unittest.TestCase):
+    def test_popen_failure_has_fixed_launch_substage_without_path(self):
+        with patch("worker_release_bounded_process.subprocess.Popen",
+                   side_effect=OSError(2, "missing", "/private/path")):
+            with self.assertRaises(capture_module.ProcessLaunchError) as caught:
+                run_bounded_capture(("/missing",), timeout=1)
+        self.assertEqual(caught.exception.errno, 2)
+        self.assertEqual(caught.exception.safe_substage, "pnpm-launch")
+        self.assertNotIn("/private/path", str(caught.exception))
+
     def test_systemd_fixture_copies_bounded_runner_and_pnpm_wrapper(self):
         fixture = (Path(__file__).parents[1] / "tools" / "nonproduction-worker-release" /
                    "dependency-builder-systemd-test.sh").read_text(encoding="utf-8")

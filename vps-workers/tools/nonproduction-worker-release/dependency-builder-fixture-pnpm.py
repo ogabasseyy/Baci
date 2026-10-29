@@ -115,8 +115,25 @@ def _write_diagnostic(path: Path | None, value: dict[str, object]) -> None:
 
 
 def read_diagnostic(path: Path, *, owner_uid: int) -> dict[str, object] | None:
+    parent_fd = None
     try:
-        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        parent_fd = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                            | getattr(os, "O_NOFOLLOW", 0))
+    except OSError:
+        if scratch_fd is not None:
+            os.close(scratch_fd)
+        if root_fd is not None:
+            os.close(root_fd)
+        return None
+    try:
+        return _read_diagnostic_at(parent_fd, path.name, owner_uid=owner_uid)
+    finally:
+        os.close(parent_fd)
+
+
+def _read_diagnostic_at(directory_fd: int, name: str, *, owner_uid: int) -> dict[str, object] | None:
+    try:
+        fd = os.open(name, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0), dir_fd=directory_fd)
     except OSError:
         return None
     try:
@@ -138,6 +155,36 @@ def read_diagnostic(path: Path, *, owner_uid: int) -> dict[str, object] | None:
         return None
     finally:
         os.close(fd)
+
+
+def read_scratch_diagnostic(scratch: Path, *, build_root: Path, expected_sha: str,
+                            owner_uid: int, build_root_uid: int = 0) -> dict[str, object] | None:
+    """Read only the diagnostic in the builder-owned per-release scratch."""
+    scratch = Path(scratch)
+    build_root = Path(build_root)
+    root_fd = None
+    scratch_fd = None
+    try:
+        root_fd = os.open(build_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                          | getattr(os, "O_NOFOLLOW", 0))
+        root_info = os.fstat(root_fd)
+        scratch_fd = os.open(scratch.name, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                             | getattr(os, "O_NOFOLLOW", 0), dir_fd=root_fd)
+        scratch_info = os.fstat(scratch_fd)
+    except OSError:
+        return None
+    try:
+        if (scratch.parent != build_root or not scratch.name.startswith(f"{expected_sha}.")
+            or not stat.S_ISDIR(root_info.st_mode) or root_info.st_uid != build_root_uid
+            or not stat.S_ISDIR(scratch_info.st_mode) or scratch_info.st_uid != owner_uid
+            or stat.S_IMODE(scratch_info.st_mode) != 0o700):
+            return None
+        return _read_diagnostic_at(scratch_fd, FIXTURE_ERROR_NAME, owner_uid=owner_uid)
+    finally:
+        if scratch_fd is not None:
+            os.close(scratch_fd)
+        if root_fd is not None:
+            os.close(root_fd)
 
 
 def main(argv: Sequence[str] | None = None) -> int:

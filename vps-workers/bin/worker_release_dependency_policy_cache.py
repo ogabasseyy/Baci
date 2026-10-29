@@ -47,9 +47,9 @@ from worker_release_dependency_diagnostics import (
     has_fresh_policy_pass,
     has_policy_pass_marker,
     policy_evidence_summary,
-    run_pnpm_checked,
     write_diagnostic,
 )
+from worker_release_pnpm_exec import run_pnpm_checked
 def _sha256_regular_file(path: Path, *, owner_uid: int | None = None, max_bytes: int = 64 * 1024 * 1024) -> str:
     try:
         fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))

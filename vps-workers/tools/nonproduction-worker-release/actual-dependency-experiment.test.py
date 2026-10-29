@@ -169,17 +169,44 @@ class ActualDependencyExperimentTests(unittest.TestCase):
                 ])
             self.assertEqual(result, 1)
             self.assertEqual(error_output.getvalue(),
-                             "experiment failure stage=policy-preverify category=filesystem-no-space\n")
+                             "experiment failure stage=policy-preverify category=filesystem-no-space "
+                             "errno=28 substage=preverify-filesystem\n")
             self.assertNotIn("/private/path", error_output.getvalue())
             self.assertEqual(read_diagnostic(diagnostic, owner_uid=os.geteuid()), {
                 "stage": "policy-preverify", "category": "filesystem-no-space", "exit_code": None,
+                "os_error": {"errno": 28, "substage": "preverify-filesystem"},
+            })
+
+    def test_policy_child_preserves_only_origin_classified_pnpm_launch_error(self):
+        from contextlib import redirect_stderr
+        from io import StringIO
+        from worker_release_bounded_process import ProcessLaunchError
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            diagnostic = root / "child.json"
+            error_output = StringIO()
+            with patch.object(experiment.policy_cli.policy, "preverify",
+                              side_effect=ProcessLaunchError(2)), redirect_stderr(error_output):
+                result = experiment.policy_cli.main([
+                    "--preverify", "--source", str(root), "--store", str(root),
+                    "--cache", str(root), "--diagnostic-file", str(diagnostic),
+                ])
+            self.assertEqual(result, 1)
+            self.assertEqual(error_output.getvalue(),
+                             "experiment failure stage=policy-preverify category=filesystem-missing "
+                             "errno=2 substage=pnpm-launch\n")
+            self.assertEqual(read_diagnostic(diagnostic, owner_uid=os.geteuid()), {
+                "stage": "policy-preverify", "category": "filesystem-missing", "exit_code": None,
+                "os_error": {"errno": 2, "substage": "pnpm-launch"},
             })
 
     def test_supervisor_promotes_child_diagnostic_over_generic_process_exit(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             diagnostic = root / "child.json"
-            write_diagnostic(diagnostic, "preverify-worker-install", "dependency-resolution", 17)
+            write_diagnostic(diagnostic, "preverify-worker-install", "filesystem-error", None,
+                             os_error={"errno": 28, "substage": "preverify-filesystem"})
             with patch.object(experiment, "run",
                               side_effect=MonitorFailure("policy-preverify", "process-exit", 1)):
                 with self.assertRaises(MonitorFailure) as raised:
@@ -189,7 +216,11 @@ class ActualDependencyExperimentTests(unittest.TestCase):
                     )
             self.assertEqual((raised.exception.stage, raised.exception.category,
                               raised.exception.exit_code),
-                             ("preverify-worker-install", "dependency-resolution", 17))
+                             ("preverify-worker-install", "filesystem-error", 1))
+            self.assertEqual(raised.exception.os_error,
+                             {"errno": 28, "substage": "preverify-filesystem"})
+            self.assertIn("errno=28 substage=preverify-filesystem",
+                          failure_diagnostic("policy-preverify", raised.exception))
         self.assertEqual(
             failure_diagnostic("checkout-identity", RuntimeError("checkout does not match dispatched SHA")),
             "experiment failure stage=checkout-identity category=checkout-mismatch",

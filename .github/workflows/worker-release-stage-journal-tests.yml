@@ -15,6 +15,7 @@ on:
       - 'vps-workers/bin/worker_release_systemd_extractor.py'
       - 'vps-workers/bin/worker_release_systemd_contract.py'
       - 'vps-workers/bin/worker_release_systemd_extractor.test.py'
+      - 'vps-workers/bin/worker_release_systemd_test_support.py'
       - 'vps-workers/bin/worker_release_archive_extract_child.py'
       - 'vps-workers/bin/provision-worker-source-extractor.py'
       - 'vps-workers/bin/worker_release_descriptor_cgroup.py'

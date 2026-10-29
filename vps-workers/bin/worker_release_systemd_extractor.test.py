@@ -9,7 +9,6 @@ import os
 import pwd
 import socket
 import stat
-import subprocess
 import sys
 import tarfile
 import tempfile
@@ -24,6 +23,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 import worker_release_archive_extract_child as child
 import worker_release_systemd_extractor as supervisor
 import worker_release_systemd_contract as contract
+from worker_release_systemd_test_support import (
+    systemd_system_manager_available, systemd_unit_failure_summary,
+)
 _provisioner_path = Path(__file__).with_name("provision-worker-source-extractor.py")
 _provisioner_spec = importlib.util.spec_from_file_location("source_extractor_provisioner", _provisioner_path)
 provisioner = importlib.util.module_from_spec(_provisioner_spec)
@@ -36,20 +38,6 @@ SHA = "a" * 40
 FENCE = {"repository": "ogabasseyy/Baci", "workflow": ".github/workflows/production-release.yml",
          "ref": "refs/heads/main", "sha": SHA, "run_id": "234", "run_attempt": 1, "job_id": "567"}
 RESOURCE_ROOT = supervisor.RESOURCE_ROOT
-
-
-def systemd_system_manager_available(run=None) -> bool:
-    """Probe manager reachability without requiring the host to be healthy."""
-    runner = run or subprocess.run
-    try:
-        result = runner(
-            ("systemctl", "--system", "show", "--property=Version", "--value"),
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-            text=True, timeout=5, check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return result.returncode == 0 and bool(result.stdout.strip())
 
 
 def archive_bytes() -> bytes:
@@ -104,6 +92,17 @@ class ExtractorUnitTests(unittest.TestCase):
     def test_systemd_manager_probe_rejects_absent_manager(self):
         self.assertFalse(systemd_system_manager_available(
             Mock(return_value=Mock(returncode=1, stdout=""))))
+
+    def test_unit_failure_summary_reports_only_fixed_categories(self):
+        values = {"LoadState": "loaded", "ActiveState": "inactive", "Result": "success",
+                  "ConditionResult": "no", "MainPID": "0", "ExecMainCode": "exited",
+                  "ExecMainStatus": "0", "ControlGroup": ""}
+        run = Mock(side_effect=lambda args, **_kwargs:
+                   Mock(returncode=0, stdout=values[args[3].split("=", 1)[1]]))
+        summary = systemd_unit_failure_summary("baci-worker-source-extract@" + "a" * 32 + ".service", run)
+        self.assertEqual(summary, "load=loaded active=inactive result=success condition=no main_pid=zero "
+                         "exec_code=exited exec_status=zero cgroup=empty")
+        self.assertNotIn("/system.slice", summary)
 
     def test_apply_passes_file_record_to_shared_installer_without_missing_type_import(self):
         item = provisioner.File("fixture", b"content", 0o440, Path("/tmp/fixture"))
@@ -257,7 +256,12 @@ class ExtractorUnitTests(unittest.TestCase):
                               stage_gid=os.getgid(), resource_root=RESOURCE_ROOT,
                               resource_uid=account.pw_uid) as journal:
                 journal.begin(FENCE, digest)
-                receipt = supervisor.extract_frozen_source(journal, bundle, digest)
+                try:
+                    receipt = supervisor.extract_frozen_source(journal, bundle, digest)
+                except Exception as error:
+                    self.fail(f"extractor unit failed ({type(error).__name__}); "
+                              f"systemd state: {systemd_unit_failure_summary(
+                                  f'{supervisor.UNIT_PREFIX}{journal.transaction_id}.service')}")
                 source = receipt["snapshot"]
                 self.assertEqual(receipt["source_sha"], SHA)
                 self.assertEqual((source / "pnpm-lock.yaml").read_bytes(), b"root lock\n")

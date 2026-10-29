@@ -353,6 +353,16 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
         else argument
         for argument in command
     )
+    worker_index = command.index("--sandbox-worker")
+    source_snapshot = Path(command[worker_index + 1])
+    seed_cache = source_snapshot.parent / "pnpm-cache-seed"
+    seed_receipt = source_snapshot.parent / dependency_builder.RECEIPT_NAME
+    if seed_receipt.parent == seed_cache or (seed_cache / dependency_builder.RECEIPT_NAME).exists():
+        raise RuntimeError("policy receipt is not separated from the metadata cache seed")
+    dependency_builder.validate_receipt(
+        source_snapshot, seed_cache, seed_receipt,
+        owner_uid=0, cache_owner_uid=0, expected_sha=sha,
+    )
     if usage_root is None or Path(usage_root) != dependency_builder.BUILD_ROOT:
         raise RuntimeError("dependency builder did not forward the fixed build usage root")
     uid_argument = next((argument for argument in command if argument.startswith("--uid=")), None)

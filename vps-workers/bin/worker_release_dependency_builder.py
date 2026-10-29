@@ -205,7 +205,7 @@ def build(source_arg: str, expected_sha: str, *, runner=None) -> tuple[dict[str,
         input_copy.chmod(0o555)
         _copy_private_offline_store(scratch, uid, gid)
         _copy_private_policy_cache(seed_cache, scratch, uid, gid)
-        validate_receipt(source_copy, seed_cache, seed_cache / RECEIPT_NAME,
+        validate_receipt(source_copy, seed_cache, input_copy / RECEIPT_NAME,
                          owner_uid=0, cache_owner_uid=0, expected_sha=expected_sha)
         directory_usage(BUILD_ROOT, max_entries=MAX_BUILD_SCRATCH_ENTRIES, max_bytes=MAX_BUILD_SCRATCH_BYTES)
         (scratch / "home").mkdir(mode=0o700)

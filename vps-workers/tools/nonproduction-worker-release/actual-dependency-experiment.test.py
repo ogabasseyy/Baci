@@ -3,6 +3,7 @@ import errno
 import json
 import os
 import sys
+import subprocess
 import tempfile
 import threading
 import time
@@ -47,6 +48,15 @@ from worker_release_dependency_evidence_shape import OFFLINE_STORE_SUBTYPES
 
 
 class ActualDependencyExperimentTests(unittest.TestCase):
+    def test_extracted_tree_size_suite_is_part_of_experiment_gate(self):
+        suite = Path(__file__).with_name("actual-dependency-tree-size.test.py")
+        result = subprocess.run(
+            (sys.executable, str(suite), "-q"), cwd=suite.parent,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, timeout=30, check=False,
+        )
+        self.assertEqual(result.returncode, 0, "extracted tree-size regression suite failed")
+
     def test_resource_scan_emits_only_allowlisted_filesystem_subtype(self):
         category, subtype = _resource_category(
             RuntimeError("experiment contains an unsupported filesystem entry /private/secret")
@@ -625,28 +635,6 @@ class ActualDependencyExperimentTests(unittest.TestCase):
                  patch.object(experiment.subprocess, "run", side_effect=fake_run):
                 self.assertEqual(experiment.pinned_pnpm("/usr/bin/node", experiment.policy.EXPECTED_PNPM),
                                  str(canonical_package))
-
-    def test_tree_size_measures_regular_content_and_directories(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            (root / "sub").mkdir()
-            (root / "sub" / "payload").write_bytes(b"synthetic")
-            entries, size = experiment.tree_size(root, max_entries=2, max_bytes=100)
-            self.assertEqual(entries, 2)
-            self.assertEqual(size, len(b"synthetic"))
-
-    def test_tree_size_rejects_symlink_and_hardlink(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            root = Path(temporary)
-            target = root / "target"
-            target.write_text("synthetic", encoding="utf-8")
-            (root / "escape").symlink_to(target)
-            with self.assertRaisesRegex(RuntimeError, "unsafe entry"):
-                experiment.tree_size(root, max_entries=10, max_bytes=100)
-            (root / "escape").unlink()
-            os.link(target, root / "second-link")
-            with self.assertRaisesRegex(RuntimeError, "shared file inode"):
-                experiment.tree_size(root, max_entries=10, max_bytes=100)
 
     def test_manual_workflow_is_read_only_and_no_secrets_are_injected(self):
         workflow = SCRIPT.parents[3] / ".github/workflows/worker-release-actual-dependency-experiment.yml"

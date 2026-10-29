@@ -138,9 +138,10 @@ def _main() -> int:
                 timeout=600, resource_root=base, diagnostic_path=preverify_diagnostic,
             )
             stage = "offline-store-validation"
-            input_cache.validate_offline_store(store, owner_uid=os.geteuid(),
-                                               max_entries=200_000,
-                                               max_bytes=EXPERIMENT_STORE_BYTES)
+            _, validated_store_exclusions = input_cache.validate_offline_store(
+                store, owner_uid=os.geteuid(), max_entries=200_000,
+                max_bytes=EXPERIMENT_STORE_BYTES,
+            )
             stage = "source-lock-validation"
             lock_hashes, _ = policy._input_hashes(source)
             output = base / "payload"
@@ -194,12 +195,16 @@ def _main() -> int:
             stage = "receipt-validation"
             policy.validate_receipt(source, cache, preverify_receipt, expected_sha=expected_sha,
                                     cache_max_bytes=EXPERIMENT_CACHE_BYTES)
-            input_cache.validate_offline_store(store, owner_uid=os.geteuid(),
-                                               max_entries=200_000,
-                                               max_bytes=EXPERIMENT_STORE_BYTES)
+            _, checked_store_exclusions = input_cache.validate_offline_store(
+                store, owner_uid=os.geteuid(), max_entries=200_000,
+                max_bytes=EXPERIMENT_STORE_BYTES,
+            )
+            if checked_store_exclusions != validated_store_exclusions:
+                raise RuntimeError("offline pnpm store index layout changed during experiment")
             stage = "offline-store-validation"
             store_count, store_bytes = tree_size(store, max_entries=200_000,
-                                                 max_bytes=EXPERIMENT_STORE_BYTES)
+                                                 max_bytes=EXPERIMENT_STORE_BYTES,
+                                                 excluded_relative_directories=checked_store_exclusions)
             worker_modules = source / "vps-workers" / "node_modules"
             if not worker_modules.is_dir() or worker_modules.is_symlink():
                 raise RuntimeError("offline standalone worker install produced no real node_modules directory")

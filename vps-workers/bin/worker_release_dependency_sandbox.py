@@ -149,7 +149,8 @@ def systemd_command(source: Path, scratch: Path, expected_sha: str, uid: int, gi
         "NoNewPrivileges=true", "PrivateUsers=true", "RestrictSUIDSGID=true", "LockPersonality=true",
         "UMask=0077", "KillMode=control-group", f"RuntimeMaxSec={MAX_BUILD_SECONDS}s",
         "MemoryMax=2G", "CPUQuota=200%", "TasksMax=128", "LimitFSIZE=1073741824", "LimitNOFILE=4096",
-        f"ReadOnlyPaths={source} {source.parent / 'pnpm-cache-seed'}", f"ReadWritePaths={scratch}",
+        f"ReadOnlyPaths={source} {source.parent / 'pnpm-cache-seed'} {source.parent / RECEIPT_NAME}",
+        f"ReadWritePaths={scratch}",
         f"InaccessiblePaths={WORKER_RUNTIME} {WORKER_RELEASES} {WORKER_LOCKS}",
         "PrivateNetwork=true", "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
     )
@@ -212,7 +213,7 @@ def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
             or not stat.S_ISDIR(seed_info.st_mode) or seed_info.st_uid != SEED_OWNER_UID
             or seed_info.st_mode & 0o222):
         raise BuilderRejected("immutable pnpm policy seed ownership or mode is unsafe")
-    seed_receipt = seed_cache / RECEIPT_NAME
+    seed_receipt = source.parent / RECEIPT_NAME
     working = scratch / "source"
     copy_source_tree(source, working)
     (scratch / "home").mkdir(mode=0o700, exist_ok=True)

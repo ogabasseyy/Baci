@@ -8,7 +8,7 @@ from pathlib import Path
 
 from worker_release_dependency_artifacts import BuilderRejected, copy_source_tree, make_read_only_input
 from worker_release_dependency_evidence_shape import OFFLINE_STORE_SUBTYPES
-from worker_release_dependency_policy_cache import MAX_CACHE_BYTES, MAX_CACHE_ENTRIES, _hash_tree
+from worker_release_dependency_policy_cache import MAX_CACHE_BYTES, MAX_CACHE_ENTRIES, RECEIPT_NAME, _hash_tree
 
 
 class OfflineStoreRejected(BuilderRejected):
@@ -135,28 +135,41 @@ def copy_policy_cache_seed(
     max_entries: int = MAX_CACHE_ENTRIES,
     max_bytes: int = MAX_CACHE_BYTES,
 ) -> Path:
-    """Create a root-owned read-only metadata seed and colocated receipt."""
+    """Create a root-owned read-only metadata seed and sibling receipt."""
     seed = input_root / "pnpm-cache-seed"
     copy_source_tree(cache, seed, max_bytes=max_bytes, max_entries=max_entries)
-    _copy_seed_receipt(receipt_source, seed)
+    _copy_seed_receipt(receipt_source, input_root)
     make_read_only_input(seed)
     return seed
 
 
-def _copy_seed_receipt(receipt_source: Path, seed: Path) -> None:
+def _copy_seed_receipt(receipt_source: Path, input_root: Path) -> None:
+    if receipt_source.name != RECEIPT_NAME:
+        raise BuilderRejected("fixed pnpm policy receipt name is unexpected")
     try:
         source_fd = os.open(receipt_source, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     except OSError as exc:
         raise BuilderRejected("fixed pnpm policy receipt is unavailable") from exc
+    destination_parent_fd = -1
     destination_fd = -1
+    created = False
     try:
+        destination_parent_fd = os.open(
+            input_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        )
+        parent_info = os.fstat(destination_parent_fd)
+        if (not stat.S_ISDIR(parent_info.st_mode) or parent_info.st_uid != 0
+                or parent_info.st_mode & 0o022):
+            raise BuilderRejected("policy seed parent ownership or mode is unsafe")
         before = os.fstat(source_fd)
         if (not stat.S_ISREG(before.st_mode) or before.st_uid != 0 or before.st_nlink != 1
                 or before.st_mode & 0o022 or before.st_size > 32_768):
             raise BuilderRejected("fixed pnpm policy receipt inode is unsafe")
-        destination_fd = os.open(seed / receipt_source.name,
+        destination_fd = os.open(RECEIPT_NAME,
                                  os.O_WRONLY | os.O_CREAT | os.O_EXCL
-                                 | getattr(os, "O_NOFOLLOW", 0), 0o444)
+                                 | getattr(os, "O_NOFOLLOW", 0), 0o444,
+                                 dir_fd=destination_parent_fd)
+        created = True
         copied = 0
         while chunk := os.read(source_fd, min(16_384, 32_769 - copied)):
             copied += len(chunk)
@@ -174,18 +187,22 @@ def _copy_seed_receipt(receipt_source: Path, seed: Path) -> None:
                 (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
             raise BuilderRejected("fixed pnpm policy receipt changed while copying")
         os.fsync(destination_fd)
+        os.fsync(destination_parent_fd)
     except BaseException:
         if destination_fd >= 0:
             os.close(destination_fd)
             destination_fd = -1
         try:
-            os.unlink(seed / receipt_source.name)
+            if created and destination_parent_fd >= 0:
+                os.unlink(RECEIPT_NAME, dir_fd=destination_parent_fd)
         except FileNotFoundError:
             pass
         raise
     finally:
         if destination_fd >= 0:
             os.close(destination_fd)
+        if destination_parent_fd >= 0:
+            os.close(destination_parent_fd)
         os.close(source_fd)
 
 

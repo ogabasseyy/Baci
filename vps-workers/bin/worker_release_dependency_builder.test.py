@@ -150,6 +150,7 @@ class DependencyBuilderTests(unittest.TestCase):
         self.assertIn("--gid=1234", command)
         self.assertIn("ReadOnlyPaths=/input", joined)
         self.assertIn("/pnpm-cache-seed", joined)
+        self.assertIn(policy_cache.RECEIPT_NAME, joined)
         self.assertIn("ReadWritePaths=/scratch", joined)
         self.assertIn("InaccessiblePaths=/srv/baci-workers/runtime /srv/baci-workers/releases /srv/baci-workers/locks", joined)
         self.assertIn("ProtectSystem=strict", joined)
@@ -188,6 +189,9 @@ class DependencyBuilderTests(unittest.TestCase):
             seed.mkdir(mode=0o700)
             (seed / "metadata.json").write_text("verified seed", encoding="utf-8")
             seed.chmod(0o500)
+            receipt_path = root / policy_cache.RECEIPT_NAME
+            receipt_path.write_text("synthetic receipt", encoding="utf-8")
+            receipt_path.chmod(0o400)
             calls = []
             injection_settings = []
             receipt_validations = []
@@ -260,8 +264,9 @@ class DependencyBuilderTests(unittest.TestCase):
             self.assertEqual(len(receipt_validations), 2)
             for args, kwargs in receipt_validations:
                 self.assertEqual(args[1], seed)
-                self.assertEqual(args[2], seed / policy_cache.RECEIPT_NAME)
+                self.assertEqual(args[2], receipt_path)
                 self.assertEqual(kwargs["cache_owner_uid"], os.geteuid())
+            self.assertFalse((seed / policy_cache.RECEIPT_NAME).exists())
             self.assertTrue((scratch / "payload" / "root" / "node_modules").is_dir())
 
     def test_private_offline_store_is_an_independent_writable_copy(self):
@@ -768,6 +773,39 @@ class DependencyBuilderTests(unittest.TestCase):
                     source, writable, receipt, owner_uid=os.geteuid(),
                     cache_owner_uid=os.geteuid(), expected_sha=SHA,
                 )
+
+    @unittest.skipUnless(os.geteuid() == 0, "seed receipt snapshot requires root-owned fixture inputs")
+    def test_policy_seed_receipt_is_sibling_and_excluded_from_cache_digest(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = make_source(root)
+            for relative in policy_cache.POLICY_FILES:
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("minimumReleaseAge: 1440\ntrustPolicy: no-downgrade\n", encoding="utf-8")
+            cache = root / "cache"
+            cache.mkdir(mode=0o700)
+            (cache / "metadata.json").write_text("verified metadata", encoding="utf-8")
+            store = root / "store"
+            store.mkdir(mode=0o700)
+            receipt = store / policy_cache.RECEIPT_NAME
+            receipt.write_text(json.dumps(policy_cache.make_receipt(source, cache, "11.7.0")), encoding="utf-8")
+            receipt.chmod(0o400)
+            input_root = root / "input"
+            input_root.mkdir(mode=0o700)
+
+            seed = builder._copy_policy_cache_seed(cache, receipt, input_root)
+
+            self.assertFalse((seed / policy_cache.RECEIPT_NAME).exists())
+            self.assertTrue((input_root / policy_cache.RECEIPT_NAME).is_file())
+            self.assertEqual(policy_cache._hash_tree(seed), policy_cache.make_receipt(
+                source, cache, "11.7.0"
+            )["metadataCacheSha256"])
+            validated = policy_cache.validate_receipt(
+                source, seed, input_root / policy_cache.RECEIPT_NAME,
+                owner_uid=0, cache_owner_uid=0, expected_sha=SHA,
+            )
+            self.assertEqual(validated["metadataCacheSha256"], policy_cache._hash_tree(seed))
 
     def test_policy_preverify_runs_both_lockfiles_with_scripts_and_trust_bypass_disabled(self):
         policy_source = SCRIPT.with_name("worker_release_dependency_policy_cache.py").read_text(encoding="utf-8")

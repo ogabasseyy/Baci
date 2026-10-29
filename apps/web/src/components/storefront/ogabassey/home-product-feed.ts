@@ -76,12 +76,22 @@ interface MapOgabasseyProductsOptions {
    * carousel/JSON-LD) where truncation would alter schema markup.
    */
   descriptionMode?: 'teaser' | 'full';
+  /**
+   * Whether to serialize multi-image gallery arrays (`images` and
+   * `image_payloads`). Defaults to `true` for listing/detail callers; the
+   * 24-card homepage feed passes `false` because homepage cards only render
+   * the primary `image` + `image_alt` and have no color-swatch image switching.
+   */
+  includeGalleryImages?: boolean;
 }
 
 export function mapStorefrontProductsToOgabasseyProducts(
   storefrontProducts: StorefrontProduct[],
   currency: CurrencyConfig = DEFAULT_HOME_FEED_CURRENCY,
-  { descriptionMode = 'teaser' }: MapOgabasseyProductsOptions = {}
+  {
+    descriptionMode = 'teaser',
+    includeGalleryImages = true,
+  }: MapOgabasseyProductsOptions = {}
 ): OgabasseyProduct[] {
   return storefrontProducts.map((product) => {
     const {
@@ -96,10 +106,14 @@ export function mapStorefrontProductsToOgabasseyProducts(
 
     const category =
       Array.isArray(product.categories) ? product.categories[0] : product.categories;
+    const categorySlug = category?.slug || product.category_slug;
     const condition: ConditionLabel = product.has_condition_offers
       ? 'New & Used'
       : mapCondition(product.condition);
-    const altImagePayloads = slimImagePayloads(imagePayloads);
+    const altImagePayloads = includeGalleryImages
+      ? slimImagePayloads(imagePayloads)
+      : [];
+    const primaryStorage = product.storage_options?.[0];
 
     return {
       id: product.id,
@@ -109,7 +123,7 @@ export function mapStorefrontProductsToOgabasseyProducts(
       rawPrice: product.price,
       image,
       ...(imageAlt ? { image_alt: imageAlt } : {}),
-      ...(altImagePayloads.length > 0
+      ...(includeGalleryImages && altImagePayloads.length > 0
         ? { image_payloads: altImagePayloads }
         : {}),
       description:
@@ -122,18 +136,22 @@ export function mapStorefrontProductsToOgabasseyProducts(
         ? { rating: product.rating }
         : {}),
       category: category?.name || product.category || 'General',
-      category_id: product.category_id,
-      categorySlug: category?.slug || product.category_slug,
+      ...(product.category_id ? { category_id: product.category_id } : {}),
+      ...(categorySlug ? { categorySlug } : {}),
       condition,
       // The deferred home-card chrome uses this flag to route mixed-condition
       // products to PDP option selection instead of ambiguous quick-add.
       ...(product.has_condition_offers
         ? { has_condition_offers: true }
         : {}),
-      brand: product.brand,
-      colors: product.colors,
-      storage: product.storage_options?.[0],
-      images,
+      ...(product.brand ? { brand: product.brand } : {}),
+      ...(includeGalleryImages &&
+      product.colors &&
+      product.colors.length > 0
+        ? { colors: product.colors }
+        : {}),
+      ...(primaryStorage ? { storage: primaryStorage } : {}),
+      ...(includeGalleryImages ? { images } : {}),
     };
   });
 }
@@ -147,6 +165,7 @@ export function createOgabasseyHomeProductFeed(
       0,
       OGABASSEY_HOME_PRODUCT_FEED_LIMIT
     ),
-    currency
+    currency,
+    { includeGalleryImages: false }
   );
 }

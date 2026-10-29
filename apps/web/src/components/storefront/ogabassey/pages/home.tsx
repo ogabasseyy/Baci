@@ -37,10 +37,12 @@ export const OgabasseyHomePage: React.FC<HomePageProps> = ({
   // the home product feed so callers that don't pass `launchProducts` (e.g. the
   // generic storefront renderer) still render a product carousel rather than an
   // empty slot now that the old promo banner is gone.
-  const launchSlides = buildLaunchSlides(
-    launchProducts ?? products ?? [],
-    routeBasePath
-  ).slice(0, LAUNCH_CAROUSEL_LIMIT);
+  const launchSlides = renderHero
+    ? buildLaunchSlides(
+        launchProducts ?? products ?? [],
+        routeBasePath
+      ).slice(0, LAUNCH_CAROUSEL_LIMIT)
+    : [];
 
   return (
     <>

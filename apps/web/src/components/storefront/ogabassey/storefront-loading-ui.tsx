@@ -161,7 +161,7 @@ export function ShellChromeLoading({
 export function HomeRouteLoading() {
   return (
     <LoadingStatus label="Loading storefront homepage">
-      <StorefrontPageSkeleton />
+      <div className="min-h-screen bg-background" aria-hidden="true" />
     </LoadingStatus>
   );
 }

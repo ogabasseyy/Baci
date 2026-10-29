@@ -396,4 +396,43 @@ describe('createOgabasseyHomeProductFeed', () => {
       })
     );
   });
+
+  it('omits gallery images, image_payloads, and undefined optional fields from the homepage RSC feed while preserving primary image and image_alt', () => {
+    const products = [
+      createStorefrontProduct({
+        id: 'product-rsc-slim',
+        name: 'Samsung Galaxy S26 Ultra',
+        slug: 'samsung-galaxy-s26-ultra',
+        price: 1850000,
+        image: '',
+        brand: undefined,
+        category_id: undefined,
+        category_slug: undefined,
+        colors: ['Titanium Black', 'Titanium Gray'],
+        storage_options: undefined,
+        images: [
+          { url: '/s26-front.jpg', alt: 'Samsung Galaxy S26 Ultra', order: 0 },
+          { url: '/s26-back.jpg', alt: 'Samsung Galaxy S26 Ultra', order: 1 },
+          { url: '/s26-side.jpg', alt: 'Samsung Galaxy S26 Ultra', order: 2 },
+        ],
+      }),
+    ];
+
+    const result = createOgabasseyHomeProductFeed(products);
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        id: 'product-rsc-slim',
+        image: '/s26-front.jpg',
+        image_alt: 'Samsung Galaxy S26 Ultra',
+      })
+    );
+    expect(result[0]).not.toHaveProperty('images');
+    expect(result[0]).not.toHaveProperty('image_payloads');
+    expect(result[0]).not.toHaveProperty('brand');
+    expect(result[0]).not.toHaveProperty('category_id');
+    expect(result[0]).not.toHaveProperty('categorySlug');
+    expect(result[0]).not.toHaveProperty('colors');
+    expect(result[0]).not.toHaveProperty('storage');
+  });
 });

@@ -7,6 +7,11 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+# This observer is also imported from its staged systemd helper directory.
+# Keep sibling fixture modules importable when an importlib caller's sys.path
+# points at the checkout or a shell's current directory instead.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 from dependency_builder_fixture_pnpm_classification import safe_success_output, summarize_failure
 from dependency_builder_fixture_pnpm_diagnostics import (
     FIXTURE_ERROR_NAME, _diagnostic_path, _write_diagnostic, read_diagnostic,

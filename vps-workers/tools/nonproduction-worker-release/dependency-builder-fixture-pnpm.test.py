@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import hashlib
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -25,6 +26,36 @@ SPEC.loader.exec_module(fixture)
 
 
 class FixturePnpmDiagnosticTests(unittest.TestCase):
+    def test_observer_imports_sibling_modules_when_loaded_from_staged_directory(self):
+        module_names = ("dependency_builder_fixture_pnpm_classification",
+                        "dependency_builder_fixture_pnpm_diagnostics")
+        saved_paths = list(sys.path)
+        saved_modules = {name: sys.modules.pop(name, None) for name in module_names}
+        try:
+            with tempfile.TemporaryDirectory() as temporary:
+                staged = Path(temporary)
+                for source in (MODULE_PATH,
+                               MODULE_PATH.with_name("dependency_builder_fixture_pnpm_classification.py"),
+                               MODULE_PATH.with_name("dependency_builder_fixture_pnpm_diagnostics.py")):
+                    shutil.copyfile(source, staged / source.name)
+                sys.path[:] = [str(Path(__file__).resolve().parents[2] / "bin")]
+                spec = importlib.util.spec_from_file_location(
+                    "staged_dependency_builder_fixture_pnpm", staged / MODULE_PATH.name,
+                )
+                self.assertIsNotNone(spec)
+                self.assertIsNotNone(spec.loader)
+                staged_observer = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(staged_observer)
+                self.assertEqual(staged_observer.summarize_failure("ERR_PNPM_TRUST_DOWNGRADE")["error_code"],
+                                 "ERR_PNPM_TRUST_DOWNGRADE")
+                self.assertIn(str(staged), sys.path[0])
+        finally:
+            sys.path[:] = saved_paths
+            for name in module_names:
+                sys.modules.pop(name, None)
+                if saved_modules[name] is not None:
+                    sys.modules[name] = saved_modules[name]
+
     def test_trust_failure_without_hint_is_reported_as_unreported(self):
         output = (
             'ERR_PNPM_TRUST_DOWNGRADE High-risk trust downgrade for "tsx@4.22.4" '

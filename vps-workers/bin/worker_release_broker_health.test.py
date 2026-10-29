@@ -9,30 +9,24 @@ class HealthAfterRestartTests(unittest.TestCase):
         events = []
 
         class Lease:
-            def require_active(self):
-                events.append("active")
-
-            def release(self):
-                events.append("services restarted")
+            def start_health(self):
+                events.append("health gate opened")
 
         def probe():
-            self.assertEqual(events, ["active", "services restarted"])
+            self.assertEqual(events, ["health gate opened"])
             return {"healthy": True}
 
         self.assertEqual(_health_after_restart(Lease(), probe), {"healthy": True})
 
     def test_failed_cleanup_never_runs_health_probe(self):
         class Lease:
-            def require_active(self):
-                pass
-
-            def release(self):
-                raise RuntimeError("cleanup failed")
+            def start_health(self):
+                raise RuntimeError("health transition failed")
 
         def probe():
             self.fail("probe must not run before confirmed restart")
 
-        with self.assertRaisesRegex(RuntimeError, "cleanup failed"):
+        with self.assertRaisesRegex(RuntimeError, "health transition failed"):
             _health_after_restart(Lease(), probe)
 
 

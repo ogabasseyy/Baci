@@ -23,6 +23,9 @@ function mockBroker({ healthResult = health, failAt } = {}) {
       async operateWorkerRelease(args) {
         calls.push([args.operation, args]);
         if (failAt === args.operation) throw Error(`${args.operation} failed`);
+        if (args.operation === 'recovery-status') {
+          return { ok: true, operation: 'recovery-status', sourceSha: identity.sha, pending: false };
+        }
         if (args.operation === 'promote') return promoted;
         if (args.operation === 'health') return healthResult;
         return rollback;
@@ -42,7 +45,7 @@ test('requires an exact durable lock before contacting the broker', async () => 
 test('runs the authenticated broker lifecycle in order and requires exact installed SHA health', async () => {
   const { broker, calls } = mockBroker();
   const result = await runWorkerReleaseCoordinator({ env, broker, readLock: () => lock });
-  assert.deepEqual(calls.map(([operation]) => operation), ['stage', 'preflight', 'promote', 'health']);
+  assert.deepEqual(calls.map(([operation]) => operation), ['recovery-status', 'stage', 'preflight', 'promote', 'health']);
   assert.ok(calls.every(([, args]) => args.sha === identity.sha));
   assert.equal(result.health.sourceSha, identity.sha);
 });
@@ -61,12 +64,14 @@ test('a bad active SHA health receipt requests only a fenced rollback and retain
     runWorkerReleaseCoordinator({ env, broker, readLock: () => lock }),
     error => /rollback completed and release lock remains held/.test(error.message) && error.cause?.message.includes('installed SHA'),
   );
-  assert.deepEqual(calls.map(([operation]) => operation), ['stage', 'preflight', 'promote', 'health', 'rollback']);
+  assert.deepEqual(calls.map(([operation]) => operation), ['recovery-status', 'stage', 'preflight', 'promote', 'health', 'rollback']);
 });
 
 test('an invalid rollback receipt leaves release reconciliation blocked', async () => {
   const { broker } = mockBroker({ healthResult: { ok: false, operation: 'health', sourceSha: identity.sha, healthy: false, runId: '1234', runAttempt: 2, jobId: '5678' } });
-  broker.operateWorkerRelease = async args => args.operation === 'promote' ? promoted : { ...rollback, sourceSha: 'c'.repeat(40) };
+  broker.operateWorkerRelease = async args => args.operation === 'recovery-status'
+    ? { ok: true, operation: 'recovery-status', sourceSha: identity.sha, pending: false }
+    : args.operation === 'promote' ? promoted : { ...rollback, sourceSha: 'c'.repeat(40) };
   await assert.rejects(
     runWorkerReleaseCoordinator({ env, broker, readLock: () => lock }),
     error => /rollback is unconfirmed/.test(error.message) && /rollback receipt is invalid/.test(error.rollbackError?.message ?? ''),

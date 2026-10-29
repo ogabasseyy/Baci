@@ -16,7 +16,7 @@ from pathlib import Path
 
 from worker_release_broker import BrokerProtocolError, BROKER_CLIENT_TIMEOUT_SECONDS, BROKER_OPERATION_BUDGET_SECONDS, DISPATCHER_TIMEOUT_SECONDS, extract_github_tarball, serve_connection, _stage_archive, _freeze_release_tree, _validate_staged_release, _load_release_state, _record_promotion_failure, _record_promotion_success, _promotion_restore_confirmed, _run_gigl_capability_smoke, _validate_gigl_release_sha
 from worker_release_lifecycle import LifecycleRejected, ReleaseHealthProbeError, ReleaseHealthRejected
-from worker_release_staging import _drop_extractor_privileges
+from worker_release_staging import _close_inherited_descriptors, _drop_extractor_privileges
 from worker_release_gigl import _acquire_gigl_tracking_lock
 
 
@@ -124,6 +124,23 @@ class BrokerSocketTests(unittest.TestCase):
 
 
 class GiglCapabilityBrokerTests(unittest.TestCase):
+    def test_archive_extractor_closes_inherited_broker_lock_descriptors(self):
+        read_fd, keep_fd = os.pipe()
+        unrelated_read_fd, unrelated_write_fd = os.pipe()
+        try:
+            _close_inherited_descriptors({keep_fd})
+            os.fstat(keep_fd)
+            with self.assertRaises(OSError):
+                os.fstat(unrelated_read_fd)
+            with self.assertRaises(OSError):
+                os.fstat(unrelated_write_fd)
+        finally:
+            for fd in (read_fd, keep_fd, unrelated_read_fd, unrelated_write_fd):
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+
     def test_extractor_retains_only_provisioned_lock_group(self):
         calls = []
         with patch("worker_release_staging.broker.os.setgroups", side_effect=lambda value: calls.append(("groups", value))), \

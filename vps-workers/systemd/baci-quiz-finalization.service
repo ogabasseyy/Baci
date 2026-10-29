@@ -1,7 +1,8 @@
 [Unit]
 Description=Baci quiz deadline finalizer
-After=network-online.target
+After=network-online.target baci-worker-release-broker.service
 Wants=network-online.target
+BindsTo=baci-worker-release-broker.service
 
 [Service]
 Type=simple
@@ -13,6 +14,7 @@ Environment=NODE_ENV=production
 Environment=BACI_WORKER_PROFILE=quiz-finalization
 Environment=BACI_REPO_DIR=/srv/baci-workers/current
 Environment=BACI_WORKER_ENV=/srv/baci-workers/runtime/worker.env
+ExecCondition=/usr/local/lib/baci-worker-broker/worker-release-launch-gate unit baci-quiz-finalization
 ExecStart=/usr/bin/flock -n /srv/baci-workers/locks/quiz-finalize.lock /srv/baci-workers/current/bin/process-quiz-finalization.sh --loop
 Restart=always
 RestartSec=1

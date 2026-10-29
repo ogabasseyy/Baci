@@ -221,6 +221,13 @@ if is_disabled:
     fragment = '\n'.join(line for line in fragment.splitlines()
                          if not any(f'{remote_dir}/jobs/{job}' in line for job in jobs))
 
+def gate_worker_cron(line):
+    if not any(lock in line for lock in ('flock -n ' + lock_dir + '/', 'flock -n ' + remote_dir + '/locks/')) or not line.strip():
+        return line
+    if "bash -lc '" not in line:
+        raise SystemExit('worker cron command has no guarded bash payload')
+    return line.replace("bash -lc '", "bash -lc 'if ! /usr/local/lib/baci-worker-broker/worker-release-launch-gate scheduled; then exit 0; fi; ", 1)
+
 existing = subprocess.run(
     ['crontab', '-l'],
     check=False,
@@ -261,6 +268,8 @@ for line in lines:
 while filtered and not filtered[-1].strip():
     filtered.pop()
 
+filtered = [gate_worker_cron(line) for line in filtered]
+fragment = '\n'.join(gate_worker_cron(line) for line in fragment.splitlines())
 if filtered:
     print('\n'.join(filtered))
     print()

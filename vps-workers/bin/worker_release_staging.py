@@ -3,6 +3,21 @@ import worker_release_broker as broker
 import io, os, re, shutil, signal, stat, time
 
 
+def _close_inherited_descriptors(keep_fds: set[int]) -> None:
+    """Close broker lock FDs in the no-exec archive child before UID drop."""
+    descriptor_dir = "/proc/self/fd" if broker.os.path.isdir("/proc/self/fd") else "/dev/fd"
+    try:
+        inherited = [int(name) for name in broker.os.listdir(descriptor_dir) if name.isdigit()]
+    except OSError as error:
+        raise broker.BrokerProtocolError("extractor descriptor isolation failed") from error
+    for fd in inherited:
+        if fd > 2 and fd not in keep_fds:
+            try:
+                broker.os.close(fd)
+            except OSError:
+                pass
+
+
 def _drop_extractor_privileges(worker_uid: int, worker_gid: int, lock_gid: int) -> None:
     """Keep only the provisioned traversal group before changing identity."""
     broker.os.setgroups([lock_gid])
@@ -29,6 +44,7 @@ def _run_as_worker_extractor(archive_bytes: bytes, destination: str, worker_uid:
     if child == 0:
         try:
             broker.os.close(read_fd)
+            _close_inherited_descriptors({write_fd})
             # /srv/baci-workers is root:baci-locks 0710. The extractor needs
             # this one provisioned supplementary group to traverse it.
             _drop_extractor_privileges(worker_uid, worker_gid, lock_gid)

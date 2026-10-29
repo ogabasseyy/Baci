@@ -1,7 +1,8 @@
 [Unit]
 Description=Baci durable domain-event router
-After=network-online.target
+After=network-online.target baci-worker-release-broker.service
 Wants=network-online.target
+BindsTo=baci-worker-release-broker.service
 
 [Service]
 Type=simple
@@ -13,6 +14,7 @@ Environment=NODE_ENV=production
 Environment=BACI_WORKER_PROFILE=event-pipeline
 Environment=BACI_REPO_DIR=/srv/baci-workers/current
 Environment=BACI_WORKER_ENV=/srv/baci-workers/runtime/worker.env
+ExecCondition=/usr/local/lib/baci-worker-broker/worker-release-launch-gate unit baci-domain-event-router
 ExecStart=/usr/bin/flock -n /srv/baci-workers/locks/process-domain-events.lock /srv/baci-workers/current/bin/process-domain-events.sh
 Restart=on-failure
 RestartSec=5

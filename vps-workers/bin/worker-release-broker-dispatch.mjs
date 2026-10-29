@@ -50,6 +50,7 @@ try {
       installedSha: result.installedSha,
       latchedSha: result.latchedSha,
     } : {}),
+    ...(result.operation === 'recover' ? { recoveryOf: result.recoveryOf } : {}),
     ...(result.operation === 'stage' ? {
       archiveSha256: result.bundleSha256,
       archiveBase64: result.sourceArchive.toString('base64'),

@@ -81,9 +81,14 @@ def transition_crontab(
     )
     block = [block_start]
     for name, schedule, wait in targets:
+        job = (
+            'if ! /usr/local/lib/baci-worker-broker/worker-release-launch-gate scheduled; '
+            f'then exit 0; fi; exec {shlex.quote(node_bin)} '
+            f'{shlex.quote(f"{remote_dir}/jobs/{name}.mjs")}'
+        )
         payload = (
             f'{command}{wait} -E 75 {global_lock} '
-            f'{shlex.quote(node_bin)} {remote}/jobs/{name}.mjs'
+            f'/bin/bash -lc {shlex.quote(job)}'
         )
         block.append(
             f'{schedule} flock -n {shlex.quote(f"{lock_dir}/{name}.lock")} bash -lc {shlex.quote(payload)} '

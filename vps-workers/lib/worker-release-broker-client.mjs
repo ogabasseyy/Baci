@@ -7,7 +7,7 @@ const GITHUB_API = 'https://api.github.com';
 const MAX_BUNDLE_BYTES = WORKER_RELEASE_BROKER_POLICY.maxBundleBytes;
 const MAX_REPLY_BYTES = 4096;
 const SHA_RE = /^[0-9a-f]{40}$/;
-const OPERATIONS = new Set(['stage', 'preflight', 'readiness', 'gigl-capability', 'promote', 'health', 'rollback']);
+const OPERATIONS = new Set(['stage', 'preflight', 'readiness', 'gigl-capability', 'recovery-status', 'recover', 'promote', 'health', 'rollback']);
 const OIDC_ENDPOINT_ORIGIN = 'https://pipelines.actions.githubusercontent.com';
 
 function fail(message) {
@@ -118,6 +118,28 @@ export function exchangeWorkerRelease(socketPath, request, { timeoutMs = WORKER_
 
 function validReceipt(payload, request) {
   if (payload?.ok !== true || !OPERATIONS.has(request.operation) || payload.operation !== request.operation) return false;
+  if (request.operation === 'recovery-status') {
+    if (payload.sourceSha !== request.sourceSha || typeof payload.pending !== 'boolean') return false;
+    if (!payload.pending) return true;
+    const target = payload.recoveryOf;
+    const owner = payload.recoveryOwner;
+    return target && /^[1-9][0-9]{0,19}$/.test(String(target.run_id)) &&
+      Number.isSafeInteger(target.run_attempt) && target.run_attempt >= 1 &&
+      /^[1-9][0-9]{0,19}$/.test(String(target.job_id)) && SHA_RE.test(target.sha ?? '') &&
+      owner && /^[1-9][0-9]{0,19}$/.test(String(owner.run_id)) &&
+      Number.isSafeInteger(owner.run_attempt) && owner.run_attempt >= 1 &&
+      /^[1-9][0-9]{0,19}$/.test(String(owner.job_id)) && SHA_RE.test(owner.sha ?? '') &&
+      SHA_RE.test(payload.previousSha ?? '') &&
+      ['quiescing', 'health_probe', 'restore', 'recovery_required'].includes(payload.phase);
+  }
+  if (request.operation === 'recover') {
+    return payload.sourceSha === request.sourceSha && payload.recovered === true &&
+      (request.recoveryOf ? payload.rolledBackSha === request.recoveryOf.sha : SHA_RE.test(payload.rolledBackSha ?? '')) &&
+      SHA_RE.test(payload.previousSha ?? '') &&
+      typeof payload.alreadyRestored === 'boolean' &&
+      /^[1-9][0-9]{0,19}$/.test(String(payload.runId)) && Number.isSafeInteger(payload.runAttempt) &&
+      payload.runAttempt >= 1 && /^[1-9][0-9]{0,19}$/.test(String(payload.jobId));
+  }
   if (request.operation === 'rollback') {
     return payload.rolledBackSha === request.sourceSha && SHA_RE.test(payload.sourceSha ?? '') &&
       /^[1-9][0-9]{0,19}$/.test(String(payload.runId)) && Number.isSafeInteger(payload.runAttempt) &&
@@ -156,6 +178,7 @@ function validReceipt(payload, request) {
 export async function operateWorkerRelease({
   operation,
   sha,
+  recoveryOf,
   socketPath = '/run/baci-worker-release/broker.sock',
   githubToken,
   oidcToken,
@@ -164,7 +187,7 @@ export async function operateWorkerRelease({
   fetchImpl = fetch,
   exchangeImpl = exchangeWorkerRelease,
 }) {
-  if (!['readiness', 'gigl-capability', 'promote', 'health', 'rollback'].includes(operation)) fail('release operation is invalid');
+  if (!['readiness', 'gigl-capability', 'recovery-status', 'recover', 'promote', 'health', 'rollback'].includes(operation)) fail('release operation is invalid');
   if (!SHA_RE.test(sha ?? '')) fail('source SHA is invalid');
   if (typeof githubToken !== 'string' || githubToken.length < 1 || githubToken.length > 4096) fail('GitHub token is unavailable');
   const signedToken = oidcToken ?? await readOidcToken({
@@ -174,8 +197,11 @@ export async function operateWorkerRelease({
     fetchImpl,
   });
   if (typeof signedToken !== 'string' || signedToken.length < 1 || signedToken.length > 16_384) fail('OIDC token is invalid');
-  const receipt = await exchangeImpl(socketPath, { operation, sourceSha: sha, oidcToken: signedToken, githubToken });
-  if (!validReceipt(receipt, { operation, sourceSha: sha })) fail(`broker rejected or mismatched the ${operation} operation`);
+  if (operation === 'recover' && (!recoveryOf || Object.keys(recoveryOf).sort().join(',') !== 'job_id,run_attempt,run_id,sha')) fail('recovery target is invalid');
+  const request = { operation, sourceSha: sha, oidcToken: signedToken, githubToken,
+    ...(operation === 'recover' && recoveryOf ? { recoveryOf } : {}) };
+  const receipt = await exchangeImpl(socketPath, request);
+  if (!validReceipt(receipt, { operation, sourceSha: sha, recoveryOf })) fail(`broker rejected or mismatched the ${operation} operation`);
   return receipt;
 }
 

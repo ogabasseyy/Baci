@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -293,6 +295,43 @@ describe('deploy crontab', () => {
     assert.doesNotMatch(deployScript, /install-event-pipeline-services\.sh|install-quiz-finalization-service\.sh/);
     assert.doesNotMatch(deployScript, /process-domain-events\.sh|process-event-deliveries\.sh/);
     assert.doesNotMatch(deployScript, /process-quiz-finalization\.sh|\/api\/quiz\/finalize/);
+  });
+
+  it('guards worker cron payloads behind the durable recovery latch after flock', () => {
+    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
+    assert.match(deployScript, /def gate_worker_cron\(line\):/);
+    assert.match(deployScript, /worker-release-launch-gate scheduled; then exit 0; fi/);
+    assert.match(deployScript, /filtered = \[gate_worker_cron\(line\) for line in filtered\]/);
+    assert.match(deployScript, /fragment = '\\n'\.join\(gate_worker_cron\(line\) for line in fragment\.splitlines\(\)\)/);
+  });
+
+  it('gates preserved scheduled rows outside the managed block before printing them', () => {
+    const deployScript = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
+    const script = deployScript.match(/python3 - .* <<'PY'\n([\s\S]*?)\nPY/)?.[1];
+    assert.ok(script, 'expected inline crontab reconciler');
+    const directory = mkdtempSync(join(tmpdir(), 'baci-crontab-gate-'));
+    try {
+      const bin = join(directory, 'bin');
+      mkdirSync(bin);
+      const fragment = join(directory, 'fragment');
+      const disabled = join(directory, 'disabled');
+      const oldWorker = "*/10 * * * * flock -n /srv/baci-workers/locks/custom-task.lock bash -lc 'echo preserved'";
+      writeFileSync(fragment, "# managed begin\n1 * * * * flock -n /srv/baci-workers/locks/new-task.lock bash -lc 'echo new'\n# managed end\n");
+      writeFileSync(join(bin, 'crontab'), `#!/bin/sh\nprintf '%s\\n' ${JSON.stringify(oldWorker)}\n`);
+      chmodSync(join(bin, 'crontab'), 0o755);
+      const scriptPath = join(directory, 'reconcile.py');
+      writeFileSync(scriptPath, script);
+      const result = spawnSync('python3', [
+        scriptPath, fragment, '/srv/baci-workers/current', '# managed begin', '# managed end',
+        'enabled', disabled, '/srv/baci-workers/locks',
+      ], { encoding: 'utf8', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /bash -lc 'if ! \/usr\/local\/lib\/baci-worker-broker\/worker-release-launch-gate scheduled; then exit 0; fi; echo preserved'/u);
+      assert.match(result.stdout, /bash -lc 'if ! \/usr\/local\/lib\/baci-worker-broker\/worker-release-launch-gate scheduled; then exit 0; fi; echo new'/u);
+      assert.equal((result.stdout.match(/worker-release-launch-gate scheduled/g) ?? []).length, 2);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('keeps the deployment entrypoint within the repository size limit', () => {

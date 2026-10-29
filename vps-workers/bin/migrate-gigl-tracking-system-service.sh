@@ -105,8 +105,9 @@ render_service() {
   cat <<EOF
 [Unit]
 Description=Baci GIGL tracking poller
-After=network-online.target
+After=network-online.target baci-worker-release-broker.service
 Wants=network-online.target
+BindsTo=baci-worker-release-broker.service
 
 [Service]
 Type=oneshot
@@ -118,6 +119,7 @@ Environment=NODE_ENV=production
 Environment=BACI_WORKER_PROFILE=gigl-tracking
 Environment=BACI_WORKER_ENV=$WORKER_ROOT/runtime/worker.env
 Environment=GIGL_ENV_FILE_AUTHORITATIVE=1
+ExecCondition=/usr/local/lib/baci-worker-broker/worker-release-launch-gate scheduled
 ExecStart=/usr/bin/flock -n $WORKER_ROOT/locks/gigl-tracking.lock /usr/bin/timeout --signal=TERM --kill-after=30s 2m $WORKER_ROOT/current/bin/process-gigl-tracking.sh
 NoNewPrivileges=true
 PrivateTmp=true
@@ -132,6 +134,8 @@ render_timer() {
   cat <<EOF
 [Unit]
 Description=Run Baci GIGL tracking every five minutes
+After=baci-worker-release-broker.service
+BindsTo=baci-worker-release-broker.service
 
 [Timer]
 OnCalendar=*:0/5

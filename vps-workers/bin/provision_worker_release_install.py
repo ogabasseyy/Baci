@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import stat
 import tempfile
+import grp
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +29,8 @@ def install_one(file: Any) -> None:
     old = read_existing(file.destination)
     if old is not None:
         old_content, metadata = old
-        if old_content != file.content or stat.S_IMODE(metadata.st_mode) != file.mode or metadata.st_gid != 0:
+        expected_gid = grp.getgrnam(file.group).gr_gid
+        if old_content != file.content or stat.S_IMODE(metadata.st_mode) != file.mode or metadata.st_gid != expected_gid:
             raise RuntimeError(f"existing protected file differs; refusing overwrite: {file.destination}")
         return
     fd, temporary = tempfile.mkstemp(prefix=".baci-install-", dir=file.destination.parent)
@@ -37,7 +39,7 @@ def install_one(file: Any) -> None:
             handle.write(file.content)
             handle.flush()
             os.fsync(handle.fileno())
-        os.chown(temporary, 0, 0)
+        os.chown(temporary, 0, grp.getgrnam(file.group).gr_gid)
         os.chmod(temporary, file.mode)
         os.replace(temporary, file.destination)
         directory_fd = os.open(file.destination.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))

@@ -1,4 +1,5 @@
 import { createHash, createPublicKey, verify as verifySignature } from 'node:crypto';
+import { proveCompletedWorkerAttempt } from './worker-release-github-proof.mjs';
 
 /** Fail-closed authentication and policy for the privileged release broker. */
 export const WORKER_RELEASE_BROKER_POLICY = Object.freeze({
@@ -8,7 +9,7 @@ export const WORKER_RELEASE_BROKER_POLICY = Object.freeze({
   readinessJob: 'vps-drain-readiness',
   runnerLabel: 'baci-release',
   branch: 'refs/heads/main',
-  operations: Object.freeze(['stage', 'preflight', 'readiness', 'gigl-capability', 'promote', 'health', 'rollback']),
+  operations: Object.freeze(['stage', 'preflight', 'readiness', 'gigl-capability', 'recovery-status', 'recover', 'promote', 'health', 'rollback']),
   maxBundleBytes: 256 * 1024 * 1024,
   authorizationDeadlineMs: 330_000,
   githubRequestTimeoutMs: 30_000,
@@ -199,13 +200,31 @@ export async function authorizeBrokerRequest({ peerUid, expectedReleaseUid, work
   if (!OP_SET.has(operation)) fail('unknown operation');
   const expectedKeys = operation === 'stage'
     ? 'bundleSha256,githubToken,oidcToken,operation,sourceSha'
-    : 'githubToken,oidcToken,operation,sourceSha';
+    : operation === 'recover'
+      ? 'githubToken,oidcToken,operation,recoveryOf,sourceSha'
+      : 'githubToken,oidcToken,operation,sourceSha';
   if (keys.join(',') !== expectedKeys) fail('request contains unsupported fields');
   if (!SHA_RE.test(sourceSha ?? '')) fail('source SHA is invalid');
   if (operation === 'stage' && !/^[0-9a-f]{64}$/.test(bundleSha256 ?? '')) fail('bundle digest is invalid');
   const budget = createDeadlineBudget({ clock: deadlineClock });
   const verifiedJob = await authenticateJob({ oidcToken, githubToken, operation, fetchImpl, now, budget });
   if (verifiedJob.currentMainSha !== sourceSha) fail('source SHA is not current main');
+  let recoveryOf;
+  if (operation === 'recover') {
+    const target = request.recoveryOf;
+    if (!target || Object.keys(target).sort().join(',') !== 'job_id,run_attempt,run_id,sha') fail('recovery target fields are invalid');
+    try {
+      recoveryOf = await proveCompletedWorkerAttempt({
+        target,
+        repository: WORKER_RELEASE_BROKER_POLICY.repository,
+        workflowId: verifiedJob.run.workflow_id,
+        runnerLabel: WORKER_RELEASE_BROKER_POLICY.runnerLabel,
+        apiJson: async (pathname) => githubJson(fetchImpl, `${GITHUB_API}${pathname}`, githubToken, budget),
+      });
+    } catch (error) {
+      fail(error instanceof Error ? error.message : 'prior worker attempt cannot be proven terminal');
+    }
+  }
   validateIdentity({
     repository: verifiedJob.claims.repository,
     workflow: WORKER_RELEASE_BROKER_POLICY.workflow,
@@ -238,6 +257,7 @@ export async function authorizeBrokerRequest({ peerUid, expectedReleaseUid, work
     workerUid,
     workerRoot: WORKER_RELEASE_BROKER_POLICY.workerRoot,
     ...(operation === 'stage' ? { sourceArchive: archive.bytes } : {}),
+    ...(operation === 'recover' ? { recoveryOf } : {}),
   });
 }
 

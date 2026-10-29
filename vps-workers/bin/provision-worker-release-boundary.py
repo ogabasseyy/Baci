@@ -38,6 +38,8 @@ UNIT = """[Unit]
 Description=Baci worker release broker
 After=network-online.target
 Wants=network-online.target
+Wants=baci-domain-event-router.service baci-event-delivery-worker.service baci-quiz-finalization.service
+Wants=baci-cache-invalidation-drain.timer baci-gigl-tracking.timer
 
 [Service]
 Type=simple
@@ -56,7 +58,7 @@ PrivateTmp=yes
 PrivateDevices=yes
 ProtectHome=yes
 ProtectSystem=strict
-ReadWritePaths=/srv/baci-workers /run/baci-worker-release
+ReadWritePaths=/srv/baci-workers /run/baci-worker-release /run/baci-worker-release-gate
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
@@ -73,6 +75,14 @@ set -euo pipefail
 readonly release_uid="$(/usr/bin/id -u baci-release)"
 readonly worker_uid="$(/usr/bin/id -u baci-worker)"
 readonly worker_gid="$(/usr/bin/id -g baci-worker)"
+readonly gate_dir=/run/baci-worker-release-gate
+/usr/bin/install -d -o root -g baci-worker -m 0710 "$gate_dir"
+gate_socket="$gate_dir/health.sock"
+if [ -e "$gate_socket" ] || [ -L "$gate_socket" ]; then
+  [ -S "$gate_socket" ] && [ ! -L "$gate_socket" ] || exit 1
+  [ "$(/usr/bin/stat -c '%u:%g:%a' "$gate_socket")" = "0:$worker_gid:660" ] || exit 1
+  /usr/bin/rm -- "$gate_socket"
+fi
 exec /usr/bin/python3 /usr/local/lib/baci-worker-broker/worker_release_broker.py \\
   --release-uid "$release_uid" --worker-uid "$worker_uid" --worker-gid "$worker_gid"
 """
@@ -88,6 +98,7 @@ class InstallFile:
     content: bytes
     mode: int
     destination: Path
+    group: str = "root"
 
 
 def _source(relative: str) -> bytes:
@@ -105,16 +116,24 @@ def install_files() -> tuple[InstallFile, ...]:
         InstallFile("broker-dispatch.py", _source("vps-workers/bin/worker_release_broker_dispatch.py"), 0o440, HELPER_ROOT / "worker_release_broker_dispatch.py"),
         InstallFile("broker-staging.py", _source("vps-workers/bin/worker_release_staging.py"), 0o440, HELPER_ROOT / "worker_release_staging.py"),
         InstallFile("broker-state.py", _source("vps-workers/bin/worker_release_state.py"), 0o440, HELPER_ROOT / "worker_release_state.py"),
+        InstallFile("recovery-dispatch.py", _source("vps-workers/bin/worker_release_recovery_dispatch.py"), 0o440, HELPER_ROOT / "worker_release_recovery_dispatch.py"),
+        InstallFile("recovery-lifecycle.py", _source("vps-workers/bin/worker_release_recovery_lifecycle.py"), 0o440, HELPER_ROOT / "worker_release_recovery_lifecycle.py"),
         InstallFile("broker-gigl.py", _source("vps-workers/bin/worker_release_gigl.py"), 0o440, HELPER_ROOT / "worker_release_gigl.py"),
         InstallFile("readiness.py", _source("vps-workers/bin/worker_release_readiness.py"), 0o440, HELPER_ROOT / "worker_release_readiness.py"),
         InstallFile("lifecycle.py", _source("vps-workers/bin/worker_release_lifecycle.py"), 0o440, HELPER_ROOT / "worker_release_lifecycle.py"),
         InstallFile("lease.py", _source("vps-workers/bin/worker_release_quiesce_lease.py"), 0o440, HELPER_ROOT / "worker_release_quiesce_lease.py"),
         InstallFile("lease-identity.py", _source("vps-workers/bin/worker_release_quiesce_lease_identity.py"), 0o440, HELPER_ROOT / "worker_release_quiesce_lease_identity.py"),
+        InstallFile("lease-locks.py", _source("vps-workers/bin/worker_release_quiesce_locks.py"), 0o440, HELPER_ROOT / "worker_release_quiesce_locks.py"),
+        InstallFile("lease-runtime.py", _source("vps-workers/bin/worker_release_quiesce_lease_runtime.py"), 0o440, HELPER_ROOT / "worker_release_quiesce_lease_runtime.py"),
+        InstallFile("lease-core.py", _source("vps-workers/bin/worker_release_quiesce_lease_core.py"), 0o440, HELPER_ROOT / "worker_release_quiesce_lease_core.py"),
+        InstallFile("lease-manager.py", _source("vps-workers/bin/worker_release_quiesce_lease_manager.py"), 0o440, HELPER_ROOT / "worker_release_quiesce_lease_manager.py"),
+        InstallFile("lease-recovery-latch.py", _source("vps-workers/bin/worker_release_recovery_latch.py"), 0o440, HELPER_ROOT / "worker_release_recovery_latch.py", "baci-locks"),
+        InstallFile("lease-gate.py", _source("vps-workers/bin/worker_release_quiesce_gate.py"), 0o440, HELPER_ROOT / "worker_release_quiesce_gate.py"),
+        InstallFile("launch-gate", _source("vps-workers/bin/worker-release-launch-gate"), 0o550, HELPER_ROOT / "worker-release-launch-gate", "baci-locks"),
         InstallFile("dispatcher.mjs", _source("vps-workers/bin/worker-release-broker-dispatch.mjs"), 0o440, HELPER_ROOT / "bin/worker-release-broker-dispatch.mjs"),
         InstallFile("broker-policy.mjs", _source("vps-workers/lib/worker-release-broker.mjs"), 0o440, HELPER_ROOT / "lib/worker-release-broker.mjs"),
+        InstallFile("github-proof.mjs", _source("vps-workers/lib/worker-release-github-proof.mjs"), 0o440, HELPER_ROOT / "lib/worker-release-github-proof.mjs"),
         InstallFile("quiesce.sh", _source("vps-workers/lib/worker-release-quiesce-lease.sh"), 0o550, HELPER_ROOT / "worker-release-quiesce-lease.sh"),
-        InstallFile("strict-quiesce.sh", _source("vps-workers/lib/quiesce-worker-release-strict.sh"), 0o440, HELPER_ROOT / "quiesce-worker-release-strict.sh"),
-        InstallFile("lock-keeper.py", _source("vps-workers/lib/strict-lock-keeper.py"), 0o440, HELPER_ROOT / "strict-lock-keeper.py"),
         InstallFile("health-check", _source("vps-workers/bin/worker-release-health-check"), 0o550, HELPER_ROOT / "worker-release-health-check"),
         InstallFile("broker-start", START_BROKER.encode(), 0o550, HELPER_ROOT / "start-broker.sh"),
         InstallFile("dispatcher-wrapper", DISPATCHER_WRAPPER.encode(), 0o550, HELPER_ROOT / "worker-release-broker-dispatch.mjs"),
@@ -159,10 +178,17 @@ def _check_identities() -> None:
     if grp.getgrnam(RELEASE).gr_gid == grp.getgrnam(WORKER).gr_gid:
         raise RuntimeError("release and worker groups must be distinct")
     lock_group = grp.getgrnam("baci-locks")
+    _validate_bassey_lock_group(lock_group.gr_gid)
     if set(lock_group.gr_mem) - {"bassey", WORKER}:
         raise RuntimeError("baci-locks has unexpected members")
     if WORKER not in lock_group.gr_mem:
         raise RuntimeError("baci-worker is missing the protected lock group")
+
+
+def _validate_bassey_lock_group(lock_gid: int) -> None:
+    bassey = pwd.getpwnam("bassey")
+    if lock_gid not in os.getgrouplist("bassey", bassey.pw_gid):
+        raise RuntimeError("bassey is missing the protected lock group required by the scheduled launch gate")
 
 
 def _existing_identity_state() -> tuple[bool, bool]:
@@ -246,7 +272,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(shlex.join(action))
             for file in files:
                 digest = hashlib.sha256(file.content).hexdigest()
-                print(f"install root:root {file.mode:04o} {file.destination} sha256={digest}")
+                print(f"install root:{file.group} {file.mode:04o} {file.destination} sha256={digest}")
             print("Dry run only. Requires baci-worker identity/root layout before --apply.")
             return 0
         apply()

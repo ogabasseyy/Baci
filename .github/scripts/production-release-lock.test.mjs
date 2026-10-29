@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
+  acquireOrRecoverWorkerSyncLock,
   acquireProductionReleaseLock,
   assertCacheWorkerActionLockOwner,
   assertNoopPublicationOutcome,
@@ -33,6 +34,68 @@ test('creates a private lock bound to the exact workflow run, attempt and SHA', 
   assert.deepEqual(readProductionReleaseLock(path), { ...release, state: 'worker_syncing', workflow: '.github/workflows/production-release.yml' });
   assert.equal(statSync(path).mode & 0o777, 0o600);
   assert.throws(() => acquireProductionReleaseLock(path, release), /already exists/);
+});
+
+test('takes over a prior completed attempt only after exact GitHub attempt proof', async (t) => {
+  const path = fixture(t);
+  const prior = { run_id: '42', run_attempt: 1, sha: 'a'.repeat(40) };
+  const current = { run_id: '42', run_attempt: 2, sha: prior.sha };
+  acquireProductionReleaseLock(path, prior);
+  const requests = [];
+  const fetchImpl = async (url) => {
+    requests.push(String(url));
+    if (String(url).endsWith('/actions/runs/42')) return response({
+      id: 42, workflow_id: 9, path: '.github/workflows/production-release.yml', event: 'workflow_dispatch',
+      head_branch: 'main', head_sha: prior.sha, run_attempt: 2, status: 'in_progress',
+    });
+    if (String(url).includes('/attempts/1/jobs')) return response({ total_count: 1, jobs: [{
+      id: 4201, run_id: 42, name: 'Sync VPS workers', status: 'completed', head_sha: prior.sha,
+      labels: ['self-hosted', 'baci-release'], runner_name: 'release-runner',
+    }] });
+    throw new Error(`unexpected API request ${url}`);
+  };
+  const result = await acquireOrRecoverWorkerSyncLock({
+    lockPath: path,
+    payload: current,
+    auth: { run: { workflow_id: 9 } },
+    env: { GH_TOKEN: 'test-token' },
+    fetchImpl,
+  });
+  assert.deepEqual(result, current);
+  assert.deepEqual(readProductionReleaseLock(path), {
+    ...current, state: 'worker_syncing', workflow: '.github/workflows/production-release.yml',
+  });
+  assert.equal(requests.length, 2);
+});
+
+test('retains an active prior worker lock when its GitHub attempt has not terminated', async (t) => {
+  const path = fixture(t);
+  acquireProductionReleaseLock(path, release);
+  const fetchImpl = async (url) => String(url).endsWith('/actions/runs/42')
+    ? response({ id: 42, workflow_id: 9, path: '.github/workflows/production-release.yml', event: 'push',
+      head_branch: 'main', head_sha: release.sha, run_attempt: 1, status: 'in_progress' })
+    : response({ total_count: 1, jobs: [{ id: 4201, run_id: 42, name: 'Sync VPS workers', status: 'in_progress',
+      head_sha: release.sha, labels: ['baci-release'], runner_name: 'release-runner' }] });
+  await assert.rejects(acquireOrRecoverWorkerSyncLock({
+    lockPath: path, payload: { run_id: '99', run_attempt: 1, sha: 'b'.repeat(40) },
+    auth: { run: { workflow_id: 9 } }, env: { GH_TOKEN: 'test-token' }, fetchImpl,
+  }), /not terminal/);
+  assert.deepEqual(readProductionReleaseLock(path), {
+    ...release, state: 'worker_syncing', workflow: '.github/workflows/production-release.yml',
+  });
+});
+
+test('fails closed when the old run proof API is unavailable or publication was started', async (t) => {
+  for (const state of ['worker_syncing', 'publishing']) {
+    const path = fixture(t);
+    acquireProductionReleaseLock(path, release);
+    if (state === 'publishing') markProductionReleasePublishing(path, release);
+    await assert.rejects(acquireOrRecoverWorkerSyncLock({
+      lockPath: path, payload: { run_id: '99', run_attempt: 1, sha: 'b'.repeat(40) },
+      auth: { run: { workflow_id: 9 } }, env: { GH_TOKEN: 'test-token' },
+      fetchImpl: async () => { throw new Error('GitHub API unavailable'); },
+    }), state === 'publishing' ? /publication state is ambiguous/ : /GitHub API unavailable/);
+  }
 });
 
 test('leaves an indeterminate or failed release locked until a matching owner finalizes it', (t) => {

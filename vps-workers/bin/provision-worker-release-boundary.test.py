@@ -44,6 +44,12 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
             "worker_release_staging.py",
             "worker_release_state.py",
             "worker_release_gigl.py",
+            "worker_release_recovery_latch.py",
+            "worker_release_recovery_dispatch.py",
+            "worker_release_recovery_lifecycle.py",
+            "worker_release_quiesce_gate.py",
+            "worker_release_quiesce_lease_core.py",
+            "worker_release_quiesce_lease_manager.py",
         )
         for module in broker_modules:
             self.assertIn(provision.HELPER_ROOT / module, destinations)
@@ -51,9 +57,17 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
         for module in broker_modules:
             self.assertEqual(installed[module].mode, 0o440)
             self.assertTrue(installed[module].content)
+        self.assertEqual(installed["worker_release_recovery_latch.py"].group, "baci-locks")
+        launch_gate = next(file for file in files if file.relative == "launch-gate")
+        self.assertEqual((launch_gate.mode, launch_gate.group), (0o550, "baci-locks"))
         self.assertIn(provision.HELPER_ROOT / "worker-release-health-check", destinations)
+        self.assertIn(provision.HELPER_ROOT / "worker-release-launch-gate", destinations)
         self.assertIn(provision.HELPER_ROOT / "bin/worker-release-broker-dispatch.mjs", destinations)
         self.assertIn(provision.HELPER_ROOT / "lib/worker-release-broker.mjs", destinations)
+        self.assertIn(provision.HELPER_ROOT / "lib/worker-release-github-proof.mjs", destinations)
+        proof = next(file for file in files if file.relative == "github-proof.mjs")
+        self.assertEqual(proof.destination, provision.HELPER_ROOT / "lib/worker-release-github-proof.mjs")
+        self.assertEqual(proof.mode, 0o440)
         self.assertIn(provision.UNIT_PATH, destinations)
         self.assertTrue(all(str(file.destination).startswith((str(provision.HELPER_ROOT), "/etc/systemd/system/")) for file in files))
         self.assertTrue(all(file.mode & 0o022 == 0 for file in files))
@@ -79,6 +93,25 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
         wrapper = next(file for file in provision.install_files() if file.relative == "dispatcher-wrapper")
         self.assertIn("../lib/worker-release-broker.mjs", actual_dispatcher.content.decode())
         self.assertIn("./bin/worker-release-broker-dispatch.mjs", wrapper.content.decode())
+
+    def test_broker_lock_owner_module_is_installed_root_owned_read_only(self):
+        locks = next(file for file in provision.install_files() if file.relative == "lease-locks.py")
+        self.assertEqual(locks.destination, provision.HELPER_ROOT / "worker_release_quiesce_locks.py")
+        self.assertEqual(locks.mode, 0o440)
+        install_source = SCRIPT.with_name("provision_worker_release_install.py").read_text(encoding="utf-8")
+        self.assertIn("metadata.st_uid != 0", install_source)
+        self.assertIn("metadata.st_gid != expected_gid", install_source)
+        self.assertIn("os.chown(temporary, 0, grp.getgrnam(file.group).gr_gid)", install_source)
+        self.assertIn("os.chmod(temporary, file.mode)", install_source)
+
+    def test_cron_identity_must_be_in_protected_lock_group(self):
+        with patch.object(provision.pwd, "getpwnam", return_value=type("User", (), {"pw_gid": 1000})()), \
+             patch.object(provision.os, "getgrouplist", return_value=[1000, 2000]):
+            provision._validate_bassey_lock_group(2000)
+        with patch.object(provision.pwd, "getpwnam", return_value=type("User", (), {"pw_gid": 1000})()), \
+             patch.object(provision.os, "getgrouplist", return_value=[1000]):
+            with self.assertRaisesRegex(RuntimeError, "bassey is missing"):
+                provision._validate_bassey_lock_group(2000)
 
     def test_worker_health_check_binds_active_pointer_and_fixed_services(self):
         health = next(file for file in provision.install_files() if file.relative == "health-check").content.decode()

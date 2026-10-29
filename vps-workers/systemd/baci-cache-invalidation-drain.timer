@@ -1,5 +1,7 @@
 [Unit]
 Description=Run Baci cache invalidation HTTP scheduler every two minutes
+After=baci-worker-release-broker.service
+BindsTo=baci-worker-release-broker.service
 
 [Timer]
 OnCalendar=*:0/2

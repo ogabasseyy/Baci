@@ -60,6 +60,30 @@ export async function runWorkerReleaseCoordinator({
   })();
 
   const common = { sha: identity.sha };
+  const recoveryStatus = await authorizedBroker.operateWorkerRelease({ operation: 'recovery-status', ...common });
+  if (recoveryStatus?.ok !== true || recoveryStatus.operation !== 'recovery-status' ||
+      recoveryStatus.sourceSha !== identity.sha || typeof recoveryStatus.pending !== 'boolean') {
+    throw new Error('worker release recovery status receipt is invalid');
+  }
+  let recovery;
+  if (recoveryStatus.pending) {
+    const target = recoveryStatus.recoveryOf;
+    const owner = recoveryStatus.recoveryOwner;
+    if (!target || !owner || !SHA_RE.test(target.sha ?? '') || !SHA_RE.test(recoveryStatus.previousSha ?? '') ||
+        !/^[1-9][0-9]{0,19}$/.test(String(target.run_id)) || !Number.isSafeInteger(target.run_attempt) ||
+        !/^[1-9][0-9]{0,19}$/.test(String(target.job_id))) {
+      throw new Error('worker release recovery target receipt is invalid');
+    }
+    const currentOwnsRecovery = owner.run_id === identity.runId && owner.run_attempt === identity.runAttempt && owner.sha === identity.sha;
+    recovery = await authorizedBroker.operateWorkerRelease({
+      operation: 'recover', ...common, ...(!currentOwnsRecovery ? { recoveryOf: target } : {}),
+    });
+    if (recovery?.ok !== true || recovery.operation !== 'recover' || recovery.sourceSha !== identity.sha ||
+        recovery.recovered !== true || recovery.rolledBackSha !== target.sha ||
+        recovery.previousSha !== recoveryStatus.previousSha || !hasRunReceipt(recovery, identity)) {
+      throw new Error('worker release recovery receipt is invalid; persistent release lock remains held');
+    }
+  }
   const staged = await authorizedBroker.stageWorkerRelease(common);
   if (staged?.ok !== true || staged.operation !== 'stage' || staged.sourceSha !== identity.sha ||
       !Number.isSafeInteger(staged.entryCount) || staged.entryCount < 1) {
@@ -88,7 +112,7 @@ export async function runWorkerReleaseCoordinator({
         health.healthy !== true || !hasRunReceipt(health, identity, promoted.jobId)) {
       throw new Error('worker release installed SHA or health receipt is invalid');
     }
-    return { staged, preflight, promoted, health };
+    return { recovery, staged, preflight, promoted, health };
   } catch (healthError) {
     try {
       const rollback = await authorizedBroker.operateWorkerRelease({ operation: 'rollback', ...common });

@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { hostname, userInfo } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { authorizeCoordinatorJob, COORDINATOR_WORKFLOW_PATH, RELEASE_REPOSITORY, WORKER_JOB_NAME } from './authorize-coordinator-worker.mjs';
+import { proveCompletedWorkerAttempt } from '../../vps-workers/lib/worker-release-github-proof.mjs';
 
 export const PRODUCTION_RELEASE_LOCK_PATH = '/home/baci-release/.local/state/baci/pending-production-release.json';
 const WEB_PROJECT_ID = 'prj_y6kGI7ZzyFWU6tyZbaklPtVsXeqx';
@@ -58,6 +59,48 @@ export function acquireProductionReleaseLock(lockPath, payload) {
     closeSync(fd);
   }
   return identity;
+}
+
+function replaceWorkerSyncLock(lockPath, payload, expectedPrior) {
+  assertPrivateParent(lockPath);
+  const current = readProductionReleaseLock(lockPath);
+  if (!current || current.state !== 'worker_syncing' || current.run_id !== expectedPrior.run_id ||
+      current.run_attempt !== expectedPrior.run_attempt || current.sha !== expectedPrior.sha) {
+    throw new Error('production release lock changed during authenticated recovery');
+  }
+  const identity = validatePayload(payload);
+  const temporary = `${lockPath}.${process.pid}.recovery.tmp`;
+  const fd = openSync(temporary, 'wx', 0o600);
+  try {
+    writeFileSync(fd, `${JSON.stringify({ ...identity, state: 'worker_syncing', workflow: COORDINATOR_WORKFLOW_PATH })}\n`, 'utf8');
+  } finally {
+    closeSync(fd);
+  }
+  renameSync(temporary, lockPath);
+  return identity;
+}
+
+export async function acquireOrRecoverWorkerSyncLock({ lockPath, payload, auth, env, fetchImpl }) {
+  const existing = readProductionReleaseLock(lockPath);
+  if (!existing) return acquireProductionReleaseLock(lockPath, payload);
+  const next = validatePayload(payload);
+  if (existing.run_id === next.run_id && existing.run_attempt === next.run_attempt && existing.sha === next.sha &&
+      existing.state === 'worker_syncing') return next;
+  if (existing.state !== 'worker_syncing') {
+    throw new Error('production release publication state is ambiguous; operator reconciliation is required');
+  }
+  const token = env.GH_TOKEN ?? env.GITHUB_TOKEN;
+  if (!token || !auth?.run || !Number.isSafeInteger(auth.run.workflow_id)) {
+    throw new Error('GitHub proof is unavailable for prior worker release recovery');
+  }
+  await proveCompletedWorkerAttempt({
+    target: existing,
+    repository: RELEASE_REPOSITORY,
+    workflowId: auth.run.workflow_id,
+    runnerLabel: 'baci-release',
+    apiJson: pathname => apiJson(fetchImpl, pathname, token),
+  });
+  return replaceWorkerSyncLock(lockPath, next, existing);
 }
 
 export function readProductionReleaseLock(lockPath) {
@@ -184,7 +227,7 @@ export async function verifyLiveAliasAndWorker(auth, env, fetchImpl, lockPath = 
   clearProductionReleaseLock(lockPath, lock);
 }
 
-export async function runProductionReleaseLockCommand(command, { env = process.env, fetchImpl = fetch } = {}) {
+export async function runProductionReleaseLockCommand(command, { env = process.env, fetchImpl = fetch, authorize = authorizeCoordinatorJob } = {}) {
   assertExpectedLockHost(env);
   if (command === 'authorize-worker-lock') {
     const lock = readProductionReleaseLock(PRODUCTION_RELEASE_LOCK_PATH);
@@ -197,10 +240,10 @@ export async function runProductionReleaseLockCommand(command, { env = process.e
     return;
   }
   if (command === 'acquire') {
-    const auth = await authorizeCoordinatorJob({ env, fetchImpl, expectedJobName: WORKER_JOB_NAME });
-    acquireProductionReleaseLock(PRODUCTION_RELEASE_LOCK_PATH, {
+    const auth = await authorize({ env, fetchImpl, expectedJobName: WORKER_JOB_NAME });
+    await acquireOrRecoverWorkerSyncLock({ lockPath: PRODUCTION_RELEASE_LOCK_PATH, auth, env, fetchImpl, payload: {
       run_id: auth.claims.run_id, run_attempt: auth.claims.run_attempt, sha: auth.claims.sha,
-    });
+    } });
     return;
   }
   if (command === 'authorize-cache-worker-action') {

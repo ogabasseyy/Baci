@@ -4,9 +4,8 @@ import worker_release_broker as broker
 import stat
 
 def _health_after_restart(lease, probe):
-    """Restart the stopped services before probing, retaining the release lock."""
-    lease.require_active()
-    lease.release()
+    """Probe under an explicit live gate; unexpected EOF stops the units."""
+    lease.start_health()
     return probe()
 
 def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid: int) -> Callable[[int, dict[str, Any]], dict[str, Any]]:
@@ -28,10 +27,10 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
     # window. A fresh manager is created per trusted broker process; process
     # exit closes the pipe and lets the helper's cleanup trap release locks.
     from worker_release_quiesce_lease import WorkerQuiesceLeaseManager
-    quiescence = WorkerQuiesceLeaseManager()
+    quiescence = WorkerQuiesceLeaseManager(worker_uid=worker_uid, worker_gid=worker_gid)
 
     def dispatch(peer_uid: int, request: dict[str, Any]) -> dict[str, Any]:
-        if peer_uid != release_uid or request.get("operation") not in ("stage", "preflight", "readiness", "gigl-capability", "promote", "health", "rollback"):
+        if peer_uid != release_uid or request.get("operation") not in ("stage", "preflight", "readiness", "gigl-capability", "recovery-status", "recover", "promote", "health", "rollback"):
             raise broker.BrokerProtocolError("unsupported broker operation")
         # No shell, cwd selection, PATH inheritance, or caller-selected executable.
         child_env = {
@@ -64,6 +63,32 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
             raise broker.BrokerProtocolError("trusted dispatcher returned invalid data") from None
         if not broker.re.fullmatch(r"[0-9a-f]{40}", sha) or operation != request.get("operation") or not broker.re.fullmatch(r"[1-9][0-9]{0,19}", str(run_id)) or not isinstance(run_attempt, int) or run_attempt < 1 or not broker.re.fullmatch(r"[1-9][0-9]{0,19}", str(job_id)):
             raise broker.BrokerProtocolError("trusted dispatcher returned invalid source identity")
+        recovery_of = verified.get("recoveryOf")
+        fence = {"run_id": str(run_id), "run_attempt": run_attempt, "sha": sha}
+        if operation in ("stage", "readiness", "gigl-capability", "recovery-status", "recover", "promote", "health", "rollback"):
+            latch = quiescence.recovery_latch()
+            if latch and not quiescence.is_active_for(fence):
+                if operation not in ("recovery-status", "recover") and (operation != "rollback" or latch.get("fence") != fence):
+                    raise broker.BrokerProtocolError("worker release recovery latch blocks this operation")
+        if operation in ("recovery-status", "recover"):
+            from worker_release_recovery_dispatch import recover, status as recovery_status
+            from worker_release_lifecycle import AuthenticatedRun
+            identity = AuthenticatedRun.from_broker({
+                "repository": repository, "workflow": workflow, "ref": ref,
+                "sha": sha, "run_id": run_id, "run_attempt": run_attempt,
+                "job_id": job_id, "status": status,
+            }, expected_sha=sha)
+            current_link = broker.os.path.join(broker.WORKER_ROOT, "current")
+            lock_path = broker.os.path.join(broker.WORKER_ROOT, "release.lock")
+            state_path = broker.os.path.join(broker.WORKER_ROOT, "release-state.json")
+            if operation == "recovery-status":
+                return recovery_status(source_sha=sha, quiescence=quiescence, state_path=state_path)
+            return recover(
+                verified={"sourceSha": sha, "runId": str(run_id), "runAttempt": run_attempt,
+                          "jobId": str(job_id), "recoveryOf": recovery_of},
+                identity=identity, quiescence=quiescence, current_link=current_link,
+                releases_root=releases_root, lock_path=lock_path, state_path=state_path,
+            )
         if operation == "preflight":
             count = broker._validate_staged_release(releases_root, sha, worker_gid)
             return {"ok": True, "operation": "preflight", "sourceSha": sha, "entryCount": count}
@@ -151,7 +176,7 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
                         if state is not None and state.get("status") not in ("healthy", "rolled_back"):
                             raise LifecycleRejected("unresolved release state blocks promotion")
                         prior = broker._read_current_sha(current_link, releases_root)
-                        lease = quiescence.acquire(identity.fence())
+                        lease = quiescence.acquire(identity.fence(), previous_sha=prior)
                         broker._write_release_state(state_path, {
                             "version": 1, "status": "promoting", "sha": sha,
                             "previous_sha": prior, "fence": identity.fence(),
@@ -174,34 +199,59 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
                                 "previousSha": prior, "runId": str(run_id), "runAttempt": run_attempt,
                                 "jobId": str(job_id)}
                     state = broker._load_release_state(state_path)
-                    if state is None or state.get("fence") != identity.fence() or state.get("sha") != sha:
+                    existing_latch = quiescence.recovery_latch()
+                    latch_recovery = bool(existing_latch and existing_latch.get("fence") == identity.fence())
+                    if (state is None and not (operation == "rollback" and latch_recovery)) or (
+                        state is not None and (state.get("fence") != identity.fence() or state.get("sha") != sha)
+                    ):
                         raise LifecycleRejected("release state does not match authenticated run and SHA")
                     if operation == "health":
+                        if state is None or state.get("status") != "promoted":
+                            raise LifecycleRejected("release state is not ready for health verification")
                         lease = quiescence.require_active(identity.fence())
-                        result = _health_after_restart(lease, lambda: check_release_health(
-                                current_link=current_link, releases_root=releases_root,
-                                identity=identity, health_check=health_check,
-                            ))
-                        state["status"] = "healthy"
-                        broker._write_release_state(state_path, state)
+                        with lease.operation():
+                            try:
+                                result = _health_after_restart(lease, lambda: check_release_health(
+                                        current_link=current_link, releases_root=releases_root,
+                                        identity=identity, health_check=health_check,
+                                    ))
+                                state["status"] = "healthy"
+                                broker._write_release_state(state_path, state)
+                                lease.confirm_healthy()
+                            except Exception:
+                                if lease._state == "active" and quiescence.is_active_for(identity.fence()):
+                                    lease.abort_health()
+                                raise
                         return {"ok": True, "operation": operation, "sourceSha": sha,
                                 "healthy": True, "runId": str(run_id), "runAttempt": run_attempt,
                                 "jobId": str(job_id)}
-                    if state.get("status") not in ("promoted", "healthy"):
+                    latch = quiescence.recovery_latch()
+                    recovery = bool(latch and latch.get("fence") == identity.fence())
+                    if state is not None and state.get("fence") != identity.fence():
+                        raise LifecycleRejected("release recovery belongs to another authenticated run")
+                    prior = state.get("previous_sha") if state is not None else None
+                    if prior is None and recovery:
+                        prior = latch.get("previous_sha")
+                    if not isinstance(prior, str) or not broker.re.fullmatch(r"[0-9a-f]{40}", prior):
+                        raise LifecycleRejected("recorded prior release is invalid")
+                    if state is not None and state.get("status") not in ("promoting", "promoted", "healthy", "recovery_required", "rolled_back"):
                         raise LifecycleRejected("release state is not eligible for rollback")
-                    prior = state.get("previous_sha")
-                    # Expiry closes and cleans the old lease. Recovery may
-                    # reacquire only for this already authenticated run fence.
-                    lease = quiescence.acquire(identity.fence())
+                    lease = quiescence.acquire(identity.fence(), previous_sha=prior, recovery=recovery)
+                    current_sha = broker._read_current_sha(current_link, releases_root)
                     with lease.operation():
-                        result = rollback_release(
-                            current_link=current_link, releases_root=releases_root,
-                            identity=identity, promoted_sha=sha, previous_sha=prior,
-                            quiescence_lease=lease,
-                        )
-                    state["status"] = "rolled_back"
-                    broker._write_release_state(state_path, state)
-                    lease.release()
+                        if current_sha == sha:
+                            result = rollback_release(
+                                current_link=current_link, releases_root=releases_root,
+                                identity=identity, promoted_sha=sha, previous_sha=prior,
+                                quiescence_lease=lease,
+                            )
+                        elif current_sha == prior:
+                            result = {"ok": True, "sha": prior}
+                        else:
+                            raise LifecycleRejected("active release does not match the recovery record")
+                    broker._record_promotion_failure(state_path, sha, prior, identity.fence(), restored=True)
+                    with lease.operation():
+                        lease.confirm_rollback()
                     return {"ok": True, "operation": operation, "sourceSha": result["sha"],
                             "rolledBackSha": sha, "runId": str(run_id), "runAttempt": run_attempt,
                             "jobId": str(job_id)}

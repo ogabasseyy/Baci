@@ -1,7 +1,8 @@
 [Unit]
 Description=Baci cache invalidation HTTP scheduler
-After=network-online.target
+After=network-online.target baci-worker-release-broker.service
 Wants=network-online.target
+BindsTo=baci-worker-release-broker.service
 
 [Service]
 Type=oneshot
@@ -12,6 +13,7 @@ EnvironmentFile=/srv/baci-workers/runtime/worker.env
 Environment=HOME=/srv/baci-workers/home
 Environment=NODE_ENV=production
 Environment=CACHE_INVALIDATION_STATE_FILE=/srv/baci-workers/shared/cache-invalidations.json
+ExecCondition=/usr/local/lib/baci-worker-broker/worker-release-launch-gate scheduled
 ExecStart=/usr/bin/flock -n /srv/baci-workers/locks/cache-invalidations.lock /usr/bin/timeout --signal=TERM --kill-after=10s 75s /usr/bin/node /srv/baci-workers/current/jobs/run-cache-invalidation-cron.mjs
 NoNewPrivileges=true
 PrivateTmp=true

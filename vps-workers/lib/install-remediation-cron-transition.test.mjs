@@ -14,6 +14,19 @@ describe('remediation cron transition', () => {
     assert.doesNotMatch(outcome.crontab, /remote\/locks\/vercel-error-remediator\.lock/);
   });
 
+  it('creates remediation rows with the recovery gate after both flocks', () => {
+    const outcome = runTransition('interleaving');
+    const row = outcome.crontab.split('\n').find(line => line.includes('vercel-error-remediator.mjs'));
+
+    assert.equal(outcome.result.status, 0, outcome.result.stderr);
+    assert.ok(row);
+    const workerLock = row.indexOf('vercel-error-remediator.lock');
+    const globalLock = row.indexOf('error-remediator-global.lock');
+    const gate = row.indexOf('worker-release-launch-gate scheduled');
+    const node = row.indexOf('exec /usr/local/bin/node');
+    assert.ok(workerLock >= 0 && globalLock > workerLock && gate > globalLock && node > gate);
+  });
+
   it('times out with a diagnostic when a legacy lock remains held', () => {
     const outcome = runTransition('lock-timeout');
 

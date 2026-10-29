@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import json
 import os
+import re
 import stat
 from pathlib import Path
 
@@ -17,8 +18,12 @@ DIAGNOSTIC_CATEGORIES = frozenset({
     "lockfile-trust-downgrade", "minimum-release-age", "frozen-lockfile-mismatch",
     "registry-network", "registry-response", "lockfile-policy", "unsupported-pnpm-option",
     "filesystem-access", "dependency-resolution", "pnpm-exit", "policy-rejected",
-    "filesystem-error", "preverify-timeout", "operation-error",
+    "filesystem-error", "preverify-timeout", "operation-error", "policy-pass-marker-missing",
+    "registry-policy", "source-policy-invalid", "metadata-cache-bound", "metadata-cache-invalid",
+    "pnpm-version-mismatch", "source-policy-mutated",
 })
+POLICY_PASS_MARKER = "Lockfile passes supply-chain policies"
+_ANSI_ESCAPE = re.compile(r"\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\))")
 
 
 class PnpmStepRejected(BuilderRejected):
@@ -95,6 +100,37 @@ def pnpm_failure_category(output: str) -> str:
     if any(token in sample for token in ("lockfile", "resolution", "could not resolve", "no matching version")):
         return "dependency-resolution"
     return "pnpm-exit"
+
+
+def policy_rejection_category(message: str) -> tuple[str, str]:
+    """Map fixed policy exception messages to closed stage/category pairs."""
+    sample = message.lower()
+    if "pnpm preverify web-deploy did not report" in sample:
+        return "preverify-web-deploy", "policy-pass-marker-missing"
+    if "pnpm preverify worker-install did not report" in sample:
+        return "preverify-worker-install", "policy-pass-marker-missing"
+    if "pnpm version" in sample or "runtime differs" in sample:
+        return "policy-preverify", "pnpm-version-mismatch"
+    if "registry" in sample or "npmrc" in sample:
+        return "policy-preverify", "registry-policy"
+    if "cache exceeds its byte limit" in sample:
+        return "policy-preverify", "metadata-cache-bound"
+    if "policy cache" in sample or "metadata cache" in sample:
+        return "policy-preverify", "metadata-cache-invalid"
+    if "changed a lockfile or policy" in sample:
+        return "policy-preverify", "source-policy-mutated"
+    if "policy input" in sample or "lockfile" in sample:
+        return "policy-preverify", "source-policy-invalid"
+    return "policy-preverify", "policy-rejected"
+
+
+def has_policy_pass_marker(stdout: str, stderr: str) -> bool:
+    """Require a standalone pnpm success line after removing terminal escapes."""
+    for output in (stdout, stderr):
+        normalized = _ANSI_ESCAPE.sub("", output)
+        if any(line.strip() == POLICY_PASS_MARKER for line in normalized.splitlines()):
+            return True
+    return False
 
 
 def run_pnpm_checked(command: tuple[str, ...], *, cwd, env=None, timeout: int, stage: str):

@@ -24,6 +24,8 @@ from worker_release_actual_dependency_guard import (
 )
 from worker_release_dependency_diagnostics import (
     PnpmStepRejected,
+    has_policy_pass_marker,
+    policy_rejection_category,
     pnpm_failure_category,
     read_diagnostic,
     write_diagnostic,
@@ -81,6 +83,15 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         self.assertEqual((error.safe_stage, error.safe_category, error.exit_code),
                          ("preverify-web-deploy", "lockfile-trust-downgrade", 17))
         self.assertNotIn("private-token", str(error))
+        self.assertEqual(
+            policy_rejection_category("pnpm preverify worker-install did not report lockfile supply-chain policy verification"),
+            ("preverify-worker-install", "policy-pass-marker-missing"),
+        )
+
+    def test_policy_pass_marker_requires_exact_line_after_ansi_normalization(self):
+        self.assertTrue(has_policy_pass_marker("", "\x1b[32mLockfile passes supply-chain policies\x1b[0m\n"))
+        self.assertFalse(has_policy_pass_marker("progress: Lockfile passes supply-chain policies passed", ""))
+        self.assertFalse(has_policy_pass_marker("Lockfile passes supply-chain policies for package-x", ""))
 
     def test_policy_child_main_writes_stage_category_without_raw_pnpm_output(self):
         from contextlib import redirect_stderr

@@ -681,7 +681,9 @@ class DependencyBuilderTests(unittest.TestCase):
                 if command[-1] == "--version":
                     return type("Result", (), {"stdout": "11.7.0\n"})()
                 (cache / "registry-metadata.json").write_text("verified", encoding="utf-8")
-                return type("Result", (), {"stdout": "Lockfile passes supply-chain policies"})()
+                marker = "Lockfile passes supply-chain policies"
+                return (type("Result", (), {"stdout": "", "stderr": marker})()
+                        if len(calls) == 3 else type("Result", (), {"stdout": marker, "stderr": ""})())
 
             with patch.object(policy_cache.subprocess, "run", side_effect=run):
                 policy_cache.preverify(source, store, cache, "/fixed/pnpm")
@@ -757,11 +759,35 @@ class DependencyBuilderTests(unittest.TestCase):
             cache.mkdir()
             with patch.object(policy_cache.subprocess, "run", side_effect=[
                 type("Result", (), {"stdout": "11.7.0\n"})(),
-                type("Result", (), {"stdout": "Lockfile is up to date"})(),
+                type("Result", (), {"stdout": "progress: Lockfile passes supply-chain policies (message text only)"})(),
             ]):
-                with self.assertRaisesRegex(policy_cache.BuilderRejected, "did not report"):
+                with self.assertRaises(policy_cache.BuilderRejected) as raised:
                     policy_cache.preverify(source, store, cache, "/fixed/pnpm")
+            self.assertEqual(raised.exception.safe_stage, "preverify-web-deploy")
+            self.assertEqual(raised.exception.safe_category, "policy-pass-marker-missing")
+            self.assertEqual(raised.exception.exit_code, 0)
             self.assertFalse((store / policy_cache.RECEIPT_NAME).exists())
+
+    def test_policy_pass_marker_on_stderr_is_still_checked_without_relaxing_marker(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = make_source(root)
+            for relative in policy_cache.POLICY_FILES:
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("minimumReleaseAge: 1440\ntrustPolicy: no-downgrade\n", encoding="utf-8")
+            store = root / "store"
+            store.mkdir()
+            cache = root / "cache"
+            cache.mkdir(mode=0o700)
+            (cache / "registry-metadata.json").write_text("verified", encoding="utf-8")
+            result = lambda stdout, stderr="": type("Result", (), {"stdout": stdout, "stderr": stderr})()
+            with patch.object(policy_cache.subprocess, "run", side_effect=[
+                result("11.7.0\n"), result("", "Lockfile passes supply-chain policies"),
+                result("Lockfile passes supply-chain policies"),
+            ]):
+                policy_cache.preverify(source, store, cache, "/fixed/pnpm")
+            self.assertTrue((store / policy_cache.RECEIPT_NAME).is_file())
 
     def test_policy_preverify_reports_fixed_stage_and_category_without_raw_output(self):
         with tempfile.TemporaryDirectory() as temporary:

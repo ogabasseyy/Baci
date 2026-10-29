@@ -10,7 +10,11 @@ from typing import Sequence
 
 from worker_release_dependency_artifacts import BuilderRejected
 import worker_release_dependency_policy_cache as policy
-from worker_release_dependency_diagnostics import PnpmStepRejected, write_diagnostic
+from worker_release_dependency_diagnostics import (
+    PnpmStepRejected,
+    policy_rejection_category,
+    write_diagnostic,
+)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -45,7 +49,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif isinstance(exc, OSError):
             stage, category, exit_code = "policy-preverify", "filesystem-error", None
         else:
-            stage, category, exit_code = "policy-preverify", "policy-rejected", None
+            stage, category = policy_rejection_category(str(exc))
+            exit_code = None
         if args.diagnostic_file is not None:
             try:
                 write_diagnostic(args.diagnostic_file, stage, category, exit_code)

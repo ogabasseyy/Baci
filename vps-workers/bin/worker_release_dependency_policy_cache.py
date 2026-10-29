@@ -42,6 +42,7 @@ from worker_release_dependency_registry_policy import (
 )
 from worker_release_dependency_diagnostics import (
     PnpmStepRejected,
+    has_policy_pass_marker,
     run_pnpm_checked,
     write_diagnostic,
 )
@@ -251,8 +252,9 @@ def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/u
             for stage, (command, cwd) in zip(("web-deploy", "worker-install"), commands, strict=True):
                 result = run_pnpm_checked(command, cwd=cwd, env=env, timeout=240,
                                           stage=f"preverify {stage}")
-                if "Lockfile passes supply-chain policies" not in result.stdout:
-                    raise BuilderRejected(f"pnpm preverify {stage} did not report lockfile supply-chain policy verification")
+                if not has_policy_pass_marker(getattr(result, "stdout", "") or "",
+                                              getattr(result, "stderr", "") or ""):
+                    raise PnpmStepRejected(f"preverify-{stage}", "policy-pass-marker-missing", 0)
     if before != _input_hashes(source):
         raise BuilderRejected("pnpm changed a lockfile or policy during preverification")
     receipt = make_receipt(source, cache, version, cache_max_bytes=cache_max_bytes)

@@ -22,6 +22,7 @@ from worker_release_broker_dispatch import (
     _latch_matches_authenticated_fence, _latched_operation_is_allowed,
     _release_state_matches_fence,
 )
+from worker_release_runtime_test_fixtures import create_runtime_tree, runtime_archive_entries
 
 
 def make_archive(entries):
@@ -373,10 +374,10 @@ class AtomicStageTests(unittest.TestCase):
             releases = Path(temp) / "releases"
             releases.mkdir()
             sha = "a" * 40
-            archive = make_archive([directory("repo/"), regular("repo/worker.mjs", b"ready")]).getvalue()
-            with patch("worker_release_broker._run_as_worker_extractor", side_effect=lambda raw, path, _uid, _gid: extract_github_tarball(io.BytesIO(raw), path)), patch("worker_release_broker._freeze_release_tree", side_effect=lambda path, gid: _freeze_release_tree(path, gid, owner_uid=os.getuid())):
-                count = _stage_archive(archive, str(releases), sha, os.getuid(), os.getgid())
-            self.assertEqual(count, 1)
+            archive = make_archive([directory("repo/"), regular("repo/worker.mjs", b"ready"), *runtime_archive_entries()]).getvalue()
+            with patch("worker_release_broker._run_as_worker_extractor", side_effect=lambda raw, path, _uid, _gid: extract_github_tarball(io.BytesIO(raw), path)), patch("worker_release_broker._freeze_release_tree", side_effect=lambda path, gid, owner_uid=0: _freeze_release_tree(path, gid, owner_uid=os.getuid())):
+                count = _stage_archive(archive, str(releases), sha, os.getuid(), os.getgid(), owner_uid=os.getuid())
+            self.assertEqual(count, 11)
             self.assertEqual((releases / sha / "worker.mjs").read_bytes(), b"ready")
             self.assertEqual((releases / sha / "worker.mjs").stat().st_mode & 0o777, 0o440)
             self.assertFalse((releases / f".{sha}.incoming").exists())
@@ -396,11 +397,12 @@ class AtomicStageTests(unittest.TestCase):
                 regular("repo/vps-workers/lib/gigl-tracking-scoped-env.sh", b"# scoped env\n"),
                 regular("repo/vps-workers/config/worker.json", b"{}\n"),
                 regular("repo/vps-workers/systemd/baci-event-delivery-worker.service", b"[Service]\n"),
+                *runtime_archive_entries(),
             ]
             archive = make_archive(entries).getvalue()
             with patch("worker_release_broker._run_as_worker_extractor", side_effect=lambda raw, path, _uid, _gid: extract_github_tarball(io.BytesIO(raw), path)), \
-                    patch("worker_release_broker._freeze_release_tree", side_effect=lambda path, gid: _freeze_release_tree(path, gid, owner_uid=os.getuid())):
-                _stage_archive(archive, str(releases), sha, os.getuid(), os.getgid())
+                    patch("worker_release_broker._freeze_release_tree", side_effect=lambda path, gid, owner_uid=0: _freeze_release_tree(path, gid, owner_uid=os.getuid())):
+                _stage_archive(archive, str(releases), sha, os.getuid(), os.getgid(), owner_uid=os.getuid())
             release = releases / sha
             current = Path(temp) / "current"
             current.symlink_to(Path("releases") / sha)
@@ -424,14 +426,14 @@ class AtomicStageTests(unittest.TestCase):
             releases.mkdir()
             sha = "b" * 40
             bad_archive = make_archive([regular("repo/../escape", b"bad")]).getvalue()
-            with patch("worker_release_broker._run_as_worker_extractor", side_effect=lambda raw, path, _uid, _gid: extract_github_tarball(io.BytesIO(raw), path)), patch("worker_release_broker._freeze_release_tree", side_effect=lambda path, gid: _freeze_release_tree(path, gid, owner_uid=os.getuid())):
+            with patch("worker_release_broker._run_as_worker_extractor", side_effect=lambda raw, path, _uid, _gid: extract_github_tarball(io.BytesIO(raw), path)), patch("worker_release_broker._freeze_release_tree", side_effect=lambda path, gid, owner_uid=0: _freeze_release_tree(path, gid, owner_uid=os.getuid())):
                 with self.assertRaises(BrokerProtocolError):
-                    _stage_archive(bad_archive, str(releases), sha, os.getuid(), os.getgid())
+                    _stage_archive(bad_archive, str(releases), sha, os.getuid(), os.getgid(), owner_uid=os.getuid())
             self.assertFalse((releases / f".{sha}.incoming").exists())
             self.assertFalse((releases / sha).exists())
-            good_archive = make_archive([regular("repo/worker.mjs", b"retry")]).getvalue()
-            with patch("worker_release_broker._run_as_worker_extractor", side_effect=lambda raw, path, _uid, _gid: extract_github_tarball(io.BytesIO(raw), path)), patch("worker_release_broker._freeze_release_tree", side_effect=lambda path, gid: _freeze_release_tree(path, gid, owner_uid=os.getuid())):
-                _stage_archive(good_archive, str(releases), sha, os.getuid(), os.getgid())
+            good_archive = make_archive([regular("repo/worker.mjs", b"retry"), *runtime_archive_entries()]).getvalue()
+            with patch("worker_release_broker._run_as_worker_extractor", side_effect=lambda raw, path, _uid, _gid: extract_github_tarball(io.BytesIO(raw), path)), patch("worker_release_broker._freeze_release_tree", side_effect=lambda path, gid, owner_uid=0: _freeze_release_tree(path, gid, owner_uid=os.getuid())):
+                _stage_archive(good_archive, str(releases), sha, os.getuid(), os.getgid(), owner_uid=os.getuid())
             self.assertEqual((releases / sha / "worker.mjs").read_bytes(), b"retry")
 
     def test_refuses_existing_final_release(self):
@@ -441,8 +443,7 @@ class AtomicStageTests(unittest.TestCase):
             sha = "c" * 40
             (releases / sha).mkdir()
             with self.assertRaisesRegex(BrokerProtocolError, "already exists"):
-                _stage_archive(b"unused", str(releases), sha, os.getuid(), os.getgid())
-
+                _stage_archive(b"unused", str(releases), sha, os.getuid(), os.getgid(), owner_uid=os.getuid())
 
 class ReadOnlyPreflightTests(unittest.TestCase):
     def test_accepts_only_complete_immutable_root_owned_tree(self):
@@ -453,8 +454,9 @@ class ReadOnlyPreflightTests(unittest.TestCase):
             release.mkdir(mode=0o750)
             (release / "worker.mjs").write_text("ready")
             (release / "worker.mjs").chmod(0o440)
+            create_runtime_tree(release)
             release.chmod(0o550)
-            self.assertEqual(_validate_staged_release(str(releases), release.name, os.getgid(), owner_uid=os.getuid()), 1)
+            self.assertGreater(_validate_staged_release(str(releases), release.name, os.getgid(), owner_uid=os.getuid()), 1)
             (release / "worker.mjs").chmod(0o640)
             with self.assertRaisesRegex(BrokerProtocolError, "file ownership or mode"):
                 _validate_staged_release(str(releases), release.name, os.getgid(), owner_uid=os.getuid())
@@ -472,7 +474,6 @@ class ReadOnlyPreflightTests(unittest.TestCase):
                     _validate_staged_release(str(releases), release.name, os.getgid(), owner_uid=os.getuid())
             finally:
                 release.chmod(0o750)
-
 
 class PromotionFailureStateTests(unittest.TestCase):
     def test_successful_pointer_promotion_is_not_marked_healthy_before_probe(self):

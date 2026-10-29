@@ -108,7 +108,50 @@ def _freeze_release_tree(destination: str, worker_gid: int, *, owner_uid: int = 
     broker.os.chmod(destination, 0o550)
 
 
-def _stage_archive(archive: bytes, releases_root: str, sha: str, worker_uid: int, worker_gid: int) -> int:
+def _validate_runtime_dependencies(root: str, *, owner_uid: int, worker_gid: int) -> None:
+    """Require the frozen dependency paths consumed by worker launchers.
+
+    This is a structural gate only: it proves that the immutable release has
+    the required materialized paths, not where their contents came from.
+    Dependency builders must materialize pnpm links before this boundary;
+    staged releases reject symlinks throughout.
+    """
+    def require_directory(relative: str) -> str:
+        path = broker.os.path.join(root, relative)
+        try:
+            metadata = broker.os.lstat(path)
+        except OSError as error:
+            raise broker.BrokerProtocolError("staged release is missing required runtime dependencies") from error
+        if (not broker.stat.S_ISDIR(metadata.st_mode) or metadata.st_uid != owner_uid
+                or metadata.st_gid != worker_gid or broker.stat.S_IMODE(metadata.st_mode) != 0o550):
+            raise broker.BrokerProtocolError("staged runtime dependency directory is unsafe")
+        return path
+
+    root_modules = require_directory("node_modules")
+    web_modules = require_directory("apps/web/node_modules")
+    bin_dir = require_directory("apps/web/node_modules/.bin")
+    # Empty dependency roots are the archive-only case this gate is meant to
+    # prevent. Inspect entry types without following links.
+    for path in (root_modules, web_modules):
+        try:
+            entries = list(broker.os.scandir(path))
+        except OSError as error:
+            raise broker.BrokerProtocolError("staged release runtime dependencies are unreadable") from error
+        if not entries or any(entry.is_symlink() for entry in entries):
+            raise broker.BrokerProtocolError("staged release is missing required runtime dependencies")
+    tsx = broker.os.path.join(bin_dir, "tsx")
+    try:
+        metadata = broker.os.lstat(tsx)
+    except OSError as error:
+        raise broker.BrokerProtocolError("staged release is missing required web runtime dependencies") from error
+    if (not broker.stat.S_ISREG(metadata.st_mode) or metadata.st_uid != owner_uid
+            or metadata.st_gid != worker_gid or broker.stat.S_IMODE(metadata.st_mode) != 0o550
+            or not metadata.st_mode & 0o111):
+        raise broker.BrokerProtocolError("staged web runtime entrypoint is unsafe")
+
+
+def _stage_archive(archive: bytes, releases_root: str, sha: str, worker_uid: int, worker_gid: int,
+                   *, owner_uid: int = 0) -> int:
     """Extract into a private incoming directory, then publish it atomically by SHA."""
     if not broker.re.fullmatch(r"[0-9a-f]{40}", sha):
         raise broker.BrokerProtocolError("invalid source identity")
@@ -140,7 +183,8 @@ def _stage_archive(archive: bytes, releases_root: str, sha: str, worker_uid: int
             if not broker.os.path.isfile(dotenv) or broker.os.path.islink(dotenv) or broker.os.path.lexists(target):
                 raise broker.BrokerProtocolError("release archive is missing the trusted dotenv reader")
             broker.shutil.copy2(dotenv, target)
-        broker._freeze_release_tree(destination, worker_gid)
+        broker._freeze_release_tree(destination, worker_gid, owner_uid=owner_uid)
+        _validate_runtime_dependencies(destination, owner_uid=owner_uid, worker_gid=worker_gid)
         # releases_root is root-owned and not writable by the extractor identity;
         # the SHA name is therefore stable between the collision check and rename.
         if broker.os.path.lexists(release_path):
@@ -175,4 +219,5 @@ def _validate_staged_release(releases_root: str, sha: str, worker_gid: int, *, o
             entries += 1
     if entries == 0:
         raise broker.BrokerProtocolError("staged release is empty")
+    _validate_runtime_dependencies(root, owner_uid=owner_uid, worker_gid=worker_gid)
     return entries

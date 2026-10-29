@@ -276,6 +276,64 @@ describe('interpretFastCatalogIntent', () => {
     });
   });
 
+  it('treats wireless as an evidence-backed requirement for earbuds', () => {
+    expect(
+      interpretFastCatalogIntent(['Recommend wireless earbuds'], categories)
+    ).toMatchObject({
+      kind: 'search',
+      categoryId: 'earbuds',
+      query: '',
+      wirelessEarbudsOnly: true,
+    });
+    expect(
+      interpretFastCatalogIntent(['Samsung wireless earbuds'], categories)
+    ).toMatchObject({
+      kind: 'search',
+      categoryId: 'earbuds',
+      query: 'Samsung',
+      wirelessEarbudsOnly: true,
+    });
+    expect(
+      interpretFastCatalogIntent(['earbuds without wireless'], categories)
+    ).toMatchObject({
+      kind: 'clarify',
+      reason: 'options',
+    });
+  });
+
+  it.each([
+    'non-wireless earbuds',
+    'not wireless earbuds',
+    'non bluetooth earbuds',
+    "I don't want wireless earbuds",
+    "earbuds that aren't wireless",
+    'wired earbuds instead of wireless',
+    'I don’t want wireless earbuds',
+  ])('does not reverse an excluded wireless requirement: %s', (message) => {
+    expect(interpretFastCatalogIntent([message], categories)).toMatchObject({
+      kind: 'clarify',
+      reason: 'options',
+    });
+  });
+
+  it('recognizes an intent to order a phone as a catalog search', () => {
+    expect(
+      interpretFastCatalogIntent(['I want to order an iPhone 16'], categories)
+    ).toMatchObject({ kind: 'search', query: 'iPhone 16' });
+    expect(
+      interpretFastCatalogIntent(
+        ['I want to order an iPhone 16 and cancel my order'],
+        categories
+      )
+    ).toBeNull();
+  });
+
+  it('normalizes a plural iPhone shopping request while preserving its budget', () => {
+    expect(
+      interpretFastCatalogIntent(['Show me iPhones under 500000'], categories)
+    ).toMatchObject({ kind: 'search', query: 'iPhone', maxPrice: 500000 });
+  });
+
   it('uses the earbuds category for a generic earbuds request', () => {
     expect(
       interpretFastCatalogIntent(['best earbuds'], categories)

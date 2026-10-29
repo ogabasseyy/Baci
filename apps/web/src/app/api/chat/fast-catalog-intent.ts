@@ -16,6 +16,7 @@ export type FastCatalogIntent =
       isPhoneCategory: boolean;
       isAccessory?: boolean;
       phoneProtectiveAccessory?: boolean;
+      wirelessEarbudsOnly?: boolean;
       phoneCategoryIds?: string[];
       preference?: string;
     };
@@ -27,7 +28,7 @@ const NON_CATALOG_REQUEST =
 const CONTEXTUAL_PRICE =
   /^(?:how much(?:\s+(?:is|for)\s+(?:it|that|this))?|what(?:['’]s| is)\s+(?:the\s+)?(?:price|cost)(?:\s+(?:(?:of|for)\s+)?(?:it|that|this))?|(?:the\s+)?(?:price|cost))[?!.\s]*$/i;
 const SHOPPING_REQUEST =
-  /\b(?:recommend|recommendation|suggest|looking for|buy|shop|price|cost|how much|phone|phones|smartphone|smartphones|iphone|pixel|laptop|laptops|macbook|tablet|tablets|ipad|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
+  /\b(?:recommend|recommendation|suggest|looking for|buy|shop|price|cost|how much|phone|phones|smartphone|smartphones|iphones?|pixel|laptop|laptops|macbook|tablet|tablets|ipad|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
 const FOLLOW_UP =
   /\b(?:under|below|budget|cheaper|less|more|instead|wifi|wi-fi|used|new)\b/i;
 const BUDGET_WORD =
@@ -38,7 +39,7 @@ const MAX_PRICE =
 const UNCHECKED_OPTION =
   /\b(?:brand[\s-]*new|new|used|refurbished|second[\s-]*hand|pre[\s-]*owned|open[\s-]*box|\d+(?:\.\d+)?\s*(?:gb|tb)|black|blue|red|green|purple|pink|white|gold|silver|gray|grey|titanium|e-?sim|physical\s+sim|dual[\s-]*sim)\b/i;
 const PHONE_SIGNAL =
-  /\b(?:smartphones?|phones?|iphone|pixel|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
+  /\b(?:smartphones?|phones?|iphones?|pixel|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
 const LAPTOP_SIGNAL = /\b(?:laptops?|macbook|notebook)\b/i;
 const TABLET_SIGNAL = /\b(?:tablets?|ipad)\b/i;
 const ACCESSORY_SIGNAL =
@@ -101,6 +102,7 @@ function getMaximumPrice(
 
 function searchText(text: string): string {
   return normalizeAccessoryNouns(text)
+    .replace(/\biphones\b/gi, 'iPhone')
     .replace(/\bi['’](?:m|d|ll|ve)\b/gi, ' ')
     .replace(new RegExp(MAX_PRICE.source, 'gi'), ' ')
     .replace(
@@ -108,7 +110,7 @@ function searchText(text: string): string {
       ' '
     )
     .replace(
-      /\b(?:show|me|find|please|recommend|recommendation|suggest|looking|for|buy|shop|best|good|great|cheap|affordable|gaming|camera|battery|with|under|smartphones?|phones?|laptops?|tablets?|a|an|the|my|what|which|is|am|are|available|can|i|need|want|get|do|does|you|have|of|and|how|much|price|cost|any|in|store|to|it|that|this)\b/gi,
+      /\b(?:show|me|find|please|recommend|recommendation|suggest|looking|for|buy|order|shop|best|good|great|cheap|affordable|gaming|camera|battery|with|under|smartphones?|phones?|laptops?|tablets?|a|an|the|my|what|which|is|am|are|available|can|i|need|want|get|do|does|you|have|of|and|how|much|price|cost|any|in|store|to|it|that|this)\b/gi,
       ' '
     )
     .replace(/[?!.,;:]+/g, ' ')
@@ -122,9 +124,16 @@ export function interpretFastCatalogIntent(
   categories: FastCatalogCategory[]
 ): FastCatalogIntent | null {
   const latest = userMessages.at(-1)?.trim() ?? '';
+  const orderAsPurchase =
+    /\border\s+(?:me\s+)?(?:an?\s+)?(?:iphones?|smartphones?|phones?|laptops?|tablets?|chargers?|earbuds?|cases?)\b/i.test(
+      latest
+    );
+  const actionText = orderAsPurchase
+    ? latest.replace(/\border\b/i, 'buy')
+    : latest;
   if (
     !latest ||
-    ACTION_REQUEST.test(latest) ||
+    ACTION_REQUEST.test(actionText) ||
     NON_CATALOG_REQUEST.test(latest)
   )
     return null;
@@ -145,13 +154,27 @@ export function interpretFastCatalogIntent(
 
   const category = resolveCategory(text, categories);
   const priceLimit = getMaximumPrice(latest) ?? getMaximumPrice(text);
+  const wirelessEarbudsOnly =
+    category?.slug.toLowerCase() === 'earbuds' &&
+    /\b(?:wireless|bluetooth)\b/i.test(text);
+  if (
+    wirelessEarbudsOnly &&
+    /(?:\b(?:not|no|without|avoid|exclude|except|never|non|don['’]?t|doesn['’]?t|isn['’]?t|aren['’]?t|instead\s+of|rather\s+than|other\s+than)\b|\bnon[\s-]*(?:wireless|bluetooth)\b)/i.test(
+      text
+    )
+  ) {
+    return { kind: 'clarify', reason: 'options' };
+  }
+  const searchInput = wirelessEarbudsOnly
+    ? text.replace(/\b(?:true\s+)?(?:wireless|bluetooth)\b/gi, ' ')
+    : text;
   const query =
     category?.slug.toLowerCase() === 'earbuds'
-      ? searchText(text)
+      ? searchText(searchInput)
           .replace(/\bearbud\b/gi, ' ')
           .replace(/\s+/g, ' ')
           .trim()
-      : searchText(text);
+      : searchText(searchInput);
   if (priceFollowUp && !query) return { kind: 'clarify', reason: 'product' };
   if (
     !category &&
@@ -222,6 +245,7 @@ export function interpretFastCatalogIntent(
     wifiOnly,
     isPhoneCategory: !!category && phoneCategoryIds.includes(category.id),
     ...(ACCESSORY_SIGNAL.test(text) ? { isAccessory: true } : {}),
+    ...(wirelessEarbudsOnly ? { wirelessEarbudsOnly: true } : {}),
     ...(/\b(?:cases?|screen[\s-]*protectors?)\b/i.test(text) &&
     PHONE_SIGNAL.test(text)
       ? { phoneProtectiveAccessory: true }

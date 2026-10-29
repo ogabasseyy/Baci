@@ -5,8 +5,8 @@ import type { AiChatProvider } from '@/env';
 import { buildStorefrontDisplayData } from '@/lib/agentic/storefront-display-data';
 import { createStaticChatFallbackResponse } from './route-helpers';
 
-const PER_PROVIDER_TIMEOUT_MS = 10_000;
-const MAX_CHAIN_TIMEOUT_MS = 20_000;
+const PER_PROVIDER_TIMEOUT_MS = 6_000;
+const MAX_CHAIN_TIMEOUT_MS = 12_000;
 const COMMERCE_ACTION =
   /\b(?:cart|checkout|orders?|payments?|paid|pay|transfer|bank|cancel\w*|refund\w*|returns?|exchange\w*|receipt|tracking|track|shipping|deliver\w*|warrant(?:y|ies)|instal{1,2}ments?|add\s+(?:it|this|that|them|these|those|one))\b/i;
 const NEGOTIATION =
@@ -21,6 +21,8 @@ const BUSINESS_FACT_REQUEST =
   /\b(?:address|location|located|opening\s+(?:time|hours)|closing\s+(?:time|hours)|(?:business|store|shop)\s+hours|when\s+do\s+you\s+(?:open|close)|phone\s+(?:number|no)|email(?:\s+address)?)\b/i;
 const UNGROUNDED_REPLY =
   /[\p{N}₦$€£]|\b(?:naira|iphone|ipad|macbook|airpods|apple|samsung|galaxy|sony|nokia|oppo|vivo|huawei|tecno|infinix|xiaomi|redmi|pixel|itel|oraimo|anker|shipping|delivery|warranty|refund|returns?|exchang\w*|in\s+(?:your|the)\s+cart|(?:added|removed)\s+(?:it|this|that|the\s+item)|in[\s-]+stock|out[\s-]+of[\s-]+stock|(?:is|are)\s+available|available\s+now|guaranteed|(?:is|are|works|fits)\s+compatible)\b/iu;
+const UNVERIFIED_COMMERCE_ACTION =
+  /\b(?:cancel(?:l)?ed|refunded|charged|shipped|delivered|paid)\b|\b(?:order|payment|purchase|transfer|account|transaction|receipt|checkout|cart)\b[^.!?\n]{0,80}\b(?:confirmed|processed|completed|successful|received|placed|created|generated|issued|ready|activated|settled|approved|sent)\b|\b(?:confirmed|processed|completed|placed|created|generated|issued|opened|sent)\b[^.!?\n]{0,80}\b(?:order|payment|purchase|transfer|account|transaction|receipt|checkout|cart)\b|\b(?:i|we)(?:['’](?:ve|ll)|\s+(?:have|will|just))?\s+(?:did|done|handled|completed|processed|created|issued|sent)\s+(?:it|that|this)\b/i;
 const UNVERIFIED_RECOMMENDATION =
   /\b(?:(?:i|we)\s+(?:(?:would|do)\s+)?(?:recommend|suggest)\s+(?:a|an|the|buying|getting)|you\s+(?:should|could)\s+(?:buy|get|choose|consider))\b/i;
 const UNVERIFIED_PRODUCT_RECOMMENDATION =
@@ -176,6 +178,7 @@ export async function runOgabasseyConversation(options: {
         );
         return (
           !UNGROUNDED_REPLY.test(claimCheckText) &&
+          !UNVERIFIED_COMMERCE_ACTION.test(text) &&
           !UNVERIFIED_RECOMMENDATION.test(text) &&
           !UNVERIFIED_PRODUCT_RECOMMENDATION.test(text)
         );

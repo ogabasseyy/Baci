@@ -88,6 +88,30 @@ describe('chat route fast catalog response', () => {
     expect(mocks.conversation).not.toHaveBeenCalled();
   });
 
+  it('routes a cancellation request to a customer-confirmed account action without a model or side effect', async () => {
+    const response = await POST(
+      new Request('https://ogabassey.com/api/chat', {
+        method: 'POST',
+        headers: {
+          Accept: storefrontAgentUiContract.mediaType,
+          'Content-Type': 'application/json',
+          'x-baci-chat-order-actions': '1',
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: 'Cancel my order #12345' }],
+        }),
+      })
+    );
+    expect(response.headers.get('x-baci-chat-action')).toBe('orders');
+    expect(response.headers.get('x-baci-santa-merchant-slug')).toBe(
+      'ogabassey'
+    );
+    expect(await response.json()).toMatchObject({ version: 1, events: [] });
+    expect(mocks.fast).not.toHaveBeenCalled();
+    expect(mocks.conversation).not.toHaveBeenCalled();
+    expect(mocks.ollama).not.toHaveBeenCalled();
+  });
+
   it('uses the preferred conversation before the existing slower provider', async () => {
     mocks.conversation.mockResolvedValue(
       new Response('Hello from the assistant')

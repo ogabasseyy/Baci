@@ -100,6 +100,18 @@ function catalogMatchesModel(
   return required.length > 0 && required.every((word) => actual.has(word));
 }
 
+function catalogHasWirelessEarbudEvidence(
+  name: string,
+  description: string | null
+): boolean {
+  const text = `${name} ${description ?? ''}`;
+  const wirelessEarbuds =
+    /\b(?:true\s+)?(?:wireless|bluetooth)\s+(?:(?:in[\s-]*ear|stereo)\s+)?(?:earbuds?|earphones?)\b/i;
+  const negated =
+    /\b(?:(?:not|no|never|without)\s+|non[\s-]*)(?:true\s+)?(?:wireless|bluetooth)\s+(?:(?:in[\s-]*ear|stereo)\s+)?(?:earbuds?|earphones?)\b/i;
+  return wirelessEarbuds.test(text) && !negated.test(text);
+}
+
 function catalogNamesPhoneAccessory(name: string): boolean {
   return /\b(?:phones?|smartphones?|iphone|pixel\s*\d+|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i.test(
     name
@@ -154,6 +166,8 @@ export async function loadFastCatalogProducts(
         row.status === 'active' &&
         (!intent.phoneProtectiveAccessory ||
           catalogNamesPhoneAccessory(row.name)) &&
+        (!intent.wirelessEarbudsOnly ||
+          catalogHasWirelessEarbudEvidence(row.name, row.description)) &&
         (!rankedIds ||
           (rankedIds.has(row.id) &&
             catalogMatchesModel(intent.query, row.name, row.brand))) &&

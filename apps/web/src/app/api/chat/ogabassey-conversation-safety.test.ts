@@ -71,6 +71,44 @@ it.each([
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
+it.each([
+  'Your order has been cancelled.',
+  'Your payment has been confirmed.',
+  'It has been delivered.',
+  'I have processed your order.',
+  'Your virtual account has been created.',
+  'I have done it for you.',
+])('rejects an unverified commerce-action claim: %s', async (unsafe) => {
+  const reply = (text: string) =>
+    new Response(
+      JSON.stringify({
+        id: 'mock',
+        created: 1_700_000_000,
+        model: 'model',
+        choices: [
+          {
+            index: 0,
+            finish_reason: 'stop',
+            message: { role: 'assistant', content: text },
+          },
+        ],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      }),
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(reply(unsafe))
+    .mockResolvedValueOnce(reply('How can I help you?'));
+  vi.stubGlobal('fetch', fetchMock);
+  const result = await runOgabasseyConversation({
+    ...options(),
+    messages: [{ role: 'user', content: 'Did you do it?' }],
+  });
+  expect(await result?.text()).toBe('How can I help you?');
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
 it('does not infer a budget answer from earlier unverified product context', async () => {
   const fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
@@ -173,4 +211,49 @@ it('does not start a provider after the route deadline is exhausted', async () =
 
   expect(result?.headers.get('x-baci-chat-fallback')).toBe('static');
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it('switches to the backup promptly when the primary stalls', async () => {
+  const timeoutDurations: number[] = [];
+  const realTimeout = AbortSignal.timeout.bind(AbortSignal);
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation((duration) => {
+    timeoutDurations.push(duration);
+    return realTimeout(timeoutDurations.length === 1 ? 10 : duration);
+  });
+  const fetchMock = vi
+    .fn()
+    .mockImplementation((url: string | URL, init?: RequestInit) => {
+      if (String(url).includes('api.openai.com')) {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(new Error('aborted')),
+            { once: true }
+          );
+        });
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            id: 'mock',
+            created: 1_700_000_000,
+            model: 'deepseek-flash',
+            choices: [
+              {
+                index: 0,
+                finish_reason: 'stop',
+                message: { role: 'assistant', content: 'How can I help you?' },
+              },
+            ],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          }),
+          { headers: { 'Content-Type': 'application/json' } }
+        )
+      );
+    });
+  vi.stubGlobal('fetch', fetchMock);
+  const response = await runOgabasseyConversation(options());
+  expect(await response?.text()).toBe('How can I help you?');
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(timeoutDurations[0]).toBeLessThanOrEqual(6_000);
 });

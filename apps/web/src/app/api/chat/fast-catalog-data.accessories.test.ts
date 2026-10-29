@@ -80,6 +80,66 @@ describe('loadFastCatalogProducts accessories', () => {
     ).toEqual(['Fast Chargers']);
   });
 
+  it('recommends wireless earbuds only when catalog text identifies the earbuds themselves as wireless', async () => {
+    mocks.query.limit.mockResolvedValue({
+      data: [
+        {
+          ...row,
+          id: 'p1',
+          category_id: 'earbuds',
+          name: 'Pixel Buds',
+          description: 'A true wireless earbud set.',
+        },
+        {
+          ...row,
+          id: 'p2',
+          category_id: 'earbuds',
+          name: 'Wired Sound',
+          description: 'Wired earbuds with a wireless charging case.',
+        },
+        {
+          ...row,
+          id: 'p3',
+          category_id: 'earbuds',
+          name: 'Unknown Sound',
+          description: 'Check Bluetooth or wired connection.',
+        },
+        {
+          ...row,
+          id: 'p4',
+          category_id: 'earbuds',
+          name: 'Cable Sound',
+          description: 'These are not wireless earbuds.',
+        },
+        {
+          ...row,
+          id: 'p5',
+          category_id: 'earbuds',
+          name: 'Cabled Model',
+          description: 'Non-wireless earbuds with a cable.',
+        },
+        {
+          ...row,
+          id: 'p6',
+          category_id: 'earbuds',
+          name: 'Wired Model',
+          description: 'Not wireless in-ear earbuds.',
+        },
+      ],
+      error: null,
+    });
+    const products = await loadFastCatalogProducts('merchant-1', {
+      ...intent,
+      categoryId: 'earbuds',
+      query: '',
+      isPhoneCategory: false,
+      isAccessory: true,
+      wirelessEarbudsOnly: true,
+    });
+    expect(products.map((product) => product.name)).toEqual(['Pixel Buds']);
+    expect(mocks.ranked).not.toHaveBeenCalled();
+  });
+
   it('does not present controller or microphone cases as phone cases', async () => {
     mocks.ranked.mockResolvedValue({
       productIds: ['p1', 'p2', 'p3'],

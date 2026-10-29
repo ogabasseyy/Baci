@@ -75,7 +75,7 @@ describe('Ogabassey preferred chat response', () => {
     );
   });
 
-  it('falls through to the existing chat chain when neither path applies', async () => {
+  it('returns a safe fallback when neither preferred path applies', async () => {
     const request = new Request('https://example.com/api/chat');
 
     const result = await tryOgabasseyPreferredResponse(
@@ -86,7 +86,24 @@ describe('Ogabassey preferred chat response', () => {
       () => 30_000
     );
 
-    expect(result).toBeNull();
+    expect(result?.headers.get('x-baci-chat-fallback')).toBe('static');
+  });
+
+  it('records static fallbacks without shopper text', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const request = new Request('https://ogabassey.com/api/chat');
+    await tryOgabasseyPreferredResponse(
+      request,
+      [{ role: 'user', content: 'private shopper text' }],
+      tenant,
+      'auto',
+      () => 30_000
+    );
+    expect(JSON.stringify(warn.mock.calls)).toContain('static_fallback');
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(
+      'private shopper text'
+    );
+    warn.mockRestore();
   });
 
   it('leaves other merchants on their existing chat path', async () => {
@@ -103,6 +120,83 @@ describe('Ogabassey preferred chat response', () => {
 
     expect(result).toBeNull();
     expect(mocks.conversation).not.toHaveBeenCalled();
+  });
+
+  it('offers account actions without exposing order details to the model or legacy clients', async () => {
+    const orderMessages = [
+      { role: 'user' as const, content: 'Cancel my order #12345' },
+    ];
+    const request = new Request('https://ogabassey.com/api/chat', {
+      headers: {
+        Accept: storefrontAgentUiContract.mediaType,
+        'x-baci-chat-order-actions': '1',
+      },
+    });
+    const result = await tryOgabasseyPreferredResponse(
+      request,
+      orderMessages,
+      tenant,
+      'auto',
+      () => 30_000
+    );
+    expect(result?.headers.get('x-baci-chat-action')).toBe('orders');
+    expect(result?.headers.get('x-baci-santa-merchant-slug')).toBe('ogabassey');
+    expect(await result?.json()).toMatchObject({ events: [], version: 1 });
+    expect(mocks.fast).not.toHaveBeenCalled();
+    expect(mocks.conversation).not.toHaveBeenCalled();
+
+    const legacy = await tryOgabasseyPreferredResponse(
+      new Request('https://ogabassey.com/api/chat'),
+      orderMessages,
+      tenant,
+      'auto',
+      () => 30_000
+    );
+    expect(legacy?.headers.get('x-baci-chat-action')).toBeNull();
+    expect(await legacy?.text()).toMatch(/account/i);
+  });
+
+  it('gives safe checkout guidance for a new purchase without falling back to Gemini', async () => {
+    const request = new Request('https://ogabassey.com/api/chat');
+    const result = await tryOgabasseyPreferredResponse(
+      request,
+      [{ role: 'user', content: 'How do I pay?' }],
+      tenant,
+      'auto',
+      () => 30_000
+    );
+    expect(await result?.text()).toMatch(/cart.*checkout/i);
+    expect(mocks.conversation).not.toHaveBeenCalled();
+  });
+
+  it('gives delivery guidance without inventing a fee or falling back to Gemini', async () => {
+    const request = new Request('https://ogabassey.com/api/chat');
+    const result = await tryOgabasseyPreferredResponse(
+      request,
+      [{ role: 'user', content: 'How much is my delivery to Abuja?' }],
+      tenant,
+      'auto',
+      () => 30_000
+    );
+    expect(await result?.text()).toMatch(/delivery.*checkout/i);
+    expect(mocks.conversation).not.toHaveBeenCalled();
+  });
+
+  it('does not enable Ogabassey account actions for another tenant', async () => {
+    const orderMessages = [
+      { role: 'user' as const, content: 'Cancel my order' },
+    ];
+    const request = new Request('https://example.com/api/chat', {
+      headers: { 'x-baci-chat-order-actions': '1' },
+    });
+    const result = await tryOgabasseyPreferredResponse(
+      request,
+      orderMessages,
+      { ...tenant, merchantSlug: 'another-store' },
+      'auto',
+      () => 30_000
+    );
+    expect(result).toBeNull();
   });
 
   it('returns the client-closed response when the request is aborted', async () => {

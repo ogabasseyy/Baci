@@ -46,18 +46,18 @@ export function WalletCheckoutRecoveryView({
     openingRef.current = true;
     setOpening(true);
     setBrowserError(null);
-    try {
-      await openWalletPaystackCheckout(authorizationUrl);
-    } catch {
-      if (mountedRef.current) {
-        setBrowserError(
-          'Could not open Paystack. Check your funding status or try again.'
-        );
-      }
-    } finally {
-      openingRef.current = false;
-      if (mountedRef.current) setOpening(false);
-    }
+    await openWalletPaystackCheckout(authorizationUrl)
+      .catch(() => {
+        if (mountedRef.current) {
+          setBrowserError(
+            'Could not open Paystack. Check your funding status or try again.'
+          );
+        }
+      })
+      .finally(() => {
+        openingRef.current = false;
+        if (mountedRef.current) setOpening(false);
+      });
   };
 
   return (

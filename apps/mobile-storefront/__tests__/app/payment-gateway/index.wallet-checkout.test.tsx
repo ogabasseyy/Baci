@@ -1,5 +1,5 @@
 // Register the shared mocks before importing the mocked modules below.
-import './wallet-checkout.test-support';
+import '@/test-support/wallet-checkout-fixture';
 import {
   afterEach,
   beforeEach,
@@ -18,7 +18,7 @@ import {
 import {
   renderWalletCheckoutScreen,
   setWalletSearchParams,
-} from './wallet-checkout.test-support';
+} from '@/test-support/wallet-checkout-fixture';
 
 describe('Paystack wallet funding checkout', () => {
   beforeEach(() => {

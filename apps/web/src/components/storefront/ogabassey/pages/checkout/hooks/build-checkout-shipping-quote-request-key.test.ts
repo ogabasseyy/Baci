@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { buildQuoteRequestKey as buildKey } from './checkout-shipping-request-key';
+import { buildCheckoutShippingQuoteRequestKey as buildKey } from './build-checkout-shipping-quote-request-key';
 
 const receiver: Parameters<typeof buildKey>[0] = {
   address: '12 Sample Road',

@@ -5,7 +5,7 @@ import { isCheckoutDeliveryAddressReady } from '../is-checkout-delivery-address-
 import { shouldFetchCheckoutShippingQuotes } from '../should-fetch-checkout-shipping-quotes';
 import type { ShippingQuote } from '../types';
 import { getPreferredDoorQuoteId } from '../utils';
-import { buildQuoteRequestKey } from './checkout-shipping-request-key';
+import { buildCheckoutShippingQuoteRequestKey } from './build-checkout-shipping-quote-request-key';
 
 export const CHECKOUT_QUOTE_TIMEOUT_MS = 15_000;
 
@@ -104,7 +104,7 @@ export async function loadCheckoutShippingQuotes(
       ? [receiver.city.trim(), receiver.state.trim()].filter(Boolean).join(', ')
       : receiver.address;
   const requestReceiver = { ...receiver, address: addressForRequest };
-  const requestKey = buildQuoteRequestKey(requestReceiver, cart);
+  const requestKey = buildCheckoutShippingQuoteRequestKey(requestReceiver, cart);
   if (!state.force && requestKey === state.currentRequestKey) return;
   const requestKeyChanged = requestKey !== state.currentRequestKey;
   const requestSequence = invalidatePendingQuoteRequests(

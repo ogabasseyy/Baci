@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -38,8 +38,27 @@ test('public-only verification is explicit and never claims to scan secrets', as
     }));
     const env = { PATH: process.env.PATH };
     assert.throws(() => execFileSync('node', [script, directory, '2.1.663', sha], { env, stdio: 'pipe' }));
-    const result = execFileSync('node', [script, directory, '2.1.663', sha, '--public-only'], { env, encoding: 'utf8' });
+    assert.throws(() => execFileSync('node', [script, directory, '2.1.663', sha, '--public-only'], { env, stdio: 'pipe' }));
+    const verified = execFileSync('node', [script, directory, '2.1.663', sha], {
+      env: { ...env, SENTRY_AUTH_TOKEN: 'synthetic-sentry-secret', STOREFRONT_TIKTOK_APP_SECRET: 'synthetic-tiktok-secret' },
+      encoding: 'utf8',
+    });
+    const digest = verified.match(/Provenance SHA-256: ([a-f0-9]{64})/)?.[1];
+    assert.ok(digest, 'The workflow must emit a trusted provenance digest');
+    const result = execFileSync('node', [script, directory, '2.1.663', sha, '--public-only', digest], { env, encoding: 'utf8' });
     assert.match(result, /private.*not.*scanned/i);
+    assert.throws(() => execFileSync('node', [script, directory, '2.1.663', sha, '--public-only', '0'.repeat(64)], { env, stdio: 'pipe' }));
+    await writeFile(path.join(directory, 'dist', 'bundle.hbc'), `tampered-${sha}`);
+    assert.throws(() => execFileSync('node', [script, directory, '2.1.663', sha, '--public-only', digest], { env, stdio: 'pipe' }));
+    await writeFile(path.join(directory, 'dist', 'bundle.hbc'), `bundle-${sha}`);
+    await writeFile(path.join(directory, 'dist', 'bundle.hbc.map'), '{"tampered":true}');
+    assert.throws(() => execFileSync('node', [script, directory, '2.1.663', sha, '--public-only', digest], { env, stdio: 'pipe' }));
+    await writeFile(path.join(directory, 'dist', 'bundle.hbc.map'), '{}');
+    const configPath = path.join(directory, 'expo-config.json');
+    const changedConfig = JSON.parse(await readFile(configPath, 'utf8'));
+    changedConfig.extra.unverified = true;
+    await writeFile(configPath, JSON.stringify(changedConfig));
+    assert.throws(() => execFileSync('node', [script, directory, '2.1.663', sha, '--public-only', digest], { env, stdio: 'pipe' }));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

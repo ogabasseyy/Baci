@@ -15,6 +15,11 @@ on:
         description: Native build number for the target iOS build
         required: true
         type: string
+      ios_tiktok_configured:
+        description: Verified existing TikTok capability for this runtime
+        required: true
+        type: choice
+        options: ['false', 'true']
 
 permissions:
   contents: read
@@ -43,9 +48,16 @@ jobs:
           [[ "$IOS_BUILD" =~ ^[1-9][0-9]*$ ]]
           [[ "$IOS_RUNTIME" == *".$IOS_BUILD" ]]
           git merge-base --is-ancestor "$SOURCE_SHA" "$GITHUB_SHA"
-          node --test .github/scripts/storefront-ota-export-validation.test.mjs .github/scripts/verify-storefront-ota-export.test.mjs
-          cp .github/scripts/storefront-ota-export-validation.mjs "$RUNNER_TEMP/"
+          node --test .github/scripts/storefront-ota-config-validation.test.mjs .github/scripts/storefront-ota-metadata-validation.test.mjs .github/scripts/storefront-ota-secret-scan.test.mjs .github/scripts/storefront-ota-public-config.test.mjs .github/scripts/verify-storefront-ota-export.test.mjs
+          cp .github/scripts/storefront-ota-config-validation.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-digest-collection.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-digest-validation.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-metadata-validation.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-secret-scan.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-sha256.mjs "$RUNNER_TEMP/"
           cp .github/scripts/verify-storefront-ota-export.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-public-config.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/prepare-storefront-ota-public-config.mjs "$RUNNER_TEMP/"
           cp .github/scripts/storefront-ota-workflow-contract.test.mjs "$RUNNER_TEMP/"
           cp .github/workflows/storefront-ota-export.yml "$RUNNER_TEMP/"
           git checkout --detach "$SOURCE_SHA"
@@ -85,6 +97,7 @@ jobs:
           EXPO_NO_DOTENV: '1'
           IOS_APP_VERSION: ${{ inputs.ios_runtime }}
           IOS_BUILD_NUMBER: ${{ inputs.ios_build }}
+          IOS_TIKTOK_CONFIGURED: ${{ inputs.ios_tiktok_configured }}
           EXPO_PUBLIC_BUILD_SHA: ${{ inputs.source_sha }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
@@ -131,6 +144,7 @@ jobs:
           test ! -f .env
           mkdir -p "$RUNNER_TEMP/storefront-ota"
           pnpm exec expo config --type public --json > "$RUNNER_TEMP/storefront-ota/expo-config.json"
+          node "$RUNNER_TEMP/prepare-storefront-ota-public-config.mjs" "$RUNNER_TEMP/storefront-ota/expo-config.json" "$IOS_TIKTOK_CONFIGURED"
           pnpm exec expo export --platform ios --dump-assetmap --source-maps external --max-workers 2 --output-dir "$RUNNER_TEMP/storefront-ota/dist"
 
       - name: Verify export and reject private values

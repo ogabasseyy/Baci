@@ -15,6 +15,7 @@ import {
   performCustomerLogout,
 } from './customer-auth-session';
 import { publishCustomerIdentity } from './customer-live-identity';
+import { sendCustomerOtpRequest } from './customer-otp-send';
 import { requestCustomerOtpVerification } from './customer-otp-verification';
 
 export interface CustomerUser {
@@ -56,6 +57,7 @@ export interface OtpState {
   email: string;
   codeSent: boolean;
   expiresAt?: number;
+  sentAt?: number;
 }
 
 interface OAuthRedirectResponse {
@@ -161,23 +163,14 @@ export function CustomerAuthProvider({
     email: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const response = await fetch('/api/storefront/auth/send-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, merchantSlug }),
-      });
+      const result = await sendCustomerOtpRequest(email, merchantSlug);
+      if (!result.success) return result;
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        return { success: false, error: data.error || 'Failed to send code' };
-      }
-
-      // Set OTP state with 10 minute expiry
       setOtpState({
         email,
         codeSent: true,
-        expiresAt: Date.now() + 10 * 60 * 1000,
+        expiresAt: result.expiresAt,
+        sentAt: Date.now(),
       });
 
       return { success: true };

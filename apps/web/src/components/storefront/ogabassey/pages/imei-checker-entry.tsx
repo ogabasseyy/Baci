@@ -9,7 +9,7 @@ import {
 } from '@baci/shared/imei';
 import { Loader2, Sparkles } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { ImeiCheckerBrandChips } from './imei-checker-brand-chips';
 import { ImeiCheckerDeviceSearch } from './imei-checker-device-search';
 import { ImeiCheckerDeviceTabs } from './imei-checker-device-tabs';
@@ -34,6 +34,7 @@ interface OgabasseyImeiEntryProps {
   imei: string;
   isLoading: boolean;
   isPending: boolean;
+  needsSignIn?: boolean;
   needsWalletFunding: boolean;
   /** Set when the parent already committed the IMEI LCP hero. */
   omitHero?: boolean;
@@ -66,6 +67,7 @@ export const OgabasseyImeiEntry = ({
   imei,
   isLoading,
   isPending,
+  needsSignIn = false,
   needsWalletFunding,
   omitHero = false,
   onCheck,
@@ -87,6 +89,7 @@ export const OgabasseyImeiEntry = ({
 }: OgabasseyImeiEntryProps) => {
   const currentTier = getDisplayTier(selectedTier);
   const canVerify = isValidDeviceIdentifier(imei, identifier);
+  const devicePanelId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Give this step a focus landing point on mount — covers both the initial
@@ -115,26 +118,36 @@ export const OgabasseyImeiEntry = ({
         <p className="mb-4 text-center text-sm font-medium text-gray-500">
           What are you checking?
         </p>
-        <ImeiCheckerDeviceTabs onSelect={onSelectDevice} selected={device} />
+        <ImeiCheckerDeviceTabs
+          onSelect={onSelectDevice}
+          selected={device}
+          panelId={devicePanelId}
+        />
 
-        {device === 'smartphone' && (
+        <div
+          role="tabpanel"
+          id={devicePanelId}
+          aria-labelledby={`${devicePanelId}-${device}-tab`}
+        >
+          {device === 'smartphone' && (
+            <div className="mt-4">
+              <ImeiCheckerBrandChips
+                onSelectBrand={onSelectBrand}
+                selectedBrand={brand}
+              />
+            </div>
+          )}
+
           <div className="mt-4">
-            <ImeiCheckerBrandChips
-              onSelectBrand={onSelectBrand}
-              selectedBrand={brand}
+            <ImeiCheckerTierSelector
+              canToggleServices={canToggleServices}
+              displayedTierKeys={displayedTierKeys}
+              onSelectTier={onSelectTier}
+              onToggleServices={onToggleServices}
+              selectedTier={selectedTier}
+              showAllServices={showAllServices}
             />
           </div>
-        )}
-
-        <div className="mt-4">
-          <ImeiCheckerTierSelector
-            canToggleServices={canToggleServices}
-            displayedTierKeys={displayedTierKeys}
-            onSelectTier={onSelectTier}
-            onToggleServices={onToggleServices}
-            selectedTier={selectedTier}
-            showAllServices={showAllServices}
-          />
         </div>
       </div>
 
@@ -173,6 +186,7 @@ export const OgabasseyImeiEntry = ({
         {error ? (
           <ImeiCheckerError
             error={error}
+            needsSignIn={needsSignIn}
             needsWalletFunding={needsWalletFunding}
           />
         ) : null}

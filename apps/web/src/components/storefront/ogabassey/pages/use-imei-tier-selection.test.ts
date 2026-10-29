@@ -14,7 +14,7 @@ describe('useImeiTierSelection', () => {
     expect(result.current.identifier).toBe('imei');
     expect(result.current.displayedTierKeys).toEqual([
       'full',
-      'activation',
+      'basic',
       'blacklist',
       'carrier',
     ]);

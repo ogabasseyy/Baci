@@ -107,6 +107,18 @@ describe('OgabasseyLoginPage', () => {
     mockSearchParams.get = vi.fn(() => null);
   });
 
+  it.each([
+    { isVerifying: true, verified: false },
+    { isVerifying: false, verified: true },
+  ])('does not bypass the server-confirmed OTP transition: %o', (state) => {
+    const defaults = mockUseOgabasseyLogin();
+    mockUseOgabasseyLogin.mockReturnValue({ ...defaults, ...state, isCodeSent: true });
+    mockUseCustomerAuth.mockReturnValue({ isAuthenticated: true, isLoading: false });
+    render(<OgabasseyLoginPage />);
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(screen.getByTestId('otp-form')).toBeInTheDocument();
+  });
+
   describe('Loading states', () => {
     it('shows LoadingScreen with merchant message when merchantLoading is true', () => {
       // Arrange

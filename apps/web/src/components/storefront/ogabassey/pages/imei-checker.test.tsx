@@ -94,7 +94,7 @@ describe('OgabasseyImeiChecker', () => {
 
     expect(selectedTierRadio).toBeInTheDocument();
     expect(
-      screen.getByRole('radio', { name: tierButtonName('activation') })
+      screen.getByRole('radio', { name: tierButtonName('basic') })
     ).toBeInTheDocument();
     expect(
       screen.getByRole('radio', { name: tierButtonName('blacklist') })
@@ -102,7 +102,7 @@ describe('OgabasseyImeiChecker', () => {
     expect(
       screen.getByRole('radio', { name: tierButtonName('carrier') })
     ).toBeInTheDocument();
-    expect(screen.queryByText('Quick ID')).not.toBeInTheDocument();
+    expect(screen.getByText('Quick ID')).toBeInTheDocument();
   });
 
   it('posts IMEI checks with an idempotency key', async () => {
@@ -143,6 +143,23 @@ describe('OgabasseyImeiChecker', () => {
     });
     expect(await screen.findByText('iPhone 15 Pro')).toBeInTheDocument();
     expect(screen.getByText('Safe to buy')).toBeInTheDocument();
+  });
+
+  it('clears the stale sign-in action when merchant context disappears', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ success: false, error: 'Unauthorized' }),
+    });
+    const { rerender } = render(<OgabasseyImeiChecker />);
+    enterValidImei();
+    fireEvent.click(screen.getByRole('button', { name: /verify now/i }));
+    await screen.findByRole('link', { name: /sign in/i });
+    mocks.useMerchantSafe.mockReturnValue(null);
+    rerender(<OgabasseyImeiChecker />);
+    fireEvent.click(screen.getByRole('button', { name: /verify now/i }));
+    await screen.findByText(/storefront is unavailable/i);
+    expect(screen.queryByRole('link', { name: /sign in/i })).toBeNull();
   });
 
   it('shows an error instead of silently dropping submission without merchant context', async () => {
@@ -206,6 +223,8 @@ describe('OgabasseyImeiChecker', () => {
 
     render(<OgabasseyImeiChecker />);
 
+    if (expectedTier === 'activation')
+      fireEvent.click(screen.getByRole('button', { name: 'More checks' }));
     fireEvent.click(
       screen.getByRole('radio', { name: tierButtonName(expectedTier) })
     );
@@ -296,6 +315,26 @@ describe('OgabasseyImeiChecker', () => {
       firstHeaders.get('idempotency-key')
     );
     expect(await screen.findByText('iPhone 15 Pro')).toBeInTheDocument();
+  });
+
+  it('offers sign-in with a return to the checker after an expired session', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ success: false, error: 'Unauthorized' }),
+    });
+    render(<OgabasseyImeiChecker />);
+    enterValidImei();
+    fireEvent.click(screen.getByRole('button', { name: /verify now/i }));
+    expect(
+      await screen.findByRole('link', { name: /sign in/i })
+    ).toHaveAttribute(
+      'href',
+      '/ogabassey/account/login?redirect=%2Fogabassey%2Fimei-check'
+    );
+    expect(
+      screen.queryByRole('link', { name: /fund wallet/i })
+    ).not.toBeInTheDocument();
   });
 
   it('links to the wallet funding flow when the wallet balance is insufficient', async () => {
@@ -691,7 +730,12 @@ describe('OgabasseyImeiChecker', () => {
   it('switches to the tablet device tab and resets the tier selection', () => {
     render(<OgabasseyImeiChecker />);
 
+    const phoneTab = screen.getByRole('tab', { name: /phone checks/i });
+    const phonePanel = screen.getByRole('tabpanel', { name: /phone checks/i });
+    expect(phoneTab.getAttribute('aria-controls')).toBe(phonePanel.id);
     fireEvent.click(screen.getByRole('tab', { name: /ipad checks/i }));
+    const tabletPanel = screen.getByRole('tabpanel', { name: /ipad checks/i });
+    expect(tabletPanel.id).toBe(phonePanel.id);
 
     const recommended = IMEI_SERVICE_TIERS.activation;
     expect(

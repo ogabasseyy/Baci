@@ -1,0 +1,104 @@
+'use client';
+import { Loader2 } from 'lucide-react';
+import type { ClipboardEvent, KeyboardEvent, RefObject } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+
+type Props = {
+  code: string[];
+  error: string;
+  isVerifying: boolean;
+  isSending: boolean;
+  resendCooldownSeconds?: number;
+  codeInputRefs: RefObject<(HTMLInputElement | null)[]>;
+  handlePaste: (event: ClipboardEvent) => void;
+  handleCodeChange: (index: number, value: string) => void;
+  handleKeyDown: (
+    index: number,
+    event: KeyboardEvent<HTMLInputElement>
+  ) => void;
+  handleResendCode: () => Promise<void>;
+  onDifferentEmail: () => void;
+};
+export function CustomerCodeForm({
+  code,
+  error,
+  isVerifying,
+  isSending,
+  resendCooldownSeconds = 0,
+  codeInputRefs,
+  handlePaste,
+  handleCodeChange,
+  handleKeyDown,
+  handleResendCode,
+  onDifferentEmail,
+}: Props) {
+  return (
+    <div className="space-y-6">
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">Verification code</legend>
+        <div className="flex gap-2 justify-center" onPaste={handlePaste}>
+          {(['d1', 'd2', 'd3', 'd4', 'd5', 'd6'] as const).map(
+            (slot, index) => (
+              <Input
+                key={slot}
+                ref={(el) => {
+                  codeInputRefs.current[index] = el;
+                }}
+                type="text"
+                inputMode="numeric"
+                autoComplete={index === 0 ? 'one-time-code' : 'off'}
+                maxLength={index === 0 ? 6 : 1}
+                value={code[index]}
+                onChange={(e) => handleCodeChange(index, e.target.value)}
+                onKeyDown={(e) => handleKeyDown(index, e)}
+                className="w-12 h-14 text-center text-2xl font-mono border-store-border bg-store-background text-store-background-text"
+                disabled={isSending || isVerifying}
+                autoFocus={index === 0}
+                aria-label={`Digit ${index + 1} of 6`}
+              />
+            )
+          )}
+        </div>
+      </fieldset>
+
+      {error && <p className="text-sm text-destructive text-center">{error}</p>}
+
+      {isVerifying && (
+        <div className="flex items-center justify-center gap-2 text-store-background-text/70">
+          <Loader2 className="size-4 animate-spin" />
+          <span>Verifying…</span>
+        </div>
+      )}
+
+      <div className="text-center space-y-2">
+        <p className="text-sm text-store-background-text/70">
+          Didn't receive the code?
+        </p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={handleResendCode}
+          disabled={isSending || isVerifying || resendCooldownSeconds > 0}
+        >
+          {isSending
+            ? 'Sending...'
+            : resendCooldownSeconds > 0
+              ? `Resend code in ${resendCooldownSeconds}s`
+              : 'Resend code'}
+        </Button>
+      </div>
+
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full border-store-border bg-store-background text-store-background-text hover:bg-store-secondary hover:text-store-secondary-text"
+        onClick={onDifferentEmail}
+        disabled={isSending || isVerifying}
+      >
+        Use a different email
+      </Button>
+    </div>
+  );
+}

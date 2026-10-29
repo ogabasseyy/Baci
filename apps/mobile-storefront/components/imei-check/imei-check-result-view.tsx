@@ -1,4 +1,8 @@
 import type { ImeiServiceTierDefinition } from '@baci/shared/imei';
+import {
+  canAssessImeiNetworkUnlock,
+  getImeiEffectiveVerdict,
+} from '@baci/shared/imei';
 import Ionicons, {
   type IoniconsIconName,
 } from '@react-native-vector-icons/ionicons';
@@ -36,7 +40,8 @@ export function ImeiCheckResultView({
   onReset,
 }: ImeiCheckResultViewProps) {
   const insets = useSafeAreaInsets();
-  const verdictColors = getVerdictColors(result.verdictType, colors);
+  const effectiveVerdict = getImeiEffectiveVerdict(result);
+  const verdictColors = getVerdictColors(effectiveVerdict.type, colors);
   const statusCards = getImeiResultStatusCards(
     result,
     colors,
@@ -84,8 +89,32 @@ export function ImeiCheckResultView({
               {currentTier.name}
             </Text>
             <Text style={[styles.deviceName, { color: colors.text }]}>
-              {result.device}
+              {result.deviceProfile?.model ?? result.device}
             </Text>
+            {result.deviceProfile && (
+              <>
+                {(result.deviceProfile.color ||
+                  result.deviceProfile.storage) && (
+                  <Text
+                    style={[styles.imeiText, { color: colors.textSecondary }]}
+                  >
+                    {[result.deviceProfile.color, result.deviceProfile.storage]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </Text>
+                )}
+                {result.deviceProfile.imageMatch !== 'none' && (
+                  <Text
+                    style={[styles.imeiText, { color: colors.textSecondary }]}
+                  >
+                    {result.deviceProfile.imageMatch === 'color' &&
+                    result.deviceProfile.color
+                      ? `Catalog illustration · ${result.deviceProfile.color}`
+                      : 'Model illustration · colour may differ'}
+                  </Text>
+                )}
+              </>
+            )}
             <Text style={[styles.imeiText, { color: colors.textSecondary }]}>
               IMEI: {result.imei}
             </Text>
@@ -114,11 +143,11 @@ export function ImeiCheckResultView({
           ]}
         >
           <Text style={[styles.verdictText, { color: verdictColors.text }]}>
-            {result.verdict}
+            {effectiveVerdict.text}
           </Text>
         </View>
 
-        {lookupId && apiBaseUrl ? (
+        {lookupId && apiBaseUrl && canAssessImeiNetworkUnlock(result) ? (
           <ImeiRemediationOffer
             accessToken={accessToken}
             apiBaseUrl={apiBaseUrl}
@@ -185,10 +214,10 @@ function TrustScore({
   colors: ImeiCheckerColors;
   result: ImeiResult;
 }) {
-  const isClean = result.status === 'Clean';
-  const cleanPalette = getVerdictColors('safe', colors);
-  const dangerPalette = getVerdictColors('danger', colors);
-  const palette = isClean ? cleanPalette : dangerPalette;
+  const palette = getVerdictColors(
+    getImeiEffectiveVerdict(result).type,
+    colors
+  );
 
   return (
     <View style={[styles.scoreContainer, { backgroundColor: palette.bg }]}>

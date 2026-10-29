@@ -195,6 +195,7 @@ export async function GET(
     const result = await resolveClaimedPetrockLookup({
       encryptionKey,
       lookup: claimed,
+      merchantId,
       provider,
       supabaseAdmin,
     });

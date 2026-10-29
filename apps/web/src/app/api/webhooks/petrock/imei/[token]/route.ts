@@ -13,7 +13,7 @@ interface FeedbackLookupRow {
   id: string;
 }
 
-const accepted = () => NextResponse.json({ received: true }, { status: 202 });
+const accepted = () => NextResponse.json({ received: true }, { status: 200 });
 
 export async function POST(
   request: NextRequest | Request,

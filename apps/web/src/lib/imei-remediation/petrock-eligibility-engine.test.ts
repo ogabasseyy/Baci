@@ -5,13 +5,44 @@ describe('submitNextPetrockEligibilityCheck', () => {
   const order = {
     eligibilityChecksCompleted: [] as string[],
     eligibilityEvidence: {
-      blacklistStatus: 'Unknown',
+      blacklistStatus: 'Clean',
       carrier: 'Unknown',
       device: 'iPhone 17 Pro Max',
       simLock: 'Locked',
     },
     id: 'order-1',
   };
+
+  it('does not buy missing house checks for a known blacklisted device', async () => {
+    const submitOrder = vi.fn();
+    const readProduct = vi.fn();
+    const suppress = vi.fn().mockResolvedValue(true);
+    const result = await submitNextPetrockEligibilityCheck({
+      client: { getAccount: vi.fn(), submitOrder },
+      identifier: '490154203237518',
+      order: {
+        ...order,
+        eligibilityEvidence: {
+          ...order.eligibilityEvidence,
+          blacklistStatus: 'Blacklisted',
+        },
+      },
+      origin: 'https://ogabassey.com',
+      readProduct,
+      state: {
+        begin: vi.fn(),
+        markSubmissionUnknown: vi.fn(),
+        recordSubmission: vi.fn(),
+        suppress,
+      },
+    });
+    expect(result).toMatchObject({
+      kind: 'suppressed',
+      reason: 'blacklist_risk',
+    });
+    expect(submitOrder).not.toHaveBeenCalled();
+    expect(readProduct).not.toHaveBeenCalled();
+  });
 
   it('write-aheads and submits the first missing house check', async () => {
     const begin = vi.fn().mockResolvedValue(true);
@@ -38,9 +69,9 @@ describe('submitNextPetrockEligibilityCheck', () => {
         readProduct: vi.fn().mockResolvedValue({
           active: true,
           currency: 'USD',
-          orderFieldName: 'IMEI or Serial Number',
-          priceUsd: 0.019,
-          productId: '693',
+          orderFieldName: 'IMEI/SN:',
+          priceUsd: 0.07,
+          productId: '689',
           syncedAt: new Date().toISOString(),
         }),
         state: {
@@ -61,7 +92,7 @@ describe('submitNextPetrockEligibilityCheck', () => {
       })
     );
     expect(submitOrder).toHaveBeenCalledWith(
-      expect.objectContaining({ productId: '693' })
+      expect.objectContaining({ productId: '689', orderFieldName: 'IMEI/SN:' })
     );
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({ providerOrderId: 'provider-order-1' })
@@ -91,9 +122,9 @@ describe('submitNextPetrockEligibilityCheck', () => {
       readProduct: vi.fn().mockResolvedValue({
         active: true,
         currency: 'USD',
-        orderFieldName: 'IMEI or Serial Number',
-        priceUsd: 0.019,
-        productId: '693',
+        orderFieldName: 'IMEI/SN:',
+        priceUsd: 0.07,
+        productId: '689',
         syncedAt: new Date().toISOString(),
       }),
       state: {
@@ -122,9 +153,9 @@ describe('submitNextPetrockEligibilityCheck', () => {
       readProduct: vi.fn().mockResolvedValue({
         active: true,
         currency: 'EUR',
-        orderFieldName: 'IMEI or Serial Number',
-        priceUsd: 0.019,
-        productId: '693',
+        orderFieldName: 'IMEI/SN:',
+        priceUsd: 0.07,
+        productId: '689',
         syncedAt: new Date().toISOString(),
       }),
       state: {
@@ -171,9 +202,9 @@ describe('submitNextPetrockEligibilityCheck', () => {
       readProduct: vi.fn().mockResolvedValue({
         active: true,
         currency: 'USD',
-        orderFieldName: 'IMEI or Serial Number',
-        priceUsd: 0.019,
-        productId: '693',
+        orderFieldName: 'IMEI/SN:',
+        priceUsd: 0.07,
+        productId: '689',
         syncedAt: new Date().toISOString(),
       }),
       state: {
@@ -213,9 +244,9 @@ describe('submitNextPetrockEligibilityCheck', () => {
       readProduct: vi.fn().mockResolvedValue({
         active: true,
         currency: 'USD',
-        orderFieldName: 'IMEI or Serial Number',
-        priceUsd: 0.019,
-        productId: '693',
+        orderFieldName: 'IMEI/SN:',
+        priceUsd: 0.07,
+        productId: '689',
         syncedAt: new Date().toISOString(),
       }),
       state: {
@@ -247,9 +278,9 @@ describe('submitNextPetrockEligibilityCheck', () => {
       readProduct: vi.fn().mockResolvedValue({
         active: true,
         currency: 'USD',
-        orderFieldName: 'IMEI or Serial Number',
-        priceUsd: 0.019,
-        productId: '693',
+        orderFieldName: 'IMEI/SN:',
+        priceUsd: 0.07,
+        productId: '689',
         syncedAt: new Date(Date.now() + 60_000).toISOString(),
       }),
       state: {
@@ -291,9 +322,9 @@ describe('submitNextPetrockEligibilityCheck', () => {
       readProduct: vi.fn().mockResolvedValue({
         active: true,
         currency: 'USD',
-        orderFieldName: 'IMEI or Serial Number',
-        priceUsd: 0.019,
-        productId: '693',
+        orderFieldName: 'IMEI/SN:',
+        priceUsd: 0.07,
+        productId: '689',
         syncedAt: new Date().toISOString(),
       }),
       state: {
@@ -308,4 +339,36 @@ describe('submitNextPetrockEligibilityCheck', () => {
     expect(markSubmissionUnknown).toHaveBeenCalled();
     expect(suppress).not.toHaveBeenCalled();
   });
+});
+
+it.each([
+  { blacklistStatus: 'Unknown', simLock: 'Locked' },
+  { blacklistStatus: 'Clean', simLock: 'Unknown' },
+  { blacklistStatus: 'Clean', simLock: 'Unlocked' },
+])('does not buy any eligibility check without explicit clean and locked evidence: %j', async (evidence) => {
+  const client = { getAccount: vi.fn(), submitOrder: vi.fn() };
+  const readProduct = vi.fn();
+  const state = {
+    begin: vi.fn(),
+    markSubmissionUnknown: vi.fn(),
+    recordSubmission: vi.fn(),
+    suppress: vi.fn().mockResolvedValue(true),
+  };
+  const result = await submitNextPetrockEligibilityCheck({
+    client,
+    identifier: '490154203237518',
+    origin: 'https://ogabassey.com',
+    readProduct,
+    state,
+    order: {
+      id: 'order-1',
+      eligibilityChecksCompleted: [],
+      eligibilityEvidence: { ...evidence, carrier: 'AT&T' },
+    },
+  });
+  expect(result.kind).toBe('suppressed');
+  expect(readProduct).not.toHaveBeenCalled();
+  expect(client.getAccount).not.toHaveBeenCalled();
+  expect(client.submitOrder).not.toHaveBeenCalled();
+  expect(state.begin).not.toHaveBeenCalled();
 });

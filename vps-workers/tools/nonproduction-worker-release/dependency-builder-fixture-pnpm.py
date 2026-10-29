@@ -20,13 +20,13 @@ from dependency_builder_fixture_pnpm_diagnostics import (
 
 
 def _pnpm_command(entrypoint: str, pnpm_args: Sequence[str]) -> tuple[str, ...]:
-    """Use structured errors for synthetic deploy diagnostics only.
+    """Use the fixed append-only error formatter for synthetic deploy only.
 
-    The reporter choice does not alter resolution or trust policy. It makes
-    pnpm 11.7's error event carry the bounded package headline/hint that the
-    fixture classifier hashes and allowlists; no raw output is emitted.
+    The reporter changes output formatting only, not resolution or trust
+    policy. The bounded capture feeds the allowlisting classifier; raw output
+    is never emitted or persisted.
     """
-    reporter = ("--reporter=ndjson",) if "deploy" in pnpm_args else ()
+    reporter = ("--reporter=append-only",) if "deploy" in pnpm_args else ()
     return ("/usr/bin/node", entrypoint, *reporter, *pnpm_args)
 
 def main(argv: Sequence[str] | None = None) -> int:

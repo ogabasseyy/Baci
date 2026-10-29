@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import hashlib
+import json
 import os
 import shutil
 import sys
@@ -26,12 +27,43 @@ SPEC.loader.exec_module(fixture)
 
 
 class FixturePnpmDiagnosticTests(unittest.TestCase):
-    def test_ndjson_reporter_is_limited_to_synthetic_deploy_invocation(self):
+    def test_append_only_reporter_is_limited_to_synthetic_deploy_invocation(self):
         deploy = fixture._pnpm_command("/trusted/pnpm.cjs", ("--filter", "@baci/web", "deploy"))
         install = fixture._pnpm_command("/trusted/pnpm.cjs", ("install", "--offline"))
-        self.assertEqual(deploy, ("/usr/bin/node", "/trusted/pnpm.cjs", "--reporter=ndjson",
+        self.assertEqual(deploy, ("/usr/bin/node", "/trusted/pnpm.cjs", "--reporter=append-only",
                                   "--filter", "@baci/web", "deploy"))
         self.assertEqual(install, ("/usr/bin/node", "/trusted/pnpm.cjs", "install", "--offline"))
+
+    def test_nested_json_reporter_error_decodes_only_safe_package_and_transition(self):
+        secret = "token=fixture-private-marker"
+        nested_message = (
+            'High-risk trust downgrade for "@esbuild/linux-x64@0.28.1" '
+            '(possible package takeover)'
+        )
+        nested_hint = (
+            "Earlier versions had trusted publisher, but this version has no trust evidence."
+        )
+        output = json.dumps({
+            "level": "error",
+            "err": json.dumps({
+                "code": "ERR_PNPM_TRUST_DOWNGRADE",
+                "message": nested_message,
+                "hint": nested_hint,
+                "diagnostic": secret,
+            }),
+        })
+        summary = fixture.summarize_failure(output, pnpm_args=("--filter", "@baci/web", "deploy"),
+                                            env={"PNPM_CONFIG_OFFLINE": "true",
+                                                 "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true"})
+        self.assertEqual(summary["error_code"], "ERR_PNPM_TRUST_DOWNGRADE")
+        self.assertEqual(summary["fixture_package"], "esbuild-platform-binary")
+        self.assertEqual(summary["trust_evidence_transition"], "trusted-publisher-to-none")
+        self.assertEqual(summary["trust_headline_state"], "recognized")
+        self.assertEqual(summary["trust_hint_state"], "recognized")
+        self.assertEqual(summary["package_coordinate_sha256"],
+                         hashlib.sha256(b"@esbuild/linux-x64@0.28.1").hexdigest())
+        self.assertNotIn(secret, repr(summary))
+        self.assertNotIn("@esbuild/linux-x64", repr(summary))
 
     def test_ndjson_trust_error_is_reduced_to_coordinate_hash_and_transition(self):
         output = (

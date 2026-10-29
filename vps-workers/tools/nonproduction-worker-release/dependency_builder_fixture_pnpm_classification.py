@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from pathlib import Path
 from typing import Sequence
@@ -41,6 +42,60 @@ _FIXTURE_STAGES = {
 }
 _FIXTURE_NETWORK_MODES = {"offline", "online", "unknown"}
 _FIXTURE_INJECTION_MODES = {"enabled", "disabled", "unknown"}
+_MAX_JSON_NODES = 4096
+_MAX_JSON_DEPTH = 8
+_MAX_JSON_LINE_BYTES = 65_536
+
+
+def _decoded_error_text(output: str) -> str:
+    """Decode bounded nested reporter JSON so safe classification sees fields.
+
+    The decoded content is used only in memory for fixed-enum matching. No
+    message, path, package coordinate, or hint is returned by this helper.
+    """
+    candidates = [output]
+    candidates.extend(output.splitlines()[:2048])
+    fragments: list[str] = []
+    visited = 0
+
+    def visit(value: object, depth: int) -> None:
+        nonlocal visited
+        visited += 1
+        if visited > _MAX_JSON_NODES or depth > _MAX_JSON_DEPTH:
+            return
+        if isinstance(value, str):
+            if len(value.encode("utf-8", errors="replace")) > _MAX_JSON_LINE_BYTES:
+                return
+            fragments.append(value)
+            nested = value.strip()
+            if (depth < _MAX_JSON_DEPTH and len(nested) <= _MAX_JSON_LINE_BYTES
+                    and nested.startswith(("{", "[", '"'))):
+                try:
+                    visit(json.loads(nested), depth + 1)
+                except (json.JSONDecodeError, RecursionError):
+                    pass
+            return
+        if isinstance(value, dict):
+            for key, item in list(value.items())[:_MAX_JSON_NODES]:
+                visit(key, depth + 1)
+                visit(item, depth + 1)
+        elif isinstance(value, list):
+            for item in value[:_MAX_JSON_NODES]:
+                visit(item, depth + 1)
+
+    for candidate in candidates:
+        if visited > _MAX_JSON_NODES:
+            break
+        stripped = candidate.strip()
+        if not stripped or len(stripped.encode("utf-8", errors="replace")) > _MAX_JSON_LINE_BYTES:
+            continue
+        if not stripped.startswith(("{", "[", '"')):
+            continue
+        try:
+            visit(json.loads(stripped), 0)
+        except (json.JSONDecodeError, RecursionError):
+            continue
+    return "\n".join(fragments)
 
 
 def _fixture_stage(pnpm_args: Sequence[str], cwd: Path) -> str:
@@ -75,7 +130,8 @@ def summarize_failure(output: str, *, pnpm_args: Sequence[str] = (),
                       cwd: Path | None = None,
                       env: dict[str, str] | None = None) -> dict[str, object]:
     """Return only a bounded, non-sensitive classification of fixture output."""
-    sample = _ANSI.sub("", output[:1_048_576]).lower()
+    bounded_output = _ANSI.sub("", output[:1_048_576])
+    sample = f"{bounded_output}\n{_decoded_error_text(bounded_output)}".lower()
     trust_failure = "err_pnpm_trust_downgrade" in sample
     normalized = re.sub(r"\s+", " ", sample)
     match = _TRUST_TRANSITION.search(normalized) if trust_failure else None

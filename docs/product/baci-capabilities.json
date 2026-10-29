@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-26T05:47:06.000000+00:00",
-  "source_revision": "f8fa3bb0797e6297d049e550b906de3202829f23",
-  "evidence_digest": "f8546b1bc70506e8601032769875de38ae45621c8ed1c4622a498e3113c15511",
-  "claims_digest": "8e0349a127d17699dcfb6f2c5d3f3e0a2617a5599673af61c4141d69b3f13ba9",
-  "review_scope": "Source evidence only. OAuth connected discovery excludes legacy link tools; anonymous compatibility preserved. PKCE/encrypted grants, resource-specific transport and refresh receipts unchanged. Other capability claims retain the newly merged main audit, including merchant onboarding email suppression, preferences, event permissions and worker isolation. No new production capability promotion. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged.",
+  "reviewed_at": "2026-10-29T14:01:04.000000+00:00",
+  "source_revision": "e2e2beadffd878a895112ad023d7610020641ce9",
+  "evidence_digest": "f133c23bcac058931a525a831563706d7ee1efc9a34fad0aa86c700501378cbb",
+  "claims_digest": "fe7e5d2368029b3ce3269e7e37547d58700d910bace87bc48c9c666002d6482d",
+  "review_scope": "Source evidence only. Re-reviewed the Shopping MCP access map after retiring the misleading link-only add_to_cart alias. Anonymous discovery retains prepare_storefront_cart_link; connected discovery excludes it. Existing register and access-map citations were verified unchanged from the previous review through the main baseline. PKCE/encrypted grants, resource-specific transport and refresh receipts remain as previously reviewed. No new production capability promotion. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged.",
   "capabilities": [
     {
       "id": "payments",

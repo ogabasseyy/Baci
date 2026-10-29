@@ -1,4 +1,5 @@
 type CancellationState = 'pending' | 'uncertain' | 'resolved';
+export type ChatCancellationOutcome = 'confirmed' | 'uncertain' | 'not-applied';
 
 // Keep unresolved writes in memory even when a chat message or widget unmounts.
 // Keys contain only the storefront slug and an order ID already returned by the
@@ -39,11 +40,12 @@ export function startChatCancellation(
 export function finishChatCancellation(
   merchant: string,
   order: string,
-  confirmed: boolean
+  outcome: ChatCancellationOutcome
 ) {
   const id = key(merchant, order);
   if (states.get(id) !== 'pending') return;
-  states.set(id, confirmed ? 'resolved' : 'uncertain');
+  if (outcome === 'not-applied') states.delete(id);
+  else states.set(id, outcome === 'confirmed' ? 'resolved' : 'uncertain');
   notify();
 }
 

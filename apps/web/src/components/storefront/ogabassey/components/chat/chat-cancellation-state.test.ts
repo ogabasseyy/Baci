@@ -14,7 +14,7 @@ describe('shared chat cancellation state', () => {
     expect(startChatCancellation('ogabassey', 'order-1')).toBe(true);
     expect(startChatCancellation('ogabassey', 'order-1')).toBe(false);
     expect(startChatCancellation('another-store', 'order-1')).toBe(true);
-    finishChatCancellation('ogabassey', 'order-1', false);
+    finishChatCancellation('ogabassey', 'order-1', 'uncertain');
     reconcileChatCancellations('ogabassey', [
       { id: 'order-1', shipping_status: 'pending' },
     ]);
@@ -24,5 +24,15 @@ describe('shared chat cancellation state', () => {
     ]);
     expect(chatCancellationState('ogabassey', 'order-1')).toBe('resolved');
     expect(startChatCancellation('ogabassey', 'order-1')).toBe(false);
+  });
+
+  it('releases a definite rejection without unlocking another uncertain order', () => {
+    expect(startChatCancellation('ogabassey', 'order-1')).toBe(true);
+    finishChatCancellation('ogabassey', 'order-1', 'uncertain');
+    expect(startChatCancellation('ogabassey', 'order-2')).toBe(true);
+    finishChatCancellation('ogabassey', 'order-2', 'not-applied');
+    expect(chatCancellationState('ogabassey', 'order-1')).toBe('uncertain');
+    expect(chatCancellationState('ogabassey', 'order-2')).toBeUndefined();
+    expect(startChatCancellation('ogabassey', 'order-2')).toBe(true);
   });
 });

@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { subscribeCustomerIdentityChange } from '@/contexts/customer-live-identity';
 import { subscribeCustomerIdentityInvalidation } from '@/contexts/customer-identity-invalidation';
+import { subscribeCustomerIdentityChange } from '@/contexts/customer-live-identity';
 import { createClient } from '@/lib/supabase/client';
 import {
+  type ChatCancellationOutcome,
   chatCancellationRevision,
   chatCancellationState,
   finishChatCancellation,
@@ -82,16 +83,21 @@ export function useChatAccountScope(merchantSlug: string) {
       setCancellationBusy(true);
       return true;
     },
-    finishCancellation: (token: number, confirmed: boolean) => {
+    finishCancellation: (token: number, outcome: ChatCancellationOutcome) => {
       cancellationPending.current = false;
-      if (!confirmed || generation.current !== token) {
+      const current = generation.current === token;
+      const effectiveOutcome =
+        outcome === 'not-applied' || current ? outcome : 'uncertain';
+      if (effectiveOutcome === 'uncertain') {
         if (isMounted.current) setCancellationUncertain(true);
+      } else if (outcome === 'not-applied' && !current) {
+        if (isMounted.current) setCancellationUncertain(false);
       }
       if (cancellationOrderId.current)
         finishChatCancellation(
           merchantSlug,
           cancellationOrderId.current,
-          confirmed && generation.current === token
+          effectiveOutcome
         );
       cancellationOrderId.current = null;
       if (isMounted.current) setCancellationBusy(false);

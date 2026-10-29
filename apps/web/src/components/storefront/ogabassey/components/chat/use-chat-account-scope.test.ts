@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { publishCustomerIdentity } from '@/contexts/customer-live-identity';
 import * as crossTab from '@/contexts/customer-identity-invalidation';
+import { publishCustomerIdentity } from '@/contexts/customer-live-identity';
 import { resetChatCancellationStateForTests } from './chat-cancellation-state';
 import { useChatAccountScope } from './use-chat-account-scope';
 
@@ -62,7 +62,7 @@ describe('chat account scope', () => {
     const firstToken = result.current.capture();
     act(() => expect(result.current.startCancellation('order-a')).toBe(true));
     act(() => publishCustomerIdentity(null, null, 'ogabassey'));
-    act(() => result.current.finishCancellation(firstToken, false));
+    act(() => result.current.finishCancellation(firstToken, 'uncertain'));
     act(() =>
       result.current.resolveCancellationWarning([
         { id: 'order-b', shipping_status: 'pending' },
@@ -72,7 +72,7 @@ describe('chat account scope', () => {
     expect(result.current.isCancellationBlocked('order-a')).toBe(true);
     const secondToken = result.current.capture();
     act(() => expect(result.current.startCancellation('order-b')).toBe(true));
-    act(() => result.current.finishCancellation(secondToken, true));
+    act(() => result.current.finishCancellation(secondToken, 'confirmed'));
     act(() => publishCustomerIdentity(null, null, 'ogabassey'));
     act(() =>
       result.current.resolveCancellationWarning([
@@ -87,7 +87,7 @@ describe('chat account scope', () => {
     const { result } = renderHook(() => useChatAccountScope('ogabassey'));
     const token = result.current.capture();
     act(() => expect(result.current.startCancellation('order-a')).toBe(true));
-    act(() => result.current.finishCancellation(token, false));
+    act(() => result.current.finishCancellation(token, 'uncertain'));
     expect(result.current.cancellationUncertain).toBe(true);
     act(() => publishCustomerIdentity(null, null, 'ogabassey'));
     expect(result.current.cancellationUncertain).toBe(false);

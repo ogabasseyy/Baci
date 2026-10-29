@@ -30,15 +30,18 @@ function catalogMatchesPreference(specs: unknown, preference: string): boolean {
   const recommendations = record.recommended_for;
   if (!Array.isArray(recommendations)) return false;
   const matchers: Record<string, RegExp> = {
-    gaming: /\bgaming\b/i,
-    camera: /\b(?:camera|photograph\w*)\b/i,
+    gaming: /\b(?:gaming|gamers?)\b/i,
+    camera: /\b(?:cameras?|photograph\w*|photos?)\b/i,
     battery: /\bbattery\b/i,
   };
   const matcher = matchers[preference];
   return (
     !!matcher &&
     recommendations.some(
-      (item) => typeof item === 'string' && matcher.test(item)
+      (item) =>
+        typeof item === 'string' &&
+        !/\b(?:not|no|never|without|avoid|unsuitable|non)\b/i.test(item) &&
+        matcher.test(item)
     )
   );
 }

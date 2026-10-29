@@ -4,9 +4,10 @@ import { useRef, useState } from 'react';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { joinRouteBasePath } from '@/lib/routes';
 import {
-  storefrontChatAccountSchemas,
   type StorefrontChatOrder,
+  storefrontChatAccountSchemas,
 } from '@/schemas/storefront-chat-account';
+import type { ChatCancellationOutcome } from './chat-cancellation-state';
 import type { useChatAccountScope } from './use-chat-account-scope';
 
 export function ChatOrderPanel({
@@ -77,7 +78,7 @@ export function ChatOrderPanel({
     pending.current = true;
     const token = scope.capture();
     setSubmitting(true);
-    let confirmed = false;
+    let outcome: ChatCancellationOutcome = 'uncertain';
     try {
       const response = await fetchWithCsrf(
         `/api/storefront/account/orders/${orderId}/cancel`,
@@ -87,9 +88,20 @@ export function ChatOrderPanel({
           signal: AbortSignal.timeout(15_000),
         }
       );
+      if (response.status === 429) {
+        // This endpoint rate-limits before its cancellation RPC runs.
+        outcome = 'not-applied';
+        if (!scope.isCurrent(token)) return;
+        setResults((previous) => ({
+          ...previous,
+          [orderId]:
+            'Too many cancellation attempts. Please wait, then refresh your orders to try again.',
+        }));
+        return;
+      }
       if (!scope.isCurrent(token)) return;
       if (response.status === 409) {
-        confirmed = true;
+        outcome = 'confirmed';
         setResults((previous) => ({
           ...previous,
           [orderId]:
@@ -101,7 +113,7 @@ export function ChatOrderPanel({
         );
         if (!scope.isCurrent(token)) return;
         if (payload.success) {
-          confirmed = true;
+          outcome = 'confirmed';
           setOrders(
             (previous) =>
               previous?.map((order) =>
@@ -135,7 +147,7 @@ export function ChatOrderPanel({
       }));
     } finally {
       pending.current = false;
-      scope.finishCancellation(token, confirmed);
+      scope.finishCancellation(token, outcome);
       if (scope.isCurrent(token)) {
         setConfirming(null);
         setSubmitting(false);

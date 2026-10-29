@@ -13,6 +13,7 @@ import { paymentGatewayStyles as styles } from '@/components/payment-gateway/pay
 import type Colors from '@/constants/Colors';
 import { BRAND, withAlpha } from '@/constants/Colors';
 import { PAYMENT_CLIPBOARD_BRIDGE } from '@/constants/payment-clipboard-bridge';
+import { PAYMENT_PAGE_INTERACTIVE_SCRIPT } from '@/constants/payment-page-interactive-bridge';
 
 const PAYMENT_AMOUNT_FORMATTER = new Intl.NumberFormat('en-NG', {
   currency: 'NGN',
@@ -25,6 +26,10 @@ const PAYMENT_AMOUNT_FORMATTER = new Intl.NumberFormat('en-NG', {
 interface PaymentGatewayCheckoutViewProps {
   amount?: number;
   authorizationUrl?: string;
+  interactiveWalletCheckout?: boolean;
+  walletCheckoutInteractive?: boolean;
+  walletCheckoutStalled?: boolean;
+  onWalletCheckoutRecovery?: () => void;
   colors: typeof Colors.light;
   gatewayName: string;
   // Primary launches ride this view on loading/ready with the URL in
@@ -51,6 +56,10 @@ interface PaymentGatewayCheckoutViewProps {
 export function PaymentGatewayCheckoutView({
   amount,
   authorizationUrl,
+  interactiveWalletCheckout = false,
+  walletCheckoutInteractive = false,
+  walletCheckoutStalled = false,
+  onWalletCheckoutRecovery,
   colors,
   gatewayName,
   missingUrlMessage,
@@ -84,7 +93,7 @@ export function PaymentGatewayCheckoutView({
         }}
       />
 
-      {status === 'loading' ? (
+      {status === 'loading' && !walletCheckoutInteractive ? (
         <View style={styles.loadingOverlay}>
           <View style={[styles.loadingCard, { backgroundColor: colors.card }]}>
             <ActivityIndicator
@@ -113,6 +122,19 @@ export function PaymentGatewayCheckoutView({
         </Text>
       </View>
 
+      {walletCheckoutStalled ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Recover wallet funding checkout"
+          onPress={onWalletCheckoutRecovery}
+          style={styles.securityBadge}
+        >
+          <Text style={[styles.securityText, { color: colors.text }]}>
+            Taking too long? Check your funding options
+          </Text>
+        </Pressable>
+      ) : null}
+
       {authorizationUrl ? (
         <WebView
           ref={webViewRef}
@@ -124,14 +146,20 @@ export function PaymentGatewayCheckoutView({
           onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
           onMessage={onMessage}
           injectedJavaScriptBeforeContentLoaded={
-            PAYMENT_CLIPBOARD_BRIDGE.script
+            interactiveWalletCheckout
+              ? `${PAYMENT_PAGE_INTERACTIVE_SCRIPT}\n${PAYMENT_CLIPBOARD_BRIDGE.script}`
+              : PAYMENT_CLIPBOARD_BRIDGE.script
           }
-          injectedJavaScript={PAYMENT_CLIPBOARD_BRIDGE.script}
+          injectedJavaScript={
+            interactiveWalletCheckout
+              ? `${PAYMENT_PAGE_INTERACTIVE_SCRIPT}\n${PAYMENT_CLIPBOARD_BRIDGE.script}`
+              : PAYMENT_CLIPBOARD_BRIDGE.script
+          }
           injectedJavaScriptBeforeContentLoadedForMainFrameOnly={false}
           injectedJavaScriptForMainFrameOnly={false}
           javaScriptEnabled={true}
           domStorageEnabled={true}
-          startInLoadingState={true}
+          startInLoadingState={!interactiveWalletCheckout}
           scalesPageToFit={Platform.OS === 'android'}
           mixedContentMode="never"
           onError={onError}

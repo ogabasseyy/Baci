@@ -15,12 +15,14 @@ export interface TikTokBusinessPluginConfig {
   ios: {
     appId: string;
     tiktokAppId: string;
-    appSecret: string;
     autoInitialize?: boolean;
     debugMode?: boolean;
     disablePaymentTracking?: boolean;
     disableSKAdNetworkSupport?: boolean;
-  };
+  } & (
+    | { appSecret: string; appSecretEnvVar?: never }
+    | { appSecret?: never; appSecretEnvVar: string }
+  );
 }
 
 export type TikTokBusinessPlugin = [

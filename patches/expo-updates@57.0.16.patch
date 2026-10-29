@@ -1,0 +1,76 @@
+diff --git a/utils/build/createFingerprintAsync.js b/utils/build/createFingerprintAsync.js
+--- a/utils/build/createFingerprintAsync.js
++++ b/utils/build/createFingerprintAsync.js
+@@ -35,7 +35,9 @@
+ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.createFingerprintAsync = createFingerprintAsync;
+ const Fingerprint = __importStar(require("expo/fingerprint"));
++const fs_1 = require("fs");
+ async function createFingerprintAsync(projectRoot, platform, workflow, options) {
++    projectRoot = (0, fs_1.realpathSync)(projectRoot);
+     if (workflow === 'generic') {
+         return await Fingerprint.createFingerprintAsync(projectRoot, {
+             ...options,
+diff --git a/utils/src/createFingerprintAsync.ts b/utils/src/createFingerprintAsync.ts
+--- a/utils/src/createFingerprintAsync.ts
++++ b/utils/src/createFingerprintAsync.ts
+@@ -1,4 +1,5 @@
+ import * as Fingerprint from 'expo/fingerprint';
++import { realpathSync } from 'fs';
+ 
+ import { Workflow } from './workflow';
+ 
+@@ -8,6 +9,7 @@
+   workflow: Workflow,
+   options: Fingerprint.Options
+ ): Promise<Fingerprint.Fingerprint> {
++  projectRoot = realpathSync(projectRoot);
+   if (workflow === 'generic') {
+     return await Fingerprint.createFingerprintAsync(projectRoot, {
+       ...options,
+diff --git a/utils/build/createFingerprintForBuildAsync.js b/utils/build/createFingerprintForBuildAsync.js
+--- a/utils/build/createFingerprintForBuildAsync.js
++++ b/utils/build/createFingerprintForBuildAsync.js
+@@ -47,7 +47,7 @@
+             ? (0, workflow_1.validateWorkflow)(workflowOverride)
+             : await (0, workflow_1.resolveWorkflowAsync)(projectRoot, platform);
+         const createdFingerprint = await (0, createFingerprintAsync_1.createFingerprintAsync)(projectRoot, platform, workflow, {});
+-        console.log(JSON.stringify(createdFingerprint));
++        console.log(`Computed Expo native fingerprint: ${createdFingerprint.hash}`);
+         fingerprint = createdFingerprint;
+     }
+     fs_1.default.writeFileSync(path_1.default.join(destinationDir, 'fingerprint'), fingerprint.hash);
+diff --git a/utils/src/createFingerprintForBuildAsync.ts b/utils/src/createFingerprintForBuildAsync.ts
+--- a/utils/src/createFingerprintForBuildAsync.ts
++++ b/utils/src/createFingerprintForBuildAsync.ts
+@@ -50,7 +50,7 @@
+       ? validateWorkflow(workflowOverride)
+       : await resolveWorkflowAsync(projectRoot, platform);
+     const createdFingerprint = await createFingerprintAsync(projectRoot, platform, workflow, {});
+-    console.log(JSON.stringify(createdFingerprint));
++    console.log(`Computed Expo native fingerprint: ${createdFingerprint.hash}`);
+     fingerprint = createdFingerprint;
+   }
+ 
+diff --git a/utils/build/workflow.js b/utils/build/workflow.js
+--- a/utils/build/workflow.js
++++ b/utils/build/workflow.js
+@@ -10,6 +10,7 @@
+ const path_1 = __importDefault(require("path"));
+ const vcs_1 = __importDefault(require("./vcs"));
+ async function resolveWorkflowAsync(projectDir, platform) {
++    projectDir = fs_1.default.realpathSync(projectDir);
+     const vcsClient = await (0, vcs_1.default)(projectDir);
+     let platformWorkflowMarkers;
+     try {
+diff --git a/utils/src/workflow.ts b/utils/src/workflow.ts
+--- a/utils/src/workflow.ts
++++ b/utils/src/workflow.ts
+@@ -10,6 +10,7 @@
+   projectDir: string,
+   platform: 'ios' | 'android'
+ ): Promise<Workflow> {
++  projectDir = fs.realpathSync(projectDir);
+   const vcsClient = await getVCSClientAsync(projectDir);
+ 
+   let platformWorkflowMarkers: string[];

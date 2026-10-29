@@ -10,11 +10,18 @@ const INFO_PLIST_KEYS = {
   tiktokAppId: 'BaciTikTokBusinessTikTokAppId',
 };
 
-function createTikTokBusinessInfoPlistEntries(ios) {
+function createTikTokBusinessInfoPlistEntries(ios, environment = process.env) {
+  const environmentSecret = ios.appSecretEnvVar
+    ? environment[ios.appSecretEnvVar]?.trim()
+    : undefined;
+  const appSecret = ios.appSecret ?? environmentSecret;
+  if (typeof appSecret !== 'string' || !appSecret.trim()) {
+    throw new Error('TikTok business app secret is missing for iOS prebuild.');
+  }
   return {
     [INFO_PLIST_KEYS.appId]: ios.appId,
     [INFO_PLIST_KEYS.tiktokAppId]: ios.tiktokAppId,
-    [INFO_PLIST_KEYS.appSecret]: ios.appSecret,
+    [INFO_PLIST_KEYS.appSecret]: appSecret,
     // Preserve launch-time initialization for existing consumers unless they
     // explicitly opt into consent-gated initialization.
     [INFO_PLIST_KEYS.autoInitialize]: ios.autoInitialize !== false,

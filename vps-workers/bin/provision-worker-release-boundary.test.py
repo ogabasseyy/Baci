@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).with_name("provision-worker-release-boundary.py")
+FIXTURE_PARENT = Path("/run") if os.geteuid() == 0 and sys.platform.startswith("linux") else SCRIPT.parent
 SPEC = importlib.util.spec_from_file_location("provision_worker_release_boundary", SCRIPT)
 assert SPEC and SPEC.loader
 provision = importlib.util.module_from_spec(SPEC)
@@ -171,7 +172,7 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
 
     @unittest.skipUnless(os.geteuid() == 0, "installer ownership contract requires root")
     def test_install_one_is_idempotent_for_exact_root_owned_file(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory(dir=FIXTURE_PARENT) as directory:
             destination = Path(directory) / "protected.py"
             item = provision.InstallFile("fixture", b"trusted module\n", 0o440,
                                         destination, "root")
@@ -188,7 +189,7 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
 
     @unittest.skipUnless(os.geteuid() == 0, "installer ownership contract requires root")
     def test_install_one_refuses_mismatched_existing_file(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory(dir=FIXTURE_PARENT) as directory:
             destination = Path(directory) / "protected.py"
             item = provision.InstallFile("fixture", b"trusted module\n", 0o440,
                                         destination, "root")
@@ -218,7 +219,7 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
 
     @unittest.skipUnless(os.geteuid() == 0, "installer ownership contract requires root")
     def test_install_one_rejects_symlink_target_without_following_or_replacing_it(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory(dir=FIXTURE_PARENT) as directory:
             root = Path(directory)
             destination = root / "protected.py"
             target = root / "outside.py"
@@ -284,7 +285,7 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
                 self.assertEqual(item.content, (module_root / f"{module}.py").read_bytes())
 
     def test_runtime_view_root_is_created_exactly_and_idempotently(self):
-        with tempfile.TemporaryDirectory(dir=SCRIPT.parent) as directory:
+        with tempfile.TemporaryDirectory(dir=FIXTURE_PARENT) as directory:
             path = Path(directory) / "runtime-views"
             ensure_root_directory(path, uid=os.geteuid(), gid=os.getegid(), mode=0o711)
             first = path.lstat()
@@ -296,7 +297,7 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
             self.assertEqual((first.st_dev, first.st_ino), (second.st_dev, second.st_ino))
 
     def test_runtime_view_root_rejects_symlink_and_wrong_permissions(self):
-        with tempfile.TemporaryDirectory(dir=SCRIPT.parent) as directory:
+        with tempfile.TemporaryDirectory(dir=FIXTURE_PARENT) as directory:
             root = Path(directory)
             target = root / "actual"
             target.mkdir(mode=0o711)
@@ -317,7 +318,7 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
                 )
 
     def test_runtime_view_root_refuses_to_create_missing_parent(self):
-        with tempfile.TemporaryDirectory(dir=SCRIPT.parent) as directory:
+        with tempfile.TemporaryDirectory(dir=FIXTURE_PARENT) as directory:
             path = Path(directory) / "missing-parent" / "runtime-views"
             with self.assertRaisesRegex(RuntimeError, "parent is missing"):
                 ensure_root_directory(
@@ -326,7 +327,7 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
             self.assertFalse(path.parent.exists())
 
     def test_dry_run_is_complete_and_does_not_change_host(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory(dir=FIXTURE_PARENT) as directory:
             marker = Path(directory) / "marker"
             result = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)

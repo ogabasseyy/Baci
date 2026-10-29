@@ -64,7 +64,8 @@ class DependencyBuilderTests(unittest.TestCase):
         self.assertIn("TasksMax=128", joined)
         self.assertIn("PrivateNetwork=true", joined)
         self.assertIn("PNPM_CONFIG_OFFLINE=true", joined)
-        self.assertIn(f"ReadOnlyPaths={builder.PNPM_STORE}", joined)
+        self.assertIn("PNPM_CONFIG_STORE_DIR=/scratch/pnpm-store", joined)
+        self.assertNotIn(str(builder.PNPM_STORE), joined)
         self.assertIn("PNPM_CONFIG_IGNORE_SCRIPTS=true", joined)
         self.assertNotIn("worker.env", joined)
         self.assertNotIn("GITHUB_TOKEN", joined)
@@ -78,6 +79,7 @@ class DependencyBuilderTests(unittest.TestCase):
             scratch = root / "scratch"
             scratch.mkdir()
             (scratch / "home").mkdir()
+            (scratch / "pnpm-store").mkdir(mode=0o700)
             calls = []
 
             def copy_source(_source, destination):
@@ -100,12 +102,127 @@ class DependencyBuilderTests(unittest.TestCase):
                  }), patch.object(sandbox, "write_smoke_evidence"):
                 sandbox.run_sandbox_worker(source, scratch, SHA)
 
+            web_deploy, web_cwd = calls[1]
+            self.assertEqual(web_cwd, scratch / "source")
+            self.assertIn("deploy", web_deploy)
+            self.assertIn("--store-dir", web_deploy)
+            self.assertIn(str(scratch / "pnpm-store"), web_deploy)
             worker_install, worker_cwd = calls[2]
             self.assertEqual(worker_cwd, scratch / "source" / "vps-workers")
             self.assertEqual(worker_install[:3], (sandbox.PNPM, "install", "--prod"))
             for required in ("--frozen-lockfile", "--ignore-scripts", "--offline", "--store-dir"):
                 self.assertIn(required, worker_install)
+            self.assertIn(str(scratch / "pnpm-store"), worker_install)
             self.assertTrue((scratch / "payload" / "root" / "node_modules").is_dir())
+
+    def test_private_offline_store_is_an_independent_writable_copy(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            shared = root / "shared-store"
+            package = shared / "files" / "ab"
+            package.mkdir(parents=True)
+            content = package / "cli.mjs"
+            external_link = root / "active-release-file"
+            external_link.write_text("export {};", encoding="utf-8")
+            os.link(external_link, content)
+            content.chmod(0o555)
+            scratch = root / "scratch"
+            scratch.mkdir(mode=0o700)
+            with (patch.object(builder, "PNPM_STORE", shared),
+                  patch.object(builder, "_validate_offline_store") as validate):
+                copy = builder._copy_private_offline_store(scratch, os.getuid(), os.getgid())
+
+            cloned = copy / "files" / "ab" / "cli.mjs"
+            self.assertEqual(validate.call_count, 1)
+            self.assertEqual(cloned.read_text(encoding="utf-8"), "export {};")
+            self.assertNotEqual(cloned.stat().st_ino, content.stat().st_ino)
+            self.assertEqual(cloned.stat().st_nlink, 1)
+            self.assertEqual(stat.S_IMODE(cloned.stat().st_mode), 0o700)
+            self.assertEqual(stat.S_IMODE((copy / "files").stat().st_mode), 0o700)
+            cloned.write_text("local mutation", encoding="utf-8")
+            self.assertEqual(content.read_text(encoding="utf-8"), "export {};")
+            self.assertEqual(external_link.read_text(encoding="utf-8"), "export {};")
+
+    def test_offline_store_copy_obeys_the_scratch_byte_bound(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            shared = root / "shared-store"
+            shared.mkdir()
+            (shared / "large").write_bytes(b"123456")
+            scratch = root / "scratch"
+            scratch.mkdir()
+            with (patch.object(builder, "PNPM_STORE", shared),
+                  patch.object(builder, "_validate_offline_store"),
+                  patch.object(builder, "MAX_BUILD_SCRATCH_BYTES", 5)):
+                with self.assertRaisesRegex(builder.BuilderRejected, "size limit"):
+                    builder._copy_private_offline_store(scratch, os.getuid(), os.getgid())
+
+    def test_offline_store_validation_rejects_root_symlink(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "real-store"
+            target.mkdir()
+            link = root / "store-link"
+            link.symlink_to(target, target_is_directory=True)
+            with patch.object(builder, "PNPM_STORE", link):
+                with self.assertRaisesRegex(builder.BuilderRejected, "ownership or mode"):
+                    builder._validate_offline_store(owner_uid=os.getuid())
+
+    def test_offline_store_validation_rejects_untrusted_store_owner(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = Path(temporary) / "store"
+            store.mkdir()
+            (store / "index.json").write_text("{}", encoding="utf-8")
+            with patch.object(builder, "PNPM_STORE", store):
+                with self.assertRaisesRegex(builder.BuilderRejected, "ownership or mode"):
+                    builder._validate_offline_store(owner_uid=os.getuid() + 1)
+
+    @unittest.skipUnless(os.geteuid() == 0, "changing store entry ownership requires root")
+    def test_offline_store_validation_rejects_untrusted_entry_owner(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = Path(temporary) / "store"
+            store.mkdir()
+            child = store / "index.json"
+            child.write_text("{}", encoding="utf-8")
+            os.chown(child, os.getuid() + 1234, os.getgid())
+            with patch.object(builder, "PNPM_STORE", store):
+                with self.assertRaisesRegex(builder.BuilderRejected, "untrusted entry"):
+                    builder._validate_offline_store(owner_uid=os.getuid())
+
+    def test_offline_store_validation_rejects_writable_modes_symlinks_and_specials(self):
+        for case in ("root-mode", "child-mode", "symlink", "fifo"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                store = root / "store"
+                store.mkdir()
+                if case == "root-mode":
+                    store.chmod(0o777)
+                elif case == "child-mode":
+                    child = store / "writable.json"
+                    child.write_text("{}", encoding="utf-8")
+                    child.chmod(0o666)
+                elif case == "symlink":
+                    (store / "link").symlink_to(root / "outside")
+                else:
+                    os.mkfifo(store / "pipe")
+                with patch.object(builder, "PNPM_STORE", store):
+                    with self.assertRaises(builder.BuilderRejected):
+                        builder._validate_offline_store(owner_uid=os.getuid())
+
+    def test_offline_store_validation_enforces_entry_and_byte_budgets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = Path(temporary) / "store"
+            store.mkdir()
+            (store / "one").write_bytes(b"123")
+            (store / "two").write_bytes(b"456")
+            with (patch.object(builder, "PNPM_STORE", store),
+                  patch.object(builder, "MAX_BUILD_SCRATCH_ENTRIES", 1)):
+                with self.assertRaisesRegex(builder.BuilderRejected, "too many entries"):
+                    builder._validate_offline_store(owner_uid=os.getuid())
+            with (patch.object(builder, "PNPM_STORE", store),
+                  patch.object(builder, "MAX_BUILD_SCRATCH_BYTES", 5)):
+                with self.assertRaisesRegex(builder.BuilderRejected, "size limit"):
+                    builder._validate_offline_store(owner_uid=os.getuid())
 
     def test_manifest_hashes_files_but_marks_symlinks_as_unapproved(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -355,6 +472,9 @@ class DependencyBuilderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = make_source(root)
+            store = root / "store"
+            store.mkdir()
+            (store / "package-index.json").write_text("{}", encoding="utf-8")
             build_root = root / "build-root"
             build_root.mkdir(mode=0o710)
             results = build_root / "results"
@@ -380,6 +500,7 @@ class DependencyBuilderTests(unittest.TestCase):
                 builder, "BUILD_ROOT", build_root
             ), patch.object(builder, "BUILD_INPUT_ROOT", build_root), patch.object(
                 builder, "BUILD_RESULTS_ROOT", results
+            ), patch.object(builder, "PNPM_STORE", store
             ), patch.object(builder, "_is_root", return_value=True), patch.object(
                 builder, "_acquire_build_lock", side_effect=lambda: os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
             ), patch.object(

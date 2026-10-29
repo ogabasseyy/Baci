@@ -54,6 +54,7 @@ BUILD_ROOT = Path("/run/baci-worker-release-build")
 BUILD_INPUT_ROOT = BUILD_ROOT
 BUILD_RESULTS_ROOT = BUILD_ROOT / "results"
 MAX_BUILD_SCRATCH_BYTES = 1536 * 1024 * 1024
+MAX_BUILD_SCRATCH_ENTRIES = 200_000
 MIN_BUILD_FILESYSTEM_BYTES = 3 * 1024 * 1024 * 1024
 MAX_BUILD_FILESYSTEM_BYTES = 4 * 1024 * 1024 * 1024
 MAX_SOURCE_BYTES = 512 * 1024 * 1024
@@ -126,13 +127,59 @@ def _builder_identity() -> tuple[int, int]:
     return user.pw_uid, group.gr_gid
 
 
-def _validate_offline_store() -> None:
+def _validate_offline_store(*, owner_uid: int = 0) -> None:
     try:
         info = PNPM_STORE.lstat()
     except OSError as exc:
         raise BuilderRejected("fixed offline pnpm store is unavailable") from exc
-    if not stat.S_ISDIR(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+    if not stat.S_ISDIR(info.st_mode) or info.st_uid != owner_uid or info.st_mode & 0o022:
         raise BuilderRejected("fixed offline pnpm store ownership or mode is unsafe")
+    entries = 0
+    total_bytes = 0
+    for current, directories, files in os.walk(PNPM_STORE, topdown=True, followlinks=False):
+        for name in directories + files:
+            path = Path(current) / name
+            child = path.lstat()
+            entries += 1
+            if entries > MAX_BUILD_SCRATCH_ENTRIES:
+                raise BuilderRejected("offline pnpm store has too many entries")
+            if child.st_uid != owner_uid or child.st_mode & 0o022:
+                raise BuilderRejected("offline pnpm store contains an untrusted entry")
+            if stat.S_ISDIR(child.st_mode):
+                continue
+            if not stat.S_ISREG(child.st_mode) or child.st_nlink < 1:
+                raise BuilderRejected("offline pnpm store contains a symlink or special file")
+            total_bytes += child.st_size
+            if total_bytes > MAX_BUILD_SCRATCH_BYTES:
+                raise BuilderRejected("offline pnpm store exceeds the private-copy size limit")
+
+
+def _copy_private_offline_store(scratch: Path, uid: int, gid: int) -> Path:
+    """Copy the immutable shared store into a bounded, writable per-build tree."""
+    _validate_offline_store()
+    destination = scratch / "pnpm-store"
+    copy_source_tree(PNPM_STORE, destination, max_bytes=MAX_BUILD_SCRATCH_BYTES,
+                     max_entries=MAX_BUILD_SCRATCH_ENTRIES, preserve_executable=True,
+                     allow_hardlinks=True)
+    for current, directories, files in os.walk(destination, topdown=False, followlinks=False):
+        current_path = Path(current)
+        for name in files:
+            path = current_path / name
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise BuilderRejected("private offline store copy contains an unsafe file")
+            os.chown(path, uid, gid, follow_symlinks=False)
+            os.chmod(path, 0o700 if info.st_mode & 0o111 else 0o600, follow_symlinks=False)
+        for name in directories:
+            path = current_path / name
+            info = path.lstat()
+            if not stat.S_ISDIR(info.st_mode):
+                raise BuilderRejected("private offline store copy contains an unsafe directory")
+            os.chown(path, uid, gid, follow_symlinks=False)
+            os.chmod(path, 0o700, follow_symlinks=False)
+        os.chown(current_path, uid, gid, follow_symlinks=False)
+        os.chmod(current_path, 0o700, follow_symlinks=False)
+    return destination
 
 
 def _validate_build_roots(gid: int) -> None:
@@ -212,6 +259,7 @@ def build(source_arg: str, expected_sha: str, *, runner=None) -> tuple[dict[str,
         copy_source_tree(source, source_copy, max_bytes=MAX_SOURCE_BYTES)
         make_read_only_input(source_copy)
         input_copy.chmod(0o555)
+        _copy_private_offline_store(scratch, uid, gid)
         (scratch / "home").mkdir(mode=0o700)
         os.chown(scratch / "home", uid, gid)
         lockfiles = {

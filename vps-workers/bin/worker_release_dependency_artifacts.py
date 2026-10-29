@@ -32,7 +32,9 @@ def _exclude_source_name(name: str) -> bool:
     return name in (".npmrc", ".netrc", ".git-credentials") or name.startswith(".env") or name.endswith(".env")
 
 
-def copy_source_tree(source: Path, destination: Path, *, max_bytes: int = 512 * 1024 * 1024, max_entries: int = 200_000) -> None:
+def copy_source_tree(source: Path, destination: Path, *, max_bytes: int = 512 * 1024 * 1024,
+                     max_entries: int = 200_000, preserve_executable: bool = False,
+                     allow_hardlinks: bool = False) -> None:
     """Copy bounded regular content through no-follow dirfds, omitting credentials."""
     source_fd = os.open(source, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
     destination.mkdir(mode=0o700, parents=True, exist_ok=False)
@@ -65,7 +67,7 @@ def copy_source_tree(source: Path, destination: Path, *, max_bytes: int = 512 * 
                 finally:
                     os.close(child_in)
             elif stat.S_ISREG(info.st_mode):
-                if info.st_nlink != 1 or info.st_size < 0:
+                if (info.st_nlink != 1 and not allow_hardlinks) or info.st_size < 0:
                     raise BuilderRejected("source input contains a shared or invalid file")
                 counters["bytes"] += info.st_size
                 if counters["bytes"] > max_bytes:
@@ -76,7 +78,8 @@ def copy_source_tree(source: Path, destination: Path, *, max_bytes: int = 512 * 
                     opened = os.fstat(input_file)
                     if (info.st_dev, info.st_ino) != (opened.st_dev, opened.st_ino):
                         raise BuilderRejected("source file changed while copying")
-                    output_file = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600, dir_fd=output_fd)
+                    output_mode = 0o700 if preserve_executable and info.st_mode & 0o111 else 0o600
+                    output_file = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), output_mode, dir_fd=output_fd)
                     copied = 0
                     while True:
                         block = os.read(input_file, min(1024 * 1024, info.st_size - copied + 1))

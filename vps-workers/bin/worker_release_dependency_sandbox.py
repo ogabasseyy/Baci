@@ -15,7 +15,6 @@ SYSTEMCTL = "/usr/bin/systemctl"
 PYTHON = "/usr/bin/python3"
 PNPM = "/usr/bin/pnpm"
 EXPECTED_PNPM = "11.7.0"
-PNPM_STORE = Path("/var/cache/baci-worker-release/pnpm-store")
 WORKER_RUNTIME = Path("/srv/baci-workers/runtime")
 WORKER_RELEASES = Path("/srv/baci-workers/releases")
 WORKER_LOCKS = Path("/srv/baci-workers/locks")
@@ -30,7 +29,7 @@ def systemd_command(source: Path, scratch: Path, expected_sha: str, uid: int, gi
         "NoNewPrivileges=true", "PrivateUsers=true", "RestrictSUIDSGID=true", "LockPersonality=true",
         "UMask=0077", "KillMode=control-group", f"RuntimeMaxSec={MAX_BUILD_SECONDS}s",
         "MemoryMax=2G", "CPUQuota=200%", "TasksMax=128", "LimitFSIZE=1073741824", "LimitNOFILE=4096",
-        f"ReadOnlyPaths={source}", f"ReadOnlyPaths={PNPM_STORE}", f"ReadWritePaths={scratch}",
+        f"ReadOnlyPaths={source}", f"ReadWritePaths={scratch}",
         f"InaccessiblePaths={WORKER_RUNTIME} {WORKER_RELEASES} {WORKER_LOCKS}",
         "PrivateNetwork=true", "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
     )
@@ -40,7 +39,7 @@ def systemd_command(source: Path, scratch: Path, expected_sha: str, uid: int, gi
     for key, value in (
         ("HOME", str(scratch / "home")), ("PATH", "/usr/bin:/bin"), ("CI", "true"),
         ("NODE_ENV", "production"), ("PNPM_CONFIG_IGNORE_SCRIPTS", "true"),
-        ("PNPM_CONFIG_FROZEN_LOCKFILE", "true"), ("PNPM_CONFIG_STORE_DIR", str(PNPM_STORE)),
+        ("PNPM_CONFIG_FROZEN_LOCKFILE", "true"), ("PNPM_CONFIG_STORE_DIR", str(scratch / "pnpm-store")),
         ("PNPM_CONFIG_OFFLINE", "true"), ("npm_config_userconfig", "/dev/null"),
         ("npm_config_globalconfig", "/dev/null"),
     ):
@@ -55,6 +54,15 @@ def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
         raise BuilderRejected("sandbox worker identity or environment is invalid")
     if source.is_symlink() or not source.is_dir():
         raise BuilderRejected("sandbox source is not a real directory")
+    private_store = scratch / "pnpm-store"
+    try:
+        store_info = private_store.lstat()
+    except OSError as exc:
+        raise BuilderRejected("per-build offline pnpm store is unavailable") from exc
+    if (not private_store.is_dir() or private_store.is_symlink()
+            or store_info.st_uid != os.geteuid() or store_info.st_gid != os.getgid()
+            or store_info.st_mode & 0o077):
+        raise BuilderRejected("per-build offline pnpm store ownership or mode is unsafe")
     working = scratch / "source"
     copy_source_tree(source, working)
     (scratch / "home").mkdir(mode=0o700, exist_ok=True)
@@ -63,9 +71,9 @@ def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
     version = subprocess.run((PNPM, "--version"), cwd=working, check=True, capture_output=True, text=True, timeout=15).stdout.strip()
     if version != EXPECTED_PNPM:
         raise BuilderRejected("installed pnpm version does not match repository pin")
-    subprocess.run((PNPM, "--filter", "@baci/web", "--prod", "deploy", "--legacy", "--ignore-scripts", "--offline", str(web_output)), cwd=working, check=True, timeout=240)
+    subprocess.run((PNPM, "--filter", "@baci/web", "--prod", "deploy", "--legacy", "--ignore-scripts", "--offline", "--store-dir", str(private_store), str(web_output)), cwd=working, check=True, timeout=240)
     workers_root = working / "vps-workers"
-    subprocess.run((PNPM, "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--offline", "--store-dir", str(PNPM_STORE)), cwd=workers_root, check=True, timeout=240)
+    subprocess.run((PNPM, "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--offline", "--store-dir", str(private_store)), cwd=workers_root, check=True, timeout=240)
     installed = workers_root / "node_modules"
     if not installed.is_dir() or installed.is_symlink():
         raise BuilderRejected("worker dependency install did not produce a real node_modules directory")

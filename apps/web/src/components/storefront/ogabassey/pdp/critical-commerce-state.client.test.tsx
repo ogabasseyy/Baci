@@ -153,7 +153,9 @@ describe('OgabasseyPdpCriticalCommerceProvider', () => {
       screen.getByRole('button', { name: /select 256gb storage/i })
     );
 
-    expect(screen.getByText('blocked')).toBeInTheDocument();
+    expect(screen.getByText('selected ram:8GB')).toBeInTheDocument();
+    expect(screen.getByText('278418.6')).toBeInTheDocument();
+    expect(screen.getByText('ready')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /select 8gb ram/i }));
     fireEvent.click(screen.getByRole('button', { name: /add to cart/i }));
@@ -518,9 +520,9 @@ describe('OgabasseyPdpCriticalCommerceProvider', () => {
       screen.getByRole('button', { name: /select 256gb storage/i })
     );
 
-    expect(screen.getByText('selected condition:')).toBeInTheDocument();
+    expect(screen.getByText('selected condition:new')).toBeInTheDocument();
     expect(screen.getByText('552000')).toBeInTheDocument();
-    expect(screen.getByText('blocked')).toBeInTheDocument();
+    expect(screen.getByText('ready')).toBeInTheDocument();
     expect(cartMocks.addToCart).not.toHaveBeenCalled();
   });
 

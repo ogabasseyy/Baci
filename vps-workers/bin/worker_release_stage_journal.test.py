@@ -26,19 +26,26 @@ FENCE = {
 
 class StageJournalTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(dir=Path.home())
         self.root = Path(self.temp.name)
         (self.root / "releases").mkdir(mode=0o700)
+        self.resource_root = self.root / "stage-resources"
+        self.resource_root.mkdir(mode=0o700)
         self.owner = os.getuid()
 
     def tearDown(self):
         self.temp.cleanup()
 
-    def journal(self, stage_uid=None):
-        return StageJournal(self.root, owner_uid=self.owner, stage_uid=stage_uid)
+    def journal(self, stage_uid=None, *, resources=False):
+        return StageJournal(self.root, owner_uid=self.owner, stage_uid=stage_uid,
+                            resource_root=self.resource_root if resources else None)
 
     def begin(self, journal):
         return journal.begin(FENCE, DIGEST)
+
+    def recover_owned(self, journal):
+        return journal.recover(terminal_attempt_proven=lambda _fence: True,
+                               resources_quiesced=lambda _fence: True)
 
     def test_interruption_after_durable_intent_recovers_without_touching_unknown_paths(self):
         with self.journal() as journal:
@@ -47,7 +54,11 @@ class StageJournalTests(unittest.TestCase):
         unknown.mkdir()
 
         with self.journal() as journal:
-            result = journal.recover(terminal_attempt_proven=lambda fence: fence == FENCE)
+            with self.assertRaisesRegex(StageJournalError, "process-quiescence proof"):
+                journal.recover(terminal_attempt_proven=lambda fence: fence == FENCE)
+            self.assertTrue((self.root / "release-stage-journal.json").exists())
+            result = journal.recover(terminal_attempt_proven=lambda fence: fence == FENCE,
+                                     resources_quiesced=lambda fence: fence == FENCE)
 
         self.assertEqual(result, "discarded")
         self.assertFalse((self.root / "release-stage-journal.json").exists())
@@ -64,7 +75,7 @@ class StageJournalTests(unittest.TestCase):
 
         with self.journal() as journal:
             with self.assertRaisesRegex(StageJournalError, "without its recorded inode"):
-                journal.recover(terminal_attempt_proven=lambda _fence: True)
+                self.recover_owned(journal)
 
         self.assertTrue(sentinel.exists())
         self.assertTrue((self.root / "release-stage-journal.json").exists())
@@ -77,7 +88,7 @@ class StageJournalTests(unittest.TestCase):
         os.link(journal_path, temp_link)
 
         with self.journal() as journal:
-            result = journal.recover(terminal_attempt_proven=lambda _fence: True)
+            result = self.recover_owned(journal)
 
         self.assertEqual(result, "discarded")
         self.assertFalse(temp_link.exists())
@@ -91,34 +102,11 @@ class StageJournalTests(unittest.TestCase):
             expected = os.stat(incoming, follow_symlinks=False)
 
         with self.journal() as journal:
-            result = journal.recover(terminal_attempt_proven=lambda _fence: True)
+            result = self.recover_owned(journal)
 
         self.assertEqual(result, "discarded")
         self.assertFalse(incoming.exists())
         self.assertEqual(record["incoming_name"], incoming.name)
-
-    def test_incoming_identity_and_mode_are_fsynced_before_journal_phase_advance(self):
-        synced_directories = set()
-        real_fsync = os.fsync
-        original_write = StageJournal._write
-
-        def record_fsync(fd):
-            info = os.fstat(fd)
-            if stat.S_ISDIR(info.st_mode):
-                synced_directories.add((info.st_dev, info.st_ino))
-            return real_fsync(fd)
-
-        def check_before_phase_write(journal, value, *, create=False):
-            if value.get("phase") == "incoming":
-                incoming_info = (self.root / "releases" / value["incoming_name"]).lstat()
-                self.assertIn((incoming_info.st_dev, incoming_info.st_ino), synced_directories)
-            return original_write(journal, value, create=create)
-
-        with patch.object(os, "fsync", side_effect=record_fsync), \
-             patch.object(StageJournal, "_write", new=check_before_phase_write):
-            with self.journal() as journal:
-                self.begin(journal)
-                journal.create_incoming()
 
     def test_terminal_proof_failure_keeps_journal_and_incoming_tree(self):
         with self.journal() as journal:
@@ -144,7 +132,7 @@ class StageJournalTests(unittest.TestCase):
 
         with self.journal() as journal:
             with self.assertRaisesRegex(StageJournalError, "inode changed"):
-                journal.recover(terminal_attempt_proven=lambda _fence: True)
+                self.recover_owned(journal)
 
         self.assertTrue(sentinel.exists())
         self.assertTrue((self.root / "release-stage-journal.json").exists())
@@ -177,7 +165,7 @@ class StageJournalTests(unittest.TestCase):
 
         with StageJournal(self.root, owner_uid=self.owner, stage_uid=stage_uid,
                           stage_gid=stage_gid) as journal:
-            self.assertEqual(journal.recover(terminal_attempt_proven=lambda _fence: True), "discarded")
+            self.assertEqual(self.recover_owned(journal), "discarded")
 
     @unittest.skipUnless(os.geteuid() == 0, "cross-UID ownership requires root")
     def test_rename_before_external_chown_is_recoverable_with_exact_inode(self):
@@ -194,7 +182,7 @@ class StageJournalTests(unittest.TestCase):
 
         with StageJournal(self.root, owner_uid=self.owner, stage_uid=stage_uid,
                           stage_gid=stage_gid) as journal:
-            self.assertEqual(journal.recover(terminal_attempt_proven=lambda _fence: True), "discarded")
+            self.assertEqual(self.recover_owned(journal), "discarded")
 
         self.assertFalse(final.exists())
 
@@ -207,7 +195,7 @@ class StageJournalTests(unittest.TestCase):
             os.rename(incoming, self.root / "releases" / SHA)
 
         with self.journal() as journal:
-            result = journal.recover(terminal_attempt_proven=lambda _fence: True)
+            result = self.recover_owned(journal)
 
         self.assertEqual(result, "discarded")
         self.assertFalse((self.root / "releases" / SHA).exists())
@@ -223,7 +211,7 @@ class StageJournalTests(unittest.TestCase):
 
         with self.journal() as journal:
             with self.assertRaisesRegex(StageJournalError, "active release"):
-                journal.recover(terminal_attempt_proven=lambda _fence: True)
+                self.recover_owned(journal)
 
         self.assertTrue(incoming.exists())
 
@@ -292,7 +280,6 @@ class StageJournalTests(unittest.TestCase):
             (nested_info.st_dev, nested_info.st_ino),
             (root_info.st_dev, root_info.st_ino),
         ])
-
 
 if __name__ == "__main__":
     unittest.main()

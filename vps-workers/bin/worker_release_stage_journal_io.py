@@ -63,7 +63,9 @@ def read_fd(fd: int) -> dict[str, Any]:
 def validate(value: dict[str, Any], *, stage_uid: int, stage_gid: int) -> None:
     expected = {"schema", "phase", "transaction_id", "fence", "archive_sha256",
                 "incoming_name", "release_name", "stage_uid", "stage_gid",
-                "incoming_dev", "incoming_ino"}
+                "incoming_dev", "incoming_ino", "resource_root_dev", "resource_root_ino",
+                "source_name", "source_dev", "source_ino", "source_state",
+                "result_name", "result_dev", "result_ino", "result_state"}
     if set(value) != expected or value.get("schema") != 1 or value.get("phase") not in PHASES:
         reject("stage journal contract is invalid")
     txid = value.get("transaction_id")
@@ -97,6 +99,29 @@ def validate(value: dict[str, Any], *, stage_uid: int, stage_gid: int) -> None:
         reject("stage journal inode identity is invalid")
     if value["phase"] in ("incoming", "ownership_transfer", "published", "committed") and ino is None:
         reject("stage journal phase lacks an incoming inode")
+    _validate_resource_fields(value, sha=sha, txid=txid)
+
+
+def _validate_resource_fields(value: dict[str, Any], *, sha: str, txid: str) -> None:
+    root_dev, root_ino = value["resource_root_dev"], value["resource_root_ino"]
+    if (root_dev is None) != (root_ino is None) or (root_dev is not None and
+            (not isinstance(root_dev, int) or root_dev < 0 or not isinstance(root_ino, int) or root_ino <= 0)):
+        reject("stage resource root identity is invalid")
+    enabled = root_dev is not None
+    for kind in ("source", "result"):
+        name, dev, ino, state = (value[f"{kind}_name"], value[f"{kind}_dev"],
+                                 value[f"{kind}_ino"], value[f"{kind}_state"])
+        if not enabled:
+            if (name, dev, ino, state) != (None, None, None, "disabled"):
+                reject("disabled stage resource has an identity")
+            continue
+        if name != f".{sha}.{kind}.{txid}" or state not in ("reserved", "created", "removed"):
+            reject("stage resource name or state is invalid")
+        if (dev is None) != (ino is None) or (dev is not None and
+                (not isinstance(dev, int) or dev < 0 or not isinstance(ino, int) or ino <= 0)):
+            reject("stage resource inode identity is invalid")
+        if (state == "reserved" and dev is not None) or (state == "created" and dev is None):
+            reject("stage resource state lacks its expected inode")
 
 
 def load(root_fd: int, *, owner_uid: int, stage_uid: int, stage_gid: int) -> dict[str, Any] | None:

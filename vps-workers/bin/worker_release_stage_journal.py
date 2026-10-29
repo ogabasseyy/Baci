@@ -17,13 +17,16 @@ from worker_release_stage_journal_io import (
     JOURNAL, StageJournalError, load as load_journal, reject as _reject,
     trusted_directory as _trusted_directory, verify_frozen_release, write as write_journal,
 )
+from worker_release_result_root import PinnedResultRoot, pin_result_root
+from worker_release_stage_journal_resources import StageResources
+from worker_release_stage_journal_recovery import recover as _recover_stage
 
 
 class StageJournal:
     """Root-owned journal for one staged incoming release transaction."""
 
     def __init__(self, worker_root: Path, *, owner_uid: int = 0, stage_uid: int | None = None,
-                 stage_gid: int | None = None):
+                 stage_gid: int | None = None, resource_root: Path | None = None):
         self.root = Path(worker_root)
         self.owner_uid = owner_uid
         self.stage_uid = owner_uid if stage_uid is None else stage_uid
@@ -35,17 +38,28 @@ class StageJournal:
         _trusted_directory(self.releases, owner_uid)
         self._root_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         self._releases_fd = -1
+        self._resources_pin: PinnedResultRoot | None = None
         try:
             self._releases_fd = os.open("releases", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
                                         dir_fd=self._root_fd)
             opened = os.fstat(self._releases_fd)
             if opened.st_uid != owner_uid or opened.st_mode & 0o022:
                 _reject("release staging directory changed during open")
+            if resource_root is not None:
+                self._resources_pin = pin_result_root(Path(resource_root), owner_uid=owner_uid)
+            self.resources = StageResources(
+                Path(resource_root) if resource_root is not None else None,
+                self._resources_pin.fd if self._resources_pin is not None else None,
+                owner_uid, self.stage_uid, self.stage_gid, lambda value: self._write(value),
+            )
         except BaseException:
             self.close()
             raise
 
     def close(self) -> None:
+        if self._resources_pin is not None:
+            self._resources_pin.close()
+            self._resources_pin = None
         if self._releases_fd >= 0:
             os.close(self._releases_fd)
             self._releases_fd = -1
@@ -71,7 +85,19 @@ class StageJournal:
         write_journal(self._root_fd, value, owner_uid=self.owner_uid,
                       stage_uid=self.stage_uid, stage_gid=self.stage_gid, create=create)
 
+    def _verify_resource_root(self, value: dict[str, Any]) -> None:
+        if self._resources_pin is None:
+            if value.get("resource_root_dev") is not None:
+                _reject("stage resource root is unavailable")
+            return
+        self._resources_pin.verify_unchanged()
+        info = os.fstat(self._resources_pin.fd)
+        if (info.st_dev, info.st_ino) != (value.get("resource_root_dev"), value.get("resource_root_ino")):
+            _reject("stage resource root inode changed")
+
     def begin(self, fence: dict[str, Any], archive_sha256: str) -> dict[str, Any]:
+        if self._resources_pin is not None:
+            self._resources_pin.verify_unchanged()
         if self._load() is not None:
             _reject("unresolved stage journal blocks another release stage")
         self._validate({
@@ -81,6 +107,7 @@ class StageJournal:
             "release_name": fence.get("sha"), "stage_uid": self.stage_uid,
             "stage_gid": self.stage_gid,
             "incoming_dev": None, "incoming_ino": None,
+            **self.resources.journal_fields(fence.get("sha"), "0" * 32),
         })
         if self._exists(fence["sha"]):
             _reject("release SHA already exists")
@@ -95,9 +122,36 @@ class StageJournal:
             "release_name": fence["sha"], "stage_uid": self.stage_uid,
             "stage_gid": self.stage_gid,
             "incoming_dev": None, "incoming_ino": None,
+            **self.resources.journal_fields(fence["sha"], transaction_id),
         }
+        self._verify_resource_root(value)
         self._write(value, create=True)
         return dict(value)
+
+    def create_source_snapshot(self) -> Path:
+        value = self._require_journal()
+        self._verify_resource_root(value)
+        result = self.resources.create(value, "source")
+        self._verify_resource_root(value)
+        return result
+
+    def create_builder_result(self) -> Path:
+        """Record the result directory inode before a builder writes into it."""
+        value = self._require_journal()
+        self._verify_resource_root(value)
+        result = self.resources.create(value, "result")
+        self._verify_resource_root(value)
+        return result
+
+    def remove_source_snapshot(self) -> None:
+        value = self._require_journal()
+        self._verify_resource_root(value)
+        self.resources.remove(value, "source")
+
+    def remove_builder_result(self) -> None:
+        value = self._require_journal()
+        self._verify_resource_root(value)
+        self.resources.remove(value, "result")
 
     def create_incoming(self) -> Path:
         value = self._require_journal()
@@ -151,6 +205,8 @@ class StageJournal:
         value = self._require_journal()
         if value["phase"] != "published":
             _reject("stage commit is out of sequence")
+        self._verify_resource_root(value)
+        self.resources.assert_removed(value)
         self._verify_directory(value["release_name"], value, expected_uid=self.owner_uid,
                                expected_gid=self.stage_gid)
         verify_frozen_release(self._releases_fd, value["release_name"],
@@ -163,54 +219,19 @@ class StageJournal:
         value = self._require_journal()
         if value["phase"] != "committed":
             _reject("cannot finish an uncommitted stage")
+        self._verify_resource_root(value)
+        self.resources.assert_removed(value)
         self._verify_directory(value["release_name"], value, expected_uid=self.owner_uid,
                                expected_gid=self.stage_gid)
         self._verify_committed_tree(value)
         self._unlink_journal()
 
     def recover(self, *, terminal_attempt_proven: Callable[[dict[str, Any]], bool],
-                current_link: str = "current") -> str:
+                current_link: str = "current",
+                resources_quiesced: Callable[[dict[str, Any]], bool] | None = None) -> str:
         """Discard only a journal-owned incomplete tree after terminal proof."""
-        value = self._require_journal()
-        if value["phase"] == "committed":
-            self._verify_directory(value["release_name"], value, expected_uid=self.owner_uid,
-                                   expected_gid=self.stage_gid)
-            self._verify_committed_tree(value)
-            self._unlink_journal()
-            return "committed"
-        if terminal_attempt_proven(value["fence"]) is not True:
-            _reject("stage recovery requires proof that the owning run attempt is terminal")
-        sha = value["fence"]["sha"]
-        if self._current_sha(current_link) == sha:
-            _reject("refusing to discard the active release")
-        incoming_exists = self._exists(value["incoming_name"])
-        final_exists = self._exists(value["release_name"])
-        if incoming_exists and final_exists:
-            _reject("both incoming and published release paths exist")
-        if incoming_exists:
-            if value["incoming_ino"] is None:
-                _reject("cannot discard an incoming path without its recorded inode")
-            if value["phase"] not in ("incoming", "ownership_transfer"):
-                _reject("incoming path is inconsistent with the journal phase")
-            allowed_uids = ((self.stage_uid, self.owner_uid)
-                            if value["phase"] == "ownership_transfer" else self.stage_uid)
-            self._verify_directory(value["incoming_name"], value, expected_uid=allowed_uids,
-                                   expected_gid=self.stage_gid)
-            self._remove_exact(value["incoming_name"])
-        elif final_exists:
-            if value["incoming_ino"] is None:
-                _reject("cannot discard a published path without its recorded inode")
-            if value["phase"] not in ("ownership_transfer", "published"):
-                _reject("published path is inconsistent with the journal phase")
-            allowed_uids = ((self.stage_uid, self.owner_uid)
-                            if value["phase"] in ("ownership_transfer", "published")
-                            else self.owner_uid)
-            self._verify_directory(value["release_name"], value, expected_uid=allowed_uids,
-                                   expected_gid=self.stage_gid)
-            self._remove_exact(value["release_name"])
-        self._sync_releases()
-        self._unlink_journal()
-        return "discarded"
+        return _recover_stage(self, terminal_attempt_proven=terminal_attempt_proven,
+                              current_link=current_link, resources_quiesced=resources_quiesced)
 
     def _verify_directory(self, name: str, value: dict[str, Any], *, expected_uid: int | tuple[int, ...],
                           expected_gid: int) -> os.stat_result:

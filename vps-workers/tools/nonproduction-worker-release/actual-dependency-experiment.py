@@ -121,9 +121,22 @@ def _main() -> int:
 
             def observe_production(stage_name: str, entries: int | None = None,
                                    byte_count: int | None = None) -> tuple[int, int]:
+                measured_usage: dict[str, int | None] = {}
+
+                def record_usage(measured_entries: int, measured_bytes: int,
+                                 allocated_blocks: int | None, inode_count: int) -> None:
+                    measured_usage.update(entries=measured_entries, logical_bytes=measured_bytes,
+                                          allocated_blocks=allocated_blocks, inode_count=inode_count)
+
                 if entries is None or byte_count is None:
-                    entries, byte_count = enforce_resource_limits(base)
-                production_high_water.observe(stage_name, entries, byte_count)
+                    enforce_resource_limits(base, observe_usage=record_usage)
+                    entries = measured_usage["entries"]
+                    byte_count = measured_usage["logical_bytes"]
+                production_high_water.observe(
+                    stage_name, entries, byte_count,
+                    allocated_block_bytes=measured_usage.get("allocated_blocks"),
+                    inode_count=measured_usage.get("inode_count"),
+                )
                 return entries, byte_count
 
             observe_production("source-copy")

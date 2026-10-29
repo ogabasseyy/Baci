@@ -152,12 +152,18 @@ def _resource_category(error: BaseException) -> tuple[str, str | None]:
 
 def run_monitored(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], timeout: int,
                   stage: str, resource_root: Path, poll_seconds: float = POLL_SECONDS,
-                  observe_resource: Callable[[str, int, int], None] | None = None) -> int:
+                  observe_resource: Callable[..., None] | None = None) -> int:
+    def observe_usage(entries: int, byte_count: int, allocated_blocks: int | None,
+                      inode_count: int) -> None:
+        if observe_resource is not None:
+            observe_resource(stage, entries, byte_count,
+                             allocated_block_bytes=allocated_blocks,
+                             inode_count=inode_count)
+
     def check_resources(*, live_sample: bool = False) -> None:
         try:
-            entries, byte_count = enforce_resource_limits(resource_root, live_sample=live_sample)
-            if observe_resource is not None:
-                observe_resource(stage, entries, byte_count)
+            enforce_resource_limits(resource_root, live_sample=live_sample,
+                                    observe_usage=observe_usage)
         except Exception as exc:
             kwargs = {}
             if isinstance(exc, ResourceEntryLimitExceeded):
@@ -184,9 +190,8 @@ def run_monitored(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], t
             if time.monotonic() >= deadline:
                 raise MonitorFailure(stage, "deadline")
             try:
-                entries, byte_count = enforce_resource_limits(resource_root, live_sample=True)
-                if observe_resource is not None:
-                    observe_resource(stage, entries, byte_count)
+                enforce_resource_limits(resource_root, live_sample=True,
+                                        observe_usage=observe_usage)
             except Exception as exc:
                 kwargs = {}
                 if isinstance(exc, ResourceEntryLimitExceeded):

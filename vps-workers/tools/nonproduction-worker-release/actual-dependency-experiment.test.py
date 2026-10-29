@@ -52,9 +52,9 @@ class ActualDependencyExperimentTests(unittest.TestCase):
     def test_resource_high_water_records_monotonic_peak_and_fixed_stage(self):
         high_water = ResourceHighWater()
         high_water.observe("source-copy", 4, 40)
-        high_water.observe("web-deploy", 8, 70)
-        high_water.observe("worker-install", 6, 90)
-        high_water.observe("payload-snapshot", 8, 20)
+        high_water.observe("web-deploy", 8, 70, allocated_block_bytes=8192, inode_count=9)
+        high_water.observe("worker-install", 6, 90, allocated_block_bytes=4096, inode_count=8)
+        high_water.observe("payload-snapshot", 8, 20, allocated_block_bytes=8192, inode_count=9)
         self.assertEqual(high_water.report(), {
             "kind": "sampled-high-water-lower-bound",
             "logical_file_bytes": 90,
@@ -63,14 +63,58 @@ class ActualDependencyExperimentTests(unittest.TestCase):
             "entries_stage": "web-deploy",
             "sampling": "1s subprocess polls plus exact logical-byte accounting during snapshot copy",
             "transient_files_between_samples": "may be missed",
-            "allocated_block_bytes": None,
-            "allocated_block_bytes_status": "not-measured",
+            "allocated_block_bytes": 8192,
+            "allocated_block_bytes_stage": "web-deploy",
+            "allocated_block_bytes_status": (
+                "sampled-unique-inode-st_blocks-512-byte-units; not-physical-filesystem-usage; "
+                "excludes-filesystem-metadata-and-may-miss-transients"
+            ),
+            "inode_count": 9,
+            "inode_count_stage": "web-deploy",
+            "inode_count_status": "sampled-lower-bound-of-unique-tree-inodes-including-root",
         })
         for stage, entries, byte_count in (("untrusted-stage", 1, 1), ("source-copy", -1, 1),
                                            ("source-copy", 1, True)):
             with self.subTest(stage=stage, entries=entries, byte_count=byte_count):
                 with self.assertRaisesRegex(ValueError, "sample is invalid"):
                     high_water.observe(stage, entries, byte_count)
+
+    def test_resource_high_water_keeps_allocated_blocks_and_inode_count_optional(self):
+        high_water = ResourceHighWater()
+        high_water.observe("source-copy", 3, 17)
+        report = high_water.report()
+        self.assertIsNone(report["allocated_block_bytes"])
+        self.assertEqual(report["allocated_block_bytes_status"], "not-measured")
+        self.assertIsNone(report["inode_count"])
+        self.assertEqual(report["inode_count_status"], "not-measured")
+        with self.assertRaisesRegex(ValueError, "sample is invalid"):
+            high_water.observe("source-copy", 3, 17, allocated_block_bytes=True)
+        with self.assertRaisesRegex(ValueError, "sample is invalid"):
+            high_water.observe("source-copy", 3, 17, inode_count=-1)
+
+    def test_resource_scan_samples_unique_tree_inodes_and_allocated_blocks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            child = root / "child"
+            child.mkdir()
+            source = child / "data.bin"
+            source.write_bytes(b"allocated")
+            os.link(source, child / "data-alias.bin")
+            os.symlink("data.bin", child / "data-link")
+            samples = []
+            entries, logical_bytes = enforce_resource_limits(
+                root, min_free_bytes=0, min_free_inodes=0,
+                observe_usage=lambda *sample: samples.append(sample),
+            )
+            self.assertEqual(entries, 4)
+            self.assertEqual(logical_bytes, len(b"allocated") * 2)
+            self.assertEqual(len(samples), 1)
+            measured_entries, measured_bytes, allocated_blocks, inode_count = samples[0]
+            self.assertEqual((measured_entries, measured_bytes), (entries, logical_bytes))
+            expected_inodes = {root, child, source, child / "data-link"}
+            self.assertEqual(inode_count, len(expected_inodes))
+            expected_allocated = sum(path.lstat().st_blocks * 512 for path in expected_inodes)
+            self.assertEqual(allocated_blocks, expected_allocated)
 
     def test_live_resource_monitor_contributes_to_high_water(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -84,6 +128,8 @@ class ActualDependencyExperimentTests(unittest.TestCase):
             ), 0)
             self.assertGreaterEqual(high_water.report()["logical_file_bytes"], 65_536)
             self.assertEqual(high_water.report()["logical_file_bytes_stage"], "web-deploy")
+            self.assertIsInstance(high_water.report()["allocated_block_bytes"], int)
+            self.assertGreaterEqual(high_water.report()["inode_count"], 2)
 
     def test_production_equivalent_snapshot_precedes_large_tree_reclamation(self):
         source = SCRIPT.read_text(encoding="utf-8")

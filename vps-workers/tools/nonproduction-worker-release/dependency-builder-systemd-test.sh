@@ -198,7 +198,7 @@ if [ -n "$unit_load_state" ] && [ "$unit_load_state" != not-found ]; then
   exit 1
 fi
 builder_unit_owned=1
-python3 - "$source_root" "$release_root" "$sha" "$suffix" <<'PY'
+python3 - "$source_root" "$release_root" "$sha" "$suffix" "$helper_root" <<'PY'
 import os, re, subprocess, sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -207,6 +207,7 @@ from worker_release_dependency_consumer import _verify_candidate
 from worker_release_dependency_install import install_payload
 
 source, release, sha = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
+helper_root = Path(sys.argv[5])
 from worker_release_dependency_builder import uuid
 uuid.uuid4 = lambda: SimpleNamespace(hex=sys.argv[4])
 
@@ -214,8 +215,17 @@ def run_fixture_sandbox(command, scratch, unit):
     # The production helper intentionally discards child output. This fixture
     # has only synthetic inputs and no secrets, so capture a small, redacted
     # diagnostic from its exact transient unit when it fails.
+    # The checkout lives below /home/runner, which the test service correctly
+    # cannot traverse with ProtectHome=true. Execute the same copied module
+    # set from the root-owned, world-readable fixture directory instead.
+    fixture_command = tuple(
+        str(helper_root / "worker_release_dependency_builder.py")
+        if argument == str(Path(dependency_builder.__file__))
+        else argument
+        for argument in command
+    )
     result = subprocess.run(
-        command,
+        fixture_command,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -238,7 +248,7 @@ def run_fixture_sandbox(command, scratch, unit):
     print(f"dependency fixture transient unit failed: {unit} (exit {result.returncode})", file=sys.stderr)
     if diagnostic.strip():
         print(diagnostic, file=sys.stderr)
-    raise subprocess.CalledProcessError(result.returncode, command)
+    raise subprocess.CalledProcessError(result.returncode, fixture_command)
 
 dependency_builder.run_sandbox = run_fixture_sandbox
 manifest, result_dir = dependency_builder.build(str(source), sha)

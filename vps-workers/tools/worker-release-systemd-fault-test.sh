@@ -20,6 +20,7 @@ core="${prefix}-core.service"
 scheduled="${prefix}-scheduled.service"
 timer="${prefix}-scheduled.timer"
 lock="${tmp}/poller.lock"
+process_lock_dir="${tmp}/process-locks"
 latch_dir="${tmp}/locks"
 latch="${latch_dir}/release-recovery-latch.json"
 runtime_dir="${tmp}/gate-run"
@@ -58,7 +59,8 @@ cleanup() {
     stat -c '%A %U:%G %n' "$permission_root" "$helper_dir" \
       "$helper_dir/worker_release_recovery_latch.py" \
       "$helper_dir/worker_release_quiesce_gate.py" \
-      "$helper_dir/worker-release-launch-gate" "$latch_dir" "$latch" >&2
+      "$helper_dir/worker-release-launch-gate" "$latch_dir" "$latch" \
+      "$process_lock_dir" "$lock" >&2
   fi
   systemctl stop "${units[@]}" >/dev/null 2>&1
   rm -f "${units[@]/#/${unit_dir}/}"
@@ -104,6 +106,8 @@ for module in worker_release_quiesce_lease.py worker_release_quiesce_lease_ident
   install -o root -g root -m 0444 "$(dirname "$0")/../bin/$module" "$helper_dir/$module"
 done
 install -d -o root -g baci-locks -m 0710 "$latch_dir"
+install -d -o root -g baci-locks -m 0710 "$process_lock_dir"
+install -o root -g baci-locks -m 0660 /dev/null "$lock"
 install -d -o root -g baci-worker -m 0710 "$runtime_dir"
 install -d -o root -g baci-worker -m 0770 "$data_dir"
 chmod 0711 "$tmp"

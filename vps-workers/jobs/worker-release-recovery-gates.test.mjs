@@ -56,5 +56,8 @@ describe('worker release recovery launch gates', () => {
     assert.match(harness, /StartLimitIntervalSec=0/);
     assert.match(harness, /worker ExecStart after recovery/);
     assert.match(harness, /-p StartLimitBurst -p NRestarts/);
+    assert.match(harness, /process_lock_dir="\$\{tmp\}\/process-locks"/);
+    assert.match(harness, /install -d -o root -g baci-locks -m 0710 "\$process_lock_dir"/);
+    assert.match(harness, /install -o root -g baci-locks -m 0660 \/dev\/null "\$lock"/);
   });
 });

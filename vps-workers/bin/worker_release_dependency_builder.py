@@ -13,7 +13,6 @@ import json
 import os
 import pwd
 import grp
-import re
 import shutil
 import stat
 import subprocess
@@ -35,6 +34,7 @@ from worker_release_dependency_artifacts import (
     verify_runtime_candidates,
 )
 from worker_release_dependency_fs import (
+    directory_usage,
     read_smoke_evidence,
     snapshot_payload,
     write_manifest,
@@ -44,6 +44,17 @@ from worker_release_dependency_sandbox import (
     run_sandbox_worker,
     systemd_command as _systemd_command,
 )
+from worker_release_dependency_policy_cache import (
+    MAX_CACHE_BYTES,
+    MAX_CACHE_ENTRIES,
+    RECEIPT_NAME,
+    validate_receipt,
+)
+from worker_release_dependency_input_cache import (
+    copy_private_offline_store as _copy_offline_store,
+    copy_private_policy_cache as _copy_policy_cache,
+    validate_offline_store as _validate_store,
+)
 
 
 BUILDER_USER = "baci-release-build"
@@ -51,6 +62,7 @@ BUILDER_GROUP = "baci-release-build"
 LOCK_GROUP = "baci-locks"
 WORKER_ROOT = Path("/srv/baci-workers")
 PNPM_STORE = Path("/var/cache/baci-worker-release/pnpm-store")
+PNPM_CACHE = Path("/var/cache/baci-worker-release/pnpm-cache")
 BUILD_ROOT = Path("/run/baci-worker-release-build")
 BUILD_INPUT_ROOT = BUILD_ROOT
 BUILD_RESULTS_ROOT = BUILD_ROOT / "results"
@@ -129,85 +141,23 @@ def _builder_identity() -> tuple[int, int]:
 
 
 def _validate_offline_store(*, owner_uid: int = 0) -> tuple[tuple[int, int], frozenset[str]]:
-    try:
-        info = PNPM_STORE.lstat()
-    except OSError as exc:
-        raise BuilderRejected("fixed offline pnpm store is unavailable") from exc
-    if not stat.S_ISDIR(info.st_mode) or info.st_uid != owner_uid or info.st_mode & 0o022:
-        raise BuilderRejected("fixed offline pnpm store ownership or mode is unsafe")
-    root_identity = (info.st_dev, info.st_ino)
-    entries = 0
-    total_bytes = 0
-    excluded_project_indexes: set[str] = set()
-    for current, directories, files in os.walk(PNPM_STORE, topdown=True, followlinks=False):
-        relative_parent = Path(current).relative_to(PNPM_STORE).parts
-        for name in list(directories):
-            path = Path(current) / name
-            child = path.lstat()
-            entries += 1
-            if entries > MAX_BUILD_SCRATCH_ENTRIES:
-                raise BuilderRejected("offline pnpm store has too many entries")
-            if child.st_uid != owner_uid or child.st_mode & 0o022:
-                raise BuilderRejected("offline pnpm store contains an untrusted entry")
-            if stat.S_ISDIR(child.st_mode):
-                relative = "/".join((*relative_parent, name))
-                if (len(relative_parent) == 1 and re.fullmatch(r"v[0-9]+", relative_parent[0])
-                        and name == "projects"):
-                    excluded_project_indexes.add(relative)
-                    directories.remove(name)
-                continue
-            raise BuilderRejected("offline pnpm store contains a symlink or special file")
-        for name in files:
-            path = Path(current) / name
-            child = path.lstat()
-            entries += 1
-            if entries > MAX_BUILD_SCRATCH_ENTRIES:
-                raise BuilderRejected("offline pnpm store has too many entries")
-            if child.st_uid != owner_uid or child.st_mode & 0o022:
-                raise BuilderRejected("offline pnpm store contains an untrusted entry")
-            if not stat.S_ISREG(child.st_mode) or child.st_nlink < 1:
-                raise BuilderRejected("offline pnpm store contains a symlink or special file")
-            total_bytes += child.st_size
-            if total_bytes > MAX_BUILD_SCRATCH_BYTES:
-                raise BuilderRejected("offline pnpm store exceeds the private-copy size limit")
-    try:
-        after = PNPM_STORE.lstat()
-    except OSError as exc:
-        raise BuilderRejected("fixed offline pnpm store changed during validation") from exc
-    if ((after.st_dev, after.st_ino) != root_identity
-            or after.st_mtime_ns != info.st_mtime_ns or after.st_ctime_ns != info.st_ctime_ns):
-        raise BuilderRejected("fixed offline pnpm store changed during validation")
-    return root_identity, frozenset(excluded_project_indexes)
+    return _validate_store(PNPM_STORE, owner_uid=owner_uid,
+                           max_entries=MAX_BUILD_SCRATCH_ENTRIES,
+                           max_bytes=MAX_BUILD_SCRATCH_BYTES)
 
 
 def _copy_private_offline_store(scratch: Path, uid: int, gid: int) -> Path:
     """Copy the immutable shared store into a bounded, writable per-build tree."""
-    root_identity, excluded_project_indexes = _validate_offline_store()
-    destination = scratch / "pnpm-store"
-    copy_source_tree(PNPM_STORE, destination, max_bytes=MAX_BUILD_SCRATCH_BYTES,
-                     max_entries=MAX_BUILD_SCRATCH_ENTRIES, preserve_executable=True,
-                     allow_hardlinks=True,
-                     exclude_relative_directories=excluded_project_indexes,
-                     expected_root_identity=root_identity)
-    for current, directories, files in os.walk(destination, topdown=False, followlinks=False):
-        current_path = Path(current)
-        for name in files:
-            path = current_path / name
-            info = path.lstat()
-            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
-                raise BuilderRejected("private offline store copy contains an unsafe file")
-            os.chown(path, uid, gid, follow_symlinks=False)
-            os.chmod(path, 0o700 if info.st_mode & 0o111 else 0o600, follow_symlinks=False)
-        for name in directories:
-            path = current_path / name
-            info = path.lstat()
-            if not stat.S_ISDIR(info.st_mode):
-                raise BuilderRejected("private offline store copy contains an unsafe directory")
-            os.chown(path, uid, gid, follow_symlinks=False)
-            os.chmod(path, 0o700, follow_symlinks=False)
-        os.chown(current_path, uid, gid, follow_symlinks=False)
-        os.chmod(current_path, 0o700, follow_symlinks=False)
-    return destination
+    identity, excluded = _validate_offline_store()
+    return _copy_offline_store(PNPM_STORE, scratch, uid, gid, identity, excluded,
+                               max_entries=MAX_BUILD_SCRATCH_ENTRIES,
+                               max_bytes=MAX_BUILD_SCRATCH_BYTES)
+
+
+def _copy_private_policy_cache(scratch: Path, uid: int, gid: int) -> Path:
+    """Copy the metadata cache consumed by pnpm's offline supply-chain pass."""
+    return _copy_policy_cache(PNPM_CACHE, scratch, uid, gid,
+                              max_entries=MAX_CACHE_ENTRIES, max_bytes=MAX_CACHE_BYTES)
 
 
 def _validate_build_roots(gid: int) -> None:
@@ -271,6 +221,7 @@ def build(source_arg: str, expected_sha: str, *, runner=None) -> tuple[dict[str,
         raise BuilderRejected("sandbox orchestration must run as root")
     source = _safe_source(Path(source_arg), expected_sha)
     uid, gid = _builder_identity()
+    validate_receipt(source, PNPM_CACHE, PNPM_STORE / RECEIPT_NAME, expected_sha=expected_sha)
     _validate_offline_store()
     _validate_build_roots(gid)
     lock_fd = _acquire_build_lock()
@@ -288,6 +239,10 @@ def build(source_arg: str, expected_sha: str, *, runner=None) -> tuple[dict[str,
         make_read_only_input(source_copy)
         input_copy.chmod(0o555)
         _copy_private_offline_store(scratch, uid, gid)
+        _copy_private_policy_cache(scratch, uid, gid)
+        validate_receipt(source_copy, scratch / "pnpm-cache", scratch / "pnpm-store" / RECEIPT_NAME,
+                         owner_uid=uid, expected_sha=expected_sha)
+        directory_usage(BUILD_ROOT, max_entries=MAX_BUILD_SCRATCH_ENTRIES, max_bytes=MAX_BUILD_SCRATCH_BYTES)
         (scratch / "home").mkdir(mode=0o700)
         os.chown(scratch / "home", uid, gid)
         lockfiles = {
@@ -296,11 +251,12 @@ def build(source_arg: str, expected_sha: str, *, runner=None) -> tuple[dict[str,
         }
         command = _systemd_command(source_copy, scratch, expected_sha, uid, gid, unit)
         if runner is None:
-            run_sandbox(command, scratch, unit)
+            run_sandbox(command, scratch, unit, usage_root=BUILD_ROOT)
         else:
             runner(command, scratch, unit)
         smoke = read_smoke_evidence(scratch, uid)
         snapshot = snapshot_payload(scratch, result_dir, uid)
+        directory_usage(BUILD_ROOT, max_entries=MAX_BUILD_SCRATCH_ENTRIES, max_bytes=MAX_BUILD_SCRATCH_BYTES)
         manifest = payload_manifest(snapshot, expected_sha, lockfiles, smoke)
         write_manifest(result_dir, manifest)
         success = True

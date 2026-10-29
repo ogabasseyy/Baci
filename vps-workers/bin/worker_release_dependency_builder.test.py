@@ -31,6 +31,12 @@ SANDBOX_SPEC = importlib.util.spec_from_file_location(
 assert SANDBOX_SPEC and SANDBOX_SPEC.loader
 sandbox = importlib.util.module_from_spec(SANDBOX_SPEC)
 SANDBOX_SPEC.loader.exec_module(sandbox)
+POLICY_SPEC = importlib.util.spec_from_file_location(
+    "worker_release_dependency_policy_cache", SCRIPT.with_name("worker_release_dependency_policy_cache.py")
+)
+assert POLICY_SPEC and POLICY_SPEC.loader
+policy_cache = importlib.util.module_from_spec(POLICY_SPEC)
+POLICY_SPEC.loader.exec_module(policy_cache)
 
 SHA = "a" * 40
 
@@ -65,6 +71,9 @@ class DependencyBuilderTests(unittest.TestCase):
         self.assertIn("PrivateNetwork=true", joined)
         self.assertIn("PNPM_CONFIG_OFFLINE=true", joined)
         self.assertIn("PNPM_CONFIG_STORE_DIR=/scratch/pnpm-store", joined)
+        self.assertIn("PNPM_CONFIG_CACHE_DIR=/scratch/pnpm-cache", joined)
+        self.assertIn("PNPM_CONFIG_TRUST_LOCKFILE=false", joined)
+        self.assertIn(f"PNPM_CONFIG_REGISTRY={policy_cache.TRUSTED_REGISTRY}", joined)
         self.assertNotIn(str(builder.PNPM_STORE), joined)
         self.assertIn("PNPM_CONFIG_IGNORE_SCRIPTS=true", joined)
         self.assertNotIn("worker.env", joined)
@@ -80,6 +89,7 @@ class DependencyBuilderTests(unittest.TestCase):
             scratch.mkdir()
             (scratch / "home").mkdir()
             (scratch / "pnpm-store").mkdir(mode=0o700)
+            (scratch / "pnpm-cache").mkdir(mode=0o700)
             calls = []
 
             def copy_source(_source, destination):
@@ -89,14 +99,15 @@ class DependencyBuilderTests(unittest.TestCase):
                 calls.append((tuple(command), Path(cwd)))
                 if command == (sandbox.PNPM, "--version"):
                     return type("Result", (), {"stdout": sandbox.EXPECTED_PNPM + "\n"})()
-                if command[1:3] == ("install", "--prod"):
+                if "install" in command and "--prod" in command:
                     self.assertEqual(Path(cwd), scratch / "source" / "vps-workers")
                     (Path(cwd) / "node_modules").mkdir()
-                return type("Result", (), {"stdout": ""})()
+                return type("Result", (), {"stdout": "Lockfile passes supply-chain policies\n"})()
 
             with patch.dict(os.environ, {"HOME": str(scratch / "home")}), \
                  patch.object(sandbox, "copy_source_tree", side_effect=copy_source), \
                  patch.object(sandbox.subprocess, "run", side_effect=run), \
+                 patch.object(sandbox, "validate_receipt"), \
                  patch.object(sandbox, "verify_runtime_candidates", return_value={
                      "web_tsx": "passed", "worker_dotenv": "passed"
                  }), patch.object(sandbox, "write_smoke_evidence"):
@@ -105,12 +116,17 @@ class DependencyBuilderTests(unittest.TestCase):
             web_deploy, web_cwd = calls[1]
             self.assertEqual(web_cwd, scratch / "source")
             self.assertIn("deploy", web_deploy)
+            self.assertIn("--registry", web_deploy)
+            self.assertIn(policy_cache.TRUSTED_REGISTRY, web_deploy)
             self.assertIn("--store-dir", web_deploy)
             self.assertIn(str(scratch / "pnpm-store"), web_deploy)
+            self.assertIn("--ignore-pnpmfile", web_deploy)
             worker_install, worker_cwd = calls[2]
             self.assertEqual(worker_cwd, scratch / "source" / "vps-workers")
-            self.assertEqual(worker_install[:3], (sandbox.PNPM, "install", "--prod"))
-            for required in ("--frozen-lockfile", "--ignore-scripts", "--offline", "--store-dir"):
+            self.assertEqual(worker_install[:3], (sandbox.PNPM, "--registry", policy_cache.TRUSTED_REGISTRY))
+            self.assertIn("install", worker_install)
+            self.assertIn("--prod", worker_install)
+            for required in ("--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir"):
                 self.assertIn(required, worker_install)
             self.assertIn(str(scratch / "pnpm-store"), worker_install)
             self.assertTrue((scratch / "payload" / "root" / "node_modules").is_dir())
@@ -509,6 +525,172 @@ class DependencyBuilderTests(unittest.TestCase):
             with self.assertRaisesRegex(builder.BuilderRejected, "SHA marker"):
                 builder._safe_source(source, SHA)
 
+    def test_policy_receipt_is_bound_to_exact_locks_policy_flags_and_cache(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = make_source(root)
+            for relative in policy_cache.POLICY_FILES:
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("minimumReleaseAge: 1440\ntrustPolicy: no-downgrade\ntrustLockfile: true\n", encoding="utf-8")
+            cache = root / "cache"
+            cache.mkdir(mode=0o700)
+            (cache / "metadata.json").write_text("verified registry metadata", encoding="utf-8")
+            receipt = policy_cache.make_receipt(source, cache, "11.7.0")
+            path = root / "receipt.json"
+            path.write_text(json.dumps(receipt), encoding="utf-8")
+            path.chmod(0o400)
+            self.assertEqual(policy_cache.validate_receipt(source, cache, path), receipt)
+            self.assertFalse(receipt["effectiveFlags"]["trustLockfile"])
+            receipt["registryRouting"]["default"] = "https://registry.attacker.invalid/"
+            path.chmod(0o600)
+            path.write_text(json.dumps(receipt), encoding="utf-8")
+            path.chmod(0o400)
+            with self.assertRaisesRegex(policy_cache.BuilderRejected, "exact lockfiles and policy"):
+                policy_cache.validate_receipt(source, cache, path)
+            receipt["registryRouting"]["default"] = policy_cache.TRUSTED_REGISTRY
+            path.chmod(0o600)
+            path.write_text(json.dumps(receipt), encoding="utf-8")
+            path.chmod(0o400)
+            with self.assertRaisesRegex(policy_cache.BuilderRejected, "expected source SHA"):
+                policy_cache.validate_receipt(source, cache, path, expected_sha="b" * 40)
+            (source / "pnpm-lock.yaml").write_text("changed lock\n", encoding="utf-8")
+            with self.assertRaisesRegex(policy_cache.BuilderRejected, "exact lockfiles and policy"):
+                policy_cache.validate_receipt(source, cache, path)
+            (source / "pnpm-lock.yaml").write_text("lock\n", encoding="utf-8")
+            (source / "pnpm-workspace.yaml").write_text("minimumReleaseAge: 60\n", encoding="utf-8")
+            with self.assertRaisesRegex(policy_cache.BuilderRejected, "exact lockfiles and policy"):
+                policy_cache.validate_receipt(source, cache, path)
+
+    def test_policy_receipt_rejects_metadata_cache_tampering(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = make_source(root)
+            for relative in policy_cache.POLICY_FILES:
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("minimumReleaseAge: 1440\ntrustPolicy: no-downgrade\n", encoding="utf-8")
+            cache = root / "cache"
+            cache.mkdir(mode=0o700)
+            (cache / "metadata.json").write_text("trusted metadata", encoding="utf-8")
+            receipt_path = root / "receipt.json"
+            receipt_path.write_text(json.dumps(policy_cache.make_receipt(source, cache, "11.7.0")), encoding="utf-8")
+            receipt_path.chmod(0o400)
+            (cache / "metadata.json").write_text("changed metadata", encoding="utf-8")
+            with self.assertRaisesRegex(policy_cache.BuilderRejected, "exact lockfiles and policy"):
+                policy_cache.validate_receipt(source, cache, receipt_path)
+
+    def test_policy_preverify_runs_both_lockfiles_with_scripts_and_trust_bypass_disabled(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = make_source(root)
+            for relative in policy_cache.POLICY_FILES:
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("minimumReleaseAge: 1440\ntrustPolicy: no-downgrade\ntrustLockfile: true\n", encoding="utf-8")
+            (source / ".npmrc").write_text("# registry configuration is pinned by the fixture\n", encoding="utf-8")
+            safe_npmrc = source / "apps/mobile-storefront/.npmrc"
+            safe_npmrc.parent.mkdir(parents=True, exist_ok=True)
+            safe_npmrc.write_text("legacy-peer-deps=true\nengine-strict=false\n", encoding="utf-8")
+            store = root / "store"
+            store.mkdir()
+            cache = root / "cache"
+            cache.mkdir(mode=0o700)
+            calls = []
+
+            def run(command, **kwargs):
+                calls.append((tuple(command), kwargs))
+                if command[-1] == "--version":
+                    return type("Result", (), {"stdout": "11.7.0\n"})()
+                (cache / "registry-metadata.json").write_text("verified", encoding="utf-8")
+                return type("Result", (), {"stdout": "Lockfile passes supply-chain policies"})()
+
+            with patch.object(policy_cache.subprocess, "run", side_effect=run):
+                policy_cache.preverify(source, store, cache, "/fixed/pnpm")
+            checks = [call for call in calls if "install" in call[0] or "deploy" in call[0]]
+            self.assertEqual(len(checks), 2)
+            for command, kwargs in checks:
+                self.assertEqual(kwargs["env"]["PNPM_CONFIG_FROZEN_LOCKFILE"], "true")
+                if "install" in command:
+                    self.assertIn("--frozen-lockfile", command)
+                self.assertIn("--ignore-scripts", command)
+                self.assertIn("--ignore-pnpmfile", command)
+                self.assertNotIn("--config.trust-lockfile=true", command)
+                self.assertEqual(kwargs["env"]["PNPM_CONFIG_TRUST_LOCKFILE"], "false")
+                self.assertIn("--registry", command)
+                registry_index = command.index("--registry")
+                self.assertEqual(command[registry_index + 1], policy_cache.TRUSTED_REGISTRY)
+                self.assertEqual(kwargs["env"]["PNPM_CONFIG_REGISTRY"], policy_cache.TRUSTED_REGISTRY)
+                self.assertEqual(kwargs["env"]["npm_config_registry"], policy_cache.TRUSTED_REGISTRY)
+            receipt = store / policy_cache.RECEIPT_NAME
+            self.assertTrue(receipt.is_file())
+            validated = policy_cache.validate_receipt(source, cache, receipt)
+            self.assertEqual(validated["effectiveFlags"], policy_cache.POLICY_FLAGS)
+            self.assertEqual(validated["registryRouting"], {"default": policy_cache.TRUSTED_REGISTRY, "scoped": "none"})
+
+    def test_preverify_rejects_archive_owned_registry_overrides(self):
+        for relative, content in (
+            (".npmrc", "@attacker:registry=https://registry.attacker.invalid/\n"),
+            (".npmrc", "strict-ssl=false\n"),
+            (".npmrc", "//registry.npmjs.org/:_authToken=${TOKEN}\n"),
+            ("pnpm-workspace.yaml", "registries:\n  https://registry.attacker.invalid/:\n    scopes: ['@attacker']\n"),
+            ("pnpm-workspace.yaml", "nested:\n  'registry': https://registry.attacker.invalid/\n"),
+            ("pnpm-workspace.yaml", "packages: [{name: fixture, registries: {https://registry.attacker.invalid/: {scopes: ['@attacker']}}}]\n"),
+            ("pnpm-workspace.yaml", "routing: \"regist\\u0072y\"\n"),
+        ):
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                source = make_source(root)
+                for policy_path in policy_cache.POLICY_FILES:
+                    (source / policy_path).parent.mkdir(parents=True, exist_ok=True)
+                    (source / policy_path).write_text("minimumReleaseAge: 1440\ntrustPolicy: no-downgrade\n", encoding="utf-8")
+                (source / relative).write_text(content, encoding="utf-8")
+                store = root / "store"
+                store.mkdir()
+                cache = root / "cache"
+                cache.mkdir()
+                with patch.object(policy_cache.subprocess, "run") as run:
+                    with self.assertRaisesRegex(policy_cache.BuilderRejected, "source"):
+                        policy_cache.preverify(source, store, cache, "/fixed/pnpm")
+                    run.assert_not_called()
+
+    def test_policy_preverify_refuses_when_pnpm_did_not_report_policy_pass(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = make_source(root)
+            for relative in policy_cache.POLICY_FILES:
+                path = source / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("minimumReleaseAge: 1440\ntrustPolicy: no-downgrade\n", encoding="utf-8")
+            store = root / "store"
+            store.mkdir()
+            cache = root / "cache"
+            cache.mkdir()
+            with patch.object(policy_cache.subprocess, "run", side_effect=[
+                type("Result", (), {"stdout": "11.7.0\n"})(),
+                type("Result", (), {"stdout": "Lockfile is up to date"})(),
+            ]):
+                with self.assertRaisesRegex(policy_cache.BuilderRejected, "did not report"):
+                    policy_cache.preverify(source, store, cache, "/fixed/pnpm")
+            self.assertFalse((store / policy_cache.RECEIPT_NAME).exists())
+
+    def test_policy_cache_hash_rejects_links_and_writable_entries(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cache = root / "cache"
+            cache.mkdir(mode=0o700)
+            target = root / "target"
+            target.write_text("metadata", encoding="utf-8")
+            (cache / "link").symlink_to(target)
+            with self.assertRaisesRegex(policy_cache.BuilderRejected, "unsafe file"):
+                policy_cache._hash_tree(cache)
+            (cache / "link").unlink()
+            entry = cache / "entry.json"
+            entry.write_text("metadata", encoding="utf-8")
+            entry.chmod(0o666)
+            with self.assertRaisesRegex(policy_cache.BuilderRejected, "unsafe file"):
+                policy_cache._hash_tree(cache)
+
     def test_builder_identity_rejects_lock_group_membership(self):
         fake_user = type("User", (), {"pw_gid": 77, "pw_uid": 1234})()
         fake_group = type("Group", (), {"gr_gid": 77})()
@@ -555,6 +737,9 @@ class DependencyBuilderTests(unittest.TestCase):
             ), patch.object(builder, "BUILD_INPUT_ROOT", build_root), patch.object(
                 builder, "BUILD_RESULTS_ROOT", results
             ), patch.object(builder, "PNPM_STORE", store
+            ), patch.object(builder, "PNPM_CACHE", root / "policy-cache"
+            ), patch.object(builder, "validate_receipt"
+            ), patch.object(builder, "_copy_private_policy_cache", side_effect=lambda scratch, *_: (scratch / "pnpm-cache").mkdir(mode=0o700)
             ), patch.object(builder, "_is_root", return_value=True), patch.object(
                 builder, "_acquire_build_lock", side_effect=lambda: os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
             ), patch.object(

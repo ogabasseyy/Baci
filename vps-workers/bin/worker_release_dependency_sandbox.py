@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 import subprocess
 import time
 from pathlib import Path
 
 from worker_release_dependency_artifacts import BuilderRejected, copy_source_tree, validate_payload, verify_runtime_candidates
 from worker_release_dependency_fs import directory_usage, write_smoke_evidence
+from worker_release_dependency_policy_cache import RECEIPT_NAME, TRUSTED_REGISTRY, validate_receipt
 
 SYSTEMD_RUN = "/usr/bin/systemd-run"
 SYSTEMCTL = "/usr/bin/systemctl"
@@ -40,7 +42,10 @@ def systemd_command(source: Path, scratch: Path, expected_sha: str, uid: int, gi
         ("HOME", str(scratch / "home")), ("PATH", "/usr/bin:/bin"), ("CI", "true"),
         ("NODE_ENV", "production"), ("PNPM_CONFIG_IGNORE_SCRIPTS", "true"),
         ("PNPM_CONFIG_FROZEN_LOCKFILE", "true"), ("PNPM_CONFIG_STORE_DIR", str(scratch / "pnpm-store")),
-        ("PNPM_CONFIG_OFFLINE", "true"), ("npm_config_userconfig", "/dev/null"),
+        ("PNPM_CONFIG_CACHE_DIR", str(scratch / "pnpm-cache")),
+        ("PNPM_CONFIG_TRUST_LOCKFILE", "false"), ("PNPM_CONFIG_OFFLINE", "true"),
+        ("PNPM_CONFIG_REGISTRY", TRUSTED_REGISTRY), ("npm_config_registry", TRUSTED_REGISTRY),
+        ("npm_config_userconfig", "/dev/null"),
         ("npm_config_globalconfig", "/dev/null"),
     ):
         args.append(f"--setenv={key}={value}")
@@ -63,6 +68,14 @@ def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
             or store_info.st_uid != os.geteuid() or store_info.st_gid != os.getgid()
             or store_info.st_mode & 0o077):
         raise BuilderRejected("per-build offline pnpm store ownership or mode is unsafe")
+    private_cache = scratch / "pnpm-cache"
+    try:
+        cache_info = private_cache.lstat()
+    except OSError as exc:
+        raise BuilderRejected("per-build offline pnpm policy cache is unavailable") from exc
+    if (not stat.S_ISDIR(cache_info.st_mode) or cache_info.st_uid != os.geteuid()
+            or cache_info.st_gid != os.getgid() or cache_info.st_mode & 0o077):
+        raise BuilderRejected("per-build offline pnpm policy cache ownership or mode is unsafe")
     working = scratch / "source"
     copy_source_tree(source, working)
     (scratch / "home").mkdir(mode=0o700, exist_ok=True)
@@ -71,9 +84,14 @@ def run_sandbox_worker(source: Path, scratch: Path, expected_sha: str) -> int:
     version = subprocess.run((PNPM, "--version"), cwd=working, check=True, capture_output=True, text=True, timeout=15).stdout.strip()
     if version != EXPECTED_PNPM:
         raise BuilderRejected("installed pnpm version does not match repository pin")
-    subprocess.run((PNPM, "--filter", "@baci/web", "--prod", "deploy", "--legacy", "--ignore-scripts", "--offline", "--store-dir", str(private_store), str(web_output)), cwd=working, check=True, timeout=240)
+    validate_receipt(working, private_cache, private_store / RECEIPT_NAME, version, expected_sha=expected_sha)
+    web_policy = subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "--filter", "@baci/web", "--prod", "deploy", "--legacy", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store), str(web_output)), cwd=working, check=True, capture_output=True, text=True, timeout=240)
+    if "Lockfile passes supply-chain policies" not in web_policy.stdout:
+        raise BuilderRejected("web offline deploy did not verify lockfile supply-chain policy")
     workers_root = working / "vps-workers"
-    subprocess.run((PNPM, "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--offline", "--store-dir", str(private_store)), cwd=workers_root, check=True, timeout=240)
+    worker_policy = subprocess.run((PNPM, "--registry", TRUSTED_REGISTRY, "install", "--prod", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile", "--offline", "--store-dir", str(private_store)), cwd=workers_root, check=True, capture_output=True, text=True, timeout=240)
+    if "Lockfile passes supply-chain policies" not in worker_policy.stdout:
+        raise BuilderRejected("worker offline install did not verify lockfile supply-chain policy")
     installed = workers_root / "node_modules"
     if not installed.is_dir() or installed.is_symlink():
         raise BuilderRejected("worker dependency install did not produce a real node_modules directory")
@@ -91,12 +109,12 @@ def stop_unit(unit: str) -> None:
     subprocess.run((SYSTEMCTL, "stop", unit), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
 
 
-def run_sandbox(command: tuple[str, ...], scratch: Path, unit: str) -> None:
+def run_sandbox(command: tuple[str, ...], scratch: Path, unit: str, *, usage_root: Path | None = None) -> None:
     process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={"PATH": "/usr/bin:/bin"})
     deadline = time.monotonic() + MAX_BUILD_SECONDS + 15
     try:
         while process.poll() is None:
-            directory_usage(scratch, max_entries=MAX_ENTRIES, max_bytes=MAX_BUILD_SCRATCH_BYTES)
+            directory_usage(usage_root or scratch, max_entries=MAX_ENTRIES, max_bytes=MAX_BUILD_SCRATCH_BYTES)
             if time.monotonic() >= deadline:
                 stop_unit(unit)
                 raise BuilderRejected("dependency build exceeded its wall-clock limit")

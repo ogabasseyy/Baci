@@ -13,6 +13,7 @@ chmod 0711 "$test_root"
 helper_root="/usr/local/lib/baci-dependency-test-${suffix}"
 build_root=/run/baci-worker-release-build
 store_root=/var/cache/baci-worker-release/pnpm-store
+cache_root=/var/cache/baci-worker-release/pnpm-cache
 cache_parent=/var/cache/baci-worker-release
 test_unit="baci-dependency-snapshot-${suffix}.service"
 lock_group_created=0
@@ -23,6 +24,7 @@ worker_user_created=0
 build_mounted=0
 store_created=0
 cache_parent_created=0
+policy_cache_created=0
 helper_created=0
 builder_unit_owned=0
 test_unit_owned=0
@@ -44,6 +46,7 @@ cleanup() {
   [ "$node_link_created" -eq 0 ] || rm -f /usr/bin/node
   [ "$build_mounted" -eq 0 ] || umount "$build_root"
   [ "$store_created" -eq 0 ] || rm -rf -- "$store_root"
+  [ "$policy_cache_created" -eq 0 ] || rm -rf -- "$cache_root"
   [ "$cache_parent_created" -eq 0 ] || rmdir "$cache_parent"
   [ "$worker_user_created" -eq 0 ] || userdel baci-worker >/dev/null 2>&1
   [ "$worker_group_created" -eq 0 ] || groupdel baci-worker >/dev/null 2>&1
@@ -94,6 +97,8 @@ install -d -o root -g root -m 0755 "$cache_parent"
 cache_parent_created=1
 install -d -o root -g root -m 0755 "$store_root"
 store_created=1
+install -d -o root -g root -m 0755 "$cache_root"
+policy_cache_created=1
 
 if [ -e /srv/baci-workers ] || [ -e /srv ]; then
   if [ ! -d /srv ] || [ -e /srv/baci-workers ]; then
@@ -126,26 +131,32 @@ JSON
 cat >"$source_root/pnpm-workspace.yaml" <<'YAML'
 packages:
   - apps/web
+minimumReleaseAge: 1440
+trustPolicy: no-downgrade
+trustLockfile: true
 YAML
 cat >"$source_root/apps/web/package.json" <<'JSON'
 {"name":"@baci/web","version":"1.0.0","dependencies":{"tsx":"4.22.4"}}
 JSON
 cat >"$source_root/vps-workers/package.json" <<'JSON'
-{"name":"baci-vps-workers-fixture","version":"1.0.0","private":true,"dependencies":{"dotenv":"16.6.1"}}
+{"name":"baci-vps-workers-fixture","version":"1.0.0","private":true,"packageManager":"pnpm@11.7.0","dependencies":{"dotenv":"16.6.1"}}
 JSON
 cat >"$source_root/vps-workers/pnpm-workspace.yaml" <<'YAML'
 packages:
   - .
+minimumReleaseAge: 1440
+trustPolicy: no-downgrade
+trustLockfile: true
 YAML
+printf '%s\n' "$sha" >"$source_root/.baci-source-sha"
 
 pnpm --version | grep -Fx '11.7.0'
 (cd "$source_root" && pnpm install --lockfile-only --ignore-scripts)
 (cd "$source_root/vps-workers" && pnpm install --lockfile-only --ignore-scripts)
 cp -a "$source_root/." "$seed_root/"
-(cd "$seed_root" && pnpm install --prod --frozen-lockfile --ignore-scripts --store-dir "$store_root")
-(cd "$seed_root/vps-workers" && pnpm install --prod --frozen-lockfile --ignore-scripts --store-dir "$store_root")
+python3 "$(dirname "$0")/../../bin/worker_release_dependency_policy_cache.py" \
+  --preverify --source "$seed_root" --store "$store_root" --cache "$cache_root" --pnpm "$(command -v pnpm)"
 rm -rf -- "$seed_root"
-printf '%s\n' "$sha" >"$source_root/.baci-source-sha"
 chown -R root:root "$source_root"
 find "$source_root" -type d -exec chmod 0550 {} +
 find "$source_root" -type f -exec chmod 0440 {} +
@@ -167,6 +178,8 @@ elif [ "$(/usr/bin/node --version)" != "$(node --version)" ]; then
 fi
 chown -R root:root "$store_root"
 chmod -R a-w "$store_root"
+chown -R root:root "$cache_root"
+chmod -R a-w "$cache_root"
 
 if [ -e "$helper_root" ] || [ -L "$helper_root" ]; then
   echo "refusing pre-existing helper directory" >&2
@@ -176,7 +189,9 @@ mkdir -m 0755 -- "$helper_root"
 helper_created=1
 chown root:root "$helper_root"
 for module in worker_release_dependency_builder.py worker_release_dependency_artifacts.py \
-  worker_release_dependency_fs.py worker_release_dependency_sandbox.py; do
+  worker_release_dependency_fs.py worker_release_dependency_sandbox.py \
+  worker_release_dependency_policy_cache.py worker_release_dependency_registry_policy.py \
+  worker_release_dependency_input_cache.py; do
   install -o root -g root -m 0444 "$(dirname "$0")/../../bin/$module" "$helper_root/$module"
 done
 install -o root -g root -m 0555 "$(dirname "$0")/dependency-snapshot-smoke.py" \

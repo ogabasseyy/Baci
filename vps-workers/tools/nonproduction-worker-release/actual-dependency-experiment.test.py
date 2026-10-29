@@ -19,7 +19,6 @@ experiment = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(experiment)
 from worker_release_actual_dependency_guard import (
     MonitorFailure,
-    ResourceEntryLimitExceeded,
     enforce_resource_limits,
     failure_diagnostic,
     run_monitored,
@@ -29,6 +28,7 @@ from worker_release_actual_dependency_resources import (
     MAX_TREE_ENTRIES,
     MIN_FREE_BYTES,
     MIN_FREE_INODES,
+    ResourceEntryLimitExceeded,
 )
 from worker_release_dependency_diagnostics import (
     PnpmStepRejected,

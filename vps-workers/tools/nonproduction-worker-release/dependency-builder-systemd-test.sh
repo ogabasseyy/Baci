@@ -199,17 +199,49 @@ if [ -n "$unit_load_state" ] && [ "$unit_load_state" != not-found ]; then
 fi
 builder_unit_owned=1
 python3 - "$source_root" "$release_root" "$sha" "$suffix" <<'PY'
-import os, sys
+import os, re, subprocess, sys
 from pathlib import Path
 from types import SimpleNamespace
-from worker_release_dependency_builder import build
+import worker_release_dependency_builder as dependency_builder
 from worker_release_dependency_consumer import _verify_candidate
 from worker_release_dependency_install import install_payload
 
 source, release, sha = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
 from worker_release_dependency_builder import uuid
 uuid.uuid4 = lambda: SimpleNamespace(hex=sys.argv[4])
-manifest, result_dir = build(str(source), sha)
+
+def run_fixture_sandbox(command, scratch, unit):
+    # The production helper intentionally discards child output. This fixture
+    # has only synthetic inputs and no secrets, so capture a small, redacted
+    # diagnostic from its exact transient unit when it fails.
+    result = subprocess.run(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env={"PATH": "/usr/bin:/bin"},
+        timeout=330,
+        check=False,
+        text=True,
+        errors="replace",
+    )
+    if result.returncode == 0:
+        return
+    diagnostic = (result.stderr + "\n" + result.stdout)[-4096:]
+    for pattern, replacement in (
+        (r"(?i)(bearer\s+)[^\s,;]+", r"\1[redacted]"),
+        (r"(?i)((?:access[_-]?token|refresh[_-]?token|password|secret)=)[^\s,;]+", r"\1[redacted]"),
+        (r"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b", "[redacted]"),
+        (r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "[redacted]"),
+    ):
+        diagnostic = re.sub(pattern, replacement, diagnostic)
+    print(f"dependency fixture transient unit failed: {unit} (exit {result.returncode})", file=sys.stderr)
+    if diagnostic.strip():
+        print(diagnostic, file=sys.stderr)
+    raise subprocess.CalledProcessError(result.returncode, command)
+
+dependency_builder.run_sandbox = run_fixture_sandbox
+manifest, result_dir = dependency_builder.build(str(source), sha)
 payload = _verify_candidate(manifest, result_dir, source, sha, os.geteuid())
 install_payload(payload, release, owner_uid=os.geteuid())
 print("dependency candidate materialized")

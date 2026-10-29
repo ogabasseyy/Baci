@@ -10,11 +10,23 @@ class UnitContractRejected(RuntimeError):
     """The loaded unit differs from the fixed extractor policy."""
 
 
+def control_group_category(control_group: str, *, unit: str) -> str:
+    """Classify a cgroup path without returning it or any caller-controlled text."""
+    expected = f"/system.slice/{unit}"
+    if control_group == expected:
+        return "expected-system-slice"
+    if not control_group:
+        return "empty"
+    nested = re.fullmatch(r"/system\.slice/[^/]+\.slice/" + re.escape(unit), control_group)
+    return "nested-template-slice" if nested else "other"
+
+
 def expected_properties(*, extractor: str, resource_root: Path,
                         control_root: Path) -> dict[str, str]:
     return {
         "Type": "simple", "User": extractor, "Group": extractor,
         "SupplementaryGroups": "", "DropInPaths": "", "Delegate": "no",
+        "Slice": "system.slice",
         "KillMode": "control-group", "Restart": "no", "RuntimeMaxUSec": "3min",
         "TimeoutStartUSec": "20s", "TimeoutStopUSec": "5s", "NoNewPrivileges": "yes",
         "PrivateTmp": "yes", "PrivateDevices": "yes", "PrivateNetwork": "yes",
@@ -66,8 +78,10 @@ def validate_unit_contract(*, unit: str, transaction_id: str, extractor_uid: int
     except ValueError as error:
         raise UnitContractRejected("extractor systemd main process is invalid") from error
     control_group = run("systemctl", "show", "-p", "ControlGroup", "--value", unit)
-    if control_group != f"/system.slice/{unit_prefix}{transaction_id}.service":
-        raise UnitContractRejected("extractor cgroup name differs from fixed instance")
+    cgroup_class = control_group_category(control_group, unit=unit)
+    if cgroup_class != "expected-system-slice":
+        raise UnitContractRejected(
+            f"extractor cgroup name differs from fixed instance ({cgroup_class})")
     if pid <= 1:
         raise UnitContractRejected("extractor systemd main process is unavailable")
     pid_identity(pid, extractor_uid, extractor_gid)

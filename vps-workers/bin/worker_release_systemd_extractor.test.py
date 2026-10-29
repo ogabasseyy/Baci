@@ -74,6 +74,29 @@ class ExtractorUnitTests(unittest.TestCase):
                         if item.relative == "extract-tmpfiles").content.decode()
         self.assertIn("d /run/baci-worker-release-extract/control 0710 root baci-release-extractor -", tmpfiles)
 
+    def test_template_pins_instance_service_to_fixed_system_slice(self):
+        properties = contract.expected_properties(
+            extractor=supervisor.EXTRACTOR, resource_root=supervisor.RESOURCE_ROOT,
+            control_root=supervisor.CONTROL_ROOT,
+        )
+        unit_source = (Path(__file__).resolve().parents[1] / "systemd"
+                       / "baci-worker-source-extract@.service").read_text()
+        self.assertEqual(properties["Slice"], "system.slice")
+        self.assertIn("Slice=system.slice", unit_source.splitlines())
+
+    def test_control_group_diagnostic_is_a_fixed_path_class(self):
+        unit = "baci-worker-source-extract@" + "a" * 32 + ".service"
+        self.assertEqual(contract.control_group_category(f"/system.slice/{unit}", unit=unit),
+                         "expected-system-slice")
+        self.assertEqual(contract.control_group_category(
+            f"/system.slice/baci-worker-source-extract.slice/{unit}", unit=unit),
+            "nested-template-slice")
+        self.assertEqual(contract.control_group_category("", unit=unit), "empty")
+        self.assertEqual(contract.control_group_category(
+            "/system.slice/other.service", unit=unit), "other")
+        self.assertNotIn("other.service", contract.control_group_category(
+            "/system.slice/other.service", unit=unit))
+
     def test_helper_path_requires_root_owned_traversable_ancestors(self):
         helper = Path("/usr/local/lib/baci-worker-broker")
         blocked = helper.parent

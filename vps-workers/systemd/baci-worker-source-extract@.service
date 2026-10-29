@@ -5,6 +5,7 @@ ConditionPathIsExecutable=/usr/local/lib/baci-worker-broker/worker_release_archi
 
 [Service]
 Type=simple
+Slice=system.slice
 User=baci-release-extractor
 Group=baci-release-extractor
 SupplementaryGroups=

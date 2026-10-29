@@ -22,6 +22,12 @@ from worker_release_actual_dependency_guard import (
     failure_diagnostic,
     run_monitored,
 )
+from worker_release_dependency_diagnostics import (
+    PnpmStepRejected,
+    pnpm_failure_category,
+    read_diagnostic,
+    write_diagnostic,
+)
 
 
 class ActualDependencyExperimentTests(unittest.TestCase):
@@ -40,6 +46,82 @@ class ActualDependencyExperimentTests(unittest.TestCase):
             failure_diagnostic("pnpm-pin", RuntimeError("could not identify exactly one pnpm 11.7.0 package entrypoint")),
             "experiment failure stage=pnpm-pin category=runtime-pin-invalid",
         )
+
+    def test_policy_child_diagnostic_is_closed_and_redacted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "child-diagnostic.json"
+            write_diagnostic(path, "preverify-web-deploy", "lockfile-trust-downgrade", 1)
+            self.assertEqual(
+                read_diagnostic(path, owner_uid=os.geteuid()),
+                {"stage": "preverify-web-deploy", "category": "lockfile-trust-downgrade", "exit_code": 1},
+            )
+            path.unlink()
+            write_diagnostic(path, "attacker/path", "private token", 1)
+            self.assertEqual(
+                read_diagnostic(path, owner_uid=os.geteuid()),
+                {"stage": "policy-preverify", "category": "operation-error", "exit_code": 1},
+            )
+
+    def test_policy_diagnostic_reader_rejects_symlink_and_unknown_schema(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "target"
+            target.write_text('{"stage":"policy-preverify","category":"operation-error","exit_code":1}')
+            link = root / "diagnostic"
+            link.symlink_to(target)
+            self.assertIsNone(read_diagnostic(link, owner_uid=os.geteuid()))
+            link.unlink()
+            link.write_text('{"stage":"policy-preverify","category":"token=secret","exit_code":1}')
+            self.assertIsNone(read_diagnostic(link, owner_uid=os.geteuid()))
+
+    def test_pnpm_failure_classifier_is_closed_and_step_error_does_not_echo_output(self):
+        output = "ERR_PNPM_TRUST_DOWNGRADE private-token=must-not-escape"
+        self.assertEqual(pnpm_failure_category(output), "lockfile-trust-downgrade")
+        error = PnpmStepRejected("preverify-web-deploy", pnpm_failure_category(output), 17)
+        self.assertEqual((error.safe_stage, error.safe_category, error.exit_code),
+                         ("preverify-web-deploy", "lockfile-trust-downgrade", 17))
+        self.assertNotIn("private-token", str(error))
+
+    def test_policy_child_main_writes_stage_category_without_raw_pnpm_output(self):
+        from contextlib import redirect_stderr
+        from io import StringIO
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            diagnostic = root / "child.json"
+            error_output = StringIO()
+            with patch.object(experiment.policy_cli.policy, "preverify",
+                              side_effect=PnpmStepRejected("preverify-worker-install",
+                                                           "dependency-resolution", 19)), \
+                 redirect_stderr(error_output):
+                result = experiment.policy_cli.main([
+                    "--preverify", "--source", str(root), "--store", str(root),
+                    "--cache", str(root), "--pnpm", "/fixed/pnpm", "--node", "/fixed/node",
+                    "--diagnostic-file", str(diagnostic),
+                ])
+            self.assertEqual(result, 1)
+            self.assertEqual(read_diagnostic(diagnostic, owner_uid=os.geteuid()), {
+                "stage": "preverify-worker-install", "category": "dependency-resolution", "exit_code": 19,
+            })
+            self.assertIn("category=dependency-resolution", error_output.getvalue())
+            self.assertNotIn("dependency-resolution failed", error_output.getvalue())
+            self.assertNotIn("/fixed/pnpm", error_output.getvalue())
+
+    def test_supervisor_promotes_child_diagnostic_over_generic_process_exit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            diagnostic = root / "child.json"
+            write_diagnostic(diagnostic, "preverify-worker-install", "dependency-resolution", 17)
+            with patch.object(experiment, "run",
+                              side_effect=MonitorFailure("policy-preverify", "process-exit", 1)):
+                with self.assertRaises(MonitorFailure) as raised:
+                    experiment.run_policy_preverify(
+                        ("synthetic",), cwd=root, env={}, timeout=10, resource_root=root,
+                        diagnostic_path=diagnostic,
+                    )
+            self.assertEqual((raised.exception.stage, raised.exception.category,
+                              raised.exception.exit_code),
+                             ("preverify-worker-install", "dependency-resolution", 17))
         self.assertEqual(
             failure_diagnostic("checkout-identity", RuntimeError("checkout does not match dispatched SHA")),
             "experiment failure stage=checkout-identity category=checkout-mismatch",
@@ -215,6 +297,20 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         self.assertIn('"PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true"', source)
         self.assertIn('"PNPM_CONFIG_TRUST_LOCKFILE": "false"', source)
 
+    def test_large_measurement_caps_are_scoped_to_disposable_experiment(self):
+        self.assertEqual(experiment.policy.MAX_CACHE_BYTES, 256 * 1024 * 1024)
+        self.assertEqual(experiment.policy.MAX_EXPERIMENT_CACHE_BYTES, 4 * 1024 * 1024 * 1024)
+        self.assertEqual(experiment.EXPERIMENT_CACHE_BYTES, 4 * 1024 * 1024 * 1024)
+        self.assertEqual(experiment.EXPERIMENT_STORE_BYTES, 4 * 1024 * 1024 * 1024)
+        source = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn('"--experiment-cache-max-bytes", str(EXPERIMENT_CACHE_BYTES)', source)
+        self.assertIn('"monitored_scratch": 12 * 1024 * 1024 * 1024', source)
+        self.assertEqual(experiment.policy.make_receipt.__kwdefaults__["cache_max_bytes"],
+                         256 * 1024 * 1024)
+        production_builder = (SCRIPT.parents[3] / "vps-workers/bin/worker_release_dependency_builder.py")
+        builder_source = production_builder.read_text(encoding="utf-8")
+        self.assertIn("max_entries=MAX_CACHE_ENTRIES, max_bytes=MAX_CACHE_BYTES", builder_source)
+
     def test_deployed_dependency_must_match_exact_source_lock_version(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -252,7 +348,8 @@ class ActualDependencyExperimentTests(unittest.TestCase):
 
             with patch.object(experiment.shutil, "which", return_value=str(launcher)), \
                  patch.object(experiment.subprocess, "run", side_effect=fake_run):
-                self.assertEqual(experiment.pinned_pnpm("/usr/bin/node"), str(canonical_package))
+                self.assertEqual(experiment.pinned_pnpm("/usr/bin/node", experiment.policy.EXPECTED_PNPM),
+                                 str(canonical_package))
 
     def test_tree_size_measures_regular_content_and_directories(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -280,6 +377,7 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         workflow = SCRIPT.parents[3] / ".github/workflows/worker-release-actual-dependency-experiment.yml"
         text = workflow.read_text(encoding="utf-8")
         self.assertIn("worker_release_actual_dependency_guard.py", text)
+        self.assertIn("worker_release_actual_dependency_runtime.py", text)
         self.assertNotIn("workflow_dispatch", text)
         self.assertIn("pull_request:", text)
         self.assertIn("contents: read", text)

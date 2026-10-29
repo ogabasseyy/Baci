@@ -64,6 +64,7 @@ class DependencySnapshotSmokeTests(unittest.TestCase):
         workflow = SCRIPT.parents[3] / ".github/workflows/worker-release-dependency-systemd-tests.yml"
         workflow_text = workflow.read_text(encoding="utf-8")
         self.assertIn("worker_release_dependency_diagnostics.py", fixture)
+        self.assertIn("worker_release_dependency_policy_cli.py", fixture)
         self.assertIn("vps-workers/bin/worker_release_dependency_*.py", workflow_text)
 
     def test_snapshot_layout_failure_reports_only_category_and_relative_path(self):

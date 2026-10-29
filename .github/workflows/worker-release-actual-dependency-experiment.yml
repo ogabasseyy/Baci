@@ -14,6 +14,7 @@ on:
       - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.py'
       - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.test.py'
       - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_dependency_guard.py'
+      - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_dependency_runtime.py'
       - 'vps-workers/tools/nonproduction-worker-release/dependency-snapshot-smoke.py'
 permissions:
   contents: read

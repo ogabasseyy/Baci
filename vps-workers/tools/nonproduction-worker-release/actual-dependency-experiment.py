@@ -7,12 +7,9 @@ then builds both real lockfiles offline with scripts disabled and reports sizes.
 """
 from __future__ import annotations
 
-import hashlib
-import importlib.util
 import json
 import os
 import shutil
-import stat
 import subprocess
 import sys
 import tarfile
@@ -22,19 +19,30 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 BIN = ROOT / "vps-workers" / "bin"
+EXPERIMENT_CACHE_BYTES = 4 * 1024 * 1024 * 1024
+EXPERIMENT_STORE_BYTES = 4 * 1024 * 1024 * 1024
 sys.path.insert(0, str(BIN))
 
 import worker_release_dependency_artifacts as artifacts
 import worker_release_dependency_install as installer
 import worker_release_dependency_input_cache as input_cache
 import worker_release_dependency_policy_cache as policy
+import worker_release_dependency_policy_cli as policy_cli
 import worker_release_dependency_sandbox as sandbox
 from worker_release_actual_dependency_guard import (
+    MonitorFailure,
     assert_deployed_package_matches_lock,
     enforce_resource_limits,
     failure_diagnostic,
     run_monitored,
     web_deploy_command,
+)
+from worker_release_dependency_diagnostics import read_diagnostic
+from worker_release_actual_dependency_runtime import (
+    independent_smoke,
+    load_smoke_module,
+    pinned_pnpm,
+    tree_size,
 )
 
 
@@ -44,94 +52,18 @@ def run(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], timeout: in
                   resource_root=resource_root)
 
 
-def pinned_pnpm(node: str) -> str:
-    launcher = shutil.which("pnpm")
-    if not launcher:
-        raise RuntimeError("pinned pnpm launcher is unavailable")
-    # pnpm/action-setup installs a shell shim in PNPM_HOME and keeps the actual
-    # package below node_modules/.pnpm.  pathlib's recursive glob skips hidden
-    # directories by default, so walk explicitly without following symlinks.
-    search_root = (Path(launcher).parent.parent).resolve(strict=True)
-    candidates = []
-    seen = 0
-    for current, directories, files in os.walk(search_root, topdown=True, followlinks=False):
-        directories[:] = [name for name in directories
-                          if not (Path(current) / name).is_symlink()]
-        seen += len(directories) + len(files)
-        if seen > 100_000:
-            raise RuntimeError("pnpm installation exceeds entry bound")
-        if not current.endswith("/pnpm/bin") or "pnpm.cjs" not in files:
-            continue
-        candidate = Path(current) / "pnpm.cjs"
-        info = candidate.lstat()
-        if not stat.S_ISREG(info.st_mode) or candidate.is_symlink():
-            continue
-        try:
-            candidate.resolve(strict=True).relative_to(search_root)
-        except (OSError, ValueError):
-            continue
-        result = subprocess.run((node, str(candidate), "--version"), stdin=subprocess.DEVNULL,
-                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                                text=True, timeout=15, check=False)
-        if result.returncode == 0 and result.stdout.strip() == policy.EXPECTED_PNPM:
-            candidates.append(candidate.resolve(strict=True))
-    if len(candidates) != 1:
-        raise RuntimeError("could not identify exactly one pnpm 11.7.0 package entrypoint")
-    return str(candidates[0])
-
-
-def tree_size(root: Path, *, max_entries: int, max_bytes: int) -> tuple[int, int]:
-    count = 0
-    total = 0
-    for current, directories, files in os.walk(root, topdown=True, followlinks=False):
-        for name in directories + files:
-            path = Path(current) / name
-            info = path.lstat()
-            count += 1
-            entry_type = stat.S_IFMT(info.st_mode)
-            if count > max_entries or entry_type not in (stat.S_IFDIR, stat.S_IFREG):
-                raise RuntimeError("measured tree contains an unsafe entry or exceeds entry bound")
-            if entry_type == stat.S_IFREG:
-                if info.st_nlink != 1:
-                    raise RuntimeError("measured tree contains a shared file inode")
-                total += info.st_size
-                if total > max_bytes:
-                    raise RuntimeError("measured tree exceeds configured size bound")
-    return count, total
-
-
-def load_smoke_module():
-    path = ROOT / "vps-workers" / "tools" / "nonproduction-worker-release" / "dependency-snapshot-smoke.py"
-    spec = importlib.util.spec_from_file_location("actual_dependency_smoke", path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError("independent smoke module is unavailable")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def independent_smoke(release: Path, node: str, smoke, resource_root: Path) -> str:
-    before = hashlib.sha256()
-    before.update(bytes.fromhex(smoke.snapshot_digest(release / "apps/web/node_modules", "web")))
-    before.update(bytes.fromhex(smoke.snapshot_digest(release / "node_modules", "worker")))
-    environment = {"PATH": f"{Path(node).parent}:/usr/bin:/bin", "HOME": "/nonexistent", "NODE_ENV": "production"}
-    tsx = release / "apps/web/node_modules/.bin/tsx"
-    if not tsx.is_file() or not os.access(tsx, os.X_OK):
-        raise RuntimeError("materialized web tsx entrypoint is unavailable")
-    run((str(tsx), "--version"), cwd=release / "apps/web", env=environment, timeout=30,
-        stage="independent-smoke", resource_root=resource_root)
-    dotenv = release / "node_modules/dotenv"
-    if not dotenv.is_dir():
-        raise RuntimeError("materialized worker dotenv package is unavailable")
-    run((node, "--input-type=module", "-e", "import('dotenv').then(m => { if (typeof m.config !== 'function') process.exit(2) })"),
-        cwd=release, env=environment, timeout=30, stage="independent-smoke",
-        resource_root=resource_root)
-    after = hashlib.sha256()
-    after.update(bytes.fromhex(smoke.snapshot_digest(release / "apps/web/node_modules", "web-after")))
-    after.update(bytes.fromhex(smoke.snapshot_digest(release / "node_modules", "worker-after")))
-    if before.digest() != after.digest():
-        raise RuntimeError("independent smoke modified the materialized dependency snapshot")
-    return before.hexdigest()
+def run_policy_preverify(command: tuple[str, ...], *, cwd: Path, env: dict[str, str],
+                         timeout: int, resource_root: Path, diagnostic_path: Path) -> None:
+    try:
+        run(command, cwd=cwd, env=env, timeout=timeout, stage="policy-preverify",
+            resource_root=resource_root)
+    except MonitorFailure as exc:
+        record = read_diagnostic(diagnostic_path, owner_uid=os.geteuid())
+        if record is not None and exc.category == "process-exit":
+            raise MonitorFailure(str(record["stage"]), str(record["category"]),
+                                 record["exit_code"] if isinstance(record["exit_code"], int)
+                                 else exc.exit_code) from exc
+        raise
 
 
 def _main() -> int:
@@ -148,7 +80,7 @@ def _main() -> int:
     if not node or subprocess.run((node, "--version"), capture_output=True, text=True, check=True).stdout.strip().split(".")[0] != "v24":
         raise RuntimeError("Node 24 runtime is unavailable")
     stage = "pnpm-pin"
-    pnpm = pinned_pnpm(node)
+    pnpm = pinned_pnpm(node, policy.EXPECTED_PNPM)
     try:
         with tempfile.TemporaryDirectory(prefix="baci-actual-dependency-experiment-") as temporary:
             base = Path(temporary)
@@ -188,14 +120,19 @@ def _main() -> int:
                 sys.executable, str(BIN / "worker_release_dependency_policy_cache.py"), "--preverify",
                 "--source", str(source), "--store", str(store), "--cache", str(cache),
                 "--pnpm", pnpm, "--node", node,
+                "--experiment-cache-max-bytes", str(EXPERIMENT_CACHE_BYTES),
             )
-            run(preverify_command, cwd=ROOT,
+            preverify_diagnostic = base / "policy-preverify-diagnostic.json"
+            preverify_command += ("--diagnostic-file", str(preverify_diagnostic))
+            run_policy_preverify(
+                preverify_command, cwd=ROOT,
                 env={"PATH": f"{Path(node).parent}:/usr/bin:/bin", "HOME": str(home), "CI": "true"},
-                timeout=600, stage="policy-preverify", resource_root=base)
+                timeout=600, resource_root=base, diagnostic_path=preverify_diagnostic,
+            )
             stage = "offline-store-validation"
             input_cache.validate_offline_store(store, owner_uid=os.geteuid(),
                                                max_entries=200_000,
-                                               max_bytes=1536 * 1024 * 1024)
+                                               max_bytes=EXPERIMENT_STORE_BYTES)
             stage = "source-lock-validation"
             lock_hashes, _ = policy._input_hashes(source)
             output = base / "payload"
@@ -221,7 +158,8 @@ def _main() -> int:
             }
             preverify_receipt = store / policy.RECEIPT_NAME
             stage = "receipt-validation"
-            policy.validate_receipt(source, cache, preverify_receipt, expected_sha=expected_sha)
+            policy.validate_receipt(source, cache, preverify_receipt, expected_sha=expected_sha,
+                                    cache_max_bytes=EXPERIMENT_CACHE_BYTES)
             web_cmd = web_deploy_command(node, pnpm, store, output / "web", policy.TRUSTED_REGISTRY)
             run(web_cmd, cwd=source, env=offline_env, timeout=900,
                 stage="web-deploy", resource_root=base)
@@ -236,12 +174,14 @@ def _main() -> int:
             run(worker_cmd, cwd=source / "vps-workers", env=offline_env, timeout=900,
                 stage="worker-install", resource_root=base)
             stage = "receipt-validation"
-            policy.validate_receipt(source, cache, preverify_receipt, expected_sha=expected_sha)
+            policy.validate_receipt(source, cache, preverify_receipt, expected_sha=expected_sha,
+                                    cache_max_bytes=EXPERIMENT_CACHE_BYTES)
             input_cache.validate_offline_store(store, owner_uid=os.geteuid(),
                                                max_entries=200_000,
-                                               max_bytes=1536 * 1024 * 1024)
+                                               max_bytes=EXPERIMENT_STORE_BYTES)
             stage = "offline-store-validation"
-            store_count, store_bytes = tree_size(store, max_entries=200_000, max_bytes=1536 * 1024 * 1024)
+            store_count, store_bytes = tree_size(store, max_entries=200_000,
+                                                 max_bytes=EXPERIMENT_STORE_BYTES)
             worker_modules = source / "vps-workers" / "node_modules"
             if not worker_modules.is_dir() or worker_modules.is_symlink():
                 raise RuntimeError("offline standalone worker install produced no real node_modules directory")
@@ -256,7 +196,7 @@ def _main() -> int:
             installer.install_payload(output, release, owner_uid=os.geteuid())
             enforce_resource_limits(base)
             stage = "independent-smoke"
-            smoke_hash = independent_smoke(release, node, load_smoke_module(), base)
+            smoke_hash = independent_smoke(release, node, load_smoke_module(ROOT), base)
             stage = "materialized-tree-validation"
             materialized_count, materialized_bytes = tree_size(release, max_entries=200_000,
                                                                 max_bytes=1024 * 1024 * 1024)
@@ -276,6 +216,11 @@ def _main() -> int:
                 "preverify_seconds": round(time.monotonic() - preverify_started, 2),
                 "total_seconds": round(time.monotonic() - started, 2),
                 "network_policy": "preverify-only-fixed-registry; all builds offline",
+                "measurement_caps_bytes": {
+                    "metadata_cache": EXPERIMENT_CACHE_BYTES,
+                    "store": EXPERIMENT_STORE_BYTES,
+                    "monitored_scratch": 12 * 1024 * 1024 * 1024,
+                },
                 "lifecycle_scripts": "disabled",
             }
             print(json.dumps(report, sort_keys=True))

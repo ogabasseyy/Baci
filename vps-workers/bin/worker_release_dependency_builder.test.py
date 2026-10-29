@@ -781,8 +781,11 @@ class DependencyBuilderTests(unittest.TestCase):
             with patch.object(policy_cache.subprocess, "run", side_effect=[
                 type("Result", (), {"stdout": "11.7.0\n"})(), failure,
             ]):
-                with self.assertRaisesRegex(policy_cache.BuilderRejected, "web-deploy failed .*registry-network") as caught:
+                with self.assertRaises(policy_cache.BuilderRejected) as caught:
                     policy_cache.preverify(source, store, cache, "/fixed/pnpm")
+            self.assertEqual(caught.exception.safe_stage, "preverify-web-deploy")
+            self.assertEqual(caught.exception.safe_category, "registry-network")
+            self.assertEqual(caught.exception.exit_code, 1)
             self.assertNotIn("synthetic-private-token", str(caught.exception))
             self.assertNotIn("synthetic credential marker", str(caught.exception))
             self.assertFalse((store / policy_cache.RECEIPT_NAME).exists())

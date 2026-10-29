@@ -250,7 +250,8 @@ chown root:root "$helper_root"
 for module in worker_release_dependency_builder.py worker_release_dependency_artifacts.py \
   worker_release_dependency_fs.py worker_release_dependency_sandbox.py \
   worker_release_dependency_policy_cache.py worker_release_dependency_registry_policy.py \
-  worker_release_dependency_input_cache.py worker_release_dependency_diagnostics.py; do
+  worker_release_dependency_input_cache.py worker_release_dependency_diagnostics.py \
+  worker_release_dependency_policy_cli.py; do
   install -o root -g root -m 0444 "$(dirname "$0")/../../bin/$module" "$helper_root/$module"
 done
 install -o root -g root -m 0555 "$(dirname "$0")/dependency-snapshot-smoke.py" \

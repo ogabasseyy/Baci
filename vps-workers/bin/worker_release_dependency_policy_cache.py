@@ -7,18 +7,15 @@ checked the authenticated immutable source and fixed policy.
 """
 from __future__ import annotations
 
-import argparse
 import hashlib
 import hmac
 import json
 import os
 import re
 import stat
-import subprocess
-import sys
+import subprocess  # shared module alias retained for colocated test patching
 import tempfile
 from pathlib import Path
-from typing import Sequence
 
 from worker_release_dependency_artifacts import BuilderRejected
 
@@ -36,13 +33,18 @@ POLICY_FLAGS = {
 }
 TRUSTED_REGISTRY = "https://registry.npmjs.org/"
 MAX_CACHE_BYTES = 256 * 1024 * 1024
+MAX_EXPERIMENT_CACHE_BYTES = 4 * 1024 * 1024 * 1024
 MAX_CACHE_ENTRIES = 100_000
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
 from worker_release_dependency_registry_policy import (
     validate_registry_routing as _validate_registry_routing,
 )
-from worker_release_dependency_diagnostics import run_pnpm_checked
+from worker_release_dependency_diagnostics import (
+    PnpmStepRejected,
+    run_pnpm_checked,
+    write_diagnostic,
+)
 
 
 def _sha256_regular_file(path: Path, *, owner_uid: int | None = None, max_bytes: int = 64 * 1024 * 1024) -> str:
@@ -71,7 +73,8 @@ def _sha256_regular_file(path: Path, *, owner_uid: int | None = None, max_bytes:
         os.close(fd)
 
 
-def _hash_tree(root: Path, expected_owner: int | None = None) -> str:
+def _hash_tree(root: Path, expected_owner: int | None = None,
+               max_bytes: int = MAX_CACHE_BYTES) -> str:
     owner = os.geteuid() if expected_owner is None else expected_owner
     root_info = root.lstat()
     if not stat.S_ISDIR(root_info.st_mode) or root_info.st_uid != owner or root_info.st_mode & 0o022:
@@ -100,7 +103,7 @@ def _hash_tree(root: Path, expected_owner: int | None = None) -> str:
             with child.open("rb") as handle:
                 while chunk := handle.read(1024 * 1024):
                     total += len(chunk)
-                    if total > MAX_CACHE_BYTES:
+                    if total > max_bytes:
                         raise BuilderRejected("pnpm policy cache exceeds its byte limit")
                     file_digest.update(chunk)
             after = child.lstat()
@@ -162,7 +165,8 @@ def _source_sha(source: Path) -> str:
     return sha
 
 
-def make_receipt(source: Path, cache: Path, pnpm_version: str, *, cache_owner: int | None = None) -> dict[str, object]:
+def make_receipt(source: Path, cache: Path, pnpm_version: str, *, cache_owner: int | None = None,
+                 cache_max_bytes: int = MAX_CACHE_BYTES) -> dict[str, object]:
     _validate_registry_routing(source, POLICY_FILES, TRUSTED_REGISTRY)
     locks, policies = _input_hashes(source)
     if pnpm_version != EXPECTED_PNPM:
@@ -175,13 +179,14 @@ def make_receipt(source: Path, cache: Path, pnpm_version: str, *, cache_owner: i
         "policyFiles": policies,
         "effectiveFlags": POLICY_FLAGS,
         "registryRouting": {"default": TRUSTED_REGISTRY, "scoped": "none"},
-        "metadataCacheSha256": _hash_tree(cache, cache_owner),
+        "metadataCacheSha256": _hash_tree(cache, cache_owner, cache_max_bytes),
         "verification": "pnpm-online-frozen-install-passed",
     }
 
 
 def validate_receipt(source: Path, cache: Path, receipt_path: Path, pnpm_version: str = EXPECTED_PNPM,
-                     *, owner_uid: int | None = None, expected_sha: str | None = None) -> dict[str, object]:
+                     *, owner_uid: int | None = None, expected_sha: str | None = None,
+                     cache_max_bytes: int = MAX_CACHE_BYTES) -> dict[str, object]:
     owner = os.geteuid() if owner_uid is None else owner_uid
     try:
         fd = os.open(receipt_path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
@@ -200,7 +205,8 @@ def validate_receipt(source: Path, cache: Path, receipt_path: Path, pnpm_version
     finally:
         if "fd" in locals():
             os.close(fd)
-    expected = make_receipt(source, cache, pnpm_version, cache_owner=owner)
+    expected = make_receipt(source, cache, pnpm_version, cache_owner=owner,
+                            cache_max_bytes=cache_max_bytes)
     if value != expected:
         raise BuilderRejected("pnpm policy verification receipt does not match exact lockfiles and policy")
     if expected_sha is not None and not hmac.compare_digest(str(value["sourceSha"]), expected_sha):
@@ -208,7 +214,8 @@ def validate_receipt(source: Path, cache: Path, receipt_path: Path, pnpm_version
     return value
 
 
-def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/usr/bin/node") -> None:
+def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/usr/bin/node",
+              *, cache_max_bytes: int = MAX_CACHE_BYTES) -> None:
     _validate_registry_routing(source, POLICY_FILES, TRUSTED_REGISTRY)
     version = run_pnpm_checked((node, pnpm, "--version"), cwd=source,
                                timeout=15, stage="version check").stdout.strip()
@@ -248,7 +255,7 @@ def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/u
                     raise BuilderRejected(f"pnpm preverify {stage} did not report lockfile supply-chain policy verification")
     if before != _input_hashes(source):
         raise BuilderRejected("pnpm changed a lockfile or policy during preverification")
-    receipt = make_receipt(source, cache, version)
+    receipt = make_receipt(source, cache, version, cache_max_bytes=cache_max_bytes)
     path = store / RECEIPT_NAME
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o400)
     try:
@@ -269,25 +276,6 @@ def preverify(source: Path, store: Path, cache: Path, pnpm: str, node: str = "/u
         os.close(directory_fd)
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--preverify", action="store_true", help="fixture-only: online verify and write consistency receipt")
-    parser.add_argument("--source", type=Path, required=True)
-    parser.add_argument("--store", type=Path, required=True)
-    parser.add_argument("--cache", type=Path, required=True)
-    parser.add_argument("--pnpm", default="/usr/bin/pnpm")
-    parser.add_argument("--node", default="/usr/bin/node")
-    args = parser.parse_args(argv)
-    try:
-        if not args.preverify:
-            parser.error("--preverify is required")
-        preverify(args.source, args.store, args.cache, args.pnpm, args.node)
-        print("synthetic dependency policy preverification passed")
-        return 0
-    except (BuilderRejected, OSError, subprocess.SubprocessError) as exc:
-        print(f"dependency policy preverification rejected: {exc}", file=sys.stderr)
-        return 1
-
-
 if __name__ == "__main__":
+    from worker_release_dependency_policy_cli import main
     raise SystemExit(main())

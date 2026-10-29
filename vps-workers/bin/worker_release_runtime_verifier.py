@@ -36,6 +36,7 @@ MAX_CHECK_SECONDS = 35
 MAX_LAUNCH_SECONDS = 5
 MAX_CLEANUP_SECONDS = 30
 POLL_SECONDS = 0.05
+RUNTIME_SMOKE_UID = 65534
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 SYSTEMD_RUN = "/usr/bin/systemd-run"
 SYSTEMCTL = "/usr/bin/systemctl"
@@ -122,10 +123,15 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
         raise RuntimeVerificationRejected("systemd runtime verifier is unavailable")
     if not re.fullmatch(r"baci-worker-runtime-[0-9a-f]{16}-[0-9a-f]{12}-[01]\.service", unit):
         raise RuntimeVerificationRejected("systemd runtime unit name is invalid")
+    if properties.get("User") != str(RUNTIME_SMOKE_UID):
+        raise RuntimeVerificationRejected("runtime unit identity is outside fixed policy")
     try:
-        preflight_cgroup_root(CGROUP_ROOT)
+        trusted_root = preflight_cgroup_root(CGROUP_ROOT)
     except Exception as error:
         raise RuntimeVerificationRejected("required cgroup v2 runtime boundary is unavailable") from error
+    if (not isinstance(trusted_root, tuple) or len(trusted_root) != 4
+            or any(type(value) is not int or value < 0 for value in trusted_root)):
+        raise RuntimeVerificationRejected("trusted cgroup v2 runtime identity is invalid")
     # Keep failed units inspectable until Result/ExecMainStatus are read. The
     # default inactive collection mode removes the exact transient unit after
     # the explicit drain transitions it to inactive.
@@ -230,6 +236,7 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
                     rejected=RuntimeVerificationRejected,
                     deadline=time.monotonic() + MAX_CLEANUP_SECONDS,
                     unproven=RuntimeVerificationQuiescenceUnproven,
+                    uid=RUNTIME_SMOKE_UID, trusted_root=trusted_root,
                 )
             except RuntimeVerificationQuiescenceUnproven:
                 raise

@@ -23,6 +23,14 @@ SHA = "a" * 40
 FENCE = {"repository": "org/repo", "workflow": "release.yml", "ref": "refs/heads/main",
          "sha": SHA, "run_id": "11", "run_attempt": 1, "job_id": "12"}
 UNIT = f"baci-worker-deps-{SHA[:12]}-{'b' * 32}.service"
+COLLECTED_UNIT = {"LoadState": "not-found", "ActiveState": "inactive",
+                  "SubState": "dead", "MainPID": "0", "ControlGroup": ""}
+
+
+def collected_systemctl(*args, **_kwargs):
+    """Model systemd's complete properties after collecting the exact unit."""
+    prop = args[1].removeprefix("--property=")
+    return COLLECTED_UNIT.get(prop, "")
 
 
 class BuilderRunnerAdapterTests(unittest.TestCase):
@@ -91,7 +99,7 @@ class BuilderJournalStageLifecycleTests(unittest.TestCase):
         self.assertIsNone(self.journal.read())
 
     def test_terminal_recovery_drains_then_removes_exact_recorded_resources(self):
-        with patch.object(journal_module, "_systemctl", return_value="not-found"), patch.object(
+        with patch.object(journal_module, "_systemctl", side_effect=collected_systemctl), patch.object(
             journal_module, "_open_cgroup", side_effect=UnitCgroupAbsent
         ):
             with self.assertRaisesRegex(BuilderLifecycleRejected, "terminal attempt"):
@@ -120,7 +128,7 @@ class BuilderJournalStageLifecycleTests(unittest.TestCase):
         original.rename(held)
         original.mkdir(mode=0o700)
         os.chown(original, self.account.pw_uid, self.account.pw_gid)
-        with patch.object(journal_module, "_systemctl", return_value="not-found"), patch.object(
+        with patch.object(journal_module, "_systemctl", side_effect=collected_systemctl), patch.object(
             journal_module, "_open_cgroup", side_effect=UnitCgroupAbsent
         ):
             with self.assertRaisesRegex(BuilderLifecycleRejected, "inode changed"):

@@ -8,11 +8,10 @@ import stat
 from pathlib import Path
 
 from worker_release_dependency_artifacts import BuilderRejected, MAX_ENTRIES, MAX_PAYLOAD_BYTES
+from worker_release_dependency_graph import materialize_package_dependencies
 
 MAX_MATERIALIZED_BYTES = MAX_PAYLOAD_BYTES
 MAX_MATERIALIZED_ENTRIES = MAX_ENTRIES
-
-
 def _copy_file(source: Path, destination: Path, budget: dict[str, int]) -> None:
     before = source.lstat()
     if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
@@ -83,7 +82,9 @@ def _write_executable_wrapper(destination: Path, target_relative: Path,
 def _materialize_directory(source: Path, destination: Path, payload_root: Path,
                            budget: dict[str, int], ancestors: frozenset[tuple[int, int]],
                            tree_root: Path | None = None,
-                           materialized_root: Path | None = None) -> None:
+                           materialized_root: Path | None = None,
+                           expand_dependencies: bool = False,
+                           package_ancestors: frozenset[tuple[int, int]] = frozenset()) -> None:
     resolved = source.resolve(strict=True)
     try:
         resolved.relative_to(payload_root)
@@ -125,8 +126,11 @@ def _materialize_directory(source: Path, destination: Path, payload_root: Path,
                     or link_target != os.readlink(child)):
                 raise BuilderRejected("dependency symlink changed while installing")
             if resolved_child.is_dir():
+                direct_package_alias = (child.parent == tree_root
+                                        or child.parent.parent == tree_root)
                 _materialize_directory(resolved_child, target, payload_root, budget, next_ancestors,
-                                       tree_root, materialized_root)
+                                       tree_root, materialized_root,
+                                       direct_package_alias, package_ancestors)
             elif resolved_child.is_file():
                 if child.parent.name == ".bin" and resolved_child.stat().st_mode & 0o111:
                     try:
@@ -147,6 +151,11 @@ def _materialize_directory(source: Path, destination: Path, payload_root: Path,
     if ((before.st_dev, before.st_ino) != (after.st_dev, after.st_ino)
             or before.st_mtime_ns != after.st_mtime_ns or before.st_ctime_ns != after.st_ctime_ns):
         raise BuilderRejected("dependency candidate directory changed while installing")
+    if expand_dependencies:
+        materialize_package_dependencies(
+            resolved, destination, payload_root, budget, tree_root, materialized_root,
+            package_ancestors, materialize_directory=_materialize_directory,
+            copy_file=_copy_file, max_entries=MAX_MATERIALIZED_ENTRIES)
     os.chmod(destination, 0o550)
 
 

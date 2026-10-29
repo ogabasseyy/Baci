@@ -99,6 +99,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                 return 0
 
         spawn.return_value = Launcher()
+        _preflight.return_value = (1, 2, 3, 4)
         unit = "baci-worker-runtime-ffffffffffffffff-aaaaaaaaaaaa-0.service"
         values = {
             "LoadState": "loaded", "ActiveState": "active", "SubState": "exited",
@@ -112,7 +113,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                 patch("worker_release_runtime_verifier.SYSTEMD_RUN", "/usr/bin/true"), \
                 patch("worker_release_runtime_verifier.SYSTEMCTL", "/usr/bin/true"):
             _execute_fixed_unit(unit, self.candidate, ("/usr/bin/true",),
-                                {"PrivateNetwork": "yes"}, 1)
+                                {"User": "65534", "PrivateNetwork": "yes"}, 1)
         launch_args = spawn.call_args.args[0]
         self.assertIn("--no-block", launch_args)
         self.assertNotIn("--collect", launch_args)
@@ -120,6 +121,8 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
         self.assertIn("--property=StandardOutput=null", launch_args)
         self.assertIn("--property=StandardError=null", launch_args)
         drain.assert_called_once()
+        self.assertEqual(drain.call_args.kwargs["uid"], 65534)
+        self.assertEqual(drain.call_args.kwargs["trusted_root"], (1, 2, 3, 4))
 
     @patch("worker_release_runtime_verifier.drain_unpinned_until_proven")
     @patch("worker_release_runtime_verifier.preflight_cgroup_root")
@@ -141,6 +144,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                 return 0
 
         spawn.return_value = Launcher()
+        _preflight.return_value = (1, 2, 3, 4)
         unit = "baci-worker-runtime-ffffffffffffffff-aaaaaaaaaaaa-0.service"
         state = {"load": "loaded"}
 
@@ -175,13 +179,34 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                 patch("worker_release_runtime_verifier.SYSTEMD_RUN", "/usr/bin/true"), \
                 patch("worker_release_runtime_verifier.SYSTEMCTL", "/usr/bin/true"):
             with self.assertRaisesRegex(RuntimeVerificationRejected, "exit=21"):
-                _execute_fixed_unit(unit, self.candidate, ("/usr/bin/false",), {}, 1)
+                _execute_fixed_unit(unit, self.candidate, ("/usr/bin/false",),
+                                    {"User": "65534"}, 1)
         reset_index = next(i for i, call in enumerate(systemctl.call_args_list)
                            if call.args[:2] == ("reset-failed", unit))
         failed_state_index = next(i for i, call in enumerate(systemctl.call_args_list)
                                   if call.args[:3] == ("show", "--property=ActiveState", "--value"))
         self.assertLess(failed_state_index, reset_index)
         self.assertEqual(state["load"], "not-found")
+
+    @patch("worker_release_runtime_verifier.preflight_cgroup_root")
+    @patch("worker_release_runtime_verifier._spawn_unit")
+    def test_fixed_uid_and_cgroup_root_are_required_before_launch(self, spawn, preflight):
+        from worker_release_runtime_verifier import _execute_fixed_unit
+        unit = "baci-worker-runtime-ffffffffffffffff-aaaaaaaaaaaa-0.service"
+        with patch("worker_release_runtime_verifier.sys.platform", "linux"), \
+                patch("worker_release_runtime_verifier.os.geteuid", return_value=0), \
+                patch("worker_release_runtime_verifier.SYSTEMD_RUN", "/usr/bin/true"), \
+                patch("worker_release_runtime_verifier.SYSTEMCTL", "/usr/bin/true"):
+            with self.assertRaisesRegex(RuntimeVerificationRejected, "identity is outside fixed policy"):
+                _execute_fixed_unit(unit, self.candidate, ("/usr/bin/true",),
+                                    {"User": "0"}, 1)
+            preflight.assert_not_called()
+            spawn.assert_not_called()
+            preflight.return_value = None
+            with self.assertRaisesRegex(RuntimeVerificationRejected, "trusted cgroup.*invalid"):
+                _execute_fixed_unit(unit, self.candidate, ("/usr/bin/true",),
+                                    {"User": "65534"}, 1)
+        spawn.assert_not_called()
 
     @patch("worker_release_runtime_verifier.drain_unpinned_until_proven")
     @patch("worker_release_runtime_verifier.preflight_cgroup_root")
@@ -204,6 +229,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                 return self.returncode
 
         spawn.return_value = Launcher()
+        _preflight.return_value = (1, 2, 3, 4)
         unit = "baci-worker-runtime-ffffffffffffffff-aaaaaaaaaaaa-0.service"
         with patch("worker_release_runtime_verifier.sys.platform", "linux"), \
                 patch("worker_release_runtime_verifier.os.geteuid", return_value=0), \
@@ -212,7 +238,8 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                 patch("worker_release_runtime_verifier._kill_launcher",
                       side_effect=lambda process: setattr(process, "returncode", -9)):
             with self.assertRaisesRegex(RuntimeVerificationRejected, "launch timed out"):
-                _execute_fixed_unit(unit, self.candidate, ("/usr/bin/true",), {}, 1)
+                _execute_fixed_unit(unit, self.candidate, ("/usr/bin/true",),
+                                    {"User": "65534"}, 1)
         drain.assert_called_once()
         self.assertEqual(drain.call_args.args[0], unit)
 
@@ -244,6 +271,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                 return 1
 
         spawn.return_value = RejectedLauncher()
+        _preflight.return_value = (1, 2, 3, 4)
         with patch("worker_release_runtime_verifier.sys.platform", "linux"), \
                 patch("worker_release_runtime_verifier.os.geteuid", return_value=0), \
                 patch("worker_release_runtime_verifier.SYSTEMD_RUN", "/usr/bin/true"), \
@@ -251,7 +279,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
             with self.assertRaises(RuntimeVerificationQuiescenceUnproven) as raised:
                 _execute_fixed_unit(
                     "baci-worker-runtime-ffffffffffffffff-aaaaaaaaaaaa-0.service",
-                    self.candidate, ("/usr/bin/true",), {}, 1)
+                    self.candidate, ("/usr/bin/true",), {"User": "65534"}, 1)
         self.assertTrue(raised.exception.preserve_candidate_required)
         drain.assert_called_once()
 

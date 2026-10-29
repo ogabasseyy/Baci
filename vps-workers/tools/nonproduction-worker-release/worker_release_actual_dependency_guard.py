@@ -124,17 +124,24 @@ def web_deploy_command(node: str, pnpm: str, store: Path, target: Path, registry
 def enforce_resource_limits(root: Path, *, max_bytes: int = MAX_TREE_BYTES,
                              max_entries: int = MAX_TREE_ENTRIES,
                              min_free_bytes: int = MIN_FREE_BYTES,
-                             min_free_inodes: int = MIN_FREE_INODES) -> tuple[int, int]:
-    root_info = root.lstat()
+                             min_free_inodes: int = MIN_FREE_INODES,
+                             live_sample: bool = False) -> tuple[int, int]:
+    try:
+        root_info = root.lstat()
+    except FileNotFoundError as exc:
+        raise RuntimeError("experiment resource root disappeared") from exc
     if not stat.S_ISDIR(root_info.st_mode) or root.is_symlink():
         raise RuntimeError("experiment resource root is unsafe")
+    root_identity = (root_info.st_dev, root_info.st_ino)
 
     def on_walk_error(error: OSError) -> None:
         if isinstance(error, FileNotFoundError):
+            if live_sample:
+                return
             raise _TransientEntryRace() from error
         raise error
 
-    for attempt in range(SCAN_RETRIES):
+    for attempt in range(1 if live_sample else SCAN_RETRIES):
         count = total = 0
         try:
             for current, directories, files in os.walk(root, topdown=True, followlinks=False,
@@ -145,6 +152,11 @@ def enforce_resource_limits(root: Path, *, max_bytes: int = MAX_TREE_BYTES,
                     try:
                         info = path.lstat()
                     except FileNotFoundError as exc:
+                        if live_sample:
+                            # A child may atomically replace or remove entries while
+                            # sampled. The root itself was checked above; pre/post
+                            # calls remain strict and verify a stable complete tree.
+                            continue
                         raise _TransientEntryRace() from exc
                     count += 1
                     if count > max_entries:
@@ -161,6 +173,13 @@ def enforce_resource_limits(root: Path, *, max_bytes: int = MAX_TREE_BYTES,
             if attempt + 1 == SCAN_RETRIES:
                 raise RuntimeError("experiment tree changed repeatedly during resource scan") from exc
             time.sleep(SCAN_RETRY_SECONDS * (attempt + 1))
+    try:
+        final_root = root.lstat()
+    except FileNotFoundError as exc:
+        raise RuntimeError("experiment resource root disappeared") from exc
+    if (not stat.S_ISDIR(final_root.st_mode) or root.is_symlink()
+            or (final_root.st_dev, final_root.st_ino) != root_identity):
+        raise RuntimeError("experiment resource root changed")
     space = os.statvfs(root)
     free_bytes = space.f_bavail * space.f_frsize
     free_inodes = space.f_favail
@@ -197,6 +216,8 @@ def _resource_category(error: BaseException) -> str:
         ("entry cap", "entry-cap"),
         ("tree changed repeatedly", "transient-tree-churn"),
         ("resource root", "resource-root-invalid"),
+        ("resource root changed", "resource-root-changed"),
+        ("resource root disappeared", "resource-root-disappeared"),
         ("unsupported filesystem", "filesystem-entry-invalid"),
     )
     return next((label for marker, label in categories if marker in message), "resource-scan-error")
@@ -228,7 +249,10 @@ def run_monitored(command: tuple[str, ...], *, cwd: Path, env: dict[str, str], t
                 return returncode
             if time.monotonic() >= deadline:
                 raise MonitorFailure(stage, "deadline")
-            check_resources()
+            try:
+                enforce_resource_limits(resource_root, live_sample=True)
+            except Exception as exc:
+                raise MonitorFailure(stage, _resource_category(exc)) from exc
             time.sleep(poll_seconds)
     except BaseException:
         _terminate_group(process)

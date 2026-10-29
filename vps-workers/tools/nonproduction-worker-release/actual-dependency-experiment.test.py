@@ -3,6 +3,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -81,6 +82,57 @@ class ActualDependencyExperimentTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "changed repeatedly"):
                     enforce_resource_limits(root, min_free_bytes=0, min_free_inodes=0)
 
+    def test_live_resource_sample_tolerates_continuous_entry_churn_then_strict_scan_passes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stop = threading.Event()
+            started = threading.Event()
+
+            def churn():
+                index = 0
+                started.set()
+                while not stop.is_set():
+                    transient = root / f"transient-{index % 8}"
+                    try:
+                        transient.write_bytes(b"x" * 128)
+                        transient.unlink()
+                    except FileNotFoundError:
+                        pass
+                    index += 1
+
+            worker = threading.Thread(target=churn)
+            worker.start()
+            try:
+                self.assertTrue(started.wait(1))
+                for _ in range(25):
+                    enforce_resource_limits(root, live_sample=True,
+                                             min_free_bytes=0, min_free_inodes=0)
+                (root / "stable").write_bytes(b"stable")
+            finally:
+                stop.set()
+                worker.join(timeout=2)
+            self.assertFalse(worker.is_alive())
+            count, size = enforce_resource_limits(root, min_free_bytes=0, min_free_inodes=0)
+            self.assertEqual(count, 1)
+            self.assertEqual(size, len(b"stable"))
+
+    def test_live_sample_does_not_tolerate_resource_root_disappearance(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "resource-root"
+            root.mkdir()
+            original_lstat = Path.lstat
+
+            def remove_root_after_initial_check(path):
+                if path == root:
+                    root.rmdir()
+                    raise FileNotFoundError(path)
+                return original_lstat(path)
+
+            with patch.object(Path, "lstat", remove_root_after_initial_check):
+                with self.assertRaisesRegex(RuntimeError, "resource root disappeared"):
+                    enforce_resource_limits(root, live_sample=True,
+                                             min_free_bytes=0, min_free_inodes=0)
+
     def test_resource_guard_enforces_tree_size_and_free_reserves(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -119,7 +171,7 @@ class ActualDependencyExperimentTests(unittest.TestCase):
             parent = f"import subprocess,sys,time; subprocess.Popen([sys.executable, '-c', {child!r}]); time.sleep(10)"
             calls = 0
 
-            def resource_check(_root):
+            def resource_check(_root, **_kwargs):
                 nonlocal calls
                 calls += 1
                 if calls == 1:

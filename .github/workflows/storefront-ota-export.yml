@@ -48,7 +48,7 @@ jobs:
           [[ "$IOS_BUILD" =~ ^[1-9][0-9]*$ ]]
           [[ "$IOS_RUNTIME" == *".$IOS_BUILD" ]]
           git merge-base --is-ancestor "$SOURCE_SHA" "$GITHUB_SHA"
-          node --test .github/scripts/storefront-ota-config-validation.test.mjs .github/scripts/storefront-ota-metadata-validation.test.mjs .github/scripts/storefront-ota-secret-scan.test.mjs .github/scripts/storefront-ota-public-config.test.mjs .github/scripts/verify-storefront-ota-export.test.mjs
+          node --test .github/scripts/prepare-storefront-ota-public-config.test.mjs .github/scripts/storefront-ota-config-validation.test.mjs .github/scripts/storefront-ota-digest-collection.test.mjs .github/scripts/storefront-ota-digest-validation.test.mjs .github/scripts/storefront-ota-metadata-validation.test.mjs .github/scripts/storefront-ota-secret-scan.test.mjs .github/scripts/storefront-ota-sha256.test.mjs .github/scripts/storefront-ota-public-config.test.mjs .github/scripts/verify-storefront-ota-export.test.mjs
           cp .github/scripts/storefront-ota-config-validation.mjs "$RUNNER_TEMP/"
           cp .github/scripts/storefront-ota-digest-collection.mjs "$RUNNER_TEMP/"
           cp .github/scripts/storefront-ota-digest-validation.mjs "$RUNNER_TEMP/"

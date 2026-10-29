@@ -4,13 +4,25 @@ import { acceptsAgentUi } from './accepts-agent-ui';
 import { withChatTenantHeader } from './chat-tenant';
 import { tryFastCatalogResponse } from './fast-catalog-response';
 import { negotiateChatAgentUiResponse } from './negotiate-chat-agent-ui-response';
-import { hasRecentCommerceContext } from './ogabassey-commerce-context';
+import { resolveOgabasseyCommerceContext } from './ogabassey-commerce-context';
 import { runOgabasseyConversation } from './ogabassey-conversation';
 import { buildOgabasseyOrderAction } from './ogabassey-order-action';
 import {
   createClientClosedRequestResponse,
   createStaticChatFallbackResponse,
 } from './route-helpers';
+
+function personalDetailsClarification(): Response {
+  return new Response(
+    'What would you like help with? Please avoid sharing personal details in chat.',
+    {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    }
+  );
+}
 
 export async function tryOgabasseyPreferredResponse(
   request: Request,
@@ -19,6 +31,9 @@ export async function tryOgabasseyPreferredResponse(
   provider: AiChatProvider,
   remainingRouteMs: () => number
 ): Promise<Response | null> {
+  let commerceContext: ReturnType<
+    typeof resolveOgabasseyCommerceContext
+  > | null = null;
   if (tenant.merchantSlug === 'ogabassey' && provider === 'auto') {
     if (request.signal.aborted) {
       return withChatTenantHeader(
@@ -45,6 +60,16 @@ export async function tryOgabasseyPreferredResponse(
       }
       return withChatTenantHeader(
         await negotiateChatAgentUiResponse(request, response),
+        tenant.merchantSlug
+      );
+    }
+    commerceContext = resolveOgabasseyCommerceContext(messages);
+    if (commerceContext.explicitPersonal) {
+      return withChatTenantHeader(
+        await negotiateChatAgentUiResponse(
+          request,
+          personalDetailsClarification()
+        ),
         tenant.merchantSlug
       );
     }
@@ -118,19 +143,22 @@ export async function tryOgabasseyPreferredResponse(
     messages,
     timeoutMs: remainingRouteMs(),
   });
+  commerceContext ??= resolveOgabasseyCommerceContext(messages);
   const response =
     conversation ??
-    (hasRecentCommerceContext(messages)
-      ? new Response(
-          'For a new purchase, use your cart and checkout. For an existing order or delivery help, open your account orders or contact the store. Please do not share personal or payment details in chat.',
-          {
-            headers: {
-              'Content-Type': 'text/plain; charset=utf-8',
-              'Cache-Control': 'no-store',
-            },
-          }
-        )
-      : createStaticChatFallbackResponse());
+    (commerceContext.needsClarification
+      ? personalDetailsClarification()
+      : commerceContext.guarded
+        ? new Response(
+            'For a new purchase, use your cart and checkout. For an existing order or delivery help, open your account orders or contact the store. Please do not share personal or payment details in chat.',
+            {
+              headers: {
+                'Content-Type': 'text/plain; charset=utf-8',
+                'Cache-Control': 'no-store',
+              },
+            }
+          )
+        : createStaticChatFallbackResponse());
   if (response.headers.get('x-baci-chat-fallback') === 'static') {
     console.warn(
       'agentic_chat_provider',

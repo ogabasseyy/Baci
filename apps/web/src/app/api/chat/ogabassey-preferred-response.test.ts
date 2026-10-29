@@ -201,7 +201,7 @@ describe('Ogabassey preferred chat response', () => {
     const text = await result?.text();
     expect(result?.headers.get('x-baci-chat-fallback')).toBeNull();
     expect(result?.headers.get('x-baci-chat-action')).toBeNull();
-    expect(text).toMatch(/checkout|account orders/i);
+    expect(text).toMatch(/help|personal details/i);
     expect(text).not.toContain('Jane Doe');
   });
 

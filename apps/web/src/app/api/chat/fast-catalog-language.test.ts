@@ -1,0 +1,56 @@
+import { describe, expect, it } from 'vitest';
+import {
+  catalogPreferenceText,
+  hasNegatedBudget,
+  isBusinessFactRequest,
+  isCatalogBoundary,
+  isRelativePriceRequest,
+  normalizeUseCasePhrases,
+  resolveWifiOnly,
+  stripRelativePricePhrases,
+} from './fast-catalog-language';
+
+describe('catalog conversation language', () => {
+  it('distinguishes a store phone-number request from a phone search', () => {
+    expect(isBusinessFactRequest('What is your phone number?')).toBe(true);
+    expect(isBusinessFactRequest('Show me a phone under 300k')).toBe(false);
+  });
+
+  it('treats order actions as boundaries without blocking product searches', () => {
+    expect(isCatalogBoundary('Cancel my order')).toBe(true);
+    expect(isCatalogBoundary('Order me an iPhone')).toBe(false);
+  });
+
+  it('recognizes a negated compact budget without negating a normal limit', () => {
+    expect(hasNegatedBudget('Not under300k')).toBe(true);
+    expect(hasNegatedBudget('Under300k')).toBe(false);
+  });
+
+  it('removes relative-price wording while retaining the product and budget', () => {
+    const request = 'Anything cheaper under 300k for iPhone 16';
+    expect(isRelativePriceRequest(request)).toBe(true);
+    expect(stripRelativePricePhrases(request).trim()).toBe(
+      'under 300k for iPhone 16'
+    );
+  });
+
+  it('uses the latest Wi-Fi directive and preserves unrelated negation', () => {
+    expect(resolveWifiOnly('Wi-Fi only, not Wi-Fi only')).toEqual({
+      wifiOnly: false,
+      otherNegation: false,
+    });
+    expect(resolveWifiOnly('Wi-Fi only, not refurbished')).toEqual({
+      wifiOnly: true,
+      otherNegation: true,
+    });
+  });
+
+  it('normalizes supported use cases without turning a battery charger into a preference', () => {
+    expect(normalizeUseCasePhrases('long battery life')).toBe('battery');
+    expect(normalizeUseCasePhrases('best camera quality')).toBe('camera');
+    expect(normalizeUseCasePhrases('hardcore gaming')).toBe('gaming');
+    expect(normalizeUseCasePhrases('battery charger')).toBe('battery charger');
+    expect(catalogPreferenceText('battery charger')).toMatch(/charger/);
+    expect(catalogPreferenceText('battery charger')).not.toMatch(/battery/);
+  });
+});

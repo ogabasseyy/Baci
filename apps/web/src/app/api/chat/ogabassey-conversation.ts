@@ -4,7 +4,7 @@ import type { TextProvider } from '@/ai/text-provider-chain';
 import type { AiChatProvider } from '@/env';
 import { buildStorefrontDisplayData } from '@/lib/agentic/storefront-display-data';
 import { isBusinessFactRequest } from './fast-catalog-language';
-import { hasRecentCommerceContext } from './ogabassey-commerce-context';
+import { resolveOgabasseyCommerceContext } from './ogabassey-commerce-context';
 import { createStaticChatFallbackResponse } from './route-helpers';
 
 const PER_PROVIDER_TIMEOUT_MS = 6_000;
@@ -95,7 +95,15 @@ export async function runOgabasseyConversation(options: {
       { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
     );
   }
-  if (hasRecentCommerceContext(options.messages)) return null;
+  const commerceContext = resolveOgabasseyCommerceContext(options.messages);
+  if (commerceContext.guarded) return null;
+  // A prior commerce turn may contain personal details, even after the user
+  // changes topics. Do not forward that history to the general model.
+  const conversationMessages = commerceContext.promptOverride
+    ? [{ role: 'user' as const, content: commerceContext.promptOverride }]
+    : commerceContext.isolateHistory
+      ? [last]
+      : options.messages;
 
   const providers = getOgabasseyConversationProviders();
   if (providers.length === 0) return null;
@@ -109,7 +117,7 @@ export async function runOgabasseyConversation(options: {
 
   // Unsupported catalog questions must not be answered from a model's memory
   // or from untrusted client-supplied conversation history.
-  const previousUsers = options.messages
+  const previousUsers = conversationMessages
     .filter((message) => message.role === 'user')
     .slice(-4, -1);
   const isProductFollowUp =
@@ -145,7 +153,7 @@ export async function runOgabasseyConversation(options: {
     const result = await generateTextWithChain({
       abortSignal: options.abortSignal,
       chain: providers,
-      messages: options.messages
+      messages: conversationMessages
         .filter((message) => message.role !== 'system')
         .slice(-10)
         .map((message) => ({
@@ -155,7 +163,7 @@ export async function runOgabasseyConversation(options: {
       system:
         `${buildStorefrontDisplayData(options.merchantName)} ` +
         'Keep replies brief, friendly, and honest. You have no access to live inventory, ' +
-        'current prices, product compatibility, discounts, orders, checkout, or payments. ' +
+        'current prices, product compatibility, discounts, orders, checkout, payments, or live weather. ' +
         'Never invent product recommendations, prices, availability, policies, or promises. ' +
         'Do not claim to have performed an action. For current details or offers, direct ' +
         'the customer to the storefront or store support.',

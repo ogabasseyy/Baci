@@ -1,4 +1,5 @@
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -8,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from worker_release_actual_dependency_guard import failure_diagnostic
 from worker_release_actual_dependency_hardlinks import HardlinkBoundaryError
+from worker_release_actual_dependency_limits import inspect_materialization_budget
 
 
 class PayloadDiagnosticsTests(unittest.TestCase):
@@ -45,6 +47,62 @@ class PayloadDiagnosticsTests(unittest.TestCase):
                          "category=payload-invalid payload_check=external-hardlink "
                          "hardlink_roots=web+worker external_hardlink_groups=3")
         self.assertNotIn("/", result)
+
+    def test_materialization_preflight_distinguishes_byte_and_entry_bounds(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            payload = Path(temporary)
+            web = payload / "web" / "node_modules" / "pkg"
+            workers = payload / "root" / "node_modules"
+            web.mkdir(parents=True)
+            workers.mkdir(parents=True)
+            (web / "index.js").write_bytes(b"12345")
+            (workers / "index.js").write_bytes(b"x")
+
+            self.assertEqual(inspect_materialization_budget(payload, byte_limit=5),
+                             ("bytes-bound", 5, 6))
+
+    def test_materialization_budget_counts_directory_symlink_copies_safely(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            payload = Path(temporary)
+            web = payload / "web" / "node_modules"
+            workers = payload / "root" / "node_modules"
+            (web / "pkg").mkdir(parents=True)
+            workers.mkdir(parents=True)
+            (web / "pkg" / "index.js").write_bytes(b"x")
+            (web / "alias").symlink_to(web / "pkg", target_is_directory=True)
+
+            state, entries, size = inspect_materialization_budget(
+                payload, byte_limit=100,
+            )
+            self.assertEqual((state, size), ("within-bounds", 2))
+            self.assertEqual(entries, 6)
+
+    def test_materialization_failure_diagnostic_contains_only_bounded_measurements(self):
+        error = RuntimeError("materialized dependency candidate exceeds configured bounds")
+        error.safe_materialization_check = "bytes-bound"
+        error.safe_materialization_entries = 3
+        error.safe_materialization_bytes = 10_000
+        error.safe_materialization_entry_limit = 200_000
+        error.safe_materialization_byte_limit = 9_999
+        result = failure_diagnostic("payload-materialization", error)
+        self.assertEqual(
+            result,
+            "experiment failure stage=payload-materialization category=configured-bound "
+            "materialization_check=bytes-bound materialized_entries=3 materialized_bytes=10000 "
+            "materialized_entry_limit=200000 materialized_byte_limit=9999",
+        )
+        self.assertNotIn("/", result)
+
+    def test_materialization_diagnostic_rejects_unrecognized_enum_or_unbounded_counts(self):
+        error = RuntimeError("materialized dependency candidate exceeds configured bounds")
+        error.safe_materialization_check = "path=/secret"
+        error.safe_materialization_entries = 999_999_999
+        error.safe_materialization_bytes = 10
+        error.safe_materialization_entry_limit = 200_000
+        error.safe_materialization_byte_limit = 10
+        result = failure_diagnostic("payload-materialization", error)
+        self.assertEqual(result, "experiment failure stage=payload-materialization category=configured-bound")
+        self.assertNotIn("/secret", result)
 
 
 if __name__ == "__main__":

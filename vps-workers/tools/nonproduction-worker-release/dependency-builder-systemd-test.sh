@@ -406,6 +406,8 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
         owner_uid=expected_owner_uid,
     )
     fixture_stage = fixture_detail["fixture_stage"] if fixture_detail else "diagnostic-unavailable"
+    fixture_network = fixture_detail["fixture_network"] if fixture_detail else "diagnostic-unavailable"
+    fixture_injection = fixture_detail["fixture_injection"] if fixture_detail else "diagnostic-unavailable"
     error_code = fixture_detail["error_code"] if fixture_detail else "diagnostic-unavailable"
     fixture_package = fixture_detail["fixture_package"] if fixture_detail else "diagnostic-unavailable"
     package_coordinate_hash = (fixture_detail["package_coordinate_sha256"]
@@ -417,7 +419,8 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
     hint_state = (fixture_detail["trust_hint_state"]
                   if fixture_detail else "diagnostic-unavailable")
     print(f"dependency fixture transient unit failed exit={process.returncode} "
-          f"fixture_stage={fixture_stage} fixture_error={error_code} fixture_package={fixture_package} "
+          f"fixture_stage={fixture_stage} fixture_network={fixture_network} "
+          f"fixture_injection={fixture_injection} fixture_error={error_code} fixture_package={fixture_package} "
           f"package_coordinate_sha256={package_coordinate_hash} "
           f"trust_evidence_transition={evidence_transition} "
           f"trust_headline_state={headline_state} trust_hint_state={hint_state}",

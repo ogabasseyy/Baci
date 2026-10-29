@@ -35,5 +35,6 @@ docker run --rm --network none --read-only \
     printf "%s\n" "[5/6] Migrate GIGL and cache schedulers with rollback cases"
     node --test vps-workers/bin/migrate-gigl-tracking-system-service.test.mjs
     python3 vps-workers/bin/migrate-cache-invalidation-system-service.test.py
+    python3 vps-workers/bin/migrate-cache-invalidation-protected-locks.test.py
     printf "%s\n" "Linux worker migration integration suites passed"
   '

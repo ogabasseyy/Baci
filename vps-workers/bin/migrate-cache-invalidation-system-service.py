@@ -7,10 +7,9 @@ runtime env is safe and the route's non-mutating capability preflight succeeds.
 """
 from __future__ import annotations
 
-import fcntl
+import grp
 import os
 import pwd
-import re
 import shutil
 import stat
 import subprocess
@@ -23,6 +22,9 @@ from typing import Callable, Sequence
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cache_scheduler_preflight import (MigrationError, _parse_runtime_env,
     _validate_layout, _verify_cache_role_preflight)
+from cache_scheduler_locks import (acquire_lock as _acquire_lock,
+    cache_cron_lines as _cache_cron_lines, release_lock as _release_lock,
+    validate_cache_lock as _validate_cache_lock)
 
 WORKER = "baci-worker"
 LEGACY_USER = "bassey"
@@ -32,7 +34,6 @@ UNIT_DIR = Path("/etc/systemd/system")
 SERVICE = "baci-cache-invalidation-drain.service"
 TIMER = "baci-cache-invalidation-drain.timer"
 BACKUP_ROOT = Path("/var/lib/baci-workers/cache-invalidation-migration-backups")
-LEGACY_LOCK_RE = re.compile(r"flock\s+-n\s+([^\s'\"]+/locks/cache-invalidations\.lock)")
 
 
 def _run(argv: Sequence[str], *, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> str:
@@ -49,52 +50,6 @@ def _run(argv: Sequence[str], *, runner: Callable[..., subprocess.CompletedProce
 
 def _read_crontab(*, runner=subprocess.run) -> str:
     return _run(("/usr/bin/crontab", "-u", LEGACY_USER, "-l"), runner=runner)
-
-
-def _cache_cron_lines(crontab: str, *, legacy_root: Path | None = None) -> list[tuple[int, str, str]]:
-    legacy_root = LEGACY_ROOT if legacy_root is None else legacy_root
-    found: list[tuple[int, str, str]] = []
-    for index, line in enumerate(crontab.splitlines(keepends=True)):
-        if "run-cache-invalidation-cron.mjs" not in line and "locks/cache-invalidations.lock" not in line:
-            continue
-        if line.lstrip().startswith("#"):
-            continue
-        schedule = line.split()[:5]
-        lock = LEGACY_LOCK_RE.search(line)
-        if schedule != ["*/2", "*", "*", "*", "*"] or not lock or "run-cache-invalidation-cron.mjs" not in line:
-            raise MigrationError("legacy cache scheduler is not the expected two-minute cron entry")
-        if Path(lock.group(1)) != legacy_root / "locks/cache-invalidations.lock":
-            raise MigrationError("legacy cache scheduler lock is outside the fixed worker lock path")
-        found.append((index, line, lock.group(1)))
-    if len(found) != 1:
-        raise MigrationError("expected exactly one active legacy cache scheduler")
-    return found
-
-
-def _acquire_lock(path: Path, *, timeout: float = 180) -> int:
-    try:
-        fd = os.open(path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0))
-        info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
-            os.close(fd)
-            raise MigrationError("cache scheduler lock is not a regular file")
-    except OSError as error:
-        raise MigrationError("cache scheduler lock is unavailable") from error
-    deadline = time.monotonic() + timeout
-    while True:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            return fd
-        except BlockingIOError:
-            if time.monotonic() >= deadline:
-                os.close(fd)
-                raise MigrationError("timed out draining the cache scheduler lock")
-            time.sleep(0.1)
-
-
-def _release_lock(fd: int | None) -> None:
-    if fd is not None:
-        os.close(fd)
 
 
 def _service_source() -> Path:
@@ -134,18 +89,22 @@ def migrate(*, runner=subprocess.run, opener=urllib.request.urlopen, root: Path 
     if (unit_dir / SERVICE).exists() or (unit_dir / TIMER).exists():
         raise MigrationError("cache scheduler systemd unit already exists; refusing to overwrite")
     crontab = _read_crontab(runner=runner)
-    matches = _cache_cron_lines(crontab)
+    matches = _cache_cron_lines(crontab, legacy_root=LEGACY_ROOT, protected_root=root)
     index, old_line, old_lock = matches[0]
     old_lock_path = Path(old_lock)
-    old_lock_info = old_lock_path.lstat()
     try:
         legacy_account = pwd.getpwnam(LEGACY_USER)
     except KeyError as error:
         raise MigrationError("legacy cache scheduler account is unavailable") from error
-    if (not stat.S_ISREG(old_lock_info.st_mode) or stat.S_ISLNK(old_lock_info.st_mode) or
-            old_lock_info.st_nlink != 1 or old_lock_info.st_uid != legacy_account.pw_uid or
-            old_lock_info.st_gid != legacy_account.pw_gid or stat.S_IMODE(old_lock_info.st_mode) & 0o022):
-        raise MigrationError("legacy cache scheduler lock is unsafe")
+    try:
+        protected_lock_gid = grp.getgrnam("baci-locks").gr_gid
+    except KeyError as error:
+        raise MigrationError("protected cache lock group is unavailable") from error
+    _validate_cache_lock(
+        old_lock_path, legacy_root=LEGACY_ROOT, protected_root=root,
+        legacy_uid=legacy_account.pw_uid, legacy_gid=legacy_account.pw_gid,
+        lock_gid=protected_lock_gid,
+    )
     service_source, timer_source = root / "current/systemd" / SERVICE, root / "current/systemd" / TIMER
     service_text, timer_text = service_source.read_text(), timer_source.read_text()
     if "EnvironmentFile=/srv/baci-workers/runtime/worker.env" not in service_text or "run-cache-invalidation-cron.mjs" not in service_text or "OnCalendar=*:0/2" not in timer_text:
@@ -186,7 +145,8 @@ def migrate(*, runner=subprocess.run, opener=urllib.request.urlopen, root: Path 
         if timer_enabled or installed_timer:
             try:
                 _run(("/usr/bin/systemctl", "disable", "--now", TIMER), runner=runner)
-                new_fd = _acquire_lock(root / "locks/cache-invalidations.lock")
+                new_fd = _acquire_lock(root / "locks/cache-invalidations.lock",
+                                       held_fds=(old_fd,) if old_fd is not None else ())
             except Exception:
                 raise MigrationError("cache migration failed; timer could not be stopped, retaining both schedules and unit files for recovery")
         if cron_changed:
@@ -230,13 +190,13 @@ def rollback(backup: Path, *, runner=subprocess.run, root: Path = ROOT, unit_dir
     migrated = (backup / "legacy.crontab.migrated").read_text()
     if _read_crontab(runner=runner) != migrated:
         raise MigrationError("legacy crontab changed since migration; refusing to overwrite operator changes")
-    matches = _cache_cron_lines(original)
+    matches = _cache_cron_lines(original, legacy_root=LEGACY_ROOT, protected_root=root)
     old_lock = Path(matches[0][2])
     old_fd = new_fd = None
     try:
         new_fd = _acquire_lock(root / "locks/cache-invalidations.lock")
         _run(("/usr/bin/systemctl", "disable", "--now", TIMER), runner=runner)
-        old_fd = _acquire_lock(old_lock)
+        old_fd = _acquire_lock(old_lock, held_fds=(new_fd,) if new_fd is not None else ())
         _run(("/usr/bin/crontab", "-u", LEGACY_USER, str(backup / "legacy.crontab")), runner=runner)
         (unit_dir / TIMER).unlink()
         (unit_dir / SERVICE).unlink()

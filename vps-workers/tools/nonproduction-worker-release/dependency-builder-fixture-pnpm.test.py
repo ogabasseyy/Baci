@@ -27,6 +27,8 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
         self.assertEqual(summary, {
             "schema": 1,
             "fixture_stage": "unknown",
+            "fixture_network": "unknown",
+            "fixture_injection": "unknown",
             "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
             "fixture_package": "tsx",
             "package_coordinate_sha256": hashlib.sha256(b"tsx@4.22.4").hexdigest(),
@@ -85,6 +87,19 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
         self.assertEqual(summary["fixture_stage"], "worker-install")
         self.assertEqual(summary["trust_headline_state"], "absent")
         self.assertEqual(summary["package_coordinate_sha256"], "unreported")
+
+    def test_unparsed_trust_failure_records_offline_injected_web_deploy(self):
+        summary = fixture.summarize_failure(
+            "ERR_PNPM_TRUST_DOWNGRADE",
+            pnpm_args=("--filter", "@baci/web", "deploy", "--offline"),
+            cwd=Path("/run/build/source"),
+            env={"PNPM_CONFIG_OFFLINE": "true",
+                 "PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES": "true"},
+        )
+        self.assertEqual(summary["fixture_stage"], "web-deploy")
+        self.assertEqual(summary["fixture_network"], "offline")
+        self.assertEqual(summary["fixture_injection"], "enabled")
+        self.assertNotIn("/run/build", repr(summary))
 
     def test_json_escaped_pnpm_headline_produces_coordinate_hash_only(self):
         summary = fixture.summarize_failure(
@@ -145,6 +160,8 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             invalid = {
                 "schema": 1,
                 "fixture_stage": "worker-install",
+                "fixture_network": "offline",
+                "fixture_injection": "disabled",
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
                 "fixture_package": "unknown",
                 "package_coordinate_sha256": "0" * 64,
@@ -218,6 +235,8 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             fixture._write_diagnostic(accepted, {
                 "schema": 1,
                 "fixture_stage": "web-install",
+                "fixture_network": "offline",
+                "fixture_injection": "disabled",
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
                 "fixture_package": "unknown",
                 "package_coordinate_sha256": "0" * 64,
@@ -228,6 +247,8 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             self.assertEqual(fixture.read_diagnostic(accepted, owner_uid=accepted.stat().st_uid), {
                 "schema": 1,
                 "fixture_stage": "web-install",
+                "fixture_network": "offline",
+                "fixture_injection": "disabled",
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
                 "fixture_package": "unknown",
                 "package_coordinate_sha256": "0" * 64,
@@ -260,6 +281,8 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             fixture._write_diagnostic(candidate, {
                 "schema": 1,
                 "fixture_stage": "worker-install",
+                "fixture_network": "offline",
+                "fixture_injection": "disabled",
                 "error_code": "ERR_PNPM_TRUST_DOWNGRADE",
                 "fixture_package": "unknown",
                 "package_coordinate_sha256": "0" * 64,
@@ -296,7 +319,11 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
         harness = MODULE_PATH.with_name("dependency-builder-systemd-test.sh").read_text(encoding="utf-8")
         self.assertIn("read_scratch_diagnostic(", harness)
         self.assertIn('fixture_detail["fixture_stage"]', harness)
+        self.assertIn('fixture_detail["fixture_network"]', harness)
+        self.assertIn('fixture_detail["fixture_injection"]', harness)
         self.assertIn("fixture_stage={fixture_stage}", harness)
+        self.assertIn("fixture_network={fixture_network}", harness)
+        self.assertIn("fixture_injection={fixture_injection}", harness)
         self.assertIn("scratch, build_root=dependency_builder.BUILD_ROOT", harness)
         self.assertNotIn('store_argument = next((index for index, value in enumerate(command)', harness)
         self.assertIn("stdout=subprocess.DEVNULL", harness)

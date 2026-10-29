@@ -45,6 +45,8 @@ _TRUST_HEADLINE = re.compile(
 _FIXTURE_STAGES = {
     "version-check", "web-install", "web-deploy", "worker-install", "unknown",
 }
+_FIXTURE_NETWORK_MODES = {"offline", "online", "unknown"}
+_FIXTURE_INJECTION_MODES = {"enabled", "disabled", "unknown"}
 
 
 def _fixture_stage(pnpm_args: Sequence[str], cwd: Path) -> str:
@@ -62,8 +64,22 @@ def _fixture_stage(pnpm_args: Sequence[str], cwd: Path) -> str:
     return "unknown"
 
 
+def _fixture_network_mode(pnpm_args: Sequence[str], env: dict[str, str]) -> str:
+    if "--offline" in pnpm_args or env.get("PNPM_CONFIG_OFFLINE") == "true":
+        return "offline"
+    if env.get("PNPM_CONFIG_OFFLINE") == "false":
+        return "online"
+    return "unknown"
+
+
+def _fixture_injection_mode(env: dict[str, str]) -> str:
+    value = env.get("PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES")
+    return {"true": "enabled", "false": "disabled"}.get(value, "unknown")
+
+
 def summarize_failure(output: str, *, pnpm_args: Sequence[str] = (),
-                      cwd: Path | None = None) -> dict[str, object]:
+                      cwd: Path | None = None,
+                      env: dict[str, str] | None = None) -> dict[str, object]:
     """Return only a bounded, non-sensitive classification of fixture output."""
     sample = _ANSI.sub("", output[:1_048_576]).lower()
     trust_failure = "err_pnpm_trust_downgrade" in sample
@@ -91,9 +107,12 @@ def summarize_failure(output: str, *, pnpm_args: Sequence[str] = (),
         "intro-unparsed" if "earlier versions had" in normalized else
         "absent"
     )
+    command_env = {} if env is None else env
     return {
         "schema": 1,
         "fixture_stage": _fixture_stage(pnpm_args, Path.cwd() if cwd is None else cwd),
+        "fixture_network": _fixture_network_mode(pnpm_args, command_env),
+        "fixture_injection": _fixture_injection_mode(command_env),
         "error_code": "ERR_PNPM_TRUST_DOWNGRADE" if trust_failure else "OTHER_PNPM_ERROR",
         "fixture_package": fixture_package,
         "package_coordinate_sha256": coordinate_hash,
@@ -212,10 +231,13 @@ def _read_diagnostic_at(directory_fd: int, name: str, *, owner_uid: int) -> dict
             return None
         value = json.loads(os.read(fd, 513))
         if (not isinstance(value, dict) or set(value) != {
-                "schema", "fixture_stage", "error_code", "fixture_package", "package_coordinate_sha256",
+                "schema", "fixture_stage", "fixture_network", "fixture_injection",
+                "error_code", "fixture_package", "package_coordinate_sha256",
                 "trust_evidence_transition", "trust_headline_state", "trust_hint_state"}
                 or value["schema"] != 1
                 or value["fixture_stage"] not in _FIXTURE_STAGES
+                or value["fixture_network"] not in _FIXTURE_NETWORK_MODES
+                or value["fixture_injection"] not in _FIXTURE_INJECTION_MODES
                 or value["error_code"] not in {"ERR_PNPM_TRUST_DOWNGRADE", "OTHER_PNPM_ERROR"}
                 or value["fixture_package"] not in {
                     "tsx", "dotenv", "esbuild", "fsevents", "esbuild-platform-binary",
@@ -306,7 +328,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(output)
         return 0
     summary = summarize_failure(f"{result.stdout}\n{result.stderr}",
-                                pnpm_args=pnpm_args, cwd=Path.cwd())
+                                pnpm_args=pnpm_args, cwd=Path.cwd(), env=os.environ)
     _write_diagnostic(_diagnostic_path(pnpm_args), summary)
     if summary["error_code"] == "ERR_PNPM_TRUST_DOWNGRADE":
         print("ERR_PNPM_TRUST_DOWNGRADE", file=sys.stderr)

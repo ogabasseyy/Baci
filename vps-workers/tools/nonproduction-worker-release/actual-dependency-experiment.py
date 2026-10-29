@@ -40,6 +40,7 @@ from worker_release_actual_dependency_guard import (
 )
 from worker_release_actual_dependency_limits import (
     EXPERIMENT_PAYLOAD_BYTES, configure_experiment_payload_limits,
+    inspect_materialization_budget,
 )
 from worker_release_actual_dependency_runner import run, run_policy_preverify as _run_policy_preverify
 from worker_release_actual_dependency_resources import (MAX_TREE_BYTES, MAX_TREE_ENTRIES, MIN_FREE_BYTES,
@@ -235,7 +236,21 @@ def _main() -> int:
             if materialization_headroom <= 0:
                 raise RuntimeError("experiment disk cap leaves no materialization headroom")
             configure_experiment_payload_limits(materialization_limit=materialization_headroom)
-            installer.install_payload(exported_output, release, owner_uid=os.geteuid())
+            try:
+                installer.install_payload(exported_output, release, owner_uid=os.geteuid())
+            except Exception as install_error:
+                if str(install_error) in {
+                        "materialized dependency candidate exceeds configured bounds",
+                        "materialized dependency candidate has too many entries"}:
+                    check, measured_entries, measured_bytes = inspect_materialization_budget(
+                        exported_output, byte_limit=materialization_headroom,
+                    )
+                    install_error.safe_materialization_check = check
+                    install_error.safe_materialization_entries = measured_entries
+                    install_error.safe_materialization_bytes = measured_bytes
+                    install_error.safe_materialization_entry_limit = 200_000
+                    install_error.safe_materialization_byte_limit = materialization_headroom
+                raise
             enforce_resource_limits(base)
             stage = "independent-smoke"
             smoke = load_smoke_module(ROOT)

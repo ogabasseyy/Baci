@@ -4,7 +4,7 @@ from __future__ import annotations
 import subprocess
 
 from worker_release_actual_dependency_resources import (
-    MAX_TREE_ENTRIES, ResourceEntryLimitExceeded,
+    MAX_TREE_BYTES, MAX_TREE_ENTRIES, ResourceEntryLimitExceeded,
 )
 from worker_release_dependency_diagnostics import format_policy_line_shapes
 from worker_release_dependency_evidence_shape import (
@@ -19,6 +19,7 @@ def failure_diagnostic_impl(stage: str, error: BaseException) -> str:
     )
 
     entry_metadata = None
+    materialization_metadata = None
     store_subtype = getattr(error, "safe_subtype", None)
     if store_subtype not in OFFLINE_STORE_SUBTYPES:
         store_subtype = None
@@ -34,6 +35,21 @@ def failure_diagnostic_impl(stage: str, error: BaseException) -> str:
         exit_code, os_error = None, None
         if isinstance(error, ResourceEntryLimitExceeded):
             entry_metadata = error.entries_seen, error.limit
+        materialization_check = getattr(error, "safe_materialization_check", None)
+        materialization_entries = getattr(error, "safe_materialization_entries", None)
+        materialization_bytes = getattr(error, "safe_materialization_bytes", None)
+        materialization_entry_limit = getattr(error, "safe_materialization_entry_limit", None)
+        materialization_byte_limit = getattr(error, "safe_materialization_byte_limit", None)
+        if (materialization_check in {"within-bounds", "bytes-bound", "entry-bound", "both", "unsafe-entry"}
+                and type(materialization_entries) is int and 0 <= materialization_entries <= MAX_TREE_ENTRIES + 1
+                and type(materialization_bytes) is int and 0 <= materialization_bytes <= MAX_TREE_BYTES + 1
+                and type(materialization_entry_limit) is int
+                and 1 <= materialization_entry_limit <= MAX_TREE_ENTRIES
+                and type(materialization_byte_limit) is int
+                and 0 <= materialization_byte_limit <= MAX_TREE_BYTES):
+            materialization_metadata = (materialization_check, materialization_entries,
+                                        materialization_bytes, materialization_entry_limit,
+                                        materialization_byte_limit)
         if isinstance(error, subprocess.CalledProcessError):
             category, exit_code = "subprocess-exit", error.returncode
         elif isinstance(error, subprocess.TimeoutExpired):
@@ -63,6 +79,7 @@ def failure_diagnostic_impl(stage: str, error: BaseException) -> str:
                 ("launcher is unavailable", "runtime-unavailable"),
                 ("could not identify exactly one", "runtime-pin-invalid"),
                 ("installation exceeds entry bound", "runtime-entry-bound"),
+                ("has too many entries", "materialization-entry-bound"),
                 ("expected checkout SHA is invalid", "input-invalid"),
                 ("does not match dispatched SHA", "checkout-mismatch"),
                 ("Node 24 runtime is unavailable", "runtime-unavailable"),
@@ -107,6 +124,11 @@ def failure_diagnostic_impl(stage: str, error: BaseException) -> str:
         if (type(seen) is int and 1 <= seen <= MAX_TREE_ENTRIES + 1
                 and type(limit) is int and 1 <= limit <= MAX_TREE_ENTRIES):
             suffix += f" entries_seen={seen} entry_limit={limit}"
+    if materialization_metadata is not None:
+        check, entries, byte_count, entry_limit, byte_limit = materialization_metadata
+        suffix += (f" materialization_check={check} materialized_entries={entries}"
+                   f" materialized_bytes={byte_count} materialized_entry_limit={entry_limit}"
+                   f" materialized_byte_limit={byte_limit}")
     for key, value in (("store_check", store_subtype), ("resource_check", resource_check),
                        ("tree_check", tree_check), ("payload_check", payload_check)):
         allowed = (OFFLINE_STORE_SUBTYPES if key == "store_check" else

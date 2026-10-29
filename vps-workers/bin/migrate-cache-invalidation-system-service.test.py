@@ -140,13 +140,16 @@ class CacheSchedulerMigrationTests(unittest.TestCase):
     def test_requires_exactly_one_canonical_legacy_schedule(self):
         lock = "/home/bassey/baci-workers/locks/cache-invalidations.lock"
         line = f"*/2 * * * * flock -n {lock} bash -lc 'cd /home/bassey/baci-workers && node jobs/run-cache-invalidation-cron.mjs'\n"
-        self.assertEqual(migration._cache_cron_lines(line)[0][2], lock)
+        self.assertEqual(migration._cache_cron_lines(line, legacy_root=migration.LEGACY_ROOT,
+                                                     protected_root=migration.ROOT)[0][2], lock)
         with self.assertRaisesRegex(migration.MigrationError, "exactly one"):
-            migration._cache_cron_lines(line + line)
+            migration._cache_cron_lines(line + line, legacy_root=migration.LEGACY_ROOT,
+                                        protected_root=migration.ROOT)
         with self.assertRaisesRegex(migration.MigrationError, "expected two-minute"):
-            migration._cache_cron_lines(line.replace("*/2", "*/5"))
+            migration._cache_cron_lines(line.replace("*/2", "*/5"), legacy_root=migration.LEGACY_ROOT,
+                                        protected_root=migration.ROOT)
 
-    def fixture(self, base: Path):
+    def fixture(self, base: Path, *, protected_lock=False):
         root = base / "worker"
         release = root / "releases" / ("a" * 40)
         unit_dir = base / "systemd"
@@ -160,7 +163,8 @@ class CacheSchedulerMigrationTests(unittest.TestCase):
             source = SCRIPT.parents[1] / "systemd" / name
             shutil.copyfile(source, release / "systemd" / name)
         (root / "current").symlink_to(Path("releases") / ("a" * 40))
-        old_lock = base / "legacy/locks/cache-invalidations.lock"
+        old_lock = (root / "locks/cache-invalidations.lock" if protected_lock
+                    else base / "legacy/locks/cache-invalidations.lock")
         old_lock.parent.mkdir(parents=True)
         old_lock.write_text("")
         state["cron"] = (
@@ -204,6 +208,8 @@ class CacheSchedulerMigrationTests(unittest.TestCase):
                  patch.object(migration, "_ensure_backup_root"), \
                  patch.object(migration, "LEGACY_ROOT", root.parent / "legacy"), \
                  patch.object(migration.pwd, "getpwnam", return_value=SimpleNamespace(pw_uid=(root.parent / "legacy/locks/cache-invalidations.lock").stat().st_uid, pw_gid=(root.parent / "legacy/locks/cache-invalidations.lock").stat().st_gid)), \
+                 patch.object(migration.grp, "getgrnam", return_value=SimpleNamespace(gr_gid=os.getgid())), \
+                 patch.object(migration, "_validate_cache_lock"), \
                  patch.object(migration, "_acquire_lock", side_effect=acquire_lock), \
                  patch.object(migration, "_release_lock"):
                 backup = migration.migrate(runner=runner, root=root, unit_dir=unit_dir, backup_root=backup_root, require_root=False)
@@ -238,6 +244,8 @@ class CacheSchedulerMigrationTests(unittest.TestCase):
                  patch.object(migration, "_ensure_backup_root"), \
                  patch.object(migration, "LEGACY_ROOT", root.parent / "legacy"), \
                  patch.object(migration.pwd, "getpwnam", return_value=SimpleNamespace(pw_uid=(root.parent / "legacy/locks/cache-invalidations.lock").stat().st_uid, pw_gid=(root.parent / "legacy/locks/cache-invalidations.lock").stat().st_gid)), \
+                 patch.object(migration.grp, "getgrnam", return_value=SimpleNamespace(gr_gid=os.getgid())), \
+                 patch.object(migration, "_validate_cache_lock"), \
                  patch.object(migration, "_acquire_lock", return_value=55), \
                  patch.object(migration, "_release_lock"):
                 with self.assertRaisesRegex(migration.MigrationError, "command failed"):

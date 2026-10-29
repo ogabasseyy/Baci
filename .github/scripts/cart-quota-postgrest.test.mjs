@@ -21,7 +21,8 @@ async function freePort() {
   return port;
 }
 
-test('real PostgREST confines a signed quota token and serializes increments', { skip: !postgrest, timeout: 30000 }, async () => {
+// Allow startup and requests enough time in addition to the probe's 20 s limit.
+test('real PostgREST confines a signed quota token and serializes increments', { skip: !postgrest, timeout: 90000 }, async () => {
   const bin = process.env.PG_BIN ?? execFileSync('pg_config', ['--bindir'], { encoding: 'utf8' }).trim();
   const dir = mkdtempSync(join(tmpdir(), 'baci-quota-api-'));
   const pgPort = await freePort();

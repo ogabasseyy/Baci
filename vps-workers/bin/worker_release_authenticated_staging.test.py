@@ -24,8 +24,10 @@ from worker_release_dependency_fs import write_manifest
 from worker_release_lifecycle import AuthenticatedRun
 from worker_release_descriptor_cgroup import CgroupProofRejected
 from worker_release_dependency_supervisor_cgroup import preflight_cgroup_root
-from worker_release_systemd_extractor import EXTRACTOR, RESOURCE_ROOT
-from worker_release_systemd_test_support import systemd_system_manager_available
+from worker_release_systemd_extractor import EXTRACTOR, RESOURCE_ROOT, UNIT_PREFIX, extract_frozen_source
+from worker_release_systemd_test_support import (
+    systemd_system_manager_available, systemd_unit_failure_summary,
+)
 
 SHA = "a" * 40
 
@@ -187,10 +189,22 @@ class AuthenticatedStagingTests(unittest.TestCase):
 
                 return run
 
+            def diagnostic_extractor(journal, archive, archive_sha256):
+                txid = journal._require_journal()["transaction_id"]
+                unit = f"{UNIT_PREFIX}{txid}.service"
+                try:
+                    return extract_frozen_source(journal, archive, archive_sha256)
+                except Exception as error:
+                    raise AssertionError(
+                        f"extractor failed ({type(error).__name__}); systemd state: "
+                        f"{systemd_unit_failure_summary(unit)}"
+                    ) from error
+
             receipt = stage_authenticated_archive(
                 response(data), identity(), expected_archive_sha256=digest,
                 worker_root=worker_root, lock_path=lock, result_root=results,
                 worker_gid=os.getgid(), builder=builder,
+                extractor=diagnostic_extractor,
                 builder_runner_factory=journaled_runner_factory,
                 builder_build_root=build_root, builder_results_root=results,
                 builder_quiesced=lambda _fence: True,

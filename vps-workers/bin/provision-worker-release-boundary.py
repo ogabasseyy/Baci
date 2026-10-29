@@ -34,6 +34,11 @@ NOLOGIN = "/usr/sbin/nologin"
 HELPER_ROOT = Path("/usr/local/lib/baci-worker-broker")
 UNIT_PATH = Path("/etc/systemd/system/baci-worker-release-broker.service")
 HOME = Path("/home/baci-release")
+BUILD_ROOT = Path("/run/baci-worker-release-build")
+BUILD_RESULTS_ROOT = BUILD_ROOT / "results"
+BUILD_USER = "baci-release-build"
+BUILD_GROUP = "baci-release-build"
+BUILD_NOLOGIN = "/usr/sbin/nologin"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 UNIT = """[Unit]
@@ -60,7 +65,7 @@ PrivateTmp=yes
 PrivateDevices=yes
 ProtectHome=yes
 ProtectSystem=strict
-ReadWritePaths=/srv/baci-workers /run/baci-worker-release /run/baci-worker-release-gate
+ReadWritePaths=/srv/baci-workers /run/baci-worker-release /run/baci-worker-release-gate /run/baci-worker-release-build /var/lib/baci-worker-runtime-views
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
@@ -207,6 +212,58 @@ def _check_identities() -> None:
         raise RuntimeError("baci-worker is missing the protected lock group")
 
 
+def _validate_dependency_builder_prerequisites(*, build_root: Path = BUILD_ROOT,
+                                               results_root: Path = BUILD_RESULTS_ROOT) -> None:
+    """Require the separately provisioned bounded builder mount before broker start.
+
+    The broker's strict systemd namespace permits writes only to fixed build
+    scratch and runtime-view roots. This check does not create or resize either
+    root; the dedicated builder provisioner owns that setup.
+    """
+    try:
+        group = grp.getgrnam(BUILD_GROUP)
+        user = pwd.getpwnam(BUILD_USER)
+        worker = pwd.getpwnam(WORKER)
+        try:
+            release = pwd.getpwnam(RELEASE)
+            release_gid = grp.getgrnam(RELEASE).gr_gid
+        except KeyError:
+            release = None
+            release_gid = None
+        supplementary = os.getgrouplist(BUILD_USER, user.pw_gid)
+        passwd_entries = pwd.getpwall()
+        group_entries = grp.getgrall()
+    except (KeyError, OSError) as error:
+        raise RuntimeError("dedicated dependency builder identity is not provisioned") from error
+    if (user.pw_uid <= 0 or user.pw_uid == worker.pw_uid
+            or (release is not None and user.pw_uid == release.pw_uid)
+            or user.pw_gid != group.gr_gid or user.pw_shell != BUILD_NOLOGIN
+            or user.pw_dir != "/nonexistent" or group.gr_mem
+            or supplementary != [group.gr_gid]
+            or group.gr_gid == worker.pw_gid or (release_gid is not None and group.gr_gid == release_gid)
+            or any(item.pw_uid == user.pw_uid and item.pw_name != BUILD_USER
+                   for item in passwd_entries)
+            or any(item.pw_gid == group.gr_gid and item.pw_name != BUILD_USER
+                   for item in passwd_entries)
+            or any(item.gr_gid == group.gr_gid and item.gr_name != BUILD_GROUP
+                   for item in group_entries)):
+        raise RuntimeError("dependency builder identity is not isolated")
+    try:
+        build_info = build_root.lstat()
+        results_info = results_root.lstat()
+    except OSError as error:
+        raise RuntimeError("fixed dependency builder filesystem is not provisioned") from error
+    if (not stat.S_ISDIR(build_info.st_mode) or stat.S_ISLNK(build_info.st_mode)
+            or build_info.st_uid != 0 or build_info.st_gid != group.gr_gid
+            or stat.S_IMODE(build_info.st_mode) != 0o710
+            or not os.path.ismount(build_root)):
+        raise RuntimeError("dependency builder filesystem is not the fixed mount")
+    if (not stat.S_ISDIR(results_info.st_mode) or stat.S_ISLNK(results_info.st_mode)
+            or results_info.st_uid != 0 or results_info.st_gid != group.gr_gid
+            or stat.S_IMODE(results_info.st_mode) != 0o700):
+        raise RuntimeError("dependency builder result root ownership or mode is unsafe")
+
+
 def _validate_bassey_lock_group(lock_gid: int) -> None:
     bassey = pwd.getpwnam("bassey")
     if lock_gid not in os.getgrouplist("bassey", bassey.pw_gid):
@@ -255,6 +312,7 @@ def apply(*, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
     if os.geteuid() != 0:
         raise RuntimeError("--apply requires root")
     _validate_account(WORKER, expected_shell=NOLOGIN, expected_home="/srv/baci-workers/home")
+    _validate_dependency_builder_prerequisites()
     release_group_exists, release_user_exists = _existing_identity_state()
     release_home_exists = _check_release_home(account_exists=release_user_exists)
     if not release_group_exists:
@@ -267,6 +325,7 @@ def apply(*, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
         runner(("install", "-d", "-o", RELEASE, "-g", RELEASE, "-m", "0700", str(HOME)),
                check=True, stdin=subprocess.DEVNULL)
     _check_identities()
+    _validate_dependency_builder_prerequisites()
     ensure_runtime_view_root()
     # Require the dedicated worker tree and refuse symlinks or permissions that
     # would let the release identity replace broker-owned paths.

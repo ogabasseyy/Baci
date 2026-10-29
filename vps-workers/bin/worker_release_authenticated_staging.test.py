@@ -32,6 +32,7 @@ from worker_release_systemd_extractor import EXTRACTOR, RESOURCE_ROOT, UNIT_PREF
 from worker_release_systemd_test_support import (
     systemd_system_manager_available, systemd_unit_failure_summary,
 )
+from worker_release_runtime_verifier_test_support import emit_namespace_failure_diagnostic
 
 SHA = "a" * 40
 
@@ -252,15 +253,31 @@ class AuthenticatedStagingTests(unittest.TestCase):
             with (patch.object(worker_release_candidate_pin, "RELEASES_ROOT", fixture_releases),
                   patch.object(worker_release_runtime_verifier, "grant_candidate_acl",
                                side_effect=grant_fixture_candidate_acl)):
-                receipt = stage_authenticated_archive(
-                    response(data), identity(), expected_archive_sha256=digest,
-                    worker_root=worker_root, lock_path=lock, result_root=results,
-                    worker_gid=account.pw_gid, builder=builder,
-                    extractor=diagnostic_extractor,
-                    builder_runner_factory=journaled_runner_factory,
-                    builder_build_root=build_root, builder_results_root=results,
-                    builder_quiesced=lambda _fence: True,
-                )
+                unit_names = []
+                real_unit_name = worker_release_runtime_verifier._unit_name
+
+                def record_unit_name(*args):
+                    unit = real_unit_name(*args)
+                    unit_names.append(unit)
+                    return unit
+
+                with patch.object(worker_release_runtime_verifier, "_unit_name",
+                                  side_effect=record_unit_name):
+                    try:
+                        receipt = stage_authenticated_archive(
+                            response(data), identity(), expected_archive_sha256=digest,
+                            worker_root=worker_root, lock_path=lock, result_root=results,
+                            worker_gid=account.pw_gid, builder=builder,
+                            extractor=diagnostic_extractor,
+                            builder_runner_factory=journaled_runner_factory,
+                            builder_build_root=build_root, builder_results_root=results,
+                            builder_quiesced=lambda _fence: True,
+                        )
+                    except StagingOrchestrationRejected as error:
+                        if "runtime verification failed" in str(error):
+                            for unit in unit_names:
+                                emit_namespace_failure_diagnostic(unit)
+                        raise
             release = Path(receipt["release_path"])
             self.assertEqual(receipt["phase"], "committed")
             self.assertFalse((worker_root / "current").exists())

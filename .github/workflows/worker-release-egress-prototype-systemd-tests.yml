@@ -24,5 +24,6 @@ jobs:
           /usr/bin/python3 -B vps-workers/tools/nonproduction-worker-release/worker_release_egress_protocol.test.py -v
           /usr/bin/python3 -B vps-workers/tools/nonproduction-worker-release/worker_release_egress_proxy.test.py -v
           /usr/bin/python3 -B vps-workers/tools/nonproduction-worker-release/worker_release_egress_bridge.test.py -v
+          /usr/bin/python3 -B vps-workers/tools/nonproduction-worker-release/worker_release_egress_systemd_integration.test.py -v
       - name: Run real PrivateNetwork and AF_UNIX peer integration
         run: sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/tools/nonproduction-worker-release/worker_release_egress_systemd_integration.py

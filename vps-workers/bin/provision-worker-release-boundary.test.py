@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -22,6 +23,80 @@ from provision_worker_release_install import ensure_root_directory, read_trusted
 
 
 class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
+    def test_broker_unit_write_allowlist_is_exact_and_includes_only_fixed_runtime_roots(self):
+        lines = [line for line in provision.UNIT.splitlines()
+                 if line.startswith("ReadWritePaths=")]
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0].split("=", 1)[1].split(), [
+            "/srv/baci-workers",
+            "/run/baci-worker-release",
+            "/run/baci-worker-release-gate",
+            "/run/baci-worker-release-build",
+            "/var/lib/baci-worker-runtime-views",
+        ])
+        self.assertIn("ProtectSystem=strict", provision.UNIT)
+        self.assertNotIn("/var/cache", lines[0])
+        self.assertNotIn("/home", lines[0])
+
+    def test_dependency_builder_prerequisites_require_isolated_identity_and_mounted_fixed_roots(self):
+        group = SimpleNamespace(gr_gid=2300, gr_mem=[], gr_name=provision.BUILD_GROUP)
+        builder = SimpleNamespace(pw_uid=2301, pw_gid=2300,
+                                  pw_shell=provision.BUILD_NOLOGIN,
+                                  pw_dir="/nonexistent", pw_name=provision.BUILD_USER)
+        worker = SimpleNamespace(pw_uid=2302, pw_gid=2302, pw_name=provision.WORKER)
+        release = SimpleNamespace(pw_uid=2303, pw_gid=2303, pw_name=provision.RELEASE)
+        worker_group = SimpleNamespace(gr_gid=2302, gr_mem=[], gr_name=provision.WORKER)
+        release_group = SimpleNamespace(gr_gid=2303, gr_mem=[], gr_name=provision.RELEASE)
+        build_root = Path("/fixed-test-build")
+        results_root = build_root / "results"
+        build_info = os.stat_result((stat.S_IFDIR | 0o710, 11, 12, 2, 0, 2300, 0, 0, 0, 0))
+        results_info = os.stat_result((stat.S_IFDIR | 0o700, 13, 12, 2, 0, 2300, 0, 0, 0, 0))
+
+        def account(name):
+            return {provision.BUILD_USER: builder,
+                    provision.WORKER: worker,
+                    provision.RELEASE: release}[name]
+
+        def group_for(name):
+            return {provision.BUILD_GROUP: group,
+                    provision.WORKER: worker_group,
+                    provision.RELEASE: release_group}[name]
+
+        def path_stat(path):
+            return build_info if Path(path) == build_root else results_info
+
+        with patch.object(provision.grp, "getgrnam", side_effect=group_for), \
+                patch.object(provision.pwd, "getpwnam", side_effect=account), \
+                patch.object(provision.os, "getgrouplist", return_value=[2300]), \
+                patch.object(provision.pwd, "getpwall", return_value=[builder, worker, release]), \
+                patch.object(provision.grp, "getgrall", return_value=[group, worker_group, release_group]), \
+                patch.object(Path, "lstat", autospec=True, side_effect=lambda self: path_stat(self)), \
+                patch.object(provision.os.path, "ismount", return_value=True):
+            provision._validate_dependency_builder_prerequisites(
+                build_root=build_root, results_root=results_root)
+
+        with patch.object(provision.grp, "getgrnam", side_effect=group_for), \
+                patch.object(provision.pwd, "getpwnam", side_effect=account), \
+                patch.object(provision.os, "getgrouplist", return_value=[2300]), \
+                patch.object(provision.pwd, "getpwall", return_value=[builder, worker, release]), \
+                patch.object(provision.grp, "getgrall", return_value=[group, worker_group, release_group]), \
+                patch.object(Path, "lstat", autospec=True, side_effect=lambda self: path_stat(self)), \
+                patch.object(provision.os.path, "ismount", return_value=False):
+            with self.assertRaisesRegex(RuntimeError, "fixed mount"):
+                provision._validate_dependency_builder_prerequisites(
+                    build_root=build_root, results_root=results_root)
+
+        with patch.object(provision.grp, "getgrnam", side_effect=group_for), \
+                patch.object(provision.pwd, "getpwnam", side_effect=account), \
+                patch.object(provision.os, "getgrouplist", return_value=[2300, 2304]), \
+                patch.object(provision.pwd, "getpwall", return_value=[builder, worker, release]), \
+                patch.object(provision.grp, "getgrall", return_value=[group, worker_group, release_group]), \
+                patch.object(Path, "lstat", autospec=True, side_effect=lambda self: path_stat(self)), \
+                patch.object(provision.os.path, "ismount", return_value=True):
+            with self.assertRaisesRegex(RuntimeError, "not isolated"):
+                provision._validate_dependency_builder_prerequisites(
+                    build_root=build_root, results_root=results_root)
+
     def test_trusted_source_rejects_final_symlink(self):
         with tempfile.TemporaryDirectory(dir=Path.home()) as directory:
             root = Path(directory) / "repo"

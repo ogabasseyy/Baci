@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import pwd
 import grp
+import re
 import socket
 import subprocess
 import sys
@@ -20,6 +21,14 @@ from worker_release_egress_protocol import EgressRejected, encode_request, read_
 import worker_release_egress_broker as broker_module
 
 SYNTHETIC_REPLY = b"synthetic-registry-response-v1"
+_SAFE_DIAGNOSTIC = re.compile(r"[^A-Za-z0-9 _.,:=/@+()\-]")
+
+
+def _safe_diagnostic(stdout: str, stderr: str, *, limit: int = 300) -> str:
+    """Bound systemd fixture diagnostics to safe, printable synthetic evidence."""
+    combined = " ".join(f"{stdout} {stderr}".split())
+    filtered = _SAFE_DIAGNOSTIC.sub("?", combined)
+    return filtered[-limit:] or "no diagnostic output"
 
 
 def _run_host_fixture() -> int:
@@ -104,8 +113,9 @@ def _run_host_fixture() -> int:
                 result = subprocess.run(command, check=False, capture_output=True,
                                         text=True, timeout=45)
                 if result.returncode != 0:
+                    detail = _safe_diagnostic(result.stdout, result.stderr)
                     raise RuntimeError(
-                        f"systemd egress fixture failed (exit {result.returncode})")
+                        f"systemd child failed (exit={result.returncode}; diagnostic={detail})")
             finally:
                 broker_module.connect_public = original_connect
             for thread in synthetic_threads:
@@ -169,5 +179,9 @@ if __name__ == "__main__":
     try:
         raise SystemExit(_host_mode())
     except Exception as error:
-        print(f"egress systemd integration failed: {type(error).__name__}", file=sys.stderr)
+        if isinstance(error, RuntimeError):
+            detail = _safe_diagnostic(str(error), "")
+            print(f"egress systemd integration failed: {detail}", file=sys.stderr)
+        else:
+            print(f"egress systemd integration failed: {type(error).__name__}", file=sys.stderr)
         raise SystemExit(1)

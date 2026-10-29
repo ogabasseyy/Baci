@@ -163,5 +163,9 @@ if __name__ == "__main__":
             raise RuntimeError("client fixture arguments are invalid")
         raise SystemExit(_client_mode(sys.argv[2], int(sys.argv[3])))
     except Exception as error:
-        print(f"egress client integration failed: {type(error).__name__}", file=sys.stderr)
+        if isinstance(error, RuntimeError):
+            message = " ".join(str(error).split())[:240]
+            print(f"egress client integration failed: {message}", file=sys.stderr)
+        else:
+            print(f"egress client integration failed: {type(error).__name__}", file=sys.stderr)
         raise SystemExit(1)

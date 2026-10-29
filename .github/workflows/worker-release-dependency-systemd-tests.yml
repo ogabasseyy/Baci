@@ -17,6 +17,7 @@ on:
       - 'vps-workers/bin/worker_release_lifecycle.py'
       - 'vps-workers/tools/nonproduction-worker-release/dependency-*'
       - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_fixture_pnpm_*.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_systemd_test_source.py'
       - '.github/workflows/worker-release-dependency-systemd-tests.yml'
   workflow_dispatch:
 

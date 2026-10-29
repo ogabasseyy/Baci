@@ -83,7 +83,7 @@ jobs:
           require_value 'release root ownership/mode' "0:$(getent group baci-worker | cut -d: -f3):750" "$(stat -c '%u:%g:%a' /srv/baci-workers/releases)"
           require_value 'runtime-view root ownership/mode' '0:0:711' "$(stat -c '%u:%g:%a' /var/lib/baci-worker-runtime-views)"
           require_value 'verifier group membership is empty' '' "$(getent group baci-worker-runtime-verify | cut -d: -f4)"
-          require_value 'verifier account home and shell' '/nonexistent,/usr/sbin/nologin' "$(getent passwd baci-worker-runtime-verify | cut -d: -f6,7)"
+          require_value 'verifier account home and shell' '/nonexistent:/usr/sbin/nologin' "$(getent passwd baci-worker-runtime-verify | cut -d: -f6,7)"
           require_value 'verifier has only its primary group' "$(getent group baci-worker-runtime-verify | cut -d: -f3)" "$(id -G baci-worker-runtime-verify)"
           for executable in /usr/bin/systemd-run /usr/bin/systemctl /usr/bin/node; do
             if [[ ! -x "$executable" ]]; then

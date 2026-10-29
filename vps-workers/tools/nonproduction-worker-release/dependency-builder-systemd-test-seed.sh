@@ -7,23 +7,27 @@
 (cd "$source_root" && PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES=false pnpm install --lockfile-only --ignore-scripts)
 (cd "$source_root/vps-workers" && PNPM_CONFIG_INJECT_WORKSPACE_PACKAGES=false pnpm install --lockfile-only --ignore-scripts)
 
-# The source snapshot is the authenticated workspace, not pnpm's mutable
-# install workspace. lockfile-only can still leave node_modules metadata behind;
-# its symlinks are intentionally forbidden by the immutable source validator.
-# Put an explicit generated symlink in that location so this fixture keeps
-# exercising the cleanup contract even when a pnpm version leaves no metadata.
-mkdir -p -- "$source_root/node_modules/.bin"
-ln -s -- "$test_root" "$source_root/node_modules/.bin/generated-fixture-entry"
-find "$source_root" -name node_modules -prune -exec rm -rf -- {} +
-if find "$source_root" -name node_modules -print -quit | grep -q .; then
-  echo "generated pnpm install metadata remains in synthetic source snapshot" >&2
-  exit 1
-fi
+# Freeze only the explicit synthetic source inputs. pnpm may leave generated
+# workspace metadata outside node_modules, so the immutable source must never
+# be a recursive copy of its mutable install workspace. This generated symlink
+# proves the snapshot builder excludes install artifacts without relaxing the
+# source validator's rejection of symlinks.
+pnpm_workspace_root="$source_root"
+source_root="$test_root/source-snapshot"
+mkdir -p -- "$pnpm_workspace_root/node_modules/.bin"
+ln -s -- "$test_root" "$pnpm_workspace_root/node_modules/.bin/generated-fixture-entry"
+PYTHONPATH="$(dirname "$0")${PYTHONPATH:+:$PYTHONPATH}" PYTHONDONTWRITEBYTECODE=1 \
+  python3 -B "$(dirname "$0")/dependency-builder-systemd-test-source.test.py" -q
+PYTHONPATH="$(dirname "$0")${PYTHONPATH:+:$PYTHONPATH}" PYTHONDONTWRITEBYTECODE=1 \
+  python3 -B - "$pnpm_workspace_root" "$source_root" <<'PY'
+import sys
+from pathlib import Path
+from dependency_builder_systemd_test_source import copy_snapshot
+
+copy_snapshot(Path(sys.argv[1]), Path(sys.argv[2]), owner_uid=0, owner_gid=0)
+print("synthetic source snapshot contains only the fixed workspace inputs")
+PY
 cp -a "$source_root/." "$seed_root/"
-if find "$seed_root" -name node_modules -print -quit | grep -q .; then
-  echo "synthetic immutable source snapshot contains generated pnpm metadata" >&2
-  exit 1
-fi
 python3 "$(dirname "$0")/../../bin/worker_release_dependency_policy_cache.py" \
   --preverify --source "$seed_root" --store "$store_root" --cache "$cache_root" \
   --pnpm "$pnpm_entrypoint" --node /usr/bin/node

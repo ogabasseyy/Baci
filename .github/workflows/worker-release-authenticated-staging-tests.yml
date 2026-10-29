@@ -150,8 +150,18 @@ jobs:
                   status=1
                 fi
                 group_record="$(getent group "$verify_group" || true)"
-                if [[ "$group_record" == "$verify_group:x:$verify_group_gid:" \
-                      && -z "$(awk -F: -v gid="$verify_group_gid" '$4 == gid { print $1; exit }' /etc/passwd)" ]]; then
+                passwd_gid_alias="$(awk -F: -v gid="$verify_group_gid" '$4 == gid { found=1 } END { print found ? "present" : "absent" }' /etc/passwd)"
+                if [[ "$group_record" == "$verify_group:x:$verify_group_gid:" ]]; then
+                  group_row_shape=empty
+                elif [[ "$group_record" == "$verify_group:x:$verify_group_gid:$verify_user" ]]; then
+                  group_row_shape=self_member
+                else
+                  group_row_shape=unexpected
+                fi
+                if [[ "$group_row_shape" != empty || "$passwd_gid_alias" != absent ]]; then
+                  echo "disposable runtime verifier cleanup diagnostic: group_row=$group_row_shape primary_gid_alias=$passwd_gid_alias" >&2
+                fi
+                if [[ "$group_row_shape" == empty && "$passwd_gid_alias" == absent ]]; then
                   groupdel "$verify_group"
                 else
                   echo 'disposable runtime verifier group changed unexpectedly' >&2

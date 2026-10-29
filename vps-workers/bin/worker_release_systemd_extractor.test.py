@@ -8,6 +8,7 @@ import io
 import os
 import pwd
 import socket
+import stat
 import subprocess
 import sys
 import tarfile
@@ -15,6 +16,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -63,6 +65,36 @@ def archive_bytes() -> bytes:
 
 
 class ExtractorUnitTests(unittest.TestCase):
+    def test_installed_helper_files_are_group_readable_and_child_is_executable(self):
+        files = {item.relative: item for item in provisioner.install_files()}
+        for name, mode in (("archive-child", 0o550), ("archive-reader", 0o440),
+                           ("broker-common", 0o440)):
+            with self.subTest(name=name):
+                self.assertEqual(files[name].group, supervisor.EXTRACTOR)
+                self.assertEqual(files[name].mode, mode)
+        self.assertEqual(files["systemd-contract"].group, "root")
+
+    def test_helper_path_requires_root_owned_traversable_ancestors(self):
+        helper = Path("/usr/local/lib/baci-worker-broker")
+        blocked = helper.parent
+        block_parent = False
+
+        def metadata(path):
+            mode = 0o700 if block_parent and path == blocked else 0o755
+            return SimpleNamespace(st_mode=stat.S_IFDIR | mode, st_uid=0, st_gid=0)
+
+        with patch.object(Path, "lstat", metadata):
+            provisioner._assert_helper_traversal(
+                extractor_uid=1001, extractor_gid=1001, helper_root=helper, trusted_uid=0,
+            )
+        block_parent = True
+        with patch.object(Path, "lstat", metadata):
+            with self.assertRaisesRegex(RuntimeError, "cannot traverse"):
+                provisioner._assert_helper_traversal(
+                    extractor_uid=1001, extractor_gid=1001,
+                    helper_root=helper, trusted_uid=0,
+                )
+
     def test_systemd_manager_probe_accepts_degraded_but_reachable_manager(self):
         run = Mock(return_value=Mock(returncode=0, stdout="255\n"))
         self.assertTrue(systemd_system_manager_available(run))
@@ -81,6 +113,7 @@ class ExtractorUnitTests(unittest.TestCase):
              patch.object(provisioner.pwd, "getpwnam", return_value=object()), \
              patch.object(provisioner, "_identity", return_value=(1234, 1234)), \
              patch.object(provisioner, "_runtime_paths"), \
+             patch.object(provisioner, "_assert_helper_traversal"), \
              patch.object(provisioner, "install_files", return_value=(item,)), \
              patch.object(provisioner, "install_one") as install_one:
             provisioner.apply(runner=runner)

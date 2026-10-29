@@ -45,11 +45,11 @@ def _source(relative: str) -> bytes:
 def install_files() -> tuple[File, ...]:
     return (
         File("archive-child", _source("vps-workers/bin/worker_release_archive_extract_child.py"),
-             0o550, HELPER_ROOT / "worker_release_archive_extract_child.py"),
+             0o550, HELPER_ROOT / "worker_release_archive_extract_child.py", GROUP),
         File("archive-reader", _source("vps-workers/bin/worker_release_archive.py"),
-             0o440, HELPER_ROOT / "worker_release_archive.py"),
+             0o440, HELPER_ROOT / "worker_release_archive.py", GROUP),
         File("broker-common", _source("vps-workers/bin/worker_release_broker_common.py"),
-             0o440, HELPER_ROOT / "worker_release_broker_common.py"),
+             0o440, HELPER_ROOT / "worker_release_broker_common.py", GROUP),
         File("systemd-contract", _source("vps-workers/bin/worker_release_systemd_contract.py"),
              0o440, HELPER_ROOT / "worker_release_systemd_contract.py"),
         File("extract-unit", _source("vps-workers/systemd/baci-worker-source-extract@.service"),
@@ -57,6 +57,28 @@ def install_files() -> tuple[File, ...]:
         File("extract-tmpfiles", _source("vps-workers/systemd/baci-worker-source-extract.tmpfiles"),
              0o644, TMPFILES),
     )
+
+
+def _assert_helper_traversal(*, extractor_uid: int, extractor_gid: int, helper_root: Path = HELPER_ROOT,
+                             trusted_uid: int = 0) -> None:
+    """Require every fixed helper parent to be root-owned and traversable by the extractor."""
+    current = Path(helper_root)
+    while True:
+        try:
+            metadata = current.lstat()
+        except OSError as error:
+            raise RuntimeError("extractor helper path is unavailable") from error
+        mode = stat.S_IMODE(metadata.st_mode)
+        if (not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode)
+                or metadata.st_uid != trusted_uid or mode & 0o022):
+            raise RuntimeError("extractor helper ancestry is not root-owned and private")
+        if not (metadata.st_uid == extractor_uid and mode & 0o100
+                or metadata.st_gid == extractor_gid and mode & 0o010
+                or mode & 0o001):
+            raise RuntimeError("extractor cannot traverse its helper ancestry")
+        if current == current.parent:
+            break
+        current = current.parent
 
 
 def _identity() -> tuple[int, int]:
@@ -121,6 +143,7 @@ def apply(*, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
         # install_one consumes the small file-record protocol directly. The
         # shared installer module deliberately exposes no parallel record type.
         install_one(item)
+    _assert_helper_traversal(extractor_uid=uid, extractor_gid=gid)
     runner(("systemd-tmpfiles", "--create", str(TMPFILES)), check=True, stdin=subprocess.DEVNULL)
     runner(("systemctl", "daemon-reload"), check=True, stdin=subprocess.DEVNULL)
 

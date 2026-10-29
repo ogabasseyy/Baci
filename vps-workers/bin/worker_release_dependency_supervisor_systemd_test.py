@@ -34,6 +34,11 @@ class SystemdStartupRejected(RuntimeError):
 
 
 class SystemdStartupWaitTests(unittest.TestCase):
+    def test_degraded_exit_status_is_accepted_when_manager_version_is_reachable(self):
+        def query(kind, _timeout):
+            return (1, "degraded") if kind == "state" else (0, "systemd 255")
+        self.assertEqual(wait_for_systemd(query, lambda: None), ("degraded", "systemd 255"))
+
     def test_retries_starting_and_transient_cgroup_preflight_until_ready(self):
         now = [0.0]
         responses = iter([
@@ -62,7 +67,7 @@ class SystemdStartupWaitTests(unittest.TestCase):
             clock=lambda: now[0], sleep=sleep,
         )
         self.assertEqual((state, version), ("running", "systemd 255"))
-        self.assertEqual(preflights[0], 2)
+        self.assertEqual(preflights[0], 3)
         self.assertGreater(now[0], 0)
 
     def test_timeout_fails_closed_when_manager_never_reaches_ready_state(self):
@@ -96,11 +101,12 @@ def wait_for_systemd(query, preflight, *, timeout=30, poll=0.25,
                 last_state = state
             else:
                 last_state = "unexpected"
-            if state_status != 0 or version_status != 0 or not version:
+            if version_status != 0 or not version:
                 last_reason = "manager-not-reachable"
             else:
                 preflight()
-                if state in ("running", "degraded"):
+                expected_status = {"running": 0, "degraded": 1}.get(state)
+                if expected_status is not None and state_status == expected_status:
                     return state, version
                 last_reason = "manager-starting" if state in ("starting", "initializing") else "manager-not-ready"
         except (OSError, subprocess.SubprocessError, CgroupProofRejected, RuntimeError):

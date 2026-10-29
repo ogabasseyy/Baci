@@ -155,7 +155,8 @@ pnpm --version | grep -Fx '11.7.0'
 (cd "$source_root/vps-workers" && pnpm install --lockfile-only --ignore-scripts)
 cp -a "$source_root/." "$seed_root/"
 python3 "$(dirname "$0")/../../bin/worker_release_dependency_policy_cache.py" \
-  --preverify --source "$seed_root" --store "$store_root" --cache "$cache_root" --pnpm "$(command -v pnpm)"
+  --preverify --source "$seed_root" --store "$store_root" --cache "$cache_root" \
+  --pnpm "$(readlink -f "$(command -v pnpm)")"
 rm -rf -- "$seed_root"
 chown -R root:root "$source_root"
 find "$source_root" -type d -exec chmod 0550 {} +

@@ -42,17 +42,13 @@ export type FastCatalogIntent =
     };
 
 const CONTEXTUAL_PRICE =
-  /^(?:how much(?:\s+(?:is|for)\s+(?:it|that|this))?|what(?:['’]s| is)\s+(?:the\s+)?(?:price|cost)(?:\s+(?:(?:of|for)\s+)?(?:it|that|this))?|(?:the\s+)?(?:price|cost))[?!.\s]*$/i;
+  /^(?:how much(?:\s+(?:is|for)\s+(?:it|that|this))?|what(?:['’]s| is)\s+(?:the\s+)?(?:price|cost)(?:\s+(?:(?:of|for)\s+)?(?:it|that|this))?|(?:what|how)\s+about\s+(?:the\s+)?(?:price|cost)|(?:the\s+)?(?:price|cost))[?!.\s]*$/i;
 const SHOPPING_REQUEST =
   /\b(?:recommend|recommendation|suggest|looking for|buy|shop|do\s+you\s+(?:have|sell|carry|stock)|have\s+you\s+got|price|cost|how much|phone|phones|smartphone|smartphones|iphones?|pixel|laptop|laptops|macbook|tablet|tablets|ipad|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
 const FOLLOW_UP =
   /\b(?:under|below|budget|within|up\s+to|at\s+most|maximum|max|cheaper|cheapest|less|more|instead|wifi|wi-fi|used|new|gaming|camera|battery)\b/i;
-const PHONE_SIGNAL =
-  /\b(?:smartphones?|phones?|iphones?|pixel|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
-const LAPTOP_SIGNAL = /\b(?:laptops?|macbook|notebook)\b/i;
-const TABLET_SIGNAL = /\b(?:tablets?|ipad)\b/i;
-const ACCESSORY_SIGNAL =
-  /\b(?:airpods|earbuds?|headphones?|headsets?|earphones?|chargers?|cables?|adapters?|power[\s-]*banks?|cases?|screen[\s-]*protectors?|speakers?)\b/i;
+const { PHONE_SIGNAL, LAPTOP_SIGNAL, TABLET_SIGNAL, ACCESSORY_SIGNAL } =
+  catalogLanguage;
 
 export function normalizeAccessoryNouns(value: string): string {
   return value.replace(
@@ -166,6 +162,13 @@ export function interpretFastCatalogIntent(
   if (continuation?.kind === 'product-details')
     return { kind: 'clarify', reason: 'product-details' };
   const { text, priceFollowUp } = context;
+  const { wifiOnly, otherNegation } = catalogLanguage.resolveWifiOnly(text);
+  if (
+    otherNegation ||
+    catalogLanguage.hasUnsupportedDisjunction(text) ||
+    catalogLanguage.hasAmbiguousProductBundle(text)
+  )
+    return { kind: 'clarify', reason: 'options' };
   const latestBudget = analyzeFastCatalogBudget(latest, currencyCode);
   const contextualBudget = analyzeFastCatalogBudget(text, currencyCode);
   const unverifiedTopBrands = [...text.matchAll(/\b(top)\s+brands?\b/gi)].some(
@@ -259,10 +262,6 @@ export function interpretFastCatalogIntent(
       /\b(?:not|no|without|avoid|exclude|except|never|don'?t)\b/i.test(text))
   )
     return { kind: 'clarify', reason: 'options' };
-  const { wifiOnly, otherNegation } = catalogLanguage.resolveWifiOnly(text);
-  if (wifiOnly && otherNegation) {
-    return { kind: 'clarify', reason: 'options' };
-  }
   if (wifiOnly && !PHONE_SIGNAL.test(text))
     return { kind: 'clarify', reason: 'options' };
   const phoneCategoryIds = categories

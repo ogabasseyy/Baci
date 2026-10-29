@@ -88,6 +88,23 @@ it('asks for a complete product and budget for an ambiguous product switch witho
   expect(mocks.products).not.toHaveBeenCalled();
 });
 
+it('does not load categories for a budget-only reply after a product replacement', async () => {
+  mocks.categories.mockRejectedValue(new Error('Catalog unavailable'));
+  const result = await tryFastCatalogChat({
+    tenant,
+    signal: new AbortController().signal,
+    messages: [
+      { role: 'user', content: 'Show me iPhones under 500k' },
+      { role: 'user', content: 'Samsung instead' },
+      { role: 'user', content: 'Under 300k' },
+    ],
+  });
+  expect(result?.text).toMatch(/new search.*product.*budget/i);
+  expect(result?.events).toEqual([]);
+  expect(mocks.categories).not.toHaveBeenCalled();
+  expect(mocks.products).not.toHaveBeenCalled();
+});
+
 it('checks real categories before accepting a category-only complete search', async () => {
   await tryFastCatalogChat({
     tenant,

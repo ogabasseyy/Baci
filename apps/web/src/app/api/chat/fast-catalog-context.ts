@@ -1,3 +1,9 @@
+import {
+  hasPendingCatalogAlternative,
+  isCatalogAcknowledgement,
+  stripTerminalCatalogAlternative,
+} from './fast-catalog-alternative';
+
 const MAX_CONTEXT_MESSAGES = 6;
 
 /** Keep only contiguous customer refinements attached to the nearest search. */
@@ -24,10 +30,15 @@ export function resolveCatalogContext(
   const priceFollowUp = options.isPriceFollowUp(latest);
   const continuation = options.getContinuationRequest?.(latest) ?? null;
   const windowStart = Math.max(0, messages.length - MAX_CONTEXT_MESSAGES);
+  if (hasPendingCatalogAlternative(messages.slice(windowStart), options))
+    return isCatalogAcknowledgement(latest)
+      ? null
+      : { text: '', priceFollowUp: false, requiresFreshSearch: true };
   const hasPendingFreshSearchBefore = (endIndex: number): boolean => {
     for (let index = endIndex - 1; index >= windowStart; index--) {
       const previous = messages[index].trim();
       if (!previous || options.isBoundary(previous)) return false;
+      if (isCatalogAcknowledgement(previous)) continue;
       const prior = options.getContinuationRequest?.(previous);
       if (prior?.requiresFreshSearch) return true;
       if (prior) continue;
@@ -44,7 +55,11 @@ export function resolveCatalogContext(
     const requiresFreshSearch =
       hasPendingFreshSearchBefore(messages.length - 1) &&
       !options.isCompleteSearch?.(latest);
-    return { text: latest, priceFollowUp: false, requiresFreshSearch };
+    return {
+      text: stripTerminalCatalogAlternative(latest),
+      priceFollowUp: false,
+      requiresFreshSearch,
+    };
   }
   if (!priceFollowUp && !continuation && !options.isRefinement(latest))
     return null;
@@ -52,18 +67,21 @@ export function resolveCatalogContext(
   const refinements = priceFollowUp
     ? []
     : continuation?.refinement
-      ? [continuation.refinement]
+      ? [stripTerminalCatalogAlternative(continuation.refinement)]
       : continuation
         ? []
-        : [latest];
+        : [stripTerminalCatalogAlternative(latest)];
   let requiresFreshSearch = continuation?.requiresFreshSearch ?? false;
   for (let index = messages.length - 2; index >= windowStart; index--) {
     const previous = messages[index].trim();
     if (!previous || options.isBoundary(previous)) return null;
+    if (isCatalogAcknowledgement(previous)) continue;
     const priorContinuation = options.getContinuationRequest?.(previous);
     if (priorContinuation) {
       if (priorContinuation.refinement)
-        refinements.unshift(priorContinuation.refinement);
+        refinements.unshift(
+          stripTerminalCatalogAlternative(priorContinuation.refinement)
+        );
       if (priorContinuation.requiresFreshSearch) requiresFreshSearch = true;
       continue;
     }
@@ -77,13 +95,15 @@ export function resolveCatalogContext(
       )
         requiresFreshSearch = true;
       return {
-        text: [previous, ...refinements].join(' '),
+        text: [stripTerminalCatalogAlternative(previous), ...refinements].join(
+          ' '
+        ),
         priceFollowUp,
         requiresFreshSearch,
       };
     }
     if (!options.isRefinement(previous)) return null;
-    refinements.unshift(previous);
+    refinements.unshift(stripTerminalCatalogAlternative(previous));
   }
   return null;
 }

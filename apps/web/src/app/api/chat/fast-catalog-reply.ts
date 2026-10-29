@@ -36,7 +36,7 @@ export async function buildFastCatalogReply(
           : intent.reason === 'more-results'
             ? 'I can’t show another page of results in this chat. Please browse the store or refine the product, brand or budget.'
             : intent.reason === 'more-needs-search'
-              ? 'I can’t show another page in this chat. Please send a new search with the product, budget and any must-have conditions, or browse the store.'
+              ? 'Please send a new search with the product, budget and any must-have conditions, or browse the store.'
               : intent.reason === 'product-details'
                 ? 'Which product would you like details about, and what would you like to know?'
                 : intent.reason === 'ambiguous-budget'

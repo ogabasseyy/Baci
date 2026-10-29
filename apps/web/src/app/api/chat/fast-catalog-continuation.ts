@@ -1,4 +1,5 @@
 import { analyzeFastCatalogBudget } from './fast-catalog-budget';
+import { hasCatalogProductCue } from './fast-catalog-language';
 
 /** Recognize only complete requests for another set of catalog options. */
 export function isCatalogMoreOptionsRequest(text: string): boolean {
@@ -34,7 +35,8 @@ export function createCompleteSearchVerifier(options: {
         !budget.price ||
         budget.invalid ||
         budget.ambiguousCurrency ||
-        budget.unsupportedCurrency
+        budget.unsupportedCurrency ||
+        !hasCatalogProductCue(value)
       )
         return false;
       if (!options.categoriesLoaded) {

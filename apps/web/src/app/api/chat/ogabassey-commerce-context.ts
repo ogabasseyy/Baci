@@ -37,7 +37,7 @@ function isLikelyPersonal(text: string): boolean {
   return LIKELY_PERSONAL.test(text) || containsEmail(text);
 }
 
-function isIndependentTopic(text: string): boolean {
+export function isIndependentTopic(text: string): boolean {
   return INDEPENDENT_TOPIC.test(text.trim());
 }
 

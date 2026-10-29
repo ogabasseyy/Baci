@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   catalogPreferenceText,
+  hasAmbiguousProductBundle,
+  hasCatalogProductCue,
   hasNegatedBudget,
+  hasUnsupportedDisjunction,
   isBusinessFactRequest,
   isCatalogBoundary,
   isRelativePriceRequest,
@@ -24,6 +27,33 @@ describe('catalog conversation language', () => {
   it('recognizes a negated compact budget without negating a normal limit', () => {
     expect(hasNegatedBudget('Not under300k')).toBe(true);
     expect(hasNegatedBudget('Under300k')).toBe(false);
+  });
+
+  it('recognizes unsupported substitutions without matching model-name substrings', () => {
+    expect(hasUnsupportedDisjunction('Samsung or iPhone')).toBe(true);
+    expect(hasUnsupportedDisjunction('Samsung instead of iPhone')).toBe(true);
+    expect(hasUnsupportedDisjunction('Honor phone')).toBe(false);
+  });
+
+  it('distinguishes a complete product candidate from a budget-only reply', () => {
+    expect(hasCatalogProductCue('Phones under 300k')).toBe(true);
+    expect(hasCatalogProductCue('iPhone charger under 10k')).toBe(true);
+    expect(hasCatalogProductCue('Under 300k')).toBe(false);
+  });
+
+  it('distinguishes a joined phone and accessory from a device-compatible accessory', () => {
+    expect(hasAmbiguousProductBundle('Samsung phone with charger')).toBe(true);
+    expect(hasAmbiguousProductBundle('Samsung phone and case')).toBe(true);
+    expect(hasAmbiguousProductBundle('Samsung phone charger')).toBe(false);
+    expect(hasAmbiguousProductBundle('MacBook with charger')).toBe(true);
+    expect(hasAmbiguousProductBundle('Samsung phone + charger')).toBe(true);
+    expect(hasAmbiguousProductBundle('Samsung Galaxy S21+ phone charger')).toBe(
+      false
+    );
+    expect(hasAmbiguousProductBundle('Samsung Galaxy S21+ charger')).toBe(
+      false
+    );
+    expect(hasAmbiguousProductBundle('MacBook charger')).toBe(false);
   });
 
   it('removes relative-price wording while retaining the product and budget', () => {

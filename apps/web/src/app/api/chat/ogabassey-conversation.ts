@@ -3,6 +3,7 @@ import { generateTextWithChain } from '@/ai/generate-text-with-chain';
 import type { TextProvider } from '@/ai/text-provider-chain';
 import type { AiChatProvider } from '@/env';
 import { buildStorefrontDisplayData } from '@/lib/agentic/storefront-display-data';
+import { isBusinessFactRequest } from './fast-catalog-language';
 import { hasRecentCommerceContext } from './ogabassey-commerce-context';
 import { createStaticChatFallbackResponse } from './route-helpers';
 
@@ -18,8 +19,6 @@ const PRODUCT_REFERENCE = /\b(?:it|this|that|these|those|one|ones)\b/i;
 const PRODUCT_AMOUNT = /[₦$€£\d]|\b(?:enough|afford\w*|cheaper|less|more)\b/i;
 const SHOPPING_ADVICE_REQUEST =
   /\b(?:gifts?|shopping|(?:a|the|birthday|christmas)\s+present)\b/i;
-const BUSINESS_FACT_REQUEST =
-  /\b(?:address|location|located|opening\s+(?:time|hours)|closing\s+(?:time|hours)|(?:business|store|shop)\s+hours|when\s+do\s+you\s+(?:open|close)|phone\s+(?:number|no)|email(?:\s+address)?)\b/i;
 const UNGROUNDED_REPLY =
   /[\p{N}₦$€£]|\b(?:naira|iphone|ipad|macbook|airpods|apple|samsung|galaxy|sony|nokia|oppo|vivo|huawei|tecno|infinix|xiaomi|redmi|pixel|itel|oraimo|anker|shipping|delivery|warranty|refund|returns?|exchang\w*|in\s+(?:your|the)\s+cart|(?:added|removed)\s+(?:it|this|that|the\s+item)|in[\s-]+stock|out[\s-]+of[\s-]+stock|(?:is|are)\s+available|available\s+now|guaranteed|(?:is|are|works|fits)\s+compatible)\b/iu;
 const UNVERIFIED_COMMERCE_ACTION =
@@ -90,6 +89,12 @@ export async function runOgabasseyConversation(options: {
 
   const last = options.messages.at(-1);
   if (last?.role !== 'user') return null;
+  if (isBusinessFactRequest(last.content)) {
+    return new Response(
+      'Please check the store’s contact page or contact support for current details.',
+      { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+    );
+  }
   if (hasRecentCommerceContext(options.messages)) return null;
 
   const providers = getOgabasseyConversationProviders();
@@ -98,13 +103,6 @@ export async function runOgabasseyConversation(options: {
   if (NEGOTIATION.test(last.content)) {
     return new Response(
       'I can’t promise a discount here. Please contact the store about current offers.',
-      { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
-    );
-  }
-
-  if (BUSINESS_FACT_REQUEST.test(last.content)) {
-    return new Response(
-      'Please check the store’s contact page or contact support for current details.',
       { headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
     );
   }

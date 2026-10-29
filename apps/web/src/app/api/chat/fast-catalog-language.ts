@@ -1,0 +1,34 @@
+export const actionRequest =
+  /\b(?:order|orders|payment|payments|paid|pay|transfer|cancel|refund|receipt|delivery|deliver|shipping|track|tracking|cart|checkout|support|buy\s+(?:it|that|this))\b/i;
+export const nonCatalogRequest =
+  /\b(?:negotiat\w*|discount\w*|haggl\w*|(?:last|final)\s+price|(?:reduce|lower)\s+(?:the\s+|your\s+)?(?:price|cost)|bargain|deal|warrant(?:y|ies)|instal{1,2}ments?|returns?|refund\w*|polic(?:y|ies)|contact|address|location|(?:sell|trade|swap)\s+(?:my|this|that)|carry\b[^?]{0,80}\b(?:airport|airplane|plane|flight))\b/i;
+
+// These conditions require evidence beyond the catalog's recommendation tags.
+export const uncheckedOption =
+  /\b(?:brand[\s-]*new|new|used|refurbished|second[\s-]*hand|pre[\s-]*owned|open[\s-]*box|\d+(?:\.\d+)?\s*(?:gb|tb)|\d+(?:[.,]\d+)?[\s-]*(?:m\s*a\s*h|mp|megapixels?)|black|blue|red|green|purple|pink|white|gold|silver|gray|grey|titanium|e-?sim|physical\s+sim|dual[\s-]*sim|low[\s-]*light|all[\s-]*day\s+battery|\d+\s*(?:hours?|hrs?|days?)\s+(?:of\s+)?battery|battery\s+(?:that\s+)?(?:lasts?|lasting)\s+(?:for\s+)?(?:all[\s-]*day|\d+\s*(?:hours?|days?)))\b/i;
+
+export function isBusinessFactRequest(text: string): boolean {
+  return /\b(?:address|location|located|opening\s+(?:time|hours)|closing\s+(?:time|hours)|(?:business|store|shop)\s+hours|when\s+do\s+you\s+(?:open|close)|(?:phone|whatsapp)\s+(?:number|no)|telephone(?:\s+(?:number|no))?|(?:your|our|(?:store|shop|business|ogabassey)(?:['’]s)?)\s+(?:(?:phone|telephone|whatsapp)\s+)?(?:number|no)|email(?:\s+address)?|contact\s+(?:you|us|support|(?:the\s+)?(?:store|shop)|ogabassey|number|details|information|info)|(?:how\s+(?:can|do)\s+i|can\s+i)\s+(?:call|reach)\s+(?:you|(?:the\s+)?(?:store|shop)|ogabassey))\b/i.test(
+    text
+  );
+}
+
+/** Strip only recognized recommendation phrases; keep model and option terms. */
+export function normalizeUseCasePhrases(text: string): string {
+  return text
+    .replace(
+      /\b(?:long(?:[\s-]+lasting)?|longer|good|great|better|best|excellent)\s+battery(?:\s+life)?\b(?!\s+(?:chargers?|cases?)\b)/gi,
+      'battery'
+    )
+    .replace(/\bbattery\s+life\b/gi, 'battery')
+    .replace(
+      /\b(?:(?:good|great|better|best|excellent)\s+)?camera\s+quality\b/gi,
+      'camera'
+    )
+    .replace(/\b(?:heavy|hardcore|mobile|casual)\s+gaming\b/gi, 'gaming');
+}
+
+/** A battery charger or case is a product name, not a recommendation tag. */
+export function catalogPreferenceText(text: string): string {
+  return text.replace(/\bbattery(?=\s+(?:chargers?|cases?)\b)/gi, ' ');
+}

@@ -1,3 +1,5 @@
+import * as catalogLanguage from './fast-catalog-language';
+
 export interface FastCatalogCategory {
   id: string;
   name: string;
@@ -21,10 +23,6 @@ export type FastCatalogIntent =
       preference?: string;
     };
 
-const ACTION_REQUEST =
-  /\b(?:order|orders|payment|payments|paid|pay|transfer|cancel|refund|receipt|delivery|deliver|shipping|track|tracking|cart|checkout|support|buy\s+(?:it|that|this))\b/i;
-const NON_CATALOG_REQUEST =
-  /\b(?:negotiat\w*|discount\w*|haggl\w*|(?:last|final)\s+price|(?:reduce|lower)\s+(?:the\s+|your\s+)?(?:price|cost)|bargain|deal|warrant(?:y|ies)|instal{1,2}ments?|returns?|refund\w*|polic(?:y|ies)|contact|address|location|(?:sell|trade|swap)\s+(?:my|this|that)|carry\b[^?]{0,80}\b(?:airport|airplane|plane|flight))\b/i;
 const CONTEXTUAL_PRICE =
   /^(?:how much(?:\s+(?:is|for)\s+(?:it|that|this))?|what(?:['’]s| is)\s+(?:the\s+)?(?:price|cost)(?:\s+(?:(?:of|for)\s+)?(?:it|that|this))?|(?:the\s+)?(?:price|cost))[?!.\s]*$/i;
 const SHOPPING_REQUEST =
@@ -35,9 +33,6 @@ const BUDGET_WORD =
   /\b(?:under|below|budget|within|less than|up to|at most|maximum|max|between)\b/i;
 const MAX_PRICE =
   /\b(?:under|below|budget(?:\s+of)?|within|less than|up to|at most|maximum|max)\s*(?:₦|ngn\s*|n(?=\d))?\s*([\d,]+(?:\.\d+)?)\s*(million|thousand|[km])?\b/i;
-// Do not silently drop option requirements that need variant-level selection.
-const UNCHECKED_OPTION =
-  /\b(?:brand[\s-]*new|new|used|refurbished|second[\s-]*hand|pre[\s-]*owned|open[\s-]*box|\d+(?:\.\d+)?\s*(?:gb|tb)|black|blue|red|green|purple|pink|white|gold|silver|gray|grey|titanium|e-?sim|physical\s+sim|dual[\s-]*sim)\b/i;
 const PHONE_SIGNAL =
   /\b(?:smartphones?|phones?|iphones?|pixel|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
 const LAPTOP_SIGNAL = /\b(?:laptops?|macbook|notebook)\b/i;
@@ -126,7 +121,7 @@ function getMaximumPrice(
 }
 
 function searchText(text: string): string {
-  return normalizeAccessoryNouns(text)
+  return normalizeAccessoryNouns(catalogLanguage.normalizeUseCasePhrases(text))
     .replace(/\biphones\b/gi, 'iPhone')
     .replace(/\bi['’](?:m|d|ll|ve)\b/gi, ' ')
     .replace(
@@ -139,9 +134,10 @@ function searchText(text: string): string {
       ' '
     )
     .replace(
-      /\b(?:show|me|find|please|recommend|recommendation|suggest|looking|for|buy|order|shop|sell|carry|best|good|great|cheap|affordable|gaming|camera|battery|with|under|smartphones?|phones?|laptops?|tablets?|a|an|the|my|what|which|is|am|are|available|can|i|need|want|get|got|do|does|you|have|of|and|how|much|price|cost|any|in|store|to|it|that|this)\b/gi,
+      /\b(?:show|me|find|please|recommend|recommendation|suggest|looking|for|buy|order|shop|sell|carry|best|good|great|cheap|affordable|gaming|camera|with|under|smartphones?|phones?|laptops?|tablets?|a|an|the|my|what|which|is|am|are|available|can|i|need|want|get|got|do|does|you|have|of|and|how|much|price|cost|any|in|store|to|it|that|this)\b/gi,
       ' '
     )
+    .replace(/\bbattery\b(?!\s+(?:charger|case)\b)/gi, ' ')
     .replace(/[?!.,;:]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -162,8 +158,9 @@ export function interpretFastCatalogIntent(
     : latest;
   if (
     !latest ||
-    ACTION_REQUEST.test(actionText) ||
-    NON_CATALOG_REQUEST.test(latest)
+    catalogLanguage.actionRequest.test(actionText) ||
+    catalogLanguage.nonCatalogRequest.test(latest) ||
+    catalogLanguage.isBusinessFactRequest(latest)
   )
     return null;
 
@@ -179,7 +176,8 @@ export function interpretFastCatalogIntent(
         isShoppingRequest(previous)
       ? `${previous} ${latest}`
       : latest;
-  if (!isShoppingRequest(text)) return null;
+  if (!isShoppingRequest(text) || catalogLanguage.isBusinessFactRequest(text))
+    return null;
   // Clarify whether Max is a model or a price limit before searching.
   if (
     [...text.matchAll(new RegExp(MAX_PRICE.source, 'gi'))].some(
@@ -239,12 +237,14 @@ export function interpretFastCatalogIntent(
     return { kind: 'clarify' };
   }
   const preferences = new Set(
-    (text.match(/\b(?:gaming|camera|battery)\b/gi) ?? []).map((value) =>
-      value.toLowerCase()
-    )
+    (
+      catalogLanguage
+        .catalogPreferenceText(text)
+        .match(/\b(?:gaming|camera|battery)\b/gi) ?? []
+    ).map((value) => value.toLowerCase())
   );
   if (
-    UNCHECKED_OPTION.test(text) ||
+    catalogLanguage.uncheckedOption.test(text) ||
     preferences.size > 1 ||
     (preferences.size > 0 &&
       /\b(?:not|no|without|avoid|exclude|except|never|don'?t)\b/i.test(text))

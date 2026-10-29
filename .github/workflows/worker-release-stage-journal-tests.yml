@@ -15,6 +15,7 @@ on:
       - 'vps-workers/bin/worker_release_systemd_extractor.py'
       - 'vps-workers/bin/worker_release_systemd_contract.py'
       - 'vps-workers/bin/worker_release_systemd_extractor.test.py'
+      - 'vps-workers/bin/worker_release_systemd_contract_regressions_test.py'
       - 'vps-workers/bin/worker_release_extractor_control_dac.test.py'
       - 'vps-workers/bin/worker_release_systemd_test_support.py'
       - 'vps-workers/bin/worker_release_systemd_test_support.test.py'

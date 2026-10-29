@@ -21,7 +21,21 @@ _TRUST_TRANSITION = re.compile(
     r"earlier versions had (trusted publisher|provenance attestation), "
     r"but this version has (trusted publisher|provenance attestation|no trust evidence)"
 )
-_FIXTURE_PACKAGES = {"tsx@4.22.4": "tsx", "dotenv@16.6.1": "dotenv"}
+_ESBUILD_PLATFORMS = (
+    "aix-ppc64", "android-arm64", "android-arm", "android-x64", "darwin-arm64",
+    "darwin-x64", "freebsd-arm64", "freebsd-x64", "linux-arm64", "linux-arm",
+    "linux-ia32", "linux-loong64", "linux-mips64el", "linux-ppc64", "linux-riscv64",
+    "linux-s390x", "linux-x64", "netbsd-arm64", "netbsd-x64", "openbsd-arm64",
+    "openbsd-x64", "sunos-x64", "win32-arm64", "win32-ia32", "win32-x64",
+)
+_FIXTURE_PACKAGES = {
+    "tsx@4.22.4": "tsx",
+    "dotenv@16.6.1": "dotenv",
+    "esbuild@0.28.1": "esbuild",
+    "fsevents@2.3.3": "fsevents",
+    **{f"@esbuild/{platform}@0.28.1": "esbuild-platform-binary"
+       for platform in _ESBUILD_PLATFORMS},
+}
 _TRUST_HEADLINE = re.compile(
     r'high-risk trust downgrade for "([^"\s]{1,160})" \(possible package takeover\)'
 )

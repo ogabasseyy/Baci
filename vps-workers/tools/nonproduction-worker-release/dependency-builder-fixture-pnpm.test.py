@@ -33,8 +33,12 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
 
     def test_trust_headline_only_classifies_fixed_fixture_allowlist(self):
         for package, expected in (("dotenv@16.6.1", "dotenv"),
+                                  ("esbuild@0.28.1", "esbuild"),
+                                  ("@esbuild/linux-x64@0.28.1", "esbuild-platform-binary"),
+                                  ("fsevents@2.3.3", "fsevents"),
                                   ("attacker@1.2.3", "unknown"),
-                                  ("tsx@4.22.5", "unknown")):
+                                  ("tsx@4.22.5", "unknown"),
+                                  ("@esbuild/linux-x64@0.28.2", "unknown")):
             with self.subTest(package=package):
                 result = fixture.summarize_failure(
                     f'ERR_PNPM_TRUST_DOWNGRADE High-risk trust downgrade for "{package}" '

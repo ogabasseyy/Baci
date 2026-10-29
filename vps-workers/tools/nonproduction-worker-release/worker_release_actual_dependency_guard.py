@@ -85,6 +85,7 @@ def failure_diagnostic(stage: str, error: BaseException) -> str:
                 ("source lock does not pin", "lock-graph-invalid"),
                 ("measured tree exceeds", "tree-size-bound"),
                 ("did not produce", "expected-output-missing"),
+                ("receipt metadata cache changed", "policy-receipt-cache-changed"),
                 ("receipt", "policy-receipt"),
                 ("timed out", "deadline"),
             )

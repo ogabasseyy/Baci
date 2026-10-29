@@ -206,6 +206,8 @@ def validate_receipt(source: Path, cache: Path, receipt_path: Path, pnpm_version
     expected = make_receipt(source, cache, pnpm_version, cache_owner=owner,
                             cache_max_bytes=cache_max_bytes)
     if value != expected:
+        if isinstance(value, dict) and value.get("metadataCacheSha256") != expected["metadataCacheSha256"]:
+            raise BuilderRejected("pnpm policy verification receipt metadata cache changed")
         raise BuilderRejected("pnpm policy verification receipt does not match exact lockfiles and policy")
     if expected_sha is not None and not hmac.compare_digest(str(value["sourceSha"]), expected_sha):
         raise BuilderRejected("pnpm policy verification receipt does not match expected source SHA")

@@ -693,7 +693,7 @@ class DependencyBuilderTests(unittest.TestCase):
             receipt_path.write_text(json.dumps(policy_cache.make_receipt(source, cache, "11.7.0")), encoding="utf-8")
             receipt_path.chmod(0o400)
             (cache / "metadata.json").write_text("changed metadata", encoding="utf-8")
-            with self.assertRaisesRegex(policy_cache.BuilderRejected, "exact lockfiles and policy"):
+            with self.assertRaisesRegex(policy_cache.BuilderRejected, "metadata cache changed"):
                 policy_cache.validate_receipt(source, cache, receipt_path)
 
     def test_policy_preverify_runs_both_lockfiles_with_scripts_and_trust_bypass_disabled(self):

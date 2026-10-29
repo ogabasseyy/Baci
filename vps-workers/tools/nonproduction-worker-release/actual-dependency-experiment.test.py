@@ -232,6 +232,11 @@ class ActualDependencyExperimentTests(unittest.TestCase):
             failure_diagnostic("checkout-identity", RuntimeError("checkout does not match dispatched SHA")),
             "experiment failure stage=checkout-identity category=checkout-mismatch",
         )
+        self.assertEqual(
+            failure_diagnostic("receipt-validation",
+                               RuntimeError("pnpm policy verification receipt metadata cache changed")),
+            "experiment failure stage=receipt-validation category=policy-receipt-cache-changed",
+        )
 
     def test_resource_guard_retries_transient_child_disappearance(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -442,6 +447,7 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         self.assertEqual(MIN_FREE_BYTES, 2 * 1024 * 1024 * 1024)
         self.assertEqual(MIN_FREE_INODES, 20_000)
         source = SCRIPT.read_text(encoding="utf-8")
+        self.assertEqual(source.count("cache_max_bytes=EXPERIMENT_CACHE_BYTES"), 2)
         self.assertIn('"--experiment-cache-max-bytes", str(EXPERIMENT_CACHE_BYTES)', source)
         self.assertIn('"monitored_scratch": 12 * 1024 * 1024 * 1024', source)
         self.assertEqual(experiment.policy.make_receipt.__kwdefaults__["cache_max_bytes"],

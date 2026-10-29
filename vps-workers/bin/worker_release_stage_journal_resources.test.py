@@ -144,6 +144,7 @@ class StageResourceJournalTests(unittest.TestCase):
             file.chmod(0o440)
             os.chown(file, extractor.pw_uid, extractor.pw_gid)
             journal.begin_source_transfer()
+            record = journal._require_journal()
             os.chown(source, extractor.pw_uid, worker_gid)
             source.chmod(0o550)
             inode = source.stat().st_ino

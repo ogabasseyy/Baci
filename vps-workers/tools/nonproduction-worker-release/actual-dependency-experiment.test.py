@@ -39,8 +39,11 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         workflow = SCRIPT.parents[3] / ".github/workflows/worker-release-actual-dependency-experiment.yml"
         text = workflow.read_text(encoding="utf-8")
         self.assertIn("workflow_dispatch", text)
+        self.assertIn("pull_request:", text)
         self.assertIn("contents: read", text)
         self.assertIn("persist-credentials: false", text)
+        self.assertIn("github.event.pull_request.head.sha || github.sha", text)
+        self.assertIn("head.ref == 'codex/automatic-worker-release'", text)
         self.assertNotIn("sudo ", text)
         self.assertNotIn("secrets.", text)
         self.assertNotIn("actions/cache", text)

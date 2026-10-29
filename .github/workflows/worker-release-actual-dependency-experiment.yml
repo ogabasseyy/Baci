@@ -1,6 +1,19 @@
 name: Worker release actual dependency experiment
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/worker-release-actual-dependency-experiment.yml'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'vps-workers/pnpm-lock.yaml'
+      - 'vps-workers/pnpm-workspace.yaml'
+      - '**/package.json'
+      - '**/.npmrc'
+      - 'vps-workers/bin/worker_release_dependency_*.py'
+      - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.py'
+      - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.test.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency-snapshot-smoke.py'
   workflow_dispatch:
 
 permissions:
@@ -8,11 +21,16 @@ permissions:
 
 jobs:
   actual-checkout-dependencies:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'codex/automatic-worker-release'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -24,5 +42,5 @@ jobs:
         run: python3 vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.test.py -q
       - name: Preverify and build both real lockfiles offline
         env:
-          EXPECTED_CHECKOUT_SHA: ${{ github.sha }}
+          EXPECTED_CHECKOUT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: python3 vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.py

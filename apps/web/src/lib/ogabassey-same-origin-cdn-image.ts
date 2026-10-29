@@ -38,8 +38,12 @@ export function buildUpstreamOgabasseyTransformUrl(
   if (options.fit === 'cover') {
     parts.push('fit=cover');
   }
+  const encodedAssetPath = assetPath
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
   const query = searchParams?.toString();
-  return `${DEFAULT_MEDIA_CDN_ORIGIN}/image/${parts.join(',')}/${assetPath}${query ? `?${query}` : ''}`;
+  return `${DEFAULT_MEDIA_CDN_ORIGIN}/image/${parts.join(',')}/${encodedAssetPath}${query ? `?${query}` : ''}`;
 }
 
 export function getCandidateQualitiesForRequest(

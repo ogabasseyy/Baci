@@ -31,6 +31,14 @@ describe('ogabassey-same-origin-cdn-image', () => {
     ).toBe(
       'https://cdn.ogabassey.com/image/width=384,quality=60,format=avif/core-assets/products/redmi.jpg?v=20260927'
     );
+    expect(
+      buildUpstreamOgabasseyTransformUrl(
+        options,
+        'core-assets/products/phone#red 5g.avif'
+      )
+    ).toBe(
+      'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/phone%23red%205g.avif'
+    );
   });
 
   it('returns the quality step-down ladder for mobile AVIF transforms and single quality otherwise', () => {

@@ -282,3 +282,23 @@ test("never overrides a developer's GIT_SSH wrapper", () => {
   }
 });
 
+test('lets branch deletions through even when the base has moved', () => {
+  const { root, remote, work } = setup();
+  try {
+    advanceRemoteMain(root, remote);
+    // `git push origin --delete feature` sends an all-zero local SHA.
+    const result = spawnSync('sh', ['-c', behindBaseScript()], {
+      cwd: work,
+      encoding: 'utf8',
+      env: gitEnv,
+      input: `(delete) ${'0'.repeat(40)} refs/heads/feature ${'1'.repeat(40)}\n`,
+      timeout: 30_000,
+    });
+
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.doesNotMatch(result.stdout, /behind/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+

@@ -92,7 +92,7 @@ vi.mock('@/lib/agentic/idempotency-response-storage', () => ({
 vi.mock('@/lib/agentic/merchant-context', () => ({
   AGENTIC_CHECKOUT_DISABLED_ERROR: 'Agentic checkout is disabled',
   isAgenticMerchantCheckoutEnabled: vi.fn(() => true),
-  resolveAgenticMerchantContext: mockResolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc: mockResolveAgenticMerchantContext,
 }));
 vi.mock('@/lib/agentic/mutation-request', () => ({
   readAgenticMutationRequest: mockReadAgenticMutationRequest,

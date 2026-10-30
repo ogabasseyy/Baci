@@ -27,7 +27,7 @@ vi.mock('@/lib/agentic/checkout', () => ({
   calculateCheckoutSession: vi.fn(),
 }));
 vi.mock('@/lib/agentic/merchant-context', () => ({
-  resolveAgenticMerchantContext: mockResolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc: mockResolveAgenticMerchantContext,
 }));
 vi.mock('@/lib/agentic/mutation-request', () => ({
   readAgenticMutationRequest: mockReadAgenticMutationRequest,

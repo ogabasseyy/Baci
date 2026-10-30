@@ -32,7 +32,7 @@ vi.mock('@/lib/agentic/agent-request-controls', () => ({
 }));
 
 vi.mock('@/lib/agentic/merchant-context', () => ({
-  resolveAgenticMerchantContext: mockResolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc: mockResolveAgenticMerchantContext,
 }));
 
 vi.mock('@/lib/agentic/scoped-supabase', () => ({

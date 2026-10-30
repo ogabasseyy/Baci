@@ -8,13 +8,12 @@ import { resolveExistingPaymentState } from '@/lib/agentic/checkout-completion-r
 import { getAgenticCheckoutSession } from '@/lib/agentic/checkout-session-record';
 import { buildCheckoutSessionStateResponse } from '@/lib/agentic/checkout-session-response';
 import { mapCheckoutSessionStatus } from '@/lib/agentic/checkout-storage';
-import { resolveAgenticMerchantContext } from '@/lib/agentic/merchant-context';
+import { resolveAgenticMerchantContextFromRpc } from '@/lib/agentic/merchant-context';
 import { readAgenticMutationRequest } from '@/lib/agentic/mutation-request';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { buildStoreUrl } from '@/lib/store-url';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { agenticCheckoutItemsSchema } from '@/schemas/agentic-checkout';
 import { agenticCheckoutSessionRouteParamsSchema } from '@/schemas/agentic-checkout-session-route-params';
 
@@ -41,8 +40,7 @@ export async function handleAgenticCheckoutSessionGet(
     requireIdempotency: false,
   });
   if (!signedRead.ok) return signedRead.response;
-  const bootstrap = createAdminClient();
-  const merchant = await resolveAgenticMerchantContext(bootstrap);
+  const merchant = await resolveAgenticMerchantContextFromRpc();
   if (!merchant) {
     return NextResponse.json(
       { error: 'Agentic merchant not found' },

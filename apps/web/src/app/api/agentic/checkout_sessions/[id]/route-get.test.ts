@@ -27,7 +27,7 @@ vi.mock('@/lib/agentic/merchant-context', () => ({
   isAgenticMerchantCheckoutEnabled: (merchant: {
     agentic_checkout_enabled?: boolean;
   }) => merchant.agentic_checkout_enabled !== false,
-  resolveAgenticMerchantContext: mockResolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc: mockResolveAgenticMerchantContext,
 }));
 vi.mock('@/lib/agentic/mutation-request', () => ({
   readAgenticMutationRequest: mockReadAgenticMutationRequest,
@@ -199,7 +199,7 @@ describe('GET /api/agentic/checkout_sessions/[id]', () => {
 
     expect(response.status).toBe(200);
     expect(body).toMatchObject({ id: 'agentic_session_1' });
-    expect(createAdminClient).toHaveBeenCalled();
+    expect(createAdminClient).not.toHaveBeenCalled();
     expect(createAgenticScopedSupabaseClient).toHaveBeenCalledWith({
       merchantId: 'merchant-1',
       merchantSlug: 'ogabassey',

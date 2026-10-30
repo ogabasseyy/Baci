@@ -44,4 +44,9 @@ export const EXPECTED_IMEI_PENDING_SOURCES = [
       'supabase/migrations/20261030125541_imei_refund_unsubmitted_petrock_debits.sql',
     sha256: '5ccb72b09e1516d572eed20aa188509f3c6a29abbee52c4866665b07e6025a52',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261030181744_imei_approved_price_reductions.sql',
+    sha256: '08e262540899c9a2ec179b9e0892fbe90a6fbd11a9f052a36934d905d73de8df',
+  },
 ];

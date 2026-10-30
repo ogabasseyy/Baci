@@ -74,14 +74,14 @@ describe('ImeiCheckFormView', () => {
   it('renders the verify CTA with the current tier price', () => {
     render(<ImeiCheckFormView {...baseProps} />);
 
-    expect(screen.getByText('Verify Now - ₦1,500')).toBeTruthy();
+    expect(screen.getByText('Verify Now - ₦1,000')).toBeTruthy();
   });
 
   it('disables the verify button when the IMEI is shorter than 15 digits', () => {
     const onCheck = jest.fn();
     render(<ImeiCheckFormView {...baseProps} imei="12345" onCheck={onCheck} />);
 
-    const button = screen.getByText('Verify Now - ₦1,500').parent;
+    const button = screen.getByText('Verify Now - ₦1,000').parent;
     expect(button).toBeTruthy();
     fireEvent.press(button as NonNullable<typeof button>);
 
@@ -98,7 +98,7 @@ describe('ImeiCheckFormView', () => {
       />
     );
 
-    fireEvent.press(screen.getByText('Verify Now - ₦1,500'));
+    fireEvent.press(screen.getByText('Verify Now - ₦1,000'));
 
     expect(onCheck).not.toHaveBeenCalled();
   });
@@ -113,7 +113,7 @@ describe('ImeiCheckFormView', () => {
       />
     );
 
-    fireEvent.press(screen.getByText('Verify Now - ₦1,500'));
+    fireEvent.press(screen.getByText('Verify Now - ₦1,000'));
 
     expect(onCheck).toHaveBeenCalledTimes(1);
   });
@@ -123,7 +123,7 @@ describe('ImeiCheckFormView', () => {
       <ImeiCheckFormView {...baseProps} imei="490154203237518" isLoading />
     );
 
-    expect(screen.queryByText('Verify Now - ₦1,500')).toBeNull();
+    expect(screen.queryByText('Verify Now - ₦1,000')).toBeNull();
   });
 
   it('turns the button into a top-up action when wallet balance is short', () => {
@@ -143,7 +143,7 @@ describe('ImeiCheckFormView', () => {
     fireEvent.press(screen.getByText('Top up to unlock'));
 
     expect(onTopUpWallet).toHaveBeenCalledTimes(1);
-    expect(onTopUpWallet).toHaveBeenCalledWith(1000);
+    expect(onTopUpWallet).toHaveBeenCalledWith(500);
     expect(onCheck).not.toHaveBeenCalled();
   });
 

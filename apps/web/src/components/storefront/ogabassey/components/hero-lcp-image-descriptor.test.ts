@@ -117,4 +117,16 @@ describe('hero-lcp-image-descriptor', () => {
     expect(capped).toContain('750w');
     expect(capped).not.toContain('384w');
   });
+
+  it('keeps the AVIF tier for a hero source that is already a same-origin /cdn-image/ URL', () => {
+    const descriptor = getOgabasseyHeroLcpImage(
+      '/cdn-image/width=384,quality=70,format=avif/core-assets/products/tecno-spark-40-pro.avif'
+    );
+
+    expect(descriptor?.avifSrc).toMatch(/^\/cdn-image\/.*format=avif/);
+    expect(descriptor?.avifSrcSet).toMatch(/^\/cdn-image\/.*format=avif/);
+    expect(descriptor?.src).toMatch(/^\/cdn-image\/.*format=jpeg/);
+    expect(descriptor?.srcSet).not.toMatch(/[?&](w|q)=/);
+  });
 });
+

@@ -103,6 +103,7 @@ async function fetchCandidateVariant(
       signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
     });
     if (!response.ok) {
+      await response.body?.cancel();
       return {
         ok: false,
         status: response.status === 404 ? 404 : 502,
@@ -174,6 +175,7 @@ export async function fetchSameOriginOgabasseyImageResponse(
     }
 
     if (!upstreamResponse.ok) {
+      await upstreamResponse.body?.cancel();
       return buildErrorResponse(
         'Requested image variant not found',
         upstreamResponse.status === 404 ? 404 : 502

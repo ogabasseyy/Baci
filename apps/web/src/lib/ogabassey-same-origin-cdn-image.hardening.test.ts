@@ -171,4 +171,28 @@ describe('fetchSameOriginOgabasseyImageResponse response hardening', () => {
       "default-src 'none'; sandbox"
     );
   });
+
+  it.each([
+    ['streamed', desktopRequest],
+    ['quality-ladder', mobileRequest],
+  ])('cancels the %s upstream body on a non-OK response so the connection is released', async (_path, request) => {
+    const cancelled: boolean[] = [];
+    const fetcher: typeof fetch = vi.fn(async () => {
+      const body = new ReadableStream({
+        cancel() {
+          cancelled.push(true);
+        },
+      });
+      return new Response(body, { status: 404 });
+    });
+
+    const response = await fetchSameOriginOgabasseyImageResponse(
+      request,
+      fetcher
+    );
+
+    expect(response.status).toBe(404);
+    expect(cancelled.length).toBe(vi.mocked(fetcher).mock.calls.length);
+    expect(cancelled.length).toBeGreaterThan(0);
+  });
 });

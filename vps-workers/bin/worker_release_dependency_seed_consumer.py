@@ -20,7 +20,7 @@ from worker_release_dependency_input_cache import (
     validate_offline_store,
 )
 from worker_release_dependency_policy_cache import MAX_CACHE_BYTES, MAX_CACHE_ENTRIES, RECEIPT_NAME
-from dependency_seed_filesystem import anchored_path, child_directory, open_directory
+from dependency_seed_filesystem import child_directory, open_directory
 from dependency_seed_source import source_snapshot_digest
 from dependency_seed_transaction import named_root_matches, reject_unresolved_staging
 from dependency_seed_verification import verify_seed_locked
@@ -127,8 +127,13 @@ def consume_seed(source: Path, authenticated_source_sha: str, *, seed_root: Path
         seed_fd = child_directory(root_fd, authenticated_source_sha, owner_uid=0, immutable=True)
         cache_fd = child_directory(seed_fd, "cache", owner_uid=0, immutable=True)
         store_fd = child_directory(seed_fd, "store", owner_uid=0, immutable=True)
-        cache_path = anchored_path(cache_fd)
-        store_path = anchored_path(store_fd)
+        # Keep the child name beneath the held seed descriptor.  A bare
+        # /proc/self/fd/N path is itself a symlink, so validators that use
+        # lstat correctly reject it as a link.  Addressing the child through
+        # the already-pinned parent resolves to the real directory while
+        # `expected_root_identity` below still binds each reopen to its fd.
+        cache_path = Path(f"/proc/self/fd/{seed_fd}/cache")
+        store_path = Path(f"/proc/self/fd/{seed_fd}/store")
 
         # Independently enforce current production copy limits. This path does
         # not increase capacity when a source-specific seed is larger.

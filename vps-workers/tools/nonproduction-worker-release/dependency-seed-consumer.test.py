@@ -93,8 +93,12 @@ class DependencySeedConsumerTests(unittest.TestCase):
             source_b, _ = self._fixture(root / "other", SHA_B)
             with self.assertRaises(BuilderRejected):
                 self._consume(source_b, seeds, root / "wrong", SHA_B)
-            with self.assertRaisesRegex(BuilderRejected, "does not exist"):
-                self._consume(source_a, root / "empty-seeds", root / "missing", SHA_A)
+            empty_seeds = root / "empty-seeds"
+            empty_seeds.mkdir(mode=0o700)
+            lock = empty_seeds / ".publish.lock"
+            lock.touch(mode=0o600)
+            with self.assertRaisesRegex(BuilderRejected, "seed child directory is unavailable"):
+                self._consume(source_a, empty_seeds, root / "missing", SHA_A)
             self.assertFalse((root / "wrong/scratch/pnpm-store").exists())
             self.assertFalse((root / "missing/scratch/pnpm-store").exists())
 

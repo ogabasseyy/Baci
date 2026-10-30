@@ -104,10 +104,7 @@ export async function loadCheckoutShippingQuotes(
       ? [receiver.city.trim(), receiver.state.trim()].filter(Boolean).join(', ')
       : receiver.address;
   const requestReceiver = { ...receiver, address: addressForRequest };
-  const requestKey = buildCheckoutShippingQuoteRequestKey(
-    requestReceiver,
-    cart
-  );
+  const requestKey = buildCheckoutShippingQuoteRequestKey(requestReceiver, cart);
   if (!state.force && requestKey === state.currentRequestKey) return;
   const requestKeyChanged = requestKey !== state.currentRequestKey;
   const requestSequence = invalidatePendingQuoteRequests(

@@ -1,5 +1,17 @@
 // Exact scoped cart JWT paths only. No admin/service factory permission is granted.
 export const eventPipelineCartCredentialPaths = [
+  // Recovery verifies the shopper proof before minting a short-lived cart JWT.
+  [
+    'apps/web/src/app/api/storefront/cart/checkout/reconcile/route.ts',
+    'apps/web/src/lib/cart/checkout-reconciliation-client.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/cart/checkout-reconciliation-client.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
   [
     'apps/web/src/lib/cart/realtime-access.ts',
     'apps/web/src/lib/cart/scoped-client.ts',

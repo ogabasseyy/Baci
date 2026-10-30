@@ -11,12 +11,10 @@ import { CartVariantDetails } from '../../../components/cart-variant-details';
 import type { DeliveryMethod, PaymentMethod, ResumedOrder } from '../types';
 import { DesktopCheckoutActions } from './DesktopCheckoutActions';
 import type { RedvaultQuoteSummary } from './redvault/RedvaultPaymentOption';
-
 /** Item kind narrows cart and resumed-order values without shape checks. */
 export type CheckoutItem =
   | ({ kind: 'cart' } & CartItem)
   | ({ kind: 'resumed' } & ResumedOrder['items'][number]);
-
 export interface DesktopOrderSummaryProps {
   displayItems: CheckoutItem[];
   formatCurrencyAuto: (amount: number) => string;
@@ -41,6 +39,7 @@ export interface DesktopOrderSummaryProps {
   remainingAmount: number;
   checkoutPayWithWallet: boolean;
   redvaultSummary: RedvaultQuoteSummary | null;
+  redvaultOrderReady: boolean;
   newsletterOptIn: boolean;
   setNewsletterOptIn: (value: boolean) => void;
   handlePlaceOrder: () => void | Promise<void>;
@@ -73,6 +72,7 @@ export function DesktopOrderSummary({
   remainingAmount,
   checkoutPayWithWallet,
   redvaultSummary,
+  redvaultOrderReady,
   newsletterOptIn,
   setNewsletterOptIn,
   handlePlaceOrder,
@@ -291,6 +291,7 @@ export function DesktopOrderSummary({
           isDeliveryValid={isDeliveryValid}
           remainingAmount={remainingAmount}
           paymentMethod={paymentMethod}
+          redvaultOrderReady={redvaultOrderReady}
           isPayForMeValid={isPayForMeValid}
         />
       </div>

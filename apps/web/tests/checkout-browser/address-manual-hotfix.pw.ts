@@ -23,12 +23,12 @@ for (const width of [390, 1440]) {
       })
     );
     let rateLookupWorks = false;
-    let manualRequests = 0;
+    const manualBodies: Array<{
+      merchant_rates_only?: boolean;
+      receiver: { latitude?: number };
+    }> = [];
     await page.route('**/api/shipping/quotes', (route) => {
-      const body = route.request().postDataJSON();
-      expect(body.merchant_rates_only).toBe(true);
-      expect(body.receiver.latitude).toBeUndefined();
-      manualRequests += 1;
+      manualBodies.push(route.request().postDataJSON());
       return route.fulfill(
         rateLookupWorks
           ? {
@@ -68,7 +68,11 @@ for (const width of [390, 1440]) {
     rateLookupWorks = true;
     await retry.click();
     await expect(next).toBeEnabled();
-    expect(manualRequests).toBeGreaterThan(0);
+    expect(manualBodies.length).toBeGreaterThan(0);
+    for (const body of manualBodies) {
+      expect(body.merchant_rates_only).toBe(true);
+      expect(body.receiver.latitude).toBeUndefined();
+    }
     await page.screenshot({
       path: testInfo.outputPath(`manual-pickup-${width}.png`),
       fullPage: true,

@@ -45,6 +45,161 @@ const summaryRow = {
   mixed_basket: true,
 };
 describe('REDVAULT checkout response', () => {
+  const sharedCart = {
+    binding: {
+      cart_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      cart_version: 3,
+      checkout_generation: 2,
+      checkout_session_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    },
+    principalId: 'verified-principal',
+  };
+  const boundReceipt = {
+    ok: true,
+    replayed: false,
+    order: { ...row, idempotency_replayed: false },
+    binding: {
+      cartId: sharedCart.binding.cart_id,
+      cartVersionReviewed: sharedCart.binding.cart_version,
+      checkout_generation: sharedCart.binding.checkout_generation,
+      merchantId,
+      sessionId: sharedCart.binding.checkout_session_id,
+      variant: 'redvault',
+    },
+  };
+  const boundInput = {
+    orderRpcArgs: {
+      p_merchant_id: merchantId,
+      p_customer_email: ' Customer@Example.Test ',
+      p_payment_method: 'uba_redvault',
+      p_checkout_idempotency_key: 'checkout-key',
+      p_items: [{ cart_line_id: 'line', product_id: 'product', quantity: 1 }],
+    },
+    quote: redvaultTestQuote,
+    merchantId,
+    customerEmail: ' Customer@Example.Test ',
+    userId: null,
+    sharedCart,
+  };
+
+  it.each([
+    false,
+    true,
+  ])('creates or replays the reviewed shared-cart draft (replay: %s)', async (replayed) => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: {
+          ...boundReceipt,
+          replayed,
+          order: { ...row, idempotency_replayed: replayed },
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [summaryRow], error: null });
+    const response = await createRedvaultCheckoutResponse({
+      ...boundInput,
+      client: { rpc } as never,
+    });
+    expect(response.status).toBe(replayed ? 200 : 201);
+    expect(response.headers.get('x-idempotency-replayed')).toBe(
+      replayed ? 'true' : null
+    );
+    const [name, request] = rpc.mock.calls[0];
+    expect(name).toBe('create_storefront_order_with_cart_binding');
+    expect(request).toMatchObject({
+      p_variant: 'redvault',
+      p_session_id: sharedCart.binding.checkout_session_id,
+      p_generation: 2,
+      p_args: {
+        ...boundInput.orderRpcArgs,
+        p_cart_id: sharedCart.binding.cart_id,
+        p_cart_version: 3,
+        p_cart_principal_id: sharedCart.principalId,
+        p_redvault_quote: redvaultTestQuote,
+      },
+    });
+    expect(request.p_args.p_redvault_order).toMatchObject({
+      customer_email: 'customer@example.test',
+      items: [
+        { cart_line_id: 'line', condition: 'new', variant_attributes: {} },
+      ],
+    });
+    expect(request.p_args.p_redvault_route_proof.payload).toEqual({
+      order: request.p_args.p_redvault_order,
+      quote: redvaultTestQuote,
+    });
+    expect(rpc.mock.calls[1][0]).toBe(
+      'get_storefront_redvault_checkout_summary'
+    );
+  });
+
+  it.each([
+    { binding: { ...boundReceipt.binding, variant: 'base' } },
+    { binding: { ...boundReceipt.binding, cartId: 'wrong-cart' } },
+    { binding: { ...boundReceipt.binding, sessionId: 'wrong-session' } },
+    { binding: { ...boundReceipt.binding, merchantId: 'wrong-merchant' } },
+    { binding: { ...boundReceipt.binding, cartVersionReviewed: 4 } },
+    { replayed: true },
+    { order: { ...row, quote_version_id: null, idempotency_replayed: false } },
+  ])('rejects a malformed or mismatched shared-cart receipt', async (override) => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: { ...boundReceipt, ...override },
+      error: null,
+    });
+    const response = await createRedvaultCheckoutResponse({
+      ...boundInput,
+      client: { rpc } as never,
+    });
+    expect(response.status).toBe(503);
+    expect((await response.json()).code).toBe(
+      'SHARED_CART_TEMPORARILY_UNAVAILABLE'
+    );
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['cart_checkout_stale', 409, 'SHARED_CART_STALE'],
+    ['cart_checkout_expired', 409, 'SHARED_CART_SESSION_EXPIRED'],
+    ['cart_order_unauthorized', 403, 'SHARED_CART_BINDING_FORBIDDEN'],
+  ])('maps %s without leaking the database error', async (message, status, code) => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: null, error: { code: 'P0001', message } });
+    const response = await createRedvaultCheckoutResponse({
+      ...boundInput,
+      client: { rpc } as never,
+    });
+    expect(response.status).toBe(status);
+    expect(await response.json()).toMatchObject({ code });
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not submit a shared cart without a verified principal', async () => {
+    const rpc = vi.fn();
+    const response = await createRedvaultCheckoutResponse({
+      ...boundInput,
+      client: { rpc } as never,
+      sharedCart: { ...sharedCart, principalId: null },
+    });
+    expect(response.status).toBe(403);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['checkout_idempotency_conflict', 'CHECKOUT_IDEMPOTENCY_CONFLICT'],
+    ['order_not_reusable', 'CHECKOUT_ORDER_NOT_REUSABLE'],
+  ])('maps a rejected REDVAULT replay safely: %s', async (message, code) => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: null, error: { code: 'P0001', message } });
+    const response = await createRedvaultCheckoutResponse({
+      ...boundInput,
+      client: { rpc } as never,
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code });
+  });
   it('does not forward the web pre-REDVAULT expected_total into discounted order creation', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: null,

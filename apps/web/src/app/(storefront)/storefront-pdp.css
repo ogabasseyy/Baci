@@ -53,3 +53,14 @@
     pointer-events: none;
   }
 }
+
+/* The assistant otherwise drops to the screen edge when navigation hides.
+   Clear both the purchase bar and its scroll-to-top control. */
+@media (width < 48rem) {
+  body:has([data-sticky-cart-visible="true"]):has(
+      .ogabassey-mobile-footer--hidden
+    )
+    .ogabassey-chat-anchor {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 9rem);
+  }
+}

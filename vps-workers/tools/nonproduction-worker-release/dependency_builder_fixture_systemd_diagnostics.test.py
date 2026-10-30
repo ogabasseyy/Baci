@@ -20,6 +20,17 @@ class BuilderSystemdDiagnosticsTests(unittest.TestCase):
         self.assertEqual(category, "python-exception")
         self.assertNotIn("secret", category)
 
+    def test_builder_rejection_maps_only_fixed_message_fragments(self):
+        category = summarize_child_output(
+            b"", b"dependency build rejected: per-build offline pnpm store ownership "
+            b"or mode is unsafe at /private/secret-path")
+        self.assertEqual(category, "builder-scratch-store")
+        self.assertNotIn("secret", category)
+        self.assertEqual(
+            summarize_child_output(b"", b"dependency build rejected: unknown private detail"),
+            "builder-rejected-other",
+        )
+
     def test_summary_returns_only_closed_categories_and_fixed_fields(self):
         summary = summarize_status(
             "LoadState=loaded\nActiveState=failed\nSubState=failed\nResult=exit-code\n"

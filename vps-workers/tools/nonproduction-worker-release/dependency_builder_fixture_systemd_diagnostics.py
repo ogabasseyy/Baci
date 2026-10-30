@@ -69,8 +69,30 @@ def summarize_child_output(stdout: bytes, stderr: bytes) -> str:
         return "permission"
     if "no such file or directory" in text or "not found" in text:
         return "path-missing"
-    if "dependency build rejected" in text:
-        return "builder-rejected"
+    rejection = next((line.split("dependency build rejected:", 1)[1].strip()
+                      for line in text.splitlines()
+                      if "dependency build rejected:" in line), "")
+    if rejection:
+        categories = (
+            (("sandbox worker identity or environment",), "sandbox-identity"),
+            (("sandbox source",), "sandbox-source"),
+            (("per-build offline pnpm store",), "scratch-store"),
+            (("per-build offline pnpm policy cache",), "scratch-cache"),
+            (("immutable pnpm policy seed",), "seed-input"),
+            (("receipt",), "seed-receipt"),
+            (("installed pnpm version",), "pnpm-version"),
+            (("offline install did not verify", "supply-chain policy"), "pnpm-policy"),
+            (("worker dependency install", "worker install tree"), "worker-dependencies"),
+            (("runtime candidate", "runtime shape"), "runtime-candidate"),
+            (("payload",), "payload"),
+            (("source",), "source"),
+        )
+        category = next((category for patterns, category in categories
+                         if any(pattern in rejection for pattern in patterns)),
+                        "rejected-other")
+        return f"builder-{category}"
+    if "dependency build rejected stage=" in text:
+        return "pnpm-step-rejected"
     return "other"
 
 

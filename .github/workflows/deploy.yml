@@ -229,9 +229,9 @@ jobs:
     runs-on: ubuntu-24.04
     environment:
       name: production
-    # Four reload probes plus the first cron run can take 72 minutes.
+    # Five reload probes plus the first cron run can take 87 minutes.
     # Headroom lets each check report its own error before the job times out.
-    timeout-minutes: 80
+    timeout-minutes: 95
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}

@@ -8,6 +8,27 @@ import {
   startStub,
 } from './probe-address-budget-hook-reload-harness.mjs';
 
+for (const escape of ['', '1']) {
+  test(`rejects cleartext bound URLs before any request (local escape ${escape || 'unset'})`, async () => {
+    const stub = await startStub({
+      mgmt: () => [200, [{ applied: '1' }]],
+      canary: () => [403, ACK],
+    });
+    try {
+      const result = await runProbe(baseEnv(stub.port, {
+        NEXT_PUBLIC_SUPABASE_URL: 'http://test.supabase.co',
+        ADDRESS_BUDGET_HOOK_PROBE_ALLOW_UNBOUND_URL: escape,
+      }));
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /must use HTTPS/);
+      assert.equal(stub.hits.mgmt, 0);
+      assert.equal(stub.hits.canary, 0);
+    } finally {
+      stub.server.close();
+    }
+  });
+}
+
 test('refuses a Supabase URL belonging to another project', async () => {
   const result = await runProbe(
     baseEnv(1, {

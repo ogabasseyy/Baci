@@ -50,7 +50,7 @@ export function assertVercelAccess(readAlias = readServingDeploymentId) {
   }
 }
 
-// Covers the sequential job allowance (10 + 80 + 10 + 240 = 340 min:
+// Covers the sequential job allowance (10 + 95 + 10 + 240 = 355 min:
 // vps-drain-readiness, db-migrations, gigl-worker-capability,
 // deploy-production) plus queue and environment-approval slack, so
 // a healthy slow release is never abandoned while it may publish.

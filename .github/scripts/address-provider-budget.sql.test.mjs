@@ -185,6 +185,7 @@ test('a reservation waiting on an owner update observes the revoked allowance', 
     for (let attempt = 0; attempt < 10; attempt++) {
       holding = query("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event='PgSleep' AND query LIKE 'BEGIN;%address-budget:google%')") === 't';
       if (holding) break;
+      await new Promise(resolve => setTimeout(resolve, 50));
     }
     assert.ok(holding, 'owner holds the shared provider lock');
     assert.equal(reserve().status, 'unavailable');

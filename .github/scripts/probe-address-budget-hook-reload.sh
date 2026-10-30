@@ -49,6 +49,13 @@ canary_host="$(printf '%s' "$NEXT_PUBLIC_SUPABASE_URL" | sed -e 's#^[a-zA-Z][a-z
 expected_host="${SUPABASE_PROJECT_REF}.supabase.co"
 case "$canary_host" in
   *.supabase.co)
+    case "$NEXT_PUBLIC_SUPABASE_URL" in
+      https://*) ;;
+      *)
+        echo "::error::ADDRESS BUDGET hook probe URL must use HTTPS." >&2
+        exit 1
+        ;;
+    esac
     if [ "$canary_host" != "$expected_host" ]; then
       echo "::error::ADDRESS BUDGET hook probe URL host '${canary_host}' does not match project ref '${SUPABASE_PROJECT_REF}' (expected '${expected_host}'); refusing to probe." >&2
       exit 1

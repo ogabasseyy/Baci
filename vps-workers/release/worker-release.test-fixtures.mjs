@@ -79,7 +79,9 @@ function createStubs(base) {
   write(
     join(bin, 'pnpm'),
     `#!/usr/bin/env bash
-if [ -f apps/web/package.json ]; then mkdir -p apps/web/node_modules/.bin && printf '#!/bin/sh\\n' > apps/web/node_modules/.bin/tsx && chmod +x apps/web/node_modules/.bin/tsx; else mkdir -p node_modules; fi
+# A hoisted install (marker file) puts tsx only at the workspace root.
+tsx_dir=apps/web/node_modules/.bin; [ ! -e "$HOME/hoisted-tsx" ] || tsx_dir=node_modules/.bin
+if [ -f apps/web/package.json ]; then mkdir -p "$tsx_dir" && printf '#!/bin/sh\\n' > "$tsx_dir/tsx" && chmod +x "$tsx_dir/tsx"; else mkdir -p node_modules; fi
 `,
     0o755
   );

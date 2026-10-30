@@ -76,7 +76,9 @@ build_release() {
 
   echo "worker-release: installing application dependencies for $sha"
   (cd "$release/app" && CI=true PUPPETEER_SKIP_DOWNLOAD=1 pnpm install --frozen-lockfile)
-  [ -x "$release/app/apps/web/node_modules/.bin/tsx" ] || fail "tsx is missing after the install."
+  # Mirrors run-web-script.sh: a hoisted install puts tsx at the workspace root.
+  [ -x "$release/app/apps/web/node_modules/.bin/tsx" ] || [ -x "$release/app/node_modules/.bin/tsx" ] ||
+    fail "tsx is missing after the install."
 
   cp -a "$release/app/vps-workers" "$release/workers"
   cp "$release/app/.github/scripts/gigl-dotenv.sh" "$release/workers/bin/gigl-dotenv.sh"
@@ -242,7 +244,12 @@ activate_release() {
   if [ -n "$previous" ] && [ "$previous" != "$sha" ]; then
     printf '%s\n' "$previous" > "$WORKERS/state/previous-release"
   fi
-  prune_releases "$sha" "$previous"
+  # Reactivating the live SHA keeps the recorded rollback target.
+  local keep="$previous"
+  if [ -z "$keep" ] || [ "$keep" = "$sha" ]; then
+    keep="$(cat "$WORKERS/state/previous-release" 2>/dev/null || true)"
+  fi
+  prune_releases "$sha" "$keep"
   echo "worker-release: activated $sha."
 }
 

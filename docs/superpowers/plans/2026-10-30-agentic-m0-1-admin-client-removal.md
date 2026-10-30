@@ -816,6 +816,14 @@ Expected from `git status --short` before the commit: only `?? apps/web/src/app/
 
 ---
 
+### Added during the build: a colocated create-handler test
+
+`checkout-session-create-handler.ts` had no test of its own (only `checkout_sessions/route.test.ts` covered it), and the repository requires one for every modified file. The build added `apps/web/src/app/api/agentic/checkout_sessions/checkout-session-create-handler.test.ts`, which calls the handler directly and asserts that it resolves the merchant with `resolveAgenticMerchantContextFromRpc()` (no arguments), never calls `createAdminClient`, and answers `500 { error: 'Agentic merchant not found' }` without further work when no merchant resolves. Both tests failed against the pre-Task-6 handler.
+
+Build note: because many agents share the build machine, local runs were limited to the test files each task touches (with longer timeouts), and the full typecheck and suites are left to CI.
+
+---
+
 ### Task 7: Switch checkout completion
 
 **Files:**

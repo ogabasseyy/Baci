@@ -16,6 +16,8 @@ SEED_ROOT = WORK_ROOT / "seeds"
 UNIT_NAME = "var-cache-baci\\x2dworker\\x2drelease-seed\\x2dwork.mount"
 IMAGE_BYTES = 32 * 1024**3
 INODE_COUNT = 2_000_000
+EXPECTED_OBSERVED_BYTES = 14_771_000_000
+MIN_USABLE_CAPACITY_BYTES = EXPECTED_OBSERVED_BYTES * 2
 MOUNT_OPTIONS = "loop,nosuid,nodev,noexec"
 LOOP_RE = re.compile(r"^/dev/loop[0-9]+$")
 
@@ -84,7 +86,10 @@ def verify_bounded_seed_workspace(*, runner: Callable[..., object] = subprocess.
 
     fs = os.statvfs(WORK_ROOT)
     capacity = fs.f_blocks * fs.f_frsize
-    if not IMAGE_BYTES * 99 // 100 <= capacity <= IMAGE_BYTES * 101 // 100:
+    # ext4 statvfs excludes filesystem metadata from f_blocks, unlike the
+    # raw filesystem geometry. Require the planned twofold workload headroom,
+    # and never let reported usable capacity exceed the fixed image ceiling.
+    if not MIN_USABLE_CAPACITY_BYTES <= capacity <= IMAGE_BYTES:
         raise BuilderRejected("fixed seed workspace byte quota differs from policy")
     details = _query(runner, ("/usr/sbin/tune2fs", "-l", str(IMAGE)), timeout=5)
     geometry = _geometry(details)

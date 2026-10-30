@@ -24,6 +24,7 @@ from worker_release_seed_workspace_paths import (
 from worker_release_seed_workspace_rollback import rollback_created_state
 from worker_release_seed_workspace_mount import (
     IMAGE, WORK_ROOT, UNIT_NAME, IMAGE_BYTES, INODE_COUNT, MOUNT_OPTIONS,
+    EXPECTED_OBSERVED_BYTES,
     verify_bounded_seed_workspace,
 )
 
@@ -32,7 +33,6 @@ PUBLISHED_SEED_ROOT_MAX_BYTES = 16 * 1024**3
 HOST_RESERVE_BYTES = 8 * 1024**3
 MIN_FREE_BYTES = IMAGE_BYTES + PUBLISHED_SEED_ROOT_MAX_BYTES + HOST_RESERVE_BYTES
 MIN_HOST_FREE_INODES = 600_000
-EXPECTED_OBSERVED_BYTES = 14_771_000_000
 EXPECTED_OBSERVED_INODES = 786_000
 
 

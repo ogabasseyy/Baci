@@ -43,7 +43,8 @@ class SeedWorkspaceMountProofTests(unittest.TestCase):
             patch.object(mount, "IMAGE_BYTES", 64),
             patch.object(mount, "INODE_COUNT", 20),
             patch.object(mount.os, "statvfs", return_value=SimpleNamespace(
-                f_blocks=64, f_frsize=1)),
+                f_blocks=56, f_frsize=1)),
+            patch.object(mount, "MIN_USABLE_CAPACITY_BYTES", 48),
             patch.object(mount.os.path, "ismount", return_value=True),
         ]
         for item in self.patches:
@@ -77,8 +78,20 @@ class SeedWorkspaceMountProofTests(unittest.TestCase):
         capacity, inodes = mount.verify_bounded_seed_workspace(
             runner=self.runner, image_identity=identity,
         )
-        self.assertEqual((capacity, inodes), (64, 20))
+        self.assertEqual((capacity, inodes), (56, 20))
         self.assertEqual(len(self.calls), 6)
+
+    def test_usable_capacity_must_cover_required_headroom(self):
+        with patch.object(mount.os, "statvfs", return_value=SimpleNamespace(
+                f_blocks=47, f_frsize=1)):
+            with self.assertRaisesRegex(BuilderRejected, "byte quota differs"):
+                mount.verify_bounded_seed_workspace(runner=self.runner)
+
+    def test_usable_capacity_must_not_exceed_fixed_image(self):
+        with patch.object(mount.os, "statvfs", return_value=SimpleNamespace(
+                f_blocks=65, f_frsize=1)):
+            with self.assertRaisesRegex(BuilderRejected, "byte quota differs"):
+                mount.verify_bounded_seed_workspace(runner=self.runner)
 
     def test_plain_host_directory_is_not_accepted_as_quota_mount(self):
         with patch.object(mount.os.path, "ismount", return_value=False):

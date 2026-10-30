@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { createServer } from 'node:http';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -131,3 +132,49 @@ test('skips loudly instead of hanging when the remote cannot be read', () => {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// Regression for the original hang: a remote that accepts the connection but
+// never answers. The previous unbounded `git fetch` waited forever; the
+// bounded ls-remote must give up and soft-skip within its stall budget.
+test(
+  'gives up on a stalled remote instead of hanging the push',
+  // Fail (rather than hang the suite) if the hook regresses to an unbounded wait.
+  { timeout: 120_000 },
+  async () => {
+  const { root, work, featureSha } = setup();
+  const server = createServer(() => {
+    // Accept and never respond.
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const { port } = server.address();
+    git(work, 'remote', 'set-url', 'origin', `http://127.0.0.1:${port}/repo.git`);
+    const startedAt = Date.now();
+    const result = await new Promise((resolve) => {
+      const child = spawn('sh', ['-c', behindBaseScript()], {
+        cwd: work,
+        env: gitEnv,
+      });
+      let stdout = '';
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk;
+      });
+      child.on('close', (status) => resolve({ status, stdout }));
+      child.stdin.end(
+        `refs/heads/feature ${featureSha} refs/heads/feature ${'0'.repeat(40)}\n`
+      );
+    });
+    const elapsedMs = Date.now() - startedAt;
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /skipping behind-base check/);
+    // http.lowSpeedTime is 20s; allow generous slack for slow machines.
+    assert.ok(elapsedMs < 90_000, `hook took ${elapsedMs}ms on a stalled remote`);
+  } finally {
+    server.closeAllConnections();
+    server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+  }
+);
+

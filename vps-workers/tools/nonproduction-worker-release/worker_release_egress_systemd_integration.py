@@ -38,7 +38,8 @@ def _namespace_failure_category(text: str) -> str:
     if not value.strip():
         return "journal-unavailable"
     if not any(marker in value for marker in (
-            "mount namespac", "step namespace", "namespace setup", "failed to mount")):
+            "mount namespac", "step namespace", "namespace setup", "failed to mount",
+            "status=226", "status 226")):
         return "failure-unclassified"
     if "operation not permitted" in value or "permission denied" in value:
         return "namespace-permission"
@@ -86,7 +87,12 @@ def _approved_socket_properties(host_socket: Path, source_alias: Path,
             or isolated_alias != Path(os.path.normpath(str(isolated_alias)))
             or resolved_alias == Path("/run") or Path("/run") in resolved_alias.parents):
         raise RuntimeError("egress fixture socket paths are outside fixed mount policy")
-    return ("--property=InaccessiblePaths=/run",
+    # InaccessiblePaths=/run exits at systemd's NAMESPACE step on the
+    # disposable Ubuntu runner (status 226). A fresh read-only tmpfs gives the
+    # child an empty /run, so host AF_UNIX sockets remain unreachable. The
+    # approved broker socket is separately exposed through the fixed alias
+    # outside /run below.
+    return ("--property=TemporaryFileSystem=/run:ro",
             f"--property=BindReadOnlyPaths={source_alias}:{isolated_alias}")
 
 
@@ -250,7 +256,7 @@ def _namespace_probe_steps(mask_property: str, bind_property: str) -> tuple[tupl
             "--property=RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6")
     return (
         ("base", *base),
-        ("mask", *base, mask_property),
+        ("empty-run", *base, mask_property),
         ("bind", *base, bind_property),
         ("combined", *base, mask_property, bind_property),
     )

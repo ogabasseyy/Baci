@@ -8,6 +8,10 @@ import worker_release_dependency_builder as dependency_builder
 import worker_release_dependency_sandbox as dependency_sandbox
 from worker_release_dependency_consumer import _verify_candidate
 from worker_release_dependency_install import install_payload
+from dependency_builder_fixture_systemd_diagnostics import (
+    cleanup_unit, collect_unit_diagnostics,
+)
+from worker_release_dependency_diagnostics import read_diagnostic
 
 source, release, sha = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
 helper_root = Path(sys.argv[5])
@@ -27,12 +31,17 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
     # The checkout lives below /home/runner, which the test service correctly
     # cannot traverse with ProtectHome=true. Execute the same copied module
     # set from the root-owned, world-readable fixture directory instead.
-    fixture_command = tuple(
-        str(helper_root / "worker_release_dependency_builder.py")
-        if argument == str(Path(dependency_builder.__file__))
-        else argument
-        for argument in command
-    )
+    if command.count("--collect") != 1:
+        raise RuntimeError("dependency builder systemd collection contract changed")
+    fixture_command = []
+    for argument in command:
+        if argument == "--collect":
+            continue
+        fixture_command.append(
+            str(helper_root / "worker_release_dependency_builder.py")
+            if argument == str(Path(dependency_builder.__file__)) else argument
+        )
+    fixture_command = tuple(fixture_command)
     worker_index = command.index("--sandbox-worker")
     source_snapshot = Path(command[worker_index + 1])
     seed_cache = source_snapshot.parent / "pnpm-cache-seed"
@@ -72,6 +81,42 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
                 raise subprocess.TimeoutExpired(fixture_command, dependency_sandbox.MAX_BUILD_SECONDS + 15)
             time.sleep(0.25)
         process.wait()
+        if process.returncode == 0:
+            return
+        fixture_detail = diagnostic_module.read_scratch_diagnostic(
+            scratch, build_root=dependency_builder.BUILD_ROOT, expected_sha=sha,
+            owner_uid=expected_owner_uid,
+        )
+        builder_detail = read_diagnostic(scratch / ".baci-pnpm-error.json",
+                                         owner_uid=expected_owner_uid)
+        unit_detail = collect_unit_diagnostics(unit)
+        fixture_stage = fixture_detail["fixture_stage"] if fixture_detail else "unavailable"
+        fixture_network = fixture_detail["fixture_network"] if fixture_detail else "unavailable"
+        fixture_injection = fixture_detail["fixture_injection"] if fixture_detail else "unavailable"
+        fixture_error = fixture_detail["error_code"] if fixture_detail else "unavailable"
+        fixture_package = fixture_detail["fixture_package"] if fixture_detail else "unavailable"
+        package_coordinate_hash = (fixture_detail["package_coordinate_sha256"]
+                                   if fixture_detail else "unavailable")
+        trust_transition = (fixture_detail["trust_evidence_transition"]
+                           if fixture_detail else "unavailable")
+        trust_headline = (fixture_detail["trust_headline_state"]
+                          if fixture_detail else "unavailable")
+        trust_hint = (fixture_detail["trust_hint_state"]
+                      if fixture_detail else "unavailable")
+        builder_stage = builder_detail["stage"] if builder_detail else "unavailable"
+        builder_category = builder_detail["category"] if builder_detail else "unavailable"
+        print(f"dependency fixture unit failed exit={process.returncode} "
+              f"fixture_stage={fixture_stage} fixture_network={fixture_network} "
+              f"fixture_injection={fixture_injection} fixture_error={fixture_error} "
+              f"fixture_package={fixture_package} package_coordinate_sha256={package_coordinate_hash} "
+              f"trust_evidence_transition={trust_transition} trust_headline_state={trust_headline} "
+              f"trust_hint_state={trust_hint} builder_stage={builder_stage} "
+              f"builder_category={builder_category} systemd_load={unit_detail['load_state']} "
+              f"systemd_active={unit_detail['active_state']} systemd_sub={unit_detail['sub_state']} "
+              f"systemd_result={unit_detail['result']} systemd_exit={unit_detail['exec_main_status']} "
+              f"systemd_status={unit_detail['status_category']} "
+              f"systemd_journal={unit_detail['journal_category']}", file=sys.stderr)
+        raise subprocess.CalledProcessError(process.returncode, fixture_command)
     except BaseException:
         if process.poll() is None:
             subprocess.run(("/usr/bin/systemctl", "kill", "--kill-whom=all", "--signal=SIGKILL", unit),
@@ -79,33 +124,8 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
                            stderr=subprocess.DEVNULL, timeout=10, check=False)
             process.wait(timeout=15)
         raise
-    if process.returncode == 0:
-        return
-    fixture_detail = diagnostic_module.read_scratch_diagnostic(
-        scratch, build_root=dependency_builder.BUILD_ROOT, expected_sha=sha,
-        owner_uid=expected_owner_uid,
-    )
-    fixture_stage = fixture_detail["fixture_stage"] if fixture_detail else "diagnostic-unavailable"
-    fixture_network = fixture_detail["fixture_network"] if fixture_detail else "diagnostic-unavailable"
-    fixture_injection = fixture_detail["fixture_injection"] if fixture_detail else "diagnostic-unavailable"
-    error_code = fixture_detail["error_code"] if fixture_detail else "diagnostic-unavailable"
-    fixture_package = fixture_detail["fixture_package"] if fixture_detail else "diagnostic-unavailable"
-    package_coordinate_hash = (fixture_detail["package_coordinate_sha256"]
-                               if fixture_detail else "diagnostic-unavailable")
-    evidence_transition = (fixture_detail["trust_evidence_transition"]
-                           if fixture_detail else "diagnostic-unavailable")
-    headline_state = (fixture_detail["trust_headline_state"]
-                      if fixture_detail else "diagnostic-unavailable")
-    hint_state = (fixture_detail["trust_hint_state"]
-                  if fixture_detail else "diagnostic-unavailable")
-    print(f"dependency fixture transient unit failed exit={process.returncode} "
-          f"fixture_stage={fixture_stage} fixture_network={fixture_network} "
-          f"fixture_injection={fixture_injection} fixture_error={error_code} fixture_package={fixture_package} "
-          f"package_coordinate_sha256={package_coordinate_hash} "
-          f"trust_evidence_transition={evidence_transition} "
-          f"trust_headline_state={headline_state} trust_hint_state={hint_state}",
-          file=sys.stderr)
-    raise subprocess.CalledProcessError(process.returncode, fixture_command)
+    finally:
+        cleanup_unit(unit)
 
 dependency_builder.run_sandbox = run_fixture_sandbox
 manifest, result_dir = dependency_builder.build(str(source), sha)

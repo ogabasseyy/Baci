@@ -119,7 +119,8 @@ install -o root -g root -m 0555 "$(dirname "$0")/dependency-snapshot-smoke.py" \
 install -o root -g root -m 0444 "$(dirname "$0")/dependency-builder-fixture-pnpm.py" \
   "$helper_root/dependency-builder-fixture-pnpm.py"
 for module in dependency_builder_fixture_pnpm_classification.py \
-  dependency_builder_fixture_pnpm_diagnostics.py; do
+  dependency_builder_fixture_pnpm_diagnostics.py \
+  dependency_builder_fixture_systemd_diagnostics.py; do
   install -o root -g root -m 0444 "$(dirname "$0")/$module" "$helper_root/$module"
 done
 python3 "$(dirname "$0")/dependency-builder-fixture-pnpm.test.py"

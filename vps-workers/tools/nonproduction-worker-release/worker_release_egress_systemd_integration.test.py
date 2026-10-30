@@ -29,13 +29,13 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
     def test_empty_diagnostic_is_explicit(self):
         self.assertEqual(_safe_diagnostic("", ""), "no diagnostic output")
 
-    def test_approved_socket_is_bound_outside_masked_run(self):
+    def test_approved_socket_is_bound_outside_isolated_run(self):
         properties = _approved_socket_properties(
             Path("/run/baci-worker-egress-approved-123.sock"),
             Path("/tmp/worker-egress-fixture/approved-source.sock"),
             Path("/tmp/worker-egress-fixture/approved.sock"))
         self.assertEqual(properties, (
-            "--property=InaccessiblePaths=/run",
+            "--property=TemporaryFileSystem=/run:ro",
             "--property=BindReadOnlyPaths=/tmp/worker-egress-fixture/approved-source.sock:"
             "/tmp/worker-egress-fixture/approved.sock"))
         with self.assertRaisesRegex(RuntimeError, "outside fixed mount policy"):
@@ -107,13 +107,14 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
 
     def test_namespace_probes_progress_from_base_to_full_mount_policy(self):
         steps = _namespace_probe_steps(
-            "--property=InaccessiblePaths=/run",
+            "--property=TemporaryFileSystem=/run:ro",
             "--property=BindReadOnlyPaths=/tmp/source.sock:/tmp/target.sock")
-        self.assertEqual([step[0] for step in steps], ["base", "mask", "bind", "combined"])
+        self.assertEqual([step[0] for step in steps],
+                         ["base", "empty-run", "bind", "combined"])
         self.assertNotIn("--property=InaccessiblePaths=/run", steps[0])
-        self.assertIn("--property=InaccessiblePaths=/run", steps[1])
+        self.assertIn("--property=TemporaryFileSystem=/run:ro", steps[1])
         self.assertIn("--property=BindReadOnlyPaths=/tmp/source.sock:/tmp/target.sock", steps[2])
-        self.assertIn("--property=InaccessiblePaths=/run", steps[3])
+        self.assertIn("--property=TemporaryFileSystem=/run:ro", steps[3])
         self.assertIn("--property=BindReadOnlyPaths=/tmp/source.sock:/tmp/target.sock", steps[3])
 
     def test_cleanup_stops_and_resets_only_exact_fixture_unit(self):

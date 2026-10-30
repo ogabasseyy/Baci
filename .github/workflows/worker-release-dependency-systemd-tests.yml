@@ -17,6 +17,7 @@ on:
       - 'vps-workers/bin/worker_release_lifecycle.py'
       - 'vps-workers/tools/nonproduction-worker-release/dependency-*'
       - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_fixture_pnpm_*.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_fixture_systemd_*.py'
       - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_systemd_test_source.py'
       - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_systemd_test_seed_diagnostics.py'
       - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_systemd_test_seed_normalize.py'
@@ -46,6 +47,7 @@ jobs:
           python3 vps-workers/bin/worker_release_dependency_runtime_smoke.test.py -q
           python3 vps-workers/bin/worker_release_dependency_reclamation.test.py -q
           PYTHONPATH=vps-workers/tools/nonproduction-worker-release python3 vps-workers/tools/nonproduction-worker-release/dependency_builder_systemd_test_seed_diagnostics.test.py -q
+          PYTHONPATH=vps-workers/tools/nonproduction-worker-release python3 vps-workers/tools/nonproduction-worker-release/dependency_builder_fixture_systemd_diagnostics.test.py -q
           python3 vps-workers/bin/worker_release_dependency_consumer.test.py -q
           python3 vps-workers/bin/worker_release_dependency_install.test.py -q
           python3 vps-workers/bin/worker_release_dependency_consumer_quiescence.test.py -q

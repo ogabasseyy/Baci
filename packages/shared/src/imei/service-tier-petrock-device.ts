@@ -18,7 +18,8 @@ export const PETROCK_DEVICE_IMEI_SERVICE_TIERS = {
     checksIncluded: ['device', 'modelNumber', 'esimCompatibility'],
     icon: 'radio-outline',
     brandScopes: ['apple'],
-    deviceCategories: ['smartphone', 'tablet'],
+    // Captured product 1941 evidence is an iPhone IMEI only.
+    deviceCategories: ['smartphone'],
     identifier: 'imei',
   },
   refurbishedStatus: {
@@ -55,17 +56,17 @@ export const PETROCK_DEVICE_IMEI_SERVICE_TIERS = {
     providerServiceId: 'petrock-only',
     name: 'Apple Part Number',
     tagline: 'Identify the exact variant',
-    description: 'Resolve Apple part and model identifiers',
+    description: 'Look up the Apple part number for an iPhone',
     detail:
       'Returns the part number used to identify market and configuration.',
     price: 700,
-    costUsd: 0.04,
-    features: ['Part Number', 'Model Number', 'Device Family'],
-    checksIncluded: ['device', 'modelNumber', 'partNumber'],
+    costUsd: 0.12,
+    features: ['Part Number'],
+    checksIncluded: ['partNumber'],
     icon: 'barcode-outline',
     brandScopes: ['apple'],
-    deviceCategories: ['smartphone', 'tablet', 'laptop', 'watch'],
-    identifier: 'both',
+    deviceCategories: ['smartphone'],
+    identifier: 'imei',
   },
   knoxEnrollment: {
     providerServiceId: 'petrock-only',

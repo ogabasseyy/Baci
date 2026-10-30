@@ -64,7 +64,9 @@ describe('complete Petrock customer check mapping', () => {
     ).toBe('rejected_probe');
     expect(
       PETROCK_CHECK_MAPPINGS.filter((x) => x.evidence === 'successful_probe')
-    ).toHaveLength(1);
+        .map((mapping) => mapping.productId)
+        .sort()
+    ).toEqual(['1941', '1954', '1963', '716']);
   });
   it('never includes an unlock or eligibility-conversion operation as a diagnostic check', () => {
     for (const id of ['1509', '2019', '2021', '4070'])
@@ -127,7 +129,7 @@ it('excludes phone-only variants from Mac laptop results', () => {
   expect(ids).toContain('707');
 });
 it('preserves explicitly advertised serial input without claiming verified coverage', () => {
-  for (const id of ['689', '1963']) {
+  for (const id of ['689']) {
     const product = snapshot.products[id as keyof typeof snapshot.products];
     expect(product.fields[0]).toMatchObject({ display_label: 'IMEI/SN' });
     expect(
@@ -137,6 +139,17 @@ it('preserves explicitly advertised serial input without claiming verified cover
       evidence: 'unverified',
     });
   }
+});
+it('narrows captured part-number coverage to the verified smartphone IMEI scope', () => {
+  expect(
+    PETROCK_CHECK_MAPPINGS.find((row) => row.productId === '1963')
+  ).toMatchObject({
+    identifiers: ['imei'],
+    evidence: 'successful_probe',
+    observedFields: ['partNumber'],
+    brandScope: ['apple'],
+    deviceScope: ['smartphone'],
+  });
 });
 it('includes advertised iMac locks but excludes laptop-only Dell checks from desktops', () => {
   const ids = getPetrockCheckCatalog({

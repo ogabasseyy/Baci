@@ -4,7 +4,9 @@ import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 import test from 'node:test';
-import {
+import { behindBaseFixture } from './lefthook-behind-base.test-support.mjs';
+
+const {
   advanceRemoteMain,
   behindBaseScript,
   fakeSsh,
@@ -13,7 +15,7 @@ import {
   runHook,
   runHookWith,
   setup,
-} from './lefthook-behind-base.test-support.mjs';
+} = behindBaseFixture;
 
 // Runs the LIVE behind-base script from lefthook.yml against throwaway repos
 // (helpers in lefthook-behind-base.test-support.mjs).

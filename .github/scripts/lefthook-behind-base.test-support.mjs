@@ -12,7 +12,7 @@ import { join } from 'node:path';
 // Runs the LIVE behind-base script from lefthook.yml (not a copy) against
 // throwaway repositories, so a regression in the hook fails here instead of
 // silently letting stale branches through or hanging pushes again.
-export function behindBaseScript() {
+function behindBaseScript() {
   const lines = readFileSync(
     new URL('../../lefthook.yml', import.meta.url),
     'utf8'
@@ -41,7 +41,7 @@ writeFileSync(emptyGlobalConfig, '');
 const { GIT_SSH_COMMAND: _sshCommand, GIT_SSH: _ssh, ...inheritedEnv } =
   process.env;
 
-export const gitEnv = {
+const gitEnv = {
   ...inheritedEnv,
   GIT_CONFIG_GLOBAL: emptyGlobalConfig,
   GIT_CONFIG_NOSYSTEM: '1',
@@ -51,17 +51,17 @@ export const gitEnv = {
   GIT_COMMITTER_EMAIL: 'test@example.com',
 };
 
-export const git = (cwd, ...args) =>
+const git = (cwd, ...args) =>
   execFileSync('git', args, { cwd, encoding: 'utf8', env: gitEnv }).trim();
 
-export function commit(cwd, name) {
+function commit(cwd, name) {
   writeFileSync(join(cwd, name), name);
   git(cwd, 'add', name);
   git(cwd, 'commit', '-q', '-m', name);
   return git(cwd, 'rev-parse', 'HEAD');
 }
 
-export function setup() {
+function setup() {
   const root = mkdtempSync(join(tmpdir(), 'behind-base-'));
   const remote = join(root, 'remote.git');
   git(root, 'init', '-q', '--bare', '-b', 'main', remote);
@@ -76,14 +76,14 @@ export function setup() {
   return { root, remote, work, featureSha };
 }
 
-export function advanceRemoteMain(root, remote) {
+function advanceRemoteMain(root, remote) {
   const other = join(root, 'other');
   git(root, 'clone', '-q', remote, other);
   commit(other, 'peer');
   git(other, 'push', '-q', 'origin', 'main');
 }
 
-export function runHook(work, featureSha) {
+function runHook(work, featureSha) {
   return spawnSync('sh', ['-c', behindBaseScript()], {
     cwd: work,
     encoding: 'utf8',
@@ -93,7 +93,7 @@ export function runHook(work, featureSha) {
   });
 }
 
-export function fakeSsh(root, name) {
+function fakeSsh(root, name) {
   const log = join(root, `${name}.log`);
   const script = join(root, name);
   writeFileSync(script, `#!/bin/sh\necho "$@" >> "${log}"\nexit 1\n`);
@@ -101,7 +101,7 @@ export function fakeSsh(root, name) {
   return { script, log };
 }
 
-export function runHookWith(work, featureSha, env) {
+function runHookWith(work, featureSha, env) {
   return spawnSync('sh', ['-c', behindBaseScript()], {
     cwd: work,
     encoding: 'utf8',
@@ -110,3 +110,16 @@ export function runHookWith(work, featureSha, env) {
     timeout: 30_000,
   });
 }
+
+/** Fixtures for running the live behind-base hook against throwaway repos. */
+export const behindBaseFixture = {
+  advanceRemoteMain,
+  behindBaseScript,
+  commit,
+  fakeSsh,
+  git,
+  gitEnv,
+  runHook,
+  runHookWith,
+  setup,
+};

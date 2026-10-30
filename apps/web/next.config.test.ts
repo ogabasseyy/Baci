@@ -65,6 +65,13 @@ describe('next.config core options', () => {
     expect(nextConfig.experimental?.useTypeScriptCli).toBe(true);
   });
 
+  it('uses the serial native build checker without skipping type errors', () => {
+    expect(nextConfig.typescript).toEqual({
+      tsconfigPath: 'tsconfig.build.json',
+      ignoreBuildErrors: false,
+    });
+  });
+
   it('publishes only public PostHog release context envs to the browser bundle', () => {
     expect(nextConfig.env).toEqual(
       expect.not.objectContaining({

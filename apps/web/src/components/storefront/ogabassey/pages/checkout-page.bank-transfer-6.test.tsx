@@ -1,11 +1,11 @@
 import {
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   getCheckoutIdempotencyKey,
   it,
   mockCaptureCheckoutFunnelEventOnce,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useCart,
   useMerchantSafe,
@@ -130,10 +130,10 @@ it('keeps another checkout recovery key when a DVA transfer confirms', async () 
   } as unknown as ReturnType<typeof useMerchantSafe>);
   vi.mocked(usePersistedForm).mockReturnValue(paymentForm);
 
-  render(<CheckoutPage />);
+  renderCheckoutWithStoreRates();
   fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  await continueToPaymentAfterPickupCheck();
   const paymentRadio = screen
     .getAllByRole('radio', { name: /bank transfer/i })
     .find((radio) => radio.getAttribute('value') === 'bank_transfer');

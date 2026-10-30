@@ -1,4 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { useLayoutEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CheckoutShippingQuotesOptions } from './checkout-shipping-quotes-options';
 import { useCheckoutShippingQuotes } from './use-checkout-shipping-quotes';
@@ -67,6 +68,105 @@ describe('useCheckoutShippingQuotes', () => {
     vi.stubGlobal('fetch', mockFetch);
   });
   afterEach(() => vi.unstubAllGlobals());
+  it.each([
+    [true, 'method'],
+    [false, 'method'],
+    [true, 'restored address'],
+    [false, 'restored address'],
+  ] as const)('invalidates readiness before painting pickup in new-address mode %s after changing %s', async (isNewAddressMode, change) => {
+    const pending = deferredResponse();
+    mockFetch
+      .mockResolvedValueOnce(response('door'))
+      .mockReturnValueOnce(pending.promise);
+    const input: CheckoutShippingQuotesOptions = {
+      ...options(),
+      deliveryMethod: change === 'method' ? 'door' : 'pickup',
+      isNewAddressMode,
+      selectedAddressId: 17,
+      addresses: [
+        {
+          id: 17,
+          label: 'Home',
+          address: '12 Allen Avenue, Ikeja, Lagos',
+          phone: '+2348000000000',
+          isDefault: true,
+        },
+      ],
+    };
+    const committedReadiness: boolean[] = [];
+    const { result, rerender } = renderHook(
+      (props) => {
+        const quotes = useCheckoutShippingQuotes(props);
+        useLayoutEffect(() => {
+          committedReadiness.push(quotes.hasResolvedQuotes);
+        });
+        return quotes;
+      },
+      { initialProps: input }
+    );
+    await waitFor(() => expect(result.current.hasResolvedQuotes).toBe(true));
+    committedReadiness.length = 0;
+
+    const restoredInput: CheckoutShippingQuotesOptions = {
+      ...input,
+      deliveryMethod: 'pickup',
+      ...(change === 'restored address'
+        ? {
+            newAddressStreet: '8 Sample Road',
+            currentStep: 'payment',
+            addresses: input.addresses.map((address) => ({
+              ...address,
+              address: '8 Sample Road, Ikeja, Lagos',
+            })),
+          }
+        : {}),
+    };
+    rerender(restoredInput);
+
+    expect(committedReadiness[0]).toBe(false);
+    expect(result.current.hasResolvedQuotes).toBe(false);
+    expect(result.current.isLoadingQuotes).toBe(true);
+    await act(async () => pending.resolve(response('pickup')));
+    expect(result.current.hasResolvedQuotes).toBe(true);
+    expect(result.current.isLoadingQuotes).toBe(false);
+
+    rerender({ ...restoredInput, deliveryMethod: 'pickup_station' });
+    expect(result.current.hasResolvedQuotes).toBe(true);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+  it.each([
+    ['pickup', 'pickup_station'],
+    ['pickup_station', 'pickup_station'],
+    ['door', 'door'],
+  ] as const)('uses %s saved-address delivery with the matching %s carrier preference', async (deliveryMethod, deliveryPreference) => {
+    mockFetch.mockImplementation(async () => response('saved-address'));
+    const input = options();
+    input.isNewAddressMode = false;
+    input.deliveryMethod = deliveryMethod;
+    input.deliveryCoordinates = { latitude: 6.6, longitude: 3.3 };
+    input.selectedAddressId = 17;
+    input.addresses = [
+      {
+        id: 17,
+        label: 'Home',
+        address: '12 Allen Avenue, Ikeja, Lagos',
+        phone: '+2348000000000',
+        isDefault: true,
+      },
+    ];
+
+    const { result } = renderHook(() => useCheckoutShippingQuotes(input));
+
+    await waitFor(() =>
+      expect(result.current.shippingQuotes[0]?.id).toBe('saved-address')
+    );
+    expect(JSON.parse(String(mockFetch.mock.calls[0][1]?.body))).toMatchObject({
+      deliveryPreference,
+      merchant_rates_only: false,
+      receiver: { latitude: 6.6, longitude: 3.3 },
+    });
+  });
+
   it('waits for hydration before requesting quotes', async () => {
     mockFetch.mockResolvedValue(response('ready'));
     const input = options();

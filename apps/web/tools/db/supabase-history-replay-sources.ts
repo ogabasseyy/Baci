@@ -12,6 +12,7 @@ import { FEED_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-feed-
 import { FOLLOW_UP_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-follow-up-pending-sources';
 import { GIGL_TRACKING_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-gigl-tracking-pending-sources';
 import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-gigl-wallet-sources';
+import { IMEI_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-imei-sources';
 import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
 import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumia-pending-sources';
 import { LOYALTY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-loyalty-pending-sources';
@@ -36,13 +37,11 @@ import { STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES } from './supabase-history-rep
 import { STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW } from './supabase-history-replay-storefront-comparison-pending-sources';
 import { STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-storefront-order-pending-sources';
 import { STOREFRONT_ORDER_TAIL_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-storefront-order-tail-pending-sources';
+import { STOREFRONT_SEMANTIC_PENDING_SOURCE_ROWS } from './supabase-history-replay-storefront-semantic-sources';
 import { VTU_CHECKOUT_RLS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-checkout-rls-pending-sources';
 import { VTU_EMAIL_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-email-pending-sources';
 import { VTU_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-pending-sources';
 
-const STOREFRONT_PDP_SEMANTIC_PENDING_SOURCES = `a402b932c082f876b44feb1cd98ef4d879641a0a5e075b52a05fb0a9b7df43dc 20260831153000_optimize_storefront_pdp_semantic_reads.sql`;
-const STOREFRONT_SEMANTIC_INDEX_REPAIR_PENDING_SOURCES = `2999879d1a4127e4b703c8cb18a88f276ced6b2512331c1383402fdf36fff76d 20260901123000_repair_storefront_semantic_inventory_indexes.sql`;
-const STOREFRONT_CACHE_CAUSAL_IDENTITY_PENDING_SOURCES = `e87f8b3e8fecf098cc148d4efc75c75f62a96e0b4bdc98cdb904a91157a33c42 20260905183000_share_storefront_cache_invalidation_causal_identity.sql`;
 const TRACKING_ORDER_AMOUNT_PAID_PENDING_SOURCES = `2dfc3e7d95e55cd202ee973cbf149f0e0447cf1d6248c7c6132348f3cc78c0df 20260921130000_include_tracking_order_amount_paid.sql`;
 const TRACKING_ORDER_PAYMENT_ACCOUNTS_PENDING_SOURCES = `e4cc677df89fc76136e7ad3d6439d07893df34d6e064f0941951ec1d0c2723c9 20260921180100_include_tracking_order_payment_accounts.sql`;
 const TRACKING_ORDER_METHOD_IMPORT_SOURCE_PENDING_SOURCES = `8f48eadc61f6a052ba2d7ae7ff5c0386bb75fae35eca5625b52aedd00432260c 20260923150000_include_tracking_order_method_and_import_source.sql`;
@@ -105,6 +104,7 @@ e8aab2aed87c3ae93090db6343ac125210d1fd90f80de1cff51772ef33b29750 20260718070005_
 395cfdef9ec80858ce34b031df0b642e51b3ba4d5d81922a9687a58962e35c5e 20260718070011_require_credit_direct_guest_tracking_token.sql`;
 // PayPal/Korapay BYOK migrations land in PENDING before the 20260721 cancellation batch (version-earlier, unattested).
 const PENDING_SOURCES = [
+  IMEI_PENDING_REPLAY_SOURCE_ROWS,
   REFUND_PENDING_REPLAY_SOURCE_ROWS,
   CART_PENDING_REPLAY_SOURCE_ROWS,
   BUILDER_PENDING_REPLAY_SOURCE_ROWS,
@@ -130,9 +130,7 @@ const PENDING_SOURCES = [
   PRIMARY_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES,
-  STOREFRONT_PDP_SEMANTIC_PENDING_SOURCES,
-  STOREFRONT_SEMANTIC_INDEX_REPAIR_PENDING_SOURCES,
-  STOREFRONT_CACHE_CAUSAL_IDENTITY_PENDING_SOURCES,
+  STOREFRONT_SEMANTIC_PENDING_SOURCE_ROWS,
   STOREFRONT_PAYMENT_SETTINGS_INSURANCE_PENDING_SOURCES,
   SEARCH_CONDITION_MATCH_HYPHEN_PENDING_SOURCES,
   STOREFRONT_ORDER_TAIL_PENDING_REPLAY_SOURCE_ROWS,

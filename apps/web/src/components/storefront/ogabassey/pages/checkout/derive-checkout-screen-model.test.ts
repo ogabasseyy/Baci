@@ -88,6 +88,27 @@ describe('deriveCheckoutScreenModel', () => {
     });
     expect(model.summary.presentation.discount.visible).toBe(false);
     expect(model.summary.presentation.discount.cartTotal).toBe(215_000);
+
+    // Only an existing order with a selected direct gateway and no active cart
+    // may proceed without a newly validated delivery destination.
+    resumed.sessions.delivery.validation.isValid = false;
+    resumed.sessions.attempt.preferredGateway = 'credpal';
+    const cart = resumed.display.checkoutCart;
+    resumed.display.checkoutCart = [];
+    const directPayment = deriveCheckoutScreenModel(resumed);
+    expect(directPayment.steps.payment.isDeliveryValid).toBe(true);
+    expect(directPayment.summary.presentation.desktop.isDeliveryValid).toBe(
+      true
+    );
+    resumed.display.checkoutCart = cart;
+    const freshOrder = deriveCheckoutScreenModel(resumed);
+    expect(freshOrder.steps.payment.isDeliveryValid).toBe(false);
+    expect(freshOrder.summary.presentation.desktop.isDeliveryValid).toBe(false);
+    resumed.display.checkoutCart = [];
+    resumed.sessions.attempt.preferredGateway = null;
+    expect(
+      deriveCheckoutScreenModel(resumed).steps.payment.isDeliveryValid
+    ).toBe(false);
   });
 
   it('preserves wallet amount and selection callback identities', () => {

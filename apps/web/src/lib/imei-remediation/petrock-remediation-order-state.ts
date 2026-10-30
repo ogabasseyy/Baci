@@ -196,7 +196,7 @@ export async function loadPetrockRemediationOrderContext({
   const { data: order, error: orderError } = await supabaseAdmin
     .from('petrock_orders')
     .select(
-      'id, identifier_hash, identifier_ciphertext, status, remediation_product_id, payment_currency, amount_ngn, amount_usdt, cost_usd, fx_rate_used'
+      'id, identifier_hash, identifier_ciphertext, status, remediation_product_id, payment_currency, amount_ngn, amount_usdt, cost_usd, fx_rate_used, eligibility_evidence, provider_order_id, provider_attempt_started_at'
     )
     .match({ customer_id: customerId, id: orderId, merchant_id: merchantId })
     .maybeSingle();
@@ -212,7 +212,7 @@ export async function loadPetrockRemediationOrderContext({
   const { data: product, error: productError } = await supabaseAdmin
     .from('petrock_remediation_products')
     .select(
-      'id, provider_product_id, cost_usd, price_ngn, price_usdt, order_field_name, is_active, manual_disabled, review_status, fixture_verified, excluded_reason, launch_carrier'
+      'id, provider_product_id, cost_usd, price_ngn, price_usdt, order_field_name, is_active, manual_disabled, review_status, fixture_verified, excluded_reason, launch_carrier, carrier, model_scope, status_segment'
     )
     .match({ id: productId })
     .maybeSingle();
@@ -241,6 +241,15 @@ export async function loadPetrockRemediationOrderContext({
       amountUsdt: optionalNumber(order.amount_usdt),
       costUsd: Number(order.cost_usd ?? product.cost_usd),
       customerId,
+      eligibilityEvidence: order.eligibility_evidence,
+      providerOrderId:
+        typeof order.provider_order_id === 'string'
+          ? order.provider_order_id
+          : null,
+      providerAttemptStartedAt:
+        typeof order.provider_attempt_started_at === 'string'
+          ? order.provider_attempt_started_at
+          : null,
       id: String(order.id),
       merchantId,
       paymentCurrency:
@@ -250,6 +259,9 @@ export async function loadPetrockRemediationOrderContext({
       status: String(order.status),
     },
     product: {
+      carrier: String(product.carrier ?? ''),
+      modelScope: product.model_scope,
+      statusSegment: String(product.status_segment ?? ''),
       active:
         product.is_active === true &&
         product.manual_disabled === false &&

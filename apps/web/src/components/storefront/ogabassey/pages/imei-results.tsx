@@ -1,12 +1,14 @@
 'use client';
 
+import { canAssessImeiNetworkUnlock, getImeiEffectiveVerdict } from '@baci/shared/imei';
+
 import type { ImeiServiceTierDefinition } from '@baci/shared/imei';
 import { ScanBarcode, Smartphone } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { ImeiCheckerStatusCard } from './imei-checker-status-card';
 import { getImeiResultStatusCards } from './imei-checker-status-cards';
-import { getVerdictTone, IMEI_TONES } from './imei-checker-tone';
+import { getVerdictTone } from './imei-checker-tone';
 import type { ImeiResult } from './imei-checker-types';
 import { ImeiRemediationOffer } from './imei-remediation-offer';
 
@@ -38,9 +40,9 @@ export function OgabasseyImeiResults({
     return null;
   }
 
-  const isClean = result.status === 'Clean';
-  const headerTone = isClean ? IMEI_TONES.safe : IMEI_TONES.danger;
-  const verdictTone = getVerdictTone(result.verdictType);
+  const effectiveVerdict = getImeiEffectiveVerdict(result);
+  const headerTone = getVerdictTone(effectiveVerdict.type);
+  const verdictTone = headerTone;
   const statusCards = getImeiResultStatusCards(
     result,
     currentTier.checksIncluded
@@ -54,7 +56,7 @@ export function OgabasseyImeiResults({
       tabIndex={-1}
     >
       <p aria-live="polite" className="sr-only" role="status">
-        {currentTier.name} report ready for {result.device}: {result.verdict}
+        {currentTier.name} report ready for {result.device}: {effectiveVerdict.text}
       </p>
       <div className="overflow-hidden rounded-3xl border border-[var(--store-border,#f3f4f6)] bg-[var(--store-surface,#ffffff)] shadow-xl">
         <div className={`p-6 md:p-8 ${headerTone.surface}`}>
@@ -85,8 +87,26 @@ export function OgabasseyImeiResults({
                 </span>
               </div>
               <h2 className="text-xl font-bold text-[var(--store-text,#111827)] md:text-2xl">
-                {result.device}
+                {result.deviceProfile?.model ?? result.device}
               </h2>
+              {result.deviceProfile && (
+                <>
+                  {(result.deviceProfile.color || result.deviceProfile.storage) && (
+                  <p className="mt-1 text-sm text-store-foreground">
+                    {[result.deviceProfile.color, result.deviceProfile.storage]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                  )}
+                  {result.deviceProfile.imageMatch !== 'none' && (
+                    <p className="mt-1 text-xs text-store-foreground">
+                      {result.deviceProfile.imageMatch === 'color' && result.deviceProfile.color
+                        ? `Catalog illustration · ${result.deviceProfile.color}`
+                        : 'Model illustration · colour may differ'}
+                    </p>
+                  )}
+                </>
+              )}
               <p className="mt-1 font-mono text-sm text-[var(--store-muted-text,#6b7280)]">
                 IMEI: {result.imei}
               </p>
@@ -122,12 +142,12 @@ export function OgabasseyImeiResults({
           <p
             className={`text-base font-bold leading-relaxed ${verdictTone.text}`}
           >
-            {result.verdict}
+            {effectiveVerdict.text}
           </p>
         </div>
       </div>
 
-      {lookupId ? (
+      {lookupId && canAssessImeiNetworkUnlock(result) ? (
         <ImeiRemediationOffer identifier={result.imei} lookupId={lookupId} />
       ) : null}
 

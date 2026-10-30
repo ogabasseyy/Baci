@@ -34,7 +34,7 @@ describe('resolveImeiProviderBinding', () => {
     ).toBe('sickw');
   });
 
-  it('selects the allowlisted Petrock product with its exact input field', () => {
+  it('blocks the rejected blacklist product even when explicitly allowlisted', () => {
     expect(
       resolveImeiProviderBinding({
         clientSupportsAsync: true,
@@ -45,10 +45,8 @@ describe('resolveImeiProviderBinding', () => {
         tierKey: 'blacklist',
       })
     ).toMatchObject({
-      costUsd: 0.019,
-      orderFieldName: 'IMEI',
-      productId: '1955',
-      provider: 'petrock',
+      productId: IMEI_SERVICE_TIERS.blacklist.providerServiceId,
+      provider: 'sickw',
     });
   });
 
@@ -77,4 +75,36 @@ describe('resolveImeiProviderBinding', () => {
       })
     ).toBeNull();
   });
+});
+
+it('retains supported allowlisted Petrock routing with the exact input field', () => {
+  expect(
+    resolveImeiProviderBinding({
+      clientSupportsAsync: true,
+      deviceCategory: 'smartphone',
+      petrockEnabled: true,
+      petrockEnabledTiers: new Set(['simLock']),
+      tier: IMEI_SERVICE_TIERS.simLock,
+      tierKey: 'simLock',
+    })
+  ).toMatchObject({
+    provider: 'petrock',
+    productId: '716',
+    orderFieldName: 'IMEI',
+  });
+});
+it('fails closed when rejected blacklist has no alternate provider', () => {
+  expect(
+    resolveImeiProviderBinding({
+      clientSupportsAsync: true,
+      deviceCategory: 'smartphone',
+      petrockEnabled: true,
+      petrockEnabledTiers: new Set(['blacklist']),
+      tier: {
+        ...IMEI_SERVICE_TIERS.blacklist,
+        providerServiceId: 'petrock-only',
+      },
+      tierKey: 'blacklist',
+    })
+  ).toBeNull();
 });

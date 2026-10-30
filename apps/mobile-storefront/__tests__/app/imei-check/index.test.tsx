@@ -109,7 +109,7 @@ describe('ImeiCheckerScreen', () => {
     render(<ImeiCheckerScreen />);
 
     expect(screen.getByText('Full Report')).toBeTruthy();
-    expect(screen.getByText('Non-Active Status PRO')).toBeTruthy();
+    expect(screen.getByText('Quick ID')).toBeTruthy();
     expect(screen.getByText('Stolen Check')).toBeTruthy();
     expect(screen.getByText('Network Check')).toBeTruthy();
     expect(screen.getByText('Verify Now - ₦1,500')).toBeTruthy();
@@ -118,6 +118,7 @@ describe('ImeiCheckerScreen', () => {
   it('updates the CTA price when a different service tier is selected', () => {
     render(<ImeiCheckerScreen />);
 
+    fireEvent.press(screen.getByText('More checks'));
     fireEvent.press(screen.getByText('Non-Active Status PRO'));
 
     expect(screen.getByText('Verify Now - ₦700')).toBeTruthy();
@@ -184,10 +185,15 @@ describe('ImeiCheckerScreen', () => {
     render(<ImeiCheckerScreen />);
 
     // The full catalog is public now, so the "show all services" toggle appears.
-    expect(screen.getByText('Show all services')).toBeTruthy();
+    expect(screen.getByText('More checks')).toBeTruthy();
     // Selecting a non-Apple brand reveals its checks without needing "show all".
     fireEvent.press(screen.getByText('Samsung'));
 
+    expect(screen.getByText('Quick ID')).toBeTruthy();
+    expect(screen.queryByText('Samsung Info')).toBeNull();
+    expect(screen.queryByText('Samsung Info PRO')).toBeNull();
+    fireEvent.press(screen.getByLabelText('Other options for Device details'));
+    expect(screen.getByText('Samsung Info')).toBeTruthy();
     expect(screen.getByText('Samsung Info PRO')).toBeTruthy();
   });
 

@@ -72,10 +72,16 @@ const defaultLedgers: CredentialReaderLedgers = {
     // unchanged. This fingerprint is not a service-role authorization renewal.
     'apps/web/src/scripts/process-ai-storefront-jobs.ts':
       'a730ed7b56887a231aa4a483526354162ec1dcb514a47fd899e0c347e2268d03',
-    // Reviewed #3847 (1a17a9b900): the five isolated-release jobs below only
-    // swapped inline entrypoint detection for vps-workers/lib/is-entrypoint.mjs
-    // (symlinked releases); credential reads unchanged. This fingerprint is not
-    // a service-role authorization renewal.
+    // Reviewed #3847 (1a17a9b900), limited to these five existing readers:
+    // vps-workers/jobs/cleanup-agentic-request-records.mjs
+    // vps-workers/jobs/cleanup-legacy-expense-receipts.mjs
+    // vps-workers/jobs/cleanup-private-expense-receipts.mjs
+    // vps-workers/jobs/supabase-retention-cleanup.mjs
+    // vps-workers/jobs/sync-gigl-service-centres.mjs
+    // Only entrypoint detection moved to vps-workers/lib/is-entrypoint.mjs;
+    // credential reads are unchanged. These fingerprints do not renew authority.
+    // Adjacent cleanup-import-uploads.mjs, cleanup-push-tokens.mjs, and
+    // push-receipts.mjs entries are unchanged and outside this review.
     'vps-workers/jobs/cleanup-agentic-request-records.mjs':
       'd6e9fa7c098a010da404d679b6617a7de58cebfaf03c873dcc66cd3e36775cf3',
     'vps-workers/jobs/cleanup-legacy-expense-receipts.mjs':

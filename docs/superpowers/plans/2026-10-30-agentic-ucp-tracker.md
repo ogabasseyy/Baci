@@ -11,7 +11,7 @@ The single place to see where the agentic commerce work stands and what happens 
 | --- | --- |
 | **Current plan** | Milestone 0, plan 1 is built and in review as draft PR [ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869); plan 2 is next |
 | **Next action** | Plan 2: draft being written (latest-docs check done 31 Oct); then independent review |
-| **Waiting on the owner** | OK to replace plan 1's PR branch with the version rebuilt on today's main (local commit `ede636ee97`); merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851); read-only production queries for plan 2 |
+| **Waiting on the owner** | Merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851); read-only production queries for plan 2 |
 | **Last updated** | 31 October 2026 |
 
 ## How every plan moves (the loop)
@@ -58,7 +58,7 @@ Plan: [2026-10-30-agentic-m0-1-admin-client-removal.md](2026-10-30-agentic-m0-1-
 - [x] Built with TDD (plan tasks 1–10, 30 Oct): every task red then green; the create-handler test was added during the build
 - [x] Local gates passed (30 Oct): 40 test files and 195 tests, both SQL tests in a throwaway Postgres 17, capability gate (178 tests). CodeRabbit unavailable (rate-limited, no seat); full suites left to CI
 - [x] PR opened (owner OK): draft [ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869), 31 Oct; Codex review requested
-- [ ] Branch synced with main after #3860 (rebuilt locally, inventory and capability record regenerated once; push waits for the owner's OK)
+- [x] Branch synced with main after #3860 (31 Oct, owner OK): rebuilt on `bec52f6033`, inventory and capability record regenerated once; pushed as `ede636ee97` with identical commit IDs
 - [ ] PR gates green
 - [ ] Merged (owner OK, deploys)
 - [ ] Production check: payment-split function live, `anon` cannot execute it
@@ -182,7 +182,7 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | --- | --- | --- | --- |
 | 30 Oct | Roadmap | Five external review rounds | All findings applied; F33–F38 added |
 | 30 Oct | Plan 1 | Codex on PR #3851 (commit `faf0ddf`) | One P2: the edge inventory binds the edited agentic route files, so it must be regenerated after they are committed. Fixed in plan 1 Task 8. |
-| 31 Oct | Plan 1 code | Codex on PR #3869 | Requested; pending |
+| 31 Oct | Plan 1 code | Codex on PR #3869 | Clean on `d43c97b7fc` ("Didn't find any major issues"); re-requested for the rebuilt head `ede636ee97` |
 | 31 Oct | Plan 1 branch | Orchestrator | The first push rewrote commit IDs, so the capability record named a commit only this Mac had. Fixed: the push script now keeps IDs identical and stops on any mismatch. |
 
 ## Change log

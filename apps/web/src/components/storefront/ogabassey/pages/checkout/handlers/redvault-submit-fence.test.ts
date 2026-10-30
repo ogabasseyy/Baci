@@ -101,7 +101,9 @@ describe('resolveRedvaultSubmitFence', () => {
   });
 
   it('cancels a blocking ordinary order and continues', async () => {
-    mockFetch.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    mockFetch.mockResolvedValueOnce(
+      new Response('{"success":true,"cancelled":true}', { status: 200 })
+    );
     const options = buildOptions({
       reusableOrder: null,
       clearStoredOrder: false,
@@ -154,7 +156,9 @@ describe('resolveRedvaultSubmitFence', () => {
   });
 
   it('cancels a stale same-lane order and continues', async () => {
-    mockFetch.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    mockFetch.mockResolvedValueOnce(
+      new Response('{"success":true,"cancelled":true}', { status: 200 })
+    );
     const options = buildOptions({
       reusableOrder: null,
       clearStoredOrder: false,

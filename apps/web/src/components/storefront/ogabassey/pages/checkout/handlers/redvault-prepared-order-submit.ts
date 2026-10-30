@@ -16,6 +16,8 @@ export interface RedvaultPreparedOrderBillingAddress {
 }
 
 export interface RedvaultPreparedOrder {
+  /** Cart whose reviewed checkout created this order, when shared. */
+  cartId?: string;
   billingAddress: RedvaultPreparedOrderBillingAddress;
   customerEmail: string;
   customerName: string;

@@ -13,6 +13,7 @@ type ActionProps = Pick<
   | 'isDeliveryValid'
   | 'remainingAmount'
   | 'paymentMethod'
+  | 'redvaultOrderReady'
   | 'isPayForMeValid'
 >;
 
@@ -25,6 +26,7 @@ export function DesktopCheckoutActions({
   isDeliveryValid,
   remainingAmount,
   paymentMethod,
+  redvaultOrderReady,
   isPayForMeValid,
 }: ActionProps) {
   return (
@@ -65,6 +67,8 @@ export function DesktopCheckoutActions({
           'Get a Proforma Invoice'
         ) : paymentMethod === 'payforme' ? (
           'Send Payment Link'
+        ) : paymentMethod === 'uba_redvault' && redvaultOrderReady ? (
+          'Review and continue to UBA'
         ) : (
           'Place Order'
         )}

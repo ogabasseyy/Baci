@@ -13,6 +13,7 @@ it('keeps the processing order button named and disabled for assistive technolog
       isDeliveryValid
       remainingAmount={1000}
       paymentMethod="paystack"
+      redvaultOrderReady={false}
       isPayForMeValid
     />
   );
@@ -31,6 +32,7 @@ it('requires validated delivery before allowing the desktop order action', () =>
     isProcessing: false,
     remainingAmount: 1000,
     paymentMethod: 'paystack' as const,
+    redvaultOrderReady: false,
     isPayForMeValid: true,
   };
   const { rerender } = render(
@@ -44,4 +46,27 @@ it('requires validated delivery before allowing the desktop order action', () =>
   expect(placeOrder).toBeEnabled();
   fireEvent.click(placeOrder);
   expect(props.handlePlaceOrder).toHaveBeenCalledOnce();
+});
+
+it('labels the UBA confirmation while keeping delivery validation', () => {
+  const props = {
+    hasUser: true,
+    newsletterOptIn: false,
+    setNewsletterOptIn: vi.fn(),
+    handlePlaceOrder: vi.fn(),
+    isProcessing: false,
+    remainingAmount: 102.5,
+    paymentMethod: 'uba_redvault' as const,
+    redvaultOrderReady: true,
+    isPayForMeValid: true,
+  };
+  const { rerender } = render(
+    <DesktopCheckoutActions {...props} isDeliveryValid={false} />
+  );
+  const action = screen.getByRole('button', {
+    name: 'Review and continue to UBA',
+  });
+  expect(action).toBeDisabled();
+  rerender(<DesktopCheckoutActions {...props} isDeliveryValid />);
+  expect(action).toBeEnabled();
 });

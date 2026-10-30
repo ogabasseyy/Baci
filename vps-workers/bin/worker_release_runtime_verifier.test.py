@@ -272,7 +272,7 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             self.assertEqual(properties["Group"], str(self.acl_gid))
             self.assertEqual(properties["BindReadOnlyPaths"],
                              f"{self.candidate}:{self.parent / unit / 'candidate'}")
-            self.assertEqual(properties["RuntimeMaxSec"], "35")
+            self.assertEqual(properties["RuntimeMaxSec"], "35" if _index == 1 else "10")
             self.assertEqual(properties["LimitFSIZE"], "4096")
             self.assertIn("-i", command)
             all_args += " ".join(command)

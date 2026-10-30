@@ -97,6 +97,10 @@ def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callab
             runtime_uid=runtime_uid,
             candidate_identity=(candidate_identity.st_dev, candidate_identity.st_ino))
         view_properties = dict(properties)
+        if index > 0:
+            # Three isolated Node units stay within the former 30-second
+            # aggregate import budget while leaving the web CLI's own 35s cap.
+            view_properties["RuntimeMaxSec"] = "10"
         view_properties["BindReadOnlyPaths"] = f"{candidate}:{view.candidate_path}"
         if (view_properties.get("Group") != str(runtime_gid)
                 or view_properties.get("SupplementaryGroups") != ""

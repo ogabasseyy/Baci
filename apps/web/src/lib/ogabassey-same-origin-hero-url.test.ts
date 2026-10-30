@@ -1,5 +1,57 @@
-import { describe, expect, it } from 'vitest';
+import { NextRequest } from 'next/server';
+import { describe, expect, it, vi } from 'vitest';
+import { GET } from '@/app/cdn-image/[...path]/route';
+import { proxy, config as proxyConfig } from '@/proxy';
 import { toOgabasseySameOriginTransformUrl } from './ogabassey-same-origin-hero-url';
+
+vi.mock('@/lib/domain-cache-simple', () => ({
+  getCustomDomainForSlug: vi.fn().mockResolvedValue(null),
+  getSlugForCustomDomain: vi.fn().mockResolvedValue('ogabassey'),
+}));
+
+vi.mock('@/lib/reverse-domain-cache', () => ({
+  isRecentlyUnmappedCustomDomain: vi.fn().mockReturnValue(false),
+}));
+
+vi.mock('@/lib/slug-alias-cache', () => ({
+  getCurrentSlugForAlias: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock('@/lib/storefront-product-slug-membership', () => ({
+  resolveStorefrontProductSlugResolution: vi
+    .fn()
+    .mockResolvedValue({ kind: 'present-or-unknown' }),
+}));
+
+vi.mock('@/lib/storefront-product-canonical-redirect', () => ({
+  getStorefrontProductCanonicalRedirectResult: vi
+    .fn()
+    .mockResolvedValue({ kind: 'unknown' }),
+}));
+
+function matchesProxyMatcher(pathname: string): boolean {
+  return proxyConfig.matcher.some((pattern) => {
+    if (!pattern) return false;
+    if (pattern === '/baci-relay/:path*') {
+      return pathname === '/baci-relay' || pathname.startsWith('/baci-relay/');
+    }
+    return new RegExp(`^${pattern}$`).test(pathname);
+  });
+}
+
+async function resolveEffectiveCustomDomainPathname(
+  pathname: string
+): Promise<string> {
+  if (!matchesProxyMatcher(pathname)) {
+    return pathname;
+  }
+  const request = new NextRequest(`https://ogabassey.com${pathname}`, {
+    headers: { host: 'ogabassey.com' },
+  });
+  const response = await proxy(request);
+  const rewritten = response.headers.get('x-middleware-rewrite');
+  return rewritten ? new URL(rewritten).pathname : pathname;
+}
 
 describe('toOgabasseySameOriginTransformUrl', () => {
   it('rewrites cdn.ogabassey.com transform URLs to /cdn-image/... while preserving non-CDN URLs', () => {
@@ -40,5 +92,55 @@ describe('toOgabasseySameOriginTransformUrl', () => {
     expect(toOgabasseySameOriginTransformUrl(duplicateVersionQuery)).toBe(
       duplicateVersionQuery
     );
+  });
+
+  it('leaves uppercase or percent-encoded extensions on cdn.ogabassey.com and exercises custom-domain proxy routing for rewritten paths', async () => {
+    const uppercaseUrl =
+      'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/phone.JPG';
+    expect(toOgabasseySameOriginTransformUrl(uppercaseUrl)).toBe(uppercaseUrl);
+    expect(
+      await resolveEffectiveCustomDomainPathname(
+        '/cdn-image/width=384,quality=70,format=avif/core-assets/products/phone.JPG'
+      )
+    ).toBe(
+      '/ogabassey.com/cdn-image/width=384,quality=70,format=avif/core-assets/products/phone.JPG'
+    );
+
+    const encodedExtensionUrl =
+      'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/phone.%6A%70%67';
+    expect(toOgabasseySameOriginTransformUrl(encodedExtensionUrl)).toBe(
+      encodedExtensionUrl
+    );
+
+    for (const sourceUrl of [
+      'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/phone.jpg',
+      'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/static/phone.jpg',
+    ]) {
+      const rewritten = toOgabasseySameOriginTransformUrl(sourceUrl);
+      expect(rewritten.startsWith('/cdn-image/')).toBe(true);
+      const effectivePathname =
+        await resolveEffectiveCustomDomainPathname(rewritten);
+      expect(effectivePathname).toBe(rewritten);
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response(new Uint8Array(12_000), {
+          headers: { 'content-type': 'image/avif' },
+          status: 200,
+        })
+      );
+      try {
+        const routeSegments = effectivePathname
+          .slice('/cdn-image/'.length)
+          .split('/')
+          .map((segment) => decodeURIComponent(segment));
+        const routeResponse = await GET(
+          new NextRequest(`https://ogabassey.com${effectivePathname}`),
+          { params: Promise.resolve({ path: routeSegments }) }
+        );
+        expect(routeResponse.status).toBe(200);
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    }
   });
 });

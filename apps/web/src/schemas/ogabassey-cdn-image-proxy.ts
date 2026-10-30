@@ -1,7 +1,10 @@
 import { z } from 'zod';
 
 const ALLOWED_ASSET_PREFIX_PATTERN = /^core-assets\/(?:products|blog)\//;
-const ALLOWED_ASSET_EXTENSION_PATTERN = /\.(?:avif|jpe?g|png|webp)$/i;
+// Lowercase-only to match the static-asset exclusion in apps/web/src/proxy.ts;
+// uppercase extensions (.JPG, .PNG, etc.) would enter the proxy and be rewritten
+// to /{customDomain}/cdn-image/... instead of reaching the root route handler.
+const ALLOWED_ASSET_EXTENSION_PATTERN = /\.(?:avif|jpe?g|png|webp)$/;
 const FORBIDDEN_PATH_PATTERN = /(?:^|\/)\.\.(?:\/|$)|\\|\0|%(?:2e|2f|5c)/i;
 
 const ogabasseyCdnImageTransformOptionsSchema = z.object({

@@ -10,6 +10,12 @@ describe('/cdn-image/[...path] same-origin route and 20 KB AVIF step-down', () =
       ['width=384,quality=70,format=avif', '../secret.avif'],
       ['width=384,quality=70,format=avif', 'other-bucket', 'item.avif'],
       ['width=384,quality=70,format=svg', 'core-assets', 'products', 'a.svg'],
+      [
+        'width=384,quality=70,format=avif',
+        'core-assets',
+        'products',
+        'phone.JPG',
+      ],
       ['malformed-token', 'core-assets', 'products', 'a.avif'],
     ]) {
       const response = await GET(

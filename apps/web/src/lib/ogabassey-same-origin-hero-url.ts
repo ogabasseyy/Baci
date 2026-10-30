@@ -5,6 +5,7 @@ import { ogabasseyCdnImageProxySearchParamsSchema } from '@/schemas/ogabassey-cd
 const OGABASSEY_CDN_HOSTNAME = new URL(DEFAULT_MEDIA_CDN_ORIGIN).hostname;
 const OGABASSEY_IMAGE_TRANSFORM_PREFIX = '/image/';
 const OGABASSEY_SAME_ORIGIN_IMAGE_TRANSFORM_PREFIX = '/cdn-image/';
+const PROXY_EXCLUDED_LOWERCASE_EXTENSION_PATTERN = /\.(?:avif|jpe?g|png|webp)$/;
 
 /**
  * Rewrites an OgaBassey CDN transform URL (`https://cdn.ogabassey.com/image/...`)
@@ -31,6 +32,9 @@ export function toOgabasseySameOriginTransformUrl(url: string): string {
   const remainder = parsed.pathname.slice(
     OGABASSEY_IMAGE_TRANSFORM_PREFIX.length
   );
+  if (!PROXY_EXCLUDED_LOWERCASE_EXTENSION_PATTERN.test(remainder)) {
+    return url;
+  }
 
   let decodedSegments: string[];
   try {

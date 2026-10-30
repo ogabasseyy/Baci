@@ -133,6 +133,10 @@ test('skips loudly instead of hanging when the remote cannot be read', () => {
   }
 });
 
+// http.lowSpeedTime is 20s; the deadline leaves generous slack for slow
+// machines and stays under the test timeout so cleanup always runs.
+const STALLED_REMOTE_DEADLINE_MS = 90_000;
+
 // Regression for the original hang: a remote that accepts the connection but
 // never answers. The previous unbounded `git fetch` waited forever; the
 // bounded ls-remote must give up and soft-skip within its stall budget.
@@ -150,26 +154,43 @@ test(
     const { port } = server.address();
     git(work, 'remote', 'set-url', 'origin', `http://127.0.0.1:${port}/repo.git`);
     const startedAt = Date.now();
+    // Own the deadline: on a regression, kill the hook's whole process group
+    // so neither it nor a git child keeps this suite (and the CI job) alive.
     const result = await new Promise((resolve) => {
       const child = spawn('sh', ['-c', behindBaseScript()], {
         cwd: work,
         env: gitEnv,
+        detached: true,
       });
       let stdout = '';
+      const killTimer = setTimeout(() => {
+        try {
+          process.kill(-child.pid, 'SIGKILL');
+        } catch {
+          child.kill('SIGKILL');
+        }
+        resolve({ status: null, stdout, timedOut: true });
+      }, STALLED_REMOTE_DEADLINE_MS);
       child.stdout.on('data', (chunk) => {
         stdout += chunk;
       });
-      child.on('close', (status) => resolve({ status, stdout }));
+      child.on('close', (status) => {
+        clearTimeout(killTimer);
+        resolve({ status, stdout, timedOut: false });
+      });
       child.stdin.end(
         `refs/heads/feature ${featureSha} refs/heads/feature ${'0'.repeat(40)}\n`
       );
     });
     const elapsedMs = Date.now() - startedAt;
 
+    assert.equal(
+      result.timedOut,
+      false,
+      `hook still waiting on a stalled remote after ${elapsedMs}ms`
+    );
     assert.equal(result.status, 0);
     assert.match(result.stdout, /skipping behind-base check/);
-    // http.lowSpeedTime is 20s; allow generous slack for slow machines.
-    assert.ok(elapsedMs < 90_000, `hook took ${elapsedMs}ms on a stalled remote`);
   } finally {
     server.closeAllConnections();
     server.close();

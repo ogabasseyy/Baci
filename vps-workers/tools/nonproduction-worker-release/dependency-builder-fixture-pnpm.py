@@ -14,8 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from dependency_builder_fixture_pnpm_classification import safe_success_output, summarize_failure
 from dependency_builder_fixture_pnpm_diagnostics import (
-    FIXTURE_ERROR_NAME, _diagnostic_path, _write_diagnostic, read_diagnostic,
-    read_scratch_diagnostic,
+    FIXTURE_ERROR_NAME, _diagnostic_path, _diagnostic_path_state, _write_diagnostic, read_diagnostic,
+    read_scratch_diagnostic, read_scratch_diagnostic_status,
 )
 
 
@@ -51,7 +51,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     summary = summarize_failure(f"{result.stdout}\n{result.stderr}",
                                 pnpm_args=pnpm_args, cwd=Path.cwd(), env=os.environ)
-    _write_diagnostic(_diagnostic_path(pnpm_args, env=os.environ), summary)
+    diagnostic_path, path_state = _diagnostic_path_state(pnpm_args, env=os.environ)
+    if diagnostic_path is None:
+        diagnostic_state = f"path-{path_state}"
+    else:
+        try:
+            _write_diagnostic(diagnostic_path, summary)
+        except OSError:
+            diagnostic_state = "write-failed"
+        else:
+            diagnostic_state = (
+                "sidecar-readable" if read_diagnostic(diagnostic_path, owner_uid=os.geteuid())
+                is not None else "sidecar-unreadable"
+            )
+    print(f"PNPM_FIXTURE_DIAGNOSTIC={diagnostic_state}", file=sys.stderr)
     if summary["error_code"] == "ERR_PNPM_TRUST_DOWNGRADE":
         print("ERR_PNPM_TRUST_DOWNGRADE", file=sys.stderr)
     else:

@@ -16,7 +16,8 @@ from dependency_builder_fixture_pnpm_classification import (
 
 FIXTURE_ERROR_NAME = ".fixture-pnpm-diagnostic.json"
 
-def _diagnostic_path(argv: Sequence[str], *, env: dict[str, str] | None = None) -> Path | None:
+def _diagnostic_path_state(argv: Sequence[str], *, env: dict[str, str] | None = None
+                           ) -> tuple[Path | None, str]:
     command_env = os.environ if env is None else env
     try:
         store_values = [argv[index + 1] for index, value in enumerate(argv[:-1])
@@ -26,25 +27,36 @@ def _diagnostic_path(argv: Sequence[str], *, env: dict[str, str] | None = None) 
         configured = command_env.get("PNPM_CONFIG_STORE_DIR")
         if configured:
             store_values.append(configured)
-        if not store_values or len(set(store_values)) != 1:
-            return None
+        if not store_values:
+            return None, "store-config-missing"
+        if len(set(store_values)) != 1:
+            return None, "store-config-conflict"
         store = Path(store_values[0])
         info = store.lstat()
     except (IndexError, OSError):
-        return None
-    if (store.name != "pnpm-store" or not stat.S_ISDIR(info.st_mode)
-            or store.is_symlink() or info.st_uid != os.geteuid()):
-        return None
+        return None, "store-unavailable"
+    if store.name != "pnpm-store" or not stat.S_ISDIR(info.st_mode) or store.is_symlink():
+        return None, "store-shape-invalid"
+    if info.st_uid != os.geteuid():
+        return None, "store-owner-mismatch"
     parent = store.parent
     try:
         parent_info = parent.lstat()
     except OSError:
-        return None
-    if (not parent.name.startswith("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.")
-            or not stat.S_ISDIR(parent_info.st_mode) or parent_info.st_uid != os.geteuid()
-            or parent_info.st_mode & 0o077):
-        return None
-    return parent / FIXTURE_ERROR_NAME
+        return None, "scratch-unavailable"
+    if not parent.name.startswith("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa."):
+        return None, "scratch-name-mismatch"
+    if not stat.S_ISDIR(parent_info.st_mode):
+        return None, "scratch-shape-invalid"
+    if parent_info.st_uid != os.geteuid():
+        return None, "scratch-owner-mismatch"
+    if parent_info.st_mode & 0o077:
+        return None, "scratch-mode-mismatch"
+    return parent / FIXTURE_ERROR_NAME, "path-accepted"
+
+
+def _diagnostic_path(argv: Sequence[str], *, env: dict[str, str] | None = None) -> Path | None:
+    return _diagnostic_path_state(argv, env=env)[0]
 
 
 def _write_diagnostic(path: Path | None, value: dict[str, object]) -> None:
@@ -139,8 +151,9 @@ def _read_diagnostic_at(directory_fd: int, name: str, *, owner_uid: int) -> dict
         os.close(fd)
 
 
-def read_scratch_diagnostic(scratch: Path, *, build_root: Path, expected_sha: str,
-                            owner_uid: int, build_root_uid: int = 0) -> dict[str, object] | None:
+def read_scratch_diagnostic_status(scratch: Path, *, build_root: Path, expected_sha: str,
+                                   owner_uid: int, build_root_uid: int = 0
+                                   ) -> tuple[dict[str, object] | None, str]:
     """Read only the diagnostic in the builder-owned per-release scratch."""
     scratch = Path(scratch)
     build_root = Path(build_root)
@@ -154,16 +167,25 @@ def read_scratch_diagnostic(scratch: Path, *, build_root: Path, expected_sha: st
                              | getattr(os, "O_NOFOLLOW", 0), dir_fd=root_fd)
         scratch_info = os.fstat(scratch_fd)
     except OSError:
-        return None
+        return None, "root-or-scratch-unavailable"
     try:
         if (scratch.parent != build_root or not scratch.name.startswith(f"{expected_sha}.")
             or not stat.S_ISDIR(root_info.st_mode) or root_info.st_uid != build_root_uid
             or not stat.S_ISDIR(scratch_info.st_mode) or scratch_info.st_uid != owner_uid
             or stat.S_IMODE(scratch_info.st_mode) != 0o700):
-            return None
-        return _read_diagnostic_at(scratch_fd, FIXTURE_ERROR_NAME, owner_uid=owner_uid)
+            return None, "scratch-identity-rejected"
+        value = _read_diagnostic_at(scratch_fd, FIXTURE_ERROR_NAME, owner_uid=owner_uid)
+        return (value, "sidecar-accepted") if value is not None else (None, "sidecar-rejected-or-absent")
     finally:
         if scratch_fd is not None:
             os.close(scratch_fd)
         if root_fd is not None:
             os.close(root_fd)
+
+
+def read_scratch_diagnostic(scratch: Path, *, build_root: Path, expected_sha: str,
+                            owner_uid: int, build_root_uid: int = 0) -> dict[str, object] | None:
+    return read_scratch_diagnostic_status(
+        scratch, build_root=build_root, expected_sha=expected_sha,
+        owner_uid=owner_uid, build_root_uid=build_root_uid,
+    )[0]

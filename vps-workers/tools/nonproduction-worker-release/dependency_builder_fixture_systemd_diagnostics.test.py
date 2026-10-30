@@ -20,6 +20,13 @@ class BuilderSystemdDiagnosticsTests(unittest.TestCase):
         self.assertEqual(category, "python-exception")
         self.assertNotIn("secret", category)
 
+    def test_fixture_diagnostic_marker_is_closed_enum_only(self):
+        self.assertEqual(summarize_child_output(
+            b"", b"PNPM_FIXTURE_DIAGNOSTIC=path-store-owner-mismatch"),
+            "pnpm-path-store-owner-mismatch")
+        self.assertEqual(summarize_child_output(
+            b"", b"PNPM_FIXTURE_DIAGNOSTIC=private-path=/secret"), "other")
+
     def test_builder_rejection_maps_only_fixed_message_fragments(self):
         category = summarize_child_output(
             b"", b"dependency build rejected: per-build offline pnpm store ownership "

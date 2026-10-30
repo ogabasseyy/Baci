@@ -101,7 +101,7 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
         if process.returncode == 0:
             return
         child_error = summarize_child_output(stdout_drain.read(), stderr_drain.read())
-        fixture_detail = diagnostic_module.read_scratch_diagnostic(
+        fixture_detail, fixture_sidecar_read = diagnostic_module.read_scratch_diagnostic_status(
             scratch, build_root=dependency_builder.BUILD_ROOT, expected_sha=sha,
             owner_uid=expected_owner_uid,
         )
@@ -128,7 +128,8 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
               f"fixture_injection={fixture_injection} fixture_error={fixture_error} "
               f"fixture_package={fixture_package} package_coordinate_sha256={package_coordinate_hash} "
               f"trust_evidence_transition={trust_transition} trust_headline_state={trust_headline} "
-              f"trust_hint_state={trust_hint} builder_stage={builder_stage} "
+              f"trust_hint_state={trust_hint} fixture_sidecar_read={fixture_sidecar_read} "
+              f"builder_stage={builder_stage} "
               f"builder_category={builder_category} systemd_load={unit_detail['load_state']} "
               f"systemd_active={unit_detail['active_state']} systemd_sub={unit_detail['sub_state']} "
               f"systemd_result={unit_detail['result']} systemd_exit={unit_detail['exec_main_status']} "

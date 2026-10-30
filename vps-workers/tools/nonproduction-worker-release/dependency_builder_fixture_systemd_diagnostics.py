@@ -5,6 +5,13 @@ import re
 import threading
 
 UNIT_RE = re.compile(r"^baci-worker-deps-[0-9a-f]{12}-[0-9a-f]{10}(?:\.service)?$")
+FIXTURE_DIAGNOSTIC_STATES = frozenset({
+    "path-store-config-missing", "path-store-config-conflict", "path-store-unavailable",
+    "path-store-shape-invalid", "path-store-owner-mismatch", "path-scratch-unavailable",
+    "path-scratch-name-mismatch", "path-scratch-shape-invalid",
+    "path-scratch-owner-mismatch", "path-scratch-mode-mismatch", "path-path-accepted",
+    "write-failed", "sidecar-readable", "sidecar-unreadable",
+})
 ALLOWED_PROPERTIES = frozenset({
     "LoadState", "ActiveState", "SubState", "Result", "ExecMainCode",
     "ExecMainStatus", "StatusText", "StatusErrno",
@@ -59,6 +66,13 @@ def summarize_child_output(stdout: bytes, stderr: bytes) -> str:
     text = (stdout + b"\n" + stderr).decode("utf-8", errors="replace").lower()
     if not text.strip():
         return "absent"
+    diagnostic_states = [
+        line.partition("=")[2].strip()
+        for line in text.splitlines()
+        if line.startswith("pnpm_fixture_diagnostic=")
+    ]
+    if len(diagnostic_states) == 1 and diagnostic_states[0] in FIXTURE_DIAGNOSTIC_STATES:
+        return f"pnpm-{diagnostic_states[0]}"
     if "modulenotfounderror" in text or "importerror" in text:
         return "python-import"
     if "traceback (most recent call last)" in text:

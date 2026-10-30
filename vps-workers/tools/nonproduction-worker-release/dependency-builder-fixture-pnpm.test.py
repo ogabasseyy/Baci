@@ -392,10 +392,12 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             fixture._write_diagnostic(candidate, {
                 **fixture.summarize_failure("ERR_PNPM_META_FETCH_FAIL"),
             })
-            self.assertEqual(fixture.read_scratch_diagnostic(
+            diagnostic, state = fixture.read_scratch_diagnostic_status(
                 scratch, build_root=root, expected_sha=sha, owner_uid=os.geteuid(),
                 build_root_uid=os.geteuid(),
-            )["error_code"], "ERR_PNPM_TRUST_DOWNGRADE")
+            )
+            self.assertEqual(state, "sidecar-accepted")
+            self.assertEqual(diagnostic["error_code"], "ERR_PNPM_TRUST_DOWNGRADE")
 
     def test_observer_uses_fixed_pnpm_store_environment_when_cli_omits_store_dir(self):
         sha = "a" * 40
@@ -405,10 +407,19 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
             scratch.mkdir(mode=0o700)
             store = scratch / "pnpm-store"
             store.mkdir(mode=0o700)
+            path, state = fixture._diagnostic_path_state(
+                ("--filter", "@baci/web", "deploy"),
+                env={"PNPM_CONFIG_STORE_DIR": str(store)})
+            self.assertEqual(state, "path-accepted")
+            self.assertEqual(path, scratch / fixture.FIXTURE_ERROR_NAME)
             self.assertEqual(fixture._diagnostic_path(
                 ("--filter", "@baci/web", "deploy"),
                 env={"PNPM_CONFIG_STORE_DIR": str(store)}),
                 scratch / fixture.FIXTURE_ERROR_NAME)
+            _path, state = fixture._diagnostic_path_state(
+                ("--store-dir", str(root / "other")),
+                env={"PNPM_CONFIG_STORE_DIR": str(store)})
+            self.assertEqual(state, "store-config-conflict")
             self.assertIsNone(fixture._diagnostic_path(
                 ("--store-dir", str(root / "other")),
                 env={"PNPM_CONFIG_STORE_DIR": str(store)}))
@@ -435,7 +446,8 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
 
     def test_harness_reads_diagnostic_from_builder_scratch_not_outer_command_args(self):
         harness = systemd_fixture_source()
-        self.assertIn("read_scratch_diagnostic(", harness)
+        self.assertIn("read_scratch_diagnostic_status(", harness)
+        self.assertIn("fixture_sidecar_read={fixture_sidecar_read}", harness)
         self.assertIn('fixture_detail["fixture_stage"]', harness)
         self.assertIn('fixture_detail["fixture_network"]', harness)
         self.assertIn('fixture_detail["fixture_injection"]', harness)

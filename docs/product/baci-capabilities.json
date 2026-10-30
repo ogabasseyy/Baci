@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-30T02:20:46+00:00",
-  "source_revision": "5a8dcf5d695cef5a7dc582aeb27420c763c6abfe",
-  "evidence_digest": "2483ee2b6abcd7e4e0533068c176eeacd96910c7d81fc223315d4ff3e8dfc0e7",
-  "claims_digest": "67ce9d5b3ec4a60f9eac3eefba239c95b355c9cbc4951a04128b3e3f6d0e19dc",
+  "reviewed_at": "2026-10-30T05:18:08+00:00",
+  "source_revision": "2740f9a2b0a35ba4f8113aa8758a2421b9ff5a4b",
+  "evidence_digest": "98d2797a5005660590466bd6ed26993ff5a8146627cb5462dc41393aadfb2314",
+  "claims_digest": "4fe32de23b908f621578c9fe29ab0fda402be773b5f9c9872b5364f201ac6090",
   "review_scope": "Source evidence only. Rechecked the support-chat health probe: catalog and conversation checks run concurrently, with Ogabassey tenant and catalog markers. All cited capability and access-map sources remain unchanged since the previous source review across this main integration. OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
   "capabilities": [
     {

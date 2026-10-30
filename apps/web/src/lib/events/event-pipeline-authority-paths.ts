@@ -26,4 +26,8 @@ export const eventPipelineAdminImporters = [
   // claim-bound snapshot RPC and the claim-sent marker RPC; direct table
   // access is limited to the worker-owned dispatch lease below.
   'apps/web/src/lib/send-manual-order-document.ts',
+  // Audited in-app feedback sender (owner-approved 2026-10-30): emails each
+  // report to the fixed support inbox only through the audited Zeptomail
+  // sender, matching repair-notifications.ts above.
+  'apps/web/src/lib/feedback/send-feedback-report-email.ts',
 ] as const;

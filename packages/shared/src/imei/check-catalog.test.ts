@@ -36,7 +36,7 @@ describe('customer check outcome catalog', () => {
         (PUBLIC_IMEI_SERVICE_TIERS as readonly string[]).includes(id)
       ).toBe(false);
     expect(IMEI_SERVICE_TIERS.basic.price).toBe(300);
-    expect(IMEI_SERVICE_TIERS.full.price).toBe(1500);
+    expect(IMEI_SERVICE_TIERS.full.price).toBe(1000);
   });
   it('uses outcome names and questions rather than unexplained supplier source or premium labels', () => {
     for (const entry of Object.values(IMEI_CHECK_CATALOG)) {

@@ -88,12 +88,12 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         (self.candidate / "node_modules" / "@supabase" / "supabase-js" / "package.json").write_text(
             '{"name":"@supabase/supabase-js","type":"module","exports":"./index.js"}\n')
         (self.candidate / "node_modules" / "@supabase" / "supabase-js" / "index.js").write_text(
-            "export function createClient() {}\n")
+            "export function createClient() { return { from() {} }; }\n")
         (self.candidate / "node_modules" / "expo-server-sdk").mkdir()
         (self.candidate / "node_modules" / "expo-server-sdk" / "package.json").write_text(
             '{"name":"expo-server-sdk","type":"module","exports":"./index.js"}\n')
         (self.candidate / "node_modules" / "expo-server-sdk" / "index.js").write_text(
-            "export class Expo {}\n")
+            "export class Expo { sendPushNotificationsAsync() {} }\n")
         freeze(self.candidate, os.getgid())
         actual_systemd_smoke = (
             self._testMethodName == "test_actual_linux_sandbox_smoke_produces_receipt"
@@ -245,18 +245,16 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             self.assertNotIn("/home", inaccessible)  # supplied by ProtectHome
             if "--input-type=module" in command:
                 smoke_script = command[-1]
-                self.assertIn("const smokeWatchdog = setTimeout(() => process.exit(34), 30000)",
+                self.assertIn("import { spawnSync } from 'node:child_process'", smoke_script)
+                self.assertIn("timeout: 8000", smoke_script)
+                self.assertIn("stdio: 'ignore'", smoke_script)
+                self.assertIn("if (child.error || child.status !== 0) process.exit(41 + i)",
                               smoke_script)
-                self.assertIn("(async () => {", smoke_script)
-                self.assertIn("if (code === 13) process.exitCode = 40 + smokeStage", smoke_script)
-                self.assertIn("smokeStage = 1", smoke_script)
-                self.assertIn("smokeStage = 2", smoke_script)
-                self.assertIn("smokeStage = 3", smoke_script)
-                self.assertIn("smokeStage = 4", smoke_script)
-                self.assertIn("boundedImport('dotenv', 31)", smoke_script)
-                self.assertIn("boundedImport('@supabase/supabase-js', 32)", smoke_script)
-                self.assertIn("boundedImport('expo-server-sdk', 33)", smoke_script)
-                self.assertNotIn("Promise.all([import(", smoke_script)
+                self.assertIn("import('dotenv')", smoke_script)
+                self.assertIn("import('@supabase/supabase-js')", smoke_script)
+                self.assertIn("import('expo-server-sdk')", smoke_script)
+                self.assertNotIn("Promise.race", smoke_script)
+                self.assertNotIn("process.on('exit'", smoke_script)
             self.assertNotIn("/var/run", inaccessible)  # aliases /run on Ubuntu
             self.assertNotIn("/run", inaccessible)  # isolated by a read-only empty tmpfs
             self.assertIn("/srv", inaccessible)  # keep the worker tree masked
@@ -274,6 +272,71 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         self.assertIn("expo-server-sdk", all_args)
         self.assertIn("synthetic-smoke-key", all_args)
         self.assertIn("synthetic-smoke-token", all_args)
+
+    @unittest.skipUnless(shutil.which("node"), "Node is required for loader-exit regression")
+    def test_unsettled_module_tla_is_confined_and_mapped_by_child_probe(self):
+        """A dependency's Node exit 13 cannot terminate the supervising smoke."""
+        package = self.parent / "node_modules" / "tla-probe"
+        package.mkdir(parents=True)
+        (package / "package.json").write_text(
+            '{"name":"tla-probe","type":"module","exports":"./index.js"}\\n')
+        (package / "index.js").write_text(
+            "await new Promise(() => {}); export const loaded = true;\\n")
+        script = (
+            "import { spawnSync } from 'node:child_process'; "
+            "const child = spawnSync(process.execPath, ['--input-type=module','-e',"
+            "\"import('tla-probe').then(() => {})\"], { cwd: "
+            + repr(str(self.parent))
+            + ", env: { PATH: '/usr/bin:/bin', NODE_ENV: 'production' }, "
+              "stdio: 'ignore', timeout: 8000, maxBuffer: 1024 }); "
+              "if (child.error?.code === 'ETIMEDOUT') process.exit(31); "
+              "if (child.error || child.status !== 0) process.exit(41);"
+        )
+        result = __import__("subprocess").run(
+            (shutil.which("node"), "--input-type=module", "-e", script),
+            cwd=self.parent, env={"PATH": "/usr/bin:/bin", "NODE_ENV": "production"},
+            stdin=__import__("subprocess").DEVNULL,
+            stdout=__import__("subprocess").DEVNULL,
+            stderr=__import__("subprocess").DEVNULL, timeout=12, check=False)
+        self.assertEqual(result.returncode, 41)
+
+    @unittest.skipUnless(shutil.which("node"), "Node is required for generated smoke execution")
+    def test_generated_smoke_imports_each_fixed_package_without_loader_exit(self):
+        from worker_release_runtime_smoke import run_fixed_smokes
+
+        class FakeView:
+            def __init__(self, unit, **_kwargs):
+                self.candidate_path = self.candidate
+            def verify_target(self): pass
+            def cleanup(self): pass
+            def abandon(self): pass
+        FakeView.candidate = self.candidate
+        captured = []
+
+        def execute(_unit, cwd, command, _properties, index):
+            if index == 2:
+                captured.append((cwd, command))
+                # /etc exists on the developer host. The fixed script returns
+                # 4 only after all three child imports and API checks passed.
+                result = __import__("subprocess").run(
+                    (shutil.which("node"), "--input-type=module", "-e", command[-1]),
+                    cwd=cwd, env={"PATH": "/usr/bin:/bin", "NODE_ENV": "production"},
+                    stdin=__import__("subprocess").DEVNULL,
+                    stdout=__import__("subprocess").DEVNULL,
+                    stderr=__import__("subprocess").DEVNULL, timeout=30, check=False)
+                self.assertEqual(result.returncode, 4)
+
+        with patch("worker_release_runtime_smoke.create_runtime_view", side_effect=FakeView), \
+                patch("worker_release_runtime_smoke.sys.platform", "linux"), \
+                patch("worker_release_runtime_smoke.os.geteuid", return_value=0), \
+                patch("pathlib.Path.is_file", return_value=True):
+            run_fixed_smokes(self.candidate, "f" * 64, execute_unit=execute,
+                             unit_name=lambda *_: "baci-worker-runtime-" + "f" * 16 + "-" + "a" * 12 + "-1.service",
+                             rejected=RuntimeVerificationRejected, max_seconds=35,
+                             max_output_bytes=4096, systemd_run="/usr/bin/systemd-run",
+                             systemctl="/usr/bin/systemctl", runtime_uid=61000,
+                             runtime_gid=self.acl_gid)
+        self.assertEqual(len(captured), 1)
 
     @patch("worker_release_runtime_smoke.create_runtime_view")
     @patch("worker_release_runtime_verifier._execute_fixed_unit")

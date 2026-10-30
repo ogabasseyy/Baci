@@ -59,38 +59,30 @@ def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callab
         "InaccessiblePaths": "/tmp /var/tmp /dev/shm /etc /srv /opt /usr/local /var/log /var/cache /var/spool /var/backups",
     }
     worker_imports = (
-        # Keep the async smoke inside an IIFE rather than a top-level await:
-        # Node otherwise exits with status 13 for unresolved module TLA before
-        # useful failure diagnostics. Per-import bounds and this fixed watchdog
-        # preserve bounded failure while the stage marker identifies any
-        # Node-originated 13 without logging package output.
-        "let smokeStage = 0; process.on('exit', code => { "
-        "if (code === 13) process.exitCode = 40 + smokeStage; }); "
-        "const smokeWatchdog = setTimeout(() => process.exit(34), 30000); "
-        "(async () => { "
-        "const boundedImport = async (specifier, timeoutCode) => { let timer; "
-        "try { return await Promise.race([import(specifier), new Promise((_, reject) => { "
-        "timer = setTimeout(() => reject({ baciImportTimeout: timeoutCode }), 8000); })]); } "
-        "catch (error) { process.exit(Number.isInteger(error?.baciImportTimeout) "
-        "? error.baciImportTimeout : error?.code === 'ERR_MODULE_NOT_FOUND' ? 21 : 22); } "
-        "finally { clearTimeout(timer); } }; "
-        "try { const fs = await import('node:fs'); "
+        # Run each package import in a child process. Node exits the whole
+        # process with status 13 when any imported module graph has unsettled
+        # top-level await; Promise.race and exit hooks in this parent cannot
+        # reliably observe or classify that loader-level termination. A
+        # synchronous bounded child lets the parent map the exact fixed package
+        # to a safe status without exposing package output.
+        "import { spawnSync } from 'node:child_process'; "
+        "import fs from 'node:fs'; "
+        "const checks = ["
+        "['dotenv', \"import('dotenv').then(m => { if (typeof m.config !== 'function') process.exit(2); })\"],"
+        "['supabase', \"import('@supabase/supabase-js').then(m => { if (typeof m.createClient !== 'function') process.exit(2); const c = m.createClient('https://example.invalid', 'synthetic-smoke-key'); if (typeof c.from !== 'function') process.exit(3); })\"],"
+        "['expo', \"import('expo-server-sdk').then(m => { if (typeof m.Expo !== 'function') process.exit(2); const e = new m.Expo({ accessToken: 'synthetic-smoke-token' }); if (typeof e.sendPushNotificationsAsync !== 'function') process.exit(3); })\"]"
+        "]; "
+        "for (let i = 0; i < checks.length; i++) { "
+        "const child = spawnSync(process.execPath, ['--input-type=module', '-e', checks[i][1]], "
+        "{ env: { PATH: '/usr/bin:/bin', NODE_ENV: 'production' }, stdio: 'ignore', "
+        "timeout: 8000, maxBuffer: 1024 }); "
+        "if (child.error?.code === 'ETIMEDOUT') process.exit(31 + i); "
+        "if (child.error || child.status !== 0) process.exit(41 + i); "
+        "} "
+        "try { "
         "for (const hidden of ['/srv/baci-workers/releases','/srv/baci-workers/runtime','/srv/baci-workers/locks','/etc','/var/log','/var/cache','/var/spool','/var/backups','/opt','/usr/local']) { "
         "try { fs.accessSync(hidden); process.exit(4); } catch (error) { if (!['ENOENT','EACCES','EPERM'].includes(error?.code)) process.exit(5); } } "
-        "smokeStage = 1; "
-        "const dotenv = await boundedImport('dotenv', 31); "
-        "smokeStage = 2; "
-        "const supabase = await boundedImport('@supabase/supabase-js', 32); "
-        "smokeStage = 3; "
-        "const expo = await boundedImport('expo-server-sdk', 33); "
-        "smokeStage = 4; "
-        "if (typeof dotenv.config !== 'function' || typeof supabase.createClient !== 'function' || typeof expo.Expo !== 'function') process.exit(2); "
-        "const client = supabase.createClient('https://example.invalid', 'synthetic-smoke-key'); "
-        "const push = new expo.Expo({ accessToken: 'synthetic-smoke-token' }); "
-        "if (typeof client.from !== 'function' || typeof push.sendPushNotificationsAsync !== 'function') process.exit(3); "
-        "} catch (error) { process.exit(error?.code === 'ERR_MODULE_NOT_FOUND' ? 21 : 22); }"
-        "})().then(() => clearTimeout(smokeWatchdog), () => { "
-        "clearTimeout(smokeWatchdog); process.exit(22); });"
+        "} catch (error) { process.exit(22); }"
     )
     commands = (
         ("apps/web", ("/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "NODE_ENV=production",

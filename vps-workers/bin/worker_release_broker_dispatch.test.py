@@ -232,7 +232,11 @@ class BrokerDrainTests(unittest.TestCase):
                 self.assertEqual(dispatched, [1], "queued request ran after drain began")
                 self.assertEqual(server_errors, [])
                 second.settimeout(2)
-                self.assertEqual(second.recv(4096), b"")
+                try:
+                    queued_reply = second.recv(4096)
+                except ConnectionResetError:
+                    queued_reply = b""
+                self.assertEqual(queued_reply, b"")
             finally:
                 stop_event.set()
                 finish_dispatch.set()

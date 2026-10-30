@@ -121,9 +121,13 @@ it('attaches the guest checkout to the new account before REDVAULT initializatio
       .getAllByRole('button', { name: /place order/i })
       .find((button) => !button.hasAttribute('disabled')) as HTMLButtonElement
   );
-  await screen.findByRole('button', { name: /review and continue to uba/i });
+  await screen.findAllByRole('button', { name: /review and continue to uba/i });
   fireEvent.click(
-    await screen.findByRole('button', { name: /review and continue to uba/i })
+    (
+      await screen.findAllByRole('button', {
+        name: /review and continue to uba/i,
+      })
+    )[0]
   );
 
   await waitFor(() => {

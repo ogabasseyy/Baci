@@ -396,6 +396,7 @@ jobs:
           --sql-check supabase/migrations/tests/repair_pickup_receiver_fulfillment.sql
           --sql-check supabase/migrations/tests/gigl_tracking_orderless_repair_unlink.sql
           --sql-check supabase/tests/uba_redvault_refund_inventory_p1_regressions.sql
+          --sql-check supabase/tests/commerce_cart_redvault_full_schema.sql
           --sql-check supabase/migrations/tests/manual_order_document_date_sync.sql
           --sql-check supabase/tests/feed_offer_manifest_offer_change_regressions.sql
           --sql-check supabase/migrations/tests/claim_push_tokenless_retry.sql

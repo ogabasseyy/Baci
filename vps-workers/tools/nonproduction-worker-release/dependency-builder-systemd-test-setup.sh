@@ -297,10 +297,21 @@ seed_workspace_mount_started=1
 PYTHONPATH="$(cd "$(dirname "$0")/../../bin" && pwd)${PYTHONPATH:+:$PYTHONPATH}" \
 SEED_TEST_IMAGE_IDENTITY="$seed_image_identity" python3 -B - <<'PY'
 import os
+import subprocess
 from worker_release_seed_workspace_paths import ensure_seed_collection
 from worker_release_seed_workspace import _secure_mounted_root, _verify_mount
+from worker_release_seed_workspace_mount import IMAGE, WORK_ROOT, UNIT_NAME, MOUNT_OPTIONS
 _secure_mounted_root()
 ensure_seed_collection(__import__("pathlib").Path("/var/cache/baci-worker-release/seed-work"))
+for key, expected in (("What", str(IMAGE)), ("Where", str(WORK_ROOT)),
+                      ("Type", "ext4"), ("Options", MOUNT_OPTIONS), ("ActiveState", "active")):
+    result = subprocess.run(("/usr/bin/systemctl", "show", f"--property={key}", "--value", UNIT_NAME),
+                            capture_output=True, text=True, timeout=3, check=False)
+    actual = result.stdout.strip()
+    print(f"seed mount {key}: " + ("match" if result.returncode == 0 and actual == expected else "mismatch"))
+    if key == "Options" and actual != expected:
+        for option in ("loop", "nosuid", "nodev", "noexec"):
+            print(f"seed mount option {option}: " + ("present" if option in actual.split(",") else "absent"))
 _verify_mount(__import__("subprocess").run,
               image_identity=tuple(map(int, os.environ["SEED_TEST_IMAGE_IDENTITY"].split(":"))))
 print("temporary seed mount passed the production bounded-mount verifier")

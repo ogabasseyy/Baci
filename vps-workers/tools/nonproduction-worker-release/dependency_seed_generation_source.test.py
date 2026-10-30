@@ -7,12 +7,14 @@ from pathlib import Path
 import tempfile
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "bin"))
 
 from dependency_seed_generation_contract import SeedGenerationRejected
 from dependency_seed_generation_source import digest_pinned_stage_source
 from worker_release_source_snapshot import pin_source_snapshot
+from worker_release_source_view_access import grant_source_view_access
 
 
 @unittest.skipUnless(os.geteuid() == 0, "requires disposable root-owned frozen files")
@@ -37,7 +39,15 @@ class PinnedStageSourceTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_digest_comes_from_the_exact_live_stage_pin(self):
-        with pin_source_snapshot(self.source, trusted_root=self.root, owner_uid=0) as pin:
+        # This unit test checks that seed generation consumes the exact pin.
+        # Use isolated synthetic reader UIDs and real ACLs so it does not
+        # depend on system accounts provisioned by the separate host workflow.
+        readers = (61001, 61002)
+        grant_source_view_access(self.source, read_uids=readers)
+        with (patch("worker_release_source_view_access.fixed_reader_uids",
+                    return_value=readers),
+              pin_source_snapshot(self.source, trusted_root=self.root, owner_uid=0,
+                                  read_uids=readers) as pin):
             digest = digest_pinned_stage_source(self.source, pin)
             self.assertEqual(len(digest), 64)
             pin.verify_unchanged()

@@ -10,8 +10,12 @@ must never receive that secret, a signature, or a signed payload.
 
 1. Validate the append-only access migration and SQL contracts in a disposable
    database. Do not run fixtures or contract tests against production.
-2. Apply `20261030120000_imei_authenticated_access_boundary.sql` through the
-   normal migration release. It does not provision a default signing secret.
+2. Apply `20261030120000_imei_authenticated_access_boundary.sql` followed by
+   `20261030120001_imei_verified_diagnostic_prices.sql` through the normal
+   migration release. The latter permits the captured eSIM and Apple part-number
+   checks at their existing NGN700 prices without changing other prices or access
+   rules. Verify both recorded migrations and the authenticated SQL contracts before
+   allowlisting or application publication. Neither provisions a default secret.
 3. Generate a dedicated random secret of at least 32 bytes. Using a trusted
    database-owner channel, provision exactly one row in
    `private.imei_access_secrets` with `singleton=true`. Set the same secret as
@@ -28,8 +32,14 @@ must never receive that secret, a signature, or a signed payload.
 
 Changing an environment variable alone does not update an existing deployment.
 Do not enable any additional Petrock tier without reviewed service-specific
-response evidence. The four existing bindings remain behind the master flag,
-tier allowlist, and asynchronous-client gate. Customer prices are unchanged.
+response evidence. The captured `esimCompatibility` binding is Apple-smartphone
+IMEI only; its public selection is additionally gated by the server capability
+response on web and mobile. That response advertises configuration, not database
+provisioning, so it cannot substitute for the migration checks above. The four
+existing bindings and eSIM remain behind the master flag, tier allowlist, and
+asynchronous-client gate. Customer prices are unchanged. The initial diagnostic
+rollout allowlist is `simLock,esimCompatibility,applePartNumber`; the other 20 candidates stay dark.
+Keep `PETROCK_REMEDIATION_ENABLED=false` in both web and worker configuration.
 Remediation ordering is outside this diagnostic boundary and remains disabled.
 
 ## Verification

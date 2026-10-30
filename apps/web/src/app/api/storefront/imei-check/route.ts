@@ -28,6 +28,7 @@ import { resolveImeiCustomer } from '@/lib/imei-lookup-fulfillment';
 import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
 import { imeiCheckSchema } from '@/schemas/imei-check';
+import { createImeiCapabilitiesHandler } from './capabilities-handler';
 import { executeImeiLookup } from './execute-imei-lookup';
 import { prepareImeiProvider } from './prepare-imei-provider';
 import {
@@ -284,3 +285,14 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+export const GET = createImeiCapabilitiesHandler({
+  getAccessSigningSecret: () => process.env.IMEI_ACCESS_SIGNING_SECRET,
+  getImeiDisabledTierKeys,
+  getImeiHashSalt,
+  getImeiIdentifierEncryptionKey,
+  getPetrockConfig,
+  getPetrockEnabledTierKeys,
+  getSickwApiKey,
+  isPetrockEnabled,
+});

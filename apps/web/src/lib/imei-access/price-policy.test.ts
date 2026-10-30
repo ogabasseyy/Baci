@@ -10,7 +10,7 @@ it('pins every purchasable tier to the same retail price in the authenticated ga
   const sql = readFileSync(
     resolve(
       import.meta.dirname,
-      '../../../../../supabase/migrations/20261030120000_imei_authenticated_access_boundary.sql'
+      '../../../../../supabase/migrations/20261030120001_imei_verified_diagnostic_prices.sql'
     ),
     'utf8'
   );

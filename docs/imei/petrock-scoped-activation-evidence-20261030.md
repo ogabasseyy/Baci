@@ -1,5 +1,12 @@
 # Petrock scoped activation evidence — 2026-10-30
 
+Historical pre-probe snapshot: later authorized captures and their restricted
+bindings are documented in [the eSIM addendum](petrock-esim-capture-20261030.md),
+[part-number addendum](petrock-part-number-capture-20261030.md), and
+[SIM-lock capture disposition](petrock-additional-captures-20261030.md).
+The zero-addition result below predates those probes; the current release has
+two verified additions and 20 remaining dark candidates.
+
 No additional customer services qualify for activation from the checked-in response
 evidence. The 22 dark info-tier candidates contain **15 catalog-matched candidates,
 7 unmatched candidates, and 0 additional verified bindings**. All remain dark.

@@ -59,10 +59,10 @@ describe('offline candidate replay review', () => {
   });
 
   it('inspects synthetic field coverage without promoting it to verified evidence', () => {
-    const review = inspectPetrockInfoCandidateReplay('esimCompatibility', {
-      productId: '1941',
+    const review = inspectPetrockInfoCandidateReplay('oneplusPremium', {
+      productId: '738',
       status: 'success',
-      replay: 'Model: iPhone 17<br>Model Number: A3525<br>eSIM Support: Yes',
+      replay: 'Model: OnePlus 13<br>Model Number: CPH2649',
     });
     expect(review.missingFields).toEqual([]);
     expect(review.blockers).toEqual(['reviewed_capture_required']);
@@ -73,26 +73,25 @@ describe('offline candidate replay review', () => {
     'in-process',
     'rejected',
   ])('does not credit fields from a %s order', (status) => {
-    const review = inspectPetrockInfoCandidateReplay('esimCompatibility', {
-      productId: '1941',
+    const review = inspectPetrockInfoCandidateReplay('oneplusPremium', {
+      productId: '738',
       status,
-      replay: 'Model: iPhone 17<br>Model Number: A3525<br>eSIM Support: Yes',
+      replay: 'Model: OnePlus 13<br>Model Number: CPH2649',
     });
     expect(review.blockers).toContain('completion_required');
     expect(review.missingFields).toEqual(
-      IMEI_SERVICE_TIERS.esimCompatibility.checksIncluded
+      IMEI_SERVICE_TIERS.oneplusPremium.checksIncluded
     );
   });
 
   it('does not count placeholder fields as covered', () => {
-    const review = inspectPetrockInfoCandidateReplay('esimCompatibility', {
-      productId: '1941',
+    const review = inspectPetrockInfoCandidateReplay('oneplusPremium', {
+      productId: '738',
       status: 'success',
-      replay:
-        'Model: Unknown<br>Model Number: N/A<br>eSIM Support: Not Available',
+      replay: 'Model: Unknown<br>Model Number: N/A',
     });
     expect(review.missingFields).toEqual(
-      IMEI_SERVICE_TIERS.esimCompatibility.checksIncluded
+      IMEI_SERVICE_TIERS.oneplusPremium.checksIncluded
     );
   });
 });

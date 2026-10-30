@@ -46,6 +46,8 @@ try:
     sql(match.group(0))
     sql((ROOT/'supabase/migrations/20261030120000_imei_authenticated_access_boundary.sql').read_text())
     sql((ROOT/'supabase/tests/imei_authenticated_access.sql').read_text())
+    sql((ROOT/'supabase/migrations/20261030120001_imei_verified_diagnostic_prices.sql').read_text())
+    sql((ROOT/'supabase/tests/imei_verified_diagnostic_prices.sql').read_text())
     print('IMEI authenticated access SQL contracts passed on disposable database.')
 finally:
     sql('DROP DATABASE IF EXISTS '+database+' WITH (FORCE);', 'postgres')

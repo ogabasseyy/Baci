@@ -224,7 +224,6 @@ describe('IMEI service tiers', () => {
   it('catalogs Phase 3 Petrock-only checks while keeping every one dark', () => {
     expect(PETROCK_DARK_IMEI_SERVICE_TIERS).toEqual(
       expect.arrayContaining([
-        'esimCompatibility',
         'attFinance',
         'tmobileFinance',
         'verizonFinance',
@@ -244,7 +243,7 @@ describe('IMEI service tiers', () => {
     }
   });
 
-  it('declares the new parser fields on their matching dark tiers', () => {
+  it('declares the parser fields on their matching Petrock tiers', () => {
     expect(IMEI_SERVICE_TIERS.esimCompatibility.checksIncluded).toContain(
       'esimCompatibility'
     );

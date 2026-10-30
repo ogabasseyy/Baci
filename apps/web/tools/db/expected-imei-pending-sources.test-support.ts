@@ -34,4 +34,9 @@ export const EXPECTED_IMEI_PENDING_SOURCES = [
       'supabase/migrations/20261030120000_imei_authenticated_access_boundary.sql',
     sha256: '0f43cff57a17e3787ec6e0e16f6b901956108d5396e2584ad5f652d56157c55b',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261030120001_imei_verified_diagnostic_prices.sql',
+    sha256: 'a9f95deb4e58f9770313883785003dcbf86e599131932ac4e59c82995f247e69',
+  },
 ];

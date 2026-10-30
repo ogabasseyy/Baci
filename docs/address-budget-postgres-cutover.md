@@ -35,8 +35,13 @@ Store Pickup; do not issue a speculative provider request to test the account.
 
 1. Run the SQL concurrency/replay tests, real signed PostgREST confinement tests,
    provider regressions, database history replay, lint, typechecks and required reviews.
-2. Deploy through the normal coordinator. Migration `20261030075538` adds only the
-   restricted request guard and anonymous canary. The release observes canary reload
+2. Merge through the normal required checks and reviews. The main deployment
+   installs the exact isolated worker release through `vps-worker-sync` before
+   drain, migration and capability checks, as described in
+   `vps-workers/docs/isolated-worker-releases.md`. Do not use the legacy manual
+   worker deploy script or its old coordinator on a migrated host. Migration
+   `20261030075538` adds only the restricted request guard and anonymous canary.
+   The release observes canary reload
    before migration `20261030075540` grants the dedicated reservation role. The guard
    changes the existing GIGL hook, so normal worker/schema integrity checks apply.
 3. Verify the served revision and manual-address Store Pickup with provider calls

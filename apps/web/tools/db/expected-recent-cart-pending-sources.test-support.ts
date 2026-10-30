@@ -182,7 +182,7 @@ export const EXPECTED_RECENT_CART_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20261030140000_agentic_merchant_payment_split.sql',
+      'supabase/migrations/20261030190000_agentic_merchant_payment_split.sql',
     sha256: '769b93607eab5062a318176dc58b809649cf264c2516bd8792cff26364d63b3e',
   },
 ] as const;

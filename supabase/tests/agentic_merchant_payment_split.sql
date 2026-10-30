@@ -11,8 +11,8 @@ CREATE TABLE public.domains(id uuid,merchant_id uuid,domain text,is_primary bool
 CREATE TABLE public.merchant_feature_settings(merchant_id uuid,agentic_checkout_enabled boolean,pay_on_delivery_enabled boolean,custom_settings jsonb);
 INSERT INTO public.merchants VALUES('11111111-1111-4111-8111-111111111111','ogabassey','Ogabassey','ACCT_ogabassey'),('22222222-2222-4222-8222-222222222222','other','Other','ACCT_other');
 \ir ../migrations/20261015179995_agentic_merchant_context_authority.sql
-\ir ../migrations/20261030140000_agentic_merchant_payment_split.sql
-\ir ../migrations/20261030140000_agentic_merchant_payment_split.sql
+\ir ../migrations/20261030190000_agentic_merchant_payment_split.sql
+\ir ../migrations/20261030190000_agentic_merchant_payment_split.sql
 DO $$ DECLARE r text; BEGIN
  FOREACH r IN ARRAY ARRAY['anon','authenticated','service_role'] LOOP
   IF has_function_privilege(r,'public.resolve_agentic_merchant_payment_split(text)','EXECUTE') THEN RAISE EXCEPTION 'Payment split executable by %',r; END IF;

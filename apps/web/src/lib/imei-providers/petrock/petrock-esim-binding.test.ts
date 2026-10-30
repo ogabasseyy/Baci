@@ -21,7 +21,7 @@ const input: ResolveImeiProviderBindingInput = {
 };
 
 describe('captured eSIM binding scope', () => {
-  it('binds only the verified product and preserves both price baselines', () => {
+  it('binds only the verified product with approved retail and unchanged supplier cost', () => {
     expect(resolveImeiProviderBinding(input)).toMatchObject({
       productId: capture.productId,
       costUsd: 0.04,
@@ -30,7 +30,7 @@ describe('captured eSIM binding scope', () => {
       provider: 'petrock',
     });
     expect(input.tier).toMatchObject({
-      price: 700,
+      price: 400,
       costUsd: 0.04,
       identifier: 'imei',
       brandScopes: ['apple'],

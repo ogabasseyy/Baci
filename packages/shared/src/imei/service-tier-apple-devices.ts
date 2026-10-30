@@ -5,8 +5,8 @@ import type { ImeiServiceTierDefinition } from './service-tier-types';
  * Watch), but a few (Serial Info, GSX Premium, Repair Eligibility, Replacement
  * History) also apply to iPhones via their serial — hence `smartphone` in their
  * `deviceCategories`. Sickw accepts an Apple serial in the same `imei` param, so
- * these are gated by our serial-input mode. Prices follow the catalog's blended
- * ~₦16,350/$ markup.
+ * these are gated by our serial-input mode. Retail prices are owner-approved
+ * fixed NGN amounts; supplier costs remain separate.
  */
 export const APPLE_DEVICE_IMEI_SERVICE_TIERS = {
   serialInfo: {
@@ -32,7 +32,7 @@ export const APPLE_DEVICE_IMEI_SERVICE_TIERS = {
     description: 'iCloud clean or lost status',
     detail:
       'Checks whether the device is clean or marked lost in iCloud records.',
-    price: 500,
+    price: 300,
     costUsd: 0.03,
     features: ['Clean/Lost Status', 'iCloud Risk', 'Device Model'],
     checksIncluded: ['device', 'modelNumber', 'icloud'],
@@ -48,7 +48,7 @@ export const APPLE_DEVICE_IMEI_SERVICE_TIERS = {
     description: 'MacBook & iMac iCloud on/off status',
     detail:
       'Checks whether a MacBook or iMac has Activation/iCloud lock enabled before you buy.',
-    price: 3300,
+    price: 1900,
     costUsd: 0.2,
     features: ['iCloud On/Off', 'Activation Lock Risk', 'Mac Model'],
     checksIncluded: ['device', 'modelNumber', 'icloud'],
@@ -65,7 +65,7 @@ export const APPLE_DEVICE_IMEI_SERVICE_TIERS = {
     description: 'Apple sold-by channel and purchase country',
     detail:
       'Shows where and by whom the iPad, Mac or Watch was originally sold.',
-    price: 29400,
+    price: 5700,
     costUsd: 1.8,
     features: ['Sold-By Channel', 'Purchase Country', 'Purchase Date'],
     checksIncluded: [
@@ -86,7 +86,7 @@ export const APPLE_DEVICE_IMEI_SERVICE_TIERS = {
     description: 'Full Apple GSX premium details',
     detail:
       'The deepest Apple report: warranty, coverage, repairs, replacements and activation from Apple GSX.',
-    price: 32700,
+    price: 6300,
     costUsd: 2.0,
     features: [
       'Warranty & AppleCare',
@@ -118,7 +118,7 @@ export const APPLE_DEVICE_IMEI_SERVICE_TIERS = {
     description: 'Apple GSX cases, repairs and coverage',
     detail:
       'Shows Apple repair/case history and current warranty coverage for the device.',
-    price: 19600,
+    price: 3800,
     costUsd: 1.2,
     features: ['Repair History', 'Case History', 'Warranty Coverage'],
     checksIncluded: ['device', 'modelNumber', 'repairHistory', 'gsxCoverage'],
@@ -134,7 +134,7 @@ export const APPLE_DEVICE_IMEI_SERVICE_TIERS = {
     description: 'Apple GSX repair eligibility',
     detail:
       'Checks whether the device is eligible for Apple service and its warranty state.',
-    price: 2300,
+    price: 1400,
     costUsd: 0.14,
     features: ['Repair Eligibility', 'Warranty State', 'Device Model'],
     checksIncluded: ['device', 'modelNumber', 'repairEligibility', 'warranty'],
@@ -150,7 +150,7 @@ export const APPLE_DEVICE_IMEI_SERVICE_TIERS = {
     description: 'Apple replacement history',
     detail:
       'Shows whether the device was replaced by Apple and its replacement lineage.',
-    price: 11500,
+    price: 6700,
     costUsd: 0.7,
     features: ['Replacement Status', 'Device Lineage', 'Apple GSX'],
     checksIncluded: ['device', 'modelNumber', 'replacementHistory'],

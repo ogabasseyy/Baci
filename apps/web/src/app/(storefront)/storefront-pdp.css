@@ -1,4 +1,5 @@
 @import "tailwindcss" source(none);
+@import "./storefront-theme-tokens.css";
 
 @config "../../../tailwind.storefront.scoped.config.mjs";
 
@@ -12,7 +13,7 @@
 @source "./[slug]/(catalog)/(pdp)/product/[productSlug]/loading.tsx";
 @source "./[slug]/(catalog)/(pdp)/products/[productSlug]/page.tsx";
 @source "./[slug]/(catalog)/(pdp)/products/[productSlug]/loading.tsx";
-@source "./[slug]/(catalog)/(pdp)/products/[productSlug]/product-detail-client.tsx";
+@source "./[slug]/(catalog)/(pdp)/products/[productSlug]/product-detail-*.tsx";
 @source "./[slug]/(catalog)/(pdp)/[category]/[productSlug]/page.tsx";
 @source "./[slug]/(catalog)/(pdp)/[category]/[productSlug]/loading.tsx";
 @source "./[slug]/(catalog)/(pdp)/[category]/[productSlug]/default-product-detail-client.tsx";
@@ -39,3 +40,16 @@
 @source "../../components/ui/label.tsx";
 @source "../../components/ui/skeleton.tsx";
 @source "../../components/ui/skeletons.tsx";
+
+@source "../../components/storefront/sticky-add-to-cart.tsx";
+@source "../../components/ui/quantity-button.tsx";
+
+/* On upward scroll navigation takes the bottom edge; on downward scroll
+   it hides and the purchase controls occupy the same space. */
+@media (width < 48rem) {
+  body:has(.ogabassey-mobile-footer:not(.ogabassey-mobile-footer--hidden))
+    [data-sticky-cart-visible="true"] {
+    visibility: hidden;
+    pointer-events: none;
+  }
+}

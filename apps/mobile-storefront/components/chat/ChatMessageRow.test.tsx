@@ -1,5 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
+import { Linking } from 'react-native';
 import { ChatMessageRow } from './ChatMessageRow';
 import type { ChatMessage } from './types';
 
@@ -60,5 +61,86 @@ describe('ChatMessageRow', () => {
     );
 
     expect(UNSAFE_getByProps({ children: '🎅' })).toBeTruthy();
+  });
+
+  it('opens verified storefront product links in assistant messages', () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    const url = 'https://ogabassey.com/smartphones/iphone-16';
+    render(
+      <ChatMessageRow
+        item={{ ...baseMessage, text: `Choose a product: ${url}` }}
+        santaMode={false}
+        colors={colors}
+      />
+    );
+    fireEvent.press(screen.getByRole('link', { name: url }));
+    expect(open).toHaveBeenCalledWith(url);
+    open.mockRestore();
+  });
+
+  it('keeps sentence punctuation out of storefront link targets', () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    const phone = 'https://ogabassey.com/smartphones/iphone-16';
+    const charger = 'https://ogabassey.com/accessories/charger';
+    render(
+      <ChatMessageRow
+        item={{ ...baseMessage, text: `See (${phone}), or ${charger}.` }}
+        santaMode={false}
+        colors={colors}
+      />
+    );
+    expect(
+      screen.getByText(`See (${phone}), or ${charger}.`)
+    ).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole('link', { name: phone }));
+    fireEvent.press(screen.getByRole('link', { name: charger }));
+    expect(open).toHaveBeenNthCalledWith(1, phone);
+    expect(open).toHaveBeenNthCalledWith(2, charger);
+    open.mockRestore();
+  });
+
+  it('preserves balanced parentheses in a storefront link', () => {
+    const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    const url = 'https://ogabassey.com/search?q=charger(20W)';
+    render(
+      <ChatMessageRow
+        item={{ ...baseMessage, text: `See (${url}).` }}
+        santaMode={false}
+        colors={colors}
+      />
+    );
+    expect(screen.getByText(`See (${url}).`)).toBeOnTheScreen();
+    fireEvent.press(screen.getByRole('link', { name: url }));
+    expect(open).toHaveBeenCalledWith(url);
+    open.mockRestore();
+  });
+
+  it('does not turn lookalike URLs into links', () => {
+    render(
+      <ChatMessageRow
+        item={{
+          ...baseMessage,
+          text: 'https://ogabassey.com.evil.example/product',
+        }}
+        santaMode={false}
+        colors={colors}
+      />
+    );
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('does not turn a user-provided storefront URL into a link', () => {
+    render(
+      <ChatMessageRow
+        item={{
+          ...baseMessage,
+          role: 'user',
+          text: 'https://ogabassey.com/account/orders',
+        }}
+        santaMode={false}
+        colors={colors}
+      />
+    );
+    expect(screen.queryByRole('link')).toBeNull();
   });
 });

@@ -6,12 +6,20 @@ import {
   createClientClosedRequestResponse,
   createRouteDeadline,
   createStaticChatFallbackResponse,
+  generateChatSessionId,
   getSafeChatBackendErrorMessage,
   isChatAbortError,
   withTimeout,
 } from '@/app/api/chat/route-helpers';
 
 describe('chat route helpers', () => {
+  it('uses a stable, IP-specific fallback session id', () => {
+    const sessionId = generateChatSessionId('192.0.2.1');
+    expect(sessionId).toMatch(/^[a-f0-9]{16}$/);
+    expect(generateChatSessionId('192.0.2.1')).toBe(sessionId);
+    expect(generateChatSessionId('192.0.2.2')).not.toBe(sessionId);
+  });
+
   it('builds backend messages without forwarding user-supplied system messages', () => {
     const messages = buildChatMessages(
       [

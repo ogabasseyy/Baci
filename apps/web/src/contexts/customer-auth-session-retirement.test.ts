@@ -10,6 +10,7 @@ import {
   commitCustomerAuthSession,
   performCustomerLogout,
 } from './customer-auth-session';
+import { subscribeCustomerIdentityChange } from './customer-live-identity';
 
 vi.mock('@/hooks/cart/shared-cart-session-revoke-client', () => ({
   beginDeferredCartLogout: vi.fn(),
@@ -74,6 +75,18 @@ it('does not clear the local session when the server logout fails', async () => 
   expect(setUser).not.toHaveBeenCalled();
   expect(setCustomer).not.toHaveBeenCalled();
   expect(isCartSessionRetiring('ogabassey')).toBe(false);
+});
+
+it('invalidates account views when a logout response is ambiguous', async () => {
+  vi.mocked(revokeCartDeviceSession).mockResolvedValue({ ok: true });
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network lost')));
+  const listener = vi.fn();
+  const unsubscribe = subscribeCustomerIdentityChange(listener);
+  await expect(
+    performCustomerLogout('ogabassey', vi.fn(), vi.fn(), vi.fn(), 'user-1')
+  ).rejects.toThrow();
+  expect(listener).toHaveBeenCalledTimes(2);
+  unsubscribe();
 });
 
 it('bounds the auth logout fetch so it cannot hold the cart lock indefinitely', async () => {

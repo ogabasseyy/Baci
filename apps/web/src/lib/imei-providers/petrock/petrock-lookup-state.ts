@@ -1,11 +1,12 @@
 import 'server-only';
 
 import type { ImeiServiceTierKey } from '@baci/shared/imei';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ImeiRpcClient } from '@/lib/imei-access';
 import type { ImeiLookupResponseBody } from '@/lib/imei-lookup-fulfillment';
-import type { createAdminClient } from '@/lib/supabase/admin';
 import type { PetrockProductSnapshot } from './petrock-preflight';
 
-type AdminClient = ReturnType<typeof createAdminClient>;
+type AdminClient = ImeiRpcClient;
 
 export interface ClaimedPetrockLookup {
   amount_ngn: number | string;
@@ -41,7 +42,7 @@ export async function readPetrockProductSnapshot({
   supabaseAdmin,
 }: {
   productId: string;
-  supabaseAdmin: AdminClient;
+  supabaseAdmin: SupabaseClient;
 }): Promise<PetrockProductSnapshot | null> {
   const { data, error } = await supabaseAdmin
     .from('imei_provider_products')
@@ -175,7 +176,11 @@ export async function claimPetrockLookupPoll({
     }
   );
   if (error) throw error;
-  return ((data ?? [])[0] as ClaimedPetrockPoll | undefined) ?? null;
+  return (
+    (Array.isArray(data)
+      ? (data[0] as ClaimedPetrockPoll | undefined)
+      : undefined) ?? null
+  );
 }
 
 export function reschedulePetrockLookupPoll({

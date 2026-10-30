@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
   mockAuthenticateApiRequest: vi.fn(),
   mockCheckCsrfProtection: vi.fn(),
   mockCheckRateLimit: vi.fn(),
-  mockCreateAdminClient: vi.fn(),
+  mockCreateAccessClient: vi.fn(),
   mockFinalizePetrockLookup: vi.fn(),
   mockMarkPetrockSubmissionUnknown: vi.fn(),
   mockPetrockGetOrder: vi.fn(),
@@ -84,8 +84,9 @@ vi.mock('@/lib/storefront-merchant', () => ({
     mocks.mockResolveStorefrontMerchantFromRequest(...args),
 }));
 
-vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: () => mocks.mockCreateAdminClient(),
+vi.mock('@/lib/imei-access', () => ({
+  createImeiAccessClient: (...args: unknown[]) =>
+    mocks.mockCreateAccessClient(...args),
 }));
 
 vi.mock('@/lib/imei-lookup-fulfillment', async () => {
@@ -300,7 +301,39 @@ function createSupabaseMock(rows: ImeiLookupRow[] = []) {
     }),
   };
 
-  return supabase;
+  return Object.assign(supabase, {
+    rpc: vi.fn(),
+    readPaymentState: vi.fn().mockResolvedValue({
+      data: { debited: false, refunded: false },
+      error: null,
+    }),
+    readReplay: (idempotencyKey: string) =>
+      supabase
+        .from('imei_lookups')
+        .select()
+        .eq('idempotency_key', idempotencyKey)
+        .maybeSingle(),
+    readSnapshot: async (productId: string) => ({
+      data: await mocks.mockReadPetrockProductSnapshot({ productId }),
+      error: null,
+    }),
+    insertPending: (row: Record<string, unknown>) =>
+      supabase.from('imei_lookups').insert(row).select().single(),
+    cache: (lookupId: string, patch: Record<string, unknown>) =>
+      supabase
+        .from('imei_lookups')
+        .update(patch)
+        .eq('id', lookupId)
+        .select()
+        .single(),
+    deletePending: (lookupId: string) =>
+      supabase
+        .from('imei_lookups')
+        .delete()
+        .eq('id', lookupId)
+        .select()
+        .single(),
+  });
 }
 
 function mockAuthenticatedUser({
@@ -315,8 +348,8 @@ function mockAuthenticatedUser({
     supabase: userSupabase,
     user: { email: 'buyer@example.com', id: 'user-1' },
   });
-  mocks.mockCreateAdminClient.mockReset();
-  mocks.mockCreateAdminClient.mockReturnValue(adminSupabase);
+  mocks.mockCreateAccessClient.mockReset();
+  mocks.mockCreateAccessClient.mockReturnValue(adminSupabase);
   return { adminSupabase, userSupabase };
 }
 
@@ -411,6 +444,83 @@ describe('POST /api/storefront/imei-check', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  it('refunds the confirmed durable Sickw debit after its response is lost without calling the provider', async () => {
+    const { adminSupabase } = mockAuthenticatedUser();
+    adminSupabase.readPaymentState.mockResolvedValue({
+      data: { debited: true, refunded: false },
+      error: null,
+    });
+    mocks.mockRedeemImeiWalletPayment.mockRejectedValue(
+      new Error('debit committed; response disconnected')
+    );
+    const { POST } = await importRoute();
+    const response = await POST(createRequest());
+    expect(response.status).toBe(502);
+    expect(adminSupabase.readPaymentState).toHaveBeenCalledWith('lookup-1');
+    expect(mocks.mockRefundImeiWalletPayment).toHaveBeenCalledTimes(1);
+    expect(mocks.mockRequestSickwCheck).not.toHaveBeenCalled();
+    expect(adminSupabase.__deletes).toHaveLength(0);
+    expect(adminSupabase.__updates).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({ status: 'refunded_error' }),
+      }),
+    ]);
+  });
+
+  it('keeps Sickw payment unresolved if a lost debit response cannot be reconciled durably', async () => {
+    const { adminSupabase } = mockAuthenticatedUser();
+    adminSupabase.readPaymentState.mockResolvedValue({
+      data: null,
+      error: { message: 'ledger unavailable' },
+    });
+    mocks.mockRedeemImeiWalletPayment.mockRejectedValue(
+      new Error('debit response lost')
+    );
+    const { POST } = await importRoute();
+    const response = await POST(createRequest());
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: 'IMEI_PAYMENT_RECONCILIATION_REQUIRED',
+    });
+    expect(mocks.mockRefundImeiWalletPayment).not.toHaveBeenCalled();
+    expect(mocks.mockRequestSickwCheck).not.toHaveBeenCalled();
+    expect(adminSupabase.__deletes).toHaveLength(0);
+    expect(adminSupabase.__updates).toHaveLength(0);
+  });
+
+  it('binds the server capability to the authenticated user and resolved storefront customer', async () => {
+    const { userSupabase } = mockAuthenticatedUser();
+    const { POST } = await importRoute();
+    await POST(createRequest());
+    expect(mocks.mockCreateAccessClient).toHaveBeenCalledWith({
+      customerId: 'customer-1',
+      merchantId: 'merchant-1',
+      supabase: userSupabase,
+      userId: 'user-1',
+    });
+  });
+
+  it('fails before persistence, wallet debit, or provider submission when the access boundary is unavailable', async () => {
+    const { adminSupabase } = mockAuthenticatedUser();
+    mocks.mockCreateAccessClient.mockImplementationOnce(() => {
+      throw new Error('IMEI access signing configuration is unavailable');
+    });
+    const { POST } = await importRoute();
+    const response = await POST(createRequest());
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: 'IMEI_ACCESS_UNAVAILABLE',
+      success: false,
+    });
+    expect(adminSupabase.from).not.toHaveBeenCalled();
+    expect(mocks.mockRedeemImeiWalletPayment).not.toHaveBeenCalled();
+    expect(
+      mocks.mockRedeemPetrockWalletAndBeginSubmission
+    ).not.toHaveBeenCalled();
+    expect(mocks.mockRequestSickwCheck).not.toHaveBeenCalled();
+    expect(mocks.mockPetrockSubmitOrder).not.toHaveBeenCalled();
   });
 
   it('returns 401 with AUTH_REQUIRED when no session is present', async () => {
@@ -513,7 +623,7 @@ describe('POST /api/storefront/imei-check', () => {
     expect(response.status).toBe(400);
     expect(body.code).toBe('INVALID_REQUEST_BODY');
     expect(mocks.mockResolveImeiCustomer).not.toHaveBeenCalled();
-    expect(mocks.mockCreateAdminClient).not.toHaveBeenCalled();
+    expect(mocks.mockCreateAccessClient).not.toHaveBeenCalled();
     expect(mocks.mockRequestSickwCheck).not.toHaveBeenCalled();
   });
 
@@ -663,7 +773,7 @@ describe('POST /api/storefront/imei-check', () => {
     expect(response.status).toBe(503);
     expect(body.code).toBe('SICKW_API_KEY_MISSING');
     expect(adminSupabase.from).toHaveBeenCalledOnce();
-    expect(mocks.mockCreateAdminClient).toHaveBeenCalled();
+    expect(mocks.mockCreateAccessClient).toHaveBeenCalled();
     expect(mocks.mockRedeemImeiWalletPayment).not.toHaveBeenCalled();
   });
 
@@ -963,7 +1073,7 @@ describe('POST /api/storefront/imei-check', () => {
     // H4: imei_lookups writes + wallet RPCs go through the service-role
     // client. Reads (resolveImeiCustomer / wallet balance) stay on the
     // authenticated user client.
-    expect(mocks.mockCreateAdminClient).toHaveBeenCalled();
+    expect(mocks.mockCreateAccessClient).toHaveBeenCalled();
     expect(mocks.mockResolveImeiCustomer).toHaveBeenCalledWith(
       expect.objectContaining({ supabase: userSupabase })
     );

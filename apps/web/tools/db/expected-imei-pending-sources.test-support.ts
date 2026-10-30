@@ -29,4 +29,9 @@ export const EXPECTED_IMEI_PENDING_SOURCES = [
       'supabase/migrations/20261028100000_petrock_guard_unknown_rejection.sql',
     sha256: 'a2bac127c0db03f61231cd6cdc365dcfc4c7c33a07e320a43ef1725423f59534',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261030120000_imei_authenticated_access_boundary.sql',
+    sha256: '0f43cff57a17e3787ec6e0e16f6b901956108d5396e2584ad5f652d56157c55b',
+  },
 ];

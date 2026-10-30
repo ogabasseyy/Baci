@@ -10,6 +10,7 @@ import { createPetrockProvider } from '@/lib/imei-providers/petrock/petrock-prov
 import { runPetrockRemediationNotifications } from '@/lib/imei-remediation/run-petrock-remediation-notifications';
 import { runPetrockRemediationReconciliation } from '@/lib/imei-remediation/run-petrock-remediation-reconciliation';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { PETROCK_SUBMISSION_MANUAL_REVIEW_ATTEMPTS } from './petrock.constants';
 
 export async function runPetrockReconciliation({ origin }: { origin: string }) {
   const config = getPetrockConfig();
@@ -33,6 +34,7 @@ export async function runPetrockReconciliation({ origin }: { origin: string }) {
     completed: 0,
     errored: 0,
     failed: 0,
+    manualReview: 0,
     pending: 0,
     submissionUnknown: 0,
   };
@@ -51,6 +53,10 @@ export async function runPetrockReconciliation({ origin }: { origin: string }) {
           continue;
         }
         summary.submissionUnknown += 1;
+        if (
+          lookup.reconcile_attempts >= PETROCK_SUBMISSION_MANUAL_REVIEW_ATTEMPTS
+        )
+          summary.manualReview += 1;
         console.error('[Petrock Reconcile] Submission identity was not saved');
         continue;
       }
@@ -70,6 +76,8 @@ export async function runPetrockReconciliation({ origin }: { origin: string }) {
         provider,
         supabaseAdmin,
       });
+      if ('needsReview' in result && result.needsReview)
+        summary.manualReview += 1;
       if (result.kind === 'pending' || result.kind === 'lease_lost') {
         summary.pending += 1;
       } else if (result.kind === 'complete') summary.completed += 1;
@@ -98,7 +106,7 @@ export async function runPetrockReconciliation({ origin }: { origin: string }) {
       remediation.errored > 0 ||
       notifications.errored > 0
         ? 500
-        : remediation.manualReview > 0
+        : summary.manualReview > 0 || remediation.manualReview > 0
           ? 503
           : 200,
   };

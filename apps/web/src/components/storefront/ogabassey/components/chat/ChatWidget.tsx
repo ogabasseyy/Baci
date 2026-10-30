@@ -154,7 +154,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                     'Ogabassey AI'
                   )}
                 </h3>
-                <p className={`text-xs ${isSanta ? 'text-red-100' : 'text-gray-500'}`}>Online</p>
+                <p className={`text-xs ${isSanta ? 'text-red-100' : 'text-gray-500'}`}>Shopping assistant</p>
               </div>
             </div>
             <button
@@ -228,7 +228,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
           />
           <div className="text-center mt-2">
             <p className="text-[10px] text-gray-300">
-              Powered by Google Gemini &bull; AI can make mistakes.
+              AI can make mistakes. Check product details before buying.
             </p>
           </div>
         </div>

@@ -345,26 +345,6 @@ describe('ChatWidget - chat window when open', () => {
     expect(screen.getByText('I need a new phone.')).toBeDefined();
   });
 
-  it('shows "Online" status text in the header', () => {
-    vi.mocked(useOgabasseyChat).mockReturnValue({
-      isOpen: true,
-      setIsOpen: vi.fn(),
-      messages: [],
-      input: '',
-      setInput: vi.fn(),
-      isLoading: false,
-      proactiveMsg: null,
-      setProactiveMsg: vi.fn(),
-      messagesEndRef: { current: null },
-      handleSend: vi.fn(),
-      handleSubmit: vi.fn(),
-      handleAddSantaWishToCart: vi.fn(),
-    });
-
-    render(<ChatWidget />);
-    expect(screen.getByText('Online')).toBeDefined();
-  });
-
   it('shows loading indicator when isLoading is true', () => {
     vi.mocked(useOgabasseyChat).mockReturnValue({
       isOpen: true,

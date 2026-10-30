@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-30T02:08:58.628043+00:00",
-  "source_revision": "48e3d73761c0a48b3f8dffea8247fe4a2966234d",
-  "evidence_digest": "bf262f6e5a12c1ca8993b5783f216b503a2223af2f4220eca9c1288f36662b86",
-  "claims_digest": "73aaa0bd88f5139f447270c0958163712e471c6f206fc16f4b621ce345f41e50",
-  "review_scope": "Source evidence only. OAuth connected discovery excludes legacy link tools; anonymous compatibility preserved. PKCE/encrypted grants, resource-specific transport and refresh receipts unchanged. Other capability claims retain the newly merged main audit, including merchant onboarding email suppression, preferences, event permissions and worker isolation. No new production capability promotion. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged. The mobile admin inventory sheet empty footer uses undefined; the inventory capability remains unchanged. Main cart quota and storefront presentation changes do not alter the cited capability claims; deployment and native acceptance remain unverified. Main checkout, device lookup and mobile release changes do not change the cited capability claims; deployment and native acceptance remain unverified.",
+  "reviewed_at": "2026-10-30T05:18:08+00:00",
+  "source_revision": "2740f9a2b0a35ba4f8113aa8758a2421b9ff5a4b",
+  "evidence_digest": "98d2797a5005660590466bd6ed26993ff5a8146627cb5462dc41393aadfb2314",
+  "claims_digest": "4fe32de23b908f621578c9fe29ab0fda402be773b5f9c9872b5364f201ac6090",
+  "review_scope": "Source evidence only. Rechecked the support-chat health probe: catalog and conversation checks run concurrently, with Ogabassey tenant and catalog markers. All cited capability and access-map sources remain unchanged since the previous source review across this main integration. OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

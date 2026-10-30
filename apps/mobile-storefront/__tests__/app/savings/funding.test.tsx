@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import {
   defaultSavingsFundingGoal,
   type SavingsFundingGoalFixture,
-} from './funding.test-support';
+} from '../../../test-support/savings/funding.fixture';
 
 const mockFetchPlanFunding = jest.fn();
 const mockFetchExistingPlanFunding = jest.fn();
@@ -67,8 +67,8 @@ jest.mock('@/hooks/use-auth-guard', () => ({
 jest.mock('@/hooks/use-wallet', () => ({
   useWallet: () => {
     const { createSavingsFundingWalletResponse } = jest.requireActual<
-      typeof import('./funding.test-support')
-    >('./funding.test-support');
+      typeof import('../../../test-support/savings/funding.fixture')
+    >('../../../test-support/savings/funding.fixture');
     return {
       data: createSavingsFundingWalletResponse(
         mockActiveGoal,

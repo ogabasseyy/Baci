@@ -72,9 +72,10 @@ const defaultLedgers: CredentialReaderLedgers = {
     // unchanged. This fingerprint is not a service-role authorization renewal.
     'apps/web/src/scripts/process-ai-storefront-jobs.ts':
       'a730ed7b56887a231aa4a483526354162ec1dcb514a47fd899e0c347e2268d03',
-    // Reviewed entrypoint detection only (1a17a9b900, isEntrypoint helper);
-    // credential reads unchanged in these five VPS jobs. These fingerprints
-    // are not a service-role authorization renewal.
+    // Reviewed #3847 (1a17a9b900): the five isolated-release jobs below only
+    // swapped inline entrypoint detection for vps-workers/lib/is-entrypoint.mjs
+    // (symlinked releases); credential reads unchanged. This fingerprint is not
+    // a service-role authorization renewal.
     'vps-workers/jobs/cleanup-agentic-request-records.mjs':
       'd6e9fa7c098a010da404d679b6617a7de58cebfaf03c873dcc66cd3e36775cf3',
     'vps-workers/jobs/cleanup-legacy-expense-receipts.mjs':

@@ -13,7 +13,11 @@ build_root=/run/baci-worker-release-build
 store_root=/var/cache/baci-worker-release/pnpm-store
 cache_root=/var/cache/baci-worker-release/pnpm-cache
 cache_parent=/var/cache/baci-worker-release
-published_seed_root="$cache_parent/seeds"
+seed_workspace="$cache_parent/seed-work"
+seed_image="$cache_parent/seed-work.img"
+published_seed_root="$seed_workspace/seeds"
+seed_unit_name='var-cache-baci\x2dworker\x2drelease\x2dseed\x2dwork.mount'
+seed_unit_file="/run/systemd/system/$seed_unit_name"
 test_unit="baci-dependency-snapshot-${suffix}.service"
 lock_group_created=0
 builder_group_created=0
@@ -25,6 +29,12 @@ store_created=0
 cache_parent_created=0
 policy_cache_created=0
 published_seed_root_created=0
+seed_unit_created=0
+seed_image_created=0
+seed_workspace_created=0
+seed_workspace_mount_started=0
+seed_image_identity=""
+seed_unit_identity=""
 helper_created=0
 builder_unit_owned=0
 test_unit_owned=0
@@ -58,14 +68,54 @@ cleanup() {
   set +e
   [ "$test_unit_owned" -eq 0 ] || systemctl stop "$test_unit" >/dev/null 2>&1
   [ "$builder_unit_owned" -eq 0 ] || systemctl stop "$builder_unit" >/dev/null 2>&1
+  local seed_mount_quiesced=1
+  if [ "$seed_unit_created" -eq 1 ]; then
+    systemctl stop "$seed_unit_name" >/dev/null 2>&1 || seed_mount_quiesced=0
+    if mountpoint -q "$seed_workspace"; then
+      umount "$seed_workspace" >/dev/null 2>&1 || seed_mount_quiesced=0
+    fi
+    if mountpoint -q "$seed_workspace"; then seed_mount_quiesced=0; fi
+    seed_active_state="$(systemctl show --property=ActiveState --value "$seed_unit_name" 2>/dev/null || true)"
+    case "$seed_active_state" in active|activating|deactivating|mounting|mounted) seed_mount_quiesced=0 ;; esac
+    if [ -e "$seed_image" ]; then
+      local attached_backing_files
+      attached_backing_files="$(losetup --noheadings --raw --output BACK-FILE 2>/dev/null)" || seed_mount_quiesced=0
+      if printf '%s\n' "$attached_backing_files" | grep -Fxq "$seed_image"; then
+        seed_mount_quiesced=0
+      fi
+    fi
+    local current_unit_identity
+    current_unit_identity="$(stat -c '%d:%i' "$seed_unit_file" 2>/dev/null || true)"
+    if [ "$seed_mount_quiesced" -eq 1 ] && [ -n "$seed_unit_identity" ] && \
+       [ "$current_unit_identity" = "$seed_unit_identity" ]; then
+      rm -f -- "$seed_unit_file"
+      systemctl daemon-reload >/dev/null 2>&1
+      seed_load_state="$(systemctl show --property=LoadState --value "$seed_unit_name" 2>/dev/null || true)"
+      [ "$seed_load_state" = not-found ] || seed_mount_quiesced=0
+    else
+      seed_mount_quiesced=0
+    fi
+  fi
   [ "$helper_created" -eq 0 ] || rm -rf -- "$helper_root"
   [ "$pnpm_link_created" -eq 0 ] || rm -f /usr/bin/pnpm
   [ "$node_link_created" -eq 0 ] || rm -f /usr/bin/node
   [ "$build_mounted" -eq 0 ] || umount "$build_root"
   [ "$store_created" -eq 0 ] || rm -rf -- "$store_root"
   [ "$policy_cache_created" -eq 0 ] || rm -rf -- "$cache_root"
-  [ "$published_seed_root_created" -eq 0 ] || rm -rf -- "$published_seed_root"
-  [ "$cache_parent_created" -eq 0 ] || rmdir "$cache_parent"
+  if [ "$seed_mount_quiesced" -eq 1 ] && [ "$published_seed_root_created" -eq 1 ]; then
+    rm -rf -- "$published_seed_root"
+  fi
+  if [ "$seed_mount_quiesced" -eq 1 ] && [ "$seed_workspace_created" -eq 1 ]; then
+    rmdir "$seed_workspace" >/dev/null 2>&1
+  fi
+  if [ "$seed_mount_quiesced" -eq 1 ] && [ "$seed_image_created" -eq 1 ]; then
+    local current_image_identity
+    current_image_identity="$(stat -c '%d:%i' "$seed_image" 2>/dev/null || true)"
+    if [ -n "$seed_image_identity" ] && [ "$current_image_identity" = "$seed_image_identity" ]; then
+      rm -f -- "$seed_image"
+    fi
+  fi
+  [ "$cache_parent_created" -eq 0 ] || rmdir "$cache_parent" 2>/dev/null
   [ "$worker_user_created" -eq 0 ] || userdel baci-worker >/dev/null 2>&1
   [ "$worker_group_created" -eq 0 ] || groupdel baci-worker >/dev/null 2>&1
   [ "$builder_user_created" -eq 0 ] || userdel baci-release-build >/dev/null 2>&1
@@ -165,10 +215,96 @@ install -d -o root -g root -m 0755 "$store_root"
 store_created=1
 install -d -o root -g root -m 0755 "$cache_root"
 policy_cache_created=1
-if [ -e "$published_seed_root" ] || [ -L "$published_seed_root" ]; then
-  echo "refusing pre-existing per-SHA dependency seed root" >&2
+if [ -e "$seed_image" ] || [ -L "$seed_image" ] || [ -e "$seed_workspace" ] || \
+   [ -L "$seed_workspace" ] || mountpoint -q "$seed_workspace"; then
+  echo "refusing pre-existing bounded seed workspace" >&2
   exit 1
 fi
+if [ -e "$seed_unit_file" ] || [ -L "$seed_unit_file" ]; then
+  echo "refusing pre-existing disposable seed mount unit" >&2
+  exit 1
+fi
+PYTHONPATH="$(cd "$(dirname "$0")/../../bin" && pwd)${PYTHONPATH:+:$PYTHONPATH}" \
+  python3 -B - <<'PY'
+import sys
+import os
+from worker_release_seed_workspace import (
+    MIN_FREE_BYTES, MIN_HOST_FREE_INODES, IMAGE, host_capacity,
+)
+usage = os.statvfs(IMAGE.parent.parent)
+available_bytes = usage.f_bavail * usage.f_frsize
+available_inodes = usage.f_favail
+print(f"seed mount capacity evidence: available_bytes={available_bytes} required_bytes={MIN_FREE_BYTES} "
+      f"available_inodes={available_inodes} required_inodes={MIN_HOST_FREE_INODES}")
+try:
+    host_capacity()
+except Exception as error:
+    print("disposable runner lacks capacity for the production seed mount contract", file=sys.stderr)
+    raise SystemExit(1) from error
+print("disposable seed mount capacity verified by production host-capacity check")
+PY
+python3 - "$seed_image" <<'PY'
+import os, sys
+fd = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+os.fsync(fd)
+os.close(fd)
+PY
+seed_image_created=1
+seed_image_identity="$(stat -c '%d:%i' "$seed_image")"
+python3 - "$seed_image" <<'PY'
+import os, sys
+fd = os.open(sys.argv[1], os.O_WRONLY | os.O_NOFOLLOW)
+try:
+    os.posix_fallocate(fd, 0, 32 * 1024**3)
+    os.fsync(fd)
+    info = os.fstat(fd)
+    if info.st_uid != 0 or info.st_nlink != 1 or info.st_size != 32 * 1024**3:
+        raise SystemExit("temporary seed image identity or size is unsafe")
+    print(f"temporary seed image identity: {info.st_dev}:{info.st_ino}")
+finally:
+    os.close(fd)
+PY
+install -d -o root -g root -m 0700 "$seed_workspace"
+seed_workspace_created=1
+/usr/sbin/mkfs.ext4 -F -m 0 -N 2000000 -L baci-seed-work "$seed_image" >/dev/null
+seed_unit_created=1
+PYTHONPATH="$(cd "$(dirname "$0")/../../bin" && pwd)${PYTHONPATH:+:$PYTHONPATH}" \
+  python3 -B - "$seed_unit_file" <<'PY'
+import os, sys
+from pathlib import Path
+from worker_release_seed_workspace import mount_unit_contents
+path = Path(sys.argv[1])
+fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644)
+try:
+    payload = mount_unit_contents()
+    view = memoryview(payload)
+    while view:
+        size = os.write(fd, view)
+        if size <= 0: raise SystemExit("seed mount unit write was incomplete")
+        view = view[size:]
+    os.fsync(fd)
+    info = os.fstat(fd)
+    if info.st_uid != 0 or info.st_nlink != 1 or info.st_mode & 0o777 != 0o644:
+        raise SystemExit("temporary seed mount unit metadata is unsafe")
+    print(f"{info.st_dev}:{info.st_ino}")
+finally:
+    os.close(fd)
+PY
+seed_unit_identity="$(stat -c '%d:%i' "$seed_unit_file")"
+systemctl daemon-reload
+systemctl start 'var-cache-baci\x2dworker\x2drelease\x2dseed\x2dwork.mount'
+seed_workspace_mount_started=1
+PYTHONPATH="$(cd "$(dirname "$0")/../../bin" && pwd)${PYTHONPATH:+:$PYTHONPATH}" \
+SEED_TEST_IMAGE_IDENTITY="$seed_image_identity" python3 -B - <<'PY'
+import os
+from worker_release_seed_workspace_paths import ensure_seed_collection
+from worker_release_seed_workspace import _verify_mount
+ensure_seed_collection(__import__("pathlib").Path("/var/cache/baci-worker-release/seed-work"))
+_verify_mount(__import__("subprocess").run,
+              image_identity=tuple(map(int, os.environ["SEED_TEST_IMAGE_IDENTITY"].split(":"))))
+print("temporary seed mount passed the production bounded-mount verifier")
+PY
+published_seed_root_created=1
 
 if [ -e /srv/baci-workers ] || [ -e /srv ]; then
   if [ ! -d /srv ] || [ -e /srv/baci-workers ]; then

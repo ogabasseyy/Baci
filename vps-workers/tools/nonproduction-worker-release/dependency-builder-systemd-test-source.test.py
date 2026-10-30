@@ -62,6 +62,15 @@ class SyntheticSourceSnapshotTests(unittest.TestCase):
         self.assertIn("dependency_seed_generation_contract", source)
         self.assertIn("install -o root -g root -m 0444", source)
 
+    def test_fixture_uses_the_production_verified_bounded_seed_mount(self):
+        setup = (Path(__file__).with_name("dependency-builder-systemd-test-setup.sh")
+                 .read_text(encoding="utf-8"))
+        self.assertIn('published_seed_root="$seed_workspace/seeds"', setup)
+        self.assertIn("worker_release_seed_workspace import _verify_mount", setup)
+        self.assertIn("temporary seed mount passed the production bounded-mount verifier", setup)
+        self.assertIn("os.posix_fallocate(fd, 0, 32 * 1024**3)", setup)
+        self.assertNotIn('published_seed_root="$cache_parent/seeds"', setup)
+
     def test_required_source_symlink_fails_closed_without_following_target(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

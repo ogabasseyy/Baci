@@ -58,8 +58,10 @@ chown -R root:root "$seed_root"
 find "$seed_root" -type d -exec chmod 0550 {} +
 find "$seed_root" -type f -exec chmod 0440 {} +
 
-mkdir -m 0700 -- "$published_seed_root"
-published_seed_root_created=1
+if [ ! -d "$published_seed_root" ] || [ -L "$published_seed_root" ]; then
+  echo "production-verified bounded per-SHA seed root is unavailable" >&2
+  exit 1
+fi
 PYTHONPATH="$(cd "$(dirname "$0")/../../bin" && pwd):$(cd "$(dirname "$0")" && pwd)" \
   python3 - "$seed_root" "$cache_root" "$store_root" "$published_seed_root" "$sha" <<'PY'
 import json, sys

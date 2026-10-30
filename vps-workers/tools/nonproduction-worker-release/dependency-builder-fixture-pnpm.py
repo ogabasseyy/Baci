@@ -14,8 +14,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from dependency_builder_fixture_pnpm_classification import safe_success_output, summarize_failure
 from dependency_builder_fixture_pnpm_diagnostics import (
-    FIXTURE_ERROR_NAME, _diagnostic_path, _diagnostic_path_state, _write_diagnostic, read_diagnostic,
-    read_scratch_diagnostic, read_scratch_diagnostic_status,
+    FIXTURE_ERROR_NAME, FIXTURE_STATUS_NAME, _diagnostic_path, _diagnostic_path_state,
+    _write_diagnostic, read_diagnostic,
+    read_scratch_diagnostic, read_scratch_diagnostic_status, read_scratch_fixture_status,
+    write_scratch_diagnostic_status,
 )
 
 
@@ -52,6 +54,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     summary = summarize_failure(f"{result.stdout}\n{result.stderr}",
                                 pnpm_args=pnpm_args, cwd=Path.cwd(), env=os.environ)
     diagnostic_path, path_state = _diagnostic_path_state(pnpm_args, env=os.environ)
+    scratch_status_path = Path(os.environ.get("BACI_FIXTURE_DIAGNOSTIC_STATUS_PATH", ""))
+    status = f"path-{path_state}"
     if diagnostic_path is None:
         diagnostic_state = f"path-{path_state}"
     else:
@@ -59,11 +63,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             _write_diagnostic(diagnostic_path, summary)
         except OSError:
             diagnostic_state = "write-failed"
+            status = "sidecar-write-failed"
         else:
             diagnostic_state = (
                 "sidecar-readable" if read_diagnostic(diagnostic_path, owner_uid=os.geteuid())
                 is not None else "sidecar-unreadable"
             )
+            status = "sidecar-readable" if diagnostic_state == "sidecar-readable" else "sidecar-unreadable"
+    if scratch_status_path:
+        write_scratch_diagnostic_status(
+            scratch_status_path, store=Path(os.environ.get("PNPM_CONFIG_STORE_DIR", "")),
+            state=status,
+        )
     print(f"PNPM_FIXTURE_DIAGNOSTIC={diagnostic_state}", file=sys.stderr)
     if summary["error_code"] == "ERR_PNPM_TRUST_DOWNGRADE":
         print("ERR_PNPM_TRUST_DOWNGRADE", file=sys.stderr)

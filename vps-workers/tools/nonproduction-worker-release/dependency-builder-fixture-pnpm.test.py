@@ -424,6 +424,25 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
                 ("--store-dir", str(root / "other")),
                 env={"PNPM_CONFIG_STORE_DIR": str(store)}))
 
+    def test_fixture_status_sidecar_records_only_closed_path_and_write_states(self):
+        sha = "a" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scratch = root / f"{sha}.fixture"
+            scratch.mkdir(mode=0o700)
+            store = scratch / "pnpm-store"
+            store.mkdir(mode=0o700)
+            status_path = scratch / fixture.FIXTURE_STATUS_NAME
+            self.assertTrue(fixture.write_scratch_diagnostic_status(
+                status_path, store=store, state="path-store-owner-mismatch"))
+            self.assertEqual(fixture.read_scratch_fixture_status(
+                scratch, build_root=root, expected_sha=sha, owner_uid=os.geteuid(),
+                build_root_uid=os.geteuid()), "path-store-owner-mismatch")
+            self.assertFalse(fixture.write_scratch_diagnostic_status(
+                status_path, store=store, state="arbitrary-output"))
+            self.assertFalse(fixture.write_scratch_diagnostic_status(
+                scratch / "elsewhere", store=store, state="path-accepted"))
+
     def test_scratch_reader_rejects_wrong_sha_mode_and_location(self):
         sha = "a" * 40
         with tempfile.TemporaryDirectory() as temporary:

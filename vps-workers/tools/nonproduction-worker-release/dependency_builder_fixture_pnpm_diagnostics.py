@@ -15,6 +15,14 @@ from dependency_builder_fixture_pnpm_classification import (
 )
 
 FIXTURE_ERROR_NAME = ".fixture-pnpm-diagnostic.json"
+FIXTURE_STATUS_NAME = ".fixture-pnpm-diagnostic-status"
+_FIXTURE_STATUS_STATES = frozenset({
+    "path-store-config-missing", "path-store-config-conflict", "path-store-unavailable",
+    "path-store-shape-invalid", "path-store-owner-mismatch", "path-scratch-unavailable",
+    "path-scratch-name-mismatch", "path-scratch-shape-invalid",
+    "path-scratch-owner-mismatch", "path-scratch-mode-mismatch", "path-accepted",
+    "sidecar-write-failed", "sidecar-readable", "sidecar-unreadable",
+})
 
 def _diagnostic_path_state(argv: Sequence[str], *, env: dict[str, str] | None = None
                            ) -> tuple[Path | None, str]:
@@ -189,3 +197,73 @@ def read_scratch_diagnostic(scratch: Path, *, build_root: Path, expected_sha: st
         scratch, build_root=build_root, expected_sha=expected_sha,
         owner_uid=owner_uid, build_root_uid=build_root_uid,
     )[0]
+
+
+def write_scratch_diagnostic_status(path: Path, *, store: Path, state: str) -> bool:
+    """Write one closed-enum fixture status beside the private per-build store."""
+    path, store = Path(path), Path(store)
+    if (path.name != FIXTURE_STATUS_NAME or path.parent != store.parent
+            or store.name != "pnpm-store" or state not in _FIXTURE_STATUS_STATES):
+        return False
+    try:
+        parent_info = path.parent.lstat()
+        if (not stat.S_ISDIR(parent_info.st_mode) or parent_info.st_uid != os.geteuid()
+                or stat.S_IMODE(parent_info.st_mode) != 0o700):
+            return False
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                     | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    except FileExistsError:
+        return False
+    except OSError:
+        return False
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o600):
+            return False
+        payload = (state + "\n").encode("ascii")
+        if os.write(fd, payload) != len(payload):
+            return False
+        os.fsync(fd)
+        return True
+    except OSError:
+        return False
+    finally:
+        os.close(fd)
+
+
+def read_scratch_fixture_status(scratch: Path, *, build_root: Path, expected_sha: str,
+                                owner_uid: int, build_root_uid: int = 0) -> str:
+    """Read the test-only status through exact scratch dirfds, returning enums only."""
+    scratch, build_root = Path(scratch), Path(build_root)
+    root_fd = scratch_fd = status_fd = None
+    try:
+        root_fd = os.open(build_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                          | getattr(os, "O_NOFOLLOW", 0))
+        root_info = os.fstat(root_fd)
+        if not stat.S_ISDIR(root_info.st_mode) or root_info.st_uid != build_root_uid:
+            return "build-root-rejected"
+        scratch_fd = os.open(scratch.name, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                             | getattr(os, "O_NOFOLLOW", 0), dir_fd=root_fd)
+        scratch_info = os.fstat(scratch_fd)
+        if (scratch.parent != build_root or not scratch.name.startswith(f"{expected_sha}.")
+                or not stat.S_ISDIR(scratch_info.st_mode) or scratch_info.st_uid != owner_uid
+                or stat.S_IMODE(scratch_info.st_mode) != 0o700):
+            return "scratch-identity-rejected"
+        status_fd = os.open(FIXTURE_STATUS_NAME, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                            dir_fd=scratch_fd)
+        info = os.fstat(status_fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != owner_uid or info.st_nlink != 1
+                or stat.S_IMODE(info.st_mode) != 0o600 or info.st_size > 80):
+            return "status-file-rejected"
+        value = os.read(status_fd, 81).decode("ascii")
+        state = value.rstrip("\n")
+        return state if value == state + "\n" and state in _FIXTURE_STATUS_STATES else "status-value-rejected"
+    except FileNotFoundError:
+        return "status-missing"
+    except (OSError, UnicodeError):
+        return "status-unreadable"
+    finally:
+        for fd in (status_fd, scratch_fd, root_fd):
+            if fd is not None:
+                os.close(fd)

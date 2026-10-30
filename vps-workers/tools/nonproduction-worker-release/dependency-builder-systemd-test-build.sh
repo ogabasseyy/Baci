@@ -37,13 +37,22 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
     if command.count("--collect") != 1:
         raise RuntimeError("dependency builder systemd collection contract changed")
     fixture_command = []
+    fixture_status = scratch / diagnostic_module.FIXTURE_STATUS_NAME
+    status_env_added = False
     for argument in command:
         if argument == "--collect":
             continue
+        if argument.startswith("--setenv=PNPM_CONFIG_STORE_DIR=") and not status_env_added:
+            fixture_command.append(
+                f"--setenv=BACI_FIXTURE_DIAGNOSTIC_STATUS_PATH={fixture_status}"
+            )
+            status_env_added = True
         fixture_command.append(
             str(helper_root / "worker_release_dependency_builder.py")
             if argument == str(Path(dependency_builder.__file__)) else argument
         )
+    if not status_env_added:
+        raise RuntimeError("dependency builder did not configure the fixture pnpm store")
     fixture_command = tuple(fixture_command)
     worker_index = command.index("--sandbox-worker")
     source_snapshot = Path(command[worker_index + 1])
@@ -105,6 +114,10 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
             scratch, build_root=dependency_builder.BUILD_ROOT, expected_sha=sha,
             owner_uid=expected_owner_uid,
         )
+        fixture_path_status = diagnostic_module.read_scratch_fixture_status(
+            scratch, build_root=dependency_builder.BUILD_ROOT, expected_sha=sha,
+            owner_uid=expected_owner_uid,
+        )
         builder_detail = read_diagnostic(scratch / ".baci-pnpm-error.json",
                                          owner_uid=expected_owner_uid)
         unit_detail = collect_unit_diagnostics(unit)
@@ -129,6 +142,7 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
               f"fixture_package={fixture_package} package_coordinate_sha256={package_coordinate_hash} "
               f"trust_evidence_transition={trust_transition} trust_headline_state={trust_headline} "
               f"trust_hint_state={trust_hint} fixture_sidecar_read={fixture_sidecar_read} "
+              f"fixture_path_status={fixture_path_status} "
               f"builder_stage={builder_stage} "
               f"builder_category={builder_category} systemd_load={unit_detail['load_state']} "
               f"systemd_active={unit_detail['active_state']} systemd_sub={unit_detail['sub_state']} "

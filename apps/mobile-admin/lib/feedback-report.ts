@@ -1,5 +1,9 @@
 import * as Application from 'expo-application';
-import { Platform } from 'react-native';
+import {
+  getRuntimePlatform,
+  getRuntimePlatformConstant,
+  getRuntimePlatformVersion,
+} from '@/config/runtime-platform';
 import { apiClient } from './api-client';
 
 export interface FeedbackDiagnostics {
@@ -9,27 +13,27 @@ export interface FeedbackDiagnostics {
   device?: string;
 }
 
+const REPORTED_PLATFORMS = ['ios', 'android', 'web'] as const;
+
 interface FeedbackReportResponse {
   id: string;
   emailed: boolean;
 }
 
-function readConstant(key: string): string | undefined {
-  const constants = Platform.constants as unknown as Record<string, unknown>;
-  const value = constants?.[key];
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-function describeDevice(): string | undefined {
-  if (Platform.OS === 'android') {
-    const model = [readConstant('Brand'), readConstant('Model')]
+function describeDevice(os: string): string | undefined {
+  if (os === 'android') {
+    const model = [
+      getRuntimePlatformConstant('Brand'),
+      getRuntimePlatformConstant('Model'),
+    ]
       .filter(Boolean)
       .join(' ');
-    const release = readConstant('Release') ?? String(Platform.Version);
+    const release =
+      getRuntimePlatformConstant('Release') ?? getRuntimePlatformVersion();
     return [model, `Android ${release}`].filter(Boolean).join(' · ');
   }
-  if (Platform.OS === 'ios') {
-    return `iOS ${String(Platform.Version)}`;
+  if (os === 'ios') {
+    return `iOS ${getRuntimePlatformVersion()}`;
   }
   return undefined;
 }
@@ -45,15 +49,13 @@ function describeAppVersion(): string | undefined {
 export function collectFeedbackDiagnostics(
   screen: string | null | undefined
 ): FeedbackDiagnostics {
-  const platform =
-    Platform.OS === 'ios' || Platform.OS === 'android' || Platform.OS === 'web'
-      ? Platform.OS
-      : undefined;
+  const os = getRuntimePlatform();
+  const platform = REPORTED_PLATFORMS.find((candidate) => candidate === os);
   return {
     screen: screen?.trim() || undefined,
     platform,
     appVersion: describeAppVersion(),
-    device: describeDevice(),
+    device: describeDevice(os),
   };
 }
 

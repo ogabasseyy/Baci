@@ -15,7 +15,14 @@ const { mockApiClient, mockApplication, mockPlatform } = vi.hoisted(() => ({
 
 vi.mock('./api-client', () => ({ apiClient: mockApiClient }));
 vi.mock('expo-application', () => mockApplication);
-vi.mock('react-native', () => ({ Platform: mockPlatform }));
+vi.mock('@/config/runtime-platform', () => ({
+  getRuntimePlatform: () => mockPlatform.OS,
+  getRuntimePlatformVersion: () => String(mockPlatform.Version),
+  getRuntimePlatformConstant: (key: string) => {
+    const value = mockPlatform.constants[key];
+    return typeof value === 'string' ? value : undefined;
+  },
+}));
 
 import {
   collectFeedbackDiagnostics,

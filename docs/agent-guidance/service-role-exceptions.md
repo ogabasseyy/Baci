@@ -118,3 +118,34 @@ renewal permits no credential, firewall, authentication-setting or database-gran
 change, and renews no other exception. Required review, CI, coordinated deployment,
 rollback and recovery-activation checks remain enforced. At expiry, replace this
 boundary or obtain a new explicit owner decision; never silently extend it.
+
+## In-app feedback email only
+
+<!-- exception: in-app-feedback-email status=approved expires=2027-01-30T00:00:00.000Z -->
+
+The owner explicitly approved this exception on 2026-10-30 in the Claude Code
+conversation that produced PR #3852, after being shown that the shared Zeptomail
+sender records delivery attempts with the admin client and offered a
+queue-based alternative. It expires at **2027-01-30T00:00:00.000Z**, or when
+platform email delivery auditing moves to a restricted worker role, whichever
+occurs first.
+
+The permitted chain is `apps/web/src/app/api/feedback/route.ts` →
+`apps/web/src/lib/feedback/send-feedback-report-email.ts#sendFeedbackReportEmail`
+→ `apps/web/src/lib/zeptomail.ts#sendEmail`, whose only privileged operation is
+its existing email delivery-attempt audit. The exact import paths are pinned in
+`apps/web/src/lib/events/event-pipeline-feedback-credential-paths.ts` and
+`eventPipelineAdminImporters`.
+
+Authentication, CSRF validation, Zod validation, merchant resolution through
+`getMerchantForApiRequest`, the per-user rate limit and the RLS-scoped insert of
+the report must all succeed before the sender runs. The report is stored only
+with the caller's own session. The recipient is the fixed `FEEDBACK_INBOX_EMAIL`
+constant; request input never selects a recipient, tenant or sender. Each send
+is a single bounded attempt so a slow provider cannot time out the client after
+the report is saved.
+
+No sibling route, caller, table query, write or RPC inherits this approval.
+Credentials and provider bodies must not enter client bundles, responses, logs
+or event payloads. At expiry, replace this boundary or obtain a new explicit
+owner decision; never silently extend it.

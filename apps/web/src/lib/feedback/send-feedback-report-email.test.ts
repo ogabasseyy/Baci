@@ -5,7 +5,10 @@ const { mockSendEmail } = vi.hoisted(() => ({ mockSendEmail: vi.fn() }));
 vi.mock('@/lib/zeptomail', () => ({ sendEmail: mockSendEmail }));
 
 import type { FeedbackReportEmailInput } from './feedback-report-email';
-import { sendFeedbackReportEmail } from './send-feedback-report-email';
+import {
+  FEEDBACK_EMAIL_BUDGET_MS,
+  sendFeedbackReportEmail,
+} from './send-feedback-report-email';
 
 function input(
   overrides: Partial<FeedbackReportEmailInput> = {}
@@ -39,6 +42,32 @@ describe('sendFeedbackReportEmail', () => {
         emailType: 'notifications',
       })
     );
+  });
+
+  it('bounds delivery to one attempt within the client request budget', async () => {
+    mockSendEmail.mockResolvedValue({ success: true });
+    const before = Date.now();
+
+    await sendFeedbackReportEmail(input());
+
+    const params = mockSendEmail.mock.calls[0]?.[0];
+    expect(FEEDBACK_EMAIL_BUDGET_MS).toBeLessThan(20_000);
+    expect(params.maxAttemptsPerSender).toBe(1);
+    expect(params.signal).toBeInstanceOf(AbortSignal);
+    expect(params.fallbackDeadlineMs).toBeGreaterThanOrEqual(
+      before + FEEDBACK_EMAIL_BUDGET_MS
+    );
+    expect(params.fallbackDeadlineMs).toBeLessThanOrEqual(
+      Date.now() + FEEDBACK_EMAIL_BUDGET_MS
+    );
+  });
+
+  it('reports not-emailed when the provider times out', async () => {
+    mockSendEmail.mockRejectedValue(
+      new DOMException('The operation timed out.', 'TimeoutError')
+    );
+
+    await expect(sendFeedbackReportEmail(input())).resolves.toBe(false);
   });
 
   it('omits reply-to when the sender has no email', async () => {

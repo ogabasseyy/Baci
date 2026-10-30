@@ -29,7 +29,7 @@ def normalize_temporary_project_index(store: Path, workspace: Path, *,
                                      expected_subdirectories: tuple[str, ...] = ("vps-workers",)) -> int:
     """Remove only pnpm-generated pointers to the fixed workspace importers.
 
-    pnpm 11.7 writes `v10/projects/<32-hex-key>` as relative symlinks to the
+    pnpm 11.7 writes `v11/projects/<32-hex-key>` as relative symlinks to the
     importer roots. The temporary workspace is deleted after preverification,
     so these pointers cannot enter an immutable seed. Only the workspace root
     and explicitly enumerated importer directories are accepted; the publisher
@@ -37,7 +37,7 @@ def normalize_temporary_project_index(store: Path, workspace: Path, *,
     """
     if owner_uid < 0 or not store.is_absolute() or not workspace.is_absolute():
         raise SeedNormalizationRejected("pnpm seed normalization paths are invalid")
-    store_fd = workspace_fd = v10_fd = projects_fd = -1
+    store_fd = workspace_fd = version_fd = projects_fd = -1
     importer_fds: list[int] = []
     try:
         store_fd = os.open(store, DIRECTORY_FLAGS)
@@ -56,12 +56,15 @@ def normalize_temporary_project_index(store: Path, workspace: Path, *,
             importer_fds.append(fd)
             expected_importers.add((info.st_dev, info.st_ino))
         try:
-            v10_fd = os.open("v10", DIRECTORY_FLAGS, dir_fd=store_fd)
+            # The `--store-dir` option names the store base. pnpm 11.7
+            # places its versioned store (and project registrations) under
+            # `v11`; `v10` is the prior major's layout and is not a fallback.
+            version_fd = os.open("v11", DIRECTORY_FLAGS, dir_fd=store_fd)
         except FileNotFoundError as error:
             raise SeedNormalizationRejected("pnpm project-index is unavailable") from error
-        v10_info = _directory(v10_fd, owner_uid=owner_uid, same_device=store_info.st_dev)
+        version_info = _directory(version_fd, owner_uid=owner_uid, same_device=store_info.st_dev)
         try:
-            projects_fd = os.open("projects", DIRECTORY_FLAGS, dir_fd=v10_fd)
+            projects_fd = os.open("projects", DIRECTORY_FLAGS, dir_fd=version_fd)
         except FileNotFoundError as error:
             raise SeedNormalizationRejected("pnpm project-index is unavailable") from error
         projects_info = _directory(projects_fd, owner_uid=owner_uid,
@@ -94,7 +97,7 @@ def normalize_temporary_project_index(store: Path, workspace: Path, *,
             raise SeedNormalizationRejected("pnpm project-index is missing a fixed importer pointer")
         # pnpm has exited; this root-owned directory is no longer writable by
         # the builder. Recheck each exact link inode immediately before unlink.
-        named_projects = os.stat("projects", dir_fd=v10_fd, follow_symlinks=False)
+        named_projects = os.stat("projects", dir_fd=version_fd, follow_symlinks=False)
         if ((named_projects.st_dev, named_projects.st_ino) !=
                 (projects_info.st_dev, projects_info.st_ino)):
             raise SeedNormalizationRejected("pnpm project-index directory changed before normalization")
@@ -106,8 +109,8 @@ def normalize_temporary_project_index(store: Path, workspace: Path, *,
             os.unlink(name, dir_fd=projects_fd)
         if os.listdir(projects_fd):
             raise SeedNormalizationRejected("pnpm project-index changed during normalization")
-        if (os.fstat(v10_fd).st_ino, os.fstat(v10_fd).st_dev) != (
-                v10_info.st_ino, v10_info.st_dev):
+        if (os.fstat(version_fd).st_ino, os.fstat(version_fd).st_dev) != (
+                version_info.st_ino, version_info.st_dev):
             raise SeedNormalizationRejected("pnpm store version directory changed")
         return len(pinned_links)
     except SeedNormalizationRejected:
@@ -117,7 +120,7 @@ def normalize_temporary_project_index(store: Path, workspace: Path, *,
     finally:
         for fd in reversed(importer_fds):
             os.close(fd)
-        for fd in (projects_fd, v10_fd, workspace_fd, store_fd):
+        for fd in (projects_fd, version_fd, workspace_fd, store_fd):
             if fd >= 0:
                 os.close(fd)
 

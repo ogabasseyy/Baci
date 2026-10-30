@@ -3,6 +3,7 @@
 import { ChevronRight } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { CheckoutStepSection } from './CheckoutStepSection';
+import { checkoutDeliveryHint } from './checkout-delivery-hint';
 import { DeliveryAddressFields } from './DeliveryAddressFields';
 import { DeliveryOptions } from './DeliveryOptions';
 
@@ -51,16 +52,15 @@ export function CheckoutDeliveryStep({
             id="checkout-delivery-help"
             className="mb-3 text-sm text-store-background-text/75"
           >
-            {deliveryOptions?.tabs.deliveryMethod === 'pickup'
-              ? deliveryOptions.door.isLoadingQuotes
-                ? 'Checking pickup availability before continuing.'
-                : 'Refresh pickup availability to continue.'
-              : !addressFields.addressReady &&
-                  deliveryOptions?.tabs.deliveryMethod === 'door'
-                ? 'Enter your street address, city and state for home delivery.'
-                : !addressFields.addressReady && !deliveryOptions
-                  ? 'Enter your street address, city and state to see delivery options.'
-                  : 'Choose an available delivery option above to continue.'}
+            {checkoutDeliveryHint({
+              deliveryMethod: deliveryOptions?.tabs.deliveryMethod,
+              isLoadingQuotes: deliveryOptions?.door.isLoadingQuotes ?? false,
+              isNewAddressMode: addressFields.isNewAddressMode,
+              city: addressFields.newAddressCity,
+              state: addressFields.newAddressState,
+              addressReady: addressFields.addressReady,
+              hasDeliveryOptions: Boolean(deliveryOptions),
+            })}
           </p>
         )}
         <button

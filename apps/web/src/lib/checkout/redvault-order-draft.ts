@@ -4,6 +4,10 @@ import {
   getRedvaultCheckoutSummary,
   type RedvaultCheckoutSummary,
 } from './get-redvault-checkout-summary';
+import {
+  createBoundRedvaultDraft,
+  type RedvaultSharedCart,
+} from './redvault-shared-cart-binding';
 
 type RedvaultDraftRow = {
   id: string;
@@ -33,9 +37,13 @@ function firstRow(value: unknown): RedvaultDraftRow | null {
 export async function createRedvaultOrderDraft({
   client,
   draftArgs,
+  sharedCart,
+  orderArgs,
 }: {
   client: SupabaseClient;
   draftArgs: Record<string, unknown>;
+  sharedCart?: RedvaultSharedCart;
+  orderArgs?: Record<string, unknown>;
 }): Promise<{
   id: string;
   quotePayloadHash: string;
@@ -43,10 +51,20 @@ export async function createRedvaultOrderDraft({
   replayed: boolean;
   summary: RedvaultCheckoutSummary;
 }> {
-  const { data: draftData, error: draftError } = await client.rpc(
-    'create_storefront_redvault_order' as never,
-    draftArgs as never
-  );
+  const { data: draftData, error: draftError } = sharedCart
+    ? {
+        data: await createBoundRedvaultDraft({
+          client,
+          sharedCart,
+          orderArgs: orderArgs ?? {},
+          draftArgs,
+        }),
+        error: null,
+      }
+    : await client.rpc(
+        'create_storefront_redvault_order' as never,
+        draftArgs as never
+      );
   const draft = firstRow(draftData);
   if (draftError || !draft) {
     throw new Error(

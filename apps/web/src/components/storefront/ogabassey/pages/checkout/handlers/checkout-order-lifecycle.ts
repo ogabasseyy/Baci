@@ -1,22 +1,29 @@
 import {
-  CHECKOUT_FUNNEL_EVENTS,
   buildCheckoutFunnelProperties,
+  CHECKOUT_FUNNEL_EVENTS,
   getCheckoutPaymentIntent,
   resolveFinalizedCheckoutPaymentMethod,
 } from '@baci/shared/contracts';
-import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
-import { buildCheckoutBillingAddress } from '../build-checkout-billing-address';
-import { persistPendingCheckoutOrder } from '../persist-pending-checkout-order';
 import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
+import { buildCheckoutBillingAddress } from '../build-checkout-billing-address';
 import type { RedvaultQuoteSummary } from '../components/redvault/RedvaultPaymentOption';
+import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
+import { persistPendingCheckoutOrder } from '../persist-pending-checkout-order';
+import { readRedvaultReviewRecovery } from '../read-redvault-review-recovery';
+import { clearRedvaultUncertainAttempt } from '../redvault-uncertain-attempt';
 import type { PaymentMethod } from '../types';
+import { recoverPendingCheckoutOrder } from './recover-pending-checkout-order';
+import {
+  isRedvaultAttemptFenceCurrent,
+  prepareRedvaultRecovery,
+  type RedvaultAttemptFence,
+} from './prepare-redvault-recovery';
 import type {
   CheckoutPaymentOrder,
   CheckoutWalletRedemption,
   SubmitCheckoutOrderOptions,
   SubmittedCheckoutOrder,
 } from './submit-checkout-order';
-import { recoverPendingCheckoutOrder } from './recover-pending-checkout-order';
 import { submitCheckoutOrder } from './submit-checkout-order';
 
 export type CheckoutOrderReuseOptions = Parameters<
@@ -26,10 +33,7 @@ export type CheckoutOrderRecoveryContext = Parameters<
   typeof recoverPendingCheckoutOrder
 >[0]['context'];
 
-type SubmitOptions = Omit<
-  SubmitCheckoutOrderOptions,
-  'resolvedPendingOrder'
->;
+type SubmitOptions = Omit<SubmitCheckoutOrderOptions, 'resolvedPendingOrder'>;
 
 export interface CheckoutOrderLifecycleOptions {
   reuse: CheckoutOrderReuseOptions;
@@ -62,6 +66,7 @@ export interface CheckoutOrderLifecycleOptions {
     customerName: string;
     checkoutFingerprint: string;
     setReady: (ready: {
+      cartId?: string;
       billingAddress: ReturnType<typeof buildCheckoutBillingAddress>;
       customerEmail: string;
       customerName: string;
@@ -117,9 +122,33 @@ export async function runCheckoutOrderLifecycle({
   });
   if (recovery.kind === 'handled') return { kind: 'handled' };
 
+  let attemptedKey: string | undefined;
+  let attemptFence: RedvaultAttemptFence | undefined;
   const submitted: SubmittedCheckoutOrder = await submitCheckoutOrder({
     ...submit,
     resolvedPendingOrder: recovery.pendingOrder,
+    onBeforeBoundRedvaultSend: ({ idempotencyKey, orderRequest }) => {
+      if (!redvaultReview.enabled) {
+        throw new Error(
+          'UBA checkout recovery is unavailable. Please try again.'
+        );
+      }
+      attemptFence = prepareRedvaultRecovery({
+        merchantSlug: reuse.merchantSlug ?? null,
+        merchantId: customer.merchantId,
+        idempotencyKey,
+        fingerprint: redvaultReview.checkoutFingerprint,
+        customer: {
+          email: customer.email,
+          phone: customer.phone,
+          name: redvaultReview.customerName,
+        },
+        shippingAddress,
+        merchantCountry,
+        orderRequest,
+      });
+      attemptedKey = idempotencyKey;
+    },
   });
   const { order, wallet } = submitted;
   const amountDueToGateway = submitted.amountDueToGateway;
@@ -171,6 +200,21 @@ export async function runCheckoutOrderLifecycle({
     shippingAddress.state,
     merchantCountry
   );
+  const ready = {
+    ...(submit.orderRequest.shared_cart
+      ? { cartId: submit.orderRequest.shared_cart.cart_id }
+      : {}),
+    billingAddress,
+    customerEmail: customer.email,
+    customerName: redvaultReview.customerName,
+    customerPhone: customer.phone,
+    currency: orderChargeCurrency,
+    orderId: order.id,
+    checkoutFingerprint: redvaultReview.checkoutFingerprint,
+    trackingToken: order.tracking_token,
+    total: order.total ?? fallbackTotal,
+    orderNumber: createdOrderNumber,
+  };
   const snapshot: PendingCheckoutOrderSnapshot = {
     orderId: order.id,
     orderNumber: order.order_number,
@@ -182,23 +226,47 @@ export async function runCheckoutOrderLifecycle({
     paymentMethod: reuse.paymentMethod,
     amountDueToGateway,
     createdAt: new Date().toISOString(),
+    ...(redvaultReview.enabled &&
+    submit.orderRequest.shared_cart &&
+    submitted.redvaultSummary
+      ? {
+          redvaultReview: {
+            ready,
+            summary: submitted.redvaultSummary,
+            ...(attemptFence
+              ? {
+                  recoveryFence: {
+                    merchantSlug: attemptFence.merchantSlug,
+                    epoch: attemptFence.epoch,
+                  },
+                }
+              : {}),
+          },
+        }
+      : {}),
   };
+  if (
+    attemptedKey &&
+    (!attemptFence ||
+      !isRedvaultAttemptFenceCurrent(attemptFence) ||
+      !readRedvaultReviewRecovery(snapshot, customer.merchantId))
+  ) {
+    throw new Error(
+      'Unable to restore the UBA checkout review. Please try again.'
+    );
+  }
   persistPendingCheckoutOrder(snapshot);
   onPendingSnapshot(snapshot);
+  if (attemptedKey) {
+    try {
+      clearRedvaultUncertainAttempt(customer.merchantId, attemptedKey);
+    } catch {
+      // The durable pending-order fence takes precedence over a stale marker.
+    }
+  }
 
   if (redvaultReview.enabled) {
-    redvaultReview.setReady({
-      billingAddress,
-      customerEmail: customer.email,
-      customerName: redvaultReview.customerName,
-      customerPhone: customer.phone,
-      currency: orderChargeCurrency,
-      orderId: order.id,
-      checkoutFingerprint: redvaultReview.checkoutFingerprint,
-      trackingToken: order.tracking_token,
-      total: order.total ?? fallbackTotal,
-      orderNumber: createdOrderNumber,
-    });
+    redvaultReview.setReady(ready);
     redvaultReview.releaseSubmission();
     return { kind: 'redvault_review' };
   }

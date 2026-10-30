@@ -576,7 +576,7 @@ export default function NewDiscountScreen() {
                 opacity: isCreating ? 0.7 : 1,
               },
             ]}
-            onPress={() => handleSubmit(onSubmit)()}
+            onPress={() => void handleSubmit(onSubmit)()}
             disabled={isCreating}
           >
             {isCreating ? (

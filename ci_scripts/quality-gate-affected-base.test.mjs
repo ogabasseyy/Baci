@@ -268,3 +268,17 @@ test('scopes changes inside workspace packages and Markdown elsewhere', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('keeps the full gate for Markdown that a package file names', () => {
+  const { dir } = repoWithBase();
+  try {
+    writeFile(dir, 'apps/web/docs.test.ts', "readFileSync('AGENTS.md');\n");
+    git(dir, 'add', '-A');
+    const base = commit(dir, 'test reads AGENTS.md');
+    git(dir, 'update-ref', 'refs/remotes/origin/main', base);
+    writeFile(dir, 'AGENTS.md', 'changed\n');
+    assert.equal(run({ cwd: dir, args: [dir] }).stdout, '');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

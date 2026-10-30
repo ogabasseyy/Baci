@@ -63,8 +63,11 @@ class SyntheticSourceSnapshotTests(unittest.TestCase):
         self.assertIn("install -o root -g root -m 0444", source)
 
     def test_fixture_uses_the_production_verified_bounded_seed_mount(self):
-        setup = (Path(__file__).with_name("dependency-builder-systemd-test-setup.sh")
-                 .read_text(encoding="utf-8"))
+        setup_dir = Path(__file__).parent
+        setup = (setup_dir / "dependency-builder-systemd-test-setup.sh").read_text(encoding="utf-8")
+        mount_setup = (setup_dir / "dependency-builder-systemd-test-setup-seed-mount.sh")
+        setup += mount_setup.read_text(encoding="utf-8")
+        self.assertIn('source "$script_dir/dependency-builder-systemd-test-setup-seed-mount.sh"', setup)
         self.assertIn('published_seed_root="$seed_workspace/seeds"', setup)
         self.assertIn("worker_release_seed_workspace import _verify_mount", setup)
         self.assertIn("temporary seed mount passed the production bounded-mount verifier", setup)

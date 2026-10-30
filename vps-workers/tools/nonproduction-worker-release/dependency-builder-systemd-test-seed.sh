@@ -81,7 +81,7 @@ import sys
 from pathlib import Path
 from dependency_seed_publisher import verify_seed
 
-source, seeds, sha = map(Path, sys.argv[1:3])
+source, seeds = map(Path, sys.argv[1:3])
 sha_value = sys.argv[3]
 verify_seed(seeds / sha_value, source, authenticated_source_sha=sha_value)
 print("synthetic exact per-SHA seed verified against the builder source")

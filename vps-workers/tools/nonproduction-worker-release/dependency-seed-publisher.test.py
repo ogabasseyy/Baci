@@ -78,7 +78,8 @@ class DependencySeedPublisherTests(unittest.TestCase):
             os.chmod(manifest_path, 0o644)
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             os.chmod(manifest_path, 0o444)
-            with self.assertRaisesRegex(publisher.BuilderRejected, "attestation"):
+            with self.assertRaisesRegex(publisher.BuilderRejected,
+                                        "fence does not match authenticated source"):
                 publisher.verify_seed(published, source, authenticated_source_sha="a" * 40)
 
     def test_existing_sha_is_reused_only_after_verification_and_never_overwritten(self):

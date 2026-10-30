@@ -209,31 +209,6 @@ def _run_host_fixture() -> int:
         if any(path.exists() or path.is_symlink()
                for path in (socket_source_alias, socket_alias)):
             raise RuntimeError("approved socket alias fixture path already exists")
-        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        listener.bind(str(socket_path))
-        os.chmod(socket_path, 0o666)
-        approved_identity = socket_path.lstat()
-        approved_source_identity = (approved_identity.st_dev, approved_identity.st_ino,
-                                    approved_identity.st_uid, approved_identity.st_mode)
-        # /run is a separate tmpfs on Ubuntu, so hard links to the temp fixture
-        # root fail with EXDEV. A temporary bind mount aliases the exact socket
-        # inode outside /run; systemd can resolve that source before masking /run.
-        source_placeholder_identity = _mount_socket_source_alias(socket_path, socket_source_alias)
-        # Give systemd an existing socket mountpoint for the namespace bind.
-        alias_placeholder = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        alias_placeholder.bind(str(socket_alias))
-        os.chmod(socket_alias, 0o600)
-        alias_placeholder.close()
-        listener.listen(8)
-        listener.settimeout(0.2)
-        hidden_host_socket = Path(f"/run/baci-worker-egress-hidden-{os.getpid()}.sock")
-        if hidden_host_socket.exists() or hidden_host_socket.is_symlink():
-            raise RuntimeError("hidden host socket fixture path already exists")
-        hidden_listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        hidden_listener.bind(str(hidden_host_socket))
-        os.chmod(hidden_host_socket, 0o666)
-        hidden_identity = hidden_host_socket.lstat()
-        hidden_listener.listen(1)
         stopping = threading.Event()
         accepted = []
         registry_served = []
@@ -265,10 +240,46 @@ def _run_host_fixture() -> int:
             thread.start()
             return upstream
 
-        accept_thread = threading.Thread(target=broker.serve,
-                                         args=(listener, stopping), daemon=True)
-        accept_thread.start()
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        hidden_listener = None
+        accept_thread = None
+        approved_identity = None
+        hidden_identity = None
+        approved_source_identity = None
+        source_placeholder_identity = None
+        hidden_host_socket = Path(f"/run/baci-worker-egress-hidden-{os.getpid()}.sock")
         try:
+            listener.bind(str(socket_path))
+            approved_identity = socket_path.lstat()
+            os.chmod(socket_path, 0o666)
+            approved_identity = socket_path.lstat()
+            approved_source_identity = (approved_identity.st_dev, approved_identity.st_ino,
+                                        approved_identity.st_uid, approved_identity.st_mode)
+            # /run is a separate tmpfs on Ubuntu, so hard links to the temp fixture
+            # root fail with EXDEV. A temporary bind mount aliases the exact socket
+            # inode outside /run; systemd can resolve that source before masking /run.
+            source_placeholder_identity = _mount_socket_source_alias(
+                socket_path, socket_source_alias)
+            # Give systemd an existing socket mountpoint for the namespace bind.
+            alias_placeholder = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                alias_placeholder.bind(str(socket_alias))
+                os.chmod(socket_alias, 0o600)
+            finally:
+                alias_placeholder.close()
+            listener.listen(8)
+            listener.settimeout(0.2)
+            if hidden_host_socket.exists() or hidden_host_socket.is_symlink():
+                raise RuntimeError("hidden host socket fixture path already exists")
+            hidden_listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            hidden_listener.bind(str(hidden_host_socket))
+            hidden_identity = hidden_host_socket.lstat()
+            os.chmod(hidden_host_socket, 0o666)
+            hidden_identity = hidden_host_socket.lstat()
+            hidden_listener.listen(1)
+            accept_thread = threading.Thread(target=broker.serve,
+                                             args=(listener, stopping), daemon=True)
+            accept_thread.start()
             # Ensure the peer credential gate rejects a root caller even when
             # its request would otherwise be approved. The connector count must
             # remain zero before the authorized systemd bridge is launched.
@@ -319,8 +330,10 @@ def _run_host_fixture() -> int:
         finally:
             stopping.set()
             listener.close()
-            hidden_listener.close()
-            if source_placeholder_identity is not None:
+            if hidden_listener is not None:
+                hidden_listener.close()
+            if (source_placeholder_identity is not None
+                    and approved_source_identity is not None):
                 _unmount_socket_source_alias(
                     socket_source_alias,
                     placeholder_identity=source_placeholder_identity,
@@ -328,6 +341,8 @@ def _run_host_fixture() -> int:
                 )
             for path, identity in ((socket_path, approved_identity),
                                    (hidden_host_socket, hidden_identity)):
+                if identity is None:
+                    continue
                 try:
                     current = path.lstat()
                 except FileNotFoundError:
@@ -336,7 +351,8 @@ def _run_host_fixture() -> int:
                         != (identity.st_dev, identity.st_ino, identity.st_uid, identity.st_mode)):
                     raise RuntimeError("Unix socket fixture path changed before cleanup")
                 path.unlink()
-            accept_thread.join(timeout=2)
+            if accept_thread is not None and accept_thread.ident is not None:
+                accept_thread.join(timeout=2)
             for upstream, registry in accepted:
                 for sock in (upstream, registry):
                     try:

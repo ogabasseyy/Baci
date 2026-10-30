@@ -18,9 +18,9 @@ it('binds the checked-in inventory snapshot to current committed source content'
   expect(result).toEqual({
     validationKind: 'repository_snapshot',
     snapshotSha256:
-      '55484e36cb98695269027f36d979eb39c61e88a8824d338cd2ca6ed0f5c90deb',
+      '088504efd989605fbd4b9272f5afa7588cde3d2519b2d2ff47a687f503e53237',
     validatedSourceSha: expect.stringMatching(/^[a-f0-9]{40}$/),
-    rowCount: 584,
+    rowCount: 585,
   });
 });
 
@@ -35,6 +35,15 @@ it('keeps every private cart endpoint on the dynamic origin', async () => {
   const cartRows = inventory.rows.filter((row) =>
     row.sourcePath?.startsWith('apps/web/src/app/api/storefront/cart/')
   );
-  expect(cartRows).toHaveLength(10);
+  expect(cartRows).toHaveLength(11);
+  expect(cartRows).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        sourcePath:
+          'apps/web/src/app/api/storefront/cart/checkout/reconcile/route.ts',
+        decision: 'origin_dynamic',
+      }),
+    ])
+  );
   for (const row of cartRows) expect(row.decision).toBe('origin_dynamic');
 });

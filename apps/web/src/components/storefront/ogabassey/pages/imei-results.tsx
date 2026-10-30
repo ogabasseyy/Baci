@@ -1,13 +1,20 @@
 'use client';
 
-import { canAssessImeiNetworkUnlock, getImeiEffectiveVerdict } from '@baci/shared/imei';
-
 import type { ImeiServiceTierDefinition } from '@baci/shared/imei';
+import {
+  canAssessImeiNetworkUnlock,
+  getImeiBlacklistState,
+  getImeiEffectiveVerdict,
+  isValidDeviceIdentifier,
+} from '@baci/shared/imei';
 import { ScanBarcode, Smartphone } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
+import { ImeiCheckerError } from './imei-checker-error';
+import { ImeiCheckerPending } from './imei-checker-pending';
 import { ImeiCheckerStatusCard } from './imei-checker-status-card';
 import { getImeiResultStatusCards } from './imei-checker-status-cards';
+import { getDisplayTier } from './imei-checker-tiers';
 import { getVerdictTone } from './imei-checker-tone';
 import type { ImeiResult } from './imei-checker-types';
 import { ImeiRemediationOffer } from './imei-remediation-offer';
@@ -17,6 +24,12 @@ interface OgabasseyImeiResultsProps {
   lookupId?: string | null;
   result: ImeiResult | null;
   onReset: () => void;
+  onCheckBlacklist?: () => void;
+  isChecking?: boolean;
+  pendingPaused?: boolean;
+  checkError?: string | null;
+  needsSignIn?: boolean;
+  needsWalletFunding?: boolean;
 }
 
 export function OgabasseyImeiResults({
@@ -24,6 +37,12 @@ export function OgabasseyImeiResults({
   lookupId,
   result,
   onReset,
+  onCheckBlacklist,
+  isChecking = false,
+  pendingPaused = false,
+  checkError,
+  needsSignIn = false,
+  needsWalletFunding = false,
 }: OgabasseyImeiResultsProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -43,6 +62,11 @@ export function OgabasseyImeiResults({
   const effectiveVerdict = getImeiEffectiveVerdict(result);
   const headerTone = getVerdictTone(effectiveVerdict.type);
   const verdictTone = headerTone;
+  const canCheckBlacklist =
+    onCheckBlacklist &&
+    !currentTier.checksIncluded.includes('blacklistStatus') &&
+    isValidDeviceIdentifier(result.imei, 'imei') &&
+    getImeiBlacklistState(result.blacklistStatus) === 'unknown';
   const statusCards = getImeiResultStatusCards(
     result,
     currentTier.checksIncluded
@@ -56,7 +80,8 @@ export function OgabasseyImeiResults({
       tabIndex={-1}
     >
       <p aria-live="polite" className="sr-only" role="status">
-        {currentTier.name} report ready for {result.device}: {effectiveVerdict.text}
+        {currentTier.name} report ready for {result.device}:{' '}
+        {effectiveVerdict.text}
       </p>
       <div className="overflow-hidden rounded-3xl border border-[var(--store-border,#f3f4f6)] bg-[var(--store-surface,#ffffff)] shadow-xl">
         <div className={`p-6 md:p-8 ${headerTone.surface}`}>
@@ -91,16 +116,21 @@ export function OgabasseyImeiResults({
               </h2>
               {result.deviceProfile && (
                 <>
-                  {(result.deviceProfile.color || result.deviceProfile.storage) && (
-                  <p className="mt-1 text-sm text-store-foreground">
-                    {[result.deviceProfile.color, result.deviceProfile.storage]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </p>
+                  {(result.deviceProfile.color ||
+                    result.deviceProfile.storage) && (
+                    <p className="mt-1 text-sm text-store-foreground">
+                      {[
+                        result.deviceProfile.color,
+                        result.deviceProfile.storage,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
                   )}
                   {result.deviceProfile.imageMatch !== 'none' && (
                     <p className="mt-1 text-xs text-store-foreground">
-                      {result.deviceProfile.imageMatch === 'color' && result.deviceProfile.color
+                      {result.deviceProfile.imageMatch === 'color' &&
+                      result.deviceProfile.color
                         ? `Catalog illustration · ${result.deviceProfile.color}`
                         : 'Model illustration · colour may differ'}
                     </p>
@@ -144,8 +174,29 @@ export function OgabasseyImeiResults({
           >
             {effectiveVerdict.text}
           </p>
+          {canCheckBlacklist ? (
+            <button
+              className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--store-primary)] px-5 py-3 text-sm font-bold text-[var(--store-primary-text,#ffffff)] hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-4 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isChecking}
+              onClick={onCheckBlacklist}
+              type="button"
+            >
+              {isChecking
+                ? 'Checking blacklist…'
+                : `Check blacklist status · ${getDisplayTier('blacklist').priceDisplay}`}
+            </button>
+          ) : null}
         </div>
       </div>
+
+      {isChecking ? <ImeiCheckerPending paused={pendingPaused} /> : null}
+      {checkError ? (
+        <ImeiCheckerError
+          error={checkError}
+          needsSignIn={needsSignIn}
+          needsWalletFunding={needsWalletFunding}
+        />
+      ) : null}
 
       {lookupId && canAssessImeiNetworkUnlock(result) ? (
         <ImeiRemediationOffer identifier={result.imei} lookupId={lookupId} />
@@ -155,6 +206,7 @@ export function OgabasseyImeiResults({
         <button
           className="inline-flex items-center gap-2 text-sm font-bold text-[var(--store-muted-text,#6b7280)] hover:text-[var(--store-text,#111827)]"
           onClick={onReset}
+          disabled={isChecking}
           type="button"
         >
           <ScanBarcode size={16} />

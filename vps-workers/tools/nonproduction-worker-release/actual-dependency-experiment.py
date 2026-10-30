@@ -78,18 +78,25 @@ def run_policy_preverify(command: tuple[str, ...], *, cwd: Path, env: dict[str, 
 def _main() -> int:
     started = time.monotonic()
     stage = "checkout-identity"
-    expected_sha = os.environ.get("EXPECTED_CHECKOUT_SHA", "")
-    if len(expected_sha) != 40 or any(char not in "0123456789abcdef" for char in expected_sha):
-        raise RuntimeError("expected checkout SHA is invalid")
-    head = subprocess.run(("git", "rev-parse", "HEAD"), cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
-    if head != expected_sha:
-        raise RuntimeError("checkout does not match dispatched SHA")
-    stage = "runtime-pin"
-    node = shutil.which("node")
-    if not node or subprocess.run((node, "--version"), capture_output=True, text=True, check=True).stdout.strip().split(".")[0] != "v24":
-        raise RuntimeError("Node 24 runtime is unavailable")
-    stage = "pnpm-pin"
-    pnpm = pinned_pnpm(node, policy.EXPECTED_PNPM)
+    try:
+        expected_sha = os.environ.get("EXPECTED_CHECKOUT_SHA", "")
+        if len(expected_sha) != 40 or any(char not in "0123456789abcdef" for char in expected_sha):
+            raise RuntimeError("expected checkout SHA is invalid")
+        head = subprocess.run(("git", "rev-parse", "HEAD"), cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+        if head != expected_sha:
+            raise RuntimeError("checkout does not match dispatched SHA")
+        stage = "runtime-pin"
+        node = shutil.which("node")
+        if not node or subprocess.run((node, "--version"), capture_output=True, text=True, check=True).stdout.strip().split(".")[0] != "v24":
+            raise RuntimeError("Node 24 runtime is unavailable")
+        stage = "pnpm-pin"
+        pnpm = pinned_pnpm(node, policy.EXPECTED_PNPM)
+    except Exception as exc:
+        # Preserve the bounded stage and closed diagnostic category for setup
+        # failures; never print the exception text or subprocess output.
+        print(failure_diagnostic(stage, exc), file=sys.stderr)
+        return 1
+
     try:
         with tempfile.TemporaryDirectory(prefix="baci-actual-dependency-experiment-") as temporary:
             base = Path(temporary)

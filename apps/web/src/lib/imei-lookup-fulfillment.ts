@@ -3,8 +3,8 @@ import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { parseSickwResponse } from '@/app/api/storefront/imei-check/sickw-parser';
 import type { ImeiCheckResult } from '@/app/api/storefront/imei-check/sickw-parser.types';
 import { buildSickwLookupData } from '@/lib/imei-sickw-lookup-data';
-import { isInsufficientWalletBalanceError } from '@/lib/vtu-fulfillment';
-import { resolveVtuCustomer } from '@/lib/vtu-pending-transaction';
+import { resolveVtuCustomer } from '@/lib/vtu-customer-resolution';
+import { isInsufficientWalletBalanceError } from '@/lib/wallet-balance-error';
 
 const SICKW_API_URL = 'https://sickw.com/api.php';
 const SICKW_REQUEST_TIMEOUT_MS = 15_000;

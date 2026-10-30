@@ -3,14 +3,6 @@ import {
   type ImeiDeviceCategory,
   type ImeiServiceTierKey,
 } from '@baci/shared/imei';
-import {
-  getImeiDisabledTierKeys,
-  getImeiIdentifierEncryptionKey,
-  getPetrockConfig,
-  getPetrockEnabledTierKeys,
-  getSickwApiKey,
-  isPetrockEnabled,
-} from '@/env';
 import type { ImeiAccessClient } from '@/lib/imei-access';
 import { createPetrockClient } from '@/lib/imei-providers/petrock/petrock-client';
 import { validatePetrockProductSnapshot } from '@/lib/imei-providers/petrock/petrock-preflight';
@@ -20,17 +12,36 @@ import { createSickwProvider } from '@/lib/imei-providers/sickw-provider';
 import { resolveImeiProviderBinding } from '@/lib/imei-providers/tier-bindings';
 import { errorBody, json } from './route-helpers';
 
+interface ImeiProviderConfiguration {
+  getImeiDisabledTierKeys(): readonly string[];
+  getImeiIdentifierEncryptionKey(): string | undefined;
+  getPetrockConfig(): { baseUrl: string; token: string } | null;
+  getPetrockEnabledTierKeys(): readonly string[];
+  getSickwApiKey(): string | undefined;
+  isPetrockEnabled(): boolean;
+}
+
 export async function prepareImeiProvider({
   access,
   requestedTier,
   deviceCategory,
   clientSupportsAsync,
+  configuration,
 }: {
   access: ImeiAccessClient;
   requestedTier: ImeiServiceTierKey;
   deviceCategory?: ImeiDeviceCategory;
   clientSupportsAsync: boolean;
+  configuration: ImeiProviderConfiguration;
 }) {
+  const {
+    getImeiDisabledTierKeys,
+    getImeiIdentifierEncryptionKey,
+    getPetrockConfig,
+    getPetrockEnabledTierKeys,
+    getSickwApiKey,
+    isPetrockEnabled,
+  } = configuration;
   if (getImeiDisabledTierKeys().includes(requestedTier)) {
     return {
       response: json(

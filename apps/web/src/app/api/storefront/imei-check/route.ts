@@ -8,7 +8,16 @@ import {
   resolveInputIdentifier,
 } from '@baci/shared/imei';
 import type { NextRequest } from 'next/server';
-import { getImeiHashSalt, getRootDomain } from '@/env';
+import {
+  getImeiDisabledTierKeys,
+  getImeiHashSalt,
+  getImeiIdentifierEncryptionKey,
+  getPetrockConfig,
+  getPetrockEnabledTierKeys,
+  getRootDomain,
+  getSickwApiKey,
+  isPetrockEnabled,
+} from '@/env';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
@@ -240,6 +249,14 @@ export async function POST(request: NextRequest) {
 
     const prepared = await prepareImeiProvider({
       access: supabaseAdmin,
+      configuration: {
+        getImeiDisabledTierKeys,
+        getImeiIdentifierEncryptionKey,
+        getPetrockConfig,
+        getPetrockEnabledTierKeys,
+        getSickwApiKey,
+        isPetrockEnabled,
+      },
       clientSupportsAsync,
       deviceCategory,
       requestedTier,

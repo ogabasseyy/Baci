@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createImeiAccessClient } from './index';
@@ -19,7 +19,7 @@ it('fails closed without a dedicated signing secret', () => {
 });
 
 it('signs the exact operation bytes and binds actor, customer, merchant and expiry', async () => {
-  const secret = 'a-dedicated-test-secret-of-at-least-32-bytes';
+  const secret = randomBytes(32).toString('hex');
   vi.stubEnv('IMEI_ACCESS_SIGNING_SECRET', secret);
   const rpc = vi
     .fn()

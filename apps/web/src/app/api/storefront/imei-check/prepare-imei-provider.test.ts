@@ -3,7 +3,7 @@ import type { ImeiAccessClient } from '@/lib/imei-access';
 import { prepareImeiProvider } from './prepare-imei-provider';
 
 const config = vi.hoisted(() => ({ disabled: [] as string[], enabled: true }));
-vi.mock('@/env', () => ({
+const configuration = {
   getImeiDisabledTierKeys: () => config.disabled,
   getImeiIdentifierEncryptionKey: () => 'encryption-key',
   getPetrockConfig: () => ({
@@ -13,7 +13,7 @@ vi.mock('@/env', () => ({
   getPetrockEnabledTierKeys: () => ['simLock'],
   getSickwApiKey: () => 'sickw-test-key',
   isPetrockEnabled: () => config.enabled,
-}));
+};
 function input(clientSupportsAsync = true) {
   const readSnapshot = vi.fn().mockResolvedValue({
     data: {
@@ -27,6 +27,7 @@ function input(clientSupportsAsync = true) {
     error: null,
   });
   return {
+    configuration,
     access: { readSnapshot } as unknown as ImeiAccessClient,
     clientSupportsAsync,
     deviceCategory: 'smartphone' as const,

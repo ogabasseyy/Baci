@@ -37,6 +37,7 @@ export function createRunner({
   provisioned = true,
   legacyStuck = false,
   crontabWriteFails = false,
+  stopFails = false,
 } = {}) {
   const base = mkdtempSync(join(tmpdir(), 'baci-sync-runner-'));
   const scripts = join(base, 'scripts');
@@ -61,7 +62,7 @@ esac
   );
   executable(
     join(stubs, 'id'),
-    `case "$*" in -un) echo deploy ;; '-u baci-worker') ${provisioned ? 'echo 999' : 'exit 1'} ;; *) exit 1 ;; esac\n`
+    `case "$*" in -un) echo deploy ;; -u) echo 1001 ;; '-u baci-worker') ${provisioned ? 'echo 999' : 'exit 1'} ;; *) exit 1 ;; esac\n`
   );
   executable(
     join(stubs, 'sudo'),
@@ -73,8 +74,8 @@ esac
   );
   executable(
     join(stubs, 'systemctl'),
-    `echo "$*" >> "${base}/systemctl.log"
-case "$*" in *is-active*) ${legacyStuck ? 'exit 0' : 'exit 3'} ;; esac
+    `echo "xdg=\${XDG_RUNTIME_DIR:-unset} $*" >> "${base}/systemctl.log"
+case "$*" in *is-active*) ${legacyStuck ? 'exit 0' : 'exit 3'} ;; *' --user stop '*|'--user stop '*) ${stopFails ? 'exit 1' : 'exit 0'} ;; esac
 `
   );
   writeFileSync(join(base, 'crontab'), LEGACY_CRONTAB);

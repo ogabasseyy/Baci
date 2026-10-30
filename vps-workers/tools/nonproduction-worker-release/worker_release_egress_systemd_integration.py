@@ -27,6 +27,18 @@ _FIXTURE_UNIT = re.compile(
     r"(?:worker-egress-(?:prototype-[0-9]{1,10}|probe-[0-9]{1,10}"
     r"(?:-(?:base|empty-run|bind|combined))?)|worker-seed-socket-probe-[0-9]{1,10})"
 )
+_SYSTEMD_RESULT = frozenset({
+    "success", "resources", "protocol", "timeout", "watchdog", "signal",
+    "core-dump", "exit-code", "start-limit-hit", "condition", "exec-condition",
+    "reload", "oom-kill",
+})
+_SYSTEMD_LOAD = frozenset({"loaded", "not-found", "error", "masked", "stub", "merged"})
+_SYSTEMD_ACTIVE = frozenset({
+    "active", "reloading", "inactive", "failed", "activating", "deactivating", "maintenance",
+})
+_SYSTEMD_CODE = {"1": "exited", "2": "killed", "3": "dumped", "4": "trapped",
+                 "exited": "exited", "killed": "killed", "dumped": "dumped",
+                 "trapped": "trapped"}
 from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture_modules
 
 def _safe_diagnostic(stdout: str, stderr: str, *, limit: int = 300) -> str:
@@ -66,6 +78,39 @@ def _namespace_missing_path(text: str, candidates: tuple[Path, ...]) -> str | No
             if candidate in line:
                 return candidate
     return None
+
+
+def _normalized_unit_exit(text: str) -> str | None:
+    """Extract only fixed systemd enums and bounded numeric exit fields."""
+    fields = {}
+    allowed = {"LoadState", "ActiveState", "Result", "ExecMainCode",
+               "ExecMainStatus", "StatusErrno"}
+    for line in text.splitlines():
+        key, separator, value = line.partition("=")
+        if separator and key in allowed:
+            fields[key] = value.strip()
+    if not fields:
+        return None
+
+    load = fields.get("LoadState", "other")
+    load = load if load in _SYSTEMD_LOAD else "other"
+    active = fields.get("ActiveState", "other")
+    active = active if active in _SYSTEMD_ACTIVE else "other"
+    result = fields.get("Result", "other")
+    result = result if result in _SYSTEMD_RESULT else "other"
+    code = _SYSTEMD_CODE.get(fields.get("ExecMainCode", ""), "other")
+
+    def bounded_number(key: str, maximum: int) -> str:
+        value = fields.get(key, "")
+        if not re.fullmatch(r"(?:0|[1-9][0-9]{0,3})", value):
+            return "other"
+        number = int(value)
+        return str(number) if number <= maximum else "other"
+
+    status = bounded_number("ExecMainStatus", 255)
+    errno = bounded_number("StatusErrno", 4095)
+    return (f"unit-state(load={load},active={active},result={result},code={code},"
+            f"status={status},errno={errno})")
 
 
 def _approved_socket_properties(host_socket: Path, source_alias: Path,
@@ -231,8 +276,10 @@ def _seed_socket_probe_failure_summary(stdout: str, stderr: str, journal: str,
     evidence = "\n".join((stdout, stderr, journal))
     category = _namespace_failure_category(evidence)
     if category == "failure-unclassified":
-        category = ("client-probe-rejected" if "egress client integration failed:" in evidence
-                    else "unit-failed-unclassified")
+        category = (_normalized_unit_exit(journal)
+                    or ("client-probe-rejected"
+                        if "egress client integration failed:" in evidence
+                        else "unit-failed-unclassified"))
     missing_path = _namespace_missing_path(evidence, known_paths)
     suffix = f" path={missing_path}" if missing_path is not None else ""
     return f"{category}{suffix}"

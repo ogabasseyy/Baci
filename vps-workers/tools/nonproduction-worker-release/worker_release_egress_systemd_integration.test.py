@@ -14,7 +14,8 @@ from worker_release_egress_systemd_integration import (
     _approved_socket_properties, _namespace_failure_category, _safe_diagnostic,
     _socket_bind_mount_command, _namespace_missing_path,
     _unit_journal_text, _cleanup_systemd_unit, _namespace_probe_steps,
-    _run_seed_unit_socket_probe, _seed_socket_probe_failure_summary,
+    _normalized_unit_exit, _run_seed_unit_socket_probe,
+    _seed_socket_probe_failure_summary,
 )
 import worker_release_egress_systemd_integration as integration
 from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture_modules
@@ -140,6 +141,32 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
             (Path("/tmp/fixed.sock"),),
         )
         self.assertEqual(summary, "client-probe-rejected")
+
+    def test_seed_socket_probe_uses_only_normalized_systemd_exit_fields(self):
+        journal = (
+            "LoadState=loaded\nActiveState=failed\nSubState=failed\n"
+            "Result=exit-code\nExecMainCode=1\nExecMainStatus=13\n"
+            "StatusErrno=0\nStatusText=secret diagnostic\n"
+            "ControlGroup=/system.slice/private-unit\n"
+        )
+        summary = _seed_socket_probe_failure_summary("", "", journal, ())
+        self.assertEqual(
+            summary,
+            "unit-state(load=loaded,active=failed,result=exit-code,code=exited,status=13,errno=0)",
+        )
+        self.assertNotIn("secret", summary)
+        self.assertNotIn("private-unit", summary)
+
+    def test_systemd_exit_fields_are_closed_and_numbers_are_bounded(self):
+        self.assertEqual(
+            _normalized_unit_exit(
+                "LoadState=unexpected-secret\nActiveState=failed\n"
+                "Result=unexpected-secret\nExecMainCode=9\n"
+                "ExecMainStatus=999999999\nStatusErrno=999999999\n"
+            ),
+            "unit-state(load=other,active=failed,result=other,code=other,status=other,errno=other)",
+        )
+        self.assertIsNone(_normalized_unit_exit("StatusText=raw-only\nControlGroup=/secret\n"))
 
     def test_seed_socket_probe_uses_bound_tools_path_with_private_tmp_enabled(self):
         with tempfile.TemporaryDirectory() as temporary:

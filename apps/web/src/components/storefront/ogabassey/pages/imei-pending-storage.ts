@@ -1,4 +1,7 @@
 import {
+  IMEI_DEVICE_CATEGORIES,
+  IMEI_SERVICE_TIERS,
+  type ImeiDeviceCategory,
   type ImeiServiceTierKey,
   isImeiServiceTierKey,
 } from '@baci/shared/imei';
@@ -16,6 +19,7 @@ export interface PendingImeiLookup {
   createdAt: string;
   lookupId: string;
   tier: ImeiServiceTierKey;
+  device?: ImeiDeviceCategory;
 }
 
 export function pendingImeiStorageKey(
@@ -57,10 +61,18 @@ export function loadPendingImeiLookup(
     ) {
       throw new Error('Invalid pending IMEI lookup');
     }
+    const device = IMEI_DEVICE_CATEGORIES.find(
+      (category) => category.id === value.device
+    )?.id;
+    const categories: readonly ImeiDeviceCategory[] =
+      IMEI_SERVICE_TIERS[value.tier].deviceCategories;
+    const supportedDevice =
+      device && categories.includes(device) ? device : undefined;
     return {
       createdAt: value.createdAt,
       lookupId: value.lookupId,
       tier: value.tier,
+      ...(supportedDevice ? { device: supportedDevice } : {}),
     };
   } catch {
     storage.removeItem(key);

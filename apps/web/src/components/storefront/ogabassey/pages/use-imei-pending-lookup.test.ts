@@ -31,6 +31,7 @@ describe('useImeiPendingLookup', () => {
         lookupId: '11111111-1111-4111-8111-111111111111',
         pollAfterMs: 0,
         tier: 'blacklist',
+        device: 'smartphone',
       });
     });
 
@@ -43,6 +44,7 @@ describe('useImeiPendingLookup', () => {
     await waitFor(() => expect(result.current.terminal?.kind).toBe('complete'));
     expect(result.current.terminal).toMatchObject({
       lookupId: '11111111-1111-4111-8111-111111111111',
+      device: 'smartphone',
     });
     expect(localStorage.getItem(key)).toBeNull();
     expect(result.current.pending).toBeNull();

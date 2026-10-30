@@ -54,6 +54,12 @@ export function useImeiCheckRequest(merchantSlug?: string) {
       setResult(terminal.result);
       setResultLookupId(terminal.lookupId);
       setResultTier(IMEI_SERVICE_TIERS[terminal.tier]);
+      const categories = IMEI_SERVICE_TIERS[terminal.tier].deviceCategories;
+      // Old saved lookups have no device. Infer only an unambiguous tier;
+      // an IMEI alone does not distinguish a phone from a cellular tablet.
+      setResultDevice(
+        terminal.device ?? (categories.length === 1 ? categories[0] : null)
+      );
     } else {
       setError(terminal.error);
     }
@@ -133,6 +139,7 @@ export function useImeiCheckRequest(merchantSlug?: string) {
         lookupId: outcome.pending.lookupId,
         pollAfterMs: outcome.pending.pollAfterMs,
         tier: selectedTier,
+        device,
       });
     } else if (outcome.error !== null) {
       setError(outcome.error);

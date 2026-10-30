@@ -1,0 +1,12 @@
+{
+  "productId": "1966",
+  "capturedAt": "2026-10-30",
+  "status": "success",
+  "provenance": "Owner-authorized single paid provider probe; terminal response read by the release operator. IMEI Number line omitted; order, reference and transport credentials omitted.",
+  "verifiedScope": {
+    "brand": "apple",
+    "device": "smartphone",
+    "input": "imei"
+  },
+  "replay": "Model: iPhone 17 Pro Max 512GB Silver<br>Replacement Device: <span style=\"color:green;\">No</span>"
+}

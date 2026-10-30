@@ -14,6 +14,7 @@ const PETROCK_COUNT_KEYS = [
   'completed',
   'errored',
   'failed',
+  'manualReview',
   'pending',
   'submissionUnknown',
 ] as const;
@@ -42,6 +43,9 @@ function sanitizePetrockSummary({
     for (const key of PETROCK_COUNT_KEYS) {
       summary[key] = body[key];
     }
+  }
+  if ('manualReview' in body && body.manualReview > 0) {
+    summary.attention = 'provider_submission_unresolved';
   }
   if ('remediation' in body && typeof body.remediation.manualReview === 'number' && body.remediation.manualReview > 0) {
     summary.remediationManualReview = body.remediation.manualReview;

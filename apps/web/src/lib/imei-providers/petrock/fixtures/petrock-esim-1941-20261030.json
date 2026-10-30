@@ -1,0 +1,14 @@
+{
+  "productId": "1941",
+  "capturedAt": "2026-10-30",
+  "status": "success",
+  "costUsd": 0.04,
+  "provenance": "Owner-authorized single paid provider probe; terminal response read by the release operator. Device identifier line omitted; order, reference and transport credentials omitted. This is captured output, not a synthetic parser example.",
+  "verifiedScope": {
+    "brand": "apple",
+    "device": "smartphone",
+    "input": "imei",
+    "observedModel": "iPhone 17 Pro Max (A3525)"
+  },
+  "replay": "Model: APPLE_A3525_IPHONE 17 PRO MAX_IPHONE 17 PRO MAX (CANADA-JP)<br>eSIM Compatible: Yes<br>Physical SIM Compatible: No"
+}

@@ -3,17 +3,20 @@ import 'server-only';
 
 import { createHash } from 'node:crypto';
 import { IMEI_SERVICE_TIERS } from '@baci/shared/imei';
+import type { ImeiRpcClient } from '@/lib/imei-access';
 import { decryptImeiIdentifier } from '@/lib/imei-identifier-crypto';
-import type { createAdminClient } from '@/lib/supabase/admin';
 import type { ImeiProvider } from '../types';
-import { PETROCK_MAX_POLL_AFTER_MS } from './petrock.constants';
+import {
+  PETROCK_MAX_POLL_AFTER_MS,
+  PETROCK_SUBMISSION_MANUAL_REVIEW_ATTEMPTS,
+} from './petrock.constants';
 import type { ClaimedPetrockPoll } from './petrock-lookup-state';
 import {
   finalizePetrockLookup,
   reschedulePetrockLookupPoll,
 } from './petrock-lookup-state';
 
-type AdminClient = ReturnType<typeof createAdminClient>;
+type AdminClient = ImeiRpcClient;
 type PollProvider = {
   poll: NonNullable<ImeiProvider['poll']>;
 };
@@ -40,41 +43,26 @@ export async function resolveClaimedPetrockLookup({
   supabaseAdmin: AdminClient;
 }) {
   if (!lookup.provider_order_id || !lookup.identifier_ciphertext) {
-    if (lookup.status === 'submission_unknown' && !lookup.provider_order_id) {
-      const body = {
-        code: 'PETROCK_SUBMISSION_UNRESOLVED',
-        error:
-          'IMEI submission could not be confirmed; your wallet was refunded.',
-        lookupId: lookup.id,
-        status: 'error' as const,
-        success: false as const,
-      };
-      const finalized = await finalizePetrockLookup({
-        body,
-        leaseToken: lookup.lease_token,
-        lookupId: lookup.id,
-        providerStatus: 'submission_unresolved',
-        status: 502,
-        supabaseAdmin,
-        terminalStatus: 'refunded_error',
-      });
-      return finalized
-        ? { body, kind: 'failure' as const, status: 502 }
-        : {
-            kind: 'lease_lost' as const,
-            pollAfterMs: PETROCK_MAX_POLL_AFTER_MS,
-          };
-    }
     const pollAfterMs = PETROCK_MAX_POLL_AFTER_MS;
     const rescheduled = await reschedulePetrockLookupPoll({
       leaseToken: lookup.lease_token,
       lookupId: lookup.id,
       nextPollAt: new Date(Date.now() + pollAfterMs).toISOString(),
-      providerStatus: 'poll_identity_missing',
+      providerStatus:
+        lookup.status === 'submission_unknown' && !lookup.provider_order_id
+          ? 'submission_unknown_manual_review'
+          : 'poll_identity_missing',
       supabaseAdmin,
     });
     if (!rescheduled) return { kind: 'lease_lost' as const, pollAfterMs };
-    return { kind: 'pending' as const, pollAfterMs };
+    return {
+      kind: 'pending' as const,
+      pollAfterMs,
+      needsReview:
+        lookup.status === 'submission_unknown' &&
+        !lookup.provider_order_id &&
+        attempt >= PETROCK_SUBMISSION_MANUAL_REVIEW_ATTEMPTS,
+    };
   }
 
   const tier = IMEI_SERVICE_TIERS[lookup.tier];

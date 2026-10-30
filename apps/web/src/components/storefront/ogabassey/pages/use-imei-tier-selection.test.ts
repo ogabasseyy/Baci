@@ -1,6 +1,21 @@
 import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useImeiTierSelection } from './use-imei-tier-selection';
+
+const availability = vi.hoisted(() => ({
+  keys: null as import('@baci/shared/imei').ImeiServiceTierKey[] | null,
+}));
+vi.mock('./use-imei-runtime-availability', () => ({
+  useImeiRuntimeAvailability: () => ({
+    availableTierKeys: availability.keys,
+    failed: false,
+    loading: false,
+    retry: vi.fn(),
+  }),
+}));
+beforeEach(() => {
+  availability.keys = null;
+});
 
 describe('useImeiTierSelection', () => {
   it('defaults to the smartphone tab, apple brand, and the recommended tier', () => {
@@ -51,6 +66,9 @@ describe('useImeiTierSelection', () => {
     act(() => {
       // 'full' is identifier 'imei'; 'serialInfo' is identifier 'serial' — a
       // real identifier change on the same (smartphone) device.
+      result.current.onToggleServices();
+    });
+    act(() => {
       result.current.onSelectTier('serialInfo');
     });
 
@@ -113,6 +131,9 @@ describe('useImeiTierSelection', () => {
 
     act(() => {
       // 'serialInfo' resolves to identifier 'serial': alphanumeric, uppercased.
+      result.current.onToggleServices();
+    });
+    act(() => {
       result.current.onSelectTier('serialInfo');
     });
     act(() => {
@@ -151,5 +172,37 @@ describe('useImeiTierSelection', () => {
       'repairEligibility',
       'gsxPremium',
     ]);
+  });
+});
+
+describe('runtime IMEI tier selection', () => {
+  it('hides eSIM until advertised and clears its selection after capabilities are revoked', () => {
+    const { result, rerender } = renderHook(() => useImeiTierSelection());
+    act(() => result.current.onToggleServices());
+    expect(result.current.displayedTierKeys).not.toContain('esimCompatibility');
+    availability.keys = ['full', 'esimCompatibility'];
+    rerender();
+    expect(result.current.displayedTierKeys).toContain('esimCompatibility');
+    act(() => result.current.onSelectTier('esimCompatibility'));
+    expect(result.current.selectedTier).toBe('esimCompatibility');
+    availability.keys = [];
+    rerender();
+    expect(result.current.displayedTierKeys).toEqual([]);
+    expect(result.current.selectedTier).toBeNull();
+    availability.keys = ['full', 'esimCompatibility'];
+    rerender();
+    expect(result.current.selectedTier).toBeNull();
+  });
+  it('still applies brand and device filtering to an advertised eSIM capability', () => {
+    availability.keys = ['full', 'esimCompatibility', 'macIcloud'];
+    const { result } = renderHook(() => useImeiTierSelection());
+    act(() => result.current.onToggleServices());
+    act(() => result.current.onSelectTier('esimCompatibility'));
+    act(() => result.current.onSelectBrand('samsung'));
+    expect(result.current.displayedTierKeys).not.toContain('esimCompatibility');
+    expect(result.current.selectedTier).not.toBe('esimCompatibility');
+    act(() => result.current.onSelectDevice('laptop'));
+    expect(result.current.displayedTierKeys).not.toContain('esimCompatibility');
+    expect(result.current.selectedTier).not.toBe('esimCompatibility');
   });
 });

@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import type { ImeiDeviceCategory, ImeiServiceTierKey } from '@baci/shared/imei';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import type { ImeiAccessClient } from '@/lib/imei-access';
 import type {
   ImeiLookupErrorBody,
   ImeiLookupResponseBody,
@@ -227,16 +227,10 @@ export function mapExistingTerminalLookupWithoutImeiHash(
 }
 
 export async function findLookupByIdempotencyKey(
-  supabase: SupabaseClient,
+  supabase: ImeiAccessClient,
   idempotencyKey: string
 ) {
-  const { data, error } = await supabase
-    .from('imei_lookups')
-    .select(
-      'id, customer_id, merchant_id, tier, imei_hash, device_category, amount_ngn, status, cached_response, cached_status'
-    )
-    .eq('idempotency_key', idempotencyKey)
-    .maybeSingle();
+  const { data, error } = await supabase.readReplay(idempotencyKey);
 
   if (error) {
     throw new Error(`Failed to read IMEI idempotency row: ${error.message}`);

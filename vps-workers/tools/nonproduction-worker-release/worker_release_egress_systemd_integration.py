@@ -31,6 +31,63 @@ def _safe_diagnostic(stdout: str, stderr: str, *, limit: int = 300) -> str:
     return filtered[-limit:] or "no diagnostic output"
 
 
+def _namespace_failure_category(text: str) -> str:
+    """Reduce disposable systemd namespace evidence to a fixed CI category."""
+    value = text.lower()
+    if not value.strip():
+        return "journal-unavailable"
+    if not any(marker in value for marker in (
+            "mount namespac", "step namespace", "namespace setup", "failed to mount")):
+        return "failure-unclassified"
+    if "operation not permitted" in value or "permission denied" in value:
+        return "namespace-permission"
+    if "no such file or directory" in value or "not found" in value:
+        return "namespace-path-missing"
+    if "read-only file system" in value or "mount point is not" in value:
+        return "namespace-mount-conflict"
+    return "namespace-failure-unclassified"
+
+
+def _approved_socket_properties(host_socket: Path, isolated_alias: Path) -> tuple[str, str]:
+    """Mask host /run and expose only its approved socket at a separate alias."""
+    host_socket = Path(host_socket)
+    isolated_alias = Path(isolated_alias)
+    resolved_alias = Path(os.path.realpath(isolated_alias))
+    if (not host_socket.is_absolute() or host_socket.parent != Path("/run")
+            or host_socket != Path(os.path.normpath(str(host_socket)))
+            or not isolated_alias.is_absolute()
+            or isolated_alias == Path("/run")
+            or Path("/run") in isolated_alias.parents
+            or isolated_alias == Path("/var/run")
+            or Path("/var/run") in isolated_alias.parents
+            or isolated_alias != Path(os.path.normpath(str(isolated_alias)))
+            or resolved_alias == Path("/run") or Path("/run") in resolved_alias.parents):
+        raise RuntimeError("egress fixture socket paths are outside fixed mount policy")
+    return ("--property=InaccessiblePaths=/run",
+            f"--property=BindReadOnlyPaths={host_socket}:{isolated_alias}")
+
+
+def _unit_journal_text(unit: str) -> str:
+    """Read a small bounded boot-journal slice for one generated fixture unit."""
+    if not re.fullmatch(r"worker-egress-prototype-[0-9]{1,10}", unit):
+        return ""
+    bin_path = HERE.parents[1] / "bin"
+    if str(bin_path) not in sys.path:
+        sys.path.insert(0, str(bin_path))
+    from worker_release_bounded_process import run_bounded_capture
+
+    try:
+        result = run_bounded_capture(
+            ("/usr/bin/journalctl", "--no-pager", "--output=short", "--lines=20",
+             f"--grep={unit}"),
+            timeout=2, max_stream_bytes=4096,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+        )
+    except Exception:
+        return ""
+    return result.stdout + result.stderr
+
+
 def _run_host_fixture() -> int:
     if os.geteuid() != 0 or Path("/proc/1/comm").read_text().strip() != "systemd":
         raise RuntimeError("requires root on a disposable systemd Linux VM")
@@ -46,8 +103,11 @@ def _run_host_fixture() -> int:
         fixture_client = stage_fixture_modules(Path(__file__).absolute().parents[3], fixture_root,
                                                  owner_uid=0, owner_gid=0)
         socket_path = Path(f"/run/baci-worker-egress-approved-{os.getpid()}.sock")
+        socket_alias = scratch_root / "approved-egress.sock"
         if socket_path.exists() or socket_path.is_symlink():
             raise RuntimeError("approved host socket fixture path already exists")
+        if socket_alias.exists() or socket_alias.is_symlink():
+            raise RuntimeError("approved socket alias fixture path already exists")
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         listener.bind(str(socket_path))
         os.chmod(socket_path, 0o666)
@@ -117,24 +177,25 @@ def _run_host_fixture() -> int:
             try:
                 unit = f"worker-egress-prototype-{os.getpid()}"
                 command = [
-                    "/usr/bin/systemd-run", "--quiet", "--system", "--wait", "--pipe",
+                    "/usr/bin/systemd-run", "--system", "--wait", "--pipe",
                     "--collect", f"--unit={unit}", f"--uid={peer_uid}",
                     f"--gid={peer_gid}", "--property=PrivateNetwork=yes",
-                    "--property=InaccessiblePaths=/run",
-                    f"--property=BindReadOnlyPaths={socket_path}:/run/baci-seed-egress.sock",
+                    *_approved_socket_properties(socket_path, socket_alias),
                     "--property=NoNewPrivileges=yes",
                     "--property=PrivateUsers=yes", "--property=SupplementaryGroups=",
                     "--property=RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
                     "/usr/bin/python3", str(fixture_client), "--client",
-                    "/run/baci-seed-egress.sock", str(os.stat("/proc/self/ns/net").st_ino),
+                    str(socket_alias), str(os.stat("/proc/self/ns/net").st_ino),
                     str(hidden_host_socket),
                 ]
                 result = subprocess.run(command, check=False, capture_output=True,
                                         text=True, timeout=45)
                 if result.returncode != 0:
-                    detail = _safe_diagnostic(result.stdout, result.stderr)
+                    journal = _unit_journal_text(unit)
+                    category = _namespace_failure_category(
+                        result.stdout + "\n" + result.stderr + "\n" + journal)
                     raise RuntimeError(
-                        f"systemd child failed (exit={result.returncode}; diagnostic={detail})")
+                        f"systemd child failed (exit={result.returncode}; category={category})")
             finally:
                 broker_module.connect_public = original_connect
             for thread in synthetic_threads:

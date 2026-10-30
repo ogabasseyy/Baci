@@ -8,7 +8,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from worker_release_egress_systemd_integration import _safe_diagnostic
+from worker_release_egress_systemd_integration import (
+    _approved_socket_properties, _namespace_failure_category, _safe_diagnostic,
+)
 from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture_modules
 
 
@@ -22,6 +24,31 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
 
     def test_empty_diagnostic_is_explicit(self):
         self.assertEqual(_safe_diagnostic("", ""), "no diagnostic output")
+
+    def test_approved_socket_is_bound_outside_masked_run(self):
+        properties = _approved_socket_properties(
+            Path("/run/baci-worker-egress-approved-123.sock"),
+            Path("/tmp/worker-egress-fixture/approved.sock"))
+        self.assertEqual(properties, (
+            "--property=InaccessiblePaths=/run",
+            "--property=BindReadOnlyPaths=/run/baci-worker-egress-approved-123.sock:"
+            "/tmp/worker-egress-fixture/approved.sock"))
+        with self.assertRaisesRegex(RuntimeError, "outside fixed mount policy"):
+            _approved_socket_properties(
+                Path("/run/baci-worker-egress-approved-123.sock"),
+                Path("/run/approved.sock"))
+        with self.assertRaisesRegex(RuntimeError, "outside fixed mount policy"):
+            _approved_socket_properties(
+                Path("/run/baci-worker-egress-approved-123.sock"),
+                Path("/var/run/approved.sock"))
+
+    def test_systemd_failure_is_reduced_to_non_sensitive_category(self):
+        category = _namespace_failure_category(
+            "Failed to set up mount namespacing: /run/private.sock: Operation not permitted "
+            "credential=do-not-print")
+        self.assertEqual(category, "namespace-permission")
+        self.assertNotIn("private.sock", category)
+        self.assertEqual(_namespace_failure_category(""), "journal-unavailable")
 
     def _fixture_source(self, root: Path) -> Path:
         for index, relative in enumerate(FIXTURE_MODULES):

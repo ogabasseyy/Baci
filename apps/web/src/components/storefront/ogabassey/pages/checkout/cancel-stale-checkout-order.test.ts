@@ -11,6 +11,7 @@ describe('cancelStaleCheckoutOrder', () => {
     '{}',
     '{"success":true}',
     '{"success":false,"cancelled":true}',
+    '{"success":true,"cancelled":"true"}',
   ])('does not treat an unconfirmed 200 response as cancellation: %s', async (body) => {
     const result = await cancelStaleCheckoutOrder({
       isAuthenticated: false,

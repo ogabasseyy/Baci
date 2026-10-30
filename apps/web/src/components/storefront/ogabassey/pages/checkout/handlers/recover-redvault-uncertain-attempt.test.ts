@@ -7,71 +7,16 @@ import {
   saveRedvaultUncertainAttempt,
 } from '../redvault-uncertain-attempt';
 import { recoverRedvaultUncertainAttempt } from './recover-redvault-uncertain-attempt';
+import {
+  attempt,
+  cartId,
+  merchantId,
+  orderRequest,
+  response,
+  sessionId,
+} from './recover-redvault-uncertain-attempt.test-support';
 
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: vi.fn() }));
-
-const merchantId = '11111111-1111-4111-8111-111111111111';
-const cartId = '22222222-2222-4222-8222-222222222222';
-const sessionId = '44444444-4444-4444-8444-444444444444';
-const fingerprint = `uba_redvault:${JSON.stringify({
-  merchantId,
-  customerEmail: 'ada@example.com',
-  items: [{ id: 'phone' }],
-})}`;
-const orderRequest = {
-  merchant_id: merchantId,
-  customer_email: 'ada@example.com',
-  customer_name: 'Ada Customer',
-  customer_phone: '08000000000',
-  items: [{ product_id: 'phone', name: 'Phone', quantity: 1, price: 100 }],
-  subtotal: 100,
-  payment_method: 'uba_redvault',
-  shared_cart: {
-    cart_id: cartId,
-    cart_version: 1,
-    checkout_generation: 1,
-    checkout_session_id: sessionId,
-  },
-};
-const attempt = {
-  merchantId,
-  idempotencyKey: 'attempt-key',
-  fingerprint,
-  customer: {
-    email: 'ada@example.com',
-    name: 'Ada Customer',
-    phone: '08000000000',
-  },
-  billingAddress: {
-    line1: 'Store pickup',
-    city: 'Lagos',
-    state: 'Lagos',
-    country: 'NG',
-  },
-  orderRequest: orderRequest as never,
-};
-const response = {
-  order: {
-    id: 'order-1',
-    total: 102.5,
-    currency: 'NGN',
-    tracking_token: 'tracking-token',
-  },
-  redvault: {
-    quote: {
-      product_subtotal_kobo: 10000,
-      eligible_subtotal_kobo: 10000,
-      ineligible_subtotal_kobo: 0,
-      discount_kobo: 500,
-      assurance_fee_kobo: 0,
-      tax_kobo: 750,
-      shipping_kobo: 0,
-      gift_wrapping_kobo: 0,
-      payable_kobo: 10250,
-      mixed_basket: false,
-    },
-  },
-};
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -151,6 +96,46 @@ it('retains the attempt if the server response or order identity cannot be confi
   expect(readRedvaultUncertainAttempt(merchantId).kind).toBe('pending');
 });
 
+it.each([
+  { ...response.order, id: '' },
+  { ...response.order, tracking_token: '' },
+  { ...response.order, currency: 'USD' },
+  { ...response.order, total: '102.5' },
+])('retains the fence for a malformed recovered order: %j', async (order) => {
+  saveRedvaultUncertainAttempt(attempt);
+  const request = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(Response.json({ ...response, order }));
+  expect(
+    await recoverRedvaultUncertainAttempt({
+      merchantId,
+      pendingOrder: null,
+      request,
+    })
+  ).toEqual({ kind: 'unavailable' });
+  expect(readRedvaultUncertainAttempt(merchantId).kind).toBe('pending');
+});
+
+it('keeps the existing currency normalization and order-number fallback', async () => {
+  saveRedvaultUncertainAttempt(attempt);
+  const request = vi.fn<typeof fetch>().mockResolvedValue(
+    Response.json({
+      ...response,
+      order: { ...response.order, currency: ' ngn ', order_number: 123 },
+    })
+  );
+  expect(
+    await recoverRedvaultUncertainAttempt({
+      merchantId,
+      pendingOrder: null,
+      request,
+    })
+  ).toMatchObject({
+    kind: 'recovered',
+    snapshot: { orderNumber: 'ORDER-1' },
+  });
+});
+
 it('never overwrites an unresolved request with a changed checkout', () => {
   saveRedvaultUncertainAttempt(attempt);
   expect(() =>
@@ -219,16 +204,14 @@ it('keeps an uncertain attempt when retirement names a different checkout', asyn
   const stored = JSON.parse(sessionStorage.getItem(key) ?? 'null');
   stored.createdAt = Date.now() - 31 * 60_000;
   sessionStorage.setItem(key, JSON.stringify(stored));
-  const request = vi
-    .fn<typeof fetch>()
-    .mockResolvedValue(
-      Response.json({
-        kind: 'retired',
-        cartId,
-        checkoutSessionId: 'other',
-        checkoutGeneration: 1,
-      })
-    );
+  const request = vi.fn<typeof fetch>().mockResolvedValue(
+    Response.json({
+      kind: 'retired',
+      cartId,
+      checkoutSessionId: 'other',
+      checkoutGeneration: 1,
+    })
+  );
 
   expect(
     await recoverRedvaultUncertainAttempt({

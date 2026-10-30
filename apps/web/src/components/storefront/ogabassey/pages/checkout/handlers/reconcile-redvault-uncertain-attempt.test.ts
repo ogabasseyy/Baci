@@ -14,16 +14,14 @@ const attempt = {
 };
 
 it('sends the saved session binding and accepts only its matching retirement receipt', async () => {
-  const request = vi
-    .fn()
-    .mockResolvedValue(
-      Response.json({
-        kind: 'retired',
-        cartId: binding.cart_id,
-        checkoutSessionId: binding.checkout_session_id,
-        checkoutGeneration: binding.checkout_generation,
-      })
-    );
+  const request = vi.fn().mockResolvedValue(
+    Response.json({
+      kind: 'retired',
+      cartId: binding.cart_id,
+      checkoutSessionId: binding.checkout_session_id,
+      checkoutGeneration: binding.checkout_generation,
+    })
+  );
   const signal = new AbortController().signal;
   expect(
     await reconcileRedvaultUncertainAttempt({
@@ -73,4 +71,40 @@ it('does not retire the saved attempt for a different checkout or an unavailable
   expect(await reconcileRedvaultUncertainAttempt(input)).toEqual({
     kind: 'unavailable',
   });
+});
+
+it('does not accept a submitted result whose order cannot be recovered', async () => {
+  const request = vi.fn().mockResolvedValue(
+    Response.json({
+      kind: 'submitted',
+      order: { id: 'order-1', currency: 'NGN', total: 100 },
+    })
+  );
+  expect(
+    await reconcileRedvaultUncertainAttempt({
+      attempt: attempt as never,
+      request,
+      signal: new AbortController().signal,
+    })
+  ).toEqual({ kind: 'unavailable' });
+});
+
+it('preserves the submitted order and quote for recovery', async () => {
+  const payload = {
+    kind: 'submitted',
+    order: {
+      id: 'order-1',
+      tracking_token: 'proof',
+      currency: 'NGN',
+      total: 100,
+    },
+    redvault: { quote: { payable_kobo: 10000 } },
+  };
+  expect(
+    await reconcileRedvaultUncertainAttempt({
+      attempt: attempt as never,
+      request: vi.fn().mockResolvedValue(Response.json(payload)),
+      signal: new AbortController().signal,
+    })
+  ).toEqual({ kind: 'submitted', payload });
 });

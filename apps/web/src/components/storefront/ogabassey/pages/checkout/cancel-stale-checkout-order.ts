@@ -1,4 +1,5 @@
 import { fetchWithCsrf } from '@/lib/api-client';
+import { staleCheckoutCancellationResponseSchema } from '@/schemas/stale-checkout-cancellation-response';
 import { verifyCancelledRedvaultOrder } from './verify-cancelled-redvault-order';
 
 export type CancelStaleCheckoutOrderResult =
@@ -15,16 +16,11 @@ async function isConfirmedCancellation(
   confirmation: Parameters<typeof verifyCancelledRedvaultOrder>[0]
 ): Promise<boolean> {
   try {
-    const body: unknown = await response.json();
-    const valid =
-      typeof body === 'object' &&
-      body !== null &&
-      'success' in body &&
-      body.success === true &&
-      'cancelled' in body &&
-      typeof body.cancelled === 'boolean';
-    if (!valid || !('cancelled' in body)) return false;
-    if (body.cancelled === true || !requireNewCancellation) return true;
+    const body = staleCheckoutCancellationResponseSchema.safeParse(
+      await response.json()
+    );
+    if (!body.success) return false;
+    if (body.data.cancelled || !requireNewCancellation) return true;
     return await verifyCancelledRedvaultOrder(confirmation);
   } catch {
     return false;

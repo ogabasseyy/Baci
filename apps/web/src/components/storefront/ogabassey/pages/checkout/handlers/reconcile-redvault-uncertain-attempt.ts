@@ -1,5 +1,6 @@
 import { cartRoute } from '@/hooks/cart/shared-cart-client-support';
-import { readRedvaultUncertainAttempt } from '../redvault-uncertain-attempt';
+import { redvaultReconciliationResponseSchema } from '@/schemas/redvault-reconciliation-response';
+import type { readRedvaultUncertainAttempt } from '../redvault-uncertain-attempt';
 
 type Attempt = Extract<
   ReturnType<typeof readRedvaultUncertainAttempt>,
@@ -42,9 +43,11 @@ export async function reconcileRedvaultUncertainAttempt({
       }
     );
     if (!response.ok || signal.aborted) return { kind: 'unavailable' };
-    const data: unknown = await response.json();
-    if (!data || typeof data !== 'object') return { kind: 'unavailable' };
-    const result = data as Record<string, unknown>;
+    const parsed = redvaultReconciliationResponseSchema.safeParse(
+      await response.json()
+    );
+    if (!parsed.success) return { kind: 'unavailable' };
+    const result = parsed.data;
     if (
       result.kind === 'retired' &&
       result.cartId === binding.cart_id &&
@@ -53,7 +56,7 @@ export async function reconcileRedvaultUncertainAttempt({
     )
       return { kind: 'retired' };
     if (result.kind === 'submitted')
-      return { kind: 'submitted', payload: data };
+      return { kind: 'submitted', payload: result };
   } catch {
     // Preserve the attempt whenever the server cannot confirm the outcome.
   }

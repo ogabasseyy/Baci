@@ -1,4 +1,3 @@
-import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
 import {
   getCartCookieEpoch,
   isCartCookieEpochCurrent,
@@ -13,7 +12,9 @@ import {
 } from '@/hooks/cart/shared-cart-session-revoke-client';
 import { getCartSessionGeneration } from '@/hooks/cart/shared-cart-storage';
 import { fetchWithCsrf } from '@/lib/api-client';
+import { redvaultRecoveredOrderResponseSchema } from '@/schemas/redvault-recovered-order-response';
 import { parseRedvaultOrderQuote } from '../parse-redvault-order-quote';
+import type { PendingCheckoutOrderSnapshot } from '../pending-checkout-order';
 import { persistPendingCheckoutOrder } from '../persist-pending-checkout-order';
 import { readRedvaultReviewRecovery } from '../read-redvault-review-recovery';
 import {
@@ -146,32 +147,12 @@ async function recoverLocked(
   }
   try {
     if (!isCurrent()) return { kind: 'unavailable' };
-    if (
-      !payload ||
-      typeof payload !== 'object' ||
-      !('order' in payload) ||
-      !payload.order ||
-      typeof payload.order !== 'object'
-    )
-      return { kind: 'unavailable' };
-    const order = payload.order as Record<string, unknown>;
-    if (
-      typeof order.id !== 'string' ||
-      !order.id ||
-      typeof order.tracking_token !== 'string' ||
-      !order.tracking_token ||
-      typeof order.currency !== 'string' ||
-      order.currency.trim().toUpperCase() !== 'NGN' ||
-      typeof order.total !== 'number' ||
-      !Number.isFinite(order.total)
-    ) {
-      return { kind: 'unavailable' };
-    }
+    const parsed = redvaultRecoveredOrderResponseSchema.safeParse(payload);
+    if (!parsed.success) return { kind: 'unavailable' };
+    const { order } = parsed.data;
     const summary = parseRedvaultOrderQuote(payload);
     const orderNumber =
-      typeof order.order_number === 'string' && order.order_number
-        ? order.order_number
-        : order.id.slice(0, 8).toUpperCase();
+      order.order_number || order.id.slice(0, 8).toUpperCase();
     const ready = {
       cartId: binding.cart_id,
       billingAddress: attempt.billingAddress,

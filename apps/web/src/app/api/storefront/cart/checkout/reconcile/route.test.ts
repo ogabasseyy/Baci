@@ -88,11 +88,27 @@ beforeEach(() => {
   });
 });
 
-it('rejects invalid CSRF before authenticating or invoking recovery', async () => {
+it('rejects invalid CSRF before the authentication lookup on this guest-capable route', async () => {
   mocks.csrf.mockResolvedValueOnce({ valid: false });
   expect((await POST(request())).status).toBe(403);
   expect(mocks.auth).not.toHaveBeenCalled();
   expect(mocks.rpc).not.toHaveBeenCalled();
+});
+
+it('allows a verified guest only when the cart proof is valid', async () => {
+  mocks.auth.mockResolvedValue({
+    user: null,
+    error: 'Not authenticated',
+    supabase: null,
+  });
+  expect((await POST(request())).status).toBe(200);
+  expect(mocks.resolveProof).toHaveBeenCalledWith(
+    expect.any(NextRequest),
+    expect.objectContaining({ userId: null })
+  );
+  mocks.resolveProof.mockReturnValueOnce({ ok: false });
+  expect((await POST(request())).status).toBe(401);
+  expect(mocks.rpc).toHaveBeenCalledOnce();
 });
 
 it('rejects malformed input and denied quota before invoking recovery', async () => {

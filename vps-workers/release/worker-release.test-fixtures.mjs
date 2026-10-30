@@ -92,7 +92,7 @@ if [ -f apps/web/package.json ]; then mkdir -p apps/web/node_modules/.bin && pri
   );
   write(
     join(bin, 'node'),
-    '#!/usr/bin/env bash\n[ ! -e "$HOME/fail-preflight" ] || exit 1\n[ -r .env ] || exit 3\n',
+    '#!/usr/bin/env bash\n[ ! -e "$HOME/fail-preflight" ] || exit 1\n# Like the real preflight: ../.env relative to the resolved script path.\n[ -r "$(dirname "$(readlink -f "$1")")/../.env" ] || exit 3\n',
     0o755
   );
   return bin;

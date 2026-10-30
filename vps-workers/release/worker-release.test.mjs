@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
-import { existsSync, readlinkSync, realpathSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+  existsSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { createHost } from './worker-release.test-fixtures.mjs';
 
@@ -219,3 +225,40 @@ function describeActivationFailure() {
     }
   );
 }
+
+test(
+  'bugfix: jobs resolving ../.env from their real release path read the persistent environment',
+  linuxOnly,
+  () => {
+    const host = createHost();
+    release(host, host.firstSha);
+
+    const job = realpathSync(
+      join(host.root, 'baci-workers/jobs/preflight-direct-web-workers.mjs')
+    );
+    assert.equal(
+      readFileSync(join(dirname(job), '../.env'), 'utf8'),
+      'BACI_REPO_DIR=x\n'
+    );
+    assert.equal(
+      realpathSync(join(dirname(job), '../logs')),
+      realpathSync(join(host.root, 'baci-workers/logs'))
+    );
+  }
+);
+
+test(
+  'bugfix: a first release that fails preflight leaves no active or rollback target',
+  linuxOnly,
+  () => {
+    const host = createHost();
+    assert.equal(host.run('build', host.firstSha).status, 0);
+    writeFileSync(join(host.root, 'fail-preflight'), '');
+
+    const result = host.run('activate', host.firstSha);
+
+    assert.notEqual(result.status, 0);
+    assert.ok(!existsSync(join(host.root, 'current')));
+    assert.ok(!existsSync(join(host.root, 'app-live')));
+  }
+);

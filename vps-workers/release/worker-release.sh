@@ -81,6 +81,13 @@ build_release() {
   cp -a "$release/app/vps-workers" "$release/workers"
   cp "$release/app/.github/scripts/gigl-dotenv.sh" "$release/workers/bin/gigl-dotenv.sh"
   printf '%s' "$sha" > "$release/workers/app-checkout.sha"
+  # Node resolves symlinked entrypoints to their real path, and jobs load
+  # `../.env` (and logs/state) relative to that file, so the release itself
+  # must point at the persistent worker state.
+  local name
+  for name in $PERSISTENT_ENTRIES; do
+    [ "$name" = app-checkout.sha ] || ln -sfn "$WORKERS/$name" "$release/workers/$name"
+  done
   echo "worker-release: installing worker dependencies for $sha"
   (cd "$release/workers" && CI=true pnpm install --frozen-lockfile --prod)
   [ -z "$(git -C "$release/app" status --porcelain=v1 --untracked-files=no)" ] ||
@@ -211,7 +218,12 @@ activate_release() {
   switch_current "$sha"
   if ! preflight; then
     echo "worker-release: preflight failed for $sha; restoring ${previous:-nothing}." >&2
-    if [ -n "$previous" ] && [ "$previous" != "$sha" ]; then switch_current "$previous"; fi
+    if [ -n "$previous" ] && [ "$previous" != "$sha" ]; then
+      switch_current "$previous"
+    else
+      # A rejected first release must not remain the active or rollback target.
+      rm -f "$ROOT/current" "$ROOT/app-live"
+    fi
     exit 1
   fi
   flock -u 8

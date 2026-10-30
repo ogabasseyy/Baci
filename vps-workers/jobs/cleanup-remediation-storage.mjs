@@ -1,10 +1,10 @@
 import { dirname, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import {
   DEFAULT_DRAIN_MAX_BYTES,
   DEFAULT_DRAIN_MAX_ROTATED_FILES,
 } from '../lib/vercel-error-events-limits.mjs';
 import { cleanupRemediationStorage } from './cleanup-remediation-storage-core.mjs';
+import { isEntrypoint } from '../lib/is-entrypoint.mjs';
 
 const DEFAULT_ORPHAN_STORE_RETENTION_MS = 24 * 60 * 60 * 1_000;
 const DEFAULT_WORKER_LOG_DIR = 'logs';
@@ -65,8 +65,7 @@ export function runRemediationStorageCleanup({
 }
 
 if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
+  isEntrypoint(import.meta.url)
 ) {
   const { config } = await import('dotenv');
   config({ path: new URL('../.env', import.meta.url) });

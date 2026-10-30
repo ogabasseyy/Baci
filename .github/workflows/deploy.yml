@@ -71,16 +71,48 @@ jobs:
       - name: Run CWV workflow actionlint
         uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
 
+  # Every main release installs the exact commit's VPS workers first. The
+  # runner (deployment identity) hands the SHA to vps-workers/release, which
+  # fetches, builds and runs it as the unprivileged baci-worker user, so
+  # dependency lifecycle scripts and worker runtime never see deployment
+  # credentials. A host that is not provisioned fails closed here.
+  vps-worker-sync:
+    if: github.ref == 'refs/heads/main'
+    runs-on: baci-deploy
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: .worker-sync
+          persist-credentials: false
+          sparse-checkout: |
+            vps-workers/release/sync-from-runner.sh
+            vps-workers/release/worker-release.sh
+            .github/scripts/verify-coordinated-release.sh
+          sparse-checkout-cone-mode: false
+      # A dispatch the coordination guard refuses must not change workers.
+      - name: Verify coordinated release identity before worker activation
+        env:
+          EXPECTED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
+          COORDINATION_ID: ${{ inputs.coordination_id }}
+        run: bash .worker-sync/.github/scripts/verify-coordinated-release.sh
+      - name: Install and activate the exact worker release
+        run: bash .worker-sync/vps-workers/release/sync-from-runner.sh "$GITHUB_SHA"
+
   # Enqueue-capable migrations and Vercel cron removals must never land until
   # its matching VPS schedule is live. Verify it on the VPS-hosted deploy
   # runner first; missing worker files or schedule entries fail closed before
   # database credentials are exposed to a job.
   vps-drain-readiness:
-    needs: [changes]
+    needs: [changes, vps-worker-sync]
     # always() so a skipped changes job (manual dispatch) still runs the
     # cache-invalidation and GIGL cutover-marker verifications below; only
     # the exact-SHA GIGL step gates itself on the tracking changeset.
-    if: always() && github.ref == 'refs/heads/main'
+    # Verifiers that execute worker code run as the worker user from the
+    # installed release (run-as-worker.sh), never as the runner.
+    if: always() && github.ref == 'refs/heads/main' && needs.vps-worker-sync.result == 'success'
     outputs:
       cutover_latched: ${{ steps.gigl-cutover-latch.outputs.latched }}
       tracking_stale: ${{ steps.gigl-cutover-latch.outputs.tracking_stale }}
@@ -104,6 +136,7 @@ jobs:
           sparse-checkout: |
             vps-workers/bin/verify-cache-invalidation-drain-installed.sh
             vps-workers/bin/verify-gigl-direct-workers-installed.sh
+            vps-workers/release/run-as-worker.sh
             .github/scripts/check-gigl-cutover-latch.sh
             .github/scripts/resolve-gigl-latch-identity.sh
             .github/scripts/gigl-dotenv.sh
@@ -117,8 +150,8 @@ jobs:
         run: bash .readiness-checkout/.github/scripts/verify-coordinated-release.sh
       - name: Verify production cache-invalidation drain installation
         env:
-          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
-        run: .readiness-checkout/vps-workers/bin/verify-cache-invalidation-drain-installed.sh
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/srv/baci-worker/baci-workers' }}
+        run: bash .readiness-checkout/vps-workers/release/run-as-worker.sh vps-workers/bin/verify-cache-invalidation-drain-installed.sh
       - name: Verify GIGL tracking cutover marker
         # Runs on EVERY main push with no changeset condition: the marker
         # proves deploy.sh has installed the worker and its schedule at
@@ -133,8 +166,8 @@ jobs:
         # GIGL defaults to enabled, and installing the worker once is the
         # safe default even for a currently-disabled provider.
         env:
-          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
-        run: .readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh --cutover-marker
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/srv/baci-worker/baci-workers' }}
+        run: bash .readiness-checkout/vps-workers/release/run-as-worker.sh vps-workers/bin/verify-gigl-direct-workers-installed.sh --cutover-marker
       - name: Check GIGL cutover latch
         id: gigl-cutover-latch
         # Signal, not gate: reports whether ANY capability smoke has yet
@@ -160,7 +193,7 @@ jobs:
         # only), not a production credential.
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/srv/baci-worker/baci-workers' }}
         run: .readiness-checkout/.github/scripts/check-gigl-cutover-latch.sh "$VPS_WORKER_REMOTE_DIR" .readiness-checkout
       - name: Warn on manifest-only worker dependency drift
         # Signal, not gate (this step never fails): manifests are
@@ -187,12 +220,12 @@ jobs:
         # Manual dispatches run it too: the changes job is skipped on
         # dispatch, so its outputs are unset and `!= 'false'` is true —
         # a dispatch can never land the cron removal with a stale worker.
-        # Deploy procedure: run vps-workers/deploy.sh before dispatching.
+        # vps-worker-sync installs this exact SHA before this job runs.
         if: needs.changes.outputs.tracking != 'false'
         env:
           BACI_EXPECTED_APP_SHA: ${{ github.sha }}
-          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
-        run: .readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/srv/baci-worker/baci-workers' }}
+        run: bash .readiness-checkout/vps-workers/release/run-as-worker.sh vps-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke
 
   # Apply any pending Supabase migrations AFTER drain readiness and BEFORE the
   # Vercel deploy so application code never lands ahead of the schema it depends on. Migrations
@@ -341,8 +374,8 @@ jobs:
         # for the installed revision it actually verified.
         env:
           BACI_EXPECTED_APP_SHA: ${{ needs.changes.outputs.tracking == 'false' && needs.vps-drain-readiness.outputs.installed_sha || github.sha }}
-          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/home/bassey/baci-workers' }}
-        run: bash .github/scripts/refresh-gigl-cutover-latch.sh
+          VPS_WORKER_REMOTE_DIR: ${{ vars.VPS_WORKER_REMOTE_DIR || '/srv/baci-worker/baci-workers' }}
+        run: bash vps-workers/release/run-as-worker.sh .github/scripts/refresh-gigl-cutover-latch.sh
 
   deploy-production:
     needs: [changes, cwv-runner-contracts, db-migrations, gigl-worker-capability, vps-drain-readiness]

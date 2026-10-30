@@ -7,12 +7,12 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { appendFileSync, mkdirSync, renameSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { withDrainFileLock } from '../lib/drain-file-lock.mjs';
 import {
   DEFAULT_DRAIN_MAX_BYTES,
   DEFAULT_DRAIN_MAX_ROTATED_FILES,
 } from '../lib/vercel-error-events-limits.mjs';
+import { isEntrypoint } from '../lib/is-entrypoint.mjs';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PATH = '/__baci/vercel-log-drain';
@@ -246,8 +246,7 @@ async function main() {
 }
 
 if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
+  isEntrypoint(import.meta.url)
 ) {
   await main();
 }

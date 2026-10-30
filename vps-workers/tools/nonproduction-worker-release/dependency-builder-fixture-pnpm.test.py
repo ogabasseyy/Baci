@@ -27,10 +27,10 @@ SPEC.loader.exec_module(fixture)
 
 
 class FixturePnpmDiagnosticTests(unittest.TestCase):
-    def test_append_only_reporter_is_limited_to_synthetic_deploy_invocation(self):
+    def test_ndjson_reporter_is_limited_to_synthetic_deploy_invocation(self):
         deploy = fixture._pnpm_command("/trusted/pnpm.cjs", ("--filter", "@baci/web", "deploy"))
         install = fixture._pnpm_command("/trusted/pnpm.cjs", ("install", "--offline"))
-        self.assertEqual(deploy, ("/usr/bin/node", "/trusted/pnpm.cjs", "--reporter=append-only",
+        self.assertEqual(deploy, ("/usr/bin/node", "/trusted/pnpm.cjs", "--reporter=ndjson",
                                   "--filter", "@baci/web", "deploy"))
         self.assertEqual(install, ("/usr/bin/node", "/trusted/pnpm.cjs", "install", "--offline"))
 

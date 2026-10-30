@@ -1,0 +1,133 @@
+import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+
+// Runs the LIVE behind-base script from lefthook.yml (not a copy) against
+// throwaway repositories, so a regression in the hook fails here instead of
+// silently letting stale branches through or hanging pushes again.
+function behindBaseScript() {
+  const lines = readFileSync(
+    new URL('../../lefthook.yml', import.meta.url),
+    'utf8'
+  ).split('\n');
+  const jobIndex = lines.findIndex((line) => line === '    behind-base:');
+  assert.ok(jobIndex >= 0, 'behind-base job must remain extractable');
+  const runIndex = lines.findIndex(
+    (line, index) => index > jobIndex && line === '      run: |'
+  );
+  assert.ok(runIndex > jobIndex, 'behind-base run block must remain extractable');
+  const body = [];
+  for (const line of lines.slice(runIndex + 1)) {
+    if (line.trim() !== '' && !line.startsWith('        ')) break;
+    body.push(line.slice(8));
+  }
+  return body.join('\n').replaceAll('{1}', 'origin');
+}
+
+// Hermetic git: ignore the developer's global/system config (global
+// core.hooksPath shims, signing, credential helpers) so the throwaway repos
+// behave the same on every machine and stay fast.
+const emptyGlobalConfig = join(mkdtempSync(join(tmpdir(), 'git-cfg-')), 'gitconfig');
+writeFileSync(emptyGlobalConfig, '');
+const gitEnv = {
+  ...process.env,
+  GIT_CONFIG_GLOBAL: emptyGlobalConfig,
+  GIT_CONFIG_NOSYSTEM: '1',
+  GIT_AUTHOR_NAME: 'test',
+  GIT_AUTHOR_EMAIL: 'test@example.com',
+  GIT_COMMITTER_NAME: 'test',
+  GIT_COMMITTER_EMAIL: 'test@example.com',
+};
+
+const git = (cwd, ...args) =>
+  execFileSync('git', args, { cwd, encoding: 'utf8', env: gitEnv }).trim();
+
+function commit(cwd, name) {
+  writeFileSync(join(cwd, name), name);
+  git(cwd, 'add', name);
+  git(cwd, 'commit', '-q', '-m', name);
+  return git(cwd, 'rev-parse', 'HEAD');
+}
+
+function setup() {
+  const root = mkdtempSync(join(tmpdir(), 'behind-base-'));
+  const remote = join(root, 'remote.git');
+  git(root, 'init', '-q', '--bare', '-b', 'main', remote);
+  const work = join(root, 'work');
+  git(root, 'clone', '-q', remote, work);
+  git(work, 'checkout', '-q', '-b', 'main');
+  commit(work, 'base');
+  git(work, 'push', '-q', 'origin', 'main');
+  git(work, 'remote', 'set-head', 'origin', 'main');
+  git(work, 'checkout', '-q', '-b', 'feature');
+  const featureSha = commit(work, 'feature');
+  return { root, remote, work, featureSha };
+}
+
+function advanceRemoteMain(root, remote) {
+  const other = join(root, 'other');
+  git(root, 'clone', '-q', remote, other);
+  commit(other, 'peer');
+  git(other, 'push', '-q', 'origin', 'main');
+}
+
+function runHook(work, featureSha) {
+  return spawnSync('sh', ['-c', behindBaseScript()], {
+    cwd: work,
+    encoding: 'utf8',
+    env: gitEnv,
+    input: `refs/heads/feature ${featureSha} refs/heads/feature ${'0'.repeat(40)}\n`,
+    timeout: 30_000,
+  });
+}
+
+test('lets an up-to-date branch through', () => {
+  const { root, work, featureSha } = setup();
+  try {
+    const result = runHook(work, featureSha);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('blocks a branch behind base commits that were never fetched locally', () => {
+  const { root, remote, work, featureSha } = setup();
+  try {
+    advanceRemoteMain(root, remote);
+    const result = runHook(work, featureSha);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /behind origin\/main/);
+    assert.match(result.stdout, /git fetch origin main/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('reports the exact count once the base tip is available locally', () => {
+  const { root, remote, work, featureSha } = setup();
+  try {
+    advanceRemoteMain(root, remote);
+    git(work, 'fetch', '-q', 'origin', 'main');
+    const result = runHook(work, featureSha);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /is 1 commit\(s\) behind origin\/main/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('skips loudly instead of hanging when the remote cannot be read', () => {
+  const { root, work, featureSha } = setup();
+  try {
+    git(work, 'remote', 'set-url', 'origin', join(root, 'missing.git'));
+    const result = runHook(work, featureSha);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /skipping behind-base check/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

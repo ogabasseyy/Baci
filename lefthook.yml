@@ -210,26 +210,36 @@ pre-push:
           fi
 
           base_ref=${base#${remote}/}
-          if ! git fetch -q "$remote" "$base_ref" 2>/dev/null; then
-            echo "⚠️  Couldn't fetch $base for '$branch' — skipping behind-base check (offline?)."
+          # Read only the base tip with one bounded ls-remote round trip
+          # instead of `git fetch`: a fetch in this many-worktree repo
+          # negotiates packs (30s+) and has no stall limit, so a slow or
+          # contended remote hung the push indefinitely. lowSpeed* aborts a
+          # stalled HTTP transfer; GIT_TERMINAL_PROMPT=0 keeps a credential
+          # prompt from blocking a non-interactive push.
+          base_sha=$(GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1000 \
+            -c http.lowSpeedTime=20 ls-remote "$remote" "refs/heads/$base_ref" \
+            2>/dev/null | awk 'NR==1 { print $1 }')
+          if [ -z "$base_sha" ]; then
+            echo "⚠️  Couldn't read $base for '$branch' — skipping behind-base check (offline?)."
             continue
           fi
 
-          # Count commits in $base not reachable from the SHA being
-          # pushed — NOT from HEAD, so cross-branch pushes work.
-          #
-          # Use FETCH_HEAD (the exact tip we just fetched) rather than
-          # the local tracking branch ($base). Single-branch clones and
-          # certain git configs don't maintain refs/remotes/origin/*,
-          # so $base may be stale or missing entirely, causing
-          # `git rev-list` to fail silently and leave $behind empty.
-          # `|| echo 0` ensures the numeric comparison below always
-          # operates on a real integer instead of throwing
-          # `integer expression expected` and bypassing the guard.
-          behind=$(git rev-list --count "$local_sha..FETCH_HEAD" 2>/dev/null || echo 0)
-          if [ "${behind:-0}" -gt 0 ]; then
+          # Compare against the SHA being pushed — NOT HEAD — so
+          # cross-branch pushes work. Up to date when the base tip is already
+          # in the pushed history. A tip that isn't present locally cannot be
+          # an ancestor, so the branch is behind without a fetch to prove it.
+          if git merge-base --is-ancestor "$base_sha" "$local_sha" 2>/dev/null; then
+            continue
+          fi
+          if git cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
+            behind=$(git rev-list --count "$local_sha..$base_sha" 2>/dev/null || echo 1)
+          else
+            behind="an unknown number of"
+          fi
+          if [ -n "$behind" ] && [ "$behind" != "0" ]; then
             echo ""
             echo "❌ Branch '$branch' is $behind commit(s) behind $base."
+            echo "   Fetch it first: git fetch $remote $base_ref"
             echo "   Run one of:"
             echo "     git merge $base"
             echo "     git rebase $base"

@@ -3,7 +3,9 @@ from __future__ import annotations
 import sys
 import os
 import tempfile
+import types
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -11,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from worker_release_egress_systemd_integration import (
     _approved_socket_properties, _namespace_failure_category, _safe_diagnostic,
     _socket_bind_mount_command, _namespace_missing_path,
+    _unit_journal_text, _cleanup_systemd_unit,
 )
 from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture_modules
 
@@ -82,6 +85,50 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
             (expected,)))
         self.assertIsNone(_namespace_missing_path(
             f"permission denied: {expected}", (expected,)))
+
+    def test_unit_diagnostics_query_exact_unit_and_systemctl_status(self):
+        calls = []
+
+        def capture(command, **_kwargs):
+            calls.append(command)
+            return type("Result", (), {"stdout": "fixed journal text", "stderr": ""})()
+
+        fake_process = types.ModuleType("worker_release_bounded_process")
+        fake_process.run_bounded_capture = capture
+        with patch.dict(sys.modules, {"worker_release_bounded_process": fake_process}):
+            text = _unit_journal_text("worker-egress-prototype-123")
+        self.assertIn("fixed journal text", text)
+        self.assertTrue(any("--unit=worker-egress-prototype-123.service" in call for call in calls))
+        self.assertTrue(any("status" in call and "worker-egress-prototype-123.service" in call
+                            for call in calls))
+        self.assertFalse(any("--collect" in call for call in calls))
+
+    def test_cleanup_stops_and_resets_only_exact_fixture_unit(self):
+        calls = []
+
+        def run(command, **_kwargs):
+            calls.append(command)
+            return type("Result", (), {"returncode": 0, "stdout": "loaded\n"})()
+
+        with patch("worker_release_egress_systemd_integration.subprocess.run", side_effect=run):
+            _cleanup_systemd_unit("worker-egress-prototype-123")
+        self.assertEqual(calls, [
+            ("/usr/bin/systemctl", "--system", "show", "--property=LoadState", "--value",
+             "worker-egress-prototype-123.service"),
+            ("/usr/bin/systemctl", "--system", "stop", "worker-egress-prototype-123.service"),
+            ("/usr/bin/systemctl", "--system", "reset-failed", "worker-egress-prototype-123.service"),
+        ])
+
+    def test_cleanup_does_not_stop_an_unloaded_unit(self):
+        calls = []
+
+        def run(command, **_kwargs):
+            calls.append(command)
+            return type("Result", (), {"returncode": 0, "stdout": "not-found\n"})()
+
+        with patch("worker_release_egress_systemd_integration.subprocess.run", side_effect=run):
+            _cleanup_systemd_unit("worker-egress-prototype-123")
+        self.assertEqual(len(calls), 1)
 
     def _fixture_source(self, root: Path) -> Path:
         for index, relative in enumerate(FIXTURE_MODULES):

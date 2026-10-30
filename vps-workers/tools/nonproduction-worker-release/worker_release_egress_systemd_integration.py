@@ -181,7 +181,7 @@ def _unmount_socket_source_alias(source_alias: Path, *,
 
 
 def _unit_journal_text(unit: str) -> str:
-    """Read a small bounded boot-journal slice for one generated fixture unit."""
+    """Read bounded journal and unit status before its transient unit is reset."""
     if not re.fullmatch(r"worker-egress-prototype-[0-9]{1,10}", unit):
         return ""
     bin_path = HERE.parents[1] / "bin"
@@ -190,15 +190,48 @@ def _unit_journal_text(unit: str) -> str:
     from worker_release_bounded_process import run_bounded_capture
 
     try:
-        result = run_bounded_capture(
+        env = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
+        journal = run_bounded_capture(
             ("/usr/bin/journalctl", "--no-pager", "--output=cat", "--lines=30",
              f"--unit={unit}.service"),
-            timeout=2, max_stream_bytes=4096,
-            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
+            timeout=2, max_stream_bytes=4096, env=env,
+        )
+        status = run_bounded_capture(
+            ("/usr/bin/systemctl", "--system", "status", "--no-pager", "--full",
+             f"{unit}.service"),
+            timeout=2, max_stream_bytes=4096, env=env,
         )
     except Exception:
         return ""
-    return result.stdout + result.stderr
+    return journal.stdout + journal.stderr + status.stdout + status.stderr
+
+
+def _cleanup_systemd_unit(unit: str) -> None:
+    """Stop/reset only the exact disposable unit after diagnostics are captured."""
+    if not re.fullmatch(r"worker-egress-prototype-[0-9]{1,10}", unit):
+        raise RuntimeError("egress fixture unit name is invalid")
+    env = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
+    try:
+        state = subprocess.run(("/usr/bin/systemctl", "--system", "show",
+                                "--property=LoadState", "--value", f"{unit}.service"),
+                               check=False, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, text=True, timeout=5, env=env)
+        if state.returncode != 0:
+            raise RuntimeError("egress fixture unit cleanup failed")
+        if state.stdout.strip() == "not-found":
+            return
+        stopped = subprocess.run(("/usr/bin/systemctl", "--system", "stop",
+                                  f"{unit}.service"), check=False,
+                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, timeout=10, env=env)
+        reset = subprocess.run(("/usr/bin/systemctl", "--system", "reset-failed",
+                                f"{unit}.service"), check=False,
+                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=5, env=env)
+    except (OSError, subprocess.SubprocessError) as error:
+        raise RuntimeError("egress fixture unit cleanup failed") from error
+    if stopped.returncode != 0 or reset.returncode != 0:
+        raise RuntimeError("egress fixture unit cleanup failed")
 
 
 def _run_host_fixture() -> int:
@@ -315,7 +348,7 @@ def _run_host_fixture() -> int:
                 unit = f"worker-egress-prototype-{os.getpid()}"
                 command = [
                     "/usr/bin/systemd-run", "--system", "--wait", "--pipe",
-                    "--collect", f"--unit={unit}", f"--uid={peer_uid}",
+                    f"--unit={unit}", f"--uid={peer_uid}",
                     f"--gid={peer_gid}", "--property=PrivateNetwork=yes",
                     *_approved_socket_properties(socket_path, socket_source_alias, socket_alias),
                     "--property=NoNewPrivileges=yes",
@@ -334,6 +367,7 @@ def _run_host_fixture() -> int:
                     missing_path = _namespace_missing_path(evidence, (
                         socket_source_alias, socket_alias, socket_path, hidden_host_socket,
                         fixture_client, fixture_root, scratch_root, Path("/run"),
+                        Path("/usr/bin/python3"),
                     ))
                     if missing_path is not None:
                         category = f"{category} path={missing_path}"
@@ -341,6 +375,7 @@ def _run_host_fixture() -> int:
                         f"systemd child failed (exit={result.returncode}; category={category})")
             finally:
                 broker_module.connect_public = original_connect
+                _cleanup_systemd_unit(unit)
             for thread in synthetic_threads:
                 thread.join(timeout=3)
                 if thread.is_alive():

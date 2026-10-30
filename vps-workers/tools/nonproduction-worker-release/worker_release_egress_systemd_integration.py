@@ -405,6 +405,22 @@ def _run_seed_unit_socket_probe(*, unit_prefix: str, peer_uid: int, peer_gid: in
     node.chmod(0o755)
     unit = f"worker-seed-socket-probe-{unit_prefix}"
     cleanup_attempted = False
+
+    def fail_probe(message: str, cause: BaseException | None = None) -> None:
+        nonlocal cleanup_attempted
+        cleanup_attempted = True
+        try:
+            _cleanup_systemd_unit(unit)
+        except Exception:
+            failure = RuntimeError(f"{message}; cleanup=failed")
+            if cause is not None:
+                raise failure from cause
+            raise failure
+        failure = RuntimeError(message)
+        if cause is not None:
+            raise failure from cause
+        raise failure
+
     try:
         generated = seed_unit.systemd_command(
             f"baci-worker-seed-{'a' * 12}-{'b' * 32}.service", "a" * 12,
@@ -416,11 +432,11 @@ def _run_seed_unit_socket_probe(*, unit_prefix: str, peer_uid: int, peer_gid: in
                 not in generated):
             raise RuntimeError("seed systemd command does not bind only the fixed socket")
         python_index = generated.index(seed_unit.PYTHON)
-        # The production launcher collects its transient unit immediately. Keep
-        # this disposable probe loaded so fixed terminal properties and journal
-        # evidence remain available until the explicit cleanup below.
+        # Keep the disposable unit loaded for diagnostics; completion is polled
+        # from its pinned active/exited state instead of systemd-run --wait/--pipe.
         probe_prefix = [argument for argument in generated[:python_index]
-                        if argument != "--collect"]
+                        if argument not in {"--collect", "--property=StandardError=null"}]
+        probe_prefix.append("--property=StandardError=journal")
         command = [*probe_prefix, seed_unit.PYTHON,
                    "/run/baci-seed-tools/worker_release_egress_systemd_client.py",
                    "--client", seed_unit.EGRESS_TARGET,
@@ -428,7 +444,20 @@ def _run_seed_unit_socket_probe(*, unit_prefix: str, peer_uid: int, peer_gid: in
         command[command.index(f"--unit=baci-worker-seed-{'a' * 12}-{'b' * 32}.service")] = f"--unit={unit}"
         result = subprocess.run(command, check=False, capture_output=True,
                                 text=True, timeout=45)
-        if result.returncode != 0:
+        probe_failed = result.returncode != 0
+        if not probe_failed:
+            try:
+                seed_unit.wait_for_unit_completion(seed_unit._systemctl, unit)
+            except seed_unit.SeedGenerationRejected as error:
+                journal = _unit_journal_text(unit)
+                summary = _seed_socket_probe_failure_summary(
+                    result.stdout, result.stderr, journal,
+                    (socket_path, hidden_socket, fixture_client, fixture_root, scratch,
+                     source, cache, store, runtime, pnpm, node, Path("/run"), Path("/tmp"),
+                     Path("/etc"), Path("/usr/bin/python3")),
+                )
+                fail_probe(f"seed systemd direct-socket mount probe failed ({summary})", error)
+        if probe_failed:
             journal = _unit_journal_text(unit)
             summary = _seed_socket_probe_failure_summary(
                 result.stdout, result.stderr, journal,
@@ -436,16 +465,11 @@ def _run_seed_unit_socket_probe(*, unit_prefix: str, peer_uid: int, peer_gid: in
                  source, cache, store, runtime, pnpm, node, Path("/run"), Path("/tmp"),
                  Path("/etc"), Path("/usr/bin/python3")),
             )
-            raise RuntimeError(f"seed systemd direct-socket mount probe failed ({summary})")
+            fail_probe(f"seed systemd direct-socket mount probe failed ({summary})")
     except subprocess.TimeoutExpired as error:
         unit_exit = _normalized_unit_exit(_unit_journal_text(unit)) or "unit-state(unavailable)"
         failure = f"seed systemd direct-socket mount probe timed out ({unit_exit})"
-        cleanup_attempted = True
-        try:
-            _cleanup_systemd_unit(unit)
-        except Exception:
-            raise RuntimeError(f"{failure}; cleanup=failed") from error
-        raise RuntimeError(failure) from error
+        fail_probe(failure, error)
     finally:
         seed_unit.EGRESS_SOCKET = original_socket
         if not cleanup_attempted:

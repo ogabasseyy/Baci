@@ -26,6 +26,8 @@ SYSTEMD_RUN = "/usr/bin/systemd-run"
 SYSTEMCTL = "/usr/bin/systemctl"
 PYTHON = "/usr/bin/python3"
 MAX_UNIT_SECONDS = 330
+MAX_UNIT_START_SECONDS = 45
+UNIT_COMPLETION_POLL_SECONDS = 0.1
 MAX_CLEANUP_SECONDS = 30
 MAX_UNIT_OUTPUT = 8192
 _REQUIRED_ADDRESS_FAMILIES = frozenset({"AF_UNIX", "AF_INET", "AF_INET6"})
@@ -156,11 +158,12 @@ def systemd_command(unit: str, sha: str, uid: int, gid: int, *, source: Path,
         f"{EGRESS_SOCKET}:{EGRESS_TARGET}",
     )
     bind_rw = (f"{cache}:/run/baci-seed/cache", f"{store}:/run/baci-seed/store")
-    command = [SYSTEMD_RUN, "--quiet", "--system", "--wait", "--pipe", "--collect",
+    command = [SYSTEMD_RUN, "--quiet", "--system", "--collect",
                f"--unit={unit}", f"--uid={uid}", f"--gid={gid}"]
     properties = {
         "Type": "exec", "KillMode": "mixed", "PrivateNetwork": "yes",
         "RemainAfterExit": "yes", "PrivateUsers": "yes",
+        "StandardOutput": "null", "StandardError": "null",
         "PrivateTmp": "yes", "PrivateDevices": "yes", "NoNewPrivileges": "yes",
         "ProtectSystem": "strict", "ProtectHome": "yes", "ProtectKernelTunables": "yes",
         "ProtectKernelModules": "yes", "ProtectKernelLogs": "yes",
@@ -197,6 +200,7 @@ def validate_active_unit(query, unit: str, uid: int, gid: int, *, source: Path,
         "ActiveState": "active", "SubState": "exited", "Result": "success",
         "ExecMainStatus": "0", "MainPID": "0", "ControlGroup": f"/system.slice/{unit}",
         "Type": "exec", "RemainAfterExit": "yes", "SupplementaryGroups": "",
+        "StandardOutput": "null", "StandardError": "null",
         "KillMode": "mixed", "NoNewPrivileges": "yes",
         "PrivateNetwork": "yes", "PrivateUsers": "yes", "ProtectSystem": "strict",
         "ProtectHome": "yes", "PrivateTmp": "yes", "PrivateDevices": "yes",
@@ -251,6 +255,46 @@ def validate_active_unit(query, unit: str, uid: int, gid: int, *, source: Path,
         raise SeedGenerationRejected("seed unit address-family policy differs from fixed policy")
 
 
+def wait_for_unit_completion(query, unit: str, *, timeout: float = MAX_UNIT_SECONDS + 15,
+                             poll_interval: float = UNIT_COMPLETION_POLL_SECONDS) -> None:
+    """Wait boundedly until the pinned unit reports successful process exit."""
+    if (not isinstance(unit, str)
+            or re.fullmatch(
+                r"(?:baci-worker-seed-[0-9a-f]{12}-[0-9a-f]{32}\.service|"
+                r"worker-seed-socket-probe-[0-9]{1,10})", unit) is None
+            or type(timeout) not in (int, float) or not 0 < timeout <= MAX_UNIT_SECONDS + 15
+            or type(poll_interval) not in (int, float) or not 0 < poll_interval <= 1):
+        raise SeedGenerationRejected("seed verifier completion wait is invalid")
+    deadline = time.monotonic() + timeout
+    properties = ("LoadState", "ActiveState", "SubState", "Result",
+                  "ExecMainStatus", "MainPID")
+    while True:
+        output = query("show", *(f"--property={key}" for key in properties), unit)
+        fields = {}
+        for line in output.splitlines():
+            key, separator, value = line.partition("=")
+            if separator and key in properties:
+                fields[key] = value.strip()
+        if set(fields) != set(properties):
+            raise SeedGenerationRejected("seed verifier unit state is unavailable")
+        load, active, substate = fields["LoadState"], fields["ActiveState"], fields["SubState"]
+        if load != "loaded":
+            raise SeedGenerationRejected("seed verifier unit is not loaded")
+        if active == "active" and substate == "exited":
+            if (fields["Result"] == "success" and fields["ExecMainStatus"] == "0"
+                    and fields["MainPID"] == "0"):
+                return
+            raise SeedGenerationRejected("seed verifier unit exited unsuccessfully")
+        if active in {"inactive", "failed"}:
+            raise SeedGenerationRejected("seed verifier unit exited unsuccessfully")
+        if active not in {"activating", "active", "reloading", "deactivating"}:
+            raise SeedGenerationRejected("seed verifier unit state is invalid")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise SeedGenerationRejected("seed verifier unit completion timed out")
+        time.sleep(min(poll_interval, remaining))
+
+
 def _systemctl(*args: str, timeout: float = 1) -> str:
     try:
         result = subprocess.run((SYSTEMCTL, *args), check=True, stdin=subprocess.DEVNULL,
@@ -275,8 +319,9 @@ def drain_unit(unit: str, uid: int, trusted_root: tuple[int, int, int, int], *,
 
 
 __all__ = ["CGROUP_ROOT", "EGRESS_SOCKET", "MAX_UNIT_OUTPUT", "MAX_UNIT_SECONDS",
+           "MAX_UNIT_START_SECONDS", "UNIT_COMPLETION_POLL_SECONDS",
            "PYTHON", "SeedGenerationRejected", "SYSTEMD_RUN", "SYSTEMCTL", "TOOLS",
            "BIN", "EGRESS_TARGET", "drain_unit", "identity", "preflight_cgroup_root",
-           "systemd_command",
+           "systemd_command", "wait_for_unit_completion",
            "trusted_code_tree", "trusted_directory_chain", "trusted_file", "trusted_socket",
            "validate_active_unit"]

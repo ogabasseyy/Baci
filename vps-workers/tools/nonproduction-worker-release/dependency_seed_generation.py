@@ -14,6 +14,7 @@ from pathlib import Path
 import secrets
 import stat
 import sys
+import time
 from collections.abc import Callable
 
 TOOLS = Path(__file__).resolve().parent
@@ -28,9 +29,11 @@ from dependency_seed_generation_source import digest_pinned_stage_source
 from dependency_seed_generation_workspace import create_seed_scratch, remove_seed_scratch
 from dependency_seed_generation_workspace_gate import validate_seed_collection
 from dependency_seed_generation_unit import (
-    BIN as TRUSTED_BIN, CGROUP_ROOT, EGRESS_SOCKET, MAX_UNIT_OUTPUT, MAX_UNIT_SECONDS,
+    BIN as TRUSTED_BIN, CGROUP_ROOT, EGRESS_SOCKET, MAX_UNIT_OUTPUT,
+    MAX_UNIT_SECONDS, MAX_UNIT_START_SECONDS,
     PYTHON, TOOLS as TRUSTED_TOOLS, drain_unit,
     identity as runtime_identity, validate_active_unit,
+    wait_for_unit_completion,
     trusted_directory_chain,
     preflight_cgroup_root, systemd_command, trusted_code_tree, trusted_file, trusted_socket,
 )
@@ -217,9 +220,18 @@ def _generate_authenticated_seed(
             from worker_release_bounded_process import run_bounded_capture
             journal.mark_running()
             unit_may_be_active = True
-            result = run_bounded_capture(command, timeout=MAX_UNIT_SECONDS + 15,
-                                         max_stream_bytes=MAX_UNIT_OUTPUT)
+            unit_deadline = time.monotonic() + MAX_UNIT_SECONDS + 15
+            result = run_bounded_capture(
+                command, timeout=min(MAX_UNIT_START_SECONDS,
+                                     max(0.001, unit_deadline - time.monotonic())),
+                max_stream_bytes=MAX_UNIT_OUTPUT,
+            )
             returncode = result.returncode
+            if returncode == 0:
+                remaining = unit_deadline - time.monotonic()
+                if remaining <= 0:
+                    raise SeedGenerationRejected("seed verifier unit completion timed out")
+                wait_for_unit_completion(_systemctl, unit, timeout=remaining)
         except Exception as error:
             drain_exact_unit()
             raise SeedGenerationRejected("seed verifier unit failed or timed out") from error

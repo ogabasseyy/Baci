@@ -334,6 +334,7 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
 
             with patch.object(integration.os, "stat", side_effect=fake_stat), \
                  patch.object(integration.subprocess, "run", side_effect=run), \
+                 patch.object(seed_unit, "wait_for_unit_completion") as wait_completion, \
                  patch.object(integration, "_cleanup_systemd_unit") as cleanup:
                 _run_seed_unit_socket_probe(
                     unit_prefix="123", peer_uid=1234, peer_gid=1234,
@@ -342,12 +343,18 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
                 )
 
             cleanup.assert_called_once_with("worker-seed-socket-probe-123")
+            wait_completion.assert_called_once_with(seed_unit._systemctl,
+                                                   "worker-seed-socket-probe-123")
 
             self.assertEqual(len(commands), 1)
             command = commands[0]
             self.assertNotIn("--collect", command)
+            self.assertNotIn("--wait", command)
+            self.assertNotIn("--pipe", command)
             self.assertIn("--property=PrivateTmp=yes", command)
             self.assertIn("--property=RemainAfterExit=yes", command)
+            self.assertIn("--property=StandardOutput=null", command)
+            self.assertIn("--property=StandardError=journal", command)
             self.assertIn("/run/baci-seed-tools/worker_release_egress_systemd_client.py", command)
             self.assertNotIn(str(fixture_client), command)
             self.assertTrue(any(

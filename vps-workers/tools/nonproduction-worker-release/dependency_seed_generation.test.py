@@ -15,9 +15,11 @@ sys.path.insert(0, str(HERE))
 
 import dependency_seed_generation as generation
 from dependency_seed_generation_unit import (
-    BIN, EGRESS_SOCKET, EGRESS_TARGET, TOOLS,
+    BIN, EGRESS_SOCKET, EGRESS_TARGET, TOOLS, MAX_UNIT_START_SECONDS,
     SeedGenerationRejected, systemd_command, validate_active_unit,
+    wait_for_unit_completion,
 )
+import dependency_seed_generation_unit as seed_unit
 from dependency_seed_generation_contract import (
     GenerationCapability, _generation_capability_values,
     _issue_generation_capability, validate_generation_attestation,
@@ -133,6 +135,7 @@ class SeedGenerationContractTests(unittest.TestCase):
         )
         text = "\n".join(command)
         for contract in (
+            "--collect", "--property=StandardOutput=null", "--property=StandardError=null",
             "--property=PrivateNetwork=yes", "--property=NoNewPrivileges=yes",
             "--property=KillMode=mixed", "--property=ProtectSystem=strict",
             "--property=RemainAfterExit=yes", "--property=PrivateUsers=yes",
@@ -147,10 +150,70 @@ class SeedGenerationContractTests(unittest.TestCase):
         ):
             self.assertIn(contract, text)
         self.assertIn("--sha\n0123456789ab", text)
+        self.assertNotIn("--wait", command)
+        self.assertNotIn("--pipe", command)
+        self.assertEqual(MAX_UNIT_START_SECONDS, 45)
         self.assertEqual(command[-8], "--node")
         self.assertEqual(command[-5], "0123456789ab")
         self.assertIn(f"{egress_source}:{EGRESS_TARGET}", text)
         self.assertIn(f"{EGRESS_SOCKET}:{EGRESS_TARGET}", text)
+
+    def test_wait_for_seed_unit_polls_until_pinned_successful_exit(self):
+        unit = "baci-worker-seed-aaaaaaaaaaaa-" + "b" * 32 + ".service"
+        states = iter((
+            "LoadState=loaded\nActiveState=activating\nSubState=start\n"
+            "Result=success\nExecMainStatus=0\nMainPID=812\n",
+            "LoadState=loaded\nActiveState=active\nSubState=running\n"
+            "Result=success\nExecMainStatus=0\nMainPID=812\n",
+            "LoadState=loaded\nActiveState=active\nSubState=exited\n"
+            "Result=success\nExecMainStatus=0\nMainPID=0\n",
+        ))
+        calls = []
+
+        def query(*args):
+            calls.append(args)
+            return next(states)
+
+        with patch.object(seed_unit.time, "sleep"):
+            wait_for_unit_completion(query, unit, timeout=1, poll_interval=0.001)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(calls[0], (
+            "show", "--property=LoadState", "--property=ActiveState",
+            "--property=SubState", "--property=Result", "--property=ExecMainStatus",
+            "--property=MainPID", unit,
+        ))
+        wait_for_unit_completion(
+            lambda *_args: (
+                "LoadState=loaded\nActiveState=active\nSubState=exited\n"
+                "Result=success\nExecMainStatus=0\nMainPID=0\n"
+            ),
+            "worker-seed-socket-probe-123", timeout=1,
+        )
+
+    def test_wait_for_seed_unit_fails_closed_on_failed_terminal_states(self):
+        unit = "baci-worker-seed-aaaaaaaaaaaa-" + "b" * 32 + ".service"
+        for status in (
+            "LoadState=loaded\nActiveState=failed\nSubState=failed\n"
+            "Result=exit-code\nExecMainStatus=1\nMainPID=0\n",
+            "LoadState=loaded\nActiveState=active\nSubState=exited\n"
+            "Result=exit-code\nExecMainStatus=1\nMainPID=0\n",
+            "LoadState=not-found\nActiveState=inactive\nSubState=dead\n"
+            "Result=success\nExecMainStatus=0\nMainPID=0\n",
+        ):
+            with self.subTest(status=status), self.assertRaises(SeedGenerationRejected):
+                wait_for_unit_completion(lambda *_args: status, unit, timeout=1)
+
+    def test_wait_for_seed_unit_times_out_while_still_running(self):
+        unit = "baci-worker-seed-aaaaaaaaaaaa-" + "b" * 32 + ".service"
+        running = (
+            "LoadState=loaded\nActiveState=active\nSubState=running\n"
+            "Result=success\nExecMainStatus=0\nMainPID=812\n"
+        )
+        with patch.object(seed_unit.time, "monotonic", side_effect=(0.0, 0.0, 0.11)), \
+             patch.object(seed_unit.time, "sleep"):
+            with self.assertRaisesRegex(SeedGenerationRejected, "completion timed out"):
+                wait_for_unit_completion(lambda *_args: running, unit,
+                                         timeout=0.1, poll_interval=0.1)
 
     def test_systemd_command_rejects_any_nonfixed_egress_source(self):
         with self.assertRaisesRegex(SeedGenerationRejected, "fixed broker socket"):
@@ -178,6 +241,7 @@ class SeedGenerationContractTests(unittest.TestCase):
             "ActiveState": "active", "SubState": "exited", "Result": "success",
             "ExecMainStatus": "0", "MainPID": "0", "ControlGroup": f"/system.slice/{unit}",
             "Type": "exec", "RemainAfterExit": "yes", "SupplementaryGroups": "",
+            "StandardOutput": "null", "StandardError": "null",
             "KillMode": "mixed", "NoNewPrivileges": "yes", "PrivateNetwork": "yes",
             "PrivateUsers": "yes", "ProtectSystem": "strict", "ProtectHome": "yes",
             "PrivateTmp": "yes", "PrivateDevices": "yes", "ProtectControlGroups": "yes",

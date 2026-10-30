@@ -279,13 +279,13 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         package = self.parent / "node_modules" / "tla-probe"
         package.mkdir(parents=True)
         (package / "package.json").write_text(
-            '{"name":"tla-probe","type":"module","exports":"./index.js"}\\n')
+            '{"name":"tla-probe","type":"module","exports":"./index.js"}\n')
         (package / "index.js").write_text(
-            "await new Promise(() => {}); export const loaded = true;\\n")
+            "await new Promise(() => {}); export const loaded = true;\n")
         script = (
             "import { spawnSync } from 'node:child_process'; "
             "const child = spawnSync(process.execPath, ['--input-type=module','-e',"
-            "\"import('tla-probe').then(() => {})\"], { cwd: "
+            "\"await import('tla-probe')\"], { cwd: "
             + repr(str(self.parent))
             + ", env: { PATH: '/usr/bin:/bin', NODE_ENV: 'production' }, "
               "stdio: 'ignore', timeout: 8000, maxBuffer: 1024 }); "

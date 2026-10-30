@@ -1,5 +1,6 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { primaryBankInboxFixture } from '@/lib/piggyvest/primary-wallet-bank-inbox.test-fixture';
+import { paidInterestFixture } from '@/lib/piggyvest/primary-wallet-paid-interest.test-support';
 import { deferredEvent } from '@/lib/piggyvest/webhook-processor.test-fixtures';
 import type { PiggyvestWebhookKeyFamily } from '@/lib/piggyvest/webhook-secret-union';
 
@@ -93,6 +94,50 @@ it('captures explicit interest payouts before validating their envelope', async 
     rawBody,
     signature: 'synthetic-hmac',
   });
+});
+
+it('acknowledges a supported payout only after exact wire bytes reach durable intake', async () => {
+  const rawBody = Buffer.from(
+    ` \n${JSON.stringify(paidInterestFixture.event, null, 2)} \t\n`,
+    'utf8'
+  );
+  const signature = 'synthetic-hmac';
+
+  const response = await captureInterestRawDelivery({
+    rawBody,
+    signature,
+    families: ['interest'],
+  });
+
+  expect(response?.status).toBe(200);
+  expect(await response?.json()).toMatchObject({
+    received: true,
+    interestQueued: true,
+    duplicate: false,
+  });
+  expect(mocks.inbox).toHaveBeenCalledWith({ rawBody, signature });
+});
+
+it('returns retryable failure instead of acknowledging when exact-byte capture is disabled', async () => {
+  const rawBody = Buffer.from(
+    ` \n${JSON.stringify(paidInterestFixture.event, null, 2)} \t\n`,
+    'utf8'
+  );
+  const signature = 'synthetic-hmac';
+  mocks.inbox.mockResolvedValue('disabled');
+
+  const response = await captureInterestRawDelivery({
+    rawBody,
+    signature,
+    families: ['interest'],
+  });
+
+  expect(response?.status).toBe(503);
+  expect(await response?.json()).toEqual({
+    received: false,
+    code: 'PIGGYVEST_INTEREST_RECONCILIATION_PENDING',
+  });
+  expect(mocks.inbox).toHaveBeenCalledWith({ rawBody, signature });
 });
 
 it('captures a malformed known event when the interest key is shared', async () => {

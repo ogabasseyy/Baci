@@ -1,31 +1,12 @@
-import { z } from 'zod';
+import type { z } from 'zod';
 import { orderCreateSchema } from '@/schemas/orders';
+import { redvaultRecoveryCustomerSchema } from '@/schemas/redvault-recovery-customer';
+import { redvaultUncertainAttemptSchema } from '@/schemas/redvault-uncertain-attempt';
 import type { buildCheckoutOrderRequest } from './build-checkout-order-request';
 
 const prefix = 'baci:uba-uncertain-checkout:';
 const MAX_ATTEMPT_LENGTH = 100_000;
-const attemptSchema = z.object({
-  version: z.literal(1),
-  merchantId: z.uuid(),
-  idempotencyKey: z.string().min(1).max(128),
-  fingerprint: z.string().startsWith('uba_redvault:').max(50_000),
-  customer: z.object({
-    email: z.email(),
-    name: z.string().min(1),
-    phone: z.string().min(1),
-  }),
-  billingAddress: z.object({
-    line1: z.string().min(1),
-    city: z.string().min(1),
-    state: z.string().optional(),
-    country: z.string().length(2),
-    zip_code: z.string().optional(),
-  }),
-  orderRequest: z.unknown(),
-  createdAt: z.number().int().positive(),
-});
-
-type StoredAttempt = z.infer<typeof attemptSchema>;
+type StoredAttempt = z.infer<typeof redvaultUncertainAttemptSchema>;
 type ValidatedAttempt = StoredAttempt & {
   parsedOrder: z.infer<typeof orderCreateSchema>;
 };
@@ -37,16 +18,12 @@ function storageKey(merchantId: string) {
 function parseAttempt(raw: string): ValidatedAttempt | null {
   if (raw.length > MAX_ATTEMPT_LENGTH) return null;
   try {
-    const attempt = attemptSchema.safeParse(JSON.parse(raw));
+    const attempt = redvaultUncertainAttemptSchema.safeParse(JSON.parse(raw));
     if (!attempt.success) return null;
     const order = orderCreateSchema.safeParse(attempt.data.orderRequest);
-    const rawCustomer = z
-      .object({
-        customer_email: z.string(),
-        customer_name: z.string(),
-        customer_phone: z.string(),
-      })
-      .safeParse(attempt.data.orderRequest);
+    const rawCustomer = redvaultRecoveryCustomerSchema.safeParse(
+      attempt.data.orderRequest
+    );
     if (
       !order.success ||
       order.data.merchant_id !== attempt.data.merchantId ||

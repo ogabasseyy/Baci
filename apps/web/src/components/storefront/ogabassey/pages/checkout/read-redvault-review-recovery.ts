@@ -1,48 +1,7 @@
-import { z } from 'zod';
 import { peekCartCookieEpoch } from '@/hooks/cart/cart-cross-tab-lock';
 import { isCartSessionRetiring } from '@/hooks/cart/cart-session-write-fence';
+import { redvaultReviewRecoverySchema } from '@/schemas/redvault-review-recovery';
 import type { PendingCheckoutOrderSnapshot } from './pending-checkout-order';
-
-const kobo = z.number().int().nonnegative().safe();
-const reviewSchema = z.object({
-  recoveryFence: z
-    .object({
-      merchantSlug: z.string().nullable(),
-      epoch: z.string().nullable(),
-    })
-    .optional(),
-  ready: z.object({
-    cartId: z.string().min(1).optional(),
-    orderId: z.string().min(1),
-    orderNumber: z.string().optional(),
-    trackingToken: z.string().min(1),
-    customerEmail: z.email(),
-    customerName: z.string().min(1),
-    customerPhone: z.string().min(1),
-    checkoutFingerprint: z.string().startsWith('uba_redvault:'),
-    billingAddress: z.object({
-      line1: z.string().min(1),
-      city: z.string().min(1),
-      state: z.string().optional(),
-      country: z.string().length(2),
-      zip_code: z.string().optional(),
-    }),
-    currency: z.literal('NGN'),
-    total: z.number().positive().finite(),
-  }),
-  summary: z.object({
-    productSubtotalKobo: kobo,
-    eligibleSubtotalKobo: kobo,
-    ineligibleSubtotalKobo: kobo,
-    discountKobo: kobo,
-    assuranceFeeKobo: kobo,
-    taxKobo: kobo,
-    shippingKobo: kobo,
-    giftWrappingKobo: kobo,
-    payableKobo: kobo.positive(),
-    mixedBasket: z.boolean(),
-  }),
-});
 
 /** Browser storage restores presentation only; payment still verifies the order on the server. */
 export function readRedvaultReviewRecovery(
@@ -56,7 +15,7 @@ export function readRedvaultReviewRecovery(
     pending.paymentMethod !== 'uba_redvault'
   )
     return null;
-  const parsed = reviewSchema.safeParse(pending.redvaultReview);
+  const parsed = redvaultReviewRecoverySchema.safeParse(pending.redvaultReview);
   if (!parsed.success) return null;
   const { ready, summary } = parsed.data;
   const fence = parsed.data.recoveryFence;

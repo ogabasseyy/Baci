@@ -12,8 +12,12 @@ from worker_release_runtime_verifier import RuntimeVerificationQuiescenceUnprove
 def classify_namespace_failure(journal_text: str) -> str:
     """Reduce manager journal text to a fixed, non-sensitive test diagnostic."""
     text = journal_text.lower()
-    if "failed to set up mount namespacing" not in text:
+    if not text.strip():
         return "namespace-message-unavailable"
+    if not any(marker in text for marker in (
+            "failed to set up mount namespacing", "failed at step namespace",
+            "mount namespac", "namespace setup")):
+        return "namespace-message-unclassified"
     if "/var/run" in text:
         return "namespace-path-run-alias"
     if "/root" in text or "/home" in text:
@@ -33,7 +37,12 @@ def emit_namespace_failure_diagnostic(unit: str) -> str:
         return "namespace-diagnostic-invalid-unit"
     try:
         result = run_bounded_capture(
-            ("/usr/bin/journalctl", "--unit", unit, "--no-pager", "--output=cat", "--lines=8"),
+            # systemd setup failures are manager messages and are not always
+            # tagged as the transient unit's stdout/stderr. Search only for
+            # this fixed-format unit identifier in the boot journal; emit a
+            # fixed category below, never the journal content itself.
+            ("/usr/bin/journalctl", "--no-pager", "--output=short", "--lines=20",
+             f"--grep={unit}"),
             timeout=2, max_stream_bytes=4096,
             env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
         )

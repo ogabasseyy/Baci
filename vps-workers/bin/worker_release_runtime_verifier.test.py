@@ -11,6 +11,7 @@ import tempfile
 import unittest
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -85,13 +86,18 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         (self.candidate / "node_modules" / "expo-server-sdk" / "index.js").write_text(
             "export class Expo {}\n")
         freeze(self.candidate, os.getgid())
-        self.acl_gid = 60000 if os.getgid() != 60000 else 60001
-        self.real_systemd = (os.geteuid() == 0 and sys.platform.startswith("linux")
-                             and os.environ.get("WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD") == "1")
-        from worker_release_runtime_acl import verifier_uid
-        self.runtime_uid = verifier_uid() if self.real_systemd else 61000
+        actual_systemd_smoke = (
+            self._testMethodName == "test_actual_linux_sandbox_smoke_produces_receipt"
+            and os.geteuid() == 0 and sys.platform.startswith("linux")
+            and os.environ.get("WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD") == "1"
+        )
+        self.real_systemd = actual_systemd_smoke
+        from worker_release_runtime_acl import verifier_gid, verifier_uid
+        self.acl_gid = verifier_gid() if actual_systemd_smoke else (
+            60000 if os.getgid() != 60000 else 60001)
+        self.runtime_uid = verifier_uid() if actual_systemd_smoke else 61000
         self.acl_patches = []
-        if not self.real_systemd:
+        if not actual_systemd_smoke:
             from worker_release_runtime_acl import expected_access_acl
             def fake_getxattr(target, attribute, *args, **kwargs):
                 if attribute == "system.posix_acl_access":
@@ -281,6 +287,25 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         self.assertEqual(category, "namespace-path-worker-root-mask")
         self.assertNotIn("private-sha", category)
         self.assertNotIn("should-not-appear", category)
+        self.assertEqual(classify_namespace_failure("Failed at step NAMESPACE spawning /usr/bin/node"),
+                         "namespace-path-unclassified")
+        self.assertEqual(classify_namespace_failure("unit loaded, no namespace error"),
+                         "namespace-message-unclassified")
+
+    def test_namespace_diagnostic_queries_only_fixed_unit_and_never_emits_journal(self):
+        from contextlib import redirect_stdout
+        output = io.StringIO()
+        unit = "baci-worker-runtime-0123456789abcdef-0123456789ab-0.service"
+        with patch("worker_release_bounded_process.run_bounded_capture",
+                   return_value=SimpleNamespace(
+                       stdout="Failed at step NAMESPACE: /srv is inaccessible\n",
+                       stderr="secret=must-not-print\n")) as capture, redirect_stdout(output):
+            category = emit_namespace_failure_diagnostic(unit)
+        self.assertEqual(category, "namespace-path-worker-root-mask")
+        self.assertEqual(output.getvalue(), "RUNTIME_SYSTEMD_DIAGNOSTIC=namespace-path-worker-root-mask\n")
+        self.assertEqual(capture.call_args.args[0], (
+            "/usr/bin/journalctl", "--no-pager", "--output=short", "--lines=20",
+            f"--grep={unit}"))
 
     @patch("worker_release_runtime_verifier._run_fixed_smokes")
     def test_untrusted_run_identity_fails_before_smoke(self, smokes):

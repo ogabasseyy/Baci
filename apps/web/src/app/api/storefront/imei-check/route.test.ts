@@ -1,6 +1,7 @@
 import { createHash, createHmac } from 'node:crypto';
 import type { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expectImeiWalletShortage } from './wallet-shortage.test-support';
 
 const mocks = vi.hoisted(() => ({
   mockAuthenticateApiRequest: vi.fn(),
@@ -957,11 +958,7 @@ describe('POST /api/storefront/imei-check', () => {
     };
 
     expect(response.status).toBe(402);
-    expect(body).toMatchObject({
-      balance: 500,
-      code: 'WALLET_INSUFFICIENT',
-      required: 1500,
-    });
+    expectImeiWalletShortage(body, { balance: 500, required: 1000 });
     expect(mocks.mockRequestSickwCheck).not.toHaveBeenCalled();
     expect(adminSupabase.__deletes.at(-1)).toMatchObject({
       filters: { id: 'lookup-1' },

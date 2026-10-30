@@ -12,6 +12,9 @@ import threading
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+SEED_BIN = Path("/run/baci-seed-bin")
+if SEED_BIN.is_dir():
+    sys.path.insert(0, str(SEED_BIN))
 
 SYNTHETIC_REPLY = b"synthetic-registry-response-v1"
 

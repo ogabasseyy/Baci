@@ -25,6 +25,40 @@ from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture
 
 
 class SystemdIntegrationDiagnosticTests(unittest.TestCase):
+    def test_seed_client_import_path_uses_fixed_bin_mount_only_when_present(self):
+        client = Path(__file__).with_name("worker_release_egress_systemd_client.py")
+        original_import = builtins.__import__
+        original_is_dir = Path.is_dir
+
+        for mounted in (False, True):
+            with self.subTest(seed_bin_mounted=mounted):
+                observed_paths = []
+                stderr = io.StringIO()
+
+                def is_dir(path):
+                    if str(path) == "/run/baci-seed-bin":
+                        return mounted
+                    return original_is_dir(path)
+
+                def fail_protocol_import(name, *args, **kwargs):
+                    if name == "worker_release_egress_protocol":
+                        observed_paths.append(tuple(sys.path))
+                        raise ImportError("stop after path assertion")
+                    return original_import(name, *args, **kwargs)
+
+                with patch.object(Path, "is_dir", is_dir), \
+                     patch.object(builtins, "__import__", side_effect=fail_protocol_import), \
+                     patch.object(sys, "argv", [str(client), "--client", "/run/broker.sock", "1",
+                                                 "/run/hidden.sock"]), \
+                     patch("sys.stderr", stderr):
+                    with self.assertRaises(SystemExit) as raised:
+                        runpy.run_path(str(client), run_name="__main__")
+
+                self.assertEqual(raised.exception.code, 1)
+                self.assertEqual(len(observed_paths), 1)
+                self.assertIn(str(client.parent.resolve()), observed_paths[0])
+                self.assertEqual("/run/baci-seed-bin" in observed_paths[0], mounted)
+
     def test_seed_client_startup_import_failure_categories_are_fixed_and_redacted(self):
         client = Path(__file__).with_name("worker_release_egress_systemd_client.py")
         original_import = builtins.__import__

@@ -8,6 +8,7 @@ import pwd
 import grp
 import re
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -48,13 +49,21 @@ def _namespace_failure_category(text: str) -> str:
     return "namespace-failure-unclassified"
 
 
-def _approved_socket_properties(host_socket: Path, isolated_alias: Path) -> tuple[str, str]:
-    """Mask host /run and expose only its approved socket at a separate alias."""
+def _approved_socket_properties(host_socket: Path, source_alias: Path,
+                               isolated_alias: Path) -> tuple[str, str]:
+    """Mask host /run and bind the same approved socket inode from a safe alias."""
     host_socket = Path(host_socket)
+    source_alias = Path(source_alias)
     isolated_alias = Path(isolated_alias)
+    resolved_source = Path(os.path.realpath(source_alias))
     resolved_alias = Path(os.path.realpath(isolated_alias))
     if (not host_socket.is_absolute() or host_socket.parent != Path("/run")
             or host_socket != Path(os.path.normpath(str(host_socket)))
+            or not source_alias.is_absolute()
+            or source_alias == Path("/run") or Path("/run") in source_alias.parents
+            or source_alias == Path("/var/run") or Path("/var/run") in source_alias.parents
+            or source_alias != Path(os.path.normpath(str(source_alias)))
+            or resolved_source == Path("/run") or Path("/run") in resolved_source.parents
             or not isolated_alias.is_absolute()
             or isolated_alias == Path("/run")
             or Path("/run") in isolated_alias.parents
@@ -64,7 +73,97 @@ def _approved_socket_properties(host_socket: Path, isolated_alias: Path) -> tupl
             or resolved_alias == Path("/run") or Path("/run") in resolved_alias.parents):
         raise RuntimeError("egress fixture socket paths are outside fixed mount policy")
     return ("--property=InaccessiblePaths=/run",
-            f"--property=BindReadOnlyPaths={host_socket}:{isolated_alias}")
+            f"--property=BindReadOnlyPaths={source_alias}:{isolated_alias}")
+
+
+def _socket_bind_mount_command(host_socket: Path, source_alias: Path) -> tuple[str, ...]:
+    """Return the fixed host bind-mount command for the same broker socket inode."""
+    host_socket = Path(host_socket)
+    source_alias = Path(source_alias)
+    resolved_alias = Path(os.path.realpath(source_alias))
+    if (not host_socket.is_absolute() or host_socket.parent != Path("/run")
+            or host_socket != Path(os.path.normpath(str(host_socket)))
+            or not source_alias.is_absolute() or source_alias == Path("/run")
+            or Path("/run") in source_alias.parents or source_alias == Path("/var/run")
+            or Path("/var/run") in source_alias.parents
+            or source_alias != Path(os.path.normpath(str(source_alias)))
+            or resolved_alias == Path("/run") or Path("/run") in resolved_alias.parents):
+        raise RuntimeError("egress socket alias is outside fixed mount policy")
+    return ("/usr/bin/mount", "--bind", str(host_socket), str(source_alias))
+
+
+def _mount_socket_source_alias(host_socket: Path, source_alias: Path) -> tuple[int, int, int, int]:
+    """Bind the /run socket inode to a protected outside-/run fixture path."""
+    host_socket, source_alias = Path(host_socket), Path(source_alias)
+    command = _socket_bind_mount_command(host_socket, source_alias)
+    source_info = host_socket.lstat()
+    parent_info = source_alias.parent.lstat()
+    if (not stat.S_ISSOCK(source_info.st_mode) or source_info.st_uid != 0
+            or source_info.st_nlink != 1 or not stat.S_ISDIR(parent_info.st_mode)
+            or parent_info.st_uid != 0 or parent_info.st_mode & 0o022
+            or os.path.lexists(source_alias)):
+        raise RuntimeError("approved socket source or alias parent is unsafe")
+    placeholder = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        placeholder.bind(str(source_alias))
+    finally:
+        placeholder.close()
+    os.chmod(source_alias, 0o600)
+    placeholder_info = source_alias.lstat()
+    placeholder_identity = (placeholder_info.st_dev, placeholder_info.st_ino,
+                            placeholder_info.st_uid, placeholder_info.st_mode)
+    source_identity = (source_info.st_dev, source_info.st_ino,
+                       source_info.st_uid, source_info.st_mode)
+    try:
+        result = subprocess.run(command, check=False, stdin=subprocess.DEVNULL,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                timeout=5, env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"})
+        if result.returncode != 0:
+            raise RuntimeError("approved socket bind-mount setup failed")
+        mounted_info = source_alias.lstat()
+        if (mounted_info.st_dev, mounted_info.st_ino, mounted_info.st_uid,
+                mounted_info.st_mode) != source_identity:
+            raise RuntimeError("approved socket bind mount changed inode identity")
+    except (OSError, subprocess.SubprocessError, RuntimeError) as error:
+        # A timeout can race with mount(8) completing. Remove only a mount
+        # whose visible inode still proves it is the expected source socket.
+        try:
+            current = source_alias.lstat()
+        except FileNotFoundError:
+            current = None
+        if (current is not None and
+                (current.st_dev, current.st_ino, current.st_uid, current.st_mode)
+                == source_identity):
+            _unmount_socket_source_alias(
+                source_alias, placeholder_identity=placeholder_identity,
+                source_identity=source_identity)
+        if isinstance(error, RuntimeError):
+            raise
+        raise RuntimeError("approved socket bind-mount setup failed") from error
+    return placeholder_identity
+
+
+def _unmount_socket_source_alias(source_alias: Path, *,
+                                 placeholder_identity: tuple[int, int, int, int],
+                                 source_identity: tuple[int, int, int, int]) -> None:
+    """Unmount only the exact socket inode and require its placeholder back."""
+    source_alias = Path(source_alias)
+    current = source_alias.lstat()
+    if (current.st_dev, current.st_ino, current.st_uid, current.st_mode) != source_identity:
+        raise RuntimeError("approved socket alias changed before unmount")
+    try:
+        result = subprocess.run(("/usr/bin/umount", "--", str(source_alias)), check=False,
+                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, timeout=5,
+                                env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"})
+    except (OSError, subprocess.SubprocessError) as error:
+        raise RuntimeError("approved socket bind-mount cleanup failed") from error
+    if result.returncode != 0:
+        raise RuntimeError("approved socket bind-mount cleanup failed")
+    placeholder = source_alias.lstat()
+    if (placeholder.st_dev, placeholder.st_ino, placeholder.st_uid,
+            placeholder.st_mode) != placeholder_identity:
+        raise RuntimeError("approved socket placeholder changed during unmount")
 
 
 def _unit_journal_text(unit: str) -> str:
@@ -103,15 +202,28 @@ def _run_host_fixture() -> int:
         fixture_client = stage_fixture_modules(Path(__file__).absolute().parents[3], fixture_root,
                                                  owner_uid=0, owner_gid=0)
         socket_path = Path(f"/run/baci-worker-egress-approved-{os.getpid()}.sock")
+        socket_source_alias = scratch_root / "approved-source.sock"
         socket_alias = scratch_root / "approved-egress.sock"
         if socket_path.exists() or socket_path.is_symlink():
             raise RuntimeError("approved host socket fixture path already exists")
-        if socket_alias.exists() or socket_alias.is_symlink():
+        if any(path.exists() or path.is_symlink()
+               for path in (socket_source_alias, socket_alias)):
             raise RuntimeError("approved socket alias fixture path already exists")
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         listener.bind(str(socket_path))
         os.chmod(socket_path, 0o666)
         approved_identity = socket_path.lstat()
+        approved_source_identity = (approved_identity.st_dev, approved_identity.st_ino,
+                                    approved_identity.st_uid, approved_identity.st_mode)
+        # /run is a separate tmpfs on Ubuntu, so hard links to the temp fixture
+        # root fail with EXDEV. A temporary bind mount aliases the exact socket
+        # inode outside /run; systemd can resolve that source before masking /run.
+        source_placeholder_identity = _mount_socket_source_alias(socket_path, socket_source_alias)
+        # Give systemd an existing socket mountpoint for the namespace bind.
+        alias_placeholder = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        alias_placeholder.bind(str(socket_alias))
+        os.chmod(socket_alias, 0o600)
+        alias_placeholder.close()
         listener.listen(8)
         listener.settimeout(0.2)
         hidden_host_socket = Path(f"/run/baci-worker-egress-hidden-{os.getpid()}.sock")
@@ -180,7 +292,7 @@ def _run_host_fixture() -> int:
                     "/usr/bin/systemd-run", "--system", "--wait", "--pipe",
                     "--collect", f"--unit={unit}", f"--uid={peer_uid}",
                     f"--gid={peer_gid}", "--property=PrivateNetwork=yes",
-                    *_approved_socket_properties(socket_path, socket_alias),
+                    *_approved_socket_properties(socket_path, socket_source_alias, socket_alias),
                     "--property=NoNewPrivileges=yes",
                     "--property=PrivateUsers=yes", "--property=SupplementaryGroups=",
                     "--property=RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
@@ -208,6 +320,12 @@ def _run_host_fixture() -> int:
             stopping.set()
             listener.close()
             hidden_listener.close()
+            if source_placeholder_identity is not None:
+                _unmount_socket_source_alias(
+                    socket_source_alias,
+                    placeholder_identity=source_placeholder_identity,
+                    source_identity=approved_source_identity,
+                )
             for path, identity in ((socket_path, approved_identity),
                                    (hidden_host_socket, hidden_identity)):
                 try:

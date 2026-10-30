@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from worker_release_egress_systemd_integration import (
     _approved_socket_properties, _namespace_failure_category, _safe_diagnostic,
+    _socket_bind_mount_command,
 )
 from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture_modules
 
@@ -28,19 +29,40 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
     def test_approved_socket_is_bound_outside_masked_run(self):
         properties = _approved_socket_properties(
             Path("/run/baci-worker-egress-approved-123.sock"),
+            Path("/tmp/worker-egress-fixture/approved-source.sock"),
             Path("/tmp/worker-egress-fixture/approved.sock"))
         self.assertEqual(properties, (
             "--property=InaccessiblePaths=/run",
-            "--property=BindReadOnlyPaths=/run/baci-worker-egress-approved-123.sock:"
+            "--property=BindReadOnlyPaths=/tmp/worker-egress-fixture/approved-source.sock:"
             "/tmp/worker-egress-fixture/approved.sock"))
         with self.assertRaisesRegex(RuntimeError, "outside fixed mount policy"):
             _approved_socket_properties(
                 Path("/run/baci-worker-egress-approved-123.sock"),
+                Path("/tmp/worker-egress-fixture/approved-source.sock"),
                 Path("/run/approved.sock"))
         with self.assertRaisesRegex(RuntimeError, "outside fixed mount policy"):
             _approved_socket_properties(
                 Path("/run/baci-worker-egress-approved-123.sock"),
+                Path("/tmp/worker-egress-fixture/approved-source.sock"),
                 Path("/var/run/approved.sock"))
+        with self.assertRaisesRegex(RuntimeError, "outside fixed mount policy"):
+            _approved_socket_properties(
+                Path("/run/baci-worker-egress-approved-123.sock"),
+                Path("/var/run/approved-source.sock"),
+                Path("/tmp/worker-egress-fixture/approved.sock"))
+
+    def test_source_alias_uses_cross_filesystem_bind_mount_not_hardlink(self):
+        command = _socket_bind_mount_command(
+            Path("/run/baci-worker-egress-approved-123.sock"),
+            Path("/tmp/worker-egress-fixture/approved-source.sock"))
+        self.assertEqual(command, (
+            "/usr/bin/mount", "--bind",
+            "/run/baci-worker-egress-approved-123.sock",
+            "/tmp/worker-egress-fixture/approved-source.sock"))
+        with self.assertRaisesRegex(RuntimeError, "outside fixed mount policy"):
+            _socket_bind_mount_command(
+                Path("/run/baci-worker-egress-approved-123.sock"),
+                Path("/var/run/approved-source.sock"))
 
     def test_systemd_failure_is_reduced_to_non_sensitive_category(self):
         category = _namespace_failure_category(

@@ -65,6 +65,16 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
                          "result=success,code=exited,status=1,main_pid=zero,cgroup=system-slice-other")
         self.assertNotIn("private-unexpected", summary)
 
+    def test_linux_verifier_ci_uses_the_production_pinned_node_binary(self):
+        workflow = (Path(__file__).resolve().parents[2] / ".github" / "workflows"
+                    / "worker-release-runtime-verifier-tests.yml").read_text()
+        self.assertIn("node-version: 24.22.2", workflow)
+        self.assertIn("node_version=\"$(node --version)\"", workflow)
+        self.assertIn("sudo install -o root -g root -m 0755 \"$node_binary\" /usr/bin/node",
+                      workflow)
+        self.assertIn("$(/usr/bin/node --version)\" != \"$node_version\"", workflow)
+        self.assertNotIn("apt-get install --yes nodejs", workflow)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(dir=Path.home())
         self.parent = Path(self.temporary.name) / "releases"
@@ -228,7 +238,7 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
                 patch("worker_release_runtime_verifier.SYSTEMCTL", "/usr/bin/true"):
             checks = _run_fixed_smokes(self.candidate, "f" * 64)
         self.assertEqual(checks, ("web_tsx_version", "worker_production_dependency_imports"))
-        self.assertEqual(execute.call_count, 2)
+        self.assertEqual(execute.call_count, 4)
         all_args = ""
         for call in execute.call_args_list:
             unit, _cwd, command, properties, _index = call.args
@@ -245,16 +255,16 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             self.assertNotIn("/home", inaccessible)  # supplied by ProtectHome
             if "--input-type=module" in command:
                 smoke_script = command[-1]
-                self.assertIn("import { spawnSync } from 'node:child_process'", smoke_script)
-                self.assertIn("timeout: 8000", smoke_script)
-                self.assertIn("stdio: 'ignore'", smoke_script)
-                self.assertIn("if (child.error || child.status !== 0) process.exit(41 + i)",
-                              smoke_script)
-                self.assertIn("import('dotenv')", smoke_script)
-                self.assertIn("import('@supabase/supabase-js')", smoke_script)
-                self.assertIn("import('expo-server-sdk')", smoke_script)
+                self.assertIn("import fs from 'node:fs'", smoke_script)
+                self.assertIn("await import(", smoke_script)
+                self.assertNotIn("spawnSync", smoke_script)
                 self.assertNotIn("Promise.race", smoke_script)
-                self.assertNotIn("process.on('exit'", smoke_script)
+                package = {2: "'dotenv'", 3: "'@supabase/supabase-js'",
+                           4: "'expo-server-sdk'"}[_index]
+                self.assertIn(f"await import({package})", smoke_script)
+                for other_package in {"'dotenv'", "'@supabase/supabase-js'",
+                                      "'expo-server-sdk'"} - {package}:
+                    self.assertNotIn(f"await import({other_package})", smoke_script)
             self.assertNotIn("/var/run", inaccessible)  # aliases /run on Ubuntu
             self.assertNotIn("/run", inaccessible)  # isolated by a read-only empty tmpfs
             self.assertIn("/srv", inaccessible)  # keep the worker tree masked
@@ -274,31 +284,21 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         self.assertIn("synthetic-smoke-token", all_args)
 
     @unittest.skipUnless(shutil.which("node"), "Node is required for loader-exit regression")
-    def test_unsettled_module_tla_is_confined_and_mapped_by_child_probe(self):
-        """A dependency's Node exit 13 cannot terminate the supervising smoke."""
+    def test_unsettled_module_tla_isolated_to_exact_package_check(self):
+        """Node's loader exit 13 is scoped to the systemd unit for one package."""
         package = self.parent / "node_modules" / "tla-probe"
         package.mkdir(parents=True)
         (package / "package.json").write_text(
             '{"name":"tla-probe","type":"module","exports":"./index.js"}\n')
         (package / "index.js").write_text(
             "await new Promise(() => {}); export const loaded = true;\n")
-        script = (
-            "import { spawnSync } from 'node:child_process'; "
-            "const child = spawnSync(process.execPath, ['--input-type=module','-e',"
-            "\"await import('tla-probe')\"], { cwd: "
-            + repr(str(self.parent))
-            + ", env: { PATH: '/usr/bin:/bin', NODE_ENV: 'production' }, "
-              "stdio: 'ignore', timeout: 8000, maxBuffer: 1024 }); "
-              "if (child.error?.code === 'ETIMEDOUT') process.exit(31); "
-              "if (child.error || child.status !== 0) process.exit(41);"
-        )
         result = __import__("subprocess").run(
-            (shutil.which("node"), "--input-type=module", "-e", script),
+            (shutil.which("node"), "--input-type=module", "-e", "await import('tla-probe')"),
             cwd=self.parent, env={"PATH": "/usr/bin:/bin", "NODE_ENV": "production"},
             stdin=__import__("subprocess").DEVNULL,
             stdout=__import__("subprocess").DEVNULL,
             stderr=__import__("subprocess").DEVNULL, timeout=12, check=False)
-        self.assertEqual(result.returncode, 41)
+        self.assertEqual(result.returncode, 13)
 
     @unittest.skipUnless(shutil.which("node"), "Node is required for generated smoke execution")
     def test_generated_smoke_imports_each_fixed_package_without_loader_exit(self):

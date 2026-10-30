@@ -58,40 +58,39 @@ def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callab
         # /run and keep the remaining fixed private paths inaccessible.
         "InaccessiblePaths": "/tmp /var/tmp /dev/shm /etc /srv /opt /usr/local /var/log /var/cache /var/spool /var/backups",
     }
-    worker_imports = (
-        # Run each package import in a child process. Node exits the whole
-        # process with status 13 when any imported module graph has unsettled
-        # top-level await; Promise.race and exit hooks in this parent cannot
-        # reliably observe or classify that loader-level termination. A
-        # synchronous bounded child lets the parent map the exact fixed package
-        # to a safe status without exposing package output.
-        "import { spawnSync } from 'node:child_process'; "
+    hidden_path_probe = (
         "import fs from 'node:fs'; "
-        "const checks = ["
-        "['dotenv', \"const m = await import('dotenv'); if (typeof m.config !== 'function') process.exit(2);\"],"
-        "['supabase', \"const m = await import('@supabase/supabase-js'); if (typeof m.createClient !== 'function') process.exit(2); const c = m.createClient('https://example.invalid', 'synthetic-smoke-key'); if (typeof c.from !== 'function') process.exit(3);\"],"
-        "['expo', \"const m = await import('expo-server-sdk'); if (typeof m.Expo !== 'function') process.exit(2); const e = new m.Expo({ accessToken: 'synthetic-smoke-token' }); if (typeof e.sendPushNotificationsAsync !== 'function') process.exit(3);\"]"
-        "]; "
-        "for (let i = 0; i < checks.length; i++) { "
-        "const child = spawnSync(process.execPath, ['--input-type=module', '-e', checks[i][1]], "
-        "{ env: { PATH: '/usr/bin:/bin', NODE_ENV: 'production' }, stdio: 'ignore', "
-        "timeout: 8000, maxBuffer: 1024 }); "
-        "if (child.error?.code === 'ETIMEDOUT') process.exit(31 + i); "
-        "if (child.error || child.status !== 0) process.exit(41 + i); "
-        "} "
-        "try { "
-        "for (const hidden of ['/srv/baci-workers/releases','/srv/baci-workers/runtime','/srv/baci-workers/locks','/etc','/var/log','/var/cache','/var/spool','/var/backups','/opt','/usr/local']) { "
-        "try { fs.accessSync(hidden); process.exit(4); } catch (error) { if (!['ENOENT','EACCES','EPERM'].includes(error?.code)) process.exit(5); } } "
-        "} catch (error) { process.exit(22); }"
+        "for (const hidden of ['/srv/baci-workers/releases','/srv/baci-workers/runtime',"
+        "'/srv/baci-workers/locks','/etc','/var/log','/var/cache','/var/spool',"
+        "'/var/backups','/opt','/usr/local']) { "
+        "try { fs.accessSync(hidden); process.exit(4); } "
+        "catch (error) { if (!['ENOENT','EACCES','EPERM'].includes(error?.code)) process.exit(5); } } "
+    )
+    package_smokes = (
+        ("worker_dotenv", "const m = await import('dotenv'); "
+         "if (typeof m.config !== 'function') process.exit(2);"),
+        ("worker_supabase", "const m = await import('@supabase/supabase-js'); "
+         "if (typeof m.createClient !== 'function') process.exit(2); "
+         "const c = m.createClient('https://example.invalid', 'synthetic-smoke-key'); "
+         "if (typeof c.from !== 'function') process.exit(3);"),
+        ("worker_expo", "const m = await import('expo-server-sdk'); "
+         "if (typeof m.Expo !== 'function') process.exit(2); "
+         "const e = new m.Expo({ accessToken: 'synthetic-smoke-token' }); "
+         "if (typeof e.sendPushNotificationsAsync !== 'function') process.exit(3);"),
     )
     commands = (
         ("apps/web", ("/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "NODE_ENV=production",
                        "apps/web/node_modules/.bin/tsx", "--version")),
-        ("vps-workers", ("/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "NODE_ENV=production",
-                          "/usr/bin/node", "--input-type=module", "-e", worker_imports)),
+        *( ("vps-workers", ("/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "NODE_ENV=production",
+                             "/usr/bin/node", "--input-type=module", "-e",
+                             hidden_path_probe + script))
+           for _label, script in package_smokes ),
     )
     for index, (cwd, command) in enumerate(commands):
-        unit = unit_name(fence_digest, index)
+        # The durable runtime-view journal's fixed identity suffix is 0/1.
+        # Each unit still gets a fresh random nonce, so the three worker API
+        # checks remain distinct and independently classifiable.
+        unit = unit_name(fence_digest, 0 if index == 0 else 1)
         candidate_identity = candidate.lstat()
         view = create_runtime_view(
             unit, candidate_path=candidate, fence_digest=fence_digest,

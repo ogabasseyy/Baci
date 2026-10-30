@@ -48,6 +48,10 @@ SYSTEMD_RUN = "/usr/bin/systemd-run"
 SYSTEMCTL = "/usr/bin/systemctl"
 _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 _DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+_CHECK_LABELS = {
+    1: "web_tsx_version", 2: "worker_dotenv",
+    3: "worker_supabase", 4: "worker_expo",
+}
 
 
 class RuntimeVerificationRejected(RuntimeError):
@@ -141,6 +145,7 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
                        "--", *command))
     process = None
     failure: str | None = None
+    check_label = _CHECK_LABELS.get(check_index, "unknown")
     launcher_unproven = False
     try:
         process = _spawn_unit(tuple(invocation))
@@ -195,9 +200,8 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
                     completed = True
                 else:
                     summary = summarize_unit_exit(values, expected_cgroup=expected_cgroup)
-                    failure = (
-                        f"fixed runtime check {check_index} exited unsuccessfully ({summary})"
-                    )
+                    failure = (f"fixed runtime check {check_index} ({check_label}) "
+                               f"exited unsuccessfully ({summary})")
                 break
             if load != "loaded":
                 failure = f"fixed runtime check {check_index} unit disappeared before terminal verification"
@@ -209,10 +213,11 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
                     "1": "exited", "2": "killed", "3": "dumped", "4": "trapped",
                 }.get(main_code, "other")
                 if re.fullmatch(r"(?:0|[1-9][0-9]{0,2})", status) and int(status) <= 255:
-                    failure = (f"fixed runtime check {check_index} failed "
+                    failure = (f"fixed runtime check {check_index} ({check_label}) failed "
                                f"(code={code_category},status={status})")
                 else:
-                    failure = f"fixed runtime check {check_index} failed (code={code_category})"
+                    failure = (f"fixed runtime check {check_index} ({check_label}) failed "
+                               f"(code={code_category})")
                 break
             if active == "inactive":
                 failure = f"fixed runtime check {check_index} became inactive before verification"

@@ -50,9 +50,13 @@ def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callab
         "MemoryMax": str(512 * 1024 * 1024), "CPUQuota": "100%",
         "RuntimeMaxSec": str(max_seconds), "LimitNOFILE": "256",
         "LimitFSIZE": str(max_output_bytes), "UMask": "0077",
-        # ProtectHome already masks /root and /home. Avoid duplicate mount
-        # entries and /var/run's alias of /run in the explicit path list.
-        "InaccessiblePaths": "/run /tmp /var/tmp /dev/shm /etc /srv /opt /usr/local /var/log /var/cache /var/spool /var/backups",
+        # A read-only empty /run keeps host AF_UNIX sockets hidden. The
+        # disposable Ubuntu systemd runner rejects InaccessiblePaths=/run at
+        # namespace setup (status 226), while TemporaryFileSystem works.
+        "TemporaryFileSystem": "/run:ro",
+        # ProtectHome already masks /root and /home. Avoid /var/run's alias of
+        # /run and keep the remaining fixed private paths inaccessible.
+        "InaccessiblePaths": "/tmp /var/tmp /dev/shm /etc /srv /opt /usr/local /var/log /var/cache /var/spool /var/backups",
     }
     worker_imports = (
         "try { const fs = await import('node:fs'); "

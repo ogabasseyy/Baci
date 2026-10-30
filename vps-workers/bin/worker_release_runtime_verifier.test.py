@@ -228,12 +228,14 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             self.assertEqual(properties["ProtectSystem"], "strict")
             self.assertEqual(properties["ProtectProc"], "invisible")
             self.assertEqual(properties["PrivateTmp"], "no")
-            self.assertEqual(properties["InaccessiblePaths"], "/run /tmp /var/tmp /dev/shm /etc /srv /opt /usr/local /var/log /var/cache /var/spool /var/backups")
+            self.assertEqual(properties["TemporaryFileSystem"], "/run:ro")
+            self.assertEqual(properties["InaccessiblePaths"], "/tmp /var/tmp /dev/shm /etc /srv /opt /usr/local /var/log /var/cache /var/spool /var/backups")
             inaccessible = properties["InaccessiblePaths"].split()
             self.assertEqual(len(inaccessible), len(set(inaccessible)))
             self.assertNotIn("/root", inaccessible)  # supplied by ProtectHome
             self.assertNotIn("/home", inaccessible)  # supplied by ProtectHome
             self.assertNotIn("/var/run", inaccessible)  # aliases /run on Ubuntu
+            self.assertNotIn("/run", inaccessible)  # isolated by a read-only empty tmpfs
             self.assertIn("/srv", inaccessible)  # keep the worker tree masked
             self.assertEqual(properties["SupplementaryGroups"], "")
             self.assertEqual(properties["Group"], str(self.acl_gid))

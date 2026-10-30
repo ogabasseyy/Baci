@@ -1,13 +1,25 @@
 from __future__ import annotations
 
 import unittest
+from io import BytesIO
 
 from dependency_builder_fixture_systemd_diagnostics import (
-    cleanup_unit, collect_unit_diagnostics, summarize_status,
+    BoundedOutputDrain, cleanup_unit, collect_unit_diagnostics,
+    summarize_child_output, summarize_status,
 )
 
 
 class BuilderSystemdDiagnosticsTests(unittest.TestCase):
+    def test_child_output_is_bounded_drained_and_reduced_to_category(self):
+        drain = BoundedOutputDrain(BytesIO(b"private-prefix" + b"x" * 40 + b"Traceback"),
+                                   max_bytes=32)
+        tail = drain.read()
+        self.assertLessEqual(len(tail), 32)
+        self.assertTrue(tail.endswith(b"Traceback"))
+        category = summarize_child_output(b"", b"Traceback (most recent call last): secret")
+        self.assertEqual(category, "python-exception")
+        self.assertNotIn("secret", category)
+
     def test_summary_returns_only_closed_categories_and_fixed_fields(self):
         summary = summarize_status(
             "LoadState=loaded\nActiveState=failed\nSubState=failed\nResult=exit-code\n"

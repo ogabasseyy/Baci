@@ -9,7 +9,7 @@ import worker_release_dependency_sandbox as dependency_sandbox
 from worker_release_dependency_consumer import _verify_candidate
 from worker_release_dependency_install import install_payload
 from dependency_builder_fixture_systemd_diagnostics import (
-    cleanup_unit, collect_unit_diagnostics,
+    BoundedOutputDrain, cleanup_unit, collect_unit_diagnostics, summarize_child_output,
 )
 from worker_release_dependency_diagnostics import read_diagnostic
 
@@ -63,10 +63,12 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
     process = subprocess.Popen(
         fixture_command,
         stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         env={"PATH": "/usr/bin:/bin"},
     )
+    stdout_drain = BoundedOutputDrain(process.stdout)
+    stderr_drain = BoundedOutputDrain(process.stderr)
     try:
         while process.poll() is None:
             dependency_builder.directory_usage(
@@ -83,6 +85,7 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
         process.wait()
         if process.returncode == 0:
             return
+        child_error = summarize_child_output(stdout_drain.read(), stderr_drain.read())
         fixture_detail = diagnostic_module.read_scratch_diagnostic(
             scratch, build_root=dependency_builder.BUILD_ROOT, expected_sha=sha,
             owner_uid=expected_owner_uid,
@@ -114,7 +117,7 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
               f"builder_category={builder_category} systemd_load={unit_detail['load_state']} "
               f"systemd_active={unit_detail['active_state']} systemd_sub={unit_detail['sub_state']} "
               f"systemd_result={unit_detail['result']} systemd_exit={unit_detail['exec_main_status']} "
-              f"systemd_status={unit_detail['status_category']} "
+              f"systemd_status={unit_detail['status_category']} child_error={child_error} "
               f"systemd_journal={unit_detail['journal_category']}", file=sys.stderr)
         raise subprocess.CalledProcessError(process.returncode, fixture_command)
     except BaseException:
@@ -125,6 +128,8 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
             process.wait(timeout=15)
         raise
     finally:
+        stdout_drain.read()
+        stderr_drain.read()
         cleanup_unit(unit)
 
 dependency_builder.run_sandbox = run_fixture_sandbox

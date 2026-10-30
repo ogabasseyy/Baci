@@ -428,8 +428,11 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
         self.assertIn("fixture_injection={fixture_injection}", harness)
         self.assertIn("scratch, build_root=dependency_builder.BUILD_ROOT", harness)
         self.assertNotIn('store_argument = next((index for index, value in enumerate(command)', harness)
-        self.assertIn("stdout=subprocess.DEVNULL", harness)
-        self.assertIn("stderr=subprocess.DEVNULL", harness)
+        self.assertIn("stdout=subprocess.PIPE", harness)
+        self.assertIn("stderr=subprocess.PIPE", harness)
+        self.assertIn("BoundedOutputDrain", harness)
+        self.assertIn("summarize_child_output(", harness)
+        self.assertIn("child_error={child_error}", harness)
         self.assertNotIn('diagnostic = (result.stderr + "\\n" + result.stdout)', harness)
         self.assertNotIn("print(diagnostic, file=sys.stderr)", harness)
 

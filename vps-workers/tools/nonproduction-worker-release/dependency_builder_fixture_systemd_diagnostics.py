@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import threading
 
 UNIT_RE = re.compile(r"^baci-worker-deps-[0-9a-f]{12}-[0-9a-f]{10}(?:\.service)?$")
 ALLOWED_PROPERTIES = frozenset({
@@ -23,6 +24,54 @@ def _category(value: str) -> str:
     if text.strip():
         return "other"
     return "absent"
+
+
+class BoundedOutputDrain:
+    """Continuously drain one fixture pipe while retaining only its final bound."""
+
+    def __init__(self, stream, *, max_bytes: int = 4096) -> None:
+        if type(max_bytes) is not int or not 0 < max_bytes <= 8192:
+            raise ValueError("fixture output bound is invalid")
+        self._stream = stream
+        self._max_bytes = max_bytes
+        self._tail = bytearray()
+        self._thread = threading.Thread(target=self._drain, daemon=True)
+        self._thread.start()
+
+    def _drain(self) -> None:
+        while True:
+            chunk = self._stream.read(1024)
+            if not chunk:
+                return
+            self._tail.extend(chunk)
+            if len(self._tail) > self._max_bytes:
+                del self._tail[:len(self._tail) - self._max_bytes]
+
+    def read(self) -> bytes:
+        self._thread.join(timeout=2)
+        if self._thread.is_alive():
+            return b""
+        return bytes(self._tail)
+
+
+def summarize_child_output(stdout: bytes, stderr: bytes) -> str:
+    """Reduce synthetic child output to a closed category without printing text."""
+    text = (stdout + b"\n" + stderr).decode("utf-8", errors="replace").lower()
+    if not text.strip():
+        return "absent"
+    if "modulenotfounderror" in text or "importerror" in text:
+        return "python-import"
+    if "traceback (most recent call last)" in text:
+        return "python-exception"
+    if "no space left" in text or "disk quota" in text:
+        return "storage"
+    if "permission denied" in text or "operation not permitted" in text:
+        return "permission"
+    if "no such file or directory" in text or "not found" in text:
+        return "path-missing"
+    if "dependency build rejected" in text:
+        return "builder-rejected"
+    return "other"
 
 
 def summarize_status(status_text: str, journal_text: str) -> dict[str, str]:
@@ -113,4 +162,7 @@ def cleanup_unit(unit: str, *, run=None) -> None:
             raise RuntimeError("builder fixture unit cleanup failed")
 
 
-__all__ = ["cleanup_unit", "collect_unit_diagnostics", "summarize_status"]
+__all__ = [
+    "BoundedOutputDrain", "cleanup_unit", "collect_unit_diagnostics",
+    "summarize_child_output", "summarize_status",
+]

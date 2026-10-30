@@ -97,8 +97,10 @@ async function fetchCandidateVariant(
 
 /**
  * Proxies an OgaBassey CDN image request on the storefront's own origin,
- * streaming uncapped variants directly and evaluating the `70 -> 60 -> 50`
- * quality ladder for `<= 384w` AVIF requests to enforce the 20 KB byte cap.
+ * streaming uncapped variants directly and evaluating the descending quality
+ * ladder (`70 -> 60 -> 50`) for `<= 384w` AVIF requests to target a best-effort
+ * 20 KB byte cap (falling back to the lowest-quality successful candidate if
+ * every rung exceeds 20,000 bytes).
  */
 export async function fetchSameOriginOgabasseyImageResponse(
   parsed: OgabasseyCdnImageProxyRequest,
@@ -106,10 +108,10 @@ export async function fetchSameOriginOgabasseyImageResponse(
   searchParams?: URLSearchParams
 ): Promise<Response> {
   const qualities = getCandidateQualitiesForRequest(parsed.options);
-  const enforceByteCap = qualities.length > 1;
+  const useQualityStepDown = qualities.length > 1;
   const fallbackContentType = MIME_BY_FORMAT[parsed.options.format];
 
-  if (!enforceByteCap) {
+  if (!useQualityStepDown) {
     const quality = qualities[0] ?? parsed.options.quality;
     const upstreamUrl = buildUpstreamOgabasseyTransformUrl(
       parsed.options,
@@ -117,13 +119,21 @@ export async function fetchSameOriginOgabasseyImageResponse(
       quality,
       searchParams
     );
+    const headerTimeoutController = new AbortController();
+    const headerTimeoutId = setTimeout(() => {
+      headerTimeoutController.abort(
+        new DOMException('Upstream header timeout', 'TimeoutError')
+      );
+    }, UPSTREAM_TIMEOUT_MS);
     let upstreamResponse: Response;
     try {
       upstreamResponse = await fetcher(upstreamUrl, {
-        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+        signal: headerTimeoutController.signal,
       });
     } catch {
       return buildErrorResponse('Upstream image service unavailable', 502);
+    } finally {
+      clearTimeout(headerTimeoutId);
     }
 
     if (!upstreamResponse.ok) {

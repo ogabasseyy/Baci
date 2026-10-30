@@ -6,12 +6,18 @@ import {
 } from './hero-mobile-geometry';
 
 /**
- * Computes the minimum painted area (`width * height` in CSS px²) of the square
- * `1:1` slide-0 hero `<img>` inside the mobile hero's 2-of-5 image column.
+ * Computes the visible `object-contain` painted area (`width * height` in CSS
+ * px²) of the slide-0 hero `<img>` inside the mobile hero's 2-of-5 image column
+ * for a given `width / height` aspect ratio (defaults to `1` for square product
+ * renders).
  */
 export function computeHeroMobileImageMinAreaPx2(
-  viewportWidthPx: number
+  viewportWidthPx: number,
+  aspectRatio = 1
 ): number {
+  if (!Number.isFinite(aspectRatio) || aspectRatio <= 0) {
+    return 0;
+  }
   const panelWidthPx = Math.max(
     0,
     viewportWidthPx - HERO_MOBILE_SECTION_HORIZONTAL_PADDING_PX
@@ -24,6 +30,13 @@ export function computeHeroMobileImageMinAreaPx2(
     0,
     HERO_MOBILE_PANEL_HEIGHT_PX - totalPaddingPx
   );
-  const squareSidePx = Math.min(contentWidthPx, contentHeightPx);
-  return squareSidePx * squareSidePx;
+  const visibleWidthPx = Math.min(
+    contentWidthPx,
+    contentHeightPx * aspectRatio
+  );
+  const visibleHeightPx = Math.min(
+    contentHeightPx,
+    contentWidthPx / aspectRatio
+  );
+  return visibleWidthPx * visibleHeightPx;
 }

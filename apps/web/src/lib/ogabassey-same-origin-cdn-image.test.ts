@@ -129,4 +129,65 @@ describe('fetchSameOriginOgabasseyImageResponse', () => {
     );
     expect(signals.every((signal) => signal instanceof AbortSignal)).toBe(true);
   });
+
+  it('clears the header timeout once single-quality upstream headers arrive so a streamed body is not aborted after 5 seconds', async () => {
+    vi.useFakeTimers();
+    try {
+      let capturedSignal: AbortSignal | null | undefined;
+      const streamingFetcher: typeof fetch = vi.fn(async (_input, init) => {
+        capturedSignal = init?.signal;
+        return new Response(new Uint8Array(32_000), {
+          headers: { 'content-type': 'image/avif' },
+          status: 200,
+        });
+      });
+
+      const response = await fetchSameOriginOgabasseyImageResponse(
+        {
+          assetPath: 'core-assets/products/desktop-hero.avif',
+          options: {
+            fit: 'inside',
+            format: 'avif',
+            quality: 70,
+            width: 640,
+          },
+        },
+        streamingFetcher
+      );
+
+      expect(response.status).toBe(200);
+      vi.advanceTimersByTime(10_000);
+      expect(capturedSignal?.aborted).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts the mobile AVIF ladder at the requested quality before stepping down to lower rungs', async () => {
+    const calls: string[] = [];
+    const fetcher: typeof fetch = vi.fn(async (input) => {
+      calls.push(String(input));
+      return new Response(new Uint8Array(15_000), {
+        headers: { 'content-type': 'image/avif' },
+        status: 200,
+      });
+    });
+
+    const response = await fetchSameOriginOgabasseyImageResponse(
+      {
+        assetPath: 'core-assets/products/custom-q.avif',
+        options: {
+          fit: 'inside',
+          format: 'avif',
+          quality: 65,
+          width: 384,
+        },
+      },
+      fetcher
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('X-Hero-Effective-Quality')).toBe('65');
+    expect(calls[0]).toContain('quality=65');
+  });
 });

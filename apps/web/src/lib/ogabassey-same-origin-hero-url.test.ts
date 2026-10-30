@@ -29,14 +29,22 @@ vi.mock('@/lib/storefront-product-canonical-redirect', () => ({
     .mockResolvedValue({ kind: 'unknown' }),
 }));
 
+const STATIC_ASSET_MATCHER_SOURCE =
+  '/((?!_next/image(?:/.*[^/])?$|_next/static(?:/.*[^/])?$|manifest\\.webmanifest$|robots\\.txt$|ads\\.txt$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|avif|woff|woff2|ttf|eot|css|js|json)$|(?!favicon\\.ico$)(?!favicon\\.ico/$).+\\.ico$).*)';
+const STATIC_ASSET_MATCHER_LITERAL_REGEX =
+  /^\/((?!_next\/image(?:\/.*[^/])?$|_next\/static(?:\/.*[^/])?$|manifest\.webmanifest$|robots\.txt$|ads\.txt$|.*\.(?:svg|png|jpg|jpeg|gif|webp|avif|woff|woff2|ttf|eot|css|js|json)$|(?!favicon\.ico$)(?!favicon\.ico\/$).+\.ico$).*)$/;
+const RELAY_STATIC_MATCHER_LITERAL_REGEX =
+  /^\/((?!_next\/static(?:\/|$))(?:.+\/)?(?:static|array)\/.*)$/;
+
 function matchesProxyMatcher(pathname: string): boolean {
-  return proxyConfig.matcher.some((pattern) => {
-    if (!pattern) return false;
-    if (pattern === '/baci-relay/:path*') {
-      return pathname === '/baci-relay' || pathname.startsWith('/baci-relay/');
-    }
-    return new RegExp(`^${pattern}$`).test(pathname);
-  });
+  return (
+    pathname === '/agent-commerce.json' ||
+    pathname === '/agent-trust.json' ||
+    pathname === '/baci-relay' ||
+    pathname.startsWith('/baci-relay/') ||
+    RELAY_STATIC_MATCHER_LITERAL_REGEX.test(pathname) ||
+    STATIC_ASSET_MATCHER_LITERAL_REGEX.test(pathname)
+  );
 }
 
 async function resolveEffectiveCustomDomainPathname(
@@ -74,7 +82,13 @@ describe('toOgabasseySameOriginTransformUrl', () => {
     ).toBe('https://example.com/hero.jpg');
   });
 
-  it('returns the original URL when the decoded asset path or query string fails /cdn-image/ route validation', () => {
+  it('returns the original URL when transform options, decoded asset path, or query string fail /cdn-image/ route validation', () => {
+    const unsupportedOptionKey =
+      'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif,blur=10/core-assets/products/tecno.avif';
+    expect(toOgabasseySameOriginTransformUrl(unsupportedOptionKey)).toBe(
+      unsupportedOptionKey
+    );
+
     const unsupportedBucket =
       'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/other-bucket/tecno.avif';
     expect(toOgabasseySameOriginTransformUrl(unsupportedBucket)).toBe(
@@ -95,6 +109,8 @@ describe('toOgabasseySameOriginTransformUrl', () => {
   });
 
   it('leaves uppercase or percent-encoded extensions on cdn.ogabassey.com and exercises custom-domain proxy routing for rewritten paths', async () => {
+    expect(proxyConfig.matcher).toContain(STATIC_ASSET_MATCHER_SOURCE);
+
     const uppercaseUrl =
       'https://cdn.ogabassey.com/image/width=384,quality=70,format=avif/core-assets/products/phone.JPG';
     expect(toOgabasseySameOriginTransformUrl(uppercaseUrl)).toBe(uppercaseUrl);

@@ -199,7 +199,9 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
 
             self.assertEqual(len(commands), 1)
             command = commands[0]
+            self.assertNotIn("--collect", command)
             self.assertIn("--property=PrivateTmp=yes", command)
+            self.assertIn("--property=RemainAfterExit=yes", command)
             self.assertIn("/run/baci-seed-tools/worker_release_egress_systemd_client.py", command)
             self.assertNotIn(str(fixture_client), command)
             self.assertTrue(any(

@@ -388,7 +388,12 @@ def _run_seed_unit_socket_probe(*, unit_prefix: str, peer_uid: int, peer_gid: in
                 not in generated):
             raise RuntimeError("seed systemd command does not bind only the fixed socket")
         python_index = generated.index(seed_unit.PYTHON)
-        command = [*generated[:python_index], seed_unit.PYTHON,
+        # The production launcher collects its transient unit immediately. Keep
+        # this disposable probe loaded so fixed terminal properties and journal
+        # evidence remain available until the explicit cleanup below.
+        probe_prefix = [argument for argument in generated[:python_index]
+                        if argument != "--collect"]
+        command = [*probe_prefix, seed_unit.PYTHON,
                    "/run/baci-seed-tools/worker_release_egress_systemd_client.py",
                    "--client", seed_unit.EGRESS_TARGET,
                    str(os.stat("/proc/self/ns/net").st_ino), str(hidden_socket)]

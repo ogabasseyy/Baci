@@ -32,7 +32,7 @@ vi.mock('@/lib/piggyvest/webhook-inbox', () => ({
     mocks.recordPiggyvestEvent(...args),
 }));
 vi.mock('./process-delivery', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./process-delivery')>();
+  const actual = await importOriginal<typeof ProcessDeliveryModule>();
   return {
     ...actual,
     processVerifiedDelivery: (
@@ -46,6 +46,7 @@ vi.mock('./process-delivery', async (importOriginal) => {
   };
 });
 
+import type * as ProcessDeliveryModule from './process-delivery';
 import { POST } from './route';
 import { createFakeCaptureStore } from './route.capture-test-support';
 

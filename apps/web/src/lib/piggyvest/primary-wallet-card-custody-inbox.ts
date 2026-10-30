@@ -14,6 +14,14 @@ export function createPrimaryCardCustodyInbox(input: {
     typeof createPrimaryCardCustodyReader
   >[0]['resolveAuthenticatedCrosswalk'];
   now?: () => number;
+  /**
+   * Derived archive-sourced keys, bounded: the intake accepts the overlap
+   * keys, the worker also the replay-only keys of stored rows.
+   */
+  archivedSecrets?: {
+    intake?: readonly string[];
+    worker?: readonly string[];
+  };
 }) {
   const config = schemas.runtime.parse(input.configuration);
   const { signedInbox, ...selected } = config;
@@ -39,9 +47,13 @@ export function createPrimaryCardCustodyInbox(input: {
         await execute('inboxReadiness', [capability])
       );
     },
-    acceptSigned: createPrimaryCardCustodyInboxIntake(common),
+    acceptSigned: createPrimaryCardCustodyInboxIntake({
+      ...common,
+      archivedSecrets: input.archivedSecrets?.intake,
+    }),
     drain: createPrimaryCardCustodyInboxWorker({
       ...common,
+      archivedSecrets: input.archivedSecrets?.worker,
       resolveOperation: createPrimaryCardCustodyInboxMapping({
         ...common,
         fetchImplementation: input.fetchImplementation,

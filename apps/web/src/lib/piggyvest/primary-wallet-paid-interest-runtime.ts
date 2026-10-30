@@ -1,14 +1,9 @@
 import 'server-only';
 import { primaryWalletPaidInterestSchemas as schemas } from '@/schemas/primary-wallet-paid-interest';
-import {
-  type WebhookKeyScope,
-  withFamilyArchivedSecrets,
-} from './webhook-key-archive';
 
 export function readPrimaryWalletPaidInterestRuntime(
   env: NodeJS.ProcessEnv = process.env,
-  mode: 'intake' | 'drain' = 'intake',
-  keyScope: WebhookKeyScope = 'ingress'
+  mode: 'intake' | 'drain' = 'intake'
 ) {
   // Intake stops at the flag (no new payouts while disabled); the drain
   // ignores it so a rollback cannot strand provider-acknowledged
@@ -47,11 +42,5 @@ export function readPrimaryWalletPaidInterestRuntime(
   });
   if (!parsed.success)
     throw new Error('Primary paid-interest configuration unavailable');
-  return withFamilyArchivedSecrets(
-    parsed.data,
-    'interest',
-    env,
-    new Date(),
-    mode === 'drain' ? 'replay' : keyScope
-  );
+  return parsed.data;
 }

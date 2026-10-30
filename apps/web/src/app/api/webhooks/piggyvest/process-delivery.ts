@@ -49,6 +49,21 @@ export interface ProcessDeliveryDeps {
   getPiggyvestConfig: () => PiggyvestClientConfig | null;
 }
 
+// Responses where the delivery was set aside for authorization (the wrong
+// key family signed it) rather than handled. A side table keeps the
+// provider-facing Response untouched: nothing internal leaks into headers.
+const authorizationQuarantines = new WeakSet<Response>();
+
+/**
+ * True when `response` is the acknowledgement of a delivery that was
+ * quarantined for authorization and therefore never reached a financial
+ * handler. Such a capture stays unresolved so the next correctly signed
+ * redelivery of the same bytes runs the handler.
+ */
+export function isAuthorizationQuarantine(response: Response): boolean {
+  return authorizationQuarantines.has(response);
+}
+
 const correlationSchema = z.object({
   eventId: z.string().min(1).max(200).optional(),
   eventType: z.string().min(1).max(200).optional(),
@@ -109,13 +124,19 @@ export async function processVerifiedDelivery(
     // specialized intake claimed is quarantined, never legacy-processed —
     // otherwise a compromised narrow key could forge unrelated events.
     if (!families.includes('legacy')) {
-      return quarantineAndAck(
+      const quarantined = await quarantineAndAck(
         rawBody,
         'key-family',
         { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
         redactEventDetails(parsed.data),
         createClient
       );
+      // No financial handler ran, only the signing key was wrong for it.
+      // The caller must not resolve the capture as processed, or a later
+      // correctly signed redelivery of the same bytes would be
+      // short-circuited as a processed duplicate and never credited.
+      authorizationQuarantines.add(quarantined);
+      return quarantined;
     }
     // Processing runs even for duplicates: if the first delivery recorded
     // the inbox row but crashed before the ledger write, the redelivery

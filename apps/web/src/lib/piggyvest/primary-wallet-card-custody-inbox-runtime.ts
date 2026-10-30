@@ -1,16 +1,11 @@
 import 'server-only';
 import { primaryCardCustodyInboxSchemas as schemas } from '@/schemas/primary-wallet-card-custody-inbox';
 import { readPrimaryCardCustodyRuntime } from './primary-wallet-card-custody-runtime';
-import {
-  type WebhookKeyScope,
-  withFamilyArchivedSecrets,
-} from './webhook-key-archive';
 
 export function readPrimaryCardCustodyInboxRuntime(
   env: NodeJS.ProcessEnv = process.env,
   now = Date.now(),
-  mode: 'intake' | 'drain' = 'intake',
-  keyScope: WebhookKeyScope = 'ingress'
+  mode: 'intake' | 'drain' = 'intake'
 ) {
   const custody = readPrimaryCardCustodyRuntime(env, now, mode);
   if (
@@ -27,13 +22,5 @@ export function readPrimaryCardCustodyInboxRuntime(
       batchSize: Number(env.PIGGYVEST_PRIMARY_CARD_SIGNED_BATCH_SIZE),
     },
   });
-  return parsed.success
-    ? withFamilyArchivedSecrets(
-        parsed.data,
-        'custody',
-        env,
-        now,
-        mode === 'drain' ? 'replay' : keyScope
-      )
-    : null;
+  return parsed.success ? parsed.data : null;
 }

@@ -142,6 +142,42 @@ describe('captureVerifiedDelivery', () => {
     });
   });
 
+  it('sends the headers as a plain allowlisted object that survives JSON serialisation', async () => {
+    const { client, rpc } = clientWith(async () => ({
+      data: { outcome: 'captured', id: captureId, processingState: 'pending' },
+      error: null,
+    }));
+
+    await captureVerifiedDelivery(client, {
+      ...base,
+      rawBody: new TextEncoder().encode('{}'),
+      headers: new Headers({
+        'Content-Type': 'application/json',
+        'X-PVB-Signature': base.signature.toUpperCase(),
+        Authorization: 'Bearer secret-token',
+        Cookie: 'session=secret',
+        'X-Forwarded-For': '203.0.113.9',
+      }),
+    });
+
+    const { p_command: command } = rpc.mock.calls[0]?.[1] as {
+      p_command: { headers: unknown };
+    };
+    // JSON.stringify(new Headers(...)) is "{}": the payload must carry real
+    // entries, not the Headers object.
+    expect(command.headers).not.toBeInstanceOf(Headers);
+    const wire = JSON.parse(JSON.stringify(command)).headers;
+    expect(wire['x-pvb-signature']).toBe(base.signature.toUpperCase());
+    expect(wire['content-type']).toBe('application/json');
+    expect(Object.keys(wire).sort()).toEqual([
+      'content-type',
+      'x-pvb-signature',
+    ]);
+    expect(JSON.stringify(wire)).not.toMatch(
+      /authorization|cookie|secret-token|203\.0\.113/i
+    );
+  });
+
   it('reports a duplicate with the existing row state', async () => {
     const { client } = clientWith(async () => ({
       data: {

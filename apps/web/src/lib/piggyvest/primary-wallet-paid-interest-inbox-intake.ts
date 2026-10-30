@@ -3,7 +3,11 @@ import { primaryWalletPaidInterestInboxSchemas as schemas } from '@/schemas/prim
 import { readPrimaryWalletPaidInterestInboxRuntime } from './primary-wallet-paid-interest-inbox-runtime';
 import { createPrimaryWalletPaidInterestInboxStore } from './primary-wallet-paid-interest-inbox-store';
 import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
-import type { WebhookKeyScope } from './webhook-key-archive';
+import {
+  acceptedWebhookSecrets,
+  familyArchivedSecrets,
+  type WebhookKeyScope,
+} from './webhook-key-archive';
 
 export async function dispatchPrimaryWalletPaidInterestInbox(input: {
   rawBody: Uint8Array;
@@ -12,23 +16,26 @@ export async function dispatchPrimaryWalletPaidInterestInbox(input: {
   /** `replay` also accepts this family's archived keys past their overlap. */
   keyScope?: WebhookKeyScope;
 }) {
-  const config = readPrimaryWalletPaidInterestInboxRuntime(
-    'intake',
-    input.env,
-    input.keyScope
-  );
+  const config = readPrimaryWalletPaidInterestInboxRuntime('intake', input.env);
   if (!config) return 'disabled' as const;
   const rawBody = Uint8Array.from(input.rawBody);
   if (
     !rawBody.byteLength ||
     rawBody.byteLength > 65536 ||
-    ![config.webhookSecret, ...(config.retainedWebhookSecrets ?? [])].some(
-      (secret) =>
-        verifyPiggyvestPayloadSignature({
-          payload: rawBody,
-          signature: input.signature,
-          secret,
-        })
+    !acceptedWebhookSecrets(
+      config,
+      familyArchivedSecrets(
+        'interest',
+        input.env ?? process.env,
+        new Date(),
+        input.keyScope ?? 'ingress'
+      )
+    ).some((secret) =>
+      verifyPiggyvestPayloadSignature({
+        payload: rawBody,
+        signature: input.signature,
+        secret,
+      })
     )
   )
     return 'invalid_signature' as const;

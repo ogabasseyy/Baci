@@ -1,9 +1,5 @@
 import 'server-only';
 import { primaryWalletPaidInterestInboxSchemas as schemas } from '@/schemas/primary-wallet-paid-interest-inbox';
-import {
-  type WebhookKeyScope,
-  withFamilyArchivedSecrets,
-} from './webhook-key-archive';
 
 export type PrimaryWalletPaidInterestInboxSecrets = {
   webhookSecret: unknown;
@@ -51,8 +47,7 @@ export function readPrimaryWalletPaidInterestInboxSecrets(
 
 export function readPrimaryWalletPaidInterestInboxRuntime(
   mode: 'intake' | 'worker',
-  env: NodeJS.ProcessEnv = process.env,
-  keyScope: WebhookKeyScope = 'ingress'
+  env: NodeJS.ProcessEnv = process.env
 ) {
   // Intake stops at the flag (no new rows while disabled); the worker
   // drains already-acknowledged rows through the same credentials-bound
@@ -96,11 +91,5 @@ export function readPrimaryWalletPaidInterestInboxRuntime(
   });
   if (!parsed.success)
     throw new Error('Primary interest inbox configuration unavailable');
-  return withFamilyArchivedSecrets(
-    parsed.data,
-    'interest',
-    env,
-    new Date(),
-    mode === 'worker' ? 'replay' : keyScope
-  );
+  return parsed.data;
 }

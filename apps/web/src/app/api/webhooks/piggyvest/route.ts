@@ -6,7 +6,10 @@ import { markCaptureProcessed } from '@/lib/piggyvest/webhook-capture';
 import { isPiggyvestCaptureDrainScheduled } from '@/lib/piggyvest/webhook-capture-attestation';
 import { readBoundedWebhookBody } from '@/lib/piggyvest/webhook-request';
 import { admitPiggyvestDelivery } from './ingress';
-import { processVerifiedDelivery } from './process-delivery';
+import {
+  isAuthorizationQuarantine,
+  processVerifiedDelivery,
+} from './process-delivery';
 
 /**
  * Provider delivery contract (17 Sep 2026; durable capture, R5):
@@ -116,7 +119,13 @@ export async function POST(request: NextRequest): Promise<Response> {
     processing = null;
   }
   if (processing && processing.status >= 200 && processing.status < 300) {
-    await markCaptureProcessed(createClient(), capture.id);
+    // A delivery quarantined for the wrong signing key family never ran a
+    // financial handler: acknowledge it, but leave the capture unresolved so
+    // a correctly signed redelivery of the same bytes is processed rather
+    // than short-circuited as an already-processed duplicate.
+    if (!isAuthorizationQuarantine(processing)) {
+      await markCaptureProcessed(createClient(), capture.id);
+    }
     return processing;
   }
   emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_PROCESSING_DEFERRED', {

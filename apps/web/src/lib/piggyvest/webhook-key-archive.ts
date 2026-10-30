@@ -97,12 +97,26 @@ export function derivePiggyvestKeyVersion(secret: string): string {
 export type WebhookKeyScope = 'ingress' | 'replay';
 
 /**
- * Archived secrets belonging to exactly one key family. The primary
- * intakes (bank, custody, interest) re-verify with their own runtime keys,
- * so this is how a key moved into the archive at rotation keeps working for
- * the family it was issued for, and only that family: a key archived under
- * another family is never returned. An unreadable archive contributes
- * nothing (fail closed); ingress already reports it as misconfiguration.
+ * Hard bound on the derived (archive-sourced) verification list per family.
+ * The archive itself holds up to 24 entries, most of them long expired;
+ * only the newest retirements matter for replay, and the bound keeps every
+ * verifier's key loop small and predictable.
+ */
+export const MAX_FAMILY_ARCHIVED_SECRETS = 8;
+
+/**
+ * Archived secrets belonging to exactly one key family, in scope, newest
+ * retirement first, at most MAX_FAMILY_ARCHIVED_SECRETS. The primary
+ * intakes (bank, custody, interest) and their workers re-verify with their
+ * own runtime keys, so this is how a key moved into the archive at
+ * rotation keeps working for the family it was issued for, and only that
+ * family: a key archived under another family is never returned. An
+ * unreadable archive contributes nothing (fail closed); ingress already
+ * reports it as misconfiguration.
+ *
+ * The result is a separate, derived list. It is never written into the
+ * operator-configured retained list, which is validated with the family's
+ * schema caps by the runtime readers and again by every constructor.
  */
 export function familyArchivedSecrets(
   family: PiggyvestArchivedWebhookKey['family'],
@@ -116,37 +130,32 @@ export function familyArchivedSecrets(
   const allowed = scope === 'replay' ? [...overlap, ...replayOnly] : overlap;
   return allowed
     .filter((entry) => entry.family === family)
+    .sort((a, b) => Date.parse(b.retiredAt) - Date.parse(a.retiredAt))
+    .slice(0, MAX_FAMILY_ARCHIVED_SECRETS)
     .map((entry) => entry.secret);
 }
 
 /**
- * Adds the family's archived secrets to an already-validated runtime
- * config's retained list. Applied after schema validation on purpose: the
- * schemas cap how many operator-configured retained keys exist, and the
- * archive has its own bound. The current key is never replaced.
+ * Every secret a verifier may try: the operator-validated current and
+ * retained keys followed by the separate derived archive list. Pure and
+ * bounded; neither input is modified.
  */
-export function withFamilyArchivedSecrets<
-  T extends { retainedWebhookSecrets?: string[] },
->(
-  config: T,
-  family: PiggyvestArchivedWebhookKey['family'],
-  env: NodeJS.ProcessEnv,
-  now: Date | number,
-  scope: WebhookKeyScope
-): T {
-  const archived = familyArchivedSecrets(
-    family,
-    env,
-    typeof now === 'number' ? new Date(now) : now,
-    scope
-  );
-  if (archived.length === 0) return config;
-  const retained = config.retainedWebhookSecrets ?? [];
-  return {
-    ...config,
-    retainedWebhookSecrets: [
-      ...retained,
-      ...archived.filter((secret) => !retained.includes(secret)),
-    ],
-  } as T;
+export function acceptedWebhookSecrets(
+  config: {
+    webhookSecret?: unknown;
+    retainedWebhookSecrets?: readonly unknown[];
+  },
+  archived: readonly string[]
+): string[] {
+  const usable = (value: unknown): value is string =>
+    typeof value === 'string' && value.trim().length > 0;
+  return [
+    ...new Set([
+      ...[
+        config.webhookSecret,
+        ...(config.retainedWebhookSecrets ?? []),
+      ].filter(usable),
+      ...archived.filter(usable).slice(0, MAX_FAMILY_ARCHIVED_SECRETS),
+    ]),
+  ];
 }

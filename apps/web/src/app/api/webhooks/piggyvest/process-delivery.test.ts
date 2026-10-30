@@ -26,7 +26,10 @@ vi.mock('@/lib/piggyvest/webhook-processor', () => ({
 }));
 
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
-import { processVerifiedDelivery } from './process-delivery';
+import {
+  isAuthorizationQuarantine,
+  processVerifiedDelivery,
+} from './process-delivery';
 
 const client = {
   name: 'intake-client',
@@ -138,6 +141,34 @@ describe('quarantine paths', () => {
     expect(mocks.quarantine.mock.calls[0]?.[1]).toBe('key-family');
     expect(mocks.record).not.toHaveBeenCalled();
     expect(mocks.process).not.toHaveBeenCalled();
+  });
+});
+
+describe('authorization quarantine marker', () => {
+  it('flags only the key-family quarantine, where no financial handler ran', async () => {
+    const keyFamily = await run(restriction, ['interest']);
+    expect(isAuthorizationQuarantine(keyFamily)).toBe(true);
+
+    const unparseable = await run('<<not json>>');
+    const unknown = await run({
+      eventId: 'e',
+      eventType: 'wallet.new.success',
+    });
+    mocks.dispatch.mockResolvedValue('conflict');
+    const conflict = await run(restriction);
+    mocks.dispatch.mockResolvedValue(null);
+    mocks.record.mockResolvedValue('new');
+    const processed = await run(restriction);
+
+    for (const response of [unparseable, unknown, conflict, processed]) {
+      expect(isAuthorizationQuarantine(response)).toBe(false);
+    }
+  });
+
+  it('is false for a response it never produced', () => {
+    expect(isAuthorizationQuarantine(Response.json({ received: true }))).toBe(
+      false
+    );
   });
 });
 

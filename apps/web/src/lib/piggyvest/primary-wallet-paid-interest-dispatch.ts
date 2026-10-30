@@ -4,7 +4,10 @@ import { requestPrefundedCardProviderJson } from './prefunded-card-provider-requ
 import { readPrimaryWalletPaidInterestRuntime } from './primary-wallet-paid-interest-runtime';
 import { applyPrimaryWalletSignedPaidInterest } from './primary-wallet-paid-interest-signed';
 import { createPrimaryWalletPaidInterestStore } from './primary-wallet-paid-interest-store';
-import type { WebhookKeyScope } from './webhook-key-archive';
+import {
+  familyArchivedSecrets,
+  type WebhookKeyScope,
+} from './webhook-key-archive';
 
 export async function dispatchPrimaryWalletPaidInterest(input: {
   rawBody: Uint8Array;
@@ -19,14 +22,21 @@ export async function dispatchPrimaryWalletPaidInterest(input: {
 }) {
   const configuration = readPrimaryWalletPaidInterestRuntime(
     input.env,
-    input.mode ?? 'intake',
-    input.keyScope
+    input.mode ?? 'intake'
   );
   if (!configuration) return 'disabled' as const;
   const store = createPrimaryWalletPaidInterestStore(configuration);
   return await applyPrimaryWalletSignedPaidInterest({
     ...input,
     configuration,
+    // Derived and bounded, next to (not inside) the validated config. The
+    // drain only replays rows already accepted, so it uses replay scope.
+    archivedSecrets: familyArchivedSecrets(
+      'interest',
+      input.env ?? process.env,
+      new Date(),
+      input.mode === 'drain' ? 'replay' : (input.keyScope ?? 'ingress')
+    ),
     ...store,
     retrieveWallet: async (walletId) =>
       await requestPrefundedCardProviderJson({

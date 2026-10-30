@@ -153,3 +153,93 @@ describe('interest inbox intake with archived keys', () => {
     expect(mocks.interestEnqueue).not.toHaveBeenCalled();
   });
 });
+
+const retained = (count: number) =>
+  JSON.stringify(
+    Array.from({ length: count }, (_, index) => `retained-${index + 1}`)
+  );
+
+describe('families already at their retained-key cap', () => {
+  it('bank: 3 retained + 1 archived key accepts current and archived deliveries', async () => {
+    const env = {
+      ...bank.env,
+      PIGGYVEST_PRIMARY_BANK_RETAINED_WEBHOOK_SECRETS: retained(3),
+      PIGGYVEST_WEBHOOK_KEY_ARCHIVE: JSON.stringify([
+        {
+          version: 'k-o',
+          family: 'bank',
+          secret: KEYS.overlap,
+          retiredAt: iso(2),
+        },
+      ]),
+    };
+    const deliver = (secret: string) =>
+      dispatchPrimaryWalletBankInboxIntake({
+        rawBody: bank.rawBody,
+        signature: sign(secret, bank.rawBody),
+        env,
+      });
+
+    await expect(deliver(bank.config.webhookSecret)).resolves.toMatchObject({
+      outcome: 'accepted',
+    });
+    await expect(deliver(KEYS.overlap)).resolves.toMatchObject({
+      outcome: 'accepted',
+    });
+    await expect(deliver('retained-3')).resolves.toMatchObject({
+      outcome: 'accepted',
+    });
+    // The store was built from the validated operator config only.
+    for (const [config] of mocks.bankCreate.mock.calls) {
+      expect(config.retainedWebhookSecrets).toEqual([
+        'retained-1',
+        'retained-2',
+        'retained-3',
+      ]);
+    }
+  });
+
+  it('interest: 4 retained + 1 archived key accepts current and archived deliveries', async () => {
+    const env = {
+      NODE_ENV: 'test' as const,
+      VERCEL_ENV: 'production',
+      PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_ENABLED: 'true',
+      PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_DRAIN_SCHEDULED: 'true',
+      PIGGYVEST_PRIMARY_INTEGRATION_ID: interest.config.integrationId,
+      PIGGYVEST_PRIMARY_ENVIRONMENT: 'production',
+      PIGGYVEST_PRIMARY_PAID_INTEREST_BUSINESS_ID: interest.config.businessId,
+      PIGGYVEST_PRIMARY_PAID_INTEREST_WEBHOOK_SECRET:
+        interest.config.webhookSecret,
+      PIGGYVEST_PRIMARY_PAID_INTEREST_RETAINED_WEBHOOK_SECRETS: retained(4),
+      PIGGYVEST_PRIMARY_DB_HOST: interest.config.database.host,
+      PIGGYVEST_PRIMARY_DB_PORT: '5432',
+      PIGGYVEST_PRIMARY_DB_NAME: 'postgres',
+      PIGGYVEST_PRIMARY_EVIDENCE_DB_PASSWORD: interest.config.database.password,
+      PIGGYVEST_PRIMARY_DB_CA: interest.config.database.certificateAuthority,
+      PIGGYVEST_WEBHOOK_KEY_ARCHIVE: JSON.stringify([
+        {
+          version: 'k-o',
+          family: 'interest',
+          secret: KEYS.overlap,
+          retiredAt: iso(2),
+        },
+      ]),
+    };
+    const rawBody = Buffer.from(JSON.stringify(interest.event));
+    const deliver = (secret: string) =>
+      dispatchPrimaryWalletPaidInterestInbox({
+        rawBody,
+        signature: sign(secret, rawBody),
+        env,
+      });
+
+    await expect(deliver(interest.config.webhookSecret)).resolves.toBe(
+      'accepted'
+    );
+    await expect(deliver(KEYS.overlap)).resolves.toBe('accepted');
+    await expect(deliver('retained-4')).resolves.toBe('accepted');
+    for (const [config] of mocks.interestCreate.mock.calls) {
+      expect(config.retainedWebhookSecrets).toHaveLength(4);
+    }
+  });
+});

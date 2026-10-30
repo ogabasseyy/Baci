@@ -286,21 +286,33 @@ DO $$
 DECLARE
   v_role text;
   v_id uuid;
+  v_command jsonb;
+  v_service_command jsonb;
 BEGIN
+  -- Commands are built as the owner, before any role switch: the pg_temp
+  -- helpers are not executable by API roles when default privileges revoke
+  -- PUBLIC EXECUTE, and a helper denial must never be mistaken for the
+  -- denial of the function under test.
+  v_service_command := pg_temp.pv_cmd('\x7b2263223a337d'::bytea, 'evt-service', 'x');
+
   FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated'] LOOP
+    v_command := pg_temp.pv_cmd('\x7b7d'::bytea, 'evt-' || v_role, 'x');
     EXECUTE format('SET LOCAL ROLE %I', v_role);
     BEGIN
-      PERFORM public.capture_piggyvest_webhook_delivery(
-        pg_temp.pv_cmd('\x7b7d'::bytea, 'evt-' || v_role, 'x'));
+      PERFORM public.capture_piggyvest_webhook_delivery(v_command);
       RAISE EXCEPTION '% must not capture', v_role;
     EXCEPTION WHEN insufficient_privilege THEN
-      NULL;
+      IF SQLERRM NOT LIKE '%capture_piggyvest_webhook_delivery%' THEN
+        RAISE EXCEPTION '% was denied for the wrong reason: %', v_role, SQLERRM;
+      END IF;
     END;
     BEGIN
       PERFORM 1 FROM public.piggyvest_webhook_captures;
       RAISE EXCEPTION '% must not read captures', v_role;
     EXCEPTION WHEN insufficient_privilege THEN
-      NULL;
+      IF SQLERRM NOT LIKE '%piggyvest_webhook_captures%' THEN
+        RAISE EXCEPTION '% was denied for the wrong reason: %', v_role, SQLERRM;
+      END IF;
     END;
     RESET ROLE;
   END LOOP;
@@ -310,10 +322,11 @@ BEGIN
     PERFORM 1 FROM public.piggyvest_webhook_captures;
     RAISE EXCEPTION 'service_role must not read the table directly';
   EXCEPTION WHEN insufficient_privilege THEN
-    NULL;
+    IF SQLERRM NOT LIKE '%piggyvest_webhook_captures%' THEN
+      RAISE EXCEPTION 'service_role was denied for the wrong reason: %', SQLERRM;
+    END IF;
   END;
-  v_id := (public.capture_piggyvest_webhook_delivery(
-    pg_temp.pv_cmd('\x7b2263223a337d'::bytea, 'evt-service', 'x')))->>'id';
+  v_id := (public.capture_piggyvest_webhook_delivery(v_service_command))->>'id';
   IF v_id IS NULL THEN
     RAISE EXCEPTION 'service_role must capture through the function';
   END IF;

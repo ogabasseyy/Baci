@@ -45,8 +45,14 @@ export interface DrainDeps {
     rawBody: Buffer;
     signature: string;
   }): StoredPiggyvestDeliveryVerification;
-  /** Runs the shared processing pipeline; a non-2xx status means incomplete. */
-  process(delivery: ReplayDelivery): Promise<{ status: number }>;
+  /**
+   * Runs the shared processing pipeline. A non-2xx status means incomplete,
+   * and so does an authorization quarantine (the wrong key family signed
+   * it, so no financial handler ran): that row is never resolved processed.
+   */
+  process(
+    delivery: ReplayDelivery
+  ): Promise<{ status: number; authorizationQuarantine?: boolean }>;
 }
 
 export interface DrainSummary {
@@ -101,7 +107,10 @@ async function drainRow(
       families: verification.families,
       keyScope: 'replay',
     });
-    completed = result.status >= 200 && result.status < 300;
+    completed =
+      result.status >= 200 &&
+      result.status < 300 &&
+      result.authorizationQuarantine !== true;
   } catch {
     completed = false;
   }

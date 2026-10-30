@@ -3,7 +3,10 @@ import { primaryCardCustodyInboxSchemas as schemas } from '@/schemas/primary-wal
 import { createPrimaryCardCustodyExecutor } from './primary-wallet-card-custody-executor';
 import { createPrimaryCardCustodyInboxIntake } from './primary-wallet-card-custody-inbox-intake';
 import { readPrimaryCardCustodyIntakeRuntime } from './primary-wallet-card-custody-intake-runtime';
-import type { WebhookKeyScope } from './webhook-key-archive';
+import {
+  familyArchivedSecrets,
+  type WebhookKeyScope,
+} from './webhook-key-archive';
 
 type IntakeResult =
   | { outcome: 'disabled' | 'not_handled'; response: null }
@@ -50,8 +53,7 @@ export async function dispatchPrimaryCardSignedCustodyIntake(input: {
   });
   const config = readPrimaryCardCustodyIntakeRuntime(
     environment,
-    (input.now ?? Date.now)(),
-    input.keyScope
+    (input.now ?? Date.now)()
   );
   if (!config) {
     // Unconfigured or explicitly disabled: only a positively-identified
@@ -99,6 +101,12 @@ export async function dispatchPrimaryCardSignedCustodyIntake(input: {
       configuration: config,
       capability,
       execute: createPrimaryCardCustodyExecutor(config),
+      archivedSecrets: familyArchivedSecrets(
+        'custody',
+        environment,
+        new Date((input.now ?? Date.now)()),
+        input.keyScope ?? 'ingress'
+      ),
     });
     const outcome = await accept(input.rawBody, input.signature);
     if (outcome === 'not_handled') return { outcome, response: null };

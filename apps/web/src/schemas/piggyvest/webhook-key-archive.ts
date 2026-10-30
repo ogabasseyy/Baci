@@ -39,3 +39,13 @@ export const piggyvestWebhookKeyArchiveSchema = z
   );
 
 export type PiggyvestArchivedWebhookKey = z.infer<typeof archivedKeySchema>;
+
+/**
+ * Separate, bounded input for constructors that re-validate the
+ * operator-configured retained list with their own caps: the derived
+ * archive-sourced verification keys travel next to it, never inside it.
+ */
+export const piggyvestArchivedVerificationSecretsSchema = z
+  .array(z.string().min(1).max(4096))
+  .max(8)
+  .default([]);

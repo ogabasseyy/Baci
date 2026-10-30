@@ -4,55 +4,50 @@ vi.mock('server-only', () => ({}));
 
 import { primaryBankInboxFixture as bank } from './primary-wallet-bank-inbox.test-fixture';
 import { readPrimaryWalletBankInboxRuntime } from './primary-wallet-bank-inbox-runtime';
+import { createPrimaryWalletBankInboxStore } from './primary-wallet-bank-inbox-store';
 import { primaryCardCustodyInboxFixture as custody } from './primary-wallet-card-custody-inbox.test-fixture';
+import { createPrimaryCardCustodyInboxIntake } from './primary-wallet-card-custody-inbox-intake';
 import { readPrimaryCardCustodyInboxRuntime } from './primary-wallet-card-custody-inbox-runtime';
 import { readPrimaryCardCustodyIntakeRuntime } from './primary-wallet-card-custody-intake-runtime';
 import { paidInterestFixture as interest } from './primary-wallet-paid-interest.test-support';
 import { readPrimaryWalletPaidInterestInboxRuntime } from './primary-wallet-paid-interest-inbox-runtime';
+import { createPrimaryWalletPaidInterestInboxStore } from './primary-wallet-paid-interest-inbox-store';
 import { readPrimaryWalletPaidInterestRuntime } from './primary-wallet-paid-interest-runtime';
 
 /**
- * A key moved into PIGGYVEST_WEBHOOK_KEY_ARCHIVE at rotation must keep
- * working for the family it was issued for, and only that family, through
- * the family's own re-verification (the intakes and the workers read these
- * runtimes). Inside the overlap it authorises new deliveries; past the
- * overlap it only re-checks bodies already stored.
+ * The operator-configured retained keys are validated with the family's
+ * schema caps (3 for bank and custody, 4 for interest) by the runtime
+ * readers AND again by every downstream constructor. Archived keys must
+ * never be folded into that list: a full retained list plus one archived
+ * key would otherwise fail the constructors' re-parse and disable intake
+ * and the drain even for current-key deliveries.
  */
 
 const HOUR = 3_600_000;
 const iso = (hoursAgo: number, base = Date.now()) =>
   new Date(base - hoursAgo * HOUR).toISOString();
 
-const KEYS = {
-  overlap: 'archived-overlap-secret',
-  revoked: 'archived-revoked-secret',
-  foreign: 'archived-foreign-family-secret',
-};
-
-// `base` is the clock the reader under test uses: custody readers take the
-// caller's `now`, the others use the real clock.
-function archive(family: string, foreignFamily: string, base = Date.now()) {
+function archive(family: string, base = Date.now()) {
   return JSON.stringify([
     {
       version: 'k-overlap',
       family,
-      secret: KEYS.overlap,
+      secret: 'archived-overlap-secret',
       retiredAt: iso(2, base),
     },
     {
       version: 'k-revoked',
       family,
-      secret: KEYS.revoked,
+      secret: 'archived-revoked-secret',
       retiredAt: iso(200, base),
-    },
-    {
-      version: 'k-foreign',
-      family: foreignFamily,
-      secret: KEYS.foreign,
-      retiredAt: iso(2, base),
     },
   ]);
 }
+
+const retained = (count: number) =>
+  JSON.stringify(
+    Array.from({ length: count }, (_, index) => `retained-${index + 1}`)
+  );
 
 const interestEnv = {
   NODE_ENV: 'test' as const,
@@ -72,157 +67,95 @@ const interestEnv = {
   PIGGYVEST_PRIMARY_DB_CA: interest.config.database.certificateAuthority,
 };
 
-describe('bank family', () => {
+describe('bank family at the retained-key cap', () => {
   const env = {
     ...bank.env,
-    PIGGYVEST_WEBHOOK_KEY_ARCHIVE: archive('bank', 'interest'),
+    PIGGYVEST_PRIMARY_BANK_RETAINED_WEBHOOK_SECRETS: retained(3),
+    PIGGYVEST_WEBHOOK_KEY_ARCHIVE: archive('bank'),
   };
 
-  it('accepts a bank archived key inside overlap at intake, never a revoked or foreign one', () => {
-    const retained = readPrimaryWalletBankInboxRuntime(
-      'intake',
-      env
-    )?.retainedWebhookSecrets;
-    expect(retained).toEqual([KEYS.overlap]);
-  });
-
-  it('the worker re-checks stored rows with the same family replay-only keys too', () => {
-    expect(
-      readPrimaryWalletBankInboxRuntime('worker', env)?.retainedWebhookSecrets
-    ).toEqual([KEYS.overlap, KEYS.revoked]);
-  });
-
-  it('a replayed delivery uses the replay scope at intake', () => {
-    expect(
-      readPrimaryWalletBankInboxRuntime('intake', env, 'replay')
-        ?.retainedWebhookSecrets
-    ).toEqual([KEYS.overlap, KEYS.revoked]);
-  });
-
-  it('keeps the current key and stays inside the configured retained cap', () => {
-    const full = {
-      ...env,
-      PIGGYVEST_PRIMARY_BANK_RETAINED_WEBHOOK_SECRETS: JSON.stringify([
-        'r1',
-        'r2',
-        'r3',
-      ]),
-    };
-    const config = readPrimaryWalletBankInboxRuntime('worker', full);
-    expect(config?.webhookSecret).toBe(bank.config.webhookSecret);
+  it.each([
+    'intake',
+    'worker',
+  ] as const)('the %s runtime returns exactly the operator retained list', (mode) => {
+    const config = readPrimaryWalletBankInboxRuntime(mode, env);
     expect(config?.retainedWebhookSecrets).toEqual([
-      'r1',
-      'r2',
-      'r3',
-      KEYS.overlap,
-      KEYS.revoked,
+      'retained-1',
+      'retained-2',
+      'retained-3',
     ]);
+    expect(config?.webhookSecret).toBe(bank.config.webhookSecret);
   });
 
-  it('is unchanged without an archive', () => {
-    expect(
-      readPrimaryWalletBankInboxRuntime('worker', bank.env)
-        ?.retainedWebhookSecrets
-    ).toEqual([]);
+  it('the downstream store constructor still accepts the runtime config', () => {
+    for (const mode of ['intake', 'worker'] as const) {
+      const config = readPrimaryWalletBankInboxRuntime(mode, env);
+      expect(() => createPrimaryWalletBankInboxStore(config)).not.toThrow();
+    }
   });
 });
 
-describe('interest family', () => {
+describe('interest family at the retained-key cap', () => {
   const env = {
     ...interestEnv,
-    PIGGYVEST_WEBHOOK_KEY_ARCHIVE: archive('interest', 'bank'),
+    PIGGYVEST_PRIMARY_PAID_INTEREST_RETAINED_WEBHOOK_SECRETS: retained(4),
+    PIGGYVEST_WEBHOOK_KEY_ARCHIVE: archive('interest'),
   };
 
-  it('inbox intake: overlap only; worker and replay add the revoked key; foreign never', () => {
-    expect(
-      readPrimaryWalletPaidInterestInboxRuntime('intake', env)
-        ?.retainedWebhookSecrets
-    ).toEqual([KEYS.overlap]);
-    expect(
-      readPrimaryWalletPaidInterestInboxRuntime('worker', env)
-        ?.retainedWebhookSecrets
-    ).toEqual([KEYS.overlap, KEYS.revoked]);
-    expect(
-      readPrimaryWalletPaidInterestInboxRuntime('intake', env, 'replay')
-        ?.retainedWebhookSecrets
-    ).toEqual([KEYS.overlap, KEYS.revoked]);
+  it('inbox and direct runtimes return exactly the operator retained list', () => {
+    const expected = ['retained-1', 'retained-2', 'retained-3', 'retained-4'];
+    for (const mode of ['intake', 'worker'] as const) {
+      expect(
+        readPrimaryWalletPaidInterestInboxRuntime(mode, env)
+          ?.retainedWebhookSecrets
+      ).toEqual(expected);
+    }
+    for (const mode of ['intake', 'drain'] as const) {
+      expect(
+        readPrimaryWalletPaidInterestRuntime(env, mode)?.retainedWebhookSecrets
+      ).toEqual(expected);
+    }
   });
 
-  it('direct path: intake accepts overlap only, the drain replays revoked keys', () => {
-    expect(
-      readPrimaryWalletPaidInterestRuntime(env, 'intake')
-        ?.retainedWebhookSecrets
-    ).toEqual([KEYS.overlap]);
-    expect(
-      readPrimaryWalletPaidInterestRuntime(env, 'drain')?.retainedWebhookSecrets
-    ).toEqual([KEYS.overlap, KEYS.revoked]);
-    expect(
-      readPrimaryWalletPaidInterestRuntime(env, 'intake', 'replay')
-        ?.retainedWebhookSecrets
-    ).toEqual([KEYS.overlap, KEYS.revoked]);
+  it('the downstream store constructor still accepts the runtime config', () => {
+    for (const mode of ['intake', 'worker'] as const) {
+      const config = readPrimaryWalletPaidInterestInboxRuntime(mode, env);
+      expect(() =>
+        createPrimaryWalletPaidInterestInboxStore(config)
+      ).not.toThrow();
+    }
   });
 });
 
-describe('custody family', () => {
+describe('custody family at the retained-key cap', () => {
   const env = {
     ...custody.environment,
-    PIGGYVEST_WEBHOOK_KEY_ARCHIVE: archive('custody', 'bank', custody.now),
+    PIGGYVEST_PRIMARY_CARD_RETAINED_PIGGYVEST_WEBHOOK_SECRETS: retained(3),
+    PIGGYVEST_WEBHOOK_KEY_ARCHIVE: archive('custody', custody.now),
   };
 
-  it('signed intake: overlap only; replay scope adds the revoked key; foreign never', () => {
+  it('intake and inbox runtimes return exactly the operator retained list', () => {
+    const expected = ['retained-1', 'retained-2', 'retained-3'];
     expect(
       readPrimaryCardCustodyIntakeRuntime(env, custody.now)
         ?.retainedWebhookSecrets
-    ).toEqual([KEYS.overlap]);
-    expect(
-      readPrimaryCardCustodyIntakeRuntime(env, custody.now, 'replay')
-        ?.retainedWebhookSecrets
-    ).toEqual([KEYS.overlap, KEYS.revoked]);
+    ).toEqual(expected);
+    for (const mode of ['intake', 'drain'] as const) {
+      expect(
+        readPrimaryCardCustodyInboxRuntime(env, custody.now, mode)
+          ?.retainedWebhookSecrets
+      ).toEqual(expected);
+    }
   });
 
-  it('the inbox worker (drain) re-checks stored rows with replay-only keys', () => {
-    expect(
-      readPrimaryCardCustodyInboxRuntime(env, custody.now, 'drain')
-        ?.retainedWebhookSecrets
-    ).toEqual([KEYS.overlap, KEYS.revoked]);
-    expect(
-      readPrimaryCardCustodyInboxRuntime(env, custody.now, 'intake')
-        ?.retainedWebhookSecrets
-    ).toEqual([KEYS.overlap]);
-  });
-});
-
-describe('family isolation', () => {
-  it('a key archived for one family never reaches another family runtime', () => {
-    const onlyBank = JSON.stringify([
-      {
-        version: 'k-b',
-        family: 'bank',
-        secret: KEYS.overlap,
-        retiredAt: iso(1),
-      },
-    ]);
-    expect(
-      readPrimaryWalletPaidInterestInboxRuntime('worker', {
-        ...interestEnv,
-        PIGGYVEST_WEBHOOK_KEY_ARCHIVE: onlyBank,
-      })?.retainedWebhookSecrets
-    ).toEqual([]);
-    expect(
-      readPrimaryCardCustodyIntakeRuntime(
-        { ...custody.environment, PIGGYVEST_WEBHOOK_KEY_ARCHIVE: onlyBank },
-        custody.now,
-        'replay'
-      )?.retainedWebhookSecrets
-    ).toEqual([]);
-  });
-
-  it('an unreadable archive adds nothing and does not break the runtime', () => {
-    expect(
-      readPrimaryWalletBankInboxRuntime('worker', {
-        ...bank.env,
-        PIGGYVEST_WEBHOOK_KEY_ARCHIVE: '{broken',
-      })?.retainedWebhookSecrets
-    ).toEqual([]);
+  it('the downstream intake constructor still accepts the runtime config', () => {
+    const config = readPrimaryCardCustodyIntakeRuntime(env, custody.now);
+    expect(() =>
+      createPrimaryCardCustodyInboxIntake({
+        configuration: config,
+        capability: custody.capability,
+        execute: vi.fn(),
+      })
+    ).not.toThrow();
   });
 });

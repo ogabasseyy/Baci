@@ -4,14 +4,15 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import {
+  acceptedWebhookSecrets,
   DEFAULT_WEBHOOK_KEY_OVERLAP_HOURS,
   derivePiggyvestKeyVersion,
   familyArchivedSecrets,
+  MAX_FAMILY_ARCHIVED_SECRETS,
   MAX_WEBHOOK_KEY_OVERLAP_HOURS,
   partitionArchivedKeys,
   readWebhookKeyArchive,
   readWebhookKeyOverlapMs,
-  withFamilyArchivedSecrets,
 } from './webhook-key-archive';
 
 const HOUR = 3_600_000;
@@ -176,46 +177,61 @@ describe('family-scoped archived secrets for the primary intakes', () => {
     ).toEqual([]);
   });
 
-  it('appends to retained keys after validation without duplicating or mutating', () => {
+  it('bounds the archived contribution and keeps the newest retirements', () => {
+    const many = Array.from({ length: 20 }, (_, index) => ({
+      ...entry(`old-${index}`, 100 + index, `old-secret-${index}`),
+      family: 'bank',
+    }));
+    const secrets = familyArchivedSecrets('bank', env(many), NOW, 'replay');
+    expect(secrets).toHaveLength(MAX_FAMILY_ARCHIVED_SECRETS);
+    expect(secrets[0]).toBe('old-secret-0');
+    expect(secrets).not.toContain('old-secret-19');
+    expect(familyArchivedSecrets('bank', env(many), NOW, 'ingress')).toEqual(
+      []
+    );
+  });
+});
+
+describe('acceptedWebhookSecrets', () => {
+  it('combines the operator config with the separate derived list without mutating either', () => {
     const config = Object.freeze({
       webhookSecret: 'current',
-      retainedWebhookSecrets: ['kept', 'bank-overlap-secret'],
-      other: 1,
+      retainedWebhookSecrets: Object.freeze(['kept-1', 'kept-2', 'kept-3']),
     });
-    const merged = withFamilyArchivedSecrets(
-      config,
-      'bank',
-      env(entries),
-      NOW,
-      'replay'
-    );
-    expect(merged).toEqual({
-      webhookSecret: 'current',
-      retainedWebhookSecrets: [
-        'kept',
-        'bank-overlap-secret',
-        'bank-revoked-secret',
-      ],
-      other: 1,
-    });
+    const archived = Object.freeze(['kept-2', 'archived-1']);
+
+    expect(acceptedWebhookSecrets(config, archived)).toEqual([
+      'current',
+      'kept-1',
+      'kept-2',
+      'kept-3',
+      'archived-1',
+    ]);
     expect(config.retainedWebhookSecrets).toEqual([
-      'kept',
-      'bank-overlap-secret',
+      'kept-1',
+      'kept-2',
+      'kept-3',
     ]);
   });
 
-  it('adds a retained list when the config had none and never replaces the current key', () => {
-    const merged = withFamilyArchivedSecrets(
-      { webhookSecret: 'current' } as {
-        webhookSecret: string;
-        retainedWebhookSecrets?: string[];
-      },
-      'bank',
-      env(entries),
-      NOW,
-      'ingress'
-    );
-    expect(merged.webhookSecret).toBe('current');
-    expect(merged.retainedWebhookSecrets).toEqual(['bank-overlap-secret']);
+  it('works without a retained list or archived keys and ignores non-strings', () => {
+    expect(acceptedWebhookSecrets({ webhookSecret: 'current' }, [])).toEqual([
+      'current',
+    ]);
+    expect(
+      acceptedWebhookSecrets(
+        {
+          webhookSecret: 'current',
+          retainedWebhookSecrets: ['a', '', 7 as never],
+        },
+        ['b', '  ']
+      )
+    ).toEqual(['current', 'a', 'b']);
+  });
+
+  it('never lets the derived list exceed its bound', () => {
+    const derived = Array.from({ length: 40 }, (_, index) => `d-${index}`);
+    const accepted = acceptedWebhookSecrets({ webhookSecret: 'c' }, derived);
+    expect(accepted).toHaveLength(1 + MAX_FAMILY_ARCHIVED_SECRETS);
   });
 });

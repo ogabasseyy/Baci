@@ -1,9 +1,5 @@
 import 'server-only';
 import { primaryCardCustodyInboxSchemas as schemas } from '@/schemas/primary-wallet-card-custody-inbox';
-import {
-  type WebhookKeyScope,
-  withFamilyArchivedSecrets,
-} from './webhook-key-archive';
 
 export type PrimaryCardCustodyIntakeSecrets = {
   webhookSecret: unknown;
@@ -56,8 +52,7 @@ export function readPrimaryCardCustodyIntakeSecrets(
 
 export function readPrimaryCardCustodyIntakeRuntime(
   env: NodeJS.ProcessEnv = process.env,
-  now = Date.now(),
-  keyScope: WebhookKeyScope = 'ingress'
+  now = Date.now()
 ) {
   if (
     env.PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED !== 'true' ||
@@ -114,5 +109,5 @@ export function readPrimaryCardCustodyIntakeRuntime(
   // credentials, and (in the database) the intake credential expiry
   // still fail closed.
   if (!parsed.success || !Number.isFinite(now)) return null;
-  return withFamilyArchivedSecrets(parsed.data, 'custody', env, now, keyScope);
+  return parsed.data;
 }

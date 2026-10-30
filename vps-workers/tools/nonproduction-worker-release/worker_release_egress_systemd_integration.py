@@ -49,6 +49,20 @@ def _namespace_failure_category(text: str) -> str:
     return "namespace-failure-unclassified"
 
 
+def _namespace_missing_path(text: str, candidates: tuple[Path, ...]) -> str | None:
+    """Return an exact fixture path only when the journal marks it missing."""
+    missing = ("no such file or directory", "not found", "does not exist")
+    for line in text.splitlines():
+        lowered = line.lower()
+        if not any(marker in lowered for marker in missing):
+            continue
+        for candidate in sorted((str(Path(path)) for path in candidates),
+                                key=len, reverse=True):
+            if candidate in line:
+                return candidate
+    return None
+
+
 def _approved_socket_properties(host_socket: Path, source_alias: Path,
                                isolated_alias: Path) -> tuple[str, str]:
     """Mask host /run and bind the same approved socket inode from a safe alias."""
@@ -177,8 +191,8 @@ def _unit_journal_text(unit: str) -> str:
 
     try:
         result = run_bounded_capture(
-            ("/usr/bin/journalctl", "--no-pager", "--output=short", "--lines=20",
-             f"--grep={unit}"),
+            ("/usr/bin/journalctl", "--no-pager", "--output=cat", "--lines=30",
+             f"--unit={unit}.service"),
             timeout=2, max_stream_bytes=4096,
             env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"},
         )
@@ -315,8 +329,14 @@ def _run_host_fixture() -> int:
                                         text=True, timeout=45)
                 if result.returncode != 0:
                     journal = _unit_journal_text(unit)
-                    category = _namespace_failure_category(
-                        result.stdout + "\n" + result.stderr + "\n" + journal)
+                    evidence = result.stdout + "\n" + result.stderr + "\n" + journal
+                    category = _namespace_failure_category(evidence)
+                    missing_path = _namespace_missing_path(evidence, (
+                        socket_source_alias, socket_alias, socket_path, hidden_host_socket,
+                        fixture_client, fixture_root, scratch_root, Path("/run"),
+                    ))
+                    if missing_path is not None:
+                        category = f"{category} path={missing_path}"
                     raise RuntimeError(
                         f"systemd child failed (exit={result.returncode}; category={category})")
             finally:

@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from worker_release_egress_systemd_integration import (
     _approved_socket_properties, _namespace_failure_category, _safe_diagnostic,
-    _socket_bind_mount_command,
+    _socket_bind_mount_command, _namespace_missing_path,
 )
 from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture_modules
 
@@ -71,6 +71,17 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
         self.assertEqual(category, "namespace-permission")
         self.assertNotIn("private.sock", category)
         self.assertEqual(_namespace_failure_category(""), "journal-unavailable")
+
+    def test_missing_path_diagnostic_returns_only_an_exact_known_fixture_path(self):
+        expected = Path("/tmp/worker-egress-fixture/approved-source.sock")
+        journal = ("Failed to set up mount namespacing: "
+                   f"{expected}: No such file or directory; token=must-not-escape")
+        self.assertEqual(_namespace_missing_path(journal, (expected,)), str(expected))
+        self.assertIsNone(_namespace_missing_path(
+            "Failed to set up mount namespacing: /root/private: No such file or directory",
+            (expected,)))
+        self.assertIsNone(_namespace_missing_path(
+            f"permission denied: {expected}", (expected,)))
 
     def _fixture_source(self, root: Path) -> Path:
         for index, relative in enumerate(FIXTURE_MODULES):

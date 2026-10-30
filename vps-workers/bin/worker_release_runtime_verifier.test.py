@@ -465,11 +465,44 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
                     return
                 node = ("/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "NODE_ENV=production",
                         "/usr/bin/node", "-e", "process.exit(47)")
+                host_result = __import__("subprocess").run(
+                    node, cwd=cwd, env={"PATH": "/usr/bin:/bin"},
+                    stdin=__import__("subprocess").DEVNULL,
+                    stdout=__import__("subprocess").DEVNULL,
+                    stderr=__import__("subprocess").DEVNULL, timeout=5, check=False)
+                self.assertEqual(host_result.returncode, 47,
+                                 "host-side fixed Node control must exit with its explicit marker")
+                from worker_release_runtime_verifier import _systemctl as actual_systemctl
+                observed_execstart = []
+
+                def capture_fixed_execstart(*args, **kwargs):
+                    if args == ("show", "--property=LoadState", "--value", unit):
+                        evidence = __import__("subprocess").run(
+                            (SYSTEMCTL, "show", "--property=ExecStart", "--value", unit),
+                            stdin=__import__("subprocess").DEVNULL,
+                            stdout=__import__("subprocess").PIPE,
+                            stderr=__import__("subprocess").DEVNULL,
+                            timeout=1, text=True, env={"PATH": "/usr/bin:/bin"}, check=False)
+                        if evidence.returncode == 0:
+                            argv = evidence.stdout[:4096]
+                            observed_execstart.append(
+                                "/usr/bin/node" in argv and "process.exit(47)" in argv)
+                    return actual_systemctl(*args, **kwargs)
+
                 try:
-                    _execute_fixed_unit(unit, cwd, node, properties, index + 1)
+                    with patch("worker_release_runtime_verifier._systemctl",
+                               side_effect=capture_fixed_execstart):
+                        _execute_fixed_unit(unit, cwd, node, properties, index + 1)
                 except RuntimeVerificationRejected as error:
                     if "status=47" not in str(error):
-                        raise
+                        argv_match = bool(observed_execstart and observed_execstart[0])
+                        print("runtime sandbox probe evidence: host_node_marker=47 "
+                              f"systemd_execstart_matches_fixed_argv={'yes' if argv_match else 'no'}")
+                        raise AssertionError("sandbox Node control did not return its fixed marker") from None
+                    self.assertTrue(observed_execstart and observed_execstart[0],
+                                    "systemd must retain the exact fixed Node argv for the probe")
+                    print("runtime sandbox probe evidence: host_node_marker=47 "
+                          "systemd_execstart_matches_fixed_argv=yes status=47")
                     probe_markers.append("node-started")
                 else:
                     raise AssertionError("runtime diagnostic control marker was not observed")

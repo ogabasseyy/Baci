@@ -25,31 +25,44 @@ from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture
 
 
 class SystemdIntegrationDiagnosticTests(unittest.TestCase):
-    def test_seed_client_startup_import_failure_is_fixed_and_redacted(self):
+    def test_seed_client_startup_import_failure_categories_are_fixed_and_redacted(self):
         client = Path(__file__).with_name("worker_release_egress_systemd_client.py")
         original_import = builtins.__import__
-        stderr = io.StringIO()
+        cases = (
+            (ModuleNotFoundError("secret /private/path",
+                                 name="worker_release_egress_protocol"),
+             "startup protocol module unavailable",
+             "client-startup-protocol-module-unavailable"),
+            (ModuleNotFoundError("secret /private/path", name="some_dependency"),
+             "startup import dependency unavailable",
+             "client-startup-import-dependency-unavailable"),
+            (ImportError("secret /private/path"), "startup import unavailable",
+             "client-startup-import-unavailable"),
+        )
+        for error, marker, expected_summary in cases:
+            with self.subTest(marker=marker):
+                stderr = io.StringIO()
 
-        def fail_protocol_import(name, *args, **kwargs):
-            if name == "worker_release_egress_protocol":
-                raise ImportError("secret path /private/checkout/module.py")
-            return original_import(name, *args, **kwargs)
+                def fail_protocol_import(name, *args, **kwargs):
+                    if name == "worker_release_egress_protocol":
+                        raise error
+                    return original_import(name, *args, **kwargs)
 
-        with patch.object(builtins, "__import__", side_effect=fail_protocol_import), \
-             patch.object(sys, "argv", [str(client), "--client", "/run/broker.sock", "1",
-                                         "/run/hidden.sock"]), \
-             patch("sys.stderr", stderr):
-            with self.assertRaises(SystemExit) as raised:
-                runpy.run_path(str(client), run_name="__main__")
+                with patch.object(builtins, "__import__", side_effect=fail_protocol_import), \
+                     patch.object(sys, "argv", [str(client), "--client", "/run/broker.sock", "1",
+                                                 "/run/hidden.sock"]), \
+                     patch("sys.stderr", stderr):
+                    with self.assertRaises(SystemExit) as raised:
+                        runpy.run_path(str(client), run_name="__main__")
 
-        self.assertEqual(raised.exception.code, 1)
-        message = stderr.getvalue()
-        self.assertEqual(message.strip(),
-                         "egress client integration failed: startup import unavailable")
-        self.assertNotIn("secret", message)
-        self.assertNotIn("/private/checkout", message)
-        summary = _seed_socket_probe_failure_summary("", message, "", ())
-        self.assertEqual(summary, "client-startup-import-unavailable")
+                self.assertEqual(raised.exception.code, 1)
+                message = stderr.getvalue()
+                self.assertEqual(message.strip(),
+                                 f"egress client integration failed: {marker}")
+                self.assertNotIn("secret", message)
+                self.assertNotIn("/private/path", message)
+                summary = _seed_socket_probe_failure_summary("", message, "", ())
+                self.assertEqual(summary, expected_summary)
 
     def test_diagnostic_is_printable_sanitized_and_bounded(self):
         value = _safe_diagnostic("stage\nfailed\x1b[31m", "reason: bad\x00path", limit=24)

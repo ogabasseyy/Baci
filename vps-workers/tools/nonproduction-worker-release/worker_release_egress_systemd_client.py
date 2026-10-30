@@ -170,9 +170,14 @@ if __name__ == "__main__":
     try:
         try:
             from worker_release_egress_protocol import encode_request
+        except ModuleNotFoundError as error:
+            category = ("startup protocol module unavailable"
+                        if error.name == "worker_release_egress_protocol"
+                        else "startup import dependency unavailable")
+            print(f"egress client integration failed: {category}", file=sys.stderr)
+            raise SystemExit(1)
         except ImportError:
-            print("egress client integration failed: startup import unavailable",
-                  file=sys.stderr)
+            print("egress client integration failed: startup import unavailable", file=sys.stderr)
             raise SystemExit(1)
         if len(sys.argv) != 5 or sys.argv[1] != "--client":
             raise RuntimeError("client fixture arguments are invalid")

@@ -40,6 +40,8 @@ _SYSTEMD_CODE = {"1": "exited", "2": "killed", "3": "dumped", "4": "trapped",
                  "exited": "exited", "killed": "killed", "dumped": "dumped",
                  "trapped": "trapped"}
 _CLIENT_FAILURE_LABELS = {
+    "startup protocol module unavailable": "client-startup-protocol-module-unavailable",
+    "startup import dependency unavailable": "client-startup-import-dependency-unavailable",
     "startup import unavailable": "client-startup-import-unavailable",
     "PrivateNetwork unit did not enter a distinct network namespace": "client-network-namespace-not-isolated",
     "host /run Unix socket remained reachable inside the unit": "client-host-run-socket-visible",

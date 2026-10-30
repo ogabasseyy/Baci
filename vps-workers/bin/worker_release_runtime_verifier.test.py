@@ -27,7 +27,7 @@ from worker_release_runtime_verifier_test_support import (
     classify_namespace_failure, cleanup_candidate_after_verifier,
     emit_namespace_failure_diagnostic,
 )
-from worker_release_runtime_diagnostics import BoundedLauncherStderr
+from worker_release_runtime_diagnostics import BoundedLauncherStderr, summarize_unit_exit
 
 SHA = "a" * 40
 ARCHIVE = "b" * 64
@@ -56,6 +56,15 @@ def freeze(path: Path, gid: int) -> None:
 
 
 class MaterializedRuntimeVerifierTests(unittest.TestCase):
+    def test_unit_failure_summary_is_closed_and_redacts_cgroup(self):
+        summary = summarize_unit_exit({
+            "Result": "success", "ExecMainCode": "exited", "ExecMainStatus": "1",
+            "MainPID": "0", "ControlGroup": "/system.slice/private-unexpected.service",
+        }, expected_cgroup="/system.slice/fixed.service")
+        self.assertEqual(summary,
+                         "result=success,code=exited,status=1,main_pid=zero,cgroup=mismatch")
+        self.assertNotIn("private-unexpected", summary)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(dir=Path.home())
         self.parent = Path(self.temporary.name) / "releases"

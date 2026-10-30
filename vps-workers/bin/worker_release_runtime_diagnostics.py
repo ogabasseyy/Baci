@@ -50,4 +50,23 @@ class BoundedLauncherStderr:
                      if re.search(rf"\b{re.escape(name.lower())}\b", text)), None)
 
 
-__all__ = ["BoundedLauncherStderr", "MAX_CAPTURE_BYTES"]
+def summarize_unit_exit(values: dict[str, str], *, expected_cgroup: str) -> str:
+    """Describe only fixed systemd exit enums; never return raw paths or output."""
+    result = values.get("Result", "")
+    code = values.get("ExecMainCode", "")
+    status = values.get("ExecMainStatus", "")
+    main_pid = values.get("MainPID", "")
+    cgroup = values.get("ControlGroup", "")
+    result = result if result in {
+        "success", "exit-code", "signal", "timeout", "resources", "protocol",
+    } else "other"
+    code = code if code in {"exited", "killed", "dumped", "aborted"} else "other"
+    status = status if re.fullmatch(r"[0-9]{1,3}", status) else "other"
+    main_pid = ("zero" if main_pid == "0" else
+                "nonzero" if re.fullmatch(r"[0-9]{1,10}", main_pid) else "other")
+    cgroup = "match" if cgroup == expected_cgroup else "mismatch"
+    return (f"result={result},code={code},status={status},"
+            f"main_pid={main_pid},cgroup={cgroup}")
+
+
+__all__ = ["BoundedLauncherStderr", "MAX_CAPTURE_BYTES", "summarize_unit_exit"]

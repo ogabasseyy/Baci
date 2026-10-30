@@ -27,7 +27,9 @@ from worker_release_dependency_supervisor_cgroup import (
     drain_unpinned_until_proven, preflight_cgroup_root,
 )
 from worker_release_lifecycle import AuthenticatedRun, LifecycleRejected
-from worker_release_runtime_diagnostics import BoundedLauncherStderr, MAX_CAPTURE_BYTES
+from worker_release_runtime_diagnostics import (
+    BoundedLauncherStderr, MAX_CAPTURE_BYTES, summarize_unit_exit,
+)
 from worker_release_runtime_smoke import run_fixed_smokes
 from worker_release_runtime_acl import (
     RuntimeAclRejected, grant_candidate_acl, verifier_gid, verifier_uid,
@@ -173,7 +175,10 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
                                "ControlGroup": expected_cgroup}):
                     completed = True
                 else:
-                    failure = f"fixed runtime check {check_index} exited unsuccessfully"
+                    summary = summarize_unit_exit(values, expected_cgroup=expected_cgroup)
+                    failure = (
+                        f"fixed runtime check {check_index} exited unsuccessfully ({summary})"
+                    )
                 break
             if load != "loaded":
                 failure = f"fixed runtime check {check_index} unit disappeared before terminal verification"

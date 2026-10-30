@@ -391,7 +391,9 @@ jobs:
       url: https://ogabassey.com
     permissions:
       contents: read
-    timeout-minutes: 150
+    # Run 40987693051 used 151 minutes before static generation finished.
+    # Leave the 55-minute publish budget plus completion and verification time.
+    timeout-minutes: 240
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -564,7 +566,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: .github/scripts/refuse-publish-on-promote-overlap.sh
       - name: Deploy to Vercel (with retry)
-        # Backstop for stuck deploys; the retry budget fits the 150-minute job timeout.
+        # Keep publication bounded separately from the full build/deploy job.
         timeout-minutes: 55
         env:
           DEPLOY_CURRENT_MAIN_GUARD: .github/scripts/current-main-deploy-guard.mjs

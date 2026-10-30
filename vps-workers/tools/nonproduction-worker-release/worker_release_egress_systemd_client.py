@@ -13,8 +13,6 @@ import threading
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from worker_release_egress_protocol import encode_request
-
 SYNTHETIC_REPLY = b"synthetic-registry-response-v1"
 
 
@@ -170,6 +168,12 @@ def _client_mode(broker_path: str, expected_netns_inode: int,
 
 if __name__ == "__main__":
     try:
+        try:
+            from worker_release_egress_protocol import encode_request
+        except ImportError:
+            print("egress client integration failed: startup import unavailable",
+                  file=sys.stderr)
+            raise SystemExit(1)
         if len(sys.argv) != 5 or sys.argv[1] != "--client":
             raise RuntimeError("client fixture arguments are invalid")
         raise SystemExit(_client_mode(sys.argv[2], int(sys.argv[3]), sys.argv[4]))

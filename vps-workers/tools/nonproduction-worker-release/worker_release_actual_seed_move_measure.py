@@ -75,7 +75,10 @@ def _open_dir(path: Path, substage: str) -> int:
 def move_inputs_and_measure(cache: Path, store: Path, destination: Path, *,
                             measure: Callable[[Path], tuple[int, int]]) -> dict[str, object]:
     """Rename actual cache/store inputs to a fresh sibling seed tree, no copy."""
-    if (cache.name != "cache" or store.name != "store" or cache.parent != store.parent
+    # Use the exact names created by actual-dependency-experiment.py. The
+    # published measurement tree keeps those names; labels in the report stay
+    # cache/store for readability.
+    if (cache.name != "pnpm-cache" or store.name != "pnpm-store" or cache.parent != store.parent
             or destination.exists() or destination.is_symlink()):
         raise SeedMoveMeasurementRejected("paths-invalid", "path-check")
     try:
@@ -91,8 +94,8 @@ def move_inputs_and_measure(cache: Path, store: Path, destination: Path, *,
     cache_fd = store_fd = destination_fd = -1
     try:
         try:
-            cache_fd = os.open("cache", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
-            store_fd = os.open("store", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+            cache_fd = os.open(cache.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+            store_fd = os.open(store.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
         except OSError:
             raise SeedMoveMeasurementRejected("filesystem-error", "open-inputs") from None
         target_name = destination.name
@@ -113,11 +116,11 @@ def move_inputs_and_measure(cache: Path, store: Path, destination: Path, *,
             "cache": _measure(measure, cache, "measure-cache-before"),
             "store": _measure(measure, store, "measure-store-before"),
         }
-        for name in ("cache", "store"):
+        for label, name in (("cache", cache.name), ("store", store.name)):
             try:
-                move_input_directory(parent_fd, destination_fd, name, expected[name])
+                move_input_directory(parent_fd, destination_fd, name, expected[label])
             except OSError:
-                raise SeedMoveMeasurementRejected("filesystem-error", f"move-{name}") from None
+                raise SeedMoveMeasurementRejected("filesystem-error", f"move-{label}") from None
             except Exception as error:
                 message = str(error)
                 reason = {
@@ -126,12 +129,12 @@ def move_inputs_and_measure(cache: Path, store: Path, destination: Path, *,
                     "seed move input inode changed": "source-changed",
                     "seed move destination inode changed": "inode-not-preserved",
                 }.get(message, "move-failed")
-                raise SeedMoveMeasurementRejected(reason, f"move-{name}") from None
+                raise SeedMoveMeasurementRejected(reason, f"move-{label}") from None
         after = {
-            "cache": _measure(measure, destination / "cache", "measure-cache-after"),
-            "store": _measure(measure, destination / "store", "measure-store-after"),
+            "cache": _measure(measure, destination / cache.name, "measure-cache-after"),
+            "store": _measure(measure, destination / store.name, "measure-store-after"),
         }
-        for name, path in (("cache", destination / "cache"), ("store", destination / "store")):
+        for name, path in (("cache", destination / cache.name), ("store", destination / store.name)):
             info = path.stat(follow_symlinks=False)
             if (info.st_dev, info.st_ino) != expected[name]:
                 raise SeedMoveMeasurementRejected("inode-not-preserved", f"verify-{name}-inode")

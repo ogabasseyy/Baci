@@ -262,8 +262,8 @@ def _main() -> int:
                 cache, store, seed_measurement_root / expected_sha,
                 measure=lambda path: tree_size(
                     path, max_entries=200_000,
-                    max_bytes=EXPERIMENT_STORE_BYTES if path.name == "store" else EXPERIMENT_CACHE_BYTES,
-                    excluded_relative_directories=(checked_store_exclusions if path.name == "store"
+                    max_bytes=EXPERIMENT_STORE_BYTES if path.name == "pnpm-store" else EXPERIMENT_CACHE_BYTES,
+                    excluded_relative_directories=(checked_store_exclusions if path.name == "pnpm-store"
                                                    else frozenset()),
                 ),
             )

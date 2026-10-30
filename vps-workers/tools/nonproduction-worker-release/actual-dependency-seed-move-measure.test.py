@@ -33,12 +33,12 @@ class SameFilesystemMeasurementTests(unittest.TestCase):
     def test_moves_real_input_inodes_without_copying(self):
         with tempfile.TemporaryDirectory(prefix="seed-measure-") as temporary:
             base = Path(temporary)
-            cache, store = base / "cache", base / "store"
+            cache, store = base / "pnpm-cache", base / "pnpm-store"
             cache.mkdir(); store.mkdir()
             (cache / "metadata.json").write_text("cache-data")
             (store / "package.tgz").write_bytes(b"x" * 4096)
             identities = {name: ((base / name).stat().st_dev, (base / name).stat().st_ino)
-                          for name in ("cache", "store")}
+                          for name in ("pnpm-cache", "pnpm-store")}
             target_parent = base / "seeds"
             target_parent.mkdir()
             result = MODULE.move_inputs_and_measure(
@@ -47,21 +47,21 @@ class SameFilesystemMeasurementTests(unittest.TestCase):
             self.assertEqual(result["copy_bytes"], 0)
             self.assertFalse(cache.exists())
             self.assertFalse(store.exists())
-            self.assertEqual((target_parent / ("a" * 40) / "cache").stat().st_ino, identities["cache"][1])
-            self.assertEqual((target_parent / ("a" * 40) / "store").stat().st_ino, identities["store"][1])
+            self.assertEqual((target_parent / ("a" * 40) / "pnpm-cache").stat().st_ino, identities["pnpm-cache"][1])
+            self.assertEqual((target_parent / ("a" * 40) / "pnpm-store").stat().st_ino, identities["pnpm-store"][1])
 
     def test_callback_failure_has_bounded_safe_reason_and_substage(self):
         with tempfile.TemporaryDirectory(prefix="seed-measure-callback-") as temporary:
             base = Path(temporary)
-            (base / "cache").mkdir()
-            (base / "store").mkdir()
+            (base / "pnpm-cache").mkdir()
+            (base / "pnpm-store").mkdir()
 
             def rejected(_path):
                 raise RuntimeError("measured tree contains a shared file inode")
 
             with self.assertRaises(MODULE.SeedMoveMeasurementRejected) as raised:
                 MODULE.move_inputs_and_measure(
-                    base / "cache", base / "store", base / "seeds" / ("c" * 40), measure=rejected)
+                    base / "pnpm-cache", base / "pnpm-store", base / "seeds" / ("c" * 40), measure=rejected)
             self.assertEqual(raised.exception.safe_reason, "tree-shared-inode")
             self.assertEqual(raised.exception.safe_substage, "measure-cache-before")
             self.assertNotIn("measured tree", str(raised.exception))
@@ -72,12 +72,12 @@ class SameFilesystemMeasurementTests(unittest.TestCase):
             real = base / "real"
             real.mkdir()
             (real / "secret").write_text("fixture")
-            (base / "cache").symlink_to(real, target_is_directory=True)
-            (base / "store").mkdir()
+            (base / "pnpm-cache").symlink_to(real, target_is_directory=True)
+            (base / "pnpm-store").mkdir()
             target = base / "seeds" / ("b" * 40)
             (base / "seeds").mkdir()
             with self.assertRaises(MODULE.SeedMoveMeasurementRejected) as raised:
-                MODULE.move_inputs_and_measure(base / "cache", base / "store", target, measure=measure)
+                MODULE.move_inputs_and_measure(base / "pnpm-cache", base / "pnpm-store", target, measure=measure)
             self.assertEqual(raised.exception.safe_reason, "filesystem-error")
             self.assertEqual(raised.exception.safe_substage, "open-inputs")
             self.assertEqual((real / "secret").read_text(), "fixture")

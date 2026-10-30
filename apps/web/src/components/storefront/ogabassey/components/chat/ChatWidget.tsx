@@ -2,17 +2,17 @@
 
 import '@/app/(storefront)/storefront-chat.css';
 import { Sparkles, X } from 'lucide-react';
-import type React from 'react';
-import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import type React from 'react';
 import { useCart } from '@/hooks/cart';
 import { useMerchantSafe } from '@/hooks/merchant';
 import { asRoute } from '@/lib/routes';
 import { useV2Theme } from '../../providers/v2-theme-context';
 import { useOgabasseyScrollVisibility } from '../../scroll-visibility-store';
-import { ChatMessageBubble } from './chat-message';
 import { ChatInput } from './chat-input';
-import { SUGGESTIONS, resolveSuggestionNavigationPath } from './types';
+import { ChatMessageBubble } from './chat-message';
+import { resolveSuggestionNavigationPath, SUGGESTIONS } from './types';
+import { useChatOpenOnMount } from './use-chat-open-on-mount';
 import { useOgabasseyChat } from './use-ogabassey-chat';
 
 export interface ChatWidgetProps {
@@ -56,8 +56,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     storefrontSlug: merchant?.merchant?.slug,
   });
 
-  // Suggestion chips with an `href` (e.g. "Repair quote") deep-link to a
-  // storefront page instead of sending a chat message.
   const handleSuggestionClick = (label: string) => {
     const suggestion = SUGGESTIONS.find((entry) => entry.label === label);
     const navigationPath = suggestion
@@ -100,11 +98,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     .filter(Boolean)
     .join(' ');
 
-  useEffect(() => {
-    if (openOnMount) {
-      setIsOpen(true);
-    }
-  }, [openOnMount, setIsOpen]);
+  useChatOpenOnMount(openOnMount, setIsOpen);
 
   return (
     <div
@@ -112,16 +106,15 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
       data-mobile-offset={mobileOffset}
       {...CHAT_MOBILE_OFFSET_ATTRIBUTES}
     >
-      {/* Chat Window */}
       {isOpen && (
         <div
           className={`w-[calc(100vw-32px)] md:w-[400px] h-[400px] md:h-[500px] max-h-[70vh] bg-white rounded-2xl shadow-2xl border ${isSanta ? 'border-red-200' : 'border-gray-200'} overflow-hidden flex flex-col animate-in slide-in-from-bottom-5 fade-in duration-300 origin-bottom-right ring-1 ring-black/5`}
         >
-          {/* Header */}
           <div
-            className={`relative flex items-center justify-between p-4 border-b ${isSanta
-              ? 'bg-red-600 text-white border-red-500'
-              : 'bg-white text-gray-800 border-gray-100'
+            className={`relative flex items-center justify-between p-4 border-b ${
+              isSanta
+                ? 'bg-red-600 text-white border-red-500'
+                : 'bg-white text-gray-800 border-gray-100'
             }`}
           >
             {isSanta && (
@@ -148,13 +141,18 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                 <h3 className="text-base font-semibold flex items-center gap-1">
                   {isSanta ? (
                     <>
-                      Santa AI <span className="text-xs ml-1">{'\u{1F384}'}</span>
+                      Santa AI{' '}
+                      <span className="text-xs ml-1">{'\u{1F384}'}</span>
                     </>
                   ) : (
                     'Ogabassey AI'
                   )}
                 </h3>
-                <p className={`text-xs ${isSanta ? 'text-red-100' : 'text-gray-500'}`}>Shopping assistant</p>
+                <p
+                  className={`text-xs ${isSanta ? 'text-red-100' : 'text-gray-500'}`}
+                >
+                  Shopping assistant
+                </p>
               </div>
             </div>
             <button
@@ -167,7 +165,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
             </button>
           </div>
 
-          {/* Messages Area */}
           <div
             className={`flex-1 overflow-y-auto p-4 scroll-smooth relative ${isSanta ? 'bg-[#FFF5F5]' : 'bg-[#F8F9FA]'}`}
           >
@@ -216,7 +213,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
             </div>
           </div>
 
-          {/* Input Area */}
           <ChatInput
             input={input}
             setInput={setInput}
@@ -249,7 +245,9 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
         {/* Proactive Nudge Bubble (Standard Mode) */}
         {!isOpen && !isSanta && proactiveMsg && (
           <div className="absolute bottom-[90%] right-[85%] mr-[-20px] mb-[-10px] w-48 bg-white px-4 py-3 rounded-2xl rounded-tr-none shadow-lg border border-red-50 transform transition-[transform,opacity] duration-300 animate-in fade-in slide-in-from-bottom-4 z-40">
-            <div className="text-gray-800 text-xs font-medium leading-relaxed">{proactiveMsg}</div>
+            <div className="text-gray-800 text-xs font-medium leading-relaxed">
+              {proactiveMsg}
+            </div>
             <div className="absolute -bottom-1.5 -right-1 size-4 bg-white rotate-45 border-r border-b border-red-50" />
             <button
               type="button"
@@ -291,9 +289,7 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
               )}
               <span className="ogabassey-chat-badge">
                 <span className="ogabassey-chat-badge__ping" />
-                <span className="ogabassey-chat-badge__label">
-                  AI
-                </span>
+                <span className="ogabassey-chat-badge__label">AI</span>
               </span>
             </>
           )}

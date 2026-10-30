@@ -2,6 +2,8 @@ import { IMEI_SERVICE_TIERS } from '@baci/shared/imei';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { executeImeiLookup } from './execute-imei-lookup';
 
+type FulfillmentModule = typeof import('@/lib/imei-lookup-fulfillment');
+
 const mocks = vi.hoisted(() => ({
   balance: vi.fn(),
   debit: vi.fn(),
@@ -9,7 +11,7 @@ const mocks = vi.hoisted(() => ({
   recover: vi.fn(),
 }));
 vi.mock('@/lib/imei-lookup-fulfillment', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/imei-lookup-fulfillment')>()),
+  ...(await importOriginal<FulfillmentModule>()),
   readCustomerWalletBalance: mocks.balance,
   redeemImeiWalletPayment: mocks.debit,
 }));

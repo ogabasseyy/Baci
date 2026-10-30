@@ -29,6 +29,12 @@ class SeedWorkspaceMountProofTests(unittest.TestCase):
         self.workspace.mkdir(mode=0o700)
         (self.workspace / "seeds").mkdir(mode=0o700)
         self.calls = []
+        self.systemd = {"What": "/dev/loop7", "Where": str(self.workspace),
+                        "Type": "ext4", "Options": "nosuid,nodev,noexec",
+                        "ActiveState": "active"}
+        self.findmnt = {"SOURCE": "/dev/loop7", "FSTYPE": "ext4",
+                        "OPTIONS": "rw,nosuid,nodev,noexec", "TARGET": str(self.workspace)}
+        self.loop = {"BACK-FILE": str(self.image), "SIZELIMIT": "0"}
         self.patches = [
             patch.object(mount, "IMAGE", self.image),
             patch.object(mount, "WORK_ROOT", self.workspace),
@@ -53,15 +59,14 @@ class SeedWorkspaceMountProofTests(unittest.TestCase):
         if args[0] == "/usr/bin/systemctl":
             key = next(arg.removeprefix("--property=") for arg in args
                        if arg.startswith("--property="))
-            values = {"What": str(self.image), "Where": str(self.workspace),
-                      "Type": "ext4", "Options": mount.MOUNT_OPTIONS,
-                      "ActiveState": "active"}
-            return SimpleNamespace(stdout=values[key] + "\n", returncode=0)
+            return SimpleNamespace(stdout=self.systemd[key] + "\n", returncode=0)
         if args[0] == "/usr/bin/findmnt":
-            return SimpleNamespace(stdout=(
-                f"/dev/loop7 ext4 rw,nosuid,nodev,noexec {self.workspace}\n"), returncode=0)
+            values = [self.findmnt[key] for key in ("SOURCE", "FSTYPE", "OPTIONS", "TARGET")]
+            return SimpleNamespace(stdout=" ".join(values) + "\n", returncode=0)
         if args[0] == "/usr/sbin/losetup":
-            return SimpleNamespace(stdout=f"{self.image} 0\n", returncode=0)
+            self.assertEqual(args[-1], self.findmnt["SOURCE"])
+            values = [self.loop[key] for key in ("BACK-FILE", "SIZELIMIT")]
+            return SimpleNamespace(stdout=" ".join(values) + "\n", returncode=0)
         if args[0] == "/usr/sbin/tune2fs":
             return SimpleNamespace(stdout=(
                 "Inode count: 20\nBlock count: 64\nBlock size: 1\n"), returncode=0)
@@ -73,7 +78,7 @@ class SeedWorkspaceMountProofTests(unittest.TestCase):
             runner=self.runner, image_identity=identity,
         )
         self.assertEqual((capacity, inodes), (64, 20))
-        self.assertEqual(len(self.calls), 8)
+        self.assertEqual(len(self.calls), 6)
 
     def test_plain_host_directory_is_not_accepted_as_quota_mount(self):
         with patch.object(mount.os.path, "ismount", return_value=False):
@@ -81,15 +86,58 @@ class SeedWorkspaceMountProofTests(unittest.TestCase):
                 mount.verify_bounded_seed_workspace(runner=self.runner)
         self.assertEqual(self.calls, [])
 
-    def test_wrong_loop_backing_file_is_rejected(self):
-        def wrong_runner(args, **kwargs):
-            if args[0] == "/usr/sbin/losetup":
-                self.calls.append(args)
-                return SimpleNamespace(stdout="/other/image 0\n", returncode=0)
-            return self.runner(args, **kwargs)
+    def test_systemd_mount_must_have_exact_target_type_and_active_state(self):
+        invalid_properties = (("Where", "/other/target"),
+                              ("Type", "xfs"),
+                              ("ActiveState", "inactive"))
+        for key, value in invalid_properties:
+            with self.subTest(key=key, value=value):
+                self.systemd[key] = value
+                self.calls.clear()
+                with self.assertRaisesRegex(BuilderRejected,
+                                            "systemd mount contract differs"):
+                    mount.verify_bounded_seed_workspace(runner=self.runner)
+                self.assertFalse(any(call[0] == "/usr/bin/findmnt" for call in self.calls))
+                self.systemd[key] = {"Where": str(self.workspace),
+                                     "Type": "ext4", "ActiveState": "active"}[key]
 
+    def test_wrong_loop_backing_file_is_rejected(self):
+        self.loop["BACK-FILE"] = "/other/image"
         with self.assertRaisesRegex(BuilderRejected, "backing file differs"):
-            mount.verify_bounded_seed_workspace(runner=wrong_runner)
+            mount.verify_bounded_seed_workspace(runner=self.runner)
+
+    def test_loop_device_must_be_limited_to_the_fixed_image_size(self):
+        self.loop["SIZELIMIT"] = "4096"
+        with self.assertRaisesRegex(BuilderRejected, "backing file differs"):
+            mount.verify_bounded_seed_workspace(runner=self.runner)
+
+    def test_effective_mount_flags_must_be_safe(self):
+        unsafe_options = (
+            "rw,nodev,noexec",  # missing nosuid
+            "rw,nosuid,noexec",  # missing nodev
+            "rw,nosuid,nodev",  # missing noexec
+            "rw,nosuid,nodev,noexec,exec",
+            "rw,nosuid,nodev,noexec,dev",
+            "rw,nosuid,nodev,noexec,suid",
+        )
+        for options in unsafe_options:
+            with self.subTest(options=options):
+                self.findmnt["OPTIONS"] = options
+                with self.assertRaisesRegex(BuilderRejected, "mount source or options are unsafe"):
+                    mount.verify_bounded_seed_workspace(runner=self.runner)
+
+    def test_mount_must_be_the_exact_ext4_loop_target(self):
+        invalid_mounts = (
+            ("/dev/sda1", "ext4", "rw,nosuid,nodev,noexec", str(self.workspace)),
+            ("/dev/loop7", "xfs", "rw,nosuid,nodev,noexec", str(self.workspace)),
+            ("/dev/loop7", "ext4", "rw,nosuid,nodev,noexec", str(self.root)),
+        )
+        for source, filesystem, options, target in invalid_mounts:
+            with self.subTest(source=source, filesystem=filesystem, target=target):
+                self.findmnt.update(SOURCE=source, FSTYPE=filesystem,
+                                    OPTIONS=options, TARGET=target)
+                with self.assertRaisesRegex(BuilderRejected, "mount source or options are unsafe"):
+                    mount.verify_bounded_seed_workspace(runner=self.runner)
 
     def test_missing_protected_seed_child_is_rejected(self):
         (self.workspace / "seeds").rmdir()

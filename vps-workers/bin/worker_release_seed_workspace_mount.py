@@ -34,13 +34,15 @@ def verify_bounded_seed_workspace(*, runner: Callable[..., object] = subprocess.
                 and (image.st_dev, image.st_ino) != image_identity)):
         raise BuilderRejected("fixed seed workspace image identity is unsafe")
 
+    # The active unit may expose a resolved loop device as What, and loop= is
+    # consumed while setting that device up. Verify the effective source and
+    # mount flags below instead of requiring configured strings verbatim.
     properties = {
         key: _query(runner, ("/usr/bin/systemctl", "show", f"--property={key}",
                              "--value", UNIT_NAME), timeout=3)
-        for key in ("What", "Where", "Type", "Options", "ActiveState")
+        for key in ("Where", "Type", "ActiveState")
     }
-    if properties != {"What": str(IMAGE), "Where": str(WORK_ROOT), "Type": "ext4",
-                      "Options": MOUNT_OPTIONS, "ActiveState": "active"}:
+    if properties != {"Where": str(WORK_ROOT), "Type": "ext4", "ActiveState": "active"}:
         raise BuilderRejected("fixed seed workspace systemd mount contract differs")
 
     mount = _query(runner, ("/usr/bin/findmnt", "--noheadings", "--raw", "--output",

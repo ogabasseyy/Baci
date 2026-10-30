@@ -69,23 +69,29 @@ legacy_schedule_active() {
 # tick is running, so the two identities never process work concurrently.
 stop_legacy() {
   local backup="$1" unit
-  # Called from a conditional, where errexit is ignored: check each step.
-  crontab -l > "$backup" || return 1
-  grep -Fqx "$CRON_BLOCK_START" "$backup" || return 1
+  # Called from a conditional, where errexit is ignored: check each step and
+  # name the one that failed.
+  crontab -l > "$backup" || { legacy_step_failed "saving the crontab backup"; return 1; }
+  grep -Fqx "$CRON_BLOCK_START" "$backup" || { legacy_step_failed "finding the worker block in the backup"; return 1; }
   awk -v start="$CRON_BLOCK_START" -v end="$CRON_BLOCK_END" '
     $0 == start { skip = 1; next }
     $0 == end { skip = 0; next }
     !skip { print }
-  ' "$backup" | crontab - || return 1
-  ! legacy_schedule_active || return 1
-  systemctl --user stop "${LEGACY_UNITS[@]}" || return 1
-  systemctl --user disable --quiet "${LEGACY_UNITS[@]}" || return 1
+  ' "$backup" | crontab - || { legacy_step_failed "removing the worker block from the crontab"; return 1; }
+  ! legacy_schedule_active || { legacy_step_failed "confirming the worker block is gone"; return 1; }
+  systemctl --user stop "${LEGACY_UNITS[@]}" || { legacy_step_failed "stopping the legacy services"; return 1; }
+  systemctl --user disable --quiet "${LEGACY_UNITS[@]}" || { legacy_step_failed "disabling the legacy services"; return 1; }
   for unit in "${LEGACY_UNITS[@]}"; do
-    if systemctl --user is-active --quiet "$unit"; then return 1; fi
+    if systemctl --user is-active --quiet "$unit"; then { legacy_step_failed "$unit is still active"; return 1; }; fi
   done
   if [ -d "$LEGACY_DIR/locks" ]; then
-    flock -w "$LOCK_WAIT" "$LEGACY_DIR/locks/gigl-tracking.lock" true || return 1
+    flock -w "$LOCK_WAIT" "$LEGACY_DIR/locks/gigl-tracking.lock" true ||
+      { legacy_step_failed "waiting for the legacy GIGL tick"; return 1; }
   fi
+}
+
+legacy_step_failed() {
+  echo "sync-from-runner: legacy retirement step failed: $1." >&2
 }
 
 restore_legacy() {
@@ -94,6 +100,11 @@ restore_legacy() {
   systemctl --user enable --now --quiet "${LEGACY_UNITS[@]}" 2>/dev/null || true
   echo "sync-from-runner: restored the legacy worker schedule from $backup." >&2
 }
+
+# Actions job steps do not inherit the runner listener's user-bus settings,
+# so point `systemctl --user` at this user's manager explicitly.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
 
 run_release build "$sha"
 

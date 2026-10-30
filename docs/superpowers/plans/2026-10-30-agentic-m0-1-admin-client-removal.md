@@ -66,7 +66,8 @@ Not covered: multi-merchant partner binding and partner-credential rotation. Tod
 | Modify | `apps/web/tools/db/supabase-history-replay-cart-pending-sources.ts` | Register the migration hash |
 | Modify | `apps/web/tools/db/expected-recent-cart-pending-sources.test-support.ts` | Expected registry fixture |
 | Modify | `apps/web/tools/db/supabase-history-replay-cart-pending-sources.test.ts` | Fixture count 94 → 95 |
-| Modify (if the test asks) | `apps/web/tools/cost/storefront-edge-inventory-snapshot.repository.test.ts` | Frozen snapshot hash |
+| Regenerate | `docs/superpowers/evidence/storefront-edge/task-1a-inventory.json` | Edge inventory; it binds the committed bytes of the agentic route files this plan edits |
+| Modify | `apps/web/tools/cost/storefront-edge-inventory-snapshot.repository.test.ts` | Expected `snapshotSha256` for the regenerated inventory |
 | Modify | `apps/web/src/lib/agentic/merchant-context.ts` and `merchant-context.test.ts` | `includePaymentSplit` option; remove the admin-path resolver |
 | Modify | `apps/web/src/app/api/agentic/catalog/{search,lookup,product}/route.ts` | Scoped merchant resolution |
 | Modify | `apps/web/src/app/api/agentic/checkout_sessions/checkout-session-create-handler.ts` | Same |
@@ -389,23 +390,7 @@ git add supabase/migrations/20261030140000_agentic_merchant_payment_split.sql su
 git commit -m "feat(agentic): add scoped payment-split lookup for checkout completion"
 ```
 
-- [ ] **Step 7: Refresh the frozen edge-inventory hash if needed**
-
-```bash
-cd apps/web
-npm_config_verify_deps_before_run=false pnpm exec vitest run tools/cost/storefront-edge-inventory-snapshot.repository.test.ts
-```
-
-Expected: PASS, or a single failure where only `snapshotSha256` differs and `rowCount` is still `585`. In that case, put the received `snapshotSha256` into line 21 of `apps/web/tools/cost/storefront-edge-inventory-snapshot.repository.test.ts`, rerun until it passes, then commit:
-
-```bash
-cd /Users/mac/Baci-app/.worktrees/agentic-m0-admin-client
-coderabbit review --agent -t uncommitted
-git add apps/web/tools/cost/storefront-edge-inventory-snapshot.repository.test.ts
-git commit -m "test(cost): refresh edge inventory snapshot hash for payment-split migration"
-```
-
-If `rowCount` or anything else differs, stop and investigate; this plan adds no routes or HTTP methods.
+Do not touch the edge-inventory snapshot here. Task 8 regenerates it once, after every route change is committed.
 
 ---
 
@@ -950,12 +935,14 @@ git commit -m "fix(agentic): read the completion payment split without the admin
 
 ---
 
-### Task 8: Delete the admin-path resolver and commit the guard
+### Task 8: Delete the admin-path resolver, commit the guard and regenerate the edge inventory
 
 **Files:**
 - Modify: `apps/web/src/lib/agentic/merchant-context.ts`
 - Modify: `apps/web/src/lib/agentic/merchant-context.test.ts`
 - Add: `apps/web/src/app/api/agentic/admin-client-boundary.test.ts` (written in Task 2)
+- Regenerate: `docs/superpowers/evidence/storefront-edge/task-1a-inventory.json`
+- Modify: `apps/web/tools/cost/storefront-edge-inventory-snapshot.repository.test.ts`
 
 - [ ] **Step 1: Confirm nothing calls the old resolver**
 
@@ -1009,6 +996,49 @@ coderabbit review --agent -t uncommitted
 git add apps/web/src/lib/agentic/merchant-context.ts apps/web/src/lib/agentic/merchant-context.test.ts apps/web/src/app/api/agentic/admin-client-boundary.test.ts
 git commit -m "refactor(agentic): remove the service-role merchant resolver and guard the routes"
 ```
+
+- [ ] **Step 7: Watch the edge-inventory check fail**
+
+The edge inventory covers the agentic catalog, checkout-session and order routes (`apps/web/tools/cost/storefront-edge-api-source-allowlist.ts`). Its check rebuilds the inventory from the committed source at `HEAD` and compares it with the checked-in file, so the route edits from Tasks 6–8 make it fail until the file is regenerated.
+
+```bash
+cd apps/web
+npm_config_verify_deps_before_run=false pnpm exec vitest run tools/cost/storefront-edge-inventory-snapshot.repository.test.ts
+```
+
+Expected: FAIL with `inventory snapshot does not match committed source`.
+
+- [ ] **Step 8: Regenerate the inventory from the committed source**
+
+The generator rejects uncommitted changes to the files it reads, so run it only after Step 6's commit, with a clean `git status`.
+
+```bash
+cd /Users/mac/Baci-app/.worktrees/agentic-m0-admin-client
+git status --short
+npm_config_verify_deps_before_run=false pnpm --filter @baci/web exec tsx tools/cost/create-storefront-edge-inventory-cli.ts --repo-root "$(git rev-parse --show-toplevel)" --source-sha "$(git rev-parse HEAD)" --pilot-hostname baci-edge-pilot.usebaci.com --posthog-relay-path /baci-relay --output "$(git rev-parse --show-toplevel)/docs/superpowers/evidence/storefront-edge/task-1a-inventory.json"
+python3 -c "import json; d=json.load(open('docs/superpowers/evidence/storefront-edge/task-1a-inventory.json')); print(d['inventorySha256'], len(d['rows']))"
+git diff --stat docs/superpowers/evidence/storefront-edge/task-1a-inventory.json
+```
+
+Expected: `git status --short` prints nothing before the generator runs. The last two commands print the new `inventorySha256` and `585` rows, and the diff touches only digest fields. If the row count is not 585, stop: this plan adds no routes or HTTP methods.
+
+- [ ] **Step 9: Point the snapshot test at the regenerated inventory**
+
+In `apps/web/tools/cost/storefront-edge-inventory-snapshot.repository.test.ts`, replace the expected `snapshotSha256` value (`088504efd989605fbd4b9272f5afa7588cde3d2519b2d2ff47a687f503e53237` on the baseline) with the `inventorySha256` printed in Step 8. Leave `rowCount: 585` unchanged.
+
+- [ ] **Step 10: Commit the inventory and rerun the check**
+
+The check validates against committed source, so commit first, then confirm it passes.
+
+```bash
+coderabbit review --agent -t uncommitted
+git add docs/superpowers/evidence/storefront-edge/task-1a-inventory.json apps/web/tools/cost/storefront-edge-inventory-snapshot.repository.test.ts
+git commit -m "chore(cost): regenerate edge inventory after agentic route changes"
+cd apps/web
+npm_config_verify_deps_before_run=false pnpm exec vitest run tools/cost/storefront-edge-inventory-snapshot.repository.test.ts
+```
+
+Expected: PASS. If any later task edits a file under `apps/web/src/app/api/agentic`, repeat Steps 7–10 after committing it.
 
 ---
 
@@ -1152,4 +1182,5 @@ Expected: one row, `anon_can_execute = false`, `context_role_can_execute = true`
 - **Ordering:**
   - Task 6 renames mocks only for handlers it switches. Completion tests are renamed in Task 7, together with the completion handler, so every commit is green.
   - The guard test stays uncommitted until it passes in Task 8.
+  - The edge inventory is regenerated once, in Task 8, after every route edit is committed; its check reads committed source, so it cannot be refreshed earlier.
 - **Names:** `resolveAgenticMerchantContextFromRpc`, `includePaymentSplit`, `resolve_agentic_merchant_payment_split`, `readAgenticPaymentSplit` and `AgenticPaymentSplitResult` are spelled the same in every task.

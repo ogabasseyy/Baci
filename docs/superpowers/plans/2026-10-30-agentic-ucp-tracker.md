@@ -174,7 +174,7 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | Date | Document | Reviewer | Outcome |
 | --- | --- | --- | --- |
 | 30 Oct | Roadmap | Five external review rounds | All findings applied; F33–F38 added |
-| 30 Oct | Plan 1 | Not yet reviewed | — |
+| 30 Oct | Plan 1 | Codex on PR #3851 (commit `faf0ddf`) | One P2: the edge inventory binds the edited agentic route files, so it must be regenerated after they are committed. Fixed in plan 1 Task 8. |
 
 ## Change log
 

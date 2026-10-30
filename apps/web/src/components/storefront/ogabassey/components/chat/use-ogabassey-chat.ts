@@ -131,6 +131,7 @@ export function useOgabasseyChat({
           text: displayText,
           santaActions,
           ...(aiReply.events.length > 0 ? { uiEvents: aiReply.events } : {}),
+          ...(aiReply.action ? { orderAction: aiReply.action } : {}),
           ...(aiReply.merchantSlug
             ? { merchantSlug: aiReply.merchantSlug }
             : {}),

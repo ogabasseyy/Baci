@@ -169,5 +169,11 @@ describe('/cdn-image/[...path] same-origin route and 20 KB AVIF step-down', () =
     );
     expect(response.status).toBe(200);
     expect(response.headers.get('X-Hero-Effective-Quality')).toBe('60');
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, max-age=60, s-maxage=60'
+    );
+    expect(response.headers.get('CDN-Cache-Control')).toBe(
+      'public, max-age=60'
+    );
   });
 });

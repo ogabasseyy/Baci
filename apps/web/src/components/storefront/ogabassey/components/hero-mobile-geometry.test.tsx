@@ -6,8 +6,10 @@ import { computeHeroMobileImageMinAreaPx2 } from './compute-hero-mobile-image-mi
 import { HeroMobileCarousel } from './hero-mobile-carousel';
 import {
   HERO_MOBILE_CONTROLS_ROW_CLASSES,
+  HERO_MOBILE_IMAGE_COLUMN_CLASSES,
   HERO_MOBILE_PANEL_CLASSES,
   HERO_MOBILE_SLIDE_GRID_CLASSES,
+  HERO_MOBILE_TITLE_CLASSES,
 } from './hero-mobile-geometry';
 
 vi.mock('next/link', () => ({
@@ -140,6 +142,23 @@ describe('permanent hero mobile geometry', () => {
   });
 
   it('guarantees the slide-0 hero image painted area strictly exceeds a 3-line h2 heading at 360px, 390px, and 412px viewports', () => {
+    const threeLineSlide = {
+      ...SLIDES[0],
+      name: 'Redmi Note 17 Pro Max 5G (512GB / 16GB RAM) Global Edition',
+    };
+    const carousel = render(
+      <HeroMobileCarousel slides={[threeLineSlide]} />
+    ).container;
+
+    const heading = carousel.querySelector('h2');
+    const imageColumn = carousel.querySelector('picture')?.parentElement;
+    const heroImg = carousel.querySelector('picture img');
+
+    expect(heading?.className).toBe(HERO_MOBILE_TITLE_CLASSES);
+    expect(heading?.className).toContain('line-clamp-3');
+    expect(imageColumn?.className).toBe(HERO_MOBILE_IMAGE_COLUMN_CLASSES);
+    expect(heroImg?.getAttribute('fetchpriority')).toBe('high');
+
     for (const viewportWidthPx of [360, 390, 412]) {
       const maxHeadingArea =
         computeHeroMobileHeadingMaxAreaPx2(viewportWidthPx);

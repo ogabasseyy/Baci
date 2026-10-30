@@ -4,6 +4,11 @@ import {
 } from '@/components/storefront/ogabassey/components/hero-mobile-image-config';
 import type { OgabasseyCdnImageProxyRequest } from '@/schemas/ogabassey-cdn-image-proxy';
 
+/**
+ * Returns the descending AVIF quality step-down ladder (`[70, 60, 50]`) for
+ * mobile hero (`<= 384w`) AVIF requests, or a single-element `[quality]` array
+ * for wider or non-AVIF requests.
+ */
 export function getCandidateQualitiesForRequest(
   options: OgabasseyCdnImageProxyRequest['options']
 ): readonly number[] {

@@ -1,5 +1,9 @@
 import { toOgabasseySameOriginTransformUrl } from '@/lib/ogabassey-same-origin-hero-url';
 
+/**
+ * Rewrites every candidate URL in a responsive `srcset` string to its
+ * same-origin `/cdn-image/...` path while preserving width/density descriptors.
+ */
 export function toOgabasseySameOriginSrcSet(
   srcSet: string | null | undefined
 ): string | null | undefined {

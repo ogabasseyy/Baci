@@ -92,4 +92,41 @@ describe('fetchSameOriginOgabasseyImageResponse', () => {
       'https://cdn.ogabassey.com/image/width=640,quality=70,format=avif/core-assets/products/redmi.avif',
     ]);
   });
+
+  it('attaches an AbortSignal to both single-quality and multi-quality upstream fetch calls and downgrades cache TTL when a candidate fails transiently', async () => {
+    const signals: Array<AbortSignal | null | undefined> = [];
+    const transientFetcher: typeof fetch = vi.fn(async (input, init) => {
+      signals.push(init?.signal);
+      if (String(input).includes('quality=70')) {
+        return new Response('Bad Gateway', { status: 502 });
+      }
+      return new Response(new Uint8Array(14_000), {
+        headers: { 'content-type': 'image/avif' },
+        status: 200,
+      });
+    });
+
+    const response = await fetchSameOriginOgabasseyImageResponse(
+      {
+        assetPath: 'core-assets/products/redmi.avif',
+        options: {
+          fit: 'inside',
+          format: 'avif',
+          quality: 70,
+          width: 384,
+        },
+      },
+      transientFetcher
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('X-Hero-Effective-Quality')).toBe('60');
+    expect(response.headers.get('Cache-Control')).toBe(
+      'public, max-age=60, s-maxage=60'
+    );
+    expect(response.headers.get('CDN-Cache-Control')).toBe(
+      'public, max-age=60'
+    );
+    expect(signals.every((signal) => signal instanceof AbortSignal)).toBe(true);
+  });
 });

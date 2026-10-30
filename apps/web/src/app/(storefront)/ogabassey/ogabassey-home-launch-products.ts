@@ -14,6 +14,7 @@ import {
 } from '@/lib/cached-data';
 import { getCachedStorefrontProductsBySlugs } from '@/lib/cached-storefront-products-by-slugs';
 import type { CurrencyConfig } from '@/lib/currency';
+import { preferFirstPartyCdnLeadItem } from '@/lib/prefer-first-party-cdn-lead-item';
 
 /** Newest-created first. ISO timestamps compare lexically by time; missing
  * timestamps sort last. Used only for the launch carousel so its order is
@@ -29,35 +30,11 @@ export function sortByNewestCreated<T>(rows: readonly T[]): T[] {
   });
 }
 
-function hasFirstPartyCdnImage(image: string | null | undefined): boolean {
-  if (!image) {
-    return false;
-  }
-  return (
-    image.startsWith('/cdn-image/') ||
-    image.startsWith('https://cdn.ogabassey.com/')
-  );
-}
-
-function preferFirstPartyCdnLeadProduct<T extends { image?: string | null }>(
-  items: readonly T[]
-): T[] {
-  if (items.length <= 1 || hasFirstPartyCdnImage(items[0]?.image)) {
-    return [...items];
-  }
-  const cdnLeadIndex = items.findIndex((item) =>
-    hasFirstPartyCdnImage(item.image)
-  );
-  if (cdnLeadIndex <= 0) {
-    return [...items];
-  }
-  return [
-    items[cdnLeadIndex],
-    ...items.slice(0, cdnLeadIndex),
-    ...items.slice(cdnLeadIndex + 1),
-  ];
-}
-
+/**
+ * Selects, orders, and formats the OgaBassey homepage launch carousel products,
+ * applying configured launch pins, fresh-arrival promotion, and first-party CDN
+ * lead preference for Slide 0.
+ */
 export function selectOgabasseyLaunchProducts({
   launchCandidateRows,
   pinnedProductRows,
@@ -79,13 +56,14 @@ export function selectOgabasseyLaunchProducts({
     OGABASSEY_PINNED_LAUNCH_SLUGS,
     OGABASSEY_LAUNCH_PINS_SINCE
   );
-  const launchSubset = preferFirstPartyCdnLeadProduct(
+  const launchSubset = preferFirstPartyCdnLeadItem(
     selectLaunchProducts(
       [...pinnedProducts, ...carouselProducts].filter(
         (product) => Boolean(product.slug) && Boolean(product.image)
       ),
       { pinned: launchPins, limit: LAUNCH_CAROUSEL_LIMIT }
-    )
+    ),
+    (product) => product.image
   );
 
   // Launch items feed the server-built hero slides and home JSON-LD only —

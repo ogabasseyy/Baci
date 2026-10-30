@@ -5,6 +5,10 @@ import {
   HERO_MOBILE_SECTION_HORIZONTAL_PADDING_PX,
 } from './hero-mobile-geometry';
 
+/**
+ * Computes the minimum painted area (`width * height` in CSS px²) of the square
+ * `1:1` slide-0 hero `<img>` inside the mobile hero's 2-of-5 image column.
+ */
 export function computeHeroMobileImageMinAreaPx2(
   viewportWidthPx: number
 ): number {

@@ -293,4 +293,45 @@ describe('effectiveLaunchPins', () => {
       )
     ).toEqual(['galaxy-s27-ultra', 'iphone-duo']);
   });
+
+  it('matches hyphenated category slugs and joined categories/product_categories relations when legacy category is null', () => {
+    const candidates = [
+      {
+        slug: 'ecoflow-delta',
+        created_at: '2026-10-30T00:00:00Z',
+        category: null,
+        category_slug: 'power-stations',
+      },
+      {
+        slug: 'privacy-glass',
+        created_at: '2026-10-30T00:00:00Z',
+        category: null,
+        categories: { name: 'Screen Protectors', slug: 'screen-protectors' },
+      },
+      {
+        slug: 'magsafe-battery',
+        created_at: '2026-10-30T00:00:00Z',
+        category: null,
+        product_categories: [
+          { categories: { name: 'Batteries', slug: 'batteries' } },
+        ],
+      },
+      {
+        slug: 'galaxy-z-fold9',
+        created_at: '2026-10-30T00:00:00Z',
+        category: null,
+        product_categories: [
+          { categories: { name: 'Smartphones', slug: 'smartphones' } },
+        ],
+      },
+    ];
+
+    expect(
+      effectiveLaunchPins(
+        candidates,
+        ['iphone-duo'],
+        '2026-10-29T00:00:00.000Z'
+      )
+    ).toEqual(['galaxy-z-fold9', 'iphone-duo']);
+  });
 });

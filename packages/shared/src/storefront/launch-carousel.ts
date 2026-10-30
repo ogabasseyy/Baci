@@ -115,18 +115,61 @@ export function launchCtaLabel(name: string): string {
 }
 
 const NON_LAUNCH_DEVICE_CATEGORY_PATTERN =
-  /\b(?:batter(?:y|ies)|power\s*stations?|accessor(?:y|ies)|cases?|chargers?|cables?|screen\s*protectors?|watch\s*straps?|adapters?)\b/i;
+  /\b(?:batter(?:y|ies)|power[\s-]*stations?|accessor(?:y|ies)|cases?|chargers?|cables?|screen[\s-]*protectors?|watch[\s-]*straps?|adapters?)\b/i;
+
+interface JoinedCategoryRef {
+  name?: string | null;
+  slug?: string | null;
+}
 
 interface DatedProduct {
   slug?: string | null;
   created_at?: string | null;
   category?: string | null;
   category_slug?: string | null;
+  categories?: JoinedCategoryRef | readonly JoinedCategoryRef[] | null;
+  product_categories?:
+    | readonly ({
+        categories?: JoinedCategoryRef | readonly JoinedCategoryRef[] | null;
+      } | null)[]
+    | null;
 }
 
+/**
+ * Extracts non-empty category names and slugs from a single or array-shaped
+ * joined category relation.
+ */
+function collectJoinedCategoryValues(
+  relation: JoinedCategoryRef | readonly JoinedCategoryRef[] | null | undefined
+): string[] {
+  if (!relation) {
+    return [];
+  }
+  const items = Array.isArray(relation) ? relation : [relation];
+  return items.flatMap((item) =>
+    [item?.name, item?.slug].filter(
+      (value): value is string => typeof value === 'string' && value.length > 0
+    )
+  );
+}
+
+/**
+ * Determines whether a newly created product belongs to a device category
+ * eligible for automatic launch-carousel promotion.
+ */
 function isEligibleLaunchArrival(row: DatedProduct): boolean {
-  const categoryText = [row.category, row.category_slug]
-    .filter((value): value is string => typeof value === 'string')
+  const joinedFromProductCategories = (row.product_categories ?? []).flatMap(
+    (entry) => collectJoinedCategoryValues(entry?.categories)
+  );
+  const categoryText = [
+    row.category,
+    row.category_slug,
+    ...collectJoinedCategoryValues(row.categories),
+    ...joinedFromProductCategories,
+  ]
+    .filter(
+      (value): value is string => typeof value === 'string' && value.length > 0
+    )
     .join(' ');
   if (!categoryText) {
     return true;

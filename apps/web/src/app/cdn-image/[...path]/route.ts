@@ -9,6 +9,11 @@ interface CdnImageRouteContext {
   }>;
 }
 
+/**
+ * Handles `GET /cdn-image/[...path]` requests by validating the transform
+ * options, asset path prefix/extension, and optional `?v=` query parameter
+ * before proxying the image from `cdn.ogabassey.com`.
+ */
 export async function GET(
   request: NextRequest,
   context: CdnImageRouteContext

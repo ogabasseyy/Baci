@@ -8,6 +8,7 @@ import type { OgabasseyCdnImageProxyRequest } from '@/schemas/ogabassey-cdn-imag
 const IMMUTABLE_IMAGE_CACHE_CONTROL =
   'public, max-age=31536000, s-maxage=31536000, immutable';
 const SHORT_ERROR_CACHE_CONTROL = 'public, max-age=60, s-maxage=60';
+const UPSTREAM_TIMEOUT_MS = 5_000;
 
 const MIME_BY_FORMAT: Record<
   OgabasseyCdnImageProxyRequest['options']['format'],
@@ -20,6 +21,10 @@ const MIME_BY_FORMAT: Record<
   webp: 'image/webp',
 };
 
+/**
+ * Builds a short-cached JSON error response for missing or unavailable upstream
+ * image variants.
+ */
 function buildErrorResponse(message: string, status: 404 | 502): Response {
   return NextResponse.json(
     { error: message },
@@ -45,6 +50,10 @@ interface CandidateFailure {
 
 type CandidateOutcome = CandidateFailure | CandidateSuccess;
 
+/**
+ * Fetches a single upstream quality variant with a bounded timeout combined
+ * with any caller-provided abort signal.
+ */
 async function fetchCandidateVariant(
   parsed: OgabasseyCdnImageProxyRequest,
   fetcher: typeof fetch,
@@ -60,7 +69,10 @@ async function fetchCandidateVariant(
     searchParams
   );
   try {
-    const response = await fetcher(upstreamUrl, { signal });
+    const timeoutSignal = AbortSignal.timeout(UPSTREAM_TIMEOUT_MS);
+    const response = await fetcher(upstreamUrl, {
+      signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
+    });
     if (!response.ok) {
       return {
         ok: false,
@@ -83,6 +95,11 @@ async function fetchCandidateVariant(
   }
 }
 
+/**
+ * Proxies an OgaBassey CDN image request on the storefront's own origin,
+ * streaming uncapped variants directly and evaluating the `70 -> 60 -> 50`
+ * quality ladder for `<= 384w` AVIF requests to enforce the 20 KB byte cap.
+ */
 export async function fetchSameOriginOgabasseyImageResponse(
   parsed: OgabasseyCdnImageProxyRequest,
   fetcher: typeof fetch = fetch,
@@ -102,7 +119,9 @@ export async function fetchSameOriginOgabasseyImageResponse(
     );
     let upstreamResponse: Response;
     try {
-      upstreamResponse = await fetcher(upstreamUrl);
+      upstreamResponse = await fetcher(upstreamUrl, {
+        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      });
     } catch {
       return buildErrorResponse('Upstream image service unavailable', 502);
     }
@@ -150,12 +169,15 @@ export async function fetchSameOriginOgabasseyImageResponse(
 
   const candidates: CandidateSuccess[] = [];
   let failureStatus: 404 | 502 = 502;
+  let hadTransientCandidateFailure = false;
 
   for (const candidatePromise of candidatePromises) {
     const outcome = await candidatePromise;
     if (!outcome.ok) {
       if (outcome.status === 404) {
         failureStatus = 404;
+      } else {
+        hadTransientCandidateFailure = true;
       }
       continue;
     }
@@ -184,8 +206,12 @@ export async function fetchSameOriginOgabasseyImageResponse(
 
   return new Response(selected.buffer, {
     headers: {
-      'Cache-Control': IMMUTABLE_IMAGE_CACHE_CONTROL,
-      'CDN-Cache-Control': 'public, max-age=31536000, immutable',
+      'Cache-Control': hadTransientCandidateFailure
+        ? SHORT_ERROR_CACHE_CONTROL
+        : IMMUTABLE_IMAGE_CACHE_CONTROL,
+      'CDN-Cache-Control': hadTransientCandidateFailure
+        ? 'public, max-age=60'
+        : 'public, max-age=31536000, immutable',
       'Content-Length': String(selected.bytes),
       'Content-Type': selected.contentType,
       'X-Hero-Effective-Quality': String(selected.quality),

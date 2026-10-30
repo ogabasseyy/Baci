@@ -2,6 +2,10 @@ import { DEFAULT_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 import type { OgabasseyCdnImageProxyRequest } from '@/schemas/ogabassey-cdn-image-proxy';
 import { ogabasseyCdnImageProxySearchParamsSchema } from '@/schemas/ogabassey-cdn-image-query';
 
+/**
+ * Builds the upstream `cdn.ogabassey.com/image/...` URL with per-segment URL
+ * encoding and optional allowlisted `?v=` cache-busting parameter.
+ */
 export function buildUpstreamOgabasseyTransformUrl(
   options: OgabasseyCdnImageProxyRequest['options'],
   assetPath: string,

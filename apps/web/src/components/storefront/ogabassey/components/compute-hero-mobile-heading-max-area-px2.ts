@@ -6,6 +6,10 @@ import {
   HERO_MOBILE_TITLE_MAX_LINES,
 } from './hero-mobile-geometry';
 
+/**
+ * Computes the maximum painted area (`width * height` in CSS px²) of a 3-line
+ * clamped `<h2>` product heading inside the mobile hero's 3-of-5 text column.
+ */
 export function computeHeroMobileHeadingMaxAreaPx2(
   viewportWidthPx: number
 ): number {

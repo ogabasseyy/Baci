@@ -10,6 +10,7 @@ import {
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { isExternalPlaceholderImageUrl } from '@/lib/image-utils';
+import { preferFirstPartyCdnLeadItem } from '@/lib/prefer-first-party-cdn-lead-item';
 import { getProductUrl } from '@/lib/product-url';
 import {
   AD_CONFIG,
@@ -82,32 +83,6 @@ interface CategoryRecentCarouselProps {
  * product has a usable image it falls back to the category artwork (preserving
  * the legacy banner behaviour) and otherwise renders nothing.
  */
-function hasFirstPartyCdnImage(imageUrl: string): boolean {
-  return (
-    imageUrl.startsWith('/cdn-image/') ||
-    imageUrl.startsWith('https://cdn.ogabassey.com/')
-  );
-}
-
-function preferFirstPartyCdnLeadEntry<T extends { imageUrl: string }>(
-  entries: readonly T[]
-): T[] {
-  if (entries.length <= 1 || hasFirstPartyCdnImage(entries[0].imageUrl)) {
-    return [...entries];
-  }
-  const cdnLeadIndex = entries.findIndex((entry) =>
-    hasFirstPartyCdnImage(entry.imageUrl)
-  );
-  if (cdnLeadIndex <= 0) {
-    return [...entries];
-  }
-  return [
-    entries[cdnLeadIndex],
-    ...entries.slice(0, cdnLeadIndex),
-    ...entries.slice(cdnLeadIndex + 1),
-  ];
-}
-
 interface CategoryLaunchCandidate {
   created_at?: string | null;
   category?: string;
@@ -148,11 +123,12 @@ export function CategoryRecentCarousel({
     OGABASSEY_LAUNCH_PINS_SINCE
   );
 
-  const productSlides: LaunchProductSlide[] = preferFirstPartyCdnLeadEntry(
+  const productSlides: LaunchProductSlide[] = preferFirstPartyCdnLeadItem(
     selectLaunchProducts(candidates, {
       pinned: launchPins,
       limit: RECENT_SLIDE_LIMIT,
-    })
+    }),
+    (entry) => entry.imageUrl
   ).map(({ product, imageUrl }) => ({
     kind: 'product',
     id: String(product.id),

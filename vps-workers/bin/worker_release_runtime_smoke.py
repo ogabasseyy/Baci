@@ -59,12 +59,15 @@ def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callab
         "InaccessiblePaths": "/tmp /var/tmp /dev/shm /etc /srv /opt /usr/local /var/log /var/cache /var/spool /var/backups",
     }
     worker_imports = (
-        # Node uses exit status 13 for an unresolved top-level await. The
-        # bounded imports below should convert hangs to 31-33; retain a second
-        # fixed stage marker so any Node-originated 13 identifies which import
-        # or constructor was unresolved without logging package output.
+        # Keep the async smoke inside an IIFE rather than a top-level await:
+        # Node otherwise exits with status 13 for unresolved module TLA before
+        # useful failure diagnostics. Per-import bounds and this fixed watchdog
+        # preserve bounded failure while the stage marker identifies any
+        # Node-originated 13 without logging package output.
         "let smokeStage = 0; process.on('exit', code => { "
         "if (code === 13) process.exitCode = 40 + smokeStage; }); "
+        "const smokeWatchdog = setTimeout(() => process.exit(34), 30000); "
+        "(async () => { "
         "const boundedImport = async (specifier, timeoutCode) => { let timer; "
         "try { return await Promise.race([import(specifier), new Promise((_, reject) => { "
         "timer = setTimeout(() => reject({ baciImportTimeout: timeoutCode }), 8000); })]); } "
@@ -86,6 +89,8 @@ def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callab
         "const push = new expo.Expo({ accessToken: 'synthetic-smoke-token' }); "
         "if (typeof client.from !== 'function' || typeof push.sendPushNotificationsAsync !== 'function') process.exit(3); "
         "} catch (error) { process.exit(error?.code === 'ERR_MODULE_NOT_FOUND' ? 21 : 22); }"
+        "})().then(() => clearTimeout(smokeWatchdog), () => { "
+        "clearTimeout(smokeWatchdog); process.exit(22); });"
     )
     commands = (
         ("apps/web", ("/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "NODE_ENV=production",

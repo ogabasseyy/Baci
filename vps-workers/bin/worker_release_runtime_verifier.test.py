@@ -245,6 +245,9 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             self.assertNotIn("/home", inaccessible)  # supplied by ProtectHome
             if "--input-type=module" in command:
                 smoke_script = command[-1]
+                self.assertIn("const smokeWatchdog = setTimeout(() => process.exit(34), 30000)",
+                              smoke_script)
+                self.assertIn("(async () => {", smoke_script)
                 self.assertIn("if (code === 13) process.exitCode = 40 + smokeStage", smoke_script)
                 self.assertIn("smokeStage = 1", smoke_script)
                 self.assertIn("smokeStage = 2", smoke_script)

@@ -56,6 +56,9 @@ class SyntheticSourceSnapshotTests(unittest.TestCase):
                     / "worker_release_dependency_seed_consumer.py").read_text(encoding="utf-8")
         verification = (Path(__file__).with_name("dependency_seed_verification.py")
                         .read_text(encoding="utf-8"))
+        self.assertIn("from worker_release_seed_workspace_mount import verify_bounded_seed_workspace",
+                      consumer)
+        self.assertIn("worker_release_seed_workspace_mount.py", source)
         self.assertIn("from dependency_seed_verification import verify_seed_locked", consumer)
         self.assertIn("from dependency_seed_generation_contract import validate_generation_attestation",
                       verification)

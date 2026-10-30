@@ -104,6 +104,7 @@ for module in worker_release_dependency_builder.py worker_release_dependency_art
   worker_release_dependency_receipt_validation.py \
   worker_release_dependency_fs.py worker_release_dependency_sandbox.py \
   worker_release_dependency_seed_consumer.py \
+  worker_release_seed_workspace_mount.py \
   worker_release_dependency_policy_cache.py worker_release_dependency_registry_policy.py \
   worker_release_dependency_lock_settings.py \
   worker_release_dependency_input_cache.py worker_release_dependency_diagnostics.py \

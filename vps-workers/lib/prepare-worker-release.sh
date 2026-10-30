@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-
+# shellcheck source=worker-transport.sh
+source "$(dirname "${BASH_SOURCE[0]}")/worker-transport.sh"
 cleanup_worker_staging() {
-  ssh "$VPS" "rm -rf '$STAGING_DIR'" >/dev/null 2>&1 || true
+  worker_exec_target "$VPS" "rm -rf '$STAGING_DIR'" >/dev/null 2>&1 || true
 }
 
 # Populates STAGING_DIR and NODE_BIN for deploy.sh. Source this helper before
@@ -11,29 +12,29 @@ prepare_worker_release() {
   trap cleanup_worker_staging EXIT
 
   echo "==> Staging worker files at $VPS:$STAGING_DIR"
-  rsync -av --delete --exclude='.env*' --exclude='node_modules' --exclude='logs' --exclude='locks' \
-    "$WORKER_ROOT/" "$VPS:$STAGING_DIR/"
+  worker_rsync_to_stage "$STAGING_DIR/" -av --delete --exclude='.env*' --exclude='node_modules' --exclude='logs' --exclude='locks' \
+    "$WORKER_ROOT/"
   # The GIGL scoped-env filter reads the shared dotenv through the same
   # tested parser as the CI gates; ship it next to the filter (single
   # source: .github/scripts/gigl-dotenv.sh) so the two can never
   # disagree on export/quote/comment forms.
-  rsync -av "$WORKER_ROOT/../.github/scripts/gigl-dotenv.sh" "$VPS:$STAGING_DIR/bin/gigl-dotenv.sh"
-  if ! ssh "$VPS" "test -f '$REMOTE_DIR/.env'"; then
+  worker_rsync_to_stage "$STAGING_DIR/bin/gigl-dotenv.sh" -av "$WORKER_ROOT/../.github/scripts/gigl-dotenv.sh"
+  if ! worker_exec_target "$VPS" "test -f '$REMOTE_DIR/.env'"; then
     echo "Missing $VPS:$REMOTE_DIR/.env; create it before running this deploy." >&2
     exit 1
   fi
-  ssh "$VPS" "cp '$REMOTE_DIR/.env' '$STAGING_DIR/.env'"
-  ssh "$VPS" "printf '%s' '$APP_SHA' > '$STAGING_DIR/app-checkout.sha'"
+  worker_exec_target "$VPS" "cp '$REMOTE_DIR/.env' '$STAGING_DIR/.env'"
+  worker_exec_target "$VPS" "printf '%s' '$APP_SHA' > '$STAGING_DIR/app-checkout.sha'"
 
   echo "==> Installing staged dependencies on VPS"
-  ssh "$VPS" "cd '$STAGING_DIR' && CI=true pnpm install --frozen-lockfile --prod"
+  worker_exec_target "$VPS" "cd '$STAGING_DIR' && CI=true pnpm install --frozen-lockfile --prod"
 
   echo "==> Resolving Node.js path on VPS"
-  NODE_BIN=$(ssh "$VPS" "command -v node || echo /usr/bin/node")
+  NODE_BIN=$(worker_exec_target "$VPS" "command -v node || echo /usr/bin/node")
   echo "    Using Node: $NODE_BIN"
 
   echo "==> Validating direct worker environment"
-  if ! ssh "$VPS" "cd '$STAGING_DIR' && $NODE_BIN '$STAGING_DIR/jobs/preflight-direct-web-workers.mjs'"; then
+  if ! worker_exec_target "$VPS" "cd '$STAGING_DIR' && $NODE_BIN '$STAGING_DIR/jobs/preflight-direct-web-workers.mjs'"; then
     echo "Direct-worker environment preflight failed; live worker files and crontab were not changed." >&2
     exit 1
   fi
@@ -41,11 +42,11 @@ prepare_worker_release() {
   echo "==> Provisioning immutable application checkout for $APP_SHA"
   # The provisioner ships inside the staged tree, so this revision's own
   # checkout logic runs (not whatever a previous promote installed).
-  ssh "$VPS" "bash '$STAGING_DIR/lib/provision-immutable-checkout.sh' '$STAGING_DIR' '$APP_SHA'"
+  worker_exec_target "$VPS" "bash '$STAGING_DIR/lib/provision-immutable-checkout.sh' '$STAGING_DIR' '$APP_SHA'"
 
   echo "==> Verifying the live GIGL database capability"
   gigl_capability_status=0
-  ssh "$VPS" "NODE_ENV=production BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV='$STAGING_DIR/.env' '$STAGING_DIR/bin/verify-gigl-tracking-worker-capability.sh'" || gigl_capability_status=$?
+  worker_exec_target "$VPS" "NODE_ENV=production BACI_WORKER_PROFILE=gigl-tracking BACI_WORKER_ENV='$STAGING_DIR/.env' '$STAGING_DIR/bin/verify-gigl-tracking-worker-capability.sh'" || gigl_capability_status=$?
   if [ "$gigl_capability_status" -eq 42 ]; then
     # Exit 42 means the wrapper RPCs or the worker grant are missing.
     # Deferrable on a missing/vacuous latch (nothing proven yet), on
@@ -56,7 +57,7 @@ prepare_worker_release() {
     # the 42 means the grant/membership/schema regressed: refuse to
     # promote over the previously-proven worker. (Latch:
     # scope:sha:fingerprint.)
-    gigl_latch="$(ssh "$VPS" "cat '$REMOTE_DIR/.gigl-capability-smoke-ok' 2>/dev/null" || true)"
+    gigl_latch="$(worker_exec_target "$VPS" "cat '$REMOTE_DIR/.gigl-capability-smoke-ok' 2>/dev/null" || true)"
     gigl_latch_scope="${gigl_latch%%:*}"
     gigl_latch_fp="${gigl_latch##*:}"
     gigl_latch_rest="${gigl_latch#*:}"
@@ -115,12 +116,13 @@ promote_worker_release() {
   # (stopped first, restarted by an EXIT trap covering aborts too),
   # because the flipped checkout symlink is shared. The locks dir is
   # pre-created because flock will not create parents.
-  ssh "$VPS" "mkdir -p '$REMOTE_DIR/locks' && flock -x /tmp/baci-workers-deploy.lock flock -x '$REMOTE_DIR/locks/gigl-tracking.lock' bash -s -- '$STAGING_DIR' '$REMOTE_DIR' '$APP_SHA'" <<'REMOTE_SH'
+  worker_exec_target "$VPS" "flock -x /tmp/baci-workers-deploy.lock flock -x '$LOCK_DIR/gigl-tracking.lock' bash -s -- '$STAGING_DIR' '$REMOTE_DIR' '$APP_SHA' '$LOCK_DIR'" <<'REMOTE_SH'
 set -euo pipefail
 
 staging_dir="$1"
 remote_dir="$2"
 expected_sha="$3"
+lock_dir="$4"
 
 mkdir -p "$remote_dir"
 # The capability-smoke latch survives promotes: it records that a live
@@ -131,7 +133,7 @@ mkdir -p "$remote_dir"
 # app-checkout.sha at read time, so promoting a DIFFERENT tree (rollback
 # or the exit-42 unverified path) invalidates the preserved latch until
 # a fresh smoke re-latches the installed revision.
-mkdir -p "$remote_dir/logs" "$remote_dir/locks"
+mkdir -p "$remote_dir/logs"
 
 # Quiesce every scheduled worker plus the persistent services across
 # the sync and flip (shared helper, also used by emergency rollback):
@@ -142,7 +144,7 @@ mkdir -p "$remote_dir/logs" "$remote_dir/locks"
 # shell's memory, so the rsync below cannot disturb them.
 # shellcheck source=quiesce-worker-release.sh
 . "$staging_dir/lib/quiesce-worker-release.sh"
-quiesce_worker_release "$remote_dir" "$staging_dir/bin/gigl-dotenv.sh" || exit 1
+quiesce_worker_release "$remote_dir" "$staging_dir/bin/gigl-dotenv.sh" "$lock_dir" || exit 1
 
 # Snapshot the pre-promote live tree BEFORE the rsync below mutates
 # it: if the checkout flip then refuses, the rsync has already
@@ -166,7 +168,7 @@ pre_promote_backup="${staging_dir}.pre-promote-backup"
 rm -rf "$pre_promote_backup"
 find "$(dirname "$remote_dir")" -maxdepth 1 -name '*.pre-promote-backup' -mmin +60 -exec rm -rf {} + 2>/dev/null || true
 mkdir -p "$pre_promote_backup"
-for entry in bin jobs lib config node_modules app-checkout.sha; do
+for entry in bin jobs lib config systemd node_modules app-checkout.sha; do
   if [ -e "$remote_dir/$entry" ]; then
     cp -a "$remote_dir/$entry" "$pre_promote_backup/$entry" || exit 1
   fi
@@ -197,7 +199,7 @@ fi
 # two revisions mid-run.
 if ! bash "$staging_dir/lib/flip-immutable-checkout.sh" "$remote_dir" "$expected_sha"; then
   echo "Checkout flip failed; restoring the pre-promote live tree." >&2
-  for entry in bin jobs lib config node_modules; do
+  for entry in bin jobs lib config systemd node_modules; do
     if [ -e "$pre_promote_backup/$entry" ]; then
       rsync -a --delete "$pre_promote_backup/$entry/" "$remote_dir/$entry/"
     else
@@ -234,12 +236,13 @@ REMOTE_SH
 # emergency rollback runbook.
 rollback_worker_release() {
   echo "==> Rolling back the unrecorded worker promotion on $VPS:$REMOTE_DIR"
-  ssh "$VPS" "mkdir -p '$REMOTE_DIR/locks' && flock -x /tmp/baci-workers-deploy.lock flock -x '$REMOTE_DIR/locks/gigl-tracking.lock' bash -s -- '$STAGING_DIR' '$REMOTE_DIR' '$APP_SHA'" <<'REMOTE_SH'
+  worker_exec_target "$VPS" "flock -x /tmp/baci-workers-deploy.lock flock -x '$LOCK_DIR/gigl-tracking.lock' bash -s -- '$STAGING_DIR' '$REMOTE_DIR' '$APP_SHA' '$LOCK_DIR'" <<'REMOTE_SH'
 set -euo pipefail
 
 staging_dir="$1"
 remote_dir="$2"
 expected_sha="$3"
+lock_dir="$4"
 pre_promote_backup="${staging_dir}.pre-promote-backup"
 if [ ! -d "$pre_promote_backup" ]; then
   echo "Rollback refused: no pre-promote snapshot at $pre_promote_backup; follow the emergency rollback runbook." >&2
@@ -251,7 +254,7 @@ fi
 # the old tree is back — never against a half-restored mix.
 # shellcheck source=quiesce-worker-release.sh
 . "$staging_dir/lib/quiesce-worker-release.sh"
-quiesce_worker_release "$remote_dir" "$staging_dir/bin/gigl-dotenv.sh" || exit 1
+quiesce_worker_release "$remote_dir" "$staging_dir/bin/gigl-dotenv.sh" "$lock_dir" || exit 1
 
 # Refuse when a concurrent deploy landed after this promote: the live
 # marker moved past this SHA, so restoring this snapshot would wipe
@@ -264,7 +267,7 @@ if [ -n "$live_sha" ] && [ "$live_sha" != "$expected_sha" ]; then
   exit 1
 fi
 
-for entry in bin jobs lib config node_modules; do
+for entry in bin jobs lib config systemd node_modules; do
   if [ -e "$pre_promote_backup/$entry" ]; then
     rsync -a --delete "$pre_promote_backup/$entry/" "$remote_dir/$entry/"
   else

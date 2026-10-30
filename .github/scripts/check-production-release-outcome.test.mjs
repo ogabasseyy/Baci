@@ -16,14 +16,7 @@ function releaseNeeds() {
       result: 'success',
       outputs: { web: 'true', migrations: 'true', tracking: 'false' },
     },
-    'vps-drain-readiness': {
-      result: 'success',
-      outputs: {
-        cutover_latched: 'false',
-        tracking_stale: 'true',
-        manifest_drift: 'true',
-      },
-    },
+    'vps-drain-readiness': { result: 'success', outputs: {} },
     'db-migrations': { result: 'success', outputs: {} },
     'gigl-worker-capability': { result: 'skipped', outputs: {} },
     'cwv-runner-contracts': { result: 'skipped', outputs: {} },
@@ -54,7 +47,7 @@ function check(t, needs, env = {}) {
   return { ...result, summary };
 }
 
-test('fails a required release when stale worker proof silently skipped publication', (t) => {
+test('fails a required release when the broker capability smoke was skipped', (t) => {
   const result = check(t, releaseNeeds());
   assert.equal(result.status, 1);
   for (const output of [result.stderr, result.summary]) {
@@ -62,9 +55,8 @@ test('fails a required release when stale worker proof silently skipped publicat
       output,
       /Production publication required but deploy-production is skipped/
     );
-    assert.match(output, /cutover_latched: false/);
-    assert.match(output, /tracking_stale: true/);
     assert.match(output, /gigl-worker-capability: skipped/);
+    assert.doesNotMatch(output, /cutover_latched|tracking_stale|manifest_drift/);
   }
 });
 
@@ -144,7 +136,6 @@ test('rejects malformed results without echoing input or credentials', (t) => {
 
   const needs = releaseNeeds();
   needs['deploy-production'].result = secret;
-  needs['vps-drain-readiness'].outputs.cutover_latched = secret;
   needs['vps-drain-readiness'].outputs.credential_fingerprint = secret;
   needs[secret] = { result: secret };
   const unsafe = check(t, needs);

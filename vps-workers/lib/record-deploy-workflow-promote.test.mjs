@@ -90,7 +90,7 @@ test('exits 1 when the repo cannot be resolved', () => {
   const { result } = runRecord({ env: { BACI_DEPLOY_WORKFLOW_REPO: '' } });
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /cannot resolve the deploy repo/);
+  assert.match(result.stderr, /cannot resolve the production repository/);
 });
 
 test('rejects a malformed SHA', () => {
@@ -117,7 +117,7 @@ test('exits 1 when gh is missing', () => {
       env: {
         ...process.env,
         BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '',
-        BACI_DEPLOY_WORKFLOW_REPO: 'example-owner/example-repo',
+        BACI_DEPLOY_WORKFLOW_REPO: 'ogabasseyy/Baci',
         RECORD_LIB: libPath,
         RECORD_SHA: SHA,
         PATH: binDir,
@@ -126,10 +126,10 @@ test('exits 1 when gh is missing', () => {
   );
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /gh CLI is not installed/);
+  assert.match(result.stderr, /pinned GitHub CLI is missing or has an untrusted owner or mode/);
 });
 
-test('bypass still records the promote', () => {
+test('caller supplied emergency bypass input does not weaken promote recording', () => {
   const { bare, result } = runRecord({
     runIds: tsvRows('184400111'),
     env: { BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '1' },
@@ -139,14 +139,14 @@ test('bypass still records the promote', () => {
   assert.equal(recordContent(bare), `${SHA}:184400111`);
 });
 
-test('bypass push failure warns and proceeds', () => {
+test('caller supplied emergency bypass input does not proceed after record push failure', () => {
   const { result } = runRecord({
     origin: join(tmpdir(), 'baci-promote-missing-origin.git'),
     env: { BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '1' },
   });
 
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stderr, /WARNING/);
+  assert.equal(result.status, 1, result.stderr);
+  assert.doesNotMatch(result.stderr, /WARNING/);
   assert.match(result.stderr, /NOT recorded/);
 });
 

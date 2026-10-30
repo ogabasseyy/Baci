@@ -554,7 +554,7 @@ jobs:
           PGPASSWORD: postgres
         run: bash supabase/migrations/tests/run-disposable-search-suites.sh
 
-      - name: Run X token authentication SQL contract
+      - name: Run disposable PostgreSQL role and X token contracts
         env:
           PG_BIN: /usr/lib/postgresql/16/bin
         run: |
@@ -564,6 +564,7 @@ jobs:
             test -x "$PG_BIN/$binary"
           done
           node --test .github/scripts/x-pixel-token-authentication.sql.test.mjs
+          node --test .github/scripts/cache-invalidation-worker-role-migration.test.mjs
 
   quality-misc:
     name: Quality Gate - Misc

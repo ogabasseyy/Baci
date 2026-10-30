@@ -25,15 +25,26 @@ export function writeStub(binDir, name, body) {
 
 export function runCheck({
   ghBody,
-  gitBody = 'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://github.com/example-owner/example-repo.git\'; else exit 1; fi',
+  gitBody = 'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://github.com/ogabasseyy/Baci.git\'; else exit 1; fi',
   env = {},
   path = null,
+  nodeBody = null,
+  trustedGh = true,
+  lockStatus = 'unlocked',
+  statusAvailable = true,
 }) {
   const workDir = mkdtempSync(join(tmpdir(), 'baci-inflight-'));
   const binDir = join(workDir, 'bin');
   mkdirSync(binDir, { recursive: true });
   const argsFile = join(workDir, 'gh-args.txt');
   writeStub(binDir, 'gh', ghBody.replaceAll('__ARGS_FILE__', argsFile));
+  if (nodeBody !== null) writeStub(binDir, 'node', nodeBody);
+  const testGhResolver = trustedGh
+    ? '_resolve_inflight_gh(){ _inflight_gh_bin=gh; }; _inflight_gh(){ "$_inflight_gh_bin" "$@"; }'
+    : '';
+  const testLockStatus = statusAvailable
+    ? '_query_release_lock_status(){ printf "%s\\n" "$CHECK_RELEASE_LOCK_STATUS"; }'
+    : '_query_release_lock_status(){ return 1; }';
   if (gitBody !== null) {
     writeStub(binDir, 'git', gitBody);
   }
@@ -41,7 +52,7 @@ export function runCheck({
     systemBash,
     [
       '-c',
-      'set -euo pipefail; source "$CHECK_LIB"; check_deploy_workflow_inflight',
+      `set -euo pipefail; source "$CHECK_LIB"; ${testLockStatus}; ${testGhResolver}; check_deploy_workflow_inflight`,
     ],
     {
       cwd: workDir,
@@ -55,6 +66,7 @@ export function runCheck({
         ...env,
         CHECK_LIB: libPath,
         GH_ARGS_FILE: argsFile,
+        CHECK_RELEASE_LOCK_STATUS: lockStatus,
         PATH: path ?? `${binDir}:${process.env.PATH}`,
       },
     }

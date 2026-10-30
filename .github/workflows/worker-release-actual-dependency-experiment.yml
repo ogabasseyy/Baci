@@ -1,0 +1,61 @@
+name: Worker release actual dependency experiment
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/worker-release-actual-dependency-experiment.yml'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'vps-workers/pnpm-lock.yaml'
+      - 'vps-workers/pnpm-workspace.yaml'
+      - '**/package.json'
+      - '**/.npmrc'
+      - 'vps-workers/bin/worker_release_dependency_*.py'
+      - 'vps-workers/bin/worker_release_bounded_process.py'
+      - 'vps-workers/bin/worker_release_pnpm_exec.py'
+      - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.py'
+      - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.test.py'
+      - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-seed-move-measure.test.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency-snapshot-smoke.test.py'
+      - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-tree-size.test.py'
+      - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-payload-diagnostics.test.py'
+      - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_dependency_guard.py'
+      - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_dependency_failure.py'
+      - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_dependency_hardlinks.py'
+      - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_dependency_limits.py'
+      - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_dependency_runner.py'
+      - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_dependency_resources.py'
+      - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_dependency_runtime.py'
+      - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_seed_move_measure.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency-snapshot-smoke.py'
+permissions:
+  contents: read
+
+jobs:
+  actual-checkout-dependencies:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'codex/automatic-worker-release'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.7.0
+      - name: Validate experiment harness
+        run: |
+          python3 vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.test.py -q
+          python3 vps-workers/tools/nonproduction-worker-release/actual-dependency-seed-move-measure.test.py -q
+          python3 vps-workers/tools/nonproduction-worker-release/dependency-snapshot-smoke.test.py -q
+      - name: Preverify and build both real lockfiles offline
+        env:
+          EXPECTED_CHECKOUT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.py

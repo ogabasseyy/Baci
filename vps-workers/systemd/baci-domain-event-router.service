@@ -1,0 +1,30 @@
+[Unit]
+Description=Baci durable domain-event router
+After=network-online.target baci-worker-release-broker.service
+Wants=network-online.target
+BindsTo=baci-worker-release-broker.service
+
+[Service]
+Type=simple
+User=baci-worker
+Group=baci-worker
+WorkingDirectory=/srv/baci-workers/current
+Environment=HOME=/srv/baci-workers/home
+Environment=NODE_ENV=production
+Environment=BACI_WORKER_PROFILE=event-pipeline
+Environment=BACI_REPO_DIR=/srv/baci-workers/current
+Environment=BACI_WORKER_ENV=/srv/baci-workers/runtime/worker.env
+ExecCondition=/usr/local/lib/baci-worker-broker/worker-release-launch-gate unit baci-domain-event-router
+ExecStart=/usr/bin/flock -n /srv/baci-workers/locks/process-domain-events.lock /srv/baci-workers/current/bin/process-domain-events.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/baci-workers/locks /srv/baci-workers/logs
+
+[Install]
+WantedBy=multi-user.target

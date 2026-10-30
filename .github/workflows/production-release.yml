@@ -1,0 +1,135 @@
+name: Production Release Coordinator
+run-name: Production release ${{ github.sha }}
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      reconcile_checkout_recovery_legacy:
+        description: Approve the exact ten-migration recovery predecessor upgrade to its closed gate
+        required: false
+        default: false
+        type: boolean
+      cache_worker_action:
+        description: Activate the cache worker only after owner approval; revocation is not supported while the live route depends on the role
+        required: false
+        default: none
+        type: choice
+        options: [none, activate]
+
+permissions:
+  contents: read
+
+# This lock spans the worker job and the reusable app workflow. A pending
+# lock on the VPS survives runner restarts and prevents a later run from
+# proceeding after an ambiguous or failed publication.
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+jobs:
+  rollout-readiness:
+    name: Require verified isolated worker release rollout
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions:
+      contents: read
+    env:
+      BROKER_READY: ${{ vars.BACI_WORKER_RELEASE_BROKER_READY }}
+      CREDENTIAL_ISOLATION_READY: ${{ vars.BACI_WORKER_RELEASE_CREDENTIAL_ISOLATION_READY }}
+      QUIESCENCE_READY: ${{ vars.BACI_WORKER_RELEASE_QUIESCENCE_READY }}
+      SERVICE_COMPATIBILITY_READY: ${{ vars.BACI_WORKER_RELEASE_SERVICE_COMPATIBILITY_READY }}
+    steps:
+      - name: Refuse production work until every isolated-release prerequisite is verified
+        shell: bash
+        run: |
+          set -euo pipefail
+          for gate in BROKER_READY CREDENTIAL_ISOLATION_READY QUIESCENCE_READY SERVICE_COMPATIBILITY_READY; do
+            if [[ "${!gate:-}" != 'true' ]]; then
+              echo "Production release blocked: ${gate} is not explicitly true. No worker or app deployment was started." >&2
+              exit 1
+            fi
+          done
+
+  workers:
+    name: Sync VPS workers
+    needs: [rollout-readiness]
+    if: github.ref == 'refs/heads/main' && needs.rollout-readiness.result == 'success'
+    runs-on: baci-release
+    # Worst-case staged auth/extraction plus promote, health, and exact rollback
+    # fit within the bounded broker call budgets without killing the caller
+    # while the root-owned broker is still completing a fenced operation.
+    timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    env:
+      BACI_EXPECTED_APP_SHA: ${{ github.sha }}
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Confirm exact current main and acquire persistent release lock
+        run: node .github/scripts/production-release-lock.mjs acquire
+      - name: Stage, preflight, promote, and verify the exact broker-managed worker release
+        run: node .github/scripts/worker-release-coordinator.mjs
+
+  deploy:
+    needs: [workers]
+    if: needs.workers.result == 'success'
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy.yml
+    with:
+      coordination_id: ${{ github.run_id }}
+      expected_release_sha: ${{ github.sha }}
+      reconcile_checkout_recovery_legacy: ${{ inputs.reconcile_checkout_recovery_legacy || false }}
+      cache_worker_action: ${{ inputs.cache_worker_action || 'none' }}
+    secrets:
+      CACHE_INVALIDATION_WORKER_TOKEN: ${{ secrets.CACHE_INVALIDATION_WORKER_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      QUIZ_RPC_SERVER_SECRET: ${{ secrets.QUIZ_RPC_SERVER_SECRET }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+  release-lock-finalizer:
+    name: Release lock after a proven no-op
+    needs: [deploy]
+    if: always() && needs.deploy.result == 'success' && needs.deploy.outputs.production_published != 'true'
+    runs-on: baci-release
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      BACI_APP_PUBLICATION_SUCCEEDED: ${{ needs.deploy.outputs.production_published || 'false' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts/production-release-lock.mjs
+            .github/scripts/authorize-coordinator-worker.mjs
+          sparse-checkout-cone-mode: false
+      - name: Clear only when the app workflow proves no publication was attempted
+        run: node .github/scripts/production-release-lock.mjs clear-noop

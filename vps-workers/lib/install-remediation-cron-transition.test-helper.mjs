@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import {
   copyFileSync,
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -62,6 +63,7 @@ export function runTransition(scenario) {
   );
   const stageDirectory = join(directory, 'stage');
   const transitionTmpDirectory = join(directory, 'transition-tmp');
+  const lockDirectory = join(directory, 'protected-locks');
   const procRoot = join(directory, 'proc');
   const jobsDirectory = join(remoteDirectory, 'jobs');
   const directReady = join(directory, 'direct-ready');
@@ -70,6 +72,15 @@ export function runTransition(scenario) {
   mkdirSync(join(remoteDirectory, 'lib'), { recursive: true });
   mkdirSync(procRoot);
   mkdirSync(transitionTmpDirectory);
+  mkdirSync(lockDirectory);
+  chmodSync(lockDirectory, 0o710);
+  for (const name of ['vercel-error-remediator', 'sentry-mobile-error-remediator',
+    'posthog-error-remediator', 'remediation-codex-canary', 'error-remediator-global',
+    'custom-global', 'stale-global']) {
+    const lockPath = join(lockDirectory, `${name}.lock`);
+    writeFileSync(lockPath, '');
+    chmodSync(lockPath, 0o660);
+  }
   // Mirror the post-promote live marker the transition gates on.
   writeFileSync(
     join(remoteDirectory, 'app-checkout.sha'),
@@ -126,6 +137,7 @@ bash -c "$1"
 `
   );
   writeExecutable(join(binDirectory, 'flock'), flockStub());
+  writeExecutable(join(binDirectory, 'stat'), `#!/usr/bin/env bash\nset -euo pipefail\nif [ \"$1\" = \"-c\" ] && [ \"$3\" = \"$LOCK_DIR\" ]; then echo root:baci-locks:710; elif [ \"$1\" = \"-c\" ] && [[ \"$3\" == \"$LOCK_DIR/\"* ]]; then echo root:baci-locks:660; else command stat \"$@\"; fi\n`);
   writeExecutable(join(binDirectory, 'crontab'), crontabStub());
   if (scenario === 'non-candidate-proc') {
     const vanished = join(procRoot, '5151');
@@ -174,6 +186,7 @@ bash -c "$1"
           ROLLBACK_READ_ERROR_MARKER: join(directory, 'rollback-read-error'),
           DIRECT_PROCESS_PID: directProcessPid ?? '',
           LOCK_MARKER: lockMarker,
+          LOCK_DIR: lockDirectory,
           NODE_BIN:
             scenario === 'alternate-node-exit'
               ? '/opt/alternate-node/bin/node'
@@ -232,6 +245,7 @@ bash -c "$1"
         ) &&
         existsSync(join(remoteDirectory, 'config/codex-readonly-seccomp.json')),
       result,
+      lockDirectory,
     };
   } finally {
     if (directProcessPid) {

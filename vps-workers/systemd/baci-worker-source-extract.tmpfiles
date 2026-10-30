@@ -1,0 +1,3 @@
+d /run/baci-worker-release-extract 0711 root root -
+d /run/baci-worker-release-extract/resources 0700 baci-release-extractor baci-release-extractor -
+d /run/baci-worker-release-extract/control 0710 root baci-release-extractor -

@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
+# shellcheck source=worker-transport.sh
+source "$(dirname "${BASH_SOURCE[0]}")/worker-transport.sh"
 
 install_remediation_cron_transition() {
   echo "==> Transactionally installing the remediation launch barrier"
   # shellcheck disable=SC2029 # The quoted values intentionally become remote argv.
-  ssh "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$REMOTE_DIR' '$STAGING_DIR' '$NODE_BIN' '$CODEX_REMEDIATOR_IMAGE' '$CODEX_CONTAINER_BIN' '${BACI_REMEDIATION_LEGACY_DRAIN_TIMEOUT_SECONDS:-60}' '${BACI_REMEDIATION_LEGACY_LOCK_WAIT_SECONDS:-900}' '${BACI_REMEDIATION_PROC_ROOT:-/proc}' '$APP_SHA' '${REMEDIATION_STATE:-enabled}' '${REMEDIATION_DISABLED_MARKER:-}'" <<'REMOTE_SH'
+  worker_exec_target "$VPS" "flock -x /tmp/baci-workers-deploy.lock bash -s -- '$REMOTE_DIR' '$STAGING_DIR' '$NODE_BIN' '$CODEX_REMEDIATOR_IMAGE' '$CODEX_CONTAINER_BIN' '${BACI_REMEDIATION_LEGACY_DRAIN_TIMEOUT_SECONDS:-60}' '${BACI_REMEDIATION_LEGACY_LOCK_WAIT_SECONDS:-900}' '${BACI_REMEDIATION_PROC_ROOT:-/proc}' '$APP_SHA' '${REMEDIATION_STATE:-enabled}' '${REMEDIATION_DISABLED_MARKER:-}' '$LOCK_DIR'" <<'REMOTE_SH'
 set -euo pipefail
 
 remote_dir="$1"
@@ -15,7 +17,7 @@ drain_timeout="$6"
 lock_wait_seconds="$7"
 proc_root="$8"
 expected_sha="$9"
-lock_dir="$remote_dir/locks"
+lock_dir="${12:-$remote_dir/locks}"
 
 # The deploy lock above serializes but does not order: when two
 # operators deploy concurrently, B's promote can land between A's
@@ -63,14 +65,19 @@ if [ -z "$global_lock_value" ]; then
   global_lock_path="$lock_dir/error-remediator-global.lock"
 elif [[ "$global_lock_value" = /* ]]; then
   global_lock_path="$global_lock_value"
+elif [[ "$global_lock_value" = locks/* ]]; then
+  global_lock_path="$lock_dir/${global_lock_value#locks/}"
 else
   global_lock_path="$remote_dir/$global_lock_value"
 fi
 global_lock_parent="$(dirname "$global_lock_path")"
-
-install -d -m 700 "$lock_dir"
-if [ ! -d "$global_lock_parent" ]; then
-  install -d -m 700 "$global_lock_parent"
+if [ "$global_lock_parent" != "$lock_dir" ]; then
+  echo "Refusing remediation cron transition: remediation lock must live in the protected worker namespace ($lock_dir)." >&2
+  exit 1
+fi
+if [ "$(stat -c '%U:%G:%a' "$lock_dir" 2>/dev/null || true)" != 'root:baci-locks:710' ]; then
+  echo "Refusing remediation cron transition: protected lock directory has unexpected ownership or mode." >&2
+  exit 1
 fi
 for lock_name in \
   vercel-error-remediator \
@@ -78,11 +85,18 @@ for lock_name in \
   posthog-error-remediator \
   remediation-codex-canary
 do
-  touch "$lock_dir/$lock_name.lock"
-  chmod 600 "$lock_dir/$lock_name.lock"
+  lock_path="$lock_dir/$lock_name.lock"
+  if [ ! -f "$lock_path" ] || [ -L "$lock_path" ] ||
+    [ "$(stat -c '%U:%G:%a' "$lock_path" 2>/dev/null || true)" != 'root:baci-locks:660' ]; then
+    echo "Refusing remediation cron transition: protected lock file is missing or unsafe ($lock_name.lock)." >&2
+    exit 1
+  fi
 done
-touch "$global_lock_path"
-chmod 600 "$global_lock_path"
+if [ ! -f "$global_lock_path" ] || [ -L "$global_lock_path" ] ||
+  [ "$(stat -c '%U:%G:%a' "$global_lock_path" 2>/dev/null || true)" != 'root:baci-locks:660' ]; then
+  echo "Refusing remediation cron transition: protected global lock file is missing or unsafe." >&2
+  exit 1
+fi
 
 # New entrypoints use the global lock, so holding it before installing their
 # staged copies closes the direct-launch race before the legacy drain starts.
@@ -108,6 +122,6 @@ hold_lock 10 "$lock_dir/remediation-codex-canary.lock"
 
 python3 "$staging_dir/lib/remediation-cron-transition.py" \
   "$remote_dir" "$staging_dir" "$node_bin" "$codex_image" \
-  "$codex_container_bin" "$drain_timeout" "$proc_root" "$global_lock_path"
+  "$codex_container_bin" "$drain_timeout" "$proc_root" "$global_lock_path" "$lock_dir"
 REMOTE_SH
 }

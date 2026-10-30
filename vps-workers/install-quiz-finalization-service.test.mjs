@@ -7,10 +7,8 @@ const source = readFileSync(
   'utf8'
 );
 
-test('installs one durable quiz worker using the cron fallback lock', () => {
-  assert.match(source, /loginctl enable-linger/);
-  assert.match(source, /quiz-finalize\.lock.*process-quiz-finalization\.sh --loop/);
-  assert.match(source, /Restart=always/);
-  assert.match(source, /WantedBy=default\.target/);
-  assert.match(source, /systemctl --user enable --now baci-quiz-finalization\.service/);
+test('legacy quiz user-unit installer is retired and cannot recreate home locks', () => {
+  assert.match(source, /Refusing to install the legacy Baci quiz-finalization user unit/);
+  assert.match(source, /exit 1/);
+  assert.doesNotMatch(source, /mkdir|systemctl --user enable|REMOTE_DIR\/locks/);
 });

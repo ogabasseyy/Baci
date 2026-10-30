@@ -1,0 +1,120 @@
+name: Worker release materialized runtime verifier
+
+on:
+  pull_request:
+    paths:
+      - 'vps-workers/bin/worker_release_runtime_verifier.py'
+      - 'vps-workers/bin/worker_release_runtime_receipt.py'
+      - 'vps-workers/bin/worker_release_runtime_verifier.test.py'
+      - 'vps-workers/bin/worker_release_runtime_verifier_lifecycle.test.py'
+      - 'vps-workers/bin/worker_release_runtime_verifier_test_support.py'
+      - 'vps-workers/bin/worker_release_runtime_diagnostics.py'
+      - 'vps-workers/bin/worker_release_runtime_smoke.py'
+      - 'vps-workers/bin/worker_release_runtime_view.py'
+      - 'vps-workers/bin/worker_release_runtime_view.test.py'
+      - 'vps-workers/bin/worker_release_runtime_view_journal.py'
+      - 'vps-workers/bin/worker_release_runtime_view_recovery.py'
+      - 'vps-workers/bin/worker_release_runtime_view_recovery.test.py'
+      - 'vps-workers/bin/worker_release_runtime_acl.py'
+      - 'vps-workers/bin/worker_release_runtime_acl.test.py'
+      - 'vps-workers/bin/worker_release_runtime_identity.py'
+      - 'vps-workers/bin/worker_release_runtime_identity.test.py'
+      - 'vps-workers/bin/provision-baci-worker.py'
+      - 'vps-workers/bin/provision-baci-worker.test.py'
+      - 'vps-workers/bin/provision-worker-release-boundary.py'
+      - 'vps-workers/bin/provision-worker-release-boundary.test.py'
+      - 'vps-workers/bin/provision_worker_release_install.py'
+      - 'vps-workers/bin/worker_release_broker_module_closure.py'
+      - 'vps-workers/bin/worker_release_dependency_install.py'
+      - 'vps-workers/bin/worker_release_dependency_artifacts.py'
+      - 'vps-workers/bin/worker_release_candidate_pin.py'
+      - 'vps-workers/bin/worker_release_dependency_supervisor_cgroup.py'
+      - 'vps-workers/bin/worker_release_descriptor_cgroup.py'
+      - 'vps-workers/bin/worker_release_bounded_process.py'
+      - 'vps-workers/bin/worker_release_lifecycle.py'
+      - 'vps-workers/package.json'
+      - 'vps-workers/pnpm-lock.yaml'
+      - 'vps-workers/pnpm-workspace.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.npmrc'
+      - '.github/workflows/worker-release-runtime-verifier-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fixed-runtime-verifier:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.22.2
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.7.0
+      - name: Install exact locked worker runtime dependencies
+        run: pnpm --dir vps-workers install --prod --frozen-lockfile --ignore-scripts
+      - name: Provision disposable trusted candidate parent and Node runtime
+        run: |
+          set -euo pipefail
+          node_binary="$(command -v node)"
+          node_version="$(node --version)"
+          if [ "$node_version" != 'v24.22.2' ]; then
+            echo 'runtime fixture setup failed: expected exact pinned Node v24.22.2' >&2
+            exit 1
+          fi
+          if [ -L /usr/bin/node ]; then
+            echo 'runtime fixture setup failed: refusing a symlinked /usr/bin/node target' >&2
+            exit 1
+          fi
+          sudo install -o root -g root -m 0755 "$node_binary" /usr/bin/node
+          if [ "$(/usr/bin/node --version)" != "$node_version" ]; then
+            echo 'runtime fixture setup failed: fixed Node runtime does not match setup-node' >&2
+            exit 1
+          fi
+          sudo groupadd --system baci-worker || { echo 'runtime fixture setup failed: create worker group' >&2; exit 1; }
+          sudo groupadd --system baci-worker-runtime-verify || { echo 'runtime fixture setup failed: create verifier group' >&2; exit 1; }
+          sudo useradd --system --gid baci-worker-runtime-verify --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin baci-worker-runtime-verify || { echo 'runtime fixture setup failed: create verifier user' >&2; exit 1; }
+          sudo install -d -o root -g root -m 0755 /etc/baci-workers
+          sudo install -d -o root -g root -m 0755 /srv/baci-workers
+          sudo install -d -o root -g baci-worker -m 0750 /srv/baci-workers/releases
+          sudo install -d -o root -g root -m 0755 /srv/baci-workers/runtime
+          sudo install -d -o root -g root -m 0755 /srv/baci-workers/locks
+          sudo install -d -o root -g root -m 0711 /var/lib/baci-worker-runtime-views
+          require_value() {
+            label="$1" expected="$2" actual="$3"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "runtime fixture setup failed: $label" >&2
+              exit 1
+            fi
+          }
+          require_value 'release root ownership/mode' "0:$(getent group baci-worker | cut -d: -f3):750" "$(stat -c '%u:%g:%a' /srv/baci-workers/releases)"
+          require_value 'runtime-view root ownership/mode' '0:0:711' "$(stat -c '%u:%g:%a' /var/lib/baci-worker-runtime-views)"
+          require_value 'verifier group membership is empty' '' "$(getent group baci-worker-runtime-verify | cut -d: -f4)"
+          require_value 'verifier account home and shell' '/nonexistent:/usr/sbin/nologin' "$(getent passwd baci-worker-runtime-verify | cut -d: -f6,7)"
+          require_value 'verifier has only its primary group' "$(getent group baci-worker-runtime-verify | cut -d: -f3)" "$(id -G baci-worker-runtime-verify)"
+          for executable in /usr/bin/systemd-run /usr/bin/systemctl /usr/bin/node; do
+            if [[ ! -x "$executable" ]]; then
+              echo "runtime fixture setup failed: required executable missing ($(basename "$executable"))" >&2
+              exit 1
+            fi
+          done
+      - name: Run candidate pinning and sandbox contract regressions
+        run: |
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_verifier.test.py -v
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_verifier_lifecycle.test.py -v
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_view.test.py -v
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_view_recovery.test.py -v
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_acl.test.py -v
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_identity.test.py -v
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/bin/provision-worker-release-boundary.test.py -v
+      - name: Run actual fixed systemd sandbox verification
+        run: |
+          sudo env PYTHONDONTWRITEBYTECODE=1 WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_verifier.test.py -v
+          sudo env PYTHONDONTWRITEBYTECODE=1 WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_verifier_lifecycle.test.py -v
+          sudo env PYTHONDONTWRITEBYTECODE=1 WORKER_RELEASE_RUNTIME_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_runtime_view_recovery.test.py -v

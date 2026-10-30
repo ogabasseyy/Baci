@@ -43,16 +43,77 @@ describe('GIGL direct worker cost contract', () => {
   });
 
   it('schedules tracking directly every five minutes', () => {
-    const cronLine = deployScript
+    const cronLines = deployScript
       .split('\n')
-      .find((line) => line.includes('gigl-tracking.lock'));
+      .filter((line) => line.includes('gigl-tracking.lock'));
+
+    // A duplicated crontab line would cause two pollers to contend on the
+    // same flock and can hide a broken lock contract. Keep this worker's
+    // schedule singular in the generated production crontab.
+    assert.equal(cronLines.length, 1, 'GIGL tracking must have one cron entry');
+    const cronLine = cronLines[0];
 
     assert.ok(cronLine);
     assert.match(
       cronLine,
-      /^\*\/5 \*\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/gigl-tracking\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=gigl-tracking && export GIGL_ENV_FILE_AUTHORITATIVE=1 && cd \$REMOTE_DIR && timeout --signal=TERM --kill-after=30s 2m \$REMOTE_DIR\/bin\/process-gigl-tracking\.sh' >> \$REMOTE_DIR\/logs\/gigl-tracking\.log 2>&1$/
+      /^\*\/5 \*\s+\* \* \* flock -n \$LOCK_DIR\/gigl-tracking\.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=gigl-tracking && export GIGL_ENV_FILE_AUTHORITATIVE=1 && cd \$REMOTE_DIR && timeout --signal=TERM --kill-after=30s 2m \$REMOTE_DIR\/bin\/process-gigl-tracking\.sh' >> \$REMOTE_DIR\/logs\/gigl-tracking\.log 2>&1$/
     );
     assert.doesNotMatch(cronLine, /run-web-cron|\/api\/cron\/gigl-tracking/);
+  });
+
+  it('keeps brokered worker promotion fail-closed behind the quiescence lease', () => {
+    const coordinator = readFileSync(
+      join(repoRoot, '.github', 'workflows', 'production-release.yml'),
+      'utf8'
+    );
+    const coordinatorScript = readFileSync(
+      join(repoRoot, '.github', 'scripts', 'worker-release-coordinator.mjs'),
+      'utf8'
+    );
+    const brokerDispatch = readFileSync(
+      join(repoRoot, 'vps-workers', 'bin', 'worker_release_broker_dispatch.py'),
+      'utf8'
+    );
+    const quiesceAdapter = readFileSync(
+      join(
+        repoRoot,
+        'vps-workers',
+        'lib',
+        'worker-release-quiesce-adapter.mjs'
+      ),
+      'utf8'
+    );
+
+    assert.match(coordinator, /worker-release-coordinator\.mjs/);
+    assert.match(coordinatorScript, /operation: 'promote'/);
+    assert.match(coordinatorScript, /operation: 'health'/);
+    assert.match(coordinatorScript, /operation: 'rollback'/);
+    assert.match(
+      brokerDispatch,
+      /quiescence = WorkerQuiesceLeaseManager\(worker_uid=worker_uid, worker_gid=worker_gid\)/
+    );
+    assert.match(
+      brokerDispatch,
+      /lease = quiescence\.acquire\(identity\.fence\(\), previous_sha=prior\)/
+    );
+    assert.match(
+      brokerDispatch,
+      /lease = quiescence\.require_active\(identity\.fence\(\)\)/
+    );
+    assert.match(brokerDispatch, /operation in \("recovery-status", "recover"\)/);
+    assert.match(brokerDispatch, /return recovery_status\(source_sha=sha, quiescence=quiescence/);
+    assert.match(
+      brokerDispatch,
+      /return recover\([\s\S]*identity=identity, quiescence=quiescence/
+    );
+    assert.match(
+      coordinatorScript,
+      /recovery-status[\s\S]*operation: 'recover'[\s\S]*recoveryOf: target/
+    );
+    assert.match(
+      quiesceAdapter,
+      /throw new Error\([\s\S]*refusing promotion or rollback/
+    );
   });
 
   it('keeps the privileged notification graph off the VPS', () => {
@@ -106,41 +167,20 @@ describe('GIGL direct worker cost contract', () => {
     }
   });
 
-  it('warns (never blocks) on manifest-only worker dependency drift', () => {
-    const deployFilter = readFileSync(
-      join(repoRoot, '.github', 'filters', 'deploy.yml'),
-      'utf8'
-    );
-    const group = deployFilter
-      .split(/^manifests:\s*$/m)[1]
-      .split(/^\w[\w-]*:\s*$/m)[0];
-    assert.match(group, /^\s+- 'package\.json'\s*$/m);
-    assert.match(group, /^\s+- 'pnpm-lock\.yaml'\s*$/m);
-    assert.match(group, /^\s+- 'pnpm-workspace\.yaml'\s*$/m);
-    assert.match(group, /^\s+- '\.npmrc'\s*$/m);
-    assert.match(group, /^\s+- 'apps\/web\/package\.json'\s*$/m);
-
-    const deploy = readFileSync(
-      join(repoRoot, '.github', 'workflows', 'deploy.yml'),
+  it('routes releases through the exact-SHA worker coordinator', () => {
+    const coordinator = readFileSync(
+      join(repoRoot, '.github', 'workflows', 'production-release.yml'),
       'utf8'
     );
     assert.match(
-      deploy,
-      /manifests: \$\{\{ steps\.filter\.outputs\.manifests \}\}/
+      coordinator,
+      /node \.github\/scripts\/worker-release-coordinator\.mjs/
     );
-    const step = deploy
-      .split('- name: Warn on manifest-only worker dependency drift')[1]
-      .split(/^\s+- name: /m)[0];
-    assert.match(
-      step,
-      /needs\.changes\.outputs\.manifests == 'true' && needs\.changes\.outputs\.tracking != 'true'/
+    assert.match(coordinator, /expected_release_sha: \$\{\{ github\.sha \}\}/);
+    assert.doesNotMatch(
+      coordinator,
+      /Warn on manifest-only worker dependency drift/
     );
-    assert.match(step, /::warning::/);
-    // Warn-never-blocks scopes to this CI step: the warning must not
-    // fail the build. Enforcement lives in the latch bypass term
-    // (deploy.yml requires manifest_drift == 'false'), which closes
-    // the smoke bypass until deploy.sh converges the worker.
-    assert.doesNotMatch(step, /::error::/);
   });
 
   it('selects deploy_scripts for GIGL gate script changes', () => {

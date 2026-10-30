@@ -113,10 +113,13 @@ describe('remediation deploy crontab', () => {
     assert.match(deployScript, /vercel-error-remediator\.lock bash -lc/);
     assert.match(deployScript, /sentry-mobile-error-remediator\.lock bash -lc/);
     assert.match(deployScript, /posthog-error-remediator\.lock bash -lc/);
-    assert.match(
-      deployScript,
-      /install -d -m 700 \$REMOTE_DIR\/locks && touch \$REMOTE_DIR\/locks\/error-remediator-global\.lock && chmod 600 \$REMOTE_DIR\/locks\/error-remediator-global\.lock/
+    const transportSource = readFileSync(
+      join(workerRoot, 'lib/worker-transport.sh'),
+      'utf8'
     );
+    assert.match(transportSource, /LOCK_DIR='\/srv\/baci-workers\/locks'/);
+    assert.match(transitionScript, /lock_dir=\"\$\{12:-\$remote_dir\/locks\}\"/);
+    assert.match(transitionScript, /protected lock directory has unexpected ownership or mode/);
     assert.doesNotMatch(deployScript, /BACI_REMEDIATION_GLOBAL_FLOCK_HELD/);
     assert.match(transitionScript, /flock -x \/tmp\/baci-workers-deploy\.lock/);
     assert.match(transitionScript, /BACI_REMEDIATION_PROC_ROOT:-\/proc/);
@@ -209,7 +212,7 @@ describe('remediation deploy crontab', () => {
     assert.ok(canaryCronLine);
     assert.match(
       canaryCronLine,
-      /22 4\s+\* \* \* flock -n \$REMOTE_DIR\/locks\/remediation-codex-canary\.lock bash -lc 'export BACI_CODEX_DOCKER_IMAGE=/
+      /22 4\s+\* \* \* flock -n \$LOCK_DIR\/remediation-codex-canary\.lock bash -lc 'export BACI_CODEX_DOCKER_IMAGE=/
     );
     assert.doesNotMatch(canaryCronLine, /BACI_REMEDIATION_CANARY_ENABLED=/);
     assert.match(canaryCronLine, /jobs\/remediation-codex-canary\.mjs/);
@@ -235,7 +238,7 @@ describe('remediation deploy crontab', () => {
     assert.match(deployScript, /CODEX_CONTAINER_BIN=.*find/);
     assert.ok(
       deployScript.indexOf('prepare_worker_release') <
-        deployScript.indexOf('CODEX_CONTAINER_BIN=$(ssh')
+      deployScript.indexOf('CODEX_CONTAINER_BIN=$(worker_exec_target')
     );
     assert.equal(
       deployScript.match(/BACI_CODEX_CONTAINER_BIN=\$CODEX_CONTAINER_BIN/g)

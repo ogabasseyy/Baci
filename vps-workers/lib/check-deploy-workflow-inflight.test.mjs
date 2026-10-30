@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -26,7 +26,7 @@ test('passes when no production deploy run is in flight', () => {
   // fixed recent-run window that could miss an approval-held run.
   assert.match(
     ghArgs,
-    /repos\/example-owner\/example-repo\/actions\/workflows\/deploy\.yml\/runs\?branch=main/
+    /repos\/ogabasseyy\/Baci\/actions\/workflows\/production-release\.yml\/runs\?branch=main/
   );
   assert.match(ghArgs, /--paginate/);
   assert.match(ghArgs, /--jq/);
@@ -41,7 +41,7 @@ test('queries every non-completed status without a fixed window', () => {
   // Two consecutive stable passes prove nothing transitioned
   // mid-scan; a single pass can always dodge.
   const calls = ghArgs.split('\n').filter(Boolean);
-  assert.equal(calls.length, 12);
+  assert.equal(calls.length, 24);
   // Mirrors IN_FLIGHT_RUN_STATUSES in coordinate-production-release.mjs:
   // an approval-parked run can still publish later.
   for (const status of [
@@ -54,13 +54,13 @@ test('queries every non-completed status without a fixed window', () => {
   ]) {
     assert.equal(
       calls.filter((call) => call.includes(`status=${status}`)).length,
-      2,
+      4,
       `expected two status=${status} queries`
     );
   }
   for (const call of calls) {
     assert.match(call, /--paginate/);
-    assert.match(call, /actions\/workflows\/deploy\.yml\/runs\?branch=main/);
+    assert.match(call, /actions\/workflows\/(?:deploy|production-release)\.yml\/runs\?branch=main/);
   }
 });
 
@@ -141,6 +141,62 @@ test('the in-flight query preserves approval-parked runs', () => {
   );
 });
 
+test('checks the coordinator lock at its baci-release-owned path', () => {
+  const source = readFileSync(libPath, 'utf8');
+  const lockSource = readFileSync(
+    new URL('../../.github/scripts/production-release-lock.mjs', import.meta.url),
+    'utf8'
+  );
+  const statusSource = readFileSync(
+    new URL('../bin/production_release_lock_status.py', import.meta.url),
+    'utf8'
+  );
+  const filesystemSource = readFileSync(
+    new URL('../bin/production_release_lock_status_fs.py', import.meta.url),
+    'utf8'
+  );
+  const unitSource = readFileSync(
+    new URL('../systemd/baci-production-release-lock-status.service', import.meta.url),
+    'utf8'
+  );
+  const configuredPath = lockSource.match(
+    /PRODUCTION_RELEASE_LOCK_PATH = '([^']+)'/
+  )?.[1];
+
+  assert.equal(
+    configuredPath,
+    '/home/baci-release/.local/state/baci/pending-production-release.json'
+  );
+  assert.match(statusSource, /LOCK_VIEW_DIRECTORY = Path\("\/run\/baci-worker-release-status\/lock-state"\)/);
+  assert.match(statusSource, /LOCK_PATH = LOCK_VIEW_DIRECTORY \/ LOCK_FILENAME/);
+  assert.match(unitSource, /BindReadOnlyPaths=\/home\/baci-release\/\.local\/state\/baci:\/run\/baci-worker-release-status\/lock-state/);
+  assert.match(filesystemSource, /"\/home\/baci-release\/\.local\/state\/baci"/);
+  assert.match(filesystemSource, /"\/baci-release\/\.local\/state\/baci"/);
+  assert.doesNotMatch(filesystemSource, /\/proc\/1\/root/);
+  assert.match(source, /production_release_lock_status\.py'\s*\n\s*\[ -x "\$status_helper" \]/);
+  assert.match(source, /case "\$lock_status" in[\s\S]*?unlocked\)[\s\S]*?locked\)/);
+  assert.match(source, /production-release-lock\.mjs" authorize-worker-lock/);
+});
+
+test('fails closed when the lock-status endpoint is missing', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    statusAvailable: false,
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /read-only production release lock status endpoint is unavailable/);
+  assert.equal(ghArgs, '');
+});
+
+test('fails closed on a malformed lock-status response', () => {
+  const { result, ghArgs } = runCheck({ ghBody: RECORD_ARGS, lockStatus: 'maybe' });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /production release lock status response is invalid/);
+  assert.equal(ghArgs, '');
+});
+
 test('refuses promotion while an approval-parked run is listed', () => {
   const { result } = runCheck({
     ghBody: `${RECORD_ARGS}\nprintf '184400115\\tcompleted\\tabc54321\\tworkflow_dispatch\\thttps://github.com/example/repo/actions/runs/184400115\\n'`,
@@ -189,7 +245,7 @@ test('fails closed when gh is missing', () => {
       env: {
         ...process.env,
         BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '',
-        BACI_DEPLOY_WORKFLOW_REPO: '',
+        BACI_DEPLOY_WORKFLOW_REPO: 'ogabasseyy/Baci',
         CHECK_LIB: libPath,
         // No gh on PATH: only the empty stub dir, so `command -v gh`
         // fails before any other tool is needed.
@@ -199,19 +255,42 @@ test('fails closed when gh is missing', () => {
   );
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /gh CLI is not installed/);
+  assert.match(result.stderr, /pinned GitHub CLI is missing or has an untrusted owner or mode/);
 });
 
-test('bypass override proceeds with a loud warning', () => {
+test('caller supplied emergency bypass input does not bypass an active deploy run', () => {
   const { result } = runCheck({
     ghBody: `${RECORD_ARGS}\necho '184400111 in_progress abc12345 push https://example.invalid/runs/1'`,
     env: { BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '1' },
   });
 
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(
-    result.stderr,
-    /WARNING: skipping the pre-promote in-flight deploy check/
-  );
-  assert.match(result.stderr, /re-run the GIGL smoke\/latch sequence/);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /production deploy run/);
+  assert.doesNotMatch(result.stderr, /skipping the pre-promote/);
+});
+
+test('forged run context and PATH-spoofed Node or gh cannot authorize a manual worker process', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'baci-hostile-path-'));
+  const marker = join(dir, 'node-was-run');
+  const { result } = runCheck({
+    ghBody: [
+      'echo "$@" >> "$GH_ARGS_FILE"',
+      'case "$*" in',
+      '  *production-release.yml*) printf \'184400111\\tin_progress\\tabc12345\\tpush\\thttps://example.invalid/runs/184400111\\n\';;',
+      'esac',
+    ].join('\n'),
+    env: {
+      GITHUB_RUN_ID: '184400111',
+      GITHUB_SHA: 'a'.repeat(40),
+      GITHUB_JOB: 'workers',
+      BACI_DEPLOY_WORKFLOW_REPO: 'ogabasseyy/Baci',
+      ACTIONS_ID_TOKEN_REQUEST_URL: 'https://attacker.invalid/token',
+      ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'forged',
+    },
+    nodeBody: `echo called > '${marker}'\nprintf '184400111\\tdeadbeef\\t1\\n'`,
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /production release coordinator is active and this process is not its authenticated worker job/);
+  assert.equal(existsSync(marker), false);
 });

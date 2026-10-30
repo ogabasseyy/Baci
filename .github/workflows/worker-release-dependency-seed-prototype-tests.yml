@@ -1,0 +1,56 @@
+name: Worker release dependency seed prototype tests
+
+on:
+  pull_request:
+    paths:
+      - 'vps-workers/tools/nonproduction-worker-release/dependency_seed_*.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency_seed_*.test.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency-seed-*.test.py'
+      - 'vps-workers/bin/worker_release_dependency_*.py'
+      - 'vps-workers/bin/worker_release_seed_workspace*.py'
+      - 'vps-workers/tools/nonproduction-worker-release/worker_release_egress_*.py'
+      - 'vps-workers/bin/worker_release_pinned_runtime*.py'
+      - 'vps-workers/bin/provision-worker-pinned-runtime.py'
+      - '.github/workflows/worker-release-dependency-seed-prototype-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-linux-root-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run disconnected seed prototype regressions as root
+        run: |
+          set -eu
+          test "$(id -u)" -ne 0
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-publisher.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-move-publication.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency_seed_retention.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-consumer.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-recovery.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-filesystem.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-cross-sha.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-transaction.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency_seed_generation_source.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency_seed_generation.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency_seed_generation_journal.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency_seed_generation_recovery.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_seed_workspace.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_seed_workspace_mount.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_seed_workspace_recovery.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_seed_workspace_provision.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_pinned_runtime_install.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/tools/nonproduction-worker-release/worker_release_egress_systemd_integration.py
+          if find vps-workers -type f -path '*/__pycache__/*' -uid 0 -print -quit | grep -q .; then
+            echo 'root-run seed tests left root-owned bytecode in the checkout' >&2
+            exit 1
+          fi
+          pycache_prefix="$(mktemp -d)"
+          trap 'rm -rf -- "$pycache_prefix"' EXIT
+          PYTHONPYCACHEPREFIX="$pycache_prefix" /usr/bin/python3 -m py_compile vps-workers/tools/nonproduction-worker-release/dependency_seed_*.py

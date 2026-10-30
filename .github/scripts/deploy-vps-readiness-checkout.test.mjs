@@ -1,17 +1,112 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-
 import YAML from 'yaml';
+import { assertNoopPublicationOutcome } from './production-release-lock.mjs';
 
-const workflowUrl = new URL('../workflows/deploy.yml', import.meta.url);
+const deploymentWorkflowUrl = new URL('../workflows/deploy.yml', import.meta.url);
+const coordinatorWorkflowUrl = new URL('../workflows/production-release.yml', import.meta.url);
+
+function evaluateGithubExpression(expression, context) {
+  const source = expression
+    .replace(/^\s*\$\{\{\s*/, '')
+    .replace(/\s*\}\}\s*$/, '')
+    .trim();
+  const tokenPattern = /\s*(\&\&|\|\||==|!=|!|\(|\)|'[^']*'|[A-Za-z_][A-Za-z0-9_.-]*)/y;
+  const tokens = [];
+  let offset = 0;
+  while (offset < source.length) {
+    tokenPattern.lastIndex = offset;
+    const match = tokenPattern.exec(source);
+    if (!match) throw new Error(`Unsupported workflow expression at ${source.slice(offset)}`);
+    tokens.push(match[1]);
+    offset = tokenPattern.lastIndex;
+  }
+
+  let cursor = 0;
+  const peek = () => tokens[cursor];
+  const take = (expected) => {
+    const token = tokens[cursor++];
+    if (expected !== undefined && token !== expected) {
+      throw new Error(`Expected ${expected}, received ${token}`);
+    }
+    return token;
+  };
+  const resolve = (name) => {
+    if (name === 'true') return true;
+    if (name === 'false') return false;
+    return name.split('.').reduce((value, key) => value?.[key], context);
+  };
+
+  function primary() {
+    if (peek() === '(') {
+      take('(');
+      const value = disjunction();
+      take(')');
+      return value;
+    }
+    const token = take();
+    if (token?.startsWith("'")) return token.slice(1, -1);
+    if (peek() === '(') {
+      take('(');
+      take(')');
+      if (token === 'always' || token === 'success') return true;
+      throw new Error(`Unsupported workflow function ${token}`);
+    }
+    return resolve(token);
+  }
+
+  function negation() {
+    if (peek() === '!') {
+      take('!');
+      return !negation();
+    }
+    return primary();
+  }
+
+  function equality() {
+    let value = negation();
+    while (peek() === '==' || peek() === '!=') {
+      const operator = take();
+      const right = negation();
+      value = operator === '==' ? value === right : value !== right;
+    }
+    return value;
+  }
+
+  function conjunction() {
+    let value = equality();
+    while (peek() === '&&') {
+      take('&&');
+      const right = equality();
+      value = value ? right : value;
+    }
+    return value;
+  }
+
+  function disjunction() {
+    let value = conjunction();
+    while (peek() === '||') {
+      take('||');
+      const right = conjunction();
+      value = value ? value : right;
+    }
+    return value;
+  }
+
+  const result = disjunction();
+  if (cursor !== tokens.length) throw new Error(`Unexpected workflow token ${peek()}`);
+  return result;
+}
 
 test('validates publication tooling and safety before building and again before publishing', async () => {
-  const workflow = YAML.parse(await readFile(workflowUrl, 'utf8'));
+  const workflow = YAML.parse(await readFile(deploymentWorkflowUrl, 'utf8'));
   const steps = workflow.jobs['deploy-production'].steps;
-  const buildIndex = steps.findIndex(step => step.name === 'Build for Vercel');
-  const publishIndex = steps.findIndex(step => step.name === 'Deploy to Vercel (with retry)');
-  const checks = steps.map((step, index) => ({ step, index })).filter(({ step }) => step.run === '.github/scripts/refuse-publish-on-promote-overlap.sh');
+  const buildIndex = steps.findIndex((step) => step.name === 'Build for Vercel');
+  const publishIndex = steps.findIndex((step) => step.name === 'Deploy to Vercel (with retry)');
+  const checks = steps
+    .map((step, index) => ({ step, index }))
+    .filter(({ step }) => step.run === '.github/scripts/refuse-publish-on-promote-overlap.sh');
   assert.equal(checks.length, 2);
   assert.ok(checks[0].index < buildIndex);
   assert.ok(checks[1].index > buildIndex && checks[1].index < publishIndex);
@@ -21,112 +116,111 @@ test('validates publication tooling and safety before building and again before 
   }
 });
 
-test('uses a minimal sparse checkout for VPS drain readiness', async () => {
-  const workflow = YAML.parse(await readFile(workflowUrl, 'utf8'));
-  const steps = workflow.jobs['vps-drain-readiness'].steps;
-  const checkout = steps.find((step) => typeof step.uses === 'string');
-  const verification = steps.find(
-    (step) =>
-      step.name === 'Verify production cache-invalidation drain installation'
-  );
-  const giglVerification = steps.find(
-    (step) => step.name === 'Verify production GIGL direct-worker installation'
-  );
-  const cutoverMarker = steps.find(
-    (step) => step.name === 'Verify GIGL tracking cutover marker'
-  );
+test('uses a minimal sparse checkout for exact-SHA worker readiness', async () => {
+  const workflow = YAML.parse(await readFile(deploymentWorkflowUrl, 'utf8'));
+  const readiness = workflow.jobs['vps-drain-readiness'];
+  const checkout = readiness.steps.find((step) => typeof step.uses === 'string');
 
   assert.equal(checkout.with.path, '.readiness-checkout');
   assert.equal(
     checkout.with['sparse-checkout'],
-    'vps-workers/bin/verify-cache-invalidation-drain-installed.sh\n' +
-      'vps-workers/bin/verify-gigl-direct-workers-installed.sh\n' +
-      '.github/scripts/check-gigl-cutover-latch.sh\n' +
-      '.github/scripts/resolve-gigl-latch-identity.sh\n' +
-      '.github/scripts/gigl-dotenv.sh\n' +
+    '.github/scripts/check-worker-release-readiness.mjs\n' +
       '.github/scripts/verify-coordinated-release.sh\n' +
-      '.github/filters/deploy.yml\n'
+      'vps-workers/lib/worker-release-broker-client.mjs\n' +
+      'vps-workers/lib/worker-release-broker.mjs\n'
   );
   assert.equal(checkout.with['sparse-checkout-cone-mode'], false);
   assert.equal(
-    verification.run,
-    '.readiness-checkout/vps-workers/bin/verify-cache-invalidation-drain-installed.sh'
+    readiness.steps.find((step) => step.id === 'worker-readiness').run,
+    'node .readiness-checkout/.github/scripts/check-worker-release-readiness.mjs'
   );
+  assert.deepEqual(Object.keys(readiness.outputs).sort(), ['installed_sha', 'worker_units_ready']);
+  assert.equal(readiness.steps.some((step) => step.run?.includes('/home/bassey/')), false);
+  const finalReadiness = workflow.jobs['deploy-production'].steps.find(
+    (step) => step.name === 'Verify exact worker SHA before lock release'
+  );
+  assert.equal(finalReadiness.run, 'node .github/scripts/check-worker-release-readiness.mjs');
+  assert.equal(finalReadiness.env.BACI_EXPECTED_APP_SHA, '${{ inputs.expected_release_sha }}');
+  assert.equal(finalReadiness.env.GITHUB_TOKEN, '${{ github.token }}');
   assert.equal(
-    giglVerification.run,
-    '.readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke'
-  );
-  assert.equal(
-    giglVerification.if,
-    "needs.changes.outputs.tracking != 'false'"
-  );
-  // The cutover marker runs on every main push with no changeset
-  // condition: diff-scoped gates alone would let an unrelated web push
-  // deploy the cron removal while the worker was never installed.
-  assert.equal(
-    cutoverMarker.run,
-    '.readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh --cutover-marker'
-  );
-  assert.equal(cutoverMarker.if, undefined);
-});
-
-test('reports the cutover latch as a readiness output signal', async () => {
-  const workflow = YAML.parse(await readFile(workflowUrl, 'utf8'));
-  const readiness = workflow.jobs['vps-drain-readiness'];
-  const latchCheck = readiness.steps.find(
-    (step) => step.name === 'Check GIGL cutover latch'
-  );
-
-  assert.equal(
-    readiness.outputs.cutover_latched,
-    '${{ steps.gigl-cutover-latch.outputs.latched }}'
-  );
-  assert.equal(
-    readiness.outputs.tracking_stale,
-    '${{ steps.gigl-cutover-latch.outputs.tracking_stale }}'
-  );
-  assert.equal(
-    readiness.outputs.manifest_drift,
-    '${{ steps.gigl-cutover-latch.outputs.manifest_drift }}'
-  );
-  assert.equal(
-    readiness.outputs.installed_sha,
-    '${{ steps.gigl-cutover-latch.outputs.installed_sha }}'
-  );
-  assert.equal(
-    readiness.outputs.installed_tracking_stale,
-    '${{ steps.gigl-cutover-latch.outputs.installed_tracking_stale }}'
-  );
-  // Signal, not gate: no changeset condition, never fails (fail-closed
-  // latched=false / stale=true), so tracking pushes proceed to their own
-  // smoke. The script diffs the latched revision against HEAD over the
-  // tracking filter; the token is read-scoped fetch auth only.
-  assert.equal(latchCheck.if, undefined);
-  assert.equal(
-    latchCheck.run,
-    '.readiness-checkout/.github/scripts/check-gigl-cutover-latch.sh "$VPS_WORKER_REMOTE_DIR" .readiness-checkout'
-  );
-  assert.equal(latchCheck.env.GITHUB_TOKEN, '${{ github.token }}');
-});
-
-test('delegates verification, smoke and latch persistence to one locked helper', async () => {
-  const workflow = YAML.parse(await readFile(workflowUrl, 'utf8'));
-  const capability = workflow.jobs['gigl-worker-capability'];
-  const refreshSteps = capability.steps.filter(
-    (step) => step.run === 'bash .github/scripts/refresh-gigl-cutover-latch.sh'
-  );
-
-  assert.equal(refreshSteps.length, 1);
-  assert.equal(refreshSteps[0].if, undefined);
-  assert.equal(refreshSteps[0]['continue-on-error'], undefined);
-  assert.equal(capability['continue-on-error'], undefined);
-  assert.equal(capability.env.GIGL_ENV_FILE_AUTHORITATIVE, '1');
-  assert.equal(typeof refreshSteps[0].env.BACI_EXPECTED_APP_SHA, 'string');
-  assert.equal(
-    capability.steps.some((step) =>
-      step.run?.includes('> "$VPS_WORKER_REMOTE_DIR/.gigl-capability-smoke-ok"')
+    workflow.jobs['deploy-production'].steps.some((step) =>
+      step.run === 'vps-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke'
     ),
     false,
-    'the workflow must not write an unlocked latch outside the helper'
+    'final worker verification must use the authenticated broker receipt'
+  );
+});
+
+test('keeps the post-migration capability smoke bound to the caller SHA', async () => {
+  const workflow = YAML.parse(await readFile(deploymentWorkflowUrl, 'utf8'));
+  const readiness = workflow.jobs['vps-drain-readiness'];
+  const capability = workflow.jobs['gigl-worker-capability'];
+  const smoke = capability.steps.find(
+    (step) => step.run === 'node .github/scripts/run-gigl-capability-smoke.mjs'
+  );
+
+  assert.ok(smoke);
+  assert.equal(smoke.env.BACI_EXPECTED_APP_SHA, '${{ github.sha }}');
+  assert.deepEqual(capability.needs, ['changes', 'db-migrations', 'vps-drain-readiness']);
+  assert.match(capability.if, /always\(\)/);
+  assert.match(capability.if, /needs\.db-migrations\.result == 'success'/);
+  assert.match(capability.if, /needs\.vps-drain-readiness\.result == 'success'/);
+  assert.equal(capability.permissions['id-token'], 'write');
+  assert.equal(capability.env.GH_TOKEN, '${{ github.token }}');
+  assert.equal(
+    readiness.steps.find((step) => step.id === 'worker-readiness').env,
+    undefined,
+    'readiness receives the exact SHA from the job environment'
+  );
+  assert.equal(
+    readiness.env.BACI_EXPECTED_APP_SHA,
+    '${{ github.sha }}'
+  );
+});
+
+test('clears the persistent lock only for a successful no-op, and preserves published or failed outcomes', async () => {
+  const deployment = YAML.parse(await readFile(deploymentWorkflowUrl, 'utf8'));
+  const coordinator = YAML.parse(await readFile(coordinatorWorkflowUrl, 'utf8'));
+  const publishJob = deployment.jobs['deploy-production'];
+  const finalizer = coordinator.jobs['release-lock-finalizer'];
+
+  const publishedExpression = publishJob.outputs.production_published;
+  const publicationOutcome = (stepOutcome) =>
+    evaluateGithubExpression(publishedExpression, {
+      steps: { 'live-alias-verification': { outcome: stepOutcome } },
+    });
+  assert.equal(publicationOutcome('success'), 'true');
+  assert.equal(publicationOutcome('skipped'), 'false');
+  assert.equal(publicationOutcome('failure'), 'false');
+
+  const finalizerRuns = (deployResult, published) =>
+    Boolean(
+      evaluateGithubExpression(finalizer.if, {
+        needs: {
+          deploy: {
+            result: deployResult,
+            outputs: { production_published: published },
+          },
+        },
+      })
+    );
+  assert.equal(finalizer.needs.join(','), 'deploy');
+  assert.equal(finalizerRuns('success', 'false'), true);
+  assert.equal(finalizerRuns('success', 'true'), false);
+  assert.equal(finalizerRuns('failure', 'false'), false);
+  assert.equal(finalizerRuns('skipped', 'false'), false);
+  assert.equal(
+    finalizer.env.BACI_APP_PUBLICATION_SUCCEEDED,
+    "${{ needs.deploy.outputs.production_published || 'false' }}"
+  );
+  assert.equal(
+    finalizer.steps.find((step) => step.name === 'Clear only when the app workflow proves no publication was attempted').run,
+    'node .github/scripts/production-release-lock.mjs clear-noop'
+  );
+
+  assertNoopPublicationOutcome('false');
+  assert.throws(
+    () => assertNoopPublicationOutcome('true'),
+    /did not prove that app publication was skipped/
   );
 });

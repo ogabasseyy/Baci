@@ -8,11 +8,8 @@ if [ $# -eq 0 ]; then
   exit 1
 fi
 
-# Two attempts fit the deploy step's timeout-minutes budget in deploy.yml: one
-# capped deploy (~20m) that recovers by promoting its created deployment (or, if
-# unpromotable, falls through) plus one fallback deploy (~20m). A third attempt
-# could not finish before the step deadline, so it would only create another
-# unpromoted deployment -- don't start one.
+# Two attempts fit deploy.yml's timeout: a capped deploy with same-target
+# recovery, then one fallback. Further attempts cannot finish before the deadline.
 MAX_ATTEMPTS=${MAX_ATTEMPTS:-2}
 BACKOFF_SECONDS=${BACKOFF_SECONDS:-15}
 # Per-attempt wall-clock cap for the deploy command. Vercel CLI 57's
@@ -36,16 +33,12 @@ PROMOTE_ATTEMPTS=${PROMOTE_ATTEMPTS:-2}
 # Optional exact-main authority check. The production workflow binds this to a
 # fail-closed GitHub ref verifier. Tests and non-production callers may omit it.
 DEPLOY_CURRENT_MAIN_GUARD=${DEPLOY_CURRENT_MAIN_GUARD:-}
-# Optional worker-promote overlap check. The production workflow binds this
-# to the publish-side overlap refusal: the pre-publish step is only a
-# point-in-time check before a deployment step that may run ~55 minutes,
-# and a promote recorded after that step would otherwise publish off a
-# stale latch/SHA read. Checked immediately before EVERY promote attempt
-# (a record written during the deploy, a backoff, or an earlier attempt
-# blocks the promotion) AND immediately after (a record written during
-# the promote itself rolls the publish back to the captured previous
-# production deployment). Tests and non-production callers may omit it.
+# Optional worker-promote exclusion, checked before every promotion and after
+# promote; the latter rolls back to the serving deployment captured pre-staging.
 DEPLOY_PROMOTE_OVERLAP_CHECK=${DEPLOY_PROMOTE_OVERLAP_CHECK:-}
+# A runtime preflight can only roll back safely when the pre-staging serving
+# deployment was captured by the overlap guard.
+DEPLOY_POST_PROMOTE_HEALTH_CHECK=${DEPLOY_POST_PROMOTE_HEALTH_CHECK:-}
 deploy_command=("$@")
 # The deploy command prefix is static per process: resolve it once for
 # the promote/rollback command-shape dispatch in the overlap helper.
@@ -58,11 +51,13 @@ last_deployment_target=""
 retry_lib_dir="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=deploy-with-retry-overlap.sh
 . "$retry_lib_dir/deploy-with-retry-overlap.sh"
+validate_post_promote_health_configuration || exit 1
 # Rollback target for the post-promote overlap exclusion: captured
 # ONCE before the first staging (see the attempt loop) and reused by
 # every promote in this process.
 captured_previous_production_target=""
 previous_production_captured=0
+fatal_promote_failure=0
 
 run_current_main_guard() {
   if [ -z "$DEPLOY_CURRENT_MAIN_GUARD" ]; then
@@ -139,6 +134,7 @@ run_promote_command() {
     # Ambiguous failure (server-side effect with a client-side error):
     # resolve the alias and verify/roll back before returning.
     if [ "$overlap_bound" = "1" ] && recover_ambiguous_promote "$last_deployment_target" "$captured_previous_production_target"; then
+      verify_post_promote_runtime_with_fatal_flag "$last_deployment_target" "$captured_previous_production_target" || return 1
       return 0
     fi
     return 1
@@ -153,6 +149,7 @@ run_promote_command() {
       return 1
     fi
   fi
+  verify_post_promote_runtime_with_fatal_flag "$last_deployment_target" "$captured_previous_production_target" || return 1
   return 0
 }
 
@@ -165,6 +162,9 @@ promote_with_retries() {
   for promote_attempt in $(seq 1 "$PROMOTE_ATTEMPTS"); do
     if run_promote_command; then
       return 0
+    fi
+    if [ "$fatal_promote_failure" = "1" ]; then
+      return 1
     fi
     if [ "$promote_attempt" -lt "$PROMOTE_ATTEMPTS" ]; then
       echo "Promote of ${last_deployment_target} failed (promote attempt ${promote_attempt}/${PROMOTE_ATTEMPTS}); retrying in ${BACKOFF_SECONDS}s..." >&2
@@ -244,6 +244,15 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
         echo "Recovered killed deploy by promoting ${last_deployment_target} to production."
         rm -f "$attempt_log"
         exit 0
+      fi
+      if [ "$fatal_promote_failure" = "1" ]; then
+        # A runtime preflight failure is terminal even when its rollback was
+        # confirmed: starting another deploy would republish after the safety
+        # gate rejected this candidate. An unconfirmed rollback also requires
+        # operator reconciliation before any further publication.
+        rm -f "$attempt_log"
+        echo "Runtime preflight failed during killed-deploy recovery; refusing another deployment attempt." >&2
+        exit 1
       fi
       echo "Could not promote ${last_deployment_target} after ${PROMOTE_ATTEMPTS} attempts; treating as a normal failure." >&2
     fi

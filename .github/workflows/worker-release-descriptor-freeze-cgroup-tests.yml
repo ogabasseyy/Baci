@@ -1,0 +1,30 @@
+name: Worker release descriptor freeze cgroup tests
+
+on:
+  pull_request:
+    paths:
+      - 'vps-workers/bin/worker_release_descriptor_freeze.py'
+      - 'vps-workers/bin/worker_release_descriptor_freeze.test.py'
+      - 'vps-workers/bin/worker_release_descriptor_freeze_cgroup.test.py'
+      - 'vps-workers/bin/worker_release_descriptor_cgroup_test_support.py'
+      - 'vps-workers/bin/worker_release_descriptor_cgroup.py'
+      - 'vps-workers/bin/worker_release_descriptor_process.py'
+      - 'vps-workers/tools/worker-release-descriptor-freeze-cgroup-ci.py'
+      - '.github/workflows/worker-release-descriptor-freeze-cgroup-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-descriptor-freeze-cgroup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      WORKER_RELEASE_REQUIRE_CGROUP: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Exercise descriptor freeze in a disposable cgroup v2
+        run: sudo env WORKER_RELEASE_REQUIRE_CGROUP=1 python3 vps-workers/tools/worker-release-descriptor-freeze-cgroup-ci.py

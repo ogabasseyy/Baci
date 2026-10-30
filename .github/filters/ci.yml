@@ -98,6 +98,7 @@ quiz_db:
   - '.github/workflows/ci.yml'
   - '.github/actions/postdeploy-migrations/**'
   - '.github/scripts/x-pixel-token-authentication.sql.test.mjs'
+  - '.github/scripts/cache-invalidation-worker-role-migration.test.mjs'
   - 'supabase/migrations/**'
   - 'supabase/tests/**'
   - '.github/scripts/deferred-production-migrations.sh'

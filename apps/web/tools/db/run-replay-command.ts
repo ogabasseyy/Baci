@@ -3,15 +3,17 @@ import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import { readSupabaseHistoryEffects } from './read-supabase-history-effects';
 import { replayRepository } from './replay-repository-root';
-import { supabaseCommandDiagnostic } from './supabase-command-diagnostic';
 import { supabaseHistoryEffectQueryContract } from './supabase-history-effect-query-contract';
 import { supabaseHistoryReplayManifest } from './supabase-history-replay-manifest';
 import type {
   ReplayCommand,
   SupabaseHistoryEffectComparisonMode,
 } from './supabase-history-replay-types';
+import {
+  replayCommandFailure as commandFailure,
+  type ReplayCommandFailureClass as FailureClass,
+} from './supabase-replay-command-diagnostic';
 import { createSupabaseReplayDatabaseEnvironment } from './supabase-replay-contract';
-import { supabaseReplayFailureDiagnostic } from './supabase-replay-failure-diagnostic';
 
 export type ReplayCommandLimits = {
   stderrBytes: number;
@@ -31,59 +33,6 @@ const DEFAULT_LIMITS: ReplayCommandLimits = {
   stdinBytes: 8 * 1024 * 1024,
   stdoutBytes: 8 * 1024 * 1024,
 };
-type FailureClass =
-  | 'non-zero-exit'
-  | 'spawn-error'
-  | 'stderr-limit'
-  | 'stdin-limit'
-  | 'stdout-limit'
-  | 'timeout';
-
-function sanitizedCommandName(command: string): string {
-  const basename = path.basename(command);
-  return /^[A-Za-z0-9._-]+$/.test(basename) ? basename : 'command';
-}
-
-function boundedPsqlDiagnostic(
-  command: string,
-  stderr: readonly Buffer[]
-): string {
-  const commandName = sanitizedCommandName(command);
-  if (commandName === 'supabase') {
-    return supabaseCommandDiagnostic(Buffer.concat(stderr).toString('utf8'));
-  }
-  if (!/^psql(?:-[A-Za-z0-9._-]+)?$/.test(commandName)) {
-    return '';
-  }
-  const output = Buffer.concat(stderr).toString('utf8');
-  const escapedCommandName = commandName.replaceAll('.', '\\.');
-  const match = new RegExp(
-    `^${escapedCommandName}:[^\\r\\n]*:(\\d+):[ \\t]+(?:ERROR|error):(?:[ \\t]+([0-9A-Z]{5})(?=[: \\t]|$))?`,
-    'm'
-  ).exec(output);
-  const line = Number(match?.[1]);
-  if (!Number.isSafeInteger(line) || line < 1) return '';
-  return ` (line=${line}${match?.[2] ? `,sqlstate=${match[2]}` : ''})`;
-}
-
-function commandFailure(
-  command: string,
-  failure: FailureClass,
-  stderr: readonly Buffer[] = []
-): Error {
-  const diagnostic =
-    failure !== 'non-zero-exit'
-      ? ''
-      : sanitizedCommandName(command) === 'supabase'
-        ? supabaseReplayFailureDiagnostic(
-            Buffer.concat(stderr).toString('utf8')
-          )
-        : boundedPsqlDiagnostic(command, stderr);
-  return new Error(
-    `${sanitizedCommandName(command)} failed: ${failure}${diagnostic}`
-  );
-}
-
 function createReplayCommand(
   repositoryRoot: string,
   options: ReplayCommandOptions = {}
@@ -179,7 +128,7 @@ function createReplayCommand(
             return;
           }
           if (code !== 0 || stdinFailed) {
-            reject(commandFailure(command, 'non-zero-exit', stderr));
+            reject(commandFailure(command, 'non-zero-exit', stderr, stdout));
             return;
           }
           resolve({

@@ -67,6 +67,7 @@ describe('createSupabaseReplaySqlApplier', () => {
     )('/tmp/126-other.sql');
     expect(run).toHaveBeenCalledTimes(1);
     expect(run.mock.calls[0][1]).toContain('/tmp/126-other.sql');
+    expect(run.mock.calls[0][1]).toContain('VERBOSITY=verbose');
   });
 
   it('rejects changed retention bytes before any database command', async () => {

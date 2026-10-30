@@ -16,14 +16,7 @@ export function createSupabaseReplaySqlApplier(
 ) {
   // Rejects non-loopback URLs and passes credentials only through the environment.
   const env = createSupabaseReplayDatabaseEnvironment(databaseUrl);
-  const args = [
-    '-X',
-    '-w',
-    '-v',
-    'ON_ERROR_STOP=1',
-    '-v',
-    'VERBOSITY=sqlstate',
-  ];
+  const args = ['-X', '-w', '-v', 'ON_ERROR_STOP=1', '-v', 'VERBOSITY=verbose'];
   return async (sqlPath: string) => {
     const name = path.basename(sqlPath).replace(/^\d+-/, '');
     if (name === RETENTION_SOURCE) {

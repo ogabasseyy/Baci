@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { cacheInvalidationPurgeCausalKey } from '@/lib/cache-invalidation-purge-causal-key';
+import { createCacheInvalidationWorkerClient } from '@/lib/cache-invalidation-worker-client';
 import { hasValidCronSecret } from '@/lib/cron-secret-auth';
 import { drainStorefrontCacheInvalidation } from '@/lib/drain-storefront-cache-invalidation';
-import { createServiceClient } from '@/lib/supabase/service';
 import { cacheInvalidationDrainCronResponseSchemas } from '@/schemas/cache-invalidation-drain-cron';
 
 export const maxDuration = 60;
@@ -19,7 +19,31 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   const startedAt = Date.now();
   const workerId = `next-cron-${startedAt}`;
-  const supabase = createServiceClient('event-pipeline');
+  let supabase: ReturnType<typeof createCacheInvalidationWorkerClient>;
+  try {
+    supabase = createCacheInvalidationWorkerClient(process.env);
+  } catch {
+    return NextResponse.json(
+      { error: 'Cache invalidation worker unavailable' },
+      { status: 500 }
+    );
+  }
+  if (new URL(request.url).searchParams.get('preflight') === '1') {
+    try {
+      const readiness = await supabase.rpc(
+        'has_cache_invalidation_dead_letters'
+      );
+      if (readiness.error || typeof readiness.data !== 'boolean') {
+        throw new Error('cache_worker_not_ready');
+      }
+      return NextResponse.json({ ready: true });
+    } catch {
+      return NextResponse.json(
+        { error: 'Cache invalidation worker unavailable' },
+        { status: 503 }
+      );
+    }
+  }
   let claimed = 0;
   let completed = 0;
   let failed = 0;

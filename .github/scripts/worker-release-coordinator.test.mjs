@@ -1,0 +1,220 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import test from 'node:test';
+import { runWorkerReleaseCoordinator } from './worker-release-coordinator.mjs';
+import { operateWorkerRelease } from '../../vps-workers/lib/worker-release-broker-client.mjs';
+
+const identity = { runId: '1234', runAttempt: 2, sha: 'a'.repeat(40) };
+const env = { GITHUB_RUN_ID: identity.runId, GITHUB_RUN_ATTEMPT: '2', BACI_EXPECTED_APP_SHA: identity.sha };
+const lock = { run_id: identity.runId, run_attempt: identity.runAttempt, sha: identity.sha, state: 'worker_syncing' };
+const stage = { ok: true, operation: 'stage', sourceSha: identity.sha, entryCount: 10 };
+const preflight = { ok: true, operation: 'preflight', sourceSha: identity.sha, entryCount: 10 };
+const promoted = { ok: true, operation: 'promote', sourceSha: identity.sha, previousSha: 'b'.repeat(40), runId: '1234', runAttempt: 2, jobId: '5678' };
+const health = { ok: true, operation: 'health', sourceSha: identity.sha, healthy: true, runId: '1234', runAttempt: 2, jobId: '5678' };
+const rollback = { ok: true, operation: 'rollback', sourceSha: 'b'.repeat(40), rolledBackSha: identity.sha, runId: '1234', runAttempt: 2, jobId: '5678' };
+
+function mockBroker({ healthResult = health, failAt } = {}) {
+  const calls = [];
+  return {
+    calls,
+    broker: {
+      async stageWorkerRelease(args) { calls.push(['stage', args]); if (failAt === 'stage') throw Error('stage failed'); return stage; },
+      async preflightWorkerRelease(args) { calls.push(['preflight', args]); if (failAt === 'preflight') throw Error('preflight failed'); return preflight; },
+      async operateWorkerRelease(args) {
+        calls.push([args.operation, args]);
+        if (failAt === args.operation) throw Error(`${args.operation} failed`);
+        if (args.operation === 'recovery-status') {
+          return { ok: true, operation: 'recovery-status', sourceSha: identity.sha, pending: false };
+        }
+        if (args.operation === 'promote') return promoted;
+        if (args.operation === 'health') return healthResult;
+        return rollback;
+      },
+    },
+  };
+}
+
+test('requires an exact durable lock before contacting the broker', async () => {
+  for (const current of [null, { ...lock, sha: 'c'.repeat(40) }, { ...lock, state: 'publishing' }]) {
+    const { broker, calls } = mockBroker();
+    await assert.rejects(runWorkerReleaseCoordinator({ env, broker, readLock: () => current }), /persistent production release lock/);
+    assert.deepEqual(calls, []);
+  }
+});
+
+test('runs the authenticated broker lifecycle in order and requires exact installed SHA health', async () => {
+  const { broker, calls } = mockBroker();
+  const result = await runWorkerReleaseCoordinator({ env, broker, readLock: () => lock });
+  assert.deepEqual(calls.map(([operation]) => operation), ['recovery-status', 'stage', 'preflight', 'promote', 'health']);
+  assert.ok(calls.every(([, args]) => args.sha === identity.sha));
+  assert.equal(result.health.sourceSha, identity.sha);
+});
+
+test('recovers an exact interrupted stage fence before attempting a new stage', async () => {
+  const target = { run_id: '987', run_attempt: 4, sha: 'c'.repeat(40), job_id: '654' };
+  const calls = [];
+  const broker = {
+    async operateWorkerRelease(args) {
+      calls.push(args);
+      if (args.operation === 'recovery-status') return {
+        ok: true, operation: 'recovery-status', sourceSha: identity.sha, pending: false,
+        stageRecovery: { pending: true, target },
+      };
+      if (args.operation === 'stage-recovery') return {
+        ok: true, operation: 'stage-recovery', sourceSha: identity.sha, recovered: true,
+        recoveredFence: target, runId: identity.runId, runAttempt: identity.runAttempt, jobId: '5678',
+      };
+      if (args.operation === 'promote') return promoted;
+      if (args.operation === 'health') return health;
+      throw new Error(`unexpected operation ${args.operation}`);
+    },
+    async stageWorkerRelease(args) { calls.push({ operation: 'stage', ...args }); return stage; },
+    async preflightWorkerRelease(args) { calls.push({ operation: 'preflight', ...args }); return preflight; },
+  };
+  const result = await runWorkerReleaseCoordinator({ env, broker, readLock: () => lock });
+  assert.equal(result.stageRecovery.recovered, true);
+  assert.deepEqual(result.stageRecovery.recoveredFence, target);
+  assert.deepEqual(calls.map(call => call.operation), [
+    'recovery-status', 'stage-recovery', 'stage', 'preflight', 'promote', 'health',
+  ]);
+  assert.deepEqual(calls[1].recoveryOf, target);
+});
+
+test('a mismatched stage-recovery receipt prevents new staging', async () => {
+  const target = { run_id: '987', run_attempt: 4, sha: 'c'.repeat(40), job_id: '654' };
+  const calls = [];
+  const broker = {
+    async operateWorkerRelease(args) {
+      calls.push(args.operation);
+      if (args.operation === 'recovery-status') return {
+        ok: true, operation: 'recovery-status', sourceSha: identity.sha, pending: false,
+        stageRecovery: { pending: true, target },
+      };
+      if (args.operation === 'stage-recovery') return {
+        ok: true, operation: 'stage-recovery', sourceSha: identity.sha, recovered: true,
+        recoveredFence: { ...target, sha: 'd'.repeat(40) },
+        runId: identity.runId, runAttempt: identity.runAttempt, jobId: '5678',
+      };
+      throw new Error(`unexpected operation ${args.operation}`);
+    },
+    async stageWorkerRelease() { calls.push('stage'); return stage; },
+  };
+  await assert.rejects(runWorkerReleaseCoordinator({ env, broker, readLock: () => lock }),
+                       /interrupted staging recovery receipt is invalid/);
+  assert.deepEqual(calls, ['recovery-status', 'stage-recovery']);
+});
+
+test('same active coordinator owner recovers through the real client without a completed-attempt target', async () => {
+  const target = { run_id: identity.runId, run_attempt: identity.runAttempt, sha: identity.sha, job_id: '5678' };
+  const requests = [];
+  const broker = {
+    async operateWorkerRelease(args) {
+      if (args.operation === 'recovery-status') return operateWorkerRelease({
+        ...args, githubToken: 'test-token', oidcToken: 'signed-current-job-token',
+        exchangeImpl: async (_socket, request) => {
+          requests.push(request);
+          return { ok: true, operation: 'recovery-status', sourceSha: identity.sha, pending: true,
+            recoveryOf: target,
+            recoveryOwner: { run_id: identity.runId, run_attempt: identity.runAttempt,
+              sha: identity.sha, job_id: '5678' },
+            currentOwner: true, previousSha: 'b'.repeat(40), phase: 'recovery_required' };
+        },
+      });
+      if (args.operation === 'recover') return operateWorkerRelease({
+        ...args, githubToken: 'test-token', oidcToken: 'signed-current-job-token',
+        exchangeImpl: async (_socket, request) => {
+          requests.push(request);
+          return { ok: true, operation: 'recover', sourceSha: identity.sha, recovered: true,
+            rolledBackSha: target.sha, previousSha: 'b'.repeat(40), alreadyRestored: true,
+            runId: identity.runId, runAttempt: identity.runAttempt, jobId: '5678' };
+        },
+      });
+      if (args.operation === 'promote') return promoted;
+      if (args.operation === 'health') return health;
+      throw new Error(`unexpected operation ${args.operation}`);
+    },
+    async stageWorkerRelease() { return stage; },
+    async preflightWorkerRelease() { return preflight; },
+  };
+  const result = await runWorkerReleaseCoordinator({ env, broker, readLock: () => lock });
+  assert.equal(result.recovery.recovered, true);
+  assert.deepEqual(Object.keys(requests[0]).sort(), ['githubToken', 'oidcToken', 'operation', 'sourceSha']);
+  assert.equal(requests[0].operation, 'recovery-status');
+  assert.deepEqual(Object.keys(requests[1]).sort(), ['githubToken', 'oidcToken', 'operation', 'sourceSha']);
+  assert.equal(requests[1].operation, 'recover');
+});
+
+test('same run fence with another active job includes the prior-attempt target', async () => {
+  const target = { run_id: identity.runId, run_attempt: identity.runAttempt, sha: identity.sha, job_id: '5678' };
+  let recoverArgs;
+  const broker = {
+    async operateWorkerRelease(args) {
+      if (args.operation === 'recovery-status') return {
+        ok: true, operation: 'recovery-status', sourceSha: identity.sha, pending: true,
+        recoveryOf: target,
+        recoveryOwner: { run_id: identity.runId, run_attempt: identity.runAttempt,
+          sha: identity.sha, job_id: '5678' },
+        currentOwner: false, previousSha: 'b'.repeat(40), phase: 'recovery_required',
+      };
+      if (args.operation === 'recover') { recoverArgs = args; throw new Error('attempt proof unavailable'); }
+      throw new Error(`unexpected operation ${args.operation}`);
+    },
+  };
+  await assert.rejects(runWorkerReleaseCoordinator({ env, broker, readLock: () => lock }), /attempt proof unavailable/);
+  assert.deepEqual(recoverArgs.recoveryOf, target);
+});
+
+test('real client still rejects a malformed explicit recovery target', async () => {
+  await assert.rejects(operateWorkerRelease({
+    operation: 'recover', sha: identity.sha, recoveryOf: { run_id: identity.runId },
+    githubToken: 'test-token', oidcToken: 'signed-current-job-token',
+    exchangeImpl: async () => assert.fail('invalid recovery target must be rejected locally'),
+  }), /recovery target is invalid/);
+});
+
+test('stage, preflight, and ambiguous promote failures stop without later operations', async () => {
+  for (const failed of ['stage', 'preflight', 'promote']) {
+    const { broker, calls } = mockBroker({ failAt: failed });
+    await assert.rejects(runWorkerReleaseCoordinator({ env, broker, readLock: () => lock }), new RegExp(`${failed} failed`));
+    assert.equal(calls.some(([operation]) => operation === 'health' || operation === 'rollback'), false);
+  }
+});
+
+test('a bad active SHA health receipt requests only a fenced rollback and retains the lock', async () => {
+  const { broker, calls } = mockBroker({ healthResult: { ...health, sourceSha: 'c'.repeat(40) } });
+  await assert.rejects(
+    runWorkerReleaseCoordinator({ env, broker, readLock: () => lock }),
+    error => /rollback completed and release lock remains held/.test(error.message) && error.cause?.message.includes('installed SHA'),
+  );
+  assert.deepEqual(calls.map(([operation]) => operation), ['recovery-status', 'stage', 'preflight', 'promote', 'health', 'rollback']);
+});
+
+test('an invalid rollback receipt leaves release reconciliation blocked', async () => {
+  const { broker } = mockBroker({ healthResult: { ok: false, operation: 'health', sourceSha: identity.sha, healthy: false, runId: '1234', runAttempt: 2, jobId: '5678' } });
+  broker.operateWorkerRelease = async args => args.operation === 'recovery-status'
+    ? { ok: true, operation: 'recovery-status', sourceSha: identity.sha, pending: false }
+    : args.operation === 'promote' ? promoted : { ...rollback, sourceSha: 'c'.repeat(40) };
+  await assert.rejects(
+    runWorkerReleaseCoordinator({ env, broker, readLock: () => lock }),
+    error => /rollback is unconfirmed/.test(error.message) && /rollback receipt is invalid/.test(error.rollbackError?.message ?? ''),
+  );
+});
+
+test('rejects invalid run identity before any lock or broker activity', async () => {
+  const { broker, calls } = mockBroker();
+  await assert.rejects(runWorkerReleaseCoordinator({ env: { ...env, GITHUB_RUN_ATTEMPT: '0' }, broker, readLock: () => lock }), /identity is invalid/);
+  assert.deepEqual(calls, []);
+});
+
+test('CLI invocation without injected options fails closed on missing identity', () => {
+  const result = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL('./worker-release-coordinator.mjs', import.meta.url))],
+    { encoding: 'utf8', env: { PATH: process.env.PATH ?? '' } },
+  );
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /worker release coordinator identity is invalid/);
+  assert.doesNotMatch(result.stderr, /Cannot read properties of undefined/);
+});

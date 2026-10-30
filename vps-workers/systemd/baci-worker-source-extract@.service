@@ -1,0 +1,44 @@
+[Unit]
+Description=Isolated Baci worker source archive extractor (%i)
+After=systemd-tmpfiles-setup.service
+After=baci-worker-release-broker.service
+ConditionPathIsExecutable=/usr/local/lib/baci-worker-broker/worker_release_archive_extract_launcher.py
+
+[Service]
+Type=simple
+Slice=system.slice
+User=baci-release-extractor
+Group=baci-release-extractor
+SupplementaryGroups=
+ExecStart=/usr/bin/python3 -I -B /usr/local/lib/baci-worker-broker/worker_release_archive_extract_launcher.py %i
+RuntimeMaxSec=180
+TimeoutStartSec=20
+TimeoutStopSec=5
+KillMode=control-group
+Delegate=no
+Restart=no
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+ProtectHome=yes
+ProtectSystem=strict
+ProtectControlGroups=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectProc=invisible
+ProcSubset=pid
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+ReadOnlyPaths=/usr/local/lib/baci-worker-broker /var/lib/baci-worker-broker/pointer
+ReadWritePaths=/run/baci-worker-release-extract/resources /run/baci-worker-release-extract/control
+InaccessiblePaths=/srv/baci-workers /etc /root /home
+MemoryMax=768M
+TasksMax=16
+CPUQuota=100%
+StandardOutput=null
+StandardError=null

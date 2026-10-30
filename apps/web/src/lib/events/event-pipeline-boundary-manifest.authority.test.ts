@@ -63,7 +63,6 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/lib/send-manual-order-document.ts',
     ]);
     expect(manifest.authority.serviceImporters).toEqual([
-      'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts',
       'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
       'apps/web/src/app/api/cron/process-redvault-refunds/route.ts',
       'apps/web/src/app/api/analytics/conversion/route.ts',

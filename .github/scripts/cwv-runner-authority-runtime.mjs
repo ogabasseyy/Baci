@@ -89,7 +89,7 @@ function scalar(value) { if (value === 'true') return true; if (value === 'false
 function localImports(source) { return [...source.matchAll(/(?:import|export)[^'"`]*['"](\.\/[^'"]+)['"]/g)].map((match) => match[1]).sort(); }
 function assertRepositoryClosure(sources, workflowText) {
   if (!object(sources) || typeof sources.actionlint !== 'string' || typeof sources.actionlintWorkflow !== 'string' || typeof sources.deploy !== 'string' || typeof sources.deployFilter !== 'string' || !object(sources.workflows) || !object(sources.authoritySources)) fail('source closure refused');
-  if (sources.actionlint.trim() !== 'self-hosted-runner:\n  labels:\n    - baci-android\n    - baci-deploy\n    - baci-lighthouse\n    - baci-cwv-measurement' || !sources.actionlintWorkflow.includes('.github/actionlint.yaml')) fail('actionlint refused');
+  if (sources.actionlint.trim() !== 'self-hosted-runner:\n  labels:\n    - baci-android\n    - baci-deploy\n    - baci-release\n    - baci-lighthouse\n    - baci-cwv-measurement' || !sources.actionlintWorkflow.includes('.github/actionlint.yaml')) fail('actionlint refused');
   const selectorCount = Object.values(sources.workflows).join('').split('baci-cwv-measurement').length - 1;
   if (sources.workflows['cwv-runner-attestation.yml'] !== workflowText || selectorCount !== 1) fail('measurement selector refused');
   assertDeployFilterContract(sources.deploy, sources.deployFilter);

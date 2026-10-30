@@ -1,8 +1,9 @@
 import 'dotenv/config';
 
+import { realpathSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import process from 'node:process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { runGiglTrackingMonitorBatch } from '@/app/api/cron/gigl-tracking/run-gigl-tracking-monitor-batch';
 import { createGiglTrackingWorkerClient } from '@/lib/gigl-tracking-worker-client';
 
@@ -116,8 +117,19 @@ export async function runGiglTrackingCli({
   }
 }
 
-const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
-if (import.meta.url === invokedPath) {
+export function isDirectEntry(
+  argvPath: string | undefined,
+  moduleUrl: string
+): boolean {
+  if (!argvPath) return false;
+  try {
+    return realpathSync(argvPath) === realpathSync(fileURLToPath(moduleUrl));
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectEntry(process.argv[1], import.meta.url)) {
   runGiglTrackingCli().then((exitCode) => {
     process.exitCode = exitCode;
   });

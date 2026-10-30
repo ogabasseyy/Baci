@@ -221,7 +221,7 @@ describe('gigl-tracking-scoped-env', () => {
     const deploySource = readFileSync(join(workerRoot, 'deploy.sh'), 'utf8');
     const trackingLine = deploySource
       .split('\n')
-      .find((line) => line.includes('locks/gigl-tracking.lock bash -lc'));
+      .find((line) => line.includes('$LOCK_DIR/gigl-tracking.lock bash -lc'));
 
     assert.ok(trackingLine, 'expected a gigl-tracking cron line');
     assert.ok(
@@ -238,7 +238,7 @@ describe('gigl-tracking-scoped-env', () => {
 
     assert.match(
       releaseHelper,
-      /\.github\/scripts\/gigl-dotenv\.sh" "\$VPS:\$STAGING_DIR\/bin\/gigl-dotenv\.sh/
+      /worker_rsync_to_stage "\$STAGING_DIR\/bin\/gigl-dotenv\.sh" -av "\$WORKER_ROOT\/\.\.\/\.github\/scripts\/gigl-dotenv\.sh"/
     );
   });
 });

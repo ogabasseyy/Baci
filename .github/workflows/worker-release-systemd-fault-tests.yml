@@ -1,0 +1,42 @@
+name: Worker release systemd fault tests
+
+on:
+  pull_request:
+    paths:
+      - 'vps-workers/bin/worker_release_quiesce_*.py'
+      - 'vps-workers/bin/worker_release_recovery_latch.py'
+      - 'vps-workers/bin/worker_release_recovery_dispatch.py'
+      - 'vps-workers/bin/worker_release_recovery_lifecycle.py'
+      - 'vps-workers/bin/worker_release_broker_dispatch.py'
+      - 'vps-workers/bin/worker-release-launch-gate'
+      - 'vps-workers/lib/worker-release-quiesce-lease.sh'
+      - 'vps-workers/lib/worker-release-broker.mjs'
+      - 'vps-workers/lib/worker-release-github-proof.mjs'
+      - '.github/scripts/production-release-lock.mjs'
+      - '.github/scripts/worker-release-coordinator.mjs'
+      - 'vps-workers/deploy.sh'
+      - 'vps-workers/jobs/deploy-crontab.test.mjs'
+      - 'vps-workers/systemd/**'
+      - 'vps-workers/tools/worker-release-systemd-fault-test.sh'
+      - 'vps-workers/tools/nonproduction-worker-release/broker-lifecycle-integration.py'
+      - 'vps-workers/tools/nonproduction-worker-release/broker_lifecycle_integration_support.py'
+      - '.github/workflows/worker-release-systemd-fault-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-systemd-fault-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate broker lifecycle integration imports
+        env:
+          PYTHONPATH: vps-workers/bin:vps-workers/tools/nonproduction-worker-release
+        run: python3 -c "import runpy; runpy.run_path('vps-workers/tools/nonproduction-worker-release/broker-lifecycle-integration.py', run_name='broker_lifecycle_import_check')"
+      - name: Exercise broker and worker crash coupling on the disposable VM
+        run: sudo bash vps-workers/tools/worker-release-systemd-fault-test.sh

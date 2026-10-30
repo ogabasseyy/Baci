@@ -10,6 +10,31 @@ describe('remediation cron transition', () => {
     assert.equal(outcome.locks.length, 5);
     assert.equal(outcome.barrierFiles, true);
     assert.match(outcome.crontab, /error-remediator-global\.lock/);
+    assert.match(outcome.crontab, new RegExp(`${outcome.lockDirectory}/vercel-error-remediator\\.lock`));
+    assert.doesNotMatch(outcome.crontab, /remote\/locks\/vercel-error-remediator\.lock/);
+  });
+
+  it('creates remediation rows with the recovery gate after both flocks', () => {
+    const outcome = runTransition('interleaving');
+    const row = outcome.crontab.split('\n').find(line => line.includes('vercel-error-remediator.mjs'));
+
+    assert.equal(outcome.result.status, 0, outcome.result.stderr);
+    assert.ok(row);
+    const workerLock = row.indexOf('vercel-error-remediator.lock');
+    const globalLock = row.indexOf('error-remediator-global.lock');
+    const gate = row.indexOf('worker-release-launch-gate scheduled');
+    const node = row.indexOf(`exec ${process.execPath}`);
+    const globalExec = row.indexOf('exec flock -F');
+    const nestedShell = row.indexOf('/bin/bash -lc', globalExec);
+    assert.ok(
+      workerLock >= 0 &&
+        globalExec > workerLock &&
+        globalLock > globalExec &&
+        nestedShell > globalLock &&
+        gate > nestedShell &&
+        node > gate,
+      `expected worker flock, global flock, launch gate, then Node in order: ${row}`
+    );
   });
 
   it('times out with a diagnostic when a legacy lock remains held', () => {

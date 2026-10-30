@@ -67,6 +67,78 @@ describe('applySupabaseReplaySql', () => {
     );
   });
 
+  it('preserves only the bounded pgTAP failure index', async () => {
+    const apply = vi.fn(async () => {
+      throw new Error(
+        'psql failed: non-zero-exit (line=110,sqlstate=P0001,tap=34)'
+      );
+    });
+
+    await expect(
+      applySupabaseReplaySql(apply, {
+        kind: 'sql-check',
+        ordinal: 97,
+        sqlPath: '/owned/replay/secret.sql',
+      })
+    ).rejects.toThrow(
+      /^Replay SQL check failed at ordinal 97: non-zero-exit \(line=110,sqlstate=P0001,tap=34\)$/
+    );
+  });
+
+  it('drops out-of-range pgTAP indexes from replay diagnostics', async () => {
+    const apply = vi.fn(async () => {
+      throw new Error(
+        'psql failed: non-zero-exit (line=110,sqlstate=P0001,tap=9999999)'
+      );
+    });
+
+    await expect(
+      applySupabaseReplaySql(apply, {
+        kind: 'sql-check',
+        ordinal: 97,
+        sqlPath: '/owned/replay/secret.sql',
+      })
+    ).rejects.toThrow(
+      /^Replay SQL check failed at ordinal 97: non-zero-exit \(line=110,sqlstate=P0001\)$/
+    );
+  });
+
+  it('preserves only allowlisted permission categories from replay diagnostics', async () => {
+    const apply = vi.fn(async () => {
+      throw new Error(
+        'psql failed: non-zero-exit (line=20,sqlstate=42501,permission=relation_access_denied)'
+      );
+    });
+
+    await expect(
+      applySupabaseReplaySql(apply, {
+        kind: 'migration',
+        ordinal: 2045,
+        sqlPath: '/owned/replay/secret.sql',
+      })
+    ).rejects.toThrow(
+      /^Replay migration application failed at ordinal 2045: non-zero-exit \(line=20,sqlstate=42501,permission=relation_access_denied\)$/
+    );
+  });
+
+  it('drops unknown permission categories from replay diagnostics', async () => {
+    const apply = vi.fn(async () => {
+      throw new Error(
+        'psql failed: non-zero-exit (line=20,sqlstate=42501,permission=private_object_secret)'
+      );
+    });
+
+    await expect(
+      applySupabaseReplaySql(apply, {
+        kind: 'migration',
+        ordinal: 2045,
+        sqlPath: '/owned/replay/secret.sql',
+      })
+    ).rejects.toThrow(
+      /^Replay migration application failed at ordinal 2045: non-zero-exit \(line=20,sqlstate=42501\)$/
+    );
+  });
+
   it.each([
     [
       'migration',

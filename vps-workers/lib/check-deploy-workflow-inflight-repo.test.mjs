@@ -17,28 +17,24 @@ test('queries the origin repo explicitly so fork checkouts cannot pass vacuously
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,
     gitBody:
-      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'git@github.com:example-owner/example-repo.git\'; else exit 1; fi',
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'git@github.com:ogabasseyy/Baci.git\'; else exit 1; fi',
   });
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(
     ghArgs,
-    /repos\/example-owner\/example-repo\/actions\/workflows/
+    /repos\/ogabasseyy\/Baci\/actions\/workflows/
   );
 });
 
 test('fails closed when the repo cannot be resolved from origin', () => {
-  // No silent fallback to gh default resolution: a fork-clone deploy
-  // would query the fork (no runs) and pass vacuously while production
-  // deploys fly.
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,
     gitBody: 'exit 1',
   });
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /cannot resolve the deploy repo/);
-  assert.match(result.stderr, /BACI_DEPLOY_WORKFLOW_REPO/);
+  assert.match(result.stderr, /cannot resolve the production repository/);
   assert.equal(ghArgs, '');
 });
 
@@ -46,13 +42,13 @@ test('resolves credential-bearing remotes without leaking the credential', () =>
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,
     gitBody:
-      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://operator:s3krit-value@github.com/example-owner/example-repo.git\'; else exit 1; fi',
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://operator:s3krit-value@github.com/ogabasseyy/Baci.git\'; else exit 1; fi',
   });
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(
     ghArgs,
-    /repos\/example-owner\/example-repo\/actions\/workflows/
+    /repos\/ogabasseyy\/Baci\/actions\/workflows/
   );
   assert.ok(!result.stderr.includes('s3krit-value'));
   assert.ok(!result.stdout.includes('s3krit-value'));
@@ -62,22 +58,22 @@ test('resolves mixed-case github.com hosts like the coordinator', () => {
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,
     gitBody:
-      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://GitHub.com/example-owner/example-repo.git\'; else exit 1; fi',
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://GitHub.com/ogabasseyy/Baci.git\'; else exit 1; fi',
   });
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(
     ghArgs,
-    /repos\/example-owner\/example-repo\/actions\/workflows/
+    /repos\/ogabasseyy\/Baci\/actions\/workflows/
   );
 });
 
 test('resolves mixed-case schemes and hosts like the coordinator', () => {
   for (const remote of [
-    'git@GitHub.com:example-owner/example-repo.git',
-    'ssh://git@GitHub.com/example-owner/example-repo.git',
-    'SSH://git@GitHub.com/example-owner/example-repo.git',
-    'HTTPS://GitHub.com/example-owner/example-repo.git',
+    'git@GitHub.com:ogabasseyy/Baci.git',
+    'ssh://git@GitHub.com/ogabasseyy/Baci.git',
+    'SSH://git@GitHub.com/ogabasseyy/Baci.git',
+    'HTTPS://GitHub.com/ogabasseyy/Baci.git',
   ]) {
     const { result, ghArgs } = runCheck({
       ghBody: RECORD_ARGS,
@@ -87,7 +83,7 @@ test('resolves mixed-case schemes and hosts like the coordinator', () => {
     assert.equal(result.status, 0, `${remote}: ${result.stderr}`);
     assert.match(
       ghArgs,
-      /repos\/example-owner\/example-repo\/actions\/workflows/
+      /repos\/ogabasseyy\/Baci\/actions\/workflows/
     );
   }
 });
@@ -96,20 +92,20 @@ test('resolves the default HTTPS port like the coordinator', () => {
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,
     gitBody:
-      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://github.com:443/example-owner/example-repo.git\'; else exit 1; fi',
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://github.com:443/ogabasseyy/Baci.git\'; else exit 1; fi',
   });
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(
     ghArgs,
-    /repos\/example-owner\/example-repo\/actions\/workflows/
+    /repos\/ogabasseyy\/Baci\/actions\/workflows/
   );
 });
 
 test('refuses plaintext and non-default-port remotes like the coordinator', () => {
   for (const remote of [
-    'http://github.com/example-owner/example-repo.git',
-    'https://github.com:8443/example-owner/example-repo.git',
+    'http://github.com/ogabasseyy/Baci.git',
+    'https://github.com:8443/ogabasseyy/Baci.git',
   ]) {
     const { result, ghArgs } = runCheck({
       ghBody: RECORD_ARGS,
@@ -124,19 +120,19 @@ test('refuses plaintext and non-default-port remotes like the coordinator', () =
 test('refused remotes never leak credentials from any scheme', () => {
   for (const [remote, secret] of [
     [
-      'http://operator:s3krit-http@github.com/example-owner/example-repo.git',
+      'http://operator:s3krit-http@github.com/ogabasseyy/Baci.git',
       's3krit-http',
     ],
     [
-      'http://s3krit-bare@github.com/example-owner/example-repo.git',
+      'http://s3krit-bare@github.com/ogabasseyy/Baci.git',
       's3krit-bare',
     ],
     [
-      'ssh://operator:s3krit-ssh@github.com/example-owner/example-repo.git',
+      'ssh://operator:s3krit-ssh@github.com/ogabasseyy/Baci.git',
       's3krit-ssh',
     ],
     [
-      'https://operator:s3krit-port@github.com:8443/example-owner/example-repo.git',
+      'https://operator:s3krit-port@github.com:8443/ogabasseyy/Baci.git',
       's3krit-port',
     ],
   ]) {
@@ -155,13 +151,13 @@ test('resolves trailing-slash remotes', () => {
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,
     gitBody:
-      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://github.com/example-owner/example-repo///\'; else exit 1; fi',
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://github.com/ogabasseyy/Baci///\'; else exit 1; fi',
   });
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(
     ghArgs,
-    /repos\/example-owner\/example-repo\/actions\/workflows/
+    /repos\/ogabasseyy\/Baci\/actions\/workflows/
   );
 });
 
@@ -169,7 +165,7 @@ test('refuses fragment-embedded remotes that forge a github.com host', () => {
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,
     gitBody:
-      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://evil.example#@github.com/example-owner/example-repo\'; else exit 1; fi',
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://evil.example#@github.com/ogabasseyy/Baci\'; else exit 1; fi',
   });
 
   assert.equal(result.status, 1);
@@ -181,7 +177,7 @@ test('refuses query-bearing remotes that forge a github.com host', () => {
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,
     gitBody:
-      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://evil.example?x=@github.com/example-owner/example-repo\'; else exit 1; fi',
+      'if [ "$1 $2 $3" = "remote get-url origin" ]; then echo \'https://evil.example?x=@github.com/ogabasseyy/Baci\'; else exit 1; fi',
   });
 
   assert.equal(result.status, 1);
@@ -199,28 +195,39 @@ test('no-path credential remotes never leak the secret into errors', () => {
   assert.doesNotMatch(result.stderr, /ghp_LEAKPROBE/);
   assert.equal(ghArgs, '');
 });
-test('honors the explicit repo override for exotic remotes', () => {
+test('honors only an explicit canonical repo identity for exotic remotes', () => {
   const { result, ghArgs } = runCheck({
     ghBody: RECORD_ARGS,
     gitBody: 'exit 1',
-    env: { BACI_DEPLOY_WORKFLOW_REPO: 'override-owner/override-repo' },
+    env: { BACI_DEPLOY_WORKFLOW_REPO: 'Ogabasseyy/baci' },
   });
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(
     ghArgs,
-    /repos\/override-owner\/override-repo\/actions\/workflows/
+    /repos\/ogabasseyy\/Baci\/actions\/workflows/
   );
 });
 
-test('rejects a malformed repo override', () => {
+test('rejects a malformed or noncanonical repo override', () => {
   const { result } = runCheck({
     ghBody: RECORD_ARGS,
     env: { BACI_DEPLOY_WORKFLOW_REPO: 'not-a-repo' },
   });
 
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /must be 'owner\/repo'/);
+  assert.match(result.stderr, /canonical production repository/);
+});
+
+test('does not let an override redirect overlap checks to an unrelated repository', () => {
+  const { result, ghArgs } = runCheck({
+    ghBody: RECORD_ARGS,
+    gitBody: 'exit 1',
+    env: { BACI_DEPLOY_WORKFLOW_REPO: 'attacker/empty-repo' },
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /canonical production repository/);
+  assert.equal(ghArgs, '');
 });
 
 test('runs under the system shell with strict mode (bash 3.2 compatible)', () => {

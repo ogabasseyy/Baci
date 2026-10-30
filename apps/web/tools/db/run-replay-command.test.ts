@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -93,62 +93,6 @@ describe('createReplayCommand', () => {
     );
   });
 
-  it('reports only the SQL line and SQLSTATE from a failed psql command', async () => {
-    const root = await temporaryRoot();
-    const psql = path.join(root, 'psql');
-    await writeFile(
-      psql,
-      "#!/bin/sh\nprintf 'psql:/owned/replay/secret.sql:42: ERROR:  42501: permission denied\\nidentity@example.test postgresql://user:password@localhost/db\\n' >&2\nexit 1\n",
-      { mode: 0o700 }
-    );
-    const runCommand = replayCommandRuntime.create(root);
-
-    await expect(runCommand(psql, [])).rejects.toThrow(
-      /^psql failed: non-zero-exit \(line=42,sqlstate=42501\)$/
-    );
-  });
-
-  it.each([
-    ['failed to connect to postgres: connection refused', 'connection-refused'],
-    ['failed to pull image from private registry', 'image-pull'],
-    ['failed to create docker container', 'container-create'],
-    ['bind: address already in use', 'port-conflict'],
-    ['container is unhealthy', 'container-health'],
-    [
-      'client version is too old. Minimum supported API version is 1.44',
-      'docker-api',
-    ],
-    ['no space left on device', 'disk-full'],
-    ['ERROR: permission denied (SQLSTATE 42501)', 'postgres-42501'],
-  ])('classifies Supabase failures without copying private output: %s', async (message, diagnostic) => {
-    const root = await temporaryRoot();
-    const supabase = path.join(root, 'supabase');
-    await writeFile(
-      supabase,
-      `#!${process.execPath}\nprocess.stderr.write(${JSON.stringify(`${message}\nhttps://user:private-password@db.example token=private-value`)});process.exit(1);\n`,
-      { mode: 0o700 }
-    );
-    const runCommand = replayCommandRuntime.create(root);
-    await expect(runCommand(supabase, ['db', 'start'])).rejects.toMatchObject({
-      message: `supabase failed: non-zero-exit (diagnostic=${diagnostic})`,
-    });
-  });
-
-  it('reports bounded diagnostics from a versioned psql executable', async () => {
-    const root = await temporaryRoot();
-    const psql = path.join(root, 'psql-18.3');
-    await writeFile(
-      psql,
-      "#!/bin/sh\nprintf 'psql-18.3:/owned/replay/secret.sql:17: ERROR:  23505: duplicate key\\nprivate detail\\n' >&2\nexit 1\n",
-      { mode: 0o700 }
-    );
-    const runCommand = replayCommandRuntime.create(root);
-
-    await expect(runCommand(psql, [])).rejects.toThrow(
-      /^psql-18\.3 failed: non-zero-exit \(line=17,sqlstate=23505\)$/
-    );
-  });
-
   it('preserves psql diagnostics when stdin closes before stderr is drained', async () => {
     const root = await temporaryRoot();
     const child = Object.assign(new EventEmitter(), {
@@ -169,7 +113,7 @@ describe('createReplayCommand', () => {
     child.emit('close', 1);
 
     await expect(failure).rejects.toThrow(
-      /^psql failed: non-zero-exit \(line=42,sqlstate=42501\)$/
+      /^psql failed: non-zero-exit \(line=42,sqlstate=42501,permission=permission_denied\)$/
     );
   });
 

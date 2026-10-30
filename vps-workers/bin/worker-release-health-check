@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Fixed post-promotion health gate for the broker. This is installed root-owned.
+set -euo pipefail
+
+readonly root='/srv/baci-workers'
+readonly expected="${1:-}"
+readonly stability_seconds=5
+readonly poll_seconds=1
+[[ "$expected" =~ ^[0-9a-f]{40}$ ]] || exit 2
+[[ -d "$root" && ! -L "$root" ]] || exit 1
+[[ -L "$root/current" ]] || exit 1
+[[ "$(readlink "$root/current")" == "releases/$expected" ]] || exit 1
+[[ -d "$root/releases/$expected" && ! -L "$root/releases/$expected" ]] || exit 1
+
+# These fixed services are the first release-managed system units. Require
+# active main processes to remain unchanged for a bounded stabilization window.
+readonly services=(baci-domain-event-router baci-event-delivery-worker baci-quiz-finalization)
+initial_main_pids=()
+for index in "${!services[@]}"; do
+  service="${services[$index]}"
+  /usr/bin/systemctl is-active --quiet "$service"
+  main_pid="$(/usr/bin/systemctl show --property=MainPID --value "$service")"
+  [[ "$main_pid" =~ ^[1-9][0-9]*$ ]] || exit 1
+  initial_main_pids[$index]="$main_pid"
+done
+
+for ((second = 0; second < stability_seconds; second++)); do
+  /bin/sleep "$poll_seconds"
+  for index in "${!services[@]}"; do
+    service="${services[$index]}"
+    /usr/bin/systemctl is-active --quiet "$service"
+    main_pid="$(/usr/bin/systemctl show --property=MainPID --value "$service")"
+    [[ "$main_pid" =~ ^[1-9][0-9]*$ && "$main_pid" == "${initial_main_pids[$index]}" ]] || exit 1
+  done
+done

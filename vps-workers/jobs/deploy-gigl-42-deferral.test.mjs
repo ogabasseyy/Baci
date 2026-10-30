@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import {
   chmodSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -15,8 +17,6 @@ import { fileURLToPath } from 'node:url';
 import { gigl42SshStub } from './deploy-gigl-42-deferral.test-fixture.mjs';
 
 const workerRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-const repoRoot = join(workerRoot, '..');
-const deployScript = join(workerRoot, 'deploy.sh');
 
 function writeExecutable(path, source) {
   writeFileSync(path, source);
@@ -27,6 +27,28 @@ function writeExecutable(path, source) {
 // No GitHub, SSH or rsync operation reaches an external system.
 function runGigl42Scenario(scenario) {
   const directory = mkdtempSync(join(tmpdir(), 'baci-deploy-gigl-42-'));
+  const testRepoRoot = join(directory, 'repo');
+  const testWorkerRoot = join(testRepoRoot, 'vps-workers');
+  const testScriptsDir = join(testRepoRoot, '.github', 'scripts');
+  cpSync(workerRoot, testWorkerRoot, {
+    recursive: true,
+    filter: (source) => !source.includes('/node_modules'),
+  });
+  const inflightGuardPath = join(
+    testWorkerRoot,
+    'lib',
+    'check-deploy-workflow-inflight.sh'
+  );
+  writeFileSync(
+    inflightGuardPath,
+    `${readFileSync(inflightGuardPath, 'utf8')}\n_query_release_lock_status() { printf 'unlocked\\n'; }\n`
+  );
+  mkdirSync(testScriptsDir, { recursive: true });
+  writeFileSync(
+    join(testScriptsDir, 'trusted-gh.mjs'),
+    `process.stdout.write(\`\${process.env.TEST_GH_PATH}\\n\`);\n`
+  );
+  const testDeployScript = join(testWorkerRoot, 'deploy.sh');
   const binDirectory = join(directory, 'bin');
   const rsyncMarker = join(directory, 'rsync-called');
   const sshMarker = join(directory, 'ssh-called');
@@ -149,16 +171,17 @@ exit 0
       return { result };
     }
 
-    const result = spawnSync('bash', [deployScript], {
-      cwd: repoRoot,
+    const result = spawnSync('bash', [testDeployScript], {
+      cwd: testRepoRoot,
       encoding: 'utf8',
       env: {
         ...process.env,
         BACI_DEPLOY_SKIP_INFLIGHT_CHECK: '',
         // Pin a fixture-only repository for the stubbed inflight guard.
-        BACI_DEPLOY_WORKFLOW_REPO: 'example-owner/example-repo',
+        BACI_DEPLOY_WORKFLOW_REPO: 'ogabasseyy/Baci',
         PATH: `${binDirectory}:${process.env.PATH ?? ''}`,
         TEST_FETCH_MARKER: fetchMarker,
+        TEST_GH_PATH: join(binDirectory, 'gh'),
         TEST_RSYNC_MARKER: rsyncMarker,
         TEST_PROMOTION_MARKER: promotionMarker,
         TEST_SCENARIO: scenario,

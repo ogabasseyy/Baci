@@ -1,0 +1,57 @@
+name: Worker release dependency systemd tests
+
+on:
+  pull_request:
+    paths:
+      - 'vps-workers/bin/worker_release_dependency_*.py'
+      - 'vps-workers/bin/worker_release_result_root.py'
+      - 'vps-workers/bin/worker_release_bounded_process.py'
+      - 'vps-workers/bin/worker_release_bounded_process.test.py'
+      - 'vps-workers/bin/worker_release_pnpm_exec.py'
+      - 'vps-workers/bin/worker_release_dependency_policy_cache.py'
+      - 'vps-workers/bin/worker_release_dependency_source.py'
+      - 'vps-workers/bin/worker_release_dependency_receipt_validation.py'
+      - 'vps-workers/bin/worker_release_dependency_registry_policy.py'
+      - 'vps-workers/bin/worker_release_archive.py'
+      - 'vps-workers/bin/worker_release_broker_common.py'
+      - 'vps-workers/bin/worker_release_lifecycle.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency-*'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_fixture_pnpm_*.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_fixture_systemd_*.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_systemd_test_source.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_systemd_test_seed_diagnostics.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_systemd_test_seed_normalize.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency_builder_systemd_test_seed_normalize.test.py'
+      - '.github/workflows/worker-release-dependency-systemd-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-dependency-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11.7.0
+      - name: Run dependency consumer and pinned-path regressions
+        run: |
+          python3 vps-workers/bin/worker_release_dependency_runtime_smoke.test.py -q
+          python3 vps-workers/bin/worker_release_dependency_reclamation.test.py -q
+          PYTHONPATH=vps-workers/tools/nonproduction-worker-release python3 vps-workers/tools/nonproduction-worker-release/dependency_builder_systemd_test_seed_diagnostics.test.py -q
+          PYTHONPATH=vps-workers/tools/nonproduction-worker-release python3 vps-workers/tools/nonproduction-worker-release/dependency_builder_fixture_systemd_diagnostics.test.py -q
+          python3 vps-workers/bin/worker_release_dependency_consumer.test.py -q
+          python3 vps-workers/bin/worker_release_dependency_install.test.py -q
+          python3 vps-workers/bin/worker_release_dependency_consumer_quiescence.test.py -q
+          python3 vps-workers/bin/worker_release_dependency_consumer_snapshot.test.py -q
+          python3 vps-workers/bin/worker_release_source_snapshot.test.py -q
+      - name: Build synthetic dependencies and smoke the materialized snapshot
+        run: sudo env "PATH=$PATH" bash vps-workers/tools/nonproduction-worker-release/dependency-builder-systemd-test.sh

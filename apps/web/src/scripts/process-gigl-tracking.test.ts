@@ -1,5 +1,13 @@
+import { spawnSync } from 'node:child_process';
+import { mkdtemp, rm, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { runGiglTrackingCli } from './process-gigl-tracking';
+import { isDirectEntry, runGiglTrackingCli } from './process-gigl-tracking';
+
+const scriptPath = fileURLToPath(import.meta.url).replace(/\.test\.ts$/, '.ts');
+const webRoot = resolve(dirname(scriptPath), '../..');
 
 const { mockCreateClient, mockRunMonitorBatch } = vi.hoisted(() => ({
   mockCreateClient: vi.fn(() => ({ rpc: vi.fn() })),
@@ -24,6 +32,47 @@ const configuredEnv: NodeJS.ProcessEnv = {
 };
 
 describe('process-gigl-tracking', () => {
+  it('does not treat a missing entry path as a direct invocation', () => {
+    expect(isDirectEntry(undefined, import.meta.url)).toBe(false);
+    expect(isDirectEntry('/path/that/does/not/exist', import.meta.url)).toBe(
+      false
+    );
+  });
+
+  it('runs its CLI when the script is invoked through a symlink', async () => {
+    const temporaryDirectory = await mkdtemp(
+      resolve(tmpdir(), 'gigl-tracking-cli-')
+    );
+    const symlinkPath = resolve(temporaryDirectory, 'worker-entry.ts');
+
+    try {
+      await symlink(scriptPath, symlinkPath);
+      const result = spawnSync(
+        process.execPath,
+        [resolve(webRoot, '../../node_modules/.bin/tsx'), symlinkPath],
+        {
+          cwd: webRoot,
+          encoding: 'utf8',
+          timeout: 10_000,
+          env: {
+            HOME: temporaryDirectory,
+            NODE_ENV: 'test',
+            NODE_OPTIONS: '--conditions=react-server',
+            PATH: process.env.PATH ?? '',
+            GIGL_ENABLED: 'true',
+            GIGL_BASE_URL: '',
+          },
+        }
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('[gigl-tracking] preflight failed');
+    } finally {
+      await rm(temporaryDirectory, { recursive: true, force: true });
+    }
+  });
+
   it('runs the monitor batch directly and logs only bounded counts', async () => {
     const runBatch = vi.fn().mockResolvedValue({
       ok: true,

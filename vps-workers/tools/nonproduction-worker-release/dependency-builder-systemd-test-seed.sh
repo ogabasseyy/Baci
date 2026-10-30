@@ -111,7 +111,8 @@ for module in worker_release_dependency_builder.py worker_release_dependency_art
   install -o root -g root -m 0444 "$(dirname "$0")/../../bin/$module" "$helper_root/$module"
 done
 for module in dependency_seed_filesystem dependency_seed_receipts dependency_seed_source \
-  dependency_seed_transaction dependency_seed_tree dependency_seed_verification; do
+  dependency_seed_transaction dependency_seed_tree dependency_seed_verification \
+  dependency_seed_generation_contract; do
   install -o root -g root -m 0444 "$(dirname "$0")/${module}.py" "$helper_root/${module}.py"
 done
 install -o root -g root -m 0555 "$(dirname "$0")/dependency-snapshot-smoke.py" \

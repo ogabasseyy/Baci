@@ -49,6 +49,19 @@ class SyntheticSourceSnapshotTests(unittest.TestCase):
         self.assertIn('published = _publish_seed(source, cache, store, seeds, sha', source)
         self.assertIn('"$seed_root" "$cache_root" "$store_root" "$published_seed_root"', source)
 
+    def test_systemd_helper_closure_stages_seed_attestation_validator(self):
+        script = Path(__file__).with_name("dependency-builder-systemd-test-seed.sh")
+        source = script.read_text(encoding="utf-8")
+        consumer = (Path(__file__).parents[2] / "bin"
+                    / "worker_release_dependency_seed_consumer.py").read_text(encoding="utf-8")
+        verification = (Path(__file__).with_name("dependency_seed_verification.py")
+                        .read_text(encoding="utf-8"))
+        self.assertIn("from dependency_seed_verification import verify_seed_locked", consumer)
+        self.assertIn("from dependency_seed_generation_contract import validate_generation_attestation",
+                      verification)
+        self.assertIn("dependency_seed_generation_contract", source)
+        self.assertIn("install -o root -g root -m 0444", source)
+
     def test_required_source_symlink_fails_closed_without_following_target(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

@@ -11,6 +11,44 @@ from worker_release_dependency_evidence_shape import (
     OFFLINE_STORE_SUBTYPES, safe_errno_category, validate_os_error,
 )
 
+SNAPSHOT_REJECTIONS = {
+    "scratch or result directory is not a safe real directory":
+        ("filesystem-entry-invalid", "scratch-or-result-directory"),
+    "sandbox scratch ownership or mode is invalid":
+        ("filesystem-entry-invalid", "scratch-metadata"),
+    "result directory ownership or mode is invalid":
+        ("filesystem-entry-invalid", "result-metadata"),
+    "dependency candidate contains an unsafe entry name":
+        ("filesystem-entry-invalid", "entry-name"),
+    "dependency payload has too many entries":
+        ("entry-cap", "entry-limit"),
+    "dependency candidate directory has unsafe write or set-id bits":
+        ("filesystem-entry-invalid", "entry-mode"),
+    "dependency candidate directory changed while snapshotting":
+        ("filesystem-entry-invalid", "source-changed"),
+    "dependency candidate has an invalid file":
+        ("filesystem-entry-invalid", "file-metadata"),
+    "dependency candidate file has unsafe write or set-id bits":
+        ("filesystem-entry-invalid", "entry-mode"),
+    "dependency candidate file changed while snapshotting":
+        ("filesystem-entry-invalid", "source-changed"),
+    "dependency candidate file grew while snapshotting":
+        ("filesystem-entry-invalid", "source-grew"),
+    "dependency snapshot write failed":
+        ("filesystem-write-failed", "snapshot-write"),
+    "dependency symlink changed while snapshotting":
+        ("filesystem-entry-invalid", "symlink-changed"),
+    "dependency candidate has a non-portable symlink":
+        ("filesystem-entry-invalid", "symlink-target"),
+    "dependency symlink escapes payload root":
+        ("filesystem-entry-invalid", "symlink-escape"),
+    "dependency payload exceeds size limit":
+        ("size-bound", "payload-byte-limit"),
+    "dependency candidate contains a special file":
+        ("filesystem-entry-invalid", "special-file"),
+}
+SNAPSHOT_CHECKS = frozenset(check for _category, check in SNAPSHOT_REJECTIONS.values())
+
 
 def failure_diagnostic_impl(stage: str, error: BaseException) -> str:
     from worker_release_actual_dependency_guard import (
@@ -23,7 +61,7 @@ def failure_diagnostic_impl(stage: str, error: BaseException) -> str:
     store_subtype = getattr(error, "safe_subtype", None)
     if store_subtype not in OFFLINE_STORE_SUBTYPES:
         store_subtype = None
-    resource_check = tree_check = payload_check = None
+    resource_check = tree_check = payload_check = snapshot_check = None
     hardlink_roots = hardlink_group_count = None
     move_reason = getattr(error, "safe_reason", None)
     move_substage = getattr(error, "safe_substage", None)
@@ -66,6 +104,10 @@ def failure_diagnostic_impl(stage: str, error: BaseException) -> str:
             category = "invalid-result"
         elif isinstance(error, RuntimeError):
             message = str(error)
+            snapshot_rejection = (SNAPSHOT_REJECTIONS.get(message)
+                                  if stage == "payload-export" else None)
+            if snapshot_rejection is not None:
+                category, snapshot_check = snapshot_rejection
             roots = getattr(error, "safe_roots", None)
             if (isinstance(roots, tuple) and roots
                     and all(root in {"web", "worker", "other"} for root in roots)):
@@ -105,7 +147,10 @@ def failure_diagnostic_impl(stage: str, error: BaseException) -> str:
                 ("receipt metadata cache changed", "policy-receipt-cache-changed"),
                 ("receipt", "policy-receipt"), ("timed out", "deadline"),
             )
-            if payload_check is None:
+            if snapshot_rejection is not None:
+                category, snapshot_check = snapshot_rejection
+                payload_check = None
+            elif payload_check is None:
                 category = next((label for marker, label in categories if marker in message), "runtime-error")
             if store_subtype is not None:
                 category = "filesystem-entry-invalid"
@@ -146,4 +191,6 @@ def failure_diagnostic_impl(stage: str, error: BaseException) -> str:
         suffix += f" hardlink_roots={hardlink_roots}"
     if hardlink_group_count is not None:
         suffix += f" external_hardlink_groups={hardlink_group_count}"
+    if snapshot_check in SNAPSHOT_CHECKS:
+        suffix += f" snapshot_check={snapshot_check}"
     return f"experiment failure stage={stage} category={category}{suffix}"

@@ -39,6 +39,56 @@ class PayloadDiagnosticsTests(unittest.TestCase):
         self.assertEqual(result, "experiment failure stage=payload-validation category=runtime-error")
         self.assertNotIn(secret, result)
 
+    def test_snapshot_export_failures_use_fixed_allowlisted_categories(self):
+        cases = {
+            "scratch or result directory is not a safe real directory":
+                ("filesystem-entry-invalid", "scratch-or-result-directory"),
+            "sandbox scratch ownership or mode is invalid":
+                ("filesystem-entry-invalid", "scratch-metadata"),
+            "result directory ownership or mode is invalid":
+                ("filesystem-entry-invalid", "result-metadata"),
+            "dependency candidate contains an unsafe entry name":
+                ("filesystem-entry-invalid", "entry-name"),
+            "dependency payload has too many entries": ("entry-cap", "entry-limit"),
+            "dependency candidate directory has unsafe write or set-id bits":
+                ("filesystem-entry-invalid", "entry-mode"),
+            "dependency candidate directory changed while snapshotting":
+                ("filesystem-entry-invalid", "source-changed"),
+            "dependency candidate has an invalid file":
+                ("filesystem-entry-invalid", "file-metadata"),
+            "dependency candidate file has unsafe write or set-id bits":
+                ("filesystem-entry-invalid", "entry-mode"),
+            "dependency candidate file changed while snapshotting":
+                ("filesystem-entry-invalid", "source-changed"),
+            "dependency candidate file grew while snapshotting":
+                ("filesystem-entry-invalid", "source-grew"),
+            "dependency snapshot write failed": ("filesystem-write-failed", "snapshot-write"),
+            "dependency symlink changed while snapshotting":
+                ("filesystem-entry-invalid", "symlink-changed"),
+            "dependency candidate has a non-portable symlink":
+                ("filesystem-entry-invalid", "symlink-target"),
+            "dependency symlink escapes payload root":
+                ("filesystem-entry-invalid", "symlink-escape"),
+            "dependency payload exceeds size limit": ("size-bound", "payload-byte-limit"),
+            "dependency candidate contains a special file":
+                ("filesystem-entry-invalid", "special-file"),
+        }
+        for message, (category, snapshot_check) in cases.items():
+            with self.subTest(snapshot_check=snapshot_check):
+                result = failure_diagnostic("payload-export", RuntimeError(message))
+                self.assertEqual(
+                    result,
+                    f"experiment failure stage=payload-export category={category} "
+                    f"snapshot_check={snapshot_check}",
+                )
+                self.assertNotIn(message, result)
+
+    def test_snapshot_message_with_unrecognized_detail_stays_generic_and_redacted(self):
+        secret = "dependency candidate file changed while snapshotting: /private/token"
+        result = failure_diagnostic("payload-export", RuntimeError(secret))
+        self.assertEqual(result, "experiment failure stage=payload-export category=runtime-error")
+        self.assertNotIn(secret, result)
+
     def test_external_hardlink_diagnostic_uses_only_fixed_root_categories(self):
         error = HardlinkBoundaryError(("web", "worker"), 3)
         result = failure_diagnostic("payload-hardlink-normalization", error)

@@ -1,67 +1,15 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import test from 'node:test';
-import { fileURLToPath } from 'node:url';
-
-const scriptPath = fileURLToPath(
-  new URL('./quality-gate-affected-base.sh', import.meta.url)
-);
-const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
-
-function cleanEnv(extra = {}) {
-  const env = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (!key.startsWith('GIT_') && key !== 'QUALITY_GATE_FULL') {
-      env[key] = value;
-    }
-  }
-  return { ...env, ...extra };
-}
-
-function git(cwd, ...args) {
-  return execFileSync(
-    'git',
-    ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args],
-    {
-      cwd,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: cleanEnv({
-        GIT_AUTHOR_NAME: 'Test',
-        GIT_AUTHOR_EMAIL: 'test@example.com',
-        GIT_COMMITTER_NAME: 'Test',
-        GIT_COMMITTER_EMAIL: 'test@example.com',
-      }),
-    }
-  ).trim();
-}
-
-function commit(cwd, message) {
-  git(cwd, 'commit', '-q', '--allow-empty', '-m', message);
-  return git(cwd, 'rev-parse', 'HEAD');
-}
-
-function createRepo() {
-  const dir = mkdtempSync(join(tmpdir(), 'qg-affected-base-'));
-  git(dir, 'init', '-q');
-  return dir;
-}
-
-function run({ cwd, args = [], env = {} }) {
-  const result = spawnSync('sh', [scriptPath, ...args], {
-    cwd,
-    encoding: 'utf8',
-    env: cleanEnv(env),
-  });
-  return {
-    status: result.status,
-    stdout: result.stdout.trim(),
-    stderr: result.stderr,
-  };
-}
+import {
+  EMPTY_TREE,
+  commit,
+  createRepo,
+  git,
+  run,
+} from './quality-gate-affected-base.test-helpers.mjs';
 
 test('prints the merge base of HEAD and origin/main, not HEAD itself', () => {
   const repo = createRepo();
@@ -220,65 +168,5 @@ test('prints nothing and exits 0 outside a git repository', () => {
     assert.equal(result.stdout, '');
   } finally {
     rmSync(notRepo, { recursive: true, force: true });
-  }
-});
-
-function repoWithBase() {
-  const dir = createRepo();
-  const base = commit(dir, 'base');
-  git(dir, 'update-ref', 'refs/remotes/origin/main', base);
-  return { dir, base };
-}
-
-function writeFile(dir, path, content = 'x\n') {
-  mkdirSync(dirname(join(dir, path)), { recursive: true });
-  writeFileSync(join(dir, path), content);
-}
-
-test('keeps the full gate for an uncommitted change outside workspace packages', () => {
-  const { dir } = repoWithBase();
-  try {
-    writeFile(dir, 'supabase/migrations/20990101000000_example.sql');
-    assert.deepEqual(run({ cwd: dir, args: [dir] }), { status: 0, stdout: '', stderr: '' });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('keeps the full gate for a committed root-level change', () => {
-  const { dir } = repoWithBase();
-  try {
-    writeFile(dir, 'turbo.json', '{}\n');
-    git(dir, 'add', 'turbo.json');
-    commit(dir, 'root config');
-    assert.equal(run({ cwd: dir, args: [dir] }).stdout, '');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('scopes changes inside workspace packages and Markdown elsewhere', () => {
-  const { dir, base } = repoWithBase();
-  try {
-    writeFile(dir, 'apps/web/src/changed.ts');
-    writeFile(dir, 'packages/shared/src/changed.ts');
-    writeFile(dir, 'docs/notes.md');
-    assert.equal(run({ cwd: dir, args: [dir] }).stdout, base);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('keeps the full gate for Markdown that a package file names', () => {
-  const { dir } = repoWithBase();
-  try {
-    writeFile(dir, 'apps/web/docs.test.ts', "readFileSync('AGENTS.md');\n");
-    git(dir, 'add', '-A');
-    const base = commit(dir, 'test reads AGENTS.md');
-    git(dir, 'update-ref', 'refs/remotes/origin/main', base);
-    writeFile(dir, 'AGENTS.md', 'changed\n');
-    assert.equal(run({ cwd: dir, args: [dir] }).stdout, '');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
   }
 });

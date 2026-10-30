@@ -121,7 +121,7 @@ class SeedRetentionTests(unittest.TestCase):
         # boundaries here: these tests exercise lock/journal/deletion behavior,
         # while seed-manifest authenticity is covered by recovery tests.
         with patch.object(retention, "_verify_preserved_canonical") as verify, \
-             patch.object(retention_journal, "_verify_preserved_canonical"):
+             patch.object(retention_journal, "_verify_preserved_canonical") as journal_verify:
             removed = retention.prune_unreferenced_seeds(self.worker, self.seeds,
                                                          request_sha="d" * 40)
         self.assertEqual(removed, (ORPHAN,))
@@ -129,7 +129,8 @@ class SeedRetentionTests(unittest.TestCase):
         self.assertTrue((self.seeds / OLD_RELEASE).exists())
         self.assertTrue((self.seeds / RETAINED_RELEASE).exists())
         self.assertFalse((self.seeds / ORPHAN).exists())
-        self.assertEqual(verify.call_count, 2)
+        self.assertEqual([call.args[1] for call in verify.call_args_list], [ORPHAN])
+        self.assertEqual([call.args[1] for call in journal_verify.call_args_list], [ORPHAN])
 
     def test_unknown_release_entry_fails_closed_before_seed_deletion(self):
         (self.releases / "incoming-candidate").mkdir()
@@ -154,13 +155,14 @@ class SeedRetentionTests(unittest.TestCase):
         self.assertTrue((self.seeds / retention_journal.JOURNAL).is_file())
         (self.releases / ORPHAN).mkdir()
         with patch.object(retention, "_verify_preserved_canonical") as verify, \
-             patch.object(retention_journal, "_verify_preserved_canonical"):
+             patch.object(retention_journal, "_verify_preserved_canonical") as journal_verify:
             removed = retention.prune_unreferenced_seeds(self.worker, self.seeds)
         self.assertEqual(removed, ())
         self.assertTrue((self.seeds / ORPHAN).is_dir())
         self.assertFalse((self.seeds / retention_journal.JOURNAL).exists())
         self.assertFalse(tombstones[0].exists())
-        self.assertEqual(verify.call_count, 1)
+        self.assertEqual(verify.call_count, 0)
+        self.assertEqual([call.args[1] for call in journal_verify.call_args_list], [ORPHAN])
 
     def test_unreferenced_partial_tombstone_delete_resumes_and_clears_journal(self):
         with patch.object(retention, "_verify_preserved_canonical"), \

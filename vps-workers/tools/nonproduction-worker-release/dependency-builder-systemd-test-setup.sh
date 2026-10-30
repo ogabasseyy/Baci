@@ -298,7 +298,8 @@ PYTHONPATH="$(cd "$(dirname "$0")/../../bin" && pwd)${PYTHONPATH:+:$PYTHONPATH}"
 SEED_TEST_IMAGE_IDENTITY="$seed_image_identity" python3 -B - <<'PY'
 import os
 from worker_release_seed_workspace_paths import ensure_seed_collection
-from worker_release_seed_workspace import _verify_mount
+from worker_release_seed_workspace import _secure_mounted_root, _verify_mount
+_secure_mounted_root()
 ensure_seed_collection(__import__("pathlib").Path("/var/cache/baci-worker-release/seed-work"))
 _verify_mount(__import__("subprocess").run,
               image_identity=tuple(map(int, os.environ["SEED_TEST_IMAGE_IDENTITY"].split(":"))))

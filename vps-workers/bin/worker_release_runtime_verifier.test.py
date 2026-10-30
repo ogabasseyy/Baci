@@ -496,8 +496,26 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
                 except RuntimeVerificationRejected as error:
                     if "status=47" not in str(error):
                         argv_match = bool(observed_execstart and observed_execstart[0])
+                        from worker_release_runtime_verifier import RuntimeVerificationQuiescenceUnproven
+                        summary_match = __import__("re").search(
+                            r"\((result=(?:success|exit-code|signal|timeout|resources|protocol|other),"
+                            r"code=(?:exited|killed|dumped|trapped|other),status=(?:[0-9]{1,3}|other),"
+                            r"main_pid=(?:zero|nonzero|other),cgroup=(?:match|empty|service-suffix-omitted|"
+                            r"basename-only|system-slice-other|other))\)$", str(error))
+                        failed_match = __import__("re").search(
+                            r"failed \((code=(?:exited|killed|dumped|trapped|other),"
+                            r"status=(?:[0-9]{1,3}))\)$", str(error))
+                        if isinstance(error, RuntimeVerificationQuiescenceUnproven):
+                            safe_failure = "quiescence-unproven"
+                        elif summary_match:
+                            safe_failure = summary_match.group(1)
+                        elif failed_match:
+                            safe_failure = failed_match.group(1)
+                        else:
+                            safe_failure = "other-closed-category"
                         print("runtime sandbox probe evidence: host_node_marker=47 "
-                              f"systemd_execstart_matches_fixed_argv={'yes' if argv_match else 'no'}")
+                              f"systemd_execstart_matches_fixed_argv={'yes' if argv_match else 'no'} "
+                              f"systemd_failure={safe_failure}")
                         raise AssertionError("sandbox Node control did not return its fixed marker") from None
                     self.assertTrue(observed_execstart and observed_execstart[0],
                                     "systemd must retain the exact fixed Node argv for the probe")

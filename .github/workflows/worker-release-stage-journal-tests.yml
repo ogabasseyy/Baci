@@ -15,6 +15,7 @@ on:
       - 'vps-workers/bin/worker_release_systemd_extractor.py'
       - 'vps-workers/bin/worker_release_systemd_contract.py'
       - 'vps-workers/bin/worker_release_systemd_extractor.test.py'
+      - 'vps-workers/bin/worker_release_systemd_extractor_ci_fixture.py'
       - 'vps-workers/bin/worker_release_systemd_contract_regressions_test.py'
       - 'vps-workers/bin/worker_release_extractor_control_dac.test.py'
       - 'vps-workers/bin/worker_release_systemd_test_support.py'
@@ -83,5 +84,5 @@ jobs:
           /usr/bin/python3 -B vps-workers/bin/worker_release_stage_journal_resources.test.py
           /usr/bin/python3 -B vps-workers/bin/worker_release_systemd_test_support.test.py
           WORKER_RELEASE_EXTRACT_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_extractor_control_dac.test.py
-          WORKER_RELEASE_EXTRACT_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_systemd_extractor.test.py
+          WORKER_RELEASE_EXTRACT_REQUIRE_SYSTEMD=1 WORKER_RELEASE_EXTRACT_CI_FIXTURE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_systemd_extractor.test.py
           BASH

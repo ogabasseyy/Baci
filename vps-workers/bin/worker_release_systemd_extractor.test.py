@@ -6,7 +6,6 @@ import hashlib
 import importlib.util
 import io
 import os
-import pwd
 import socket
 import stat
 import sys
@@ -23,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import worker_release_archive_extract_child as child
 import worker_release_systemd_extractor as supervisor
 import worker_release_systemd_contract as contract
+from worker_release_systemd_extractor_ci_fixture import run_systemd_extractor_case
 from worker_release_systemd_contract_regressions_test import ContractRegressionTests
 from worker_release_systemd_test_support import (
     systemd_system_manager_available, systemd_unit_failure_summary,
@@ -32,8 +32,6 @@ _provisioner_spec = importlib.util.spec_from_file_location("source_extractor_pro
 provisioner = importlib.util.module_from_spec(_provisioner_spec)
 sys.modules[_provisioner_spec.name] = provisioner
 _provisioner_spec.loader.exec_module(provisioner)
-from worker_release_stage_journal import StageJournal
-from worker_release_source_snapshot import pin_source_snapshot
 
 SHA = "a" * 40
 FENCE = {"repository": "ogabasseyy/Baci", "workflow": ".github/workflows/production-release.yml",
@@ -254,44 +252,13 @@ class ExtractorUnitTests(unittest.TestCase):
                     server.close()
                 self.assertEqual(list(resource.iterdir()), [])
 
-    @unittest.skipUnless(os.geteuid() == 0 and os.environ.get("WORKER_RELEASE_EXTRACT_REQUIRE_SYSTEMD") == "1",
+    @unittest.skipUnless(os.geteuid() == 0
+                         and os.environ.get("WORKER_RELEASE_EXTRACT_REQUIRE_SYSTEMD") == "1"
+                         and os.environ.get("WORKER_RELEASE_EXTRACT_CI_FIXTURE") == "1",
                          "enabled only by the disposable root/systemd CI harness")
     def test_fixed_systemd_unit_extracts_exact_archive_and_freezes_journal_output(self):
-        account = pwd.getpwnam(supervisor.EXTRACTOR)
-        if not systemd_system_manager_available():
-            self.fail("CI requires a reachable systemd system manager")
-        self.assertEqual(list(RESOURCE_ROOT.iterdir()), [], "unknown resource trees must block extraction")
-        with tempfile.TemporaryDirectory(dir=Path.home()) as temporary:
-            journal_root = Path(temporary)
-            (journal_root / "releases").mkdir(mode=0o700)
-            bundle = archive_bytes()
-            digest = hashlib.sha256(bundle).hexdigest()
-            with StageJournal(journal_root, owner_uid=0, stage_uid=account.pw_uid,
-                              stage_gid=os.getgid(), resource_root=RESOURCE_ROOT,
-                              resource_uid=account.pw_uid) as journal:
-                journal_state = journal.begin(FENCE, digest)
-                transaction_id = journal_state["transaction_id"]
-                try:
-                    receipt = supervisor.extract_frozen_source(journal, bundle, digest)
-                except Exception as error:
-                    self.fail(f"extractor unit failed ({type(error).__name__}); "
-                              f"systemd state: {systemd_unit_failure_summary(
-                                  f'{supervisor.UNIT_PREFIX}{transaction_id}.service')}")
-                source = receipt["snapshot"]
-                self.assertEqual(receipt["source_sha"], SHA)
-                self.assertEqual((source / "pnpm-lock.yaml").read_bytes(), b"root lock\n")
-                self.assertEqual((source / "vps-workers/pnpm-lock.yaml").read_bytes(), b"worker lock\n")
-                self.assertEqual((source / ".baci-source-sha").read_text(), SHA + "\n")
-                self.assertEqual(source.stat().st_uid, account.pw_uid)
-                self.assertEqual(source.stat().st_gid, os.getgid())
-                self.assertEqual(source.stat().st_mode & 0o777, 0o550)
-                with pin_source_snapshot(source, trusted_root=RESOURCE_ROOT,
-                                         owner_uid=account.pw_uid) as pin:
-                    pin.verify_unchanged()
-                self.assertEqual(journal.recover(terminal_attempt_proven=lambda _fence: True,
-                                                 resources_quiesced=lambda _fence: True), "discarded")
-        self.assertEqual(list(RESOURCE_ROOT.iterdir()), [])
-
+        run_systemd_extractor_case(self, archive_bytes=archive_bytes,
+                                   fence=FENCE, source_sha=SHA)
 
 if __name__ == "__main__":
     unittest.main()

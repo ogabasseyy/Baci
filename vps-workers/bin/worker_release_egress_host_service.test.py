@@ -21,7 +21,7 @@ from worker_release_egress_identity import egress_identity
 
 
 class EgressHostServiceTests(unittest.TestCase):
-    @unittest.skipUnless(os.geteuid() == 0 and linux(), "requires root Linux Unix sockets")
+    @unittest.skipUnless(os.geteuid() == 0 and sys.platform.startswith("linux"), "requires root Linux Unix sockets")
     def test_broker_socket_is_group_restricted_and_lifecycle_bound(self):
         _uid, gid = egress_identity()
         with tempfile.TemporaryDirectory(prefix="baci-egress-host-", dir="/run") as tmp:
@@ -52,7 +52,7 @@ class EgressHostServiceTests(unittest.TestCase):
                 service.close()
                 self.assertFalse(path.exists())
 
-    @unittest.skipUnless(os.geteuid() == 0 and linux(), "requires root Linux Unix sockets")
+    @unittest.skipUnless(os.geteuid() == 0 and sys.platform.startswith("linux"), "requires root Linux Unix sockets")
     def test_directory_with_broader_access_is_rejected(self):
         with tempfile.TemporaryDirectory(prefix="baci-egress-host-", dir="/run") as tmp:
             directory = Path(tmp) / "broker"
@@ -67,10 +67,6 @@ class EgressHostServiceTests(unittest.TestCase):
         self.assertEqual(host.EGRESS_SOCKET, Path("/run/baci-worker-egress/broker.sock"))
         self.assertEqual(host.DIRECTORY_MODE, 0o711)
         self.assertEqual(host.SOCKET_MODE, 0o660)
-
-
-def linux() -> bool:
-    return Path("/proc/self/status").exists()
 
 
 def connect_as(path: Path, uid: int, gid: int, *, expect_allowed: bool) -> None:

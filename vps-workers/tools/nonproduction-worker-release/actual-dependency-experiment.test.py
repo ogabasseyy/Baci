@@ -101,6 +101,15 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "sample is invalid"):
             high_water.observe("source-copy", 3, 17, inode_count=-1)
 
+    def test_resource_high_water_accepts_seed_move_measurement_stage(self):
+        high_water = ResourceHighWater()
+        high_water.observe("seed-move-measurement", 7, 70)
+        report = high_water.report()
+        self.assertEqual(report["entries"], 7)
+        self.assertEqual(report["entries_stage"], "seed-move-measurement")
+        self.assertEqual(report["logical_file_bytes"], 70)
+        self.assertEqual(report["logical_file_bytes_stage"], "seed-move-measurement")
+
     def test_resource_scan_samples_unique_tree_inodes_and_allocated_blocks(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

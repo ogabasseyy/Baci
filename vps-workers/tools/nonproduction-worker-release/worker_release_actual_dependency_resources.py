@@ -16,7 +16,7 @@ SCAN_RETRIES = 3
 SCAN_RETRY_SECONDS = 0.1
 HIGH_WATER_STAGES = frozenset({
     "source-copy", "policy-preverify", "offline-store-validation", "build-cache-snapshot",
-    "web-deploy", "worker-install", "payload-snapshot",
+    "web-deploy", "worker-install", "seed-move-measurement", "payload-snapshot",
 })
 
 

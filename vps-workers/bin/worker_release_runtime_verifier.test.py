@@ -91,9 +91,9 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         tsx.chmod(0o755)
         (self.candidate / "vps-workers" / "bin" / "worker.mjs").write_text("export {};\n")
         (self.candidate / "node_modules" / "dotenv" / "package.json").write_text(
-            '{"name":"dotenv","type":"module","exports":"./index.js"}\n')
+            '{"name":"dotenv","main":"index.js"}\n')
         (self.candidate / "node_modules" / "dotenv" / "index.js").write_text(
-            "export function config() { return {}; }\n")
+            "exports.config = function config() { return {}; };\n")
         (self.candidate / "node_modules" / "@supabase" / "supabase-js").mkdir(parents=True)
         (self.candidate / "node_modules" / "@supabase" / "supabase-js" / "package.json").write_text(
             '{"name":"@supabase/supabase-js","type":"module","exports":"./index.js"}\n')
@@ -256,12 +256,15 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             if "--input-type=module" in command:
                 smoke_script = command[-1]
                 self.assertIn("import fs from 'node:fs'", smoke_script)
-                self.assertIn("await import(", smoke_script)
                 self.assertNotIn("spawnSync", smoke_script)
                 self.assertNotIn("Promise.race", smoke_script)
                 package = {2: "'dotenv'", 3: "'@supabase/supabase-js'",
                            4: "'expo-server-sdk'"}[_index]
-                self.assertIn(f"await import({package})", smoke_script)
+                if _index == 2:
+                    self.assertIn("createRequire(import.meta.url)('dotenv')", smoke_script)
+                    self.assertNotIn("await import('dotenv')", smoke_script)
+                else:
+                    self.assertIn(f"await import({package})", smoke_script)
                 for other_package in {"'dotenv'", "'@supabase/supabase-js'",
                                       "'expo-server-sdk'"} - {package}:
                     self.assertNotIn(f"await import({other_package})", smoke_script)
@@ -301,7 +304,7 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         self.assertEqual(result.returncode, 13)
 
     @unittest.skipUnless(shutil.which("node"), "Node is required for generated smoke execution")
-    def test_generated_smoke_imports_each_fixed_package_without_loader_exit(self):
+    def test_generated_smoke_loads_each_fixed_package_before_path_assertions(self):
         from worker_release_runtime_smoke import run_fixed_smokes
 
         class FakeView:
@@ -314,17 +317,17 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
         captured = []
 
         def execute(_unit, cwd, command, _properties, index):
-            if index == 2:
+            if index > 1:
                 captured.append((cwd, command))
                 # /etc exists on the developer host. The fixed script returns
-                # 4 only after all three child imports and API checks passed.
+                # 4 only after this package's API check has completed.
                 result = __import__("subprocess").run(
                     (shutil.which("node"), "--input-type=module", "-e", command[-1]),
                     cwd=cwd, env={"PATH": "/usr/bin:/bin", "NODE_ENV": "production"},
                     stdin=__import__("subprocess").DEVNULL,
                     stdout=__import__("subprocess").DEVNULL,
                     stderr=__import__("subprocess").DEVNULL, timeout=30, check=False)
-                self.assertEqual(result.returncode, 4)
+                self.assertEqual(result.returncode, 4, msg=f"fixed package smoke index {index}")
 
         with patch("worker_release_runtime_smoke.create_runtime_view", side_effect=FakeView), \
                 patch("worker_release_runtime_smoke.sys.platform", "linux"), \
@@ -336,7 +339,7 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
                              max_output_bytes=4096, systemd_run="/usr/bin/systemd-run",
                              systemctl="/usr/bin/systemctl", runtime_uid=61000,
                              runtime_gid=self.acl_gid)
-        self.assertEqual(len(captured), 1)
+        self.assertEqual(len(captured), 3)
 
     @patch("worker_release_runtime_smoke.create_runtime_view")
     @patch("worker_release_runtime_verifier._execute_fixed_unit")

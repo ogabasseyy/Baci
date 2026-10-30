@@ -67,7 +67,11 @@ def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callab
         "catch (error) { if (!['ENOENT','EACCES','EPERM'].includes(error?.code)) process.exit(5); } } "
     )
     package_smokes = (
-        ("worker_dotenv", "const m = await import('dotenv'); "
+        # dotenv's public package entrypoint is CommonJS. Use the same Node
+        # require path worker scripts use so the check does not depend on
+        # Node's synthetic ESM named-export/TLA loader behavior.
+        ("worker_dotenv", "import { createRequire } from 'node:module'; "
+         "const m = createRequire(import.meta.url)('dotenv'); "
          "if (typeof m.config !== 'function') process.exit(2);"),
         ("worker_supabase", "const m = await import('@supabase/supabase-js'); "
          "if (typeof m.createClient !== 'function') process.exit(2); "
@@ -83,7 +87,7 @@ def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callab
                        "apps/web/node_modules/.bin/tsx", "--version")),
         *( ("vps-workers", ("/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "NODE_ENV=production",
                              "/usr/bin/node", "--input-type=module", "-e",
-                             hidden_path_probe + script))
+                             script + hidden_path_probe))
            for _label, script in package_smokes ),
     )
     for index, (cwd, command) in enumerate(commands):

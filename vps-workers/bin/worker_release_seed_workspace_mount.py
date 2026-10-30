@@ -70,8 +70,11 @@ def verify_bounded_seed_workspace(*, runner: Callable[..., object] = subprocess.
         if ((root.st_dev, root.st_ino, root.st_uid, stat.S_IMODE(root.st_mode))
                 != (path_root.st_dev, path_root.st_ino, 0, 0o700)):
             raise BuilderRejected("fixed seed workspace mount root metadata is unsafe")
-        seed_fd = os.open("seeds", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
-                          dir_fd=root_fd)
+        try:
+            seed_fd = os.open("seeds", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                              dir_fd=root_fd)
+        except OSError as error:
+            raise BuilderRejected("fixed per-SHA seed root is unavailable") from error
         try:
             seeds = os.fstat(seed_fd)
             named = os.stat("seeds", dir_fd=root_fd, follow_symlinks=False)

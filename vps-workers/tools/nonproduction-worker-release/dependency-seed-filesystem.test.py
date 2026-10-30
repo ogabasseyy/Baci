@@ -13,6 +13,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "bin"))
 sys.path.insert(0, str(Path(__file__).parent))
 from worker_release_dependency_policy_cache import _hash_tree
+import dependency_seed_tree as seed_tree
 import dependency_seed_empty_recovery as empty_recovery
 import dependency_seed_transaction as seed_transaction
 
@@ -118,6 +119,51 @@ class SeedFilesystemPrimitiveTests(unittest.TestCase):
             finally:
                 os.close(fd)
             self.assertEqual(descriptor_hash, _hash_tree(root, max_bytes=4096))
+
+    def test_cache_digest_is_stable_across_directory_enumeration_and_copy_order(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = root / "first"
+            second = root / "second"
+            for cache, directory_order in ((first, ("z-dir", "a-dir")),
+                                           (second, ("a-dir", "z-dir"))):
+                cache.mkdir(mode=0o700)
+                for name in directory_order:
+                    child = cache / name
+                    child.mkdir()
+                    (child / "metadata.json").write_bytes(name.encode("ascii"))
+
+            first_fd = os.open(first, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            second_fd = os.open(second, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            root_identities = {
+                (os.fstat(first_fd).st_dev, os.fstat(first_fd).st_ino): ["z-dir", "a-dir"],
+                (os.fstat(second_fd).st_dev, os.fstat(second_fd).st_ino): ["a-dir", "z-dir"],
+            }
+            real_listdir = os.listdir
+
+            def fixture_listdir(fd):
+                identity = (os.fstat(fd).st_dev, os.fstat(fd).st_ino)
+                if identity in root_identities:
+                    return root_identities[identity]
+                return real_listdir(fd)
+
+            copied_fd = -1
+            destination_fd = os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                with patch.object(seed_tree.os, "listdir", side_effect=fixture_listdir):
+                    first_digest = seed_tree.policy_cache_digest_fd(first_fd, max_bytes=4096)
+                    second_digest = seed_tree.policy_cache_digest_fd(second_fd, max_bytes=4096)
+                    copied_fd = publisher.copy_tree(first_fd, destination_fd, "copied",
+                                                    max_bytes=4096, max_entries=100)
+                    copied_digest = seed_tree.policy_cache_digest_fd(copied_fd, max_bytes=4096)
+                self.assertEqual(first_digest, second_digest)
+                self.assertEqual(first_digest, copied_digest)
+                self.assertEqual(first_digest, _hash_tree(first, max_bytes=4096))
+            finally:
+                if copied_fd >= 0:
+                    os.close(copied_fd)
+                for fd in (destination_fd, second_fd, first_fd):
+                    os.close(fd)
 
     def test_no_replace_rename_preserves_racing_target(self):
         with tempfile.TemporaryDirectory() as temporary:

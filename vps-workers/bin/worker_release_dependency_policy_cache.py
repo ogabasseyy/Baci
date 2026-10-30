@@ -85,6 +85,9 @@ def _hash_tree(root: Path, expected_owner: int | None = None,
     entries = 0
     for current, directories, files in os.walk(root, topdown=True, followlinks=False):
         current_path = Path(current)
+        # Keep the receipt's tree digest stable across filesystems and copies
+        # that enumerate directory entries in different orders.
+        directories.sort()
         for name in sorted(directories):
             child = current_path / name
             info = child.lstat()

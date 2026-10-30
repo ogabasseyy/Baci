@@ -267,7 +267,11 @@ def policy_cache_digest_fd(directory_fd: int, *, max_bytes: int) -> str:
                 digest.update(content_hash.digest())
             finally:
                 os.close(file_fd)
-        for name in directories:
+        # Canonicalize directory traversal. copy_tree creates entries in
+        # lexical order, while an input filesystem may enumerate directories
+        # differently; an order-sensitive digest must not treat that as a
+        # content change.
+        for name in sorted(directories):
             relative = f"{prefix}/{name}" if prefix else name
             child = child_directory(fd, name, owner_uid=owner)
             try:

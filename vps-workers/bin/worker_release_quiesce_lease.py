@@ -2,16 +2,15 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
-LEASE_HELPER_PATH = "/usr/local/lib/baci-worker-broker/worker-release-quiesce-lease.sh"
-LEASE_SUPPORT_PATHS = (
-    "/usr/local/lib/baci-worker-broker/worker_release_quiesce_locks.py",
-    "/usr/local/lib/baci-worker-broker/worker_release_quiesce_lease_runtime.py",
-    "/usr/local/lib/baci-worker-broker/worker_release_recovery_latch.py",
-    "/usr/local/lib/baci-worker-broker/worker_release_quiesce_gate.py",
-    "/usr/local/lib/baci-worker-broker/worker_release_quiesce_lease_core.py",
-    "/usr/local/lib/baci-worker-broker/worker_release_quiesce_lease_manager.py",
-)
+_GENERATION_ROOT = Path(__file__).resolve().parent
+LEASE_HELPER_PATH = str(_GENERATION_ROOT / "worker-release-quiesce-lease.sh")
+LEASE_SUPPORT_PATHS = tuple(str(_GENERATION_ROOT / name) for name in (
+    "worker_release_quiesce_locks.py", "worker_release_quiesce_lease_runtime.py",
+    "worker_release_recovery_latch.py", "worker_release_quiesce_gate.py",
+    "worker_release_quiesce_lease_core.py", "worker_release_quiesce_lease_manager.py",
+))
 LEASE_MAX_SECONDS = 20 * 60
 LEASE_READY_SECONDS = 630
 LEASE_LOCK_SECONDS = 590

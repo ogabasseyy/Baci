@@ -25,6 +25,40 @@ from worker_release_broker_common import BROKER_CLIENT_TIMEOUT_SECONDS
 
 
 class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
+    def test_active_legacy_broker_is_rejected_before_stable_file_writer_runs(self):
+        item = provision.InstallFile("launcher", b"new", 0o550,
+                                      Path("/fixed/helper/start-broker.sh"), "root")
+        writes = []
+
+        class ActiveLegacyControl:
+            def prove_installation_safe(self, *, current_digest, stable_files_complete):
+                self.asserted = (current_digest, stable_files_complete)
+                if current_digest is None or not stable_files_complete:
+                    raise RuntimeError("active broker is not a complete recognized generation")
+
+        with self.assertRaisesRegex(RuntimeError, "not a complete recognized generation"):
+            provision.install_preflight.install_stable_files(
+                (item,), current_digest=None, control=ActiveLegacyControl(),
+                read_existing=lambda _path: None, writer=writes.append)
+        self.assertEqual(writes, [])
+
+    def test_install_preflight_rejects_mismatched_stable_state_before_any_write(self):
+        item = provision.InstallFile("stable", b"new", 0o550,
+                                      Path("/fixed/helper/start-broker.sh"), "root")
+        metadata = SimpleNamespace(st_uid=0, st_gid=0, st_mode=stat.S_IFREG | 0o550)
+        with patch.object(provision, "_read_existing", return_value=(b"legacy", metadata)), \
+                patch.object(provision.grp, "getgrnam", return_value=SimpleNamespace(gr_gid=0)):
+            with self.assertRaisesRegex(RuntimeError, "not an exact recognized install"):
+                provision.preflight_install_files((item,))
+
+    def test_install_preflight_accepts_only_exact_existing_stable_file(self):
+        item = provision.InstallFile("stable", b"fixed", 0o550,
+                                      Path("/fixed/helper/start-broker.sh"), "root")
+        metadata = SimpleNamespace(st_uid=0, st_gid=0, st_mode=stat.S_IFREG | 0o550)
+        with patch.object(provision, "_read_existing", return_value=(b"fixed", metadata)), \
+                patch.object(provision.grp, "getgrnam", return_value=SimpleNamespace(gr_gid=0)):
+            provision.preflight_install_files((item,))
+
     def test_broker_stop_timeout_allows_inflight_client_budget_to_drain(self):
         configured = next(line for line in provision.UNIT.splitlines()
                          if line.startswith("TimeoutStopSec="))
@@ -44,6 +78,8 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
             "/run/baci-worker-release-gate",
             "/run/baci-worker-release-build",
             "/var/lib/baci-worker-runtime-views",
+            "/var/lib/baci-worker-broker/pointer",
+            "/var/lib/baci-worker-broker/transaction",
         ])
         self.assertIn("ProtectSystem=strict", provision.UNIT)
         self.assertNotIn("/var/cache", lines[0])
@@ -237,7 +273,9 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
     def test_root_broker_installs_exact_python_import_closure(self):
         source_root = SCRIPT.parents[2] / "vps-workers" / "bin"
         seed_source_root = SCRIPT.parents[2] / "vps-workers" / "tools" / "nonproduction-worker-release"
-        pending = ["worker_release_broker", "worker_release_broker_dispatch"]
+        pending = ["worker_release_broker", "worker_release_broker_dispatch",
+                   "worker_release_broker_launcher", "worker_release_archive_extract_child",
+                   "worker_release_archive_extract_launcher"]
         reachable = set()
         while pending:
             module = pending.pop()
@@ -277,8 +315,15 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
         for module in provision.BROKER_RUNTIME_MODULES:
             with self.subTest(module=module):
                 item = installed[f"{module}.py"]
-                expected_group = "baci-locks" if module == "worker_release_recovery_latch" else "root"
-                expected_mode = 0o550 if module == "worker_release_broker" else 0o440
+                if module == "worker_release_recovery_latch":
+                    expected_group = "baci-locks"
+                elif module == "worker_release_archive_extract_launcher":
+                    expected_group = "baci-release-extractor"
+                else:
+                    expected_group = "root"
+                expected_mode = (0o550 if module in {"worker_release_broker",
+                                                     "worker_release_archive_extract_launcher"}
+                                 else 0o440)
                 self.assertEqual(item.group, expected_group)
                 self.assertEqual(item.mode, expected_mode)
                 module_root = seed_source_root if module.startswith("dependency_seed_") else source_root
@@ -327,7 +372,7 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
             self.assertFalse(path.parent.exists())
 
     def test_dry_run_is_complete_and_does_not_change_host(self):
-        with tempfile.TemporaryDirectory(dir=FIXTURE_PARENT) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             marker = Path(directory) / "marker"
             result = subprocess.run([sys.executable, str(SCRIPT)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -385,6 +430,26 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
         self.assertTrue(all(file.mode & 0o022 == 0 for file in files))
         self.assertTrue(all("token" not in file.content.decode("utf-8", errors="ignore").lower() for file in files if file.relative in {"broker-start", "systemd-unit"}))
 
+    def test_installer_builds_generation_and_keeps_only_fixed_launcher_control_files_stable(self):
+        from worker_release_broker_generation_install import split_install_records, STABLE_FILES
+
+        files = provision.install_files()
+        stable, generation = split_install_records(files, provision.HELPER_ROOT,
+                                                   lambda _group: 0)
+        stable_names = {item.destination.relative_to(provision.HELPER_ROOT).as_posix()
+                        for item in stable if item.destination.is_relative_to(provision.HELPER_ROOT)}
+        generation_paths = {item.path for item in generation}
+        self.assertTrue(STABLE_FILES.issubset(stable_names))
+        self.assertIn("worker_release_broker.py", generation_paths)
+        self.assertIn("worker-release-broker-dispatch.mjs", generation_paths)
+        self.assertNotIn("start-broker.sh", generation_paths)
+        self.assertTrue(all(item.destination == provision.UNIT_PATH or
+                            item.destination.parent == provision.HELPER_ROOT and
+                            item.destination.name in STABLE_FILES for item in stable))
+        start = next(item.content.decode() for item in files if item.relative == "broker-start")
+        self.assertIn("worker_release_broker_launcher.py", start)
+        self.assertNotIn("worker_release_broker.py \\", start)
+
     def test_provisioning_install_helpers_are_available_from_checkout(self):
         helper = SCRIPT.with_name("provision_worker_release_install.py")
         self.assertTrue(helper.is_file())
@@ -401,6 +466,12 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
         self.assertIn("ProtectHome=yes", provision.UNIT)
         self.assertIn("RuntimeDirectoryMode=0710", provision.UNIT)
         self.assertIn("RuntimeDirectoryGroup=baci-release", provision.UNIT)
+        self.assertIn("ReadWritePaths=/srv/baci-workers", provision.UNIT)
+        self.assertIn("/var/lib/baci-worker-broker", provision.UNIT)
+        self.assertIn(("install", "-d", "-o", "root", "-g", "root", "-m", "0700",
+                       "/var/lib/baci-worker-broker/transaction"), actions)
+        self.assertIn(("install", "-d", "-o", "root", "-g", "root", "-m", "0711",
+                       "/var/lib/baci-worker-broker/pointer"), actions)
 
     def test_dispatcher_layout_preserves_relative_module_imports(self):
         actual_dispatcher = next(file for file in provision.install_files() if file.relative == "dispatcher.mjs")

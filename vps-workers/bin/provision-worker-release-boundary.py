@@ -20,12 +20,20 @@ import shlex
 import stat
 import subprocess
 import sys
-import tempfile
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Sequence
 
 from worker_release_broker_module_closure import BROKER_RUNTIME_MODULES
+from worker_release_broker_generation import current_generation, publish_generation
+from worker_release_broker_generation_install import split_install_records
+import worker_release_broker_install_preflight as install_preflight
+from worker_release_broker_upgrade import (
+    SystemdBrokerControl, bootstrap_generation, recover_interrupted_upgrade,
+    upgrade_generation,
+)
+from provision_worker_release_install import (ensure_runtime_view_root, read_existing as _read_existing,
+                                              read_trusted_source, install_one as _install_one,
+                                              RUNTIME_VIEW_ROOT, ensure_root_directory)
 
 
 RELEASE = "baci-release"
@@ -38,77 +46,16 @@ BUILD_ROOT = Path("/run/baci-worker-release-build")
 BUILD_RESULTS_ROOT = BUILD_ROOT / "results"
 BUILD_USER = "baci-release-build"
 BUILD_GROUP = "baci-release-build"
+BROKER_STATE_ROOT = Path("/var/lib/baci-worker-broker")
+BROKER_POINTER_ROOT = BROKER_STATE_ROOT / "pointer"
+BROKER_TRANSACTION_ROOT = BROKER_STATE_ROOT / "transaction"
 BUILD_NOLOGIN = "/usr/sbin/nologin"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-UNIT = """[Unit]
-Description=Baci worker release broker
-After=network-online.target
-Wants=network-online.target
-Wants=baci-domain-event-router.service baci-event-delivery-worker.service baci-quiz-finalization.service
-Wants=baci-cache-invalidation-drain.timer baci-gigl-tracking.timer
-
-[Service]
-Type=simple
-User=root
-Group=root
-RuntimeDirectory=baci-worker-release
-RuntimeDirectoryGroup=baci-release
-RuntimeDirectoryMode=0710
-RuntimeDirectoryPreserve=no
-ExecStart=/usr/local/lib/baci-worker-broker/start-broker.sh
-Restart=on-failure
-RestartSec=3
-TimeoutStopSec=1200s
-KillMode=mixed
-UMask=0077
-NoNewPrivileges=yes
-PrivateTmp=yes
-PrivateDevices=yes
-ProtectHome=yes
-ProtectSystem=strict
-ReadWritePaths=/srv/baci-workers /run/baci-worker-release /run/baci-worker-release-gate /run/baci-worker-release-build /var/lib/baci-worker-runtime-views
-ProtectKernelTunables=yes
-ProtectKernelModules=yes
-ProtectKernelLogs=yes
-ProtectControlGroups=yes
-LockPersonality=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-
-[Install]
-WantedBy=multi-user.target
-"""
-
-START_BROKER = """#!/usr/bin/env bash
-set -euo pipefail
-readonly release_uid="$(/usr/bin/id -u baci-release)"
-readonly worker_uid="$(/usr/bin/id -u baci-worker)"
-readonly worker_gid="$(/usr/bin/id -g baci-worker)"
-readonly gate_dir=/run/baci-worker-release-gate
-/usr/bin/install -d -o root -g baci-worker -m 0710 "$gate_dir"
-gate_socket="$gate_dir/health.sock"
-if [ -e "$gate_socket" ] || [ -L "$gate_socket" ]; then
-  [ -S "$gate_socket" ] && [ ! -L "$gate_socket" ] || exit 1
-  [ "$(/usr/bin/stat -c '%u:%g:%a' "$gate_socket")" = "0:$worker_gid:660" ] || exit 1
-  /usr/bin/rm -- "$gate_socket"
-fi
-exec /usr/bin/python3 /usr/local/lib/baci-worker-broker/worker_release_broker.py \\
-  --release-uid "$release_uid" --worker-uid "$worker_uid" --worker-gid "$worker_gid"
-"""
-
-DISPATCHER_WRAPPER = """#!/usr/bin/node
-import './bin/worker-release-broker-dispatch.mjs';
-"""
-
-
-@dataclass(frozen=True)
-class InstallFile:
-    relative: str
-    content: bytes
-    mode: int
-    destination: Path
-    group: str = "root"
-
+from worker_release_broker_install_manifest import (
+    DISPATCHER_WRAPPER, InstallFile, START_BROKER, UNIT, build_install_files,
+    build_provisioning_plan,
+)
 
 def _source(relative: str) -> bytes:
     source_uid = os.getuid()
@@ -123,65 +70,20 @@ def _source(relative: str) -> bytes:
         raise RuntimeError(f"required trusted source could not be read safely: {relative}") from error
 
 
+preflight_install_files = lambda files: install_preflight.preflight_install_files(
+    files, read_existing=_read_existing)
+
+
 def install_files() -> tuple[InstallFile, ...]:
-    files = [
-        InstallFile("broker.py", _source("vps-workers/bin/worker_release_broker.py"), 0o550, HELPER_ROOT / "worker_release_broker.py"),
-        InstallFile("broker-common.py", _source("vps-workers/bin/worker_release_broker_common.py"), 0o440, HELPER_ROOT / "worker_release_broker_common.py"),
-        InstallFile("broker-archive.py", _source("vps-workers/bin/worker_release_archive.py"), 0o440, HELPER_ROOT / "worker_release_archive.py"),
-        InstallFile("broker-dispatch.py", _source("vps-workers/bin/worker_release_broker_dispatch.py"), 0o440, HELPER_ROOT / "worker_release_broker_dispatch.py"),
-        InstallFile("broker-staging.py", _source("vps-workers/bin/worker_release_staging.py"), 0o440, HELPER_ROOT / "worker_release_staging.py"),
-        InstallFile("broker-state.py", _source("vps-workers/bin/worker_release_state.py"), 0o440, HELPER_ROOT / "worker_release_state.py"),
-        InstallFile("recovery-dispatch.py", _source("vps-workers/bin/worker_release_recovery_dispatch.py"), 0o440, HELPER_ROOT / "worker_release_recovery_dispatch.py"),
-        InstallFile("recovery-lifecycle.py", _source("vps-workers/bin/worker_release_recovery_lifecycle.py"), 0o440, HELPER_ROOT / "worker_release_recovery_lifecycle.py"),
-        InstallFile("broker-gigl.py", _source("vps-workers/bin/worker_release_gigl.py"), 0o440, HELPER_ROOT / "worker_release_gigl.py"),
-        InstallFile("readiness.py", _source("vps-workers/bin/worker_release_readiness.py"), 0o440, HELPER_ROOT / "worker_release_readiness.py"),
-        InstallFile("lifecycle.py", _source("vps-workers/bin/worker_release_lifecycle.py"), 0o440, HELPER_ROOT / "worker_release_lifecycle.py"),
-        InstallFile("lease.py", _source("vps-workers/bin/worker_release_quiesce_lease.py"), 0o440, HELPER_ROOT / "worker_release_quiesce_lease.py"),
-        InstallFile("lease-identity.py", _source("vps-workers/bin/worker_release_quiesce_lease_identity.py"), 0o440, HELPER_ROOT / "worker_release_quiesce_lease_identity.py"),
-        InstallFile("lease-locks.py", _source("vps-workers/bin/worker_release_quiesce_locks.py"), 0o440, HELPER_ROOT / "worker_release_quiesce_locks.py"),
-        InstallFile("lease-runtime.py", _source("vps-workers/bin/worker_release_quiesce_lease_runtime.py"), 0o440, HELPER_ROOT / "worker_release_quiesce_lease_runtime.py"),
-        InstallFile("lease-core.py", _source("vps-workers/bin/worker_release_quiesce_lease_core.py"), 0o440, HELPER_ROOT / "worker_release_quiesce_lease_core.py"),
-        InstallFile("lease-manager.py", _source("vps-workers/bin/worker_release_quiesce_lease_manager.py"), 0o440, HELPER_ROOT / "worker_release_quiesce_lease_manager.py"),
-        InstallFile("lease-recovery-latch.py", _source("vps-workers/bin/worker_release_recovery_latch.py"), 0o440, HELPER_ROOT / "worker_release_recovery_latch.py", "baci-locks"),
-        InstallFile("lease-gate.py", _source("vps-workers/bin/worker_release_quiesce_gate.py"), 0o440, HELPER_ROOT / "worker_release_quiesce_gate.py"),
-        InstallFile("launch-gate", _source("vps-workers/bin/worker-release-launch-gate"), 0o550, HELPER_ROOT / "worker-release-launch-gate", "baci-locks"),
-        InstallFile("dispatcher.mjs", _source("vps-workers/bin/worker-release-broker-dispatch.mjs"), 0o440, HELPER_ROOT / "bin/worker-release-broker-dispatch.mjs"),
-        InstallFile("broker-policy.mjs", _source("vps-workers/lib/worker-release-broker.mjs"), 0o440, HELPER_ROOT / "lib/worker-release-broker.mjs"),
-        InstallFile("github-proof.mjs", _source("vps-workers/lib/worker-release-github-proof.mjs"), 0o440, HELPER_ROOT / "lib/worker-release-github-proof.mjs"),
-        InstallFile("quiesce.sh", _source("vps-workers/lib/worker-release-quiesce-lease.sh"), 0o550, HELPER_ROOT / "worker-release-quiesce-lease.sh"),
-        InstallFile("health-check", _source("vps-workers/bin/worker-release-health-check"), 0o550, HELPER_ROOT / "worker-release-health-check"),
-        InstallFile("broker-start", START_BROKER.encode(), 0o550, HELPER_ROOT / "start-broker.sh"),
-        InstallFile("dispatcher-wrapper", DISPATCHER_WRAPPER.encode(), 0o550, HELPER_ROOT / "worker-release-broker-dispatch.mjs"),
-        InstallFile("systemd-unit", UNIT.encode(), 0o644, UNIT_PATH),
-    ]
-    installed_names = {file.destination.name for file in files
-                       if file.destination.parent == HELPER_ROOT}
-    for module in BROKER_RUNTIME_MODULES:
-        filename = f"{module}.py"
-        if filename not in installed_names:
-            source_relative = (
-                f"vps-workers/tools/nonproduction-worker-release/{filename}"
-                if module.startswith("dependency_seed_")
-                else f"vps-workers/bin/{filename}"
-            )
-            files.append(InstallFile(f"broker-runtime-{module}",
-                                     _source(source_relative),
-                                     0o440, HELPER_ROOT / filename))
-    return tuple(files)
+    return build_install_files(_source, HELPER_ROOT, UNIT_PATH, BROKER_RUNTIME_MODULES)
 
 
 def provisioning_plan() -> tuple[tuple[str, ...], ...]:
-    return (
-        ("groupadd", "--system", RELEASE),
-        ("useradd", "--system", "--gid", RELEASE, "--home-dir", str(HOME), "--no-create-home", "--shell", NOLOGIN, RELEASE),
-        ("install", "-d", "-o", RELEASE, "-g", RELEASE, "-m", "0700", str(HOME)),
-        ("install", "-d", "-o", "root", "-g", "root", "-m", "0755", str(HELPER_ROOT)),
-        ("install", "-d", "-o", "root", "-g", "root", "-m", "0755", str(HELPER_ROOT / "bin")),
-        ("install", "-d", "-o", "root", "-g", "root", "-m", "0755", str(HELPER_ROOT / "lib")),
-        ("install", "-d", "-o", "root", "-g", "root", "-m", "0711", str(RUNTIME_VIEW_ROOT)),
-        ("systemctl", "daemon-reload"),
-        ("systemctl", "enable", "--now", "baci-worker-release-broker.service"),
-    )
+    return build_provisioning_plan(release=RELEASE, home=HOME, helper_root=HELPER_ROOT,
+                                   runtime_view_root=RUNTIME_VIEW_ROOT,
+                                   state_root=BROKER_STATE_ROOT,
+                                   pointer_root=BROKER_POINTER_ROOT,
+                                   transaction_root=BROKER_TRANSACTION_ROOT)
 
 
 def _validate_account(name: str, *, expected_shell: str, expected_home: str) -> None:
@@ -305,11 +207,6 @@ def _check_release_home(*, account_exists: bool) -> bool:
     return True
 
 
-from provision_worker_release_install import (ensure_runtime_view_root, read_existing as _read_existing,
-                                              read_trusted_source, install_one as _install_one,
-                                              RUNTIME_VIEW_ROOT)
-
-
 def apply(*, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run) -> None:
     if os.geteuid() != 0:
         raise RuntimeError("--apply requires root")
@@ -329,6 +226,16 @@ def apply(*, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
     _check_identities()
     _validate_dependency_builder_prerequisites()
     ensure_runtime_view_root()
+    ensure_root_directory(HELPER_ROOT, uid=0, gid=0, mode=0o755)
+    ensure_root_directory(BROKER_STATE_ROOT, uid=0, gid=0, mode=0o755)
+    ensure_root_directory(BROKER_POINTER_ROOT, uid=0, gid=0, mode=0o711)
+    ensure_root_directory(BROKER_TRANSACTION_ROOT, uid=0, gid=0, mode=0o700)
+    control = SystemdBrokerControl()
+    recover_interrupted_upgrade(
+        HELPER_ROOT, control=control,
+        state_root=BROKER_POINTER_ROOT, state_mode=0o711,
+        transaction_root=BROKER_TRANSACTION_ROOT,
+    )
     # Require the dedicated worker tree and refuse symlinks or permissions that
     # would let the release identity replace broker-owned paths.
     for path, owner, group, mode in (
@@ -340,10 +247,26 @@ def apply(*, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
             raise RuntimeError(f"worker release path is not a real directory: {path}")
         if (pwd.getpwuid(info.st_uid).pw_name, grp.getgrgid(info.st_gid).gr_name, stat.S_IMODE(info.st_mode)) != (owner, group, mode):
             raise RuntimeError(f"worker release path ownership or mode is not trusted: {path}")
-    for file in install_files():
-        _install_one(file)
+    files = install_files()
+    stable_files, generation_files = split_install_records(
+        files, HELPER_ROOT, lambda group: grp.getgrnam(group).gr_gid)
+    old_digest = current_generation(HELPER_ROOT, state_root=BROKER_POINTER_ROOT,
+                                   state_mode=0o711)
+    install_preflight.install_stable_files(
+        stable_files, current_digest=old_digest, control=control,
+        read_existing=_read_existing, writer=_install_one)
     runner(("systemctl", "daemon-reload"), check=True, stdin=subprocess.DEVNULL)
-    runner(("systemctl", "enable", "--now", "baci-worker-release-broker.service"), check=True, stdin=subprocess.DEVNULL)
+    new_digest = publish_generation(HELPER_ROOT, generation_files)
+    if old_digest is None:
+        bootstrap_generation(HELPER_ROOT, new_digest, control=control,
+                             state_root=BROKER_POINTER_ROOT, state_mode=0o711,
+                             transaction_root=BROKER_TRANSACTION_ROOT)
+    elif old_digest != new_digest:
+        upgrade_generation(HELPER_ROOT, new_digest, control=control,
+                           state_root=BROKER_POINTER_ROOT, state_mode=0o711,
+                           transaction_root=BROKER_TRANSACTION_ROOT)
+    runner(("systemctl", "enable", "baci-worker-release-broker.service"), check=True, stdin=subprocess.DEVNULL)
+    runner(("systemctl", "start", "baci-worker-release-broker.service"), check=True, stdin=subprocess.DEVNULL)
     runner(("systemctl", "is-active", "--quiet", "baci-worker-release-broker.service"), check=True, stdin=subprocess.DEVNULL)
 
 

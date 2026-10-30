@@ -112,7 +112,7 @@ def expected_properties(*, extractor: str, resource_root: Path,
         "MemoryMax": "805306368", "TasksMax": "16", "CPUQuotaPerSecUSec": "1s",
         "StandardOutput": "null", "StandardError": "null",
         "ReadWritePaths": f"{resource_root} {control_root}",
-        "ReadOnlyPaths": "/usr/local/lib/baci-worker-broker",
+        "ReadOnlyPaths": "/usr/local/lib/baci-worker-broker /var/lib/baci-worker-broker/pointer",
         "InaccessiblePaths": "/srv/baci-workers /etc /root /home",
     }
 
@@ -144,7 +144,7 @@ def validate_unit_contract(*, unit: str, transaction_id: str, extractor_uid: int
     command = run("systemctl", "show", "-p", "ExecStart", "--value", unit)
     match = re.search(r"argv\[\]=(.*?)\s*;", command)
     expected_exec = (f"/usr/bin/python3 -I -B /usr/local/lib/baci-worker-broker/"
-                     f"worker_release_archive_extract_child.py {transaction_id}")
+                     f"worker_release_archive_extract_launcher.py {transaction_id}")
     if not match or match.group(1) != expected_exec:
         raise UnitContractRejected("extractor executable differs from fixed helper")
     try:

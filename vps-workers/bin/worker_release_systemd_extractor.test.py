@@ -70,7 +70,8 @@ class ExtractorUnitTests(unittest.TestCase):
         )
         self.assertEqual(properties["ReadWritePaths"],
                          f"{supervisor.RESOURCE_ROOT} {supervisor.CONTROL_ROOT}")
-        self.assertEqual(properties["ReadOnlyPaths"], "/usr/local/lib/baci-worker-broker")
+        self.assertEqual(properties["ReadOnlyPaths"],
+                         "/usr/local/lib/baci-worker-broker /var/lib/baci-worker-broker/pointer")
         tmpfiles = next(item for item in provisioner.install_files()
                         if item.relative == "extract-tmpfiles").content.decode()
         self.assertIn("d /run/baci-worker-release-extract/control 0710 root baci-release-extractor -", tmpfiles)
@@ -150,7 +151,7 @@ class ExtractorUnitTests(unittest.TestCase):
                 return str(unit_file)
             if name == "ExecStart":
                 return ("{ path=/usr/bin/python3 ; argv[]=/usr/bin/python3 -I -B "
-                        f"/usr/local/lib/baci-worker-broker/worker_release_archive_extract_child.py {transaction_id} ; }}")
+                        f"/usr/local/lib/baci-worker-broker/worker_release_archive_extract_launcher.py {transaction_id} ; }}")
             if name == "MainPID":
                 return "4321"
             if name == "ControlGroup":

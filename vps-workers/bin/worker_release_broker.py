@@ -28,7 +28,42 @@ import time
 import signal
 import tempfile
 import threading
+from pathlib import Path
 from typing import Callable, BinaryIO, Any
+
+
+def _pin_isolated_generation_imports() -> None:
+    """Pin module lookup to the immutable generation before importing helpers."""
+    if not sys.flags.isolated:
+        return
+    expected_args = [index for index, value in enumerate(sys.argv[:-1])
+                     if value == "--generation-digest"]
+    if len(expected_args) != 1:
+        raise ImportError("broker generation argument is missing")
+    digest = sys.argv[expected_args[0] + 1]
+    if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+        raise ImportError("broker generation argument is invalid")
+    generation = Path(__file__).parent
+    expected = Path("/usr/local/lib/baci-worker-broker/generations") / digest
+    try:
+        generation_info = generation.lstat()
+        parent_info = generation.parent.lstat()
+    except OSError as error:
+        raise ImportError("broker generation directory is unavailable") from error
+    if (generation != expected or not stat.S_ISDIR(generation_info.st_mode)
+            or (generation_info.st_uid, generation_info.st_gid,
+                stat.S_IMODE(generation_info.st_mode)) != (0, 0, 0o555)
+            or not stat.S_ISDIR(parent_info.st_mode)
+            or (parent_info.st_uid, parent_info.st_gid,
+                stat.S_IMODE(parent_info.st_mode)) != (0, 0, 0o755)):
+        raise ImportError("broker generation directory is not pinned")
+    sys.path.insert(0, str(generation))
+
+
+_pin_isolated_generation_imports()
+
+BROKER_HELPER_ROOT = Path("/usr/local/lib/baci-worker-broker")
+BROKER_POINTER_ROOT = Path("/var/lib/baci-worker-broker/pointer")
 
 # Helper modules import the facade by its canonical name. Register the live
 # entrypoint before importing them so `python worker_release_broker.py` and
@@ -40,6 +75,7 @@ if _existing_broker_module is not None and _existing_broker_module is not _broke
 sys.modules["worker_release_broker"] = _broker_module
 
 from worker_release_readiness import ReadinessRejected, collect_worker_readiness
+from worker_release_broker_generation import current_generation, verify_generation
 
 from worker_release_broker_common import (
     BrokerProtocolError, MAX_REQUEST_BYTES, MAX_REPLY_BYTES, MAX_ARCHIVE_COMPRESSED_BYTES,
@@ -99,14 +135,19 @@ def serve_connection(
     *,
     expected_release_uid: int,
     dispatch: Callable[[int, dict[str, Any]], dict[str, Any]],
+    generation_digest: str | None = None,
 ) -> None:
     """Handle one request; peer UID comes exclusively from kernel credentials."""
     try:
         connection.settimeout(15)
         uid = _peer_uid(connection)
-        if uid != expected_release_uid:
+        if uid != expected_release_uid and uid != 0:
             raise BrokerProtocolError("unauthorized peer")
         request = _read_one_request(connection)
+        if uid == 0 and uid != expected_release_uid:
+            return _send_status(connection, request, generation_digest)
+        if uid == expected_release_uid and request.get("operation") == "broker-status":
+            raise BrokerProtocolError("unauthorized peer")
         # Longest fixed quiescence acquisition is 630s; leave room for the
         # pointer operation, service health check, and cleanup before reply.
         connection.settimeout(BROKER_CLIENT_TIMEOUT_SECONDS)
@@ -126,11 +167,27 @@ def serve_connection(
             pass
 
 
+def _send_status(connection: socket.socket, request: dict[str, Any], digest: str | None) -> None:
+    if request != {"operation": "broker-status"} or not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+        raise BrokerProtocolError("unauthorized peer")
+    connection.sendall(json.dumps({"ok": True, "operation": "broker-status",
+                                   "generationDigest": digest}, separators=(",", ":")).encode("ascii") + b"\n")
+
+
+def _guard_upgrade_dispatch(dispatch, *, blocked):
+    def guarded(peer_uid: int, request: dict[str, Any]) -> dict[str, Any]:
+        if blocked():
+            raise BrokerProtocolError("broker generation recovery is required")
+        return dispatch(peer_uid, request)
+    return guarded
+
+
 def serve_forever(
     listener: socket.socket,
     *,
     expected_release_uid: int,
     dispatch: Callable[[int, dict[str, Any]], dict[str, Any]],
+    generation_digest: str | None = None,
     stop_event: threading.Event | None = None,
     accept_poll_seconds: float = 0.25,
 ) -> None:
@@ -159,7 +216,8 @@ def serve_forever(
                 # dispatched is allowed to finish before this loop exits.
                 if stop_event is not None and stop_event.is_set():
                     return
-                serve_connection(connection, expected_release_uid=expected_release_uid, dispatch=dispatch)
+                serve_connection(connection, expected_release_uid=expected_release_uid,
+                                 dispatch=dispatch, generation_digest=generation_digest)
     finally:
         listener.settimeout(previous_timeout)
 
@@ -182,6 +240,7 @@ from worker_release_gigl import (
 )
 
 from worker_release_broker_dispatch import make_fixed_release_dispatch
+from worker_release_broker_upgrade import mutations_blocked
 
 if sys.modules.get("worker_release_broker") is not sys.modules[__name__]:
     raise ImportError("worker release broker facade identity is inconsistent")
@@ -219,7 +278,10 @@ def bind_broker_socket(path: str, *, release_gid: int, backlog: int = 8) -> sock
         raise
 
 
-def run_service(release_uid: int, worker_uid: int, worker_gid: int, socket_path: str = "/run/baci-worker-release/broker.sock") -> None:
+def run_service(release_uid: int, worker_uid: int, worker_gid: int,
+                generation_digest: str,
+                socket_path: str = "/run/baci-worker-release/broker.sock") -> None:
+    global TRUSTED_DISPATCHER, TRUSTED_HEALTH_CHECK
     if os.geteuid() != 0:
         raise PermissionError("worker release broker must run as root")
     release_account = pwd.getpwuid(release_uid)
@@ -235,6 +297,15 @@ def run_service(release_uid: int, worker_uid: int, worker_gid: int, socket_path:
             raise PermissionError("dedicated accounts cannot belong to docker or sudo")
     if socket_path != "/run/baci-worker-release/broker.sock":
         raise ValueError("broker socket path is fixed")
+    if re.fullmatch(r"[0-9a-f]{64}", generation_digest) is None:
+        raise ValueError("broker generation digest is invalid")
+    generation_directory = os.path.dirname(os.path.realpath(__file__))
+    expected_directory = f"/usr/local/lib/baci-worker-broker/generations/{generation_digest}"
+    if generation_directory != expected_directory:
+        raise PermissionError("broker entrypoint does not match its generation digest")
+    verify_active_generation(generation_digest)
+    TRUSTED_DISPATCHER = os.path.join(generation_directory, "worker-release-broker-dispatch.mjs")
+    TRUSTED_HEALTH_CHECK = os.path.join(generation_directory, "worker-release-health-check")
     listener = bind_broker_socket(socket_path, release_gid=release_gid)
     stop_event = threading.Event()
 
@@ -246,8 +317,9 @@ def run_service(release_uid: int, worker_uid: int, worker_gid: int, socket_path:
         for signum in (signal.SIGTERM, signal.SIGINT):
             old_handlers[signum] = signal.signal(signum, request_shutdown)
         dispatch = make_fixed_release_dispatch(release_uid=release_uid, worker_uid=worker_uid, worker_gid=worker_gid)
-        serve_forever(listener, expected_release_uid=release_uid, dispatch=dispatch,
-                      stop_event=stop_event)
+        serve_forever(listener, expected_release_uid=release_uid,
+                      dispatch=_guard_upgrade_dispatch(dispatch, blocked=mutations_blocked),
+                      stop_event=stop_event, generation_digest=generation_digest)
     finally:
         for signum, handler in old_handlers.items():
             signal.signal(signum, handler)
@@ -256,6 +328,14 @@ def run_service(release_uid: int, worker_uid: int, worker_gid: int, socket_path:
             os.unlink(socket_path)
         except FileNotFoundError:
             pass
+
+
+def verify_active_generation(generation_digest: str) -> None:
+    """Verify the executable and the exact dedicated mutable pointer root."""
+    verify_generation(BROKER_HELPER_ROOT, generation_digest)
+    if current_generation(BROKER_HELPER_ROOT, state_root=BROKER_POINTER_ROOT,
+                          state_mode=0o711) != generation_digest:
+        raise PermissionError("broker generation is not the active pointer")
 
 
 # Public facade imports preserve the historical broker API.
@@ -269,9 +349,11 @@ if __name__ == "__main__":
     parser.add_argument("--release-uid", type=int, required=True)
     parser.add_argument("--worker-uid", type=int, required=True)
     parser.add_argument("--worker-gid", type=int, required=True)
+    parser.add_argument("--generation-digest", required=True)
     arguments = parser.parse_args()
     try:
-        run_service(arguments.release_uid, arguments.worker_uid, arguments.worker_gid)
+        run_service(arguments.release_uid, arguments.worker_uid, arguments.worker_gid,
+                    arguments.generation_digest)
     except Exception:
         # Host journal receives no request, credential, or upstream response data.
         sys.stderr.write("worker release broker stopped: trusted startup or dispatch failure\n")

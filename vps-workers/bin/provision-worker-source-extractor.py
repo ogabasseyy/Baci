@@ -44,6 +44,8 @@ def _source(relative: str) -> bytes:
 
 def install_files() -> tuple[File, ...]:
     return (
+        File("archive-launcher", _source("vps-workers/bin/worker_release_archive_extract_launcher.py"),
+             0o550, HELPER_ROOT / "worker_release_archive_extract_launcher.py", GROUP),
         File("archive-child", _source("vps-workers/bin/worker_release_archive_extract_child.py"),
              0o550, HELPER_ROOT / "worker_release_archive_extract_child.py", GROUP),
         File("archive-reader", _source("vps-workers/bin/worker_release_archive.py"),

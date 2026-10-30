@@ -7,16 +7,27 @@ import json
 import os
 import re
 import socket
+import stat
 import sys
 import tempfile
 from pathlib import Path
 
-HELPER_ROOT = Path("/usr/local/lib/baci-worker-broker")
+if sys.flags.isolated:
+    _generation = Path(__file__).parent
+    _expected_parent = Path("/usr/local/lib/baci-worker-broker/generations")
+    _generation_info = _generation.lstat()
+    if (not _generation.is_absolute() or _generation.parent != _expected_parent
+            or not re.fullmatch(r"[0-9a-f]{64}", _generation.name)
+            or not stat.S_ISDIR(_generation_info.st_mode)
+            or (_generation_info.st_uid, _generation_info.st_gid,
+                stat.S_IMODE(_generation_info.st_mode)) != (0, 0, 0o555)):
+        raise RuntimeError("extractor generation path is not pinned")
+    sys.path.insert(0, str(_generation))
+
 RESOURCE_ROOT = Path("/run/baci-worker-release-extract/resources")
 CONTROL_ROOT = Path("/run/baci-worker-release-extract/control")
 MAX_HEADER_BYTES = 4096
 MAX_ARCHIVE_BYTES = 256 * 1024 * 1024
-sys.path.insert(0, str(HELPER_ROOT))
 from worker_release_archive import extract_github_tarball
 from worker_release_broker_common import MAX_ARCHIVE_COMPRESSED_BYTES, MAX_ARCHIVE_ENTRIES
 

@@ -15,7 +15,7 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 
-from worker_release_broker import BrokerProtocolError, BROKER_CLIENT_TIMEOUT_SECONDS, BROKER_OPERATION_BUDGET_SECONDS, DISPATCHER_TIMEOUT_SECONDS, extract_github_tarball, serve_connection, _stage_archive, _freeze_release_tree, _validate_staged_release, _load_release_state, _record_promotion_failure, _record_promotion_success, _promotion_restore_confirmed, _run_gigl_capability_smoke, _validate_gigl_release_sha
+from worker_release_broker import BrokerProtocolError, BROKER_CLIENT_TIMEOUT_SECONDS, BROKER_OPERATION_BUDGET_SECONDS, DISPATCHER_TIMEOUT_SECONDS, extract_github_tarball, serve_connection, _guard_upgrade_dispatch, _stage_archive, _freeze_release_tree, _validate_staged_release, _load_release_state, _record_promotion_failure, _record_promotion_success, _promotion_restore_confirmed, _run_gigl_capability_smoke, _validate_gigl_release_sha
 from worker_release_lifecycle import LifecycleRejected, ReleaseHealthProbeError, ReleaseHealthRejected
 from worker_release_staging import _close_inherited_descriptors, _drop_extractor_privileges
 from worker_release_gigl import _acquire_gigl_tracking_lock
@@ -165,6 +165,46 @@ class BrokerSocketTests(unittest.TestCase):
         result = self.exchange(os.getuid() + 1, b'{"operation":"stage"}\n', lambda *_: called.append(True) or {"ok": True})
         self.assertEqual(result, {"ok": False, "error": "unauthorized"})
         self.assertEqual(called, [])
+
+    def test_root_status_query_is_read_only_and_returns_only_fixed_generation_digest(self):
+        server, client = socket.socketpair()
+        calls = []
+        worker = threading.Thread(target=serve_connection, kwargs={
+            "connection": server, "expected_release_uid": 1001,
+            "dispatch": lambda *_: calls.append("dispatch") or {"ok": True},
+            "generation_digest": "a" * 64,
+        })
+        with patch("worker_release_broker._peer_uid", return_value=0):
+            worker.start()
+            client.sendall(b'{"operation":"broker-status"}\n')
+            response = bytearray()
+            while not response.endswith(b"\n"):
+                response.extend(client.recv(1024))
+        worker.join(timeout=2)
+        client.close()
+        server.close()
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(json.loads(response), {"ok": True, "operation": "broker-status",
+                                               "generationDigest": "a" * 64})
+        self.assertEqual(calls, [])
+
+    def test_release_identity_cannot_request_root_only_status(self):
+        with patch("worker_release_broker._peer_uid", return_value=1001):
+            result = self.exchange(1001, b'{"operation":"broker-status"}\n',
+                                   lambda *_: {"ok": True})
+        self.assertEqual(result, {"ok": False, "error": "unauthorized"})
+
+    def test_unresolved_upgrade_journal_blocks_mutating_dispatch(self):
+        called = []
+        guarded = _guard_upgrade_dispatch(
+            lambda *_: called.append(True) or {"ok": True}, blocked=lambda: True)
+        with self.assertRaisesRegex(BrokerProtocolError, "recovery is required"):
+            guarded(1001, {"operation": "stage"})
+        self.assertEqual(called, [])
+        allowed = _guard_upgrade_dispatch(
+            lambda *_: called.append(True) or {"ok": True}, blocked=lambda: False)
+        self.assertEqual(allowed(1001, {"operation": "stage"}), {"ok": True})
+        self.assertEqual(called, [True])
 
     def test_rejects_oversized_multiline_and_non_object_requests(self):
         for payload in (b"x" * 25_000 + b"\n", b'{"op":1}\n{}\n', b'[]\n'):

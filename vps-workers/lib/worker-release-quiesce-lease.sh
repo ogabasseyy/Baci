@@ -5,12 +5,13 @@ set -euo pipefail
 
 readonly python=/usr/bin/python3
 readonly recovery_module=worker_release_recovery_latch
+readonly helper_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly services=(baci-domain-event-router baci-event-delivery-worker baci-quiz-finalization)
 declare -a active_services=()
 authorized_exit=0
 
 recovery() {
-  PYTHONPATH=/usr/local/lib/baci-worker-broker "$python" -m "$recovery_module" "$@"
+  "$python" -I "$helper_root/${recovery_module}.py" "$@"
 }
 
 stop_active() {

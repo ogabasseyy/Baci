@@ -129,7 +129,14 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
     # the explicit drain transitions it to inactive.
     invocation = [SYSTEMD_RUN, "--quiet", "--no-block", f"--unit={unit}"]
     invocation.extend(f"--property={key}={value}" for key, value in properties.items())
-    invocation.extend(("--property=RemainAfterExit=yes", "--property=StandardOutput=null",
+    # Keep a fixed same-unit process alive briefly after ExecStart. This gives
+    # the broker a bounded opportunity to observe systemd's exact cgroup
+    # identity while the unit is still active; some systemd versions clear
+    # ControlGroup immediately after the last process exits, even with
+    # RemainAfterExit=yes. Empty terminal ControlGroup is accepted only if the
+    # exact cgroup was observed during this hold.
+    invocation.extend(("--property=ExecStartPost=/usr/bin/sleep 0.5",
+                       "--property=RemainAfterExit=yes", "--property=StandardOutput=null",
                        "--property=StandardError=null", f"--property=WorkingDirectory={cwd}",
                        "--", *command))
     process = None
@@ -154,6 +161,8 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
             failure = f"transient unit launch was rejected ({category}){safe_property}"
         deadline = time.monotonic() + MAX_CHECK_SECONDS
         completed = False
+        expected_cgroup = f"/system.slice/{unit}"
+        observed_exact_cgroup = False
         while failure is None and time.monotonic() < deadline:
             load = _systemctl("show", "--property=LoadState", "--value", unit)
             active = _systemctl("show", "--property=ActiveState", "--value", unit)
@@ -161,6 +170,12 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
             if load == "not-found":
                 failure = "transient unit disappeared before terminal verification"
                 break
+            control_group = _systemctl("show", "--property=ControlGroup", "--value", unit)
+            if control_group:
+                if control_group != expected_cgroup:
+                    failure = f"fixed runtime check {check_index} has unexpected cgroup identity"
+                    break
+                observed_exact_cgroup = True
             if active == "active" and substate == "exited":
                 values = {
                     "Result": _systemctl("show", "--property=Result", "--value", unit),
@@ -169,10 +184,14 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
                     "MainPID": _systemctl("show", "--property=MainPID", "--value", unit),
                     "ControlGroup": _systemctl("show", "--property=ControlGroup", "--value", unit),
                 }
-                expected_cgroup = f"/system.slice/{unit}"
-                if (values == {"Result": "success", "ExecMainCode": "1",
-                               "ExecMainStatus": "0", "MainPID": "0",
-                               "ControlGroup": expected_cgroup}):
+                # ControlGroup may be empty at terminal state on systemd
+                # releases that reap empty service cgroups. That is accepted
+                # only after this exact unit's cgroup was observed during its
+                # fixed ExecStartPost hold above.
+                terminal_identity_ok = values["ControlGroup"] in ("", expected_cgroup)
+                if (values["Result"] == "success" and values["ExecMainCode"] == "1"
+                        and values["ExecMainStatus"] == "0" and values["MainPID"] == "0"
+                        and terminal_identity_ok and observed_exact_cgroup):
                     completed = True
                 else:
                     summary = summarize_unit_exit(values, expected_cgroup=expected_cgroup)

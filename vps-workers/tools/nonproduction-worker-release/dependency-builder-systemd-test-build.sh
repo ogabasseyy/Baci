@@ -8,8 +8,11 @@ import worker_release_dependency_builder as dependency_builder
 import worker_release_dependency_sandbox as dependency_sandbox
 from worker_release_dependency_consumer import _verify_candidate
 from worker_release_dependency_install import install_payload
+from worker_release_dependency_artifacts import BuilderRejected
+from worker_release_dependency_policy_cache import EXPECTED_PNPM, make_receipt
 from dependency_builder_fixture_systemd_diagnostics import (
-    BoundedOutputDrain, cleanup_unit, collect_unit_diagnostics, summarize_child_output,
+    BoundedOutputDrain, cleanup_unit, collect_unit_diagnostics, receipt_difference,
+    summarize_child_output,
 )
 from worker_release_dependency_diagnostics import read_diagnostic
 
@@ -48,10 +51,22 @@ def run_fixture_sandbox(command, scratch, unit, *, usage_root=None, owner_uid=No
     seed_receipt = source_snapshot.parent / dependency_builder.RECEIPT_NAME
     if seed_receipt.parent == seed_cache or (seed_cache / dependency_builder.RECEIPT_NAME).exists():
         raise RuntimeError("policy receipt is not separated from the metadata cache seed")
-    dependency_builder.validate_receipt(
-        source_snapshot, seed_cache, seed_receipt,
-        owner_uid=0, cache_owner_uid=0, expected_sha=sha,
-    )
+    try:
+        dependency_builder.validate_receipt(
+            source_snapshot, seed_cache, seed_receipt,
+            owner_uid=0, cache_owner_uid=0, expected_sha=sha,
+        )
+    except BuilderRejected:
+        try:
+            actual_receipt = json.loads(seed_receipt.read_text(encoding="utf-8"))
+            expected_receipt = make_receipt(source_snapshot, seed_cache, EXPECTED_PNPM,
+                                            cache_owner=0)
+            difference = receipt_difference(actual_receipt, expected_receipt)
+        except Exception:
+            difference = "unavailable"
+        print(f"synthetic policy receipt validation failed; differing_fields={difference}",
+              file=sys.stderr)
+        raise SystemExit("synthetic policy receipt preflight rejected")
     if usage_root is None or Path(usage_root) != dependency_builder.BUILD_ROOT:
         raise RuntimeError("dependency builder did not forward the fixed build usage root")
     uid_argument = next((argument for argument in command if argument.startswith("--uid=")), None)

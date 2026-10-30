@@ -153,12 +153,100 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
         launch_args = spawn.call_args.args[0]
         self.assertIn("--no-block", launch_args)
         self.assertNotIn("--collect", launch_args)
+        self.assertIn("--property=ExecStartPost=/usr/bin/sleep 0.5", launch_args)
         self.assertIn("--property=RemainAfterExit=yes", launch_args)
         self.assertIn("--property=StandardOutput=null", launch_args)
         self.assertIn("--property=StandardError=null", launch_args)
         drain.assert_called_once()
         self.assertEqual(drain.call_args.kwargs["uid"], self.runtime_uid)
         self.assertEqual(drain.call_args.kwargs["trusted_root"], (1, 2, 3, 4))
+
+    @patch("worker_release_runtime_verifier.drain_unpinned_until_proven")
+    @patch("worker_release_runtime_verifier.preflight_cgroup_root")
+    @patch("worker_release_runtime_verifier._systemctl")
+    @patch("worker_release_runtime_verifier._spawn_unit")
+    def test_empty_terminal_cgroup_requires_prior_exact_unit_cgroup_observation(
+            self, spawn, query, _preflight, drain):
+        from worker_release_runtime_verifier import _execute_fixed_unit
+
+        class Launcher:
+            returncode = 0
+
+            @staticmethod
+            def wait(timeout=None):
+                return 0
+
+            @staticmethod
+            def poll():
+                return 0
+
+        spawn.return_value = Launcher()
+        _preflight.return_value = (1, 2, 3, 4)
+        unit = "baci-worker-runtime-ffffffffffffffff-aaaaaaaaaaaa-0.service"
+        values = {
+            "LoadState": "loaded", "ActiveState": "active", "SubState": "exited",
+            "Result": "success", "ExecMainCode": "1", "ExecMainStatus": "0",
+            "MainPID": "0",
+        }
+        cgroup_reads = 0
+
+        def systemctl(*args, **_kwargs):
+            nonlocal cgroup_reads
+            prop = next(item.split("=", 1)[1] for item in args if item.startswith("--property="))
+            if prop == "ControlGroup":
+                cgroup_reads += 1
+                # First read is while the fixed ExecStartPost hold is running;
+                # systemd may reap the empty cgroup by terminal status.
+                return f"/system.slice/{unit}" if cgroup_reads == 1 else ""
+            return values[prop]
+
+        query.side_effect = systemctl
+        with patch("worker_release_runtime_verifier.sys.platform", "linux"), \
+                patch("worker_release_runtime_verifier.os.geteuid", return_value=0), \
+                patch("worker_release_runtime_verifier.SYSTEMD_RUN", "/usr/bin/true"), \
+                patch("worker_release_runtime_verifier.SYSTEMCTL", "/usr/bin/true"):
+            _execute_fixed_unit(unit, self.candidate, ("/usr/bin/true",),
+                                {"User": str(self.runtime_uid)}, 1)
+        self.assertEqual(cgroup_reads, 2)
+        drain.assert_called_once()
+
+    @patch("worker_release_runtime_verifier.drain_unpinned_until_proven")
+    @patch("worker_release_runtime_verifier.preflight_cgroup_root")
+    @patch("worker_release_runtime_verifier._systemctl")
+    @patch("worker_release_runtime_verifier._spawn_unit")
+    def test_mismatched_cgroup_is_rejected_even_when_terminal_values_succeed(
+            self, spawn, query, _preflight, drain):
+        from worker_release_runtime_verifier import _execute_fixed_unit
+
+        class Launcher:
+            returncode = 0
+
+            @staticmethod
+            def wait(timeout=None):
+                return 0
+
+            @staticmethod
+            def poll():
+                return 0
+
+        spawn.return_value = Launcher()
+        _preflight.return_value = (1, 2, 3, 4)
+        unit = "baci-worker-runtime-ffffffffffffffff-aaaaaaaaaaaa-0.service"
+        values = {
+            "LoadState": "loaded", "ActiveState": "active", "SubState": "exited",
+            "Result": "success", "ExecMainCode": "1", "ExecMainStatus": "0",
+            "MainPID": "0", "ControlGroup": "/system.slice/other.service",
+        }
+        query.side_effect = lambda *args, **_kwargs: values[
+            next(item.split("=", 1)[1] for item in args if item.startswith("--property="))]
+        with patch("worker_release_runtime_verifier.sys.platform", "linux"), \
+                patch("worker_release_runtime_verifier.os.geteuid", return_value=0), \
+                patch("worker_release_runtime_verifier.SYSTEMD_RUN", "/usr/bin/true"), \
+                patch("worker_release_runtime_verifier.SYSTEMCTL", "/usr/bin/true"):
+            with self.assertRaisesRegex(RuntimeVerificationRejected, "unexpected cgroup identity"):
+                _execute_fixed_unit(unit, self.candidate, ("/usr/bin/true",),
+                                    {"User": str(self.runtime_uid)}, 1)
+        drain.assert_called_once()
 
     @patch("worker_release_runtime_verifier.drain_unpinned_until_proven")
     @patch("worker_release_runtime_verifier.preflight_cgroup_root")
@@ -194,6 +282,8 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                 return "failed"
             if prop == "ExecMainStatus":
                 return "21"
+            if prop == "ControlGroup":
+                return f"/system.slice/{unit}"
             raise AssertionError(f"unexpected property {prop}")
 
         def fake_systemctl(*args, timeout=1):

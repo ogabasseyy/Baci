@@ -79,6 +79,11 @@ def summarize_child_output(stdout: bytes, stderr: bytes) -> str:
             (("per-build offline pnpm store",), "scratch-store"),
             (("per-build offline pnpm policy cache",), "scratch-cache"),
             (("immutable pnpm policy seed",), "seed-input"),
+            (("metadata cache changed",), "seed-receipt-cache-changed"),
+            (("does not match exact lockfiles and policy",), "seed-receipt-policy-mismatch"),
+            (("does not match expected source sha",), "seed-receipt-source-mismatch"),
+            (("receipt is unsafe",), "seed-receipt-unsafe"),
+            (("receipt is unavailable or malformed",), "seed-receipt-malformed"),
             (("receipt",), "seed-receipt"),
             (("installed pnpm version",), "pnpm-version"),
             (("offline install did not verify", "supply-chain policy"), "pnpm-policy"),
@@ -94,6 +99,21 @@ def summarize_child_output(stdout: bytes, stderr: bytes) -> str:
     if "dependency build rejected stage=" in text:
         return "pnpm-step-rejected"
     return "other"
+
+
+def receipt_difference(actual: object, expected: object) -> str:
+    """Return only mismatched fields from the closed synthetic receipt schema."""
+    fields = (
+        "schema", "sourceSha", "pnpmVersion", "lockfiles", "policyFiles",
+        "effectiveFlags", "lockInjectionSettings", "registryRouting",
+        "metadataCacheSha256", "verification",
+    )
+    if not isinstance(actual, dict) or not isinstance(expected, dict):
+        return "malformed"
+    if set(actual) != set(fields) or set(expected) != set(fields):
+        return "shape"
+    differences = [field for field in fields if actual[field] != expected[field]]
+    return ",".join(differences) if differences else "none"
 
 
 def summarize_status(status_text: str, journal_text: str) -> dict[str, str]:
@@ -186,5 +206,5 @@ def cleanup_unit(unit: str, *, run=None) -> None:
 
 __all__ = [
     "BoundedOutputDrain", "cleanup_unit", "collect_unit_diagnostics",
-    "summarize_child_output", "summarize_status",
+    "receipt_difference", "summarize_child_output", "summarize_status",
 ]

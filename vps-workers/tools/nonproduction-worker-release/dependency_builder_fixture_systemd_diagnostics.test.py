@@ -5,7 +5,7 @@ from io import BytesIO
 
 from dependency_builder_fixture_systemd_diagnostics import (
     BoundedOutputDrain, cleanup_unit, collect_unit_diagnostics,
-    summarize_child_output, summarize_status,
+    receipt_difference, summarize_child_output, summarize_status,
 )
 
 
@@ -30,6 +30,21 @@ class BuilderSystemdDiagnosticsTests(unittest.TestCase):
             summarize_child_output(b"", b"dependency build rejected: unknown private detail"),
             "builder-rejected-other",
         )
+        self.assertEqual(
+            summarize_child_output(b"", b"dependency build rejected: pnpm policy verification receipt "
+                                   b"does not match exact lockfiles and policy"),
+            "builder-seed-receipt-policy-mismatch",
+        )
+
+    def test_receipt_difference_reports_only_closed_field_names(self):
+        actual = {key: index for index, key in enumerate((
+            "schema", "sourceSha", "pnpmVersion", "lockfiles", "policyFiles",
+            "effectiveFlags", "lockInjectionSettings", "registryRouting",
+            "metadataCacheSha256", "verification",
+        ))}
+        expected = dict(actual, metadataCacheSha256="different")
+        self.assertEqual(receipt_difference(actual, expected), "metadataCacheSha256")
+        self.assertEqual(receipt_difference({"private": "secret"}, expected), "shape")
 
     def test_summary_returns_only_closed_categories_and_fixed_fields(self):
         summary = summarize_status(

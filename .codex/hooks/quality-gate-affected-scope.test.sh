@@ -69,6 +69,15 @@ work_sha=$(git -C "$REPO" commit-tree "$base_sha^{tree}" -p "$base_sha" -m "work
 git -C "$REPO" update-ref "refs/heads/$work_branch" "$work_sha"
 git -C "$REPO" update-ref refs/remotes/origin/main "$base_sha"
 
+# A checkout without its own helper keeps the full gate, even though the
+# hook's checkout has one.
+output=$(run_stubbed_gate)
+[ -z "$output" ] || fail "gates without a checkout helper should allow stop without output"
+assert_unscoped "checkout without quality-gate-affected-base.sh"
+
+# With the checkout's own helper, the gate scopes to the origin/main merge base.
+mkdir -p "$REPO/ci_scripts"
+cp "$SCRIPT_DIR/../../ci_scripts/quality-gate-affected-base.sh" "$REPO/ci_scripts/"
 output=$(run_stubbed_gate)
 [ -z "$output" ] || fail "affected-scoped gates should allow stop without output"
 for check in lint typecheck test; do
@@ -80,12 +89,11 @@ output=$(run_stubbed_gate QUALITY_GATE_FULL=1)
 [ -z "$output" ] || fail "QUALITY_GATE_FULL=1 gates should allow stop without output"
 assert_unscoped "QUALITY_GATE_FULL=1"
 
-# The repo's own helper wins over the hook checkout's copy.
-mkdir -p "$REPO/ci_scripts"
+# The gate uses whatever base the checkout's own helper reports.
 printf '#!/bin/sh\nprintf "%%s\\n" cafebabecafebabecafebabecafebabecafebabe\n' > "$REPO/ci_scripts/quality-gate-affected-base.sh"
 output=$(run_stubbed_gate)
 [ -z "$output" ] || fail "repo-local helper gates should allow stop without output"
 grep -qx "$PNPM_TURBO lint --affected TURBO_SCM_BASE=cafebabecafebabecafebabecafebabecafebabe" "$PNPM_LOG" ||
-  fail "the repo-local quality-gate-affected-base.sh should take precedence"
+  fail "the checkout's quality-gate-affected-base.sh output should set the base"
 
 printf 'quality-gate affected-scope self-test passed\n'

@@ -119,7 +119,7 @@ Launch the Android dev client with `pnpm --filter baci-mobile-admin android:laun
 - **ALWAYS** validate API inputs with Zod before any database operation.
 - **ALWAYS** check auth (`supabase.auth.getUser()`) as the first operation in protected API routes.
 - **ALWAYS** add RLS policies when creating new database tables.
-- **ALWAYS** run `pnpm turbo lint && pnpm turbo typecheck` after writing or modifying code.
+- **ALWAYS** run lint and typecheck for the affected packages after writing or modifying code (see "Local Runs vs CI"); CI runs the full gate.
 - **ALWAYS** include a regression test when fixing a bug — the test must reproduce the exact failing condition.
 - **ALWAYS** follow the Boy Scout Rule: when editing a file over 300 lines, extract the logic you touched into smaller files (hooks, utils, sub-components, schemas). Don't refactor the whole file — just leave it better than you found it.
 
@@ -172,11 +172,12 @@ Launch the Android dev client with `pnpm --filter baci-mobile-admin android:laun
 
 ## Quality Gate
 
-Before submitting any changes, ALL must pass:
+Before submitting, lint, typecheck and tests must pass for the packages your change affects; CI's Quality Gate runs them for every PR. Locally, scope them as described in "Local Runs vs CI":
 ```bash
-pnpm turbo lint        # Zero Biome errors
-pnpm turbo typecheck   # Zero TypeScript errors
-pnpm turbo test        # All tests pass
+base=$(sh ci_scripts/quality-gate-affected-base.sh)   # empty output: run the full gate
+TURBO_SCM_BASE=$base pnpm turbo lint ${base:+--affected}        # Zero Biome errors
+TURBO_SCM_BASE=$base pnpm turbo typecheck ${base:+--affected}   # Zero TypeScript errors
+TURBO_SCM_BASE=$base pnpm turbo test ${base:+--affected}        # All tests pass
 ```
 
 ## Code Review (CodeRabbit)
@@ -522,7 +523,7 @@ These rules apply to ALL code written by ANY agent:
 Before marking any task as complete, verify:
 
 1. New source files have colocated test files
-2. Tests pass for the affected packages: `TURBO_SCM_BASE=$(git merge-base HEAD origin/main) pnpm turbo test --affected` (CI runs the full suite)
+2. Tests pass for the affected packages: `base=$(sh ci_scripts/quality-gate-affected-base.sh); TURBO_SCM_BASE=$base pnpm turbo test ${base:+--affected}` (CI runs the full suite)
 3. No files exceed 300 lines
 4. No duplicated logic across files (extract to shared)
 5. All exports are typed (no implicit `any`)
@@ -532,6 +533,6 @@ Before marking any task as complete, verify:
 Many agents share one Mac, and CI's Quality Gate already runs lint, typecheck and tests for every PR. Locally:
 
 - Run the tests your change touches: each new or changed test file, failing first and then passing.
-- For broader checks, use the affected scope: `TURBO_SCM_BASE=$(git merge-base HEAD origin/main) pnpm turbo <lint|typecheck|test> --affected`. Plain `--affected` compares against the local `main` branch, which is often stale and selects every package.
+- For broader checks, use the affected scope: `base=$(sh ci_scripts/quality-gate-affected-base.sh)`, then `TURBO_SCM_BASE=$base pnpm turbo <lint|typecheck|test> ${base:+--affected}`. When the helper prints nothing (no `origin/main` merge base, or `QUALITY_GATE_FULL=1`), this runs the full task. Plain `--affected` compares against the local `main` branch, which is often stale and selects every package.
 - Do not run full monorepo suites locally unless a task requires it, and never in a loop or in parallel with another full run.
 - The Claude and Codex Stop hooks use this affected scope automatically. Set `QUALITY_GATE_FULL=1` to force the full gate.

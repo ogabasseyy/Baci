@@ -85,3 +85,25 @@ it('reads durable payment state only through the signed owned lookup operation',
     args: { lookup_id: 'lookup' },
   });
 });
+
+it('binds known-unsubmitted cancellation to the signed actor and owned lookup', async () => {
+  vi.stubEnv('IMEI_ACCESS_SIGNING_SECRET', randomBytes(32).toString('hex'));
+  const rpc = vi.fn().mockResolvedValue({ data: true, error: null });
+  const access = createImeiAccessClient({
+    ...context,
+    supabase: { rpc } as unknown as SupabaseClient,
+  });
+  await expect(
+    access.rpc('cancel_unsubmitted_petrock_imei_lookup', {
+      p_lookup_id: 'lookup',
+    })
+  ).resolves.toEqual({ data: true, error: null });
+  expect(rpc.mock.calls[0][0]).toBe('imei_lookup_access');
+  expect(JSON.parse(rpc.mock.calls[0][1].p_payload)).toMatchObject({
+    actor: context.userId,
+    customer: context.customerId,
+    merchant: context.merchantId,
+    operation: 'cancel_unsubmitted_petrock_imei_lookup',
+    args: { p_lookup_id: 'lookup' },
+  });
+});

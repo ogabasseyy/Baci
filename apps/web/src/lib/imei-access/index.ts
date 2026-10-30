@@ -6,6 +6,7 @@ import type { ImeiLookupRow } from '@/app/api/storefront/imei-check/route-helper
 import type { PetrockProductSnapshot } from '@/lib/imei-providers/petrock/petrock-preflight';
 
 const RPC_NAMES = new Set([
+  'cancel_unsubmitted_petrock_imei_lookup',
   'redeem_imei_wallet_payment',
   'refund_imei_wallet_payment',
   'redeem_imei_wallet_and_begin_provider_submission',

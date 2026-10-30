@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  redeemImeiWalletAndBeginProviderSubmission,
-  redeemImeiWalletPayment,
-  refundImeiWalletPayment,
-} from './imei-wallet-payments';
+import { redeemImeiWalletAndBeginProviderSubmission } from './redeem-imei-wallet-and-begin-provider-submission';
 
 const identity = {
   amount: 500,
@@ -12,25 +8,7 @@ const identity = {
   merchantId: 'merchant',
 };
 
-describe('IMEI wallet capability operations', () => {
-  it.each([
-    redeemImeiWalletPayment,
-    refundImeiWalletPayment,
-  ])('propagates denied wallet operations without retrying or changing identity', async (operation) => {
-    const denied = { code: '42501', message: 'scope denied' };
-    const rpc = vi.fn().mockResolvedValue({ data: null, error: denied });
-    await expect(
-      operation({ ...identity, supabaseAdmin: { rpc } })
-    ).rejects.toBe(denied);
-    expect(rpc).toHaveBeenCalledTimes(1);
-    expect(rpc.mock.calls[0]?.[1]).toMatchObject({
-      p_amount: 500,
-      p_customer_id: 'customer',
-      p_lookup_id: 'lookup',
-      p_merchant_id: 'merchant',
-    });
-  });
-
+describe('atomic IMEI wallet debit and submission intent', () => {
   it('uses one atomic debit and write-ahead operation before a Petrock submission', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: [], error: null });
     await redeemImeiWalletAndBeginProviderSubmission({

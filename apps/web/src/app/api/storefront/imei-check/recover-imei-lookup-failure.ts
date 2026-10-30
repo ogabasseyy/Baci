@@ -1,6 +1,7 @@
 import type { ImeiAccessClient } from '@/lib/imei-access';
 import { markPetrockSubmissionUnknown } from '@/lib/imei-providers/petrock/petrock-lookup-state';
 import { pendingPetrockResponse } from './petrock-submission-flow';
+import { refundUnsubmittedPetrockLookup } from './refund-unsubmitted-petrock-lookup';
 import {
   cacheLookupResponse,
   refundAndCacheFailure,
@@ -38,9 +39,14 @@ export async function recoverImeiLookupFailure({
         throw new Error('IMEI payment outcome could not be confirmed');
       }
       if (payment.data.debited) {
-        // No provider call occurred before the lost debit response. A known
-        // Sickw debit can therefore use the idempotent refund path below.
-        // Petrock keeps its write-ahead intent pending for reconciliation.
+        // No provider call occurred before the lost debit response. Cancel
+        // Petrock's write-ahead intent atomically, including an active poll lease.
+        if (activeLookup.provider === 'petrock') {
+          return refundUnsubmittedPetrockLookup({
+            lookupId: activeLookup.id,
+            supabaseAdmin,
+          });
+        }
         return recoverImeiLookupFailure({
           activeLookup,
           debitSucceeded: true,

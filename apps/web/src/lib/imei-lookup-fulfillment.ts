@@ -96,11 +96,9 @@ export async function readCustomerWalletBalance({
   return coerceNumber(data?.available_balance);
 }
 
-export {
-  redeemImeiWalletAndBeginProviderSubmission,
-  redeemImeiWalletPayment,
-  refundImeiWalletPayment,
-} from './imei-wallet-payments';
+export { redeemImeiWalletAndBeginProviderSubmission } from './redeem-imei-wallet-and-begin-provider-submission';
+export { redeemImeiWalletPayment } from './redeem-imei-wallet-payment';
+export { refundImeiWalletPayment } from './refund-imei-wallet-payment';
 
 export { isInsufficientWalletBalanceError };
 

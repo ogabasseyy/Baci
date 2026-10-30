@@ -11,11 +11,13 @@ must never receive that secret, a signature, or a signed payload.
 1. Validate the append-only access migration and SQL contracts in a disposable
    database. Do not run fixtures or contract tests against production.
 2. Apply `20261030120000_imei_authenticated_access_boundary.sql` followed by
-   `20261030120001_imei_verified_diagnostic_prices.sql` through the normal
-   migration release. The latter permits the captured eSIM and Apple part-number
-   checks at their existing NGN700 prices without changing other prices or access
-   rules. Verify both recorded migrations and the authenticated SQL contracts before
-   allowlisting or application publication. Neither provisions a default secret.
+   `20261030120001_imei_verified_diagnostic_prices.sql`, then
+   `20261030125541_imei_refund_unsubmitted_petrock_debits.sql` through the normal
+   migration release. The price migration permits the captured eSIM and Apple
+   part-number checks at their existing NGN700 prices. The final migration adds
+   atomic pre-submit cancellation; existing prices, proofs and grants remain
+   unchanged. Verify all three migrations and the authenticated SQL contracts
+   before allowlisting or publication. None provisions a default secret.
 3. Generate a dedicated random secret of at least 32 bytes. Using a trusted
    database-owner channel, provision exactly one row in
    `private.imei_access_secrets` with `singleton=true`. Set the same secret as
@@ -56,3 +58,12 @@ and refuses to cache a charged lookup as an uncharged failure. Unknown Petrock
 submissions without an order receipt remain pending for reconciliation rather
 than receiving an automatic refund. Do not automatically repeat a paid provider
 submission after an ambiguous response.
+
+A lost debit response before `provider.submit` is distinct from an ambiguous
+supplier submission. After verifying a durable debit, that server-only branch
+uses `cancel_unsubmitted_petrock_imei_lookup` through the signed gateway. The
+operation refuses order-bearing/completed lookups, atomically refunds and clears
+provider secrets and polling state, and fences an active poll lease because
+workers never submit orders. Idempotent cancellation replay cannot duplicate
+credit. Failed confirmation returns a support/reconciliation error, never an
+unconfirmed refund claim. Actual ambiguous supplier sends remain pending.

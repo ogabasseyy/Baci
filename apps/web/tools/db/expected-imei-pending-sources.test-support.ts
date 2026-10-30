@@ -39,4 +39,9 @@ export const EXPECTED_IMEI_PENDING_SOURCES = [
       'supabase/migrations/20261030120001_imei_verified_diagnostic_prices.sql',
     sha256: 'a9f95deb4e58f9770313883785003dcbf86e599131932ac4e59c82995f247e69',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261030125541_imei_refund_unsubmitted_petrock_debits.sql',
+    sha256: '5ccb72b09e1516d572eed20aa188509f3c6a29abbee52c4866665b07e6025a52',
+  },
 ];

@@ -23,6 +23,7 @@ const lookup = {
 };
 function access() {
   return {
+    rpc: vi.fn().mockResolvedValue({ data: true, error: null }),
     readPaymentState: vi.fn().mockResolvedValue({
       data: { debited: false, refunded: false },
       error: null,
@@ -36,6 +37,29 @@ function access() {
 describe('IMEI failure recovery', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+  });
+  it('cancels a committed Petrock debit before supplier submission rather than leaving it unknown', async () => {
+    const client = access();
+    vi.mocked(client.readPaymentState).mockResolvedValue({
+      data: { debited: true, refunded: false },
+      error: null,
+    });
+    const response = await recoverImeiLookupFailure({
+      activeLookup: lookup,
+      debitSucceeded: false,
+      supabaseAdmin: client,
+    });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({
+      code: 'PETROCK_NOT_SUBMITTED',
+    });
+    expect(client.rpc).toHaveBeenCalledWith(
+      'cancel_unsubmitted_petrock_imei_lookup',
+      { p_lookup_id: 'lookup' }
+    );
+    expect(mocks.unknown).not.toHaveBeenCalled();
+    expect(mocks.refund).not.toHaveBeenCalled();
+    expect(mocks.cache).not.toHaveBeenCalled();
   });
   it('keeps an uncertain paid Petrock submission pending even if classification persistence fails', async () => {
     const client = access();

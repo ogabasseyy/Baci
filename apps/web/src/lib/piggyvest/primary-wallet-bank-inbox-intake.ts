@@ -4,15 +4,22 @@ import { bankTransferInflowSuccessEventSchema } from '@/schemas/piggyvest/events
 import { readPrimaryWalletBankInboxRuntime } from './primary-wallet-bank-inbox-runtime';
 import { createPrimaryWalletBankInboxStore } from './primary-wallet-bank-inbox-store';
 import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
+import type { WebhookKeyScope } from './webhook-key-archive';
 
 export async function dispatchPrimaryWalletBankInboxIntake(input: {
   rawBody: Uint8Array;
   signature: string | null;
   env?: NodeJS.ProcessEnv;
+  /** `replay` also accepts this family's archived keys past their overlap. */
+  keyScope?: WebhookKeyScope;
 }) {
   const headers = { 'Cache-Control': 'no-store' };
   try {
-    const config = readPrimaryWalletBankInboxRuntime('intake', input.env);
+    const config = readPrimaryWalletBankInboxRuntime(
+      'intake',
+      input.env,
+      input.keyScope
+    );
     if (!config) return { outcome: 'disabled' as const, response: null };
     if (!input.rawBody.byteLength || input.rawBody.byteLength > 65536)
       throw new Error('Invalid envelope');

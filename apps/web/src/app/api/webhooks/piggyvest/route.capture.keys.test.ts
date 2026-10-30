@@ -131,6 +131,48 @@ describe('R5 key rotation at ingress', () => {
   });
 });
 
+describe('R5 key rotation for a primary family key', () => {
+  const bankArchive = (secret: string, retiredHoursAgo: number) =>
+    JSON.stringify([
+      {
+        version: 'pv-bank-2026-09',
+        family: 'bank',
+        secret,
+        retiredAt: new Date(Date.now() - retiredHoursAgo * HOUR).toISOString(),
+      },
+    ]);
+
+  it('captures a delivery signed by a bank archived key inside its overlap, tagged with the bank family', async () => {
+    const old = randomBytes(32).toString('hex');
+    vi.stubEnv('PIGGYVEST_WEBHOOK_KEY_ARCHIVE', bankArchive(old, 5));
+    // A bank-only key is quarantined by the legacy path, whose storage is
+    // mocked out here; the capture is what this test is about.
+    vi.stubEnv('PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED', 'true');
+
+    const response = await post(accrued, sign(old, accrued));
+
+    expect(response.status).toBe(200);
+    expect(store.rows[0]).toMatchObject({
+      keyStatus: 'overlap',
+      keyVersion: 'pv-bank-2026-09',
+      keyFamilies: ['bank'],
+    });
+  });
+
+  it('rejects a bank archived key past its overlap with 401 at ingress, storing nothing', async () => {
+    const old = randomBytes(32).toString('hex');
+    vi.stubEnv('PIGGYVEST_WEBHOOK_KEY_ARCHIVE', bankArchive(old, 100));
+
+    const response = await post(accrued, sign(old, accrued));
+
+    expect(response.status).toBe(401);
+    expect(store.rows).toEqual([]);
+    expect(alerts).toHaveBeenCalledWith(
+      expect.stringContaining('pv-bank-2026-09')
+    );
+  });
+});
+
 describe('R5 distinct failure statuses', () => {
   it('answers 401, warns and stores nothing for an invalid signature', async () => {
     const response = await post(

@@ -29,6 +29,8 @@ export interface ReplayDelivery {
   signature: string;
   matchedSecret: string;
   families: readonly PiggyvestWebhookKeyFamily[];
+  /** Stored bytes may use the family's archived keys past their overlap. */
+  keyScope: 'replay';
 }
 
 export interface DrainDeps {
@@ -97,6 +99,7 @@ async function drainRow(
       signature: row.signature,
       matchedSecret: verification.secret,
       families: verification.families,
+      keyScope: 'replay',
     });
     completed = result.status >= 200 && result.status < 300;
   } catch {

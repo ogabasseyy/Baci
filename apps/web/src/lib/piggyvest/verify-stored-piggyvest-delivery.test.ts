@@ -200,3 +200,39 @@ describe('replay with an incomplete key set', () => {
     ).toBe('verified');
   });
 });
+
+describe('replay of a family archived key past its overlap', () => {
+  it('re-verifies a revoked bank key as replay-only for the bank family only', () => {
+    const current = ephemeralKey();
+    const old = ephemeralKey();
+    const env = {
+      NODE_ENV: 'test' as const,
+      PIGGYVEST_SECRET_KEY: current,
+      PIGGYVEST_WEBHOOK_KEY_ARCHIVE: archiveEnv([
+        { version: 'pv-bank', family: 'bank', secret: old, hours: 300 },
+      ]),
+    };
+
+    expect(
+      verifyPiggyvestWebhookSecrets({
+        rawBody,
+        signature: sign(old),
+        env,
+        now: NOW,
+      })
+    ).toEqual({ status: 'revoked', keyVersion: 'pv-bank' });
+    expect(
+      verifyStoredPiggyvestDelivery({
+        rawBody,
+        signature: sign(old),
+        env,
+        now: NOW,
+      })
+    ).toMatchObject({
+      status: 'verified',
+      keyStatus: 'replay-only',
+      keyVersion: 'pv-bank',
+      families: ['bank'],
+    });
+  });
+});

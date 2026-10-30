@@ -103,6 +103,7 @@ describe('drainPiggyvestWebhookCaptures', () => {
         signature: sign(current, inflow),
         matchedSecret: current,
         families: ['legacy'],
+        keyScope: 'replay',
       })
     );
     expect(resolved).toEqual([

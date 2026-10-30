@@ -159,6 +159,26 @@ describe('primary and legacy processing', () => {
     expect(mocks.record).not.toHaveBeenCalled();
   });
 
+  it('forwards the key scope so a replayed delivery can use replay-only archived keys', async () => {
+    await processVerifiedDelivery(
+      {
+        rawBody: Buffer.from(JSON.stringify(restriction)),
+        signature,
+        matchedSecret: 'matched-secret',
+        families: ['bank'],
+        keyScope: 'replay',
+      },
+      { createClient, getPiggyvestConfig }
+    );
+    expect(mocks.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ keyScope: 'replay', families: ['bank'] })
+    );
+
+    mocks.dispatch.mockClear();
+    await run(restriction);
+    expect(mocks.dispatch.mock.calls[0]?.[0].keyScope).toBeUndefined();
+  });
+
   it.each([
     ['new', false],
     ['duplicate', true],

@@ -4,6 +4,7 @@ import { requestPrefundedCardProviderJson } from './prefunded-card-provider-requ
 import { readPrimaryWalletPaidInterestRuntime } from './primary-wallet-paid-interest-runtime';
 import { applyPrimaryWalletSignedPaidInterest } from './primary-wallet-paid-interest-signed';
 import { createPrimaryWalletPaidInterestStore } from './primary-wallet-paid-interest-store';
+import type { WebhookKeyScope } from './webhook-key-archive';
 
 export async function dispatchPrimaryWalletPaidInterest(input: {
   rawBody: Uint8Array;
@@ -13,10 +14,13 @@ export async function dispatchPrimaryWalletPaidInterest(input: {
   // The inbox worker drains through 'drain' so a flag rollback cannot
   // strand acknowledged receipts; direct webhook intake stays 'intake'.
   mode?: 'intake' | 'drain';
+  /** `replay` also accepts this family's archived keys past their overlap. */
+  keyScope?: WebhookKeyScope;
 }) {
   const configuration = readPrimaryWalletPaidInterestRuntime(
     input.env,
-    input.mode ?? 'intake'
+    input.mode ?? 'intake',
+    input.keyScope
   );
   if (!configuration) return 'disabled' as const;
   const store = createPrimaryWalletPaidInterestStore(configuration);

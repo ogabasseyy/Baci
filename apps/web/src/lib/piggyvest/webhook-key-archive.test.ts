@@ -6,10 +6,12 @@ vi.mock('server-only', () => ({}));
 import {
   DEFAULT_WEBHOOK_KEY_OVERLAP_HOURS,
   derivePiggyvestKeyVersion,
+  familyArchivedSecrets,
   MAX_WEBHOOK_KEY_OVERLAP_HOURS,
   partitionArchivedKeys,
   readWebhookKeyArchive,
   readWebhookKeyOverlapMs,
+  withFamilyArchivedSecrets,
 } from './webhook-key-archive';
 
 const HOUR = 3_600_000;
@@ -116,5 +118,104 @@ describe('derivePiggyvestKeyVersion', () => {
     expect(derivePiggyvestKeyVersion(first)).toBe(version);
     expect(derivePiggyvestKeyVersion(second)).not.toBe(version);
     expect(version).not.toContain(first.slice(0, 8));
+  });
+});
+
+describe('family-scoped archived secrets for the primary intakes', () => {
+  const env = (entries: unknown, extra: Record<string, string> = {}) =>
+    ({
+      PIGGYVEST_WEBHOOK_KEY_ARCHIVE: JSON.stringify(entries),
+      ...extra,
+    }) as unknown as NodeJS.ProcessEnv;
+  const entries = [
+    entry('bank-overlap', 1, 'bank-overlap-secret'),
+    entry('bank-revoked', 200, 'bank-revoked-secret'),
+    {
+      ...entry('interest-overlap', 1, 'interest-overlap-secret'),
+      family: 'interest',
+    },
+    {
+      ...entry('custody-revoked', 200, 'custody-revoked-secret'),
+      family: 'custody',
+    },
+  ].map((item) =>
+    item.version.startsWith('bank') ? { ...item, family: 'bank' } : item
+  );
+
+  it('ingress scope returns only same-family keys still inside the overlap', () => {
+    expect(familyArchivedSecrets('bank', env(entries), NOW, 'ingress')).toEqual(
+      ['bank-overlap-secret']
+    );
+    expect(
+      familyArchivedSecrets('interest', env(entries), NOW, 'ingress')
+    ).toEqual(['interest-overlap-secret']);
+    expect(
+      familyArchivedSecrets('custody', env(entries), NOW, 'ingress')
+    ).toEqual([]);
+  });
+
+  it('replay scope adds the same family replay-only keys, never another family', () => {
+    expect(familyArchivedSecrets('bank', env(entries), NOW, 'replay')).toEqual([
+      'bank-overlap-secret',
+      'bank-revoked-secret',
+    ]);
+    expect(
+      familyArchivedSecrets('custody', env(entries), NOW, 'replay')
+    ).toEqual(['custody-revoked-secret']);
+    expect(
+      familyArchivedSecrets('legacy', env(entries), NOW, 'replay')
+    ).toEqual([]);
+  });
+
+  it('contributes nothing when the archive is unset or unreadable', () => {
+    expect(
+      familyArchivedSecrets('bank', {} as NodeJS.ProcessEnv, NOW, 'replay')
+    ).toEqual([]);
+    expect(
+      familyArchivedSecrets('bank', env('{broken'), NOW, 'replay')
+    ).toEqual([]);
+  });
+
+  it('appends to retained keys after validation without duplicating or mutating', () => {
+    const config = Object.freeze({
+      webhookSecret: 'current',
+      retainedWebhookSecrets: ['kept', 'bank-overlap-secret'],
+      other: 1,
+    });
+    const merged = withFamilyArchivedSecrets(
+      config,
+      'bank',
+      env(entries),
+      NOW,
+      'replay'
+    );
+    expect(merged).toEqual({
+      webhookSecret: 'current',
+      retainedWebhookSecrets: [
+        'kept',
+        'bank-overlap-secret',
+        'bank-revoked-secret',
+      ],
+      other: 1,
+    });
+    expect(config.retainedWebhookSecrets).toEqual([
+      'kept',
+      'bank-overlap-secret',
+    ]);
+  });
+
+  it('adds a retained list when the config had none and never replaces the current key', () => {
+    const merged = withFamilyArchivedSecrets(
+      { webhookSecret: 'current' } as {
+        webhookSecret: string;
+        retainedWebhookSecrets?: string[];
+      },
+      'bank',
+      env(entries),
+      NOW,
+      'ingress'
+    );
+    expect(merged.webhookSecret).toBe('current');
+    expect(merged.retainedWebhookSecrets).toEqual(['bank-overlap-secret']);
   });
 });

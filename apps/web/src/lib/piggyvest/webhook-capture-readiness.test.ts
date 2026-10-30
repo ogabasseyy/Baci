@@ -146,6 +146,42 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     expect(notReadyGates(ready)).toEqual([]);
   });
 
+  it('states which reply a processing failure gets, and that deferred 200 needs the drain', () => {
+    const attested = inspectPiggyvestWebhookCaptureReadiness(ready);
+    expect(attested.processingFailureReply).toBe('200-deferred');
+    expect(attested.notes).toEqual([]);
+
+    ready.env = { ...ready.env, PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: '' };
+    const unattested = inspectPiggyvestWebhookCaptureReadiness(ready);
+    expect(unattested.processingFailureReply).toBe('503-retry');
+    expect(unattested.notes).toEqual([
+      expect.stringContaining('deferred 200 reply'),
+    ]);
+    expect(unattested.notes[0]).toContain('is only active once the drain');
+    expect(unattested.notes[0]).toContain(
+      'PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED=true'
+    );
+    expect(unattested.notes[0]).toContain('503');
+    // Still not ready: the worker gate is what the note explains.
+    expect(unattested.notReady.map((entry) => entry.gate)).toEqual(['worker']);
+  });
+
+  it.each([
+    'TRUE',
+    '1',
+    'yes',
+  ])('does not count %s as an attested drain', (value) => {
+    ready.env = {
+      ...ready.env,
+      PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: value,
+    };
+    const report = inspectPiggyvestWebhookCaptureReadiness(ready);
+    expect(report.processingFailureReply).toBe('503-retry');
+    expect(report.notReady).toEqual([
+      { gate: 'worker', reason: 'DRAIN_NOT_SCHEDULED' },
+    ]);
+  });
+
   it('is advisory only and never exposes key material', () => {
     const report = inspectPiggyvestWebhookCaptureReadiness(ready);
     expect(report.enforced).toBe(false);

@@ -3,13 +3,20 @@ import { primaryWalletPaidInterestInboxSchemas as schemas } from '@/schemas/prim
 import { readPrimaryWalletPaidInterestInboxRuntime } from './primary-wallet-paid-interest-inbox-runtime';
 import { createPrimaryWalletPaidInterestInboxStore } from './primary-wallet-paid-interest-inbox-store';
 import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
+import type { WebhookKeyScope } from './webhook-key-archive';
 
 export async function dispatchPrimaryWalletPaidInterestInbox(input: {
   rawBody: Uint8Array;
   signature: string | null;
   env?: NodeJS.ProcessEnv;
+  /** `replay` also accepts this family's archived keys past their overlap. */
+  keyScope?: WebhookKeyScope;
 }) {
-  const config = readPrimaryWalletPaidInterestInboxRuntime('intake', input.env);
+  const config = readPrimaryWalletPaidInterestInboxRuntime(
+    'intake',
+    input.env,
+    input.keyScope
+  );
   if (!config) return 'disabled' as const;
   const rawBody = Uint8Array.from(input.rawBody);
   if (

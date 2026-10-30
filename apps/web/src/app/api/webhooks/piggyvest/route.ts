@@ -3,6 +3,7 @@ import { getPiggyvestApiConfig } from '@/env';
 import { createPiggyvestIntakeServiceClient } from '@/lib/piggyvest/server-intake-client';
 import { emitPiggyvestWebhookAlert } from '@/lib/piggyvest/webhook-alerts';
 import { markCaptureProcessed } from '@/lib/piggyvest/webhook-capture';
+import { isPiggyvestCaptureDrainScheduled } from '@/lib/piggyvest/webhook-capture-attestation';
 import { readBoundedWebhookBody } from '@/lib/piggyvest/webhook-request';
 import { admitPiggyvestDelivery } from './ingress';
 import { processVerifiedDelivery } from './process-delivery';
@@ -16,14 +17,22 @@ import { processVerifiedDelivery } from './process-delivery';
  *   durably stored (raw bytes, headers, signature, key version, receive
  *   time) before the receiver answers 200, whatever the event type and
  *   whatever financial-processing flags are set. See ingress.ts.
- * - Processing is a separate step that never changes the reply: once the
- *   request is captured, a processing failure leaves the stored row for the
- *   capture drain and the provider still gets 200.
+ * - Processing is a separate step. When it does not complete after capture
+ *   the stored row stays pending either way; who retries depends on the
+ *   drain attestation (PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED, read per
+ *   request, exactly 'true'):
+ *   - attested: the drain retries the row, so the reply is a deferred 200;
+ *   - NOT attested: the provider's own redeliveries (up to 10) are the only
+ *     retry mechanism, so the reply stays 503. The redelivery finds the
+ *     still-pending row and re-runs processing, which is idempotent.
+ *   Fail toward retry: anything but exactly 'true' means not attested.
  *
  * Status mapping:
  * - No usable server key configuration -> 503 + alert.
  * - Invalid signature, or a key revoked at ingress -> 401 + alert.
  * - Capture write fails -> 503 + alert (the provider retries; no row).
+ * - Captured but processing incomplete -> 503 until the drain is attested,
+ *   200 deferred once it is (alert either way).
  * - Everything else -> 200.
  */
 
@@ -93,8 +102,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
 
-  // Processing is separate from the reply: whatever happens below, the
-  // original request is already durable and the provider is told 200.
+  // Whatever happens below, the original request is already durable.
   let processing: Response | null = null;
   try {
     // Runs even for duplicates: if the first delivery captured the request
@@ -117,8 +125,22 @@ export async function POST(request: NextRequest): Promise<Response> {
       ? `processing answered ${processing.status}; row kept for retry`
       : 'processing threw; row kept for retry',
   });
+  if (isPiggyvestCaptureDrainScheduled()) {
+    // The drain owns the retry; the provider can stop redelivering.
+    return NextResponse.json(
+      { received: true, captured: true, processing: 'deferred' },
+      { status: 200, headers: noStore }
+    );
+  }
+  // No drain yet: keep the provider's redeliveries as the retry mechanism.
+  // The reply carries no failure detail.
   return NextResponse.json(
-    { received: true, captured: true, processing: 'deferred' },
-    { status: 200, headers: noStore }
+    {
+      received: true,
+      captured: true,
+      processing: 'retry',
+      code: 'PIGGYVEST_PROCESSING_RETRY',
+    },
+    { status: 503, headers: noStore }
   );
 }

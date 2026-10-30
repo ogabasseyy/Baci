@@ -179,6 +179,9 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // These suites exercise the deployment where the capture drain is
+  // scheduled, so a failed processing attempt answers the deferred 200.
+  vi.stubEnv('PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED', 'true');
   mocks.processPiggyvestEvent.mockResolvedValue('processed');
   // The union gate reads every secret var directly; pin the rotation vars
   // empty so each test's PVB_SECRET_KEY stub fully decides the outcome.

@@ -5,6 +5,7 @@ import {
   type PiggyvestCaptureStatus,
   piggyvestCaptureStatusSchema,
 } from '@/schemas/piggyvest/webhook-capture';
+import { isPiggyvestCaptureDrainScheduled } from './webhook-capture-attestation';
 import { collectPiggyvestWebhookSecretsWithStatus } from './webhook-secret-union';
 
 /**
@@ -45,6 +46,13 @@ export interface WebhookCaptureReadinessReport {
   status: 'ready' | 'not-ready';
   /** Capture stays on regardless; this report never blocks the receiver. */
   enforced: false;
+  /**
+   * What the receiver answers when processing fails after a delivery was
+   * captured: a 503 (provider redelivery is the retry) until the drain is
+   * attested, a deferred 200 once it is.
+   */
+  processingFailureReply: '503-retry' | '200-deferred';
+  notes: string[];
   checks: { gate: CaptureReadinessGate; passed: boolean }[];
   notReady: CaptureReadinessEntry[];
   details: { currentKeys: number; overlapKeys: number; replayOnlyKeys: number };
@@ -91,7 +99,7 @@ function storageReasons(storage: CaptureStorageEvidence): {
 }
 
 function workerReason(evidence: WebhookCaptureEvidence): string | null {
-  if (evidence.env.PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED !== 'true') {
+  if (!isPiggyvestCaptureDrainScheduled(evidence.env)) {
     return 'DRAIN_NOT_SCHEDULED';
   }
   if (evidence.storage.ok) {
@@ -118,9 +126,16 @@ export function inspectPiggyvestWebhookCaptureReadiness(
   const notReady = results.flatMap(([gate, reason]) =>
     reason ? [{ gate, reason }] : []
   );
+  const drainAttested = isPiggyvestCaptureDrainScheduled(evidence.env);
   return {
     status: notReady.length === 0 ? 'ready' : 'not-ready',
     enforced: false,
+    processingFailureReply: drainAttested ? '200-deferred' : '503-retry',
+    notes: drainAttested
+      ? []
+      : [
+          'The deferred 200 reply for a failed processing attempt is only active once the drain is scheduled (PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED=true). Until then the receiver answers 503 so the provider redelivers.',
+        ],
     checks: results.map(([gate, reason]) => ({
       gate,
       passed: reason === null,

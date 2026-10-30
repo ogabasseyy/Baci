@@ -65,6 +65,9 @@ let warns: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // These suites exercise the deployment where the capture drain is
+  // scheduled, so a failed processing attempt answers the deferred 200.
+  vi.stubEnv('PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED', 'true');
   store = createFakeCaptureStore();
   current = randomBytes(32).toString('hex');
   vi.stubEnv('PIGGYVEST_SECRET_KEY', current);

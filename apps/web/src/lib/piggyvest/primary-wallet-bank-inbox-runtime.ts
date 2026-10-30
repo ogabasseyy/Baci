@@ -1,5 +1,9 @@
 import 'server-only';
 import { primaryWalletBankInboxSchemas as schemas } from '@/schemas/primary-wallet-bank-inbox';
+import {
+  type WebhookKeyScope,
+  withFamilyArchivedSecrets,
+} from './webhook-key-archive';
 
 export type PrimaryWalletBankInboxSecrets = {
   webhookSecret: unknown;
@@ -48,7 +52,8 @@ export function readPrimaryWalletBankInboxSecrets(
 
 export function readPrimaryWalletBankInboxRuntime(
   mode: 'intake' | 'worker',
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  keyScope: WebhookKeyScope = 'ingress'
 ) {
   // Intake stops at the flag (no new rows while disabled); the worker
   // drains already-acknowledged rows through the same credentials-bound
@@ -123,5 +128,14 @@ export function readPrimaryWalletBankInboxRuntime(
     (parsed.data.environment === 'production')
   )
     throw new Error('Primary bank inbox scope unavailable');
-  return parsed.data;
+  // Keys archived for this family at rotation still verify: inside their
+  // overlap for new deliveries, and (worker, or a replayed delivery) past
+  // it for rows that were already accepted.
+  return withFamilyArchivedSecrets(
+    parsed.data,
+    'bank',
+    env,
+    new Date(),
+    mode === 'worker' ? 'replay' : keyScope
+  );
 }

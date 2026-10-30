@@ -3,6 +3,7 @@ import { primaryCardCustodyInboxSchemas as schemas } from '@/schemas/primary-wal
 import { createPrimaryCardCustodyExecutor } from './primary-wallet-card-custody-executor';
 import { createPrimaryCardCustodyInboxIntake } from './primary-wallet-card-custody-inbox-intake';
 import { readPrimaryCardCustodyIntakeRuntime } from './primary-wallet-card-custody-intake-runtime';
+import type { WebhookKeyScope } from './webhook-key-archive';
 
 type IntakeResult =
   | { outcome: 'disabled' | 'not_handled'; response: null }
@@ -23,6 +24,8 @@ export async function dispatchPrimaryCardSignedCustodyIntake(input: {
   signature: string | null;
   environment?: NodeJS.ProcessEnv;
   now?: () => number;
+  /** `replay` also accepts this family's archived keys past their overlap. */
+  keyScope?: WebhookKeyScope;
 }): Promise<IntakeResult> {
   const environment = input.environment ?? process.env;
   const reply = (
@@ -47,7 +50,8 @@ export async function dispatchPrimaryCardSignedCustodyIntake(input: {
   });
   const config = readPrimaryCardCustodyIntakeRuntime(
     environment,
-    (input.now ?? Date.now)()
+    (input.now ?? Date.now)(),
+    input.keyScope
   );
   if (!config) {
     // Unconfigured or explicitly disabled: only a positively-identified

@@ -3,6 +3,7 @@ import z from 'zod';
 import type { PiggyvestClientConfig } from '@/lib/piggyvest/client';
 import { redactEventDetails } from '@/lib/piggyvest/event-redaction';
 import { recordPiggyvestEvent } from '@/lib/piggyvest/webhook-inbox';
+import type { WebhookKeyScope } from '@/lib/piggyvest/webhook-key-archive';
 import { processPiggyvestEvent } from '@/lib/piggyvest/webhook-processor';
 import type { PiggyvestWebhookKeyFamily } from '@/lib/piggyvest/webhook-secret-union';
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
@@ -39,6 +40,8 @@ export interface VerifiedDelivery {
   signature: string;
   matchedSecret: string;
   families: readonly PiggyvestWebhookKeyFamily[];
+  /** `replay` for a stored row; the receiver's own deliveries use ingress. */
+  keyScope?: WebhookKeyScope;
 }
 
 export interface ProcessDeliveryDeps {
@@ -55,7 +58,7 @@ export async function processVerifiedDelivery(
   delivery: VerifiedDelivery,
   deps: ProcessDeliveryDeps
 ): Promise<Response> {
-  const { rawBody, signature, matchedSecret, families } = delivery;
+  const { rawBody, signature, matchedSecret, families, keyScope } = delivery;
   const { createClient } = deps;
   let jsonPayload: unknown;
   try {
@@ -89,6 +92,7 @@ export async function processVerifiedDelivery(
       matchedSecret,
       event: parsed.data,
       families,
+      keyScope,
     });
     if (primary === 'conflict') {
       return quarantineAndAck(

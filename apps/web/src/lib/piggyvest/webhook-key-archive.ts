@@ -86,3 +86,67 @@ export function derivePiggyvestKeyVersion(secret: string): string {
     .digest('hex');
   return `k-${digest.slice(0, 16)}`;
 }
+
+/**
+ * Which archived keys a verifier may use:
+ * - `ingress`: a delivery arriving now. Only keys still inside their
+ *   bounded overlap window authorise it.
+ * - `replay`: bytes this deployment already accepted and stored. Keys past
+ *   the overlap still count, because the rows were authentic when taken.
+ */
+export type WebhookKeyScope = 'ingress' | 'replay';
+
+/**
+ * Archived secrets belonging to exactly one key family. The primary
+ * intakes (bank, custody, interest) re-verify with their own runtime keys,
+ * so this is how a key moved into the archive at rotation keeps working for
+ * the family it was issued for, and only that family: a key archived under
+ * another family is never returned. An unreadable archive contributes
+ * nothing (fail closed); ingress already reports it as misconfiguration.
+ */
+export function familyArchivedSecrets(
+  family: PiggyvestArchivedWebhookKey['family'],
+  env: NodeJS.ProcessEnv,
+  now: Date,
+  scope: WebhookKeyScope
+): string[] {
+  const archive = readWebhookKeyArchive(env);
+  if (!archive.ok) return [];
+  const { overlap, replayOnly } = partitionArchivedKeys(archive, now);
+  const allowed = scope === 'replay' ? [...overlap, ...replayOnly] : overlap;
+  return allowed
+    .filter((entry) => entry.family === family)
+    .map((entry) => entry.secret);
+}
+
+/**
+ * Adds the family's archived secrets to an already-validated runtime
+ * config's retained list. Applied after schema validation on purpose: the
+ * schemas cap how many operator-configured retained keys exist, and the
+ * archive has its own bound. The current key is never replaced.
+ */
+export function withFamilyArchivedSecrets<
+  T extends { retainedWebhookSecrets?: string[] },
+>(
+  config: T,
+  family: PiggyvestArchivedWebhookKey['family'],
+  env: NodeJS.ProcessEnv,
+  now: Date | number,
+  scope: WebhookKeyScope
+): T {
+  const archived = familyArchivedSecrets(
+    family,
+    env,
+    typeof now === 'number' ? new Date(now) : now,
+    scope
+  );
+  if (archived.length === 0) return config;
+  const retained = config.retainedWebhookSecrets ?? [];
+  return {
+    ...config,
+    retainedWebhookSecrets: [
+      ...retained,
+      ...archived.filter((secret) => !retained.includes(secret)),
+    ],
+  } as T;
+}

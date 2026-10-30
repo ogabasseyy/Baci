@@ -120,6 +120,9 @@ function request(signatureValid = true) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  // These suites exercise the deployment where the capture drain is
+  // scheduled, so a failed processing attempt answers the deferred 200.
+  vi.stubEnv('PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED', 'true');
   boundary.families = ['bank'];
   boundary.intake.mockResolvedValue({ outcome: 'disabled', response: null });
   boundary.legacyRecord.mockResolvedValue('recorded');

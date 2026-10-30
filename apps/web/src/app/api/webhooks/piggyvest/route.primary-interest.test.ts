@@ -65,6 +65,9 @@ function request(valid = true, secret = 'fixture-secret') {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  // These suites exercise the deployment where the capture drain is
+  // scheduled, so a failed processing attempt answers the deferred 200.
+  vi.stubEnv('PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED', 'true');
   mocks.families = ['legacy', 'interest'];
   mocks.intake.mockResolvedValue('disabled');
   mocks.legacyFrom.mockImplementation(() => {

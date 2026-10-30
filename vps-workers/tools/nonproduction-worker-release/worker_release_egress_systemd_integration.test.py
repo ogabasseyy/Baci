@@ -18,6 +18,7 @@ from worker_release_egress_systemd_integration import (
     _socket_bind_mount_command, _namespace_missing_path,
     _unit_journal_text, _cleanup_systemd_unit, _namespace_probe_steps,
     _normalized_unit_exit, _run_seed_unit_socket_probe,
+    _run_seed_unit_socket_probe_with_synthetic_connector,
     _seed_socket_probe_failure_summary,
 )
 import worker_release_egress_systemd_integration as integration
@@ -25,6 +26,45 @@ from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture
 
 
 class SystemdIntegrationDiagnosticTests(unittest.TestCase):
+    def test_seed_probe_uses_synthetic_connector_and_restores_real_connector(self):
+        calls = []
+
+        def real_connector(*_args, **_kwargs):
+            raise AssertionError("real network connector must not be used by the fixture")
+
+        def synthetic_connector(*args, **kwargs):
+            calls.append((args, kwargs))
+            return "synthetic-upstream"
+
+        original_connect = integration.broker_module.connect_public
+        with patch.object(integration.broker_module, "connect_public", real_connector), \
+             patch.object(integration, "_run_seed_unit_socket_probe") as run_probe:
+            def probe(**_kwargs):
+                self.assertIs(integration.broker_module.connect_public, synthetic_connector)
+                self.assertEqual(integration.broker_module.connect_public("registry.npmjs.org", 443),
+                                 "synthetic-upstream")
+                return "probe-complete"
+
+            run_probe.side_effect = probe
+            result = _run_seed_unit_socket_probe_with_synthetic_connector(
+                synthetic_connector, unit_prefix="123", peer_uid=1001, peer_gid=1001,
+                socket_path=Path("/run/broker.sock"), fixture_client=Path("/tmp/client.py"),
+                hidden_socket=Path("/run/hidden.sock"), fixture_root=Path("/tmp/fixture"),
+            )
+            self.assertIsNone(result)
+            self.assertEqual(len(calls), 1)
+            self.assertIs(integration.broker_module.connect_public, real_connector)
+
+            run_probe.side_effect = RuntimeError("synthetic probe failure")
+            with self.assertRaisesRegex(RuntimeError, "synthetic probe failure"):
+                _run_seed_unit_socket_probe_with_synthetic_connector(
+                    synthetic_connector, unit_prefix="123", peer_uid=1001, peer_gid=1001,
+                    socket_path=Path("/run/broker.sock"), fixture_client=Path("/tmp/client.py"),
+                    hidden_socket=Path("/run/hidden.sock"), fixture_root=Path("/tmp/fixture"),
+                )
+            self.assertIs(integration.broker_module.connect_public, real_connector)
+        self.assertIs(integration.broker_module.connect_public, original_connect)
+
     def test_seed_client_import_path_uses_fixed_bin_mount_only_when_present(self):
         client = Path(__file__).with_name("worker_release_egress_systemd_client.py")
         original_import = builtins.__import__

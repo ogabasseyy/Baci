@@ -443,6 +443,16 @@ def _run_seed_unit_socket_probe(*, unit_prefix: str, peer_uid: int, peer_gid: in
         _cleanup_systemd_unit(unit)
 
 
+def _run_seed_unit_socket_probe_with_synthetic_connector(synthetic_connect, **kwargs) -> None:
+    """Keep the seed-policy probe offline using the disposable fixture connector."""
+    original_connect = broker_module.connect_public
+    broker_module.connect_public = synthetic_connect
+    try:
+        _run_seed_unit_socket_probe(**kwargs)
+    finally:
+        broker_module.connect_public = original_connect
+
+
 def _run_host_fixture() -> int:
     if os.geteuid() != 0 or Path("/proc/1/comm").read_text().strip() != "systemd":
         raise RuntimeError("requires root on a disposable systemd Linux VM")
@@ -599,7 +609,8 @@ def _run_host_fixture() -> int:
                     raise RuntimeError("synthetic registry fixture did not drain")
             if len(accepted) != 3 or len(registry_served) != 1 or len(registry_rejected) != 2:
                 raise RuntimeError("synthetic TLS route or SNI rejection evidence was incomplete")
-            _run_seed_unit_socket_probe(
+            _run_seed_unit_socket_probe_with_synthetic_connector(
+                synthetic_connect,
                 unit_prefix=str(os.getpid()), peer_uid=peer_uid, peer_gid=peer_gid,
                 socket_path=socket_path, fixture_client=fixture_client,
                 hidden_socket=hidden_host_socket, fixture_root=fixture_root,

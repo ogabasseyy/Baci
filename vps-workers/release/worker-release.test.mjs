@@ -262,3 +262,25 @@ test(
     assert.ok(!existsSync(join(host.root, 'app-live')));
   }
 );
+
+test(
+  'bugfix: refuses to activate an older main commit outside rollback',
+  linuxOnly,
+  () => {
+    const host = createHost();
+    release(host, host.firstSha);
+    const next = host.commit('second');
+    release(host, next);
+
+    const result = host.run('activate', host.firstSha);
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /older than the active release/);
+    assert.equal(host.run('status').stdout.trim(), next);
+    assert.equal(
+      host.run('rollback').status,
+      0,
+      'rollback stays the explicit way back'
+    );
+  }
+);

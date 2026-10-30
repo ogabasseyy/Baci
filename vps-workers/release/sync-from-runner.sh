@@ -69,12 +69,15 @@ legacy_schedule_active() {
 # tick is running, so the two identities never process work concurrently.
 stop_legacy() {
   local backup="$1" unit
-  crontab -l > "$backup"
+  # Called from a conditional, where errexit is ignored: check each step.
+  crontab -l > "$backup" || return 1
+  grep -Fqx "$CRON_BLOCK_START" "$backup" || return 1
   awk -v start="$CRON_BLOCK_START" -v end="$CRON_BLOCK_END" '
     $0 == start { skip = 1; next }
     $0 == end { skip = 0; next }
     !skip { print }
-  ' "$backup" | crontab -
+  ' "$backup" | crontab - || return 1
+  ! legacy_schedule_active || return 1
   systemctl --user stop "${LEGACY_UNITS[@]}" || return 1
   systemctl --user disable --quiet "${LEGACY_UNITS[@]}" || return 1
   for unit in "${LEGACY_UNITS[@]}"; do

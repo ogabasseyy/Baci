@@ -59,8 +59,9 @@ legacy `bassey` schedule and services and starts them as `baci-worker`.
 
 ## Rollback
 
-- Previous release: `sudo -u baci-worker -H bash /srv/baci-worker/app-live/vps-workers/release/worker-release.sh rollback`
-  (with `XDG_RUNTIME_DIR=/run/user/$(id -u baci-worker)`).
+- Previous release (sudo resets the environment, so pass the user-manager
+  socket through `env`):
+  `sudo -u baci-worker -H env XDG_RUNTIME_DIR=/run/user/$(id -u baci-worker) bash /srv/baci-worker/app-live/vps-workers/release/worker-release.sh rollback`
 - Back to the legacy layout: remove the `baci-workers` block from
   `baci-worker`'s crontab, stop its `baci-*` user services, restore the saved
   crontab from `/home/bassey/.local/state/baci/legacy-worker-crontab.*` with

@@ -22,7 +22,10 @@ function write(path, content, mode = 0o644) {
 }
 
 function git(cwd, ...args) {
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  const result = spawnSync('git', ['-c', 'commit.gpgsign=false', ...args], {
+    cwd,
+    encoding: 'utf8',
+  });
   if (result.status !== 0)
     throw new Error(`git ${args.join(' ')}: ${result.stderr}`);
   return result.stdout.trim();

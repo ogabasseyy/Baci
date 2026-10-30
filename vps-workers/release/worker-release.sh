@@ -212,6 +212,12 @@ activate_release() {
   # the release that was verified and live immediately before.
   if [ "$verify" = verify ]; then fetch_commit "$sha"; fi
   previous="$(current_sha || true)"
+  # A re-run of an older workflow must not silently downgrade the workers;
+  # going back is what `rollback` is for.
+  if [ "$verify" = verify ] && [ -n "$previous" ] && [ "$previous" != "$sha" ] &&
+    git -C "$REPO" merge-base --is-ancestor "$sha" "$previous" 2>/dev/null; then
+    fail "$sha is older than the active release $previous; use rollback to go back."
+  fi
   mkdir -p "$WORKERS/locks"
   exec 8>"$WORKERS/locks/gigl-tracking.lock"
   flock -w "$LOCK_WAIT" 8 || fail "timed out waiting for the GIGL tracking tick to finish."

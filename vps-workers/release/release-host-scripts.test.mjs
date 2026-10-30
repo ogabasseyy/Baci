@@ -38,6 +38,7 @@ function createRunner({
   activateFails = false,
   provisioned = true,
   legacyStuck = false,
+  crontabWriteFails = false,
 } = {}) {
   const base = mkdtempSync(join(tmpdir(), 'baci-sync-runner-'));
   const scripts = join(base, 'scripts');
@@ -70,7 +71,7 @@ esac
   );
   executable(
     join(stubs, 'crontab'),
-    `case "$1" in -l) cat "${base}/crontab" ;; -) cat > "${base}/crontab" ;; *) cp "$1" "${base}/crontab" ;; esac\n`
+    `case "$1" in -l) cat "${base}/crontab" ;; -) ${crontabWriteFails ? 'cat >/dev/null; exit 1' : `cat > "${base}/crontab"`} ;; *) cp "$1" "${base}/crontab" ;; esac\n`
   );
   executable(
     join(stubs, 'systemctl'),
@@ -346,5 +347,32 @@ test(
 
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /VPS_WORKER_REMOTE_DIR must be/);
+  }
+);
+
+test(
+  'bugfix: activates nothing while a legacy service is still running',
+  linuxOnly,
+  () => {
+    const runner = createRunner({ legacyStuck: true });
+    const result = runner.run();
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /did not stop cleanly/);
+    assert.equal(runner.read('crontab'), LEGACY_CRONTAB);
+    assert.doesNotMatch(runner.read('release.log'), /^activate/m);
+  }
+);
+
+test(
+  'bugfix: activates nothing when the legacy schedule cannot be removed',
+  linuxOnly,
+  () => {
+    const runner = createRunner({ crontabWriteFails: true });
+    const result = runner.run();
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /did not stop cleanly/);
+    assert.doesNotMatch(runner.read('release.log'), /^activate/m);
   }
 );

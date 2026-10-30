@@ -7,8 +7,14 @@ import {
 } from './route.test-helpers';
 
 vi.mock('../provider-budget', () => ({
-  reserveGooglePlacesRequest: vi.fn(async () => ({ reserved: true })),
-  reserveGeoapifyRequest: vi.fn(async () => true),
+  reserveGooglePlacesRequest: vi.fn(async () => ({
+    reserved: true,
+    dispatchBefore: Date.now() + 60_000,
+  })),
+  reserveGeoapifyRequest: vi.fn(async () => ({
+    reserved: true,
+    dispatchBefore: Date.now() + 60_000,
+  })),
 }));
 
 describe('GET /api/places/autocomplete', () => {

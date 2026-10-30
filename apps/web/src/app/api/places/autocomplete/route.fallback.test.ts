@@ -11,8 +11,14 @@ import {
 } from './route.test-helpers';
 
 vi.mock('../provider-budget', () => ({
-  reserveGooglePlacesRequest: vi.fn(async () => ({ reserved: true })),
-  reserveGeoapifyRequest: vi.fn(async () => true),
+  reserveGooglePlacesRequest: vi.fn(async () => ({
+    reserved: true,
+    dispatchBefore: Date.now() + 60_000,
+  })),
+  reserveGeoapifyRequest: vi.fn(async () => ({
+    reserved: true,
+    dispatchBefore: Date.now() + 60_000,
+  })),
 }));
 
 const geoResult = {
@@ -41,8 +47,14 @@ describe('address provider fallback', () => {
     vi.clearAllMocks();
     vi.stubEnv('GEOAPIFY_API_KEY', 'test-geo-key');
     vi.stubEnv('GOOGLE_MAPS_API_KEY', 'test-api-key');
-    vi.mocked(reserveGooglePlacesRequest).mockResolvedValue({ reserved: true });
-    vi.mocked(reserveGeoapifyRequest).mockResolvedValue(true);
+    vi.mocked(reserveGooglePlacesRequest).mockResolvedValue({
+      reserved: true,
+      dispatchBefore: Date.now() + 60_000,
+    });
+    vi.mocked(reserveGeoapifyRequest).mockResolvedValue({
+      reserved: true,
+      dispatchBefore: Date.now() + 60_000,
+    });
   });
   afterEach(() => vi.unstubAllEnvs());
 
@@ -209,7 +221,10 @@ describe('address provider fallback', () => {
       reserved: false,
       reason: 'limit_reached',
     });
-    vi.mocked(reserveGeoapifyRequest).mockResolvedValue(false);
+    vi.mocked(reserveGeoapifyRequest).mockResolvedValue({
+      reserved: false,
+      reason: 'limit_reached',
+    });
     const response = await GET(
       makeRequest({
         fallback: 'geoapify',

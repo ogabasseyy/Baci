@@ -10,7 +10,10 @@ vi.mock('./legacy-places', async (importOriginal) => ({
   fetchLegacyPlacesJson: vi.fn(),
 }));
 vi.mock('./provider-budget', () => ({
-  reserveGooglePlacesRequest: vi.fn(async () => ({ reserved: true })),
+  reserveGooglePlacesRequest: vi.fn(async () => ({
+    reserved: true,
+    dispatchBefore: Date.now() + 60_000,
+  })),
 }));
 
 beforeEach(() => {
@@ -64,8 +67,14 @@ describe('Google autocomplete provider boundary', () => {
     expect(url.searchParams.get('key')).toBe('places-test-key');
     expect(url.searchParams.get('sessiontoken')).toBe('session');
     expect(url.searchParams.get('components')).toBe('country:ng');
-    expect(await beforeAttempt?.()).toEqual({ reserved: true });
-    expect(reserveGooglePlacesRequest).toHaveBeenCalledWith('autocomplete');
+    expect(await beforeAttempt?.()).toEqual({
+      reserved: true,
+      dispatchBefore: expect.any(Number),
+    });
+    expect(reserveGooglePlacesRequest).toHaveBeenCalledWith(
+      'autocomplete',
+      'places-test-key'
+    );
     expect(JSON.stringify(result)).not.toContain('places-test-key');
   });
   it('lowercases an uppercase country code for direct callers', async () => {

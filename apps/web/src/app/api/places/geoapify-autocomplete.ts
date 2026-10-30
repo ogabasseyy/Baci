@@ -19,8 +19,11 @@ export async function fetchGeoapifyPredictions(
 ): Promise<PlacePrediction[]> {
   const apiKey = process.env.GEOAPIFY_API_KEY?.trim();
   if (!apiKey) throw new GeoapifyAutocompleteError(503);
-  if (!(await reserveGeoapifyRequest()))
-    throw new GeoapifyAutocompleteError(429);
+  const reservation = await reserveGeoapifyRequest(apiKey);
+  if (!reservation.reserved)
+    throw new GeoapifyAutocompleteError(
+      reservation.reason === 'limit_reached' ? 429 : 503
+    );
 
   // Geoapify documents lowercase countrycode filters; normalize once so
   // direct callers cannot desync the request filter from the match check.
@@ -34,6 +37,11 @@ export async function fetchGeoapifyPredictions(
     url.searchParams.set('filter', `countrycode:${normalizedCountry}`);
 
   try {
+    if (
+      !Number.isFinite(reservation.dispatchBefore) ||
+      reservation.dispatchBefore <= Date.now()
+    )
+      throw new GeoapifyAutocompleteError(503);
     const response = await fetch(url.toString(), {
       cache: 'no-store',
       signal: AbortSignal.timeout(5000),

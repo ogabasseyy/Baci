@@ -294,6 +294,18 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
         run: .github/scripts/probe-cart-quota-hook-reload.sh
+      - name: Apply pending migrations through the address-budget scope hook
+        env:
+          MIGRATION_PHASE: predeploy
+          MIGRATION_MAX_VERSION: 20261030075538
+        run: .github/scripts/apply-pending-migrations.sh
+      - name: Probe address-budget hook reload acknowledgement
+        # The narrow reservation role is not granted until the existing fleet
+        # has been observed enforcing its one-RPC request scope.
+        env:
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        run: .github/scripts/probe-address-budget-hook-reload.sh
       - name: Apply remaining pending migrations via Management API
         env:
           MIGRATION_PHASE: predeploy

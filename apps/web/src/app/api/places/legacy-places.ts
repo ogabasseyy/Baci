@@ -66,6 +66,12 @@ export async function fetchLegacyPlacesJson<T extends { status?: string }>(
           failure,
         };
       }
+      if (
+        !Number.isFinite(reservation.dispatchBefore) ||
+        reservation.dispatchBefore <= Date.now()
+      ) {
+        return { ok: false, status: 503, failure: 'budget_unavailable' };
+      }
     }
     let response: Response;
     try {

@@ -427,6 +427,7 @@ jobs:
           --sql-check supabase/tests/mcp_guest_carts_privileges.sql
           --sql-check supabase/tests/mcp_guest_carts_capacity.sql
           --sql-check supabase/tests/commerce_cart_quota.sql
+          --sql-check supabase/tests/address_provider_budget.sql
           --sql-check supabase/tests/blog_media_tombstone_sweep_claim.sql
           --sql-check supabase/migrations/tests/blog_post_intent_provenance.sql
           --sql-check supabase/migrations/tests/blog_post_merchant_intent_null.sql
@@ -620,6 +621,8 @@ jobs:
           export PATH="$RUNNER_TEMP:$PATH"
           node --test .github/scripts/cart-quota-guard-stage.sql.test.mjs
           node --test .github/scripts/cart-quota-postgrest.test.mjs
+          node --test .github/scripts/address-provider-budget.sql.test.mjs
+          node --test .github/scripts/address-provider-budget-postgrest.test.mjs
       - name: Test Deployment and VPS Worker Scripts
         if: needs.changes.outputs.deploy_scripts == 'true'
         run: >-
@@ -666,6 +669,9 @@ jobs:
           .github/scripts/guest-cart-hook-probe-gate.test.mjs
           .github/scripts/probe-cart-quota-hook-reload.test.mjs
           .github/scripts/probe-cart-quota-hook-reload-binding.test.mjs
+          .github/scripts/probe-address-budget-hook-reload.test.mjs
+          .github/scripts/probe-address-budget-hook-reload-binding.test.mjs
+          .github/scripts/address-budget-hook-probe-gate.test.mjs
           .github/scripts/verify-cart-quota-maintenance.test.mjs
           .github/scripts/cart-quota-hook-probe-gate.test.mjs
           .github/scripts/preview-workflow-contract.test.mjs

@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "bin"))
 from worker_release_dependency_policy_cache import _hash_tree
+from dependency_seed_test_support import fixture_generation_capability
 MODULE = Path(__file__).with_name("dependency_seed_publisher.py")
 SPEC = importlib.util.spec_from_file_location("dependency_seed_publisher", MODULE)
 assert SPEC and SPEC.loader
@@ -49,8 +50,9 @@ class DependencySeedPublisherTests(unittest.TestCase):
     def publish(self, source: Path, cache: Path, store: Path, seeds: Path, sha: str):
         receipt = publisher.make_receipt(source, cache, publisher.EXPECTED_PNPM,
                                          cache_max_bytes=publisher.MAX_CACHE_BYTES)
-        return publisher.publish_seed(source, cache, store, seeds, sha,
-                                      verified_receipt=receipt)
+        return publisher._publish_seed(source, cache, store, seeds, sha,
+                                      generation_capability=fixture_generation_capability(
+                                          source, sha, receipt))
 
     def test_publish_is_sha_scoped_frozen_and_verified(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -65,7 +67,21 @@ class DependencySeedPublisherTests(unittest.TestCase):
             self.assertEqual((published / "cache/metadata.json").stat().st_mode & 0o222, 0)
             self.assertEqual((published / "store/package.bin").stat().st_mode & 0o222, 0)
 
-    def test_existing_sha_is_never_overwritten_even_with_different_seed_inputs(self):
+    def test_consumer_rejects_durable_attestation_tampering(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, cache, store = self.fixture(root)
+            published = self.publish(source, cache, store, root / "seeds", "a" * 40)
+            manifest_path = published / publisher.MANIFEST
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["generationAttestation"]["fence"]["sha"] = "b" * 40
+            os.chmod(published, 0o755)
+            os.chmod(manifest_path, 0o644)
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaisesRegex(publisher.BuilderRejected, "attestation"):
+                publisher.verify_seed(published, source, authenticated_source_sha="a" * 40)
+
+    def test_existing_sha_is_reused_only_after_verification_and_never_overwritten(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source, cache, store = self.fixture(root)
@@ -73,9 +89,42 @@ class DependencySeedPublisherTests(unittest.TestCase):
             published = self.publish(source, cache, store, seeds, "a" * 40)
             before = (published / "store/package.bin").read_bytes()
             (store / "package.bin").write_bytes(b"different bytes")
-            with self.assertRaisesRegex(publisher.BuilderRejected, "already exists"):
-                self.publish(source, cache, store, seeds, "a" * 40)
+            callback_calls = []
+            receipt = publisher.make_receipt(source, cache, publisher.EXPECTED_PNPM,
+                                             cache_max_bytes=publisher.MAX_CACHE_BYTES)
+            capability = fixture_generation_capability(
+                source, "a" * 40, receipt,
+                prepublish_guard=lambda: callback_calls.append("revalidated"))
+            reused = publisher._publish_seed(
+                source, cache, store, seeds, "a" * 40,
+                generation_capability=capability)
+            self.assertEqual(reused, published)
+            self.assertEqual(callback_calls, ["revalidated"])
             self.assertEqual((published / "store/package.bin").read_bytes(), before)
+
+    def test_recovery_shortcut_revalidates_fence_before_success_return(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, cache, store = self.fixture(root)
+            seeds = root / "seeds"
+            seeds.mkdir(mode=0o700)
+            (seeds / publisher.INFLIGHT_JOURNAL).write_text("synthetic", encoding="ascii")
+            receipt = publisher.make_receipt(source, cache, publisher.EXPECTED_PNPM,
+                                             cache_max_bytes=publisher.MAX_CACHE_BYTES)
+            callback_calls = []
+
+            def reject_fence():
+                callback_calls.append(True)
+                raise publisher.BuilderRejected("authenticated run fence changed")
+
+            capability = fixture_generation_capability(
+                source, "a" * 40, receipt, prepublish_guard=reject_fence)
+            with patch.object(publisher, "_recover_interrupted_seed", return_value=True):
+                with self.assertRaisesRegex(publisher.BuilderRejected, "fence changed"):
+                    publisher._publish_seed(
+                        source, cache, store, seeds, "a" * 40,
+                        generation_capability=capability)
+            self.assertEqual(callback_calls, [True])
 
     def test_separate_authenticated_shas_publish_independently(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -112,6 +161,31 @@ class DependencySeedPublisherTests(unittest.TestCase):
             with self.assertRaisesRegex(publisher.BuilderRejected, "already exists"):
                 self.publish(source, cache, store, seeds, "a" * 40)
             self.assertEqual(sentinel.read_text(encoding="ascii"), "do not replace")
+
+    def test_prepublication_fence_guard_runs_after_copy_and_can_block_final_rename(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, cache, store = self.fixture(root)
+            seeds = root / "seeds"
+            receipt = publisher.make_receipt(
+                source, cache, publisher.EXPECTED_PNPM,
+                cache_max_bytes=publisher.MAX_CACHE_BYTES)
+            observed = []
+
+            def guard():
+                observed.append(sorted(path.name for path in seeds.iterdir()))
+                raise publisher.BuilderRejected("authenticated run fence changed")
+
+            with self.assertRaisesRegex(publisher.BuilderRejected, "fence changed"):
+                publisher._publish_seed(
+                    source, cache, store, seeds, "a" * 40,
+                    generation_capability=fixture_generation_capability(
+                        source, "a" * 40, receipt, prepublish_guard=guard))
+            self.assertEqual(len(observed), 1)
+            # Staging is complete, but the final SHA name is never published.
+            self.assertTrue(any(name.startswith("." + "a" * 40 + ".")
+                                for name in observed[0]))
+            self.assertFalse((seeds / ("a" * 40)).exists())
 
     def test_writable_source_entry_is_rejected_before_seed_creation(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -162,7 +236,7 @@ class DependencySeedPublisherTests(unittest.TestCase):
                 results = list(pool.map(lambda _: publish(), range(2)))
             self.assertEqual(sum(result is not None for result in results), 1)
             self.assertEqual(publisher.verify_seed(seeds / ("a" * 40), source,
-                                                   authenticated_source_sha="a" * 40)["schema"], 1)
+                                                   authenticated_source_sha="a" * 40)["schema"], 2)
             self.assertEqual(sorted(p.name for p in seeds.iterdir()), [".publish.lock", "a" * 40])
 
     def test_writable_child_is_rejected_before_hash_validation(self):

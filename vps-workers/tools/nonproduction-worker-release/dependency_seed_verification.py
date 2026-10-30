@@ -11,6 +11,7 @@ from dependency_seed_filesystem import anchored_path, assert_frozen_tree, child_
 from dependency_seed_receipts import make_receipt
 from dependency_seed_source import source_snapshot_digest
 from dependency_seed_tree import policy_cache_digest_fd, tree_digest_fd
+from dependency_seed_generation_contract import validate_generation_attestation
 
 MANIFEST = "seed-manifest.json"
 MAX_STORE_BYTES = 4 * 1024 * 1024 * 1024
@@ -41,8 +42,9 @@ def verify_seed_locked(root_fd: int, source_fd: int, source_sha: str, *,
         expected_keys = {
             "schema", "authenticatedSourceSha", "pnpmVersion", "lockfiles", "policyFiles",
             "metadataCacheSha256", "packageStoreSha256", "sourceTreeSha256", "verificationReceipt",
+            "generationAttestation",
         }
-        if (not isinstance(value, dict) or set(value) != expected_keys or value.get("schema") != 1
+        if (not isinstance(value, dict) or set(value) != expected_keys or value.get("schema") != 2
                 or value.get("authenticatedSourceSha") != source_sha
                 or value.get("pnpmVersion") != EXPECTED_PNPM):
             raise BuilderRejected("seed manifest identity does not match")
@@ -55,6 +57,10 @@ def verify_seed_locked(root_fd: int, source_fd: int, source_sha: str, *,
             source_hash = source_snapshot_digest(source_fd)
             if value.get("verificationReceipt") != receipt:
                 raise BuilderRejected("seed policy receipt no longer matches exact source and cache")
+            validate_generation_attestation(
+                value.get("generationAttestation"), source_sha=source_sha,
+                source_tree_sha256=source_hash, policy_receipt=receipt,
+            )
             if (value.get("sourceTreeSha256") != source_hash
                     or receipt["sourceSha"] != source_sha
                     or value.get("metadataCacheSha256") != policy_cache_digest_fd(

@@ -18,6 +18,7 @@ from dependency_seed_transaction import (
 from dependency_seed_tree import assert_staging_tree
 from dependency_seed_tree import policy_cache_digest_fd, tree_digest_fd
 from dependency_seed_verification import verify_seed_locked
+from dependency_seed_generation_contract import validate_generation_attestation
 from worker_release_dependency_policy_cache import EXPECTED_PNPM
 
 MAX_STAGE_BYTES = 8 * 1024 * 1024 * 1024 + 32_768
@@ -122,9 +123,10 @@ def _verify_preserved_canonical(root_fd: int, sha: str, device: int, inode: int,
         expected_keys = {
             "schema", "authenticatedSourceSha", "pnpmVersion", "lockfiles", "policyFiles",
             "metadataCacheSha256", "packageStoreSha256", "sourceTreeSha256", "verificationReceipt",
+            "generationAttestation",
         }
         if (not isinstance(manifest, dict) or set(manifest) != expected_keys
-                or manifest.get("schema") != 1 or manifest.get("authenticatedSourceSha") != sha
+                or manifest.get("schema") != 2 or manifest.get("authenticatedSourceSha") != sha
                 or manifest.get("pnpmVersion") != EXPECTED_PNPM
                 or not isinstance(manifest.get("sourceTreeSha256"), str)
                 or not re.fullmatch(r"[0-9a-f]{64}", manifest["sourceTreeSha256"])):
@@ -141,6 +143,10 @@ def _verify_preserved_canonical(root_fd: int, sha: str, device: int, inode: int,
                 or manifest["lockfiles"] != receipt.get("lockfiles")
                 or manifest["policyFiles"] != receipt.get("policyFiles")):
             raise BuilderRejected("published seed receipt identity differs from journal")
+        validate_generation_attestation(
+            manifest.get("generationAttestation"), source_sha=sha,
+            source_tree_sha256=manifest["sourceTreeSha256"], policy_receipt=receipt,
+        )
         cache_fd = child_directory(seed_fd, "cache", owner_uid=os.geteuid(), immutable=True)
         store_fd = child_directory(seed_fd, "store", owner_uid=os.geteuid(), immutable=True)
         try:

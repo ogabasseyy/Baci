@@ -6,6 +6,7 @@ on:
       - 'vps-workers/tools/nonproduction-worker-release/dependency_seed_*.py'
       - 'vps-workers/tools/nonproduction-worker-release/dependency-seed-*.test.py'
       - 'vps-workers/bin/worker_release_dependency_*.py'
+      - 'vps-workers/tools/nonproduction-worker-release/worker_release_egress_*.py'
       - '.github/workflows/worker-release-dependency-seed-prototype-tests.yml'
   workflow_dispatch:
 
@@ -30,6 +31,7 @@ jobs:
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-filesystem.test.py -q
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-cross-sha.test.py -q
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-transaction.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/tools/nonproduction-worker-release/worker_release_egress_systemd_integration.py
           if find vps-workers -type f -path '*/__pycache__/*' -uid 0 -print -quit | grep -q .; then
             echo 'root-run seed tests left root-owned bytecode in the checkout' >&2
             exit 1

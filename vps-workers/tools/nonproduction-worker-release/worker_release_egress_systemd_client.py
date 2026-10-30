@@ -55,10 +55,21 @@ def _read_headers(sock: socket.socket) -> bytes:
     return bytes(data)
 
 
-def _client_mode(broker_path: str, expected_netns_inode: int) -> int:
+def _client_mode(broker_path: str, expected_netns_inode: int,
+                 hidden_host_socket: str) -> int:
     """Runs only inside PrivateNetwork; exercise loopback bridge and broker IPC."""
     if os.stat("/proc/self/ns/net").st_ino == expected_netns_inode:
         raise RuntimeError("PrivateNetwork unit did not enter a distinct network namespace")
+    hidden = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    hidden.settimeout(1)
+    try:
+        hidden.connect(hidden_host_socket)
+    except OSError:
+        pass
+    else:
+        raise RuntimeError("host /run Unix socket remained reachable inside the unit")
+    finally:
+        hidden.close()
     broker_path_obj = Path(broker_path)
 
     def broker_connector():
@@ -159,9 +170,9 @@ def _client_mode(broker_path: str, expected_netns_inode: int) -> int:
 
 if __name__ == "__main__":
     try:
-        if len(sys.argv) != 4 or sys.argv[1] != "--client":
+        if len(sys.argv) != 5 or sys.argv[1] != "--client":
             raise RuntimeError("client fixture arguments are invalid")
-        raise SystemExit(_client_mode(sys.argv[2], int(sys.argv[3])))
+        raise SystemExit(_client_mode(sys.argv[2], int(sys.argv[3]), sys.argv[4]))
     except Exception as error:
         if isinstance(error, RuntimeError):
             message = " ".join(str(error).split())[:240]

@@ -45,12 +45,23 @@ def _run_host_fixture() -> int:
         fixture_root = scratch_root / "fixture"
         fixture_client = stage_fixture_modules(Path(__file__).absolute().parents[3], fixture_root,
                                                  owner_uid=0, owner_gid=0)
-        socket_path = Path(scratch) / "broker.sock"
+        socket_path = Path(f"/run/baci-worker-egress-approved-{os.getpid()}.sock")
+        if socket_path.exists() or socket_path.is_symlink():
+            raise RuntimeError("approved host socket fixture path already exists")
         listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         listener.bind(str(socket_path))
         os.chmod(socket_path, 0o666)
+        approved_identity = socket_path.lstat()
         listener.listen(8)
         listener.settimeout(0.2)
+        hidden_host_socket = Path(f"/run/baci-worker-egress-hidden-{os.getpid()}.sock")
+        if hidden_host_socket.exists() or hidden_host_socket.is_symlink():
+            raise RuntimeError("hidden host socket fixture path already exists")
+        hidden_listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        hidden_listener.bind(str(hidden_host_socket))
+        os.chmod(hidden_host_socket, 0o666)
+        hidden_identity = hidden_host_socket.lstat()
+        hidden_listener.listen(1)
         stopping = threading.Event()
         accepted = []
         registry_served = []
@@ -109,10 +120,14 @@ def _run_host_fixture() -> int:
                     "/usr/bin/systemd-run", "--quiet", "--system", "--wait", "--pipe",
                     "--collect", f"--unit={unit}", f"--uid={peer_uid}",
                     f"--gid={peer_gid}", "--property=PrivateNetwork=yes",
+                    "--property=InaccessiblePaths=/run",
+                    f"--property=BindReadOnlyPaths={socket_path}:/run/baci-seed-egress.sock",
                     "--property=NoNewPrivileges=yes",
+                    "--property=PrivateUsers=yes", "--property=SupplementaryGroups=",
                     "--property=RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
                     "/usr/bin/python3", str(fixture_client), "--client",
-                    str(socket_path), str(os.stat("/proc/self/ns/net").st_ino),
+                    "/run/baci-seed-egress.sock", str(os.stat("/proc/self/ns/net").st_ino),
+                    str(hidden_host_socket),
                 ]
                 result = subprocess.run(command, check=False, capture_output=True,
                                         text=True, timeout=45)
@@ -131,6 +146,17 @@ def _run_host_fixture() -> int:
         finally:
             stopping.set()
             listener.close()
+            hidden_listener.close()
+            for path, identity in ((socket_path, approved_identity),
+                                   (hidden_host_socket, hidden_identity)):
+                try:
+                    current = path.lstat()
+                except FileNotFoundError:
+                    continue
+                if ((current.st_dev, current.st_ino, current.st_uid, current.st_mode)
+                        != (identity.st_dev, identity.st_ino, identity.st_uid, identity.st_mode)):
+                    raise RuntimeError("Unix socket fixture path changed before cleanup")
+                path.unlink()
             accept_thread.join(timeout=2)
             for upstream, registry in accepted:
                 for sock in (upstream, registry):

@@ -20,6 +20,7 @@ recovery_tests = importlib.util.module_from_spec(RECOVERY_SPEC)
 RECOVERY_SPEC.loader.exec_module(recovery_tests)
 publisher = recovery_tests.publisher
 import dependency_seed_tree as seed_tree
+from dependency_seed_test_support import fixture_generation_capability
 
 
 def _block_after_rename(source, cache, store, seeds, sha, receipt, ready):
@@ -31,7 +32,9 @@ def _block_after_rename(source, cache, store, seeds, sha, receipt, ready):
         time.sleep(60)
 
     publisher.rename_noreplace = block
-    publisher.publish_seed(source, cache, store, seeds, sha, verified_receipt=receipt)
+    publisher._publish_seed(
+        source, cache, store, seeds, sha,
+        generation_capability=fixture_generation_capability(source, sha, receipt))
 
 
 @unittest.skipUnless(sys.platform == "linux" and os.geteuid() == 0,

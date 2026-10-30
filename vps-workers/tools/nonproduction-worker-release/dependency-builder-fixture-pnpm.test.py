@@ -387,6 +387,11 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
                 "trust_headline_state": "recognized",
                 "trust_hint_state": "recognized",
             })
+            # A later observer failure must not replace the first bounded
+            # event; uniqueness is part of the scratch diagnostic protocol.
+            fixture._write_diagnostic(candidate, {
+                **fixture.summarize_failure("ERR_PNPM_META_FETCH_FAIL"),
+            })
             self.assertEqual(fixture.read_scratch_diagnostic(
                 scratch, build_root=root, expected_sha=sha, owner_uid=os.geteuid(),
                 build_root_uid=os.geteuid(),

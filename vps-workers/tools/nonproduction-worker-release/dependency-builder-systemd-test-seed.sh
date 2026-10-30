@@ -64,13 +64,15 @@ PYTHONPATH="$(cd "$(dirname "$0")/../../bin" && pwd):$(cd "$(dirname "$0")" && p
   python3 - "$seed_root" "$cache_root" "$store_root" "$published_seed_root" "$sha" <<'PY'
 import json, sys
 from pathlib import Path
-from dependency_seed_publisher import publish_seed
+from dependency_seed_publisher import _publish_seed
+from dependency_seed_test_support import fixture_generation_capability
 from worker_release_dependency_policy_cache import RECEIPT_NAME
 
 source, cache, store, seeds = map(Path, sys.argv[1:5])
 sha = sys.argv[5]
 receipt = json.loads((store / RECEIPT_NAME).read_text(encoding="utf-8"))
-published = publish_seed(source, cache, store, seeds, sha, verified_receipt=receipt)
+published = _publish_seed(source, cache, store, seeds, sha,
+                          generation_capability=fixture_generation_capability(source, sha, receipt))
 print(f"synthetic immutable dependency seed published for exact SHA; present={published.is_dir()}")
 PY
 PYTHONPATH="$(cd "$(dirname "$0")/../../bin" && pwd):$(cd "$(dirname "$0")" && pwd)" \

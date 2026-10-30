@@ -16,6 +16,7 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "bin"))
 sys.path.insert(0, str(Path(__file__).parent))
 import dependency_seed_recovery as seed_recovery
+from dependency_seed_test_support import fixture_generation_capability
 MODULE = Path(__file__).with_name("dependency_seed_publisher.py")
 SPEC = importlib.util.spec_from_file_location("dependency_seed_publisher", MODULE)
 assert SPEC and SPEC.loader
@@ -48,8 +49,9 @@ def _fixture(root: Path, sha: str = "a" * 40):
 def _publish(source: Path, cache: Path, store: Path, seeds: Path, sha: str):
     receipt = publisher.make_receipt(source, cache, publisher.EXPECTED_PNPM,
                                      cache_max_bytes=publisher.MAX_CACHE_BYTES)
-    return publisher.publish_seed(source, cache, store, seeds, sha,
-                                  verified_receipt=receipt)
+    return publisher._publish_seed(source, cache, store, seeds, sha,
+                                  generation_capability=fixture_generation_capability(
+                                      source, sha, receipt))
 
 
 def _block_in_copy(source, cache, store, seeds, sha, receipt, ready):
@@ -58,7 +60,9 @@ def _block_in_copy(source, cache, store, seeds, sha, receipt, ready):
         time.sleep(60)
 
     publisher.copy_tree = block
-    publisher.publish_seed(source, cache, store, seeds, sha, verified_receipt=receipt)
+    publisher._publish_seed(
+        source, cache, store, seeds, sha,
+        generation_capability=fixture_generation_capability(source, sha, receipt))
 
 
 def _block_after_stage_mkdir(source, cache, store, seeds, sha, receipt, ready):
@@ -67,7 +71,9 @@ def _block_after_stage_mkdir(source, cache, store, seeds, sha, receipt, ready):
         time.sleep(60)
 
     publisher.child_directory = block
-    publisher.publish_seed(source, cache, store, seeds, sha, verified_receipt=receipt)
+    publisher._publish_seed(
+        source, cache, store, seeds, sha,
+        generation_capability=fixture_generation_capability(source, sha, receipt))
 
 
 @unittest.skipUnless(sys.platform == "linux" and os.geteuid() == 0,

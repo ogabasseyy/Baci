@@ -13,8 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from worker_release_dependency_seed_consumer import consume_seed
 from worker_release_dependency_artifacts import BuilderRejected, copy_source_tree, make_read_only_input
-from dependency_seed_publisher import EXPECTED_PNPM, make_receipt, publish_seed
+from dependency_seed_publisher import EXPECTED_PNPM, make_receipt, _publish_seed
 from worker_release_dependency_policy_cache import MAX_CACHE_BYTES, validate_receipt
+from dependency_seed_test_support import fixture_generation_capability
 
 SHA_A = "a" * 40
 SHA_B = "b" * 40
@@ -47,7 +48,8 @@ class DependencySeedConsumerTests(unittest.TestCase):
         source.chmod(0o555)
         seeds = root / "seeds"
         receipt = make_receipt(source, cache, EXPECTED_PNPM, cache_max_bytes=MAX_CACHE_BYTES)
-        publish_seed(source, cache, store, seeds, sha, verified_receipt=receipt,
+        _publish_seed(source, cache, store, seeds, sha,
+                     generation_capability=fixture_generation_capability(source, sha, receipt),
                      max_store_bytes=1024 * 1024)
         return source, seeds
 

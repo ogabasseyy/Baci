@@ -56,6 +56,9 @@ from dependency_seed_recovery import (
     recover_interrupted_seed as _recover_interrupted_seed,
 )
 from dependency_seed_verification import verify_seed_locked
+from dependency_seed_generation_contract import (
+    _generation_capability_values, validate_generation_attestation,
+)
 
 MANIFEST = "seed-manifest.json"
 MAX_STORE_BYTES = 4 * 1024 * 1024 * 1024
@@ -83,14 +86,16 @@ def _write_manifest(directory_fd: int, value: dict[str, object]) -> None:
         os.close(fd)
 
 
-def publish_seed(source: Path, cache: Path, store: Path, seed_root: Path,
-                 authenticated_source_sha: str, *, verified_receipt: dict[str, object],
-                 pnpm_version: str = EXPECTED_PNPM,
-                 max_cache_bytes: int = MAX_CACHE_BYTES,
-                 max_store_bytes: int = MAX_STORE_BYTES) -> Path:
+def _publish_seed(source: Path, cache: Path, store: Path, seed_root: Path,
+                  authenticated_source_sha: str, *, generation_capability: object,
+                  pnpm_version: str = EXPECTED_PNPM,
+                  max_cache_bytes: int = MAX_CACHE_BYTES,
+                  max_store_bytes: int = MAX_STORE_BYTES) -> Path:
     """Publish once per trusted-caller SHA with descriptor-relative no-replace."""
     if not SHA_RE.fullmatch(authenticated_source_sha):
         raise BuilderRejected("authenticated source SHA is malformed")
+    verified_receipt, generation_attestation, prepublish_guard = (
+        _generation_capability_values(generation_capability))
     with ExitStack() as stack:
         source_fd = _own_fd(stack, open_directory(Path(source), owner_uid=0, immutable=True))
         cache_fd = _own_fd(stack, open_directory(Path(cache), owner_uid=os.geteuid()))
@@ -105,6 +110,10 @@ def publish_seed(source: Path, cache: Path, store: Path, seed_root: Path,
             raise BuilderRejected("trusted preverification receipt does not match source and cache")
         if expected_receipt["sourceSha"] != authenticated_source_sha:
             raise BuilderRejected("source marker does not match caller-authenticated SHA")
+        generation_attestation = validate_generation_attestation(
+            generation_attestation, source_sha=authenticated_source_sha,
+            source_tree_sha256=source_hash, policy_receipt=expected_receipt,
+        )
         cache_hash = policy_cache_digest_fd(cache_fd, max_bytes=max_cache_bytes)
         store_hash = tree_digest_fd(store_fd, max_bytes=max_store_bytes)
 
@@ -117,14 +126,24 @@ def publish_seed(source: Path, cache: Path, store: Path, seed_root: Path,
             if _recover_interrupted_seed(
                     root_fd, lock_fd, source_fd, authenticated_source_sha,
                     max_cache_bytes=max_cache_bytes, max_store_bytes=max_store_bytes):
+                prepublish_guard()
                 return Path(seed_root) / authenticated_source_sha
         _reject_unresolved_staging(root_fd)
         try:
-            os.stat(authenticated_source_sha, dir_fd=root_fd, follow_symlinks=False)
+            existing = os.stat(authenticated_source_sha, dir_fd=root_fd, follow_symlinks=False)
         except FileNotFoundError:
-            pass
-        else:
-            raise BuilderRejected("immutable source seed already exists")
+            existing = None
+        if existing is not None:
+            # Same-SHA generation is idempotent only when the published tree
+            # still verifies against the exact frozen source and policy. Never
+            # replace or trust an existing name based on presence alone.
+            verify_seed_locked(root_fd, source_fd, authenticated_source_sha,
+                               max_cache_bytes=max_cache_bytes,
+                               max_store_bytes=max_store_bytes)
+            if not _named_root_matches(Path(seed_root), root_fd):
+                raise BuilderRejected("seed root path changed while reusing verified seed")
+            prepublish_guard()
+            return Path(seed_root) / authenticated_source_sha
 
         copy_budget = preflight_copy_budget(
             root_fd, cache_fd, store_fd, max_cache_bytes=max_cache_bytes,
@@ -158,7 +177,7 @@ def publish_seed(source: Path, cache: Path, store: Path, seed_root: Path,
                 if copied_store_fd >= 0:
                     os.close(copied_store_fd)
             _write_manifest(staging_fd, {
-                "schema": 1,
+                "schema": 2,
                 "authenticatedSourceSha": authenticated_source_sha,
                 "pnpmVersion": pnpm_version,
                 "lockfiles": verified_receipt["lockfiles"],
@@ -167,6 +186,7 @@ def publish_seed(source: Path, cache: Path, store: Path, seed_root: Path,
                 "packageStoreSha256": store_hash,
                 "sourceTreeSha256": source_hash,
                 "verificationReceipt": verified_receipt,
+                "generationAttestation": generation_attestation,
             })
             freeze_tree(staging_fd)
             assert_frozen_tree(staging_fd, owner_uid=os.geteuid())
@@ -200,6 +220,9 @@ def publish_seed(source: Path, cache: Path, store: Path, seed_root: Path,
             if (revalidated_receipt != expected_receipt
                     or revalidated_receipt["sourceSha"] != authenticated_source_sha):
                 raise BuilderRejected("source policy changed before seed publication")
+            if not callable(prepublish_guard):
+                raise BuilderRejected("trusted prepublication fence guard is required")
+            prepublish_guard()
             rename_noreplace(root_fd, staging_name, authenticated_source_sha)
             published = True
             os.fsync(root_fd)

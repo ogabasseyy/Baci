@@ -45,13 +45,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No merchant found' }, { status: 403 });
   }
 
-  const allowed = await checkRateLimit(
-    supabase,
-    user.id,
-    'feedback-report',
-    FEEDBACK_RATE_LIMIT.maxRequests,
-    FEEDBACK_RATE_LIMIT.windowMinutes
-  );
+  // The privileged email sender may only run behind a working per-user limit.
+  let allowed: boolean;
+  try {
+    allowed = await checkRateLimit(
+      supabase,
+      user.id,
+      'feedback-report',
+      FEEDBACK_RATE_LIMIT.maxRequests,
+      FEEDBACK_RATE_LIMIT.windowMinutes,
+      { failClosed: true }
+    );
+  } catch {
+    return NextResponse.json(
+      {
+        error: 'Feedback is temporarily unavailable. Try again shortly.',
+        code: 'rate_limit_unavailable',
+      },
+      { status: 503 }
+    );
+  }
   if (!allowed) {
     return NextResponse.json(
       {

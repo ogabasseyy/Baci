@@ -132,6 +132,28 @@ describe('POST /api/feedback', () => {
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
+  it('fails closed with 503 when the rate limit check is unavailable', async () => {
+    mockCheckRateLimit.mockRejectedValue(new Error('rpc down'));
+
+    const res = await POST(req(validBody));
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({
+      error: 'Feedback is temporarily unavailable. Try again shortly.',
+      code: 'rate_limit_unavailable',
+    });
+    expect(mockCheckRateLimit).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-1',
+      'feedback-report',
+      5,
+      10,
+      { failClosed: true }
+    );
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
   it('saves the report under the resolved merchant and emails support', async () => {
     const res = await POST(req(validBody));
 

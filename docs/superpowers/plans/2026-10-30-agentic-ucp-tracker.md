@@ -10,8 +10,8 @@ The single place to see where the agentic commerce work stands and what happens 
 | | |
 | --- | --- |
 | **Current plan** | Milestone 0, plan 1: remove the admin client from agentic routes |
-| **Next action** | Latest-docs check (running), then the plan 1 review, then the TDD build |
-| **Waiting on the owner** | Review and merge of the docs-only PR (see "Owner decisions") |
+| **Next action** | Independent review of plan 1, then the TDD build |
+| **Waiting on the owner** | Merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851) after its gates pass |
 | **Last updated** | 30 October 2026 |
 
 ## How every plan moves (the loop)
@@ -52,7 +52,7 @@ UCP and the agent protocols change quickly. Before each plan is written and agai
 
 Plan: [2026-10-30-agentic-m0-1-admin-client-removal.md](2026-10-30-agentic-m0-1-admin-client-removal.md)
 
-- [ ] Latest-docs check (Supabase JWT roles and PostgREST role switching; no protocol surface changes)
+- [ ] Latest-docs check (protocol docs checked 30 Oct and unaffected; Supabase JWT-role and PostgREST role-switching docs still to check)
 - [x] Plan written (30 Oct; SQL proven in a throwaway Postgres; all 45 replacement snippets match main `1a17a9b900`)
 - [ ] Independent review, fixes applied
 - [ ] Built with TDD (plan tasks 1–10)
@@ -148,10 +148,11 @@ Plans for these are written only when their milestone starts. Each row gets the 
 
 | Decision | Needed for | Status |
 | --- | --- | --- |
-| Commit the roadmap, plan 1 and this tracker to main in a docs-only PR, so every worktree and agent sees the same files | All plans | Approved 30 Oct; PR open |
+| Commit the roadmap, plan 1 and this tracker to main in a docs-only PR, so every worktree and agent sees the same files | All plans | Approved 30 Oct; [#3851](https://github.com/ogabasseyy/Baci/pull/3851) open |
 | Approve read-only production queries for plan 2's baseline (shared cart and VAT state) | Plan 2 | Open |
 | If the agentic merchant charges VAT: block its agentic completion until roadmap Task 6, or pull tax parity into Milestone 0 | Plan 5 | Waiting on plan 2's answer |
 | Free space in Docker Desktop (its own disk is full; tests currently run the database in memory instead) | Convenience | Open |
+| Verify Paystack's Google Pay page by hand: it blocks automated reads, so the 3DS and `PAN_ONLY` details are unconfirmed | Milestone C | Open |
 | Partner access: Google UCP sandbox, OpenAI commerce approval, Paystack token and 3DS support | Milestones B–C | Open |
 
 ## Latest-docs log
@@ -162,6 +163,11 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | 29 Oct | MCP | `2026-07-28` | Roadmap F23 (`Mcp-Method` and `Mcp-Name` CORS headers) |
 | 30 Oct | OpenAI checkout spec | Totals are integers in minor units; the page shows `API-Version` `2025-09-12` as an example | Roadmap F33; plan 4 |
 | 30 Oct | UCP `2026-04-08` cart REST | Cart declaration has only `version`, `spec` and `schema`; update is `PUT /carts/{id}` | Roadmap F15; plan 3 |
+| 30 Oct | UCP releases | Newest is still `v2026-08-25`; `2026-04-08` docs unchanged | Pins hold; `2026-08-25` breaking changes recorded in Task 17 |
+| 30 Oct | Google Merchant UCP (updated 19 Oct) | Implementation pages exist only for `2026-04-08`; profile still uses `signing_keys`; flags are `native_commerce(cart_eligibility)` and `native_commerce(checkout_eligibility)`, replaced as a group | Roadmap F25; plans 3 and Task 8 |
+| 30 Oct | OpenAI ACP | Docs page shows `2025-09-12`; the ACP repository has released `2026-04-17`, which requires `Idempotency-Key` on every POST and integer minor-unit amounts | New finding F39; plan 4 must pin a version |
+| 30 Oct | MCP | `2026-07-28` is still latest; it requires `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` headers and `_meta` fields, and removes sessions | Roadmap F23 refined; Task 5 |
+| 30 Oct | Paystack Google Pay | Page blocks automated reads (403 and a Cloudflare challenge); secondhand copy says every `PAN_ONLY` charge gets a 3DS step-up | Unconfirmed; owner to verify by hand before Milestone C |
 
 ## Review log
 
@@ -175,3 +181,4 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | Date | Change |
 | --- | --- |
 | 30 Oct | Tracker created. Roadmap reviewed and restructured; plan 1 written. |
+| 30 Oct | Docs PR #3851 opened. First latest-docs check recorded: new finding F39, F23 and F25 refined. |

@@ -117,7 +117,11 @@ class SeedRetentionTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_only_verified_seed_unreferenced_by_any_release_is_removed(self):
-        with patch.object(retention, "_verify_preserved_canonical") as verify:
+        # The retention journal has its own verifier import. Stub both verifier
+        # boundaries here: these tests exercise lock/journal/deletion behavior,
+        # while seed-manifest authenticity is covered by recovery tests.
+        with patch.object(retention, "_verify_preserved_canonical") as verify, \
+             patch.object(retention_journal, "_verify_preserved_canonical"):
             removed = retention.prune_unreferenced_seeds(self.worker, self.seeds,
                                                          request_sha="d" * 40)
         self.assertEqual(removed, (ORPHAN,))
@@ -141,6 +145,7 @@ class SeedRetentionTests(unittest.TestCase):
 
     def test_tombstone_survives_delete_failure_and_restores_if_new_release_references_sha(self):
         with patch.object(retention, "_verify_preserved_canonical"), \
+             patch.object(retention_journal, "_verify_preserved_canonical"), \
              patch.object(retention_journal, "remove_tree", side_effect=OSError("injected crash")):
             with self.assertRaisesRegex(OSError, "injected crash"):
                 retention.prune_unreferenced_seeds(self.worker, self.seeds)
@@ -148,7 +153,8 @@ class SeedRetentionTests(unittest.TestCase):
         self.assertEqual(len(tombstones), 1)
         self.assertTrue((self.seeds / retention_journal.JOURNAL).is_file())
         (self.releases / ORPHAN).mkdir()
-        with patch.object(retention, "_verify_preserved_canonical") as verify:
+        with patch.object(retention, "_verify_preserved_canonical") as verify, \
+             patch.object(retention_journal, "_verify_preserved_canonical"):
             removed = retention.prune_unreferenced_seeds(self.worker, self.seeds)
         self.assertEqual(removed, ())
         self.assertTrue((self.seeds / ORPHAN).is_dir())
@@ -158,12 +164,14 @@ class SeedRetentionTests(unittest.TestCase):
 
     def test_unreferenced_partial_tombstone_delete_resumes_and_clears_journal(self):
         with patch.object(retention, "_verify_preserved_canonical"), \
+             patch.object(retention_journal, "_verify_preserved_canonical"), \
              patch.object(retention_journal, "remove_tree", side_effect=OSError("injected crash")):
             with self.assertRaisesRegex(OSError, "injected crash"):
                 retention.prune_unreferenced_seeds(self.worker, self.seeds)
         tombstone = next(path for path in self.seeds.iterdir() if path.name.startswith(".prune-"))
         (tombstone / "placeholder").unlink()
-        with patch.object(retention, "_verify_preserved_canonical"):
+        with patch.object(retention, "_verify_preserved_canonical"), \
+             patch.object(retention_journal, "_verify_preserved_canonical"):
             removed = retention.prune_unreferenced_seeds(self.worker, self.seeds)
         self.assertEqual(removed, ())
         self.assertFalse(tombstone.exists())

@@ -16,7 +16,7 @@ cache_parent=/var/cache/baci-worker-release
 seed_workspace="$cache_parent/seed-work"
 seed_image="$cache_parent/seed-work.img"
 published_seed_root="$seed_workspace/seeds"
-seed_unit_name='var-cache-baci\x2dworker\x2drelease\x2dseed\x2dwork.mount'
+seed_unit_name='var-cache-baci\x2dworker\x2drelease-seed\x2dwork.mount'
 seed_unit_file="/run/systemd/system/$seed_unit_name"
 test_unit="baci-dependency-snapshot-${suffix}.service"
 lock_group_created=0
@@ -292,7 +292,7 @@ finally:
 PY
 seed_unit_identity="$(stat -c '%d:%i' "$seed_unit_file")"
 systemctl daemon-reload
-systemctl start 'var-cache-baci\x2dworker\x2drelease\x2dseed\x2dwork.mount'
+systemctl start "$seed_unit_name"
 seed_workspace_mount_started=1
 PYTHONPATH="$(cd "$(dirname "$0")/../../bin" && pwd)${PYTHONPATH:+:$PYTHONPATH}" \
 SEED_TEST_IMAGE_IDENTITY="$seed_image_identity" python3 -B - <<'PY'

@@ -32,7 +32,7 @@ class SourceViewAccessTests(unittest.TestCase):
         with self.assertRaises(SourceViewAccessRejected):
             _acl(0o5, (0,))
 
-    @unittest.skipUnless(os.geteuid() == 0 and sys_platform_linux(), "requires root Linux ACLs")
+    @unittest.skipUnless(os.geteuid() == 0 and sys.platform.startswith("linux"), "requires root Linux ACLs")
     def test_fixed_accounts_can_read_view_and_pin_binds_acl(self):
         readers = fixed_reader_uids()
         users = [pwd.getpwuid(uid) for uid in readers]
@@ -74,10 +74,6 @@ class SourceViewAccessTests(unittest.TestCase):
         finally:
             make_writable(view if "view" in locals() else root)
             temp.cleanup()
-
-
-def sys_platform_linux() -> bool:
-    return os.name == "posix" and Path("/proc/self/status").exists()
 
 
 def read_as(directory_fd: int, uid: int, gid: int) -> None:

@@ -68,6 +68,8 @@ class SeedWorkspaceContractTests(unittest.TestCase):
                                 seed_workspace.EXPECTED_OBSERVED_INODES * 2)
 
     def test_mount_is_fixed_non_executable_and_required_before_broker(self):
+        self.assertEqual(seed_workspace.UNIT_NAME,
+                         r"var-cache-baci\x2dworker\x2drelease-seed\x2dwork.mount")
         unit = seed_workspace.mount_unit_contents().decode("ascii")
         self.assertIn(f"What={seed_workspace.IMAGE}\n", unit)
         self.assertIn(f"Where={seed_workspace.WORK_ROOT}\n", unit)

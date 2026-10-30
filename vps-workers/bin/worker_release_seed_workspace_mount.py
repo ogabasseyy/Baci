@@ -13,7 +13,7 @@ from worker_release_dependency_artifacts import BuilderRejected
 IMAGE = Path("/var/cache/baci-worker-release/seed-work.img")
 WORK_ROOT = Path("/var/cache/baci-worker-release/seed-work")
 SEED_ROOT = WORK_ROOT / "seeds"
-UNIT_NAME = "var-cache-baci\\x2dworker\\x2drelease\\x2dseed\\x2dwork.mount"
+UNIT_NAME = "var-cache-baci\\x2dworker\\x2drelease-seed\\x2dwork.mount"
 IMAGE_BYTES = 32 * 1024**3
 INODE_COUNT = 2_000_000
 MOUNT_OPTIONS = "loop,nosuid,nodev,noexec"

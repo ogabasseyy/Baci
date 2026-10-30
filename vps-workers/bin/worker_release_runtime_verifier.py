@@ -170,7 +170,7 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
                     "ControlGroup": _systemctl("show", "--property=ControlGroup", "--value", unit),
                 }
                 expected_cgroup = f"/system.slice/{unit}"
-                if (values == {"Result": "success", "ExecMainCode": "exited",
+                if (values == {"Result": "success", "ExecMainCode": "1",
                                "ExecMainStatus": "0", "MainPID": "0",
                                "ControlGroup": expected_cgroup}):
                     completed = True

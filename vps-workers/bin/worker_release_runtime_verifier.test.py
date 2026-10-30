@@ -58,11 +58,11 @@ def freeze(path: Path, gid: int) -> None:
 class MaterializedRuntimeVerifierTests(unittest.TestCase):
     def test_unit_failure_summary_is_closed_and_redacts_cgroup(self):
         summary = summarize_unit_exit({
-            "Result": "success", "ExecMainCode": "exited", "ExecMainStatus": "1",
+            "Result": "success", "ExecMainCode": "1", "ExecMainStatus": "1",
             "MainPID": "0", "ControlGroup": "/system.slice/private-unexpected.service",
         }, expected_cgroup="/system.slice/fixed.service")
         self.assertEqual(summary,
-                         "result=success,code=exited,status=1,main_pid=zero,cgroup=mismatch")
+                         "result=success,code=exited,status=1,main_pid=zero,cgroup=system-slice-other")
         self.assertNotIn("private-unexpected", summary)
 
     def setUp(self):

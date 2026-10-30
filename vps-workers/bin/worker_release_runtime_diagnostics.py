@@ -60,11 +60,25 @@ def summarize_unit_exit(values: dict[str, str], *, expected_cgroup: str) -> str:
     result = result if result in {
         "success", "exit-code", "signal", "timeout", "resources", "protocol",
     } else "other"
-    code = code if code in {"exited", "killed", "dumped", "aborted"} else "other"
+    # systemctl show renders waitid CLD_* values numerically (CLD_EXITED=1).
+    code = {"1": "exited", "2": "killed", "3": "dumped", "4": "trapped"}.get(code, "other")
     status = status if re.fullmatch(r"[0-9]{1,3}", status) else "other"
     main_pid = ("zero" if main_pid == "0" else
                 "nonzero" if re.fullmatch(r"[0-9]{1,10}", main_pid) else "other")
-    cgroup = "match" if cgroup == expected_cgroup else "mismatch"
+    expected_name = expected_cgroup.rsplit("/", 1)[-1]
+    actual_name = cgroup.rsplit("/", 1)[-1]
+    if cgroup == expected_cgroup:
+        cgroup = "match"
+    elif not cgroup:
+        cgroup = "empty"
+    elif actual_name == expected_name.removesuffix(".service"):
+        cgroup = "service-suffix-omitted"
+    elif actual_name == expected_name:
+        cgroup = "basename-only"
+    elif cgroup.startswith("/system.slice/"):
+        cgroup = "system-slice-other"
+    else:
+        cgroup = "other"
     return (f"result={result},code={code},status={status},"
             f"main_pid={main_pid},cgroup={cgroup}")
 

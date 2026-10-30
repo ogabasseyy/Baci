@@ -139,7 +139,7 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
         unit = "baci-worker-runtime-ffffffffffffffff-aaaaaaaaaaaa-0.service"
         values = {
             "LoadState": "loaded", "ActiveState": "active", "SubState": "exited",
-            "Result": "success", "ExecMainCode": "exited", "ExecMainStatus": "0",
+            "Result": "success", "ExecMainCode": "1", "ExecMainStatus": "0",
             "MainPID": "0", "ControlGroup": f"/system.slice/{unit}",
         }
         query.side_effect = lambda *args, **_kwargs: values[

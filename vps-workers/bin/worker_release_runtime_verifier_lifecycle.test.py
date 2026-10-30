@@ -281,7 +281,9 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
             if prop == "SubState":
                 return "failed"
             if prop == "ExecMainStatus":
-                return "21"
+                return "13"
+            if prop == "ExecMainCode":
+                return "2"
             if prop == "ControlGroup":
                 return f"/system.slice/{unit}"
             raise AssertionError(f"unexpected property {prop}")
@@ -304,7 +306,8 @@ class RuntimeVerifierLifecycleTests(unittest.TestCase):
                 patch("worker_release_runtime_verifier.os.geteuid", return_value=0), \
                 patch("worker_release_runtime_verifier.SYSTEMD_RUN", "/usr/bin/true"), \
                 patch("worker_release_runtime_verifier.SYSTEMCTL", "/usr/bin/true"):
-            with self.assertRaisesRegex(RuntimeVerificationRejected, "exit=21"):
+            with self.assertRaisesRegex(RuntimeVerificationRejected,
+                                        r"code=killed,status=13"):
                 _execute_fixed_unit(unit, self.candidate, ("/usr/bin/false",),
                                     {"User": str(self.runtime_uid)}, 1)
         reset_index = next(i for i, call in enumerate(systemctl.call_args_list)

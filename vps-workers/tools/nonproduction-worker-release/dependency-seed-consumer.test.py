@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import pwd
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -85,6 +86,41 @@ class DependencySeedConsumerTests(unittest.TestCase):
             self.assertEqual((cache / "metadata.json").read_text(encoding="utf-8"),
                              "verified registry metadata")
             self.assertEqual((input_root / RECEIPT_NAME).stat().st_mode & 0o222, 0)
+
+    def test_receipt_is_root_owned_but_readable_by_the_dedicated_builder_group(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, seeds = self._fixture(root)
+            _cache, _scratch, input_root = self._consume(source, seeds, root, SHA_A)
+            uid = pwd.getpwnam("nobody").pw_uid
+            gid = pwd.getpwnam("nobody").pw_gid
+            receipt = input_root / RECEIPT_NAME
+            metadata = receipt.stat()
+            self.assertEqual((metadata.st_uid, metadata.st_gid), (0, gid))
+            self.assertEqual(metadata.st_mode & 0o777, 0o440)
+
+            # Match the production handoff: root freezes the input directory
+            # before the transient service starts, then the builder opens the
+            # receipt using only its dedicated primary group.
+            input_root.chmod(0o555)
+            root.chmod(0o711)
+
+            def drop_to_builder():
+                os.setgroups([])
+                os.setgid(gid)
+                os.setuid(uid)
+
+            try:
+                result = subprocess.run(
+                    [sys.executable, "-c", "import pathlib,sys; pathlib.Path(sys.argv[1]).read_bytes()",
+                     str(receipt)],
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL, check=False, preexec_fn=drop_to_builder,
+                )
+            finally:
+                input_root.chmod(0o700)
+                root.chmod(0o700)
+            self.assertEqual(result.returncode, 0)
 
     def test_wrong_sha_and_missing_seed_fail_closed_without_global_fallback(self):
         with tempfile.TemporaryDirectory() as temporary:

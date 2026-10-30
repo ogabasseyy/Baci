@@ -204,10 +204,15 @@ def _execute_fixed_unit(unit: str, cwd: Path, command: tuple[str, ...],
                 break
             if active == "failed":
                 status = _systemctl("show", "--property=ExecMainStatus", "--value", unit)
+                main_code = _systemctl("show", "--property=ExecMainCode", "--value", unit)
+                code_category = {
+                    "1": "exited", "2": "killed", "3": "dumped", "4": "trapped",
+                }.get(main_code, "other")
                 if re.fullmatch(r"(?:0|[1-9][0-9]{0,2})", status) and int(status) <= 255:
-                    failure = f"fixed runtime check {check_index} failed (exit={status})"
+                    failure = (f"fixed runtime check {check_index} failed "
+                               f"(code={code_category},status={status})")
                 else:
-                    failure = f"fixed runtime check {check_index} failed"
+                    failure = f"fixed runtime check {check_index} failed (code={code_category})"
                 break
             if active == "inactive":
                 failure = f"fixed runtime check {check_index} became inactive before verification"

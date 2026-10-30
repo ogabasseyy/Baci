@@ -55,9 +55,11 @@ def _open_seed_root_lock(seed_root: Path) -> tuple[int, int]:
         raise
 
 
-def _write_receipt(input_root: Path, receipt: object) -> Path:
+def _write_receipt(input_root: Path, receipt: object, builder_gid: int) -> Path:
     if not isinstance(receipt, dict) or len(json.dumps(receipt).encode("utf-8")) > 32_768:
         raise BuilderRejected("dependency seed verification receipt is malformed")
+    if type(builder_gid) is not int or builder_gid < 0:
+        raise BuilderRejected("dependency seed builder group is invalid")
     parent_fd = os.open(input_root, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0))
     fd = -1
     created = False
@@ -75,8 +77,18 @@ def _write_receipt(input_root: Path, receipt: object) -> Path:
             if written <= 0:
                 raise BuilderRejected("dependency seed receipt write was incomplete")
             view = view[written:]
-        os.fchown(fd, 0, 0)
+        # The transient build service runs as the dedicated builder identity.
+        # Keep the evidence root-owned and immutable while making it readable
+        # through the already world-traversable read-only input directory.
+        os.fchown(fd, 0, builder_gid)
         os.fchmod(fd, 0o440)
+        final = os.fstat(fd)
+        named = os.stat(RECEIPT_NAME, dir_fd=parent_fd, follow_symlinks=False)
+        if (not stat.S_ISREG(final.st_mode) or final.st_uid != 0
+                or final.st_gid != builder_gid or stat.S_IMODE(final.st_mode) != 0o440
+                or final.st_nlink != 1
+                or (final.st_dev, final.st_ino) != (named.st_dev, named.st_ino)):
+            raise BuilderRejected("dependency seed receipt ownership is unsafe")
         os.fsync(fd)
     except BaseException:
         if fd >= 0:
@@ -153,7 +165,7 @@ def consume_seed(source: Path, authenticated_source_sha: str, *, seed_root: Path
         make_read_only_input(cache_seed)
         copy_private_policy_cache(cache_path, scratch, builder_uid, builder_gid,
                                   max_entries=max_cache_entries, max_bytes=max_cache_bytes)
-        _write_receipt(input_root, receipt)
+        _write_receipt(input_root, receipt, builder_gid)
 
         # Hold the seed lock and all source descriptors through the copy, then
         # revalidate the immutable bytes and path binding before returning.

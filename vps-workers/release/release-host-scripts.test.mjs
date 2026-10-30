@@ -268,3 +268,83 @@ test(
     assert.notEqual(run('/etc/passwd.sh').status, 0);
   }
 );
+
+test(
+  'bugfix: drops credentials written with dotenv spacing or colon syntax',
+  linuxOnly,
+  () => {
+    const dir = mkdtempSync(join(tmpdir(), 'baci-provision-'));
+    const envFile = join(dir, '.env');
+    writeFileSync(
+      envFile,
+      'GITHUB_TOKEN = drop-1\nexport SUPABASE_ACCESS_TOKEN: drop-2\nKEEP = yes\n'
+    );
+
+    const result = migrate(envFile);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, 'KEEP = yes\n');
+    const check = spawnSync(
+      'bash',
+      [
+        '-c',
+        `source "${join(releaseDir, 'provision-host.sh')}" && has_dropped_key "$1"`,
+        'x',
+        envFile,
+      ],
+      { encoding: 'utf8', env: { PATH: '/usr/bin:/bin' } }
+    );
+    assert.equal(
+      check.status,
+      0,
+      'the readiness check must detect spaced credentials'
+    );
+  }
+);
+
+test(
+  'bugfix: maps a nested legacy app-live checkout to the release symlink',
+  linuxOnly,
+  () => {
+    const dir = mkdtempSync(join(tmpdir(), 'baci-provision-'));
+    const envFile = join(dir, '.env');
+    writeFileSync(
+      envFile,
+      'BACI_REPO_DIR=/home/deploy/baci-workers/app-live\n'
+    );
+
+    const result = migrate(envFile);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, 'BACI_REPO_DIR=/srv/w/app-live\n');
+  }
+);
+
+test(
+  'run-as-worker refuses a configured worker directory outside the release root',
+  linuxOnly,
+  () => {
+    const base = mkdtempSync(join(tmpdir(), 'baci-run-as-worker-'));
+    const stubs = join(base, 'stubs');
+    const root = join(base, 'root');
+    executable(join(stubs, 'sudo'), 'exit 99\n');
+    executable(join(stubs, 'id'), 'echo 999\n');
+    executable(join(root, 'app-live/vps-workers/bin/check.sh'), 'true\n');
+
+    const result = spawnSync(
+      'bash',
+      [join(releaseDir, 'run-as-worker.sh'), 'vps-workers/bin/check.sh'],
+      {
+        encoding: 'utf8',
+        env: {
+          PATH: `${stubs}:/usr/bin:/bin`,
+          BACI_WORKER_ROOT: root,
+          VPS_WORKER_REMOTE_DIR: '/home/deploy/baci-workers',
+        },
+      }
+    );
+
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /VPS_WORKER_REMOTE_DIR must be/);
+  }
+);

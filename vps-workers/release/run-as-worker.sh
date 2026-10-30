@@ -28,6 +28,12 @@ shift || true
 target="$ROOT/app-live/$script"
 [ -f "$target" ] || fail "$script is not present in the installed release."
 worker_uid="$(id -u "$WORKER_USER")" || fail "user $WORKER_USER does not exist."
+# Verifiers and the latch check must inspect the same directory; a
+# configured path that differs from the release root is a misconfiguration.
+remote_dir="$ROOT/baci-workers"
+if [ -n "${VPS_WORKER_REMOTE_DIR:-}" ] && [ "$VPS_WORKER_REMOTE_DIR" != "$remote_dir" ]; then
+  fail "VPS_WORKER_REMOTE_DIR must be $remote_dir for isolated releases (got $VPS_WORKER_REMOTE_DIR)."
+fi
 
 settings=()
 for name in "${PASSED_VARIABLES[@]}"; do
@@ -38,7 +44,7 @@ exec sudo -n -u "$WORKER_USER" -- env -i \
   HOME="$ROOT" USER="$WORKER_USER" LOGNAME="$WORKER_USER" \
   PATH=/usr/local/bin:/usr/bin:/bin LANG=C.UTF-8 \
   XDG_RUNTIME_DIR="/run/user/$worker_uid" \
-  VPS_WORKER_REMOTE_DIR="$ROOT/baci-workers" \
+  VPS_WORKER_REMOTE_DIR="$remote_dir" \
   BACI_WORKER_DEPLOY_LOCK="$ROOT/baci-workers/locks/release.lock" \
   ${settings[@]+"${settings[@]}"} \
   bash "$target" "$@"

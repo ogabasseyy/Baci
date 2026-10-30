@@ -82,7 +82,7 @@ if [ -f apps/web/package.json ]; then mkdir -p apps/web/node_modules/.bin && pri
   );
   write(
     join(bin, 'crontab'),
-    '#!/usr/bin/env bash\ncp "$1" "$HOME/installed-crontab"\n',
+    '#!/usr/bin/env bash\nif [ -e "$HOME/fail-crontab" ]; then rm -f "$HOME/fail-crontab"; exit 1; fi\nif [ "$1" = -r ]; then rm -f "$HOME/installed-crontab"; else cp "$1" "$HOME/installed-crontab"; fi\n',
     0o755
   );
   write(

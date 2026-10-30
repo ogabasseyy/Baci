@@ -18,4 +18,7 @@ test('legacy deploy.sh refuses a host migrated to isolated worker releases befor
     'the guard must run before the release is staged'
   );
   assert.match(body, /Refusing legacy worker deployment[^\n]*\n\s+exit 1/);
+  // bugfix: a failed probe must refuse instead of reading as "not migrated".
+  assert.match(body, /if ! host_layout="\$\(ssh /);
+  assert.match(body, /if \[ "\$host_layout" != legacy \]/);
 });

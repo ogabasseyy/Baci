@@ -23,6 +23,11 @@ PERSISTENT_ENTRIES=' .env logs locks state .gigl-capability-smoke-ok app-checkou
 CRON_BLOCK_START='# >>> baci-workers >>>'
 CRON_BLOCK_END='# <<< baci-workers <<<'
 # Codex remediation needs Docker, which this unprivileged user must not have.
+WORKER_UNITS=(
+  baci-vercel-log-drain-receiver.service baci-ai-storefront-trigger.service
+  baci-import-job-trigger.service baci-domain-event-router.service
+  baci-event-delivery-worker.service baci-quiz-finalization.service
+)
 REMEDIATION_JOBS='vercel-error-remediator.mjs|sentry-mobile-error-remediator.mjs|posthog-error-remediator.mjs|remediation-codex-canary.mjs|cleanup-remediation-storage.mjs'
 
 fail() {
@@ -110,26 +115,30 @@ switch_current() {
 render_crontab() {
   local deploy_script="$RELEASES/$1/workers/deploy.sh" block
   block="$(sed -n "/^\$CRON_BLOCK_START\$/,/^\$CRON_BLOCK_END\$/p" "$deploy_script")"
-  [ -n "$block" ] || fail "the worker schedule block is missing from deploy.sh."
+  if [ -z "$block" ]; then
+    echo "worker-release: the worker schedule block is missing from deploy.sh." >&2
+    return 1
+  fi
   block="$(printf '%s\n' "$block" | grep -v -E "$REMEDIATION_JOBS" |
     sed -e "s|^\$CRON_BLOCK_START\$|$CRON_BLOCK_START|" -e "s|^\$CRON_BLOCK_END\$|$CRON_BLOCK_END|" \
       -e "s|\$REMOTE_DIR|$WORKERS|g" -e "s|\$NODE_BIN|$NODE_BIN|g")"
   if printf '%s\n' "$block" | grep -q -E '\$\{?[A-Z_]'; then
-    fail "the worker schedule has unresolved variables."
+    echo "worker-release: the worker schedule has unresolved variables." >&2
+    return 1
   fi
   printf '%s\n' "$block"
 }
 
 install_services() {
   local sha="$1" unit job description dir="$HOME/.config/systemd/user"
-  mkdir -p "$dir"
+  mkdir -p "$dir" || return 1
   for unit in vercel-log-drain-receiver ai-storefront-trigger import-job-trigger; do
     case "$unit" in
       vercel-log-drain-receiver) job=vercel-log-drain-receiver; description='Vercel log drain receiver' ;;
       ai-storefront-trigger) job=ai-storefront-trigger-server; description='AI storefront trigger server' ;;
       import-job-trigger) job=import-job-trigger-server; description='import job trigger server' ;;
     esac
-    cat > "$dir/baci-$unit.service" <<EOF
+    cat > "$dir/baci-$unit.service" <<EOF || return 1
 [Unit]
 Description=Baci $description
 After=network-online.target
@@ -145,28 +154,48 @@ RestartSec=5
 WantedBy=default.target
 EOF
   done
-  systemctl --user daemon-reload
+  systemctl --user daemon-reload || return 1
   systemctl --user enable --quiet baci-vercel-log-drain-receiver.service \
-    baci-ai-storefront-trigger.service baci-import-job-trigger.service
-  bash "$RELEASES/$sha/workers/install-event-pipeline-services.sh" "$WORKERS"
-  bash "$RELEASES/$sha/workers/install-quiz-finalization-service.sh" "$WORKERS"
+    baci-ai-storefront-trigger.service baci-import-job-trigger.service || return 1
+  bash "$RELEASES/$sha/workers/install-event-pipeline-services.sh" "$WORKERS" || return 1
+  bash "$RELEASES/$sha/workers/install-quiz-finalization-service.sh" "$WORKERS" || return 1
   # Long-running services keep the release they started from until restarted.
-  systemctl --user restart baci-vercel-log-drain-receiver.service \
-    baci-ai-storefront-trigger.service baci-import-job-trigger.service \
-    baci-domain-event-router.service baci-event-delivery-worker.service \
-    baci-quiz-finalization.service
+  systemctl --user restart "${WORKER_UNITS[@]}"
 }
 
 install_schedule() {
   local sha="$1" rendered="$ROOT/state.crontab.next"
-  render_crontab "$sha" > "$rendered"
-  crontab "$rendered"
+  render_crontab "$sha" > "$rendered" || return 1
+  crontab "$rendered" || return 1
   # The deploy runner reads this copy; it cannot read another user's spool.
   mv -f "$rendered" "$WORKERS/state/installed-crontab"
 }
 
 preflight() {
   (cd "$WORKERS" && "$NODE_BIN" "$WORKERS/jobs/preflight-direct-web-workers.mjs") >/dev/null
+}
+
+# A half-installed release must never stay live: return to the previous
+# release with its schedule and services, or, on a first activation, remove
+# everything so the caller can safely restore the legacy workers.
+restore_after_failed_activation() {
+  local failed="$1" previous="$2"
+  if [ -n "$previous" ] && [ "$previous" != "$failed" ]; then
+    switch_current "$previous"
+    install_release_runtime "$previous"
+    return
+  fi
+  crontab -r 2>/dev/null || true
+  rm -f "$WORKERS/state/installed-crontab"
+  systemctl --user disable --now "${WORKER_UNITS[@]}" 2>/dev/null || true
+  rm -f "$ROOT/current" "$ROOT/app-live"
+}
+
+# Called from conditionals, where bash ignores errexit even in subshells, so
+# every step in the install path returns its failure explicitly.
+install_release_runtime() {
+  install_schedule "$1" || return 1
+  install_services "$1" || return 1
 }
 
 activate_release() {
@@ -185,12 +214,16 @@ activate_release() {
     if [ -n "$previous" ] && [ "$previous" != "$sha" ]; then switch_current "$previous"; fi
     exit 1
   fi
+  flock -u 8
+  if ! install_release_runtime "$sha"; then
+    if restore_after_failed_activation "$sha" "$previous"; then
+      fail "activation of $sha failed; restored ${previous:-the pre-release state}."
+    fi
+    fail "activation of $sha failed and restoring ${previous:-the pre-release state} also failed; repair manually."
+  fi
   if [ -n "$previous" ] && [ "$previous" != "$sha" ]; then
     printf '%s\n' "$previous" > "$WORKERS/state/previous-release"
   fi
-  flock -u 8
-  install_schedule "$sha"
-  install_services "$sha"
   prune_releases "$sha" "$previous"
   echo "worker-release: activated $sha."
 }

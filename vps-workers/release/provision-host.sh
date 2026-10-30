@@ -17,6 +17,8 @@ SUDOERS_FILE="${BACI_WORKER_SUDOERS_FILE:-/etc/sudoers.d/baci-worker}"
 WORKERS="$ROOT/baci-workers"
 # Read by no scheduled worker: GitHub, Supabase management, Vercel OIDC and
 # Sentry admin tokens, plus Docker-only remediation settings.
+# Key recognition mirrors dotenv: optional export, spaces around `=`, or `:`.
+DOTENV_KEY_PATTERN='^[[:space:]]*(export[[:space:]]+)?([A-Za-z0-9_.-]+)[[:space:]]*(=|:[[:space:]])'
 DROPPED_KEY_PATTERN='^(GITHUB_PERSONAL_ACCESS_TOKEN|GH_TOKEN|GITHUB_TOKEN|GH_BIN|SUPABASE_ACCESS_TOKEN|VERCEL_OIDC_TOKEN|VERCEL_TOKEN|VERCEL_BIN|SENTRY_AUTH_TOKEN|SENTRY_REMEDIATION_AUTH_TOKEN|CODEX_BIN|AUTONOMA_CLIENT_ID|AUTONOMA_SECRET_ID|BACI_REMEDIATION_[A-Z0-9_]*)$'
 
 fail() {
@@ -29,11 +31,14 @@ fail() {
 migrate_env() {
   local line key output=''
   while IFS= read -r line || [ -n "$line" ]; do
-    if [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)= ]]; then
+    if [[ "$line" =~ $DOTENV_KEY_PATTERN ]]; then
       key="${BASH_REMATCH[2]}"
       if [[ "$key" =~ $DROPPED_KEY_PATTERN ]]; then continue; fi
-      line="${line//$LEGACY_DIR/$WORKERS}"
+      # Checkout paths first: the nested legacy app-live would otherwise be
+      # rewritten into the worker directory instead of the release symlink.
+      line="${line//$LEGACY_DIR\/app-live/$ROOT/app-live}"
       line="${line//$LEGACY_APP_LIVE/$ROOT/app-live}"
+      line="${line//$LEGACY_DIR/$WORKERS}"
       if [[ "$line" == *"/home/$DEPLOY_USER"* ]]; then
         fail "worker setting $key still points into /home/$DEPLOY_USER; move it before provisioning."
       fi
@@ -42,6 +47,16 @@ migrate_env() {
   done < "$1"
   # Emit nothing unless the whole file migrates.
   printf '%s' "$output"
+}
+
+has_dropped_key() {
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [[ "$line" =~ $DOTENV_KEY_PATTERN ]] && [[ "${BASH_REMATCH[2]}" =~ $DROPPED_KEY_PATTERN ]]; then
+      return 0
+    fi
+  done < "$1"
+  return 1
 }
 
 check() {
@@ -57,7 +72,7 @@ check() {
   fi
   [ -f "$SUDOERS_FILE" ] || report "$SUDOERS_FILE is missing."
   [ -f "$WORKERS/.env" ] || report "$WORKERS/.env is missing."
-  if [ -f "$WORKERS/.env" ] && grep -q -E "^[[:space:]]*(export[[:space:]]+)?${DROPPED_KEY_PATTERN:1:-1}=" "$WORKERS/.env"; then
+  if [ -f "$WORKERS/.env" ] && has_dropped_key "$WORKERS/.env"; then
     report "$WORKERS/.env still contains deployment or administration credentials."
   fi
   command -v setfacl >/dev/null || report "setfacl is not installed (package: acl)."

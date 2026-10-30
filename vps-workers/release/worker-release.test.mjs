@@ -175,3 +175,47 @@ test(
     );
   }
 );
+
+describeActivationFailure();
+
+function describeActivationFailure() {
+  test(
+    'bugfix: restores the previous release and schedule when installing the new one fails',
+    linuxOnly,
+    () => {
+      const host = createHost();
+      release(host, host.firstSha);
+      const scheduleBefore = host.read('installed-crontab');
+      const next = host.commit('second');
+      assert.equal(host.run('build', next).status, 0);
+      writeFileSync(join(host.root, 'fail-crontab'), '');
+
+      const result = host.run('activate', next);
+
+      assert.notEqual(result.status, 0);
+      assert.match(
+        result.stderr,
+        /activation of [0-9a-f]{40} failed; restored/
+      );
+      assert.equal(host.run('status').stdout.trim(), host.firstSha);
+      assert.equal(host.read('installed-crontab'), scheduleBefore);
+    }
+  );
+
+  test(
+    'bugfix: leaves no worker schedule or release live when a first activation fails',
+    linuxOnly,
+    () => {
+      const host = createHost();
+      assert.equal(host.run('build', host.firstSha).status, 0);
+      writeFileSync(join(host.root, 'fail-crontab'), '');
+
+      const result = host.run('activate', host.firstSha);
+
+      assert.notEqual(result.status, 0);
+      assert.ok(!existsSync(join(host.root, 'current')));
+      assert.ok(!existsSync(join(host.root, 'installed-crontab')));
+      assert.match(host.read('systemctl.log'), /disable --now/);
+    }
+  );
+}

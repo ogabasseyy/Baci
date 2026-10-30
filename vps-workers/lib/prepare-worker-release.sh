@@ -9,7 +9,13 @@ cleanup_worker_staging() {
 prepare_worker_release() {
   # Migrated hosts get workers from deploy.yml as baci-worker (vps-workers/release);
   # this legacy path would reinstall them under the deployment identity.
-  if [ "$(ssh "$VPS" "if [ -e /srv/baci-worker/current ]; then printf isolated; fi")" = isolated ]; then
+  # Fail closed: a failed probe must never be read as "not migrated".
+  local host_layout
+  if ! host_layout="$(ssh "$VPS" "if [ -e /srv/baci-worker/current ]; then printf isolated; else printf legacy; fi")"; then
+    echo "Refusing legacy worker deployment: could not determine whether the host uses isolated releases." >&2
+    exit 1
+  fi
+  if [ "$host_layout" != legacy ]; then
     echo "Refusing legacy worker deployment: this host uses isolated worker releases from deploy.yml." >&2
     exit 1
   fi

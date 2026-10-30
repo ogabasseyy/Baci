@@ -59,6 +59,12 @@ def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callab
         "InaccessiblePaths": "/tmp /var/tmp /dev/shm /etc /srv /opt /usr/local /var/log /var/cache /var/spool /var/backups",
     }
     worker_imports = (
+        # Node uses exit status 13 for an unresolved top-level await. The
+        # bounded imports below should convert hangs to 31-33; retain a second
+        # fixed stage marker so any Node-originated 13 identifies which import
+        # or constructor was unresolved without logging package output.
+        "let smokeStage = 0; process.on('exit', code => { "
+        "if (code === 13) process.exitCode = 40 + smokeStage; }); "
         "const boundedImport = async (specifier, timeoutCode) => { let timer; "
         "try { return await Promise.race([import(specifier), new Promise((_, reject) => { "
         "timer = setTimeout(() => reject({ baciImportTimeout: timeoutCode }), 8000); })]); } "
@@ -68,9 +74,13 @@ def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callab
         "try { const fs = await import('node:fs'); "
         "for (const hidden of ['/srv/baci-workers/releases','/srv/baci-workers/runtime','/srv/baci-workers/locks','/etc','/var/log','/var/cache','/var/spool','/var/backups','/opt','/usr/local']) { "
         "try { fs.accessSync(hidden); process.exit(4); } catch (error) { if (!['ENOENT','EACCES','EPERM'].includes(error?.code)) process.exit(5); } } "
+        "smokeStage = 1; "
         "const dotenv = await boundedImport('dotenv', 31); "
+        "smokeStage = 2; "
         "const supabase = await boundedImport('@supabase/supabase-js', 32); "
+        "smokeStage = 3; "
         "const expo = await boundedImport('expo-server-sdk', 33); "
+        "smokeStage = 4; "
         "if (typeof dotenv.config !== 'function' || typeof supabase.createClient !== 'function' || typeof expo.Expo !== 'function') process.exit(2); "
         "const client = supabase.createClient('https://example.invalid', 'synthetic-smoke-key'); "
         "const push = new expo.Expo({ accessToken: 'synthetic-smoke-token' }); "

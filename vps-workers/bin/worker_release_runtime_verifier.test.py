@@ -245,6 +245,11 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             self.assertNotIn("/home", inaccessible)  # supplied by ProtectHome
             if "--input-type=module" in command:
                 smoke_script = command[-1]
+                self.assertIn("if (code === 13) process.exitCode = 40 + smokeStage", smoke_script)
+                self.assertIn("smokeStage = 1", smoke_script)
+                self.assertIn("smokeStage = 2", smoke_script)
+                self.assertIn("smokeStage = 3", smoke_script)
+                self.assertIn("smokeStage = 4", smoke_script)
                 self.assertIn("boundedImport('dotenv', 31)", smoke_script)
                 self.assertIn("boundedImport('@supabase/supabase-js', 32)", smoke_script)
                 self.assertIn("boundedImport('expo-server-sdk', 33)", smoke_script)

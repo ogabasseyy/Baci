@@ -21,6 +21,7 @@ STAGES = frozenset({
     "source-extraction", "source-tree-validation", "policy-preverify", "offline-store-validation",
     "build-cache-snapshot",
     "source-lock-validation", "web-deploy", "deploy-graph-validation", "workspace-self-link-cleanup",
+    "seed-move-measurement",
     "worker-install", "receipt-validation", "payload-hardlink-normalization", "payload-export",
     "payload-validation", "payload-materialization",
     "independent-smoke", "independent-smoke-tsx", "independent-smoke-dotenv",

@@ -3,6 +3,7 @@ import errno
 import io
 import json
 import os
+import re
 import sys
 import subprocess
 import tempfile
@@ -21,6 +22,7 @@ experiment = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(experiment)
 from worker_release_actual_dependency_guard import (
     MonitorFailure,
+    STAGES,
     _resource_category,
     enforce_resource_limits,
     failure_diagnostic,
@@ -50,6 +52,12 @@ from worker_release_dependency_evidence_shape import OFFLINE_STORE_SUBTYPES
 
 
 class ActualDependencyExperimentTests(unittest.TestCase):
+    def test_every_literal_experiment_stage_assignment_is_allowlisted(self):
+        source = SCRIPT.read_text(encoding="utf-8")
+        assigned_stages = set(re.findall(r"\bstage\s*=\s*['\"]([^'\"]+)['\"]", source))
+        self.assertTrue(assigned_stages)
+        self.assertEqual(assigned_stages - STAGES, set())
+
     def test_resource_high_water_records_monotonic_peak_and_fixed_stage(self):
         high_water = ResourceHighWater()
         high_water.observe("source-copy", 4, 40)

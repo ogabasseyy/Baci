@@ -11,14 +11,17 @@ const ALLOWED_OPTION_KEYS = new Set([
   'quality',
   'width',
 ]);
-const ALLOWED_FITS = new Set(['inside', 'cover'] as const);
-const ALLOWED_FORMATS = new Set([
+const ALLOWED_FITS: ReadonlySet<string> = new Set<ProxyFit>([
+  'inside',
+  'cover',
+]);
+const ALLOWED_FORMATS: ReadonlySet<string> = new Set<ProxyFormat>([
   'avif',
   'jpeg',
   'jpg',
   'png',
   'webp',
-] as const);
+]);
 
 export interface ParsedOgabasseyCdnImageProxyPath {
   assetPath: string;
@@ -29,6 +32,17 @@ export interface ParsedOgabasseyCdnImageProxyPath {
     quality: number;
     width: number;
   };
+}
+
+type ProxyFit = ParsedOgabasseyCdnImageProxyPath['options']['fit'];
+type ProxyFormat = ParsedOgabasseyCdnImageProxyPath['options']['format'];
+
+function isAllowedFit(value: string): value is ProxyFit {
+  return ALLOWED_FITS.has(value);
+}
+
+function isAllowedFormat(value: string): value is ProxyFormat {
+  return ALLOWED_FORMATS.has(value);
 }
 
 function parseBoundedInt(
@@ -84,11 +98,9 @@ export function parseOgabasseyCdnImageProxyPath(
     rawHeight !== undefined ? parseBoundedInt(rawHeight, 16, 3840) : undefined;
 
   if (
-    !ALLOWED_FITS.has(rawFit as 'cover' | 'inside') ||
+    !isAllowedFit(rawFit) ||
     !rawFormat ||
-    !ALLOWED_FORMATS.has(
-      rawFormat as ParsedOgabasseyCdnImageProxyPath['options']['format']
-    ) ||
+    !isAllowedFormat(rawFormat) ||
     quality === null ||
     width === null ||
     height === null
@@ -108,9 +120,8 @@ export function parseOgabasseyCdnImageProxyPath(
   return {
     assetPath,
     options: {
-      fit: rawFit as 'cover' | 'inside',
-      format:
-        rawFormat as ParsedOgabasseyCdnImageProxyPath['options']['format'],
+      fit: rawFit,
+      format: rawFormat,
       ...(height !== undefined ? { height } : {}),
       quality,
       width,

@@ -1105,21 +1105,23 @@ entitlement before calling or claiming a tool.
 
 Write the date exactly as the existing format expects, for example `Reviewed 31 October 2026`.
 
-- [ ] **Step 6: Run the gate again**
+- [ ] **Step 6: Commit the refreshed register**
 
-```bash
-BASE_SHA=$(git merge-base origin/main HEAD) BACI_REGISTER_REQUIRE_FRESH=1 python3 vps-workers/baci-editorial-context/capability_gate.py
-```
-
-Expected: PASS.
-
-- [ ] **Step 7: Commit**
+The gate compares committed changes (`BASE_SHA...HEAD`), so the register and access map must be committed before it can pass.
 
 ```bash
 coderabbit review --agent -t uncommitted
 git add docs/product/baci-capabilities.json docs/product/agent-access-map.md
 git commit -m "docs(capabilities): re-review agent protocols after scoped merchant resolution"
 ```
+
+- [ ] **Step 7: Run the gate again**
+
+```bash
+BASE_SHA=$(git merge-base origin/main HEAD) BACI_REGISTER_REQUIRE_FRESH=1 python3 vps-workers/baci-editorial-context/capability_gate.py
+```
+
+Expected: PASS. If it still fails, fix the register in a new commit and rerun the gate.
 
 ---
 

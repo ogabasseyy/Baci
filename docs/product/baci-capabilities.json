@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-30T08:07:40+00:00",
-  "source_revision": "c346c35d5c6b8e176028e57a182bc2faca2cfb33",
-  "evidence_digest": "884ec712bc68c759e59b0de3f2d07fe260a2fc08529a2ac66a1fe0ddfff8a018",
-  "claims_digest": "a5eb837dea04dc2f6441b9c038557f5d03e4c0c5ff6a3bb94b1c1cbe94dece19",
-  "review_scope": "Source evidence only. Rechecked the support-chat health probe: catalog and conversation checks run concurrently, with Ogabassey tenant and catalog markers. All cited capability and access-map sources remain unchanged since the previous source review across this main integration. OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
+  "reviewed_at": "2026-10-30T23:17:19+00:00",
+  "source_revision": "09e2b99a55d9e2d514fe227ca9cac0a809564e14",
+  "evidence_digest": "a529e3c6c4013d7585c53546e1e6ec18e858440b43e177aa238b370c6bea3fc7",
+  "claims_digest": "be00eb5b7a4f93df9b14364a9b7972a52c2f8b7ee296abd96110566deafd95b0",
+  "review_scope": "Source evidence only. Rechecked the agent-protocols sources after the agentic catalog, checkout-session and order routes moved from a service-role client to the scoped agentic merchant-context RPC, with a separate scoped payment-split lookup for checkout completion; the agent-protocols claim, limitations and status are unchanged. Other cited capability and access-map sources are unchanged since the previous review. The support-chat health probe, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

@@ -1,5 +1,7 @@
 'use client';
 
+import { isTerminalRedvaultReview } from '../is-terminal-redvault-review';
+import { readRedvaultReviewRecovery } from '../read-redvault-review-recovery';
 import type { CheckoutOrderSubmissionContext } from './checkout-order-submission-types';
 import type { useCheckoutAttemptSession } from './use-checkout-attempt-session';
 import { useCheckoutCryptoSession } from './use-checkout-crypto-session';
@@ -127,14 +129,36 @@ export function useCheckoutPaymentExecution({
   // A completed shared cart disappears from the cart display after the
   // REDVAULT order is prepared. Keep its existing payment review visible;
   // initialization still verifies the order and current pilot policy.
+  const ready = payment.session.redvault?.orderReady;
+  const savedReview = cart.sharedCartRef
+    ? readRedvaultReviewRecovery(
+        attempt.pendingCheckoutOrder,
+        identity.merchantId ?? undefined
+      )
+    : null;
+  const hasMatchingReplacementReview = Boolean(
+    savedReview &&
+      ready &&
+      isTerminalRedvaultReview({
+        merchantId: identity.merchantId ?? undefined,
+        pendingOrder: attempt.pendingCheckoutOrder,
+        sharedCartEnabled: cart.sharedCartEnabled,
+        sharedCartRef: cart.sharedCartRef,
+        checkoutItemCount: cart.checkoutCart.length,
+      }) &&
+      ready.orderId === savedReview.ready.orderId &&
+      ready.cartId === savedReview.ready.cartId &&
+      ready.trackingToken === savedReview.ready.trackingToken &&
+      ready.checkoutFingerprint === savedReview.ready.checkoutFingerprint
+  );
   const redvaultAvailable =
     redvaultAvailability.available ||
     Boolean(
       cart.sharedCartEnabled &&
-        !cart.sharedCartRef &&
+        (!cart.sharedCartRef || hasMatchingReplacementReview) &&
         cart.checkoutCart.length === 0 &&
         payment.session.method === 'uba_redvault' &&
-        payment.session.redvault?.orderReady
+        ready
     );
   const { handlePlaceOrder } = useCheckoutOrderSubmission({
     account: {

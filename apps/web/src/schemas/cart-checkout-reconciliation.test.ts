@@ -1,5 +1,8 @@
 import { expect, it } from 'vitest';
-import { cartCheckoutReconciliationSchema } from './cart-checkout-reconciliation';
+import {
+  cartCheckoutReconciliationReceiptSchema,
+  cartCheckoutReconciliationSchema,
+} from './cart-checkout-reconciliation';
 
 const request = {
   cartId: '22222222-2222-4222-8222-222222222222',
@@ -35,6 +38,23 @@ it('rejects an unbound or malformed recovery request', () => {
     cartCheckoutReconciliationSchema.safeParse({
       ...request,
       userId: 'caller-selected',
+    }).success
+  ).toBe(false);
+});
+
+it('validates the reconciliation receipt before the route acts on it', () => {
+  expect(
+    cartCheckoutReconciliationReceiptSchema.safeParse({
+      kind: 'retired',
+      cartId: request.cartId,
+      checkoutSessionId: request.sessionId,
+      checkoutGeneration: 1,
+    }).success
+  ).toBe(true);
+  expect(
+    cartCheckoutReconciliationReceiptSchema.safeParse({
+      kind: 'submitted',
+      orderId: 'not-a-uuid',
     }).success
   ).toBe(false);
 });

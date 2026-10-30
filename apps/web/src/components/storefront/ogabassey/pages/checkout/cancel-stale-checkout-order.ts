@@ -1,4 +1,5 @@
 import { fetchWithCsrf } from '@/lib/api-client';
+import { verifyCancelledRedvaultOrder } from './verify-cancelled-redvault-order';
 
 export type CancelStaleCheckoutOrderResult =
   | 'cancelled'
@@ -10,19 +11,21 @@ type CancelFetch = (url: string, init?: RequestInit) => Promise<Response>;
 
 async function isConfirmedCancellation(
   response: Response,
-  requireNewCancellation: boolean
+  requireNewCancellation: boolean,
+  confirmation: Parameters<typeof verifyCancelledRedvaultOrder>[0]
 ): Promise<boolean> {
   try {
     const body: unknown = await response.json();
-    return (
+    const valid =
       typeof body === 'object' &&
       body !== null &&
       'success' in body &&
       body.success === true &&
       'cancelled' in body &&
-      typeof body.cancelled === 'boolean' &&
-      (!requireNewCancellation || body.cancelled === true)
-    );
+      typeof body.cancelled === 'boolean';
+    if (!valid || !('cancelled' in body)) return false;
+    if (body.cancelled === true || !requireNewCancellation) return true;
+    return await verifyCancelledRedvaultOrder(confirmation);
   } catch {
     return false;
   }
@@ -42,10 +45,10 @@ async function isConfirmedCancellation(
  * 404 stays failed: the order may have been attached after signup (the
  * guest RPC only matches `user_id IS NULL`) and a sign-out preserves the
  * fence, so treating it as gone would clear the fence while the attached
- * order and hosted payment remain live. `cancelled`/`gone` (either cancel
- * response value means no live order remains) release the lane; `live`
- * (409) means the previous checkout is already initializing and must
- * replay instead of duplicating.
+ * order and hosted payment remain live. `cancelled`/`gone` release the lane;
+ * strict recovery verifies an already-cancelled response before returning
+ * `cancelled`. `live` (409) means the previous checkout is already
+ * initializing and must replay instead of duplicating.
  */
 export async function cancelStaleCheckoutOrder({
   isAuthenticated,
@@ -53,8 +56,11 @@ export async function cancelStaleCheckoutOrder({
   reason,
   trackingToken,
   requireNewCancellation = false,
+  merchantId,
+  merchantSlug,
   accountFetch = fetchWithCsrf,
   guestFetch = fetch,
+  statusFetch = fetch,
 }: {
   isAuthenticated: boolean;
   orderId: string;
@@ -62,10 +68,20 @@ export async function cancelStaleCheckoutOrder({
   trackingToken?: string;
   /** Keep a stricter fence when an earlier cancellation is not sufficient proof. */
   requireNewCancellation?: boolean;
+  merchantId?: string;
+  merchantSlug?: string | null;
   accountFetch?: CancelFetch;
   guestFetch?: CancelFetch;
+  statusFetch?: CancelFetch;
 }): Promise<CancelStaleCheckoutOrderResult> {
   try {
+    const confirmation = {
+      orderId,
+      merchantId,
+      merchantSlug,
+      trackingToken,
+      fetchImpl: statusFetch,
+    };
     if (isAuthenticated) {
       const response = await accountFetch(
         `/api/storefront/account/orders/${orderId}/cancel`,
@@ -75,7 +91,11 @@ export async function cancelStaleCheckoutOrder({
         }
       );
       if (response.ok)
-        return (await isConfirmedCancellation(response, requireNewCancellation))
+        return (await isConfirmedCancellation(
+          response,
+          requireNewCancellation,
+          confirmation
+        ))
           ? 'cancelled'
           : 'failed';
       if (response.status === 409) return 'live';
@@ -94,7 +114,11 @@ export async function cancelStaleCheckoutOrder({
       }
     );
     if (response.ok)
-      return (await isConfirmedCancellation(response, requireNewCancellation))
+      return (await isConfirmedCancellation(
+        response,
+        requireNewCancellation,
+        confirmation
+      ))
         ? 'cancelled'
         : 'failed';
     if (response.status === 409) return 'live';

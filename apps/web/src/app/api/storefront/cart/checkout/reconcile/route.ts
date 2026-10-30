@@ -14,18 +14,10 @@ import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-
 import { checkCsrfProtection } from '@/lib/csrf';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
-import { cartCheckoutReconciliationSchema } from '@/schemas/cart-checkout-reconciliation';
-
-const receiptSchema = z.discriminatedUnion('kind', [
-  z.object({
-    kind: z.literal('retired'),
-    cartId: z.uuid(),
-    checkoutSessionId: z.uuid(),
-    checkoutGeneration: z.int().positive(),
-  }),
-  z.object({ kind: z.literal('submitted'), orderId: z.uuid() }),
-  z.object({ kind: z.literal('unavailable') }),
-]);
+import {
+  cartCheckoutReconciliationReceiptSchema,
+  cartCheckoutReconciliationSchema,
+} from '@/schemas/cart-checkout-reconciliation';
 
 /** Resolve an uncertain REDVAULT checkout without creating an order or payment. */
 export async function POST(request: NextRequest) {
@@ -68,7 +60,9 @@ export async function POST(request: NextRequest) {
     const response = await client.rpc(
       'commerce_cart_reconcile_redvault_checkout' as never
     );
-    const receipt = receiptSchema.safeParse(response.data);
+    const receipt = cartCheckoutReconciliationReceiptSchema.safeParse(
+      response.data
+    );
     if (
       response.error ||
       !receipt.success ||

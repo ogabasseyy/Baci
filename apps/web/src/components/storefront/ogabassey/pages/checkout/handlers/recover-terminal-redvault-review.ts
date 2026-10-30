@@ -11,6 +11,7 @@ import type { RedvaultPreparedOrder } from './redvault-prepared-order-submit';
 
 interface TerminalRedvaultRecoveryOptions {
   merchantId: string;
+  merchantSlug?: string | null;
   pendingOrder: PendingCheckoutOrderSnapshot | null;
   paymentMethod: PaymentMethod;
   checkoutFingerprint: string;
@@ -63,6 +64,8 @@ export async function recoverTerminalRedvaultReview(
       reason: 'Checkout details changed before UBA payment',
       trackingToken: review.ready.trackingToken,
       requireNewCancellation: true,
+      merchantId: options.merchantId,
+      merchantSlug: options.merchantSlug,
     });
   } catch {
     // An unresolved auth lookup cannot prove that the old order is safe to release.
@@ -104,6 +107,7 @@ export function recoverTerminalRedvaultReviewForContext(
   const { account, cart, order, payment, processing } = context;
   return recoverTerminalRedvaultReview({
     merchantId,
+    merchantSlug: context.merchant?.slug,
     pendingOrder: order.pending,
     paymentMethod: payment.session.method,
     checkoutFingerprint,

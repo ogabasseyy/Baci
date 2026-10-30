@@ -13,8 +13,10 @@ import { prepareCheckoutOrderSubmission } from '../prepare-checkout-order-submis
 import type { SharedCartOrderBinding } from '../types';
 import { KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST } from '../utils';
 import { beginCheckoutOrderSubmission } from './begin-checkout-order-submission';
+import { buildCheckoutOrderSubmissionOptions } from './build-checkout-order-submission-options';
 import { buildSharedCartPrepareInput } from './build-shared-cart-prepare-input';
 import type { CheckoutOrderSubmissionContext } from './checkout-order-submission-types';
+import { handleTerminalRedvaultDeliveryIssue } from './handle-terminal-redvault-delivery-issue';
 
 /** Own submit validation, resume dispatch, issue recovery, and fresh-order handoff. */
 export function useCheckoutOrderSubmission(
@@ -23,52 +25,25 @@ export function useCheckoutOrderSubmission(
   const handlePlaceOrder = async () => {
     const merchant = await beginCheckoutOrderSubmission(context);
     if (!merchant) return;
-    const { cart, contact, delivery, navigation, payment, processing } =
-      context;
+    const { cart, navigation, payment, processing } = context;
     const { session: paymentSession } = payment;
 
-    const prepared = prepareCheckoutOrderSubmission({
-      payment: {
-        method: paymentSession.method,
-        bankTransferAvailable: payment.bankTransferAvailable,
-        paystackAvailable: payment.paystackAvailable,
-        korapayAvailable: payment.korapayAvailable,
-        redvaultAvailable: payment.redvaultAvailable,
-        remainingAmount: paymentSession.wallet.remainingAmount,
-        total: paymentSession.total,
-      },
-      delivery: {
-        method: delivery.method,
-        selectedQuoteId: delivery.session.quotes.selectedId,
-        selectedQuoteMatchesMethod:
-          delivery.session.quotes.matchesSelectedMethod,
-        airportRequiresQuote: delivery.airportRequiresQuote,
-        airportType: delivery.airportType,
-        quotes: delivery.session.quotes.items,
-        addresses: delivery.session.address.addresses,
-        selectedAddressId: delivery.session.address.selectedId,
-        isNewAddressMode: delivery.session.address.isNewMode,
-        newAddressStreet: delivery.newAddressStreet,
-        newAddressCity: delivery.newAddressCity,
-        newAddressState: delivery.newAddressState,
-        customerPhone: contact.customerPhone,
-        merchantCountry: delivery.merchantCountry,
-        deliveryCost: delivery.session.cost,
-      },
-      identity: {
-        merchantId: merchant.id,
-        customerEmail: contact.customerEmail,
-        customerName: `${contact.firstName} ${contact.lastName}`.trim(),
-        customerPhone: contact.customerPhone,
-        checkoutItems: buildCheckoutOrderItems(cart.checkoutCart),
-        useWalletCredit: paymentSession.checkoutValues.useWalletCredit,
-        walletAmountUsed: paymentSession.wallet.amountUsed,
-        discountCode: paymentSession.checkoutValues.discountCode,
-        giftWrappingCost: delivery.giftWrappingCost,
-      },
-    });
+    const submissionOptions = buildCheckoutOrderSubmissionOptions(
+      context,
+      merchant.id
+    );
+    const prepared = prepareCheckoutOrderSubmission(submissionOptions);
 
     if (prepared.kind === 'issue') {
+      if (
+        await handleTerminalRedvaultDeliveryIssue(
+          context,
+          merchant,
+          submissionOptions,
+          prepared.issue
+        )
+      )
+        return;
       if (prepared.issue === 'delivery-option') {
         toast({
           title: 'Select Delivery Option',

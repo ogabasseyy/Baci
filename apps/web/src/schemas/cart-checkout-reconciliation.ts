@@ -14,3 +14,17 @@ export const cartCheckoutReconciliationSchema = z
     idempotencyKey: z.string().min(1).max(128),
   })
   .strict();
+
+export const cartCheckoutReconciliationReceiptSchema = z.discriminatedUnion(
+  'kind',
+  [
+    z.object({
+      kind: z.literal('retired'),
+      cartId: z.uuid(),
+      checkoutSessionId: z.uuid(),
+      checkoutGeneration: z.int().positive(),
+    }),
+    z.object({ kind: z.literal('submitted'), orderId: z.uuid() }),
+    z.object({ kind: z.literal('unavailable') }),
+  ]
+);

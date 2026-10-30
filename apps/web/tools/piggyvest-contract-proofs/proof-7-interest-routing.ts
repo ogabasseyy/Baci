@@ -1,11 +1,15 @@
 import { createDataSchema, extractEdges, pickString } from './loose-schemas';
-import { analysePayoutReadback, inheritanceAnswer } from './payout-analysis';
-import { type GoalOwner, runGoalVariant } from './proof-7-goal-variants';
+import { analysePayoutReadback } from './payout-analysis';
+import type { GoalOwner } from './proof-7-goal-variants';
+import { recordGoalWallets } from './proof-7-goals';
+import { readbackPayout } from './proof-7-readback';
 import { answerOf, ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
 import { qaIdentityFor } from './provider-ops';
 import { discoverQaCustomer } from './qa-discovery';
-import type { Answer, ProofResult } from './types';
+import { proof7Key } from './qa-keys';
+import { usableList } from './read-rules';
+import type { ProofResult } from './types';
 
 const TITLE = 'Main-wallet interest routing at creation';
 const ERROR_CODE_KEYS = ['code', 'error_code', 'errorCode'] as const;
@@ -37,10 +41,10 @@ export async function runProof7(ctx: ProofContext): Promise<ProofResult> {
   }
   redactor.register('W', business);
   // Interest settings cannot be changed after creation, so this needs a NEW
-  // customer; its key is derived from the selected allowlisted QA key.
-  // Each attempt gets its own customer (settings cannot be re-applied to an
-  // existing one); the key stays within the 64-char journal limit.
-  const qa7 = qaIdentityFor(`${ctx.qa.qaKey.slice(0, 57)}-p7a${ctx.attempt}`);
+  // customer. Each attempt gets its own (settings cannot be re-applied to an
+  // existing one); the key is a hash of the FULL selected QA key, so two QA
+  // keys sharing a prefix can never collide.
+  const qa7 = qaIdentityFor(proof7Key(ctx.qa.qaKey, ctx.attempt));
   for (const value of [
     qa7.qaKey,
     qa7.thirdPartyIdentifier,
@@ -117,73 +121,86 @@ export async function runProof7(ctx: ProofContext): Promise<ProofResult> {
   if (mainWalletId) redactor.register('W', mainWalletId);
 
   // 2. Read the main wallet back: which fields reflect the payout destination?
+  // Polled within the budget; interest settings that never appear are `unknown`.
   let namesDestination: boolean | null = null;
   let mainDestinationPaths: string[] = [];
-  if (mainWalletId) {
-    const wallet = await api.wallet(mainWalletId);
-    b.shape('GET /wallet/:id (P7 main wallet)', wallet.httpStatus, wallet.data);
-    if (wallet.ok) {
-      const facts = analysePayoutReadback(wallet.data, business, mainWalletId);
-      namesDestination = facts.matchesTarget.length > 0;
-      mainDestinationPaths = facts.matchesTarget;
-      b.value(
-        'main_wallet_interest_field_names',
-        facts.interestFieldPaths.join(',') || null
-      );
-      b.value(
-        'main_wallet_rate_field_names',
-        facts.rateFieldPaths.join(',') || null
-      );
-      b.value(
-        'main_wallet_payout_field_paths',
-        facts.matchesTarget.join(',') || null
-      );
-      b.value('main_wallet_accrual_enabled', facts.accrualEnabled);
-      b.finding(
-        'main_wallet_readback_exposes_interest_fields',
-        'Does GET /wallet/:id expose interest or payout settings?',
-        answerOf(facts.interestFieldPaths.length > 0)
-      );
-      b.finding(
-        'main_wallet_readback_names_payout_destination',
-        'Does a readback field equal the payout wallet that was set?',
-        answerOf(namesDestination)
-      );
-      b.finding(
-        'main_wallet_accrual_flag_readable',
-        'Is the accrual on/off setting readable?',
-        answerOf(facts.accrualEnabled !== null)
-      );
-    }
-    const list = await api.customerWallets(customerId ?? '', 'ASC');
-    const edge = extractEdges(list.data).edges.find(
+  const mainQuestions = [
+    [
+      'main_wallet_readback_exposes_interest_fields',
+      'Does GET /wallet/:id expose interest or payout settings?',
+    ],
+    [
+      'main_wallet_readback_names_payout_destination',
+      'Does a readback field equal the payout wallet that was set?',
+    ],
+    [
+      'main_wallet_accrual_flag_readable',
+      'Is the accrual on/off setting readable?',
+    ],
+  ] as const;
+  const mainRead = mainWalletId
+    ? await readbackPayout(ctx, mainWalletId, business)
+    : null;
+  if (mainRead) {
+    b.shape(
+      'GET /wallet/:id (P7 main wallet)',
+      mainRead.httpStatus,
+      mainRead.data
+    );
+  }
+  const facts = mainRead?.facts ?? null;
+  if (mainWalletId && facts) {
+    namesDestination = facts.matchesTarget.length > 0;
+    mainDestinationPaths = facts.matchesTarget;
+    b.value(
+      'main_wallet_interest_field_names',
+      facts.interestFieldPaths.join(',') || null
+    );
+    b.value(
+      'main_wallet_rate_field_names',
+      facts.rateFieldPaths.join(',') || null
+    );
+    b.value(
+      'main_wallet_payout_field_paths',
+      facts.matchesTarget.join(',') || null
+    );
+    b.value('main_wallet_accrual_enabled', facts.accrualEnabled);
+    b.finding(mainQuestions[0][0], mainQuestions[0][1], 'yes');
+    b.finding(
+      mainQuestions[1][0],
+      mainQuestions[1][1],
+      answerOf(namesDestination)
+    );
+    b.finding(
+      mainQuestions[2][0],
+      mainQuestions[2][1],
+      answerOf(facts.accrualEnabled !== null)
+    );
+    const list = usableList(await api.customerWallets(customerId ?? '', 'ASC'));
+    const edge = list?.edges.find(
       (e) => pickString(e, ['id']) === mainWalletId
     );
     b.value(
       'wallet_list_interest_field_names',
-      analysePayoutReadback(
-        edge,
-        business,
-        mainWalletId
-      ).interestFieldPaths.join(',') || null
+      edge
+        ? analysePayoutReadback(
+            edge,
+            business,
+            mainWalletId
+          ).interestFieldPaths.join(',') || null
+        : null
     );
-  }
-  if (namesDestination === null) {
-    for (const [id, question] of [
-      [
-        'main_wallet_readback_exposes_interest_fields',
-        'Does GET /wallet/:id expose interest or payout settings?',
-      ],
-      [
-        'main_wallet_readback_names_payout_destination',
-        'Does a readback field equal the payout wallet that was set?',
-      ],
-      [
-        'main_wallet_accrual_flag_readable',
-        'Is the accrual on/off setting readable?',
-      ],
-    ] as const) {
-      b.finding(id, question, 'unknown', 'no wallet readback was possible');
+  } else {
+    b.inconclusive('the main wallet readback showed no interest settings');
+    for (const [id, question] of mainQuestions) {
+      b.finding(
+        id,
+        question,
+        'unknown',
+        mainRead
+          ? `no interest settings appeared in the wallet readback within ${mainRead.polls} reads (or it could not be read)`
+          : 'no wallet readback was possible'
+      );
     }
   }
 
@@ -198,83 +215,7 @@ export async function runProof7(ctx: ProofContext): Promise<ProofResult> {
       'The P7 customer is unavailable, so the sub-wallet checks ran on the main QA customer.'
     );
   }
-  if (owner) {
-    const unset = await runGoalVariant(ctx, owner, business, {
-      slot: 'p7/goal_unset',
-      nameSuffix: `-p7unset-a${ctx.attempt}`,
-      payoutWalletId: null,
-    });
-    const explicit = await runGoalVariant(ctx, owner, business, {
-      slot: 'p7/goal_explicit',
-      nameSuffix: `-p7explicit-a${ctx.attempt}`,
-      payoutWalletId: business,
-    });
-    const unsetInherits: Answer = inheritanceAnswer(
-      unset.readback,
-      mainDestinationPaths
-    );
-    b.finding(
-      'goal_without_payout_created',
-      'Is a goal sub-wallet with its own payout left unset created?',
-      answerOf(unset.exists)
-    );
-    b.finding(
-      'goal_without_payout_inherits_business_payout',
-      "Does a goal wallet with no payout of its own inherit the customer's business payout wallet?",
-      unsetInherits,
-      unsetInherits === 'unknown'
-        ? 'the readback omits a payout destination to compare, so inheritance cannot be determined'
-        : undefined
-    );
-    b.finding(
-      'goal_explicit_payout_accepted',
-      'Does POST /wallet/sub-account accept interest_payout_wallet?',
-      answerOf(explicit.accepted)
-    );
-    b.finding(
-      'goal_explicit_readback_names_payout_destination',
-      'Does the explicit goal wallet readback name that payout wallet?',
-      explicit.readback === null
-        ? 'unknown'
-        : answerOf(explicit.readback.matchesTarget.length > 0)
-    );
-    b.value(
-      'goal_explicit_error_message',
-      explicit.errorMessage ? redactor.message(explicit.errorMessage) : null
-    );
-    b.value('goal_explicit_http_status', explicit.httpStatus);
-    b.value(
-      'goal_unset_error_message',
-      unset.errorMessage ? redactor.message(unset.errorMessage) : null
-    );
-    for (const variant of [unset, explicit]) {
-      if (variant.resumedOutcome) {
-        b.inconclusive('a sub-wallet slot was already executed');
-        b.note(
-          `A sub-wallet slot was already used (${variant.resumedOutcome}); it is never resent. Use --new-attempt to repeat it.`
-        );
-      }
-    }
-    if (unsetInherits === 'yes') {
-      b.note(
-        'A goal wallet with no payout of its own INHERITS the customer payout wallet: goal interest would reach Ogabassey. Goal wallets must set their payout explicitly.'
-      );
-    }
-  } else {
-    for (const id of [
-      'goal_without_payout_created',
-      'goal_without_payout_inherits_business_payout',
-      'goal_explicit_payout_accepted',
-      'goal_explicit_readback_names_payout_destination',
-    ]) {
-      b.finding(
-        id,
-        id.replaceAll('_', ' '),
-        'unknown',
-        'no QA customer available'
-      );
-    }
-  }
+  await recordGoalWallets(ctx, b, owner, business, mainDestinationPaths);
 
   // Which routing option the evidence supports.
   const verdict =

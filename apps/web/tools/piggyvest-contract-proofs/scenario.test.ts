@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { FUNDING_FLOOR_KOBO } from './constants';
 import { createMemoryJournal } from './mutation-journal';
 import { setupScenario } from './scenario';
 import { makeHarness } from './test-harness.test-support';
@@ -86,5 +87,77 @@ describe('setupScenario: ground truth for the default wallet', () => {
     expect(second.state.createdNewCustomer).toBe(false);
     expect(second.state.createdWalletId).toBeNull();
     expect(second.state.mainWalletBasis).toBe('earliest_created_heuristic');
+  });
+});
+
+describe('setupScenario: the funding floor covers every planned outflow', () => {
+  async function topUpCase(startingBalance: number) {
+    const first = harness();
+    await setupScenario(first.ctx);
+    const { customers, wallets } = first.mock.sandbox;
+    const main = wallets.find((w) => w.id === first.state.mainWalletId);
+    if (!main) throw new Error('main wallet missing');
+    main.balance = startingBalance; // an existing QA main wallet
+    first.dispose();
+
+    const h = harness({
+      journal: createMemoryJournal(),
+      attempt: 2,
+      runId: 'run2',
+    });
+    h.mock.sandbox.customers = customers;
+    h.mock.sandbox.wallets = wallets;
+    await setupScenario(h.ctx);
+    return { h, main };
+  }
+  const fundingPosts = (h: ReturnType<typeof makeHarness>) =>
+    posts(h).filter((c) => c.pathname === '/api/v1/transfer/test/funding');
+
+  it('tops up a main wallet holding exactly the old floor of 3 transfers (no room for the bank fee)', async () => {
+    const { h, main } = await topUpCase(300_000);
+    expect(fundingPosts(h)).toHaveLength(1);
+    expect(main.balance).toBeGreaterThanOrEqual(FUNDING_FLOOR_KOBO);
+  });
+
+  it('tops up a wallet one kobo under the floor, and leaves one at the floor alone', async () => {
+    const under = await topUpCase(FUNDING_FLOOR_KOBO - 1);
+    expect(fundingPosts(under.h)).toHaveLength(1);
+    under.h.dispose();
+    const at = await topUpCase(FUNDING_FLOOR_KOBO);
+    expect(fundingPosts(at.h)).toHaveLength(0);
+  });
+
+  it('leaves the wallet un-funded and says why when its balance cannot be read', async () => {
+    const h = harness();
+    const original = h.api.wallet.bind(h.api);
+    // Ownership checks work; only the funding-floor balance read (made once the
+    // goal wallet is known) fails.
+    h.api.wallet = async (walletId) =>
+      h.state.goalWalletId
+        ? {
+            ...(await original(walletId)),
+            ok: false,
+            httpStatus: 503,
+            data: undefined,
+          }
+        : original(walletId);
+    await setupScenario(h.ctx);
+    expect(fundingPosts(h)).toHaveLength(0);
+    expect(h.state.notes.join(' ')).toMatch(/balance could not be read/);
+  });
+});
+
+describe('setupScenario: re-listing after an uncertain goal wallet creation uses the polling budget', () => {
+  it('lists the customer wallets once per allowed poll before giving up', async () => {
+    const h = harness({
+      maxPolls: 5,
+      mock: { failNetworkOnce: ['/wallet/sub-account'] },
+    });
+    await setupScenario(h.ctx);
+    const listCalls = h.mock.calls.filter(
+      (c) => c.pathname === '/api/v1/wallet/api/wallet-type'
+    );
+    expect(h.state.goalWalletId).toBeNull();
+    expect(listCalls).toHaveLength(1 + 5);
   });
 });

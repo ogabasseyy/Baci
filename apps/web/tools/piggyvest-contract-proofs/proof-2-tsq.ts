@@ -1,9 +1,16 @@
 import { randomBytes } from 'node:crypto';
 import { AMOUNTS_KOBO } from './constants';
-import { extractEdges, pickString } from './loose-schemas';
+import { pickString } from './loose-schemas';
 import { awaitTerminal, delta, readWallet, statusOf } from './poll';
 import { answerOf, ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
+import {
+  foundAnswer,
+  isTransientFailure,
+  pollSettled,
+  recordOf,
+  usableList,
+} from './read-rules';
 import { analyseRecord, statusVocabulary } from './tsq-analysis';
 import type { ProofResult } from './types';
 
@@ -46,7 +53,12 @@ export async function runProof2(ctx: ProofContext): Promise<ProofResult> {
   b.finding(
     'unknown_reference_is_404',
     'Does an unknown reference return HTTP 404?',
-    answerOf(unknown.httpStatus === null ? null : unknown.httpStatus === 404)
+    isTransientFailure(unknown.httpStatus)
+      ? 'unknown'
+      : answerOf(unknown.httpStatus === 404),
+    isTransientFailure(unknown.httpStatus)
+      ? 'the request failed (gateway error, timeout or dropped connection); the status says nothing about the reference'
+      : undefined
   );
 
   const main = state.mainWalletId;
@@ -105,14 +117,18 @@ export async function runProof2(ctx: ProofContext): Promise<ProofResult> {
     .value('terminal', watch.terminal)
     .value('polls_to_terminal', watch.polls);
 
-  const final = watch.lastOk ?? (immediate.ok ? immediate : null);
-  const facts = analyseRecord(final?.data, {
+  // Field findings need the SETTLED TSQ result: fields may only appear once the
+  // transfer is terminal, so a pending record cannot establish their absence.
+  const settledTsq =
+    watch.terminal === 'success' && watch.lastOk ? watch.lastOk : null;
+  const tsqRecord = settledTsq ? recordOf(settledTsq) : null;
+  const facts = analyseRecord(tsqRecord, {
     sourceWalletId: main,
     destinationWalletId: goal,
     amountKobo: amount,
   });
-  if (final) {
-    b.shape('GET TSQ (terminal)', final.httpStatus, final.data);
+  if (settledTsq && tsqRecord) {
+    b.shape('GET TSQ (terminal)', settledTsq.httpStatus, settledTsq.data);
     b.value('tsq_field_names', facts.fieldNames.join(','));
     b.finding(
       'tsq_shows_amount',
@@ -150,32 +166,44 @@ export async function runProof2(ctx: ProofContext): Promise<ProofResult> {
     b.finding(
       'existing_typed_tsq_schema_accepts_response',
       'Does the existing typed TSQ schema accept the live response?',
-      answerOf(final.typedAccepted)
+      answerOf(settledTsq.typedAccepted)
     );
   } else {
-    b.inconclusive('no successful TSQ response was observed');
+    b.inconclusive('the transfer did not reach a settled TSQ result');
     for (const [id, question] of UNKNOWN_QUESTIONS.slice(0, 7))
       b.finding(id, question, 'unknown');
   }
+  // A filtered lookup is only meaningful once the reference is known to exist.
+  const filtered = async (walletId: string) =>
+    settledTsq
+      ? foundAnswer(await api.verify(sent.reference, walletId))
+      : 'unknown';
   b.finding(
     'tsq_found_with_source_wallet_filter',
     'Is the reference found when narrowed by the source wallet?',
-    answerOf((await api.verify(sent.reference, main)).ok)
+    await filtered(main)
   );
   b.finding(
     'tsq_found_with_destination_wallet_filter',
     'Is the reference found when narrowed by the destination wallet?',
-    answerOf((await api.verify(sent.reference, goal)).ok)
+    await filtered(goal)
   );
 
   // C. Fallback evidence: the single-transaction record, found via the list.
-  const list = await api.transactions({ wallet_id: main, limit: '20' });
-  const row = extractEdges(list.data).edges.find(
-    (edge) => pickString(edge, ['third_party_reference']) === sent.reference
+  // The new row may not be indexed yet, so poll within the budget.
+  const findRow = (call: Awaited<ReturnType<typeof api.transactions>>) =>
+    usableList(call)?.edges.find(
+      (edge) => pickString(edge, ['third_party_reference']) === sent.reference
+    );
+  const listed = await pollSettled(
+    ctx,
+    () => api.transactions({ wallet_id: main, limit: '20' }),
+    (call) => findRow(call) !== undefined
   );
-  const rowId = pickString(row, ['id']);
+  const rowId = pickString(findRow(listed.value), ['id']);
   const single = rowId ? await api.transaction(rowId, main) : null;
-  const singleFacts = analyseRecord(single?.data, {
+  const singleRecord = single ? recordOf(single) : null;
+  const singleFacts = analyseRecord(singleRecord, {
     sourceWalletId: main,
     destinationWalletId: goal,
     amountKobo: amount,
@@ -189,7 +217,7 @@ export async function runProof2(ctx: ProofContext): Promise<ProofResult> {
   b.finding(
     'single_transaction_names_both_wallets',
     UNKNOWN_QUESTIONS[7][1],
-    single?.ok
+    singleRecord
       ? answerOf(
           singleFacts.namesSource === true &&
             singleFacts.namesDestination === true
@@ -199,26 +227,52 @@ export async function runProof2(ctx: ProofContext): Promise<ProofResult> {
   b.finding(
     'single_transaction_shows_fee',
     'Does GET /transaction/:id show a fee field?',
-    single?.ok ? answerOf(singleFacts.hasFee) : 'unknown'
+    singleRecord ? answerOf(singleFacts.hasFee) : 'unknown'
   );
 
-  const after = {
+  // Balance deltas are only published once both wallets show the settled change.
+  const balances = async () => ({
     main: await readWallet(ctx, main),
     goal: await readWallet(ctx, goal),
-  };
+  });
+  const measuring = sent.kind === 'sent' && watch.terminal === 'success';
+  const settledBalances = measuring
+    ? await pollSettled(ctx, balances, (now) => {
+        const moved = (a: number | null, b2: number | null) =>
+          a !== null && b2 !== null && a !== b2;
+        return (
+          moved(before.main.balance, now.main.balance) &&
+          moved(before.goal.balance, now.goal.balance)
+        );
+      })
+    : null;
+  if (measuring && !settledBalances?.settled) {
+    b.inconclusive(
+      'balance readbacks did not show the settled transfer within the polling budget'
+    );
+  }
+  const after = settledBalances?.settled ? settledBalances.value : null;
+  // A fee field is "absent" only if every record we meant to read was read.
+  const recordsShowFee = [
+    tsqRecord ? facts.hasFee : null,
+    singleRecord ? singleFacts.hasFee : null,
+  ];
   state.walletTransfer = {
     kind: 'wallet',
     amountKobo: amount,
     terminal: watch.terminal,
-    sourceDeltaKobo:
-      sent.kind === 'sent'
-        ? delta(before.main.balance, after.main.balance)
-        : null,
-    destinationDeltaKobo:
-      sent.kind === 'sent'
-        ? delta(before.goal.balance, after.goal.balance)
-        : null,
+    sourceDeltaKobo: after
+      ? delta(before.main.balance, after.main.balance)
+      : null,
+    destinationDeltaKobo: after
+      ? delta(before.goal.balance, after.goal.balance)
+      : null,
     feeFromRecordKobo: singleFacts.feeKobo ?? facts.feeKobo,
+    feeFieldPresent: recordsShowFee.includes(true)
+      ? true
+      : recordsShowFee.includes(null)
+        ? null
+        : false,
   };
   return b.build(ctx);
 }

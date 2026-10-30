@@ -2,6 +2,7 @@ import { extractEdges, pickString, walletDataSchema } from './loose-schemas';
 import { answerOf, ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
 import type { CallResult } from './provider-ops';
+import { usableList } from './read-rules';
 import type { ProofResult } from './types';
 
 const TITLE = 'Interest visibility (development evidence only)';
@@ -23,7 +24,16 @@ interface Walk {
   lastCall: CallResult | null;
 }
 
-/** Follows endCursor for up to MAX_PAGES pages. */
+/** Identifies a page by its rows and its cursor, to tell whether a follow-up page differs. */
+const pageSignature = (list: ReturnType<typeof extractEdges>) =>
+  `${JSON.stringify(list.edges)}|${list.pageInfo?.endCursor ?? ''}`;
+
+/**
+ * Follows endCursor for up to MAX_PAGES pages. `advances` is true only after a
+ * FOLLOW-UP page was read successfully, with a recognised list, and differs
+ * from the page before it; false if that page repeats the previous one; null if
+ * no follow-up page was read (single page, or following the cursor failed).
+ */
 async function walk(
   fetchPage: (cursor?: string) => Promise<CallResult>
 ): Promise<Walk> {
@@ -35,6 +45,7 @@ async function walk(
     lastCall: null,
   };
   let cursor: string | undefined;
+  let previous: string | null = null;
   const seen = new Set<string>();
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const call = await fetchPage(cursor);
@@ -45,14 +56,16 @@ async function walk(
     result.pages += 1;
     result.edgesPerPage.push(list.edges.length);
     result.firstEdge ??= list.edges[0];
+    const signature = pageSignature(list);
+    if (previous !== null) result.advances = signature !== previous;
+    previous = signature;
     const next = list.pageInfo?.endCursor ?? null;
-    if (!list.pageInfo?.hasNextPage || next === null) break; // single page: not testable
+    if (!list.pageInfo?.hasNextPage || next === null) break; // no follow-up page to test
     if (seen.has(next)) {
       result.advances = false;
       break;
     }
     seen.add(next);
-    result.advances = true;
     cursor = next;
   }
   return result;
@@ -166,9 +179,10 @@ export async function runProof5(ctx: ProofContext): Promise<ProofResult> {
   const differential = await api.accrued(target, {
     interest_type: 'differential',
   });
+  const differentialList = usableList(differential);
   b.value(
     'accrual_differential_edges',
-    extractEdges(differential.data).edges.length
+    differentialList ? differentialList.edges.length : null
   );
   const over = await api.accrued(target, { limit: '101' });
   b.value('accrual_limit_101_http_status', over.httpStatus);
@@ -193,9 +207,9 @@ export async function runProof5(ctx: ProofContext): Promise<ProofResult> {
   const rows = pageList.edges;
   const interestRows = countInterestRows(rows);
   b.shape('GET /transaction (page)', page.httpStatus, page.data);
-  b.value('transaction_list_rows_read', rows.length).value(
+  b.value('transaction_list_rows_read', pageUsable ? rows.length : null).value(
     'transaction_list_interest_rows',
-    interestRows
+    pageUsable ? interestRows : null
   );
   b.finding(
     'transaction_list_has_interest_rows',

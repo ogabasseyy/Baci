@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { classifyOutcome } from './provider-ops';
+import type { CallResult } from './provider-reads';
 import { HarnessRefusal } from './safety-guards';
 import { setupScenario } from './scenario';
 import { makeHarness } from './test-harness.test-support';
@@ -192,5 +194,42 @@ describe('ProviderApi gated mutations', () => {
       'p2/w2w'
     );
     expect(declined).toMatchObject({ kind: 'sent', outcome: 'rejected' });
+  });
+});
+
+describe('classifyOutcome: a refusal must be definite', () => {
+  const call = (over: Partial<CallResult>): CallResult => ({
+    ok: false,
+    httpStatus: 400,
+    data: undefined,
+    envelope: null,
+    message: null,
+    declined: true,
+    errorCode: 'PIGGYVEST_REQUEST_ERROR',
+    typedAccepted: false,
+    ...over,
+  });
+
+  it('accepted for a successful call, rejected for a definite client-error decline', () => {
+    expect(
+      classifyOutcome(call({ ok: true, declined: false, httpStatus: 202 }))
+    ).toBe('accepted');
+    expect(classifyOutcome(call({ httpStatus: 400 }))).toBe('rejected');
+    expect(classifyOutcome(call({ httpStatus: 404 }))).toBe('rejected');
+  });
+
+  it.each([
+    408, 429, 500, 502, 503,
+  ])('indeterminate for status %s: the provider may have processed the request', (httpStatus) => {
+    expect(classifyOutcome(call({ httpStatus }))).toBe('indeterminate');
+  });
+
+  it('indeterminate for a dropped connection and for an undeclined error', () => {
+    expect(classifyOutcome(call({ httpStatus: null, declined: false }))).toBe(
+      'indeterminate'
+    );
+    expect(classifyOutcome(call({ httpStatus: 400, declined: false }))).toBe(
+      'indeterminate'
+    );
   });
 });

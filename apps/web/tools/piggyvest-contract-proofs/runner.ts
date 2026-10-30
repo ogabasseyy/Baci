@@ -22,6 +22,7 @@ import { runProof7 } from './proof-7-interest-routing';
 import { emptyScenarioState, type ProofContext } from './proof-context';
 import { ProviderApi, qaIdentityFor } from './provider-ops';
 import { loadAllowlist } from './qa-allowlist';
+import { isProof7KeyOf } from './qa-keys';
 import { Redactor } from './redactor';
 import { ResponseCapture } from './response-capture';
 import type { RunConfig } from './run-mode';
@@ -86,20 +87,18 @@ export function currentAttempt(
   qaKey: string,
   newAttempt: boolean
 ): number {
-  const derived = new RegExp(`^${escapeRegExp(qaKey.slice(0, 57))}-p7a\\d+$`);
   const latest = Math.max(
     0,
     ...journal
       .entries()
-      .filter((entry) => entry.qaKey === qaKey || derived.test(entry.qaKey))
+      .filter(
+        (entry) => entry.qaKey === qaKey || isProof7KeyOf(qaKey, entry.qaKey)
+      )
       .map((entry) => entry.attempt)
   );
   if (latest === 0) return 1;
   return newAttempt ? latest + 1 : latest;
 }
-
-const escapeRegExp = (text: string) =>
-  text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const realSleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));

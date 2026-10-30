@@ -40,13 +40,22 @@ export function qaIdentityFor(qaKey: string): QaIdentity {
   };
 }
 
+/**
+ * 408 (request timeout) and 429 (rate limited) are 4xx but are not a verdict
+ * on the request: the provider may still have processed it. Only a definite
+ * client-error decline is recorded as `rejected`; everything else stays
+ * `indeterminate` until reconciled by a read.
+ */
+const NOT_A_VERDICT_STATUSES: ReadonlySet<number> = new Set([408, 429]);
+
 export function classifyOutcome(call: CallResult): JournalOutcome {
   if (call.ok) return 'accepted';
   if (
     call.declined &&
     call.httpStatus !== null &&
     call.httpStatus >= 400 &&
-    call.httpStatus < 500
+    call.httpStatus < 500 &&
+    !NOT_A_VERDICT_STATUSES.has(call.httpStatus)
   ) {
     return 'rejected';
   }

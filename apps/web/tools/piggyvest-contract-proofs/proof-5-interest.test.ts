@@ -172,3 +172,59 @@ describe('proof 5: an unreadable endpoint is not an empty history', () => {
     expect(result.status).toBe('inconclusive');
   });
 });
+
+describe('proof 5: a cursor "advances" only after the next page was read and shows progress', () => {
+  async function withRows(options: Parameters<typeof makeHarness>[0] = {}) {
+    const h = harness({
+      ...options,
+      mock: { accruedEdgeCount: 5, ...options?.mock },
+    });
+    await setupScenario(h.ctx);
+    for (let i = 0; i < 4; i += 1) {
+      h.mock.sandbox.ledger.fund({
+        wallet_id: h.state.mainWalletId,
+        amount: 1000,
+      });
+    }
+    return h;
+  }
+
+  it('is yes when following the cursor reads a different page', async () => {
+    const h = await withRows();
+    const result = await runProof5(h.ctx);
+    expect(answer(result, 'accrual_cursor_advances')).toBe('yes');
+    expect(answer(result, 'transaction_list_cursor_advances')).toBe('yes');
+  });
+
+  it('is unknown, not yes, when following the cursor fails', async () => {
+    const h = await withRows();
+    h.mock.sandbox.options.serverErrorPaths = ['cursor='];
+    const result = await runProof5(h.ctx);
+    expect(answer(result, 'accrual_cursor_advances')).toBe('unknown');
+    expect(answer(result, 'transaction_list_cursor_advances')).toBe('unknown');
+  });
+
+  it('is no when the next page is identical to the previous one', async () => {
+    const h = await withRows();
+    const original = h.api.accrued.bind(h.api);
+    // Every cursor request is answered with the FIRST page again.
+    h.api.accrued = async (walletId, query = {}) => {
+      const { cursor: _ignored, ...withoutCursor } = query;
+      return original(walletId, withoutCursor);
+    };
+    const result = await runProof5(h.ctx);
+    expect(answer(result, 'accrual_cursor_advances')).toBe('no');
+  });
+});
+
+describe('proof 5: counts are null, not zero, when the read behind them failed', () => {
+  it('nulls the differential and transaction-list counts when those reads are unusable', async () => {
+    const h = harness();
+    await setupScenario(h.ctx);
+    h.mock.sandbox.options.serverErrorPaths = ['/api/v1/'];
+    const result = await runProof5(h.ctx);
+    expect(result.values.accrual_differential_edges).toBeNull();
+    expect(result.values.transaction_list_rows_read).toBeNull();
+    expect(result.values.transaction_list_interest_rows).toBeNull();
+  });
+});

@@ -111,7 +111,7 @@ export function createMockProvider(
     if (
       method === 'GET' &&
       sandbox.options.serverErrorPaths.some((needle) =>
-        url.pathname.includes(needle)
+        `${url.pathname}${url.search}`.includes(needle)
       )
     ) {
       return Promise.resolve(

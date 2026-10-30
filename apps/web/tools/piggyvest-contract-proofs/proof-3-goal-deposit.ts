@@ -1,8 +1,9 @@
 import { AMOUNTS_KOBO } from './constants';
-import { extractEdges, pickString } from './loose-schemas';
+import { pickString } from './loose-schemas';
 import { delta, readWallet } from './poll';
 import { answerOf, ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
+import { pollSettled, recordOf, usableList } from './read-rules';
 import { analyseRecord, relationOfCredit } from './tsq-analysis';
 import type { ProofResult } from './types';
 
@@ -84,15 +85,23 @@ export async function runProof3(ctx: ProofContext): Promise<ProofResult> {
   const goalNumbers = accountNumbers(ctx, goalAccounts.data);
   const mainNumbers = accountNumbers(ctx, mainAccounts.data);
   b.value('goal_account_count', goalNumbers.length);
+  // Absence needs a successful read of a recognised list (an array of accounts).
+  const goalAccountsUsable =
+    goalAccounts.ok && Array.isArray(goalAccounts.data);
+  const mainAccountsUsable =
+    mainAccounts.ok && Array.isArray(mainAccounts.data);
   b.finding(
     'goal_wallet_has_own_virtual_account',
     'Does the goal sub-wallet have its own virtual account?',
-    goalAccounts.ok ? answerOf(goalNumbers.length > 0) : 'unknown'
+    goalAccountsUsable ? answerOf(goalNumbers.length > 0) : 'unknown'
   );
   b.finding(
     'goal_account_differs_from_main',
     'Is the goal account number different from the main wallet account number?',
-    goalNumbers.length && mainNumbers.length
+    goalAccountsUsable &&
+      mainAccountsUsable &&
+      goalNumbers.length > 0 &&
+      mainNumbers.length > 0
       ? answerOf(!goalNumbers.some((n) => mainNumbers.includes(n)))
       : 'unknown'
   );
@@ -120,11 +129,12 @@ export async function runProof3(ctx: ProofContext): Promise<ProofResult> {
     main: await readWallet(ctx, main),
   };
   // Rows that exist before this deposit can never be "this deposit's row".
+  const priorList = usableList(
+    await api.transactions({ wallet_id: goal, limit: '20' })
+  );
   const priorRowIds = new Set(
-    extractEdges(
-      (await api.transactions({ wallet_id: goal, limit: '20' })).data
-    )
-      .edges.map((edge) => pickString(edge, ['id']))
+    (priorList?.edges ?? [])
+      .map((edge) => pickString(edge, ['id']))
       .filter((id): id is string => id !== null)
   );
   const funded = await api.fundWallet(qa, goal, gross, 'p3/fund_goal');
@@ -170,20 +180,35 @@ export async function runProof3(ctx: ProofContext): Promise<ProofResult> {
     answerOf(mainDelta === null ? null : mainDelta === 0)
   );
 
-  const goalList = await api.transactions({ wallet_id: goal, limit: '20' });
-  const rows = extractEdges(goalList.data).edges.filter(
-    (edge) => pickString(edge, ['type']) === 'credit'
+  // The new row may not be indexed yet: poll the goal list within the budget.
+  const creditRows = (call: Awaited<ReturnType<typeof api.transactions>>) =>
+    (usableList(call)?.edges ?? []).filter(
+      (edge) => pickString(edge, ['type']) === 'credit'
+    );
+  const pick = (call: Awaited<ReturnType<typeof api.transactions>>) =>
+    priorList
+      ? selectDepositRow(creditRows(call), gross, credited, priorRowIds)
+      : undefined;
+  const polled = await pollSettled(
+    ctx,
+    () => api.transactions({ wallet_id: goal, limit: '20' }),
+    (call) => pick(call) !== undefined
   );
-  const row = selectDepositRow(rows, gross, credited, priorRowIds);
+  const goalList = polled.value;
+  const row = pick(goalList);
   const rowId = pickString(row, ['id']);
+  const noRowDetail = !priorList
+    ? "the list of earlier rows could not be read, so this deposit's row cannot be told apart from older ones"
+    : usableList(goalList)
+      ? `no credit row matched the gross or the measured credit within ${polled.polls} reads (not indexed yet, or recorded differently); no row was guessed`
+      : 'the goal-wallet transaction list could not be read';
   b.finding(
     DEPOSIT_QUESTIONS[2][0],
     DEPOSIT_QUESTIONS[2][1],
     row ? answerOf(pickString(row, ['wallet_id']) === goal) : 'unknown',
-    row
-      ? undefined
-      : 'no credit row matched the gross or the measured credit (not indexed yet, or recorded differently); no row was guessed'
+    row ? undefined : noRowDetail
   );
+  if (!row) b.inconclusive('the deposit row was not observed');
   b.value('deposit_row_category', pickString(row, ['category']));
   b.value('deposit_row_status', pickString(row, ['status']));
   b.shape(
@@ -192,21 +217,29 @@ export async function runProof3(ctx: ProofContext): Promise<ProofResult> {
     row
   );
 
-  const mainList = await api.transactions({ wallet_id: main, limit: '20' });
+  // "Absent from the main wallet" needs a successful read of a recognised list.
+  const mainList = usableList(
+    await api.transactions({ wallet_id: main, limit: '20' })
+  );
+  if (rowId && !mainList) {
+    b.inconclusive('the main-wallet transaction list could not be read');
+  }
   b.finding(
     DEPOSIT_QUESTIONS[3][0],
     DEPOSIT_QUESTIONS[3][1],
-    rowId
+    rowId && mainList
       ? answerOf(
-          !extractEdges(mainList.data).edges.some(
-            (edge) => pickString(edge, ['id']) === rowId
-          )
+          !mainList.edges.some((edge) => pickString(edge, ['id']) === rowId)
         )
-      : 'unknown'
+      : 'unknown',
+    rowId && !mainList
+      ? 'the main-wallet transaction list could not be read or has an unrecognised shape'
+      : undefined
   );
 
   const single = rowId ? await api.transaction(rowId, goal) : null;
-  const facts = analyseRecord(single?.data, {
+  const singleRecord = single ? recordOf(single) : null;
+  const facts = analyseRecord(singleRecord, {
     sourceWalletId: null,
     destinationWalletId: goal,
     amountKobo: gross,
@@ -216,7 +249,7 @@ export async function runProof3(ctx: ProofContext): Promise<ProofResult> {
   b.finding(
     DEPOSIT_QUESTIONS[4][0],
     DEPOSIT_QUESTIONS[4][1],
-    single?.ok ? answerOf(facts.namesDestination) : 'unknown',
+    singleRecord ? answerOf(facts.namesDestination) : 'unknown',
     facts.destinationKey ? `field: ${facts.destinationKey}` : undefined
   );
   b.value('deposit_fee_kobo_in_record', facts.feeKobo);
@@ -228,6 +261,7 @@ export async function runProof3(ctx: ProofContext): Promise<ProofResult> {
     grossKobo: gross,
     creditedKobo: credited,
     feeFromRecordKobo: facts.feeKobo,
+    feeFieldPresent: singleRecord ? facts.hasFee : null,
   };
   return b.build(ctx);
 }

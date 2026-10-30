@@ -36,6 +36,56 @@ export interface GuardedFetchOptions {
 }
 
 const NULL_BODY_STATUSES = new Set([204, 205, 304]);
+/** Describe the original wire encoding, which does not apply to the rebuilt body. */
+const WIRE_ENCODING_HEADERS = new Set([
+  'content-length',
+  'content-encoding',
+  'transfer-encoding',
+  'connection',
+  'keep-alive',
+]);
+
+function forwardedHeaders(upstream: Headers): Headers {
+  const headers = new Headers();
+  upstream.forEach((value, name) => {
+    if (!WIRE_ENCODING_HEADERS.has(name.toLowerCase()))
+      headers.set(name, value);
+  });
+  if (!headers.has('content-type')) {
+    headers.set('content-type', 'application/json');
+  }
+  return headers;
+}
+
+/**
+ * The request body must be one the scans can read. A Request object carrying
+ * a body, or any non-string body (Blob, FormData, stream, URLSearchParams,
+ * ArrayBuffer...), would otherwise reach the network unchecked, so it is
+ * refused rather than guessed at.
+ */
+function inspectableBody(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined
+): string | undefined {
+  const refuse = (): never => {
+    throw new HarnessRefusal(
+      'BODY_NOT_INSPECTABLE',
+      'only string bodies passed in the init argument can be checked'
+    );
+  };
+  if (
+    typeof input === 'object' &&
+    !(input instanceof URL) &&
+    'method' in input &&
+    (input.body !== null || input.bodyUsed)
+  ) {
+    refuse();
+  }
+  const body = init?.body;
+  if (body === undefined || body === null) return undefined;
+  if (typeof body !== 'string') refuse();
+  return body as string;
+}
 
 function readHeader(
   headers: HeadersInit | undefined,
@@ -95,7 +145,7 @@ export function createGuardedFetch(options: GuardedFetchOptions): typeof fetch {
       init?.method ??
       (typeof input === 'object' && 'method' in input ? input.method : 'GET')
     ).toUpperCase();
-    const body = typeof init?.body === 'string' ? init.body : undefined;
+    const body = inspectableBody(input, init);
     assertNoRecordingAccount('request', [url.pathname, url.search, body ?? '']);
 
     if (method === 'POST') {
@@ -147,10 +197,13 @@ export function createGuardedFetch(options: GuardedFetchOptions): typeof fetch {
     if (minGapMs > 0 && sendAt > requestedAt) await sleep(sendAt - requestedAt);
     const response = await baseFetch(target.url.toString(), {
       ...init,
+      method: target.method,
       redirect: 'error',
     });
     const text = await response.text();
-    if (containsRecordingAccount(text)) {
+    if (
+      containsRecordingAccount([text, Object.fromEntries(response.headers)])
+    ) {
       const refusal = new HarnessRefusal(
         'RECORDING_ACCOUNT',
         'response referenced a protected account and was discarded'
@@ -174,10 +227,7 @@ export function createGuardedFetch(options: GuardedFetchOptions): typeof fetch {
     return new Response(NULL_BODY_STATUSES.has(response.status) ? null : text, {
       status: response.status,
       statusText: response.statusText,
-      headers: {
-        'content-type':
-          response.headers.get('content-type') ?? 'application/json',
-      },
+      headers: forwardedHeaders(response.headers),
     });
   };
 }

@@ -28,13 +28,19 @@ export interface MockOptions {
   failNetworkOnce: string[];
   /** GET paths containing any of these answer HTTP 503 until the list is cleared. */
   serverErrorPaths: string[];
+  /** Wallet reads keep showing the pre-settlement balance for this many reads. */
+  balanceLagReads: number;
+  /** New transactions are missing from list reads for this many list reads. */
+  listLagReads: number;
+  /** A new wallet's readback omits interest settings for this many reads. */
+  settingsLagReads: number;
   accruedEdgeCount: number;
   /** Wallet reads that must pass before a settled outflow shows in withdrawal_count. */
   counterLagReads: number;
   customerPayoutWallet: 'accepted' | 'rejected';
   subAccountAcceptsPayout: boolean;
   subWalletInheritsPayout: boolean;
-  payoutReadback: 'fields' | 'none';
+  payoutReadback: 'fields' | 'none' | 'accrual_only';
   /** Sub-wallet readbacks drop the payout field while the main wallet keeps it. */
   goalReadbackOmitsPayout: boolean;
 }
@@ -59,6 +65,9 @@ export const DEFAULT_MOCK_OPTIONS: MockOptions = {
   fundingSettles: true,
   failNetworkOnce: [],
   serverErrorPaths: [],
+  balanceLagReads: 0,
+  listLagReads: 0,
+  settingsLagReads: 0,
   accruedEdgeCount: 0,
   counterLagReads: 0,
   customerPayoutWallet: 'accepted',
@@ -92,6 +101,8 @@ export interface Wallet {
   lagged: { count: number; readsLeft: number } | null;
   payoutWalletId: string | null;
   interestEnabled: boolean;
+  staleBalance: { value: number; readsLeft: number } | null;
+  settingsHiddenReads: number;
   account: string;
 }
 export interface Customer {
@@ -115,6 +126,7 @@ export interface Txn {
   fee: number;
   status: 'pending' | 'success';
   polls: number;
+  hiddenReads: number;
   createdAt: string;
 }
 

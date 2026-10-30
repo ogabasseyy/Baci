@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMockProvider } from './mock-provider';
 import { createMemoryJournal } from './mutation-journal';
+import { proof7Key } from './qa-keys';
 import { currentAttempt, runHarness } from './runner';
 import { liveConfig, noSleep } from './runner.test-support';
 
@@ -47,7 +48,7 @@ describe('currentAttempt: scoped to the selected QA customer', () => {
   });
 
   it("counts a customer's own derived proof-7 keys, and only those", () => {
-    const derived = 'qa-customer-1-p7a3';
+    const derived = proof7Key('qa-customer-1', 3);
     const journal = createMemoryJournal([
       entry(1, 'qa-customer-1'),
       entry(3, derived),
@@ -103,5 +104,42 @@ describe('runHarness: a new attempt for one QA customer never re-opens another',
       );
     expect([...attemptsOf('qa-customer-A1')]).toEqual([1]);
     expect([...attemptsOf('qa-customer-B1')].sort()).toEqual([1, 2]);
+  });
+});
+
+describe('currentAttempt: QA keys sharing a long prefix stay separate', () => {
+  const A = `${'q'.repeat(57)}AAAAAAA`;
+  const B = `${'q'.repeat(57)}BBBBBBB`;
+  const entry = (attempt: number, qaKey: string) => ({
+    v: 1 as const,
+    ts: 't',
+    runId: 'r',
+    phase: 'intent' as const,
+    slot: 's',
+    attempt,
+    op: 'o',
+    reference: `pvbproof-r-o-${qaKey.slice(-6)}0${attempt}`,
+    qaKey,
+    amountKobo: null,
+  });
+
+  it("one key's proof-7 attempts never move the other key's attempt", () => {
+    const journal = createMemoryJournal([
+      entry(1, A),
+      entry(4, proof7Key(A, 4)),
+      entry(1, B),
+      entry(2, proof7Key(B, 2)),
+    ]);
+    expect(currentAttempt(journal, A, false)).toBe(4);
+    expect(currentAttempt(journal, B, false)).toBe(2);
+    expect(currentAttempt(journal, B, true)).toBe(3);
+  });
+
+  it('a key whose only entries belong to the other key still starts at attempt 1', () => {
+    const journal = createMemoryJournal([
+      entry(3, proof7Key(A, 3)),
+      entry(3, A),
+    ]);
+    expect(currentAttempt(journal, B, false)).toBe(1);
   });
 });

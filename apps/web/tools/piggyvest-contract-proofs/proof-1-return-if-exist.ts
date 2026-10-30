@@ -1,33 +1,14 @@
-import { createDataSchema, extractEdges, pickString } from './loose-schemas';
+import { createDataSchema, pickString } from './loose-schemas';
+import {
+  position,
+  REPOST_QUESTIONS,
+  TRIVIALLY_DIFFERENT,
+  walletIdsOf,
+} from './proof-1-support';
 import { answerOf, ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
-import type { ProofResult } from './types';
-
-const TRIVIALLY_DIFFERENT = new Set([
-  'id',
-  'created_at',
-  'updated_at',
-  'virtual_account_id',
-  'balance',
-  'api_customer_id',
-]);
-
-function position(ids: string[], target: string | null): string | null {
-  const index = target ? ids.indexOf(target) : -1;
-  if (index < 0) return null;
-  if (ids.length === 1) return 'only';
-  return `${index === 0 ? 'first' : index === ids.length - 1 ? 'last' : 'middle'}_of_${ids.length}`;
-}
-
-function walletIdsOf(data: unknown): { ids: string[]; edges: unknown[] } {
-  const edges = extractEdges(data).edges;
-  return {
-    edges,
-    ids: edges
-      .map((edge) => pickString(edge, ['id']))
-      .filter((id): id is string => id !== null),
-  };
-}
+import { pollSettled, recordOf, usableList } from './read-rules';
+import type { Answer, ProofResult } from './types';
 
 export async function runProof1(ctx: ProofContext): Promise<ProofResult> {
   const { api, qa, state, mode } = ctx;
@@ -42,24 +23,44 @@ export async function runProof1(ctx: ProofContext): Promise<ProofResult> {
   }
 
   // 1. Can the customer be found by third_party_identifier? (GET)
-  const lookup = await api.customersByIdentifier(qa.thirdPartyIdentifier);
-  const list = extractEdges(lookup.data);
-  const found = list.edges.find(
-    (edge) => pickString(edge, ['customer_id', 'id']) === state.customerId
+  // A just-created customer may not be indexed yet, so poll within the budget.
+  const findCustomer = (
+    call: Awaited<ReturnType<typeof api.customersByIdentifier>>
+  ) =>
+    usableList(call)?.edges.find(
+      (edge) => pickString(edge, ['customer_id', 'id']) === state.customerId
+    );
+  const polled = await pollSettled(
+    ctx,
+    () => api.customersByIdentifier(qa.thirdPartyIdentifier),
+    (call) => findCustomer(call) !== undefined
   );
+  const lookup = polled.value;
+  const lookupList = usableList(lookup);
+  const found = findCustomer(lookup);
+  // `no` needs a successful read of a recognised list for a customer that
+  // existed before this run; a fresh customer may simply not be indexed yet.
+  const lookupAnswer: Answer = found
+    ? 'yes'
+    : !lookupList || state.createdNewCustomer === true
+      ? 'unknown'
+      : 'no';
   b.shape(
     'GET /customers?third_party_identifier=',
     lookup.httpStatus,
     lookup.data
   );
-  b.value('lookup_list_container', list.container).value(
+  b.value('lookup_list_container', lookupList?.container ?? null).value(
     'lookup_result_count',
-    list.edges.length
+    lookupList ? lookupList.edges.length : null
   );
   b.finding(
     'lookup_by_identifier_finds_customer',
     'Can GET /api/v1/customers?third_party_identifier= find the customer?',
-    answerOf(lookup.ok ? Boolean(found) : null)
+    lookupAnswer,
+    lookupAnswer === 'unknown'
+      ? `not found within ${polled.polls} reads: the read failed, the list was not recognised, or the customer was created moments ago and may not be indexed yet`
+      : undefined
   );
   const listEcho = found ? pickString(found, ['third_party_identifier']) : null;
   b.finding(
@@ -138,25 +139,50 @@ export async function runProof1(ctx: ProofContext): Promise<ProofResult> {
   }
 
   // 3. How can the default wallet be identified among the customer's wallets?
+  // Findings need a successful, recognised list that already shows every
+  // wallet we know the customer has (a new wallet may lag in the list).
   const ground = state.createdWalletId;
-  const desc = walletIdsOf(
-    (await api.customerWallets(state.customerId, 'DESC')).data
+  const knownWalletIds = state.wallets.map((wallet) => wallet.id);
+  const listsEveryWallet = (
+    call: Awaited<ReturnType<typeof api.customerWallets>>
+  ) => {
+    const list = usableList(call);
+    if (!list) return false;
+    const ids = walletIdsOf(list).ids;
+    return knownWalletIds.every((id) => ids.includes(id));
+  };
+  const ascPolled = await pollSettled(
+    ctx,
+    () => api.customerWallets(state.customerId ?? '', 'ASC'),
+    listsEveryWallet
   );
-  const ascCall = await api.customerWallets(state.customerId, 'ASC');
-  const asc = walletIdsOf(ascCall.data);
+  const ascCall = ascPolled.value;
+  const ascList = ascPolled.settled ? usableList(ascCall) : null;
+  const descList = ascList
+    ? usableList(await api.customerWallets(state.customerId, 'DESC'))
+    : null;
+  const asc = walletIdsOf(ascList);
+  const desc = walletIdsOf(descList);
   b.shape(
     'GET wallet list (customer_id filter)',
     ascCall.httpStatus,
     ascCall.data
   );
-  b.value('wallet_count', asc.ids.length);
-  if (ground) {
-    b.value(
-      'default_wallet_position_default_order',
-      position(desc.ids, ground)
+  b.value('wallet_count', ascList ? asc.ids.length : null);
+  if (!ascList) {
+    b.inconclusive(
+      'the customer wallet list could not be read completely within the polling budget'
     );
-    b.value('default_wallet_position_ascending', position(asc.ids, ground));
-  } else {
+  }
+  b.value(
+    'default_wallet_position_default_order',
+    ground && descList ? position(desc.ids, ground) : null
+  );
+  b.value(
+    'default_wallet_position_ascending',
+    ground && ascList ? position(asc.ids, ground) : null
+  );
+  if (!ground && ascList) {
     b.note(
       'No create response in this run, so there is no ground truth for the default wallet; position facts omitted.'
     );
@@ -172,7 +198,9 @@ export async function runProof1(ctx: ProofContext): Promise<ProofResult> {
   b.finding(
     'default_wallet_is_earliest_created',
     'Is the default wallet the earliest-created wallet of the customer?',
-    ground && canOrder ? answerOf(earliest === ground) : 'unknown',
+    ground && ascList && canOrder && asc.ids.includes(ground)
+      ? answerOf(earliest === ground)
+      : 'unknown',
     canOrder ? undefined : 'wallet list rows carry no creation time'
   );
 
@@ -201,7 +229,7 @@ export async function runProof1(ctx: ProofContext): Promise<ProofResult> {
   b.finding(
     'explicit_default_flag_in_wallet_list',
     'Does the wallet list carry an explicit default/primary flag?',
-    asc.ids.length ? answerOf(flagKey !== undefined) : 'unknown',
+    ascList && asc.ids.length > 0 ? answerOf(flagKey !== undefined) : 'unknown',
     flagKey ? `field name: ${flagKey}` : undefined
   );
 
@@ -211,19 +239,18 @@ export async function runProof1(ctx: ProofContext): Promise<ProofResult> {
   b.finding(
     'wallet_retrieve_exposes_customer_binding',
     'Does GET /wallet/:id expose api_customer_id (owner binding)?',
-    detail
+    detail && recordOf(detail)
       ? answerOf(pickString(detail.data, ['api_customer_id']) !== null)
       : 'unknown'
   );
 
-  const lookupOk = lookup.ok && Boolean(found);
   b.value(
     'adoption_rule',
     mode === 'live-readonly' || sameWallet === null
       ? 'unconfirmed'
-      : !sameWallet
+      : !sameWallet || lookupAnswer === 'no'
         ? 'not_supported'
-        : lookupOk && baselineIsCreate
+        : lookupAnswer === 'yes' && baselineIsCreate
           ? 'supported'
           : 'unconfirmed'
   );
@@ -232,22 +259,3 @@ export async function runProof1(ctx: ProofContext): Promise<ProofResult> {
   );
   return b.build(ctx);
 }
-
-const REPOST_QUESTIONS: ReadonlyArray<readonly [string, string]> = [
-  [
-    'repost_returns_same_wallet_id',
-    'Does the re-POST return the SAME wallet_id as the original create?',
-  ],
-  [
-    'repost_returns_same_customer_id',
-    'Does the re-POST return the same customer_id?',
-  ],
-  [
-    'repost_reports_existing_customer',
-    'Does the re-POST report new_customer:false?',
-  ],
-  [
-    'create_response_echoes_identifier',
-    'Is third_party_identifier echoed in the create response?',
-  ],
-];

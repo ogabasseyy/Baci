@@ -81,3 +81,63 @@ describe('proof 6: fees', () => {
     expect(result.status).toBe('inconclusive');
   });
 });
+
+describe('proof 6: an unread record is not "no fee field"', () => {
+  async function measured(
+    options: Parameters<typeof makeHarness>[0] = {},
+    singleDown = false
+  ) {
+    const h = harness(options);
+    await setupScenario(h.ctx);
+    if (singleDown)
+      h.mock.sandbox.options.serverErrorPaths = ['/api/v1/transaction/01M2T'];
+    await runProof2(h.ctx);
+    await runProof3(h.ctx);
+    return { h, result: await runProof6(h.ctx) };
+  }
+
+  it('answers unknown for both fee-field findings when the single records were unreadable', async () => {
+    const { result } = await measured({}, true);
+    expect(answer(result, 'deposit_fee_field_present')).toBe('unknown');
+    expect(answer(result, 'transfer_fee_field_present')).toBe('unknown');
+  });
+
+  it('does not call the deposit credit "other" when the fee is unknown', async () => {
+    const { result } = await measured({}, true);
+    expect(result.values.deposit_credit_relation).toBe('unknown');
+    expect(result.values.deposit_fee_borne_by).toBe('unknown');
+  });
+
+  it('does not claim "no fee" for the payer when the transfer fee was never read', async () => {
+    const { result } = await measured({}, true);
+    expect(result.values.transfer_fee_payer).toBe(
+      'unknown (the fee was not read)'
+    );
+  });
+
+  it('still reports a known zero fee as none observed', async () => {
+    const { result } = await measured();
+    expect(result.values.transfer_fee_payer).toBe('none observed');
+    expect(answer(result, 'transfer_fee_field_present')).toBe('yes');
+  });
+
+  it('counts only successful object records in the history scan, and counts unreadable wallets', async () => {
+    const h = harness();
+    await setupScenario(h.ctx);
+    const original = h.api.transaction.bind(h.api);
+    h.api.transaction = async (id, walletId) => ({
+      ...(await original(id, walletId)),
+      ok: true,
+      data: 'text',
+    });
+    const result = await runProof6(h.ctx);
+    expect(result.values.historical_records_read).toBe(0);
+    expect(result.values.historical_records_with_fee_field).toBe(0);
+
+    h.mock.sandbox.options.serverErrorPaths = ['/api/v1/transaction?'];
+    const noLists = await runProof6(h.ctx);
+    expect(noLists.values.historical_wallets_unreadable).toBe(
+      h.state.wallets.length
+    );
+  });
+});

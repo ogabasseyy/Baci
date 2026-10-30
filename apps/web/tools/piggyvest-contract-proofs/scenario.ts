@@ -1,4 +1,4 @@
-import { AMOUNTS_KOBO } from './constants';
+import { AMOUNTS_KOBO, FUNDING_FLOOR_KOBO } from './constants';
 import {
   createDataSchema,
   extractEdges,
@@ -16,8 +16,6 @@ import { discoverQaCustomer } from './qa-discovery';
  * re-run they resume instead of resending and the customer is rediscovered
  * by its third_party_identifier (GET only).
  */
-
-const FUNDING_FLOOR_KOBO = AMOUNTS_KOBO.walletTransfer * 3;
 
 function register(ctx: ProofContext, kind: 'W' | 'C', value: string | null) {
   ctx.redactor.register(kind, value);
@@ -127,7 +125,12 @@ async function ensureGoalWallet(ctx: ProofContext): Promise<void> {
       'goal wallet creation outcome unknown; re-listing before trusting it'
     );
   }
-  for (let attempt = 0; attempt < 3 && !state.goalWalletId; attempt += 1) {
+  // A new wallet may not be listed yet: re-list within the polling budget.
+  for (
+    let attempt = 0;
+    attempt < ctx.maxPolls && !state.goalWalletId;
+    attempt += 1
+  ) {
     await loadWallets(ctx);
     assignRoles(ctx);
     if (!state.goalWalletId) await ctx.sleep(ctx.pollIntervalMs);
@@ -145,7 +148,13 @@ async function ensureFundedMain(ctx: ProofContext): Promise<void> {
   const before = walletDataSchema.safeParse(
     (await api.wallet(state.mainWalletId)).data
   );
-  const balance = before.success ? before.data.balance : 0;
+  if (!before.success) {
+    state.notes.push(
+      'main wallet balance could not be read; funding skipped (not assumed to be empty)'
+    );
+    return;
+  }
+  const balance = before.data.balance;
   if (balance >= FUNDING_FLOOR_KOBO) return;
   const funded = await api.fundWallet(
     qa,

@@ -17,12 +17,16 @@ export interface TransferObservation {
   sourceDeltaKobo: number | null;
   destinationDeltaKobo: number | null;
   feeFromRecordKobo: number | null;
+  /** null = no record was read, so absence of a fee field is not established. */
+  feeFieldPresent: boolean | null;
 }
 
 export interface DepositObservation {
   grossKobo: number;
   creditedKobo: number | null;
   feeFromRecordKobo: number | null;
+  /** null = no record was read, so absence of a fee field is not established. */
+  feeFieldPresent: boolean | null;
 }
 
 export interface ScenarioState {

@@ -219,6 +219,7 @@ export async function runProof4(ctx: ProofContext): Promise<ProofResult> {
     sourceDeltaKobo: null,
     destinationDeltaKobo: null,
     feeFromRecordKobo: null,
+    feeFieldPresent: null,
   };
   return b.build(ctx);
 }

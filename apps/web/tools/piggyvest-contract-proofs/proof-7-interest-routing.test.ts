@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { createMemoryJournal } from './mutation-journal';
 import { runProof7 } from './proof-7-interest-routing';
+import { proof7Key } from './qa-keys';
 import { setupScenario } from './scenario';
 import { makeHarness } from './test-harness.test-support';
 import type { ProofResult } from './types';
@@ -65,7 +66,7 @@ describe('proof 7: main-wallet interest routing at creation', () => {
     expect(h.mock.sandbox.customers).toHaveLength(2);
     expect(h.mock.sandbox.customers.map((c) => c.tpi)).toEqual([
       'pvbproof:qa-customer-0001',
-      'pvbproof:qa-customer-0001-p7a1',
+      `pvbproof:${proof7Key('qa-customer-0001', 1)}`,
     ]);
   });
 
@@ -97,18 +98,16 @@ describe('proof 7: main-wallet interest routing at creation', () => {
     expect(result.notes.join(' ')).toMatch(/main QA customer/);
   });
 
-  it('calls an accepted payout unverifiable when the wallet readback cannot name it', async () => {
+  it('does not claim "no settings" when the readback never shows any within the budget', async () => {
     const { result } = await run({ mock: { payoutReadback: 'none' } });
     expect(answer(result, 'customer_create_with_payout_accepted')).toBe('yes');
     expect(answer(result, 'main_wallet_readback_exposes_interest_fields')).toBe(
-      'no'
+      'unknown'
     );
     expect(
       answer(result, 'main_wallet_readback_names_payout_destination')
-    ).toBe('no');
-    expect(result.values.interest_routing_verdict).toBe(
-      'create_time_routing_accepted_but_unverifiable'
-    );
+    ).toBe('unknown');
+    expect(result.values.interest_routing_verdict).toBe('unconfirmed');
   });
 
   it('records a sub-account endpoint that rejects interest_payout_wallet', async () => {
@@ -189,7 +188,7 @@ describe('proof 7: key length and customer identity', () => {
     const { result, h } = await run({ qaKey: 'q'.repeat(64) });
     expect(result.status).toBe('observed');
     const tpis = h.mock.sandbox.customers.map((c) => c.tpi);
-    expect(tpis[1]).toBe(`pvbproof:${'q'.repeat(57)}-p7a1`);
+    expect(tpis[1]).toBe(`pvbproof:${proof7Key('q'.repeat(64), 1)}`);
     expect(h.journal.entries().every((e) => e.qaKey.length <= 64)).toBe(true);
   });
 
@@ -207,7 +206,7 @@ describe('proof 7: key length and customer identity', () => {
     const original = h.api.customersByIdentifier.bind(h.api);
     h.api.customersByIdentifier = async (identifier: string) => {
       const call = await original(identifier);
-      return identifier.endsWith('-p7a1')
+      return identifier.endsWith(proof7Key('qa-customer-0001', 1))
         ? {
             ...call,
             data: {
@@ -245,7 +244,7 @@ describe('proof 7: a new attempt re-tests with fresh names', () => {
     expect(answer(result, 'goal_without_payout_created')).toBe('yes');
     expect(answer(result, 'goal_explicit_payout_accepted')).toBe('yes');
     expect(h.mock.sandbox.customers.map((c) => c.tpi)).toContain(
-      'pvbproof:qa-customer-0001-p7a2'
+      `pvbproof:${proof7Key('qa-customer-0001', 2)}`
     );
   });
 });
@@ -271,5 +270,31 @@ describe('proof 7: inheritance needs a readable destination', () => {
         (f) => f.id === 'goal_without_payout_inherits_business_payout'
       )?.detail
     ).toMatch(/destination/);
+  });
+});
+
+describe('proof 7: QA keys that share a prefix', () => {
+  it('get distinct customers and journal scopes, neither affecting the other', async () => {
+    const A = `${'q'.repeat(57)}AAAAAAA`;
+    const B = `${'q'.repeat(57)}BBBBBBB`;
+    const journal = createMemoryJournal();
+    const first = await run({ journal, qaKey: A });
+    const { customers, wallets } = first.h.mock.sandbox;
+    first.h.dispose();
+
+    const h = harness({ journal, qaKey: B, runId: 'run2' });
+    h.mock.sandbox.customers = customers;
+    h.mock.sandbox.wallets = wallets;
+    await setupScenario(h.ctx);
+    const result = await runProof7(h.ctx);
+
+    expect(result.status).toBe('observed');
+    expect(answer(result, 'customer_created_fresh')).toBe('yes');
+    const tpis = h.mock.sandbox.customers.map((c) => c.tpi);
+    expect(tpis).toContain(`pvbproof:${proof7Key(A, 1)}`);
+    expect(tpis).toContain(`pvbproof:${proof7Key(B, 1)}`);
+    const scopes = new Set(journal.entries().map((e) => e.qaKey));
+    expect(scopes.has(proof7Key(A, 1))).toBe(true);
+    expect(scopes.has(proof7Key(B, 1))).toBe(true);
   });
 });

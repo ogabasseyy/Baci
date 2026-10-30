@@ -1,4 +1,5 @@
 import type { MockSandbox } from './mock-sandbox';
+import { listedTransactions, markStaleBalance } from './mock-sandbox-lag';
 import {
   type Body,
   fail,
@@ -21,6 +22,7 @@ export class MockLedger {
       return fail('Funding failed');
     if (this.host.options.fundingSettles) {
       const fee = this.host.options.depositFeeKobo;
+      markStaleBalance(w, this.host.options.balanceLagReads);
       w.balance += this.host.options.depositFeeBorneByWallet
         ? amount - fee
         : amount;
@@ -36,6 +38,7 @@ export class MockLedger {
         fee,
         status: 'success',
         polls: 0,
+        hiddenReads: this.host.options.listLagReads,
         createdAt: this.host.now(),
       });
     }
@@ -76,6 +79,7 @@ export class MockLedger {
       fee,
       status: 'pending',
       polls: 0,
+      hiddenReads: this.host.options.listLagReads,
       createdAt: this.host.now(),
     });
     return {
@@ -94,6 +98,9 @@ export class MockLedger {
     txn.status = 'success';
     const source = this.host.wallet(txn.source);
     const destination = this.host.wallet(txn.destination);
+    for (const touched of [source, destination]) {
+      if (touched) markStaleBalance(touched, this.host.options.balanceLagReads);
+    }
     if (source)
       source.balance -=
         txn.amount + (txn.category === 'bank-outflow' ? txn.fee : 0);
@@ -165,7 +172,7 @@ export class MockLedger {
       type: 'debit' | 'credit';
       wallet: string | null;
     }
-    const rows: Row[] = this.txns
+    const rows: Row[] = listedTransactions(this.txns)
       .flatMap((t): Row[] => [
         ...(t.source
           ? [{ t, id: t.id, type: 'debit' as const, wallet: t.source }]

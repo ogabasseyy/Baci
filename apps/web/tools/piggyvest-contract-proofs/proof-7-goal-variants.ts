@@ -1,7 +1,9 @@
-import { extractEdges, pickString } from './loose-schemas';
-import { analysePayoutReadback, type PayoutReadback } from './payout-analysis';
+import { pickString } from './loose-schemas';
+import type { PayoutReadback } from './payout-analysis';
+import { readbackPayout } from './proof-7-readback';
 import type { ProofContext } from './proof-context';
 import type { QaIdentity } from './provider-ops';
+import { usableList } from './read-rules';
 
 export interface GoalOwner {
   qa: QaIdentity;
@@ -60,12 +62,13 @@ export async function runGoalVariant(
       0,
       120
     );
-    const list = await api.customerWallets(owner.customerId, 'ASC');
-    const found = extractEdges(list.data).edges.find(
+    const list = usableList(await api.customerWallets(owner.customerId, 'ASC'));
+    const found = list?.edges.find(
       (edge) => pickString(edge, ['name']) === wanted
     );
     walletId = pickString(found, ['id']);
-    result.exists = walletId !== null;
+    // An unreadable list says nothing about whether the wallet exists.
+    result.exists = list === null ? null : walletId !== null;
   } else {
     result.httpStatus = sent.call.httpStatus;
     if (sent.call.ok) {
@@ -80,11 +83,9 @@ export async function runGoalVariant(
   }
   if (walletId) {
     redactor.register('W', walletId);
-    const detail = await api.wallet(walletId);
-    result.readbackData = detail.data;
-    result.readback = detail.ok
-      ? analysePayoutReadback(detail.data, business, walletId)
-      : null;
+    const read = await readbackPayout(ctx, walletId, business);
+    result.readbackData = read.data;
+    result.readback = read.facts;
   }
   return result;
 }

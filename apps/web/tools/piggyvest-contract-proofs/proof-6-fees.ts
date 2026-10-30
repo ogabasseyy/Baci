@@ -1,6 +1,7 @@
-import { extractEdges, pickString } from './loose-schemas';
+import { pickString } from './loose-schemas';
 import { answerOf, ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
+import { recordOf, usableList } from './read-rules';
 import { analyseRecord, relationOfCredit } from './tsq-analysis';
 import type { ProofResult } from './types';
 
@@ -8,21 +9,26 @@ const TITLE = 'Fees on deposits and wallet transfers';
 const HISTORY_WALLETS = 3;
 const HISTORY_ROWS = 3;
 
+/** Historical records: only successful reads of object records count. */
 async function scanHistory(ctx: ProofContext, b: ProofBuilder): Promise<void> {
   let read = 0;
   let withFee = 0;
+  let unreadableWallets = 0;
   const fees = new Set<number>();
   for (const wallet of ctx.state.wallets.slice(0, HISTORY_WALLETS)) {
-    const list = await ctx.api.transactions({
-      wallet_id: wallet.id,
-      limit: '5',
-    });
-    for (const row of extractEdges(list.data).edges.slice(0, HISTORY_ROWS)) {
+    const list = usableList(
+      await ctx.api.transactions({ wallet_id: wallet.id, limit: '5' })
+    );
+    if (!list) {
+      unreadableWallets += 1;
+      continue;
+    }
+    for (const row of list.edges.slice(0, HISTORY_ROWS)) {
       const id = pickString(row, ['id']);
       if (!id) continue;
-      const single = await ctx.api.transaction(id, wallet.id);
-      if (!single.ok) continue;
-      const facts = analyseRecord(single.data, {
+      const record = recordOf(await ctx.api.transaction(id, wallet.id));
+      if (!record) continue;
+      const facts = analyseRecord(record, {
         sourceWalletId: null,
         destinationWalletId: null,
         amountKobo: null,
@@ -36,6 +42,7 @@ async function scanHistory(ctx: ProofContext, b: ProofBuilder): Promise<void> {
     'historical_records_with_fee_field',
     withFee
   );
+  b.value('historical_wallets_unreadable', unreadableWallets);
   b.value(
     'historical_fee_values_kobo',
     [...fees].sort((a, c) => a - c).join(',') || null
@@ -47,11 +54,16 @@ export async function runProof6(ctx: ProofContext): Promise<ProofResult> {
   const { deposit, walletTransfer: transfer } = ctx.state;
 
   if (deposit) {
-    const relation = relationOfCredit(
-      deposit.grossKobo,
-      deposit.creditedKobo,
-      deposit.feeFromRecordKobo
-    );
+    // With the fee unknown, a credit that is not the gross cannot be classified.
+    const relation =
+      deposit.feeFromRecordKobo === null &&
+      deposit.creditedKobo !== deposit.grossKobo
+        ? 'unknown'
+        : relationOfCredit(
+            deposit.grossKobo,
+            deposit.creditedKobo,
+            deposit.feeFromRecordKobo
+          );
     b.value('deposit_fee_kobo', deposit.feeFromRecordKobo).value(
       'deposit_credit_relation',
       relation
@@ -67,7 +79,10 @@ export async function runProof6(ctx: ProofContext): Promise<ProofResult> {
     b.finding(
       'deposit_fee_field_present',
       'Does the deposit record carry a fee field?',
-      answerOf(deposit.feeFromRecordKobo !== null)
+      answerOf(deposit.feeFieldPresent),
+      deposit.feeFieldPresent === null
+        ? 'no deposit record could be read, so a missing fee field is not established'
+        : undefined
     );
   } else {
     b.finding(
@@ -94,7 +109,10 @@ export async function runProof6(ctx: ProofContext): Promise<ProofResult> {
     b.finding(
       'transfer_fee_field_present',
       'Does the wallet-transfer record carry a fee field?',
-      answerOf(fee !== null)
+      answerOf(transfer.feeFieldPresent),
+      transfer.feeFieldPresent === null
+        ? 'not every transfer record could be read, so a missing fee field is not established'
+        : undefined
     );
     b.finding(
       'transfer_source_debited_exactly_amount',
@@ -111,9 +129,11 @@ export async function runProof6(ctx: ProofContext): Promise<ProofResult> {
       withFee
         ? 'source wallet (debited amount plus fee)'
         : exact
-          ? fee && fee > 0
-            ? 'not the source wallet (source debited exactly the amount)'
-            : 'none observed'
+          ? fee === null
+            ? 'unknown (the fee was not read)'
+            : fee > 0
+              ? 'not the source wallet (source debited exactly the amount)'
+              : 'none observed'
           : 'unknown'
     );
   } else {

@@ -52,6 +52,14 @@ export const AMOUNTS_KOBO = {
   bankOutflow: 100_000,
 } as const;
 
+/** Everything the later proofs take out of the main wallet: two wallet transfers and one bank outflow. */
+export const PLANNED_OUTFLOWS_KOBO =
+  AMOUNTS_KOBO.walletTransfer * 2 + AMOUNTS_KOBO.bankOutflow;
+/** Room for the bank-outflow fee (sandbox tariffs are tens of naira) and any transfer fee. */
+export const FEE_RESERVE_KOBO = 50_000;
+/** A main wallet below this is topped up before the proofs run. */
+export const FUNDING_FLOOR_KOBO = PLANNED_OUTFLOWS_KOBO + FEE_RESERVE_KOBO;
+
 /** Allowlisted POST paths in mutation mode. Everything else is refused. */
 export const MUTATION_PATHS = [
   '/api/v1/customers',

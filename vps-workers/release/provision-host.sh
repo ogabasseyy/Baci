@@ -77,6 +77,12 @@ check() {
     report "user $WORKER_USER does not exist."
   fi
   [ -f "$SUDOERS_FILE" ] || report "$SUDOERS_FILE is missing."
+  # A later sudoers rule (e.g. "<deploy user> ALL=(ALL:ALL) ALL" after the
+  # includedir) overrides the passwordless switch, so test the real thing.
+  if [ "$(id -u)" -eq 0 ] && id -u "$WORKER_USER" >/dev/null 2>&1 &&
+    ! su "$DEPLOY_USER" -s /bin/bash -c "sudo -n -u $WORKER_USER true" >/dev/null 2>&1; then
+    report "$DEPLOY_USER cannot switch to $WORKER_USER without a password; a later sudoers rule overrides $SUDOERS_FILE (append the rule to the end of /etc/sudoers)."
+  fi
   [ -f "$WORKERS/.env" ] || report "$WORKERS/.env is missing."
   if [ -f "$WORKERS/.env" ] && has_dropped_key "$WORKERS/.env"; then
     report "$WORKERS/.env still contains deployment or administration credentials."

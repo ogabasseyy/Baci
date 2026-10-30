@@ -397,6 +397,22 @@ class FixturePnpmDiagnosticTests(unittest.TestCase):
                 build_root_uid=os.geteuid(),
             )["error_code"], "ERR_PNPM_TRUST_DOWNGRADE")
 
+    def test_observer_uses_fixed_pnpm_store_environment_when_cli_omits_store_dir(self):
+        sha = "a" * 40
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scratch = root / f"{sha}.fixture"
+            scratch.mkdir(mode=0o700)
+            store = scratch / "pnpm-store"
+            store.mkdir(mode=0o700)
+            self.assertEqual(fixture._diagnostic_path(
+                ("--filter", "@baci/web", "deploy"),
+                env={"PNPM_CONFIG_STORE_DIR": str(store)}),
+                scratch / fixture.FIXTURE_ERROR_NAME)
+            self.assertIsNone(fixture._diagnostic_path(
+                ("--store-dir", str(root / "other")),
+                env={"PNPM_CONFIG_STORE_DIR": str(store)}))
+
     def test_scratch_reader_rejects_wrong_sha_mode_and_location(self):
         sha = "a" * 40
         with tempfile.TemporaryDirectory() as temporary:

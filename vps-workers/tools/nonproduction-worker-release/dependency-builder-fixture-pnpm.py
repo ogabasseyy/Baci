@@ -51,7 +51,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     summary = summarize_failure(f"{result.stdout}\n{result.stderr}",
                                 pnpm_args=pnpm_args, cwd=Path.cwd(), env=os.environ)
-    _write_diagnostic(_diagnostic_path(pnpm_args), summary)
+    _write_diagnostic(_diagnostic_path(pnpm_args, env=os.environ), summary)
     if summary["error_code"] == "ERR_PNPM_TRUST_DOWNGRADE":
         print("ERR_PNPM_TRUST_DOWNGRADE", file=sys.stderr)
     else:

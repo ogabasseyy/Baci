@@ -62,8 +62,21 @@ jobs:
       - name: Provision disposable trusted candidate parent and Node runtime
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install --yes nodejs
+          node_binary="$(command -v node)"
+          node_version="$(node --version)"
+          case "$node_version" in
+            v24.*) ;;
+            *) echo 'runtime fixture setup failed: expected workflow-pinned Node 24' >&2; exit 1 ;;
+          esac
+          if [ -L /usr/bin/node ]; then
+            echo 'runtime fixture setup failed: refusing a symlinked /usr/bin/node target' >&2
+            exit 1
+          fi
+          sudo install -o root -g root -m 0755 "$node_binary" /usr/bin/node
+          if [ "$(/usr/bin/node --version)" != "$node_version" ]; then
+            echo 'runtime fixture setup failed: fixed Node runtime does not match setup-node' >&2
+            exit 1
+          fi
           sudo groupadd --system baci-worker || { echo 'runtime fixture setup failed: create worker group' >&2; exit 1; }
           sudo groupadd --system baci-worker-runtime-verify || { echo 'runtime fixture setup failed: create verifier group' >&2; exit 1; }
           sudo useradd --system --gid baci-worker-runtime-verify --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin baci-worker-runtime-verify || { echo 'runtime fixture setup failed: create verifier user' >&2; exit 1; }

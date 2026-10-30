@@ -16,12 +16,21 @@ from dependency_builder_fixture_pnpm_classification import (
 
 FIXTURE_ERROR_NAME = ".fixture-pnpm-diagnostic.json"
 
-def _diagnostic_path(argv: Sequence[str]) -> Path | None:
+def _diagnostic_path(argv: Sequence[str], *, env: dict[str, str] | None = None) -> Path | None:
+    command_env = os.environ if env is None else env
     try:
-        index = argv.index("--store-dir")
-        store = Path(argv[index + 1])
+        store_values = [argv[index + 1] for index, value in enumerate(argv[:-1])
+                        if value == "--store-dir"]
+        store_values.extend(value.split("=", 1)[1] for value in argv
+                            if value.startswith("--store-dir="))
+        configured = command_env.get("PNPM_CONFIG_STORE_DIR")
+        if configured:
+            store_values.append(configured)
+        if not store_values or len(set(store_values)) != 1:
+            return None
+        store = Path(store_values[0])
         info = store.lstat()
-    except (ValueError, IndexError, OSError):
+    except (IndexError, OSError):
         return None
     if (store.name != "pnpm-store" or not stat.S_ISDIR(info.st_mode)
             or store.is_symlink() or info.st_uid != os.geteuid()):

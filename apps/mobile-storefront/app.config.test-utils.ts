@@ -16,6 +16,7 @@ export function loadAppConfigWithEnv(env: {
   EXPO_UPDATE_CHANNEL?: string;
   STOREFRONT_FACEBOOK_APP_ID?: string;
   STOREFRONT_FACEBOOK_CLIENT_TOKEN?: string;
+  STOREFRONT_TIKTOK_APP_SECRET?: string;
 }) {
   jest.resetModules();
   process.env = { ...originalEnv };
@@ -31,6 +32,7 @@ export function loadAppConfigWithEnv(env: {
   delete process.env.EXPO_UPDATE_CHANNEL;
   delete process.env.STOREFRONT_FACEBOOK_APP_ID;
   delete process.env.STOREFRONT_FACEBOOK_CLIENT_TOKEN;
+  delete process.env.STOREFRONT_TIKTOK_APP_SECRET;
   for (const [key, value] of Object.entries(env)) {
     if (value !== undefined) {
       process.env[key] = value;

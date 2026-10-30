@@ -37,4 +37,20 @@ describe('createTikTokBusinessInfoPlistEntries', () => {
       BaciTikTokBusinessDisableSKAdNetworkSupport: false,
     });
   });
+
+  it('reads an environment-referenced secret only when creating the native plist', () => {
+    const ios = {
+      appId: '6472735367',
+      tiktokAppId: '7644050881196883975',
+      appSecretEnvVar: 'TEST_TIKTOK_SECRET',
+    };
+    expect(
+      createTikTokBusinessInfoPlistEntries(ios, {
+        TEST_TIKTOK_SECRET: '  fixture-secret  ',
+      })
+    ).toMatchObject({ BaciTikTokBusinessAppSecret: 'fixture-secret' });
+    expect(() => createTikTokBusinessInfoPlistEntries(ios, {})).toThrow(
+      /TikTok.*secret/i
+    );
+  });
 });

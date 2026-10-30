@@ -30,7 +30,6 @@ const parsedAndroidVersionCode =
     : Number(rawAndroidVersionCode);
 let androidVersionCode;
 const appVersion = '2.0.1';
-const androidRuntimeVersion = `${appVersion}-android-sdk57-rn0862`;
 const DEFAULT_ANDROID_VERSION_CODE = 741;
 
 if (parsedAndroidVersionCode !== undefined) {
@@ -98,7 +97,7 @@ const tiktokBusinessPlugin =
           ios: {
             appId: tiktokIosAppStoreId,
             tiktokAppId: tiktokIosAppId,
-            appSecret: tiktokIosAppSecret,
+            appSecretEnvVar: 'STOREFRONT_TIKTOK_APP_SECRET',
             autoInitialize: false,
             debugMode: process.env.TIKTOK_SDK_DEBUG === '1',
             disableSKAdNetworkSupport:
@@ -222,7 +221,7 @@ const buildStorefrontConfig = ({ config }) => ({
     },
   },
   android: {
-    runtimeVersion: androidRuntimeVersion,
+    runtimeVersion: { policy: 'fingerprint' },
     versionCode: androidVersionCode ?? DEFAULT_ANDROID_VERSION_CODE,
     package: 'com.ogabassey.store',
     googleServicesFile: './google-services.json',

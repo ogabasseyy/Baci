@@ -76,7 +76,7 @@ describe('Expo app config (Facebook SDK and merchant domain)', () => {
     expect(config.runtimeVersion).toBeTruthy();
   });
 
-  it('uses an Android-specific runtime boundary for the SDK 57 native upgrade', () => {
+  it('derives the Android OTA runtime from native compatibility', () => {
     const appConfig = loadAppConfigWithEnv({
       EXPO_PUBLIC_POSTHOG_API_KEY: 'ph_test',
       STOREFRONT_FACEBOOK_APP_ID: '123456789',
@@ -86,9 +86,34 @@ describe('Expo app config (Facebook SDK and merchant domain)', () => {
     expect(config.version).toBe('2.0.1');
     expect(config.runtimeVersion).toBe('2.0.1');
     expect(config.android).toMatchObject({
-      runtimeVersion: '2.0.1-android-sdk57-rn0862',
+      runtimeVersion: { policy: 'fingerprint' },
       versionCode: 741,
     });
+  });
+
+  it('keeps the TikTok build secret out of the public Expo config', () => {
+    const secret = 'synthetic-tiktok-build-secret';
+    const appConfig = loadAppConfigWithEnv({
+      EXPO_PUBLIC_POSTHOG_API_KEY: 'ph_test',
+      STOREFRONT_FACEBOOK_APP_ID: '123456789',
+      STOREFRONT_FACEBOOK_CLIENT_TOKEN: 'client-token',
+      STOREFRONT_TIKTOK_APP_SECRET: secret,
+    });
+    const config = renderConfig(appConfig);
+    expect(config.extra?.tiktokBusiness?.isConfigured).toBe(true);
+    expect(config.plugins).toEqual(
+      expect.arrayContaining([
+        [
+          '@baci/tiktok-business/plugin',
+          expect.objectContaining({
+            ios: expect.objectContaining({
+              appSecretEnvVar: 'STOREFRONT_TIKTOK_APP_SECRET',
+            }),
+          }),
+        ],
+      ])
+    );
+    expect(JSON.stringify(config)).not.toContain(secret);
   });
 
   it('defaults the storefront merchant domain for production BNPL returns', () => {

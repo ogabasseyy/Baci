@@ -216,9 +216,18 @@ pre-push:
           # contended remote hung the push indefinitely. lowSpeed* aborts a
           # stalled HTTP transfer; GIT_TERMINAL_PROMPT=0 keeps a credential
           # prompt from blocking a non-interactive push.
-          base_sha=$(GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1000 \
-            -c http.lowSpeedTime=20 ls-remote "$remote" "refs/heads/$base_ref" \
-            2>/dev/null | awk 'NR==1 { print $1 }')
+          # The http.* limits do not cover SSH remotes, so bound those with
+          # connect and keepalive timeouts too — but only when neither
+          # GIT_SSH_COMMAND nor core.sshCommand is set, so a developer's own
+          # SSH setup is never overridden.
+          base_sha=$(
+            if [ -z "${GIT_SSH_COMMAND:-}" ] && [ -z "$(git config --get core.sshCommand 2>/dev/null)" ]; then
+              export GIT_SSH_COMMAND='ssh -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=4'
+            fi
+            GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1000 \
+              -c http.lowSpeedTime=20 ls-remote "$remote" "refs/heads/$base_ref" \
+              2>/dev/null | awk 'NR==1 { print $1 }'
+          )
           if [ -z "$base_sha" ]; then
             echo "⚠️  Couldn't read $base for '$branch' — skipping behind-base check (offline?)."
             continue

@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -198,4 +205,61 @@ test(
   }
   }
 );
+
+function fakeSsh(root, name) {
+  const log = join(root, `${name}.log`);
+  const script = join(root, name);
+  writeFileSync(script, `#!/bin/sh\necho "$@" >> "${log}"\nexit 1\n`);
+  chmodSync(script, 0o755);
+  return { script, log };
+}
+
+function runHookWith(work, featureSha, env) {
+  return spawnSync('sh', ['-c', behindBaseScript()], {
+    cwd: work,
+    encoding: 'utf8',
+    env: { ...gitEnv, ...env },
+    input: `refs/heads/feature ${featureSha} refs/heads/feature ${'0'.repeat(40)}\n`,
+    timeout: 30_000,
+  });
+}
+
+test('bounds SSH remotes with connect and keepalive timeouts by default', () => {
+  const { root, work, featureSha } = setup();
+  try {
+    const { log } = fakeSsh(root, 'ssh');
+    git(work, 'remote', 'set-url', 'origin', 'ssh://git@example.invalid/repo.git');
+    const result = runHookWith(work, featureSha, {
+      PATH: `${root}:${process.env.PATH}`,
+    });
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /skipping behind-base check/);
+    const sshArgs = readFileSync(log, 'utf8');
+    assert.match(sshArgs, /ConnectTimeout=15/);
+    assert.match(sshArgs, /ServerAliveInterval=5/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("never overrides a developer's core.sshCommand", () => {
+  const { root, work, featureSha } = setup();
+  try {
+    const custom = fakeSsh(root, 'custom-ssh');
+    const defaultSsh = fakeSsh(root, 'ssh');
+    git(work, 'config', 'core.sshCommand', custom.script);
+    git(work, 'remote', 'set-url', 'origin', 'ssh://git@example.invalid/repo.git');
+    const result = runHookWith(work, featureSha, {
+      PATH: `${root}:${process.env.PATH}`,
+    });
+
+    assert.equal(result.status, 0);
+    assert.ok(existsSync(custom.log), 'core.sshCommand was not used');
+    assert.equal(existsSync(defaultSsh.log), false);
+    assert.doesNotMatch(readFileSync(custom.log, 'utf8'), /ConnectTimeout/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 

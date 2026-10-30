@@ -14,6 +14,7 @@ from worker_release_egress_systemd_integration import (
     _approved_socket_properties, _namespace_failure_category, _safe_diagnostic,
     _socket_bind_mount_command, _namespace_missing_path,
     _unit_journal_text, _cleanup_systemd_unit, _namespace_probe_steps,
+    _seed_socket_probe_failure_summary,
 )
 from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture_modules
 
@@ -104,6 +105,40 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
         self.assertTrue(any("--property=StatusText" in call
                             and "--property=ExecMainStatus" in call for call in calls))
         self.assertFalse(any("--collect" in call for call in calls))
+
+    def test_seed_socket_probe_diagnostics_query_only_exact_validated_unit(self):
+        calls = []
+
+        def capture(command, **_kwargs):
+            calls.append(command)
+            return type("Result", (), {"stdout": "fixed journal text", "stderr": ""})()
+
+        fake_process = types.ModuleType("worker_release_bounded_process")
+        fake_process.run_bounded_capture = capture
+        unit = "worker-seed-socket-probe-123"
+        with patch.dict(sys.modules, {"worker_release_bounded_process": fake_process}):
+            self.assertIn("fixed journal text", _unit_journal_text(unit))
+            self.assertEqual(_unit_journal_text(unit + "-extra"), "")
+        self.assertTrue(any(f"--unit={unit}.service" in call for call in calls))
+        self.assertTrue(any("status" in call and f"{unit}.service" in call for call in calls))
+        self.assertFalse(any("--collect" in call for call in calls))
+
+    def test_seed_socket_probe_failure_summary_is_bounded_to_category_and_known_path(self):
+        source = Path("/run/baci-worker-egress-approved-123.sock")
+        summary = _seed_socket_probe_failure_summary(
+            "", "", f"Failed to set up mount namespacing: {source}: "
+            "No such file or directory; secret=must-not-escape", (source, Path("/tmp")),
+        )
+        self.assertEqual(summary, f"namespace-path-missing path={source}")
+        self.assertNotIn("secret", summary)
+        self.assertNotIn("must-not-escape", summary)
+
+    def test_seed_socket_probe_failure_summary_collapses_client_output(self):
+        summary = _seed_socket_probe_failure_summary(
+            "", "egress client integration failed: forbidden detail", "",
+            (Path("/tmp/fixed.sock"),),
+        )
+        self.assertEqual(summary, "client-probe-rejected")
 
     def test_empty_run_probe_unit_is_accepted_by_diagnostics_and_cleanup(self):
         unit = "worker-egress-probe-123-empty-run"

@@ -23,6 +23,10 @@ import worker_release_egress_broker as broker_module
 
 SYNTHETIC_REPLY = b"synthetic-registry-response-v1"
 _SAFE_DIAGNOSTIC = re.compile(r"[^A-Za-z0-9 _.,:=/@+()\-]")
+_FIXTURE_UNIT = re.compile(
+    r"(?:worker-egress-(?:prototype-[0-9]{1,10}|probe-[0-9]{1,10}"
+    r"(?:-(?:base|empty-run|bind|combined))?)|worker-seed-socket-probe-[0-9]{1,10})"
+)
 from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture_modules
 
 def _safe_diagnostic(stdout: str, stderr: str, *, limit: int = 300) -> str:
@@ -188,7 +192,7 @@ def _unmount_socket_source_alias(source_alias: Path, *,
 
 def _unit_journal_text(unit: str) -> str:
     """Read bounded journal and unit status before its transient unit is reset."""
-    if not re.fullmatch(r"worker-egress-(?:prototype|probe)-[0-9]{1,10}(?:-(?:base|empty-run|bind|combined))?", unit):
+    if not isinstance(unit, str) or _FIXTURE_UNIT.fullmatch(unit) is None:
         return ""
     bin_path = HERE.parents[1] / "bin"
     if str(bin_path) not in sys.path:
@@ -221,12 +225,22 @@ def _unit_journal_text(unit: str) -> str:
             + properties.stdout + properties.stderr)
 
 
+def _seed_socket_probe_failure_summary(stdout: str, stderr: str, journal: str,
+                                       known_paths: tuple[Path, ...]) -> str:
+    """Return only fixed failure categories and exact fixture paths."""
+    evidence = "\n".join((stdout, stderr, journal))
+    category = _namespace_failure_category(evidence)
+    if category == "failure-unclassified":
+        category = ("client-probe-rejected" if "egress client integration failed:" in evidence
+                    else "unit-failed-unclassified")
+    missing_path = _namespace_missing_path(evidence, known_paths)
+    suffix = f" path={missing_path}" if missing_path is not None else ""
+    return f"{category}{suffix}"
+
+
 def _cleanup_systemd_unit(unit: str) -> None:
     """Stop/reset only the exact disposable unit after diagnostics are captured."""
-    if not re.fullmatch(
-            r"(?:worker-egress-(?:prototype-[0-9]{1,10}|probe-[0-9]{1,10}"
-            r"(?:-(?:base|empty-run|bind|combined))?)|worker-seed-socket-probe-[0-9]{1,10})",
-            unit):
+    if not isinstance(unit, str) or _FIXTURE_UNIT.fullmatch(unit) is None:
         raise RuntimeError("egress fixture unit name is invalid")
     env = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
     try:
@@ -334,7 +348,14 @@ def _run_seed_unit_socket_probe(*, unit_prefix: str, peer_uid: int, peer_gid: in
         result = subprocess.run(command, check=False, capture_output=True,
                                 text=True, timeout=45)
         if result.returncode != 0:
-            raise RuntimeError("seed systemd direct-socket mount probe failed")
+            journal = _unit_journal_text(unit)
+            summary = _seed_socket_probe_failure_summary(
+                result.stdout, result.stderr, journal,
+                (socket_path, hidden_socket, fixture_client, fixture_root, scratch,
+                 source, cache, store, runtime, pnpm, node, Path("/run"), Path("/tmp"),
+                 Path("/etc"), Path("/usr/bin/python3")),
+            )
+            raise RuntimeError(f"seed systemd direct-socket mount probe failed ({summary})")
     except subprocess.TimeoutExpired as error:
         raise RuntimeError("seed systemd direct-socket mount probe timed out") from error
     finally:

@@ -5,7 +5,7 @@ import { getDisplayTier } from './imei-checker-tiers';
 describe('getDisplayTier', () => {
   it('formats the price as Nigerian naira', () => {
     const tier = getDisplayTier('full');
-    expect(tier.priceDisplay).toBe('₦1,500');
+    expect(tier.priceDisplay).toBe('₦1,000');
   });
 
   it('marks the recommended tier and omits it otherwise', () => {
@@ -24,7 +24,7 @@ describe('getDisplayTier', () => {
   });
 });
 
-it('explains activation checks without supplier jargon and preserves the price', () => {
+it('explains activation checks without supplier jargon at the approved price', () => {
   expect(getDisplayTier('activation').name).toBe('Activation check');
-  expect(getDisplayTier('activation').price).toBe(700);
+  expect(getDisplayTier('activation').price).toBe(400);
 });

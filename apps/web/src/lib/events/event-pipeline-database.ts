@@ -1,3 +1,4 @@
+import { eventPipelineAddressBudgetCredentialPaths } from '@/lib/events/event-pipeline-address-budget-credential-paths';
 import { eventPipelineAdminImporters } from '@/lib/events/event-pipeline-authority-paths';
 import { eventPipelineAuthorityServicePaths } from '@/lib/events/event-pipeline-authority-service-paths';
 import { eventPipelineCartCredentialPaths } from '@/lib/events/event-pipeline-cart-credential-paths';
@@ -144,7 +145,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/merchant-feature-gates.ts',
     ],
     // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
-    credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths, ...eventPipelineManualOrderDocumentCredentialPaths, ...onboardingEmailWorkerAuthority.credentialPaths],
+    credentialPaths: [...eventPipelineAddressBudgetCredentialPaths, ...eventPipelineCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths, ...eventPipelineManualOrderDocumentCredentialPaths, ...onboardingEmailWorkerAuthority.credentialPaths],
     // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
     factoryModules: ['apps/web/src/lib/supabase/admin.ts', 'apps/web/src/lib/supabase/server.ts', 'apps/web/src/lib/supabase/service.ts'],
     legacySdkImporters: eventPipelineLegacySdkImporters,

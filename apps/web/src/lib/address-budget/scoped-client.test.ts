@@ -1,4 +1,4 @@
-import { createHash, createHmac } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 import { createAddressBudgetClient } from './scoped-client';
 
@@ -20,11 +20,12 @@ const request = {
 };
 it('signs one provider/credential/attempt capability without exposing the provider key', () => {
   const now = new Date('2026-10-30T08:00:00Z');
+  const signingSecret = randomBytes(32).toString('hex');
   createAddressBudgetClient(request, {
     now,
     anonKey: 'synthetic-anon',
     supabaseUrl: 'https://project.example.test',
-    signer: { type: 'legacy-secret', secret: 'synthetic-signing-secret' },
+    signer: { type: 'legacy-secret', secret: signingSecret },
   });
   const header =
     mocks.createClient.mock.lastCall?.[2].global.headers.Authorization;
@@ -33,7 +34,7 @@ it('signs one provider/credential/attempt capability without exposing the provid
     .replace('Bearer ', '')
     .split('.');
   expect(signature).toBe(
-    createHmac('sha256', 'synthetic-signing-secret')
+    createHmac('sha256', signingSecret)
       .update(`${protectedHeader}.${payload}`)
       .digest('base64url')
   );

@@ -108,6 +108,7 @@ export const sharedCartPrepareRequestSchema = z.strictObject({
   cartId: z.uuid(),
   expectedVersion: z.number().int().min(1),
   operationId: operationIdSchema,
+  recoveryForRedvault: z.boolean().optional(),
 });
 
 export const createCartRequestSchema = z.strictObject({

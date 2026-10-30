@@ -181,6 +181,46 @@ describe('useCheckoutShippingQuotes', () => {
     );
     expect(mockFetch).toHaveBeenCalledOnce();
   });
+
+  it('invalidates resolved pickup readiness before painting a restored address', async () => {
+    const pending = deferredResponse();
+    const renamed = deferredResponse();
+    mockFetch
+      .mockResolvedValueOnce(response('pickup'))
+      .mockReturnValueOnce(pending.promise)
+      .mockReturnValueOnce(renamed.promise);
+    const input = { ...options(), deliveryMethod: 'pickup' as const };
+    const committedReadiness: boolean[] = [];
+    const { result, rerender } = renderHook(
+      (props) => {
+        const quotes = useCheckoutShippingQuotes(props);
+        useLayoutEffect(() => {
+          committedReadiness.push(quotes.hasResolvedQuotes);
+        });
+        return quotes;
+      },
+      { initialProps: input }
+    );
+    await waitFor(() => expect(result.current.hasResolvedQuotes).toBe(true));
+    committedReadiness.length = 0;
+
+    rerender({ ...input, newAddressCity: 'Yaba' });
+
+    expect(committedReadiness[0]).toBe(false);
+    expect(result.current.hasResolvedQuotes).toBe(false);
+    await act(async () => pending.resolve(response('new-pickup')));
+    expect(result.current.hasResolvedQuotes).toBe(true);
+    committedReadiness.length = 0;
+    rerender({
+      ...input,
+      newAddressCity: 'Yaba',
+      checkoutCart: [{ name: 'Renamed phone', price: 1000, quantity: 1 }],
+    });
+    expect(committedReadiness[0]).toBe(false);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    await act(async () => renamed.resolve(response('renamed')));
+    expect(result.current.hasResolvedQuotes).toBe(true);
+  });
   it('ignores a late response after the delivery address changes', async () => {
     const old = deferredResponse();
     const next = deferredResponse();

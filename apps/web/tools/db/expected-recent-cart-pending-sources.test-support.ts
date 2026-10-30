@@ -165,4 +165,19 @@ export const EXPECTED_RECENT_CART_PENDING_SOURCES = [
       'supabase/migrations/20261027051251_commerce_cart_supabase_quota_gigl_request_scope.sql',
     sha256: 'c17753b80ace9e4537e901510296c3239f515957734629bb16d051c83d331d04',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261029143945_restore_storefront_order_line_ordinals.sql',
+    sha256: 'fd2bac60b11da66e11b7f7ce9443e9fe22f40923e797c529663a4a304879edc0',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261029143946_commerce_cart_redvault_binding.sql',
+    sha256: '26409361b1846fb700d74e74bdc27f1c6bdc9d9de2bbbe4ec58352d7ad71c2a6',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261029212802_redvault_checkout_reconciliation.sql',
+    sha256: '258767d07ecdd594fb9c0b7df117646c7aae2da682c04ea60d86369d842f7fe0',
+  },
 ] as const;

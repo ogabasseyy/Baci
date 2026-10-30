@@ -503,6 +503,9 @@ jobs:
         # Vercel remains the runtime source of the sensitive Production value.
         run: node .github/scripts/inject-prebuilt-env-secret.mjs SUPABASE_AGENTIC_JWT_PRIVATE_JWK .vercel/.env.production.local --generate-es256-jwk-standin
       - name: Build for Vercel
+        env:
+          # Grouped Turbo output hides the active phase until the build exits.
+          TURBO_LOG_ORDER: stream
         run: .github/scripts/run-pinned-vercel.sh build --yes --prod
       - name: Verify prebuilt setup guide images
         run: node .github/scripts/assert-guide-prebuilt.mjs

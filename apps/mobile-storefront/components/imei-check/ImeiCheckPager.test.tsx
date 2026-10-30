@@ -63,3 +63,12 @@ describe('ImeiCheckPager', () => {
     expect(screen.queryByText('Mac iCloud Lock')).toBeNull();
   });
 });
+
+jest.mock('./use-imei-runtime-availability', () => ({
+  useImeiRuntimeAvailability: () => ({
+    availableTierKeys: null,
+    failed: false,
+    loading: false,
+    retry: () => undefined,
+  }),
+}));

@@ -58,6 +58,13 @@ export const PETROCK_CHECK_MAP_PART_4 = [
     inputType: 'imei',
   }),
   mappedCheck('1941', 'esimCompatibility', 0.04, 'IMEI', ['imei'], {
+    evidence: 'successful_probe',
+    observedFields: ['device', 'modelNumber', 'esimCompatibility'],
+    brandScope: ['apple'],
+    deviceScope: ['smartphone'],
+    notes: [
+      'Successful 2026-10-30 iPhone 17 Pro Max (A3525) IMEI probe only. Sanitized captured replay: petrock-esim-1941-20261030.json. No tablet, serial or other-brand completion evidence.',
+    ],
     supplierName:
       'Apple & Generic Model eSIM | Physical SIM [pSIM] Compatibility Check',
     turnaround: '1-5 Minutes',
@@ -69,6 +76,13 @@ export const PETROCK_CHECK_MAP_PART_4 = [
     inputType: 'text',
   }),
   mappedCheck('716', 'simLock', 0.06, 'IMEI', ['imei'], {
+    evidence: 'successful_probe',
+    observedFields: ['device', 'simLock'],
+    brandScope: ['apple'],
+    deviceScope: ['smartphone'],
+    notes: [
+      'Captured 2026-10-30 iPhone IMEI output confirms device model and SIM-lock status; no hardware model-number coverage is claimed.',
+    ],
     supplierName: 'iPhone Check Simlock Status [Instant]',
     turnaround: '1 Minutes',
     inputType: 'imei',

@@ -72,28 +72,56 @@ describe('resolveClaimedPetrockLookup', () => {
     );
   });
 
-  it('refunds a claimed submission_unknown lookup that has no provider id', async () => {
+  it.each([
+    true,
+    false,
+  ])('retains a receiptless unknown submission for manual reconciliation (lease kept: %s)', async (leaseKept) => {
+    mocks.reschedule.mockResolvedValue(leaseKept);
+    const poll = vi.fn();
     const result = await resolveClaimedPetrockLookup({
       merchantId: 'merchant-1',
-      encryptionKey: 'a'.repeat(64),
+      encryptionKey: KEY,
       lookup: {
-        id: 'lookup-1',
-        identifier_ciphertext: 'ciphertext',
-        lease_token: 'lease-1',
+        ...lookup,
         provider_order_id: null,
         status: 'submission_unknown',
-        tier: 'blacklist',
       },
-      provider: { poll: vi.fn() },
+      provider: { poll },
       supabaseAdmin: {} as never,
     });
-
-    expect(result.kind).toBe('failure');
-    expect(mocks.finalize).toHaveBeenCalledWith(
+    expect(result.kind).toBe(leaseKept ? 'pending' : 'lease_lost');
+    expect(mocks.finalize).not.toHaveBeenCalled();
+    expect(poll).not.toHaveBeenCalled();
+    expect(mocks.reschedule).toHaveBeenCalledWith(
       expect.objectContaining({
-        terminalStatus: 'refunded_error',
+        lookupId: 'lookup-1',
+        leaseToken: 'lease-1',
+        providerStatus: 'submission_unknown_manual_review',
       })
     );
+  });
+  it.each([
+    11, 12,
+  ])('signals manual review for a receiptless unknown only after bounded attempts (%s)', async (attempt) => {
+    const poll = vi.fn();
+    const result = await resolveClaimedPetrockLookup({
+      attempt,
+      merchantId: 'merchant-1',
+      encryptionKey: KEY,
+      lookup: {
+        ...lookup,
+        provider_order_id: null,
+        status: 'submission_unknown',
+      },
+      provider: { poll },
+      supabaseAdmin: {} as never,
+    });
+    expect(result).toMatchObject({
+      kind: 'pending',
+      needsReview: attempt >= 12,
+    });
+    expect(mocks.finalize).not.toHaveBeenCalled();
+    expect(poll).not.toHaveBeenCalled();
   });
   beforeEach(() => {
     vi.clearAllMocks();

@@ -8,7 +8,7 @@ import { getDisplayTier } from './imei-checker-tiers';
 interface ImeiCheckerTierSelectorProps {
   canToggleServices: boolean;
   displayedTierKeys: readonly ImeiServiceTierKey[];
-  selectedTier: ImeiServiceTierKey;
+  selectedTier: ImeiServiceTierKey | null;
   showAllServices: boolean;
   onSelectTier: (tier: ImeiServiceTierKey) => void;
   onToggleServices: () => void;
@@ -29,21 +29,23 @@ export function ImeiCheckerTierSelector({
   const radioRefs = useRef<
     Partial<Record<ImeiServiceTierKey, HTMLButtonElement | null>>
   >({});
-  const groups = groupImeiServices(displayedTierKeys, selectedTier).map(
-    (group) =>
-      expandedGoal === group.id
-        ? {
-            ...group,
-            tierKeys: displayedTierKeys.filter((key) =>
-              group.tierKeys.includes(key)
-            ),
-          }
-        : group
+  const groups = groupImeiServices(
+    displayedTierKeys,
+    selectedTier ?? displayedTierKeys[0] ?? 'full'
+  ).map((group) =>
+    expandedGoal === group.id
+      ? {
+          ...group,
+          tierKeys: displayedTierKeys.filter((key) =>
+            group.tierKeys.includes(key)
+          ),
+        }
+      : group
   );
   const visibleKeys = groups.flatMap((group) =>
     expandedGoal === group.id ? group.tierKeys : group.tierKeys.slice(0, 1)
   );
-  const currentTier = getDisplayTier(selectedTier);
+  const currentTier = getDisplayTier(selectedTier ?? 'full');
   const detailsId = `${id}-details`;
 
   function renderCard(tierKey: ImeiServiceTierKey) {
@@ -89,7 +91,8 @@ export function ImeiCheckerTierSelector({
         role="radio"
         tabIndex={
           isSelected ||
-          (!visibleKeys.includes(selectedTier) && tierKey === visibleKeys[0])
+          ((selectedTier === null || !visibleKeys.includes(selectedTier)) &&
+            tierKey === visibleKeys[0])
             ? 0
             : -1
         }
@@ -174,41 +177,43 @@ export function ImeiCheckerTierSelector({
           </button>
         </div>
       )}
-      <div className="mt-2 text-center">
-        <button
-          aria-controls={detailsId}
-          aria-expanded={showDetails}
-          className="inline-flex min-h-11 items-center gap-1 text-sm text-store-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
-          onClick={() => setShowDetails((value) => !value)}
-          type="button"
-        >
-          What's included in {currentTier.name}?
-          <ChevronRight
-            aria-hidden="true"
-            className={showDetails ? 'rotate-90' : ''}
-            size={14}
-          />
-        </button>
-        {showDetails && (
-          <div
-            className="mt-3 space-y-3 rounded-xl border border-[var(--store-border,#e5e7eb)] p-4 text-left text-sm text-store-foreground"
-            id={detailsId}
+      {selectedTier ? (
+        <div className="mt-2 text-center">
+          <button
+            aria-controls={detailsId}
+            aria-expanded={showDetails}
+            className="inline-flex min-h-11 items-center gap-1 text-sm text-store-foreground underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+            onClick={() => setShowDetails((value) => !value)}
+            type="button"
           >
-            <p>{currentTier.detail}</p>
-            <ul className="flex flex-wrap gap-2">
-              {currentTier.features.map((feature) => (
-                <li
-                  className="inline-flex items-center gap-1 rounded-full bg-[var(--store-background,#ffffff)] px-3 py-1 text-xs text-store-foreground"
-                  key={feature}
-                >
-                  <Check aria-hidden="true" size={12} />
-                  {feature}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
+            What's included in {currentTier.name}?
+            <ChevronRight
+              aria-hidden="true"
+              className={showDetails ? 'rotate-90' : ''}
+              size={14}
+            />
+          </button>
+          {showDetails && (
+            <div
+              className="mt-3 space-y-3 rounded-xl border border-[var(--store-border,#e5e7eb)] p-4 text-left text-sm text-store-foreground"
+              id={detailsId}
+            >
+              <p>{currentTier.detail}</p>
+              <ul className="flex flex-wrap gap-2">
+                {currentTier.features.map((feature) => (
+                  <li
+                    className="inline-flex items-center gap-1 rounded-full bg-[var(--store-background,#ffffff)] px-3 py-1 text-xs text-store-foreground"
+                    key={feature}
+                  >
+                    <Check aria-hidden="true" size={12} />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

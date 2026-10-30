@@ -29,4 +29,19 @@ export const EXPECTED_IMEI_PENDING_SOURCES = [
       'supabase/migrations/20261028100000_petrock_guard_unknown_rejection.sql',
     sha256: 'a2bac127c0db03f61231cd6cdc365dcfc4c7c33a07e320a43ef1725423f59534',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261030120000_imei_authenticated_access_boundary.sql',
+    sha256: '0f43cff57a17e3787ec6e0e16f6b901956108d5396e2584ad5f652d56157c55b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261030120001_imei_verified_diagnostic_prices.sql',
+    sha256: 'a9f95deb4e58f9770313883785003dcbf86e599131932ac4e59c82995f247e69',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261030125541_imei_refund_unsubmitted_petrock_debits.sql',
+    sha256: '5ccb72b09e1516d572eed20aa188509f3c6a29abbee52c4866665b07e6025a52',
+  },
 ];

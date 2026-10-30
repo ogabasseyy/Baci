@@ -94,6 +94,7 @@
         "IMEI_FX_NGN_USD",
         "IMEI_DISABLED_TIERS",
         "IMEI_IDENTIFIER_ENCRYPTION_KEY",
+        "IMEI_ACCESS_SIGNING_SECRET",
         "GIGL_ENABLED",
         "GIGL_BASE_URL",
         "GIGL_EMAIL",

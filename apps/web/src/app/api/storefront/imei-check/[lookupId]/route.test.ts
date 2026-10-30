@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   authenticate: vi.fn(),
   checkPollRateLimit: vi.fn(),
   claimPoll: vi.fn(),
-  createAdminClient: vi.fn(),
+  createImeiAccessClient: vi.fn(),
   resolveCustomer: vi.fn(),
   resolveLookup: vi.fn(),
   resolveMerchant: vi.fn(),
@@ -34,8 +34,8 @@ vi.mock('@/lib/imei-lookup-fulfillment', async () => {
   >('@/lib/imei-lookup-fulfillment');
   return { ...actual, resolveImeiCustomer: mocks.resolveCustomer };
 });
-vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: mocks.createAdminClient,
+vi.mock('@/lib/imei-access', () => ({
+  createImeiAccessClient: mocks.createImeiAccessClient,
 }));
 vi.mock('@/lib/imei-providers/petrock/petrock-lookup-state', () => ({
   claimPetrockLookupPoll: mocks.claimPoll,
@@ -68,7 +68,7 @@ function adminWithRow(row: Record<string, unknown> | null) {
     maybeSingle,
     select: vi.fn(() => builder),
   };
-  return { from: vi.fn(() => builder) };
+  return { readStatus: vi.fn(() => maybeSingle()), from: vi.fn(() => builder) };
 }
 
 describe('GET /api/storefront/imei-check/[lookupId]', () => {
@@ -92,6 +92,16 @@ describe('GET /api/storefront/imei-check/[lookupId]', () => {
     mocks.resolveCustomer.mockResolvedValue({ id: 'customer-1' });
   });
 
+  it('does not poll a paid provider when the scoped access capability is unavailable', async () => {
+    mocks.createImeiAccessClient.mockImplementationOnce(() => {
+      throw new Error('IMEI access signing configuration is unavailable');
+    });
+    const response = await GET(request, context());
+    expect(response.status).toBe(503);
+    expect(mocks.claimPoll).not.toHaveBeenCalled();
+    expect(mocks.resolveLookup).not.toHaveBeenCalled();
+  });
+
   it('returns 401 when the customer is not authenticated', async () => {
     mocks.authenticate.mockResolvedValue({
       error: 'no',
@@ -106,7 +116,7 @@ describe('GET /api/storefront/imei-check/[lookupId]', () => {
   });
 
   it('returns a customer-scoped cached terminal result', async () => {
-    mocks.createAdminClient.mockReturnValue(
+    mocks.createImeiAccessClient.mockReturnValue(
       adminWithRow({
         cached_response: { data: { device: 'iPhone' }, success: true },
         cached_status: 200,
@@ -128,7 +138,7 @@ describe('GET /api/storefront/imei-check/[lookupId]', () => {
   });
 
   it('uses the query merchant slug on a root-host path storefront', async () => {
-    mocks.createAdminClient.mockReturnValue(
+    mocks.createImeiAccessClient.mockReturnValue(
       adminWithRow({
         cached_response: { data: { device: 'iPhone' }, success: true },
         cached_status: 200,
@@ -162,7 +172,7 @@ describe('GET /api/storefront/imei-check/[lookupId]', () => {
   });
 
   it('does not expose a lookup owned by another customer', async () => {
-    mocks.createAdminClient.mockReturnValue(
+    mocks.createImeiAccessClient.mockReturnValue(
       adminWithRow({
         cached_response: null,
         cached_status: null,
@@ -179,7 +189,7 @@ describe('GET /api/storefront/imei-check/[lookupId]', () => {
   });
 
   it('claims a due provider poll and returns the resolved result', async () => {
-    mocks.createAdminClient.mockReturnValue(
+    mocks.createImeiAccessClient.mockReturnValue(
       adminWithRow({
         cached_response: null,
         cached_status: null,
@@ -213,7 +223,7 @@ describe('GET /api/storefront/imei-check/[lookupId]', () => {
   });
 
   it('returns pending when a claimed poll loses its write lease', async () => {
-    mocks.createAdminClient.mockReturnValue(
+    mocks.createImeiAccessClient.mockReturnValue(
       adminWithRow({
         cached_response: null,
         cached_status: null,

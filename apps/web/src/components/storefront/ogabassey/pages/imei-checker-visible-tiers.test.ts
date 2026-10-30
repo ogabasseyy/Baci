@@ -48,3 +48,14 @@ describe('hasAdditionalWebImeiServiceTierKeys', () => {
     );
   });
 });
+
+it('shows a sole advertised advanced check directly without inventing a recommended fallback', () => {
+  expect(
+    getVisibleWebImeiServiceTierKeys('smartphone', 'apple', false, [
+      'esimCompatibility',
+    ])
+  ).toEqual(['esimCompatibility']);
+  expect(
+    getVisibleWebImeiServiceTierKeys('smartphone', 'apple', false, [])
+  ).toEqual([]);
+});

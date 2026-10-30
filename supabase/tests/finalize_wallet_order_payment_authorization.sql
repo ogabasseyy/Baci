@@ -351,11 +351,20 @@ DECLARE
   v_order record;
   v_txn record;
 BEGIN
-  SELECT payment_status, payment_method INTO v_order
+  SELECT payment_status, payment_method, amount_paid, wallet_amount_used
+  INTO v_order
   FROM public.orders WHERE id = 'f7a11000-0000-4000-8000-000000000001';
   IF v_order.payment_status IS DISTINCT FROM 'paid'
     OR v_order.payment_method IS DISTINCT FROM 'wallet' THEN
     RAISE EXCEPTION 'L1: order not paid by wallet: %', row_to_json(v_order);
+  END IF;
+
+  -- Merchant cancellation refuses a paid order whose amount_paid differs
+  -- from its total, so a wallet-paid order must record what was paid.
+  IF v_order.amount_paid IS DISTINCT FROM 500
+    OR v_order.wallet_amount_used IS DISTINCT FROM 500 THEN
+    RAISE EXCEPTION 'L1: wallet payment not recorded on the order: %',
+      row_to_json(v_order);
   END IF;
 
   IF (SELECT count(*) FROM public.transactions

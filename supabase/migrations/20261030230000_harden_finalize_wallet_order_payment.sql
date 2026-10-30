@@ -119,9 +119,14 @@ BEGIN
     RAISE EXCEPTION 'wallet_amount_mismatch';
   END IF;
 
+  -- amount_paid must equal the total for merchant cancellation to accept a
+  -- paid order; wallet_amount_used matches what partial redemptions record.
   UPDATE public.orders
   SET payment_status = 'paid',
-      payment_method = 'wallet'
+      payment_method = 'wallet',
+      amount_paid = v_redeemed,
+      wallet_amount_used = v_redeemed,
+      updated_at = now()
   WHERE id = p_order_id;
 
   INSERT INTO public.transactions (

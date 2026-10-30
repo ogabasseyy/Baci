@@ -330,13 +330,42 @@ def _cleanup_systemd_unit(unit: str) -> None:
                                   f"{unit}.service"), check=False,
                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                 stderr=subprocess.DEVNULL, timeout=10, env=env)
+        # Transient units launched with --collect may unload as soon as they
+        # stop. Prove that state before interpreting stop/reset-failed races.
+        state_after_stop = subprocess.run(
+            ("/usr/bin/systemctl", "--system", "show", "--property=LoadState",
+             "--value", f"{unit}.service"), check=False, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+            timeout=5, env=env)
+        if state_after_stop.returncode != 0:
+            raise RuntimeError("egress fixture unit cleanup failed")
+        if state_after_stop.stdout.strip() == "not-found":
+            return
+        if stopped.returncode != 0:
+            raise RuntimeError("egress fixture unit cleanup failed")
         reset = subprocess.run(("/usr/bin/systemctl", "--system", "reset-failed",
                                 f"{unit}.service"), check=False,
                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                stderr=subprocess.DEVNULL, timeout=5, env=env)
+        final_state = subprocess.run(
+            ("/usr/bin/systemctl", "--system", "show", "--no-pager",
+             "--property=LoadState", "--property=ActiveState", "--property=SubState",
+             "--property=MainPID", "--property=ControlGroup", f"{unit}.service"),
+            check=False, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, text=True, timeout=5, env=env)
     except (OSError, subprocess.SubprocessError) as error:
         raise RuntimeError("egress fixture unit cleanup failed") from error
-    if stopped.returncode != 0 or reset.returncode != 0:
+    if final_state.returncode != 0:
+        raise RuntimeError("egress fixture unit cleanup failed")
+    properties = dict(line.split("=", 1) for line in final_state.stdout.splitlines()
+                      if "=" in line)
+    if properties.get("LoadState") == "not-found":
+        return
+    if (reset.returncode != 0 or properties.get("LoadState") != "loaded"
+            or properties.get("ActiveState") != "inactive"
+            or properties.get("SubState") != "dead"
+            or properties.get("MainPID") != "0"
+            or properties.get("ControlGroup", "") != ""):
         raise RuntimeError("egress fixture unit cleanup failed")
 
 

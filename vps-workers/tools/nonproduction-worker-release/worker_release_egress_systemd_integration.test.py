@@ -421,7 +421,10 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
 
         def run(command, **_kwargs):
             calls.append(command)
-            return type("Result", (), {"returncode": 0, "stdout": "loaded\n"})()
+            output = ("loaded\n" if "--value" in command else
+                      "LoadState=loaded\nActiveState=inactive\nSubState=dead\n"
+                      "MainPID=0\nControlGroup=\n")
+            return type("Result", (), {"returncode": 0, "stdout": output})()
 
         with patch("worker_release_egress_systemd_integration.subprocess.run", side_effect=run):
             _cleanup_systemd_unit(unit)
@@ -441,18 +444,31 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
 
     def test_cleanup_stops_and_resets_only_exact_fixture_unit(self):
         calls = []
+        unit = "worker-egress-prototype-123"
 
         def run(command, **_kwargs):
             calls.append(command)
-            return type("Result", (), {"returncode": 0, "stdout": "loaded\n"})()
+            if "--property=LoadState" in command and "--value" in command:
+                output = "loaded\n"
+            elif "--property=LoadState" in command:
+                output = ("LoadState=loaded\nActiveState=inactive\nSubState=dead\n"
+                          "MainPID=0\nControlGroup=\n")
+            else:
+                output = ""
+            return type("Result", (), {"returncode": 0, "stdout": output})()
 
         with patch("worker_release_egress_systemd_integration.subprocess.run", side_effect=run):
-            _cleanup_systemd_unit("worker-egress-prototype-123")
+            _cleanup_systemd_unit(unit)
         self.assertEqual(calls, [
             ("/usr/bin/systemctl", "--system", "show", "--property=LoadState", "--value",
-             "worker-egress-prototype-123.service"),
-            ("/usr/bin/systemctl", "--system", "stop", "worker-egress-prototype-123.service"),
-            ("/usr/bin/systemctl", "--system", "reset-failed", "worker-egress-prototype-123.service"),
+             f"{unit}.service"),
+            ("/usr/bin/systemctl", "--system", "stop", f"{unit}.service"),
+            ("/usr/bin/systemctl", "--system", "show", "--property=LoadState", "--value",
+             f"{unit}.service"),
+            ("/usr/bin/systemctl", "--system", "reset-failed", f"{unit}.service"),
+            ("/usr/bin/systemctl", "--system", "show", "--no-pager", "--property=LoadState",
+             "--property=ActiveState", "--property=SubState", "--property=MainPID",
+             "--property=ControlGroup", f"{unit}.service"),
         ])
 
     def test_cleanup_accepts_exact_seed_socket_probe_prefix(self):
@@ -461,14 +477,43 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
 
         def run(command, **_kwargs):
             calls.append(command)
-            return type("Result", (), {"returncode": 0, "stdout": "loaded\n"})()
+            output = ("loaded\n" if len(calls) == 1 else "not-found\n")
+            return type("Result", (), {"returncode": 0, "stdout": output})()
 
         with patch("worker_release_egress_systemd_integration.subprocess.run", side_effect=run):
             _cleanup_systemd_unit(unit)
         self.assertEqual(calls[-2:], [
             ("/usr/bin/systemctl", "--system", "stop", f"{unit}.service"),
-            ("/usr/bin/systemctl", "--system", "reset-failed", f"{unit}.service"),
+            ("/usr/bin/systemctl", "--system", "show", "--property=LoadState", "--value",
+             f"{unit}.service"),
         ])
+
+    def test_cleanup_accepts_collected_unit_after_stop(self):
+        unit = "worker-egress-prototype-124"
+        calls = []
+
+        def run(command, **_kwargs):
+            calls.append(command)
+            output = ("loaded\n" if len(calls) == 1 else "not-found\n" if len(calls) == 3 else "")
+            return type("Result", (), {"returncode": 0, "stdout": output})()
+
+        with patch("worker_release_egress_systemd_integration.subprocess.run", side_effect=run):
+            _cleanup_systemd_unit(unit)
+        self.assertEqual([call[2] for call in calls], ["show", "stop", "show"])
+
+    def test_cleanup_fails_closed_if_unit_remains_active(self):
+        unit = "worker-egress-prototype-125"
+
+        def run(command, **_kwargs):
+            output = ("loaded\n" if "--value" in command else
+                      "LoadState=loaded\nActiveState=active\nSubState=running\n"
+                      "MainPID=42\nControlGroup=/system.slice/test.scope\n"
+                      if "--property=LoadState" in command and "--value" not in command else "")
+            return type("Result", (), {"returncode": 0, "stdout": output})()
+
+        with patch("worker_release_egress_systemd_integration.subprocess.run", side_effect=run):
+            with self.assertRaisesRegex(RuntimeError, "cleanup failed"):
+                _cleanup_systemd_unit(unit)
 
     def test_cleanup_rejects_unrecognized_seed_socket_probe_unit(self):
         with self.assertRaisesRegex(RuntimeError, "unit name is invalid"):

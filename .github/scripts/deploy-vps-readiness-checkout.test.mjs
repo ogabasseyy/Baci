@@ -41,6 +41,7 @@ test('uses a minimal sparse checkout for VPS drain readiness', async () => {
     checkout.with['sparse-checkout'],
     'vps-workers/bin/verify-cache-invalidation-drain-installed.sh\n' +
       'vps-workers/bin/verify-gigl-direct-workers-installed.sh\n' +
+      'vps-workers/release/run-as-worker.sh\n' +
       '.github/scripts/check-gigl-cutover-latch.sh\n' +
       '.github/scripts/resolve-gigl-latch-identity.sh\n' +
       '.github/scripts/gigl-dotenv.sh\n' +
@@ -50,11 +51,11 @@ test('uses a minimal sparse checkout for VPS drain readiness', async () => {
   assert.equal(checkout.with['sparse-checkout-cone-mode'], false);
   assert.equal(
     verification.run,
-    '.readiness-checkout/vps-workers/bin/verify-cache-invalidation-drain-installed.sh'
+    'bash .readiness-checkout/vps-workers/release/run-as-worker.sh vps-workers/bin/verify-cache-invalidation-drain-installed.sh'
   );
   assert.equal(
     giglVerification.run,
-    '.readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke'
+    'bash .readiness-checkout/vps-workers/release/run-as-worker.sh vps-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke'
   );
   assert.equal(
     giglVerification.if,
@@ -65,7 +66,7 @@ test('uses a minimal sparse checkout for VPS drain readiness', async () => {
   // deploy the cron removal while the worker was never installed.
   assert.equal(
     cutoverMarker.run,
-    '.readiness-checkout/vps-workers/bin/verify-gigl-direct-workers-installed.sh --cutover-marker'
+    'bash .readiness-checkout/vps-workers/release/run-as-worker.sh vps-workers/bin/verify-gigl-direct-workers-installed.sh --cutover-marker'
   );
   assert.equal(cutoverMarker.if, undefined);
 });
@@ -113,7 +114,9 @@ test('delegates verification, smoke and latch persistence to one locked helper',
   const workflow = YAML.parse(await readFile(workflowUrl, 'utf8'));
   const capability = workflow.jobs['gigl-worker-capability'];
   const refreshSteps = capability.steps.filter(
-    (step) => step.run === 'bash .github/scripts/refresh-gigl-cutover-latch.sh'
+    (step) =>
+      step.run ===
+      'bash vps-workers/release/run-as-worker.sh .github/scripts/refresh-gigl-cutover-latch.sh'
   );
 
   assert.equal(refreshSteps.length, 1);
@@ -129,4 +132,21 @@ test('delegates verification, smoke and latch persistence to one locked helper',
     false,
     'the workflow must not write an unlocked latch outside the helper'
   );
+});
+
+test('installs the exact worker release before any readiness verification', async () => {
+  const workflow = YAML.parse(await readFile(workflowUrl, 'utf8'));
+  const sync = workflow.jobs['vps-worker-sync'];
+  const readiness = workflow.jobs['vps-drain-readiness'];
+
+  assert.equal(sync['runs-on'], 'baci-deploy');
+  assert.deepEqual(sync.permissions, { contents: 'read' });
+  assert.equal(sync.steps[0].with['persist-credentials'], false);
+  assert.equal(
+    sync.steps.at(-1).run,
+    'bash .worker-sync/vps-workers/release/sync-from-runner.sh "$GITHUB_SHA"'
+  );
+  assert.equal(sync.steps.at(-1).env, undefined, 'no runner secrets reach the worker sync');
+  assert.ok(readiness.needs.includes('vps-worker-sync'));
+  assert.match(readiness.if, /needs\.vps-worker-sync\.result == 'success'/);
 });

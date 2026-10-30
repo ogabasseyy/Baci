@@ -7,6 +7,12 @@ cleanup_worker_staging() {
 # Populates STAGING_DIR and NODE_BIN for deploy.sh. Source this helper before
 # calling the function, and call it before installing services or crontab.
 prepare_worker_release() {
+  # Migrated hosts get workers from deploy.yml as baci-worker (vps-workers/release);
+  # this legacy path would reinstall them under the deployment identity.
+  if [ "$(ssh "$VPS" "if [ -e /srv/baci-worker/current ]; then printf isolated; fi")" = isolated ]; then
+    echo "Refusing legacy worker deployment: this host uses isolated worker releases from deploy.yml." >&2
+    exit 1
+  fi
   STAGING_DIR="${REMOTE_DIR}.deploy-${APP_SHA}-$$"
   trap cleanup_worker_staging EXIT
 

@@ -42,16 +42,16 @@ describe('production cache-invalidation drain rollout gate', () => {
     );
     assert.match(
       readiness,
-      /^\s+run: \.readiness-checkout\/vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --skip-live-smoke$/m
+      /^\s+run: bash \.readiness-checkout\/vps-workers\/release\/run-as-worker\.sh vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --skip-live-smoke$/m
     );
     // The cutover marker runs on every push (no changeset condition),
     // so an unrelated web push cannot deploy the cron removal while the
     // worker was never installed.
     assert.match(
       readiness,
-      /^\s+run: \.readiness-checkout\/vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --cutover-marker$/m
+      /^\s+run: bash \.readiness-checkout\/vps-workers\/release\/run-as-worker\.sh vps-workers\/bin\/verify-gigl-direct-workers-installed\.sh --cutover-marker$/m
     );
-    assert.match(readiness, /needs: \[changes\]/);
+    assert.match(readiness, /needs: \[changes, vps-worker-sync\]/);
     assert.match(readiness, /needs\.changes\.outputs\.tracking != 'false'/);
     assert.doesNotMatch(readiness, /outputs\.migrations/);
     assert.doesNotMatch(readiness, /VPS_WORKER_SSH_TARGET|\bssh\b/);
@@ -106,7 +106,7 @@ describe('production cache-invalidation drain rollout gate', () => {
     // persistence; separate workflow steps could race with a worker promotion.
     assert.match(
       capability,
-      /run: bash \.github\/scripts\/refresh-gigl-cutover-latch\.sh/
+      /run: bash vps-workers\/release\/run-as-worker\.sh \.github\/scripts\/refresh-gigl-cutover-latch\.sh/
     );
     assert.doesNotMatch(
       capability,

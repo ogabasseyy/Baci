@@ -50,6 +50,22 @@ class SameFilesystemMeasurementTests(unittest.TestCase):
             self.assertEqual((target_parent / ("a" * 40) / "cache").stat().st_ino, identities["cache"][1])
             self.assertEqual((target_parent / ("a" * 40) / "store").stat().st_ino, identities["store"][1])
 
+    def test_callback_failure_has_bounded_safe_reason_and_substage(self):
+        with tempfile.TemporaryDirectory(prefix="seed-measure-callback-") as temporary:
+            base = Path(temporary)
+            (base / "cache").mkdir()
+            (base / "store").mkdir()
+
+            def rejected(_path):
+                raise RuntimeError("measured tree contains a shared file inode")
+
+            with self.assertRaises(MODULE.SeedMoveMeasurementRejected) as raised:
+                MODULE.move_inputs_and_measure(
+                    base / "cache", base / "store", base / "seeds" / ("c" * 40), measure=rejected)
+            self.assertEqual(raised.exception.safe_reason, "tree-shared-inode")
+            self.assertEqual(raised.exception.safe_substage, "measure-cache-before")
+            self.assertNotIn("measured tree", str(raised.exception))
+
     def test_rejects_symlinked_input_without_moving_or_following_it(self):
         with tempfile.TemporaryDirectory(prefix="seed-measure-link-") as temporary:
             base = Path(temporary)
@@ -60,8 +76,10 @@ class SameFilesystemMeasurementTests(unittest.TestCase):
             (base / "store").mkdir()
             target = base / "seeds" / ("b" * 40)
             (base / "seeds").mkdir()
-            with self.assertRaises(OSError):
+            with self.assertRaises(MODULE.SeedMoveMeasurementRejected) as raised:
                 MODULE.move_inputs_and_measure(base / "cache", base / "store", target, measure=measure)
+            self.assertEqual(raised.exception.safe_reason, "filesystem-error")
+            self.assertEqual(raised.exception.safe_substage, "open-inputs")
             self.assertEqual((real / "secret").read_text(), "fixture")
             self.assertFalse(target.exists())
 

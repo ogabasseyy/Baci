@@ -267,6 +267,22 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         )
         self.assertNotIn(secret_like, stderr.getvalue())
 
+    def test_seed_move_failure_diagnostic_emits_only_fixed_reason_and_substage(self):
+        sys.path.insert(0, str(SCRIPT.parent))
+        from worker_release_actual_seed_move_measure import SeedMoveMeasurementRejected
+
+        secret_like = "/private/cache/path token=hidden"
+        output = failure_diagnostic(
+            "seed-move-measurement",
+            SeedMoveMeasurementRejected("tree-shared-inode", "measure-store-before"),
+        )
+        self.assertEqual(
+            output,
+            "experiment failure stage=seed-move-measurement category=measurement-failed "
+            "reason=tree-shared-inode substage=measure-store-before",
+        )
+        self.assertNotIn(secret_like, output)
+
     def test_policy_child_diagnostic_is_closed_and_redacted(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "child-diagnostic.json"

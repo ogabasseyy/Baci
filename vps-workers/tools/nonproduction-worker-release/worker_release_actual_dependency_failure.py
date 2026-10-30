@@ -25,6 +25,12 @@ def failure_diagnostic_impl(stage: str, error: BaseException) -> str:
         store_subtype = None
     resource_check = tree_check = payload_check = None
     hardlink_roots = hardlink_group_count = None
+    move_reason = getattr(error, "safe_reason", None)
+    move_substage = getattr(error, "safe_substage", None)
+    from worker_release_actual_seed_move_measure import MOVE_REASONS, MOVE_SUBSTAGES
+    if move_reason in MOVE_REASONS and move_substage in MOVE_SUBSTAGES:
+        return (f"experiment failure stage=seed-move-measurement category=measurement-failed "
+                f"reason={move_reason} substage={move_substage}")
     if isinstance(error, MonitorFailure):
         stage, category, exit_code = error.stage, error.category, error.exit_code
         os_error = error.os_error

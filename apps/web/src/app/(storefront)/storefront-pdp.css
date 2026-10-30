@@ -60,7 +60,7 @@
   body:has([data-sticky-cart-visible="true"]):has(
       .ogabassey-mobile-footer--hidden
     )
-    .ogabassey-chat-anchor {
+    .ogabassey-chat-anchor:not(:has(.ogabassey-chat-button--open)) {
     bottom: calc(env(safe-area-inset-bottom, 0px) + 9rem);
   }
 }

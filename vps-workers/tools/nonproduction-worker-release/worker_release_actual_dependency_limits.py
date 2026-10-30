@@ -103,9 +103,15 @@ def reclaim_experiment_tree(path: Path, *, scratch_root: Path) -> None:
     scratch_root = Path(scratch_root).resolve(strict=True)
     if path.parent.resolve(strict=True) != scratch_root or path.name not in {
         "source", "pnpm-store", "pnpm-cache", "pnpm-build-cache", "payload", "checkout.tar", "home",
+        "seed-move-measurement",
     }:
         raise RuntimeError("experiment scratch reclamation target is invalid")
-    info = path.lstat()
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        if path.name == "seed-move-measurement":
+            return
+        raise
     if info.st_uid != os.geteuid():
         raise RuntimeError("experiment scratch reclamation owner is invalid")
     if stat.S_ISDIR(info.st_mode):

@@ -786,6 +786,29 @@ class ActualDependencyExperimentTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "target is invalid"):
                 experiment.reclaim_experiment_tree(outside, scratch_root=root)
 
+    def test_reclaim_optional_seed_measurement_root_when_present_or_absent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            measurement = root / "seed-move-measurement"
+            nested = measurement / "sha" / "pnpm-cache"
+            nested.mkdir(parents=True)
+            (nested / "metadata.json").write_text("measurement only", encoding="utf-8")
+
+            experiment.reclaim_experiment_tree(measurement, scratch_root=root)
+            self.assertFalse(measurement.exists())
+            # The optional move can fail before creating its destination.
+            experiment.reclaim_experiment_tree(measurement, scratch_root=root)
+            self.assertFalse(measurement.exists())
+
+            unrelated_missing = root / "source"
+            with self.assertRaises(FileNotFoundError):
+                experiment.reclaim_experiment_tree(unrelated_missing, scratch_root=root)
+            nested_parent = root / "other"
+            nested_parent.mkdir()
+            nested_target = nested_parent / "seed-move-measurement"
+            with self.assertRaisesRegex(RuntimeError, "target is invalid"):
+                experiment.reclaim_experiment_tree(nested_target, scratch_root=root)
+
     def test_payload_snapshot_precedes_reclamation_and_materialization(self):
         source = SCRIPT.read_text(encoding="utf-8")
         self.assertIn("os.rename(worker_modules, worker_payload)", source)

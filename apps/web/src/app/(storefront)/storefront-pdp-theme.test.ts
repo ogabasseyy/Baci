@@ -31,6 +31,14 @@ it('emits branded purchase controls and extracted product typography in the stan
     'body:has(.ogabassey-mobile-footer:not(.ogabassey-mobile-footer--hidden))'
   );
   expect(css).toContain('visibility:hidden');
+  expect(css).toContain(
+    'body:has([data-sticky-cart-visible=true]):has(.ogabassey-mobile-footer--hidden) .ogabassey-chat-anchor:not(:has(.ogabassey-chat-button--open))'
+  );
+  expect(
+    declarations(
+      'body:has([data-sticky-cart-visible=true]):has(.ogabassey-mobile-footer--hidden) .ogabassey-chat-anchor:not(:has(.ogabassey-chat-button--open))'
+    )
+  ).toContain('bottom:calc(env(safe-area-inset-bottom,0px) + 9rem)');
   expect(css).toContain('pointer-events:none');
   expect(declarations('.text-3xl')).toContain('font-size:');
   expect(declarations('.bg-store-background')).toContain(

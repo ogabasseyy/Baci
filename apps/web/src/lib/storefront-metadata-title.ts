@@ -8,6 +8,8 @@ const STOREFRONT_SERP_TITLE_MAX_LENGTH = 60;
  * re-suffixed by the platform-level root metadata template.
  */
 export function buildStorefrontMetadataTitle(input: {
+  /** Product titles: drop the brand suffix rather than cut the title. */
+  dropSuffixWhenTooLong?: boolean;
   fallback?: string;
   maxLength?: number;
   suffix?: string;
@@ -17,6 +19,7 @@ export function buildStorefrontMetadataTitle(input: {
     fallback: input.fallback,
     maxLength: input.maxLength ?? STOREFRONT_SERP_TITLE_MAX_LENGTH,
     suffix: input.suffix,
+    dropSuffixWhenTooLong: input.dropSuffixWhenTooLong,
   });
 
   return {

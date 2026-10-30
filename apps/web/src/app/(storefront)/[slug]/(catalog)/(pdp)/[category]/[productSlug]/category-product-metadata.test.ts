@@ -89,4 +89,34 @@ describe('buildCategoryProductMetadata', () => {
       googleBot: { index: false, follow: true, 'max-snippet': 42 },
     });
   });
+
+  it('keeps a long product title whole instead of cutting "Price in Nigeria" mid-word', () => {
+    const metadata = buildCategoryProductMetadata({
+      baseUrl: 'https://ogabassey.com',
+      merchant: {
+        business_name: 'Ogabassey',
+        country: 'NG',
+        is_published: true,
+        slug: 'ogabassey',
+      } as never,
+      product: {
+        name: 'Sony Alpha a7S III Mirrorless Camera Body',
+        slug: 'sony-alpha-a7s-iii-mirrorless-camera-body',
+        description: 'Full-frame mirrorless camera body.',
+        meta_description: null,
+        meta_title:
+          'Sony Alpha a7S III Mirrorless Camera Body Price in Nigeria',
+        category: 'Cameras',
+        categories: { name: 'Cameras', slug: 'cameras' },
+        price: 2_500_000,
+        status: 'active',
+        images: ['https://cdn.example.com/a7s3.jpg'],
+      } as never,
+      storeSlug: 'ogabassey.com',
+    });
+
+    expect(metadata.title).toEqual({
+      absolute: 'Sony Alpha a7S III Mirrorless Camera Body Price in Nigeria',
+    });
+  });
 });

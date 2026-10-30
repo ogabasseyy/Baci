@@ -30,7 +30,7 @@ export async function generateMetadata({
   );
 
   return {
-    title: `Contact Us | ${merchant.business_name}`,
+    title: 'Contact Us',
     description,
     openGraph: {
       title: `Contact ${merchant.business_name}`,

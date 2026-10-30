@@ -49,7 +49,8 @@ describe('buildStorefrontMetadataTitle', () => {
       title: 'Apple Magic Keyboard 11-inch for iPad Pro and iPad Air',
     });
 
-    expect(result.title).toHaveLength(42);
-    expect(result.title).toContain('| Ogabassey');
+    // Word-boundary cut, never mid-word ("11-inc...").
+    expect(result.title).toBe('Apple Magic Keyboard... | Ogabassey');
+    expect(result.title.length).toBeLessThanOrEqual(42);
   });
 });

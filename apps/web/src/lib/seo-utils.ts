@@ -15,6 +15,7 @@ import type {
 } from 'schema-dts';
 import { filterBrandMatchedSocialProfiles } from '@/lib/brand-matched-social-profiles';
 import type { JsonLdStructuredData } from '@/lib/json-ld-types';
+import { truncateMetaTitle } from '@/lib/truncate-meta-title';
 import { buildStorefrontProductPath } from './build-storefront-product-path';
 import {
   type CheckoutPaymentMerchant,
@@ -1587,6 +1588,7 @@ export function generateMetaTitle(
     maxLength?: number;
     suffix?: string;
     fallback?: string;
+    dropSuffixWhenTooLong?: boolean;
   }
 ): string {
   const maxLength = validateMaxLength(
@@ -1615,27 +1617,9 @@ export function generateMetaTitle(
     normalizedTitle = hasSuffix ? baseTitle : `${baseTitle} | ${suffix}`;
   }
 
-  if (normalizedTitle.length <= maxLength) {
-    return normalizedTitle;
-  }
-
-  if (suffix) {
-    const normalizedSuffix = normalizePlainText(suffix);
-    const suffixFragment = ` | ${normalizedSuffix}`;
-    if (normalizedTitle.endsWith(suffixFragment)) {
-      const baseTitle = normalizedTitle
-        .slice(0, normalizedTitle.length - suffixFragment.length)
-        .trim();
-      const allowedBaseLength =
-        maxLength - suffixFragment.length - ELLIPSIS_LENGTH;
-
-      if (allowedBaseLength > 0) {
-        return `${baseTitle.slice(0, allowedBaseLength)}${ELLIPSIS}${suffixFragment}`;
-      }
-    }
-  }
-
-  return `${normalizedTitle.slice(0, maxLength - ELLIPSIS_LENGTH)}${ELLIPSIS}`;
+  return truncateMetaTitle(normalizedTitle, suffix, maxLength, {
+    dropSuffixWhenTooLong: options?.dropSuffixWhenTooLong,
+  });
 }
 
 /**

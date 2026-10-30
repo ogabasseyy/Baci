@@ -135,6 +135,7 @@ export async function generateMetadata(
   );
   const { metadataTitle, title: metadataTitleText } =
     buildStorefrontMetadataTitle({
+      dropSuffixWhenTooLong: true,
       title: metadataTitleSource,
       suffix: merchantDisplayName,
       fallback:

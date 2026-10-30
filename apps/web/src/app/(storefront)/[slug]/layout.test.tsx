@@ -268,7 +268,7 @@ describe('storefront layout', () => {
     expect(providerSnapshots).toEqual([]);
   });
 
-  it('isolates canonicals, adds applicationName and authors, and omits title template', async () => {
+  it('isolates canonicals, adds applicationName and authors, and brands child titles with the merchant', async () => {
     getRequestScopedMerchant.mockResolvedValue(baseMerchant);
 
     const metadata = await generateMetadata({
@@ -278,9 +278,11 @@ describe('storefront layout', () => {
     expect(metadata.alternates).toBeNull();
     expect(metadata.applicationName).toBe(baseMerchant.business_name);
     expect(metadata.authors).toEqual([{ name: baseMerchant.business_name }]);
-    expect(
-      metadata.title == null ||
-        (typeof metadata.title === 'object' && !('template' in metadata.title))
-    ).toBe(true);
+    // Relative child titles ('Cart') must not fall through to the platform's
+    // root `%s | Baci` template on a merchant storefront.
+    expect(metadata.title).toEqual({
+      default: baseMerchant.site_title || baseMerchant.business_name,
+      template: `%s | ${baseMerchant.business_name}`,
+    });
   });
 });

@@ -118,6 +118,13 @@ export async function generateMetadata({
 
   return {
     metadataBase,
+    // Brand child-page titles with the merchant, not the platform: without a
+    // storefront template, relative titles ('Cart') inherit the root
+    // `%s | Baci` template. Absolute titles are unaffected.
+    title: {
+      default: merchant.site_title || merchant.business_name,
+      template: `%s | ${merchant.business_name}`,
+    },
     description,
     icons,
     // Replace root metadata alternates so storefront pages never inherit the platform canonical.

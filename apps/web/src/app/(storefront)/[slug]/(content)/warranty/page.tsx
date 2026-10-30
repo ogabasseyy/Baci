@@ -42,7 +42,7 @@ export async function generateMetadata({
   );
 
   return {
-    title: `Warranty Policy | ${context.merchant.business_name}`,
+    title: 'Warranty Policy',
     description,
     alternates: {
       canonical: canonicalUrl,

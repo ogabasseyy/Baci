@@ -21,7 +21,7 @@ const { generateMetadata } = await import('./layout');
 describe('storefront layout SEO metadata', () => {
   beforeEach(() => mockMerchant.mockReset());
 
-  it('uses factual fallback description while leaving the layout title undefined', async () => {
+  it('uses factual fallback description and a merchant-branded title template', async () => {
     mockMerchant.mockResolvedValue({
       slug: 'foodflow',
       business_name: 'Foodflow',
@@ -40,7 +40,10 @@ describe('storefront layout SEO metadata', () => {
       params: Promise.resolve({ slug: 'foodflow' }),
     });
 
-    expect(metadata.title).toBeUndefined();
+    expect(metadata.title).toEqual({
+      default: 'Foodflow',
+      template: '%s | Foodflow',
+    });
     expect(metadata.description).toBe('Foodflow storefront in NG.');
   });
 
@@ -62,7 +65,10 @@ describe('storefront layout SEO metadata', () => {
       params: Promise.resolve({ slug: 'medplus' }),
     });
 
-    expect(metadata.title).toBeUndefined();
+    expect(metadata.title).toEqual({
+      default: 'Medplus | Buy Gadgets Pay Later',
+      template: '%s | Medplus',
+    });
     expect(metadata.openGraph?.title).toBe('Medplus | Buy Gadgets Pay Later');
     expect(metadata.description).toBe('Medplus storefront in NG.');
   });

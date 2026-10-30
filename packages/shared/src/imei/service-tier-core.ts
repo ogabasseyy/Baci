@@ -8,7 +8,7 @@ export const CORE_IMEI_SERVICE_TIERS = {
     description: 'Complete device health report',
     detail:
       'Best first check for used iPhones: network, Find My and stolen/lost status in one report.',
-    price: 1500,
+    price: 1000,
     costUsd: 0.1,
     features: [
       'Device Model & Number',
@@ -69,7 +69,7 @@ export const CORE_IMEI_SERVICE_TIERS = {
     description: 'Deeper worldwide lost/stolen blacklist lookup',
     detail:
       'A deeper worldwide blacklist check for higher-risk devices or expensive purchases.',
-    price: 2000,
+    price: 1200,
     costUsd: 0.12,
     features: ['Worldwide Blacklist', 'Lost/Stolen Status', 'GSMA Database'],
     checksIncluded: ['device', 'modelNumber', 'blacklistStatus'],
@@ -85,7 +85,7 @@ export const CORE_IMEI_SERVICE_TIERS = {
     description: 'iPhone carrier and network info',
     detail:
       'Shows the iPhone carrier/network so you know what network it belongs to.',
-    price: 1000,
+    price: 600,
     costUsd: 0.06,
     features: ['Original Carrier', 'Network Info', 'Device Model'],
     checksIncluded: ['device', 'modelNumber', 'carrier'],
@@ -133,7 +133,7 @@ export const CORE_IMEI_SERVICE_TIERS = {
     description: 'Carrier and Find My status in one Apple check',
     detail:
       'Combines carrier/network information with Find My status for Apple devices.',
-    price: 1300,
+    price: 800,
     costUsd: 0.08,
     features: ['Carrier Info', 'Find My Status', 'Device Model'],
     checksIncluded: ['device', 'modelNumber', 'carrier', 'icloud'],

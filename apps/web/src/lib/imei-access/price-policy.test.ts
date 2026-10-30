@@ -10,7 +10,7 @@ it('pins every purchasable tier to the same retail price in the authenticated ga
   const sql = readFileSync(
     resolve(
       import.meta.dirname,
-      '../../../../../supabase/migrations/20261030120001_imei_verified_diagnostic_prices.sql'
+      '../../../../../supabase/migrations/20261030181744_imei_approved_price_reductions.sql'
     ),
     'utf8'
   );
@@ -27,5 +27,19 @@ it('pins every purchasable tier to the same retail price in the authenticated ga
         IMEI_SERVICE_TIERS[key].price,
       ])
     )
+  );
+});
+
+it('preserves every latest gateway operation and guard when changing retail prices', () => {
+  const normalize = (file: string) =>
+    readFileSync(
+      resolve(import.meta.dirname, '../../../../../supabase/migrations', file),
+      'utf8'
+    )
+      .replace(/--[^\n]*/g, '')
+      .replace(/(WHEN '[^']+' THEN )\d+/g, '$1<retail>')
+      .trim();
+  expect(normalize('20261030181744_imei_approved_price_reductions.sql')).toBe(
+    normalize('20261030125541_imei_refund_unsubmitted_petrock_debits.sql')
   );
 });

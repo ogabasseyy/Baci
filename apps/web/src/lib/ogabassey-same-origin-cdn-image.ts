@@ -9,6 +9,9 @@ const IMMUTABLE_IMAGE_CACHE_CONTROL =
   'public, max-age=31536000, s-maxage=31536000, immutable';
 const SHORT_ERROR_CACHE_CONTROL = 'public, max-age=60, s-maxage=60';
 const UPSTREAM_TIMEOUT_MS = 5_000;
+// Defense in depth: even a mislabeled body served from the storefront origin
+// cannot run script or load subresources.
+const IMAGE_RESPONSE_CSP = "default-src 'none'; sandbox";
 
 const MIME_BY_FORMAT: Record<
   OgabasseyCdnImageProxyRequest['options']['format'],
@@ -20,6 +23,32 @@ const MIME_BY_FORMAT: Record<
   png: 'image/png',
   webp: 'image/webp',
 };
+const ALLOWED_UPSTREAM_IMAGE_MIME_TYPES: ReadonlySet<string> = new Set(
+  Object.values(MIME_BY_FORMAT)
+);
+
+/**
+ * Returns the Content-Type to serve for an upstream image body, or `null` when
+ * the upstream type must not be served from the storefront origin with a
+ * one-year immutable cache. A missing header falls back to the requested
+ * format's MIME type.
+ */
+function resolveSafeUpstreamImageContentType(
+  upstreamContentType: string | null,
+  fallbackContentType: string
+): string | null {
+  if (!ALLOWED_UPSTREAM_IMAGE_MIME_TYPES.has(fallbackContentType)) {
+    return null;
+  }
+  if (upstreamContentType === null) {
+    return fallbackContentType;
+  }
+  // Compare the MIME essence (type/subtype, case-insensitive, parameters
+  // dropped). The proxy requested an explicit format, so any other type —
+  // including an empty or unparseable header — is upstream misbehavior.
+  const essence = upstreamContentType.split(';', 1)[0].trim().toLowerCase();
+  return essence === fallbackContentType ? fallbackContentType : null;
+}
 
 /**
  * Builds a short-cached JSON error response for missing or unavailable upstream
@@ -79,11 +108,19 @@ async function fetchCandidateVariant(
         status: response.status === 404 ? 404 : 502,
       };
     }
+    const contentType = resolveSafeUpstreamImageContentType(
+      response.headers.get('content-type'),
+      fallbackContentType
+    );
+    if (!contentType) {
+      await response.body?.cancel();
+      return { ok: false, status: 502 };
+    }
     const buffer = await response.arrayBuffer();
     return {
       buffer,
       bytes: buffer.byteLength,
-      contentType: response.headers.get('content-type') || fallbackContentType,
+      contentType,
       ok: true,
       quality,
     };
@@ -143,15 +180,30 @@ export async function fetchSameOriginOgabasseyImageResponse(
       );
     }
 
+    const contentType = resolveSafeUpstreamImageContentType(
+      upstreamResponse.headers.get('content-type'),
+      fallbackContentType
+    );
+    if (!contentType) {
+      await upstreamResponse.body?.cancel();
+      return buildErrorResponse('Upstream returned a non-image response', 502);
+    }
+
     const headers = new Headers({
       'Cache-Control': IMMUTABLE_IMAGE_CACHE_CONTROL,
       'CDN-Cache-Control': 'public, max-age=31536000, immutable',
-      'Content-Type':
-        upstreamResponse.headers.get('content-type') || fallbackContentType,
+      'Content-Security-Policy': IMAGE_RESPONSE_CSP,
+      'Content-Type': contentType,
       'X-Hero-Effective-Quality': String(quality),
     });
+    // fetch() transparently decodes Content-Encoding, so an upstream length
+    // describes the encoded bytes, not the decoded body streamed here.
     const upstreamLength = upstreamResponse.headers.get('content-length');
-    if (upstreamLength) {
+    const upstreamEncoding = upstreamResponse.headers.get('content-encoding');
+    if (
+      upstreamLength &&
+      (!upstreamEncoding || upstreamEncoding === 'identity')
+    ) {
       headers.set('Content-Length', upstreamLength);
     }
 
@@ -223,6 +275,7 @@ export async function fetchSameOriginOgabasseyImageResponse(
         ? 'public, max-age=60'
         : 'public, max-age=31536000, immutable',
       'Content-Length': String(selected.bytes),
+      'Content-Security-Policy': IMAGE_RESPONSE_CSP,
       'Content-Type': selected.contentType,
       'X-Hero-Effective-Quality': String(selected.quality),
     },

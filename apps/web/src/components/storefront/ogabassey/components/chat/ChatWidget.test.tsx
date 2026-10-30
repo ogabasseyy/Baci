@@ -471,16 +471,7 @@ describe('ChatWidget - proactive nudge bubble', () => {
     const user = userEvent.setup();
     render(<ChatWidget />);
 
-    // The dismiss button is inside the proactive bubble (contains an X icon)
-    const allButtons = screen.getAllByRole('button');
-    // The dismiss button is a small button inside the bubble (not the toggle)
-    const dismissButton = allButtons.find(
-      (btn) => btn !== screen.getByRole('button', { name: 'Toggle chat' })
-    );
-    expect(dismissButton).toBeDefined();
-    if (dismissButton) {
-      await user.click(dismissButton);
-    }
+    await user.click(screen.getByRole('button', { name: 'Dismiss chat suggestion' }));
     expect(setProactiveMsg).toHaveBeenCalledWith(null);
   });
 });

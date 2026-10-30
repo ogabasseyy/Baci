@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { eventPipelineAddressBudgetCredentialPaths } from './event-pipeline-address-budget-credential-paths';
 import { eventPipelineCartCredentialPaths } from './event-pipeline-cart-credential-paths';
 import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credential-paths';
 import { eventPipelineDvaCredentialPaths } from './event-pipeline-dva-credential-paths';
@@ -33,6 +34,7 @@ describe('event pipeline credential-path authority', () => {
     );
 
     expect(manifest.authority.credentialPaths).toEqual([
+      ...eventPipelineAddressBudgetCredentialPaths,
       ...eventPipelineCartCredentialPaths,
       // One host-verified public observation may mint only the existing
       // short-lived event-ingress capability; it cannot read provider credentials.

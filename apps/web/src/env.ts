@@ -1,6 +1,5 @@
 // src/env.ts
 import z from 'zod';
-import { getAddressAutocompleteKvCredentialIssue } from '@/lib/address-autocomplete-kv-credentials';
 import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
 import { normalizeEnvBoolean } from '@/lib/env-boolean';
 import { readHostedSavingsEnvironment } from '@/lib/hosted-savings-environment';
@@ -267,10 +266,6 @@ const serverSchema = z
     GOOGLE_MAPS_API_KEY: optionalTrimmedStringSchema,
     GOOGLE_PLACES_API_KEY: optionalTrimmedStringSchema,
     GEOAPIFY_API_KEY: optionalTrimmedStringSchema,
-    ADDRESS_AUTOCOMPLETE_KV_REST_API_URL: optionalTrimmedUrlSchema,
-    ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN: optionalTrimmedStringSchema,
-    ADDRESS_AUTOCOMPLETE_REDIS_REST_URL: optionalTrimmedUrlSchema,
-    ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN: optionalTrimmedStringSchema,
     AI_CHAT_MODEL: z.string().default('gemma4:e4b'),
     AI_CHAT_PROVIDER: aiChatProviderSchema,
 
@@ -412,16 +407,6 @@ const serverSchema = z
   })
   .strict()
   .superRefine((value, ctx) => {
-    const credentialIssue = getAddressAutocompleteKvCredentialIssue(value);
-    if (credentialIssue) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: credentialIssue.message,
-        path: [credentialIssue.field],
-      });
-    }
-  })
-  .superRefine((value, ctx) => {
     const isGitHubActionsBuild =
       process.env.GITHUB_ACTIONS === 'true' &&
       Boolean(process.env.GITHUB_RUN_ID) &&
@@ -540,32 +525,6 @@ const serverSchema = z
         code: z.ZodIssueCode.custom,
         message: 'LLM_SERVER_BEARER is required when LLM_SERVER_URL is set',
         path: ['LLM_SERVER_BEARER'],
-      });
-    }
-  })
-  .superRefine((value, ctx) => {
-    // A partial dedicated pair would fail closed at runtime after
-    // validation succeeded, so require both halves or neither.
-    if (
-      value.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL &&
-      !value.ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          'ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN is required when ADDRESS_AUTOCOMPLETE_REDIS_REST_URL is set',
-        path: ['ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN'],
-      });
-    }
-    if (
-      value.ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN &&
-      !value.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          'ADDRESS_AUTOCOMPLETE_REDIS_REST_URL is required when ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN is set',
-        path: ['ADDRESS_AUTOCOMPLETE_REDIS_REST_URL'],
       });
     }
   });
@@ -757,14 +716,6 @@ const getEnv = (): Partial<z.infer<typeof serverSchema>> &
         GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
         GOOGLE_PLACES_API_KEY: process.env.GOOGLE_PLACES_API_KEY,
         GEOAPIFY_API_KEY: process.env.GEOAPIFY_API_KEY,
-        ADDRESS_AUTOCOMPLETE_KV_REST_API_URL:
-          process.env.ADDRESS_AUTOCOMPLETE_KV_REST_API_URL,
-        ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN:
-          process.env.ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN,
-        ADDRESS_AUTOCOMPLETE_REDIS_REST_URL:
-          process.env.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL,
-        ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN:
-          process.env.ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN,
         AI_CHAT_MODEL: process.env.AI_CHAT_MODEL,
         AI_CHAT_PROVIDER: process.env.AI_CHAT_PROVIDER,
         CREDIT_DIRECT_PRIVATE_KEY: process.env.CREDIT_DIRECT_PRIVATE_KEY,

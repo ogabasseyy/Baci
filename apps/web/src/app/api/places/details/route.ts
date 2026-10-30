@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
 
     const fetched = await fetchLegacyPlacesJson<LegacyPlaceDetailsResponse>(
       detailsUrl.toString(),
-      () => reserveGooglePlacesRequest('details'),
+      () => reserveGooglePlacesRequest('details', googleApiKey),
       // Fail fast like autocomplete: the user can retry a 5s stall
       // manually instead of waiting through ~16.5s of timeouts.
       { retryTimeouts: false }

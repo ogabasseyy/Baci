@@ -1,3 +1,4 @@
+import { EXPECTED_ADDRESS_BUDGET_PENDING_SOURCES } from './expected-address-budget-pending-sources.test-support';
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './expected-admin-platform-pending-sources.test-support';
 import { EXPECTED_ADS_PENDING_SOURCES } from './expected-ads-pending-sources.test-support';
 import { EXPECTED_BLOG_PENDING_SOURCES } from './expected-blog-pending-sources.test-support';
@@ -41,6 +42,7 @@ import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-
 import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 
 export const EXPECTED_PENDING_SOURCES = [
+  ...EXPECTED_ADDRESS_BUDGET_PENDING_SOURCES,
   ...EXPECTED_IMEI_PENDING_SOURCES,
   ...EXPECTED_ADS_PENDING_SOURCES,
   {

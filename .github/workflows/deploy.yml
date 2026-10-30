@@ -262,9 +262,9 @@ jobs:
     runs-on: ubuntu-24.04
     environment:
       name: production
-    # Four reload probes plus the first cron run can take 72 minutes.
+    # Five reload probes plus the first cron run can take 87 minutes.
     # Headroom lets each check report its own error before the job times out.
-    timeout-minutes: 80
+    timeout-minutes: 95
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
@@ -327,6 +327,18 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
         run: .github/scripts/probe-cart-quota-hook-reload.sh
+      - name: Apply pending migrations through the address-budget scope hook
+        env:
+          MIGRATION_PHASE: predeploy
+          MIGRATION_MAX_VERSION: 20261030075538
+        run: .github/scripts/apply-pending-migrations.sh
+      - name: Probe address-budget hook reload acknowledgement
+        # The narrow reservation role is not granted until the existing fleet
+        # has been observed enforcing its one-RPC request scope.
+        env:
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        run: .github/scripts/probe-address-budget-hook-reload.sh
       - name: Apply remaining pending migrations via Management API
         env:
           MIGRATION_PHASE: predeploy

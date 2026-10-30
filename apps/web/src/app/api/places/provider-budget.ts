@@ -1,181 +1,52 @@
 import 'server-only';
 
-import { Redis } from '@upstash/redis';
+import { reserveAddressProviderRequest } from '@/lib/address-budget/reservation';
 
-// Shared across production and previews. Count every upstream attempt, including
-// retries. These caps apply only to this address flow, not other Google products.
-export const GOOGLE_MONTHLY_REQUEST_LIMIT = 4500;
-const GOOGLE_PREDICTION_REQUEST_LIMIT = 4400; // Leave room for selections.
-const DEVELOPMENT_GOOGLE_REQUEST_LIMIT = 50;
-export const GEOAPIFY_DAILY_REQUEST_LIMIT = 2800;
-const DAY_MS = 24 * 60 * 60 * 1000;
-const MONTH_COUNTER_TTL_SECONDS = 40 * 24 * 60 * 60;
-const GEOAPIFY_MIN_REQUEST_INTERVAL_MS = 250;
-
-// A stalled budget store must fail closed promptly, not hold the
-// address field until the platform deadline. The SDK invokes a
-// function-valued signal per request and throws (no retry) when it
-// aborts, so each reservation gets a fresh deadline.
-const BUDGET_REDIS_TIMEOUT_MS = 3000;
-
-const GOOGLE_BUDGET_SCRIPT = `
-local count = tonumber(redis.call('GET', KEYS[1]) or '0')
-if count >= tonumber(ARGV[1]) then return 0 end
-redis.call('INCR', KEYS[1])
-redis.call('EXPIRE', KEYS[1], ARGV[2])
-return 1
-`;
-
-const GEOAPIFY_BUDGET_SCRIPT = `
-local time = redis.call('TIME')
-local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
-redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now - tonumber(ARGV[1]))
-if redis.call('ZCARD', KEYS[1]) >= tonumber(ARGV[2]) then return 0 end
-local latest = redis.call('ZREVRANGE', KEYS[1], 0, 0, 'WITHSCORES')
-if #latest > 0 then
-  local wait = tonumber(ARGV[3]) - (now - tonumber(latest[2]))
-  if wait > 0 then return -wait end
-end
-redis.call('ZADD', KEYS[1], now, ARGV[4])
-redis.call('PEXPIRE', KEYS[1], tonumber(ARGV[1]) + 60000)
-return 1
-`;
-
-let budgetRedis: Redis | null = null;
 export type GoogleBudgetReservation =
-  | { reserved: true }
+  | { reserved: true; dispatchBefore: number }
   | { reserved: false; reason: 'limit_reached' | 'unavailable' };
 
-const developmentGoogleRequests = new Map<string, number>();
-
-function getBudgetRedis(): Redis | null {
-  if (budgetRedis) return budgetRedis;
-  // Prefer an isolated counter database without changing unrelated KV consumers.
-  const configurations = [
-    [
-      process.env.ADDRESS_AUTOCOMPLETE_KV_REST_API_URL,
-      process.env.ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN,
-    ],
-    [
-      process.env.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL,
-      process.env.ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN,
-    ],
-    [process.env.UPSTASH_REDIS_REST_URL, process.env.UPSTASH_REDIS_REST_TOKEN],
-    [process.env.KV_REST_API_URL, process.env.KV_REST_API_TOKEN],
-  ];
-  // Mirror env.ts normalization: trim each candidate and treat
-  // whitespace-only values as absent, so a padded-but-valid pair
-  // connects instead of failing closed, while a blank preferred pair
-  // falls through instead of shadowing the next database. A configured
-  // but incomplete preferred pair is still an error: switching to a
-  // different database would discard its usage history and reset the
-  // spend cap.
-  const [url, token] =
-    configurations
-      .map(([candidateUrl, candidateToken]) => [
-        candidateUrl?.trim() || undefined,
-        candidateToken?.trim() || undefined,
-      ])
-      .find(([candidateUrl, candidateToken]) =>
-        Boolean(candidateUrl || candidateToken)
-      ) ?? [];
-  if (!url || !token) return null;
-  budgetRedis = new Redis({
-    url,
-    token,
-    signal: () => AbortSignal.timeout(BUDGET_REDIS_TIMEOUT_MS),
-  });
-  return budgetRedis;
-}
-
-function reserveDevelopmentGoogleRequest(): GoogleBudgetReservation {
-  if (process.env.NODE_ENV !== 'development')
-    return { reserved: false, reason: 'unavailable' };
-
-  try {
-    const key = googleBudgetKey();
-    const count = developmentGoogleRequests.get(key) ?? 0;
-    // This fallback is process-local and resets with the dev server. Keep it
-    // intentionally small; production always requires the shared Redis budget.
-    const limit = DEVELOPMENT_GOOGLE_REQUEST_LIMIT;
-    if (count >= limit) return { reserved: false, reason: 'limit_reached' };
-    developmentGoogleRequests.set(key, count + 1);
-    return { reserved: true };
-  } catch {
-    return { reserved: false, reason: 'unavailable' };
-  }
-}
-
-export function googleBudgetKey(date = new Date()): string {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Los_Angeles',
-    year: 'numeric',
-    month: '2-digit',
-  }).formatToParts(date);
-  const year = parts.find((part) => part.type === 'year')?.value;
-  const month = parts.find((part) => part.type === 'month')?.value;
-  if (!year || !month)
-    throw new Error('Google budget billing month unavailable');
-  return `baci:address-budget:google:${year}-${month}`;
-}
-
+/** All environments use the same verified, account-wide PostgreSQL ledger. */
 export async function reserveGooglePlacesRequest(
-  kind: 'autocomplete' | 'details'
+  kind: 'autocomplete' | 'details',
+  apiKey: string
 ): Promise<GoogleBudgetReservation> {
   try {
-    const redis = getBudgetRedis();
-    if (!redis) return reserveDevelopmentGoogleRequest();
-
-    const result = await redis.eval<unknown[], number>(
-      GOOGLE_BUDGET_SCRIPT,
-      [googleBudgetKey()],
-      [
-        kind === 'autocomplete'
-          ? GOOGLE_PREDICTION_REQUEST_LIMIT
-          : GOOGLE_MONTHLY_REQUEST_LIMIT,
-        MONTH_COUNTER_TTL_SECONDS,
-      ]
-    );
-    if (result === 1) return { reserved: true };
-    if (result === 0) return { reserved: false, reason: 'limit_reached' };
-    return reserveDevelopmentGoogleRequest();
+    const result = await reserveAddressProviderRequest('google', kind, apiKey);
+    if (result.status === 'reserved')
+      return { reserved: true, dispatchBefore: result.dispatchBefore };
+    if (result.status === 'limit_reached')
+      return { reserved: false, reason: 'limit_reached' };
   } catch {
-    // Production stays fail-closed: serverless restarts must not reset its
-    // paid-usage budget. Development can safely use a bounded process-local cap.
-    console.warn('[Address API] Google budget unavailable');
-    return reserveDevelopmentGoogleRequest();
+    // An uncertain reservation stays consumed. Never retry or switch ledgers.
   }
+  console.warn('[Address API] Google budget unavailable');
+  return { reserved: false, reason: 'unavailable' };
 }
 
-export async function reserveGeoapifyRequest(): Promise<boolean> {
+export async function reserveGeoapifyRequest(
+  apiKey: string
+): Promise<GoogleBudgetReservation> {
   try {
-    const redis = getBudgetRedis();
-    if (!redis) return false;
     const reserve = () =>
-      redis.eval<unknown[], number>(
-        GEOAPIFY_BUDGET_SCRIPT,
-        ['baci:address-budget:geoapify'],
-        [
-          DAY_MS,
-          GEOAPIFY_DAILY_REQUEST_LIMIT,
-          GEOAPIFY_MIN_REQUEST_INTERVAL_MS,
-          crypto.randomUUID(),
-        ]
-      );
-    const result = await reserve();
-    if (result === 1) return true;
-    if (
-      !Number.isInteger(result) ||
-      result >= 0 ||
-      result < -GEOAPIFY_MIN_REQUEST_INTERVAL_MS
-    )
-      return false;
-    // A concurrent request may have just acquired the slot. Pace once before
-    // giving up; a daily cap or unavailable storage never triggers a retry.
-    await new Promise<void>((resolve) => setTimeout(resolve, -result));
-    return (await reserve()) === 1;
+      reserveAddressProviderRequest('geoapify', 'autocomplete', apiKey);
+    let result = await reserve();
+    // A pacing refusal creates no reservation. Wait once for the shared slot;
+    // an unavailable allowance or exhausted cap never triggers another attempt.
+    if (result.status === 'paced') {
+      const delay = result.retryAfterMs;
+      await new Promise<void>((resolve) => setTimeout(resolve, delay));
+      result = await reserve();
+    }
+    if (result.status === 'reserved')
+      return { reserved: true, dispatchBefore: result.dispatchBefore };
+    return {
+      reserved: false,
+      reason:
+        result.status === 'limit_reached' ? 'limit_reached' : 'unavailable',
+    };
   } catch {
     console.warn('[Address API] Geoapify budget unavailable');
-    return false;
+    return { reserved: false, reason: 'unavailable' };
   }
 }

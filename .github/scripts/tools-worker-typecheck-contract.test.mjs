@@ -48,6 +48,7 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
   }
   assert.equal(mcpTsconfig.extends, './tsconfig.json');
   assert.equal(webTsconfig.compilerOptions.strict, true);
+  assert.equal(webTsconfig.compilerOptions.checkers, 1);
   assert.notEqual(mcpTsconfig.compilerOptions.strict, false);
   assert.deepEqual(mcpTsconfig.include, [
     'mcp-server/server.ts',

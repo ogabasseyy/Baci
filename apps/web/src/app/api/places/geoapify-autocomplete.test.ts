@@ -3,7 +3,10 @@ import { fetchGeoapifyPredictions } from './geoapify-autocomplete';
 import { reserveGeoapifyRequest } from './provider-budget';
 
 vi.mock('./provider-budget', () => ({
-  reserveGeoapifyRequest: vi.fn(async () => true),
+  reserveGeoapifyRequest: vi.fn(async () => ({
+    reserved: true,
+    dispatchBefore: Date.now() + 60_000,
+  })),
 }));
 const result = {
   place_id: 'id-1',
@@ -35,11 +38,29 @@ describe('Geoapify address mapping', () => {
     mockFetch.mockReset();
     vi.stubGlobal('fetch', mockFetch);
     vi.stubEnv('GEOAPIFY_API_KEY', 'private-test-key');
-    vi.mocked(reserveGeoapifyRequest).mockResolvedValue(true);
+    vi.mocked(reserveGeoapifyRequest).mockResolvedValue({
+      reserved: true,
+      dispatchBefore: Date.now() + 60_000,
+    });
   });
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
+  });
+
+  it('does not dispatch an admitted request after its database deadline', async () => {
+    vi.useFakeTimers();
+    const now = Date.now();
+    vi.mocked(reserveGeoapifyRequest).mockImplementationOnce(async () => {
+      const admitted = { reserved: true as const, dispatchBefore: now + 500 };
+      vi.setSystemTime(now + 501);
+      return admitted;
+    });
+    await expect(
+      fetchGeoapifyPredictions('20 Allen Avenue', 'ng')
+    ).rejects.toMatchObject({ status: 503 });
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('returns only normalized address data with usable coordinates', async () => {
@@ -53,6 +74,7 @@ describe('Geoapify address mapping', () => {
       location: { latitude: 6.6, longitude: 3.3 },
     });
     expect(JSON.stringify(predictions)).not.toContain('private-test-key');
+    expect(reserveGeoapifyRequest).toHaveBeenCalledWith('private-test-key');
     expect(mockFetch).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -136,7 +158,10 @@ describe('Geoapify address mapping', () => {
       fetchGeoapifyPredictions('Allen Avenue')
     ).rejects.toMatchObject({ status: 503 });
     vi.stubEnv('GEOAPIFY_API_KEY', 'private-test-key');
-    vi.mocked(reserveGeoapifyRequest).mockResolvedValue(false);
+    vi.mocked(reserveGeoapifyRequest).mockResolvedValue({
+      reserved: false,
+      reason: 'limit_reached',
+    });
     await expect(
       fetchGeoapifyPredictions('Allen Avenue')
     ).rejects.toMatchObject({ status: 429 });

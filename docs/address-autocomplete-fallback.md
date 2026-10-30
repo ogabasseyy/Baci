@@ -18,16 +18,14 @@ fetch URLs are excluded from exported telemetry spans.
 
 ## Limits
 
-An isolated Redis database configured through `ADDRESS_AUTOCOMPLETE_REDIS_REST_URL`
-and `ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN` provides atomic shared counters across
-deployments. `UPSTASH_REDIS_REST_*` and `KV_REST_API_*` are supported as fallbacks.
-URL and token must come from the same configuration pair.
-A partially configured preferred pair fails closed even if another pair is
-complete. Automatically switching databases would lose the active ledger's
-usage history and could reset its spending allowance. A fallback database is
-selected only when the preferred pair is entirely absent.
-If distributed storage is unavailable, admission fails closed; there is no local
-counter that could reset on a serverless restart.
+The private `address_budget` PostgreSQL ledger in the existing Supabase project
+provides atomic shared reservations. Redis is no longer consulted by these
+address endpoints. Unrelated Redis consumers and their configuration are unchanged.
+The server uses the existing scoped JWT signer and a dedicated role that can POST
+only `reserve_address_provider_request`. It cannot initialize allowance, change
+usage history or read orders. Unknown allowance, credential mismatch, expiry,
+database failure and ambiguous commits all deny a provider request.
+There is no process-local admission in development or production.
 Preview and staging requests using these credentials consume the same counters
 as production. Separate environment counters would multiply the allowance for
 the same provider account. Automated tests mock provider requests and counters.
@@ -42,9 +40,11 @@ the same provider account. Automated tests mock provider requests and counters.
   admissions. This leaves headroom below the Free plan's 3,000 credits/day and
   five requests/second. A request arriving just after another admission waits for
   capacity and retries once. Other account usage still consumes its quota.
-- Before release, initialize the current Google month as exhausted when earlier
-  usage is untracked. The next month's counter begins automatically at the Pacific
-  month boundary. No existing cloud quotas are raised.
+- Account-wide usage and bounded liability from old deployments must be verified
+  before owner-only initialization. Unknown usage remains unavailable; it is never
+  imported as zero. Each new Google billing month requires fresh authorization.
+  Geoapify imported debt lasts at least 24 hours from verification; expired debt
+  can be replaced only with fresh owner evidence. Recent reservations remain counted.
 - The shared monthly counter has no per-caller partition beyond the proxy's
   per-IP minute throttle, so a sustained single-source burst can exhaust the
   month for everyone. Guest checkout is intentionally unauthenticated; closing
@@ -65,12 +65,13 @@ Written address, city/state and the existing shipping flow remain necessary.
 
 Run the colocated provider-budget, autocomplete-route, selection and field tests,
 plus the checkout delivery address/quote tests. Run web lint and typecheck and the
-required CodeRabbit gate before submission. Key configuration alone does not
-change live checkout. A healthy persistent Redis database and current-month counter
-initialization are release prerequisites. The previous Vercel Redis integration
-was uninstalled and its configured hostname no longer resolves.
-Merge, approved VPS prebuilt deployment and public checkout
-verification are separate release steps.
+required CodeRabbit gate before submission. The release stages the request guard,
+observes its anonymous reload canary, and only then grants the reservation role.
+Key configuration or code publication alone does not enable lookup calls: verified
+allowance is a separate prerequisite. Follow [the cutover runbook](address-budget-postgres-cutover.md).
+Merge, the checked worker/web release and public checkout verification are separate
+steps. Manual entry and existing Store Pickup remain usable while lookup allowance
+is unavailable; they do not supply a courier destination pin.
 
 Provider references: [Geoapify autocomplete](https://apidocs.geoapify.com/docs/geocoding/address-autocomplete/),
 [Geoapify pricing and attribution](https://www.geoapify.com/pricing/),

@@ -4,7 +4,10 @@ import { reserveGooglePlacesRequest } from '../provider-budget';
 
 vi.stubEnv('GOOGLE_MAPS_API_KEY', 'test-api-key');
 vi.mock('../provider-budget', () => ({
-  reserveGooglePlacesRequest: vi.fn(async () => ({ reserved: true })),
+  reserveGooglePlacesRequest: vi.fn(async () => ({
+    reserved: true,
+    dispatchBefore: Date.now() + 60_000,
+  })),
 }));
 
 const mockFetch = vi.fn();
@@ -86,6 +89,10 @@ describe('GET /api/places/details', () => {
     );
     expect(requestUrl.searchParams.get('sessiontoken')).toBe('session-123');
     expect(requestUrl.searchParams.get('key')).toBe('test-api-key');
+    expect(reserveGooglePlacesRequest).toHaveBeenCalledWith(
+      'details',
+      'test-api-key'
+    );
     expect(mockFetch).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({

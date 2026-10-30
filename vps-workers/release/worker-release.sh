@@ -230,12 +230,14 @@ activate_release() {
   switch_current "$sha"
   if ! preflight; then
     echo "worker-release: preflight failed for $sha; restoring ${previous:-nothing}." >&2
-    if [ -n "$previous" ] && [ "$previous" != "$sha" ]; then
-      switch_current "$previous"
-    else
+    if [ -z "$previous" ]; then
       # A rejected first release must not remain the active or rollback target.
       rm -f "$ROOT/current" "$ROOT/app-live"
+    elif [ "$previous" != "$sha" ]; then
+      switch_current "$previous"
     fi
+    # Re-running the live SHA leaves its links in place: scheduled jobs keep
+    # running the release that was already serving.
     exit 1
   fi
   flock -u 8

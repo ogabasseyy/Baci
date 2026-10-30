@@ -75,3 +75,22 @@ test(
     assert.doesNotMatch(schedule, /vercel-error-remediator/);
   }
 );
+
+test(
+  'bugfix: a failed preflight on the live SHA keeps its active links',
+  linuxOnly,
+  () => {
+    const host = createHost();
+    release(host, host.firstSha);
+    writeFileSync(join(host.root, 'fail-preflight'), '');
+
+    const result = host.run('activate', host.firstSha);
+
+    assert.notEqual(result.status, 0);
+    assert.equal(host.run('status').stdout.trim(), host.firstSha);
+    assert.ok(existsSync(join(host.root, 'app-live')));
+    assert.ok(
+      existsSync(join(host.root, 'baci-workers/bin/process-gigl-tracking.sh'))
+    );
+  }
+);

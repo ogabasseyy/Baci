@@ -404,6 +404,7 @@ def _run_seed_unit_socket_probe(*, unit_prefix: str, peer_uid: int, peer_gid: in
     node.write_text("#!/bin/sh\nexit 0\n", encoding="ascii")
     node.chmod(0o755)
     unit = f"worker-seed-socket-probe-{unit_prefix}"
+    cleanup_attempted = False
     try:
         generated = seed_unit.systemd_command(
             f"baci-worker-seed-{'a' * 12}-{'b' * 32}.service", "a" * 12,
@@ -437,10 +438,18 @@ def _run_seed_unit_socket_probe(*, unit_prefix: str, peer_uid: int, peer_gid: in
             )
             raise RuntimeError(f"seed systemd direct-socket mount probe failed ({summary})")
     except subprocess.TimeoutExpired as error:
-        raise RuntimeError("seed systemd direct-socket mount probe timed out") from error
+        unit_exit = _normalized_unit_exit(_unit_journal_text(unit)) or "unit-state(unavailable)"
+        failure = f"seed systemd direct-socket mount probe timed out ({unit_exit})"
+        cleanup_attempted = True
+        try:
+            _cleanup_systemd_unit(unit)
+        except Exception:
+            raise RuntimeError(f"{failure}; cleanup=failed") from error
+        raise RuntimeError(failure) from error
     finally:
         seed_unit.EGRESS_SOCKET = original_socket
-        _cleanup_systemd_unit(unit)
+        if not cleanup_attempted:
+            _cleanup_systemd_unit(unit)
 
 
 def _run_seed_unit_socket_probe_with_synthetic_connector(synthetic_connect, **kwargs) -> None:

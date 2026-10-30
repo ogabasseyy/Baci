@@ -22,6 +22,7 @@ from worker_release_egress_systemd_integration import (
     _seed_socket_probe_failure_summary,
 )
 import worker_release_egress_systemd_integration as integration
+import dependency_seed_generation_unit as seed_unit
 from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture_modules
 
 
@@ -333,12 +334,14 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
 
             with patch.object(integration.os, "stat", side_effect=fake_stat), \
                  patch.object(integration.subprocess, "run", side_effect=run), \
-                 patch.object(integration, "_cleanup_systemd_unit"):
+                 patch.object(integration, "_cleanup_systemd_unit") as cleanup:
                 _run_seed_unit_socket_probe(
                     unit_prefix="123", peer_uid=1234, peer_gid=1234,
                     socket_path=socket_path, fixture_client=fixture_client,
                     hidden_socket=hidden_socket, fixture_root=fixture_root,
                 )
+
+            cleanup.assert_called_once_with("worker-seed-socket-probe-123")
 
             self.assertEqual(len(commands), 1)
             command = commands[0]
@@ -352,6 +355,49 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
                 and ":/run/baci-seed-tools" in argument
                 for argument in command
             ))
+
+    def test_seed_probe_timeout_preserves_unit_state_when_cleanup_fails(self):
+        unit_status = (
+            "LoadState=loaded\nActiveState=failed\nResult=exit-code\n"
+            "ExecMainCode=1\nExecMainStatus=124\nStatusErrno=0\n"
+            "StatusText=secret text must not escape\n"
+        )
+        original_socket = seed_unit.EGRESS_SOCKET
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fixture_root = root / "fixture"
+            fixture_root.mkdir()
+            fixture_client = fixture_root / "client.py"
+            socket_path = root / "broker.sock"
+            hidden_socket = root / "hidden.sock"
+            original_stat = os.stat
+
+            def fake_stat(path, *args, **kwargs):
+                if str(path) == "/proc/self/ns/net":
+                    return type("Stat", (), {"st_ino": 123})()
+                return original_stat(path, *args, **kwargs)
+
+            with patch.object(integration.os, "stat", side_effect=fake_stat), \
+                 patch.object(integration.subprocess, "run",
+                              side_effect=integration.subprocess.TimeoutExpired("systemd-run", 45)), \
+                 patch.object(integration, "_unit_journal_text", return_value=unit_status), \
+                 patch.object(integration, "_cleanup_systemd_unit",
+                              side_effect=RuntimeError("cleanup detail must not replace primary")) as cleanup:
+                with self.assertRaisesRegex(
+                        RuntimeError,
+                        r"seed systemd direct-socket mount probe timed out "
+                        r"\(unit-state\(load=loaded,active=failed,result=exit-code,"
+                        r"code=exited,status=124,errno=0\)\); cleanup=failed") as raised:
+                    _run_seed_unit_socket_probe(
+                        unit_prefix="123", peer_uid=1234, peer_gid=1234,
+                        socket_path=socket_path, fixture_client=fixture_client,
+                        hidden_socket=hidden_socket, fixture_root=fixture_root,
+                    )
+
+            cleanup.assert_called_once_with("worker-seed-socket-probe-123")
+            self.assertNotIn("secret", str(raised.exception))
+            self.assertNotIn("cleanup detail", str(raised.exception))
+            self.assertEqual(seed_unit.EGRESS_SOCKET, original_socket)
 
     def test_empty_run_probe_unit_is_accepted_by_diagnostics_and_cleanup(self):
         unit = "worker-egress-probe-123-empty-run"

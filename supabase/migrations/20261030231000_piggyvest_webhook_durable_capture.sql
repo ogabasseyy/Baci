@@ -48,6 +48,13 @@ CREATE TABLE public.piggyvest_webhook_captures (
       cardinality(key_families) BETWEEN 1 AND 4
       AND key_families <@ ARRAY['legacy', 'bank', 'custody', 'interest']::text[]
     ),
+  -- The matched signing families as one canonical string (sorted, comma
+  -- separated). Part of the capture identity: the same bytes first signed by
+  -- the wrong key family and later redelivered under the right one are two
+  -- rows, each keeping its own signature as immutable evidence.
+  signing_families text NOT NULL
+    CONSTRAINT piggyvest_webhook_captures_signing_families_check
+    CHECK (signing_families ~ '^(legacy|bank|custody|interest)(,(legacy|bank|custody|interest)){0,3}$'),
   key_status text NOT NULL
     CONSTRAINT piggyvest_webhook_captures_key_status_check
     CHECK (key_status IN ('current', 'overlap')),
@@ -64,7 +71,8 @@ CREATE TABLE public.piggyvest_webhook_captures (
   lease_until timestamptz NULL,
   processed_at timestamptz NULL,
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  CONSTRAINT piggyvest_webhook_captures_identity_key UNIQUE (event_key, body_digest)
+  CONSTRAINT piggyvest_webhook_captures_identity_key
+    UNIQUE (event_key, body_digest, signing_families)
 );
 
 CREATE INDEX piggyvest_webhook_captures_unprocessed_idx
@@ -110,6 +118,7 @@ BEGIN
     OR NEW.request_headers IS DISTINCT FROM OLD.request_headers
     OR NEW.key_version IS DISTINCT FROM OLD.key_version
     OR NEW.key_families IS DISTINCT FROM OLD.key_families
+    OR NEW.signing_families IS DISTINCT FROM OLD.signing_families
     OR NEW.key_status IS DISTINCT FROM OLD.key_status
     OR NEW.received_at IS DISTINCT FROM OLD.received_at THEN
     RAISE EXCEPTION 'captured webhook evidence is immutable' USING ERRCODE = '42501';
@@ -128,8 +137,11 @@ CREATE TRIGGER piggyvest_webhook_captures_immutable_evidence
 
 -- Capture: one atomic INSERT ... ON CONFLICT DO NOTHING. A rejected command
 -- raises before any row exists, so there is never a partial row. Duplicate
--- deliveries (same provider event id AND identical body digest) store
--- nothing new and report the existing row.
+-- deliveries (same provider event id, identical body digest AND the same
+-- matched signing families) store nothing new and report the existing row.
+-- A delivery whose signing families differ is a different capture: a
+-- correctly signed redelivery of bytes first seen under the wrong family
+-- keeps its own signature, and replay verifies each row on its own.
 CREATE FUNCTION public.capture_piggyvest_webhook_delivery(p_command jsonb)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -143,6 +155,7 @@ DECLARE
   v_event_id text;
   v_headers jsonb;
   v_families text[];
+  v_signing text;
   v_id uuid;
   v_state text;
 BEGIN
@@ -165,22 +178,23 @@ BEGIN
   IF jsonb_typeof(p_command->'keyFamilies') IS DISTINCT FROM 'array' THEN
     RAISE EXCEPTION 'invalid captured webhook key families' USING ERRCODE = '22023';
   END IF;
-  SELECT array_agg(family ORDER BY family)
+  SELECT array_agg(DISTINCT family ORDER BY family)
     INTO v_families
     FROM jsonb_array_elements_text(p_command->'keyFamilies') AS family;
+  v_signing := array_to_string(v_families, ',');
 
   INSERT INTO public.piggyvest_webhook_captures (
     event_key, provider_event_id, event_type, provider_transaction_id,
     body_digest, raw_body, signature, request_headers,
-    key_version, key_families, key_status
+    key_version, key_families, signing_families, key_status
   ) VALUES (
     coalesce(v_event_id, 'raw:' || v_digest), v_event_id,
     nullif(p_command->>'eventType', ''),
     nullif(p_command->>'providerTransactionId', ''),
     v_digest, v_payload, p_command->>'signature', v_headers,
-    p_command->>'keyVersion', v_families, p_command->>'keyStatus'
+    p_command->>'keyVersion', v_families, v_signing, p_command->>'keyStatus'
   )
-  ON CONFLICT (event_key, body_digest) DO NOTHING
+  ON CONFLICT (event_key, body_digest, signing_families) DO NOTHING
   RETURNING id INTO v_id;
 
   IF v_id IS NOT NULL THEN
@@ -189,7 +203,8 @@ BEGIN
   SELECT c.id, c.processing_state INTO v_id, v_state
     FROM public.piggyvest_webhook_captures c
     WHERE c.event_key = coalesce(v_event_id, 'raw:' || v_digest)
-      AND c.body_digest = v_digest;
+      AND c.body_digest = v_digest
+      AND c.signing_families = v_signing;
   RETURN jsonb_build_object('outcome', 'duplicate', 'id', v_id, 'processingState', v_state);
 END
 $$;

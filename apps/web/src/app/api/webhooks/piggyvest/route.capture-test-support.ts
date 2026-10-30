@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { vi } from 'vitest';
+import type { PiggyvestClaimedCapture } from '@/schemas/piggyvest/webhook-capture';
 
 /**
  * Shared test double for the durable capture RPCs. Every authentic
@@ -52,17 +53,23 @@ export interface FakeCaptureRow {
   signature: string;
   headers: Record<string, string>;
   keyVersion: string;
-  keyFamilies: string[];
+  keyFamilies: PiggyvestClaimedCapture['key_families'];
   keyStatus: string;
+  /** Sorted, comma-joined matched families: part of the capture identity. */
+  signingFamilies: string;
   eventType: string | null;
-  processingState: 'pending' | 'processed';
+  providerTransactionId: string | null;
+  processingState: 'pending' | 'claimed' | 'processed' | 'needs_review';
+  claimToken: string | null;
+  attempts: number;
 }
 
 /**
  * In-memory stand-in for the database capture functions. It mirrors the SQL
  * contract the route relies on: an atomic insert that recomputes the body
- * digest, dedupe on (event key, body digest), and inline completion that
- * only ever moves a row to processed. `failCapture` simulates an outage.
+ * digest, dedupe on (event key, body digest, matched signing families),
+ * inline completion that only ever moves a pending row to processed, and
+ * the worker claim/lease/resolve cycle. `failCapture` simulates an outage.
  */
 export function createFakeCaptureStore() {
   const store = {
@@ -78,13 +85,10 @@ export function createFakeCaptureStore() {
           ): Promise<CaptureRpcResult> => {
             if (name === 'resolve_piggyvest_webhook_capture') {
               store.resolveCalls.push(args);
-              const row = store.rows.find(
-                (candidate) => candidate.id === args.p_id
-              );
-              if (row && args.p_state === 'processed') {
-                row.processingState = 'processed';
-              }
-              return Promise.resolve({ data: true, error: null });
+              return Promise.resolve({
+                data: store.resolve(args),
+                error: null,
+              });
             }
             if (store.failCapture) {
               return Promise.resolve({
@@ -102,6 +106,42 @@ export function createFakeCaptureStore() {
         }),
       };
     },
+    /** Mirrors resolve_piggyvest_webhook_capture's fencing rules. */
+    resolve(args: Record<string, unknown>): boolean {
+      const row = store.rows.find((candidate) => candidate.id === args.p_id);
+      if (!row) return false;
+      const token = args.p_claim_token as string | null;
+      const fenced =
+        token === null
+          ? row.processingState === 'pending'
+          : row.processingState === 'claimed' && row.claimToken === token;
+      if (!fenced) return false;
+      row.processingState = args.p_state as FakeCaptureRow['processingState'];
+      row.claimToken = null;
+      return true;
+    },
+    /** Mirrors claim_piggyvest_webhook_captures for pending rows. */
+    claim(limit: number): PiggyvestClaimedCapture[] {
+      const due = store.rows
+        .filter((row) => row.processingState === 'pending')
+        .slice(0, limit);
+      return due.map((row) => {
+        row.processingState = 'claimed';
+        row.claimToken = crypto.randomUUID();
+        row.attempts += 1;
+        return {
+          capture_id: row.id,
+          claim_token: row.claimToken,
+          raw_hex: row.rawHex,
+          signature: row.signature,
+          key_version: row.keyVersion,
+          key_families: row.keyFamilies,
+          attempts: row.attempts,
+          event_type: row.eventType,
+          provider_transaction_id: row.providerTransactionId,
+        };
+      });
+    },
     capture(command: Record<string, unknown>): CaptureRpcResult {
       const raw = Buffer.from(String(command.rawHex), 'hex');
       const digest = createHash('sha256').update(raw).digest('hex');
@@ -109,8 +149,14 @@ export function createFakeCaptureStore() {
         return { data: null, error: { message: 'digest mismatch' } };
       }
       const eventKey = (command.eventId as string | null) ?? `raw:${digest}`;
+      const signingFamilies = [...new Set(command.keyFamilies as string[])]
+        .sort()
+        .join(',');
       const existing = store.rows.find(
-        (row) => row.eventKey === eventKey && row.bodyDigest === digest
+        (row) =>
+          row.eventKey === eventKey &&
+          row.bodyDigest === digest &&
+          row.signingFamilies === signingFamilies
       );
       if (existing) {
         return capturedReceipt({
@@ -127,10 +173,16 @@ export function createFakeCaptureStore() {
         signature: String(command.signature),
         headers: command.headers as Record<string, string>,
         keyVersion: String(command.keyVersion),
-        keyFamilies: command.keyFamilies as string[],
+        keyFamilies:
+          command.keyFamilies as PiggyvestClaimedCapture['key_families'],
         keyStatus: String(command.keyStatus),
+        signingFamilies,
         eventType: (command.eventType as string | null) ?? null,
+        providerTransactionId:
+          (command.providerTransactionId as string | null) ?? null,
         processingState: 'pending',
+        claimToken: null,
+        attempts: 0,
       };
       store.rows.push(row);
       return capturedReceipt({ id: row.id });

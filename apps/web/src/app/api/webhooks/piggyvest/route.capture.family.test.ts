@@ -44,6 +44,12 @@ vi.mock('@/lib/piggyvest/event-quarantine', () => ({
   recordQuarantineEvent: (...args: unknown[]) => mocks.quarantine(...args),
 }));
 
+import { verifyStoredPiggyvestDelivery } from '@/lib/piggyvest/verify-stored-piggyvest-delivery';
+import { drainPiggyvestWebhookCaptures } from '@/lib/piggyvest/webhook-capture-drain';
+import {
+  isAuthorizationQuarantine,
+  processVerifiedDelivery,
+} from './process-delivery';
 import { POST } from './route';
 import { createFakeCaptureStore } from './route.capture-test-support';
 
@@ -142,8 +148,8 @@ afterEach(() => {
   alerts.mockRestore();
 });
 
-describe('wrong-family quarantine does not consume the capture', () => {
-  it('quarantines the wrong-family delivery and leaves the capture pending', async () => {
+describe('capture identity includes the matched signing family', () => {
+  it('quarantines the wrong-family delivery and leaves its capture pending', async () => {
     const response = await post(wrongFamilyKey);
 
     expect(response.status).toBe(200);
@@ -158,7 +164,7 @@ describe('wrong-family quarantine does not consume the capture', () => {
     expect(store.resolveCalls).toEqual([]);
   });
 
-  it('a correctly signed redelivery of the same bytes reaches the bank handler and credits once', async () => {
+  it('a correctly signed redelivery gets its own row with its own signature and credits once', async () => {
     await post(wrongFamilyKey);
 
     const second = await post(bankKey);
@@ -166,11 +172,30 @@ describe('wrong-family quarantine does not consume the capture', () => {
     expect(second.status).toBe(200);
     expect(await second.json()).toEqual({ received: true, bankQueued: true });
     expect(mocks.bankIntake).toHaveBeenCalledTimes(1);
-    expect(store.rows).toHaveLength(1);
-    expect(store.rows[0]?.processingState).toBe('processed');
+    expect(store.rows).toHaveLength(2);
+    const [wrong, corrected] = store.rows;
+    expect(wrong?.keyFamilies).toEqual(['interest']);
+    expect(corrected?.keyFamilies).toEqual(['bank']);
+    expect(wrong?.signature).toBe(sign(wrongFamilyKey, inflow));
+    expect(corrected?.signature).toBe(sign(bankKey, inflow));
+    expect(wrong?.rawHex).toBe(corrected?.rawHex);
+    expect(wrong?.processingState).toBe('pending');
+    expect(corrected?.processingState).toBe('processed');
   });
 
-  it('a genuinely processed duplicate still short-circuits without reprocessing', async () => {
+  it('a same-family duplicate is still deduplicated to one row', async () => {
+    await post(wrongFamilyKey);
+    await post(wrongFamilyKey);
+
+    expect(store.rows).toHaveLength(1);
+    expect(mocks.quarantine).toHaveBeenCalledTimes(2);
+
+    await post(bankKey);
+    await post(bankKey);
+    expect(store.rows).toHaveLength(2);
+  });
+
+  it('a processed bank-family duplicate short-circuits without reprocessing', async () => {
     await post(wrongFamilyKey);
     await post(bankKey);
     mocks.bankIntake.mockClear();
@@ -180,5 +205,87 @@ describe('wrong-family quarantine does not consume the capture', () => {
     expect(await third.json()).toEqual({ received: true, duplicate: true });
     expect(mocks.bankIntake).not.toHaveBeenCalled();
     expect(mocks.quarantine).toHaveBeenCalledTimes(1);
+    expect(store.rows).toHaveLength(2);
+  });
+
+  it('the processed row of one family never short-circuits another family', async () => {
+    await post(bankKey);
+    expect(store.rows[0]?.processingState).toBe('processed');
+
+    const wrong = await post(wrongFamilyKey);
+
+    expect(await wrong.json()).toEqual({ received: true, quarantined: true });
+    expect(store.rows).toHaveLength(2);
+    expect(store.rows[1]?.processingState).toBe('pending');
+  });
+});
+
+describe('a transient failure on the corrected delivery, then a drain run', () => {
+  function drain() {
+    const client = store.client();
+    return drainPiggyvestWebhookCaptures({
+      claim: () => Promise.resolve(store.claim(10)),
+      resolve: async (id, token, state, error) => {
+        const result = await client.rpc('resolve_piggyvest_webhook_capture', {
+          p_id: id,
+          p_claim_token: token,
+          p_state: state,
+          p_error: error,
+        });
+        return result.data === true;
+      },
+      verify: (input) => verifyStoredPiggyvestDelivery(input),
+      process: async (delivery) => {
+        const response = await processVerifiedDelivery(delivery, {
+          createClient: () => client as never,
+          getPiggyvestConfig: () => null,
+        });
+        return {
+          status: response.status,
+          authorizationQuarantine: isAuthorizationQuarantine(response),
+        };
+      },
+    });
+  }
+
+  it('reaches the bank handler from the corrected row and credits exactly once', async () => {
+    await post(wrongFamilyKey);
+    mocks.bankIntake.mockRejectedValueOnce(
+      new Error('transient intake failure')
+    );
+
+    const corrected = await post(bankKey);
+
+    // The drain is attested, so the provider is told the delivery is
+    // durable; the corrected row waits for the drain.
+    expect(corrected.status).toBe(200);
+    expect(await corrected.json()).toMatchObject({ processing: 'deferred' });
+    expect(store.rows.map((row) => row.processingState)).toEqual([
+      'pending',
+      'pending',
+    ]);
+
+    const summary = await drain();
+
+    // The wrong-family row is replayed under its OWN signature (still the
+    // wrong family, never the bank handler); the corrected row credits.
+    expect(summary).toMatchObject({ claimed: 2, processed: 1, retried: 1 });
+    expect(mocks.bankIntake).toHaveBeenCalledTimes(2);
+    // One call failed transiently, exactly one was accepted.
+    const settled = await Promise.allSettled(
+      mocks.bankIntake.mock.results.map((result) => result.value)
+    );
+    expect(
+      settled.filter((result) => result.status === 'fulfilled')
+    ).toHaveLength(1);
+    expect(
+      store.rows.filter((row) => row.processingState === 'processed')
+    ).toHaveLength(1);
+    expect(store.rows[1]?.processingState).toBe('processed');
+    expect(store.rows[0]?.processingState).toBe('pending');
+
+    // Replaying again must not credit a second time.
+    await drain();
+    expect(mocks.bankIntake).toHaveBeenCalledTimes(2);
   });
 });

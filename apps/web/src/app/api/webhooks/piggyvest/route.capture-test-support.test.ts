@@ -116,4 +116,65 @@ describe('createFakeCaptureStore', () => {
     expect(store.resolveCalls).toHaveLength(1);
     expect(() => client.from()).toThrow('mocked out');
   });
+
+  it('treats the matched signing families as part of the capture identity', () => {
+    const store = createFakeCaptureStore();
+    const wrong = store.capture(command('{}', { keyFamilies: ['interest'] }));
+    const right = store.capture(command('{}', { keyFamilies: ['bank'] }));
+    expect(wrong.data).toMatchObject({ outcome: 'captured' });
+    expect(right.data).toMatchObject({ outcome: 'captured' });
+    expect(store.rows.map((row) => row.signingFamilies)).toEqual([
+      'interest',
+      'bank',
+    ]);
+
+    // Same family again, even listed in another order, is a duplicate.
+    const shared = store.capture(
+      command('{}', { keyFamilies: ['legacy', 'bank'] })
+    );
+    const reordered = store.capture(
+      command('{}', { keyFamilies: ['bank', 'legacy'] })
+    );
+    expect(shared.data).toMatchObject({ outcome: 'captured' });
+    expect(reordered.data).toMatchObject({ outcome: 'duplicate' });
+    expect(store.rows).toHaveLength(3);
+  });
+
+  it('claims pending rows once, fenced by a lease token', () => {
+    const store = createFakeCaptureStore();
+    store.capture(command('{}'));
+
+    const [claimed, ...rest] = store.claim(10);
+    expect(rest).toEqual([]);
+    expect(claimed).toMatchObject({
+      raw_hex: Buffer.from('{}').toString('hex'),
+      attempts: 1,
+    });
+    expect(store.claim(10)).toEqual([]);
+
+    const row = store.rows[0];
+    // An inline (no token) completion cannot touch a claimed row.
+    expect(
+      store.resolve({
+        p_id: row?.id,
+        p_claim_token: null,
+        p_state: 'processed',
+      })
+    ).toBe(false);
+    expect(
+      store.resolve({
+        p_id: row?.id,
+        p_claim_token: crypto.randomUUID(),
+        p_state: 'processed',
+      })
+    ).toBe(false);
+    expect(
+      store.resolve({
+        p_id: row?.id,
+        p_claim_token: claimed?.claim_token,
+        p_state: 'needs_review',
+      })
+    ).toBe(true);
+    expect(row?.processingState).toBe('needs_review');
+  });
 });

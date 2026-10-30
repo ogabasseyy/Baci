@@ -170,6 +170,75 @@ $$;
 
 DO $$
 DECLARE
+  v_body bytea := '\x7b2266616d223a317d';
+  v_wrong jsonb;
+  v_right jsonb;
+  v_first jsonb;
+  v_second jsonb;
+  v_again jsonb;
+  v_before bigint := pg_temp.pv_count();
+BEGIN
+  -- The matched signing family is part of the capture identity: the same
+  -- bytes first signed by the wrong family, then redelivered under the
+  -- right one, are two immutable rows with their own signatures.
+  v_wrong := pg_temp.pv_cmd(v_body, 'evt-family', 'bank-transfer.inflow.success', 'txn-family')
+    || jsonb_build_object('keyFamilies', jsonb_build_array('interest'), 'signature', repeat('cd', 64));
+  v_right := pg_temp.pv_cmd(v_body, 'evt-family', 'bank-transfer.inflow.success', 'txn-family')
+    || jsonb_build_object('keyFamilies', jsonb_build_array('bank'), 'signature', repeat('ef', 64));
+
+  v_first := public.capture_piggyvest_webhook_delivery(v_wrong);
+  v_second := public.capture_piggyvest_webhook_delivery(v_right);
+  IF v_first->>'outcome' IS DISTINCT FROM 'captured'
+    OR v_second->>'outcome' IS DISTINCT FROM 'captured'
+    OR v_first->>'id' = v_second->>'id'
+    OR pg_temp.pv_count() <> v_before + 2 THEN
+    RAISE EXCEPTION 'a corrected-authority delivery must get its own row: % / %', v_first, v_second;
+  END IF;
+  IF (SELECT signature FROM public.piggyvest_webhook_captures WHERE id = (v_first->>'id')::uuid)
+       IS DISTINCT FROM repeat('cd', 64)
+    OR (SELECT signature FROM public.piggyvest_webhook_captures WHERE id = (v_second->>'id')::uuid)
+       IS DISTINCT FROM repeat('ef', 64)
+    OR (SELECT key_families FROM public.piggyvest_webhook_captures WHERE id = (v_second->>'id')::uuid)
+       IS DISTINCT FROM ARRAY['bank']::text[] THEN
+    RAISE EXCEPTION 'each row must keep its own signature and signing family';
+  END IF;
+
+  -- Same family again is still a duplicate, scoped to that family.
+  v_again := public.capture_piggyvest_webhook_delivery(v_right);
+  IF v_again->>'outcome' IS DISTINCT FROM 'duplicate'
+    OR v_again->>'id' IS DISTINCT FROM v_second->>'id'
+    OR pg_temp.pv_count() <> v_before + 2 THEN
+    RAISE EXCEPTION 'a same-family redelivery must dedupe to its own row: %', v_again;
+  END IF;
+  IF NOT public.resolve_piggyvest_webhook_capture((v_second->>'id')::uuid, NULL, 'processed', NULL) THEN
+    RAISE EXCEPTION 'the corrected row must complete inline';
+  END IF;
+  v_again := public.capture_piggyvest_webhook_delivery(v_right);
+  IF v_again->>'processingState' IS DISTINCT FROM 'processed' THEN
+    RAISE EXCEPTION 'the processed short-circuit must apply to the same family: %', v_again;
+  END IF;
+  v_again := public.capture_piggyvest_webhook_delivery(v_wrong);
+  IF v_again->>'outcome' IS DISTINCT FROM 'duplicate'
+    OR v_again->>'processingState' IS DISTINCT FROM 'pending'
+    OR v_again->>'id' IS DISTINCT FROM v_first->>'id' THEN
+    RAISE EXCEPTION 'a processed row of another family must not short-circuit this one: %', v_again;
+  END IF;
+
+  -- A key shared by several families is one identity regardless of order.
+  v_first := public.capture_piggyvest_webhook_delivery(
+    v_right || jsonb_build_object('keyFamilies', jsonb_build_array('legacy', 'bank')));
+  v_again := public.capture_piggyvest_webhook_delivery(
+    v_right || jsonb_build_object('keyFamilies', jsonb_build_array('bank', 'legacy')));
+  IF v_first->>'outcome' IS DISTINCT FROM 'captured'
+    OR v_again->>'outcome' IS DISTINCT FROM 'duplicate'
+    OR v_again->>'id' IS DISTINCT FROM v_first->>'id' THEN
+    RAISE EXCEPTION 'the signing family set must be order independent: % / %', v_first, v_again;
+  END IF;
+END
+$$;
+
+DO $$
+DECLARE
   v_before bigint := pg_temp.pv_count();
   v_valid jsonb := pg_temp.pv_cmd('\x7b7d20'::bytea, 'evt-bad', 'x');
   v_case text;

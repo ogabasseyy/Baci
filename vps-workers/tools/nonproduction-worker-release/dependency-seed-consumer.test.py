@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from worker_release_dependency_seed_consumer import consume_seed
 from worker_release_dependency_artifacts import BuilderRejected, copy_source_tree, make_read_only_input
 from dependency_seed_publisher import EXPECTED_PNPM, make_receipt, _publish_seed
-from worker_release_dependency_policy_cache import MAX_CACHE_BYTES, validate_receipt
+from worker_release_dependency_policy_cache import MAX_CACHE_BYTES, RECEIPT_NAME, validate_receipt
 from dependency_seed_test_support import fixture_generation_capability
 
 SHA_A = "a" * 40
@@ -84,7 +84,7 @@ class DependencySeedConsumerTests(unittest.TestCase):
                              "verified registry metadata")
             self.assertEqual((cache / "metadata.json").read_text(encoding="utf-8"),
                              "verified registry metadata")
-            self.assertEqual((input_root / "pnpm-cache-receipt.json").stat().st_mode & 0o222, 0)
+            self.assertEqual((input_root / RECEIPT_NAME).stat().st_mode & 0o222, 0)
 
     def test_wrong_sha_and_missing_seed_fail_closed_without_global_fallback(self):
         with tempfile.TemporaryDirectory() as temporary:

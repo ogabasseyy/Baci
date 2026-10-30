@@ -72,12 +72,16 @@ const defaultLedgers: CredentialReaderLedgers = {
     // unchanged. This fingerprint is not a service-role authorization renewal.
     'apps/web/src/scripts/process-ai-storefront-jobs.ts':
       'a730ed7b56887a231aa4a483526354162ec1dcb514a47fd899e0c347e2268d03',
+    // Reviewed #3847 (1a17a9b900): the five isolated-release jobs below only
+    // swapped inline entrypoint detection for vps-workers/lib/is-entrypoint.mjs
+    // (symlinked releases); credential reads unchanged. This fingerprint is not
+    // a service-role authorization renewal.
     'vps-workers/jobs/cleanup-agentic-request-records.mjs':
-      '29d02f20900fe0d476d57b2620dd324a4830ff200a66fc3b4454aaf48047dd19',
+      'd6e9fa7c098a010da404d679b6617a7de58cebfaf03c873dcc66cd3e36775cf3',
     'vps-workers/jobs/cleanup-legacy-expense-receipts.mjs':
-      '642437579009d3bfcf70dba0ed26b67e49f17eb4ed65f16cf6d6924bc80d4bd4',
+      '00ffd1b2417263dde2d39756579645a1ce6d5bc754b6209fc09e326acc64c138',
     'vps-workers/jobs/cleanup-private-expense-receipts.mjs':
-      'fa73f2cb71434ab15e08a49326f52cefb3ab02b262b8ed6cb8d5b0175dbd60e5',
+      '3597b618c1e4bfcb0c98462bcadbcc280d7570d56cbd9bd77fdb906d275a6e5d',
     'vps-workers/jobs/cleanup-import-uploads.mjs':
       '00c9de97809d2ba2280276f875506f62a56fea4c4cf89d09ade132df3105a385',
     'vps-workers/jobs/cleanup-push-tokens.mjs':
@@ -85,9 +89,9 @@ const defaultLedgers: CredentialReaderLedgers = {
     'vps-workers/jobs/push-receipts.mjs':
       '53fdf8d8b8b3b897c533d150ddbdbfa8c250df465cca6f8eea7fbe8806a4b96c',
     'vps-workers/jobs/supabase-retention-cleanup.mjs':
-      'fd260d7c9e8fa080ed938d659e009402554bbcf2915ad26823daa97b3d0f9595',
+      'a4f4c7f0338ca6395a67a3cae75c3a86ccb7f3f97f19d8f6a8e295eb3fa0a152',
     'vps-workers/jobs/sync-gigl-service-centres.mjs':
-      'f25ef9f60e7297033e1d8b42f71ceba82cee4fe42c7cbce1b201f5ff8f8e72e8',
+      'fa6c2dc262e46ee1ead9f4330fe921fe23782fa79e4fe7864377dafe7b4a609b',
     'scripts-tmp/check-cdn-access.ts':
       'a2d1896f28a50ba065b33f2b0666116f77bfd46a8b5f15110446550bfc29b647',
     'scripts-tmp/list-missing-parents.ts':

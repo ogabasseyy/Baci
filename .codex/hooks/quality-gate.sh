@@ -203,9 +203,25 @@ run_check() {
   fi
 }
 
-run_check "Biome lint" "${TURBO_CMD[@]}" lint
-run_check "TypeScript typecheck" "${TURBO_CMD[@]}" typecheck
-run_check "Test suite" "${TURBO_CMD[@]}" test
+# Scope to packages changed since the origin/main merge base. Empty output
+# (QUALITY_GATE_FULL=1, no origin/main, no merge base) keeps the full gate.
+HOOK_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+AFFECTED_ARGS=()
+for affected_base_script in \
+  "$ROOT/ci_scripts/quality-gate-affected-base.sh" \
+  "$HOOK_DIR/../../ci_scripts/quality-gate-affected-base.sh"; do
+  [ -f "$affected_base_script" ] || continue
+  affected_base=$(sh "$affected_base_script" "$ROOT" 2>/dev/null || true)
+  if [ -n "$affected_base" ]; then
+    export TURBO_SCM_BASE="$affected_base"
+    AFFECTED_ARGS=(--affected)
+  fi
+  break
+done
+
+run_check "Biome lint" "${TURBO_CMD[@]}" lint ${AFFECTED_ARGS[@]+"${AFFECTED_ARGS[@]}"}
+run_check "TypeScript typecheck" "${TURBO_CMD[@]}" typecheck ${AFFECTED_ARGS[@]+"${AFFECTED_ARGS[@]}"}
+run_check "Test suite" "${TURBO_CMD[@]}" test ${AFFECTED_ARGS[@]+"${AFFECTED_ARGS[@]}"}
 
 should_run_coderabbit=0
 case "${CODEX_QUALITY_GATE_CODERABBIT:-auto}" in

@@ -2,17 +2,17 @@
 
 The single place to see where the agentic commerce work stands and what happens next. Update it whenever a step finishes: tick the box, add the date, and add the PR link or commit.
 
-- **Roadmap:** [2026-10-29-agentic-ucp-completion.md](2026-10-29-agentic-ucp-completion.md). It holds the findings (F1–F38), the milestones and the tasks.
+- **Roadmap:** [2026-10-29-agentic-ucp-completion.md](2026-10-29-agentic-ucp-completion.md). It holds the findings (F1–F39), the milestones and the tasks.
 - **Plans:** one executable plan per pull request, saved as `2026-MM-DD-agentic-m<milestone>-<n>-<name>.md` in this folder.
 
 ## Now
 
 | | |
 | --- | --- |
-| **Current plan** | Milestone 0, plan 1: remove the admin client from agentic routes |
-| **Next action** | Plan 1 build: tasks 1–7 committed; task 8 in progress (worktree `.worktrees/agentic-m0-admin-client`). Before any push: a branch-wide CodeRabbit review (rate-limited so far) |
-| **Waiting on the owner** | Merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851) after its gates pass |
-| **Last updated** | 30 October 2026 |
+| **Current plan** | Milestone 0, plan 1 is built and in review as draft PR [ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869); plan 2 is next |
+| **Next action** | Plan 2: latest-docs check, then write the plan while plan 1's reviews run |
+| **Waiting on the owner** | OK to replace plan 1's PR branch with the version rebuilt on today's main (local commit `ede636ee97`); merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851); read-only production queries for plan 2 |
+| **Last updated** | 31 October 2026 |
 
 ## How every plan moves (the loop)
 
@@ -22,8 +22,8 @@ Each plan goes through these steps in order. A step is done only with evidence: 
 2. **Write the plan.** Use exact files, complete code, exact commands, and TDD steps.
 3. **Independent review.** A reviewer that did not write the plan checks it. Apply the valid findings and record each review round.
 4. **Build with TDD.** One fresh worker per plan task: write the failing test, run it red, write the code, run it green, then commit. The orchestrator reviews each task's diff before the next starts. A task without red-then-green evidence is not done.
-5. **Local gates.** Affected tests, typecheck, lint, the capability gate when cited files change, and `coderabbit review --agent -t uncommitted` before every commit.
-6. **Pull request.** Push and open the PR only with the owner's go-ahead.
+5. **Local gates.** The tests the change touches, affected-package checks, and the capability gate when cited files change. Run `coderabbit review --agent -t uncommitted` when it is available; when it is rate-limited or unavailable, skip it and say so in the PR (never claim it ran). Full suites run in CI.
+6. **Pull request.** Push commits as checkpoints and open a **draft** PR early, then comment `@codex review`. Keep building the next task while reviews run, and fix findings as they arrive (owner's preference, 31 Oct).
 7. **PR gates.** CI green on the latest commit; Codex verdict ("Didn't find any major issues" issue comment for that commit); the required AI-review gate; every review thread resolved. Any rebase restarts this step.
 8. **Merge.** Only with the owner's approval. Merging to main starts the production deploy (database migrations first), so approving the merge approves the deploy.
 9. **Production check.** Run the plan's read-only verification and record the result. A merged migration is not proof that it was applied.
@@ -55,9 +55,10 @@ Plan: [2026-10-30-agentic-m0-1-admin-client-removal.md](2026-10-30-agentic-m0-1-
 - [x] Latest-docs check (30 Oct: protocol docs unaffected; Supabase JWT-role switching, imported ES256 signing keys and the definer-function pattern all confirmed)
 - [x] Plan written (30 Oct; SQL proven in a throwaway Postgres; all 45 replacement snippets match main `1a17a9b900`)
 - [ ] Independent review, fixes applied
-- [ ] Built with TDD (plan tasks 1–10). Done: tasks 1–7 (`ab48e66`, `6b16a99`, `ca58d25`, `4d21c1d`, `558881e`), each red then green; the create-handler test was added during the build
-- [ ] Local gates passed
-- [ ] PR opened (owner OK):
+- [x] Built with TDD (plan tasks 1–10, 30 Oct): every task red then green; the create-handler test was added during the build
+- [x] Local gates passed (30 Oct): 40 test files and 195 tests, both SQL tests in a throwaway Postgres 17, capability gate (178 tests). CodeRabbit unavailable (rate-limited, no seat); full suites left to CI
+- [x] PR opened (owner OK): draft [ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869), 31 Oct; Codex review requested
+- [ ] Branch synced with main after #3860 (rebuilt locally, inventory and capability record regenerated once; push waits for the owner's OK)
 - [ ] PR gates green
 - [ ] Merged (owner OK, deploys)
 - [ ] Production check: payment-split function live, `anon` cannot execute it
@@ -177,6 +178,8 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | --- | --- | --- | --- |
 | 30 Oct | Roadmap | Five external review rounds | All findings applied; F33–F38 added |
 | 30 Oct | Plan 1 | Codex on PR #3851 (commit `faf0ddf`) | One P2: the edge inventory binds the edited agentic route files, so it must be regenerated after they are committed. Fixed in plan 1 Task 8. |
+| 31 Oct | Plan 1 code | Codex on PR #3869 | Requested; pending |
+| 31 Oct | Plan 1 branch | Orchestrator | The first push rewrote commit IDs, so the capability record named a commit only this Mac had. Fixed: the push script now keeps IDs identical and stops on any mismatch. |
 
 ## Change log
 
@@ -185,3 +188,6 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | 30 Oct | Tracker created. Roadmap reviewed and restructured; plan 1 written. |
 | 30 Oct | Hook PR #3858 opened: local quality gates scoped to affected packages, with full-gate fallbacks for migrations, root config and cross-workspace reads. |
 | 30 Oct | Docs PR #3851 opened. First latest-docs check recorded: new finding F39, F23 and F25 refined. |
+| 30 Oct | Plan 1 built (11 commits) and checked locally. |
+| 31 Oct | Workflow change (owner): skip CodeRabbit when unavailable; draft PR plus `@codex review` early; keep building while reviews run. |
+| 31 Oct | Plan 1 opened as draft PR #3869. Main's two failing tests were fixed by #3860; plan 1 rebuilt on top of it. |

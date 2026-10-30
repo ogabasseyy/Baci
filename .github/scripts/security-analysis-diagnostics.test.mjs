@@ -29,6 +29,15 @@ function validate(report, { empty = false, sarif = true, requested = ['probe.ts'
 }
 
 const complete = { results: [], errors: [], paths: { scanned: ['probe.ts'] } };
+test('full scans have a longer job budget without extending PR and push scans', () => {
+  const semgrep = parse(workflow).jobs.semgrep;
+  assert.equal(
+    semgrep['timeout-minutes'],
+    "${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 180 || 60 }}"
+  );
+  const full = semgrep.steps.find((step) => step.name === 'Run full Semgrep on scheduled and manual scans');
+  assert.match(full.run, /^semgrep ci --no-suppress-errors --timeout 15 --sarif/);
+});
 test('complete zero-error analysis passes and preserves unfiltered SARIF', () => {
   assert.equal(validate(complete).status, 0);
 });

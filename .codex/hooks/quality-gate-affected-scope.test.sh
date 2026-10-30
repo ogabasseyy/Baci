@@ -17,7 +17,7 @@ fail() {
 }
 
 REPO=$(mktemp -d)
-trap 'rm -rf "$REPO"' EXIT
+trap 'rm -rf "$REPO" "${STUB_DIR:-}"' EXIT
 
 git -C "$REPO" init -q || fail "init temp git repo"
 git -C "$REPO" config user.email "codex-test@example.com"
@@ -31,8 +31,10 @@ mkdir -p "$REPO/apps/web/src/lib"
 printf 'export const changed = 1;\n' > "$REPO/apps/web/src/lib/changed.ts"
 printf 'import { describe, it, expect } from "vitest";\ndescribe("changed", () => { it("works", () => expect(1).toBe(1)); });\n' > "$REPO/apps/web/src/lib/changed.test.ts"
 
-STUB_BIN="$REPO/bin"
-PNPM_LOG="$REPO/pnpm.log"
+# Stubs live outside the repo so they are not part of its change set.
+STUB_DIR=$(mktemp -d)
+STUB_BIN="$STUB_DIR/bin"
+PNPM_LOG="$STUB_DIR/pnpm.log"
 mkdir -p "$STUB_BIN"
 cat > "$STUB_BIN/pnpm" <<'SH'
 #!/usr/bin/env bash
@@ -75,9 +77,15 @@ output=$(run_stubbed_gate)
 [ -z "$output" ] || fail "gates without a checkout helper should allow stop without output"
 assert_unscoped "checkout without quality-gate-affected-base.sh"
 
-# With the checkout's own helper, the gate scopes to the origin/main merge base.
+# With the checkout's own helper (committed on main, as in a real checkout),
+# the gate scopes to the origin/main merge base.
 mkdir -p "$REPO/ci_scripts"
 cp "$SCRIPT_DIR/../../ci_scripts/quality-gate-affected-base.sh" "$REPO/ci_scripts/"
+git -C "$REPO" add ci_scripts
+base_sha=$(git -C "$REPO" commit-tree "$(git -C "$REPO" write-tree)" -p "$work_sha" -m "helper")
+work_sha=$(git -C "$REPO" commit-tree "$base_sha^{tree}" -p "$base_sha" -m "work 2")
+git -C "$REPO" update-ref "refs/heads/$work_branch" "$work_sha"
+git -C "$REPO" update-ref refs/remotes/origin/main "$base_sha"
 output=$(run_stubbed_gate)
 [ -z "$output" ] || fail "affected-scoped gates should allow stop without output"
 for check in lint typecheck test; do

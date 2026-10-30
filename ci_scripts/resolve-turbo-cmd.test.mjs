@@ -84,16 +84,13 @@ function commit(cwd, message) {
   return git(cwd, 'rev-parse', 'HEAD');
 }
 
-// A worktree stand-in: ci_scripts copied in, a base commit that origin/main
-// points at (unless withOrigin is false), and a later HEAD commit on top.
+// A worktree stand-in: ci_scripts committed in the base commit that
+// origin/main points at (unless withOrigin is false), and a later HEAD commit
+// on top. Committing the scripts keeps them out of the change set, which the
+// affected-base helper would otherwise treat as a root-level change.
 function createWorktree({ withOrigin = true, withAffectedScript = true } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'resolve-turbo-affected-'));
   git(dir, 'init', '-q');
-  const base = commit(dir, 'base');
-  if (withOrigin) {
-    git(dir, 'update-ref', 'refs/remotes/origin/main', base);
-  }
-  commit(dir, 'work');
   mkdirSync(join(dir, 'ci_scripts'));
   copyFileSync(resolverPath, join(dir, 'ci_scripts/resolve-turbo-cmd.sh'));
   if (withAffectedScript) {
@@ -109,6 +106,12 @@ function createWorktree({ withOrigin = true, withAffectedScript = true } = {}) {
     "#!/bin/sh\nprintf '%s\\0' '--filter=!@baci/skipped'\n"
   );
   chmodSync(join(dir, 'ci_scripts/turbo-sparse-exclude-filters.sh'), 0o755);
+  git(dir, 'add', '-A');
+  const base = commit(dir, 'base');
+  if (withOrigin) {
+    git(dir, 'update-ref', 'refs/remotes/origin/main', base);
+  }
+  commit(dir, 'work');
   return { dir, base };
 }
 

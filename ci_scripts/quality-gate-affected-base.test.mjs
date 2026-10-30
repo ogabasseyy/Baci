@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -220,5 +220,51 @@ test('prints nothing and exits 0 outside a git repository', () => {
     assert.equal(result.stdout, '');
   } finally {
     rmSync(notRepo, { recursive: true, force: true });
+  }
+});
+
+function repoWithBase() {
+  const dir = createRepo();
+  const base = commit(dir, 'base');
+  git(dir, 'update-ref', 'refs/remotes/origin/main', base);
+  return { dir, base };
+}
+
+function writeFile(dir, path, content = 'x\n') {
+  mkdirSync(dirname(join(dir, path)), { recursive: true });
+  writeFileSync(join(dir, path), content);
+}
+
+test('keeps the full gate for an uncommitted change outside workspace packages', () => {
+  const { dir } = repoWithBase();
+  try {
+    writeFile(dir, 'supabase/migrations/20990101000000_example.sql');
+    assert.deepEqual(run({ cwd: dir, args: [dir] }), { status: 0, stdout: '', stderr: '' });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('keeps the full gate for a committed root-level change', () => {
+  const { dir } = repoWithBase();
+  try {
+    writeFile(dir, 'turbo.json', '{}\n');
+    git(dir, 'add', 'turbo.json');
+    commit(dir, 'root config');
+    assert.equal(run({ cwd: dir, args: [dir] }).stdout, '');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('scopes changes inside workspace packages and Markdown elsewhere', () => {
+  const { dir, base } = repoWithBase();
+  try {
+    writeFile(dir, 'apps/web/src/changed.ts');
+    writeFile(dir, 'packages/shared/src/changed.ts');
+    writeFile(dir, 'docs/notes.md');
+    assert.equal(run({ cwd: dir, args: [dir] }).stdout, base);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

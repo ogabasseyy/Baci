@@ -533,6 +533,6 @@ Before marking any task as complete, verify:
 Many agents share one Mac, and CI's Quality Gate already runs lint, typecheck and tests for every PR. Locally:
 
 - Run the tests your change touches: each new or changed test file, failing first and then passing.
-- For broader checks, use the affected scope: `base=$(sh ci_scripts/quality-gate-affected-base.sh)`, then `TURBO_SCM_BASE=$base pnpm turbo <lint|typecheck|test> ${base:+--affected}`. When the helper prints nothing (no `origin/main` merge base, or `QUALITY_GATE_FULL=1`), this runs the full task. Plain `--affected` compares against the local `main` branch, which is often stale and selects every package.
+- For broader checks, use the affected scope: `base=$(sh ci_scripts/quality-gate-affected-base.sh)`, then `TURBO_SCM_BASE=$base pnpm turbo <lint|typecheck|test> ${base:+--affected}`. When the helper prints nothing (no `origin/main` merge base, `QUALITY_GATE_FULL=1`, or a change outside `apps/` and `packages/` other than Markdown, such as a migration), this runs the full task. Plain `--affected` compares against the local `main` branch, which is often stale and selects every package.
 - Do not run full monorepo suites locally unless a task requires it, and never in a loop or in parallel with another full run.
 - The Claude and Codex Stop hooks use this affected scope automatically. Set `QUALITY_GATE_FULL=1` to force the full gate.

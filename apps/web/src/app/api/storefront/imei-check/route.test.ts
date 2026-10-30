@@ -361,6 +361,10 @@ function importRoute() {
   return routeModulePromise;
 }
 
+// Load the production graph during collection so its Vite transform time does
+// not consume the first wallet-behavior test's timeout budget.
+await importRoute();
+
 describe('POST /api/storefront/imei-check', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();

@@ -445,6 +445,67 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
                 shutil.rmtree(candidate / "apps" / "web" / "node_modules")
                 install_payload(payload, candidate, owner_uid=os.geteuid())
             freeze(candidate, worker_gid)
+            # When the actual release smoke fails, run two bounded probes
+            # through the same production sandbox builder before failing the
+            # test. The probes expose only fixed exit markers: one proves the
+            # Node process starts; the other proves dotenv resolves from the
+            # pinned candidate and all fixed masked paths remain hidden.
+            from worker_release_runtime_acl import grant_candidate_acl, verifier_gid, verifier_uid
+            from worker_release_runtime_diagnostics import MAX_CAPTURE_BYTES
+            from worker_release_runtime_smoke import run_fixed_smokes
+            from worker_release_runtime_verifier import (
+                MAX_CHECK_SECONDS, RuntimeVerificationRejected, SYSTEMD_RUN, SYSTEMCTL,
+                _execute_fixed_unit, _unit_name,
+            )
+            grant_candidate_acl(candidate, expected_sha=SHA, owner_uid=0, owner_gid=worker_gid)
+            probe_markers = []
+
+            def probe_sandbox(unit, cwd, _command, properties, index):
+                if index != 2:
+                    return
+                node = ("/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "NODE_ENV=production",
+                        "/usr/bin/node", "-e", "process.exit(47)")
+                try:
+                    _execute_fixed_unit(unit, cwd, node, properties, index + 1)
+                except RuntimeVerificationRejected as error:
+                    if "status=47" not in str(error):
+                        raise
+                    probe_markers.append("node-started")
+                else:
+                    raise AssertionError("runtime diagnostic control marker was not observed")
+                package_probe = (
+                    "const fs=require('node:fs'); const path=require('node:path'); "
+                    "const m=require('dotenv'); if(typeof m.config!=='function')process.exit(49); "
+                    "const root=fs.realpathSync(process.cwd().replace(/\\/vps-workers$/,'')); "
+                    "const resolved=fs.realpathSync(require.resolve('dotenv')); "
+                    "if(!resolved.startsWith(root+path.sep+'node_modules'+path.sep+'dotenv'+path.sep))process.exit(50); "
+                    "for(const p of ['/srv/baci-workers/releases','/srv/baci-workers/runtime',"
+                    "'/srv/baci-workers/locks','/etc','/var/log','/var/cache','/var/spool',"
+                    "'/var/backups','/opt','/usr/local']){try{fs.accessSync(p);process.exit(51)}"
+                    "catch(e){if(!['ENOENT','EACCES','EPERM'].includes(e?.code))process.exit(52)}} "
+                    "process.exit(48);"
+                )
+                command = ("/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "NODE_ENV=production",
+                           "/usr/bin/node", "--input-type=commonjs", "-e", package_probe)
+                try:
+                    _execute_fixed_unit(unit, cwd, command, properties, index + 1)
+                except RuntimeVerificationRejected as error:
+                    if "status=48" not in str(error):
+                        raise
+                    probe_markers.append("dotenv-candidate-and-masks-verified")
+                else:
+                    raise AssertionError("runtime diagnostic package marker was not observed")
+
+            run_fixed_smokes(
+                candidate, "f" * 64, execute_unit=probe_sandbox, unit_name=_unit_name,
+                rejected=RuntimeVerificationRejected, max_seconds=MAX_CHECK_SECONDS,
+                max_output_bytes=MAX_CAPTURE_BYTES, systemd_run=SYSTEMD_RUN,
+                systemctl=SYSTEMCTL, runtime_uid=verifier_uid(), runtime_gid=verifier_gid(),
+            )
+            self.assertEqual(probe_markers, [
+                "node-started", "dotenv-candidate-and-masks-verified",
+            ])
+            print("runtime sandbox diagnostic markers: node-started, dotenv-candidate-and-masks-verified")
             observed_units = []
             from worker_release_runtime_verifier import _unit_name as real_unit_name
 

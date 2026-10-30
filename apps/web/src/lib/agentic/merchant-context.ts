@@ -54,17 +54,29 @@ function hasOnlyNonBlankEntries(values: readonly string[]): boolean {
 
 interface AgenticMerchantContextRpcClient {
   rpc(
-    functionName: 'resolve_agentic_merchant_context',
+    functionName:
+      | 'resolve_agentic_merchant_context'
+      | 'resolve_agentic_merchant_payment_split',
     args: { p_slug: string }
   ): PromiseLike<{ data: unknown; error: unknown }>;
 }
 
+type AgenticPaymentSplitResult =
+  | { ok: true; paystackSubaccountCode: string | null }
+  | { ok: false };
+
 /**
  * Resolves the configured merchant through the narrowly scoped
  * SECURITY DEFINER projection instead of a service-role client, so
- * user-facing cart routes never bypass RLS to read merchant config.
+ * user-facing agentic routes never bypass RLS to read merchant config.
+ * The projection withholds the Paystack subaccount; checkout completion
+ * opts into the separate payment-split RPC with `includePaymentSplit`.
  */
-export async function resolveAgenticMerchantContextFromRpc(): Promise<AgenticMerchantContext | null> {
+export async function resolveAgenticMerchantContextFromRpc({
+  includePaymentSplit = false,
+}: {
+  includePaymentSplit?: boolean;
+} = {}): Promise<AgenticMerchantContext | null> {
   const merchantSlug = getConfiguredAgenticMerchantSlug();
   if (!merchantSlug) {
     return null;
@@ -96,7 +108,7 @@ export async function resolveAgenticMerchantContextFromRpc(): Promise<AgenticMer
     agentic_agent_allowlist: record.agent_allowlist,
     agentic_agent_denylist: record.agent_denylist,
   });
-  return {
+  const context: AgenticMerchantContext = {
     agent_user_agent_allowlist: requestControls.allowlist,
     agent_user_agent_denylist: requestControls.denylist,
     agentic_checkout_enabled: record.agentic_checkout_enabled !== false,
@@ -113,6 +125,46 @@ export async function resolveAgenticMerchantContextFromRpc(): Promise<AgenticMer
         ? record.paystack_subaccount_code
         : null,
     slug: typeof record.slug === 'string' ? record.slug : merchantSlug,
+  };
+  if (!includePaymentSplit) {
+    return context;
+  }
+  const paymentSplit = await readAgenticPaymentSplit(
+    contextClient,
+    normalizedSlug
+  );
+  if (!paymentSplit.ok) {
+    return null;
+  }
+  return {
+    ...context,
+    paystack_subaccount_code: paymentSplit.paystackSubaccountCode,
+  };
+}
+
+async function readAgenticPaymentSplit(
+  contextClient: AgenticMerchantContextRpcClient,
+  slug: string
+): Promise<AgenticPaymentSplitResult> {
+  const { data, error } = await contextClient.rpc(
+    'resolve_agentic_merchant_payment_split',
+    { p_slug: slug }
+  );
+  if (error) {
+    logger.error({
+      error: sanitizeForLog(error),
+      message: 'Agentic merchant payment split RPC failed',
+    });
+    return { ok: false };
+  }
+  const row = Array.isArray(data) ? data[0] : null;
+  const code =
+    row && typeof row === 'object'
+      ? (row as Record<string, unknown>).paystack_subaccount_code
+      : null;
+  return {
+    ok: true,
+    paystackSubaccountCode: typeof code === 'string' ? code : null,
   };
 }
 

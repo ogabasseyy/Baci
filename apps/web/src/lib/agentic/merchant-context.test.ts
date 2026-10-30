@@ -454,6 +454,92 @@ describe('resolveAgenticMerchantContextFromRpc', () => {
     mocks.contextRpc.mockResolvedValueOnce({ data: [], error: null });
     await expect(resolveAgenticMerchantContextFromRpc()).resolves.toBeNull();
   });
+
+  it('reads the payment split through its own scoped RPC when asked', async () => {
+    stubBaseEnv();
+    vi.stubEnv('OPENAI_AGENTIC_MERCHANT_SLUG', 'demo-store');
+    mocks.contextRpc
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: 'merchant-1',
+            slug: 'demo-store',
+            paystack_subaccount_code: null,
+          },
+        ],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [{ paystack_subaccount_code: 'ACCT_split' }],
+        error: null,
+      });
+
+    const context = await resolveAgenticMerchantContextFromRpc({
+      includePaymentSplit: true,
+    });
+
+    expect(mocks.contextRpc).toHaveBeenNthCalledWith(
+      2,
+      'resolve_agentic_merchant_payment_split',
+      { p_slug: 'demo-store' }
+    );
+    expect(context).toMatchObject({
+      id: 'merchant-1',
+      paystack_subaccount_code: 'ACCT_split',
+    });
+  });
+
+  it('does not read the payment split by default', async () => {
+    stubBaseEnv();
+    vi.stubEnv('OPENAI_AGENTIC_MERCHANT_SLUG', 'demo-store');
+    mocks.contextRpc.mockResolvedValueOnce({
+      data: [{ id: 'merchant-1', slug: 'demo-store' }],
+      error: null,
+    });
+
+    const context = await resolveAgenticMerchantContextFromRpc();
+
+    expect(mocks.contextRpc).toHaveBeenCalledTimes(1);
+    expect(context?.paystack_subaccount_code).toBeNull();
+  });
+
+  it('fails closed when the payment split RPC errors', async () => {
+    stubBaseEnv();
+    vi.stubEnv('OPENAI_AGENTIC_MERCHANT_SLUG', 'demo-store');
+    mocks.contextRpc
+      .mockResolvedValueOnce({
+        data: [{ id: 'merchant-1', slug: 'demo-store' }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: null, error: { message: 'down' } });
+
+    await expect(
+      resolveAgenticMerchantContextFromRpc({ includePaymentSplit: true })
+    ).resolves.toBeNull();
+  });
+
+  it('keeps a missing subaccount null so completion still answers 424', async () => {
+    stubBaseEnv();
+    vi.stubEnv('OPENAI_AGENTIC_MERCHANT_SLUG', 'demo-store');
+    mocks.contextRpc
+      .mockResolvedValueOnce({
+        data: [{ id: 'merchant-1', slug: 'demo-store' }],
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: [{ paystack_subaccount_code: null }],
+        error: null,
+      });
+
+    const context = await resolveAgenticMerchantContextFromRpc({
+      includePaymentSplit: true,
+    });
+
+    expect(context).toMatchObject({
+      id: 'merchant-1',
+      paystack_subaccount_code: null,
+    });
+  });
 });
 
 it('uses a server-scoped context client by default', async () => {

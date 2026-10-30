@@ -73,7 +73,7 @@ describe('ImeiCheckDevicePage', () => {
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
       '490154203237518'
     );
-    fireEvent.press(screen.getByText('Verify Now - ₦1,500'));
+    fireEvent.press(screen.getByText('Verify Now - ₦1,000'));
 
     expect(onVerify).toHaveBeenCalledWith('full', '490154203237518');
   });
@@ -124,7 +124,7 @@ describe('runtime capability selection', () => {
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
       '490154203237518'
     );
-    expect(screen.getByText('Verify Now - ₦700')).toBeTruthy();
+    expect(screen.getByText('Verify Now - ₦400')).toBeTruthy();
     mockAvailableKeys = [];
     rerender(
       <ImeiCheckDevicePage
@@ -178,6 +178,6 @@ describe('runtime capability selection', () => {
     fireEvent.press(screen.getByRole('radio', { name: /eSIM Compatibility/ }));
     fireEvent.press(screen.getByText('Samsung'));
     expect(screen.queryByText('eSIM Compatibility')).toBeNull();
-    expect(screen.queryByText('Verify Now - ₦700')).toBeNull();
+    expect(screen.queryByText('Verify Now - ₦400')).toBeNull();
   });
 });

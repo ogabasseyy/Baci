@@ -3,6 +3,7 @@
 -- that script's enabled triggers plus its merchants, customers, and orders.
 BEGIN;
 CREATE OR REPLACE FUNCTION pg_temp.assert_true(ok boolean, label text) RETURNS void LANGUAGE plpgsql AS $$ BEGIN IF ok IS DISTINCT FROM true THEN RAISE EXCEPTION 'FAIL: %', label; END IF; END $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_true(boolean, text) TO PUBLIC; -- called after SET ROLE
 
 -- A stale customers row does not strand a manual claim: the document went to
 -- the order email as an attachment, so verified sign-in as that recipient

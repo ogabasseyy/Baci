@@ -370,6 +370,7 @@ BEGIN
   LIMIT 1;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.manage_order_edit_variant_inventory_fixture(uuid, uuid, uuid, uuid, boolean) TO PUBLIC; -- called after SET ROLE
 
 SET LOCAL ROLE anon;
 DO $$

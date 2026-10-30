@@ -102,6 +102,7 @@ BEGIN
   END IF;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_identity_verified(text, text, uuid, boolean) TO PUBLIC; -- called after SET ROLE
 
 SET LOCAL ROLE authenticated;
 SELECT pg_temp.assert_identity_verified(

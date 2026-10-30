@@ -199,6 +199,7 @@ BEGIN
   END IF;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_storefront_variant_ids(text, uuid, uuid[]) TO PUBLIC; -- called after SET ROLE
 
 SET LOCAL ROLE anon;
 SELECT set_config('request.jwt.claim.role', 'anon', true);

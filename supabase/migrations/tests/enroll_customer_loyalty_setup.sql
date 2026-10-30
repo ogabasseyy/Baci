@@ -10,9 +10,7 @@ BEGIN
   IF p_condition IS DISTINCT FROM true THEN RAISE EXCEPTION '%', p_message; END IF;
 END;
 $$;
--- New functions are no longer executable by other roles by default; later
--- parts of the suite call the helper after switching to API roles.
-GRANT EXECUTE ON FUNCTION pg_temp.assert_true(boolean, text) TO PUBLIC;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_true(boolean, text) TO PUBLIC; -- called after SET ROLE
 
 -- Simulate an authenticated storefront caller for auth.uid().
 CREATE FUNCTION pg_temp.as_user(p_user uuid)

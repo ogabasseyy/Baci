@@ -52,6 +52,7 @@ BEGIN
   );
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.quiz_device_proof(uuid, text, uuid) TO PUBLIC; -- called after SET ROLE
 
 INSERT INTO public.merchants (id, name, slug)
 VALUES (

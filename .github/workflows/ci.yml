@@ -502,6 +502,7 @@ jobs:
           --sql-check supabase/migrations/tests/enroll_customer_loyalty_concurrency.sql
           --sql-check supabase/tests/vtu_intent_claim.sql
           --sql-check supabase/tests/vtu_intent_claim_concurrency.sql
+          --sql-check supabase/tests/finalize_store_credit_order_payment_authorization.sql
           --sql-check supabase/migrations/tests/chatgpt_ads_settings_and_destination.sql
           --sql-check supabase/migrations/tests/chatgpt_ads_admin_destination.sql
           --sql-check supabase/migrations/tests/x_ads_settings_and_destination.sql

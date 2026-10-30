@@ -104,7 +104,7 @@ if [ -f apps/web/package.json ]; then mkdir -p "$tsx_dir" && printf '#!/bin/sh\\
   return bin;
 }
 
-export function createHost() {
+export function createHost({ nodeFromPath = false } = {}) {
   const base = mkdtempSync(join(tmpdir(), 'baci-worker-release-'));
   const origin = createOrigin(base);
   const stubs = createStubs(base);
@@ -115,7 +115,7 @@ export function createHost() {
     PATH: `${stubs}:${process.env.PATH}`,
     BACI_WORKER_ROOT: root,
     BACI_WORKER_ORIGIN: origin.bare,
-    BACI_WORKER_NODE_BIN: join(stubs, 'node'),
+    ...(nodeFromPath ? {} : { BACI_WORKER_NODE_BIN: join(stubs, 'node') }),
     BACI_WORKER_LOCK_WAIT_SECONDS: '5',
   };
   const run = (...args) =>

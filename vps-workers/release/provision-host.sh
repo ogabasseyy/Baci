@@ -34,6 +34,12 @@ migrate_env() {
     if [[ "$line" =~ $DOTENV_KEY_PATTERN ]]; then
       key="${BASH_REMATCH[2]}"
       if [[ "$key" =~ $DROPPED_KEY_PATTERN ]]; then continue; fi
+      # Workers always run the isolated release, whatever checkout the legacy
+      # host used (e.g. /opt/baci/app).
+      if [ "$key" = BACI_REPO_DIR ]; then
+        output+="BACI_REPO_DIR=$ROOT/app-live"$'\n'
+        continue
+      fi
       # Checkout paths first: the nested legacy app-live would otherwise be
       # rewritten into the worker directory instead of the release symlink.
       line="${line//$LEGACY_DIR\/app-live/$ROOT/app-live}"

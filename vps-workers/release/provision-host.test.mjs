@@ -116,3 +116,18 @@ test(
     assert.equal(result.stdout, 'BACI_REPO_DIR=/srv/w/app-live\n');
   }
 );
+
+test(
+  'bugfix: points any legacy checkout setting at the isolated release',
+  linuxOnly,
+  () => {
+    const dir = mkdtempSync(join(tmpdir(), 'baci-provision-'));
+    const envFile = join(dir, '.env');
+    writeFileSync(envFile, 'export BACI_REPO_DIR = /opt/baci/app\nKEEP=1\n');
+
+    const result = migrate(envFile);
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, 'BACI_REPO_DIR=/srv/w/app-live\nKEEP=1\n');
+  }
+);

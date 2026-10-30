@@ -94,3 +94,16 @@ test(
     );
   }
 );
+
+test(
+  'bugfix: resolves node from the worker PATH for preflight and schedule',
+  linuxOnly,
+  () => {
+    const host = createHost({ nodeFromPath: true });
+
+    release(host, host.firstSha);
+
+    const schedule = readFileSync(join(host.root, 'installed-crontab'), 'utf8');
+    assert.match(schedule, /stubs\/node .*run-cache-invalidation-cron\.mjs/);
+  }
+);

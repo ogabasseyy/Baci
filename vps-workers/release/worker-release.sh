@@ -13,7 +13,8 @@ set -euo pipefail
 
 ROOT="${BACI_WORKER_ROOT:-/srv/baci-worker}"
 ORIGIN="${BACI_WORKER_ORIGIN:-https://github.com/ogabasseyy/Baci.git}"
-NODE_BIN="${BACI_WORKER_NODE_BIN:-/usr/bin/node}"
+# Resolved from the sanitized worker PATH; preflight, cron and services share it.
+NODE_BIN="${BACI_WORKER_NODE_BIN:-$(command -v node || true)}"
 LOCK_WAIT="${BACI_WORKER_LOCK_WAIT_SECONDS:-180}"
 REPO="$ROOT/repo.git"
 RELEASES="$ROOT/releases"
@@ -214,6 +215,7 @@ install_release_runtime() {
 activate_release() {
   local sha="$1" verify="${2:-verify}" previous=""
   [ -f "$RELEASES/$sha/.complete" ] || fail "release $sha has not been built."
+  [ -n "$NODE_BIN" ] && [ -x "$NODE_BIN" ] || fail "node is not on the worker PATH."
   # Rollback stays possible while GitHub is unreachable; it only selects
   # the release that was verified and live immediately before.
   if [ "$verify" = verify ]; then fetch_commit "$sha"; fi

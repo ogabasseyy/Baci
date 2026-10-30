@@ -3512,6 +3512,69 @@ describe('POST /api/orders — wallet response shape', () => {
     expect(body.order.payment_method).toBe('wallet');
     expect(finalizeSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('logs and never reports the order paid when the finalize RPC refuses', async () => {
+    // finalize_wallet_order_payment verifies the wallet debit server-side and
+    // can refuse. The route must log it and leave walletFinalized false, so
+    // the response never claims the order was paid by wallet.
+    const finalizeSpy = vi.fn((_params?: unknown) =>
+      Promise.resolve({
+        data: null,
+        error: { code: 'P0001', message: 'wallet_debit_insufficient' },
+      })
+    );
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase({
+        redeem_wallet_for_order: {
+          data: [
+            {
+              success: true,
+              redeemed_amount: 1000,
+              new_balance: 0,
+              transaction_id: '88888888-aaaa-bbbb-cccc-eeeeeeeeeeee',
+            },
+          ],
+          error: null,
+        },
+      });
+      const originalRpc = sb.rpc;
+      sb.rpc = vi.fn((name: string, params?: unknown) => {
+        if (name === 'finalize_wallet_order_payment') {
+          return finalizeSpy(params);
+        }
+        return originalRpc(name);
+      });
+      return sb;
+    }) as unknown as never);
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          use_wallet_credit: true,
+          wallet_amount: 1000,
+        }),
+      })
+    );
+    const body = await readJson(response);
+
+    // The HTTP status is deliberately not pinned: only the "never report the
+    // order paid, and log" contract is.
+    expect(finalizeSpy).toHaveBeenCalledWith({
+      p_amount: 1000,
+      p_order_id: 'order-id',
+    });
+    expect(body.order?.payment_status).not.toBe('paid');
+    expect(body.order?.payment_method).not.toBe('wallet');
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Failed to finalize wallet payment',
+        orderId: 'order-id',
+      })
+    );
+  });
 });
 
 describe('POST /api/orders — non-NGN currency guards', () => {

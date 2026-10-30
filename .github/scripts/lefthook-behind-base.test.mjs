@@ -263,3 +263,22 @@ test("never overrides a developer's core.sshCommand", () => {
   }
 });
 
+test("never overrides a developer's GIT_SSH wrapper", () => {
+  const { root, work, featureSha } = setup();
+  try {
+    const wrapper = fakeSsh(root, 'ssh-wrapper');
+    const defaultSsh = fakeSsh(root, 'ssh');
+    git(work, 'remote', 'set-url', 'origin', 'ssh://git@example.invalid/repo.git');
+    const result = runHookWith(work, featureSha, {
+      GIT_SSH: wrapper.script,
+      PATH: `${root}:${process.env.PATH}`,
+    });
+
+    assert.equal(result.status, 0);
+    assert.ok(existsSync(wrapper.log), 'GIT_SSH wrapper was not used');
+    assert.equal(existsSync(defaultSsh.log), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+

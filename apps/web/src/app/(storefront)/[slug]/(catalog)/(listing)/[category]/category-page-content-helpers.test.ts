@@ -244,6 +244,30 @@ describe('normalizeCategoryPageProducts', () => {
 
     expect(result.graphics).toBe('NVIDIA RTX 4070');
   });
+
+  it('preserves created_at timestamps through category normalization and client projection', () => {
+    const normalized = normalizeCategoryPageProducts(
+      [
+        {
+          id: 'prod-8',
+          name: 'Pixel 11 Pro',
+          slug: 'pixel-11-pro',
+          description: 'Flagship phone',
+          price: 1450000,
+          created_at: '2026-10-30T12:00:00.000Z',
+          condition: 'new',
+          stock: 5,
+          images: ['https://cdn.ogabassey.com/pixel-11-pro.avif'],
+          categories: [{ name: 'Smartphones', slug: 'smartphones' }],
+        },
+      ],
+      'smartphones'
+    );
+
+    expect(normalized[0]?.created_at).toBe('2026-10-30T12:00:00.000Z');
+    const clientProjected = toClientCategoryPageProducts(normalized);
+    expect(clientProjected[0]?.created_at).toBe('2026-10-30T12:00:00.000Z');
+  });
 });
 
 describe('buildCategoryPageHubModel', () => {

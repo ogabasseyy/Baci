@@ -1,10 +1,10 @@
 import { render } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { computeHeroMobileHeadingMaxAreaPx2 } from './compute-hero-mobile-heading-max-area-px2';
+import { computeHeroMobileImageMinAreaPx2 } from './compute-hero-mobile-image-min-area-px2';
 import { HeroMobileCarousel } from './hero-mobile-carousel';
 import {
-  computeHeroMobileHeadingMaxAreaPx2,
-  computeHeroMobileImageMinAreaPx2,
   HERO_MOBILE_CONTROLS_ROW_CLASSES,
   HERO_MOBILE_PANEL_CLASSES,
   HERO_MOBILE_SLIDE_GRID_CLASSES,

@@ -16,8 +16,8 @@ import {
   MOBILE_HERO_MAX_SRCSET_WIDTH,
   MOBILE_HERO_QUALITY_STEPS,
   MOBILE_HERO_SOURCE_MEDIA,
-  selectHeroAvifQualityForByteCap,
 } from './hero-mobile-image-config';
+import { selectHeroAvifQualityForByteCap } from './select-hero-avif-quality-for-byte-cap';
 
 const CDN_HERO =
   'https://cdn.ogabassey.com/core-assets/products/tecno-spark-40-pro.avif';

@@ -50,43 +50,6 @@ export const HERO_MOBILE_TEXT_COLUMN_HORIZONTAL_PADDING_PX = 40;
 export const HERO_MOBILE_IMAGE_COLUMN_PADDING_PX = 8;
 export const HERO_MOBILE_IMAGE_ELEMENT_PADDING_PX = 8;
 
-export function computeHeroMobileHeadingMaxAreaPx2(
-  viewportWidthPx: number
-): number {
-  const panelWidthPx = Math.max(
-    0,
-    viewportWidthPx - HERO_MOBILE_SECTION_HORIZONTAL_PADDING_PX
-  );
-  const textColumnWidthPx = Math.max(
-    0,
-    panelWidthPx * (3 / 5) - HERO_MOBILE_TEXT_COLUMN_HORIZONTAL_PADDING_PX
-  );
-  const maxHeadingHeightPx =
-    HERO_MOBILE_TITLE_MAX_LINES *
-    HERO_MOBILE_TITLE_FONT_SIZE_PX *
-    HERO_MOBILE_TITLE_LINE_HEIGHT_RATIO;
-  return textColumnWidthPx * maxHeadingHeightPx;
-}
-
-export function computeHeroMobileImageMinAreaPx2(
-  viewportWidthPx: number
-): number {
-  const panelWidthPx = Math.max(
-    0,
-    viewportWidthPx - HERO_MOBILE_SECTION_HORIZONTAL_PADDING_PX
-  );
-  const imageColumnWidthPx = panelWidthPx * (2 / 5);
-  const totalPaddingPx =
-    HERO_MOBILE_IMAGE_COLUMN_PADDING_PX + HERO_MOBILE_IMAGE_ELEMENT_PADDING_PX;
-  const contentWidthPx = Math.max(0, imageColumnWidthPx - totalPaddingPx);
-  const contentHeightPx = Math.max(
-    0,
-    HERO_MOBILE_PANEL_HEIGHT_PX - totalPaddingPx
-  );
-  const squareSidePx = Math.min(contentWidthPx, contentHeightPx);
-  return squareSidePx * squareSidePx;
-}
-
 /** Controls row shown when the carousel has more than one slide — the real
  * hero is ~52px taller with it, so the fallback must reserve it too. */
 export const HERO_MOBILE_CONTROLS_ROW_CLASSES =

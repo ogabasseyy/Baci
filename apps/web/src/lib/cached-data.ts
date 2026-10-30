@@ -1498,6 +1498,7 @@ const CATEGORY_PAGE_PRODUCT_BASE_SELECT = `
           description,
           price,
           compare_at_price,
+          created_at,
           images,
           category,
           brand,

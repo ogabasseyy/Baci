@@ -172,4 +172,40 @@ describe('CategoryRecentCarousel', () => {
     expect(links[0]).toHaveAttribute('href', '/p/samsung-galaxy-s26-fe');
     expect(links[1]).toHaveAttribute('href', '/p/samsung-galaxy-z-flip8');
   });
+
+  it('promotes a freshly added category product ahead of older configured pins when created_at is newer than the pin cutoff', () => {
+    const productsWithFreshArrival = [
+      {
+        id: 'fresh-1',
+        name: 'Galaxy S27 Ultra',
+        slug: 'galaxy-s27-ultra',
+        category: 'Smartphones',
+        category_slug: 'smartphones',
+        created_at: '2026-11-15T10:00:00.000Z',
+        price: '₦2,100,000',
+        image: 'https://cdn.ogabassey.com/core-assets/products/s27-ultra.avif',
+      },
+      {
+        id: 'pin-1',
+        name: 'iPhone Duo',
+        slug: 'iphone-duo',
+        category: 'Smartphones',
+        category_slug: 'smartphones',
+        created_at: '2026-10-26T00:00:00.000Z',
+        price: '₦3,200,000',
+        image: 'https://cdn.ogabassey.com/core-assets/products/iphone-duo.avif',
+      },
+    ] as unknown as Product[];
+
+    render(
+      <CategoryRecentCarousel
+        categoryName="Smartphones"
+        products={productsWithFreshArrival}
+      />
+    );
+
+    const links = screen.getAllByRole('link');
+    expect(links[0]).toHaveAttribute('href', '/p/galaxy-s27-ultra');
+    expect(links[1]).toHaveAttribute('href', '/p/iphone-duo');
+  });
 });

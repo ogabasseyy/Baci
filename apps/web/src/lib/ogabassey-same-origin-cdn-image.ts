@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
-import {
-  MOBILE_HERO_LCP_MAX_BYTES,
-  selectHeroAvifQualityForByteCap,
-} from '@/components/storefront/ogabassey/components/hero-mobile-image-config';
+import { MOBILE_HERO_LCP_MAX_BYTES } from '@/components/storefront/ogabassey/components/hero-mobile-image-config';
+import { selectHeroAvifQualityForByteCap } from '@/components/storefront/ogabassey/components/select-hero-avif-quality-for-byte-cap';
 import { buildUpstreamOgabasseyTransformUrl } from '@/lib/build-upstream-ogabassey-transform-url';
 import { getCandidateQualitiesForRequest } from '@/lib/get-candidate-qualities-for-request';
 import type { OgabasseyCdnImageProxyRequest } from '@/schemas/ogabassey-cdn-image-proxy';

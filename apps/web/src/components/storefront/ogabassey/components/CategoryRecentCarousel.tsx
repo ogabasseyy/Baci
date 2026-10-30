@@ -132,10 +132,9 @@ export function CategoryRecentCarousel({
     }
     return [
       {
-        created_at: (product as Product & { created_at?: string | null })
-          .created_at,
+        created_at: product.created_at,
         category: product.category,
-        category_slug: product.categorySlug,
+        category_slug: product.category_slug ?? product.categorySlug,
         imageUrl,
         product,
         slug: product.slug,

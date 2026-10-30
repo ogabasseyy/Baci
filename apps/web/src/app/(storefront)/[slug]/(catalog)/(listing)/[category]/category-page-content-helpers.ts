@@ -74,6 +74,12 @@ export function normalizeCategoryPageProducts(
     const normalized = normalizeProduct(product, {
       preferredCategorySlug,
     });
+    const createdAt =
+      typeof product.created_at === 'string' && product.created_at.trim()
+        ? product.created_at.trim()
+        : product.created_at === null
+          ? null
+          : undefined;
 
     return {
       id: normalized.id,
@@ -89,6 +95,7 @@ export function normalizeCategoryPageProducts(
       condition: CONDITION_MAP[normalized.condition] || 'New',
       stock: normalized.stock,
       category_slug: normalized.category_slug,
+      ...(createdAt !== undefined ? { created_at: createdAt } : {}),
       product_key_specs: normalized.product_key_specs ?? undefined,
       graphics: getGraphicsCard(normalized.product_key_specs),
     };

@@ -148,9 +148,7 @@ export const OgabasseyImeiChecker: React.FC<OgabasseyImeiCheckerProps> = ({
           onClearImei();
         }}
         onCheckBlacklist={
-          result &&
-          resultDevice === 'smartphone' &&
-          displayedTierKeys.includes('blacklist')
+          result && resultDevice === 'smartphone'
             ? () => {
                 void runCheck('blacklist', result.imei, resultDevice, true);
               }

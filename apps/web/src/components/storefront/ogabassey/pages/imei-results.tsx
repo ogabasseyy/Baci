@@ -10,11 +10,11 @@ import {
 import { ScanBarcode, Smartphone } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
+import { ImeiBlacklistCheckAction } from './imei-blacklist-check-action';
 import { ImeiCheckerError } from './imei-checker-error';
 import { ImeiCheckerPending } from './imei-checker-pending';
 import { ImeiCheckerStatusCard } from './imei-checker-status-card';
 import { getImeiResultStatusCards } from './imei-checker-status-cards';
-import { getDisplayTier } from './imei-checker-tiers';
 import { getVerdictTone } from './imei-checker-tone';
 import type { ImeiResult } from './imei-checker-types';
 import { ImeiRemediationOffer } from './imei-remediation-offer';
@@ -174,17 +174,11 @@ export function OgabasseyImeiResults({
           >
             {effectiveVerdict.text}
           </p>
-          {canCheckBlacklist ? (
-            <button
-              className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--store-primary)] px-5 py-3 text-sm font-bold text-[var(--store-primary-text,#ffffff)] hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-4 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isChecking}
-              onClick={onCheckBlacklist}
-              type="button"
-            >
-              {isChecking
-                ? 'Checking blacklist…'
-                : `Check blacklist status · ${getDisplayTier('blacklist').priceDisplay}`}
-            </button>
+          {canCheckBlacklist && onCheckBlacklist ? (
+            <ImeiBlacklistCheckAction
+              isChecking={isChecking}
+              onCheck={onCheckBlacklist}
+            />
           ) : null}
         </div>
       </div>

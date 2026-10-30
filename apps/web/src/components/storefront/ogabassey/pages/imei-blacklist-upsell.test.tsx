@@ -1,5 +1,11 @@
-import { IMEI_SERVICE_TIERS } from '@baci/shared/imei';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { IMEI_SERVICE_TIERS, type ImeiDeviceCategory } from '@baci/shared/imei';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import type { AnchorHTMLAttributes } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OgabasseyImeiChecker } from './imei-checker';
@@ -9,6 +15,14 @@ const mocks = vi.hoisted(() => ({
   poll: vi.fn(),
   available: true,
   customerId: 'upsell-customer',
+  device: 'smartphone' as ImeiDeviceCategory,
+}));
+vi.mock('./use-imei-runtime-availability', () => ({
+  useImeiRuntimeAvailability: () => ({
+    availableTierKeys: mocks.available ? ['blacklist'] : [],
+    loading: false,
+    failed: false,
+  }),
 }));
 vi.mock('@/contexts/customer-auth-context', () => ({
   useOptionalCustomerAuth: () => ({ customer: { id: mocks.customerId } }),
@@ -34,12 +48,15 @@ vi.mock('@/hooks/use-merchant-client', () => ({
 vi.mock('./use-imei-tier-selection', () => ({
   useImeiTierSelection: () => ({
     brand: 'apple',
-    device: 'smartphone',
+    device: mocks.device,
     imei: '352313505010646',
     selectedTier: 'simLock',
     currentTier: IMEI_SERVICE_TIERS.simLock,
     identifier: 'imei',
-    displayedTierKeys: mocks.available ? ['simLock', 'blacklist'] : ['simLock'],
+    displayedTierKeys:
+      mocks.available && mocks.device === 'smartphone'
+        ? ['simLock', 'blacklist']
+        : ['simLock'],
     onClearImei: vi.fn(),
   }),
 }));
@@ -90,6 +107,7 @@ describe('blacklist result upsell', () => {
   beforeEach(() => {
     mocks.available = true;
     mocks.customerId = 'upsell-customer';
+    mocks.device = 'smartphone';
     localStorage.clear();
     mocks.check.mockReset().mockResolvedValue(success());
     mocks.poll.mockReset();
@@ -205,6 +223,33 @@ describe('blacklist result upsell', () => {
     expect(
       screen.queryByRole('button', { name: /check blacklist status/i })
     ).toBeNull();
+  });
+
+  it('offers the phone report blacklist check after the picker switches to a tablet in flight', async () => {
+    let finish: ((value: ReturnType<typeof success>) => void) | undefined;
+    mocks.check.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    const view = render(<OgabasseyImeiChecker />);
+    fireEvent.click(screen.getByRole('button', { name: 'Run SIM Lock' }));
+    mocks.device = 'tablet';
+    view.rerender(<OgabasseyImeiChecker />);
+    await act(async () => {
+      finish?.(success());
+    });
+    expect(upsell()).toBeEnabled();
+    fireEvent.click(upsell());
+    expect(mocks.check.mock.calls[1]).toEqual([
+      result.imei,
+      'blacklist',
+      700,
+      expect.any(String),
+      'ogabassey',
+      'smartphone',
+    ]);
   });
 
   it('allows a fresh check after a pending lookup is cleared by an account change', async () => {

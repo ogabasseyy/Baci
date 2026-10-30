@@ -1,7 +1,25 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import type { ImeiServiceTierKey } from '@baci/shared/imei';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import { ImeiCheckDevicePage } from './ImeiCheckDevicePage';
+
+let mockAvailableKeys: ImeiServiceTierKey[] | null = null;
+let mockAvailabilityFailed = false;
+const mockRetryAvailability = jest.fn();
+jest.mock('./use-imei-runtime-availability', () => ({
+  useImeiRuntimeAvailability: () => ({
+    availableTierKeys: mockAvailableKeys,
+    failed: mockAvailabilityFailed,
+    loading: false,
+    retry: mockRetryAvailability,
+  }),
+}));
+beforeEach(() => {
+  mockAvailableKeys = null;
+  mockAvailabilityFailed = false;
+  mockRetryAvailability.mockClear();
+});
 
 jest.mock('@react-native-vector-icons/ionicons', () => ({
   Ionicons: () => null,
@@ -78,5 +96,88 @@ describe('ImeiCheckDevicePage', () => {
     );
 
     expect(screen.queryByText(/Verify Now/)).toBeNull();
+  });
+});
+
+describe('runtime capability selection', () => {
+  it('keeps provider-only checks hidden until advertised and clears a revoked selection', () => {
+    const onVerify = jest.fn();
+    const { rerender } = render(
+      <ImeiCheckDevicePage
+        {...baseProps}
+        device="smartphone"
+        onVerify={onVerify}
+      />
+    );
+    fireEvent.press(screen.getByText('More checks'));
+    expect(screen.queryByText('eSIM Compatibility')).toBeNull();
+    mockAvailableKeys = ['full', 'esimCompatibility'];
+    rerender(
+      <ImeiCheckDevicePage
+        {...baseProps}
+        device="smartphone"
+        onVerify={onVerify}
+      />
+    );
+    fireEvent.press(screen.getByRole('radio', { name: /eSIM Compatibility/ }));
+    fireEvent.changeText(
+      screen.getByPlaceholderText('Enter 15-digit IMEI'),
+      '490154203237518'
+    );
+    expect(screen.getByText('Verify Now - ₦700')).toBeTruthy();
+    mockAvailableKeys = [];
+    rerender(
+      <ImeiCheckDevicePage
+        {...baseProps}
+        device="smartphone"
+        onVerify={onVerify}
+      />
+    );
+    expect(
+      screen.queryByRole('radio', { name: /eSIM Compatibility/ })
+    ).toBeNull();
+    expect(screen.queryByText('Full Check')).toBeNull();
+    expect(
+      screen.getByText('No checks are available for this selection.')
+    ).toBeTruthy();
+    fireEvent.press(screen.getByText('Retry available checks'));
+    expect(mockRetryAvailability).toHaveBeenCalledTimes(1);
+    fireEvent.press(screen.getByText('Choose a check'));
+    expect(onVerify).not.toHaveBeenCalled();
+  });
+  it('offers retry after capability errors while keeping provider-only checks hidden', () => {
+    mockAvailabilityFailed = true;
+    render(<ImeiCheckDevicePage {...baseProps} device="smartphone" />);
+    fireEvent.press(screen.getByText('More checks'));
+    expect(
+      screen.queryByRole('radio', { name: /eSIM Compatibility/ })
+    ).toBeNull();
+    expect(
+      screen.getByText('Some services could not be checked.')
+    ).toBeTruthy();
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Retry available checks' })
+    );
+    expect(mockRetryAvailability).toHaveBeenCalledTimes(1);
+  });
+  it('shows a sole advertised advanced check directly without choosing it automatically', () => {
+    mockAvailableKeys = ['esimCompatibility'];
+    render(<ImeiCheckDevicePage {...baseProps} device="smartphone" />);
+    expect(
+      screen.getByRole('radio', { name: /eSIM Compatibility/ })
+    ).toHaveAccessibilityState({ selected: false });
+    expect(
+      screen.queryByText('No checks are available for this selection.')
+    ).toBeNull();
+    expect(screen.getByText('Choose a check')).toBeTruthy();
+  });
+  it('filters an advertised Apple phone check after switching brand', () => {
+    mockAvailableKeys = ['full', 'esimCompatibility'];
+    render(<ImeiCheckDevicePage {...baseProps} device="smartphone" />);
+    fireEvent.press(screen.getByText('More checks'));
+    fireEvent.press(screen.getByRole('radio', { name: /eSIM Compatibility/ }));
+    fireEvent.press(screen.getByText('Samsung'));
+    expect(screen.queryByText('eSIM Compatibility')).toBeNull();
+    expect(screen.queryByText('Verify Now - ₦700')).toBeNull();
   });
 });

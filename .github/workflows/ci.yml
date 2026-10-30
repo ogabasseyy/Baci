@@ -567,6 +567,11 @@ jobs:
           done
           node --test .github/scripts/x-pixel-token-authentication.sql.test.mjs
 
+      - name: Run IMEI authenticated access SQL contracts
+        env:
+          IMEI_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: python3 supabase/tests/run_imei_access_boundary.py
+
   quality-misc:
     name: Quality Gate - Misc
     needs: [changes]

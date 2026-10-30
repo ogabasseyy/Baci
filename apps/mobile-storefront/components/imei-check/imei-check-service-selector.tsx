@@ -15,7 +15,7 @@ import type { ImeiCheckerColors } from './imei-check.types';
 interface ImeiCheckServiceSelectorProps {
   colors: ImeiCheckerColors;
   displayedTierKeys: readonly ImeiServiceTierKey[];
-  selectedTier: ImeiServiceTierKey;
+  selectedTier: ImeiServiceTierKey | null;
   canToggleServices: boolean;
   showAllServices: boolean;
   onTierSelect: (tier: ImeiServiceTierKey) => void;
@@ -34,16 +34,18 @@ export function ImeiCheckServiceSelector({
   const [expandedGoals, setExpandedGoals] = useState<Record<string, boolean>>(
     {}
   );
-  const groups = groupImeiServices(displayedTierKeys, selectedTier).map(
-    (group) =>
-      expandedGoals[group.id]
-        ? {
-            ...group,
-            tierKeys: displayedTierKeys.filter((key) =>
-              group.tierKeys.includes(key)
-            ),
-          }
-        : group
+  const groups = groupImeiServices(
+    displayedTierKeys,
+    selectedTier ?? displayedTierKeys[0] ?? 'full'
+  ).map((group) =>
+    expandedGoals[group.id]
+      ? {
+          ...group,
+          tierKeys: displayedTierKeys.filter((key) =>
+            group.tierKeys.includes(key)
+          ),
+        }
+      : group
   );
   return (
     <>

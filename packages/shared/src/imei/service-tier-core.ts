@@ -104,7 +104,7 @@ export const CORE_IMEI_SERVICE_TIERS = {
     price: 500,
     costUsd: 0.025,
     features: ['SIM Lock Status', 'Carrier Lock Risk', 'Device Model'],
-    checksIncluded: ['device', 'modelNumber', 'simLock'],
+    checksIncluded: ['device', 'simLock'],
     icon: 'phone-portrait-outline',
     brandScopes: ['apple'],
     deviceCategories: ['smartphone'],

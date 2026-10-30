@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "971ff96de6c479012981ebf8f1d6f6d8dffbd6b6",
+  "originMainSha": "c2e28416ef3f75ad2e39d6a98e88a187245cc2b6",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
   "routeTreeSha256": "5648729f561fcb54b6b158dff22e8a9284e06c493e3f937f0e6b00bcec89c546",
-  "routingProxyInputSha256": "a555f5d7bca0961159f6cfddb3dfbba0031af78a4f73c5c77891bdd70147299b",
+  "routingProxyInputSha256": "ab674c33c781d02b23d23835c98107d61384e016d17fb1434ecaf6757929d5c9",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -1465,6 +1465,8 @@
       "decision": "origin_dynamic",
       "id": "api-route:storefront/imei-check/route.ts",
       "methods": [
+        "GET",
+        "HEAD",
         "OPTIONS",
         "POST"
       ],
@@ -8646,5 +8648,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "9cbadc4f1b4fe70dcee5ae128c9cef77aafff96e1495ed4a9be4137b0de4d42a"
+  "inventorySha256": "088504efd989605fbd4b9272f5afa7588cde3d2519b2d2ff47a687f503e53237"
 }

@@ -50,13 +50,19 @@ interface OgabasseyImeiEntryProps {
   pendingPaused: boolean;
   searchLoading: boolean;
   selectedDeviceSuggestion: ProductSuggestion | null;
-  selectedTier: ImeiServiceTierKey;
+  selectedTier: ImeiServiceTierKey | null;
+  availabilityFailed?: boolean;
+  availabilityLoading?: boolean;
+  onRetryAvailability?: () => void;
   showAllServices: boolean;
   showSuggestions: boolean;
   suggestions: ProductSuggestion[];
 }
 
 export const OgabasseyImeiEntry = ({
+  availabilityFailed = false,
+  availabilityLoading = false,
+  onRetryAvailability,
   brand,
   canToggleServices,
   device,
@@ -87,8 +93,11 @@ export const OgabasseyImeiEntry = ({
   showAllServices,
   suggestions,
 }: OgabasseyImeiEntryProps) => {
-  const currentTier = getDisplayTier(selectedTier);
-  const canVerify = isValidDeviceIdentifier(imei, identifier);
+  const currentTier = getDisplayTier(selectedTier ?? 'full');
+  const canVerify =
+    selectedTier !== null &&
+    displayedTierKeys.includes(selectedTier) &&
+    isValidDeviceIdentifier(imei, identifier);
   const devicePanelId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -139,6 +148,29 @@ export const OgabasseyImeiEntry = ({
           )}
 
           <div className="mt-4">
+            {displayedTierKeys.length === 0 || availabilityFailed ? (
+              <div
+                role="status"
+                className="mb-4 text-center text-sm text-store-foreground"
+              >
+                <p>
+                  {displayedTierKeys.length === 0
+                    ? availabilityLoading
+                      ? 'Checking available services…'
+                      : 'No checks are available for this selection.'
+                    : 'Some services could not be checked.'}
+                </p>
+                {!availabilityLoading && onRetryAvailability ? (
+                  <button
+                    type="button"
+                    className="min-h-11 underline"
+                    onClick={onRetryAvailability}
+                  >
+                    Retry available checks
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             <ImeiCheckerTierSelector
               canToggleServices={canToggleServices}
               displayedTierKeys={displayedTierKeys}
@@ -165,7 +197,9 @@ export const OgabasseyImeiEntry = ({
                   ? 'Verifying'
                   : isPending
                     ? 'Checking device status'
-                    : `Verify Now · ${currentTier.priceDisplay}`
+                    : selectedTier
+                      ? `Verify Now · ${currentTier.priceDisplay}`
+                      : 'Choose a check'
               }
               className="flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-[var(--store-primary)] px-8 py-4 text-base font-bold text-[var(--store-primary-text,#ffffff)] shadow-lg shadow-[var(--store-primary)]/20 transition-all hover:bg-[var(--store-primary)]/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
               disabled={isLoading || isPending || !canVerify}
@@ -175,7 +209,9 @@ export const OgabasseyImeiEntry = ({
                 <Loader2 className="animate-spin" />
               ) : (
                 <>
-                  Verify Now · {currentTier.priceDisplay}
+                  {selectedTier
+                    ? `Verify Now · ${currentTier.priceDisplay}`
+                    : 'Choose a check'}
                   <Sparkles size={18} />
                 </>
               )}

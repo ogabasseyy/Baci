@@ -241,6 +241,24 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         )
         self.assertNotIn(secret_like, stderr.getvalue())
 
+    def test_formatter_failure_uses_fixed_fallback_and_preserves_last_stage(self):
+        secret_like = "private-token /home/runner/private/path"
+        stderr = io.StringIO()
+        completed = SimpleNamespace(stdout="a" * 40 + "\n", returncode=0)
+        with patch.dict(os.environ, {"EXPECTED_CHECKOUT_SHA": "a" * 40}), \
+             patch.object(experiment.subprocess, "run", side_effect=[completed, SimpleNamespace(stdout="v24.0.0\n", returncode=0)]), \
+             patch.object(experiment.shutil, "which", return_value="/usr/bin/node"), \
+             patch.object(experiment, "pinned_pnpm", side_effect=RuntimeError("pin failed")), \
+             patch.object(experiment, "failure_diagnostic", side_effect=RuntimeError(secret_like)), \
+             patch("sys.stderr", stderr):
+            self.assertEqual(experiment._main(), 1)
+
+        self.assertEqual(
+            stderr.getvalue(),
+            "experiment failure stage=pnpm-pin category=diagnostic-failure\n",
+        )
+        self.assertNotIn(secret_like, stderr.getvalue())
+
     def test_policy_child_diagnostic_is_closed_and_redacted(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "child-diagnostic.json"

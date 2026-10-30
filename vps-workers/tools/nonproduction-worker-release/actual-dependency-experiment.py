@@ -43,6 +43,7 @@ PRODUCTION_RESOURCE_LIMITS = {
 }
 from worker_release_actual_dependency_guard import (
     MonitorFailure,
+    STAGES,
     assert_deployed_package_matches_lock,
     enforce_resource_limits,
     failure_diagnostic,
@@ -75,6 +76,16 @@ def run_policy_preverify(command: tuple[str, ...], *, cwd: Path, env: dict[str, 
                           run_fn=run, observe_resource=observe_resource)
 
 
+def emit_failure_diagnostic(stage: str, error: BaseException) -> None:
+    """Emit a bounded diagnostic even when the primary formatter itself fails."""
+    safe_stage = stage if stage in STAGES else "experiment"
+    try:
+        diagnostic = failure_diagnostic(safe_stage, error)
+    except Exception:
+        diagnostic = f"experiment failure stage={safe_stage} category=diagnostic-failure"
+    print(diagnostic, file=sys.stderr)
+
+
 def _main() -> int:
     started = time.monotonic()
     stage = "checkout-identity"
@@ -94,7 +105,7 @@ def _main() -> int:
     except Exception as exc:
         # Preserve the bounded stage and closed diagnostic category for setup
         # failures; never print the exception text or subprocess output.
-        print(failure_diagnostic(stage, exc), file=sys.stderr)
+        emit_failure_diagnostic(stage, exc)
         return 1
 
     try:
@@ -377,7 +388,7 @@ def _main() -> int:
             print(json.dumps(report, sort_keys=True))
         return 0
     except Exception as exc:
-        print(failure_diagnostic(stage, exc), file=sys.stderr)
+        emit_failure_diagnostic(stage, exc)
         return 1
 
 
@@ -385,7 +396,7 @@ def main() -> int:
     try:
         return _main()
     except Exception as exc:
-        print(failure_diagnostic("experiment", exc), file=sys.stderr)
+        emit_failure_diagnostic("experiment", exc)
         return 1
 
 

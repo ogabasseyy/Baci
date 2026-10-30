@@ -148,5 +148,17 @@ test('installs the exact worker release before any readiness verification', asyn
   );
   assert.equal(sync.steps.at(-1).env, undefined, 'no runner secrets reach the worker sync');
   assert.ok(readiness.needs.includes('vps-worker-sync'));
+  // bugfix: a refused coordinated dispatch must not activate workers.
+  const guard = sync.steps.findIndex(
+    (step) =>
+      step.run ===
+      'bash .worker-sync/.github/scripts/verify-coordinated-release.sh'
+  );
+  assert.ok(guard > 0 && guard < sync.steps.length - 1);
+  assert.equal(
+    sync.steps[guard].env.EXPECTED_RELEASE_SHA,
+    '${{ inputs.expected_release_sha }}'
+  );
+  assert.equal(sync.steps[guard].env.COORDINATION_ID, '${{ inputs.coordination_id }}');
   assert.match(readiness.if, /needs\.vps-worker-sync\.result == 'success'/);
 });

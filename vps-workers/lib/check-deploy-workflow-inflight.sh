@@ -261,3 +261,18 @@ _push_promote_record() {
   fi
   git push --quiet origin "$push_commit:refs/heads/$PROMOTE_RECORD_BRANCH" 2>/dev/null
 }
+
+# Migrated hosts get workers from deploy.yml as baci-worker (vps-workers/release);
+# this legacy path would reinstall them under the deployment identity.
+refuse_isolated_worker_host() {
+  # Fail closed: a failed probe must never be read as "not migrated".
+  local host_layout
+  if ! host_layout="$(ssh "$VPS" "if [ -e /srv/baci-worker/current ]; then printf isolated; else printf legacy; fi")"; then
+    echo "Refusing legacy worker deployment: could not determine whether the host uses isolated releases." >&2
+    return 1
+  fi
+  if [ "$host_layout" != legacy ]; then
+    echo "Refusing legacy worker deployment: this host uses isolated worker releases from deploy.yml." >&2
+    return 1
+  fi
+}

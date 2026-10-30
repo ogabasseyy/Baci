@@ -36,6 +36,7 @@ cat <<EOF | ssh "$VPS" "cat > $STAGING_DIR/crontab.fragment"
 $CRON_BLOCK_START
 */5 *  * * * flock -n $REMOTE_DIR/locks/gigl-tracking.lock bash -lc 'cd $REMOTE_DIR && $REMOTE_DIR/bin/process-gigl-tracking.sh' >> $REMOTE_DIR/logs/gigl-tracking.log 2>&1
 */2 * * * * flock -n $REMOTE_DIR/locks/cache-invalidations.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/run-cache-invalidation-cron.mjs' >> $REMOTE_DIR/logs/cache-invalidations.log 2>&1
+40 3   * * * flock -n $REMOTE_DIR/locks/cleanup-remediation-storage.lock bash -lc 'cd $REMOTE_DIR && $NODE_BIN $REMOTE_DIR/jobs/cleanup-remediation-storage.mjs' >> $REMOTE_DIR/logs/cleanup-remediation-storage.log 2>&1
 */15 * * * * flock -n $REMOTE_DIR/locks/vercel-error-remediator.lock bash -lc 'export BACI_CODEX_DOCKER_IMAGE=$CODEX_REMEDIATOR_IMAGE && $NODE_BIN $REMOTE_DIR/jobs/vercel-error-remediator.mjs' >> $REMOTE_DIR/logs/r.log 2>&1
 $CRON_BLOCK_END
 EOF

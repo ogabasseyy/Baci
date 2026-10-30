@@ -23,12 +23,13 @@ PERSISTENT_ENTRIES=' .env logs locks state .gigl-capability-smoke-ok app-checkou
 CRON_BLOCK_START='# >>> baci-workers >>>'
 CRON_BLOCK_END='# <<< baci-workers <<<'
 # Codex remediation needs Docker, which this unprivileged user must not have.
+# (cleanup-remediation-storage stays: it also rotates every worker log.)
 WORKER_UNITS=(
   baci-vercel-log-drain-receiver.service baci-ai-storefront-trigger.service
   baci-import-job-trigger.service baci-domain-event-router.service
   baci-event-delivery-worker.service baci-quiz-finalization.service
 )
-REMEDIATION_JOBS='vercel-error-remediator.mjs|sentry-mobile-error-remediator.mjs|posthog-error-remediator.mjs|remediation-codex-canary.mjs|cleanup-remediation-storage.mjs'
+REMEDIATION_JOBS='vercel-error-remediator.mjs|sentry-mobile-error-remediator.mjs|posthog-error-remediator.mjs|remediation-codex-canary.mjs'
 
 fail() {
   echo "worker-release: $*" >&2
@@ -189,7 +190,10 @@ preflight() {
 # everything so the caller can safely restore the legacy workers.
 restore_after_failed_activation() {
   local failed="$1" previous="$2"
-  if [ -n "$previous" ] && [ "$previous" != "$failed" ]; then
+  # Re-running the live SHA: links are unchanged, the crontab swap is atomic,
+  # and services run the same code, so keep the live runtime in place.
+  if [ "$previous" = "$failed" ]; then return 0; fi
+  if [ -n "$previous" ]; then
     switch_current "$previous"
     install_release_runtime "$previous"
     return

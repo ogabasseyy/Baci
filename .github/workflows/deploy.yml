@@ -90,7 +90,14 @@ jobs:
           sparse-checkout: |
             vps-workers/release/sync-from-runner.sh
             vps-workers/release/worker-release.sh
+            .github/scripts/verify-coordinated-release.sh
           sparse-checkout-cone-mode: false
+      # A dispatch the coordination guard refuses must not change workers.
+      - name: Verify coordinated release identity before worker activation
+        env:
+          EXPECTED_RELEASE_SHA: ${{ inputs.expected_release_sha }}
+          COORDINATION_ID: ${{ inputs.coordination_id }}
+        run: bash .worker-sync/.github/scripts/verify-coordinated-release.sh
       - name: Install and activate the exact worker release
         run: bash .worker-sync/vps-workers/release/sync-from-runner.sh "$GITHUB_SHA"
 

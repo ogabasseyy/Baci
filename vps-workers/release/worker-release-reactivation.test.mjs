@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { createHost } from './worker-release.test-fixtures.mjs';
@@ -41,3 +41,37 @@ test('bugfix: accepts tsx hoisted to the workspace root', linuxOnly, () => {
 
   assert.equal(host.run('status').stdout.trim(), host.firstSha);
 });
+
+test(
+  'bugfix: a failed reinstall of the live SHA keeps its release and schedule',
+  linuxOnly,
+  () => {
+    const host = createHost();
+    release(host, host.firstSha);
+    const schedule = readFileSync(join(host.root, 'installed-crontab'), 'utf8');
+    writeFileSync(join(host.root, 'fail-crontab'), '');
+
+    const result = host.run('activate', host.firstSha);
+
+    assert.notEqual(result.status, 0);
+    assert.equal(host.run('status').stdout.trim(), host.firstSha);
+    assert.equal(
+      readFileSync(join(host.root, 'installed-crontab'), 'utf8'),
+      schedule
+    );
+    assert.ok(existsSync(join(host.root, 'app-live')));
+  }
+);
+
+test(
+  'bugfix: keeps the Docker-free worker log rotation scheduled',
+  linuxOnly,
+  () => {
+    const host = createHost();
+    release(host, host.firstSha);
+
+    const schedule = readFileSync(join(host.root, 'installed-crontab'), 'utf8');
+    assert.match(schedule, /jobs\/cleanup-remediation-storage\.mjs/);
+    assert.doesNotMatch(schedule, /vercel-error-remediator/);
+  }
+);

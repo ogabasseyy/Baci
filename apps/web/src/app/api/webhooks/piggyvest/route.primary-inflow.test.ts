@@ -50,7 +50,8 @@ vi.mock('@/lib/piggyvest/primary-wallet-bank-inbox-intake', () => ({
   dispatchPrimaryWalletBankInboxIntake: boundary.intake,
 }));
 vi.mock('@/lib/piggyvest/server-intake-client', () => ({
-  createPiggyvestIntakeServiceClient: boundary.legacyClient,
+  createPiggyvestIntakeServiceClient: () =>
+    withCaptureRpc(boundary.legacyClient()),
 }));
 vi.mock('@/lib/piggyvest/webhook-inbox', () => ({
   recordPiggyvestEvent: boundary.legacyRecord,
@@ -64,6 +65,7 @@ vi.mock('@/lib/piggyvest/event-quarantine', () => ({
 }));
 
 import { POST } from './route';
+import { withCaptureRpc } from './route.capture-test-support';
 
 type WebhookSecretUnionModule =
   typeof import('@/lib/piggyvest/webhook-secret-union');
@@ -147,10 +149,12 @@ it.each([
     signature: expect.any(String),
   });
   expect(boundary.dispatch).not.toHaveBeenCalled();
-  expect(boundary.legacyClient).not.toHaveBeenCalled();
+  // One client, used only for the capture write.
+  expect(boundary.legacyClient).toHaveBeenCalledTimes(1);
+  expect(boundary.legacyRecord).not.toHaveBeenCalled();
 });
 
-it('requests redelivery when durable bank inbox storage is unavailable', async () => {
+it('keeps the captured row and answers 200 when durable bank inbox storage is unavailable', async () => {
   boundary.intake.mockResolvedValue({
     outcome: 'unavailable',
     response: Response.json(
@@ -159,9 +163,15 @@ it('requests redelivery when durable bank inbox storage is unavailable', async (
     ),
   });
   const response = await POST(request());
-  expect(response.status).toBe(503);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    received: true,
+    captured: true,
+    processing: 'deferred',
+  });
   expect(boundary.dispatch).not.toHaveBeenCalled();
-  expect(boundary.legacyClient).not.toHaveBeenCalled();
+  expect(boundary.legacyRecord).not.toHaveBeenCalled();
+  expect(boundary.legacyProcess).not.toHaveBeenCalled();
 });
 
 it('preserves unrelated legacy deposits when bank inbox attribution is not handled', async () => {
@@ -203,16 +213,18 @@ it.each([
     received: true,
     duplicate: outcome === 'duplicate',
   });
-  expect(boundary.legacyClient).not.toHaveBeenCalled();
+  expect(boundary.legacyClient).toHaveBeenCalledTimes(1);
   expect(boundary.legacyRecord).not.toHaveBeenCalled();
   expect(boundary.legacyProcess).not.toHaveBeenCalled();
 });
 
-it('requests redelivery rather than falling back after an uncertain primary write', async () => {
+it('keeps the row for retry rather than falling back after an uncertain primary write', async () => {
   boundary.dispatch.mockRejectedValue(new Error('private database detail'));
   const response = await POST(request());
-  expect(response.status).toBe(503);
-  expect(JSON.stringify(await response.json())).not.toContain('private');
+  expect(response.status).toBe(200);
+  const body = JSON.stringify(await response.json());
+  expect(body).toContain('deferred');
+  expect(body).not.toContain('private');
   expect(boundary.legacyRecord).not.toHaveBeenCalled();
   expect(boundary.legacyProcess).not.toHaveBeenCalled();
 });
@@ -241,7 +253,7 @@ it('quarantines a primary conflict without crediting either ledger', async () =>
 
 it('never dispatches or legacy-processes a forged primary inflow', async () => {
   const response = await POST(request(false));
-  expect(response.status).toBe(200);
+  expect(response.status).toBe(401);
   expect(boundary.dispatch).not.toHaveBeenCalled();
   expect(boundary.intake).not.toHaveBeenCalled();
   expect(boundary.legacyClient).not.toHaveBeenCalled();

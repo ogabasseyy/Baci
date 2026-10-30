@@ -17,7 +17,7 @@ vi.mock('@/env', () => ({
 }));
 
 vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => mocks.createServiceClient(),
+  createServiceClient: () => withCaptureRpc(mocks.createServiceClient()),
 }));
 
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
@@ -26,6 +26,7 @@ vi.mock('@/lib/piggyvest/webhook-processor', () => ({
 }));
 
 import { GET, POST } from './route';
+import { withCaptureRpc } from './route.capture-test-support';
 
 // HMAC key derived at runtime from a stable non-secret label: deterministic
 // for reproducibility (no random test data); the label is an identifier,
@@ -231,7 +232,7 @@ describe('POST event intake', () => {
     expect(mocks.createServiceClient).not.toHaveBeenCalled();
   });
 
-  it('acks 200 without processing when the signature is invalid', async () => {
+  it('rejects with 401 and stores nothing when the signature is invalid', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
@@ -239,7 +240,7 @@ describe('POST event intake', () => {
 
       const response = await POST(createRequest(rawBody, '0'.repeat(128)));
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(401);
       expect(await response.json()).toEqual({
         received: false,
         code: 'PIGGYVEST_INVALID_SIGNATURE',
@@ -363,7 +364,7 @@ describe('POST event intake', () => {
     expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
   });
 
-  it('returns 503 when the quarantine write fails so the provider redelivers', async () => {
+  it('keeps the captured row and answers 200 when the quarantine write fails', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
     mocks.createServiceClient.mockReturnValue({
       from: vi.fn(
@@ -379,10 +380,13 @@ describe('POST event intake', () => {
 
     const response = await POST(createRequest(rawBody, signPayload(rawBody)));
 
-    expect(response.status).toBe(503);
+    // The unknown-event body is already durably captured; the failed digest
+    // quarantine is processing, which never changes the reply.
+    expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      error: 'Event intake unavailable',
-      code: 'PIGGYVEST_INBOX_ERROR',
+      received: true,
+      captured: true,
+      processing: 'deferred',
     });
   });
 
@@ -399,7 +403,7 @@ describe('POST event intake', () => {
     expect(mocks.processPiggyvestEvent).toHaveBeenCalledTimes(1);
   });
 
-  it('returns 503 when the processor throws so the provider redelivers', async () => {
+  it('answers 200 and leaves the captured row for retry when the processor throws', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
     const { query } = chainable({
       data: [{ event_id: inflowEvent.eventId }],
@@ -413,14 +417,15 @@ describe('POST event intake', () => {
 
     const response = await POST(createRequest(rawBody, signPayload(rawBody)));
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      error: 'Event intake unavailable',
-      code: 'PIGGYVEST_INBOX_ERROR',
+      received: true,
+      captured: true,
+      processing: 'deferred',
     });
   });
 
-  it('returns 503 without leaking internals when the inbox write fails', async () => {
+  it('answers 200 without leaking internals when the inbox write fails after capture', async () => {
     vi.stubEnv('PVB_SECRET_KEY', SECRET);
     mocks.createServiceClient.mockReturnValue({
       from: vi.fn(
@@ -433,11 +438,8 @@ describe('POST event intake', () => {
 
     const response = await POST(createRequest(rawBody, signPayload(rawBody)));
 
-    expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
-      error: 'Event intake unavailable',
-      code: 'PIGGYVEST_INBOX_ERROR',
-    });
+    expect(response.status).toBe(200);
+    expect(JSON.stringify(await response.json())).not.toContain('outage');
   });
 
   it('records the wallet attribution a restriction flip acts on', async () => {

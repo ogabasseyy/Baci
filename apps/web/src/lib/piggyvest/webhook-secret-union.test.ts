@@ -142,10 +142,11 @@ it('verifies with a retained key and reports the matched secret', async () => {
       signature,
       env: { NODE_ENV: 'test' },
     })
-  ).toEqual({
+  ).toMatchObject({
     status: 'verified',
     secret: 'retained-secret',
     families: ['interest'],
+    keyStatus: 'current',
   });
   expect(
     verifyPiggyvestWebhookSecrets({
@@ -226,7 +227,7 @@ it('authorizes every family sharing the matched secret value', async () => {
       signature,
       env: { NODE_ENV: 'test', PIGGYVEST_SECRET_KEY: 'shared-secret' },
     })
-  ).toEqual({
+  ).toMatchObject({
     status: 'verified',
     secret: 'shared-secret',
     families: ['legacy', 'bank'],

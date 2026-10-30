@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(),
   intake: vi.fn(),
   legacy: vi.fn(),
+  legacyFrom: vi.fn(),
   processPiggyvestEvent: vi.fn(),
   families: ['legacy', 'interest'] as string[],
 }));
@@ -40,7 +41,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-intake', () => ({
   dispatchPrimaryWalletPaidInterestInbox: mocks.intake,
 }));
 vi.mock('@/lib/piggyvest/server-intake-client', () => ({
-  createPiggyvestIntakeServiceClient: mocks.legacy,
+  createPiggyvestIntakeServiceClient: () => withCaptureRpc(mocks.legacy()),
 }));
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: (...args: unknown[]) =>
@@ -48,6 +49,7 @@ vi.mock('@/lib/piggyvest/webhook-processor', () => ({
 }));
 
 import { POST } from './route';
+import { withCaptureRpc } from './route.capture-test-support';
 
 type WebhookSecretUnionModule =
   typeof import('@/lib/piggyvest/webhook-secret-union');
@@ -65,9 +67,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.families = ['legacy', 'interest'];
   mocks.intake.mockResolvedValue('disabled');
-  mocks.legacy.mockImplementation(() => {
+  mocks.legacyFrom.mockImplementation(() => {
     throw new Error('legacy must not handle primary interest');
   });
+  mocks.legacy.mockImplementation(() => ({ from: mocks.legacyFrom }));
 });
 it.each([
   'accepted',
@@ -91,17 +94,21 @@ it.each([
     signature: expect.any(String),
   });
   expect(mocks.dispatch).not.toHaveBeenCalled();
-  expect(mocks.legacy).not.toHaveBeenCalled();
+  expect(mocks.legacyFrom).not.toHaveBeenCalled();
 });
-it('requests redelivery when storing signed interest fails', async () => {
+it('keeps the captured row and answers 200 when storing signed interest fails', async () => {
   mocks.intake.mockRejectedValue(new Error('private receipt storage detail'));
   const response = await POST(request());
-  expect(response.status).toBe(503);
-  expect(JSON.stringify(await response.json())).not.toContain(
-    'private receipt'
-  );
+  // The signed bytes are already durably captured; the failed interest
+  // intake leaves that row for the drain and never changes the reply.
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    received: true,
+    captured: true,
+    processing: 'deferred',
+  });
   expect(mocks.dispatch).not.toHaveBeenCalled();
-  expect(mocks.legacy).not.toHaveBeenCalled();
+  expect(mocks.legacyFrom).not.toHaveBeenCalled();
 });
 it.each([
   'credited',
@@ -118,7 +125,7 @@ it.each([
     rawBody: Buffer.from(rawBody),
     signature: expect.any(String),
   });
-  expect(mocks.legacy).not.toHaveBeenCalled();
+  expect(mocks.legacyFrom).not.toHaveBeenCalled();
 });
 it.each([
   'prerequisite',
@@ -126,14 +133,15 @@ it.each([
 ])('does not drop or legacy-credit unresolved primary interest %s', async (outcome) => {
   mocks.dispatch.mockResolvedValue(outcome);
   const response = await POST(request());
-  expect(response.status).toBe(503);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ processing: 'deferred' });
   expect(mocks.dispatch).toHaveBeenCalledTimes(1);
-  expect(mocks.legacy).not.toHaveBeenCalled();
+  expect(mocks.legacyFrom).not.toHaveBeenCalled();
 });
 it('does not dispatch forged interest', async () => {
-  expect((await POST(request(false))).status).toBe(200);
+  expect((await POST(request(false))).status).toBe(401);
   expect(mocks.dispatch).not.toHaveBeenCalled();
-  expect(mocks.legacy).not.toHaveBeenCalled();
+  expect(mocks.legacyFrom).not.toHaveBeenCalled();
 });
 it('accepts a delivery signed with a retained rotation key', async () => {
   mocks.intake.mockResolvedValue('accepted');
@@ -145,16 +153,16 @@ it('accepts a delivery signed with a retained rotation key', async () => {
     duplicate: false,
   });
   expect(mocks.intake).toHaveBeenCalledTimes(1);
-  expect(mocks.legacy).not.toHaveBeenCalled();
+  expect(mocks.legacyFrom).not.toHaveBeenCalled();
 });
-it('redacts primary interest storage failures and requests redelivery', async () => {
+it('redacts primary interest storage failures and keeps the captured row for retry', async () => {
   mocks.dispatch.mockRejectedValue(new Error('private database detail'));
   const response = await POST(request());
-  expect(response.status).toBe(503);
+  expect(response.status).toBe(200);
   expect(JSON.stringify(await response.json())).not.toContain(
     'private database'
   );
-  expect(mocks.legacy).not.toHaveBeenCalled();
+  expect(mocks.legacyFrom).not.toHaveBeenCalled();
 });
 it('skips the interest intake for a legacy-family delivery', async () => {
   mocks.families = ['legacy'];

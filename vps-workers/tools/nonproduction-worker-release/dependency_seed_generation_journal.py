@@ -9,7 +9,8 @@ from typing import Any
 
 from dependency_seed_generation_contract import SeedGenerationRejected
 from dependency_seed_generation_journal_validation import (
-    FENCE_KEYS as _FENCE_KEYS, SHA as _SHA, TXID as _TXID, UNIT as _UNIT, valid_record,
+    FENCE_KEYS as _FENCE_KEYS, SHA as _SHA, TXID as _TXID, UNIT as _UNIT,
+    is_legacy_alias_record, valid_record,
 )
 from dependency_seed_publication import rename_noreplace
 
@@ -83,12 +84,15 @@ class SeedGenerationJournal:
             value = json.loads(payload)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise SeedGenerationRejected("seed unit journal is malformed") from error
+        if is_legacy_alias_record(value):
+            raise SeedGenerationRejected(
+                "legacy alias seed journal requires explicit recovery preflight")
         if not self._valid(value):
             raise SeedGenerationRejected("seed unit journal fields are invalid")
         return value
 
     def begin(self, *, transaction_id: str, fence: dict[str, object], unit: str,
-              source: Path, alias_name: str, scratch_name: str,
+              source: Path, egress_socket: tuple[int, int], scratch_name: str,
               builder_uid: int, builder_gid: int) -> dict[str, Any]:
         if self.read() is not None:
             raise SeedGenerationRejected("seed unit journal already exists")
@@ -101,8 +105,8 @@ class SeedGenerationJournal:
                 or set(fence) != _FENCE_KEYS or fence.get("repository") != "ogabasseyy/Baci"
                 or fence.get("workflow") != ".github/workflows/production-release.yml"
                 or fence.get("ref") != "refs/heads/main" or fence.get("status") != "in_progress"
-                or not isinstance(alias_name, str)
-                or alias_name != f"baci-seed-egress-{transaction_id}.sock"
+                or len(egress_socket) != 2
+                or any(type(item) is not int or item < 0 for item in egress_socket)
                 or scratch_name != f"seed-{transaction_id}"
                 or not source.is_absolute()
                 or not stat.S_ISDIR(source_info.st_mode) or source_info.st_uid != self.owner_uid
@@ -110,7 +114,7 @@ class SeedGenerationJournal:
                 or min(builder_uid, builder_gid) <= 0):
             raise SeedGenerationRejected("seed unit journal identity is invalid")
         value = {
-            "schema": 1, "phase": "prepared", "transaction_id": transaction_id,
+            "schema": 2, "phase": "prepared", "transaction_id": transaction_id,
             "fence": dict(fence), "unit": unit,
             "source_path": str(source), "source_dev": source_info.st_dev,
             "source_ino": source_info.st_ino,
@@ -119,9 +123,7 @@ class SeedGenerationJournal:
             "scratch_name": scratch_name, "scratch_dev": None, "scratch_ino": None,
             "cache_dev": None, "cache_ino": None, "store_dev": None, "store_ino": None,
             "builder_uid": builder_uid, "builder_gid": builder_gid,
-            "alias_name": alias_name, "alias_state": "planned",
-            "alias_source_dev": None, "alias_source_ino": None,
-            "placeholder_dev": None, "placeholder_ino": None,
+            "egress_socket_dev": egress_socket[0], "egress_socket_ino": egress_socket[1],
         }
         self._write(value, create=True)
         return value
@@ -137,33 +139,15 @@ class SeedGenerationJournal:
                      store_dev=store[0], store_ino=store[1])
         self._write(value)
 
-    def mark_alias_prepared(self, source_identity: tuple[int, int, int, int, int, int],
-                            placeholder_identity: tuple[int, int, int, int, int]) -> None:
+    def mark_egress_binding_ready(self, socket_identity: tuple[int, int]) -> None:
         value = self._require("prepared")
-        if value["alias_state"] != "planned":
-            raise SeedGenerationRejected("egress alias preparation is already journaled")
-        if (len(source_identity) != 6 or len(placeholder_identity) != 5
-                or any(type(item) is not int or item < 0
-                       for item in (*source_identity, *placeholder_identity))):
-            raise SeedGenerationRejected("egress alias inode identity is invalid")
-        value.update(alias_state="prepared", alias_source_dev=source_identity[0],
-                     alias_source_ino=source_identity[1], placeholder_dev=placeholder_identity[0],
-                     placeholder_ino=placeholder_identity[1])
-        self._write(value)
-
-    def mark_alias_mounted(self) -> None:
-        value = self._require("prepared")
-        if (value["alias_state"] != "prepared"
-                or any(type(value.get(key)) is not int for key in
-                       ("alias_source_dev", "alias_source_ino", "placeholder_dev", "placeholder_ino"))):
-            raise SeedGenerationRejected("egress alias identities must be durable before mount")
-        value["alias_state"] = "mounted"
-        self._write(value)
+        if len(socket_identity) != 2 or any(type(item) is not int or item < 0 for item in socket_identity):
+            raise SeedGenerationRejected("fixed egress socket identity is invalid")
+        if (value["egress_socket_dev"], value["egress_socket_ino"]) != socket_identity:
+            raise SeedGenerationRejected("fixed egress socket changed before unit launch")
 
     def mark_running(self) -> None:
         value = self._require("prepared")
-        if value["alias_state"] != "mounted":
-            raise SeedGenerationRejected("egress alias must be journaled before starting seed unit")
         if any(type(value.get(key)) is not int for key in
                ("scratch_dev", "scratch_ino", "cache_dev", "cache_ino", "store_dev", "store_ino")):
             raise SeedGenerationRejected("seed workspace identities must be journaled before launch")
@@ -175,21 +159,6 @@ class SeedGenerationJournal:
         if value is None or value["phase"] not in ("prepared", "running", "drained"):
             raise SeedGenerationRejected("seed unit journal cannot record drain proof")
         value["phase"] = "drained"
-        self._write(value)
-
-    def mark_alias_removed(self) -> None:
-        value = self._require("drained")
-        if value["alias_state"] != "removing":
-            raise SeedGenerationRejected("seed alias removal must be durably intended before cleanup")
-        value.update(alias_state="removed", alias_source_dev=None, alias_source_ino=None,
-                     placeholder_dev=None, placeholder_ino=None)
-        self._write(value)
-
-    def mark_alias_removing(self) -> None:
-        value = self._require("drained")
-        if value["alias_state"] not in ("planned", "prepared", "mounted"):
-            raise SeedGenerationRejected("seed alias is not ready for removal intent")
-        value["alias_state"] = "removing"
         self._write(value)
 
     def mark_outputs_removed(self) -> None:
@@ -212,9 +181,9 @@ class SeedGenerationJournal:
 
     def clear(self) -> None:
         value = self._require("drained")
-        if (value["alias_state"] != "removed" or value["scratch_dev"] is not None
+        if (value["scratch_dev"] is not None
                 or value["scratch_ino"] is not None):
-            raise SeedGenerationRejected("seed alias and scratch must be removed before clearing journal")
+            raise SeedGenerationRejected("seed scratch must be removed before clearing journal")
         os.unlink(NAME, dir_fd=self.fd)
         os.fsync(self.fd)
 

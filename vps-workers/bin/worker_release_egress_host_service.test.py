@@ -25,6 +25,7 @@ class EgressHostServiceTests(unittest.TestCase):
     def test_broker_socket_is_group_restricted_and_lifecycle_bound(self):
         _uid, gid = egress_identity()
         with tempfile.TemporaryDirectory(prefix="baci-egress-host-", dir="/run") as tmp:
+            Path(tmp).chmod(0o711)
             directory = Path(tmp) / "broker"
             directory.mkdir(mode=0o700)
             directory.chmod(0o711)

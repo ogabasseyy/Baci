@@ -32,7 +32,6 @@ from dependency_seed_generation_unit import (
     PYTHON, TOOLS as TRUSTED_TOOLS, drain_unit,
     identity as runtime_identity, validate_active_unit,
     trusted_directory_chain,
-    mount_egress_source_alias, prepare_egress_source_alias, release_egress_source_alias,
     preflight_cgroup_root, systemd_command, trusted_code_tree, trusted_file, trusted_socket,
 )
 from dependency_seed_publisher import _publish_seed, verify_seed
@@ -188,13 +187,12 @@ def _generate_authenticated_seed(
     if (not stat.S_ISDIR(journal_info.st_mode) or journal_info.st_uid != 0
             or stat.S_IMODE(journal_info.st_mode) != 0o700 or list(journal_root.iterdir())):
         raise SeedGenerationRejected("stage result journal resource is not empty and private")
-    alias = None
     unit_may_be_active = False
     with SeedGenerationJournal(journal_root, scratch_root=WORK_ROOT, owner_uid=0) as journal:
       journal.begin(
           transaction_id=transaction_id, fence={**identity.fence(), "status": identity.status},
           unit=unit, source=source_path,
-          alias_name=f"baci-seed-egress-{transaction_id}.sock",
+          egress_socket=socket_identity,
           scratch_name=f"seed-{transaction_id}",
           builder_uid=uid, builder_gid=gid,
       )
@@ -206,24 +204,14 @@ def _generate_authenticated_seed(
           unit_may_be_active = False
           journal.mark_drained()
 
-      def release_alias() -> None:
-          if alias is None:
-              return
-          journal.mark_alias_removing()
-          release_egress_source_alias(alias, gid)
-          journal.mark_alias_removed()
-
       try:
         if trusted_socket(EGRESS_SOCKET, gid) != socket_identity:
             raise SeedGenerationRejected("egress broker socket changed before launch")
-        alias = prepare_egress_source_alias(gid, transaction_id=transaction_id)
-        journal.mark_alias_prepared(alias.source_identity, alias.placeholder_identity)
-        mount_egress_source_alias(alias, gid)
-        journal.mark_alias_mounted()
+        journal.mark_egress_binding_ready(socket_identity)
         command = systemd_command(
             unit, identity.sha[:12], uid, gid, source=source_path,
             cache=cache, store=store, pnpm=pnpm, node=node,
-            egress_source=alias.path,
+            egress_source=EGRESS_SOCKET,
         )
         try:
             from worker_release_bounded_process import run_bounded_capture
@@ -241,14 +229,12 @@ def _generate_authenticated_seed(
         try:
             validate_active_unit(
                 _systemctl, unit, uid, gid, source=source_path, cache=cache,
-                store=store, pnpm=pnpm, node=node, egress_source=alias.path,
+                store=store, pnpm=pnpm, node=node, egress_source=EGRESS_SOCKET,
             )
         except Exception:
             drain_exact_unit()
             raise
         drain_exact_unit()
-        release_alias()
-        alias = None
         if trusted_socket(EGRESS_SOCKET, gid) != socket_identity:
             raise SeedGenerationRejected("egress broker socket changed during verification")
         policy_receipt = validate_receipt(
@@ -305,12 +291,9 @@ def _generate_authenticated_seed(
       finally:
         # Any failure preserves scratch for inspection. Successful cleanup is
         # descriptor-relative and occurs only after the unit proof above.
-        if alias is not None and not unit_may_be_active:
-            # This handles a pre-launch failure only after exact unit absence
-            # is proven. If any proof fails, the journal/resource are retained.
-            drain_exact_unit()
-            release_alias()
-            alias = None
+        # No host-side alias exists: the exact fixed broker socket is bound by
+        # PID 1 into the transient unit and disappears with that unit.
+        pass
 
 
 def generate_authenticated_seed(

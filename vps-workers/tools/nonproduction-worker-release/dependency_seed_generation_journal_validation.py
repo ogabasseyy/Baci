@@ -8,6 +8,20 @@ TXID = re.compile(r"^[0-9a-f]{32}$")
 ID = re.compile(r"^[1-9][0-9]{0,19}$")
 UNIT = re.compile(r"^baci-worker-seed-([0-9a-f]{12})-([0-9a-f]{32})\.service$")
 FENCE_KEYS = {"repository", "workflow", "ref", "sha", "run_id", "run_attempt", "job_id", "status"}
+LEGACY_ALIAS_KEYS = {
+    "schema", "phase", "transaction_id", "fence", "unit", "source_path",
+    "source_dev", "source_ino", "resource_dev", "resource_ino", "scratch_root_dev",
+    "scratch_root_ino", "scratch_name", "scratch_dev", "scratch_ino", "cache_dev",
+    "cache_ino", "store_dev", "store_ino", "builder_uid", "builder_gid",
+    "alias_name", "alias_state", "alias_source_dev", "alias_source_ino",
+    "placeholder_dev", "placeholder_ino",
+}
+
+
+def is_legacy_alias_record(value: object) -> bool:
+    """Identify the former schema-1 alias journal without trusting its contents."""
+    return (isinstance(value, dict) and value.get("schema") == 1
+            and set(value) == LEGACY_ALIAS_KEYS)
 
 
 def valid_record(value: object, resource_identity: tuple[int, int],
@@ -17,26 +31,13 @@ def valid_record(value: object, resource_identity: tuple[int, int],
         "source_dev", "source_ino", "resource_dev", "resource_ino", "scratch_root_dev",
         "scratch_root_ino", "scratch_name", "scratch_dev", "scratch_ino", "cache_dev",
         "cache_ino", "store_dev", "store_ino", "builder_uid", "builder_gid",
-        "alias_name", "alias_state", "alias_source_dev", "alias_source_ino",
-        "placeholder_dev", "placeholder_ino",
+        "egress_socket_dev", "egress_socket_ino",
     }
-    if not isinstance(value, dict) or set(value) != expected or value.get("schema") != 1:
+    if not isinstance(value, dict) or set(value) != expected or value.get("schema") != 2:
         return False
     fence = value.get("fence")
     sha = fence.get("sha") if isinstance(fence, dict) else None
     unit_match = UNIT.fullmatch(value.get("unit", "")) if isinstance(value.get("unit"), str) else None
-    alias_state = value.get("alias_state")
-    alias_identity_keys = ("alias_source_dev", "alias_source_ino",
-                           "placeholder_dev", "placeholder_ino")
-    alias_identity_present = all(type(value.get(key)) is int and value[key] >= 0
-                                 for key in alias_identity_keys)
-    alias_identity_absent = all(value.get(key) is None for key in alias_identity_keys)
-    if alias_state in ("prepared", "mounted"):
-        alias_identity_valid = alias_identity_present
-    elif alias_state == "removing":
-        alias_identity_valid = alias_identity_present or alias_identity_absent
-    else:
-        alias_identity_valid = alias_identity_absent
     return (
         value.get("phase") in ("prepared", "running", "drained")
         and isinstance(value.get("transaction_id"), str) and TXID.fullmatch(value["transaction_id"])
@@ -64,7 +65,6 @@ def valid_record(value: object, resource_identity: tuple[int, int],
         and ((value["store_dev"] is None and value["store_ino"] is None)
              or (type(value["store_dev"]) is int and type(value["store_ino"]) is int))
         and value["builder_uid"] > 0 and value["builder_gid"] > 0
-        and value.get("alias_name") == f"baci-seed-egress-{value['transaction_id']}.sock"
-        and alias_state in ("planned", "prepared", "mounted", "removing", "removed")
-        and alias_identity_valid
+        and all(type(value.get(key)) is int and value[key] >= 0
+                for key in ("egress_socket_dev", "egress_socket_ino"))
     )

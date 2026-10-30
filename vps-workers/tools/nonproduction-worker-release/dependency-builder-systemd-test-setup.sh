@@ -299,7 +299,8 @@ SEED_TEST_IMAGE_IDENTITY="$seed_image_identity" python3 -B - <<'PY'
 import os
 import subprocess
 from worker_release_seed_workspace_paths import ensure_seed_collection
-from worker_release_seed_workspace import _secure_mounted_root, _verify_mount
+from worker_release_seed_workspace import _verify_mount
+from worker_release_seed_workspace import _secure_mounted_root
 from worker_release_seed_workspace_mount import IMAGE, WORK_ROOT, UNIT_NAME, MOUNT_OPTIONS
 _secure_mounted_root()
 ensure_seed_collection(__import__("pathlib").Path("/var/cache/baci-worker-release/seed-work"))

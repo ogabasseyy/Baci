@@ -154,6 +154,25 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
             ("/usr/bin/systemctl", "--system", "reset-failed", "worker-egress-prototype-123.service"),
         ])
 
+    def test_cleanup_accepts_exact_seed_socket_probe_prefix(self):
+        unit = "worker-seed-socket-probe-123"
+        calls = []
+
+        def run(command, **_kwargs):
+            calls.append(command)
+            return type("Result", (), {"returncode": 0, "stdout": "loaded\n"})()
+
+        with patch("worker_release_egress_systemd_integration.subprocess.run", side_effect=run):
+            _cleanup_systemd_unit(unit)
+        self.assertEqual(calls[-2:], [
+            ("/usr/bin/systemctl", "--system", "stop", f"{unit}.service"),
+            ("/usr/bin/systemctl", "--system", "reset-failed", f"{unit}.service"),
+        ])
+
+    def test_cleanup_rejects_unrecognized_seed_socket_probe_unit(self):
+        with self.assertRaisesRegex(RuntimeError, "unit name is invalid"):
+            _cleanup_systemd_unit("worker-seed-socket-probe-123-extra")
+
     def test_cleanup_does_not_stop_an_unloaded_unit(self):
         calls = []
 

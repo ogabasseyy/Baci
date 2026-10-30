@@ -223,7 +223,10 @@ def _unit_journal_text(unit: str) -> str:
 
 def _cleanup_systemd_unit(unit: str) -> None:
     """Stop/reset only the exact disposable unit after diagnostics are captured."""
-    if not re.fullmatch(r"worker-egress-(?:prototype|probe)-[0-9]{1,10}(?:-(?:base|empty-run|bind|combined))?", unit):
+    if not re.fullmatch(
+            r"(?:worker-egress-(?:prototype-[0-9]{1,10}|probe-[0-9]{1,10}"
+            r"(?:-(?:base|empty-run|bind|combined))?)|worker-seed-socket-probe-[0-9]{1,10})",
+            unit):
         raise RuntimeError("egress fixture unit name is invalid")
     env = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
     try:
@@ -291,6 +294,52 @@ def _run_namespace_probes(*, unit_prefix: str, peer_uid: int, peer_gid: int,
             raise RuntimeError(f"namespace probe {label} timed out") from error
         finally:
             _cleanup_systemd_unit(unit)
+
+
+def _run_seed_unit_socket_probe(*, unit_prefix: str, peer_uid: int, peer_gid: int,
+                                socket_path: Path, fixture_client: Path,
+                                hidden_socket: Path, fixture_root: Path) -> None:
+    """Run the seed unit's real generated mount policy with a disposable socket."""
+    if not re.fullmatch(r"[0-9]{1,10}", unit_prefix):
+        raise RuntimeError("seed systemd probe identity is invalid")
+    import dependency_seed_generation_unit as seed_unit
+
+    original_socket = seed_unit.EGRESS_SOCKET
+    seed_unit.EGRESS_SOCKET = socket_path
+    scratch = fixture_root / "seed-policy"
+    source, cache, store = scratch / "source", scratch / "cache", scratch / "store"
+    runtime = scratch / "runtime"
+    for directory in (source, cache, store, runtime):
+        directory.mkdir(parents=True, exist_ok=True, mode=0o755)
+    pnpm, node = runtime / "pnpm.cjs", runtime / "node"
+    pnpm.write_text("// synthetic", encoding="ascii")
+    node.write_text("#!/bin/sh\nexit 0\n", encoding="ascii")
+    node.chmod(0o755)
+    unit = f"worker-seed-socket-probe-{unit_prefix}"
+    try:
+        generated = seed_unit.systemd_command(
+            f"baci-worker-seed-{'a' * 12}-{'b' * 32}.service", "a" * 12,
+            peer_uid, peer_gid, source=source, cache=cache, store=store,
+            pnpm=pnpm, node=node, egress_source=socket_path,
+        )
+        if (f"--property=TemporaryFileSystem=/etc:ro /run:ro" not in generated
+                or f"--property=BindReadOnlyPaths={socket_path}:{seed_unit.EGRESS_TARGET}"
+                not in generated):
+            raise RuntimeError("seed systemd command does not bind only the fixed socket")
+        python_index = generated.index(seed_unit.PYTHON)
+        command = [*generated[:python_index], seed_unit.PYTHON, str(fixture_client),
+                   "--client", seed_unit.EGRESS_TARGET,
+                   str(os.stat("/proc/self/ns/net").st_ino), str(hidden_socket)]
+        command[command.index(f"--unit=baci-worker-seed-{'a' * 12}-{'b' * 32}.service")] = f"--unit={unit}"
+        result = subprocess.run(command, check=False, capture_output=True,
+                                text=True, timeout=45)
+        if result.returncode != 0:
+            raise RuntimeError("seed systemd direct-socket mount probe failed")
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError("seed systemd direct-socket mount probe timed out") from error
+    finally:
+        seed_unit.EGRESS_SOCKET = original_socket
+        _cleanup_systemd_unit(unit)
 
 
 def _run_host_fixture() -> int:
@@ -449,6 +498,11 @@ def _run_host_fixture() -> int:
                     raise RuntimeError("synthetic registry fixture did not drain")
             if len(accepted) != 3 or len(registry_served) != 1 or len(registry_rejected) != 2:
                 raise RuntimeError("synthetic TLS route or SNI rejection evidence was incomplete")
+            _run_seed_unit_socket_probe(
+                unit_prefix=str(os.getpid()), peer_uid=peer_uid, peer_gid=peer_gid,
+                socket_path=socket_path, fixture_client=fixture_client,
+                hidden_socket=hidden_host_socket, fixture_root=fixture_root,
+            )
         finally:
             stopping.set()
             listener.close()

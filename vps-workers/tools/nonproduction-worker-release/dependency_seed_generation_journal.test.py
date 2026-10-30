@@ -2,6 +2,7 @@
 """Crash-state and identity checks for stage-owned seed-unit journal records."""
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import sys
@@ -46,17 +47,18 @@ class SeedUnitJournalTests(unittest.TestCase):
         return journal.begin(
             transaction_id="f" * 32, fence=FENCE,
             unit=f"baci-worker-seed-{'a' * 12}-{'b' * 32}.service",
-            source=self.source, alias_name=f"baci-seed-egress-{'f' * 32}.sock",
+            source=self.source, egress_socket=(1, 2),
             scratch_name=f"seed-{'f' * 32}",
             builder_uid=max(1, os.getuid()), builder_gid=max(1, os.getgid()),
         )
 
-    def test_records_exact_fence_resource_alias_and_drained_lifecycle(self):
+    def test_records_fixed_socket_and_drained_lifecycle(self):
         with SeedGenerationJournal(self.resource, scratch_root=self.root,
                                    owner_uid=os.getuid()) as journal:
             record = self.make_record(journal)
+            self.assertEqual(record["schema"], 2)
             self.assertEqual(record["phase"], "prepared")
-            with self.assertRaisesRegex(SeedGenerationRejected, "alias must be journaled"):
+            with self.assertRaisesRegex(SeedGenerationRejected, "workspace identities"):
                 journal.mark_running()
             scratch = self.root / record["scratch_name"]
             scratch.mkdir(mode=0o700)
@@ -66,15 +68,10 @@ class SeedUnitJournalTests(unittest.TestCase):
             journal.mark_scratch_created((scratch.stat().st_dev, scratch.stat().st_ino))
             journal.mark_outputs_created((cache.stat().st_dev, cache.stat().st_ino),
                                          (store.stat().st_dev, store.stat().st_ino))
-            journal.mark_alias_prepared((1, 2, 0, 55, 0o140000, 0o660),
-                                        (1, 3, 0, 0, 0o600))
-            journal.mark_alias_mounted()
+            journal.mark_egress_binding_ready((1, 2))
             journal.mark_running()
             journal.mark_drained()
             self.assertEqual(journal.read()["phase"], "drained")
-            journal.mark_alias_removing()
-            self.assertEqual(journal.read()["alias_state"], "removing")
-            journal.mark_alias_removed()
             cache.rmdir()
             store.rmdir()
             journal.mark_outputs_removed()
@@ -83,44 +80,57 @@ class SeedUnitJournalTests(unittest.TestCase):
             journal.clear()
             self.assertIsNone(journal.read())
 
-    def test_alias_source_and_placeholder_inodes_are_durable_before_mount_phase(self):
+    def test_fixed_socket_inode_is_durable_before_launch(self):
         with SeedGenerationJournal(self.resource, scratch_root=self.root,
                                    owner_uid=os.getuid()) as journal:
             journal.begin(
                 transaction_id=TXID, fence={**FENCE, "status": "in_progress"},
                 unit=f"baci-worker-seed-{'a' * 12}-{TXID}.service",
-                source=self.source, alias_name=f"baci-seed-egress-{TXID}.sock",
+                source=self.source, egress_socket=(1, 2),
                 scratch_name=f"seed-{TXID}", builder_uid=max(1, os.getuid()),
                 builder_gid=max(1, os.getgid()),
             )
-            source_identity = (10, 20, 0, 55, 0o140000, 0o660)
-            placeholder_identity = (10, 21, 0, 0, 0o600)
-            journal.mark_alias_prepared(source_identity, placeholder_identity)
+            journal.mark_egress_binding_ready((1, 2))
             prepared = journal.read()
-            self.assertEqual(prepared["alias_state"], "prepared")
-            self.assertEqual((prepared["alias_source_dev"], prepared["alias_source_ino"]),
-                             source_identity[:2])
-            self.assertEqual((prepared["placeholder_dev"], prepared["placeholder_ino"]),
-                             placeholder_identity[:2])
-            journal.mark_alias_mounted()
-            self.assertEqual(journal.read()["alias_state"], "mounted")
+            self.assertEqual((prepared["egress_socket_dev"], prepared["egress_socket_ino"]), (1, 2))
 
-    def test_planned_alias_can_record_remove_intent_without_invented_inode(self):
+    def test_fixed_socket_identity_cannot_change_before_launch(self):
         with SeedGenerationJournal(self.resource, scratch_root=self.root,
                                    owner_uid=os.getuid()) as journal:
             journal.begin(
                 transaction_id=TXID, fence={**FENCE, "status": "in_progress"},
                 unit=f"baci-worker-seed-{'a' * 12}-{TXID}.service",
-                source=self.source, alias_name=f"baci-seed-egress-{TXID}.sock",
+                source=self.source, egress_socket=(1, 2),
                 scratch_name=f"seed-{TXID}", builder_uid=max(1, os.getuid()),
                 builder_gid=max(1, os.getgid()),
             )
-            journal.mark_drained()
-            journal.mark_alias_removing()
-            removing = journal.read()
-            self.assertEqual(removing["alias_state"], "removing")
-            self.assertIsNone(removing["alias_source_dev"])
-            self.assertIsNone(removing["placeholder_ino"])
+            with self.assertRaisesRegex(SeedGenerationRejected, "socket changed"):
+                journal.mark_egress_binding_ready((9, 9))
+
+    def test_legacy_schema_one_alias_record_is_preserved_for_explicit_preflight(self):
+        with SeedGenerationJournal(self.resource, scratch_root=self.root,
+                                   owner_uid=os.getuid()) as journal:
+            record = self.make_record(journal)
+            record.pop("egress_socket_dev")
+            record.pop("egress_socket_ino")
+            record.update({
+                "schema": 1,
+                "alias_name": f"baci-seed-egress-{TXID}.sock",
+                "alias_state": "planned",
+                "alias_source_dev": None,
+                "alias_source_ino": None,
+                "placeholder_dev": None,
+                "placeholder_ino": None,
+            })
+            record_path = self.resource / "seed-generation-unit.json"
+            record_path.write_text(json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n",
+                                   encoding="ascii")
+            record_path.chmod(0o600)
+            original = record_path.read_bytes()
+            with self.assertRaisesRegex(SeedGenerationRejected,
+                                        "legacy alias seed journal requires explicit recovery preflight"):
+                journal.read()
+            self.assertEqual(record_path.read_bytes(), original)
 
     def test_rejects_wrong_unit_fence_and_alias_before_recording(self):
         with SeedGenerationJournal(self.resource, scratch_root=self.root,
@@ -129,33 +139,11 @@ class SeedUnitJournalTests(unittest.TestCase):
                 journal.begin(
                     transaction_id="f" * 32, fence={**FENCE, "workflow": "wrong.yml"},
                     unit=f"baci-worker-seed-{'c' * 12}-{'b' * 32}.service",
-                    source=self.source, alias_name=f"baci-seed-egress-{'f' * 32}.sock",
+                    source=self.source, egress_socket=(1, 2),
                     scratch_name=f"seed-{'f' * 32}",
                     builder_uid=max(1, os.getuid()), builder_gid=max(1, os.getgid()),
                 )
-            with self.assertRaises(SeedGenerationRejected):
-                self.make_record(journal)
-                journal.mark_alias_removed()
-
-    def test_alias_cannot_be_marked_removed_without_durable_intent(self):
-        with SeedGenerationJournal(self.resource, scratch_root=self.root,
-                                   owner_uid=os.getuid()) as journal:
             self.make_record(journal)
-            scratch = self.root / f"seed-{'f' * 32}"
-            scratch.mkdir(mode=0o700)
-            cache, store = scratch / "cache", scratch / "store"
-            cache.mkdir(mode=0o700)
-            store.mkdir(mode=0o700)
-            journal.mark_scratch_created((scratch.stat().st_dev, scratch.stat().st_ino))
-            journal.mark_outputs_created((cache.stat().st_dev, cache.stat().st_ino),
-                                         (store.stat().st_dev, store.stat().st_ino))
-            journal.mark_alias_prepared((1, 2, 0, 55, 0o140000, 0o660),
-                                        (1, 3, 0, 0, 0o600))
-            journal.mark_alias_mounted()
-            journal.mark_running()
-            journal.mark_drained()
-            with self.assertRaisesRegex(SeedGenerationRejected, "durably intended"):
-                journal.mark_alias_removed()
 
     def test_rejects_journal_copy_under_different_resource_inode(self):
         with SeedGenerationJournal(self.resource, scratch_root=self.root,
@@ -183,9 +171,7 @@ class SeedUnitJournalTests(unittest.TestCase):
             journal.mark_scratch_created((scratch.stat().st_dev, scratch.stat().st_ino))
             journal.mark_outputs_created((cache.stat().st_dev, cache.stat().st_ino),
                                          (store.stat().st_dev, store.stat().st_ino))
-            journal.mark_alias_prepared((1, 2, 0, 55, 0o140000, 0o660),
-                                        (1, 3, 0, 0, 0o600))
-            journal.mark_alias_mounted()
+            journal.mark_egress_binding_ready((1, 2))
             journal.mark_running()
             journal.mark_drained()
             cache.rmdir()

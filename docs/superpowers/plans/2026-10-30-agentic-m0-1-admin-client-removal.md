@@ -223,6 +223,8 @@ RESET ROLE;
 ROLLBACK;
 ```
 
+The test includes the new migration twice on purpose: the second run proves the migration can safely be re-applied, as the existing `agentic_merchant_context_authority.sql` test does for its migration.
+
 - [ ] **Step 2: Start a throwaway Postgres and watch the test fail**
 
 The data directory lives in memory (`--tmpfs`) because Docker Desktop's own disk may be full; nothing is written to Docker's disk.

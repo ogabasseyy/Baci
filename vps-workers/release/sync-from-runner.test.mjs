@@ -85,3 +85,35 @@ test(
     assert.doesNotMatch(runner.read('release.log'), /^activate/m);
   }
 );
+
+test(
+  'bugfix: reaches the user manager when the job step lacks user-bus settings',
+  linuxOnly,
+  () => {
+    const runner = createRunner();
+    const result = runner.run();
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(
+      runner.read('systemctl.log'),
+      /^xdg=\/run\/user\/1001 --user stop /m
+    );
+  }
+);
+
+test(
+  'names the failed retirement step and restores the legacy schedule',
+  linuxOnly,
+  () => {
+    const runner = createRunner({ stopFails: true });
+    const result = runner.run();
+
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /legacy retirement step failed: stopping the legacy services/
+    );
+    assert.equal(runner.read('crontab'), LEGACY_CRONTAB);
+    assert.doesNotMatch(runner.read('release.log'), /^activate/m);
+  }
+);

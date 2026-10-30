@@ -503,3 +503,12 @@ describe('ImeiCheckerScreen', () => {
     expect(screen.queryByText('iPhone 13 Pro')).toBeNull();
   });
 });
+
+jest.mock('@/components/imei-check/use-imei-runtime-availability', () => ({
+  useImeiRuntimeAvailability: () => ({
+    availableTierKeys: null,
+    failed: false,
+    loading: false,
+    retry: () => undefined,
+  }),
+}));

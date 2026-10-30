@@ -9,6 +9,22 @@ import type {
 const PETROCK_TIER_BINDINGS: Partial<
   Record<ImeiServiceTierKey, ImeiProviderBinding>
 > = {
+  applePartNumber: {
+    costUsd: 0.12,
+    deviceCategories: ['smartphone'],
+    orderFieldName: 'IMEI',
+    productId: '1963',
+    provider: 'petrock',
+  },
+  // Captured product 1941 iPhone IMEI response, 2026-10-30. Public selection
+  // remains separately gated; this binding does not enable a customer tier.
+  esimCompatibility: {
+    costUsd: 0.04,
+    deviceCategories: ['smartphone'],
+    orderFieldName: 'IMEI',
+    productId: '1941',
+    provider: 'petrock',
+  },
   // 1955 rejected the paid blacklist probe. Keep blacklist on Sickw even
   // when allowlisted; a catalog annotation alone does not block submissions.
   knoxGuard: {
@@ -70,6 +86,9 @@ export function resolveImeiProviderBinding(
   }
 
   if (
+    ((input.tierKey === 'esimCompatibility' ||
+      input.tierKey === 'applePartNumber') &&
+      input.deviceCategory !== 'smartphone') ||
     (input.tier.deviceCategories.length > 1 && !input.deviceCategory) ||
     (input.deviceCategory &&
       !binding.deviceCategories.includes(input.deviceCategory))

@@ -26,10 +26,8 @@ export type ImeiServiceTierKey = keyof typeof IMEI_SERVICE_TIERS;
 
 /** Phase 3 catalog candidates. These keys are deliberately not purchasable. */
 export const PETROCK_DARK_IMEI_SERVICE_TIERS = [
-  'esimCompatibility',
   'refurbishedStatus',
   'replacementStatus',
-  'applePartNumber',
   'knoxEnrollment',
   'samsungSoldBy',
   'oneplusPremium',
@@ -69,6 +67,8 @@ export const PUBLIC_IMEI_SERVICE_TIERS = [
   'blacklistPro',
   'carrier',
   'simLock',
+  'esimCompatibility',
+  'applePartNumber',
   'icloud',
   'icloudPro',
   'icloudCleanLost',

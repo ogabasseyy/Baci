@@ -86,6 +86,34 @@ describe('runPetrockReconciliation', () => {
     });
   });
 
+  it('signals diagnostic unknown submissions requiring manual review through the worker failure status', async () => {
+    mocks.claim.mockResolvedValue([
+      {
+        id: 'lookup-secret',
+        lease_token: 'lease-secret',
+        status: 'submission_unknown',
+        reconcile_attempts: 12,
+        merchant_id: 'merchant-secret',
+        tier: 'simLock',
+        provider_order_id: null,
+      },
+    ]);
+    mocks.resolve.mockResolvedValue({
+      kind: 'pending',
+      pollAfterMs: 60000,
+      needsReview: true,
+    });
+    const result = await runPetrockReconciliation({
+      origin: 'https://usebaci.com',
+    });
+    expect(result).toMatchObject({
+      status: 503,
+      body: { manualReview: 1, pending: 1, failed: 0 },
+    });
+    expect(JSON.stringify(result.body)).not.toContain('lookup-secret');
+    expect(mocks.resolve).toHaveBeenCalledTimes(1);
+  });
+
   it('skips when Petrock is not configured', async () => {
     mocks.getPetrockConfig.mockReturnValue(null);
 

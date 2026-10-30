@@ -9,6 +9,7 @@ import type React from 'react';
 import { useEffect, useState } from 'react';
 import { useOptionalCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
+import { fetchDeviceSuggestions } from './fetch-imei-device-suggestions';
 import { OgabasseyImeiEntry } from './imei-checker-entry';
 import { createImeiIdempotencyKey } from './imei-checker-idempotency-key';
 import { performImeiCheck } from './imei-checker-request';
@@ -21,35 +22,6 @@ import type {
 import { OgabasseyImeiResults } from './imei-results';
 import { useImeiPendingLookup } from './use-imei-pending-lookup';
 import { useImeiTierSelection } from './use-imei-tier-selection';
-
-/**
- * Module-scope fetch keeps the try/finally clause out of the component body
- * so React Compiler can memoize the checker.
- */
-async function fetchDeviceSuggestions(
-  query: string
-): Promise<ProductSuggestion[] | null> {
-  try {
-    const response = await fetch(
-      `/api/storefront/products?q=${encodeURIComponent(query)}&limit=5`
-    );
-    if (!response.ok) {
-      return null;
-    }
-    const data = await response.json();
-    return (
-      data.data?.map((p: Record<string, unknown>) => ({
-        id: p.id as string,
-        name: p.name as string,
-        category: p.category as string | undefined,
-        image: p.image as string | undefined,
-      })) || []
-    );
-  } catch {
-    console.warn('Failed to fetch device suggestions');
-    return null;
-  }
-}
 
 interface OgabasseyImeiCheckerProps {
   /** Set when the parent already committed the IMEI LCP hero. */
@@ -65,6 +37,9 @@ export const OgabasseyImeiChecker: React.FC<OgabasseyImeiCheckerProps> = ({
   const customerAuth = useOptionalCustomerAuth();
   const merchantSlug = useMerchantSafe()?.merchant?.slug;
   const {
+    availabilityFailed,
+    availabilityLoading,
+    retryAvailability,
     brand,
     canToggleServices,
     currentTier,
@@ -154,7 +129,12 @@ export const OgabasseyImeiChecker: React.FC<OgabasseyImeiCheckerProps> = ({
 
   const handleCheck = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isValidDeviceIdentifier(imei, identifier)) return;
+    if (
+      !selectedTier ||
+      !displayedTierKeys.includes(selectedTier) ||
+      !isValidDeviceIdentifier(imei, identifier)
+    )
+      return;
     if (!merchantSlug) {
       setNeedsSignIn(false);
       setError('This storefront is unavailable. Refresh and try again.');
@@ -229,59 +209,62 @@ export const OgabasseyImeiChecker: React.FC<OgabasseyImeiCheckerProps> = ({
 
   const body = (
     <>
-        {!result && (
-          <OgabasseyImeiEntry
-            brand={brand}
-            canToggleServices={canToggleServices}
-            device={device}
-            deviceQuery={deviceQuery}
-            displayedTierKeys={displayedTierKeys}
-            error={error}
-            identifier={identifier}
-            imei={imei}
-            isLoading={isLoading}
-            isPending={pendingLookup.pending !== null}
-            needsSignIn={needsSignIn}
-            needsWalletFunding={needsWalletFunding}
-            omitHero={omitHero}
-            onCheck={handleCheck}
-            onDeviceQueryChange={(value) => {
-              setDeviceQuery(value);
-              setShowSuggestions(true);
-              if (!value) setSelectedDeviceSuggestion(null);
-              if (value.length < 2) setSuggestions([]);
-            }}
-            onDeviceSearchFocus={() => setShowSuggestions(true)}
-            onImeiChange={onChangeImei}
-            onSelectBrand={onSelectBrand}
-            onSelectDevice={onSelectDevice}
-            onSelectDeviceSuggestion={handleSelectDeviceSuggestion}
-            onSelectTier={onSelectTier}
-            onToggleServices={onToggleServices}
-            pendingPaused={pendingLookup.paused}
-            searchLoading={searchLoading}
-            selectedDeviceSuggestion={selectedDeviceSuggestion}
-            selectedTier={selectedTier}
-            showAllServices={showAllServices}
-            showSuggestions={showSuggestions}
-            suggestions={suggestions}
-          />
-        )}
-
-        <OgabasseyImeiResults
-          currentTier={resultTier ?? currentTier}
-          onReset={() => {
-            pendingLookup.clear();
-            setResult(null);
-            setResultLookupId(null);
-            setResultTier(null);
-            setError(null);
-            setNeedsWalletFunding(false);
-            onClearImei();
+      {!result && (
+        <OgabasseyImeiEntry
+          availabilityFailed={availabilityFailed}
+          availabilityLoading={availabilityLoading}
+          onRetryAvailability={retryAvailability}
+          brand={brand}
+          canToggleServices={canToggleServices}
+          device={device}
+          deviceQuery={deviceQuery}
+          displayedTierKeys={displayedTierKeys}
+          error={error}
+          identifier={identifier}
+          imei={imei}
+          isLoading={isLoading}
+          isPending={pendingLookup.pending !== null}
+          needsSignIn={needsSignIn}
+          needsWalletFunding={needsWalletFunding}
+          omitHero={omitHero}
+          onCheck={handleCheck}
+          onDeviceQueryChange={(value) => {
+            setDeviceQuery(value);
+            setShowSuggestions(true);
+            if (!value) setSelectedDeviceSuggestion(null);
+            if (value.length < 2) setSuggestions([]);
           }}
-          lookupId={resultLookupId}
-          result={result}
+          onDeviceSearchFocus={() => setShowSuggestions(true)}
+          onImeiChange={onChangeImei}
+          onSelectBrand={onSelectBrand}
+          onSelectDevice={onSelectDevice}
+          onSelectDeviceSuggestion={handleSelectDeviceSuggestion}
+          onSelectTier={onSelectTier}
+          onToggleServices={onToggleServices}
+          pendingPaused={pendingLookup.paused}
+          searchLoading={searchLoading}
+          selectedDeviceSuggestion={selectedDeviceSuggestion}
+          selectedTier={selectedTier}
+          showAllServices={showAllServices}
+          showSuggestions={showSuggestions}
+          suggestions={suggestions}
         />
+      )}
+
+      <OgabasseyImeiResults
+        currentTier={resultTier ?? currentTier}
+        onReset={() => {
+          pendingLookup.clear();
+          setResult(null);
+          setResultLookupId(null);
+          setResultTier(null);
+          setError(null);
+          setNeedsWalletFunding(false);
+          onClearImei();
+        }}
+        lookupId={resultLookupId}
+        result={result}
+      />
     </>
   );
 

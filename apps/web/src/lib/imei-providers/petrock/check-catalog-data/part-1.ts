@@ -57,7 +57,14 @@ export const PETROCK_CHECK_MAP_PART_1 = [
     turnaround: '1-5 Minutes',
     inputType: 'imei',
   }),
-  mappedCheck('1963', 'applePartNumber', 0.12, 'IMEI', ['imei', 'serial'], {
+  mappedCheck('1963', 'applePartNumber', 0.12, 'IMEI', ['imei'], {
+    evidence: 'successful_probe',
+    observedFields: ['partNumber'],
+    brandScope: ['apple'],
+    deviceScope: ['smartphone'],
+    notes: [
+      'Successful 2026-10-30 iPhone IMEI probe. Captured Part Number only; no device/model-number evidence. Serial and other-device inputs remain unverified.',
+    ],
     supplierName: 'Apple Part Number | MPN Check',
     turnaround: '1-5 Minutes',
     inputType: 'text',

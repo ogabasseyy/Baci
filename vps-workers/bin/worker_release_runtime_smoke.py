@@ -59,10 +59,18 @@ def run_fixed_smokes(candidate: Path, fence_digest: str, *, execute_unit: Callab
         "InaccessiblePaths": "/tmp /var/tmp /dev/shm /etc /srv /opt /usr/local /var/log /var/cache /var/spool /var/backups",
     }
     worker_imports = (
+        "const boundedImport = async (specifier, timeoutCode) => { let timer; "
+        "try { return await Promise.race([import(specifier), new Promise((_, reject) => { "
+        "timer = setTimeout(() => reject({ baciImportTimeout: timeoutCode }), 8000); })]); } "
+        "catch (error) { process.exit(Number.isInteger(error?.baciImportTimeout) "
+        "? error.baciImportTimeout : error?.code === 'ERR_MODULE_NOT_FOUND' ? 21 : 22); } "
+        "finally { clearTimeout(timer); } }; "
         "try { const fs = await import('node:fs'); "
         "for (const hidden of ['/srv/baci-workers/releases','/srv/baci-workers/runtime','/srv/baci-workers/locks','/etc','/var/log','/var/cache','/var/spool','/var/backups','/opt','/usr/local']) { "
         "try { fs.accessSync(hidden); process.exit(4); } catch (error) { if (!['ENOENT','EACCES','EPERM'].includes(error?.code)) process.exit(5); } } "
-        "const [dotenv, supabase, expo] = await Promise.all([import('dotenv'), import('@supabase/supabase-js'), import('expo-server-sdk')]); "
+        "const dotenv = await boundedImport('dotenv', 31); "
+        "const supabase = await boundedImport('@supabase/supabase-js', 32); "
+        "const expo = await boundedImport('expo-server-sdk', 33); "
         "if (typeof dotenv.config !== 'function' || typeof supabase.createClient !== 'function' || typeof expo.Expo !== 'function') process.exit(2); "
         "const client = supabase.createClient('https://example.invalid', 'synthetic-smoke-key'); "
         "const push = new expo.Expo({ accessToken: 'synthetic-smoke-token' }); "

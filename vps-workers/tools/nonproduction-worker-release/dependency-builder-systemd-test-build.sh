@@ -1,7 +1,7 @@
 # Sourced by dependency-builder-systemd-test.sh; keep shared setup in one process.
 
 python3 - "$source_root" "$release_root" "$sha" "$suffix" "$helper_root" <<'PY'
-import importlib.util, os, subprocess, sys, time
+import importlib.util, json, os, subprocess, sys, time
 from pathlib import Path
 from types import SimpleNamespace
 import worker_release_dependency_builder as dependency_builder

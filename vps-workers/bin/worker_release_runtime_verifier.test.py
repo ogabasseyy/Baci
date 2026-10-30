@@ -243,6 +243,12 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
             self.assertEqual(len(inaccessible), len(set(inaccessible)))
             self.assertNotIn("/root", inaccessible)  # supplied by ProtectHome
             self.assertNotIn("/home", inaccessible)  # supplied by ProtectHome
+            if "--input-type=module" in command:
+                smoke_script = command[-1]
+                self.assertIn("boundedImport('dotenv', 31)", smoke_script)
+                self.assertIn("boundedImport('@supabase/supabase-js', 32)", smoke_script)
+                self.assertIn("boundedImport('expo-server-sdk', 33)", smoke_script)
+                self.assertNotIn("Promise.all([import(", smoke_script)
             self.assertNotIn("/var/run", inaccessible)  # aliases /run on Ubuntu
             self.assertNotIn("/run", inaccessible)  # isolated by a read-only empty tmpfs
             self.assertIn("/srv", inaccessible)  # keep the worker tree masked

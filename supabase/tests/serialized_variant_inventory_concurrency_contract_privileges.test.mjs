@@ -69,18 +69,48 @@ test('private inventory functions remain inaccessible to authenticated callers',
   }
 });
 
-test('freshly recreated private functions regain the default PUBLIC grant', () => {
-  const signature = privateFunctions[0];
-  const recreated = authSources(`
+const recreateSql = (signature) => `
     DROP FUNCTION ${signature};
     CREATE FUNCTION private.claim_variant_inventory_units_for_order_item_internal(
       p_merchant_id uuid,
       p_order_id uuid,
       p_order_item_id uuid
     ) RETURNS jsonb LANGUAGE sql SECURITY DEFINER AS $$ SELECT '{}'::jsonb $$;
-  `);
+  `;
+
+test('freshly recreated private functions do not regain PUBLIC under the hardened default privileges', () => {
+  // 20261030233000 revokes EXECUTE from PUBLIC for functions that postgres
+  // creates, so a DROP + CREATE no longer re-opens the private function.
+  const signature = privateFunctions[0];
   assert.equal(
-    serializedInventoryPrivileges.authenticatedCanExecute(recreated, signature),
+    serializedInventoryPrivileges.authenticatedCanExecute(
+      authSources(recreateSql(signature)),
+      signature
+    ),
+    false
+  );
+});
+
+test('recreated private functions regain access when PUBLIC is granted again', () => {
+  const signature = privateFunctions[0];
+  assert.equal(
+    serializedInventoryPrivileges.authenticatedCanExecute(
+      authSources(
+        'ALTER DEFAULT PRIVILEGES FOR ROLE postgres GRANT EXECUTE ON FUNCTIONS TO PUBLIC;',
+        recreateSql(signature)
+      ),
+      signature
+    ),
+    true
+  );
+  assert.equal(
+    serializedInventoryPrivileges.authenticatedCanExecute(
+      authSources(
+        recreateSql(signature),
+        `GRANT EXECUTE ON FUNCTION ${signature} TO PUBLIC;`
+      ),
+      signature
+    ),
     true
   );
 });

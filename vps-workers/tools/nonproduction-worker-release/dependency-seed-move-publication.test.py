@@ -14,6 +14,7 @@ sys.path[:0] = [str(TOOLS.parents[1] / "bin"), str(TOOLS)]
 
 import dependency_seed_publisher as publisher
 import dependency_seed_recovery as recovery
+import dependency_seed_move_publication as move_publication
 from dependency_seed_filesystem import freeze_tree, open_directory
 from dependency_seed_test_support import fixture_generation_capability
 from worker_release_dependency_policy_cache import EXPECTED_PNPM
@@ -86,7 +87,10 @@ class SameFilesystemSeedPublicationTests(unittest.TestCase):
     def test_crash_after_first_input_rename_recovers_only_journaled_inodes(self):
         with tempfile.TemporaryDirectory(prefix="seed-move-crash-") as temporary:
             source, _scratch, cache, store, seeds, capability, identities = self.fixture(Path(temporary))
-            original_move = publisher.move_input_directory
+            # transfer_inputs resolves this helper from its defining module;
+            # patch that lookup point so the test interrupts between the real
+            # cache and store renames.
+            original_move = move_publication.move_input_directory
             calls = 0
 
             def fail_after_cache(parent_fd, destination_fd, name, expected):
@@ -96,7 +100,7 @@ class SameFilesystemSeedPublicationTests(unittest.TestCase):
                     raise publisher.BuilderRejected("simulated crash after cache rename")
                 return original_move(parent_fd, destination_fd, name, expected)
 
-            with patch.object(publisher, "move_input_directory", side_effect=fail_after_cache):
+            with patch.object(move_publication, "move_input_directory", side_effect=fail_after_cache):
                 with self.assertRaisesRegex(publisher.BuilderRejected, "simulated crash"):
                     publisher._publish_seed(
                         source, cache, store, seeds, SHA,

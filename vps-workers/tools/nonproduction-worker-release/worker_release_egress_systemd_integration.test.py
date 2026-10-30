@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from worker_release_egress_systemd_integration import (
     _approved_socket_properties, _namespace_failure_category, _safe_diagnostic,
     _socket_bind_mount_command, _namespace_missing_path,
-    _unit_journal_text, _cleanup_systemd_unit,
+    _unit_journal_text, _cleanup_systemd_unit, _namespace_probe_steps,
 )
 from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture_modules
 
@@ -101,7 +101,20 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
         self.assertTrue(any("--unit=worker-egress-prototype-123.service" in call for call in calls))
         self.assertTrue(any("status" in call and "worker-egress-prototype-123.service" in call
                             for call in calls))
+        self.assertTrue(any("--property=StatusText" in call
+                            and "--property=ExecMainStatus" in call for call in calls))
         self.assertFalse(any("--collect" in call for call in calls))
+
+    def test_namespace_probes_progress_from_base_to_full_mount_policy(self):
+        steps = _namespace_probe_steps(
+            "--property=InaccessiblePaths=/run",
+            "--property=BindReadOnlyPaths=/tmp/source.sock:/tmp/target.sock")
+        self.assertEqual([step[0] for step in steps], ["base", "mask", "bind", "combined"])
+        self.assertNotIn("--property=InaccessiblePaths=/run", steps[0])
+        self.assertIn("--property=InaccessiblePaths=/run", steps[1])
+        self.assertIn("--property=BindReadOnlyPaths=/tmp/source.sock:/tmp/target.sock", steps[2])
+        self.assertIn("--property=InaccessiblePaths=/run", steps[3])
+        self.assertIn("--property=BindReadOnlyPaths=/tmp/source.sock:/tmp/target.sock", steps[3])
 
     def test_cleanup_stops_and_resets_only_exact_fixture_unit(self):
         calls = []

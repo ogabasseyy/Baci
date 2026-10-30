@@ -182,7 +182,7 @@ def _unmount_socket_source_alias(source_alias: Path, *,
 
 def _unit_journal_text(unit: str) -> str:
     """Read bounded journal and unit status before its transient unit is reset."""
-    if not re.fullmatch(r"worker-egress-prototype-[0-9]{1,10}", unit):
+    if not re.fullmatch(r"worker-egress-(?:prototype|probe)-[0-9]{1,10}(?:-(?:base|mask|bind|combined))?", unit):
         return ""
     bin_path = HERE.parents[1] / "bin"
     if str(bin_path) not in sys.path:
@@ -201,14 +201,23 @@ def _unit_journal_text(unit: str) -> str:
              f"{unit}.service"),
             timeout=2, max_stream_bytes=4096, env=env,
         )
+        properties = run_bounded_capture(
+            ("/usr/bin/systemctl", "--system", "show", "--no-pager",
+             "--property=LoadState", "--property=ActiveState", "--property=SubState",
+             "--property=Result", "--property=ExecMainCode", "--property=ExecMainStatus",
+             "--property=StatusText", "--property=StatusErrno", "--property=ControlGroup",
+             f"{unit}.service"),
+            timeout=2, max_stream_bytes=2048, env=env,
+        )
     except Exception:
         return ""
-    return journal.stdout + journal.stderr + status.stdout + status.stderr
+    return (journal.stdout + journal.stderr + status.stdout + status.stderr
+            + properties.stdout + properties.stderr)
 
 
 def _cleanup_systemd_unit(unit: str) -> None:
     """Stop/reset only the exact disposable unit after diagnostics are captured."""
-    if not re.fullmatch(r"worker-egress-prototype-[0-9]{1,10}", unit):
+    if not re.fullmatch(r"worker-egress-(?:prototype|probe)-[0-9]{1,10}(?:-(?:base|mask|bind|combined))?", unit):
         raise RuntimeError("egress fixture unit name is invalid")
     env = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
     try:
@@ -232,6 +241,50 @@ def _cleanup_systemd_unit(unit: str) -> None:
         raise RuntimeError("egress fixture unit cleanup failed") from error
     if stopped.returncode != 0 or reset.returncode != 0:
         raise RuntimeError("egress fixture unit cleanup failed")
+
+
+def _namespace_probe_steps(mask_property: str, bind_property: str) -> tuple[tuple[str, ...], ...]:
+    """Return diagnostic-only staged sandbox property sets, weakest to full."""
+    base = ("--property=PrivateNetwork=yes", "--property=NoNewPrivileges=yes",
+            "--property=PrivateUsers=yes", "--property=SupplementaryGroups=",
+            "--property=RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6")
+    return (
+        ("base", *base),
+        ("mask", *base, mask_property),
+        ("bind", *base, bind_property),
+        ("combined", *base, mask_property, bind_property),
+    )
+
+
+def _run_namespace_probes(*, unit_prefix: str, peer_uid: int, peer_gid: int,
+                          socket_path: Path, source_alias: Path, isolated_alias: Path,
+                          fixture_paths: tuple[Path, ...]) -> None:
+    """Run true-only unit probes to identify which mount namespace stage fails."""
+    if not re.fullmatch(r"[0-9]{1,10}", unit_prefix):
+        raise RuntimeError("egress probe identity is invalid")
+    mask_property, bind_property = _approved_socket_properties(
+        socket_path, source_alias, isolated_alias)
+    for label, *properties in _namespace_probe_steps(mask_property, bind_property):
+        unit = f"worker-egress-probe-{unit_prefix}-{label}"
+        command = ["/usr/bin/systemd-run", "--system", "--wait", "--pipe",
+                   f"--unit={unit}", f"--uid={peer_uid}", f"--gid={peer_gid}",
+                   *properties, "/usr/bin/true"]
+        try:
+            result = subprocess.run(command, check=False, capture_output=True, text=True,
+                                    timeout=20)
+            if result.returncode != 0:
+                evidence = (result.stdout + "\n" + result.stderr
+                            + "\n" + _unit_journal_text(unit))
+                category = _namespace_failure_category(evidence)
+                missing_path = _namespace_missing_path(evidence, fixture_paths)
+                detail = _safe_diagnostic(result.stdout, result.stderr, limit=220)
+                suffix = f" path={missing_path}" if missing_path else ""
+                raise RuntimeError(
+                    f"namespace probe {label} failed: {category}{suffix}; detail={detail}")
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError(f"namespace probe {label} timed out") from error
+        finally:
+            _cleanup_systemd_unit(unit)
 
 
 def _run_host_fixture() -> int:
@@ -324,6 +377,14 @@ def _run_host_fixture() -> int:
             os.chmod(hidden_host_socket, 0o666)
             hidden_identity = hidden_host_socket.lstat()
             hidden_listener.listen(1)
+            _run_namespace_probes(
+                unit_prefix=str(os.getpid()), peer_uid=peer_uid, peer_gid=peer_gid,
+                socket_path=socket_path, source_alias=socket_source_alias,
+                isolated_alias=socket_alias,
+                fixture_paths=(socket_source_alias, socket_alias, socket_path,
+                               hidden_host_socket, fixture_client, fixture_root,
+                               scratch_root, Path("/run"), Path("/usr/bin/true")),
+            )
             accept_thread = threading.Thread(target=broker.serve,
                                              args=(listener, stopping), daemon=True)
             accept_thread.start()

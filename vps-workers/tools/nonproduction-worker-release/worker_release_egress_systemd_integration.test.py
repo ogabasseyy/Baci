@@ -105,6 +105,27 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
                             and "--property=ExecMainStatus" in call for call in calls))
         self.assertFalse(any("--collect" in call for call in calls))
 
+    def test_empty_run_probe_unit_is_accepted_by_diagnostics_and_cleanup(self):
+        unit = "worker-egress-probe-123-empty-run"
+        calls = []
+
+        def capture(command, **_kwargs):
+            calls.append(command)
+            return type("Result", (), {"stdout": "fixed journal text", "stderr": ""})()
+
+        fake_process = types.ModuleType("worker_release_bounded_process")
+        fake_process.run_bounded_capture = capture
+        with patch.dict(sys.modules, {"worker_release_bounded_process": fake_process}):
+            self.assertIn("fixed journal text", _unit_journal_text(unit))
+
+        def run(command, **_kwargs):
+            calls.append(command)
+            return type("Result", (), {"returncode": 0, "stdout": "loaded\n"})()
+
+        with patch("worker_release_egress_systemd_integration.subprocess.run", side_effect=run):
+            _cleanup_systemd_unit(unit)
+        self.assertTrue(any(command[-1] == f"{unit}.service" for command in calls))
+
     def test_namespace_probes_progress_from_base_to_full_mount_policy(self):
         steps = _namespace_probe_steps(
             "--property=TemporaryFileSystem=/run:ro",

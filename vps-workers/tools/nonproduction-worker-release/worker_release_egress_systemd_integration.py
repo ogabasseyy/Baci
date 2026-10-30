@@ -188,7 +188,7 @@ def _unmount_socket_source_alias(source_alias: Path, *,
 
 def _unit_journal_text(unit: str) -> str:
     """Read bounded journal and unit status before its transient unit is reset."""
-    if not re.fullmatch(r"worker-egress-(?:prototype|probe)-[0-9]{1,10}(?:-(?:base|mask|bind|combined))?", unit):
+    if not re.fullmatch(r"worker-egress-(?:prototype|probe)-[0-9]{1,10}(?:-(?:base|empty-run|bind|combined))?", unit):
         return ""
     bin_path = HERE.parents[1] / "bin"
     if str(bin_path) not in sys.path:
@@ -223,7 +223,7 @@ def _unit_journal_text(unit: str) -> str:
 
 def _cleanup_systemd_unit(unit: str) -> None:
     """Stop/reset only the exact disposable unit after diagnostics are captured."""
-    if not re.fullmatch(r"worker-egress-(?:prototype|probe)-[0-9]{1,10}(?:-(?:base|mask|bind|combined))?", unit):
+    if not re.fullmatch(r"worker-egress-(?:prototype|probe)-[0-9]{1,10}(?:-(?:base|empty-run|bind|combined))?", unit):
         raise RuntimeError("egress fixture unit name is invalid")
     env = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
     try:

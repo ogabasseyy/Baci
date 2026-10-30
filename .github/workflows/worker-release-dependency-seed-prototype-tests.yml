@@ -4,9 +4,13 @@ on:
   pull_request:
     paths:
       - 'vps-workers/tools/nonproduction-worker-release/dependency_seed_*.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency_seed_*.test.py'
       - 'vps-workers/tools/nonproduction-worker-release/dependency-seed-*.test.py'
       - 'vps-workers/bin/worker_release_dependency_*.py'
+      - 'vps-workers/bin/worker_release_seed_workspace*.py'
       - 'vps-workers/tools/nonproduction-worker-release/worker_release_egress_*.py'
+      - 'vps-workers/bin/worker_release_pinned_runtime*.py'
+      - 'vps-workers/bin/provision-worker-pinned-runtime.py'
       - '.github/workflows/worker-release-dependency-seed-prototype-tests.yml'
   workflow_dispatch:
 
@@ -26,11 +30,22 @@ jobs:
           set -eu
           test "$(id -u)" -ne 0
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-publisher.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-move-publication.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency_seed_retention.test.py -q
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-consumer.test.py -q
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-recovery.test.py -q
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-filesystem.test.py -q
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-cross-sha.test.py -q
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency-seed-transaction.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency_seed_generation_source.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency_seed_generation.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency_seed_generation_journal.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 vps-workers/tools/nonproduction-worker-release/dependency_seed_generation_recovery.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_seed_workspace.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_seed_workspace_mount.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_seed_workspace_recovery.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_seed_workspace_provision.test.py -q
+          sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/bin/worker_release_pinned_runtime_install.test.py -q
           sudo env PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 -B vps-workers/tools/nonproduction-worker-release/worker_release_egress_systemd_integration.py
           if find vps-workers -type f -path '*/__pycache__/*' -uid 0 -print -quit | grep -q .; then
             echo 'root-run seed tests left root-owned bytecode in the checkout' >&2

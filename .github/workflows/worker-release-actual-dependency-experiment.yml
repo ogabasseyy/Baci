@@ -15,6 +15,7 @@ on:
       - 'vps-workers/bin/worker_release_pnpm_exec.py'
       - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.py'
       - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.test.py'
+      - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-seed-move-measure.test.py'
       - 'vps-workers/tools/nonproduction-worker-release/dependency-snapshot-smoke.test.py'
       - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-tree-size.test.py'
       - 'vps-workers/tools/nonproduction-worker-release/actual-dependency-payload-diagnostics.test.py'
@@ -25,6 +26,7 @@ on:
       - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_dependency_runner.py'
       - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_dependency_resources.py'
       - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_dependency_runtime.py'
+      - 'vps-workers/tools/nonproduction-worker-release/worker_release_actual_seed_move_measure.py'
       - 'vps-workers/tools/nonproduction-worker-release/dependency-snapshot-smoke.py'
 permissions:
   contents: read
@@ -51,6 +53,7 @@ jobs:
       - name: Validate experiment harness
         run: |
           python3 vps-workers/tools/nonproduction-worker-release/actual-dependency-experiment.test.py -q
+          python3 vps-workers/tools/nonproduction-worker-release/actual-dependency-seed-move-measure.test.py -q
           python3 vps-workers/tools/nonproduction-worker-release/dependency-snapshot-smoke.test.py -q
       - name: Preverify and build both real lockfiles offline
         env:

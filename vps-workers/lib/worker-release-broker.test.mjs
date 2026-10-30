@@ -3,6 +3,7 @@ import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import test from 'node:test';
 import {
   authorizeBrokerRequest,
+  revalidateActiveStageFence,
   validateBundleManifest,
   verifyBrokerOidcToken,
   WORKER_RELEASE_BROKER_POLICY as policy,
@@ -19,6 +20,63 @@ const audience = `https://github.com/${policy.repository}`;
 test('archive allowance covers the measured repository while remaining bounded', () => {
   assert.ok(policy.maxBundleBytes >= 155_990_672);
   assert.equal(policy.maxBundleBytes, 256 * 1024 * 1024);
+});
+
+const activeFence = Object.freeze({
+  repository: policy.repository, workflow: policy.workflow, ref: policy.branch,
+  sha, run_id: '1234', run_attempt: 2, job_id: '5678', status: 'in_progress',
+});
+
+function makeFenceFetch({ runChanges = {}, jobChanges = {}, mainSha = sha } = {}) {
+  const run = { id: 1234, workflow_id: 88, path: policy.workflow, event: 'push',
+    head_branch: 'main', head_sha: sha, status: 'in_progress', run_attempt: 2, ...runChanges };
+  const job = { id: 5678, run_id: 1234, name: 'Sync VPS workers', status: 'in_progress',
+    head_sha: sha, labels: [policy.runnerLabel], runner_name: 'release-runner', ...jobChanges };
+  return async (url, options) => {
+    assert.equal(options.headers.authorization, 'Bearer github-token');
+    const path = new URL(url).pathname;
+    let body;
+    if (path === `/repos/${policy.repository}`) body = { full_name: policy.repository, id: 99 };
+    else if (path.endsWith(`/actions/workflows/${policy.workflow}`)) body = { path: policy.workflow, state: 'active', id: 88 };
+    else if (path.endsWith('/actions/runs/1234')) body = run;
+    else if (path.endsWith('/attempts/2/jobs')) body = { jobs: [job] };
+    else if (path.endsWith('/git/ref/heads/main')) body = { object: { sha: mainSha } };
+    else throw new Error(`unexpected endpoint ${path}`);
+    return { ok: true, status: 200, json: async () => body };
+  };
+}
+
+test('stage fence revalidation proves only the exact still-active attempt and job', async () => {
+  const result = await revalidateActiveStageFence({
+    fence: activeFence, githubToken: 'github-token', fetchImpl: makeFenceFetch(), now,
+  });
+  assert.deepEqual(result, { ...activeFence, active: true });
+});
+
+test('stage fence revalidation rejects a completed or superseded attempt', async () => {
+  await assert.rejects(revalidateActiveStageFence({
+    fence: activeFence, githubToken: 'github-token',
+    fetchImpl: makeFenceFetch({ runChanges: { status: 'completed' } }), now,
+  }), /stage fence run is no longer active/);
+  await assert.rejects(revalidateActiveStageFence({
+    fence: activeFence, githubToken: 'github-token',
+    fetchImpl: makeFenceFetch({ runChanges: { run_attempt: 3 } }), now,
+  }), /stage fence run is no longer active/);
+});
+
+test('stage fence revalidation rejects job, main-tip, and malformed fence mismatches', async () => {
+  await assert.rejects(revalidateActiveStageFence({
+    fence: activeFence, githubToken: 'github-token',
+    fetchImpl: makeFenceFetch({ jobChanges: { status: 'completed' } }), now,
+  }), /stage fence job is no longer active/);
+  await assert.rejects(revalidateActiveStageFence({
+    fence: activeFence, githubToken: 'github-token',
+    fetchImpl: makeFenceFetch({ mainSha: 'b'.repeat(40) }), now,
+  }), /stage fence SHA is no longer current main/);
+  await assert.rejects(revalidateActiveStageFence({
+    fence: { ...activeFence, actor: 'unexpected' }, githubToken: 'github-token',
+    fetchImpl: makeFenceFetch(), now,
+  }), /stage fence revalidation input is invalid/);
 });
 
 function token(claimChanges = {}) {

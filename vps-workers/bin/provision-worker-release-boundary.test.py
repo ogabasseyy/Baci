@@ -77,13 +77,29 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
             "/run/baci-worker-release",
             "/run/baci-worker-release-gate",
             "/run/baci-worker-release-build",
+            "/run/baci-worker-egress",
+            "/var/cache/baci-worker-release/seed-work",
             "/var/lib/baci-worker-runtime-views",
             "/var/lib/baci-worker-broker/pointer",
             "/var/lib/baci-worker-broker/transaction",
         ])
         self.assertIn("ProtectSystem=strict", provision.UNIT)
-        self.assertNotIn("/var/cache", lines[0])
+        self.assertNotIn("/var/cache/baci-worker-release",
+                          lines[0].split("=", 1)[1].split())
         self.assertNotIn("/home", lines[0])
+
+    def test_fixed_egress_socket_is_provisioned_only_for_dedicated_bridge_identity(self):
+        egress = next(item for item in provision.install_files()
+                      if item.relative == "egress-tmpfiles")
+        self.assertEqual(egress.destination, Path("/etc/tmpfiles.d/baci-worker-egress.conf"))
+        self.assertEqual(egress.content, b"d /run/baci-worker-egress 0711 root root -\n")
+        self.assertEqual((egress.mode, egress.group), (0o644, "root"))
+        self.assertEqual(provision.EGRESS_GROUP, "baci-worker-egress-bridge")
+        self.assertIn(("useradd", "--system", "--gid", provision.EGRESS_GROUP,
+                       "--home-dir", "/nonexistent", "--no-create-home", "--shell",
+                       provision.NOLOGIN, provision.EGRESS_USER), provision.provisioning_plan())
+        self.assertEqual((provision.EGRESS_USER, provision.EGRESS_GROUP),
+                         ("baci-worker-egress-bridge", "baci-worker-egress-bridge"))
 
     def test_dependency_builder_prerequisites_require_isolated_identity_and_mounted_fixed_roots(self):
         group = SimpleNamespace(gr_gid=2300, gr_mem=[], gr_name=provision.BUILD_GROUP)
@@ -275,14 +291,20 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
         seed_source_root = SCRIPT.parents[2] / "vps-workers" / "tools" / "nonproduction-worker-release"
         pending = ["worker_release_broker", "worker_release_broker_dispatch",
                    "worker_release_broker_launcher", "worker_release_archive_extract_child",
-                   "worker_release_archive_extract_launcher"]
+                   "worker_release_archive_extract_launcher",
+                   "dependency_seed_generation_worker"]
         reachable = set()
+        tool_modules = {
+            "worker_release_egress_broker", "worker_release_egress_bridge",
+            "worker_release_egress_network", "worker_release_egress_protocol",
+            "worker_release_egress_tls",
+        }
         while pending:
             module = pending.pop()
             if module in reachable:
                 continue
             path = source_root / f"{module}.py"
-            if module.startswith("dependency_seed_"):
+            if module.startswith("dependency_seed_") or module in tool_modules:
                 path = seed_source_root / f"{module}.py"
             self.assertTrue(path.is_file(), f"local broker import {module} has no source")
             reachable.add(module)
@@ -296,7 +318,8 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
             pending.extend(
                 name for name in imported
                 if name.startswith("worker_release_")
-                and (source_root / f"{name}.py").is_file()
+                and ((source_root / f"{name}.py").is_file()
+                     or name in tool_modules and (seed_source_root / f"{name}.py").is_file())
                 and name not in reachable
             )
             pending.extend(
@@ -326,7 +349,8 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
                                  else 0o440)
                 self.assertEqual(item.group, expected_group)
                 self.assertEqual(item.mode, expected_mode)
-                module_root = seed_source_root if module.startswith("dependency_seed_") else source_root
+                module_root = seed_source_root if (module.startswith("dependency_seed_")
+                                                   or module in tool_modules) else source_root
                 self.assertEqual(item.content, (module_root / f"{module}.py").read_bytes())
 
     def test_runtime_view_root_is_created_exactly_and_idempotently(self):
@@ -426,7 +450,8 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
         self.assertEqual(proof.destination, provision.HELPER_ROOT / "lib/worker-release-github-proof.mjs")
         self.assertEqual(proof.mode, 0o440)
         self.assertIn(provision.UNIT_PATH, destinations)
-        self.assertTrue(all(str(file.destination).startswith((str(provision.HELPER_ROOT), "/etc/systemd/system/")) for file in files))
+        self.assertTrue(all(str(file.destination).startswith((str(provision.HELPER_ROOT),
+                               "/etc/systemd/system/", "/etc/tmpfiles.d/")) for file in files))
         self.assertTrue(all(file.mode & 0o022 == 0 for file in files))
         self.assertTrue(all("token" not in file.content.decode("utf-8", errors="ignore").lower() for file in files if file.relative in {"broker-start", "systemd-unit"}))
 
@@ -443,7 +468,8 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
         self.assertIn("worker_release_broker.py", generation_paths)
         self.assertIn("worker-release-broker-dispatch.mjs", generation_paths)
         self.assertNotIn("start-broker.sh", generation_paths)
-        self.assertTrue(all(item.destination == provision.UNIT_PATH or
+        self.assertTrue(all(item.destination in {provision.UNIT_PATH,
+                                                 Path("/etc/tmpfiles.d/baci-worker-egress.conf")} or
                             item.destination.parent == provision.HELPER_ROOT and
                             item.destination.name in STABLE_FILES for item in stable))
         start = next(item.content.decode() for item in files if item.relative == "broker-start")
@@ -472,6 +498,16 @@ class ProvisionWorkerReleaseBoundaryTests(unittest.TestCase):
                        "/var/lib/baci-worker-broker/transaction"), actions)
         self.assertIn(("install", "-d", "-o", "root", "-g", "root", "-m", "0711",
                        "/var/lib/baci-worker-broker/pointer"), actions)
+        self.assertIn(("groupadd", "--system", "baci-worker-egress-bridge"), actions)
+        self.assertIn(("systemd-tmpfiles", "--create",
+                       "/etc/tmpfiles.d/baci-worker-egress.conf"), actions)
+        self.assertIn("/run/baci-worker-egress", provision.UNIT)
+        self.assertIn("systemd-tmpfiles-setup.service", provision.UNIT)
+        self.assertIn("RequiresMountsFor=/var/cache/baci-worker-release/seed-work",
+                      provision.UNIT)
+        self.assertIn("Before=local-fs.target baci-worker-release-broker.service",
+                      Path(__file__).with_name("worker_release_seed_workspace.py")
+                      .read_text(encoding="utf-8"))
 
     def test_dispatcher_layout_preserves_relative_module_imports(self):
         actual_dispatcher = next(file for file in provision.install_files() if file.relative == "dispatcher.mjs")

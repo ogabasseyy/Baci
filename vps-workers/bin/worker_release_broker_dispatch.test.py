@@ -10,6 +10,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -20,6 +21,8 @@ import worker_release_broker as broker
 import worker_release_broker_dispatch as dispatch
 import worker_release_authenticated_staging as staging
 import worker_release_dependency_builder as builder
+import worker_release_dependency_seed_consumer as seed_consumer
+import dependency_seed_retention as seed_retention
 
 
 class AuthenticatedStageDispatchTests(unittest.TestCase):
@@ -44,7 +47,10 @@ class AuthenticatedStageDispatchTests(unittest.TestCase):
               patch.object(builder, "BUILD_ROOT", Path("/run/fixed-builder")),
               patch.object(builder, "BUILD_RESULTS_ROOT", Path("/run/fixed-builder/results")),
               patch.object(builder, "build") as build):
-            receipt = dispatch._stage_authenticated_release(self.verified, self.sha, 81)
+            receipt = dispatch._stage_authenticated_release(
+                self.verified, self.sha, 81, github_token="test-token",
+                release_uid=1001, worker_uid=1002,
+            )
         self.assertEqual(receipt, result)
         stage.assert_called_once()
         args, kwargs = stage.call_args
@@ -65,11 +71,35 @@ class AuthenticatedStageDispatchTests(unittest.TestCase):
         self.assertEqual(kwargs["builder_build_root"], Path("/run/fixed-builder"))
         self.assertEqual(kwargs["builder_results_root"], Path("/run/fixed-builder/results"))
 
+    def test_trusted_node_preflight_requires_exact_pinned_version(self):
+        from worker_release_pinned_runtime import NODE_VERSION
+
+        calls = []
+        def runner(command, **kwargs):
+            calls.append((command, kwargs))
+            return SimpleNamespace(returncode=0, stdout=NODE_VERSION + "\n")
+
+        dispatch._assert_trusted_node_version(runner=runner)
+        self.assertEqual(calls[0][0], (broker.TRUSTED_NODE, "--version"))
+        self.assertEqual(calls[0][1]["timeout"], 5)
+        self.assertEqual(calls[0][1]["env"], {
+            "PATH": "/usr/bin:/bin", "HOME": "/nonexistent", "LC_ALL": "C"})
+
+        for version, status in (("v24.22.1\n", 0), (NODE_VERSION + "\n", 1)):
+            with self.subTest(version=version, status=status):
+                with self.assertRaises(PermissionError):
+                    dispatch._assert_trusted_node_version(
+                        runner=lambda *_args, **_kwargs: SimpleNamespace(
+                            returncode=status, stdout=version))
+
     def test_bad_verified_identity_is_rejected_before_pipeline(self):
         self.verified["jobId"] = "0"
         with patch.object(staging, "stage_authenticated_archive") as stage:
             with self.assertRaises(broker.BrokerProtocolError):
-                dispatch._stage_authenticated_release(self.verified, self.sha, 81)
+                dispatch._stage_authenticated_release(
+                    self.verified, self.sha, 81, github_token="test-token",
+                    release_uid=1001, worker_uid=1002,
+                )
         stage.assert_not_called()
 
     def test_uncommitted_or_mismatched_stage_receipt_is_rejected(self):
@@ -80,7 +110,10 @@ class AuthenticatedStageDispatchTests(unittest.TestCase):
               patch.object(builder, "BUILD_RESULTS_ROOT", Path("/run/fixed-builder/results")),
               patch.object(builder, "build")):
             with self.assertRaises(broker.BrokerProtocolError):
-                dispatch._stage_authenticated_release(self.verified, self.sha, 81)
+                dispatch._stage_authenticated_release(
+                    self.verified, self.sha, 81, github_token="test-token",
+                    release_uid=1001, worker_uid=1002,
+                )
 
     def test_fixed_dispatch_passes_only_verified_archive_envelope_to_pipeline(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -97,6 +130,7 @@ class AuthenticatedStageDispatchTests(unittest.TestCase):
                   patch.object(broker, "WORKER_ROOT", str(root)),
                   patch.object(broker.os.path, "realpath", return_value=str(root)),
                   patch.object(broker, "_assert_root_owned_executable"),
+                  patch.object(dispatch, "_assert_trusted_node_version"),
                   patch.object(broker.os, "stat", return_value=root_metadata),
                   patch("worker_release_quiesce_lease.WorkerQuiesceLeaseManager",
                         return_value=quiescence),
@@ -110,7 +144,10 @@ class AuthenticatedStageDispatchTests(unittest.TestCase):
                                        "bundleSha256": self.digest})
             self.assertEqual(receipt, {"ok": True, "operation": "stage",
                                        "sourceSha": self.sha, "entryCount": 17})
-            stage.assert_called_once_with(verified, self.sha, 81)
+            stage.assert_called_once_with(
+                verified, self.sha, 81, github_token=None,
+                release_uid=1001, worker_uid=1002,
+            )
 
     def test_stage_recovery_dispatch_uses_only_verified_terminal_target(self):
         target = {"sha": "b" * 40, "run_id": "99", "run_attempt": 3, "job_id": "88"}
@@ -126,6 +163,7 @@ class AuthenticatedStageDispatchTests(unittest.TestCase):
                   patch.object(broker, "WORKER_ROOT", str(root)),
                   patch.object(broker.os.path, "realpath", return_value=str(root)),
                   patch.object(broker, "_assert_root_owned_executable"),
+                  patch.object(dispatch, "_assert_trusted_node_version"),
                   patch.object(broker.os, "stat", return_value=root_metadata),
                   patch("worker_release_quiesce_lease.WorkerQuiesceLeaseManager",
                         return_value=quiescence),
@@ -156,6 +194,7 @@ class AuthenticatedStageDispatchTests(unittest.TestCase):
                   patch.object(broker, "WORKER_ROOT", str(root)),
                   patch.object(broker.os.path, "realpath", return_value=str(root)),
                   patch.object(broker, "_assert_root_owned_executable"),
+                  patch.object(dispatch, "_assert_trusted_node_version"),
                   patch.object(broker.os, "stat", return_value=root_metadata),
                   patch("worker_release_quiesce_lease.WorkerQuiesceLeaseManager",
                         return_value=quiescence),
@@ -171,6 +210,121 @@ class AuthenticatedStageDispatchTests(unittest.TestCase):
                     release_uid=1001, worker_uid=1002, worker_gid=81)
                 receipt = fixed(1001, {"operation": "recovery-status", "sourceSha": self.sha})
             self.assertEqual(receipt["stageRecovery"], {"pending": True, "target": target})
+
+
+class TerminalSeedRetentionDispatchTests(unittest.TestCase):
+    def test_terminal_retention_uses_fixed_seed_root_and_live_broker_lock_proof(self):
+        proof = object()
+        with tempfile.TemporaryDirectory(prefix="seed-root-") as temporary:
+            seed_root = Path(temporary) / "seeds"
+            seed_root.mkdir()
+            with (patch.object(seed_consumer, "SEED_ROOT", seed_root),
+                  patch.object(seed_retention, "prune_unreferenced_seeds",
+                               return_value=("b" * 40,)) as prune):
+                result = dispatch._retain_terminal_dependency_seeds("a" * 40, proof)
+        self.assertEqual(result, {"status": "pruned", "removed": 1})
+        prune.assert_called_once_with(
+            Path(broker.WORKER_ROOT), seed_root, request_sha="a" * 40,
+            release_lock_proof=proof,
+        )
+
+    def test_unavailable_seed_root_is_reported_without_attempting_prune(self):
+        proof = object()
+        with (patch.object(seed_consumer, "SEED_ROOT", Path("/path/that/does/not/exist")),
+              patch.object(seed_retention, "prune_unreferenced_seeds") as prune):
+            result = dispatch._retain_terminal_dependency_seeds("a" * 40, proof)
+        self.assertEqual(result, {"status": "not_provisioned", "removed": 0})
+        prune.assert_not_called()
+
+    def test_retention_failure_is_deferred_without_changing_terminal_success(self):
+        proof = object()
+        with tempfile.TemporaryDirectory(prefix="seed-root-failure-") as temporary:
+            seed_root = Path(temporary) / "seeds"
+            seed_root.mkdir()
+            with (patch.object(seed_consumer, "SEED_ROOT", seed_root),
+                  patch.object(seed_retention, "prune_unreferenced_seeds",
+                               side_effect=RuntimeError("sensitive detail"))):
+                result = dispatch._retain_terminal_dependency_seeds("a" * 40, proof)
+        self.assertEqual(result, {"status": "deferred", "removed": 0})
+
+    def test_health_dispatch_retains_only_after_healthy_state_is_written(self):
+        with tempfile.TemporaryDirectory(prefix="terminal-retention-dispatch-") as temporary:
+            root = Path(temporary)
+            releases = root / "releases"
+            releases.mkdir()
+            sha = "a" * 40
+            fence = {
+                "repository": "ogabasseyy/Baci",
+                "workflow": ".github/workflows/production-release.yml",
+                "ref": "refs/heads/main", "sha": sha, "run_id": "123",
+                "run_attempt": 2, "job_id": "456",
+            }
+            verified = {**fence, "operation": "health", "sourceSha": sha,
+                        "runId": "123", "runAttempt": 2, "jobId": "456",
+                        "status": "in_progress"}
+            state = {"status": "promoted", "sha": sha, "previous_sha": "b" * 40,
+                     "fence": fence}
+            events = []
+
+            class Lease:
+                _state = "active"
+
+                @contextmanager
+                def operation(self):
+                    yield
+
+                def start_health(self):
+                    events.append("health-started")
+
+                def confirm_healthy(self):
+                    events.append("health-confirmed")
+
+            lease = Lease()
+            quiescence = SimpleNamespace(
+                recovery_latch=lambda: None,
+                is_active_for=lambda _fence: True,
+                require_active=lambda _fence: lease,
+            )
+            root_metadata = SimpleNamespace(st_mode=0o40755, st_uid=0, st_gid=0)
+
+            @contextmanager
+            def release_guard(_path):
+                events.append("release-lock-acquired")
+                yield object()
+                events.append("release-lock-released")
+
+            def write_state(_path, value):
+                events.append(f"state-{value['status']}")
+
+            with (patch.object(broker.os, "geteuid", return_value=0),
+                  patch.object(broker, "WORKER_ROOT", str(root)),
+                  patch.object(broker.os.path, "realpath", return_value=str(root)),
+                  patch.object(broker, "_assert_root_owned_executable"),
+                  patch.object(dispatch, "_assert_trusted_node_version"),
+                  patch.object(broker.os, "stat", return_value=root_metadata),
+                  patch("worker_release_quiesce_lease.WorkerQuiesceLeaseManager",
+                        return_value=quiescence),
+                  patch.object(broker.subprocess, "run", return_value=SimpleNamespace(
+                      returncode=0, stdout=(json.dumps(verified) + "\n").encode("utf-8"))),
+                  patch("worker_release_lifecycle.release_lock", side_effect=release_guard),
+                  patch.object(broker, "_load_release_state", return_value=state),
+                  patch.object(broker, "_write_release_state", side_effect=write_state),
+                  patch("worker_release_lifecycle.check_release_health", return_value={"healthy": True}),
+                  patch.object(dispatch, "_retain_terminal_dependency_seeds",
+                               side_effect=lambda _sha, _proof: (
+                                   events.append("seed-retention"),
+                                   {"status": "checked", "removed": 0},
+                               )[1])):
+                fixed = dispatch.make_fixed_release_dispatch(
+                    release_uid=1001, worker_uid=1002, worker_gid=81)
+                result = fixed(1001, {"operation": "health", "sourceSha": sha})
+
+        self.assertTrue(result["healthy"])
+        self.assertEqual(result["seedRetention"], {"status": "checked", "removed": 0})
+        self.assertLess(events.index("state-healthy"), events.index("seed-retention"))
+        self.assertLess(events.index("health-confirmed"), events.index("seed-retention"))
+        self.assertLess(events.index("release-lock-acquired"), events.index("seed-retention"))
+        self.assertLess(events.index("seed-retention"), events.index("release-lock-released"))
 
 
 class BrokerDrainTests(unittest.TestCase):

@@ -64,6 +64,7 @@ from worker_release_actual_dependency_runtime import (
     pinned_pnpm,
     tree_size,
 )
+from worker_release_actual_seed_move_measure import move_inputs_and_measure
 
 
 def run_policy_preverify(command: tuple[str, ...], *, cwd: Path, env: dict[str, str],
@@ -236,6 +237,19 @@ def _main() -> int:
             store_count, store_bytes = tree_size(store, max_entries=200_000,
                                                  max_bytes=EXPERIMENT_STORE_BYTES,
                                                  excluded_relative_directories=checked_store_exclusions)
+            stage = "seed-move-measurement"
+            seed_measurement_root = base / "seed-move-measurement"
+            seed_measurement_root.mkdir(mode=0o700)
+            seed_move_measurement = move_inputs_and_measure(
+                cache, store, seed_measurement_root / expected_sha,
+                measure=lambda path: tree_size(
+                    path, max_entries=200_000,
+                    max_bytes=EXPERIMENT_STORE_BYTES if path.name == "store" else EXPERIMENT_CACHE_BYTES,
+                    excluded_relative_directories=(checked_store_exclusions if path.name == "store"
+                                                   else frozenset()),
+                ),
+            )
+            observe_production("seed-move-publication")
             worker_modules = source / "vps-workers" / "node_modules"
             if not worker_modules.is_dir() or worker_modules.is_symlink():
                 raise RuntimeError("offline standalone worker install produced no real node_modules directory")
@@ -282,7 +296,7 @@ def _main() -> int:
             # Export is a regular, independently validated snapshot. Now that
             # the production-equivalent peak was measured, remove only these
             # experiment-owned phase trees before follow-on analysis.
-            for completed_phase_tree in (store, cache, build_cache, source, home, output):
+            for completed_phase_tree in (seed_measurement_root, build_cache, source, home, output):
                 reclaim_experiment_tree(completed_phase_tree, scratch_root=base)
             enforce_resource_limits(base)
             stage = "payload-validation"
@@ -327,6 +341,7 @@ def _main() -> int:
                 "source_bytes": source_size,
                 "pnpm_store_entries": store_count,
                 "pnpm_store_bytes": store_bytes,
+                "same_filesystem_seed_move": seed_move_measurement,
                 "payload_entries": len(entries),
                 "payload_expanded_bytes": payload_bytes,
                 "payload_export": {"entries_copied": export_entries, "expanded_bytes_copied": export_bytes,

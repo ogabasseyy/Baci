@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 TOOLS = Path(__file__).resolve().parent
 BIN = TOOLS.parents[1] / "bin"
@@ -39,6 +40,16 @@ class DependencySeedProvisionTests(unittest.TestCase):
             provision._ensure_lock(root_fd, owner_uid=self.owner_uid)
         finally:
             os.close(root_fd)
+
+    def test_unmounted_workspace_is_rejected_before_seed_path_creation(self):
+        with patch.object(provision.os, "geteuid", return_value=0), \
+             patch.object(provision, "verify_bounded_seed_workspace",
+                          side_effect=provision.SeedProvisionRejected("not mounted")), \
+             patch.object(provision, "_open_root_anchor",
+                          side_effect=AssertionError("seed path must not be opened")) as open_anchor:
+            with self.assertRaisesRegex(provision.SeedProvisionRejected, "not mounted"):
+                provision.provision_seed_root()
+        open_anchor.assert_not_called()
 
     def test_creates_exact_publisher_root_and_lock_contract(self):
         self.provision_fixture()

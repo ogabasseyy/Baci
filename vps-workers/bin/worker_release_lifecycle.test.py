@@ -71,6 +71,21 @@ class WorkerReleaseLifecycleTests(unittest.TestCase):
             )
         self.assertEqual(os.readlink(self.current), f"releases/{SHA_OLD}")
 
+    def test_release_lock_proof_is_broker_issued_path_bound_and_context_scoped(self):
+        lock_path = self.root / "release.lock"
+        with release_lock(lock_path, expected_owner_uid=os.getuid()) as proof:
+            proof.require_active(lock_path)
+            with self.assertRaises(LifecycleRejected):
+                proof.require_active(self.root / "other.lock")
+        with self.assertRaisesRegex(LifecycleRejected, "inactive"):
+            proof.require_active(lock_path)
+
+    def test_release_lock_proof_cannot_be_constructed_by_callers(self):
+        from worker_release_lifecycle import ReleaseLockProof
+
+        with self.assertRaises(TypeError):
+            ReleaseLockProof(object(), 0, self.root / "release.lock")
+
     def test_promotion_switches_pointer_only_with_active_lease(self):
         class Lease:
             active = True

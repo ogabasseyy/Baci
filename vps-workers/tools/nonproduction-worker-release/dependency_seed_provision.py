@@ -19,6 +19,7 @@ sys.path.insert(0, str(BIN))
 
 from worker_release_dependency_seed_consumer import SEED_ROOT  # noqa: E402
 from worker_release_dependency_artifacts import BuilderRejected  # noqa: E402
+from worker_release_seed_workspace_mount import verify_bounded_seed_workspace  # noqa: E402
 
 ROOT_MODE = 0o700
 PARENT_CREATE_MODE = 0o755
@@ -155,6 +156,9 @@ def provision_seed_root() -> Path:
     owner_uid = os.geteuid()
     if owner_uid != 0:
         raise SeedProvisionRejected("seed-root provisioning requires root")
+    # Never create the fixed seed root on the unbounded host mountpoint. The
+    # workspace image must be mounted and fully verified first.
+    verify_bounded_seed_workspace()
     anchor_fd = _open_root_anchor(owner_uid)
     parent_fd = root_fd = -1
     try:

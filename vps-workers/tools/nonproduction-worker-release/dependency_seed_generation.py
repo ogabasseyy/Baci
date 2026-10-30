@@ -20,36 +20,44 @@ TOOLS = Path(__file__).resolve().parent
 BIN = TOOLS.parents[1] / "bin"
 sys.path.insert(0, str(BIN))
 
-from dependency_seed_filesystem import open_directory, remove_tree
-from dependency_seed_generation_contract import (
-    GenerationAttestation, SeedGenerationRejected, _issue_generation_capability,
-)
+from dependency_seed_filesystem import open_directory
+from dependency_seed_generation_contract import GenerationAttestation, SeedGenerationRejected, _issue_generation_capability
 from dependency_seed_generation_files import root_own_frozen_tree
+from dependency_seed_generation_journal import SeedGenerationJournal
+from dependency_seed_generation_source import digest_pinned_stage_source
+from dependency_seed_generation_workspace import create_seed_scratch, remove_seed_scratch
+from dependency_seed_generation_workspace_gate import validate_seed_collection
 from dependency_seed_generation_unit import (
     BIN as TRUSTED_BIN, CGROUP_ROOT, EGRESS_SOCKET, MAX_UNIT_OUTPUT, MAX_UNIT_SECONDS,
     PYTHON, TOOLS as TRUSTED_TOOLS, drain_unit,
     identity as runtime_identity, validate_active_unit,
     trusted_directory_chain,
+    mount_egress_source_alias, prepare_egress_source_alias, release_egress_source_alias,
     preflight_cgroup_root, systemd_command, trusted_code_tree, trusted_file, trusted_socket,
 )
 from dependency_seed_publisher import _publish_seed, verify_seed
-from dependency_seed_source import source_snapshot_digest
 from worker_release_dependency_consumer import _archive_from_dispatch_response
 from worker_release_dependency_policy_cache import (
     EXPECTED_PNPM, MAX_CACHE_BYTES, RECEIPT_NAME, validate_receipt,
 )
 from worker_release_dependency_seed_consumer import SEED_ROOT
-from worker_release_lifecycle import AuthenticatedRun
-from worker_release_staging_pipeline_prototype import _make_source_snapshot, _remove_source_snapshot
+from worker_release_lifecycle import AuthenticatedRun, ReleaseLockProof
+from worker_release_seed_workspace_mount import verify_bounded_seed_workspace
 
 WORK_ROOT = Path("/var/cache/baci-worker-release/seed-work")
+RELEASE_LOCK = Path("/srv/baci-workers/release.lock")
 MAX_STORE_BYTES = 4 * 1024 * 1024 * 1024
 
 
 def _revalidate_authenticated_fence(
     identity: AuthenticatedRun,
     revalidate_identity: Callable[[], AuthenticatedRun],
+    release_lock_proof: ReleaseLockProof,
 ) -> None:
+    try:
+        release_lock_proof.require_active(RELEASE_LOCK)
+    except Exception as error:
+        raise SeedGenerationRejected("broker release-lock proof is inactive") from error
     try:
         current_identity = revalidate_identity()
     except Exception as error:
@@ -58,6 +66,10 @@ def _revalidate_authenticated_fence(
             or current_identity != identity
             or current_identity.status != "in_progress"):
         raise SeedGenerationRejected("authenticated run fence changed before publication")
+    try:
+        release_lock_proof.require_active(RELEASE_LOCK)
+    except Exception as error:
+        raise SeedGenerationRejected("broker release-lock proof expired during revalidation") from error
 
 
 def _check_workspace() -> None:
@@ -71,7 +83,9 @@ def _check_workspace() -> None:
 
 
 @contextmanager
-def _locked_workspace(workspace: Path, *, owner_uid: int):
+def _locked_workspace(workspace: Path, *, owner_uid: int,
+                      release_lock_proof: ReleaseLockProof | None = None,
+                      request_sha: str | None = None):
     """Serialize generation and refuse unresolved crash leftovers."""
     root_fd = os.open(workspace, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     lock_fd = -1
@@ -92,7 +106,14 @@ def _locked_workspace(workspace: Path, *, owner_uid: int):
             fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise SeedGenerationRejected("another seed generation is active") from None
-        leftovers = set(os.listdir(root_fd)) - {".seed-generation.lock"}
+        # Existing SHA seeds are expected persistent state. Validate them under
+        # the nested publisher lock; every other workspace entry is crash debris.
+        validate_seed_collection(
+            root_fd, release_lock_proof=release_lock_proof,
+            worker_root=RELEASE_LOCK.parent if release_lock_proof is not None else None,
+            request_sha=request_sha,
+        )
+        leftovers = set(os.listdir(root_fd)) - {".seed-generation.lock", "seeds"}
         if leftovers:
             raise SeedGenerationRejected("unresolved seed-generation scratch blocks new runs")
         yield
@@ -103,17 +124,21 @@ def _locked_workspace(workspace: Path, *, owner_uid: int):
 
 
 @contextmanager
-def _generation_lock():
+def _generation_lock(release_lock_proof: ReleaseLockProof, request_sha: str):
     """Use only the provisioned workspace; preserve and block on crash debris."""
     _check_workspace()
-    with _locked_workspace(WORK_ROOT, owner_uid=0):
+    with _locked_workspace(WORK_ROOT, owner_uid=0,
+                           release_lock_proof=release_lock_proof, request_sha=request_sha):
         yield
 
 
 def _generate_authenticated_seed(
     response: dict[str, object], identity: AuthenticatedRun, *,
     expected_archive_sha256: str, pnpm: Path, node: Path,
+    source_path: Path, source_pin: object, resource_root: Path,
+    transaction_id: str,
     revalidate_identity: Callable[[], AuthenticatedRun],
+    release_lock_proof: ReleaseLockProof,
 ) -> tuple[Path, GenerationAttestation]:
     """Run real online pnpm checks, prove unit quiescence, and publish a seed.
 
@@ -126,6 +151,11 @@ def _generate_authenticated_seed(
     """
     if os.geteuid() != 0 or sys.platform != "linux":
         raise SeedGenerationRejected("seed generation requires root on Linux")
+    try:
+        verify_bounded_seed_workspace()
+    except Exception as error:
+        raise SeedGenerationRejected("seed generation requires the exact bounded workspace mount") from error
+    _revalidate_authenticated_fence(identity, revalidate_identity, release_lock_proof)
     if Path("/proc/1/comm").read_text().strip() != "systemd":
         raise SeedGenerationRejected("seed generation requires systemd as PID 1")
     if (not isinstance(identity, AuthenticatedRun)
@@ -149,54 +179,76 @@ def _generate_authenticated_seed(
     archive = _archive_from_dispatch_response(response, identity, expected_archive_sha256)
     if hashlib.sha256(archive.data).hexdigest() != expected_archive_sha256:
         raise SeedGenerationRejected("authenticated archive bytes do not match digest")
-    source_snapshot = _make_source_snapshot(
-        archive.data, sha=identity.sha, archive_sha256=expected_archive_sha256,
-        source_temp_root=WORK_ROOT, owner_uid=0, worker_gid=gid,
-    )
-    source_path = source_snapshot.path
-    source_fd = os.open(source_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    try:
-        source_digest = source_snapshot_digest(source_fd)
-    finally:
-        os.close(source_fd)
+    source_path = Path(source_path)
+    source_digest = digest_pinned_stage_source(source_path, source_pin)
 
-    run_name = f"seed-{secrets.token_hex(16)}"
-    run_dir = WORK_ROOT / run_name
     unit = f"baci-worker-seed-{identity.sha[:12]}-{secrets.token_hex(16)}.service"
-    run_dir.mkdir(mode=0o700, exist_ok=False)
-    cache, store = run_dir / "cache", run_dir / "store"
-    for path in (cache, store):
-        path.mkdir(mode=0o700)
-        os.chown(path, uid, gid)
-    run_identity = run_dir.lstat()
-    published = False
-    try:
+    journal_root = Path(resource_root)
+    journal_info = journal_root.lstat()
+    if (not stat.S_ISDIR(journal_info.st_mode) or journal_info.st_uid != 0
+            or stat.S_IMODE(journal_info.st_mode) != 0o700 or list(journal_root.iterdir())):
+        raise SeedGenerationRejected("stage result journal resource is not empty and private")
+    alias = None
+    unit_may_be_active = False
+    with SeedGenerationJournal(journal_root, scratch_root=WORK_ROOT, owner_uid=0) as journal:
+      journal.begin(
+          transaction_id=transaction_id, fence={**identity.fence(), "status": identity.status},
+          unit=unit, source=source_path,
+          alias_name=f"baci-seed-egress-{transaction_id}.sock",
+          scratch_name=f"seed-{transaction_id}",
+          builder_uid=uid, builder_gid=gid,
+      )
+      run_dir, cache, store = create_seed_scratch(WORK_ROOT, transaction_id, journal, uid, gid)
+
+      def drain_exact_unit() -> None:
+          nonlocal unit_may_be_active
+          drain_unit(unit, uid, trusted_cgroup, failed=True)
+          unit_may_be_active = False
+          journal.mark_drained()
+
+      def release_alias() -> None:
+          if alias is None:
+              return
+          journal.mark_alias_removing()
+          release_egress_source_alias(alias, gid)
+          journal.mark_alias_removed()
+
+      try:
         if trusted_socket(EGRESS_SOCKET, gid) != socket_identity:
             raise SeedGenerationRejected("egress broker socket changed before launch")
+        alias = prepare_egress_source_alias(gid, transaction_id=transaction_id)
+        journal.mark_alias_prepared(alias.source_identity, alias.placeholder_identity)
+        mount_egress_source_alias(alias, gid)
+        journal.mark_alias_mounted()
         command = systemd_command(
             unit, identity.sha[:12], uid, gid, source=source_path,
             cache=cache, store=store, pnpm=pnpm, node=node,
+            egress_source=alias.path,
         )
         try:
             from worker_release_bounded_process import run_bounded_capture
+            journal.mark_running()
+            unit_may_be_active = True
             result = run_bounded_capture(command, timeout=MAX_UNIT_SECONDS + 15,
                                          max_stream_bytes=MAX_UNIT_OUTPUT)
             returncode = result.returncode
         except Exception as error:
-            drain_unit(unit, uid, trusted_cgroup, failed=True)
+            drain_exact_unit()
             raise SeedGenerationRejected("seed verifier unit failed or timed out") from error
         if returncode != 0:
-            drain_unit(unit, uid, trusted_cgroup, failed=True)
+            drain_exact_unit()
             raise SeedGenerationRejected("seed verifier unit reported failure")
         try:
             validate_active_unit(
                 _systemctl, unit, uid, gid, source=source_path, cache=cache,
-                store=store, pnpm=pnpm, node=node,
+                store=store, pnpm=pnpm, node=node, egress_source=alias.path,
             )
         except Exception:
-            drain_unit(unit, uid, trusted_cgroup, failed=True)
+            drain_exact_unit()
             raise
-        drain_unit(unit, uid, trusted_cgroup, failed=True)
+        drain_exact_unit()
+        release_alias()
+        alias = None
         if trusted_socket(EGRESS_SOCKET, gid) != socket_identity:
             raise SeedGenerationRejected("egress broker socket changed during verification")
         policy_receipt = validate_receipt(
@@ -204,15 +256,13 @@ def _generate_authenticated_seed(
             owner_uid=uid, expected_sha=identity.sha,
             cache_max_bytes=MAX_CACHE_BYTES, cache_owner_uid=uid,
         )
-        source_fd = os.open(source_path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            if source_snapshot_digest(source_fd) != source_digest:
-                raise SeedGenerationRejected("authenticated source changed during verification")
-        finally:
-            os.close(source_fd)
+        if digest_pinned_stage_source(source_path, source_pin) != source_digest:
+            raise SeedGenerationRejected("stage source changed during verification")
         root_own_frozen_tree(cache, uid=uid, max_bytes=MAX_CACHE_BYTES)
         root_own_frozen_tree(store, uid=uid, max_bytes=MAX_STORE_BYTES)
-        _revalidate_authenticated_fence(identity, revalidate_identity)
+        _revalidate_authenticated_fence(identity, revalidate_identity, release_lock_proof)
+        if digest_pinned_stage_source(source_path, source_pin) != source_digest:
+            raise SeedGenerationRejected("stage source changed before publication")
         attestation = GenerationAttestation(
             schema=1, fence={**identity.fence(), "status": identity.status},
             archive_sha256=expected_archive_sha256,
@@ -222,10 +272,12 @@ def _generate_authenticated_seed(
         )
         generation_capability = _issue_generation_capability(
             policy_receipt, attestation.as_dict(),
-            lambda: _revalidate_authenticated_fence(identity, revalidate_identity),
+            lambda: _revalidate_authenticated_fence(
+                identity, revalidate_identity, release_lock_proof),
         )
         seed = _publish_seed(source_path, cache, store, SEED_ROOT, identity.sha,
-                             generation_capability=generation_capability)
+                             generation_capability=generation_capability,
+                             move_inputs=True, transaction_id=transaction_id)
         stored_manifest = verify_seed(
             seed, source_path, authenticated_source_sha=identity.sha,
             max_cache_bytes=MAX_CACHE_BYTES, max_store_bytes=MAX_STORE_BYTES,
@@ -238,31 +290,44 @@ def _generate_authenticated_seed(
         if not isinstance(stored_attestation, dict):
             raise SeedGenerationRejected("published seed omitted its durable attestation")
         stored_generation = GenerationAttestation.from_dict(stored_attestation)
-        published = True
+        record = journal.read()
+        remove_seed_scratch(
+            WORK_ROOT, record["scratch_name"],
+            (record["scratch_dev"], record["scratch_ino"]),
+            (record["cache_dev"], record["cache_ino"]),
+            (record["store_dev"], record["store_ino"]),
+            outputs_moved=True,
+        )
+        journal.mark_outputs_removed()
+        journal.mark_scratch_removed()
+        journal.clear()
         return seed, stored_generation
-    finally:
+      finally:
         # Any failure preserves scratch for inspection. Successful cleanup is
         # descriptor-relative and occurs only after the unit proof above.
-        if published:
-            root_fd = open_directory(WORK_ROOT, owner_uid=0)
-            try:
-                remove_tree(root_fd, run_name,
-                            expected_identity=(run_identity.st_dev, run_identity.st_ino))
-            finally:
-                os.close(root_fd)
-            _remove_source_snapshot(source_path, owner_uid=0)
+        if alias is not None and not unit_may_be_active:
+            # This handles a pre-launch failure only after exact unit absence
+            # is proven. If any proof fails, the journal/resource are retained.
+            drain_exact_unit()
+            release_alias()
+            alias = None
 
 
 def generate_authenticated_seed(
     response: dict[str, object], identity: AuthenticatedRun, *,
     expected_archive_sha256: str, pnpm: Path, node: Path,
+    source_path: Path, source_pin: object,
+    resource_root: Path, transaction_id: str,
     revalidate_identity: Callable[[], AuthenticatedRun],
+    release_lock_proof: ReleaseLockProof,
 ) -> tuple[Path, GenerationAttestation]:
     """Run one serialized seed generation; stale scratch blocks later runs."""
-    with _generation_lock():
+    with _generation_lock(release_lock_proof, identity.sha):
         return _generate_authenticated_seed(
             response, identity, expected_archive_sha256=expected_archive_sha256,
-            pnpm=pnpm, node=node, revalidate_identity=revalidate_identity,
+            pnpm=pnpm, node=node, source_path=source_path, source_pin=source_pin,
+            resource_root=resource_root, transaction_id=transaction_id,
+            revalidate_identity=revalidate_identity, release_lock_proof=release_lock_proof,
         )
 
 

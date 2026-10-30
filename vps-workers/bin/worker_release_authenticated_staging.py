@@ -21,6 +21,7 @@ from worker_release_dependency_consumer import (
     build_and_install_dependencies,
 )
 from worker_release_lifecycle import AuthenticatedRun, release_lock
+from worker_release_authenticated_seed_generation import generate_for_stage_journal
 from worker_release_dependency_supervisor_journal import BuilderUnitJournal
 from worker_release_dependency_supervisor_lifecycle import (
     clear_completed_builder, fixed_builder_runner_factory,
@@ -30,6 +31,7 @@ from worker_release_authenticated_staging_layout import (
 )
 from worker_release_source_snapshot import pin_source_snapshot
 from worker_release_source_view_journal import SourceViewJournal
+from worker_release_source_view_access import fixed_reader_uids, grant_source_view_access
 from worker_release_stage_journal import StageJournal
 from worker_release_systemd_extractor import RESOURCE_ROOT, extract_frozen_source
 from worker_release_runtime_verifier import (
@@ -206,6 +208,7 @@ def stage_authenticated_archive(
     response: dict[str, object], identity: AuthenticatedRun, *, expected_archive_sha256: str,
     worker_root: Path, lock_path: Path, result_root: Path, worker_gid: int,
     builder: Callable[..., tuple[dict[str, object], Path]],
+    revalidate_authenticated_fence: Callable[[], AuthenticatedRun],
     builder_runner_factory: Callable[[AuthenticatedRun, BuilderUnitJournal], object] = fixed_builder_runner_factory,
     builder_build_root: Path | None = None,
     builder_results_root: Path | None = None,
@@ -232,7 +235,7 @@ def stage_authenticated_archive(
         raise StagingOrchestrationRejected("authenticated archive digest changed")
     fence = identity.fence()
     txid = None
-    with release_lock(lock_path, expected_owner_uid=OWNER_UID):
+    with release_lock(lock_path, expected_owner_uid=OWNER_UID) as release_lock_proof:
         extractor_uid = os.stat(RESOURCE_ROOT, follow_symlinks=False).st_uid
         with StageJournal(worker_root, owner_uid=OWNER_UID, stage_uid=extractor_uid,
                           stage_gid=worker_gid, resource_root=RESOURCE_ROOT,
@@ -260,19 +263,28 @@ def stage_authenticated_archive(
                     source_pin.verify_unchanged()
                     # pin_source_snapshot requires the exact frozen 0440/0550 contract.
                     _freeze_release(view, worker_gid=0)
+                    reader_uids = fixed_reader_uids()
+                    grant_source_view_access(view, read_uids=reader_uids)
                     with pin_source_snapshot(view, trusted_root=result_root,
-                                             owner_uid=OWNER_UID) as view_pin:
+                                             owner_uid=OWNER_UID,
+                                             read_uids=reader_uids) as view_pin:
                         view_pin.verify_unchanged()
                         source_view_journal.mark_ready()
+                        generate_for_stage_journal(
+                            journal, response, identity,
+                            expected_archive_sha256=expected_archive_sha256,
+                            source_path=view, source_pin=view_pin,
+                            transaction_id=txid,
+                            revalidate_identity=revalidate_authenticated_fence,
+                            release_lock_proof=release_lock_proof,
+                        )
+                        source_pin.verify_unchanged()
+                        view_pin.verify_unchanged()
                         incoming = journal.create_incoming()
                         _copy_snapshot_into_release(view, incoming)
                         journal.begin_ownership_transfer()
                         _freeze_release(incoming, worker_gid=worker_gid)
                         _enable_install_parents(incoming)
-                        # Record the distinct builder-result resource before builder output exists.
-                        journal.create_builder_result()
-                        journal.remove_builder_result()
-
                         def run_builder(source: str, sha: str):
                             runner = builder_runner_factory(identity, builder_journal)
                             return builder(source, sha, runner=runner)
@@ -316,6 +328,16 @@ def stage_authenticated_archive(
                                 owner_uid=OWNER_UID, owner_gid=worker_gid):
                             raise StagingOrchestrationRejected(
                                 "materialized release changed after runtime verification")
+                        try:
+                            current_identity = revalidate_authenticated_fence()
+                        except Exception as error:
+                            raise StagingOrchestrationRejected(
+                                "authenticated stage fence could not be revalidated") from error
+                        if (not isinstance(current_identity, AuthenticatedRun)
+                                or current_identity != identity
+                                or current_identity.status != "in_progress"):
+                            raise StagingOrchestrationRejected(
+                                "authenticated stage fence changed before publication")
                         published = journal.publish()
                         from worker_release_staging import _validate_staged_release
                         count = _validate_staged_release(str(Path(worker_root) / "releases"),

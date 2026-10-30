@@ -6,9 +6,13 @@ on:
       - 'vps-workers/bin/worker_release_authenticated_staging.py'
       - 'vps-workers/bin/worker_release_authenticated_staging_recovery.py'
       - 'vps-workers/bin/worker_release_authenticated_staging_recovery.test.py'
+      - 'vps-workers/bin/worker_release_authenticated_seed_generation.py'
+      - 'vps-workers/bin/worker_release_authenticated_seed_generation.test.py'
       - 'vps-workers/bin/worker_release_authenticated_staging_layout.py'
       - 'vps-workers/bin/worker_release_authenticated_staging.test.py'
       - 'vps-workers/bin/worker_release_broker_dispatch.py'
+      - 'vps-workers/bin/worker_release_broker_stage_fence.py'
+      - 'vps-workers/bin/worker_release_broker_stage_fence.test.py'
       - 'vps-workers/bin/worker_release_broker_dispatch.test.py'
       - 'vps-workers/bin/worker_release_runtime_verifier.py'
       - 'vps-workers/bin/worker_release_runtime_receipt.py'
@@ -39,11 +43,32 @@ on:
       - 'vps-workers/bin/worker_release_dependency_supervisor_lifecycle.test.py'
       - 'vps-workers/bin/worker_release_source_snapshot.py'
       - 'vps-workers/bin/worker_release_source_snapshot.test.py'
+      - 'vps-workers/bin/worker_release_source_view_access.py'
+      - 'vps-workers/bin/worker_release_source_view_access.test.py'
+      - 'vps-workers/bin/worker_release_egress_*.py'
       - 'vps-workers/bin/worker_release_result_root.py'
+      - 'vps-workers/bin/worker_release_pinned_runtime.py'
+      - 'vps-workers/bin/worker_release_seed_workspace_mount.py'
+      - 'vps-workers/tools/nonproduction-worker-release/dependency_seed_*.py'
+      - 'vps-workers/tools/nonproduction-worker-release/worker_release_egress_*.py'
       - 'vps-workers/bin/worker_release_lifecycle.py'
       - 'vps-workers/bin/worker_release_broker.py'
       - 'vps-workers/bin/worker_release_broker_common.py'
       - 'vps-workers/bin/worker_release_broker_dispatch.py'
+      - 'vps-workers/bin/worker-release-broker.test.py'
+      - 'vps-workers/lib/worker-release-broker.mjs'
+      - 'vps-workers/lib/worker-release-broker.test.mjs'
+      - 'vps-workers/bin/worker_release_broker_dispatch.test.py'
+      - 'vps-workers/bin/worker_release_broker_generation*.py'
+      - 'vps-workers/bin/worker_release_broker_launcher.py'
+      - 'vps-workers/bin/worker_release_broker_launcher.test.py'
+      - 'vps-workers/bin/worker_release_broker_module_closure.py'
+      - 'vps-workers/bin/worker_release_broker_pointer.test.py'
+      - 'vps-workers/bin/worker_release_broker_upgrade*.py'
+      - 'vps-workers/bin/worker_release_broker_generation_install.py'
+      - 'vps-workers/bin/worker_release_broker_generation_install.test.py'
+      - 'vps-workers/bin/provision-worker-release-boundary.py'
+      - 'vps-workers/bin/provision-worker-release-boundary.test.py'
       - 'vps-workers/bin/worker_release_descriptor_cgroup.py'
       - 'vps-workers/bin/worker_release_descriptor_process.py'
       - 'vps-workers/bin/worker_release_descriptor_freeze.py'
@@ -88,6 +113,13 @@ jobs:
           verify_user_created=0
           verify_group_gid=''
           verify_user_uid=''
+          source_users=(baci-release-build baci-worker-egress-bridge)
+          source_user_created=(0 0)
+          source_group_created=(0 0)
+          source_uids=()
+          source_gids=()
+          lock_group_created=0
+          lock_group_gid=''
           if [[ ! -d /srv || -L /srv || "$(stat -c '%u:%g' /srv)" != "0:0" ]]; then
             echo 'unsafe /srv parent for disposable worker-root fixture' >&2
             exit 1
@@ -123,6 +155,43 @@ jobs:
             status=$?
             trap - EXIT
             if [[ "$fixture_created" == 1 ]]; then
+              for index in 1 0; do
+                source_user="${source_users[$index]}"
+                if [[ "${source_user_created[$index]}" == 1 ]]; then
+                  expected_gid="${source_gids[$index]}"
+                  expected_uid="${source_uids[$index]}"
+                  user_record="$(getent passwd "$source_user" || true)"
+                  expected_user_record="$source_user:x:$expected_uid:$expected_gid::/nonexistent:/usr/sbin/nologin"
+                  if [[ "$user_record" == "$expected_user_record" \
+                        && "$(awk -F: -v uid="$expected_uid" '$3 == uid { count++ } END { print count+0 }' /etc/passwd)" == 1 ]]; then
+                    userdel "$source_user"
+                  else
+                    echo 'disposable source-view reader user changed unexpectedly' >&2
+                    status=1
+                  fi
+                fi
+                if [[ "${source_group_created[$index]}" == 1 ]]; then
+                  source_group="${source_users[$index]}"
+                  group_record="$(getent group "$source_group" || true)"
+                  if [[ "$group_record" == "$source_group:x:${source_gids[$index]}:" \
+                        && -z "$(awk -F: -v gid="${source_gids[$index]}" '$4 == gid { print $1; exit }' /etc/passwd)" ]]; then
+                    groupdel "$source_group"
+                  else
+                    echo 'disposable source-view reader group changed unexpectedly' >&2
+                    status=1
+                  fi
+                fi
+              done
+              if [[ "$lock_group_created" == 1 ]]; then
+                lock_record="$(getent group baci-locks || true)"
+                if [[ "$lock_record" == "baci-locks:x:$lock_group_gid:" \
+                      && -z "$(awk -F: -v gid="$lock_group_gid" '$4 == gid { print $1; exit }' /etc/passwd)" ]]; then
+                  groupdel baci-locks
+                else
+                  echo 'disposable lock group changed unexpectedly' >&2
+                  status=1
+                fi
+              fi
               if [[ -d "$fixture" && ! -L "$fixture" \
                     && "$(stat -c '%d:%i:%u:%g:%a' "$fixture" 2>/dev/null || true)" == "$fixture_identity" \
                     && -z "$(find "$fixture" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
@@ -155,15 +224,18 @@ jobs:
                   group_row_shape=empty
                 elif [[ "$group_record" == "$verify_group:x:$verify_group_gid:$verify_user" ]]; then
                   group_row_shape=self_member
+                elif [[ -z "$group_record" ]]; then
+                  group_row_shape=already_removed
                 else
                   group_row_shape=unexpected
                 fi
-                if [[ "$group_row_shape" != empty || "$passwd_gid_alias" != absent ]]; then
+                if [[ "$group_row_shape" != empty && "$group_row_shape" != already_removed \
+                      || "$passwd_gid_alias" != absent ]]; then
                   echo "disposable runtime verifier cleanup diagnostic: group_row=$group_row_shape primary_gid_alias=$passwd_gid_alias" >&2
                 fi
                 if [[ "$group_row_shape" == empty && "$passwd_gid_alias" == absent ]]; then
                   groupdel "$verify_group"
-                else
+                elif [[ "$group_row_shape" != already_removed || "$passwd_gid_alias" != absent ]]; then
                   echo 'disposable runtime verifier group changed unexpectedly' >&2
                   status=1
                 fi
@@ -187,15 +259,56 @@ jobs:
           [[ "$(getent passwd "$verify_user")" == "$verify_user:x:$verify_user_uid:$verify_group_gid::/nonexistent:/usr/sbin/nologin" ]]
           [[ "$(awk -F: -v uid="$verify_user_uid" '$3 == uid { count++ } END { print count+0 }' /etc/passwd)" == 1 ]]
           [[ "$(id -G "$verify_user")" == "$verify_group_gid" ]]
+          if getent group baci-locks >/dev/null; then
+            echo 'refusing pre-existing lock group fixture' >&2
+            exit 1
+          fi
+          groupadd --system baci-locks
+          lock_group_created=1
+          lock_group_gid="$(getent group baci-locks | cut -d: -f3)"
+          [[ "$(getent group baci-locks)" == "baci-locks:x:$lock_group_gid:" ]]
+          [[ -z "$(awk -F: -v gid="$lock_group_gid" '$4 == gid { print $1; exit }' /etc/passwd)" ]]
+          for index in 0 1; do
+            source_user="${source_users[$index]}"
+            if getent group "$source_user" >/dev/null || getent passwd "$source_user" >/dev/null; then
+              echo 'refusing pre-existing source-view reader identity' >&2
+              exit 1
+            fi
+            groupadd --system "$source_user"
+            source_group_created[$index]=1
+            source_gids[$index]="$(getent group "$source_user" | cut -d: -f3)"
+            [[ "$(getent group "$source_user")" == "$source_user:x:${source_gids[$index]}:" ]]
+            [[ -z "$(awk -F: -v gid="${source_gids[$index]}" '$4 == gid { print $1; exit }' /etc/passwd)" ]]
+            useradd --system --gid "$source_user" --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin "$source_user"
+            source_user_created[$index]=1
+            source_uids[$index]="$(getent passwd "$source_user" | cut -d: -f3)"
+            [[ "$(getent passwd "$source_user")" == "$source_user:x:${source_uids[$index]}:${source_gids[$index]}::/nonexistent:/usr/sbin/nologin" ]]
+            [[ "$(id -G "$source_user")" == "${source_gids[$index]}" ]]
+          done
           [[ "$fixture_identity" == "$(stat -c '%d:%i:%u:%g:%a' "$fixture")" ]]
           [[ -z "$(find "$fixture" -mindepth 1 -maxdepth 1 -print -quit)" ]]
           [[ "$view_fixture_identity" == "$(stat -c '%d:%i:%u:%g:%a' "$view_fixture")" ]]
           [[ -z "$(find "$view_fixture" -mindepth 1 -maxdepth 1 -print -quit)" ]]
           /usr/bin/python3 -B vps-workers/bin/provision-worker-source-extractor.py --apply
           /usr/bin/python3 -B vps-workers/bin/worker_release_source_snapshot.test.py
+          /usr/bin/python3 -B vps-workers/bin/worker_release_source_view_access.test.py
+          /usr/bin/python3 -B vps-workers/bin/worker_release_egress_identity_provision.test.py
+          /usr/bin/python3 -B vps-workers/bin/worker_release_egress_host_service.test.py
           /usr/bin/python3 -B vps-workers/bin/worker_release_source_view_journal.test.py
           /usr/bin/python3 -B vps-workers/bin/worker_release_broker_dispatch.test.py
+          /usr/bin/python3 -B vps-workers/bin/worker_release_broker_stage_fence.test.py
+          /usr/bin/python3 -B vps-workers/bin/worker_release_broker_generation.test.py
+          /usr/bin/python3 -B vps-workers/bin/worker_release_broker_upgrade.test.py
+          /usr/bin/python3 -B vps-workers/bin/worker_release_broker_upgrade_control.test.py
+          /usr/bin/python3 -B vps-workers/bin/worker_release_broker_upgrade_journal.test.py
+          /usr/bin/python3 -B vps-workers/bin/worker_release_broker_launcher.test.py
+          /usr/bin/python3 -B vps-workers/bin/worker_release_broker_generation_install.test.py
+          /usr/bin/python3 -B vps-workers/bin/worker_release_broker_pointer.test.py
+          /usr/bin/python3 -B vps-workers/bin/worker-release-broker.test.py
+          node --test vps-workers/lib/worker-release-broker.test.mjs
+          /usr/bin/python3 -B vps-workers/bin/provision-worker-release-boundary.test.py
           /usr/bin/python3 -B vps-workers/bin/worker_release_authenticated_staging_recovery.test.py
+          /usr/bin/python3 -B vps-workers/bin/worker_release_authenticated_seed_generation.test.py
           /usr/bin/python3 -B vps-workers/bin/worker_release_authenticated_staging.test.py
           WORKER_RELEASE_STAGE_REQUIRE_SYSTEMD=1 /usr/bin/python3 -B vps-workers/bin/worker_release_authenticated_staging.test.py
           BASH

@@ -235,7 +235,10 @@ class AuthenticatedStagingTests(unittest.TestCase):
                 txid = journal._require_journal()["transaction_id"]
                 unit = f"{UNIT_PREFIX}{txid}.service"
                 try:
-                    return extract_frozen_source(journal, archive, archive_sha256)
+                    extracted = extract_frozen_source(journal, archive, archive_sha256)
+                    extracted_source = Path(extracted["snapshot"]).stat()
+                    extracted_source_identity.append((extracted_source.st_uid, extracted_source.st_gid))
+                    return extracted
                 except Exception as error:
                     raise AssertionError(
                         f"extractor failed ({type(error).__name__}); systemd state: "
@@ -243,6 +246,7 @@ class AuthenticatedStagingTests(unittest.TestCase):
                     ) from error
 
             fixture_releases = worker_root / "releases"
+            extracted_source_identity = []
 
             def grant_fixture_candidate_acl(candidate, **kwargs):
                 # Keep the production ACL validator intact while binding its
@@ -250,9 +254,26 @@ class AuthenticatedStagingTests(unittest.TestCase):
                 return worker_release_runtime_acl.grant_candidate_acl(
                     candidate, releases_root=fixture_releases, **kwargs)
 
+            generation_observations = []
+
+            def fake_seed_generation(journal, _response, _identity, **kwargs):
+                kwargs["source_pin"].verify_unchanged()
+                kwargs["release_lock_proof"].require_active(lock)
+                resource = journal.create_builder_result()
+                generation_observations.append((
+                    kwargs["source_path"].exists(), resource.exists(),
+                    kwargs["source_path"].stat().st_uid,
+                    kwargs["source_pin"].owner_uid,
+                    kwargs["source_pin"].read_uids,
+                ))
+                journal.remove_builder_result()
+                return False
+
             with (patch.object(worker_release_candidate_pin, "RELEASES_ROOT", fixture_releases),
                   patch.object(worker_release_runtime_verifier, "grant_candidate_acl",
-                               side_effect=grant_fixture_candidate_acl)):
+                               side_effect=grant_fixture_candidate_acl),
+                  patch.object(staging_module, "generate_for_stage_journal",
+                               side_effect=fake_seed_generation) as generate_seed):
                 unit_names = []
                 real_unit_name = worker_release_runtime_verifier._unit_name
 
@@ -268,6 +289,7 @@ class AuthenticatedStagingTests(unittest.TestCase):
                             response(data), identity(), expected_archive_sha256=digest,
                             worker_root=worker_root, lock_path=lock, result_root=results,
                             worker_gid=account.pw_gid, builder=builder,
+                            revalidate_authenticated_fence=identity,
                             extractor=diagnostic_extractor,
                             builder_runner_factory=journaled_runner_factory,
                             builder_build_root=build_root, builder_results_root=results,
@@ -279,6 +301,10 @@ class AuthenticatedStagingTests(unittest.TestCase):
                                 emit_namespace_failure_diagnostic(unit)
                         raise
             release = Path(receipt["release_path"])
+            self.assertEqual(generate_seed.call_count, 1)
+            self.assertEqual(generation_observations,
+                             [(True, True, 0, 0, staging_module.fixed_reader_uids())])
+            self.assertEqual(extracted_source_identity, [(account.pw_uid, account.pw_gid)])
             self.assertEqual(receipt["phase"], "committed")
             self.assertFalse((worker_root / "current").exists())
             self.assertTrue((release / "apps/web/node_modules/.bin/tsx").is_file())

@@ -306,28 +306,38 @@ def run_service(release_uid: int, worker_uid: int, worker_gid: int,
     verify_active_generation(generation_digest)
     TRUSTED_DISPATCHER = os.path.join(generation_directory, "worker-release-broker-dispatch.mjs")
     TRUSTED_HEALTH_CHECK = os.path.join(generation_directory, "worker-release-health-check")
-    listener = bind_broker_socket(socket_path, release_gid=release_gid)
     stop_event = threading.Event()
 
     def request_shutdown(_signum, _frame):
         stop_event.set()
 
     old_handlers = {}
+    listener = None
+    egress_service = None
     try:
         for signum in (signal.SIGTERM, signal.SIGINT):
             old_handlers[signum] = signal.signal(signum, request_shutdown)
+        listener = bind_broker_socket(socket_path, release_gid=release_gid)
+        from worker_release_egress_host_service import start_egress_broker
+        egress_service = start_egress_broker(stop_event)
         dispatch = make_fixed_release_dispatch(release_uid=release_uid, worker_uid=worker_uid, worker_gid=worker_gid)
         serve_forever(listener, expected_release_uid=release_uid,
                       dispatch=_guard_upgrade_dispatch(dispatch, blocked=mutations_blocked),
                       stop_event=stop_event, generation_digest=generation_digest)
     finally:
+        stop_event.set()
         for signum, handler in old_handlers.items():
             signal.signal(signum, handler)
-        listener.close()
         try:
-            os.unlink(socket_path)
-        except FileNotFoundError:
-            pass
+            if egress_service is not None:
+                egress_service.close()
+        finally:
+            if listener is not None:
+                listener.close()
+                try:
+                    os.unlink(socket_path)
+                except FileNotFoundError:
+                    pass
 
 
 def verify_active_generation(generation_digest: str) -> None:

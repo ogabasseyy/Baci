@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /** Root-owned, fixed Node entrypoint called only by worker_release_broker.py. */
-import { authorizeBrokerRequest } from '../lib/worker-release-broker.mjs';
+import { authorizeBrokerRequest, revalidateActiveStageFence } from '../lib/worker-release-broker.mjs';
 
 const MAX_REQUEST_BYTES = 24 * 1024;
 
@@ -27,6 +27,14 @@ try {
       process.env.BACI_BROKER_AUTHENTICATED_PEER !== 'kernel') {
     throw new Error('trusted peer context unavailable');
   }
+  if (process.env.BACI_BROKER_INTERNAL_FENCE_CHECK === '1') {
+    if (!request || Object.keys(request).sort().join(',') !== 'fence,githubToken,operation' ||
+        request.operation !== 'internal-stage-fence-check') throw new Error('invalid internal request');
+    const result = await revalidateActiveStageFence({ fence: request.fence,
+      githubToken: request.githubToken });
+    process.stdout.write(JSON.stringify(result) + '\n');
+    process.exitCode = 0;
+  } else {
   const result = await authorizeBrokerRequest({ peerUid, expectedReleaseUid, workerUid, request });
   process.stdout.write(JSON.stringify({
     operation: result.operation,
@@ -58,6 +66,7 @@ try {
       archiveBase64: result.sourceArchive.toString('base64'),
     } : {}),
   }) + '\n');
+  }
 } catch {
   // Never echo request fields, credentials, or upstream response bodies.
   process.exitCode = 1;

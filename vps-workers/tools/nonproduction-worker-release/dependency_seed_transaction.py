@@ -130,11 +130,20 @@ def process_identity() -> dict[str, int | str]:
     return {"pid": os.getpid(), "startTicks": start_ticks, "bootId": _boot_id()}
 
 
-def create_inflight_journal(root_fd: int, sha: str, staging_name: str) -> int:
+def create_inflight_journal(root_fd: int, sha: str, staging_name: str, *,
+                            move_inputs: dict[str, int] | None = None) -> int:
     if not SHA_RE.fullmatch(sha) or not STAGING_RE.fullmatch(staging_name):
         raise BuilderRejected("seed journal identity is malformed")
+    if move_inputs is not None and (
+            set(move_inputs) != {"parentDevice", "parentInode", "cacheDevice", "cacheInode",
+                                 "storeDevice", "storeInode"}
+            or any(type(value) is not int or value < 0 for value in move_inputs.values())
+            or move_inputs["parentInode"] < 1 or move_inputs["cacheInode"] < 1
+            or move_inputs["storeInode"] < 1):
+        raise BuilderRejected("seed move journal inputs are malformed")
     value = {"schema": 1, "sourceSha": sha, "stagingName": staging_name,
-             "stagingDevice": None, "stagingInode": None, **process_identity()}
+             "stagingDevice": None, "stagingInode": None,
+             "moveInputs": move_inputs, **process_identity()}
     fd = os.open(JOURNAL, os.O_WRONLY | os.O_CREAT | os.O_EXCL
                  | getattr(os, "O_NOFOLLOW", 0), 0o600, dir_fd=root_fd)
     try:
@@ -208,7 +217,16 @@ def read_inflight_journal(root_fd: int) -> tuple[dict[str, object], int]:
         raw = os.read(fd, 2049)
         value = json.loads(raw)
         expected = {"schema", "sourceSha", "stagingName", "stagingDevice", "stagingInode",
-                    "pid", "startTicks", "bootId"}
+                    "moveInputs", "pid", "startTicks", "bootId"}
+        move_inputs = value.get("moveInputs") if isinstance(value, dict) else None
+        valid_move_inputs = move_inputs is None or (
+            isinstance(move_inputs, dict)
+            and set(move_inputs) == {"parentDevice", "parentInode", "cacheDevice", "cacheInode",
+                                     "storeDevice", "storeInode"}
+            and all(type(item) is int and item >= 0 for item in move_inputs.values())
+            and move_inputs["parentInode"] > 0 and move_inputs["cacheInode"] > 0
+            and move_inputs["storeInode"] > 0
+        )
         if (not isinstance(value, dict) or set(value) != expected or value.get("schema") != 1
                 or not isinstance(value.get("sourceSha"), str)
                 or not SHA_RE.fullmatch(value["sourceSha"])
@@ -222,7 +240,8 @@ def read_inflight_journal(root_fd: int) -> tuple[dict[str, object], int]:
                 or type(value.get("pid")) is not int or value["pid"] < 1
                 or type(value.get("startTicks")) is not int or value["startTicks"] < 1
                 or not isinstance(value.get("bootId"), str)
-                or not BOOT_ID_RE.fullmatch(value["bootId"])):
+                or not BOOT_ID_RE.fullmatch(value["bootId"])
+                or not valid_move_inputs):
             raise BuilderRejected("seed journal schema or identity is invalid")
         return value, fd
     except BuilderRejected:

@@ -24,6 +24,8 @@ from pathlib import Path
 from typing import Callable, Sequence
 
 from worker_release_broker_module_closure import BROKER_RUNTIME_MODULES
+from worker_release_egress_identity import EGRESS_GROUP, EGRESS_USER, egress_identity
+from worker_release_egress_identity_provision import ensure_egress_identity
 from worker_release_broker_generation import current_generation, publish_generation
 from worker_release_broker_generation_install import split_install_records
 import worker_release_broker_install_preflight as install_preflight
@@ -114,6 +116,7 @@ def _check_identities() -> None:
         raise RuntimeError("baci-locks has unexpected members")
     if WORKER not in lock_group.gr_mem:
         raise RuntimeError("baci-worker is missing the protected lock group")
+    egress_identity()
 
 
 def _validate_dependency_builder_prerequisites(*, build_root: Path = BUILD_ROOT,
@@ -212,6 +215,7 @@ def apply(*, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
         raise RuntimeError("--apply requires root")
     _validate_account(WORKER, expected_shell=NOLOGIN, expected_home="/srv/baci-workers/home")
     _validate_dependency_builder_prerequisites()
+    ensure_egress_identity(runner=runner)
     release_group_exists, release_user_exists = _existing_identity_state()
     release_home_exists = _check_release_home(account_exists=release_user_exists)
     if not release_group_exists:
@@ -256,6 +260,8 @@ def apply(*, runner: Callable[..., subprocess.CompletedProcess] = subprocess.run
         stable_files, current_digest=old_digest, control=control,
         read_existing=_read_existing, writer=_install_one)
     runner(("systemctl", "daemon-reload"), check=True, stdin=subprocess.DEVNULL)
+    runner(("systemd-tmpfiles", "--create", "/etc/tmpfiles.d/baci-worker-egress.conf"),
+           check=True, stdin=subprocess.DEVNULL)
     new_digest = publish_generation(HELPER_ROOT, generation_files)
     if old_digest is None:
         bootstrap_generation(HELPER_ROOT, new_digest, control=control,

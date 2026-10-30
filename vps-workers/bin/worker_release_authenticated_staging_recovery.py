@@ -10,6 +10,7 @@ from worker_release_source_view_journal import SourceViewJournal, SourceViewReje
 from worker_release_stage_journal import StageJournal
 from worker_release_dependency_supervisor_journal import BuilderUnitJournal
 from worker_release_dependency_supervisor_lifecycle import recover_and_clear_builder
+from worker_release_authenticated_seed_generation import recover_for_stage
 from worker_release_systemd_extractor import RESOURCE_ROOT
 
 
@@ -204,6 +205,21 @@ def recover_interrupted_stage(
                 extractor_txid = stage_record["transaction_id"]
                 _prove_extractor_collected(extractor_txid, extractor_uid)
                 extractor_quiesced = True
+
+                if stage_record is not None and stage_record.get("result_state") == "created":
+                    if (source_record is None or source_record.get("phase") != "ready"
+                            or source_record.get("transaction_id") != stage_record.get("transaction_id")
+                            or source_record.get("fence") != fence):
+                        raise SourceViewRejected("seed recovery lacks its ready root-owned source view")
+                    source_identity = (source_record.get("view_dev"), source_record.get("view_ino"))
+                    if any(type(value) is not int for value in source_identity):
+                        raise SourceViewRejected("seed recovery lacks a pinned source-view identity")
+                    recover_for_stage(
+                        stage_record, resource_root=RESOURCE_ROOT,
+                        resource_owner_uid=extractor_uid,
+                        source_path=result_root / str(source_record["view_name"]),
+                        source_identity=source_identity,
+                    )
 
                 def other_resources_quiesced(_fence: dict[str, object]) -> bool:
                     return extractor_quiesced is True

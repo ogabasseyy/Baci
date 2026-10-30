@@ -24,10 +24,11 @@ from dependency_seed_filesystem import child_directory, open_directory
 from dependency_seed_source import source_snapshot_digest
 from dependency_seed_transaction import named_root_matches, reject_unresolved_staging
 from dependency_seed_verification import verify_seed_locked
+from worker_release_seed_workspace_mount import verify_bounded_seed_workspace
 
 SEED_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 SEED_MANIFEST = "seed-manifest.json"
-SEED_ROOT = Path("/var/cache/baci-worker-release/seeds")
+SEED_ROOT = Path("/var/cache/baci-worker-release/seed-work/seeds")
 
 
 def _open_seed_root_lock(seed_root: Path) -> tuple[int, int]:
@@ -121,6 +122,9 @@ def consume_seed(source: Path, authenticated_source_sha: str, *, seed_root: Path
             or not SEED_SHA_RE.fullmatch(authenticated_source_sha)
             or builder_uid <= 0 or builder_gid < 0):
         raise BuilderRejected("authenticated dependency seed identity is malformed")
+    # The fixed path can also exist as an ordinary host directory. Prove its
+    # exact quota-backed mount before opening any seed path or lock.
+    verify_bounded_seed_workspace()
     source_fd = open_directory(Path(source), owner_uid=0, immutable=True)
     root_fd = lock_fd = seed_fd = cache_fd = store_fd = -1
     try:

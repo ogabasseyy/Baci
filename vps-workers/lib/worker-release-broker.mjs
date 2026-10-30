@@ -176,6 +176,58 @@ async function fetchCommitArchive(fetchImpl, githubToken, sha, budget) {
   return { bytes, sha256: createHash('sha256').update(bytes).digest('hex') };
 }
 
+/** Recheck the exact already-authenticated worker attempt before seed publish.
+ * This read-only path intentionally does not reuse an OIDC token that may have
+ * expired during the bounded build. The caller must bind `fence` to the result
+ * of the initial authorizeBrokerRequest in the root broker process.
+ */
+export async function revalidateActiveStageFence({ fence, githubToken, fetchImpl = fetch, now = Date.now() }) {
+  const keys = ['job_id', 'ref', 'repository', 'run_attempt', 'run_id', 'sha', 'status', 'workflow'];
+  if (!fence || typeof fence !== 'object' || Array.isArray(fence) ||
+      Object.keys(fence).sort().join(',') !== keys.join(',') ||
+      fence.repository !== WORKER_RELEASE_BROKER_POLICY.repository ||
+      fence.workflow !== WORKER_RELEASE_BROKER_POLICY.workflow ||
+      fence.ref !== WORKER_RELEASE_BROKER_POLICY.branch || fence.status !== 'in_progress' ||
+      !SHA_RE.test(fence.sha ?? '') || !ID_RE.test(String(fence.run_id)) ||
+      !ID_RE.test(String(fence.job_id)) || !Number.isSafeInteger(fence.run_attempt) ||
+      fence.run_attempt < 1 || typeof githubToken !== 'string' ||
+      githubToken.length < 1 || githubToken.length > 4096) fail('stage fence revalidation input is invalid');
+  const budget = createDeadlineBudget({ timeoutMs: 120_000 });
+  const repo = WORKER_RELEASE_BROKER_POLICY.repository;
+  const repository = await githubJson(fetchImpl, `${GITHUB_API}/repos/${repo}`, githubToken, budget);
+  if (repository.full_name?.toLowerCase() !== repo.toLowerCase() || !Number.isSafeInteger(repository.id)) {
+    fail('stage fence repository is unavailable');
+  }
+  const workflow = await githubJson(fetchImpl,
+    `${GITHUB_API}/repos/${repo}/actions/workflows/${WORKER_RELEASE_BROKER_POLICY.workflow}`,
+    githubToken, budget);
+  if (workflow.path !== WORKER_RELEASE_BROKER_POLICY.workflow || workflow.state !== 'active' ||
+      !Number.isSafeInteger(workflow.id)) fail('stage fence workflow is unavailable');
+  const run = await githubJson(fetchImpl,
+    `${GITHUB_API}/repos/${repo}/actions/runs/${fence.run_id}`, githubToken, budget);
+  if (run.id !== Number(fence.run_id) || run.workflow_id !== workflow.id ||
+      ![WORKER_RELEASE_BROKER_POLICY.workflow,
+        `${WORKER_RELEASE_BROKER_POLICY.workflow}@main`,
+        `${WORKER_RELEASE_BROKER_POLICY.workflow}@refs/heads/main`].includes(run.path) ||
+      !['push', 'workflow_dispatch'].includes(run.event) || run.head_branch !== 'main' ||
+      run.head_sha !== fence.sha || run.status !== 'in_progress' ||
+      run.run_attempt !== fence.run_attempt) fail('stage fence run is no longer active');
+  const jobs = await githubJson(fetchImpl,
+    `${GITHUB_API}/repos/${repo}/actions/runs/${fence.run_id}/attempts/${fence.run_attempt}/jobs?per_page=100`,
+    githubToken, budget);
+  const matches = Array.isArray(jobs.jobs)
+    ? jobs.jobs.filter((job) => job?.id === Number(fence.job_id)) : [];
+  if (matches.length !== 1) fail('stage fence job is unavailable');
+  const job = matches[0];
+  if (job.run_id !== run.id || job.name !== 'Sync VPS workers' || job.status !== 'in_progress' ||
+      job.head_sha !== fence.sha || !Array.isArray(job.labels) ||
+      !job.labels.includes(WORKER_RELEASE_BROKER_POLICY.runnerLabel) ||
+      typeof job.runner_name !== 'string' || !job.runner_name) fail('stage fence job is no longer active');
+  const ref = await githubJson(fetchImpl, `${GITHUB_API}/repos/${repo}/git/ref/heads/main`, githubToken, budget);
+  if (ref.object?.sha !== fence.sha) fail('stage fence SHA is no longer current main');
+  return Object.freeze({ ...fence, active: true });
+}
+
 function validateIdentity(identity, expectedSha) {
   if (!identity || identity.repository !== WORKER_RELEASE_BROKER_POLICY.repository ||
       identity.workflow !== WORKER_RELEASE_BROKER_POLICY.workflow ||

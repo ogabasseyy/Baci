@@ -5,12 +5,32 @@ import stat
 from pathlib import Path
 
 
+def _assert_trusted_node_version(*, runner=None) -> None:
+    """Fail closed unless the fixed root-owned broker Node matches the pin."""
+    from worker_release_pinned_runtime import NODE_VERSION
+
+    run = broker.subprocess.run if runner is None else runner
+    try:
+        result = run((broker.TRUSTED_NODE, "--version"), check=False,
+                     stdin=broker.subprocess.DEVNULL,
+                     stdout=broker.subprocess.PIPE,
+                     stderr=broker.subprocess.DEVNULL, timeout=5, text=True,
+                     cwd="/", env={"PATH": "/usr/bin:/bin", "HOME": "/nonexistent",
+                                   "LC_ALL": "C"})
+    except (OSError, broker.subprocess.SubprocessError) as error:
+        raise PermissionError("trusted Node runtime version probe failed") from error
+    if result.returncode != 0 or result.stdout.strip() != NODE_VERSION:
+        raise PermissionError("trusted Node runtime differs from fixed version pin")
+
+
 def _stage_authenticated_release(verified: dict[str, Any], sha: str,
-                                 worker_gid: int) -> dict[str, object]:
+                                 worker_gid: int, *, github_token: str,
+                                 release_uid: int, worker_uid: int) -> dict[str, object]:
     """Send only the authenticated dispatcher envelope into the staged pipeline."""
     from worker_release_authenticated_staging import stage_authenticated_archive
     from worker_release_dependency_builder import BUILD_RESULTS_ROOT, BUILD_ROOT, build
     from worker_release_lifecycle import AuthenticatedRun, LifecycleRejected
+    from worker_release_broker_stage_fence import revalidate_active_stage_fence
 
     try:
         identity = AuthenticatedRun.from_broker({
@@ -28,12 +48,20 @@ def _stage_authenticated_release(verified: dict[str, Any], sha: str,
     digest = verified.get("archiveSha256")
     if not isinstance(digest, str) or not broker.re.fullmatch(r"[0-9a-f]{64}", digest):
         raise broker.BrokerProtocolError("trusted dispatcher archive identity is invalid")
+    def revalidate_identity():
+        return revalidate_active_stage_fence(
+            identity, github_token, node=broker.TRUSTED_NODE,
+            dispatcher=broker.TRUSTED_DISPATCHER, peer_uid=release_uid,
+            release_uid=release_uid, worker_uid=worker_uid,
+        )
+
     receipt = stage_authenticated_archive(
         verified, identity, expected_archive_sha256=digest,
         worker_root=Path(broker.WORKER_ROOT),
         lock_path=Path(broker.WORKER_ROOT) / "release.lock",
         result_root=BUILD_RESULTS_ROOT, worker_gid=worker_gid, builder=build,
         builder_build_root=BUILD_ROOT, builder_results_root=BUILD_RESULTS_ROOT,
+        revalidate_authenticated_fence=revalidate_identity,
     )
     if (receipt.get("phase") != "committed" or receipt.get("source_sha") != sha
             or receipt.get("archive_sha256") != digest
@@ -71,6 +99,25 @@ def _release_state_matches_fence(operation, state, sha, fence, latch):
     return state.get("fence") == fence and state.get("sha") == sha
 
 
+def _retain_terminal_dependency_seeds(sha: str, release_lock_proof) -> dict[str, object]:
+    """Run bounded seed eviction only after terminal release state is durable."""
+    try:
+        from worker_release_dependency_seed_consumer import SEED_ROOT
+        from dependency_seed_retention import prune_unreferenced_seeds
+
+        if not broker.os.path.lexists(SEED_ROOT):
+            return {"status": "not_provisioned", "removed": 0}
+        removed = prune_unreferenced_seeds(
+            Path(broker.WORKER_ROOT), SEED_ROOT, request_sha=sha,
+            release_lock_proof=release_lock_proof,
+        )
+        return {"status": "pruned" if removed else "checked", "removed": len(removed)}
+    except Exception:
+        # A completed health/rollback transition stays completed. Retention is
+        # maintenance; a failed proof or unsafe seed tree causes no deletion.
+        return {"status": "deferred", "removed": 0}
+
+
 def _latched_operation_is_allowed(operation, latch, active, fence):
     """Gate broker operations consistently when a durable latch outlives its lease."""
     if operation in ("recovery-status", "recover") or not latch:
@@ -84,6 +131,7 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
     if broker.os.geteuid() != 0 or release_uid <= 0 or worker_uid <= 0 or worker_gid < 0 or release_uid == worker_uid:
         raise PermissionError("invalid trusted broker execution context")
     broker._assert_root_owned_executable(broker.TRUSTED_NODE)
+    _assert_trusted_node_version()
     broker._assert_root_owned_executable(broker.TRUSTED_DISPATCHER)
     if broker.os.path.realpath(broker.WORKER_ROOT) != broker.WORKER_ROOT:
         raise PermissionError("worker root must not contain symlinks")
@@ -272,7 +320,7 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
             lock_path = broker.os.path.join(broker.WORKER_ROOT, "release.lock")
             state_path = broker.os.path.join(broker.WORKER_ROOT, "release-state.json")
             try:
-                with release_lock(lock_path):
+                with release_lock(lock_path) as release_lock_proof:
                     def health_check(target_sha: str) -> bool:
                         broker._assert_root_owned_executable(broker.TRUSTED_HEALTH_CHECK)
                         result = broker.subprocess.run(
@@ -335,7 +383,10 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
                                     lease.abort_health()
                                 raise
                         return {"ok": True, "operation": operation, "sourceSha": sha,
-                                "healthy": True, "runId": str(run_id), "runAttempt": run_attempt,
+                                "healthy": True,
+                                "seedRetention": _retain_terminal_dependency_seeds(
+                                    sha, release_lock_proof),
+                                "runId": str(run_id), "runAttempt": run_attempt,
                                 "jobId": str(job_id)}
                     latch = quiescence.recovery_latch()
                     recovery = _latch_matches_authenticated_fence(latch, identity.fence())
@@ -365,7 +416,10 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
                     with lease.operation():
                         lease.confirm_rollback()
                     return {"ok": True, "operation": operation, "sourceSha": result["sha"],
-                            "rolledBackSha": sha, "runId": str(run_id), "runAttempt": run_attempt,
+                            "rolledBackSha": sha,
+                            "seedRetention": _retain_terminal_dependency_seeds(
+                                sha, release_lock_proof),
+                            "runId": str(run_id), "runAttempt": run_attempt,
                             "jobId": str(job_id)}
             except LifecycleRejected as error:
                 raise broker.BrokerProtocolError(str(error)) from None
@@ -380,7 +434,10 @@ def make_fixed_release_dispatch(*, release_uid: int, worker_uid: int, worker_gid
         if len(archive) > broker.MAX_ARCHIVE_COMPRESSED_BYTES or broker.hashlib.sha256(archive).hexdigest() != archive_digest:
             raise broker.BrokerProtocolError("trusted dispatcher archive digest mismatch")
         del archive
-        receipt = _stage_authenticated_release(verified, sha, worker_gid)
+        receipt = _stage_authenticated_release(
+            verified, sha, worker_gid, github_token=request.get("githubToken"),
+            release_uid=release_uid, worker_uid=worker_uid,
+        )
         return {"ok": True, "operation": "stage", "sourceSha": sha,
                 "entryCount": receipt["entry_count"]}
 

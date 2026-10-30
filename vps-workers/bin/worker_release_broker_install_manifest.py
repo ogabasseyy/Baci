@@ -9,6 +9,9 @@ from typing import Callable, Iterable
 UNIT = """[Unit]
 Description=Baci worker release broker
 After=network-online.target
+After=systemd-tmpfiles-setup.service
+Requires=systemd-tmpfiles-setup.service
+RequiresMountsFor=/var/cache/baci-worker-release/seed-work
 Wants=network-online.target
 Wants=baci-domain-event-router.service baci-event-delivery-worker.service baci-quiz-finalization.service
 Wants=baci-cache-invalidation-drain.timer baci-gigl-tracking.timer
@@ -32,7 +35,7 @@ PrivateTmp=yes
 PrivateDevices=yes
 ProtectHome=yes
 ProtectSystem=strict
-ReadWritePaths=/srv/baci-workers /run/baci-worker-release /run/baci-worker-release-gate /run/baci-worker-release-build /var/lib/baci-worker-runtime-views /var/lib/baci-worker-broker/pointer /var/lib/baci-worker-broker/transaction
+ReadWritePaths=/srv/baci-workers /run/baci-worker-release /run/baci-worker-release-gate /run/baci-worker-release-build /run/baci-worker-egress /var/cache/baci-worker-release/seed-work /var/lib/baci-worker-runtime-views /var/lib/baci-worker-broker/pointer /var/lib/baci-worker-broker/transaction
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
@@ -64,6 +67,8 @@ exec /usr/bin/python3 -I /usr/local/lib/baci-worker-broker/worker_release_broker
 DISPATCHER_WRAPPER = """#!/usr/bin/node
 import './bin/worker-release-broker-dispatch.mjs';
 """
+
+EGRESS_TMPFILES = "d /run/baci-worker-egress 0711 root root -\n"
 
 
 @dataclass(frozen=True)
@@ -108,6 +113,8 @@ def build_install_files(source: Callable[[str], bytes], helper_root: Path,
         InstallFile("broker-start", START_BROKER.encode(), 0o550, helper_root / "start-broker.sh"),
         InstallFile("dispatcher-wrapper", DISPATCHER_WRAPPER.encode(), 0o550, helper_root / "worker-release-broker-dispatch.mjs"),
         InstallFile("systemd-unit", UNIT.encode(), 0o644, unit_path),
+        InstallFile("egress-tmpfiles", EGRESS_TMPFILES.encode(), 0o644,
+                    Path("/etc/tmpfiles.d/baci-worker-egress.conf")),
     ]
     installed_names = {file.destination.name for file in files
                        if file.destination.parent == helper_root}
@@ -118,7 +125,11 @@ def build_install_files(source: Callable[[str], bytes], helper_root: Path,
         if filename not in installed_names:
             source_relative = (
                 f"vps-workers/tools/nonproduction-worker-release/{filename}"
-                if module.startswith("dependency_seed_")
+                if (module.startswith("dependency_seed_") or module in {
+                    "worker_release_egress_broker", "worker_release_egress_bridge",
+                    "worker_release_egress_network", "worker_release_egress_protocol",
+                    "worker_release_egress_tls",
+                })
                 else f"vps-workers/bin/{filename}"
             )
             files.append(InstallFile(f"broker-runtime-{module}",
@@ -133,6 +144,10 @@ def build_provisioning_plan(*, release: str, home: Path, helper_root: Path,
     return (
         ("groupadd", "--system", release),
         ("useradd", "--system", "--gid", release, "--home-dir", str(home), "--no-create-home", "--shell", "/usr/sbin/nologin", release),
+        ("groupadd", "--system", "baci-worker-egress-bridge"),
+        ("useradd", "--system", "--gid", "baci-worker-egress-bridge",
+         "--home-dir", "/nonexistent", "--no-create-home", "--shell",
+         "/usr/sbin/nologin", "baci-worker-egress-bridge"),
         ("install", "-d", "-o", release, "-g", release, "-m", "0700", str(home)),
         ("install", "-d", "-o", "root", "-g", "root", "-m", "0755", str(helper_root)),
         ("install", "-d", "-o", "root", "-g", "root", "-m", "0755", str(helper_root / "bin")),
@@ -142,6 +157,7 @@ def build_provisioning_plan(*, release: str, home: Path, helper_root: Path,
         ("install", "-d", "-o", "root", "-g", "root", "-m", "0711", str(pointer_root)),
         ("install", "-d", "-o", "root", "-g", "root", "-m", "0700", str(transaction_root)),
         ("systemctl", "daemon-reload"),
+        ("systemd-tmpfiles", "--create", "/etc/tmpfiles.d/baci-worker-egress.conf"),
         ("systemctl", "enable", "--now", "baci-worker-release-broker.service"),
     )
 
@@ -149,4 +165,4 @@ def build_provisioning_plan(*, release: str, home: Path, helper_root: Path,
 
 
 __all__ = ["InstallFile", "UNIT", "START_BROKER", "DISPATCHER_WRAPPER",
-           "build_install_files", "build_provisioning_plan"]
+           "EGRESS_TMPFILES", "build_install_files", "build_provisioning_plan"]

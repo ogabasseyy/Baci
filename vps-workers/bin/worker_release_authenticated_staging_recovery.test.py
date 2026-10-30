@@ -115,6 +115,42 @@ class StagingRecoveryTests(unittest.TestCase):
         drain.assert_not_called()
         recover_view.assert_not_called()
 
+    def test_seed_recovery_uses_root_owned_pinned_view_before_source_cleanup(self):
+        txid = "b" * 32
+        source_record = {
+            "fence": self.fence, "transaction_id": txid, "phase": "ready",
+            "view_name": f".source-view.{txid}", "view_dev": 7, "view_ino": 88,
+        }
+        stage = {**self.stage, "result_state": "created",
+                 "transaction_id": txid, "result_name": f".{self.fence['sha']}.result.{txid}"}
+        patches = self._journal_mocks(stage=stage, source=source_record)
+        stage_instance, source_instance = patches[3], patches[4]
+        events = []
+        source_instance.cleanup.side_effect = lambda **_kwargs: events.append("source-cleanup")
+        stage_instance.recover.side_effect = lambda **_kwargs: events.append("stage-cleanup")
+        with (patch("pwd.getpwnam", return_value=SimpleNamespace(pw_uid=1002)),
+              patches[0], patches[1], patches[2],
+              patch.object(recovery, "release_lock", return_value=nullcontext()),
+              patch.object(recovery, "_prove_extractor_collected",
+                           side_effect=lambda *_args: events.append("extractor-drained")),
+              patch.object(recovery, "recover_for_stage",
+                           side_effect=lambda record, **kwargs: events.append((
+                               "seed-recovery", kwargs["source_path"],
+                               kwargs["source_identity"], record["transaction_id"]))),
+              patch.object(view_journal, "list_all_runtime_view_records", return_value=()),
+              patch.object(view_journal, "list_runtime_view_records_for_candidate", return_value=())):
+            result = recovery.recover_interrupted_stage(
+                self.root, Path("/srv/baci-workers/release.lock"), self.result_root,
+                worker_gid=81, terminal_attempt_proven=lambda _fence: True,
+                expected_target=self.target, view_root=self.view_root,
+            )
+        self.assertEqual(result, "recovered")
+        self.assertEqual(events, [
+            "extractor-drained",
+            ("seed-recovery", self.result_root / source_record["view_name"], (7, 88), txid),
+            "source-cleanup", "stage-cleanup",
+        ])
+
     def test_extractor_quiescence_uses_only_journal_derived_exact_unit_and_cgroup(self):
         unit = "baci-worker-source-extract@" + "e" * 32 + ".service"
         completed = [SimpleNamespace(stdout="not-found\n"),

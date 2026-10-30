@@ -26,7 +26,8 @@ MAX_STAGE_ENTRIES = 100_000 + 200_000 + 3
 
 
 def recover_interrupted_seed(root_fd: int, lock_fd: int, source_fd: int, source_sha: str, *,
-                             max_cache_bytes: int, max_store_bytes: int) -> bool:
+                             max_cache_bytes: int, max_store_bytes: int,
+                             move_source_parent_fd: int | None = None) -> bool:
     """Recover only an exact journaled seed after its publisher is proven terminal.
 
     Returns true when a complete seed was published before interruption. Hidden
@@ -41,6 +42,14 @@ def recover_interrupted_seed(root_fd: int, lock_fd: int, source_fd: int, source_
         stage_name = value["stagingName"]
         stage = _maybe_stat(root_fd, stage_name)
         target = _maybe_stat(root_fd, journal_sha)
+        move_inputs = value.get("moveInputs")
+        if move_inputs is not None:
+            if move_source_parent_fd is None:
+                raise BuilderRejected("seed move recovery requires its pinned source parent")
+            _verify_move_membership(root_fd, stage_name, journal_sha,
+                                    move_source_parent_fd, move_inputs,
+                                    stage_exists=stage is not None,
+                                    target_exists=target is not None)
         if stage is not None and target is not None:
             raise BuilderRejected("inflight seed has both staging and canonical entries")
         if stage is not None:
@@ -161,3 +170,48 @@ def _verify_preserved_canonical(root_fd: int, sha: str, device: int, inode: int,
             os.close(store_fd)
     finally:
         os.close(seed_fd)
+
+
+def _verify_move_membership(root_fd: int, stage_name: str, target_name: str,
+                            source_parent_fd: int, move_inputs: dict[str, int], *,
+                            stage_exists: bool, target_exists: bool) -> None:
+    source_parent = os.fstat(source_parent_fd)
+    if ((source_parent.st_dev, source_parent.st_ino) !=
+            (move_inputs["parentDevice"], move_inputs["parentInode"])):
+        raise BuilderRejected("seed move source parent differs from its journal")
+    destination_name = target_name if target_exists else stage_name if stage_exists else None
+    destination_fd = -1
+    if destination_name is not None:
+        destination_fd = os.open(destination_name, os.O_RDONLY | os.O_DIRECTORY
+                                  | getattr(os, "O_NOFOLLOW", 0), dir_fd=root_fd)
+    try:
+        for name in ("cache", "store"):
+            device, inode = move_inputs[f"{name}Device"], move_inputs[f"{name}Inode"]
+            source_exists = _named_directory_matches(source_parent_fd, name, device, inode)
+            destination_exists = (destination_fd >= 0 and
+                                  _named_directory_matches(destination_fd, name, device, inode))
+            if source_exists == destination_exists:
+                raise BuilderRejected("seed moved input is missing or duplicated")
+            if destination_name is None and not source_exists:
+                raise BuilderRejected("seed moved input disappeared before staging")
+    finally:
+        if destination_fd >= 0:
+            os.close(destination_fd)
+
+
+def _named_directory_matches(parent_fd: int, name: str, device: int, inode: int) -> bool:
+    try:
+        info = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    if not stat.S_ISDIR(info.st_mode) or (info.st_dev, info.st_ino) != (device, inode):
+        raise BuilderRejected("seed moved input inode differs from journal")
+    fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
+                 dir_fd=parent_fd)
+    try:
+        opened = os.fstat(fd)
+        if (opened.st_dev, opened.st_ino) != (device, inode):
+            raise BuilderRejected("seed moved input changed while opening")
+    finally:
+        os.close(fd)
+    return True

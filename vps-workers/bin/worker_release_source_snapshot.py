@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import os
 import stat
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -21,6 +22,30 @@ MAX_SNAPSHOT_DEPTH = 128
 MAX_SNAPSHOT_PATH_BYTES = 4096
 _DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
 _FILE_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+_ACL_XATTR = "system.posix_acl_access"
+
+
+def _expected_reader_acl(mode: int, read_uids: tuple[int, ...]) -> bytes:
+    permissions = 0x05 if mode & 0o111 else 0x04
+    undefined = 0xFFFFFFFF
+    entries = [(0x01, permissions, undefined)]
+    entries.extend((0x02, permissions, uid) for uid in sorted(read_uids))
+    entries.extend(((0x04, 0, undefined), (0x10, permissions, undefined),
+                    (0x20, 0, undefined)))
+    return struct.pack("<I", 2) + b"".join(
+        struct.pack("<HHI", tag, perm, qualifier) for tag, perm, qualifier in entries
+    )
+
+
+def _verify_reader_acl(fd: int, mode: int, read_uids: tuple[int, ...]) -> bytes:
+    try:
+        actual = os.getxattr(fd, _ACL_XATTR)
+    except OSError as error:
+        raise BuilderRejected("source snapshot reader ACL is unavailable") from error
+    expected = _expected_reader_acl(mode, read_uids)
+    if actual != expected:
+        raise BuilderRejected("source snapshot reader ACL does not match fixed policy")
+    return actual
 
 
 def _metadata(fd: int) -> tuple[int, ...]:
@@ -72,12 +97,16 @@ def _open_path_chain(path: Path, *, owner_uid: int) -> tuple[list[int], list[tup
 
 
 def _tree_digest(root_fd: int, *, owner_uid: int, max_entries: int, max_bytes: int,
-                 max_depth: int, max_path_bytes: int) -> str:
+                 max_depth: int, max_path_bytes: int,
+                 read_uids: tuple[int, ...] = ()) -> str:
     digest = hashlib.sha256()
     counts = {"entries": 0, "bytes": 0}
 
     def visit(directory_fd: int, relative: str = "", depth: int = 0) -> None:
         before = _metadata(directory_fd)
+        if read_uids:
+            acl = _verify_reader_acl(directory_fd, stat.S_IMODE(before[4]), read_uids)
+            digest.update(b"a\0" + relative.encode("utf-8") + b"\0" + acl)
         for name in sorted(os.listdir(directory_fd)):
             if name in {"", ".", ".."} or "/" in name or "\\" in name:
                 raise BuilderRejected("source snapshot contains an unsafe entry name")
@@ -116,6 +145,9 @@ def _tree_digest(root_fd: int, *, owner_uid: int, max_entries: int, max_bytes: i
                     if (_metadata_from_stat(info) != opened or opened[2] != owner_uid
                             or opened[5] != 1):
                         raise BuilderRejected("source snapshot file changed before reading")
+                    if read_uids:
+                        acl = _verify_reader_acl(fd, stat.S_IMODE(opened[4]), read_uids)
+                        digest.update(b"a\0" + child_relative.encode("utf-8") + b"\0" + acl)
                     digest.update(b"f\0" + encoded + b"\0" + repr(opened).encode("ascii") + b"\0")
                     remaining = info.st_size
                     while remaining:
@@ -173,6 +205,7 @@ class PinnedSourceSnapshot:
     max_bytes: int
     max_depth: int
     max_path_bytes: int
+    read_uids: tuple[int, ...]
     digest: str
     _fds: list[int]
     _identities: list[tuple[str, tuple[int, ...]]]
@@ -187,7 +220,8 @@ class PinnedSourceSnapshot:
             raise BuilderRejected("pinned source snapshot root changed during build")
         current = _tree_digest(self._fds[-1], owner_uid=self.owner_uid,
                                max_entries=self.max_entries, max_bytes=self.max_bytes,
-                               max_depth=self.max_depth, max_path_bytes=self.max_path_bytes)
+                               max_depth=self.max_depth, max_path_bytes=self.max_path_bytes,
+                               read_uids=self.read_uids)
         if current != self.digest:
             raise BuilderRejected("source snapshot contents changed during build")
         _assert_path_identity(self.path, self.trusted_root, self.owner_uid, self._identities)
@@ -213,7 +247,8 @@ def pin_source_snapshot(path: Path, *, trusted_root: Path, owner_uid: int,
                         max_entries: int = MAX_SNAPSHOT_ENTRIES,
                         max_bytes: int = MAX_SNAPSHOT_BYTES,
                         max_depth: int = MAX_SNAPSHOT_DEPTH,
-                        max_path_bytes: int = MAX_SNAPSHOT_PATH_BYTES) -> PinnedSourceSnapshot:
+                        max_path_bytes: int = MAX_SNAPSHOT_PATH_BYTES,
+                        read_uids: tuple[int, ...] = ()) -> PinnedSourceSnapshot:
     """Pin a direct child of a private root and return its initial tree digest."""
     if not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
         raise BuilderRejected("descriptor-safe source snapshot verification is unavailable")
@@ -224,6 +259,9 @@ def pin_source_snapshot(path: Path, *, trusted_root: Path, owner_uid: int,
             or type(max_bytes) is not int or not 0 <= max_bytes <= MAX_SNAPSHOT_BYTES
             or type(max_depth) is not int or not 0 <= max_depth <= MAX_SNAPSHOT_DEPTH
             or type(max_path_bytes) is not int or not 1 <= max_path_bytes <= MAX_SNAPSHOT_PATH_BYTES
+            or not isinstance(read_uids, tuple)
+            or any(type(uid) is not int or uid <= 0 for uid in read_uids)
+            or len(read_uids) != len(set(read_uids))
             or not path.is_absolute() or not trusted_root.is_absolute()
             or path.parent != trusted_root or path.name in {"", ".", ".."}):
         raise BuilderRejected("source snapshot bounds or location are invalid")
@@ -241,12 +279,13 @@ def pin_source_snapshot(path: Path, *, trusted_root: Path, owner_uid: int,
         identities.append((path.name, _metadata(root_fd)))
         digest = _tree_digest(root_fd, owner_uid=owner_uid,
                               max_entries=max_entries, max_bytes=max_bytes,
-                              max_depth=max_depth, max_path_bytes=max_path_bytes)
+                              max_depth=max_depth, max_path_bytes=max_path_bytes,
+                              read_uids=read_uids)
         _assert_path_identity(path, trusted_root, owner_uid, identities)
         if _metadata(root_fd) != identities[-1][1]:
             raise BuilderRejected("pinned source snapshot root changed during initial verification")
         return PinnedSourceSnapshot(path, trusted_root, owner_uid, max_entries, max_bytes,
-                                    max_depth, max_path_bytes, digest, fds, identities)
+                                    max_depth, max_path_bytes, read_uids, digest, fds, identities)
     except BaseException:
         if root_fd >= 0:
             os.close(root_fd)

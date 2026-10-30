@@ -7,11 +7,13 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 BIN = Path(__file__).resolve().parents[2] / "bin"
 sys.path.insert(0, str(BIN))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import worker_release_dependency_seed_consumer as seed_consumer
 from worker_release_dependency_seed_consumer import consume_seed
 from worker_release_dependency_artifacts import BuilderRejected, copy_source_tree, make_read_only_input
 from dependency_seed_publisher import EXPECTED_PNPM, make_receipt, _publish_seed
@@ -66,13 +68,32 @@ class DependencySeedConsumerTests(unittest.TestCase):
         scratch.mkdir(mode=0o700)
         os.chown(scratch, uid, gid)
         input_root = source_copy.parent
-        cache = consume_seed(source_copy, sha, seed_root=seeds, scratch=scratch,
-                             input_root=input_root, builder_uid=uid, builder_gid=gid,
-                             max_store_bytes=1024 * 1024, max_store_entries=100,
-                             max_cache_bytes=MAX_CACHE_BYTES, max_cache_entries=100)
+        with patch.object(seed_consumer, "verify_bounded_seed_workspace"):
+            cache = consume_seed(source_copy, sha, seed_root=seeds, scratch=scratch,
+                                 input_root=input_root, builder_uid=uid, builder_gid=gid,
+                                 max_store_bytes=1024 * 1024, max_store_entries=100,
+                                 max_cache_bytes=MAX_CACHE_BYTES, max_cache_entries=100)
         validate_receipt(source_copy, cache, input_root / ".baci-policy-verification.json",
                          owner_uid=0, cache_owner_uid=0, expected_sha=sha)
         return cache, scratch, input_root
+
+    def test_unmounted_workspace_is_rejected_before_seed_root_open(self):
+        uid = pwd.getpwnam("nobody").pw_uid
+        gid = pwd.getpwnam("nobody").pw_gid
+        with tempfile.TemporaryDirectory(prefix="seed-consumer-mount-gate-") as temporary:
+            root = Path(temporary)
+            with patch.object(
+                    seed_consumer, "verify_bounded_seed_workspace",
+                    side_effect=BuilderRejected("fixed seed workspace is not mounted")), \
+                 patch.object(
+                    seed_consumer, "_open_seed_root_lock",
+                    side_effect=AssertionError("seed root must not be opened")) as open_seed:
+                with self.assertRaisesRegex(BuilderRejected, "not mounted"):
+                    consume_seed(Path("/unavailable/source"), SHA_A,
+                                 seed_root=root / "seeds", scratch=root / "scratch",
+                                 input_root=root / "input", builder_uid=uid, builder_gid=gid,
+                                 max_store_bytes=1024, max_store_entries=10)
+        open_seed.assert_not_called()
 
     def test_consumes_only_authenticated_sha_and_validates_copied_inputs(self):
         with tempfile.TemporaryDirectory() as temporary:

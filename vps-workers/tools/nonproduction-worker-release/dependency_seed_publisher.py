@@ -24,6 +24,7 @@ from dependency_seed_filesystem import (
     remove_tree,
 )
 from dependency_seed_publication import rename_noreplace
+from dependency_seed_move_publication import pin_and_preflight, transfer_inputs
 from dependency_seed_capacity import (
     MAX_SEED_ROOT_BYTES,
     MAX_SEED_ROOT_ENTRIES,
@@ -90,7 +91,9 @@ def _publish_seed(source: Path, cache: Path, store: Path, seed_root: Path,
                   authenticated_source_sha: str, *, generation_capability: object,
                   pnpm_version: str = EXPECTED_PNPM,
                   max_cache_bytes: int = MAX_CACHE_BYTES,
-                  max_store_bytes: int = MAX_STORE_BYTES) -> Path:
+                  max_store_bytes: int = MAX_STORE_BYTES,
+                  move_inputs: bool = False,
+                  transaction_id: str | None = None) -> Path:
     """Publish once per trusted-caller SHA with descriptor-relative no-replace."""
     if not SHA_RE.fullmatch(authenticated_source_sha):
         raise BuilderRejected("authenticated source SHA is malformed")
@@ -120,12 +123,22 @@ def _publish_seed(source: Path, cache: Path, store: Path, seed_root: Path,
         root_fd, lock_fd = _seed_lock(Path(seed_root))
         stack.callback(os.close, root_fd)
         stack.callback(os.close, lock_fd)
+        move_source_parent_fd = -1
+        move_record = None
+        if move_inputs:
+            move_source_parent_fd, move_record = pin_and_preflight(
+                Path(cache), Path(store), cache_fd, store_fd, root_fd,
+                transaction_id, max_cache_bytes=max_cache_bytes,
+                max_store_bytes=max_store_bytes,
+            )
+            stack.callback(os.close, move_source_parent_fd)
         if not _named_root_matches(Path(seed_root), root_fd):
             raise BuilderRejected("seed root path changed after descriptor pinning")
         if INFLIGHT_JOURNAL in os.listdir(root_fd):
             if _recover_interrupted_seed(
                     root_fd, lock_fd, source_fd, authenticated_source_sha,
-                    max_cache_bytes=max_cache_bytes, max_store_bytes=max_store_bytes):
+                    max_cache_bytes=max_cache_bytes, max_store_bytes=max_store_bytes,
+                    move_source_parent_fd=(move_source_parent_fd if move_inputs else None)):
                 prepublish_guard()
                 return Path(seed_root) / authenticated_source_sha
         _reject_unresolved_staging(root_fd)
@@ -145,30 +158,38 @@ def _publish_seed(source: Path, cache: Path, store: Path, seed_root: Path,
             prepublish_guard()
             return Path(seed_root) / authenticated_source_sha
 
-        copy_budget = preflight_copy_budget(
-            root_fd, cache_fd, store_fd, max_cache_bytes=max_cache_bytes,
-            max_store_bytes=max_store_bytes, max_root_bytes=MAX_SEED_ROOT_BYTES,
-            max_root_entries=MAX_SEED_ROOT_ENTRIES,
-        )
-        staging_name = f".{authenticated_source_sha}.{secrets.token_hex(16)}"
+        if not move_inputs:
+            copy_budget = preflight_copy_budget(
+                root_fd, cache_fd, store_fd, max_cache_bytes=max_cache_bytes,
+                max_store_bytes=max_store_bytes, max_root_bytes=MAX_SEED_ROOT_BYTES,
+                max_root_entries=MAX_SEED_ROOT_ENTRIES,
+            )
+        staging_name = (f".{authenticated_source_sha}.{transaction_id}" if move_inputs else
+                        f".{authenticated_source_sha}.{secrets.token_hex(16)}")
         journal_fd = _own_fd(stack, _create_inflight_journal(
-            root_fd, authenticated_source_sha, staging_name))
+            root_fd, authenticated_source_sha, staging_name, move_inputs=move_record))
         published = False
         staging_fd = -1
         try:
             os.mkdir(staging_name, 0o700, dir_fd=root_fd)
             staging_fd = child_directory(root_fd, staging_name, owner_uid=os.geteuid())
             _update_inflight_journal(root_fd, journal_fd, staging_fd)
-            copied_cache_fd = copy_tree(cache_fd, staging_fd, "cache", max_bytes=max_cache_bytes,
-                                        max_entries=100_000, aggregate_budget=copy_budget,
-                                        capacity_check=lambda byte_count, inode_count: check_copy_capacity(
-                                            root_fd, next_bytes=byte_count, next_inodes=inode_count))
-            copied_store_fd = -1
-            try:
-                copied_store_fd = copy_tree(store_fd, staging_fd, "store", max_bytes=max_store_bytes,
-                                            max_entries=MAX_TREE_ENTRIES, aggregate_budget=copy_budget,
+            if move_inputs:
+                copied_cache_fd, copied_store_fd = transfer_inputs(
+                    move_source_parent_fd, staging_fd, move_record, owner_uid=os.geteuid(),
+                )
+            else:
+                copied_cache_fd = copy_tree(cache_fd, staging_fd, "cache", max_bytes=max_cache_bytes,
+                                            max_entries=100_000, aggregate_budget=copy_budget,
                                             capacity_check=lambda byte_count, inode_count: check_copy_capacity(
                                                 root_fd, next_bytes=byte_count, next_inodes=inode_count))
+                copied_store_fd = -1
+            try:
+                if not move_inputs:
+                    copied_store_fd = copy_tree(store_fd, staging_fd, "store", max_bytes=max_store_bytes,
+                                                max_entries=MAX_TREE_ENTRIES, aggregate_budget=copy_budget,
+                                                capacity_check=lambda byte_count, inode_count: check_copy_capacity(
+                                                    root_fd, next_bytes=byte_count, next_inodes=inode_count))
                 if (policy_cache_digest_fd(copied_cache_fd, max_bytes=max_cache_bytes) != cache_hash
                         or tree_digest_fd(copied_store_fd, max_bytes=max_store_bytes) != store_hash):
                     raise BuilderRejected("seed inputs changed while copying")
@@ -236,7 +257,7 @@ def _publish_seed(source: Path, cache: Path, store: Path, seed_root: Path,
             return Path(seed_root) / authenticated_source_sha
         finally:
             try:
-                if not published:
+                if not published and not move_inputs:
                     try:
                         named_stage = os.stat(staging_name, dir_fd=root_fd, follow_symlinks=False)
                     except FileNotFoundError:

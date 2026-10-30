@@ -13,11 +13,13 @@ import fcntl
 import os
 from pathlib import Path
 import re
+import stat
 from typing import Callable, Iterator
 
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 ID_RE = re.compile(r"^[1-9][0-9]{0,19}$")
+_LOCK_PROOF_TOKEN = object()
 
 
 class LifecycleRejected(Exception):
@@ -30,6 +32,41 @@ class ReleaseHealthRejected(LifecycleRejected):
 
 class ReleaseHealthProbeError(LifecycleRejected):
     """The health probe errored, but the prior pointer was restored."""
+
+
+class ReleaseLockProof:
+    """Unforgeable-in-process evidence yielded only while release_lock is held."""
+
+    __slots__ = ("_fd", "_path", "_identity", "_active", "_token")
+
+    def __init__(self, token: object, fd: int, path: Path):
+        if token is not _LOCK_PROOF_TOKEN:
+            raise TypeError("release lock proof is broker-issued")
+        info = os.fstat(fd)
+        self._fd = fd
+        self._path = path.absolute()
+        self._identity = info.st_dev, info.st_ino
+        self._active = True
+        self._token = token
+
+    def require_active(self, expected_path: str | Path) -> None:
+        if (self._token is not _LOCK_PROOF_TOKEN or not self._active
+                or Path(expected_path).absolute() != self._path):
+            raise LifecycleRejected("release lock proof is inactive or targets another lock")
+        try:
+            info = os.fstat(self._fd)
+            named = os.stat(self._path, follow_symlinks=False)
+            fcntl.flock(self._fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            raise LifecycleRejected("release lock proof is no longer held") from error
+        if ((info.st_dev, info.st_ino) != self._identity
+                or (named.st_dev, named.st_ino) != self._identity
+                or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1):
+            raise LifecycleRejected("release lock proof inode changed")
+
+    def _close(self) -> None:
+        self._active = False
+        os.close(self._fd)
 
 
 @dataclass(frozen=True)
@@ -83,7 +120,7 @@ class AuthenticatedRun:
 
 
 @contextmanager
-def release_lock(lock_path: str | Path, *, expected_owner_uid: int = 0) -> Iterator[None]:
+def release_lock(lock_path: str | Path, *, expected_owner_uid: int = 0) -> Iterator[ReleaseLockProof]:
     """Take a nonblocking exclusive lock on a fixed, trusted lock file."""
     path = Path(lock_path)
     fd = os.open(path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -95,9 +132,15 @@ def release_lock(lock_path: str | Path, *, expected_owner_uid: int = 0) -> Itera
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise LifecycleRejected("another release operation holds the lock") from None
-        yield
+        proof = ReleaseLockProof(_LOCK_PROOF_TOKEN, fd, path)
+        fd = -1
+        try:
+            yield proof
+        finally:
+            proof._close()
     finally:
-        os.close(fd)
+        if fd >= 0:
+            os.close(fd)
 
 
 def _current_target(current_link: Path, releases_root: Path) -> str | None:

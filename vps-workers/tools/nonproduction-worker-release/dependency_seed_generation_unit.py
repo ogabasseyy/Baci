@@ -156,7 +156,7 @@ def systemd_command(unit: str, sha: str, uid: int, gid: int, *, source: Path,
         f"{source}:/run/baci-seed/source", f"{TOOLS}:/run/baci-seed-tools",
         f"{BIN}:/run/baci-seed-bin", f"{pnpm}:/run/baci-seed-runtime/pnpm.cjs",
         f"{node}:/run/baci-seed-runtime/node", "/etc/ssl/certs:/etc/ssl/certs",
-        f"{EGRESS_SOCKET}:/run/baci-seed-egress.sock",
+        f"{EGRESS_SOCKET}:/tmp/baci-seed-egress.sock",
     )
     bind_rw = (f"{cache}:/run/baci-seed/cache", f"{store}:/run/baci-seed/store")
     command = [SYSTEMD_RUN, "--quiet", "--system", "--wait", "--pipe", "--collect",
@@ -211,7 +211,7 @@ def validate_active_unit(query, unit: str, uid: int, gid: int, *, source: Path,
             f"{source}:/run/baci-seed/source", f"{TOOLS}:/run/baci-seed-tools",
             f"{BIN}:/run/baci-seed-bin", f"{pnpm}:/run/baci-seed-runtime/pnpm.cjs",
             f"{node}:/run/baci-seed-runtime/node", "/etc/ssl/certs:/etc/ssl/certs",
-            f"{EGRESS_SOCKET}:/run/baci-seed-egress.sock",
+            f"{EGRESS_SOCKET}:/tmp/baci-seed-egress.sock",
         )),
         "InaccessiblePaths": "/root /home /var/lib /var/log /run /srv /mnt /media",
         "TemporaryFileSystem": "/etc:ro",
@@ -237,7 +237,7 @@ def validate_active_unit(query, unit: str, uid: int, gid: int, *, source: Path,
             or f"--sha {unit.split('-')[3]}" not in exec_start
             or f"--host-uid {uid}" not in exec_start
             or f"--host-gid {gid}" not in exec_start
-            or "/run/baci-seed-egress.sock" not in " ".join(
+            or "/tmp/baci-seed-egress.sock" not in " ".join(
                 (query("show", "--property=BindReadOnlyPaths", "--value", unit),))):
         raise SeedGenerationRejected("seed unit command differs from fixed policy")
     if query("show", "--property=RuntimeMaxUSec", "--value", unit) not in {

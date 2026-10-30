@@ -75,9 +75,9 @@ class DependencySeedPublisherTests(unittest.TestCase):
             manifest_path = published / publisher.MANIFEST
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["generationAttestation"]["fence"]["sha"] = "b" * 40
-            os.chmod(published, 0o755)
             os.chmod(manifest_path, 0o644)
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            os.chmod(manifest_path, 0o444)
             with self.assertRaisesRegex(publisher.BuilderRejected, "attestation"):
                 publisher.verify_seed(published, source, authenticated_source_sha="a" * 40)
 
@@ -155,10 +155,13 @@ class DependencySeedPublisherTests(unittest.TestCase):
             with self.assertRaisesRegex(publisher.BuilderRejected, "does not match"):
                 self.publish(source, cache, store, seeds, "b" * 40)
             self.assertFalse((seeds / ("b" * 40)).exists())
-            (seeds / ("a" * 40)).mkdir(parents=True)
-            sentinel = seeds / ("a" * 40) / "sentinel"
+            collision = seeds / ("a" * 40)
+            collision.mkdir(parents=True, mode=0o555)
+            sentinel = collision / "sentinel"
             sentinel.write_text("do not replace", encoding="ascii")
-            with self.assertRaisesRegex(publisher.BuilderRejected, "already exists"):
+            sentinel.chmod(0o444)
+            collision.chmod(0o555)
+            with self.assertRaisesRegex(publisher.BuilderRejected, "manifest is unavailable"):
                 self.publish(source, cache, store, seeds, "a" * 40)
             self.assertEqual(sentinel.read_text(encoding="ascii"), "do not replace")
 
@@ -220,21 +223,16 @@ class DependencySeedPublisherTests(unittest.TestCase):
             self.assertFalse((seeds / ("a" * 40)).exists())
             self.assertEqual([p.name for p in seeds.iterdir()], [".publish.lock"])
 
-    def test_concurrent_same_sha_has_one_no_replace_winner(self):
+    def test_concurrent_same_sha_publication_is_verified_and_idempotent(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source, cache, store = self.fixture(root)
             seeds = root / "seeds"
 
-            def publish():
-                try:
-                    return self.publish(source, cache, store, seeds, "a" * 40)
-                except publisher.BuilderRejected:
-                    return None
-
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-                results = list(pool.map(lambda _: publish(), range(2)))
-            self.assertEqual(sum(result is not None for result in results), 1)
+                results = list(pool.map(
+                    lambda _: self.publish(source, cache, store, seeds, "a" * 40), range(2)))
+            self.assertEqual(results, [seeds / ("a" * 40)] * 2)
             self.assertEqual(publisher.verify_seed(seeds / ("a" * 40), source,
                                                    authenticated_source_sha="a" * 40)["schema"], 2)
             self.assertEqual(sorted(p.name for p in seeds.iterdir()), [".publish.lock", "a" * 40])

@@ -13,6 +13,7 @@ class SeedNormalizationRejected(RuntimeError):
 
 DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 PROJECT_KEY_RE = re.compile(r"^[0-9a-f]{32}$")
+PREFLIGHT_TEMP_RE = re.compile(r"^pnpm-policy-preverify-[A-Za-z0-9_]{8}$")
 
 
 def _directory(fd: int, *, owner_uid: int, same_device: int | None = None) -> os.stat_result:
@@ -72,11 +73,12 @@ def normalize_temporary_project_index(store: Path, workspace: Path, *,
         names = os.listdir(projects_fd)
         if not names:
             raise SeedNormalizationRejected("pnpm project-index is missing expected importer pointers")
-        if (len(names) != len(expected_importers)
+        if (not names or len(names) > len(expected_importers) + 1
                 or any(PROJECT_KEY_RE.fullmatch(name) is None for name in names)):
             raise SeedNormalizationRejected("pnpm project-index contents are not the fixed importer set")
         observed_importers: set[tuple[int, int]] = set()
         pinned_links: list[tuple[str, os.stat_result]] = []
+        dangling_preflight_links: list[tuple[str, os.stat_result]] = []
         for name in names:
             link_before = os.stat(name, dir_fd=projects_fd, follow_symlinks=False)
             if not stat.S_ISLNK(link_before.st_mode):
@@ -86,6 +88,41 @@ def normalize_temporary_project_index(store: Path, workspace: Path, *,
                 raise SeedNormalizationRejected("pnpm project-index target is not relative")
             try:
                 target_info = os.stat(name, dir_fd=projects_fd, follow_symlinks=True)
+            except FileNotFoundError:
+                # `pnpm deploy` registers its temporary output as a project in
+                # the shared store. The output is removed when preverification
+                # exits, but pnpm leaves this one dangling project-index link.
+                # Recognize only that exact tempfile naming/location shape;
+                # never resolve or remove arbitrary dangling links.
+                projects_path = store / "v11" / "projects"
+                link_path = projects_path / name
+                lexical_target = Path(os.path.normpath(os.path.join(
+                    str(projects_path), target)))
+                temporary_root = lexical_target.parent
+                if (lexical_target.name != "web"
+                        or temporary_root.parent != store.parent
+                        or PREFLIGHT_TEMP_RE.fullmatch(temporary_root.name) is None):
+                    raise SeedNormalizationRejected("pnpm project-index target is unavailable")
+                parent_fd = os.open(store.parent, DIRECTORY_FLAGS)
+                try:
+                    parent_info = _directory(parent_fd, owner_uid=owner_uid,
+                                             same_device=store_info.st_dev)
+                    del parent_info
+                    try:
+                        os.stat(temporary_root.name, dir_fd=parent_fd,
+                                follow_symlinks=False)
+                    except FileNotFoundError:
+                        pass
+                    else:
+                        raise SeedNormalizationRejected(
+                            "pnpm temporary deploy project is still present")
+                finally:
+                    os.close(parent_fd)
+                dangling_preflight_links.append((name, link_before))
+                if len(dangling_preflight_links) > 1:
+                    raise SeedNormalizationRejected(
+                        "pnpm project-index has multiple temporary deploy pointers")
+                continue
             except OSError as error:
                 raise SeedNormalizationRejected("pnpm project-index target is unavailable") from error
             target_identity = (target_info.st_dev, target_info.st_ino)
@@ -101,7 +138,7 @@ def normalize_temporary_project_index(store: Path, workspace: Path, *,
         if ((named_projects.st_dev, named_projects.st_ino) !=
                 (projects_info.st_dev, projects_info.st_ino)):
             raise SeedNormalizationRejected("pnpm project-index directory changed before normalization")
-        for name, link_before in pinned_links:
+        for name, link_before in (*pinned_links, *dangling_preflight_links):
             named_link = os.stat(name, dir_fd=projects_fd, follow_symlinks=False)
             if ((named_link.st_dev, named_link.st_ino) !=
                     (link_before.st_dev, link_before.st_ino)):
@@ -112,7 +149,7 @@ def normalize_temporary_project_index(store: Path, workspace: Path, *,
         if (os.fstat(version_fd).st_ino, os.fstat(version_fd).st_dev) != (
                 version_info.st_ino, version_info.st_dev):
             raise SeedNormalizationRejected("pnpm store version directory changed")
-        return len(pinned_links)
+        return len(pinned_links) + len(dangling_preflight_links)
     except SeedNormalizationRejected:
         raise
     except OSError as error:

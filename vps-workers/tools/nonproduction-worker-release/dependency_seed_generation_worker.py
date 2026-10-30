@@ -26,7 +26,7 @@ from worker_release_egress_bridge import EgressBridge
 
 PROXY_HOST = "127.0.0.1"
 PROXY_PORT = 3128
-EGRESS_SOCKET = "/run/baci-seed-egress.sock"
+EGRESS_SOCKET = "/tmp/baci-seed-egress.sock"
 
 
 def proxy_environment(env: dict[str, str] | None) -> dict[str, str]:

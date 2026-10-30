@@ -85,6 +85,46 @@ class TemporaryPnpmProjectIndexTests(unittest.TestCase):
             normalize_temporary_project_index(self.store, self.workspace,
                                               owner_uid=self.uid)
 
+    def test_removes_only_dangling_preverify_deploy_pointer_after_temp_root_is_gone(self):
+        self._link()
+        self._link(name="b" * 32, target=self.workspace / "vps-workers")
+        temp_root = self.store.parent / "pnpm-policy-preverify-ab12cd34"
+        link = self.store / "v11/projects" / ("c" * 32)
+        link.symlink_to(os.path.relpath(temp_root / "web", link.parent))
+
+        removed = normalize_temporary_project_index(self.store, self.workspace,
+                                                    owner_uid=self.uid)
+
+        self.assertEqual(removed, 3)
+        self.assertFalse(link.exists())
+        self.assertFalse(link.is_symlink())
+        self.assertFalse(temp_root.exists())
+        self.assertEqual(list((self.store / "v11/projects").iterdir()), [])
+
+    def test_dangling_preverify_pointer_is_rejected_if_temp_root_still_exists(self):
+        self._link()
+        self._link(name="b" * 32, target=self.workspace / "vps-workers")
+        temp_root = self.store.parent / "pnpm-policy-preverify-ab12cd34"
+        temp_root.mkdir()
+        link = self.store / "v11/projects" / ("c" * 32)
+        link.symlink_to(os.path.relpath(temp_root / "web", link.parent))
+
+        with self.assertRaisesRegex(SeedNormalizationRejected, "still present"):
+            normalize_temporary_project_index(self.store, self.workspace,
+                                              owner_uid=self.uid)
+        self.assertTrue(link.is_symlink())
+
+    def test_arbitrary_dangling_project_pointer_is_rejected_and_preserved(self):
+        self._link()
+        self._link(name="b" * 32, target=self.workspace / "vps-workers")
+        link = self.store / "v11/projects" / ("c" * 32)
+        link.symlink_to(os.path.relpath(self.store.parent / "unexpected" / "web", link.parent))
+
+        with self.assertRaisesRegex(SeedNormalizationRejected, "target is unavailable"):
+            normalize_temporary_project_index(self.store, self.workspace,
+                                              owner_uid=self.uid)
+        self.assertTrue(link.is_symlink())
+
     def test_refuses_non_symlink_project_index_entry(self):
         (self.store / "v11/projects" / ("b" * 32)).mkdir()
         self._link(name="c" * 32, target=self.workspace / "vps-workers")

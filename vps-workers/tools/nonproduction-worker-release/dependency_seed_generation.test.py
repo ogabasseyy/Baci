@@ -115,7 +115,7 @@ class SeedGenerationContractTests(unittest.TestCase):
             "--property=InaccessiblePaths=/root /home /var/lib /var/log /run /srv /mnt /media",
             "--property=TemporaryFileSystem=/etc:ro",
             "--property=MemoryMax=2G", "--property=TasksMax=128", "--property=CPUQuota=200%",
-            "/run/baci-seed-egress.sock", "/run/baci-seed/source",
+            "/tmp/baci-seed-egress.sock", "/run/baci-seed/source",
             "/run/baci-seed/cache", "/run/baci-seed/store",
             "--host-uid", "--host-gid",
         ):
@@ -123,7 +123,7 @@ class SeedGenerationContractTests(unittest.TestCase):
         self.assertIn("--sha\n0123456789ab", text)
         self.assertEqual(command[-8], "--node")
         self.assertEqual(command[-5], "0123456789ab")
-        self.assertIn(f"{EGRESS_SOCKET}:/run/baci-seed-egress.sock", text)
+        self.assertIn(f"{EGRESS_SOCKET}:/tmp/baci-seed-egress.sock", text)
 
     def test_private_user_namespace_maps_only_to_the_dedicated_host_identity(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -153,7 +153,7 @@ class SeedGenerationContractTests(unittest.TestCase):
                 f"{TOOLS}:/run/baci-seed-tools {BIN}:/run/baci-seed-bin "
                 "/root/pnpm.cjs:/run/baci-seed-runtime/pnpm.cjs "
                 "/root/node:/run/baci-seed-runtime/node /etc/ssl/certs:/etc/ssl/certs "
-                f"{EGRESS_SOCKET}:/run/baci-seed-egress.sock",
+                f"{EGRESS_SOCKET}:/tmp/baci-seed-egress.sock",
             "InaccessiblePaths": "/root /home /var/lib /var/log /run /srv /mnt /media",
             "TemporaryFileSystem": "/etc:ro", "User": str(uid), "Group": str(gid),
             "RuntimeMaxUSec": "5min 30s", "LimitFSIZE": str(4 * 1024**3),

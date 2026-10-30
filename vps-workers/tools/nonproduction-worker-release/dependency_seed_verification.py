@@ -23,8 +23,11 @@ def verify_seed_locked(root_fd: int, source_fd: int, source_sha: str, *,
     seed_fd = child_directory(root_fd, source_sha, owner_uid=os.geteuid(), immutable=True)
     try:
         assert_frozen_tree(seed_fd, owner_uid=os.geteuid())
-        manifest_fd = os.open(MANIFEST, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
-                              dir_fd=seed_fd)
+        try:
+            manifest_fd = os.open(MANIFEST, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                                  dir_fd=seed_fd)
+        except OSError as error:
+            raise BuilderRejected("seed manifest is unavailable") from error
         try:
             info = os.fstat(manifest_fd)
             if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1

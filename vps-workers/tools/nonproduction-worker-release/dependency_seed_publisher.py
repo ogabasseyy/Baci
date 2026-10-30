@@ -190,9 +190,10 @@ def _publish_seed(source: Path, cache: Path, store: Path, seed_root: Path,
                                                 max_entries=MAX_TREE_ENTRIES, aggregate_budget=copy_budget,
                                                 capacity_check=lambda byte_count, inode_count: check_copy_capacity(
                                                     root_fd, next_bytes=byte_count, next_inodes=inode_count))
-                if (policy_cache_digest_fd(copied_cache_fd, max_bytes=max_cache_bytes) != cache_hash
-                        or tree_digest_fd(copied_store_fd, max_bytes=max_store_bytes) != store_hash):
-                    raise BuilderRejected("seed inputs changed while copying")
+                if policy_cache_digest_fd(copied_cache_fd, max_bytes=max_cache_bytes) != cache_hash:
+                    raise BuilderRejected("seed policy cache changed while copying")
+                if tree_digest_fd(copied_store_fd, max_bytes=max_store_bytes) != store_hash:
+                    raise BuilderRejected("seed package store changed while copying")
             finally:
                 os.close(copied_cache_fd)
                 if copied_store_fd >= 0:

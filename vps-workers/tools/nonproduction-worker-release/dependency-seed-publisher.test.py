@@ -224,6 +224,41 @@ class DependencySeedPublisherTests(unittest.TestCase):
             self.assertFalse((seeds / ("a" * 40)).exists())
             self.assertEqual([p.name for p in seeds.iterdir()], [".publish.lock"])
 
+    def test_copy_digest_mismatches_report_only_the_affected_seed_input(self):
+        for mismatch, expected_error in (
+                ("cache", "seed policy cache changed while copying"),
+                ("store", "seed package store changed while copying")):
+            with self.subTest(mismatch=mismatch), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                source, cache, store = self.fixture(root)
+                seeds = root / "seeds"
+                real_cache_digest = publisher.policy_cache_digest_fd
+                real_store_digest = publisher.tree_digest_fd
+                cache_calls = 0
+                store_calls = 0
+
+                def cache_digest(fd, *, max_bytes):
+                    nonlocal cache_calls
+                    cache_calls += 1
+                    if mismatch == "cache" and cache_calls == 2:
+                        return "f" * 64
+                    return real_cache_digest(fd, max_bytes=max_bytes)
+
+                def store_digest(fd, *, max_bytes):
+                    nonlocal store_calls
+                    store_calls += 1
+                    if mismatch == "store" and store_calls == 2:
+                        return "f" * 64
+                    return real_store_digest(fd, max_bytes=max_bytes)
+
+                with patch.object(publisher, "policy_cache_digest_fd", side_effect=cache_digest), \
+                     patch.object(publisher, "tree_digest_fd", side_effect=store_digest):
+                    with self.assertRaisesRegex(publisher.BuilderRejected, expected_error):
+                        self.publish(source, cache, store, seeds, "a" * 40)
+                self.assertEqual(cache_calls, 2)
+                self.assertEqual(store_calls, 2 if mismatch == "store" else 1)
+                self.assertFalse((seeds / ("a" * 40)).exists())
+
     def test_concurrent_same_sha_publication_is_verified_and_idempotent(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

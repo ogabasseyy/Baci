@@ -81,30 +81,36 @@ class SeedGenerationRecoveryTests(unittest.TestCase):
         self.assertEqual(list(self.resource.iterdir()), [])
 
     def test_prelaunch_fixed_socket_binding_recovers_after_crash(self):
-        with SeedGenerationJournal(self.resource, scratch_root=self.workspace) as journal:
+        resource = self.root / "prelaunch-resource"
+        resource.mkdir(mode=0o700)
+        workspace = self.root / "prelaunch-workspace"
+        workspace.mkdir(mode=0o700)
+        with SeedGenerationJournal(resource, scratch_root=workspace) as journal:
             journal.begin(
                 transaction_id=TXID, fence={**FENCE, "status": "in_progress"},
                 unit=f"baci-worker-seed-{'a' * 12}-{'b' * 32}.service",
                 source=self.source, egress_socket=(1, 2),
                 scratch_name=f"seed-{TXID}", builder_uid=self.uid, builder_gid=self.gid,
             )
-            create_seed_scratch(self.workspace, TXID, journal, self.uid, self.gid)
+            create_seed_scratch(workspace, TXID, journal, self.uid, self.gid)
             journal.mark_egress_binding_ready((1, 2))
             # A crash before launch leaves only journaled scratch; no alias exists.
 
-        with patch.object(recovery, "WORK_ROOT", self.workspace), \
+        with patch.object(recovery, "WORK_ROOT", workspace), \
              patch.object(recovery, "runtime_identity", return_value=(self.uid, self.gid)), \
              patch.object(recovery, "preflight_cgroup_root", return_value=(1, 2, 3, 4)), \
              patch.object(recovery, "drain_unit") as drain, \
              patch.object(recovery, "recover_seed_publication", return_value=False):
             self.assertTrue(recovery.recover_seed_generation(
-                self.resource, transaction_id=TXID, expected_fence=FENCE,
+                resource, transaction_id=TXID, expected_fence=FENCE,
                 expected_source=self.source,
                 expected_source_identity=(self.source.stat().st_dev, self.source.stat().st_ino),
             ))
         drain.assert_called_once()
-        self.assertEqual(list(self.workspace.iterdir()), [])
-        self.assertEqual(list(self.resource.iterdir()), [])
+        self.assertEqual(list(workspace.iterdir()), [])
+        self.assertEqual(list(resource.iterdir()), [])
+        self.assertTrue((self.workspace / f"seed-{TXID}").is_dir())
+        self.assertTrue((self.resource / "seed-generation-unit.json").is_file())
 
     def test_legacy_alias_blocks_recovery_without_drain_or_cleanup(self):
         alias = self.workspace / f"baci-seed-egress-{TXID}.sock"

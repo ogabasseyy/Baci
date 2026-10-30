@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-29T16:17:22.461447+00:00",
-  "source_revision": "b2a26c473380e53b946d6e54dcaea74120aad4ee",
-  "evidence_digest": "95120b157936fcf03bde19590c72ba0d6991f95e03c4516adbe1c574f23f4a00",
-  "claims_digest": "28099aab305b6441db7c3343239f8191877e2e54415bc2b41b244187ea89c0a4",
-  "review_scope": "Source evidence only. OAuth connected discovery excludes legacy link tools; anonymous compatibility preserved. PKCE/encrypted grants, resource-specific transport and refresh receipts unchanged. Other capability claims retain the newly merged main audit, including merchant onboarding email suppression, preferences, event permissions and worker isolation. No new production capability promotion. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged. The mobile admin inventory sheet empty footer uses undefined; the inventory capability remains unchanged. Main cart quota and storefront presentation changes do not alter the cited capability claims; deployment and native acceptance remain unverified.",
+  "reviewed_at": "2026-10-30T02:08:58.628043+00:00",
+  "source_revision": "48e3d73761c0a48b3f8dffea8247fe4a2966234d",
+  "evidence_digest": "bf262f6e5a12c1ca8993b5783f216b503a2223af2f4220eca9c1288f36662b86",
+  "claims_digest": "73aaa0bd88f5139f447270c0958163712e471c6f206fc16f4b621ce345f41e50",
+  "review_scope": "Source evidence only. OAuth connected discovery excludes legacy link tools; anonymous compatibility preserved. PKCE/encrypted grants, resource-specific transport and refresh receipts unchanged. Other capability claims retain the newly merged main audit, including merchant onboarding email suppression, preferences, event permissions and worker isolation. No new production capability promotion. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged. The mobile admin inventory sheet empty footer uses undefined; the inventory capability remains unchanged. Main cart quota and storefront presentation changes do not alter the cited capability claims; deployment and native acceptance remain unverified. Main checkout, device lookup and mobile release changes do not change the cited capability claims; deployment and native acceptance remain unverified.",
   "capabilities": [
     {
       "id": "payments",

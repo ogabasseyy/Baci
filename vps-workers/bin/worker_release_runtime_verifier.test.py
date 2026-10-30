@@ -466,7 +466,7 @@ class MaterializedRuntimeVerifierTests(unittest.TestCase):
                 node = ("/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "NODE_ENV=production",
                         "/usr/bin/node", "-e", "process.exit(47)")
                 host_result = __import__("subprocess").run(
-                    node, cwd=cwd, env={"PATH": "/usr/bin:/bin"},
+                    node, cwd=candidate / "vps-workers", env={"PATH": "/usr/bin:/bin"},
                     stdin=__import__("subprocess").DEVNULL,
                     stdout=__import__("subprocess").DEVNULL,
                     stderr=__import__("subprocess").DEVNULL, timeout=5, check=False)

@@ -103,6 +103,10 @@ function lockIsStale(lockPath: string): boolean {
  * Two concurrent runs would each load the same journal and each send the
  * same "fresh" slot. An exclusive lock file (holder pid inside) makes the
  * second run refuse before it can send anything.
+ *
+ * A lock whose holder is gone is NOT reclaimed automatically: two processes
+ * could both judge it stale and both delete it, the second deleting the
+ * first's fresh lock. The operator removes it after checking no run is active.
  */
 function acquireLock(filePath: string): () => void {
   const lockPath = `${filePath}.lock`;
@@ -114,51 +118,42 @@ function acquireLock(filePath: string): () => void {
       'cannot create the mutation journal directory; nothing was sent'
     );
   }
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const fd = openSync(lockPath, 'wx', 0o600);
-      try {
-        writeSync(fd, `${process.pid}\n`);
-      } finally {
-        closeSync(fd);
-      }
-      let released = false;
-      const release = () => {
-        if (released) return;
-        released = true;
-        process.off('exit', release);
-        try {
-          unlinkSync(lockPath);
-        } catch {
-          // already gone
-        }
-      };
-      process.once('exit', release);
-      return release;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
-        throw new HarnessRefusal(
-          'JOURNAL_WRITE_FAILED',
-          'cannot create the mutation journal lock; nothing was sent'
-        );
-      }
-      if (!lockIsStale(lockPath)) {
-        throw new HarnessRefusal(
-          'JOURNAL_LOCKED',
-          'another run holds the mutation journal (or left an unreadable lock file next to it)'
-        );
-      }
-      try {
-        unlinkSync(lockPath);
-      } catch {
-        // lost the race to another reclaimer: the retry will report it
-      }
+  let fd: number;
+  try {
+    fd = openSync(lockPath, 'wx', 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+      throw new HarnessRefusal(
+        'JOURNAL_WRITE_FAILED',
+        'cannot create the mutation journal lock; nothing was sent'
+      );
     }
+    const lockName = path.basename(lockPath);
+    throw new HarnessRefusal(
+      'JOURNAL_LOCKED',
+      lockIsStale(lockPath)
+        ? `a previous run left ${lockName} (its holder process no longer exists). Check that no run is active, then remove that file and retry; it is never deleted automatically`
+        : `another run holds the mutation journal (${lockName}), or the lock file is unreadable. Check that no run is active before removing it`
+    );
   }
-  throw new HarnessRefusal(
-    'JOURNAL_LOCKED',
-    'could not take the mutation journal lock'
-  );
+  try {
+    writeSync(fd, `${process.pid}\n`);
+  } finally {
+    closeSync(fd);
+  }
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    process.off('exit', release);
+    try {
+      unlinkSync(lockPath);
+    } catch {
+      // already gone
+    }
+  };
+  process.once('exit', release);
+  return release;
 }
 
 export function createFileJournal(filePath: string): Journal {

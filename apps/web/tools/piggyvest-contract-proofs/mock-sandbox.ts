@@ -250,7 +250,11 @@ export class MockSandbox {
       ...(this.options.payoutReadback === 'fields'
         ? {
             enable_interest_accrual: w.interestEnabled,
-            interest_payout_wallet: w.payoutWalletId,
+            ...(this.options.goalReadbackOmitsPayout &&
+            this.customers.find((c) => c.id === w.customerId)
+              ?.defaultWalletId !== w.id
+              ? {}
+              : { interest_payout_wallet: w.payoutWalletId }),
           }
         : {}),
     });

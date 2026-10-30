@@ -121,6 +121,34 @@ describe('guarded fetch: request pacing', () => {
     expect(slept).toEqual([150]);
   });
 
+  it('reserves its slot before sleeping, so concurrent requests stay minGapMs apart', async () => {
+    // The clock never moves: every request is issued at the same instant, like
+    // true concurrency. Each one's send time is then (instant + its wait).
+    const clock = 1_000;
+    const waits: number[] = [];
+    const built = build('live-readonly', undefined, {
+      minGapMs: 200,
+      now: () => clock,
+      sleep: (ms) => {
+        waits.push(ms);
+        return Promise.resolve();
+      },
+    });
+    await Promise.all(
+      ['a', 'b', 'c'].map((id) =>
+        built.guarded(`${ORIGIN}/api/v1/wallet/${id}`, { headers: AUTH })
+      )
+    );
+    expect(built.baseFetch).toHaveBeenCalledTimes(3);
+    // First goes now, the others queue behind each other's reservations.
+    // (Without reserving, the waits would be [200, 200]: a simultaneous send.)
+    expect(waits).toEqual([200, 400]);
+    const sendTimes = [clock, clock + waits[0], clock + waits[1]];
+    for (let i = 1; i < sendTimes.length; i += 1) {
+      expect(sendTimes[i] - sendTimes[i - 1]).toBeGreaterThanOrEqual(200);
+    }
+  });
+
   it('does not pace when no gap is configured (dry-run, tests)', async () => {
     const slept: number[] = [];
     const { guarded } = build('live-readonly', undefined, {

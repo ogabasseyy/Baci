@@ -26,6 +26,8 @@ export interface MockOptions {
   counterScope: 'wallet' | 'customer';
   fundingSettles: boolean;
   failNetworkOnce: string[];
+  /** GET paths containing any of these answer HTTP 503 until the list is cleared. */
+  serverErrorPaths: string[];
   accruedEdgeCount: number;
   /** Wallet reads that must pass before a settled outflow shows in withdrawal_count. */
   counterLagReads: number;
@@ -33,6 +35,8 @@ export interface MockOptions {
   subAccountAcceptsPayout: boolean;
   subWalletInheritsPayout: boolean;
   payoutReadback: 'fields' | 'none';
+  /** Sub-wallet readbacks drop the payout field while the main wallet keeps it. */
+  goalReadbackOmitsPayout: boolean;
 }
 
 export const DEFAULT_MOCK_OPTIONS: MockOptions = {
@@ -54,12 +58,14 @@ export const DEFAULT_MOCK_OPTIONS: MockOptions = {
   counterScope: 'wallet',
   fundingSettles: true,
   failNetworkOnce: [],
+  serverErrorPaths: [],
   accruedEdgeCount: 0,
   counterLagReads: 0,
   customerPayoutWallet: 'accepted',
   subAccountAcceptsPayout: true,
   subWalletInheritsPayout: false,
   payoutReadback: 'fields',
+  goalReadbackOmitsPayout: false,
 };
 
 export interface MockReply {

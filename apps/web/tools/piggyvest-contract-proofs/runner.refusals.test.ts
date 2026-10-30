@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMockProvider } from './mock-provider';
-import { createFileJournal, createMemoryJournal } from './mutation-journal';
+import { createFileJournal } from './mutation-journal';
 import { parseRunConfig, type RunConfig } from './run-mode';
-import { currentAttempt, runHarness } from './runner';
+import { runHarness } from './runner';
 import { allowlistFile, liveConfig, noSleep } from './runner.test-support';
 import { HarnessRefusal } from './safety-guards';
 
@@ -96,28 +96,6 @@ describe('refusals abort the run and write nothing', () => {
       print: () => undefined,
     }).catch(() => undefined);
     expect(globalThis.fetch).toBe(realFetch);
-  });
-});
-
-describe('currentAttempt', () => {
-  const entry = (attempt: number) => ({
-    v: 1 as const,
-    ts: 't',
-    runId: 'r',
-    phase: 'intent' as const,
-    slot: 's',
-    attempt,
-    op: 'o',
-    reference: `pvbproof-r-o-aaaa000${attempt}`,
-    qaKey: 'qa-customer-1',
-    amountKobo: null,
-  });
-  it('resumes the latest attempt, and --new-attempt opens the next one', () => {
-    expect(currentAttempt(createMemoryJournal(), false)).toBe(1);
-    expect(currentAttempt(createMemoryJournal(), true)).toBe(1);
-    const journal = createMemoryJournal([entry(1), entry(2)]);
-    expect(currentAttempt(journal, false)).toBe(2);
-    expect(currentAttempt(journal, true)).toBe(3);
   });
 });
 

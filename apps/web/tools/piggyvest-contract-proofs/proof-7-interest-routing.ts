@@ -1,5 +1,5 @@
 import { createDataSchema, extractEdges, pickString } from './loose-schemas';
-import { analysePayoutReadback } from './payout-analysis';
+import { analysePayoutReadback, inheritanceAnswer } from './payout-analysis';
 import { type GoalOwner, runGoalVariant } from './proof-7-goal-variants';
 import { answerOf, ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
@@ -118,12 +118,14 @@ export async function runProof7(ctx: ProofContext): Promise<ProofResult> {
 
   // 2. Read the main wallet back: which fields reflect the payout destination?
   let namesDestination: boolean | null = null;
+  let mainDestinationPaths: string[] = [];
   if (mainWalletId) {
     const wallet = await api.wallet(mainWalletId);
     b.shape('GET /wallet/:id (P7 main wallet)', wallet.httpStatus, wallet.data);
     if (wallet.ok) {
       const facts = analysePayoutReadback(wallet.data, business, mainWalletId);
       namesDestination = facts.matchesTarget.length > 0;
+      mainDestinationPaths = facts.matchesTarget;
       b.value(
         'main_wallet_interest_field_names',
         facts.interestFieldPaths.join(',') || null
@@ -207,12 +209,10 @@ export async function runProof7(ctx: ProofContext): Promise<ProofResult> {
       nameSuffix: `-p7explicit-a${ctx.attempt}`,
       payoutWalletId: business,
     });
-    const unsetInherits: Answer =
-      unset.readback === null
-        ? 'unknown'
-        : unset.readback.interestFieldPaths.length === 0
-          ? 'unknown'
-          : answerOf(unset.readback.matchesTarget.length > 0);
+    const unsetInherits: Answer = inheritanceAnswer(
+      unset.readback,
+      mainDestinationPaths
+    );
     b.finding(
       'goal_without_payout_created',
       'Is a goal sub-wallet with its own payout left unset created?',
@@ -223,7 +223,7 @@ export async function runProof7(ctx: ProofContext): Promise<ProofResult> {
       "Does a goal wallet with no payout of its own inherit the customer's business payout wallet?",
       unsetInherits,
       unsetInherits === 'unknown'
-        ? 'readback cannot name a payout destination for this wallet'
+        ? 'the readback omits a payout destination to compare, so inheritance cannot be determined'
         : undefined
     );
     b.finding(

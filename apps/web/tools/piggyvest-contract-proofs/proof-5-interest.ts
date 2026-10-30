@@ -39,8 +39,9 @@ async function walk(
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const call = await fetchPage(cursor);
     result.lastCall = call;
-    if (!call.ok) break;
     const list = extractEdges(call.data);
+    // A page counts only if the request succeeded AND its list was recognised.
+    if (!call.ok || list.container === 'unknown') break;
     result.pages += 1;
     result.edgesPerPage.push(list.edges.length);
     result.firstEdge ??= list.edges[0];
@@ -65,29 +66,42 @@ export async function runProof5(ctx: ProofContext): Promise<ProofResult> {
 
   // Rates: the sandbox pays 0%, so absence is the expected result.
   let anyRate = false;
+  let ratesRead = 0;
   for (const wallet of state.wallets) {
     const call = await api.wallet(wallet.id);
     const parsed = walletDataSchema.safeParse(call.data);
-    const rate = parsed.success
-      ? (parsed.data as Record<string, unknown>).current_interest_rate
-      : null;
+    const rate =
+      call.ok && parsed.success
+        ? (parsed.data as Record<string, unknown>).current_interest_rate
+        : null;
+    if (typeof rate === 'number') ratesRead += 1;
     if (typeof rate === 'number' && rate > 0) anyRate = true;
   }
-  b.value('interest_rate_nonzero_on_any_wallet', anyRate);
+  b.value(
+    'interest_rate_nonzero_on_any_wallet',
+    ratesRead > 0 ? anyRate : null
+  );
 
   // Accrual read: default window.
   const def = await api.accrued(target, {});
   const defList = extractEdges(def.data);
+  const defUsable = def.ok && defList.container !== 'unknown';
   b.shape('GET accrued interest (page)', def.httpStatus, def.data);
-  b.value('accrual_edges_default_window', defList.edges.length);
+  b.value(
+    'accrual_edges_default_window',
+    defUsable ? defList.edges.length : null
+  );
   b.value(
     'accrual_page_info_fields',
-    defList.pageInfo ? Object.keys(defList.pageInfo).sort().join(',') : null
+    defUsable && defList.pageInfo
+      ? Object.keys(defList.pageInfo).sort().join(',')
+      : null
   );
   b.finding(
     'existing_accrual_schema_accepts_response',
     'Does the existing typed accrual schema accept the live response?',
-    answerOf(def.typedAccepted)
+    def.ok ? answerOf(def.typedAccepted) : 'unknown',
+    def.ok ? undefined : 'the accrual read did not succeed'
   );
 
   // Accrual read: 3-month window, one record per page, following the cursor.
@@ -107,20 +121,33 @@ export async function runProof5(ctx: ProofContext): Promise<ProofResult> {
     'accrual_edges_per_page',
     accrual.edgesPerPage.join(',')
   );
-  const observed = defList.edges.length > 0 || accrual.firstEdge !== undefined;
+  const observed =
+    (defUsable && defList.edges.length > 0) || accrual.firstEdge !== undefined;
+  // Absence is only evidence if both accrual reads succeeded with a list we recognise.
+  const absenceEstablished = defUsable && accrual.pages > 0;
+  const accrualAnswer = observed
+    ? 'yes'
+    : absenceEstablished
+      ? 'no'
+      : 'unknown';
   b.finding(
     'accrual_records_observed',
     'Are any interest accrual records visible for the QA wallets?',
-    answerOf(observed),
-    observed
-      ? undefined
-      : 'No records exist at 0% sandbox rates; absence is the honest result.'
+    accrualAnswer,
+    accrualAnswer === 'no'
+      ? 'No records exist at 0% sandbox rates; absence is the honest result.'
+      : accrualAnswer === 'unknown'
+        ? `the accrual read failed or returned an unrecognised list (HTTP ${def.httpStatus ?? 'none'}); absence is not established`
+        : undefined
   );
   b.finding(
     'accrual_edge_shape_observed',
     'Was an accrual record shape observed?',
-    answerOf(observed)
+    accrualAnswer
   );
+  if (accrualAnswer === 'unknown') {
+    b.inconclusive('the accrual reads did not succeed with a recognised list');
+  }
   b.finding(
     'accrual_cursor_advances',
     'Does the accrual cursor advance across pages?',
@@ -161,7 +188,9 @@ export async function runProof5(ctx: ProofContext): Promise<ProofResult> {
     txWalk.advances === null ? 'unknown' : answerOf(txWalk.advances)
   );
   const page = await api.transactions({ wallet_id: target, limit: '20' });
-  const rows = extractEdges(page.data).edges;
+  const pageList = extractEdges(page.data);
+  const pageUsable = page.ok && pageList.container !== 'unknown';
+  const rows = pageList.edges;
   const interestRows = countInterestRows(rows);
   b.shape('GET /transaction (page)', page.httpStatus, page.data);
   b.value('transaction_list_rows_read', rows.length).value(
@@ -171,7 +200,7 @@ export async function runProof5(ctx: ProofContext): Promise<ProofResult> {
   b.finding(
     'transaction_list_has_interest_rows',
     'Does the transaction list contain interest rows?',
-    page.ok ? answerOf(interestRows > 0) : 'unknown'
+    pageUsable ? answerOf(interestRows > 0) : 'unknown'
   );
   b.value(
     'transaction_list_limit_101_http_status',

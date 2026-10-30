@@ -249,3 +249,27 @@ describe('proof 7: a new attempt re-tests with fresh names', () => {
     );
   });
 });
+
+describe('proof 7: inheritance needs a readable destination', () => {
+  it('says no when the goal readback shows an empty payout field next to the main wallet naming the business wallet', async () => {
+    const { result } = await run();
+    expect(answer(result, 'goal_without_payout_inherits_business_payout')).toBe(
+      'no'
+    );
+  });
+
+  it('says unknown when the goal readback omits its payout destination (only the accrual flag is there)', async () => {
+    const { result } = await run({ mock: { goalReadbackOmitsPayout: true } });
+    expect(
+      answer(result, 'main_wallet_readback_names_payout_destination')
+    ).toBe('yes');
+    expect(answer(result, 'goal_without_payout_inherits_business_payout')).toBe(
+      'unknown'
+    );
+    expect(
+      result.findings.find(
+        (f) => f.id === 'goal_without_payout_inherits_business_payout'
+      )?.detail
+    ).toMatch(/destination/);
+  });
+});

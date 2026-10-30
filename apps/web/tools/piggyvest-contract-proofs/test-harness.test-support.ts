@@ -15,6 +15,8 @@ export interface HarnessOptions {
   mock?: Partial<MockOptions>;
   journal?: Journal;
   attempt?: number;
+  /** Polling budget handed to the proofs (default 6). */
+  maxPolls?: number;
   runId?: string;
   qaKey?: string;
   baseUrl?: string;
@@ -62,7 +64,7 @@ export function makeHarness(options: HarnessOptions = {}) {
     state,
     sleep: async () => undefined,
     pollIntervalMs: 0,
-    maxPolls: 6,
+    maxPolls: options.maxPolls ?? 6,
     attempt: options.attempt ?? 1,
     bank:
       options.bank === undefined

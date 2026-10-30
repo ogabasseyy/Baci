@@ -49,21 +49,31 @@ const changed = (deltas: Map<string, number | null>) =>
 const known = (deltas: Map<string, number | null>) =>
   [...deltas.values()].every((value) => value !== null);
 
+const signature = (counts: Counts) =>
+  [...counts.entries()]
+    .map(([id, count]) => `${id}=${count}`)
+    .sort()
+    .join('|');
+
+/**
+ * Reads counters until they are SETTLED, using the configured polling budget.
+ * A change is settled once two consecutive reads agree after it appeared; with
+ * no change, the whole budget is spent before "no change" is concluded. The
+ * next measurement starts from this settled reading, never from a mid-update one.
+ */
 async function settledCounts(
   ctx: ProofContext,
   previous: Counts,
   expectChange: boolean
 ): Promise<Counts> {
   let current = await readCounts(ctx);
-  for (
-    let attempt = 0;
-    attempt < 3 &&
-    expectChange &&
-    changed(deltasOf(previous, current)).length === 0;
-    attempt += 1
-  ) {
+  if (!expectChange) return current;
+  for (let poll = 0; poll < ctx.maxPolls; poll += 1) {
+    const moved = changed(deltasOf(previous, current)).length > 0;
     await ctx.sleep(ctx.pollIntervalMs);
-    current = await readCounts(ctx);
+    const next = await readCounts(ctx);
+    if (moved && signature(next) === signature(current)) return next;
+    current = next;
   }
   return current;
 }
@@ -80,6 +90,7 @@ export async function runProof4(ctx: ProofContext): Promise<ProofResult> {
   for (const [id, count] of base)
     b.value(`baseline_count_${label(ctx, id)}`, count);
   b.value('wallets_read', base.size);
+  b.value('counter_settle_polls', ctx.maxPolls);
   if (mode === 'live-readonly' || !main || !goal) {
     b.inconclusive(
       mode === 'live-readonly'

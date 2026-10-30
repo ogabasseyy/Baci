@@ -1,3 +1,5 @@
+import type { Answer } from './types';
+
 /**
  * Pure analysis of a wallet readback for interest-payout evidence. Only
  * field PATHS and whether a value equals a known wallet id are reported;
@@ -8,6 +10,8 @@ export interface PayoutReadback {
   /** Interest/payout/accrual settings (rate fields are listed separately). */
   interestFieldPaths: string[];
   rateFieldPaths: string[];
+  /** Fields that can hold a payout destination (key mentions payout), whatever their value. */
+  payoutFieldPaths: string[];
   matchesTarget: string[];
   matchesOwn: string[];
   /** True/false if a boolean accrual/enabled setting exists; null if none. */
@@ -32,6 +36,7 @@ export function analysePayoutReadback(
   const out: PayoutReadback = {
     interestFieldPaths: [],
     rateFieldPaths: [],
+    payoutFieldPaths: [],
     matchesTarget: [],
     matchesOwn: [],
     accrualEnabled: null,
@@ -50,6 +55,7 @@ export function analysePayoutReadback(
           out.rateFieldPaths.push(path);
         } else {
           out.interestFieldPaths.push(path);
+          if (/payout/i.test(key)) out.payoutFieldPaths.push(path);
           if (value === targetWalletId) out.matchesTarget.push(path);
           if (ownWalletId !== null && value === ownWalletId)
             out.matchesOwn.push(path);
@@ -64,4 +70,22 @@ export function analysePayoutReadback(
   if (root) visit(root, '', 0);
   if (flags.length > 0) out.accrualEnabled = flags.some(Boolean);
   return out;
+}
+
+/**
+ * Does a goal wallet with no payout of its own inherit the business wallet?
+ * `no` needs a READABLE destination field (the very field that names the
+ * destination on the main wallet) that is empty or differs. An omitted
+ * destination, or unrelated interest settings, leave the answer unknown.
+ */
+export function inheritanceAnswer(
+  goal: PayoutReadback | null,
+  mainDestinationPaths: readonly string[]
+): Answer {
+  if (!goal) return 'unknown';
+  if (goal.matchesTarget.length > 0) return 'yes';
+  const readable = goal.payoutFieldPaths.some((path) =>
+    mainDestinationPaths.includes(path)
+  );
+  return readable ? 'no' : 'unknown';
 }

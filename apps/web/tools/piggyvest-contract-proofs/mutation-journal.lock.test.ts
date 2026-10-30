@@ -41,14 +41,51 @@ describe('createFileJournal: one run per journal', () => {
     expect(() => journal.release?.()).not.toThrow();
   });
 
-  it('reclaims a lock left by a process that no longer exists', () => {
+  it('fails closed on a stale lock: no automatic reclamation, an operator message instead', () => {
     const file = tempFile();
     writeFileSync(`${file}.lock`, '2147483646\n');
-    const journal = createFileJournal(file);
-    expect(readFileSync(`${file}.lock`, 'utf8').trim()).toBe(
-      String(process.pid)
+    let message = '';
+    try {
+      createFileJournal(file);
+    } catch (error) {
+      message =
+        error instanceof HarnessRefusal ? error.message : 'NOT_A_REFUSAL';
+    }
+    expect(message).toContain('JOURNAL_LOCKED');
+    expect(message).toMatch(/remove/i);
+    expect(message).toContain(path.basename(`${file}.lock`));
+    expect(message).toMatch(/no run is active/i);
+    // The lock is left exactly as found: nothing deleted, nothing rewritten.
+    expect(readFileSync(`${file}.lock`, 'utf8')).toBe('2147483646\n');
+  });
+
+  it('two concurrent acquirers against a stale lock: none proceeds and the lock is untouched', async () => {
+    const file = tempFile();
+    writeFileSync(`${file}.lock`, '2147483646\n');
+    const attempts = await Promise.allSettled(
+      [1, 2].map(async () => createFileJournal(file))
     );
-    journal.release?.();
+    const winners = attempts.filter((result) => result.status === 'fulfilled');
+    expect(winners).toHaveLength(0);
+    for (const result of attempts) {
+      expect(result.status).toBe('rejected');
+      expect((result as PromiseRejectedResult).reason).toMatchObject({
+        code: 'JOURNAL_LOCKED',
+      });
+    }
+    expect(readFileSync(`${file}.lock`, 'utf8')).toBe('2147483646\n');
+  });
+
+  it('with no lock present, exactly one of two concurrent acquirers proceeds', async () => {
+    const file = tempFile();
+    const attempts = await Promise.allSettled(
+      [1, 2].map(async () => createFileJournal(file))
+    );
+    const winners = attempts.filter((result) => result.status === 'fulfilled');
+    expect(winners).toHaveLength(1);
+    (
+      winners[0] as PromiseFulfilledResult<ReturnType<typeof createFileJournal>>
+    ).value.release?.();
   });
 
   it('fails closed on a lock it cannot interpret', () => {

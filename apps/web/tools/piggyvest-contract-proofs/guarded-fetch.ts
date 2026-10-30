@@ -138,9 +138,13 @@ export function createGuardedFetch(options: GuardedFetchOptions): typeof fetch {
       throw error;
     }
 
-    const wait = lastSentAt + minGapMs - now();
-    if (minGapMs > 0 && wait > 0) await sleep(wait);
-    lastSentAt = now();
+    // Reserve this request's send slot BEFORE sleeping: concurrent callers then
+    // see each other's reservation and queue behind it instead of all waking
+    // together and sending at the same moment.
+    const requestedAt = now();
+    const sendAt = Math.max(requestedAt, lastSentAt + minGapMs);
+    lastSentAt = sendAt;
+    if (minGapMs > 0 && sendAt > requestedAt) await sleep(sendAt - requestedAt);
     const response = await baseFetch(target.url.toString(), {
       ...init,
       redirect: 'error',

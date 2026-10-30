@@ -108,6 +108,19 @@ export function createMockProvider(
         )
       );
     }
+    if (
+      method === 'GET' &&
+      sandbox.options.serverErrorPaths.some((needle) =>
+        url.pathname.includes(needle)
+      )
+    ) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ status: false, message: 'Service unavailable' }),
+          { status: 503 }
+        )
+      );
+    }
     const reply = route(sandbox, method, url, init);
     return Promise.resolve(
       new Response(JSON.stringify(reply.body), { status: reply.status })

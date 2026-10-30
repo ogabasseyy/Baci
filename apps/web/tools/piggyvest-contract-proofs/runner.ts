@@ -74,15 +74,32 @@ export interface RunSummary {
   spentKobo: number;
 }
 
-/** Resume the newest attempt; `--new-attempt` opens the next one. */
-export function currentAttempt(journal: Journal, newAttempt: boolean): number {
+/**
+ * The attempt number is per QA customer: it is the newest attempt that this
+ * customer (or one of its own derived proof-7 keys) has used. Taking the
+ * maximum across the whole journal would let one customer's `--new-attempt`
+ * make another customer's executed mutations look fresh and be resent.
+ * `--new-attempt` opens the next attempt for the selected customer only.
+ */
+export function currentAttempt(
+  journal: Journal,
+  qaKey: string,
+  newAttempt: boolean
+): number {
+  const derived = new RegExp(`^${escapeRegExp(qaKey.slice(0, 57))}-p7a\\d+$`);
   const latest = Math.max(
     0,
-    ...journal.entries().map((entry) => entry.attempt)
+    ...journal
+      .entries()
+      .filter((entry) => entry.qaKey === qaKey || derived.test(entry.qaKey))
+      .map((entry) => entry.attempt)
   );
   if (latest === 0) return 1;
   return newAttempt ? latest + 1 : latest;
 }
+
+const escapeRegExp = (text: string) =>
+  text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const realSleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -135,7 +152,7 @@ export async function runHarness(
   try {
     const state = emptyScenarioState();
     const capture = new ResponseCapture();
-    const attempt = currentAttempt(journal, config.newAttempt);
+    const attempt = currentAttempt(journal, qaKey, config.newAttempt);
     const gate = new MutationGate({
       mode: config.mode,
       journal,

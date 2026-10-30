@@ -119,3 +119,29 @@ describe('proof 4: withdrawal counter', () => {
     expect(JSON.stringify(result)).not.toContain('0123456789');
   });
 });
+
+describe('proof 4: the configured polling budget decides "no change"', () => {
+  async function runLagged(maxPolls: number) {
+    return run({
+      maxPolls,
+      mock: { w2wIncrementsCounter: true, counterLagReads: 5 },
+    });
+  }
+
+  it('reports both increments when counters lag 5 reads and the budget is 15', async () => {
+    const { result } = await runLagged(15);
+    expect(answer(result, 'w2w_changes_counter')).toBe('yes');
+    expect(answer(result, 'bank_outflow_changes_counter')).toBe('yes');
+  });
+
+  it('starts the bank measurement only after the wallet-transfer counter settled', async () => {
+    const { result } = await runLagged(15);
+    expect(result.values.w2w_delta_main_W1).toBe(1);
+    expect(result.values.bank_delta_main_W1).toBe(1);
+  });
+
+  it('records the window a negative answer was measured over', async () => {
+    const { result } = await run({ maxPolls: 9 });
+    expect(result.values.counter_settle_polls).toBe(9);
+  });
+});

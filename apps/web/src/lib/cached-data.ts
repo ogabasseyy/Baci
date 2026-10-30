@@ -16,6 +16,7 @@ import {
   MAX_CATEGORY_GRAPHICS_VALUE_LENGTH,
   normalizeCategoryGraphicsValue,
 } from '@/lib/category-page-product-id-cache';
+import { getCategoryPageProductSelect } from '@/lib/get-category-page-product-select';
 import { getCategoryPageShellData } from '@/lib/get-category-page-shell-data';
 import { hydrateAndSanitizePublicProducts } from '@/lib/hydrate-public-products';
 import { hydrateRelatedBlogProductAvailability } from '@/lib/hydrate-related-blog-product-availability';
@@ -24,7 +25,6 @@ import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings
 import { normalizeStorefrontCategoryValue } from '@/lib/normalize-storefront-category-value';
 import { getOrderedBlogPostProductLinks } from '@/lib/ordered-blog-post-product-links';
 import { getProductScopedCacheTag } from '@/lib/product-cache-tags';
-import { PRODUCT_KEY_SPECS_RELATION_SELECT } from '@/lib/product-key-specs-select';
 import type { Product } from '@/lib/products';
 import {
   filterPublicBlogCategories,
@@ -1489,32 +1489,6 @@ interface CategoryPageProductDetailsResult {
   missingProductCount: number;
   productSlots: Array<unknown | null>;
   productsQueryFailed: boolean;
-}
-
-const CATEGORY_PAGE_PRODUCT_BASE_SELECT = `
-          id,
-          name,
-          slug,
-          description,
-          price,
-          compare_at_price,
-          created_at,
-          images,
-          category,
-          brand,
-          condition,
-          stock,
-          stock_quantity,
-          manage_stock,
-          ${PRODUCT_KEY_SPECS_RELATION_SELECT}
-        `;
-
-function getCategoryPageProductSelect(isCategoryScoped: boolean) {
-  const productCategoriesSelect = isCategoryScoped
-    ? 'product_categories!inner(categories(name, slug))'
-    : 'product_categories(categories(name, slug))';
-
-  return `${CATEGORY_PAGE_PRODUCT_BASE_SELECT}, ${productCategoriesSelect}`;
 }
 
 /**

@@ -39,15 +39,17 @@ export async function buildFastCatalogReply(
               ? 'Please send a new search with the product, budget and any must-have conditions, or browse the store.'
               : intent.reason === 'product-details'
                 ? 'Which product would you like details about, and what would you like to know?'
-                : intent.reason === 'ambiguous-budget'
-                  ? 'I can’t tell whether that word is a currency or part of your product request. Please send a new message with the product and budget in the store’s currency, such as “phones at most 5000”.'
-                  : intent.reason === 'currency'
-                    ? 'Please reply with your maximum in the store’s currency, for example “at most 5000”. I can’t convert currencies here.'
-                    : intent.reason === 'product'
-                      ? 'Which product do you mean? Please tell me its name so I can check the catalog.'
-                      : intent.reason === 'options'
-                        ? 'I can’t confirm that condition or product option here. Please browse the store and check the available options on the product page.'
-                        : 'Please send a new message with the product type and, if you have a budget, say “at most” followed by the amount.',
+                : intent.reason === 'product-type'
+                  ? 'Please repeat the full product name and say whether you want a phone or an accessory, including any budget.'
+                  : intent.reason === 'ambiguous-budget'
+                    ? 'I can’t tell whether that word is a currency or part of your product request. Please send a new message with the product and budget in the store’s currency, such as “phones at most 5000”.'
+                    : intent.reason === 'currency'
+                      ? 'Please reply with your maximum in the store’s currency, for example “at most 5000”. I can’t convert currencies here.'
+                      : intent.reason === 'product'
+                        ? 'Which product do you mean? Please tell me its name so I can check the catalog.'
+                        : intent.reason === 'options'
+                          ? 'I can’t confirm that condition or product option here. Please browse the store and check the available options on the product page.'
+                          : 'Please send a new message with the product type and, if you have a budget, say “at most” followed by the amount.',
     };
   }
 

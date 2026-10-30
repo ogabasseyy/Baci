@@ -1,3 +1,4 @@
+import { isCatalogAcknowledgement } from './fast-catalog-alternative';
 import { analyzeFastCatalogBudget } from './fast-catalog-budget';
 import { resolveCatalogContext } from './fast-catalog-context';
 import {
@@ -11,7 +12,6 @@ export interface FastCatalogCategory {
   name: string;
   slug: string;
 }
-
 export type FastCatalogIntent =
   | {
       kind: 'clarify';
@@ -24,7 +24,8 @@ export type FastCatalogIntent =
         | 'more-results'
         | 'more-needs-search'
         | 'more-verify-category'
-        | 'product-details';
+        | 'product-details'
+        | 'product-type';
     }
   | {
       kind: 'search';
@@ -40,59 +41,24 @@ export type FastCatalogIntent =
       phoneCategoryIds?: string[];
       preference?: string;
     };
-
 const CONTEXTUAL_PRICE =
   /^(?:how much(?:\s+(?:is|for)\s+(?:it|that|this))?|what(?:['’]s| is)\s+(?:the\s+)?(?:price|cost)(?:\s+(?:(?:of|for)\s+)?(?:it|that|this))?|(?:what|how)\s+about\s+(?:the\s+)?(?:price|cost)|(?:the\s+)?(?:price|cost))[?!.\s]*$/i;
 const SHOPPING_REQUEST =
-  /\b(?:recommend|recommendation|suggest|looking for|buy|shop|do\s+you\s+(?:have|sell|carry|stock)|have\s+you\s+got|price|cost|how much|phone|phones|smartphone|smartphones|iphones?|pixel|laptop|laptops|macbook|tablet|tablets|ipad|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
+  /\b(?:recommend|recommendation|suggest|looking for|buy|shop|do\s+you\s+(?:(?:currently|still)\s+)?(?:have|sell|carry|stock)|have\s+you\s+got|price|cost|how much|phone|phones|smartphone|smartphones|iphones?|pixel|laptop|laptops|macbook|tablet|tablets|ipad|galaxy\s+(?:[samf]\s*\d+|z\s*(?:fold|flip)\s*\d+))\b/i;
 const FOLLOW_UP =
   /\b(?:under|below|budget|within|up\s+to|at\s+most|maximum|max|cheaper|cheapest|less|more|instead|wifi|wi-fi|used|new|gaming|camera|battery)\b/i;
 const { PHONE_SIGNAL, LAPTOP_SIGNAL, TABLET_SIGNAL, ACCESSORY_SIGNAL } =
   catalogLanguage;
-
-export function normalizeAccessoryNouns(value: string): string {
-  return value.replace(
-    /\b(?:chargers|cables|adapters|cases|headphones|headsets|earphones|earbuds|speakers|banks|protectors)\b/gi,
-    (word) => word.slice(0, -1)
-  );
-}
-
-function resolveCategory(text: string, categories: FastCatalogCategory[]) {
-  // "iPhone charger" and "phone case" ask for accessories, not phones.
-  if (ACCESSORY_SIGNAL.test(text)) {
-    if (/\bearbuds?\b/i.test(text)) {
-      return categories.find(
-        (candidate) => candidate.slug.toLowerCase() === 'earbuds'
-      );
-    }
-    return /\b(?:chargers?|cables?|adapters?|cases?|screen[\s-]*protectors?|power[\s-]*banks?)\b/i.test(
-      text
-    )
-      ? categories.find(
-          (candidate) => candidate.slug.toLowerCase() === 'accessories'
-        )
-      : undefined;
-  }
-  const aliases = PHONE_SIGNAL.test(text)
-    ? ['smartphones', 'mobile-phones', 'phones']
-    : LAPTOP_SIGNAL.test(text)
-      ? ['laptops', 'notebooks']
-      : TABLET_SIGNAL.test(text)
-        ? ['tablets']
-        : [];
-  return categories.find((category) =>
-    aliases.includes(category.slug.toLowerCase())
-  );
-}
-
 function searchText(text: string): string {
-  return normalizeAccessoryNouns(
-    catalogLanguage.stripRelativePricePhrases(
-      catalogLanguage.normalizeUseCasePhrases(
-        analyzeFastCatalogBudget(text).searchText
+  const catalogText = catalogLanguage.stripCatalogAvailabilityPhrases(
+    analyzeFastCatalogBudget(text).searchText
+  );
+  return catalogLanguage
+    .normalizeAccessoryNouns(
+      catalogLanguage.stripRelativePricePhrases(
+        catalogLanguage.normalizeUseCasePhrases(catalogText)
       )
     )
-  )
     .replace(/\biphones\b/gi, 'iPhone')
     .replace(/\bi['’](?:m|d|ll|ve)\b/gi, ' ')
     .replace(
@@ -119,6 +85,36 @@ export function interpretFastCatalogIntent(
   options: { categoriesLoaded?: boolean } = {}
 ): FastCatalogIntent | null {
   const latest = userMessages.at(-1)?.trim() ?? '';
+  const typeOnly = (text: string) =>
+    catalogLanguage.isShortProductType(
+      analyzeFastCatalogBudget(text, currencyCode).searchText
+    );
+  const budgetOnly = (text: string) =>
+    !catalogLanguage.hasCatalogProductCue(text) &&
+    !/\b(?:instead|rather\s+than|switch|change|swap)\b/i.test(text) &&
+    analyzeFastCatalogBudget(text, currencyCode).hasBudget &&
+    !searchText(text);
+  const previous = typeOnly(latest)
+    ? [...userMessages.slice(-50, -1)].reverse().find((message) => {
+        const text = message.trim();
+        return (
+          !text ||
+          catalogLanguage.isCatalogBoundary(text) ||
+          (!typeOnly(text) &&
+            !budgetOnly(text) &&
+            !CONTEXTUAL_PRICE.test(text) &&
+            !catalogLanguage.isAvailabilityFollowUp(text) &&
+            !isCatalogAcknowledgement(text))
+        );
+      })
+    : undefined;
+  if (
+    previous &&
+    catalogLanguage.hasCompoundPlusModel(previous) &&
+    !catalogLanguage.isCatalogBoundary(previous) &&
+    !catalogLanguage.resolveCatalogCategory(previous, categories)
+  )
+    return { kind: 'clarify', reason: 'product-type' };
   const verifier = createCompleteSearchVerifier({
     categoriesLoaded: options.categoriesLoaded !== false,
     currencyCode,
@@ -165,6 +161,7 @@ export function interpretFastCatalogIntent(
   const { wifiOnly, otherNegation } = catalogLanguage.resolveWifiOnly(text);
   if (
     otherNegation ||
+    catalogLanguage.hasUnsupportedStockRequest(text) ||
     catalogLanguage.hasUnsupportedDisjunction(text) ||
     catalogLanguage.hasAmbiguousProductBundle(text)
   )
@@ -200,13 +197,17 @@ export function interpretFastCatalogIntent(
     return { kind: 'clarify' };
   if (latestBudget.hasBudget && latestBudget.price === undefined)
     return { kind: 'clarify' };
-  // Clarify whether Max is a model or a price limit before searching.
   if (contextualBudget.ambiguousMax)
     return { kind: 'clarify', reason: 'max-budget' };
   if (continuation?.kind === 'more-results')
     return { kind: 'clarify', reason: 'more-results' };
-
-  const category = resolveCategory(text, categories);
+  const category = catalogLanguage.resolveCatalogCategory(text, categories);
+  if (
+    options.categoriesLoaded !== false &&
+    !category &&
+    catalogLanguage.hasCompoundPlusModel(text)
+  )
+    return { kind: 'clarify', reason: 'product-type' };
   const priceLimit = latestBudget.price ?? contextualBudget.price;
   const wirelessEarbudsOnly =
     category?.slug.toLowerCase() === 'earbuds' &&

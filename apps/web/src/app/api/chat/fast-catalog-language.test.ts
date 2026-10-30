@@ -54,6 +54,22 @@ describe('catalog conversation language', () => {
       false
     );
     expect(hasAmbiguousProductBundle('MacBook charger')).toBe(false);
+    expect(
+      hasAmbiguousProductBundle('Samsung Galaxy Buds Plus with a case')
+    ).toBe(true);
+    expect(hasAmbiguousProductBundle('AirPods with a charger')).toBe(true);
+    expect(
+      hasAmbiguousProductBundle('Samsung Galaxy Buds Plus in a case')
+    ).toBe(true);
+    expect(
+      hasAmbiguousProductBundle('Samsung Galaxy Buds Plus in a charging case')
+    ).toBe(true);
+    expect(hasAmbiguousProductBundle('Samsung Galaxy Buds Plus case')).toBe(
+      false
+    );
+    expect(
+      hasAmbiguousProductBundle('Samsung Galaxy Buds Plus charger with USB-C')
+    ).toBe(false);
   });
 
   it('removes relative-price wording while retaining the product and budget', () => {

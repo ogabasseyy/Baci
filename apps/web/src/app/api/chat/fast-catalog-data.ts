@@ -14,11 +14,15 @@ import {
   type FastCatalogVariant,
   selectFastCatalogProducts,
 } from './fast-catalog-eligibility';
-import {
-  type FastCatalogCategory,
-  type FastCatalogIntent,
-  normalizeAccessoryNouns,
+import type {
+  FastCatalogCategory,
+  FastCatalogIntent,
 } from './fast-catalog-intent';
+import {
+  catalogMatchesModel,
+  catalogSearchQueries,
+  catalogSymbolModelLookup,
+} from './fast-catalog-model';
 import { isWifiOnlyConnectivity } from './fast-catalog-wifi';
 
 type SearchIntent = Extract<FastCatalogIntent, { kind: 'search' }>;
@@ -44,21 +48,6 @@ function catalogMatchesPreference(specs: unknown, preference: string): boolean {
         matcher.test(item)
     )
   );
-}
-
-function catalogMatchesModel(
-  query: string,
-  name: string,
-  brand: string | null
-): boolean {
-  const words = (value: string) =>
-    normalizeAccessoryNouns(value)
-      .normalize('NFKC')
-      .toLowerCase()
-      .match(/[\p{L}\p{N}]+/gu) ?? [];
-  const required = words(query);
-  const actual = new Set(words(`${name} ${brand ?? ''}`));
-  return required.length > 0 && required.every((word) => actual.has(word));
 }
 
 function catalogHasWirelessEarbudEvidence(
@@ -90,15 +79,60 @@ export async function loadFastCatalogProducts(
     clientInfo: 'baci-fast-chat-catalog',
     timeoutMs: 3000,
   });
-  const ranked = intent.query
-    ? await searchStorefrontProducts({
-        supabase,
-        merchantId,
-        query: intent.query,
-        filters: { categoryId: intent.categoryId },
-        limit: 50,
-        includeDidYouMean: false,
-      })
+  const searchQueries = catalogSearchQueries(intent.query);
+  const symbolModel = intent.categoryId
+    ? catalogSymbolModelLookup(intent.query)
+    : null;
+  const symbolLookup =
+    symbolModel && intent.categoryId
+      ? (() => {
+          let lookup = supabase
+            .from('products')
+            .select('id')
+            .eq('merchant_id', merchantId)
+            .eq('status', 'active')
+            .eq('category_id', intent.categoryId)
+            .ilike('name', `%${symbolModel.symbol}+%`);
+          if (symbolModel.anchor)
+            lookup = lookup.ilike('name', `%${symbolModel.anchor}%`);
+          return lookup
+            .order('view_count', { ascending: false, nullsFirst: false })
+            .order('id', { ascending: true })
+            .limit(50);
+        })()
+      : null;
+  const [rankings, symbolResult] = await Promise.all([
+    Promise.all(
+      searchQueries.map((query) =>
+        searchStorefrontProducts({
+          supabase,
+          merchantId,
+          query,
+          filters: { categoryId: intent.categoryId },
+          limit: 50,
+          includeDidYouMean: false,
+        })
+      )
+    ),
+    symbolLookup,
+  ]);
+  if (symbolResult && (symbolResult.error || !Array.isArray(symbolResult.data)))
+    throw new Error('Catalog symbol lookup unavailable');
+  const symbolIds = (symbolResult?.data ?? []).flatMap((row) =>
+    typeof row.id === 'string' && row.id ? [row.id] : []
+  );
+  const ranked = searchQueries.length
+    ? {
+        productIds: [
+          ...new Set([
+            ...(rankings[0]?.productIds.slice(0, 50) ?? []),
+            ...symbolIds,
+            ...rankings
+              .slice(1)
+              .flatMap((result) => result.productIds.slice(0, 50)),
+          ]),
+        ].slice(0, 100),
+      }
     : null;
   if (ranked && ranked.productIds.length === 0) return [];
 
@@ -112,7 +146,9 @@ export async function loadFastCatalogProducts(
     .order('view_count', { ascending: false, nullsFirst: false });
   if (intent.categoryId) query = query.eq('category_id', intent.categoryId);
   if (ranked) query = query.in('id', ranked.productIds);
-  const { data, error } = await query.limit(ranked ? 50 : 200);
+  const { data, error } = await query.limit(
+    ranked ? ranked.productIds.length : 200
+  );
   if (error) throw new Error('Catalog unavailable');
   const rankedIds = ranked ? new Set(ranked.productIds) : null;
   const parsedRows = (data ?? []).flatMap((row) => {

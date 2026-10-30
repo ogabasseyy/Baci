@@ -14,6 +14,54 @@ export const TABLET_SIGNAL = /\b(?:tablets?|ipad)\b/i;
 export const ACCESSORY_SIGNAL =
   /\b(?:airpods|earbuds?|headphones?|headsets?|earphones?|chargers?|cables?|adapters?|power[\s-]*banks?|cases?|screen[\s-]*protectors?|speakers?)\b/i;
 
+export function normalizeAccessoryNouns(value: string): string {
+  return value.replace(
+    /\b(?:chargers|cables|adapters|cases|headphones|headsets|earphones|earbuds|speakers|banks|protectors)\b/gi,
+    (word) => word.slice(0, -1)
+  );
+}
+
+export function resolveCatalogCategory<T extends { slug: string }>(
+  text: string,
+  categories: T[]
+): T | undefined {
+  if (ACCESSORY_SIGNAL.test(text)) {
+    if (/\bearbuds?\b/i.test(text))
+      return categories.find(
+        (candidate) => candidate.slug.toLowerCase() === 'earbuds'
+      );
+    return /\b(?:chargers?|cables?|adapters?|cases?|screen[\s-]*protectors?|power[\s-]*banks?)\b/i.test(
+      text
+    )
+      ? categories.find(
+          (candidate) => candidate.slug.toLowerCase() === 'accessories'
+        )
+      : undefined;
+  }
+  const aliases = PHONE_SIGNAL.test(text)
+    ? ['smartphones', 'mobile-phones', 'phones']
+    : LAPTOP_SIGNAL.test(text)
+      ? ['laptops', 'notebooks']
+      : TABLET_SIGNAL.test(text)
+        ? ['tablets']
+        : [];
+  return categories.find((category) =>
+    aliases.includes(category.slug.toLowerCase())
+  );
+}
+
+export function isShortProductType(text: string): boolean {
+  return /^(?:(?:yes|yeah|please|pls),? ){0,2}(?:it(?:['’]s| is) )?(?:(?:an?|the) )?(?:phones?|smartphones?|accessor(?:y|ies)|chargers?|cases?|earbuds?)(?:,? (?:please|pls|thanks|thank you))?[?!. ]*$/i.test(
+    text.replace(/\s+/g, ' ').trim()
+  );
+}
+
+export function isAvailabilityFollowUp(text: string): boolean {
+  return /^(?:(?:is|are) (?:it|this|that|they|these|those) )?(?:(?:currently|still) )?(?:in[ -]+stock|available)(?: (?:now|right now))?[?!. ]*$/i.test(
+    text.replace(/\s+/g, ' ').trim()
+  );
+}
+
 export function hasCatalogProductCue(text: string): boolean {
   return [PHONE_SIGNAL, LAPTOP_SIGNAL, TABLET_SIGNAL, ACCESSORY_SIGNAL].some(
     (signal) => signal.test(text)
@@ -50,18 +98,81 @@ export function hasUnsupportedDisjunction(text: string): boolean {
   return /\b(?:or|versus|vs|instead|rather\s+than|other\s+than)\b/i.test(text);
 }
 
-/** A device joined to a separate accessory may request an unverified bundle. */
+/** Only the current, purchasable catalog is available to this search. */
+export function hasUnsupportedStockRequest(text: string): boolean {
+  const normalized = text.replace(/\s+/g, ' ');
+  if (
+    /\b(?:out[ -]+of[ -]+stock|sold[ -]+out|back[ -]+in[ -]+stock|restock(?:ed|ing)?)\b/i.test(
+      normalized
+    )
+  )
+    return true;
+  return (
+    /\bin[ -]+stock\b/i.test(normalized) &&
+    (/\b(?:how many|number of|when|will|was|were|isn['’]t|aren['’]t)\b/i.test(
+      normalized
+    ) ||
+      /\bin[ -]+stock (?:in|at(?! most\b))\b/i.test(normalized))
+  );
+}
+
+/** Remove availability grammar while preserving literal product terms. */
+export function stripCatalogAvailabilityPhrases(text: string): string {
+  return text
+    .replace(/\s+/g, ' ')
+    .replace(/\bdo you (?:(?:currently|still) )?stock\b/gi, ' ')
+    .replace(
+      /\b(?:currently |still )?in[ -]+stock(?: (?:currently|right now|now))?\b/gi,
+      ' '
+    )
+    .replace(
+      /\b(iphones?|smartphones?|phones?|laptops?|tablets?|ipads?) models\b/gi,
+      '$1'
+    );
+}
+
+export function normalizeCatalogModelPunctuation(text: string): string {
+  return text.normalize('NFKC').replace(/[\p{Dash_Punctuation}\u2212]/gu, '-');
+}
+
+export function hasCompoundPlusModel(text: string): boolean {
+  return /\b[a-z0-9]{0,11}\d[a-z0-9]{0,4}(?:[ -]{1,16}(?:pro|max|ultra)){1,2}(?:\+|[ -]{1,16}plus\b)/i.test(
+    normalizeCatalogModelPunctuation(text).replace(/\s+/g, ' ')
+  );
+}
+
+/** Ambiguous model additions and device/accessory bundles need clarification. */
 export function hasAmbiguousProductBundle(text: string): boolean {
+  const normalized = normalizeCatalogModelPunctuation(text).replace(
+    /\s+/g,
+    ' '
+  );
+  if (
+    /\b[a-z0-9]{0,11}\d[a-z0-9]{0,4}(?:[ -]{1,16}(?:pro|max|ultra)){0,2}(?:\s+\+|\+(?![345]g\b)(?=[a-z0-9]))/i.test(
+      normalized
+    )
+  )
+    return true;
   let seenDevice = false;
   let seenAccessory = false;
-  const separated = text.replace(
-    /\b(phones?|smartphones?|iphones?|laptops?|notebooks?|macbooks?|tablets?|ipads?|airpods|earbuds?|headphones?|headsets?|earphones?|chargers?|cables?|adapters?|power[\s-]*banks?|cases?|screen[\s-]*protectors?|speakers?)\s*\+/gi,
-    '$1 + '
-  );
-  for (const part of separated.split(/\b(?:and|with|plus)\b|\s\+\s|[&,]/i)) {
-    const device = [PHONE_SIGNAL, LAPTOP_SIGNAL, TABLET_SIGNAL].some((signal) =>
-      signal.test(part)
+  const separated = normalized
+    .replace(/\bbuds[ -]+plus\b/gi, 'budsplus')
+    .replace(
+      /\bin (?=[^,;.!?]{0,80}\b(?:cases?|covers?|chargers?)\b)/gi,
+      'with '
+    )
+    .replace(
+      /\b(phones?|smartphones?|iphones?|laptops?|notebooks?|macbooks?|tablets?|ipads?|airpods|earbuds?|headphones?|headsets?|earphones?|chargers?|cables?|adapters?|power[\s-]*banks?|cases?|screen[\s-]*protectors?|speakers?)\s*\+/gi,
+      '$1 + '
     );
+  for (const part of separated.split(/\b(?:and|with|plus)\b|\s\+\s|[&,]/i)) {
+    const device =
+      [PHONE_SIGNAL, LAPTOP_SIGNAL, TABLET_SIGNAL].some((signal) =>
+        signal.test(part)
+      ) ||
+      /\b(?:buds(?:plus)?|earbuds?|airpods|headphones?|headsets?|earphones?)\b/i.test(
+        part
+      );
     const accessory = ACCESSORY_SIGNAL.test(part);
     if ((device && seenAccessory) || (accessory && seenDevice)) return true;
     seenDevice ||= device;

@@ -94,6 +94,42 @@ describe('buildFastCatalogReply', () => {
     expect(load).not.toHaveBeenCalled();
   });
 
+  it('asks for a product type rather than searching a categoryless Pro Plus model', async () => {
+    const load = vi.fn(async () => [product]);
+    const result = await buildFastCatalogReply(
+      ['Do you have Tecno Spark 40 Pro+?'],
+      categories,
+      load
+    );
+    expect(result?.events).toEqual([]);
+    expect(result?.text).toMatch(/phone or an accessory/i);
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('asks for the full model again after a short product-type answer', async () => {
+    const load = vi.fn(async () => [product]);
+    const result = await buildFastCatalogReply(
+      ['Do you have Tecno Spark 40 Pro+ under 300k?', 'A phone'],
+      categories,
+      load
+    );
+    expect(result?.events).toEqual([]);
+    expect(result?.text).toMatch(/repeat.*product name/i);
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it('does not load a broad phone list after a type and budget reply', async () => {
+    const load = vi.fn(async () => [product]);
+    const result = await buildFastCatalogReply(
+      ['Do you have Tecno Spark 40 Pro+?', 'A phone under 300k'],
+      categories,
+      load
+    );
+    expect(result?.events).toEqual([]);
+    expect(result?.text).toMatch(/repeat.*product name/i);
+    expect(load).not.toHaveBeenCalled();
+  });
+
   it('asks customers to distinguish a Max model from their budget', async () => {
     const load = vi.fn(async () => [product]);
     const result = await buildFastCatalogReply(

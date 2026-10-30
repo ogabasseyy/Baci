@@ -65,7 +65,9 @@ from worker_release_actual_dependency_runtime import (
     pinned_pnpm,
     tree_size,
 )
-from worker_release_actual_seed_move_measure import move_inputs_and_measure
+from worker_release_actual_seed_move_measure import (
+    SeedMoveMeasurementRejected, move_inputs_and_measure,
+)
 
 
 def run_policy_preverify(command: tuple[str, ...], *, cwd: Path, env: dict[str, str],
@@ -84,6 +86,25 @@ def emit_failure_diagnostic(stage: str, error: BaseException) -> None:
     except Exception:
         diagnostic = f"experiment failure stage={safe_stage} category=diagnostic-failure"
     print(diagnostic, file=sys.stderr)
+
+
+def measure_seed_move_optional(cache: Path, store: Path, destination: Path, *, measure):
+    """Return a bounded measurement result without treating it as publication proof."""
+    try:
+        measurement = move_inputs_and_measure(cache, store, destination, measure=measure)
+    except SeedMoveMeasurementRejected as error:
+        return {
+            "status": "not-measured",
+            "publication_proven": False,
+            "reason": error.safe_reason,
+            "substage": error.safe_substage,
+        }
+    except Exception:
+        # The move measurement is optional; retain the validated offline build
+        # and resource samples even if the measurement helper itself fails.
+        return {"status": "not-measured", "publication_proven": False,
+                "reason": "measurement-error"}
+    return {**measurement, "status": "measured", "publication_proven": False}
 
 
 def _main() -> int:
@@ -257,8 +278,7 @@ def _main() -> int:
                                                  excluded_relative_directories=checked_store_exclusions)
             stage = "seed-move-measurement"
             seed_measurement_root = base / "seed-move-measurement"
-            seed_measurement_root.mkdir(mode=0o700)
-            seed_move_measurement = move_inputs_and_measure(
+            seed_move_measurement = measure_seed_move_optional(
                 cache, store, seed_measurement_root / expected_sha,
                 measure=lambda path: tree_size(
                     path, max_entries=200_000,
@@ -267,7 +287,7 @@ def _main() -> int:
                                                    else frozenset()),
                 ),
             )
-            observe_production("seed-move-publication")
+            observe_production("seed-move-measurement")
             worker_modules = source / "vps-workers" / "node_modules"
             if not worker_modules.is_dir() or worker_modules.is_symlink():
                 raise RuntimeError("offline standalone worker install produced no real node_modules directory")
@@ -359,7 +379,7 @@ def _main() -> int:
                 "source_bytes": source_size,
                 "pnpm_store_entries": store_count,
                 "pnpm_store_bytes": store_bytes,
-                "same_filesystem_seed_move": seed_move_measurement,
+                "seed_move_measurement": seed_move_measurement,
                 "payload_entries": len(entries),
                 "payload_expanded_bytes": payload_bytes,
                 "payload_export": {"entries_copied": export_entries, "expanded_bytes_copied": export_bytes,

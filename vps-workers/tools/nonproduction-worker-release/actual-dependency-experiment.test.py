@@ -283,6 +283,44 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         )
         self.assertNotIn(secret_like, output)
 
+    def test_seed_move_measurement_is_optional_and_never_claims_publication(self):
+        sys.path.insert(0, str(SCRIPT.parent))
+        from worker_release_actual_seed_move_measure import SeedMoveMeasurementRejected
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            cache, store, destination = root / "cache", root / "store", root / "measurement"
+            with patch.object(experiment, "move_inputs_and_measure",
+                              side_effect=SeedMoveMeasurementRejected(
+                                  "filesystem-mismatch", "filesystem-check")):
+                result = experiment.measure_seed_move_optional(cache, store, destination,
+                                                               measure=lambda _path: (1, 1))
+            self.assertEqual(result, {
+                "status": "not-measured", "publication_proven": False,
+                "reason": "filesystem-mismatch", "substage": "filesystem-check",
+            })
+
+            secret = "/private/cache/path token=hidden"
+            with patch.object(experiment, "move_inputs_and_measure",
+                              side_effect=RuntimeError(secret)):
+                unavailable = experiment.measure_seed_move_optional(
+                    cache, store, destination, measure=lambda _path: (1, 1))
+            self.assertEqual(unavailable, {
+                "status": "not-measured", "publication_proven": False,
+                "reason": "measurement-error",
+            })
+            self.assertNotIn(secret, json.dumps(unavailable))
+
+            with patch.object(experiment, "move_inputs_and_measure", return_value={
+                    "same_filesystem": True, "copy_bytes": 0,
+                    "inputs": {"cache": {"entries": 1}, "store": {"entries": 2}},
+            }):
+                measured = experiment.measure_seed_move_optional(
+                    cache, store, destination, measure=lambda _path: (1, 1))
+            self.assertEqual(measured["status"], "measured")
+            self.assertIs(measured["publication_proven"], False)
+            self.assertEqual(measured["copy_bytes"], 0)
+
     def test_policy_child_diagnostic_is_closed_and_redacted(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "child-diagnostic.json"
@@ -744,7 +782,14 @@ class ActualDependencyExperimentTests(unittest.TestCase):
         self.assertIn("os.rename(worker_modules, worker_payload)", source)
         self.assertNotIn("shutil.copytree(worker_modules", source)
         self.assertIn("(seed_measurement_root, build_cache, source, home, output)", source)
-        self.assertIn('"same_filesystem_seed_move": seed_move_measurement', source)
+        self.assertIn('"seed_move_measurement": seed_move_measurement', source)
+        self.assertIn('"publication_proven": False', source)
+        self.assertIn('seed_move_measurement = measure_seed_move_optional(', source)
+        self.assertNotIn('observe_production("seed-move-publication")', source)
+        self.assertLess(source.index('run(worker_cmd, cwd=source / "vps-workers"'),
+                        source.index('seed_move_measurement = measure_seed_move_optional('))
+        self.assertLess(source.index('seed_move_measurement = measure_seed_move_optional('),
+                        source.index('observe_production("seed-move-measurement")'))
         snapshot = source.index("exported_output = dependency_fs.snapshot_payload(")
         reclaim = source.index("for completed_phase_tree in (seed_measurement_root, build_cache, source, home, output):")
         materialize = source.index('stage = "payload-materialization"')

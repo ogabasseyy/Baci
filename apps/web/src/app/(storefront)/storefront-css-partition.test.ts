@@ -21,8 +21,10 @@ describe('storefront CSS partitioning', () => {
     expect(pdpCss).not.toMatch(/storefront-pdp-semantic\.css/);
     expect(pdpCss).not.toMatch(/storefront-pdp-tabs\.css/);
     expect(pdpCss).not.toMatch(/storefront-pdp-reviews\.css/);
+    // #3856 widened the source to every product-detail-*.tsx module; either
+    // form must still cover product-detail-client.tsx.
     expect(pdpCss).toMatch(
-      /@source\s+["'][^"']*products\/\[productSlug\]\/product-detail-client\.tsx/
+      /@source\s+["'][^"']*products\/\[productSlug\]\/product-detail-(?:client|\*)\.tsx/
     );
     expect(pdpCss).not.toMatch(
       /@source\s+["'][^"']*ogabassey\/pdp\/critical-shell\.tsx/

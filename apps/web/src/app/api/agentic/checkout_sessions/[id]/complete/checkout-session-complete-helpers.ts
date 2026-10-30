@@ -40,7 +40,6 @@ type PayOnDeliveryFinalizeInput = Parameters<
  */
 export async function completeAgenticPayOnDelivery(
   input: Omit<PayOnDeliveryFinalizeInput, 'sharedCartPrincipalId'> & {
-    bootstrap: SupabaseClient;
     payOnDeliveryEnabled: boolean;
     respond: (body: unknown, status: number) => Promise<NextResponse>;
   }

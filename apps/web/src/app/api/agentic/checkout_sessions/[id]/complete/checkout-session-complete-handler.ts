@@ -20,7 +20,7 @@ import { buildStoredAgenticIdempotencyResponse } from '@/lib/agentic/idempotency
 import {
   AGENTIC_CHECKOUT_DISABLED_ERROR,
   isAgenticMerchantCheckoutEnabled,
-  resolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc,
 } from '@/lib/agentic/merchant-context';
 import { readAgenticMutationRequest } from '@/lib/agentic/mutation-request';
 import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
@@ -28,7 +28,6 @@ import { getAgenticReplayErrorStatus } from '@/lib/agentic/request-replay-respon
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { agenticCheckoutCompleteSchema } from '@/schemas/agentic-checkout';
 import { agenticCheckoutSessionRouteParamsSchema } from '@/schemas/agentic-checkout-session-route-params';
 import type { CheckoutSessionCompleteRouteOptions } from './checkout-session-complete-handler-types';
@@ -84,8 +83,9 @@ export async function handleAgenticCheckoutSessionComplete(
     }
     const { buyer, completion_authorization, payment_data } = parsed.data;
 
-    const bootstrap = createAdminClient();
-    const merchant = await resolveAgenticMerchantContext(bootstrap);
+    const merchant = await resolveAgenticMerchantContextFromRpc({
+      includePaymentSplit: true,
+    });
     if (!merchant) {
       return NextResponse.json(
         { error: 'Agentic merchant not found' },
@@ -231,7 +231,6 @@ export async function handleAgenticCheckoutSessionComplete(
     if (payment_data.provider === 'pay_on_delivery') {
       return await completeAgenticPayOnDelivery({
         agentId: mutation.agentId,
-        bootstrap,
         buyer,
         idempotencyKey: mutation.idempotencyKey,
         merchantId: merchant.id,

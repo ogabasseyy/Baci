@@ -73,3 +73,78 @@ it('shows the completed delivery summary and allows reopening the step', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Delivery Method' }));
   expect(callbacks.onOpen).toHaveBeenCalledOnce();
 });
+
+it('asks for city and state before suggesting a pickup availability refresh', () => {
+  const callbacks = props(false);
+  const deliveryOptions: NonNullable<typeof callbacks.deliveryOptions> = {
+    tabs: {
+      deliveryMethod: 'pickup',
+      newAddressState: 'Lagos',
+      merchantSlug: 'ogabassey',
+      stationPickupQuote: undefined,
+      hasMerchantPickupQuote: false,
+      onSelect: vi.fn(),
+    },
+    station: {
+      isLoadingQuotes: false,
+      stationPickupQuote: undefined,
+      stationPickupQuotes: [],
+      selectedQuoteId: '',
+      setSelectedQuoteId: vi.fn(),
+    },
+    airport: {
+      airportType: 'delivery',
+      city: 'Ikeja',
+      state: 'Lagos',
+      selectedQuoteId: '',
+      selectedQuoteMatchesDeliveryMethod: false,
+      airDeliveryQuotes: [],
+      onSelectAirportType: vi.fn(),
+      onSelectQuote: vi.fn(),
+    },
+    door: {
+      isLoadingQuotes: false,
+      doorDeliveryQuotes: [],
+      stationPickupQuote: undefined,
+      selectedQuoteId: '',
+      onSelectQuote: vi.fn(),
+      onSelectStationPickup: vi.fn(),
+      onRefreshRates: vi.fn(),
+    },
+  };
+  const { rerender } = render(
+    <CheckoutDeliveryStep {...callbacks} deliveryOptions={deliveryOptions} />
+  );
+  const button = screen.getByRole('button', { name: 'Continue to Payment' });
+  expect(button).toHaveAccessibleDescription(
+    'Enter your city and state to check pickup availability.'
+  );
+
+  rerender(
+    <CheckoutDeliveryStep
+      {...callbacks}
+      deliveryOptions={{
+        ...deliveryOptions,
+        door: { ...deliveryOptions.door, isLoadingQuotes: true },
+      }}
+    />
+  );
+  expect(button).toHaveAccessibleDescription(
+    'Checking pickup availability before continuing.'
+  );
+
+  rerender(
+    <CheckoutDeliveryStep
+      {...callbacks}
+      addressFields={{
+        ...callbacks.addressFields,
+        newAddressCity: 'Ikeja',
+        newAddressState: 'Lagos',
+      }}
+      deliveryOptions={deliveryOptions}
+    />
+  );
+  expect(button).toHaveAccessibleDescription(
+    'Refresh pickup availability to continue.'
+  );
+});

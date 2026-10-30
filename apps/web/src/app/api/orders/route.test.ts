@@ -1001,7 +1001,7 @@ describe('POST /api/orders REDVAULT integration', () => {
     }
   });
 
-  it('rejects shared-cart REDVAULT orders before any unbound draft', async () => {
+  it('passes the verified shared cart to REDVAULT draft creation', async () => {
     vi.clearAllMocks();
     primeAdminOrderCurrencyRead();
     const availability = await import(
@@ -1079,12 +1079,26 @@ describe('POST /api/orders REDVAULT integration', () => {
           }),
         })
       );
-      expect(response.status).toBe(400);
-      expect((await response.json()).code).toBe(
-        'REDVAULT_COMBINATION_UNSUPPORTED'
+      expect(response.status).toBe(201);
+      expect(checkoutSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sharedCart: {
+            principalId: 'guest-principal-001',
+            binding: {
+              cart_id: '22222222-2222-4222-8222-222222222222',
+              checkout_session_id: '33333333-3333-4333-8333-333333333333',
+              checkout_generation: 1,
+              cart_version: 3,
+            },
+          },
+        })
       );
-      expect(checkoutSpy).not.toHaveBeenCalled();
-      expect(eventSpy).not.toHaveBeenCalled();
+      expect(eventSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+          orderId: 'rv-order-1',
+        })
+      );
     } finally {
       availabilitySpy.mockRestore();
       quoteSpy.mockRestore();

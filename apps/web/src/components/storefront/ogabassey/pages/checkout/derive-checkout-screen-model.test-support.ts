@@ -225,6 +225,7 @@ export function makeInput(
         resumedOrder: options.resumedOrder ?? null,
         preferredGateway: null,
         isProcessing: false,
+        pendingCheckoutOrder: null,
       },
       delivery: deliverySession,
       financial: {
@@ -294,7 +295,7 @@ export function makeInput(
       formatCurrencyAuto: (amount: number) => `₦${amount}`,
     },
     actions: { onReturnToCart },
-    availability: { redvaultAvailable: false, sharedCartActive: false },
+    availability: { redvaultAvailable: false },
   };
   return defaults satisfies CheckoutScreenModelInput;
 }

@@ -9,6 +9,7 @@ import type { useCheckoutFinancialSession } from './hooks/use-checkout-financial
 import type { useCheckoutFormSession } from './hooks/use-checkout-form-session';
 import type { useCheckoutPaymentExecution } from './hooks/use-checkout-payment-execution';
 import { isResumedDirectPayment } from './is-resumed-direct-payment';
+import { isTerminalRedvaultReview } from './is-terminal-redvault-review';
 
 type CheckoutFormSession = ReturnType<typeof useCheckoutFormSession>;
 type CheckoutAttemptSession = ReturnType<typeof useCheckoutAttemptSession>;
@@ -21,7 +22,11 @@ export interface CheckoutScreenModelInput {
     form: CheckoutFormSession;
     attempt: Pick<
       CheckoutAttemptSession,
-      'resumeOrderId' | 'resumedOrder' | 'preferredGateway' | 'isProcessing'
+      | 'resumeOrderId'
+      | 'resumedOrder'
+      | 'preferredGateway'
+      | 'isProcessing'
+      | 'pendingCheckoutOrder'
     >;
     delivery: CheckoutDeliverySession;
     financial: Pick<
@@ -36,6 +41,8 @@ export interface CheckoutScreenModelInput {
   display: {
     checkoutDisplay: ReturnType<typeof deriveCheckoutDisplayModel>;
     checkoutCart: CartItem[];
+    sharedCartEnabled?: boolean;
+    sharedCartRef?: { cartId: string; version: number } | null;
     isHydrated: boolean;
   };
   identity: {
@@ -51,8 +58,6 @@ export interface CheckoutScreenModelInput {
   };
   availability: {
     redvaultAvailable: boolean;
-    /** Bound shared-cart orders cannot take the REDVAULT path. */
-    sharedCartActive: boolean;
   };
 }
 
@@ -70,13 +75,21 @@ export function deriveCheckoutScreenModel({
   const { merchant, user } = identity;
   const { handlePlaceOrder } = execution;
   const isPayForMeValid = paymentSession.payForMe.isValid;
+  const terminalRedvaultReview = isTerminalRedvaultReview({
+    merchantId: merchant?.id,
+    pendingOrder: attempt.pendingCheckoutOrder,
+    sharedCartEnabled: display.sharedCartEnabled,
+    sharedCartRef: display.sharedCartRef,
+    checkoutItemCount: display.checkoutCart.length,
+  });
   const isDeliveryValid =
     delivery.validation.isValid ||
     isResumedDirectPayment({
       resumedOrder: attempt.resumedOrder,
       preferredGateway: attempt.preferredGateway,
       checkoutItemCount: display.checkoutCart.length,
-    });
+    }) ||
+    terminalRedvaultReview;
   const productIds = display.checkoutCart.map((item) => item.id);
 
   const presentation = deriveCheckoutOrderSummaryPresentation({
@@ -99,6 +112,7 @@ export function deriveCheckoutScreenModel({
     hasUser: Boolean(user),
     currencySymbol: identity.currencySymbol,
     redvaultSummary: paymentSession.redvault.summary,
+    redvaultOrderReady: Boolean(paymentSession.redvault.orderReady),
     newsletterOptIn: values.newsletterOptIn,
     setNewsletterOptIn: form.form.setNewsletterOptIn,
     handlePlaceOrder,
@@ -123,7 +137,9 @@ export function deriveCheckoutScreenModel({
       account: form.account,
     },
     delivery: {
-      session: delivery,
+      session: terminalRedvaultReview
+        ? { ...delivery, validation: { isValid: true } }
+        : delivery,
       address: {
         street: values.newAddressStreet,
         city: values.newAddressCity,
@@ -144,8 +160,7 @@ export function deriveCheckoutScreenModel({
       merchant,
       user,
       currency: identity.currencyCode,
-      redvaultAvailable:
-        availability.redvaultAvailable && !availability.sharedCartActive,
+      redvaultAvailable: availability.redvaultAvailable,
       redvaultOrderReady: Boolean(paymentSession.redvault.orderReady),
     },
   };

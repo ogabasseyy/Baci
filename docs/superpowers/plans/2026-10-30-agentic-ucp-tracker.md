@@ -2,7 +2,7 @@
 
 The single place to see where the agentic commerce work stands and what happens next. Update it whenever a step finishes: tick the box, add the date, and add the PR link or commit.
 
-- **Roadmap:** [2026-10-29-agentic-ucp-completion.md](2026-10-29-agentic-ucp-completion.md). It holds the findings (F1–F39), the milestones and the tasks.
+- **Roadmap:** [2026-10-29-agentic-ucp-completion.md](2026-10-29-agentic-ucp-completion.md). It holds the findings (F1–F41), the milestones and the tasks.
 - **Plans:** one executable plan per pull request, saved as `2026-MM-DD-agentic-m<milestone>-<n>-<name>.md` in this folder.
 
 ## Now
@@ -10,7 +10,7 @@ The single place to see where the agentic commerce work stands and what happens 
 | | |
 | --- | --- |
 | **Current plan** | Milestone 0, plan 1 is built and in review as draft PR [ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869); plan 2 is next |
-| **Next action** | Plan 2: latest-docs check, then write the plan while plan 1's reviews run |
+| **Next action** | Plan 2: draft being written (latest-docs check done 31 Oct); then independent review |
 | **Waiting on the owner** | OK to replace plan 1's PR branch with the version rebuilt on today's main (local commit `ede636ee97`); merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851); read-only production queries for plan 2 |
 | **Last updated** | 31 October 2026 |
 
@@ -65,8 +65,8 @@ Plan: [2026-10-30-agentic-m0-1-admin-client-removal.md](2026-10-30-agentic-m0-1-
 
 ### Plan 2: baseline and evidence (roadmap Task 1)
 
-- [ ] Latest-docs check
-- [ ] Plan written. Needs an owner-approved, read-only production check of whether `shared_cart_enabled` and VAT are on for the agentic merchant.
+- [x] Latest-docs check (31 Oct: no new protocol versions; fixtures pin UCP by commit because its tags were re-cut; new findings F40 and F41)
+- [ ] Plan written. Needs an owner-approved, read-only production check: whether the agentic merchant's `premium_features` includes `shared_cart` (there is no `shared_cart_enabled` column), its `vat_registration_status`, the migration ledger, and a plain GET of its public UCP profile.
 - [ ] Independent review, fixes applied
 - [ ] Built with TDD
 - [ ] Local gates passed
@@ -171,6 +171,10 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | 30 Oct | MCP | `2026-07-28` is still latest; it requires `MCP-Protocol-Version`, `Mcp-Method` and `Mcp-Name` headers and `_meta` fields, and removes sessions | Roadmap F23 refined; Task 5 |
 | 30 Oct | Supabase and PostgREST | Role switching from the JWT `role` claim, imported ES256 signing keys, and `SECURITY DEFINER` with empty `search_path` and explicit revokes are all current | Plan 1 design confirmed |
 | 30 Oct | Paystack Google Pay | Page blocks automated reads (403 and a Cloudflare challenge); secondhand copy says every `PAN_ONLY` charge gets a 3DS step-up | Unconfirmed; owner to verify by hand before Milestone C |
+| 31 Oct | UCP releases | No new release; tags `v2026-04-08` and `v2026-08-25` were re-cut on 22 Oct (`v2026-04-08` → `9c9d6fce39`) | Fixtures pin the commit, not the tag |
+| 31 Oct | Google Merchant UCP | Still `2026-04-08` (and `2026-01-23`) only; a `2026-04-08` cart page exists (updated 9 Oct): Google creates and transfers carts with `POST /carts` only, and update/cancel are optional sandbox tests | Task 9 scope; profile must be public and unauthenticated (F8) |
+| 31 Oct | MCP | `2026-07-28` still latest; Baci's server card advertises `2025-06-18` | New finding F40 |
+| 31 Oct | OpenAI ACP | `2026-04-17` still the newest release; OpenAI's page still shows `2025-09-12`; Baci advertises `2026-04-30`, which has no release | New finding F41 |
 
 ## Review log
 

@@ -142,6 +142,33 @@ class SystemdIntegrationDiagnosticTests(unittest.TestCase):
         )
         self.assertEqual(summary, "client-probe-rejected")
 
+    def test_known_client_failure_labels_take_precedence_over_unit_exit(self):
+        cases = (
+            ("approved synthetic CONNECT was not accepted", "client-approved-connect-rejected"),
+            ("broker accepted a forbidden destination request",
+             "client-forbidden-broker-request-accepted"),
+            ("PrivateNetwork unit obtained direct TCP egress",
+             "client-direct-tcp-egress-available"),
+            ("host /run Unix socket remained reachable inside the unit",
+             "client-host-run-socket-visible"),
+        )
+        unit_status = "LoadState=loaded\nActiveState=failed\nResult=exit-code\nExecMainCode=1\nExecMainStatus=1\n"
+        for message, expected in cases:
+            with self.subTest(message=message):
+                summary = _seed_socket_probe_failure_summary(
+                    "", f"egress client integration failed: {message}", unit_status, (),
+                )
+                self.assertEqual(summary, expected)
+                self.assertNotIn(message, summary)
+
+    def test_unknown_client_failure_keeps_generic_label_over_unit_exit(self):
+        unit_status = "LoadState=loaded\nActiveState=failed\nResult=exit-code\nExecMainCode=1\nExecMainStatus=1\n"
+        summary = _seed_socket_probe_failure_summary(
+            "", "egress client integration failed: secret exception detail", unit_status, (),
+        )
+        self.assertEqual(summary, "client-probe-rejected")
+        self.assertNotIn("secret", summary)
+
     def test_seed_socket_probe_uses_only_normalized_systemd_exit_fields(self):
         journal = (
             "LoadState=loaded\nActiveState=failed\nSubState=failed\n"

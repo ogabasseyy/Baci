@@ -39,6 +39,20 @@ _SYSTEMD_ACTIVE = frozenset({
 _SYSTEMD_CODE = {"1": "exited", "2": "killed", "3": "dumped", "4": "trapped",
                  "exited": "exited", "killed": "killed", "dumped": "dumped",
                  "trapped": "trapped"}
+_CLIENT_FAILURE_LABELS = {
+    "PrivateNetwork unit did not enter a distinct network namespace": "client-network-namespace-not-isolated",
+    "host /run Unix socket remained reachable inside the unit": "client-host-run-socket-visible",
+    "approved synthetic CONNECT was not accepted": "client-approved-connect-rejected",
+    "approved synthetic TLS route did not return its fixture response": "client-tls-fixture-mismatch",
+    "approved CONNECT was not established before TLS SNI check": "client-sni-probe-connect-rejected",
+    "bridge did not close a wrong-SNI TLS connection": "client-wrong-sni-not-closed",
+    "bridge accepted a forbidden CONNECT destination": "client-forbidden-connect-accepted",
+    "broker accepted a forbidden destination request": "client-forbidden-broker-request-accepted",
+    "broker did not establish the approved IPC request": "client-approved-broker-request-rejected",
+    "broker did not close a forged-ready wrong-SNI IPC peer": "client-forged-sni-not-closed",
+    "PrivateNetwork unit obtained direct TCP egress": "client-direct-tcp-egress-available",
+    "client fixture arguments are invalid": "client-fixture-arguments-invalid",
+}
 from worker_release_egress_fixture_staging import FIXTURE_MODULES, stage_fixture_modules
 
 def _safe_diagnostic(stdout: str, stderr: str, *, limit: int = 300) -> str:
@@ -111,6 +125,17 @@ def _normalized_unit_exit(text: str) -> str | None:
     errno = bounded_number("StatusErrno", 4095)
     return (f"unit-state(load={load},active={active},result={result},code={code},"
             f"status={status},errno={errno})")
+
+
+def _client_failure_category(text: str) -> str | None:
+    """Map only known fixture-client messages; never return message contents."""
+    marker = "egress client integration failed:"
+    for message, category in _CLIENT_FAILURE_LABELS.items():
+        if f"{marker} {message}" in text:
+            return category
+    if marker in text:
+        return "client-probe-rejected"
+    return None
 
 
 def _approved_socket_properties(host_socket: Path, source_alias: Path,
@@ -276,10 +301,9 @@ def _seed_socket_probe_failure_summary(stdout: str, stderr: str, journal: str,
     evidence = "\n".join((stdout, stderr, journal))
     category = _namespace_failure_category(evidence)
     if category == "failure-unclassified":
-        category = (_normalized_unit_exit(journal)
-                    or ("client-probe-rejected"
-                        if "egress client integration failed:" in evidence
-                        else "unit-failed-unclassified"))
+        category = (_client_failure_category(evidence)
+                    or _normalized_unit_exit(journal)
+                    or "unit-failed-unclassified")
     missing_path = _namespace_missing_path(evidence, known_paths)
     suffix = f" path={missing_path}" if missing_path is not None else ""
     return f"{category}{suffix}"

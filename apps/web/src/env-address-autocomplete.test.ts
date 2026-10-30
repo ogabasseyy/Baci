@@ -21,7 +21,7 @@ function loadEnvModule() {
   return import('@/env');
 }
 
-describe('address autocomplete KV environment credentials', () => {
+describe('address provider environment after Redis retirement', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.unstubAllEnvs();
@@ -36,45 +36,50 @@ describe('address autocomplete KV environment credentials', () => {
     vi.resetModules();
   });
 
-  it('normalizes the credential pair in the validated server environment', async () => {
-    vi.stubEnv(
-      'ADDRESS_AUTOCOMPLETE_KV_REST_API_URL',
-      ' https://address-kv.example.com '
-    );
-    vi.stubEnv('ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN', ' address-kv-token ');
-
+  it('continues to normalize the active address provider credentials', async () => {
+    vi.stubEnv('GEOAPIFY_API_KEY', ' geo-test-key ');
+    vi.stubEnv('GOOGLE_PLACES_API_KEY', ' google-test-key ');
     const { env } = await loadEnvModule();
     expect(env).toMatchObject({
-      ADDRESS_AUTOCOMPLETE_KV_REST_API_URL: 'https://address-kv.example.com',
-      ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN: 'address-kv-token',
+      GEOAPIFY_API_KEY: 'geo-test-key',
+      GOOGLE_PLACES_API_KEY: 'google-test-key',
     });
   });
 
-  it.each([
-    ['https://address-kv.example.com', ''],
-    ['', 'address-kv-token'],
-  ])('rejects a partial credential pair %s/%s', async (url, token) => {
-    vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    vi.stubEnv('NODE_ENV', 'production');
-    vi.stubEnv('SUPABASE_JWT_SECRET', 'valid-test-signing-secret');
-    vi.stubEnv('ADDRESS_AUTOCOMPLETE_KV_REST_API_URL', url);
-    vi.stubEnv('ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN', token);
-
-    await expect(loadEnvModule()).rejects.toThrow(
-      'ADDRESS_AUTOCOMPLETE_KV_REST_API'
-    );
+  describe.each([
+    'KV_REST_API',
+    'REDIS_REST',
+  ])('retired ADDRESS_AUTOCOMPLETE_%s configuration', (suffix) => {
+    it.each([
+      ['not-a-url', 'stale-token'],
+      ['https://retired.example.test', ''],
+      ['', 'stale-token'],
+    ])('cannot block production boot with URL %s', async (url, token) => {
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      vi.stubEnv('NODE_ENV', 'production');
+      vi.stubEnv('SUPABASE_JWT_SECRET', 'valid-test-signing-secret');
+      vi.stubEnv(`ADDRESS_AUTOCOMPLETE_${suffix}_URL`, url);
+      vi.stubEnv(`ADDRESS_AUTOCOMPLETE_${suffix}_TOKEN`, token);
+      const { env } = await loadEnvModule();
+      expect(env).not.toHaveProperty(`ADDRESS_AUTOCOMPLETE_${suffix}_URL`);
+      expect(env).not.toHaveProperty(`ADDRESS_AUTOCOMPLETE_${suffix}_TOKEN`);
+    });
   });
 
-  it('omits KV credentials from client environment exports', async () => {
+  it('excludes both active and retired provider secrets from the client', async () => {
     vi.stubGlobal('window', {});
-    vi.stubEnv(
-      'ADDRESS_AUTOCOMPLETE_KV_REST_API_URL',
-      'https://address-kv.example.com'
-    );
-    vi.stubEnv('ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN', 'private-test-token');
-
+    vi.stubEnv('GEOAPIFY_API_KEY', 'private-geo-key');
+    vi.stubEnv('GOOGLE_PLACES_API_KEY', 'private-google-key');
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN', 'retired-token');
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN', 'retired-token');
     const { env } = await loadEnvModule();
-    expect(env.ADDRESS_AUTOCOMPLETE_KV_REST_API_URL).toBeUndefined();
-    expect(env.ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN).toBeUndefined();
+    for (const key of [
+      'GEOAPIFY_API_KEY',
+      'GOOGLE_PLACES_API_KEY',
+      'ADDRESS_AUTOCOMPLETE_KV_REST_API_TOKEN',
+      'ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN',
+    ]) {
+      expect(env).not.toHaveProperty(key);
+    }
   });
 });

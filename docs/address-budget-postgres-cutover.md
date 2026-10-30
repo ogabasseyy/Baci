@@ -23,6 +23,8 @@ JWTs, customer addresses or billing exports in repository files or logs.
   or establish a conservative finite bound for every remaining old/in-flight and
   external consumer. Include that liability in the imported baseline. An account
   usage snapshot alone is insufficient while unbounded consumers can continue.
+  Keep old Redis settings intact until those instances are fenced: deleting a
+  preferred pair could make old code choose a different counter store.
 - Confirm the existing Supabase scoped signing material and available database
   capacity. This change does not provision new credentials or upgrade any plan.
 

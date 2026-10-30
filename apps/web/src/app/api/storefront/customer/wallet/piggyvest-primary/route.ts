@@ -5,6 +5,7 @@ import { createPrimaryWalletExecutor } from '@/lib/piggyvest/primary-wallet-exec
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import { readPrimaryWalletMapping } from '@/lib/piggyvest/primary-wallet-mapping';
 import { onboardPiggyvestPrimaryWallet } from '@/lib/piggyvest/primary-wallet-onboarding';
+import { hasPrimaryWalletOnboarding } from '@/lib/piggyvest/primary-wallet-presence';
 import { createPrimaryWalletProviderCustomer } from '@/lib/piggyvest/primary-wallet-provider';
 import { getPrimaryWalletProviderOrigin } from '@/lib/piggyvest/primary-wallet-provider-origin';
 import { readPrimaryWalletRuntime } from '@/lib/piggyvest/primary-wallet-runtime';
@@ -71,6 +72,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       environment: runtime.onboarding.environment,
     };
     const execute = createPrimaryWalletExecutor(runtime);
+    if (!(await hasPrimaryWalletOnboarding(scope, execute))) {
+      return NextResponse.json(
+        { status: 'not_started', account: null },
+        {
+          headers: { 'Cache-Control': 'no-store' },
+        }
+      );
+    }
     const providerConfig = {
       token: runtime.providerToken,
       baseUrl: getPrimaryWalletProviderOrigin(runtime.onboarding.environment),

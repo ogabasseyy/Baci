@@ -39,6 +39,7 @@ const mockRpc = jest.fn<(...args: unknown[]) => Promise<RpcResult>>();
 
 const query = {
   eq: jest.fn(),
+  ilike: jest.fn(),
   gte: jest.fn(),
   lte: jest.fn(),
   or: jest.fn(),
@@ -54,6 +55,7 @@ const query = {
 
 for (const method of [
   query.eq,
+  query.ilike,
   query.gte,
   query.lte,
   query.or,

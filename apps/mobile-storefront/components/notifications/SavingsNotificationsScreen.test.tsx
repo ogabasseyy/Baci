@@ -26,11 +26,13 @@ jest.mock('@shopify/flash-list', () => ({
     data,
     ListEmptyComponent,
     ListHeaderComponent,
+    ListFooterComponent,
     renderItem,
   }: {
     data: unknown[];
     ListEmptyComponent?: ReactNode | (() => ReactNode);
     ListHeaderComponent?: ReactNode | (() => ReactNode);
+    ListFooterComponent?: ReactNode | (() => ReactNode);
     renderItem: (input: { item: never }) => ReactNode;
   }) => {
     const { View } = require('react-native') as typeof import('react-native');
@@ -48,6 +50,9 @@ jest.mock('@shopify/flash-list', () => ({
           : typeof ListEmptyComponent === 'function'
             ? ListEmptyComponent()
             : ListEmptyComponent}
+        {typeof ListFooterComponent === 'function'
+          ? ListFooterComponent()
+          : ListFooterComponent}
       </View>
     );
   },

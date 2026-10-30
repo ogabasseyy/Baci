@@ -59,18 +59,6 @@ export function PlanTransferMode({ colors, controller }: TransferModalProps) {
     }
   };
 
-  const handleContributeFromWallet = async () => {
-    try {
-      await controller.submitBankTransferContribution();
-    } catch (error) {
-      handleSavingsActionError(
-        error,
-        'Unable to record contribution',
-        'Failed to record the contribution. Please try again.'
-      );
-    }
-  };
-
   return (
     <ModalSheet
       visible={controller.showTransferModal}
@@ -124,11 +112,18 @@ export function PlanTransferMode({ colors, controller }: TransferModalProps) {
           <PlanFundingFallback colors={colors} controller={controller} />
         ) : null}
       </View>
+      {controller.formError ? (
+        <Text
+          accessibilityRole="alert"
+          style={[styles.errorText, { color: colors.error }]}
+        >
+          {controller.formError}
+        </Text>
+      ) : null}
       <PlanTransferActions
         colors={colors}
         controller={controller}
         onConfirmTransfer={handleConfirmTransfer}
-        onContributeFromWallet={handleContributeFromWallet}
       />
     </ModalSheet>
   );

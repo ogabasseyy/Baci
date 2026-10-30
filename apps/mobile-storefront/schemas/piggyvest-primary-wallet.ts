@@ -9,6 +9,7 @@ export const PiggyvestPrimaryWalletSchemas = {
   }),
   created: z.strictObject({ status: z.enum(['pending', 'ready']) }),
   snapshot: z.discriminatedUnion('status', [
+    z.strictObject({ status: z.literal('not_started'), account: z.null() }),
     z.strictObject({ status: z.literal('pending'), account: z.null() }),
     z.strictObject({
       status: z.literal('ready'),

@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { fetchWithRetry } from '@/lib/api';
+import { isRestrictedSavingsSandbox } from '@/lib/is-restricted-savings-sandbox';
 import { logger } from '@/lib/logger';
 import { BILLER_GC_TIME, BILLER_STALE_TIME } from '@/lib/vtu-constants';
 import {
@@ -113,6 +114,11 @@ function scheduleDeferredBillerPrefetch(callback: () => void, index: number) {
 
 /** Shared fetch function used by both useQuery and prefetch */
 async function fetchBillers(type: BillType): Promise<Biller[]> {
+  if (isRestrictedSavingsSandbox()) {
+    throw new Error(
+      'Utility purchases are not available in this savings sandbox.'
+    );
+  }
   const startTime = Date.now();
   log.info('VTU', `Fetching billers for type: ${type}`);
   const includeMonnify =
@@ -179,6 +185,7 @@ export function useVTUBillers(type: BillType, enabled = true) {
     staleTime: BILLER_STALE_TIME,
     gcTime: BILLER_GC_TIME,
     enabled,
+    ...(isRestrictedSavingsSandbox() ? { retry: false } : {}),
   });
 }
 
@@ -190,6 +197,7 @@ export function usePrefetchBillers() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
+    if (isRestrictedSavingsSandbox()) return;
     const cancelPrefetchTasks = PREFETCH_TYPES.map((type, index) =>
       scheduleDeferredBillerPrefetch(() => {
         queryClient.prefetchQuery({

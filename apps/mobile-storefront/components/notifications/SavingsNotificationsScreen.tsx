@@ -54,7 +54,7 @@ export function SavingsNotificationsScreen({
         </View>
       ) : null}
       <SavingsNotificationList
-        header={
+        preferences={
           inbox.preferences ? (
             <SavingsNotificationPreferences
               isSaving={inbox.isSaving}

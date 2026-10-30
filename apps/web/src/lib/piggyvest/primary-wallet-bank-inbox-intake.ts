@@ -44,7 +44,7 @@ export async function dispatchPrimaryWalletBankInboxIntake(input: {
     await store.readiness();
     const outcome = await store.enqueue({
       rawHex: Buffer.from(input.rawBody).toString('hex'),
-      signature: input.signature,
+      signature: input.signature.toLowerCase(),
     });
     if (outcome === 'not_handled') return { outcome, response: null };
     return {

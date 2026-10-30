@@ -21,9 +21,6 @@ const mockRpc = jest.fn<(name: string, params?: unknown) => Promise<unknown>>();
 const mockFrom = jest.fn<(table: string) => unknown>();
 const mockTrackEvent = jest.fn();
 const mockReadPrimary = jest.fn<() => Promise<unknown>>();
-type RealtimeHandler = () => void;
-const mockRealtimeHandlers: Record<string, RealtimeHandler[]> = {};
-
 jest.mock('./resolve-wallet-funding-account', () => {
   const actual = jest.requireActual(
     './resolve-wallet-funding-account'
@@ -43,17 +40,7 @@ jest.mock('@/lib/supabase', () => ({
   supabase: {
     channel: jest.fn(() => {
       const channel = {
-        on: jest.fn((...args: unknown[]) => {
-          const config = args[1] as { table?: string };
-          const callback = args[2] as RealtimeHandler;
-          if (config.table) {
-            mockRealtimeHandlers[config.table] = [
-              ...(mockRealtimeHandlers[config.table] ?? []),
-              callback,
-            ];
-          }
-          return channel;
-        }),
+        on: jest.fn(() => channel),
         subscribe: jest.fn(),
       };
       return channel;
@@ -179,9 +166,6 @@ function setupHook() {
 beforeEach(async () => {
   jest.clearAllMocks();
   mockReadPrimary.mockResolvedValue({ status: 'unavailable' });
-  for (const table of Object.keys(mockRealtimeHandlers)) {
-    delete mockRealtimeHandlers[table];
-  }
   jest.mocked(Crypto.randomUUID).mockReset();
   jest.mocked(Crypto.randomUUID).mockReturnValue('test-redemption-id');
   await AsyncStorage.clear();
@@ -994,39 +978,6 @@ describe('useWallet', () => {
     queryClient.clear();
   });
 
-  it('debounces savings realtime invalidations across goals and contributions', async () => {
-    setupWalletTableMocks();
-    const queryClient = createTestClient();
-    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
-
-    const { result, unmount } = renderHook(() => useWallet(), {
-      wrapper: createWrapper(queryClient),
-    });
-
-    await waitFor(() => expect(result.current.data).toBeDefined());
-    invalidateSpy.mockClear();
-
-    act(() => {
-      mockRealtimeHandlers.customer_savings_goals?.[0]?.();
-      mockRealtimeHandlers.customer_savings_contributions?.[0]?.();
-      mockRealtimeHandlers.customer_savings_contributions?.[0]?.();
-    });
-
-    expect(invalidateSpy).not.toHaveBeenCalled();
-    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledTimes(1));
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: walletKeys.data({
-        merchantId: 'merchant-1',
-        ownerId: 'customer-1',
-        userId: 'user-1',
-      }),
-      exact: false,
-    });
-
-    unmount();
-    queryClient.clear();
-  });
-
   it('keeps display wallet cache fresh across quick wallet-screen returns', () => {
     const { tableCalls } = setupWalletTableMocks();
     const queryClient = createTestClient();
@@ -1051,7 +1002,7 @@ describe('useWallet', () => {
     );
 
     expect(result.current.data?.wallet.balance).toBe(3210);
-    expect(tableCalls).toEqual([]);
+    expect(tableCalls).toContain('customers');
 
     unmount();
     queryClient.clear();

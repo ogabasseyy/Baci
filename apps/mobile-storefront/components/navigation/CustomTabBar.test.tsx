@@ -29,6 +29,7 @@ jest.mock('@/hooks/useTheme', () => ({
 }));
 
 const mockUseColorScheme = jest.fn(() => 'light');
+let mockDiscoveryBubbleVisible = true;
 
 jest.mock('@/components/useColorScheme', () => ({
   useColorScheme: () => mockUseColorScheme(),
@@ -50,11 +51,39 @@ jest.mock('@/hooks/use-keyboard', () => ({
   useKeyboard: () => mockUseKeyboard(),
 }));
 
+jest.mock('./WalletDiscoveryBubble', () => ({
+  WalletDiscoveryBubble: ({
+    homeFocused,
+    onVisibilityChange,
+  }: {
+    homeFocused: boolean;
+    onVisibilityChange: (visible: boolean) => void;
+  }) => {
+    const visible = homeFocused && mockDiscoveryBubbleVisible;
+    jest
+      .requireActual<typeof import('react')>('react')
+      .useLayoutEffect(
+        () => onVisibilityChange(visible),
+        [onVisibilityChange, visible]
+      );
+    return visible
+      ? jest
+          .requireActual<typeof import('react')>('react')
+          .createElement(
+            jest.requireActual<typeof import('react-native')>('react-native')
+              .View,
+            { testID: 'wallet-discovery-bubble' }
+          )
+      : null;
+  },
+}));
+
 describe('CustomTabBar', () => {
   let mockProps: BottomTabBarProps;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockDiscoveryBubbleVisible = true;
     mockUseKeyboard.mockReturnValue({
       dismissKeyboard: jest.fn(),
       isKeyboardVisible: false,
@@ -64,33 +93,7 @@ describe('CustomTabBar', () => {
       ) => handler,
     });
 
-    mockProps = {
-      insets: { top: 0, bottom: 0, left: 0, right: 0 },
-      state: {
-        index: 0,
-        routes: [
-          { key: 'home-key', name: 'index', params: {} },
-          { key: 'saved-key', name: 'saved', params: {} },
-          { key: 'hidden-key', name: 'categories', params: {} },
-        ],
-        type: 'tab',
-        routeNames: ['index', 'saved', 'categories'],
-        history: [],
-        key: 'state-key',
-        stale: false,
-        preloadedRouteKeys: [],
-      },
-      descriptors: {
-        'home-key': customTabBarTestUtils.createTabDescriptor('Home'),
-        'saved-key': customTabBarTestUtils.createTabDescriptor('Saved'),
-        'hidden-key': customTabBarTestUtils.createHiddenDescriptor('Explore'),
-      },
-      navigation: {
-        emit: jest.fn().mockReturnValue({ defaultPrevented: false }),
-        dispatch: jest.fn(),
-        navigate: jest.fn(),
-      } as unknown as BottomTabBarProps['navigation'],
-    };
+    mockProps = customTabBarTestUtils.createDefaultProps();
   });
 
   it('renders visible tab items and ignores hidden routes', () => {
@@ -99,6 +102,34 @@ describe('CustomTabBar', () => {
     expect(screen.getByRole('tab', { name: 'Home' })).toBeOnTheScreen();
     expect(screen.getByRole('tab', { name: 'Saved' })).toBeOnTheScreen();
     expect(screen.queryByRole('tab', { name: 'Explore' })).toBeNull();
+  });
+
+  it('reserves touch space only while the discovery bubble is visible', () => {
+    const { rerender } = render(<CustomTabBar {...mockProps} />);
+    const wrapper = screen.getByTestId('custom-tab-bar-wrapper');
+    expect(wrapper).not.toHaveStyle({ paddingTop: 96 });
+    expect(screen.queryByTestId('wallet-discovery-bubble')).toBeNull();
+
+    rerender(<CustomTabBar {...mockProps} preloadProtectedTabs />);
+    expect(screen.getByTestId('wallet-discovery-bubble')).toBeOnTheScreen();
+    expect(wrapper).toHaveStyle({ paddingTop: 96 });
+    expect(screen.getByTestId('custom-tab-bar')).toHaveStyle({ height: 64 });
+
+    mockDiscoveryBubbleVisible = false;
+    rerender(<CustomTabBar {...mockProps} preloadProtectedTabs />);
+    expect(screen.queryByTestId('wallet-discovery-bubble')).toBeNull();
+    expect(wrapper).not.toHaveStyle({ paddingTop: 96 });
+
+    mockDiscoveryBubbleVisible = true;
+    rerender(
+      <CustomTabBar
+        {...mockProps}
+        preloadProtectedTabs
+        state={{ ...mockProps.state, index: 1 }}
+      />
+    );
+    expect(screen.queryByTestId('wallet-discovery-bubble')).toBeNull();
+    expect(wrapper).not.toHaveStyle({ paddingTop: 96 });
   });
 
   it('jumps immediately on press-in while rendering the moving capsule', () => {

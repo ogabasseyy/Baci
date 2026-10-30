@@ -48,30 +48,10 @@ jest.mock('@/lib/wallet-funding-session', () => ({
 import { WALLET_FUNDING_POLLING } from '@/constants/wallet-funding';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 import { useWalletCreditWatch } from './use-wallet-credit-watch';
+import { positionOf, topUp } from './use-wallet-credit-watch.test-support';
 import type { WalletTopUpCandidate } from './wallet-top-up-credit';
 
 const RETURN_TO = '/utilities/airtime?repeatAmount=1000' as WalletReturnHref;
-
-function topUp(
-  id: string,
-  amount: number,
-  createdAt: string
-): WalletTopUpCandidate {
-  return {
-    amount,
-    created_at: createdAt,
-    id,
-    source_type: 'wallet_topup',
-    type: 'credit',
-  };
-}
-
-function positionOf(transaction: WalletTopUpCandidate): WalletLedgerPosition {
-  return {
-    createdAt: Date.parse(transaction.created_at),
-    id: transaction.id,
-  };
-}
 
 const OLD_TOP_UP = topUp('tx-old', 1000, '2026-07-01T09:00:00.000Z');
 const NEW_TOP_UP = topUp('tx-new', 2500, '2026-07-13T09:00:00.000Z');

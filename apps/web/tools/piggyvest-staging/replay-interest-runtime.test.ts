@@ -34,6 +34,39 @@ const event = {
   },
 };
 describe('durable interest replay adapter', () => {
+  it('accepts explicit NGN currency through the existing interest bridge', async () => {
+    const execute = vi.fn(async () => ({ rows: [{ result: 'applied' }] }));
+    const payout = {
+      ...observedInterestPayout,
+      eventData: { ...observedInterestPayout.eventData, currency: 'NGN' },
+    };
+
+    await expect(createInterestReplay(config, execute)(payout)).resolves.toBe(
+      'applied'
+    );
+  });
+
+  it.each([
+    'USD',
+    'ngn',
+    '',
+    null,
+    123,
+  ])('quarantines explicit foreign or malformed currency %s before any financial statement', async (currency) => {
+    const execute = vi.fn(async () => ({ rows: [{ result: 'applied' }] }));
+    const payout = {
+      ...observedInterestPayout,
+      eventData: { ...observedInterestPayout.eventData, currency },
+    };
+
+    await expect(
+      createInterestReplay(config, execute)(payout)
+    ).rejects.toMatchObject({
+      reason: 'poison',
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it('processes the technical-team payout category without rescaling net kobo', async () => {
     const execute = vi.fn(async () => ({ rows: [{ result: 'applied' }] }));
 

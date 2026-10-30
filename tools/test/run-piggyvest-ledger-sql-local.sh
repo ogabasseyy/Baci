@@ -15,14 +15,15 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 mkdir -m 700 "$socket_dir"
-"$postgres_bin/initdb" -D "$temp_dir/data" -A trust -U harness_admin --no-locale --encoding=UTF8 >/dev/null
+"$postgres_bin/initdb" -D "$temp_dir/data" -A trust -U postgres --no-locale --encoding=UTF8 >/dev/null
 "$postgres_bin/pg_ctl" -D "$temp_dir/data" -o "-k '$socket_dir' -h '' -p 55449" -l "$temp_dir/postgres.log" start >/dev/null
-psql=("$postgres_bin/psql" -X -w -v ON_ERROR_STOP=1 -h "$socket_dir" -p 55449 -U harness_admin -d postgres)
+psql=("$postgres_bin/psql" -X -w -v ON_ERROR_STOP=1 -h "$socket_dir" -p 55449 -U postgres -d postgres)
 "${psql[@]}" -f "$worktree/tools/test/piggyvest-savings-ledger-setup.sql" >/dev/null
 for migration in "$worktree"/supabase/migrations/20260912120[0-5]00_*.sql; do
   [[ -f "$migration" ]] || continue
   "${psql[@]}" -f "$migration" >/dev/null
 done
+"${psql[@]}" -f "$worktree/supabase/migrations/20261003160000_piggyvest_ledger_deferred_balance_authority.sql" >/dev/null
 "${psql[@]}" -f "$worktree/tools/test/piggyvest-savings-ledger-acceptance.sql"
 "$postgres_bin/pg_ctl" -D "$temp_dir/data" -m fast stop >/dev/null
 "$postgres_bin/pg_ctl" -D "$temp_dir/data" -o "-k '$socket_dir' -h '' -p 55449" -l "$temp_dir/postgres.log" start >/dev/null

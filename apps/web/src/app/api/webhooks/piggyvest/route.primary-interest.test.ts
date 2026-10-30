@@ -103,31 +103,21 @@ it('requests redelivery when storing signed interest fails', async () => {
   expect(mocks.dispatch).not.toHaveBeenCalled();
   expect(mocks.legacy).not.toHaveBeenCalled();
 });
-it.each([
-  'credited',
-  'duplicate',
-])('acknowledges verified primary interest %s without legacy processing', async (outcome) => {
-  mocks.dispatch.mockResolvedValue(outcome);
-  const response = await POST(request());
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({
-    received: true,
-    duplicate: outcome === 'duplicate',
-  });
-  expect(mocks.dispatch).toHaveBeenCalledWith({
-    rawBody: Buffer.from(rawBody),
-    signature: expect.any(String),
-  });
-  expect(mocks.legacy).not.toHaveBeenCalled();
-});
-it.each([
-  'prerequisite',
-  'conflict',
-])('does not drop or legacy-credit unresolved primary interest %s', async (outcome) => {
-  mocks.dispatch.mockResolvedValue(outcome);
+it('does not direct-credit interest when durable capture is disabled', async () => {
   const response = await POST(request());
   expect(response.status).toBe(503);
-  expect(mocks.dispatch).toHaveBeenCalledTimes(1);
+  expect(await response.json()).toMatchObject({
+    code: 'PIGGYVEST_INTEREST_RECONCILIATION_PENDING',
+  });
+  expect(mocks.intake).toHaveBeenCalledTimes(1);
+  expect(mocks.dispatch).not.toHaveBeenCalled();
+  expect(mocks.legacy).not.toHaveBeenCalled();
+});
+it('returns redelivery when durable interest capture rejects', async () => {
+  mocks.intake.mockRejectedValue(new Error('private database detail'));
+  const response = await POST(request());
+  expect(response.status).toBe(503);
+  expect(mocks.dispatch).not.toHaveBeenCalled();
   expect(mocks.legacy).not.toHaveBeenCalled();
 });
 it('does not dispatch forged interest', async () => {
@@ -148,48 +138,25 @@ it('accepts a delivery signed with a retained rotation key', async () => {
   expect(mocks.legacy).not.toHaveBeenCalled();
 });
 it('redacts primary interest storage failures and requests redelivery', async () => {
-  mocks.dispatch.mockRejectedValue(new Error('private database detail'));
+  mocks.intake.mockRejectedValue(new Error('private database detail'));
   const response = await POST(request());
   expect(response.status).toBe(503);
   expect(JSON.stringify(await response.json())).not.toContain(
     'private database'
   );
+  expect(mocks.dispatch).not.toHaveBeenCalled();
   expect(mocks.legacy).not.toHaveBeenCalled();
 });
-it('skips the interest intake for a legacy-family delivery', async () => {
+it('fails closed for explicit interest signed without interest-family authority', async () => {
   mocks.families = ['legacy'];
-  mocks.processPiggyvestEvent.mockResolvedValue('processed');
-  const query: Record<string, unknown> = {};
-  const upsert = vi.fn(() => query);
-  const select = vi.fn(() =>
-    Object.assign(
-      Promise.resolve({
-        data: [{ event_id: paidInterestFixture.event.eventId }],
-        error: null,
-      }),
-      {
-        eq: vi.fn(() => ({
-          maybeSingle: async () => ({ data: null, error: null }),
-        })),
-      }
-    )
-  );
-  const then = (resolve: (value: unknown) => void) =>
-    Promise.resolve({
-      data: [{ event_id: paidInterestFixture.event.eventId }],
-      error: null,
-    }).then(resolve);
-  Object.assign(query, { select, then, upsert });
-  mocks.legacy.mockImplementation(() => ({ from: vi.fn(() => query) }));
-
   const response = await POST(request());
 
-  expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({
-    received: true,
-    duplicate: false,
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({
+    code: 'PIGGYVEST_INTEREST_RECONCILIATION_PENDING',
   });
   expect(mocks.intake).not.toHaveBeenCalled();
   expect(mocks.dispatch).not.toHaveBeenCalled();
-  expect(mocks.processPiggyvestEvent).toHaveBeenCalled();
+  expect(mocks.legacy).not.toHaveBeenCalled();
+  expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
 });

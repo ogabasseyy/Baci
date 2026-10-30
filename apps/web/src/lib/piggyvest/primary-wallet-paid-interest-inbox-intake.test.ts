@@ -29,6 +29,19 @@ it('persists exact signed whitespace-preserving bytes before acknowledging', asy
     signature,
   });
 });
+it('accepts uppercase signature hex and persists its lowercase form with exact raw bytes', async () => {
+  const uppercaseSignature = signature.toUpperCase();
+  expect(
+    await dispatchPrimaryWalletPaidInterestInbox({
+      rawBody,
+      signature: uppercaseSignature,
+    })
+  ).toBe('accepted');
+  expect(mocks.enqueue).toHaveBeenCalledWith({
+    rawHex: rawBody.toString('hex'),
+    signature,
+  });
+});
 it('does not acknowledge when durable persistence fails', async () => {
   mocks.enqueue.mockRejectedValue(
     new Error('Primary interest inbox database unavailable')
@@ -57,21 +70,37 @@ it('does not persist invalid HMAC, reserialized bytes or oversize input', async 
   expect(
     await dispatchPrimaryWalletPaidInterestInbox({ rawBody, signature: null })
   ).toBe('invalid_signature');
+  for (const malformed of [
+    'g'.repeat(128),
+    `${signature.slice(0, -1)} `,
+    signature.slice(1),
+  ]) {
+    expect(
+      await dispatchPrimaryWalletPaidInterestInbox({
+        rawBody,
+        signature: malformed,
+      })
+    ).toBe('invalid_signature');
+  }
   expect(mocks.enqueue).not.toHaveBeenCalled();
 });
 it.each([
-  ['empty object', '{}'],
+  ['empty object', Buffer.from('{}')],
   [
     'wrong event type',
-    '{"eventType":"other","eventCategory":"interest-payout","eventId":"e1"}',
+    Buffer.from(
+      '{"eventType":"other","eventCategory":"interest-payout","eventId":"e1"}'
+    ),
   ],
   [
     'missing event id',
-    '{"eventType":"interest-payout.success","eventCategory":"interest-payout"}',
+    Buffer.from(
+      '{"eventType":"interest-payout.success","eventCategory":"interest-payout"}'
+    ),
   ],
-  ['not JSON', 'not-json'],
-])('does not persist signed %s without an identifiable envelope', async (_label, text) => {
-  const body = Buffer.from(text);
+  ['not JSON', Buffer.from('not-json')],
+  ['invalid UTF-8', Buffer.from([0xff, 0xfe, 0x00])],
+])('persists exact signed %s for durable quarantine', async (_label, body) => {
   const signed = createHmac('sha512', fixture.config.webhookSecret)
     .update(body)
     .digest('hex');
@@ -80,8 +109,11 @@ it.each([
       rawBody: body,
       signature: signed,
     })
-  ).toBe('invalid_payload');
-  expect(mocks.enqueue).not.toHaveBeenCalled();
+  ).toBe('accepted');
+  expect(mocks.enqueue).toHaveBeenCalledWith({
+    rawHex: body.toString('hex'),
+    signature: signed,
+  });
 });
 it('persists authenticated shape failures for durable worker quarantine', async () => {
   const body = Buffer.from(

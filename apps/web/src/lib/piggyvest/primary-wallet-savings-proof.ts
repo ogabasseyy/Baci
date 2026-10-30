@@ -1,17 +1,21 @@
 import 'server-only';
 import { piggyvestPrimarySavingsTransferSchemas } from '@/schemas/piggyvest-primary-savings-transfer';
-import { prefundedCardProviderEvidenceSchemas } from '@/schemas/prefunded-card-provider-evidence';
 import { prefundedCardTransferVerificationSchemas } from '@/schemas/prefunded-card-transfer-verification';
+import { primaryWalletSavingsIdentitySchemas } from '@/schemas/primary-wallet-savings-identity';
 
 export function verifyPrimaryWalletSavingsProof(
   storedReservation: unknown,
-  providerResponse: unknown
+  providerResponse: unknown,
+  identityEvidence: unknown,
+  trustedEnvironment: unknown
 ) {
   const reservation =
     piggyvestPrimarySavingsTransferSchemas.reserved.safeParse(
       storedReservation
     );
   if (!reservation.success) return { status: 'unverified' as const };
+  if (trustedEnvironment !== 'staging' && trustedEnvironment !== 'production')
+    return { status: 'unverified' as const };
   const expected = reservation.data;
   const success =
     prefundedCardTransferVerificationSchemas.rich.safeParse(providerResponse);
@@ -20,52 +24,73 @@ export function verifyPrimaryWalletSavingsProof(
     : prefundedCardTransferVerificationSchemas.richFailed.safeParse(
         providerResponse
       );
-  if (!success.success && !failure?.success) {
-    // The transaction-verify endpoint answers the minimal TSQ shape
-    // ({reference, status: success|pending|failed, amount}) — never the
-    // rich single-transaction envelope. Requiring rich bindings here
-    // would hold every reconciled contribution in pending forever, so
-    // accept a TSQ success/failure bound to the reservation's unique
-    // reference and amount. The reference is unguessable
-    // (pvb-save-<operation uuid>), the channel is the authenticated
-    // provider session, and wallets/customer/business stay bound by the
-    // server-side reservation the submit path stored. TSQ exposes no
-    // provider transaction id, so the provider-echoed reference serves
-    // as the settlement idempotency key: unique per operation, so the
-    // database duplicate/conflict handling behaves identically. Rich
-    // stays first so a fully-bound response keeps its provider id.
-    const tsq =
-      prefundedCardProviderEvidenceSchemas.tsq.safeParse(providerResponse);
-    if (!tsq.success) return { status: 'unverified' as const };
-    const observation = tsq.data.data;
-    if (
-      observation.reference !== expected.reference ||
-      observation.amount !== expected.amountKobo ||
-      observation.status === 'pending'
-    )
-      return { status: 'unverified' as const };
-    const bindings = {
-      providerTransactionId: expected.reference,
-      operationId: expected.operationId,
-      reference: expected.reference,
-      amountKobo: expected.amountKobo,
-      sourceWalletId: expected.sourceWalletId,
-      destinationWalletId: expected.destinationWalletId,
-      businessId: expected.businessId,
-    };
-    if (observation.status === 'success')
-      return { status: 'verified' as const, ...bindings };
-    return { status: 'failed' as const, ...bindings };
-  }
+  if (!success.success && !failure?.success)
+    return { status: 'unverified' as const };
   const actual = (success.success ? success.data : failure?.data)?.data;
   if (!actual) return { status: 'unverified' as const };
+  if (trustedEnvironment === 'staging' && !success.success)
+    return { status: 'unverified' as const };
+  const identity =
+    primaryWalletSavingsIdentitySchemas.evidence.safeParse(identityEvidence);
+  const identityWalletMatches =
+    identity.success &&
+    identity.data.environment === trustedEnvironment &&
+    identity.data.wallet.id === expected.sourceWalletId &&
+    identity.data.wallet.business_id === expected.businessId &&
+    identity.data.wallet.api_customer_id === expected.providerCustomerId;
+  const stagingSingleIdentity =
+    trustedEnvironment === 'staging' &&
+    success.success &&
+    identityWalletMatches &&
+    identity.success &&
+    identity.data.environment === 'staging' &&
+    'source_wallet' in identity.data.transaction &&
+    identity.data.transaction.id === actual.id &&
+    identity.data.transaction.status === 'successful' &&
+    identity.data.transaction.customer_id === actual.customer_id &&
+    identity.data.transaction.source_wallet === expected.sourceWalletId &&
+    identity.data.transaction.destination_wallet ===
+      expected.destinationWalletId &&
+    identity.data.transaction.amount === actual.amount &&
+    identity.data.transaction.fee === 0 &&
+    identity.data.transaction.reference === actual.reference &&
+    identity.data.transaction.third_party_reference === expected.reference &&
+    (identity.data.transaction.internal_reference == null ||
+      identity.data.transaction.internal_reference === actual.id);
+  const productionDirectIdentity =
+    trustedEnvironment === 'production' &&
+    actual.customer_id === expected.businessId &&
+    identityWalletMatches &&
+    identity.success &&
+    identity.data.environment === 'production' &&
+    'source_wallet' in identity.data.transaction &&
+    identity.data.transaction.id === actual.id &&
+    identity.data.transaction.category === 'p2p' &&
+    identity.data.transaction.status === actual.status &&
+    identity.data.transaction.customer_id === actual.customer_id &&
+    identity.data.transaction.source_wallet === expected.sourceWalletId &&
+    identity.data.transaction.destination_wallet ===
+      expected.destinationWalletId &&
+    identity.data.transaction.amount === actual.amount &&
+    identity.data.transaction.fee === 0 &&
+    identity.data.transaction.reference === actual.reference &&
+    identity.data.transaction.third_party_reference === expected.reference &&
+    (identity.data.transaction.internal_reference == null ||
+      identity.data.transaction.internal_reference === actual.id);
+  const customerIdentityMismatch =
+    trustedEnvironment === 'staging'
+      ? actual.customer_id !== expected.businessId &&
+        actual.customer_id !== expected.providerCustomerId
+      : actual.customer_id !== expected.businessId || !productionDirectIdentity;
   if (
     expected.sourceWalletId === expected.destinationWalletId ||
     actual.amount !== expected.amountKobo ||
     actual.third_party_reference !== expected.reference ||
     actual.source_wallet !== expected.sourceWalletId ||
     actual.destination_wallet !== expected.destinationWalletId ||
-    actual.customer_id !== expected.providerCustomerId ||
+    customerIdentityMismatch ||
+    (trustedEnvironment === 'staging' && !stagingSingleIdentity) ||
+    (trustedEnvironment === 'production' && !productionDirectIdentity) ||
     (actual.business_id !== undefined &&
       actual.business_id !== expected.businessId) ||
     (actual.currency !== undefined && actual.currency !== 'NGN')

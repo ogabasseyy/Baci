@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { piggyvestProviderIdSchema } from './piggyvest-provider-id';
 
 export const piggyvestPrimaryWalletSnapshotSchemas = {
+  presence: z.array(z.strictObject({ result: z.boolean() })).length(1),
   mapping: z
     .strictObject({
       providerWalletId: piggyvestProviderIdSchema,

@@ -1,9 +1,11 @@
 import 'server-only';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
+import { piggyvestPrimarySavingsTransferSchemas } from '@/schemas/piggyvest-primary-savings-transfer';
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
 import { requestPrefundedCardProviderJson } from './prefunded-card-provider-request';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
+import { resolvePrimaryWalletSavingsIdentity } from './primary-wallet-savings-identity';
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
 import { createPrimaryWalletSavingsReconciliationStore } from './primary-wallet-savings-reconciliation-store';
 
@@ -32,6 +34,37 @@ export function createSavingsVerifyQueryProvider(input: {
     });
 }
 
+export function createPrimaryWalletSavingsIdentityResolver(input: {
+  environment: 'staging' | 'production';
+  integrationId: string;
+  token: string;
+  store: ReturnType<typeof createPrimaryWalletSavingsReconciliationStore>;
+  fetchImplementation?: typeof fetch;
+}) {
+  type IdentityCheckpoint = NonNullable<
+    Parameters<typeof resolvePrimaryWalletSavingsIdentity>[0]['checkpoint']
+  >;
+  return (selection: { reservation: unknown; providerResponse: unknown }) => {
+    const resolve = (checkpoint?: IdentityCheckpoint) =>
+      resolvePrimaryWalletSavingsIdentity({
+        ...selection,
+        environment: input.environment,
+        token: input.token,
+        fetchImplementation: input.fetchImplementation,
+        checkpoint,
+        checkpointScope:
+          input.environment === 'production'
+            ? { integrationId: input.integrationId, environment: 'production' }
+            : undefined,
+      });
+    if (input.environment === 'staging') return resolve();
+    const reservation = piggyvestPrimarySavingsTransferSchemas.reserved.parse(
+      selection.reservation
+    );
+    return input.store.withIdentityCheckpoint(reservation.operationId, resolve);
+  };
+}
+
 export async function runPrimaryWalletSavingsReconciliation(input: {
   configuration: unknown;
   providerToken: unknown;
@@ -50,10 +83,18 @@ export async function runPrimaryWalletSavingsReconciliation(input: {
     execute: createPrimaryWalletEvidenceExecutor(configuration),
   });
   return await reconcilePrimaryWalletSavings(input.operationId, {
+    environment: configuration.environment,
     ...store,
     queryProvider: createSavingsVerifyQueryProvider({
       environment: configuration.environment,
       token,
+      fetchImplementation: input.fetchImplementation,
+    }),
+    resolveIdentity: createPrimaryWalletSavingsIdentityResolver({
+      environment: configuration.environment,
+      integrationId: configuration.integrationId,
+      token,
+      store,
       fetchImplementation: input.fetchImplementation,
     }),
   });

@@ -9,7 +9,10 @@ import { getStorefrontStatus } from '../../src/lib/website-builder/read-storefro
 import { retryCommittedDelivery } from '../../src/lib/website-builder/retry-delivery';
 import { createPublicationProofWriter } from './publication-proof';
 import { publicationRlsClient } from './publication-rls-client';
-import { publicationFixture } from './publication-test-support';
+import {
+  PUBLICATION_FIXTURE_SETUP_TIMEOUT_MS,
+  publicationFixture,
+} from './publication-test-support';
 
 let f: Awaited<ReturnType<typeof publicationFixture>>;
 let verifier: Pool;
@@ -19,7 +22,7 @@ beforeAll(async () => {
     ...f.pool.options,
     options: '-c role=baci_builder_publication_verifier',
   });
-}, 30000);
+}, PUBLICATION_FIXTURE_SETUP_TIMEOUT_MS);
 afterAll(async () => {
   await verifier?.end();
   await f?.close();

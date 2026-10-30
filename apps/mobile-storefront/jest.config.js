@@ -20,14 +20,24 @@ const expoModulesCoreRoot = path.dirname(
 /** @type {import('jest').Config} */
 const config = {
   preset: 'jest-expo',
+  // The full mobile suite grows the in-band Jest process to the V8 heap limit.
+  // Keep concurrency bounded, then recycle a worker after a completed suite
+  // when its memory crosses this fixed threshold. This is a recycling trigger,
+  // not a hard cap on memory used by one individual suite.
+  maxWorkers: 2,
+  workerIdleMemoryLimit: '768MB',
+  // Full React Native renders can exceed Jest's 5s default under suite-wide
+  // worker/GC pressure. Keep a hard per-test ceiling while the 5s RNTL
+  // asyncUtilTimeout continues to bound waitFor/findBy assertions.
+  testTimeout: 15_000,
   testPathIgnorePatterns: ['/node_modules/', '\\.test-utils\\.(t|j)sx?$'],
   // React Native native-module mocks can leave idle handles after every suite
   // has passed; exit explicitly so the run terminates instead of hanging on
   // teardown. This must apply everywhere (CI *and* the local lefthook pre-push
   // gate) — gating it on CI alone made `pnpm turbo test` hang indefinitely
-  // locally, blocking every push and spawning zombie `jest --runInBand`
-  // processes. The handles are idle and only surface once suites are green, so
-  // forcing exit is always safe here.
+  // locally, blocking every push and spawning zombie Jest processes. The
+  // This can also mask leaked handles; investigate them separately with
+  // Jest's --detectOpenHandles before relying on the suite for cleanup checks.
   forceExit: true,
   // jest-expo 57.0.2 loads TypeScript sources from Expo packages nested under
   // its own pnpm node_modules tree, so that nested Expo subtree must be compiled.

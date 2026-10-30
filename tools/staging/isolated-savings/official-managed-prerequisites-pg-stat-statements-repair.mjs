@@ -1,12 +1,21 @@
 import { readFileSync } from 'node:fs';
 
 export function officialManagedPgStatStatementsRepair(systemIdentifier) {
-  if (typeof systemIdentifier !== 'string' || !/^[1-9][0-9]{15,19}$/.test(systemIdentifier))
+  if (
+    typeof systemIdentifier !== 'string' ||
+    !/^[1-9][0-9]{15,19}$/.test(systemIdentifier)
+  )
     throw new Error('Explicit isolated PostgreSQL system identifier required');
-  const read = (name) => readFileSync(new URL(`./official-managed-prerequisites-${name}.sql`, import.meta.url), 'utf8');
+  const read = (name) =>
+    readFileSync(
+      new URL(`./official-managed-prerequisites-${name}.sql`, import.meta.url),
+      'utf8'
+    );
   return [
-    '\\set ON_ERROR_STOP on', 'BEGIN;',
-    "SET LOCAL statement_timeout = '60s';", "SET LOCAL lock_timeout = '5s';",
+    '\\set ON_ERROR_STOP on',
+    'BEGIN;',
+    "SET LOCAL statement_timeout = '60s';",
+    "SET LOCAL lock_timeout = '5s';",
     `DO $repair$ BEGIN
       IF current_database() <> 'postgres' OR session_user <> 'postgres' OR current_user <> 'postgres'
         OR inet_client_addr() IS NOT NULL OR current_setting('server_version_num') <> '170006'
@@ -39,12 +48,14 @@ export function officialManagedPgStatStatementsRepair(systemIdentifier) {
         RAISE EXCEPTION 'Managed prerequisite operation in progress';
       END IF;
     END $repair$;`,
-    read('snapshot'), read('pg-stat-statements'),
+    read('snapshot'),
+    read('pg-stat-statements'),
     `DO $preserved$ BEGIN
       IF pg_temp.managed_preserved_state() IS DISTINCT FROM (SELECT value FROM managed_preserved_snapshot) THEN
         RAISE EXCEPTION 'Auth, Storage or existing roles changed';
       END IF;
     END $preserved$;`,
-    'COMMIT;', "SELECT 'pg_stat_statements repair verified; tracking disabled' AS result;",
+    'COMMIT;',
+    "SELECT 'pg_stat_statements repair verified; tracking disabled' AS result;",
   ].join('\n');
 }

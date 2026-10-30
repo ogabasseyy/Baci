@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 import {
-  palette,
+  BRAND,
   RADIUS,
   SPACING,
   TYPOGRAPHY,
@@ -21,8 +21,13 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
     paddingTop: SPACING.lg,
     paddingBottom: SPACING.xl,
   },
-  scrollContent: { gap: SPACING.lg, paddingBottom: SPACING.md },
+  scrollContent: {
+    gap: SPACING.lg,
+    paddingBottom: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+  },
   header: {
+    paddingHorizontal: SPACING.lg,
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -182,7 +187,7 @@ export const walletSavingsProgressModalStyles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: palette.emerald[800],
+    backgroundColor: BRAND.primary,
     borderRadius: RADIUS.lg,
     justifyContent: 'center',
     minHeight: 48,

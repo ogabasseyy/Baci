@@ -427,9 +427,7 @@ describe('processScheduledNotificationClaims', () => {
 
     const results = await processScheduledNotificationClaims(client, [claim]);
 
-    expect(results).toEqual([
-      { id: claim.id, recipients: 1, status: 'sent' },
-    ]);
+    expect(results).toEqual([{ id: claim.id, recipients: 1, status: 'sent' }]);
     expect(calls).toContainEqual({
       args: expect.objectContaining({ p_outcome: 'sent' }),
       name: 'finalize_scheduled_admin_notification_v1',
@@ -479,9 +477,7 @@ describe('processScheduledNotificationClaims', () => {
 
     const results = await processScheduledNotificationClaims(client, [claim]);
 
-    expect(results).toEqual([
-      { id: claim.id, recipients: 0, status: 'sent' },
-    ]);
+    expect(results).toEqual([{ id: claim.id, recipients: 0, status: 'sent' }]);
     expect(calls).toContainEqual({
       args: expect.objectContaining({ p_outcome: 'sent' }),
       name: 'finalize_scheduled_admin_notification_v1',

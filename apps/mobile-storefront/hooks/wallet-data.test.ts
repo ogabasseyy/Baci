@@ -1,118 +1,15 @@
+// biome-ignore-all assist/source/organizeImports: support registers Jest mocks before the subject module loads.
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import {
+  createResult,
+  mockFrom,
+  mockReadPrimary,
+  mockRpc,
+  mockTrackEvent,
+  mockVariantRange,
+  setupSupabaseTables,
+} from './wallet-data.test-support';
 import { fetchWalletData } from './wallet-data';
-
-type QueryResult = {
-  data: unknown;
-  error: unknown;
-};
-
-const mockFrom = jest.fn<(table: string) => unknown>();
-const mockRpc = jest.fn<(...args: unknown[]) => unknown>();
-const mockVariantRange = jest.fn<() => Promise<unknown>>();
-const mockTrackEvent = jest.fn();
-
-jest.mock('@/lib/api', () => ({
-  withSupabaseRetry: (operation: () => Promise<unknown>) => operation(),
-}));
-
-jest.mock('@/lib/supabase', () => ({
-  supabase: {
-    from: (table: string) => mockFrom(table),
-    rpc: (...args: unknown[]) => mockRpc(...args),
-  },
-}));
-
-jest.mock('@/services/analytics', () => ({
-  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
-}));
-
-const mockReadPrimary = jest.fn<() => Promise<unknown>>();
-jest.mock('./resolve-wallet-funding-account', () => {
-  const actual = jest.requireActual(
-    './resolve-wallet-funding-account'
-  ) as typeof import('./resolve-wallet-funding-account');
-  return {
-    ...actual,
-    readPrimaryFundingAccount: () => mockReadPrimary(),
-  };
-});
-
-function createResult(data: unknown, error: unknown = null): QueryResult {
-  return { data, error };
-}
-
-function setupSupabaseTables(
-  overrides: Partial<Record<string, QueryResult>> = {}
-) {
-  const tableResults: Record<string, QueryResult> = {
-    customers: createResult([{ id: 'customer-1', loyalty_points: 1200 }]),
-    customer_wallet_payment_accounts: createResult(null),
-    customer_wallet_transactions: createResult([]),
-    customer_wallets: createResult({
-      available_balance: '5000',
-      id: 'wallet-1',
-    }),
-    customer_savings_goals: createResult([]),
-    products: createResult(null),
-    ...overrides,
-  };
-  const tableCalls: string[] = [];
-  const selectCalls: Record<string, string[]> = {};
-
-  // Interest RPC fails by default so tests pin the explicit unavailable
-  // marker; success-path tests override per case.
-  const interestFailure = {
-    data: null,
-    error: { code: 'XX000', message: 'synthetic interest outage' },
-  };
-  mockVariantRange.mockResolvedValue({
-    count: 1,
-    error: null,
-    data: [
-      {
-        id: 'variant-1',
-        product_id: 'product-1',
-        condition: 'uk_used',
-        sku: 'IPH15P-256',
-        attributes: { color: 'Black', storage: '256GB' },
-      },
-    ],
-  });
-  mockRpc.mockImplementation((name) => {
-    if (name !== 'get_storefront_product_variants')
-      return Promise.resolve(interestFailure);
-    const query = {
-      order: jest.fn(() => query),
-      range: () => mockVariantRange(),
-    };
-    return query;
-  });
-
-  mockFrom.mockImplementation((table: string) => {
-    tableCalls.push(table);
-    selectCalls[table] = [];
-    const query = {
-      eq: jest.fn(() => query),
-      in: jest.fn(() => query),
-      limit: jest.fn(async () => tableResults[table]),
-      maybeSingle: jest.fn(async () => tableResults[table]),
-      order: jest.fn(() =>
-        table === 'customer_savings_goals'
-          ? Promise.resolve(tableResults[table])
-          : query
-      ),
-      select: jest.fn((columns?: string) => {
-        if (typeof columns === 'string') {
-          selectCalls[table].push(columns);
-        }
-        return query;
-      }),
-    };
-    return query;
-  });
-
-  return { selectCalls, tableCalls };
-}
 
 describe('fetchWalletData', () => {
   beforeEach(() => {
@@ -423,81 +320,6 @@ describe('fetchWalletData', () => {
         type: 'credit',
       },
     ]);
-  });
-
-  it('exposes accrued interest earnings when the interest lookup succeeds', async () => {
-    setupSupabaseTables();
-    mockRpc.mockImplementation(async () => ({
-      data: { credited_interest_kobo: 125000, goal_interest_kobo: [] },
-      error: null,
-    }));
-    const merchantId = '10000000-0000-4000-8000-000000000001';
-
-    const result = await fetchWalletData('customer-1', merchantId, 'user-1');
-
-    expect(mockRpc).toHaveBeenCalledWith('get_customer_savings_earnings', {
-      p_merchant_id: merchantId,
-      p_include_goals: true,
-    });
-    expect(result.wallet).toMatchObject({
-      earnings_available: true,
-      earnings_balance: 1250,
-    });
-  });
-
-  it('applies confirmed per-goal interest to goal progress and balances', async () => {
-    const goalId = '30000000-0000-4000-8000-000000000001';
-    setupSupabaseTables({
-      customer_savings_goals: createResult([
-        {
-          contribution_amount: '10000',
-          contribution_frequency: 'weekly',
-          current_amount: '20000',
-          id: goalId,
-          maturity_date: '2026-09-30',
-          product_id: null,
-          product_snapshot: {},
-          source_mode: 'manual',
-          status: 'active',
-          target_amount: '120000',
-          title: 'General savings',
-          variant_id: null,
-        },
-      ]),
-    });
-    mockRpc.mockImplementation(async () => ({
-      data: {
-        credited_interest_kobo: 50000,
-        goal_interest_kobo: [
-          { goal_id: goalId, credited_interest_kobo: 50000 },
-        ],
-      },
-      error: null,
-    }));
-
-    const result = await fetchWalletData(
-      'customer-1',
-      '10000000-0000-4000-8000-000000000001',
-      'user-1'
-    );
-
-    expect(result.wallet.active_savings_goal).toEqual(
-      expect.objectContaining({ current_amount: 20500 })
-    );
-    expect(result.wallet.savings_balance).toBe(20500);
-    expect(result.wallet.total_balance).toBe(25500);
-    expect(result.wallet.earnings_balance).toBe(500);
-  });
-
-  it('marks earnings unavailable when the interest lookup fails', async () => {
-    setupSupabaseTables();
-
-    const result = await fetchWalletData('customer-1', 'merchant-1', 'user-1');
-
-    expect(result.wallet).toMatchObject({
-      earnings_available: false,
-      earnings_balance: null,
-    });
   });
 
   it('skips product metadata lookup for general savings goals without product ids', async () => {

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { officialManagedPgStatStatementsRepair } from './official-managed-prerequisites-pg-stat-statements-repair.mjs';
 import { officialManagedPrerequisites } from './official-managed-prerequisites.mjs';
+import { officialManagedPgStatStatementsRepair } from './official-managed-prerequisites-pg-stat-statements-repair.mjs';
+import { createPrerequisitesTestDatabase } from './official-managed-prerequisites-test-database.mjs';
 
 const read = (name) =>
   readFileSync(
@@ -20,62 +20,8 @@ test('official PG170006 local disposable replay and rejection matrix', {
   const socket =
     process.env.BACI_MANAGED_PREREQUISITES_DOCKER_SOCKET ??
     '/var/run/docker.sock';
-  assert.match(socket, /^\/[A-Za-z0-9_./-]+$/);
-  const docker = (args, input) =>
-    spawnSync('docker', ['--host', `unix://${socket}`, ...args], {
-      encoding: 'utf8',
-      input,
-      timeout: 60000,
-      maxBuffer: 1024 * 1024,
-      env: { PATH: process.env.PATH, HOME: process.env.HOME },
-    });
-  assert.equal(
-    docker(['image', 'inspect', image, '--format', '{{.Id}}']).status,
-    0,
-    'Pinned image must be pre-pulled; tests never pull'
-  );
-  const start = docker([
-    'run',
-    '-d',
-    '--pull',
-    'never',
-    '--network',
-    'none',
-    '--name',
-    name,
-    '--user',
-    'postgres',
-    '--tmpfs',
-    '/tmp:rw,mode=1777',
-    '--entrypoint',
-    '/bin/sh',
-    image,
-    '-c',
-      'initdb -D /tmp/managed-pg -A trust --no-locale >/tmp/init.log && exec postgres -D /tmp/managed-pg -k /tmp -c listen_addresses= -c shared_preload_libraries=pg_cron,pg_net,pg_stat_statements -c pg_stat_statements.track=none -c pg_stat_statements.track_utility=off -c cron.launch_active_jobs=off -c pg_net.database_name=baci_disabled_background -c wal_level=logical -c log_min_messages=panic',
-  ]);
-  assert.equal(start.status, 0, start.stderr);
-  const query = (sql) =>
-    docker(
-      [
-        'exec',
-        '-i',
-        name,
-        'psql',
-        '-X',
-        '-q',
-        '-A',
-        '-t',
-        '-v',
-        'ON_ERROR_STOP=1',
-        '-h',
-        '/tmp',
-        '-U',
-        'postgres',
-        '-d',
-        'postgres',
-      ],
-      sql
-    );
+  const database = createPrerequisitesTestDatabase({ image, socket, name });
+  const { docker, query } = database;
   try {
     assert.equal(
       docker([
@@ -216,25 +162,65 @@ test('official PG170006 local disposable replay and rejection matrix', {
         );
       }
     );
-    await context.test('baseline query-performance view requires installed pg_stat_statements, not just preloading', () => {
-      const baseline = readFileSync(new URL('../../../supabase/migrations/20260418000000_baseline.sql', import.meta.url), 'utf8');
-      const view = baseline.match(/CREATE OR REPLACE VIEW "public"\."admin_query_performance"[\s\S]*?LIMIT 50;/)?.[0];
-      assert.ok(view);
-      const missing = query(`BEGIN; DROP EXTENSION IF EXISTS pg_stat_statements; ${view}`);
-      assert.equal(missing.status, 3);
-      assert.match(missing.stderr, /relation "extensions.pg_stat_statements" does not exist/);
-      const installed = query(`BEGIN; ${view} SELECT count(*) FROM public.admin_query_performance; ROLLBACK;`);
-      assert.equal(installed.status, 0, installed.stderr);
-      assert.equal(query('DROP EXTENSION pg_stat_statements; CREATE SCHEMA hosted_savings_install_private;').status, 0);
-      const repair = officialManagedPgStatStatementsRepair(query('SELECT system_identifier FROM pg_control_system();').stdout.trim());
-      const sessionOverride = query("SET pg_stat_statements.track = 'none';\n" + repair);
-      assert.equal(sessionOverride.status, 3);
-      assert.match(sessionOverride.stderr, /Persistent pg_stat_statements tracking disablement required/);
-      const repaired = query(repair);
-      assert.equal(repaired.status, 0, repaired.stderr);
-      assert.equal(query(`BEGIN; ${view} SELECT count(*) FROM public.admin_query_performance; ROLLBACK;`).status, 0);
-      assert.equal(query('DROP SCHEMA hosted_savings_install_private;').status, 0);
-    });
+    await context.test(
+      'baseline query-performance view requires installed pg_stat_statements, not just preloading',
+      () => {
+        const baseline = readFileSync(
+          new URL(
+            '../../../supabase/migrations/20260418000000_baseline.sql',
+            import.meta.url
+          ),
+          'utf8'
+        );
+        const view = baseline.match(
+          /CREATE OR REPLACE VIEW "public"\."admin_query_performance"[\s\S]*?LIMIT 50;/
+        )?.[0];
+        assert.ok(view);
+        const missing = query(
+          `BEGIN; DROP EXTENSION IF EXISTS pg_stat_statements; ${view}`
+        );
+        assert.equal(missing.status, 3);
+        assert.match(
+          missing.stderr,
+          /relation "extensions.pg_stat_statements" does not exist/
+        );
+        const installed = query(
+          `BEGIN; ${view} SELECT count(*) FROM public.admin_query_performance; ROLLBACK;`
+        );
+        assert.equal(installed.status, 0, installed.stderr);
+        assert.equal(
+          query(
+            'DROP EXTENSION pg_stat_statements; CREATE SCHEMA hosted_savings_install_private;'
+          ).status,
+          0
+        );
+        const repair = officialManagedPgStatStatementsRepair(
+          query(
+            'SELECT system_identifier FROM pg_control_system();'
+          ).stdout.trim()
+        );
+        const sessionOverride = query(
+          "SET pg_stat_statements.track = 'none';\n" + repair
+        );
+        assert.equal(sessionOverride.status, 3);
+        assert.match(
+          sessionOverride.stderr,
+          /Persistent pg_stat_statements tracking disablement required/
+        );
+        const repaired = query(repair);
+        assert.equal(repaired.status, 0, repaired.stderr);
+        assert.equal(
+          query(
+            `BEGIN; ${view} SELECT count(*) FROM public.admin_query_performance; ROLLBACK;`
+          ).status,
+          0
+        );
+        assert.equal(
+          query('DROP SCHEMA hosted_savings_install_private;').status,
+          0
+        );
+      }
+    );
     await context.test(
       'RLS is default deny and unsupported operations fail explicitly',
       () => {
@@ -281,10 +267,6 @@ test('official PG170006 local disposable replay and rejection matrix', {
       }
     );
   } finally {
-    assert.equal(
-      docker(['rm', '-f', '-v', name]).status,
-      0,
-      'Disposable test container cleanup failed'
-    );
+    database.cleanup();
   }
 });

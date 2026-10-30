@@ -74,12 +74,17 @@ function SavingsPlanFundingScreen() {
     (data?.wallet.active_savings_goal?.id === goalId
       ? data.wallet.active_savings_goal
       : null);
-  const remainingAmount = activeGoal
-    ? Math.max(0, activeGoal.target_amount - activeGoal.current_amount)
-    : 0;
+  const progressAvailable = data?.wallet.earnings_available === true;
+  const remainingAmount =
+    activeGoal && progressAvailable
+      ? Math.max(0, activeGoal.target_amount - activeGoal.current_amount)
+      : null;
   const requestedAmount = parseRequestedAmount(stringParam(params.amount));
   const amount =
-    requestedAmount !== null && requestedAmount <= remainingAmount
+    progressAvailable &&
+    remainingAmount !== null &&
+    requestedAmount !== null &&
+    requestedAmount <= remainingAmount
       ? requestedAmount
       : null;
   const goalMatches =
@@ -87,13 +92,16 @@ function SavingsPlanFundingScreen() {
     validGoalId(goalId) &&
     activeGoal?.id === goalId &&
     activeGoal.source_mode === 'manual' &&
-    activeGoal.status === 'active';
+    activeGoal.status === 'active' &&
+    progressAvailable;
   const isCurrentPlan = goalMatches && amount !== null;
   // The goal matches but the cached remaining balance is lower than the linked
   // amount: the link may be fine and the wallet cache stale, so prompt a
   // refresh instead of reporting the link as dead.
   const amountExceedsCachedRemaining =
     goalMatches &&
+    progressAvailable &&
+    remainingAmount !== null &&
     requestedAmount !== null &&
     requestedAmount > remainingAmount;
   const funding = useSavingsPlanFunding({
@@ -145,13 +153,15 @@ function SavingsPlanFundingScreen() {
           </Text>
           {!isCurrentPlan || amount === null || !activeMerchantId ? (
             <Text style={[styles.copy, { color: colors.error }]}>
-              {amountExceedsCachedRemaining && activeMerchantId
-                ? 'This funding link asks for more than your cached plan balance shows. Refresh plan progress below, then open the link again.'
-                : !data?.wallet.active_savings_goal &&
-                    !data?.wallet.savings_goals?.length &&
-                    activeMerchantId
-                  ? 'We could not find your active savings plan in the cached wallet. Refresh plan progress below — if the plan still does not appear, return to savings and choose the plan again.'
-                  : 'This funding link no longer matches your active savings plan. Return to savings and choose the plan again.'}
+              {!progressAvailable
+                ? 'Savings progress is unavailable because earnings could not be confirmed. Refresh plan progress before using this funding link.'
+                : amountExceedsCachedRemaining && activeMerchantId
+                  ? 'This funding link asks for more than your cached plan balance shows. Refresh plan progress below, then open the link again.'
+                  : !data?.wallet.active_savings_goal &&
+                      !data?.wallet.savings_goals?.length &&
+                      activeMerchantId
+                    ? 'We could not find your active savings plan in the cached wallet. Refresh plan progress below — if the plan still does not appear, return to savings and choose the plan again.'
+                    : 'This funding link no longer matches your active savings plan. Return to savings and choose the plan again.'}
             </Text>
           ) : (
             <SavingsPlanFundingDetails

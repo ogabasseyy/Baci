@@ -49,6 +49,9 @@ export function useWalletFundRedeemPanels({
     setShowFundPanel(false);
     setFundAmount('');
     setFundReturnTo(walletReturnTo);
+    void Promise.resolve()
+      .then(() => refetchWalletBalance?.())
+      .catch(() => undefined);
   };
   const resetRedeemPanel = () => {
     setShowRedeemPanel(false);

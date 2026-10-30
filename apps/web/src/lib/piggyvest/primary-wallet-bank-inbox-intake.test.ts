@@ -77,6 +77,18 @@ it('accepts a retained bank key during rotation without queueing twice', async (
   expect(result.response?.status).toBe(200);
   expect(mocks.enqueue).toHaveBeenCalledTimes(1);
 });
+it('stores uppercase valid HMACs in canonical lowercase for replay', async () => {
+  const result = await dispatchPrimaryWalletBankInboxIntake({
+    rawBody: fixture.rawBody,
+    signature: fixture.signature.toUpperCase(),
+    env: fixture.env,
+  });
+  expect(result.outcome).toBe('accepted');
+  expect(mocks.enqueue).toHaveBeenCalledWith({
+    rawHex: fixture.rawBody.toString('hex'),
+    signature: fixture.signature,
+  });
+});
 it('allows unrelated legacy inflows only after authoritative ownership lookup says not_handled', async () => {
   mocks.enqueue.mockResolvedValue('not_handled');
   expect(

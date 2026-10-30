@@ -1,31 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { verifyPrimaryWalletSavingsProof } from './primary-wallet-savings-proof';
-
-const reservation = {
-  operationId: '11111111-1111-4111-8111-111111111111',
-  goalId: '22222222-2222-4222-8222-222222222222',
-  amountKobo: 10000,
-  sourceWalletId: 'source-wallet',
-  destinationWalletId: 'savings-wallet',
-  reference: 'pvb-save-operation',
-  businessId: 'business',
-  providerCustomerId: 'source-customer',
-};
-const response = {
-  status: true,
-  data: {
-    status: 'successful',
-    id: 'provider-transaction',
-    internal_reference: 'provider-transaction',
-    reference: 'provider-reference',
-    third_party_reference: reservation.reference,
-    amount: 10000,
-    fee: 0,
-    customer_id: 'source-customer',
-    source_wallet: 'source-wallet',
-    destination_wallet: 'savings-wallet',
-  },
-};
+import {
+  identityEvidence,
+  reservation,
+  response,
+  verifyPrimaryWalletSavingsProof,
+} from './primary-wallet-savings-proof.test-fixture';
 
 describe('primary wallet savings settlement proof', () => {
   it('accepts an exact provider transaction without using provider reference as our reference', () => {
@@ -47,7 +26,6 @@ describe('primary wallet savings settlement proof', () => {
     { destination_wallet: 'another-goal' },
     { third_party_reference: 'another-operation' },
     { customer_id: 'another-customer' },
-    { customer_id: 'business' },
     { fee: 1 },
     { currency: 'USD' },
     { business_id: 'another-business' },
@@ -63,10 +41,14 @@ describe('primary wallet savings settlement proof', () => {
 
   it('authenticates a failed transfer against the same bindings without verifying settlement', () => {
     expect(
-      verifyPrimaryWalletSavingsProof(reservation, {
-        ...response,
-        data: { ...response.data, status: 'failed' },
-      })
+      verifyPrimaryWalletSavingsProof(
+        reservation,
+        {
+          ...response,
+          data: { ...response.data, status: 'failed' },
+        },
+        identityEvidence('failed')
+      )
     ).toEqual({
       status: 'failed',
       providerTransactionId: 'provider-transaction',
@@ -114,51 +96,96 @@ describe('primary wallet savings settlement proof', () => {
       });
   });
 
-  it('settles on the transaction-verify TSQ success bound to the reservation', () => {
-    // The verify endpoint never returns the rich envelope: without TSQ
-    // acceptance every reconciled contribution would hold pending
-    // forever. The unguessable reference plus the amount, over the
-    // authenticated provider channel, is the success signal.
+  it.each([
+    'success',
+    'failed',
+  ])('does not settle or release on production TSQ-only %s without transaction identity', (status) => {
     expect(
       verifyPrimaryWalletSavingsProof(reservation, {
         status: true,
         data: {
-          status: 'success',
+          status,
           reference: reservation.reference,
           amount: 10000,
         },
       })
-    ).toEqual({
+    ).toEqual({ status: 'unverified' });
+  });
+
+  it('retains exact rich production success proof', () => {
+    expect(
+      verifyPrimaryWalletSavingsProof(reservation, response)
+    ).toMatchObject({
       status: 'verified',
-      providerTransactionId: reservation.reference,
-      operationId: reservation.operationId,
+      providerTransactionId: 'provider-transaction',
       reference: reservation.reference,
       amountKobo: 10000,
-      sourceWalletId: 'source-wallet',
-      destinationWalletId: 'savings-wallet',
-      businessId: 'business',
+      sourceWalletId: reservation.sourceWalletId,
+      destinationWalletId: reservation.destinationWalletId,
     });
   });
 
-  it('releases the hold on a TSQ failure bound to the reservation', () => {
+  it.each([
+    { transaction: { category: 'bank-outflow' } },
+    { transaction: { source_wallet: 'another-wallet' } },
+    { wallet: { id: 'another-wallet' } },
+    { wallet: { business_id: 'another-business' } },
+    { wallet: { api_customer_id: 'another-customer' } },
+  ])('requires direct production identity and wallet scope: %j', (change) => {
+    const identityEvidence = {
+      environment: 'production',
+      wallet: {
+        id: reservation.sourceWalletId,
+        business_id: reservation.businessId,
+        api_customer_id: reservation.providerCustomerId,
+        currency: 'NGN',
+        status: 'active',
+        is_frozen: false,
+        ...change.wallet,
+      },
+      transaction: {
+        id: response.data.id,
+        customer_id: 'business',
+        source_wallet: reservation.sourceWalletId,
+        destination_wallet: reservation.destinationWalletId,
+        status: 'successful',
+        amount: reservation.amountKobo,
+        fee: 0,
+        reference: response.data.reference,
+        third_party_reference: reservation.reference,
+        internal_reference: response.data.id,
+        category: 'p2p',
+        ...change.transaction,
+      },
+    };
     expect(
-      verifyPrimaryWalletSavingsProof(reservation, {
-        status: true,
-        data: {
-          status: 'failed',
-          reference: reservation.reference,
-          amount: 10000,
+      verifyPrimaryWalletSavingsProof(reservation, response, identityEvidence)
+    ).toEqual({ status: 'unverified' });
+  });
+
+  it('does not accept a production TSQ response without direct transaction evidence', () => {
+    expect(
+      verifyPrimaryWalletSavingsProof(reservation, response, null)
+    ).toEqual({ status: 'unverified' });
+  });
+
+  it('retains exact rich production failure proof for hold release', () => {
+    expect(
+      verifyPrimaryWalletSavingsProof(
+        reservation,
+        {
+          ...response,
+          data: { ...response.data, status: 'failed' },
         },
-      })
-    ).toEqual({
+        identityEvidence('failed')
+      )
+    ).toMatchObject({
       status: 'failed',
-      providerTransactionId: reservation.reference,
-      operationId: reservation.operationId,
+      providerTransactionId: 'provider-transaction',
       reference: reservation.reference,
       amountKobo: 10000,
-      sourceWalletId: 'source-wallet',
-      destinationWalletId: 'savings-wallet',
-      businessId: 'business',
+      sourceWalletId: reservation.sourceWalletId,
+      destinationWalletId: reservation.destinationWalletId,
     });
   });
 

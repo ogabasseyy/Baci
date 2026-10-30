@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
 import test from 'node:test';
 import { CONTRACT_E2E } from './constants.mjs';
+import { createContractHarness } from './contract-harness.mjs';
 import { createSourceLoader } from './source-loader.mjs';
 
 test('real receiver replay refuses bad economics before executing a financial statement', async () => {
@@ -43,4 +44,25 @@ test('real receiver replay refuses bad economics before executing a financial st
     /Replay dispatch quarantined: conflict/
   );
   assert.equal(executed, false);
+});
+
+test('legacy signed payout with explicit USD currency cannot credit an NGN savings policy', async () => {
+  const harness = createContractHarness();
+  try {
+    const payout = structuredClone(harness.payout);
+    payout.eventData.currency = 'USD';
+
+    await harness.transport.submit(Buffer.from(JSON.stringify(payout)));
+    await harness.worker.run();
+    const snapshot = harness.snapshot();
+
+    assert.equal(snapshot.principalKobo, 10000);
+    assert.equal(snapshot.paidInterestKobo, 0);
+    assert.equal(snapshot.interestReceipts, 0);
+    assert.equal(snapshot.allocations, 0);
+    assert.equal(snapshot.notifications, 0);
+    assert.equal(snapshot.deliveries, 0);
+  } finally {
+    harness.close();
+  }
 });

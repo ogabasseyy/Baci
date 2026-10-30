@@ -1,22 +1,23 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Image } from 'expo-image';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import { ModalSheet } from '@/components/ui/ModalSheet';
-import type Colors from '@/constants/Colors';
+import { Pressable, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DraggableModalSheet } from '@/components/ui/DraggableModalSheet';
+import { BRAND, type default as Colors } from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
-import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { formatProductConditionDisplay } from '@/types/product';
 import { getSavingsGoalImageSource } from './get-savings-goal-image-source';
 import { getSavingsProgress } from './get-savings-progress';
-import { WalletPendingSavingsContribution } from './WalletPendingSavingsContribution';
-import { WalletSavingsContributionFlow } from './WalletSavingsContributionFlow';
-import { WalletSavingsPlanFunding } from './WalletSavingsPlanFunding';
+import { WalletSavingsContributionSection } from './WalletSavingsContributionSection';
+import { WalletSavingsProgressMetrics } from './WalletSavingsProgressMetrics';
 import { walletSavingsProgressModalStyles as styles } from './wallet-savings-progress-modal.styles';
 
 type WalletColors = (typeof Colors)['light'];
 
 type WalletSavingsProgressModalProps = {
+  embedded?: boolean;
+  progressAvailable?: boolean;
   addAmount: string;
   colors: WalletColors;
   goal: WalletActiveSavingsGoal | null;
@@ -32,6 +33,7 @@ type WalletSavingsProgressModalProps = {
   onResolveVariant?: () => void;
   visible: boolean;
   walletBalance: number;
+  usesWalletBankTransfer?: boolean;
 };
 
 export function WalletSavingsProgressModal({
@@ -50,41 +52,47 @@ export function WalletSavingsProgressModal({
   onResolveVariant,
   visible,
   walletBalance,
+  usesWalletBankTransfer = false,
+  embedded = false,
+  progressAvailable = false,
 }: WalletSavingsProgressModalProps) {
+  const insets = useSafeAreaInsets();
   if (!goal) {
     return null;
   }
 
-  const { milestone, percent } = getSavingsProgress(goal);
+  const { milestone, percent, percentLabel } = getSavingsProgress(goal);
   const amountLeft = Math.max(0, goal.target_amount - goal.current_amount);
   const conditionLabel = formatProductConditionDisplay(goal.product_condition);
   const productImageSource = getSavingsGoalImageSource(goal, 170);
-  const usesPlanFunding = isHostedStagingTestPaymentsEnabled();
+  const usesPlanFunding =
+    !usesWalletBankTransfer && isHostedStagingTestPaymentsEnabled();
   const canAddToSavings =
     (goal.source_mode === 'manual' || usesPlanFunding) &&
     goal.status !== 'completed';
-  const unavailableContributionMessage =
-    goal.status === 'completed'
-      ? 'This savings goal is complete.'
-      : 'This goal is funded by scheduled auto-debit.';
 
   return (
-    <ModalSheet
+    <DraggableModalSheet
+      embedded={embedded}
       visible={visible}
-      animationType="slide"
-      backdropStyle={styles.backdrop}
-      cardStyle={[styles.card, { backgroundColor: colors.background }]}
-      keyboardAutomaticOffset
-      keyboardSurfaceColor={colors.background}
-      onBackdropPress={onClose}
-      onRequestClose={onClose}
+      backgroundColor={colors.background}
+      borderColor={BRAND.primary}
+      handleColor={BRAND.primary}
+      onClose={onClose}
     >
-      <View style={styles.header}>
-        <View style={styles.titleRow}>
-          <Text style={[styles.title, { color: colors.text }]}>
-            {canAddToSavings ? 'Add to savings' : 'Your savings plan'}
-          </Text>
-        </View>
+      <View
+        style={[
+          styles.header,
+          canAddToSavings && { justifyContent: 'flex-end' },
+        ]}
+      >
+        {!canAddToSavings ? (
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, { color: colors.text }]}>
+              Your savings plan
+            </Text>
+          </View>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close savings progress"
@@ -95,11 +103,14 @@ export function WalletSavingsProgressModal({
         </Pressable>
       </View>
 
-      <ScrollView
+      <BottomSheetScrollView
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
       >
         <View style={styles.contentRow}>
           <View style={[styles.devicePane, { backgroundColor: colors.card }]}>
@@ -124,13 +135,17 @@ export function WalletSavingsProgressModal({
 
           <View style={styles.progressPane}>
             <View style={styles.milestoneRow}>
-              <Text style={[styles.goalTitle, { color: colors.text }]}>
+              <Text
+                style={[styles.goalTitle, { color: colors.text }]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
                 {goal.title}
               </Text>
               <Text
                 style={[styles.milestoneText, { color: colors.textSecondary }]}
               >
-                {milestone}
+                {progressAvailable ? milestone : 'Progress unavailable'}
               </Text>
             </View>
 
@@ -145,16 +160,17 @@ export function WalletSavingsProgressModal({
                   Condition: {conditionLabel}
                 </Text>
               ) : null}
-              {goal.product_variant_label ? (
+              {goal.product_variant_label?.split('·').map((attribute) => (
                 <Text
+                  key={attribute}
                   style={[
                     styles.metaPill,
                     { backgroundColor: colors.muted, color: colors.text },
                   ]}
                 >
-                  {goal.product_variant_label}
+                  {attribute.trim()}
                 </Text>
-              ) : null}
+              ))}
             </View>
             {goal.selection_unresolved ? (
               <Text
@@ -188,70 +204,16 @@ export function WalletSavingsProgressModal({
             ) : null}
           </View>
         </View>
-        <View
-          style={[
-            styles.progressCard,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <View style={styles.amountRow}>
-            <Text style={[styles.amountLeft, { color: colors.text }]}>
-              {formatNgnCurrency(goal.current_amount)} saved
-            </Text>
-            <Text
-              style={[styles.walletBalance, { color: colors.textSecondary }]}
-            >
-              {formatNgnCurrency(goal.target_amount)} target
-            </Text>
-          </View>
-          <View
-            accessibilityRole="progressbar"
-            accessibilityLabel="Savings plan progress details"
-            accessibilityValue={{ max: 100, min: 0, now: percent }}
-            style={[
-              styles.progressTrack,
-              { backgroundColor: colors.primaryLowOpacity },
-            ]}
-          >
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${percent}%`, backgroundColor: colors.primary },
-              ]}
-            />
-          </View>
-          <View style={styles.amountRow}>
-            <Text
-              style={[styles.walletBalance, { color: colors.textSecondary }]}
-            >
-              {formatNgnCurrency(amountLeft)} left
-            </Text>
-            <Text
-              style={[styles.walletBalance, { color: colors.textSecondary }]}
-            >
-              <Text style={{ color: colors.primary }}>{percent}%</Text> complete
-            </Text>
-          </View>
-        </View>
-        {hasPendingContribution ? (
-          <WalletPendingSavingsContribution
-            colors={colors}
-            isChecking={isAdding}
-            onCheck={onAddSavings}
-          />
-        ) : canAddToSavings && usesPlanFunding ? (
-          visible ? (
-            <WalletSavingsPlanFunding
-              key={goal.id}
-              addAmount={addAmount}
-              colors={colors}
-              goal={goal}
-              onAddAmountChange={onAddAmountChange}
-              onRefreshWallet={onRefreshWallet}
-            />
-          ) : null
-        ) : canAddToSavings ? (
-          <WalletSavingsContributionFlow
+        <WalletSavingsProgressMetrics
+          amountLeft={amountLeft}
+          colors={colors}
+          goal={goal}
+          percent={percent}
+          percentLabel={percentLabel}
+          progressAvailable={progressAvailable}
+        />
+        {progressAvailable ? (
+          <WalletSavingsContributionSection
             addAmount={addAmount}
             colors={colors}
             isAdding={isAdding}
@@ -261,12 +223,15 @@ export function WalletSavingsProgressModal({
             onFundWallet={onFundWallet}
             remainingAmount={amountLeft}
             walletBalance={walletBalance}
+            goal={goal}
+            canAdd={canAddToSavings}
+            hasPendingContribution={hasPendingContribution}
+            usesPlanFunding={usesPlanFunding}
+            usesWalletBankTransfer={usesWalletBankTransfer}
+            visible={visible}
+            onRefreshWallet={onRefreshWallet}
           />
-        ) : (
-          <Text style={[styles.autoDebitHint, { color: colors.textSecondary }]}>
-            {unavailableContributionMessage}
-          </Text>
-        )}
+        ) : null}
         {canAddToSavings ||
         (goal.selection_unresolved &&
           (goal.status !== 'completed' ||
@@ -289,7 +254,9 @@ export function WalletSavingsProgressModal({
             </Text>
           </Pressable>
         ) : null}
-      </ScrollView>
-    </ModalSheet>
+      </BottomSheetScrollView>
+    </DraggableModalSheet>
   );
 }
+
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';

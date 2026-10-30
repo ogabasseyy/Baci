@@ -12,8 +12,35 @@ const reservation = {
   providerCustomerId: 'source-customer',
   reference: 'our-reference',
 };
+function productionIdentity(status: 'successful' | 'failed' = 'successful') {
+  return {
+    environment: 'production',
+    wallet: {
+      id: 'source',
+      business_id: 'business',
+      api_customer_id: 'source-customer',
+      currency: 'NGN',
+      status: 'active',
+      is_frozen: false,
+    },
+    transaction: {
+      id: 'transaction',
+      category: 'p2p',
+      status,
+      customer_id: 'business',
+      source_wallet: 'source',
+      destination_wallet: 'destination',
+      amount: 2000,
+      fee: 0,
+      reference: 'provider-reference',
+      third_party_reference: 'our-reference',
+      internal_reference: 'transaction',
+    },
+  };
+}
 function ports() {
   return {
+    environment: 'production' as const,
     loadDispatched: vi.fn().mockResolvedValue(reservation),
     queryProvider: vi.fn().mockResolvedValue({
       status: true,
@@ -25,11 +52,12 @@ function ports() {
         third_party_reference: 'our-reference',
         amount: 2000,
         fee: 0,
-        customer_id: 'source-customer',
+        customer_id: 'business',
         source_wallet: 'source',
         destination_wallet: 'destination',
       },
     }),
+    resolveIdentity: vi.fn().mockResolvedValue(productionIdentity()),
     settle: vi.fn().mockResolvedValue('confirmed'),
     release: vi.fn().mockResolvedValue('released'),
   };
@@ -86,6 +114,56 @@ describe('primary savings reconciliation', () => {
     ).toEqual({ status: 'pending' });
     expect(dependencies.settle).not.toHaveBeenCalled();
   });
+  it.each([
+    'success',
+    'failed',
+  ] as const)('keeps production TSQ-only %s pending without settling or releasing', async (status) => {
+    const dependencies = ports();
+    dependencies.queryProvider.mockResolvedValue({
+      status: true,
+      data: {
+        status,
+        reference: reservation.reference,
+        amount: reservation.amountKobo,
+      },
+    });
+
+    expect(
+      await reconcilePrimaryWalletSavings(operationId, dependencies)
+    ).toEqual({ status: 'pending' });
+    expect(dependencies.resolveIdentity).toHaveBeenCalledTimes(1);
+    expect(dependencies.settle).not.toHaveBeenCalled();
+    expect(dependencies.release).not.toHaveBeenCalled();
+  });
+  it('keeps a rich business-scoped transfer pending when wallet identity corroboration is incomplete', async () => {
+    const dependencies = ports();
+    dependencies.queryProvider.mockResolvedValue({
+      status: true,
+      data: {
+        status: 'successful',
+        id: 'transaction',
+        internal_reference: 'transaction',
+        reference: 'provider-reference',
+        third_party_reference: 'our-reference',
+        amount: 2000,
+        fee: 0,
+        customer_id: 'business',
+        source_wallet: 'source',
+        destination_wallet: 'destination',
+      },
+    });
+    const resolveIdentity = vi.fn().mockResolvedValue(null);
+
+    expect(
+      await reconcilePrimaryWalletSavings(operationId, {
+        ...dependencies,
+        resolveIdentity,
+      })
+    ).toEqual({ status: 'pending' });
+    expect(resolveIdentity).toHaveBeenCalledTimes(1);
+    expect(dependencies.settle).not.toHaveBeenCalled();
+    expect(dependencies.release).not.toHaveBeenCalled();
+  });
   it('does not claim confirmation when the atomic settlement is unconfirmed', async () => {
     const dependencies = ports();
     dependencies.settle.mockRejectedValue(new Error('private database error'));
@@ -109,11 +187,14 @@ describe('primary savings reconciliation', () => {
         third_party_reference: 'our-reference',
         amount: 2000,
         fee: 0,
-        customer_id: 'source-customer',
+        customer_id: 'business',
         source_wallet: 'source',
         destination_wallet: 'destination',
       },
     });
+    dependencies.resolveIdentity.mockResolvedValue(
+      productionIdentity('failed')
+    );
     dependencies.release.mockResolvedValue(outcome);
     expect(
       await reconcilePrimaryWalletSavings(operationId, dependencies)
@@ -139,11 +220,44 @@ describe('primary savings reconciliation', () => {
         third_party_reference: 'another-operation',
         amount: 2000,
         fee: 0,
-        customer_id: 'source-customer',
+        customer_id: 'business',
         source_wallet: 'source',
         destination_wallet: 'destination',
       },
     });
+    dependencies.resolveIdentity.mockResolvedValue(
+      productionIdentity('failed')
+    );
+    expect(
+      await reconcilePrimaryWalletSavings(operationId, dependencies)
+    ).toEqual({ status: 'pending' });
+    expect(dependencies.settle).not.toHaveBeenCalled();
+    expect(dependencies.release).not.toHaveBeenCalled();
+  });
+  it('keeps rich staging failure pending without releasing the hold', async () => {
+    const dependencies = {
+      ...ports(),
+      environment: 'staging' as const,
+    };
+    dependencies.queryProvider.mockResolvedValue({
+      status: true,
+      data: {
+        status: 'failed',
+        id: 'transaction',
+        internal_reference: 'transaction',
+        reference: 'provider-reference',
+        third_party_reference: 'our-reference',
+        amount: 2000,
+        fee: 0,
+        customer_id: 'business',
+        source_wallet: 'source',
+        destination_wallet: 'destination',
+      },
+    });
+    dependencies.resolveIdentity.mockResolvedValue({
+      environment: 'staging',
+    });
+
     expect(
       await reconcilePrimaryWalletSavings(operationId, dependencies)
     ).toEqual({ status: 'pending' });
@@ -163,11 +277,14 @@ describe('primary savings reconciliation', () => {
           third_party_reference: 'our-reference',
           amount: 2000,
           fee: 0,
-          customer_id: 'source-customer',
+          customer_id: 'business',
           source_wallet: 'source',
           destination_wallet: 'destination',
         },
       });
+      dependencies.resolveIdentity.mockResolvedValue(
+        productionIdentity('failed')
+      );
       if (outcome instanceof Error)
         dependencies.release.mockRejectedValue(outcome);
       else dependencies.release.mockResolvedValue(outcome);

@@ -1,5 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import type { ComponentProps, ReactNode } from 'react';
+import { type ComponentProps, type ReactNode, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { styles } from './styles';
 
@@ -36,6 +36,7 @@ export function SettingsSectionRow({
   subtitle,
   subtitleColor,
 }: SectionRowProps) {
+  const [pressed, setPressed] = useState(false);
   const computedRole = accessibilityRole ?? (onPress ? 'button' : undefined);
   const computedSubtitleColor = subtitleColor ?? labelColor;
 
@@ -43,9 +44,11 @@ export function SettingsSectionRow({
     <Pressable
       disabled={!onPress}
       onPress={onPress}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole={computedRole}
-      style={({ pressed }) => [
+      style={[
         styles.row,
         borderBottom && styles.rowBorder,
         borderBottom && borderColor ? { borderBottomColor: borderColor } : null,

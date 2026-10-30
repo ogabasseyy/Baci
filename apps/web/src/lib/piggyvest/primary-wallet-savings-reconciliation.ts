@@ -11,10 +11,15 @@ type FailedProof = Extract<
   { status: 'failed' }
 >;
 interface Ports {
+  environment: 'staging' | 'production';
   loadDispatched: (operationId: string) => Promise<unknown>;
   queryProvider: (selection: {
     reference: string;
     walletId: string;
+  }) => Promise<unknown>;
+  resolveIdentity?: (selection: {
+    reservation: unknown;
+    providerResponse: unknown;
   }) => Promise<unknown>;
   settle: (
     proof: VerifiedProof
@@ -39,7 +44,24 @@ export async function reconcilePrimaryWalletSavings(
       reference: reservation.data.reference,
       walletId: reservation.data.sourceWalletId,
     });
-    const proof = verifyPrimaryWalletSavingsProof(reservation.data, response);
+    let proof = verifyPrimaryWalletSavingsProof(
+      reservation.data,
+      response,
+      undefined,
+      ports.environment
+    );
+    if (proof.status === 'unverified' && ports.resolveIdentity) {
+      const identity = await ports.resolveIdentity({
+        reservation: reservation.data,
+        providerResponse: response,
+      });
+      proof = verifyPrimaryWalletSavingsProof(
+        reservation.data,
+        response,
+        identity,
+        ports.environment
+      );
+    }
     if (proof.status === 'failed') {
       const released = await ports.release(proof);
       // The mobile status schema accepts only pending/confirmed/

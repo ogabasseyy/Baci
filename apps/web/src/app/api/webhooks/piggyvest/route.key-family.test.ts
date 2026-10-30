@@ -3,6 +3,8 @@ import { beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createServiceClient: vi.fn(),
+  interestInbox: vi.fn(),
+  recordQuarantineEvent: vi.fn(),
   processPiggyvestEvent: vi.fn(),
   families: ['interest'] as string[],
 }));
@@ -20,9 +22,17 @@ vi.mock('@/env', () => ({
 vi.mock('@/lib/supabase/service', () => ({
   createServiceClient: () => mocks.createServiceClient(),
 }));
+vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-intake', () => ({
+  dispatchPrimaryWalletPaidInterestInbox: mocks.interestInbox,
+}));
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: (...args: unknown[]) =>
     mocks.processPiggyvestEvent(...args),
+}));
+vi.mock('@/lib/piggyvest/event-quarantine', () => ({
+  digestRawBody: () => 'a'.repeat(64),
+  recordQuarantineEvent: (...args: unknown[]) =>
+    mocks.recordQuarantineEvent(...args),
 }));
 
 import { POST } from './route';
@@ -66,33 +76,30 @@ function createRequest(rawBody: string): NextRequest {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.families = ['interest'];
+  mocks.interestInbox.mockResolvedValue('quarantined');
+  mocks.recordQuarantineEvent.mockResolvedValue('recorded');
   mocks.processPiggyvestEvent.mockResolvedValue('processed');
 });
 
-it('quarantines a legacy event signed solely by a primary family key', async () => {
-  const { query, upsert } = chainable({
-    data: [{ body_digest: 'synthetic-digest' }],
-    error: null,
-  });
-  const from = vi.fn(() => query);
-  mocks.createServiceClient.mockReturnValue({ from });
-
-  const response = await POST(createRequest(JSON.stringify(restrictionEvent)));
+it('durably key-family quarantines a known non-interest event signed only by the interest family', async () => {
+  const rawBody = JSON.stringify(restrictionEvent);
+  const response = await POST(createRequest(rawBody));
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({
     received: true,
     quarantined: true,
   });
-  expect(from).toHaveBeenCalledWith('piggyvest_event_quarantine');
-  expect(upsert).toHaveBeenCalledWith(
-    expect.objectContaining({
-      reason: 'key-family',
-      event_type: 'restriction-created.success',
-    }),
-    { onConflict: 'body_digest', ignoreDuplicates: true }
-  );
+  expect(mocks.recordQuarantineEvent).toHaveBeenCalledWith(undefined, {
+    bodyDigest: 'a'.repeat(64),
+    reason: 'key-family',
+    eventId: restrictionEvent.eventId,
+    eventType: restrictionEvent.eventType,
+    detail: expect.any(Object),
+  });
+  expect(mocks.interestInbox).not.toHaveBeenCalled();
   expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
+  expect(mocks.createServiceClient).toHaveBeenCalled();
 });
 
 it('legacy-processes the same event when the legacy family matches', async () => {

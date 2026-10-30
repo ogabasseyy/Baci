@@ -7,9 +7,18 @@ import { assertRetirementSourceClosure, snapshot } from './public-source.mjs';
 
 test('requires the email guard and retired-unconfirmed public state before packaging', () => {
   const required = new Map([
-    ['apps/web/src/lib/piggyvest/prefunded-card-checkout-public-runtime.ts', Buffer.from('prefundedCardCheckoutEmailSchema')],
-    ['apps/web/src/schemas/prefunded-card-checkout-email.ts', Buffer.from('public domain')],
-    ['apps/web/src/schemas/prefunded-card-checkout-public-runtime.ts', Buffer.from("'retired_unconfirmed'")],
+    [
+      'apps/web/src/lib/piggyvest/prefunded-card-checkout-public-runtime.ts',
+      Buffer.from('prefundedCardCheckoutEmailSchema'),
+    ],
+    [
+      'apps/web/src/schemas/prefunded-card-checkout-email.ts',
+      Buffer.from('public domain'),
+    ],
+    [
+      'apps/web/src/schemas/prefunded-card-checkout-public-runtime.ts',
+      Buffer.from("'retired_unconfirmed'"),
+    ],
   ]);
   assert.doesNotThrow(() => assertRetirementSourceClosure(required));
   required.delete('apps/web/src/schemas/prefunded-card-checkout-email.ts');
@@ -32,7 +41,9 @@ test('copies only the checkout dependency closure and records immutable source h
       await mkdir(path.dirname(path.join(root, relative)), { recursive: true });
       const content = relative.endsWith('route.ts')
         ? 'export { prefundedCardCheckoutEmailSchema } from "@/lib/piggyvest/prefunded-card-checkout-public-runtime"; export const runtime = "nodejs";'
-        : relative.includes('/lib/piggyvest/prefunded-card-checkout-public-runtime.ts')
+        : relative.includes(
+              '/lib/piggyvest/prefunded-card-checkout-public-runtime.ts'
+            )
           ? 'import { prefundedCardCheckoutEmailSchema } from "@/schemas/prefunded-card-checkout-email"; import { phase } from "@/schemas/prefunded-card-checkout-public-runtime"; export { prefundedCardCheckoutEmailSchema, phase };'
           : relative.endsWith('prefunded-card-checkout-email.ts')
             ? 'export const guard = "public domain";'

@@ -35,8 +35,12 @@ export function useWalletSavingsController(
   const retryRecovery = () => {
     recovery.retry();
     Alert.alert(
-      'Checking contributions',
-      'We need to check for an existing transfer before starting another payment. Please try again after this check.'
+      recovery.error
+        ? 'Couldn’t check contributions'
+        : 'Checking contributions',
+      recovery.error
+        ? 'We couldn’t verify your previous savings transfer. Retrying the check now. You can still add money to your wallet; savings transfers stay paused to prevent duplicate debits.'
+        : 'We’re checking for a previous savings transfer before moving money again. You can still add money to your wallet.'
     );
   };
   return {
@@ -46,8 +50,6 @@ export function useWalletSavingsController(
     handleAddSavingsContribution: recovery.ready
       ? actions.handleAddSavingsContribution
       : retryRecovery,
-    handleFundSavingsWallet: recovery.ready
-      ? actions.handleFundSavingsWallet
-      : retryRecovery,
+    handleFundSavingsWallet: actions.handleFundSavingsWallet,
   };
 }

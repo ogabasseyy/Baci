@@ -268,10 +268,9 @@ test('the builder still refuses generic EAS/CI and a reviewed profile with hoste
   );
 });
 
-test('actual missing native pins stay off for local hosted mode and refuse cloud review', () => {
-  const actualPins = require('./hosted-storefront-pins.json');
-  assert.equal(actualPins.nativeStagingPush, undefined);
-  assert.throws(() => prepare(environment, actualPins), /native pins/);
+test('missing native pins stay off for local hosted mode and refuse cloud review', () => {
+  const missingPins = { ...pins, nativeStagingPush: undefined };
+  assert.throws(() => prepare(environment, missingPins), /native pins/);
   const config = loadBuilder({ ...pins, nativeStagingPush: undefined })({
     ...environment,
     EAS_BUILD: undefined,

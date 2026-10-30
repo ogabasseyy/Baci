@@ -3,11 +3,8 @@ import { serializedInventoryNullStock } from './serialized_variant_inventory_con
 import { serializedInventorySqlParser } from './serialized_variant_inventory_concurrency_contract_sql_parser.mjs';
 import { hasImmediateUnconditionalException } from './serialized_variant_inventory_concurrency_contract_zero_row.mjs';
 
-const {
-  hasTopLevelExit,
-  inspectNullStockHandler,
-  tryExtractIfArms,
-} = serializedInventoryNullStock;
+const { hasTopLevelExit, inspectNullStockHandler, tryExtractIfArms } =
+  serializedInventoryNullStock;
 const {
   escapeRegex,
   isRequiredConjunct,

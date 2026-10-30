@@ -1,9 +1,14 @@
+import { useRef } from 'react';
 import type { SavingsFundingOption } from './start-savings.helpers';
 import type {
   SavingsProductChoice,
   SavingsSourceMode,
 } from './start-savings.types';
 import { validateStartSavingsForm } from './start-savings-controller.utils';
+import {
+  type SavingsTransferVerification,
+  verifyStartSavingsTransfer,
+} from './verify-start-savings-transfer';
 
 /**
  * Form-flow handlers for the start-savings form: preview validation,
@@ -33,6 +38,7 @@ export function useStartSavingsFormFlow({
   sourceMode,
   submitSavingsGoal,
   targetValue,
+  transferVerification,
 }: {
   acceptsNonWithdrawableTerms: boolean;
   contributionValue: number;
@@ -56,7 +62,11 @@ export function useStartSavingsFormFlow({
     deferInitialContribution?: boolean;
   }) => Promise<void>;
   targetValue: number;
+  transferVerification?: SavingsTransferVerification;
 }) {
+  const scope = JSON.stringify(transferVerification);
+  const scopeRef = useRef(scope);
+  scopeRef.current = scope;
   const handleContinue = () => {
     const error = validateStartSavingsForm({
       acceptsNonWithdrawableTerms,
@@ -75,11 +85,27 @@ export function useStartSavingsFormFlow({
   };
 
   const confirmPlanTransfer = async () => {
+    const requestScope = scopeRef.current;
+    try {
+      const confirmed = await verifyStartSavingsTransfer(transferVerification);
+      if (requestScope !== scopeRef.current) return;
+      if (!confirmed) {
+        setFormError(
+          'Your transfer is not confirmed yet. Check again after the money reaches this plan.'
+        );
+        return;
+      }
+    } catch {
+      if (requestScope === scopeRef.current)
+        setFormError('We couldn’t check your transfer. Please try again.');
+      return;
+    }
     try {
       await refetch();
     } catch {
       // Best effort: the transfer lands asynchronously via reconciliation.
     }
+    if (requestScope !== scopeRef.current) return;
     setShowTransferModal(false);
     setFormError(null);
     setCreatedGoalId(null);

@@ -8,6 +8,10 @@ import { useWalletSavingsController } from './use-wallet-savings-controller';
 import { WalletScreen } from './WalletScreen';
 import { fundWallet } from './wallet-screen.handlers';
 
+jest.mock('./use-wallet-screen-data', () =>
+  jest.requireActual('@/test-support/wallet-screen-data.mock')
+);
+
 const mockGoal: WalletActiveSavingsGoal = {
   contribution_amount: 5000,
   contribution_frequency: 'weekly',
@@ -19,8 +23,9 @@ const mockGoal: WalletActiveSavingsGoal = {
   target_amount: 500000,
   title: 'Rainy day savings',
 };
+const mockCustomerUserId = undefined as string | null | undefined;
 const mockAuthState = {
-  customer: { id: 'customer-owner-1', phone: '08000000000' },
+  customer: { id: 'customer-owner-1', user_id: mockCustomerUserId },
   merchantId: 'merchant-1',
   updateProfile: jest.fn(),
   user: { id: 'auth-user-1' },
@@ -29,6 +34,7 @@ const mockUseRequireAuth = jest.fn(() => ({
   isLoading: false,
   redirectTo: null as string | null,
 }));
+const mockUseSavingsLiveActivity = jest.fn();
 const mockUseWallet = jest.fn(() => ({
   data: { wallet: {}, transactions: [] as unknown[] } as {
     wallet: Record<string, unknown>;
@@ -76,6 +82,10 @@ jest.mock('@/components/wallet/use-wallet-route-action-setup', () => ({
 }));
 jest.mock('@/hooks/use-auth-guard', () => ({
   useRequireAuth: () => mockUseRequireAuth(),
+}));
+jest.mock('@/hooks/use-savings-live-activity', () => ({
+  useSavingsLiveActivity: (...args: unknown[]) =>
+    mockUseSavingsLiveActivity(...args),
 }));
 jest.mock('@/hooks/use-wallet', () => ({
   useCreateWalletFundingAccount: () => ({
@@ -195,6 +205,53 @@ describe('WalletScreen interest preview integration', () => {
         routeAction: 'savings',
         routeSavingsGoalId: 'goal-b',
       })
+    );
+  });
+
+  it('syncs the wallet-observed goal for the authenticated wallet owner', () => {
+    const { rerender } = render(<WalletScreen />);
+
+    expect(mockUseSavingsLiveActivity).toHaveBeenLastCalledWith(
+      mockGoal,
+      'auth-user-1'
+    );
+    expect(mockUseWallet).toHaveBeenCalledTimes(1);
+
+    const nextGoal = { ...mockGoal, id: 'goal-b', current_amount: 150000 };
+    mockDeriveWalletDisplayData.mockReturnValue({
+      activeSavingsGoal: nextGoal,
+      earningsAvailable: false,
+      earningsBalance: 0,
+      fundingAccount: null,
+      savingsBalance: 0,
+      showQuickSave: false,
+      spendableBalance: 0,
+      totalBalance: 0,
+    });
+    rerender(<WalletScreen />);
+
+    expect(mockUseSavingsLiveActivity).toHaveBeenLastCalledWith(
+      nextGoal,
+      'auth-user-1'
+    );
+
+    mockUseAuthStore.mockReturnValue({
+      ...mockAuthState,
+      customer: { ...mockAuthState.customer, user_id: 'different-user' },
+    });
+    rerender(<WalletScreen />);
+    expect(mockUseSavingsLiveActivity).toHaveBeenLastCalledWith(
+      undefined,
+      'auth-user-1'
+    );
+    mockUseAuthStore.mockReturnValue({
+      ...mockAuthState,
+      customer: { ...mockAuthState.customer, user_id: null },
+    });
+    rerender(<WalletScreen />);
+    expect(mockUseSavingsLiveActivity).toHaveBeenLastCalledWith(
+      undefined,
+      'auth-user-1'
     );
   });
 

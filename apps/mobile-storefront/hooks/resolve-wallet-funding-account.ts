@@ -51,7 +51,8 @@ function settleBoundAccount(
  */
 export async function readPrimaryFundingAccount(
   merchantId: string,
-  userId: string
+  userId: string,
+  read?: () => Promise<PrimarySnapshot>
 ): Promise<SettledPrimaryFundingAccount> {
   // Pre-fetch bind: refuse to start when the session already disagrees
   // with the expected user (stale closure after a switch, signed out,
@@ -59,7 +60,7 @@ export async function readPrimaryFundingAccount(
   // wallet load treats unavailable as non-fatal and refetches once the
   // session settles.
   if (readActiveAuthUserId() !== userId) return { status: 'unavailable' };
-  if (!isPiggyvestPrimaryMerchant(merchantId)) {
+  if (!read && !isPiggyvestPrimaryMerchant(merchantId)) {
     // Unknown verdict: probe once so a server-enabled merchant resolves
     // its primary account on first load instead of projecting legacy
     // until a manual refetch. Pilot and observed merchants skip the
@@ -83,10 +84,9 @@ export async function readPrimaryFundingAccount(
     }
   }
   try {
-    const { account } = await piggyvestPrimaryWalletApi.read(
-      merchantId,
-      userId
-    );
+    const { account } = await (read
+      ? read()
+      : piggyvestPrimaryWalletApi.read(merchantId, userId));
     return settleBoundAccount(userId, account);
   } catch (error) {
     // Only an authoritative not-ready keeps the legacy projection;

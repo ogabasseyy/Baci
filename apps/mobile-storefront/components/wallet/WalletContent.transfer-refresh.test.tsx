@@ -90,6 +90,28 @@ it('refreshes wallet goal data when the bank transfer account is refreshed', asy
   expect(refreshWallet).toHaveBeenCalledTimes(1);
 });
 
+it('renders unavailable interest history while filtering null amounts from the credit watcher', async () => {
+  render(
+    <WalletContent
+      {...props}
+      transactions={[
+        {
+          id: 'interest-unavailable',
+          goal_id: 'goal-1',
+          amount: null,
+          type: 'credit',
+          description: 'Savings interest credited',
+          source_type: 'savings_interest',
+          created_at: '2026-10-13T08:00:00Z',
+        },
+      ]}
+    />
+  );
+  await act(async () => {});
+  expect(screen.getByText('Savings interest credited')).toBeOnTheScreen();
+  expect(screen.getByText('Amount unavailable')).toBeOnTheScreen();
+});
+
 it('does not leak a late refresh failure or busy state after the customer changes', async () => {
   let rejectRefresh: (error: Error) => void = () => undefined;
   const refreshWallet = jest.fn(

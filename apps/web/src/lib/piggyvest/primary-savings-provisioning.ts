@@ -1,6 +1,7 @@
 import 'server-only';
 import { primarySavingsProvisioningSchemas as schemas } from '@/schemas/primary-savings-provisioning';
 import type { createPrimarySavingsProvisioningStore } from './primary-savings-provisioning-store';
+import { getPrimarySavingsWalletName } from './primary-savings-wallet-name';
 import type { CreatePiggyvestWalletInput } from './wallets';
 
 type Input = {
@@ -10,7 +11,7 @@ type Input = {
   interestAccepted?: boolean;
   store: ReturnType<typeof createPrimarySavingsProvisioningStore>;
   createWallet: (request: CreatePiggyvestWalletInput) => Promise<unknown>;
-  listWallets: (customerId: string) => Promise<unknown>;
+  listWallets: (customerId: string, walletName: string) => Promise<unknown>;
   retrieveWallet: (walletId: string) => Promise<unknown>;
   retrieveAccounts: (walletId: string) => Promise<unknown>;
 };
@@ -54,7 +55,11 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       interestAccepted !== input.interestAccepted
     )
       return outcome('conflict');
-    if (intent.walletName !== `baci-save:${scope.integrationId}:${goalId}`)
+    if (
+      intent.walletName !==
+        getPrimarySavingsWalletName(scope.integrationId, goalId) &&
+      intent.walletName !== `baci-save:${scope.integrationId}:${goalId}`
+    )
       return outcome('conflict');
     if (intent.status === 'conflict') return outcome('conflict');
     if (intent.status === 'claimed') {
@@ -72,7 +77,7 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       const providerCustomerId = intent.providerCustomerId;
       try {
         prelisted = schemas.wallets
-          .parse(await input.listWallets(providerCustomerId))
+          .parse(await input.listWallets(providerCustomerId, walletName))
           .filter((wallet) => wallet.name === walletName);
       } catch {
         prelisted = null;
@@ -111,7 +116,9 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       if (!intent) return outcome('unavailable');
     }
     const candidates = schemas.wallets
-      .parse(await input.listWallets(intent.providerCustomerId))
+      .parse(
+        await input.listWallets(intent.providerCustomerId, intent.walletName)
+      )
       .filter((wallet) => wallet.name === intent.walletName);
     if (candidates.length === 0) return outcome('pending');
     if (candidates.length !== 1) return outcome('conflict');

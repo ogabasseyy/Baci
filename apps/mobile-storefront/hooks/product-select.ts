@@ -3,10 +3,19 @@
  * All roles hydrate variant-bearing rows through the bounded storefront RPC so an
  * authenticated session cannot trigger per-row staff/owner RLS checks here.
  */
-export const PRODUCT_SELECT = `
+const PRODUCT_SELECT_COLUMNS = `
   id, name, slug, description, price, compare_at_price, created_at,
   images, brand, condition, has_condition_offers, variant_model, available_conditions, average_rating, review_count, status, specifications,
   has_variants, variant_attributes, manage_stock, stock, stock_quantity,
+`;
+
+export const PRODUCT_SELECT = `
+  ${PRODUCT_SELECT_COLUMNS}
+  categories (id, name, slug)
+`;
+
+export const SANDBOX_PRODUCT_SELECT = `
+  ${PRODUCT_SELECT_COLUMNS} view_count, inventory_tracking_policy,
   categories (id, name, slug)
 `;
 

@@ -23,28 +23,85 @@ export function collectPrimaryTransferHostInventory(input = {}) {
     throw new Error('Transfer inventory requires a reviewed instance name');
   const script = inventoryScript(instance);
   const run = input.run ?? spawnSync;
-  const result = run('/usr/bin/ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=12',
-    'bassey@82.29.190.219', '/usr/bin/node -'], { input: script, encoding: 'utf8', timeout: 20000, maxBuffer: 65536 });
-  if (result.status !== 0) throw new Error('Read-only transfer host inventory unavailable');
-  let observed;
-  try { observed = JSON.parse(result.stdout); } catch { throw new Error('Read-only transfer host inventory unavailable'); }
-  if (Object.keys(observed).some((key) => !['nodeMajor','accountPresent','paths','units'].includes(key)) ||
-    !Number.isInteger(observed.nodeMajor) || typeof observed.accountPresent !== 'boolean' || !observed.paths || !observed.units)
+  const result = run(
+    '/usr/bin/ssh',
+    [
+      '-o',
+      'BatchMode=yes',
+      '-o',
+      'ConnectTimeout=12',
+      'bassey@82.29.190.219',
+      '/usr/bin/node -',
+    ],
+    { input: script, encoding: 'utf8', timeout: 20000, maxBuffer: 65536 }
+  );
+  if (result.status !== 0)
     throw new Error('Read-only transfer host inventory unavailable');
-  const allowedPaths = [`/opt/baci/primary-card-transfer/transfer.cjs`,`/opt/baci/primary-card-transfer/artifact.manifest.json`,
-    `/etc/baci/primary-card-transfer-${instance}.env`,`/etc/systemd/system/baci-primary-card-transfer@${instance}.service`,`/etc/systemd/system/baci-primary-card-transfer@${instance}.timer`];
-  for (const [filename,item] of Object.entries(observed.paths)) {
-    if (!allowedPaths.includes(filename) || Object.keys(item).some((key) => !['state','regular','uid','gid','mode','sha256'].includes(key)) ||
-      !['present','absent','unreadable'].includes(item.state) || (item.sha256!==undefined && !/^[a-f0-9]{64}$/.test(item.sha256)))
+  let observed;
+  try {
+    observed = JSON.parse(result.stdout);
+  } catch {
+    throw new Error('Read-only transfer host inventory unavailable');
+  }
+  if (
+    Object.keys(observed).some(
+      (key) => !['nodeMajor', 'accountPresent', 'paths', 'units'].includes(key)
+    ) ||
+    !Number.isInteger(observed.nodeMajor) ||
+    typeof observed.accountPresent !== 'boolean' ||
+    !observed.paths ||
+    !observed.units
+  )
+    throw new Error('Read-only transfer host inventory unavailable');
+  const allowedPaths = [
+    `/opt/baci/primary-card-transfer/transfer.cjs`,
+    `/opt/baci/primary-card-transfer/artifact.manifest.json`,
+    `/etc/baci/primary-card-transfer-${instance}.env`,
+    `/etc/systemd/system/baci-primary-card-transfer@${instance}.service`,
+    `/etc/systemd/system/baci-primary-card-transfer@${instance}.timer`,
+  ];
+  for (const [filename, item] of Object.entries(observed.paths)) {
+    if (
+      !allowedPaths.includes(filename) ||
+      Object.keys(item).some(
+        (key) =>
+          !['state', 'regular', 'uid', 'gid', 'mode', 'sha256'].includes(key)
+      ) ||
+      !['present', 'absent', 'unreadable'].includes(item.state) ||
+      (item.sha256 !== undefined && !/^[a-f0-9]{64}$/.test(item.sha256))
+    )
       throw new Error('Read-only transfer host inventory unavailable');
   }
-  const allowedUnits = [`baci-primary-card-transfer@${instance}.service`,`baci-primary-card-transfer@${instance}.timer`];
-  for (const [unit,item] of Object.entries(observed.units)) {
-    if (!allowedUnits.includes(unit) ||
-      Object.entries(item).some(([key,value]) => !['LoadState','ActiveState','SubState','FragmentPath','state'].includes(key) || typeof value!=='string' || value.length>512))
+  const allowedUnits = [
+    `baci-primary-card-transfer@${instance}.service`,
+    `baci-primary-card-transfer@${instance}.timer`,
+  ];
+  for (const [unit, item] of Object.entries(observed.units)) {
+    if (
+      !allowedUnits.includes(unit) ||
+      Object.entries(item).some(
+        ([key, value]) =>
+          ![
+            'LoadState',
+            'ActiveState',
+            'SubState',
+            'FragmentPath',
+            'state',
+          ].includes(key) ||
+          typeof value !== 'string' ||
+          value.length > 512
+      )
+    )
       throw new Error('Read-only transfer host inventory unavailable');
   }
-  return { evidenceSource: 'authorized_host_metadata', host: 'bassey@82.29.190.219', instance,
-    capturedAt: (input.now ?? (() => new Date()))().toISOString(), ...observed,
-    databaseInspected: false, configurationValuesInspected: false, activationAuthorized: false };
+  return {
+    evidenceSource: 'authorized_host_metadata',
+    host: 'bassey@82.29.190.219',
+    instance,
+    capturedAt: (input.now ?? (() => new Date()))().toISOString(),
+    ...observed,
+    databaseInspected: false,
+    configurationValuesInspected: false,
+    activationAuthorized: false,
+  };
 }

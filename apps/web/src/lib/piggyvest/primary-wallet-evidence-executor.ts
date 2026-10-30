@@ -2,6 +2,7 @@ import 'server-only';
 import { Client } from 'pg';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
 import { piggyvestPrimarySavingsTransferSchemas } from '@/schemas/piggyvest-primary-savings-transfer';
+import { primaryWalletSavingsReconciliationCheckpointSchemas as checkpointSchemas } from '@/schemas/primary-wallet-savings-reconciliation-checkpoint';
 
 const statements = new Set([
   'SELECT piggyvest_primary.apply_inflow_environment($1::uuid,$2::text,$3::jsonb) AS result',
@@ -9,6 +10,9 @@ const statements = new Set([
   'SELECT piggyvest_primary.find_dispatched_savings_by_reference($1::uuid,$2::text,$3::text) AS result',
   'SELECT piggyvest_primary.settle_savings($1::uuid,$2::text,$3::jsonb) AS result',
   'SELECT piggyvest_primary.release_failed_savings($1::uuid,$2::text,$3::jsonb) AS result',
+  'SELECT piggyvest_primary.claim_savings_reconciliation_checkpoint($1::uuid,$2::text,$3::uuid) AS result',
+  'SELECT piggyvest_primary.save_savings_reconciliation_checkpoint($1::uuid,$2::text,$3::jsonb) AS result',
+  'SELECT piggyvest_primary.finish_savings_reconciliation_checkpoint($1::uuid,$2::text,$3::jsonb) AS result',
 ]);
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication
@@ -42,6 +46,16 @@ export function createPrimaryWalletEvidenceExecutor(configuration: unknown) {
       piggyvestPrimarySavingsTransferSchemas.reserved.shape.reference.parse(
         parameters[2]
       );
+    else if (statement.includes('claim_savings_reconciliation_checkpoint'))
+      piggyvestPrimarySavingsTransferSchemas.request.shape.operationId.parse(
+        parameters[2]
+      );
+    else if (statement.includes('save_savings_reconciliation_checkpoint')) {
+      const command: unknown = JSON.parse(parameters[2]);
+      const parsed = checkpointSchemas.saveCommand.parse(command);
+      checkpointSchemas.state.parse(parsed);
+    } else if (statement.includes('finish_savings_reconciliation_checkpoint'))
+      checkpointSchemas.finishCommand.parse(JSON.parse(parameters[2]));
     else JSON.parse(parameters[2]);
     const client = new Client({
       host: config.database.host,

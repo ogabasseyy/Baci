@@ -1,8 +1,12 @@
 import { Alert } from 'react-native';
+import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { checkPiggyvestPrimarySavingsStatus } from '@/lib/piggyvest-primary-savings-status';
+import { trackSavingsContribution } from '@/services/track-savings-contribution';
 
 export async function checkPendingPrimarySavings(input: {
   merchantId?: string;
+  goal?: WalletActiveSavingsGoal | null;
+  refreshGoal?: () => Promise<WalletActiveSavingsGoal | null>;
   operationId: string;
   clearOperation: () => void;
   clearAmount: () => void;
@@ -11,10 +15,18 @@ export async function checkPendingPrimarySavings(input: {
 }) {
   input.setPending(true);
   try {
-    const result = await checkPiggyvestPrimarySavingsStatus({
-      merchantId: input.merchantId,
-      operationId: input.operationId,
-    });
+    const readStatus = () =>
+      checkPiggyvestPrimarySavingsStatus({
+        merchantId: input.merchantId,
+        operationId: input.operationId,
+      });
+    const result = input.goal
+      ? await trackSavingsContribution(
+          input.goal,
+          readStatus,
+          input.refreshGoal
+        )
+      : await readStatus();
     if (result.status === 'confirmed') {
       input.clearOperation();
       input.clearAmount();

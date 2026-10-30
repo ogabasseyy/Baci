@@ -9,6 +9,7 @@ const log = createLogger('WalletRouteActionSetup');
 
 interface UseWalletRouteActionSetupParams {
   bankTransfer: {
+    openPanel?: boolean;
     canCreateFundingAccount: boolean;
     createFundingAccount: () => void;
     hasFundingAccount: boolean;
@@ -72,12 +73,25 @@ export function useWalletRouteActionSetup({
   const savingsRouteKey =
     routeAction === 'savings' ? (routeSavingsGoalId ?? '') : '';
   const routeActionKey = `${routeAction ?? ''}|${routeRequiredAmount}|${walletReturnTo ?? ''}|${savingsRouteKey}`;
+  const primaryTransferKey =
+    bankTransfer.openPanel && isBankTransferAction
+      ? `${customerId ?? ''}:${routeIntentId ?? ''}`
+      : '';
+  const [openedPrimaryTransfer, setOpenedPrimaryTransfer] = useState('');
+  if (primaryTransferKey && primaryTransferKey !== openedPrimaryTransfer) {
+    setOpenedPrimaryTransfer(primaryTransferKey);
+    setShowSavingsProgressModal(false);
+    setShowFundPanel(true);
+    setFundAmount('');
+    setFundReturnTo(walletReturnTo);
+  }
   const [prevRouteActionKey, setPrevRouteActionKey] = useState(routeActionKey);
   if (prevRouteActionKey !== routeActionKey) {
     setPrevRouteActionKey(routeActionKey);
     setPendingBankTransfer(isBankTransferAction);
     applyWalletRouteAction({
       routeAction,
+      openBankTransferPanel: bankTransfer.openPanel,
       routeRequiredAmount,
       walletReturnTo,
       setFundAmount,
@@ -185,6 +199,10 @@ export function useWalletRouteActionSetup({
     if (!pendingBankTransfer || !hasWalletData) {
       return;
     }
+    if (bankTransfer.openPanel) {
+      setPendingBankTransfer(false);
+      return;
+    }
     if (hasFundingAccount) {
       setPendingBankTransfer(false);
       return;
@@ -203,6 +221,7 @@ export function useWalletRouteActionSetup({
     createFundingAccount();
   }, [
     canCreateFundingAccount,
+    bankTransfer.openPanel,
     createFundingAccount,
     hasFundingAccount,
     hasWalletData,

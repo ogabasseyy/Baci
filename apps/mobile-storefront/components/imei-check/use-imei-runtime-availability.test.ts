@@ -6,8 +6,11 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { useImeiRuntimeAvailability } from './use-imei-runtime-availability';
 
+type SharedImeiModule = typeof import('@baci/shared/imei');
+
 const mockFetchKeys = jest.fn<typeof fetchRuntimeImeiTierKeys>();
 jest.mock('@baci/shared/imei', () => ({
+  ...jest.requireActual<SharedImeiModule>('@baci/shared/imei'),
   fetchRuntimeImeiTierKeys: (
     ...args: Parameters<typeof fetchRuntimeImeiTierKeys>
   ) => mockFetchKeys(...args),

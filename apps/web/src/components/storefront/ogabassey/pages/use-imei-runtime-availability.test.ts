@@ -6,7 +6,12 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useImeiRuntimeAvailability } from './use-imei-runtime-availability';
 
-vi.mock('@baci/shared/imei', () => ({ fetchRuntimeImeiTierKeys: vi.fn() }));
+type SharedImeiModule = typeof import('@baci/shared/imei');
+
+vi.mock('@baci/shared/imei', async (importOriginal) => ({
+  ...(await importOriginal<SharedImeiModule>()),
+  fetchRuntimeImeiTierKeys: vi.fn(),
+}));
 const fetchKeys = vi.mocked(fetchRuntimeImeiTierKeys);
 
 describe('web IMEI runtime availability', () => {

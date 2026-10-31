@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { eventPipelineCartCredentialPaths } from './event-pipeline-cart-credential-paths';
 import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credential-paths';
 import { eventPipelineDvaCredentialPaths } from './event-pipeline-dva-credential-paths';
+import { eventPipelineFeedbackCredentialPaths } from './event-pipeline-feedback-credential-paths';
 import { eventPipelineGatewayCronCredentialPaths } from './event-pipeline-gateway-cron-credential-paths';
 import { eventPipelineGiglCredentialPaths } from './event-pipeline-gigl-credential-paths';
 import { eventPipelineImmediateOrderCredentialPaths } from './event-pipeline-immediate-order-credential-paths';
@@ -270,6 +271,7 @@ describe('event pipeline credential-path authority', () => {
       ...eventPipelinePaystackRefundCredentialPaths,
       ...eventPipelineGatewayCronCredentialPaths,
       ...eventPipelineManualOrderDocumentCredentialPaths,
+      ...eventPipelineFeedbackCredentialPaths,
       ...onboardingEmailWorkerAuthority.credentialPaths,
     ]);
   });

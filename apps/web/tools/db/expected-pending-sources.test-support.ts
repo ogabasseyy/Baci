@@ -44,6 +44,11 @@ import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 
 export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_STORE_CREDIT_PENDING_SOURCES,
+  {
+    repositoryPath:
+      'supabase/migrations/20261030140000_feedback_free_text_reports.sql',
+    sha256: '046babe78abfb1ad66419a6090fe27f6e910d3aeb383498fe0df8adda7fc4ad1',
+  },
   ...EXPECTED_IMEI_PENDING_SOURCES,
   ...EXPECTED_ADS_PENDING_SOURCES,
   {

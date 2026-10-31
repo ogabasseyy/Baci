@@ -13,6 +13,20 @@ export function getRuntimePlatform(): RuntimePlatform {
   return Platform.OS as RuntimePlatform;
 }
 
+/** OS version as reported by React Native (iOS string, Android API level). */
+export function getRuntimePlatformVersion(): string {
+  return String(Platform.Version);
+}
+
+/** A non-empty string from the native platform constants (e.g. Android Model). */
+export function getRuntimePlatformConstant(key: string): string | undefined {
+  const constants = Platform.constants as unknown as
+    | Record<string, unknown>
+    | undefined;
+  const value = constants?.[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
 export function isRuntimePlatform(platform: RuntimePlatform): boolean {
   return getRuntimePlatform() === platform;
 }

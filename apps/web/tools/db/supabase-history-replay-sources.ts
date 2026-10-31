@@ -106,6 +106,7 @@ e8aab2aed87c3ae93090db6343ac125210d1fd90f80de1cff51772ef33b29750 20260718070005_
 // PayPal/Korapay BYOK migrations land in PENDING before the 20260721 cancellation batch (version-earlier, unattested).
 const PENDING_SOURCES = [
   STORE_CREDIT_PENDING_REPLAY_SOURCE_ROWS,
+  '046babe78abfb1ad66419a6090fe27f6e910d3aeb383498fe0df8adda7fc4ad1 20261030140000_feedback_free_text_reports.sql',
   IMEI_PENDING_REPLAY_SOURCE_ROWS,
   REFUND_PENDING_REPLAY_SOURCE_ROWS,
   CART_PENDING_REPLAY_SOURCE_ROWS,

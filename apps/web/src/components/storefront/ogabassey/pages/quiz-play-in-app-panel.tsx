@@ -5,6 +5,7 @@ import {
   OGABASSEY_STOREFRONT_PLAY_STORE_URL,
 } from '@/config/platform';
 import { formatQuizDateRange } from './format-quiz-date-range';
+import type { AppQuizEventsStatus } from './use-app-quiz-events';
 import {
   quizPanel as panel,
   quizPrimaryButton as primaryButton,
@@ -24,7 +25,15 @@ const STATUS_LABEL: Record<QuizV2Event['status'], string> = {
  * device integrity checks a real prize needs. The website shows what is on and
  * sends shoppers to the app to play and win.
  */
-export function QuizPlayInAppPanel({ events }: { events: QuizV2Event[] }) {
+export function QuizPlayInAppPanel({
+  events,
+  onRetry,
+  status = 'ready',
+}: {
+  events: QuizV2Event[];
+  onRetry?: () => void;
+  status?: AppQuizEventsStatus;
+}) {
   return (
     <section aria-labelledby="quiz-play-in-app-title" className={`${panel} sm:p-6`}>
       <h2 id="quiz-play-in-app-title" className="text-lg font-semibold">
@@ -34,6 +43,23 @@ export function QuizPlayInAppPanel({ events }: { events: QuizV2Event[] }) {
         Prize quizzes are played in the free Ogabassey app. Download it, sign in
         with this same account, and open Super Quiz.
       </p>
+
+      {status === 'loading' ? (
+        <p aria-live="polite" className="mt-5 text-sm text-store-background-text/70">
+          Loading current quizzes…
+        </p>
+      ) : null}
+
+      {status === 'error' ? (
+        <div role="status" className="mt-5 flex flex-wrap items-center gap-3 text-sm">
+          <span>We couldn&apos;t load the current quizzes.</span>
+          {onRetry ? (
+            <button type="button" onClick={onRetry} className={secondaryButton}>
+              Try again
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {events.length > 0 ? (
         <ul aria-label="Quizzes in the app" className="mt-5 grid gap-3 md:grid-cols-2">

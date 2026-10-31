@@ -1,5 +1,5 @@
-import { render, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import {
   OGABASSEY_STOREFRONT_APP_STORE_URL,
   OGABASSEY_STOREFRONT_PLAY_STORE_URL,
@@ -45,5 +45,22 @@ describe('QuizPlayInAppPanel', () => {
     expect(within(items[0]).getByText('Live now')).toBeInTheDocument();
     expect(within(items[1]).getByText('Coming soon')).toBeInTheDocument();
     expect(screen.queryByRole('button')).toBeNull();
+  });
+
+  it('announces loading while the current quizzes load', () => {
+    render(<QuizPlayInAppPanel events={[]} status="loading" />);
+
+    expect(screen.getByText('Loading current quizzes…')).toBeInTheDocument();
+  });
+
+  it('explains a failed load and retries on request', () => {
+    const onRetry = vi.fn();
+    render(<QuizPlayInAppPanel events={[]} onRetry={onRetry} status="error" />);
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      "We couldn't load the current quizzes."
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });

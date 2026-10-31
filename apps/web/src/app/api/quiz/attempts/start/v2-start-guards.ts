@@ -14,7 +14,9 @@ export async function enforceQuizStartGuards(
   supabase: ServerSupabaseClient,
   eventId: string,
   userId: string,
-  authMethod: 'bearer' | 'cookie' = 'bearer'
+  // Required (no default) so a new caller cannot silently skip the app-only
+  // browser restriction.
+  authMethod: 'bearer' | 'cookie'
 ): Promise<void> {
   if (getQuizPhaseEnv() !== 'production') return;
   // Players cannot read quiz_events rows directly (RLS restricts v2 rows to

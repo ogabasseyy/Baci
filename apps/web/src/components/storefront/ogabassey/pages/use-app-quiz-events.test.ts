@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { appQuizEvent } from './app-quiz-event.test-support';
 import { fetchAppQuizEvents } from './fetch-app-quiz-events';
@@ -11,35 +11,59 @@ beforeEach(() => {
 });
 
 describe('useAppQuizEvents', () => {
-  it('does not fetch while the shopper is signed out', () => {
+  it('is idle and does not fetch while the shopper is signed out', () => {
     const { result } = renderHook(() => useAppQuizEvents('ogabassey', null));
 
-    expect(result.current).toEqual([]);
+    expect(result.current.status).toBe('idle');
+    expect(result.current.events).toEqual([]);
     expect(fetchAppQuizEvents).not.toHaveBeenCalled();
   });
 
-  it('returns the app quiz events for the signed-in user', async () => {
+  it('reports loading, then the events for the signed-in user', async () => {
     const event = appQuizEvent();
     vi.mocked(fetchAppQuizEvents).mockResolvedValue([event]);
 
-    const { result } = renderHook(() => useAppQuizEvents('ogabassey', 'user-a'));
-
-    await waitFor(() =>
-      expect(result.current).toEqual([event])
+    const { result } = renderHook(() =>
+      useAppQuizEvents('ogabassey', 'user-a')
     );
+
+    expect(result.current.status).toBe('loading');
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.events).toEqual([event]);
     expect(fetchAppQuizEvents).toHaveBeenCalledWith('ogabassey');
   });
 
-  it('degrades to no events when the listing fails', async () => {
-    vi.mocked(fetchAppQuizEvents).mockImplementation(() =>
-      Promise.reject(new Error('offline'))
-    );
+  describe('bugfix: a failed listing looked like no quizzes', () => {
+    it('reports error instead of an empty successful listing', async () => {
+      vi.mocked(fetchAppQuizEvents).mockImplementation(() =>
+        Promise.reject(new Error('offline'))
+      );
 
-    const { result } = renderHook(() => useAppQuizEvents('ogabassey', 'user-a'));
+      const { result } = renderHook(() =>
+        useAppQuizEvents('ogabassey', 'user-a')
+      );
 
-    await waitFor(() => expect(fetchAppQuizEvents).toHaveBeenCalled());
-    await Promise.resolve();
-    expect(result.current).toEqual([]);
+      await waitFor(() => expect(result.current.status).toBe('error'));
+      expect(result.current.events).toEqual([]);
+    });
+
+    it('retries the listing and recovers', async () => {
+      const event = appQuizEvent();
+      vi.mocked(fetchAppQuizEvents)
+        .mockImplementationOnce(() => Promise.reject(new Error('offline')))
+        .mockResolvedValueOnce([event]);
+      const { result } = renderHook(() =>
+        useAppQuizEvents('ogabassey', 'user-a')
+      );
+      await waitFor(() => expect(result.current.status).toBe('error'));
+
+      act(() => result.current.retry());
+
+      expect(result.current.status).toBe('loading');
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+      expect(result.current.events).toEqual([event]);
+      expect(fetchAppQuizEvents).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('bugfix: previous account events leaked after an account switch', () => {
@@ -59,16 +83,15 @@ describe('useAppQuizEvents', () => {
         ({ userId }) => useAppQuizEvents('ogabassey', userId),
         { initialProps: { userId: 'user-a' as string | null } }
       );
-      await waitFor(() => expect(result.current).toEqual([privateEvent]));
+      await waitFor(() => expect(result.current.events).toEqual([privateEvent]));
 
       rerender({ userId: 'user-b' });
 
-      expect(result.current).toEqual([]);
-      expect(fetchAppQuizEvents).toHaveBeenCalledTimes(2);
+      expect(result.current.events).toEqual([]);
+      expect(result.current.status).toBe('loading');
       resolveSecond([]);
-      await waitFor(() =>
-        expect(result.current).toEqual([])
-      );
+      await waitFor(() => expect(result.current.status).toBe('ready'));
+      expect(result.current.events).toEqual([]);
     });
 
     it('drops the events on sign-out', async () => {
@@ -77,11 +100,12 @@ describe('useAppQuizEvents', () => {
         ({ userId }) => useAppQuizEvents('ogabassey', userId),
         { initialProps: { userId: 'user-a' as string | null } }
       );
-      await waitFor(() => expect(result.current).toHaveLength(1));
+      await waitFor(() => expect(result.current.events).toHaveLength(1));
 
       rerender({ userId: null });
 
-      expect(result.current).toEqual([]);
+      expect(result.current.events).toEqual([]);
+      expect(result.current.status).toBe('idle');
     });
   });
 });

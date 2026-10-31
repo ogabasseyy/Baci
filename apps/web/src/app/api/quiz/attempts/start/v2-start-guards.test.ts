@@ -47,7 +47,8 @@ describe('v2 start production gates', () => {
       enforceQuizStartGuards(
         client({ dateOfBirth: '2020-01-01' }),
         'event-1',
-        'user-1'
+        'user-1',
+        'bearer'
       )
     ).rejects.toMatchObject({ code: 'quiz_age_restricted' });
   });
@@ -56,7 +57,7 @@ describe('v2 start production gates', () => {
     vi.stubEnv('QUIZ_PRODUCTION_APPROVED', 'true');
     const supabase = client();
     await expect(
-      enforceQuizStartGuards(supabase, 'event-1', 'user-1')
+      enforceQuizStartGuards(supabase, 'event-1', 'user-1', 'bearer')
     ).resolves.toBeUndefined();
     // RLS hides v2 event rows from players, so the guard must resolve
     // mode/merchant through the projection RPC and never read quiz_events.
@@ -80,7 +81,8 @@ describe('v2 start production gates', () => {
           },
         }),
         'event-1',
-        'user-1'
+        'user-1',
+        'bearer'
       )
     ).resolves.toBeUndefined();
   });
@@ -90,7 +92,8 @@ describe('v2 start production gates', () => {
       enforceQuizStartGuards(
         client({ contextError: new Error('offline') }),
         'event-1',
-        'user-1'
+        'user-1',
+        'bearer'
       )
     ).rejects.toThrow('Quiz start eligibility could not be verified');
   });
@@ -101,7 +104,8 @@ describe('v2 start production gates', () => {
       enforceQuizStartGuards(
         client({ context: { found: false } }),
         'event-1',
-        'user-1'
+        'user-1',
+        'bearer'
       )
     ).rejects.toThrow('Quiz start eligibility could not be verified');
     await expect(
@@ -115,7 +119,8 @@ describe('v2 start production gates', () => {
           },
         }),
         'event-1',
-        'user-1'
+        'user-1',
+        'bearer'
       )
     ).rejects.toThrow('Quiz start eligibility could not be verified');
   });
@@ -123,7 +128,7 @@ describe('v2 start production gates', () => {
     vi.stubEnv('QUIZ_PHASE', 'production');
     vi.stubEnv('QUIZ_PRODUCTION_APPROVED', 'false');
     await expect(
-      enforceQuizStartGuards(client(), 'event-1', 'user-1')
+      enforceQuizStartGuards(client(), 'event-1', 'user-1', 'bearer')
     ).rejects.toMatchObject({ code: 'quiz_production_not_approved' });
   });
   it('blocks a live launch with a negative compliance verdict', async () => {
@@ -140,7 +145,8 @@ describe('v2 start production gates', () => {
           },
         }),
         'event-1',
-        'user-1'
+        'user-1',
+        'bearer'
       )
     ).rejects.toMatchObject({ code: 'quiz_production_not_approved' });
   });

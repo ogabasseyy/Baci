@@ -11,8 +11,9 @@ import { apiGet } from '@/lib/api-client';
 const PAGE_SIZE = 50;
 // The listing is ordered by start time, newest first, and paginated before any
 // status filter, so later scheduled/completed events can push a live quiz off
-// the first page. Read a bounded number of pages before filtering.
-const MAX_PAGES = 10;
+// the first page. Follow-up pages are requested only while the server reports
+// more (normally never: one page holds 50 quizzes), bounded to 200 events.
+const MAX_PAGES = 4;
 
 async function fetchPage(merchantSlug: string, offset: number) {
   const query = new URLSearchParams({
@@ -37,23 +38,12 @@ async function fetchPage(merchantSlug: string, offset: number) {
 export async function fetchAppQuizEvents(
   merchantSlug: string
 ): Promise<QuizV2Event[]> {
-  const first = await fetchPage(merchantSlug, 0);
-  const events = [...first.events];
-  const nextOffset = first.pagination?.hasMore
-    ? first.pagination.nextOffset
-    : null;
-  if (nextOffset !== null) {
-    // Remaining pages are fetched in parallel (one extra round trip, not a
-    // sequential waterfall), then concatenated up to the first final page.
-    const rest = await Promise.all(
-      Array.from({ length: MAX_PAGES - 1 }, (_, index) =>
-        fetchPage(merchantSlug, nextOffset + index * PAGE_SIZE)
-      )
-    );
-    for (const page of rest) {
-      events.push(...page.events);
-      if (!page.pagination?.hasMore) break;
-    }
+  const events: QuizV2Event[] = [];
+  let offset: number | null = 0;
+  for (let page = 0; page < MAX_PAGES && offset !== null; page += 1) {
+    const result = await fetchPage(merchantSlug, offset);
+    events.push(...result.events);
+    offset = result.pagination?.hasMore ? result.pagination.nextOffset : null;
   }
   // Only quizzes a shopper can still join are worth sending to the app.
   return events.filter(

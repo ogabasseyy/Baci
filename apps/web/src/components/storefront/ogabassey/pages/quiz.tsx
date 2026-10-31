@@ -59,7 +59,7 @@ export function OgabasseyV2Quiz({ merchantSlug }: OgabasseyV2QuizProps) {
 
   // Current prize quizzes are app-only: the v2 listing feeds the app panel and
   // the legacy listing carries only contract-v1 quizzes (filtered server-side).
-  const appEvents = useAppQuizEvents(
+  const appQuiz = useAppQuizEvents(
     merchantSlug,
     !isLoading && isAuthenticated ? (user?.id ?? customer?.id ?? null) : null
   );
@@ -185,7 +185,11 @@ export function OgabasseyV2Quiz({ merchantSlug }: OgabasseyV2QuizProps) {
           </div>
         </section>
 
-        {isLoading ? null : <QuizPlayInAppPanel events={appEvents} />}
+        {isLoading ? null : <QuizPlayInAppPanel
+            events={appQuiz.events}
+            onRetry={appQuiz.retry}
+            status={appQuiz.status}
+          />}
 
         {isLoading ? (
           <section aria-live="polite" className={panel}>Checking your quiz access…</section>

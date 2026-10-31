@@ -77,30 +77,29 @@ describe('fetchAppQuizEvents', () => {
       expect(events.map((event) => event.id)).toEqual([id(2)]);
     });
 
-    it('fetches the remaining pages in parallel, bounded to ten pages', async () => {
-      const pending: Array<() => void> = [];
-      apiGetMock.mockImplementation((url: string) => {
+    it('requests a follow-up page only while the server reports more, bounded to four', async () => {
+      apiGetMock.mockImplementation(async (url: string) => {
         const offset = offsetOf(url);
-        const page = appQuizEventsResponse([], {
+        return appQuizEventsResponse([], {
           hasMore: true,
           nextOffset: offset + 50,
           offset,
         });
-        if (offset === 0) return Promise.resolve(page);
-        return new Promise((resolve) => pending.push(() => resolve(page)));
       });
 
-      const result = fetchAppQuizEvents('ogabassey');
-      await vi.waitFor(() => expect(apiGetMock).toHaveBeenCalledTimes(10));
-      // All nine follow-up requests are in flight before any has resolved.
-      expect(pending).toHaveLength(9);
-      for (const resolve of pending) resolve();
-      await result;
+      await fetchAppQuizEvents('ogabassey');
 
-      expect(apiGetMock).toHaveBeenCalledTimes(10);
       expect(apiGetMock.mock.calls.map(([url]) => offsetOf(url))).toEqual([
-        0, 50, 100, 150, 200, 250, 300, 350, 400, 450,
+        0, 50, 100, 150,
       ]);
+    });
+
+    it('makes a single request when the first page is complete', async () => {
+      apiGetMock.mockResolvedValue(appQuizEventsResponse([appQuizEvent()]));
+
+      await fetchAppQuizEvents('ogabassey');
+
+      expect(apiGetMock).toHaveBeenCalledTimes(1);
     });
   });
 

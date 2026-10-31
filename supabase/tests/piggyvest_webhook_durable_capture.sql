@@ -406,56 +406,124 @@ BEGIN
 END
 $$;
 
+-- Role checks. Each assertion is its own top-level statement so the
+-- runner's line number names exactly the check that failed, and roles are
+-- switched with top-level SET LOCAL ROLE like the other replay suites.
+-- Commands are built as the owner first and handed over through
+-- transaction-local settings: the pg_temp helpers are not callable by API
+-- roles when default privileges do not grant PUBLIC EXECUTE, and a helper
+-- denial must never be mistaken for the denial of the object under test.
+-- Denials are asserted by SQLSTATE 42501 (insufficient_privilege), not by
+-- message wording.
+SELECT pg_catalog.set_config('app.pv_cmd_anon',
+  pg_temp.pv_cmd('\x7b7d'::bytea, 'evt-anon', 'x')::text, true);
+SELECT pg_catalog.set_config('app.pv_cmd_authenticated',
+  pg_temp.pv_cmd('\x7b7d'::bytea, 'evt-authenticated', 'x')::text, true);
+SELECT pg_catalog.set_config('app.pv_cmd_service_role',
+  pg_temp.pv_cmd('\x7b2263223a337d'::bytea, 'evt-service', 'x')::text, true);
+
+SET LOCAL ROLE anon;
+
 DO $$
 DECLARE
-  v_role text;
-  v_id uuid;
-  v_command jsonb;
-  v_service_command jsonb;
+  v_state text := 'ALLOWED';
+  v_message text;
 BEGIN
-  -- Commands are built as the owner, before any role switch: the pg_temp
-  -- helpers are not executable by API roles when default privileges revoke
-  -- PUBLIC EXECUTE, and a helper denial must never be mistaken for the
-  -- denial of the function under test.
-  v_service_command := pg_temp.pv_cmd('\x7b2263223a337d'::bytea, 'evt-service', 'x');
-
-  FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated'] LOOP
-    v_command := pg_temp.pv_cmd('\x7b7d'::bytea, 'evt-' || v_role, 'x');
-    EXECUTE format('SET LOCAL ROLE %I', v_role);
-    BEGIN
-      PERFORM public.capture_piggyvest_webhook_delivery(v_command);
-      RAISE EXCEPTION '% must not capture', v_role;
-    EXCEPTION WHEN insufficient_privilege THEN
-      IF SQLERRM NOT LIKE '%capture_piggyvest_webhook_delivery%' THEN
-        RAISE EXCEPTION '% was denied for the wrong reason: %', v_role, SQLERRM;
-      END IF;
-    END;
-    BEGIN
-      PERFORM 1 FROM public.piggyvest_webhook_captures;
-      RAISE EXCEPTION '% must not read captures', v_role;
-    EXCEPTION WHEN insufficient_privilege THEN
-      IF SQLERRM NOT LIKE '%piggyvest_webhook_captures%' THEN
-        RAISE EXCEPTION '% was denied for the wrong reason: %', v_role, SQLERRM;
-      END IF;
-    END;
-    RESET ROLE;
-  END LOOP;
-
-  SET LOCAL ROLE service_role;
   BEGIN
-    PERFORM 1 FROM public.piggyvest_webhook_captures;
-    RAISE EXCEPTION 'service_role must not read the table directly';
-  EXCEPTION WHEN insufficient_privilege THEN
-    IF SQLERRM NOT LIKE '%piggyvest_webhook_captures%' THEN
-      RAISE EXCEPTION 'service_role was denied for the wrong reason: %', SQLERRM;
-    END IF;
+    PERFORM public.capture_piggyvest_webhook_delivery(pg_catalog.current_setting('app.pv_cmd_anon')::jsonb);
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
   END;
-  v_id := (public.capture_piggyvest_webhook_delivery(v_service_command))->>'id';
-  IF v_id IS NULL THEN
-    RAISE EXCEPTION 'service_role must capture through the function';
+  IF v_state IS DISTINCT FROM '42501' THEN
+    RAISE EXCEPTION 'anon capture function: expected SQLSTATE 42501, got % (%)', v_state, v_message;
   END IF;
-  RESET ROLE;
 END
 $$;
+
+DO $$
+DECLARE
+  v_state text := 'ALLOWED';
+  v_message text;
+BEGIN
+  BEGIN
+    PERFORM 1 FROM public.piggyvest_webhook_captures;
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+  END;
+  IF v_state IS DISTINCT FROM '42501' THEN
+    RAISE EXCEPTION 'anon table read: expected SQLSTATE 42501, got % (%)', v_state, v_message;
+  END IF;
+END
+$$;
+
+RESET ROLE;
+
+SET LOCAL ROLE authenticated;
+
+DO $$
+DECLARE
+  v_state text := 'ALLOWED';
+  v_message text;
+BEGIN
+  BEGIN
+    PERFORM public.capture_piggyvest_webhook_delivery(pg_catalog.current_setting('app.pv_cmd_authenticated')::jsonb);
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+  END;
+  IF v_state IS DISTINCT FROM '42501' THEN
+    RAISE EXCEPTION 'authenticated capture function: expected SQLSTATE 42501, got % (%)', v_state, v_message;
+  END IF;
+END
+$$;
+
+DO $$
+DECLARE
+  v_state text := 'ALLOWED';
+  v_message text;
+BEGIN
+  BEGIN
+    PERFORM 1 FROM public.piggyvest_webhook_captures;
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+  END;
+  IF v_state IS DISTINCT FROM '42501' THEN
+    RAISE EXCEPTION 'authenticated table read: expected SQLSTATE 42501, got % (%)', v_state, v_message;
+  END IF;
+END
+$$;
+
+RESET ROLE;
+
+SET LOCAL ROLE service_role;
+
+DO $$
+DECLARE
+  v_state text := 'ALLOWED';
+  v_message text;
+BEGIN
+  BEGIN
+    PERFORM 1 FROM public.piggyvest_webhook_captures;
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+  END;
+  IF v_state IS DISTINCT FROM '42501' THEN
+    RAISE EXCEPTION 'service_role table read: expected SQLSTATE 42501, got % (%)', v_state, v_message;
+  END IF;
+END
+$$;
+
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := public.capture_piggyvest_webhook_delivery(
+    pg_catalog.current_setting('app.pv_cmd_service_role')::jsonb);
+  IF v_result->>'outcome' IS DISTINCT FROM 'captured' THEN
+    RAISE EXCEPTION 'service_role must capture through the function: %', v_result;
+  END IF;
+END
+$$;
+
+RESET ROLE;
 
 ROLLBACK;

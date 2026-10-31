@@ -55,6 +55,8 @@ try:
     sql((ROOT/'supabase/tests/imei_approved_price_reductions.sql').read_text())
     # The price-only replacement must retain the latest pre-submit refund behavior.
     sql((ROOT/'supabase/tests/imei_unsubmitted_petrock_refund.sql').read_text())
+    sql((ROOT/'supabase/migrations/20261031061214_imei_report_history_device_read.sql').read_text())
+    sql((ROOT/'supabase/tests/imei_report_history.sql').read_text())
     print('IMEI authenticated access SQL contracts passed on disposable database.')
 finally:
     sql('DROP DATABASE IF EXISTS '+database+' WITH (FORCE);', 'postgres')

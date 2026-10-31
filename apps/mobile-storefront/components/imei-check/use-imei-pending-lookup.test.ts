@@ -1,4 +1,4 @@
-import { jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
@@ -101,4 +101,29 @@ describe('useImeiPendingLookup', () => {
     );
     jest.useRealTimers();
   });
+});
+
+it('keeps polling in memory when optional pending storage fails', async () => {
+  const { result } = renderHook(() =>
+    useImeiPendingLookup({
+      accessToken: 'token',
+      apiBaseUrl: 'https://test.invalid',
+      customerId: 'customer-1',
+      merchantId: 'merchant-1',
+    })
+  );
+  jest
+    .spyOn(AsyncStorage, 'setItem')
+    .mockRejectedValueOnce(new Error('Storage full'));
+  mockPollImeiLookup.mockResolvedValue({ kind: 'retry', pollAfterMs: 60000 });
+  await act(async () => {
+    await result.current.start({
+      lookupId: '11111111-1111-4111-8111-111111111111',
+      pollAfterMs: 0,
+      tier: 'blacklist',
+      device: 'smartphone',
+    });
+  });
+  await waitFor(() => expect(mockPollImeiLookup).toHaveBeenCalled());
+  expect(result.current.pending?.device).toBe('smartphone');
 });

@@ -1,11 +1,11 @@
 import type { ImeiServiceTierDefinition } from '@baci/shared/imei';
 import {
   canAssessImeiNetworkUnlock,
+  getImeiBlacklistState,
   getImeiEffectiveVerdict,
+  isValidDeviceIdentifier,
 } from '@baci/shared/imei';
-import Ionicons, {
-  type IoniconsIconName,
-} from '@react-native-vector-icons/ionicons';
+import Ionicons from '@react-native-vector-icons/ionicons';
 import { Image } from 'expo-image';
 import { Stack } from 'expo-router';
 import { Pressable, ScrollView, Text, View } from 'react-native';
@@ -14,11 +14,13 @@ import { BRAND, SPACING, withAlpha } from '@/constants/Colors';
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { ImeiResult } from '@/lib/validation';
 import { getVerdictColors } from './get-verdict-colors';
+import { ImeiBlacklistCheckAction } from './imei-blacklist-check-action';
 import { styles } from './imei-check.styles';
 import type { ImeiCheckerColors } from './imei-check.types';
+import { ImeiCheckPending } from './imei-check-pending';
 import { getImeiResultStatusCards } from './imei-check-result-status-cards';
 import { ImeiRemediationOffer } from './imei-remediation-offer';
-import { isStatusClean } from './is-status-clean';
+import { ImeiResultStatusCard } from './imei-result-status-card';
 
 interface ImeiCheckResultViewProps {
   accessToken?: string;
@@ -28,6 +30,11 @@ interface ImeiCheckResultViewProps {
   lookupId?: string | null;
   result: ImeiResult;
   onReset: () => void;
+  onCheckBlacklist?: () => void;
+  isChecking?: boolean;
+  checkError?: string | null;
+  pendingPaused?: boolean;
+  canResume?: boolean;
 }
 
 export function ImeiCheckResultView({
@@ -38,6 +45,11 @@ export function ImeiCheckResultView({
   lookupId,
   result,
   onReset,
+  onCheckBlacklist,
+  isChecking = false,
+  checkError,
+  pendingPaused = false,
+  canResume = true,
 }: ImeiCheckResultViewProps) {
   const insets = useSafeAreaInsets();
   const effectiveVerdict = getImeiEffectiveVerdict(result);
@@ -62,6 +74,7 @@ export function ImeiCheckResultView({
               // conditional render on this route, so router.back() would pop
               // the whole screen and land on home.
               onPress={onReset}
+              disabled={isChecking}
             >
               <Ionicons name="arrow-back" size={24} color={colors.text} />
             </Pressable>
@@ -129,7 +142,7 @@ export function ImeiCheckResultView({
 
         <View style={styles.statusGrid}>
           {statusCards.map((card) => (
-            <StatusCard key={card.label} colors={colors} {...card} />
+            <ImeiResultStatusCard key={card.label} colors={colors} {...card} />
           ))}
         </View>
 
@@ -147,6 +160,27 @@ export function ImeiCheckResultView({
           </Text>
         </View>
 
+        {onCheckBlacklist &&
+        !currentTier.checksIncluded.includes('blacklistStatus') &&
+        isValidDeviceIdentifier(result.imei, 'imei') &&
+        getImeiBlacklistState(result.blacklistStatus) === 'unknown' ? (
+          <ImeiBlacklistCheckAction
+            isChecking={isChecking}
+            onCheck={onCheckBlacklist}
+          />
+        ) : null}
+        {isChecking ? (
+          <ImeiCheckPending
+            colors={colors}
+            paused={pendingPaused}
+            canResume={canResume}
+          />
+        ) : null}
+        {checkError ? (
+          <Text accessibilityRole="alert" style={{ color: colors.text }}>
+            {checkError}
+          </Text>
+        ) : null}
         {lookupId && apiBaseUrl && canAssessImeiNetworkUnlock(result) ? (
           <ImeiRemediationOffer
             accessToken={accessToken}
@@ -166,6 +200,7 @@ export function ImeiCheckResultView({
             },
           ]}
           onPress={onReset}
+          disabled={isChecking}
         >
           <Ionicons name="scan-outline" size={18} color={BRAND.primary} />
           <Text style={[styles.resetButtonText, { color: BRAND.primary }]}>
@@ -227,55 +262,6 @@ function TrustScore({
       <Text style={[styles.scoreLabel, { color: colors.textSecondary }]}>
         Trust
       </Text>
-    </View>
-  );
-}
-
-function StatusCard({
-  cleanAware = false,
-  colors,
-  icon,
-  label,
-  tint,
-  value,
-}: {
-  cleanAware?: boolean;
-  colors: ImeiCheckerColors;
-  icon: IoniconsIconName;
-  label: string;
-  tint?: string;
-  value: string;
-}) {
-  const clean = isStatusClean(value);
-  const cleanPalette = getVerdictColors('safe', colors);
-  const dangerPalette = getVerdictColors('danger', colors);
-  const color = cleanAware
-    ? clean
-      ? cleanPalette.text
-      : dangerPalette.text
-    : tint || colors.text;
-  const backgroundColor = cleanAware
-    ? clean
-      ? cleanPalette.bg
-      : dangerPalette.bg
-    : withAlpha(color, 0.12);
-
-  return (
-    <View
-      style={[
-        styles.statusCard,
-        { backgroundColor: colors.card, borderColor: colors.border },
-      ]}
-    >
-      <View style={[styles.statusIcon, { backgroundColor }]}>
-        <Ionicons name={icon} size={20} color={color} />
-      </View>
-      <View style={styles.statusInfo}>
-        <Text style={[styles.statusLabel, { color: colors.textSecondary }]}>
-          {label}
-        </Text>
-        <Text style={[styles.statusValue, { color }]}>{value}</Text>
-      </View>
     </View>
   );
 }

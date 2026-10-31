@@ -20,7 +20,7 @@ const formatPrice = (amount: number) =>
 // The balance only matters when it cannot cover the delivery.
 function getWalletDetails(wallet: Props['wallet']): ShipmentOptionDetail[] {
   if (!wallet) return [];
-  if (wallet.canBook) return [{ text: 'Paid from your wallet' }];
+  if (wallet.canBook) return [{ text: 'From your wallet' }];
   return [
     { text: `Wallet balance: ${formatPrice(wallet.availableBalance)}` },
     {
@@ -30,15 +30,22 @@ function getWalletDetails(wallet: Props['wallet']): ShipmentOptionDetail[] {
   ];
 }
 
-function getDestination(
+// One line: "GoStandard · 2 days · Abakaliki" (the state when no city).
+function getQuoteSummary(
+  quote: OrderGiglQuote,
   address: Partial<OrderGiglReceiver>
-): string | undefined {
-  const place = [address.city, address.state]
-    .map((part) => part?.trim())
+): string {
+  const days = `${quote.estimatedDays} day${quote.estimatedDays === 1 ? '' : 's'}`;
+  const place = address.city?.trim() || address.state?.trim();
+  return [quote.serviceTier || quote.displayName, days, place]
     .filter(Boolean)
-    .join(', ');
-  return place ? `To ${place}` : undefined;
+    .join(' · ');
 }
+
+// While a price loads the card keeps the height of a priced card, so the
+// sheet does not jump when the price arrives.
+const LOADING_PRICE = '₦ …';
+const LOADING_DETAILS: ShipmentOptionDetail[] = [{ text: 'From your wallet' }];
 
 interface Props {
   addressDraft: Partial<OrderGiglReceiver>;
@@ -113,22 +120,32 @@ export function ShipmentFlowGiglPanel({
   const { colors } = useTheme();
   const loading = state === 'loading';
   const description = quote
-    ? `${quote.serviceTier || quote.displayName} · ${quote.estimatedDays} day${quote.estimatedDays === 1 ? '' : 's'}`
+    ? getQuoteSummary(quote, addressDraft)
     : loading
-      ? 'Getting a fresh delivery price…'
-      : 'Get a fresh GIG delivery price for this order.';
+      ? 'Getting a delivery price…'
+      : 'Get a GIG delivery price for this order.';
+  const price = quote
+    ? formatPrice(quote.price)
+    : loading
+      ? LOADING_PRICE
+      : undefined;
+  const details = quote
+    ? getWalletDetails(wallet)
+    : loading
+      ? LOADING_DETAILS
+      : [];
 
   return (
     <View>
       <ShipmentOptionCard
-        caption={quote ? getDestination(addressDraft) : undefined}
+        badge="GIG"
         colors={colors}
         description={description}
-        details={quote ? getWalletDetails(wallet) : []}
+        details={details}
         disabled={loading}
         icon="paper-plane-outline"
         onPress={onModeChange}
-        price={quote ? formatPrice(quote.price) : undefined}
+        price={price}
         selected={selected}
         title="Ship with GIG"
       />

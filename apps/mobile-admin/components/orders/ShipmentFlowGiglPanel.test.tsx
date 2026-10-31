@@ -56,11 +56,12 @@ const base = {
 describe('ShipmentFlowGiglPanel', () => {
   it('shows one bundled GIG price, the balance and the top-up when the wallet is short', () => {
     render(<ShipmentFlowGiglPanel {...base} />);
-    expect(screen.getByText('Ship with GIG')).toBeTruthy();
+    expect(screen.getByText('GIG')).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /^Ship with GIG/ })).toBeTruthy();
     expect(screen.getByText('₦11,000')).toBeTruthy();
     expect(screen.getByText('Wallet balance: ₦1,000')).toBeTruthy();
     expect(screen.getByText('Top up ₦10,000 to book')).toBeTruthy();
-    expect(screen.queryByText('Paid from your wallet')).toBeNull();
+    expect(screen.queryByText('From your wallet')).toBeNull();
     expect(screen.queryByText(/margin|provider cost/i)).toBeNull();
   });
 
@@ -80,7 +81,7 @@ describe('ShipmentFlowGiglPanel', () => {
     ).toBeTruthy();
   });
 
-  it('shows the service, destination and wallet payment instead of the balance', () => {
+  it('shows service, days and destination on one line and the wallet payment instead of the balance', () => {
     render(
       <ShipmentFlowGiglPanel
         {...base}
@@ -90,23 +91,44 @@ describe('ShipmentFlowGiglPanel', () => {
       />
     );
 
-    expect(screen.getByText('GoStandard · 2 days')).toBeTruthy();
-    expect(screen.getByText('To Abakaliki, Ebonyi')).toBeTruthy();
-    expect(screen.getByText('Paid from your wallet')).toBeTruthy();
+    expect(screen.getByText('GoStandard · 2 days · Abakaliki')).toBeTruthy();
+    expect(screen.getByText('From your wallet')).toBeTruthy();
     expect(screen.queryByText(/Wallet balance/)).toBeNull();
   });
 
-  it('leaves out the destination line when the order has no city or state', () => {
-    render(
+  it('falls back to the state, then to no place, when the city is missing', () => {
+    const { rerender } = render(
       <ShipmentFlowGiglPanel
         {...base}
-        addressDraft={{ city: ' ', state: '' }}
+        addressDraft={{ city: ' ', state: 'Ebonyi' }}
         wallet={{ availableBalance: 20000, canBook: true, shortfall: 0 }}
       />
     );
+    expect(screen.getByText('Express · 2 days · Ebonyi')).toBeTruthy();
 
-    expect(screen.queryByText(/^To /)).toBeNull();
+    rerender(
+      <ShipmentFlowGiglPanel
+        {...base}
+        addressDraft={{}}
+        wallet={{ availableBalance: 20000, canBook: true, shortfall: 0 }}
+      />
+    );
     expect(screen.getByText('Express · 2 days')).toBeTruthy();
+  });
+
+  it('keeps the price and wallet lines while a price loads so the sheet does not jump', () => {
+    render(
+      <ShipmentFlowGiglPanel
+        {...base}
+        quote={null}
+        state="loading"
+        wallet={null}
+      />
+    );
+
+    expect(screen.getByText('Getting a delivery price…')).toBeTruthy();
+    expect(screen.getByText('₦ …')).toBeTruthy();
+    expect(screen.getByText('From your wallet')).toBeTruthy();
   });
 
   it('shows only server-reported accessible address fields', () => {

@@ -12,8 +12,11 @@ export interface ShipmentOptionDetail {
 }
 
 interface ShipmentOptionCardProps {
-  /** A second muted line under the description, e.g. the destination. */
-  caption?: string;
+  /**
+   * A short brand badge (e.g. "GIG") shown in place of the icon and title.
+   * The title still names the option for screen readers.
+   */
+  badge?: string;
   colors: ThemeColors;
   description: string;
   details?: ShipmentOptionDetail[];
@@ -26,7 +29,7 @@ interface ShipmentOptionCardProps {
 }
 
 export function ShipmentOptionCard({
-  caption,
+  badge,
   colors,
   description,
   details = [],
@@ -40,7 +43,6 @@ export function ShipmentOptionCard({
   const accessibilityLabel = [
     title,
     description,
-    caption,
     price,
     ...details.map((detail) => detail.text),
   ]
@@ -63,38 +65,43 @@ export function ShipmentOptionCard({
         },
       ]}
     >
-      <View
-        style={[
-          styles.optionIconWrap,
-          {
-            backgroundColor: selected
-              ? colors.primaryLight
-              : colors.backgroundLight,
-          },
-        ]}
-      >
-        <Ionicons
-          color={selected ? colors.primary : colors.textSecondary}
-          name={icon}
-          size={18}
-        />
-      </View>
+      {badge ? null : (
+        <View
+          style={[
+            styles.optionIconWrap,
+            {
+              backgroundColor: selected
+                ? colors.primaryLight
+                : colors.backgroundLight,
+            },
+          ]}
+        >
+          <Ionicons
+            color={selected ? colors.primary : colors.textSecondary}
+            name={icon}
+            size={18}
+          />
+        </View>
+      )}
       <View style={styles.optionCopy}>
-        <Text style={[styles.optionTitle, { color: colors.text }]}>
-          {title}
-        </Text>
+        {badge ? (
+          <View style={[cardStyles.badge, { backgroundColor: colors.primary }]}>
+            <Text
+              style={[cardStyles.badgeText, { color: colors.textOnPrimary }]}
+            >
+              {badge}
+            </Text>
+          </View>
+        ) : (
+          <Text style={[styles.optionTitle, { color: colors.text }]}>
+            {title}
+          </Text>
+        )}
         <Text
           style={[styles.optionDescription, { color: colors.textSecondary }]}
         >
           {description}
         </Text>
-        {caption ? (
-          <Text
-            style={[styles.optionDescription, { color: colors.textSecondary }]}
-          >
-            {caption}
-          </Text>
-        ) : null}
         {price ? (
           <Text style={[cardStyles.price, { color: colors.text }]}>
             {price}
@@ -127,6 +134,17 @@ export function ShipmentOptionCard({
 }
 
 const cardStyles = StyleSheet.create({
+  badge: {
+    alignSelf: 'flex-start',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  badgeText: {
+    fontSize: TYPOGRAPHY.size.sm,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
   detail: {
     fontSize: TYPOGRAPHY.size.sm,
   },

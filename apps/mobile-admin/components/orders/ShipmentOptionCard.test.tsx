@@ -110,13 +110,17 @@ describe('ShipmentOptionCard', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows the caption under the description and reads it in the accessibility label', () => {
-    renderCard({ caption: 'To Abakaliki, Ebonyi', price: '₦48,600' });
+  it('shows a badge instead of the icon and title, keeping the title for screen readers', () => {
+    renderCard({ badge: 'GIG', price: '₦48,600' });
 
-    expect(screen.getByText('To Abakaliki, Ebonyi')).toBeInTheDocument();
+    expect(screen.getByText('GIG')).toBeInTheDocument();
+    expect(screen.queryByText('Ship with GIG')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('img', { name: 'paper-plane-outline' })
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole('radio', {
-        name: 'Ship with GIG. GIG Logistics · 2 days. To Abakaliki, Ebonyi. ₦48,600',
+        name: 'Ship with GIG. GIG Logistics · 2 days. ₦48,600',
       })
     ).toBeInTheDocument();
   });

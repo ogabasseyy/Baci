@@ -9,9 +9,9 @@ The single place to see where the agentic commerce work stands and what happens 
 
 | | |
 | --- | --- |
-| **Current plan** | Milestone 0: plan 1 in review as draft PR [ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869); plan 2 built and in review as draft PR [ogabasseyy/Baci#3873](https://github.com/ogabasseyy/Baci/pull/3873), stacked on plan 1 |
-| **Next action** | Plan 3: latest-docs check, then write the plan. Fix Codex findings on #3869 and #3873 as they arrive. When #3869 merges, retarget #3873 to main, rebase it and redo its Task 8 (register re-review) |
-| **Waiting on the owner** | Merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851); merge approval for #3869, then #3873, once their gates are green; the plan 5 VAT decision (the merchant is VAT-registered at 7.50%) |
+| **Current plan** | Milestone 0: plan 1 ([ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869), head `26fc3d4011`) and plan 2 ([ogabasseyy/Baci#3873](https://github.com/ogabasseyy/Baci/pull/3873), stacked, head `1537b8d0a7`) are back in Codex review after their fixes and a sync with main. Plan 3 is written: [2026-10-31-agentic-m0-3-truthful-claims.md](2026-10-31-agentic-m0-3-truthful-claims.md) |
+| **Next action** | Independent review of plan 3, then build it on a branch stacked on #3873 (until plans 1 and 2 merge). Fix Codex findings on #3869 and #3873 as they arrive. When #3869 merges, retarget #3873 to main, merge main into it (no force-push) and redo its register re-review |
+| **Waiting on the owner** | Merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851) (recommended after Milestone 0); merge approval for #3869, then #3873, once their gates are green; the plan 5 VAT decision (the merchant is VAT-registered at 7.50%); plan 3's four decisions, which proceed on their defaults unless the owner objects |
 | **Last updated** | 31 October 2026 |
 
 ## How every plan moves (the loop)
@@ -59,6 +59,7 @@ Plan: [2026-10-30-agentic-m0-1-admin-client-removal.md](2026-10-30-agentic-m0-1-
 - [x] Local gates passed (30 Oct): 40 test files and 195 tests, both SQL tests in a throwaway Postgres 17, capability gate (178 tests). CodeRabbit unavailable (rate-limited, no seat); full suites left to CI
 - [x] PR opened (owner OK): draft [ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869), 31 Oct; Codex review requested
 - [x] Branch synced with main after #3860 (31 Oct, owner OK): rebuilt on `bec52f6033`, inventory and capability record regenerated once; pushed as `ede636ee97` with identical commit IDs
+- [x] Codex P1 fixed and synced with main (31 Oct): payment-split tests moved to their own file (`598f51421c`); main merged in (`e8c6adf908`) instead of a rebase, so no force-push; inventory and register regenerated (`d05d0e0f6e`, `26fc3d4011`); 143 agentic tests, typecheck and capability gate pass; pushed with identical IDs, Codex re-requested
 - [ ] PR gates green
 - [ ] Merged (owner OK, deploys)
 - [ ] Production check: payment-split function live, `anon` cannot execute it
@@ -71,14 +72,15 @@ Plan: [2026-10-30-agentic-m0-1-admin-client-removal.md](2026-10-30-agentic-m0-1-
 - [x] Built with TDD (31 Oct): 21 test files, 127 pass and 9 known gaps fail as expected; Codex's two P1s (one primary export per file) fixed in `3778e7aaa2`
 - [x] Local gates passed (31 Oct): web typecheck, affected-package lint, capability gate `OK` (178 tests), register `fresh`; re-reviewed at `76b52d16ce`
 - [x] PR opened (owner OK): draft [ogabasseyy/Baci#3873](https://github.com/ogabasseyy/Baci/pull/3873), base `fix/agentic-remove-admin-client`; final head `e4eacf287a`, Codex review requested
+- [x] Codex P1s fixed and synced with plan 1 (31 Oct): conformance and Paystack fixture helpers split into one module each (`f119a47ba9`); plan 1's new head merged in (`33e82e0d65`); register re-reviewed (`1537b8d0a7`); 154 tests pass with 9 known gaps, web typecheck, lint, capability gate `OK`; pushed with identical IDs, Codex re-requested
 - [ ] PR gates green
 - [ ] Merged (owner OK, deploys)
 - [x] Production check (none beyond Task 1, which ran read-only on 31 Oct: shared cart enrolled, VAT registered at 7.50%, migration ledger matches the repository, public profile 200 for plain and browser requests with no checkout declared)
 
 ### Plan 3: truthful capability claims and the shared-cart gate (roadmap Task 3)
 
-- [ ] Latest-docs check (UCP profile and capability fields, Google cart rules, OpenAI feed flags)
-- [ ] Plan written
+- [x] Latest-docs check (31 Oct; see the docs log): stay on UCP `2026-04-08`; cart and catalog need `schema`; Google cart transfer is create-only and opt-out per product (US rollout only); OpenAI feed flags are `is_eligible_*` with `enable_*` aliases
+- [x] Plan written (31 Oct): [2026-10-31-agentic-m0-3-truthful-claims.md](2026-10-31-agentic-m0-3-truthful-claims.md), 9 tasks; stacked on #3873 until plans 1 and 2 merge
 - [ ] Independent review, fixes applied
 - [ ] Built with TDD
 - [ ] Local gates passed
@@ -156,6 +158,10 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | Free space in Docker Desktop (its own disk is full; tests currently run the database in memory instead) | Convenience | Open |
 | Verify Paystack's Google Pay page by hand: it blocks automated reads, so the 3DS and `PAN_ONLY` details are unconfirmed | Milestone C | Open |
 | Partner access: Google UCP sandbox, OpenAI commerce approval, Paystack token and 3DS support | Milestones B–C | Open |
+| OpenAI feed: every row `enable_checkout: false` until an OpenAI checkout integration is approved | Plan 3 | Default taken; owner may object |
+| Google cart eligibility (F25): keep cart declared for shared-cart merchants, although Google treats every free-listing product as cart-eligible; per-product flags arrive with Task 8 | Plan 3 | Default taken; owner may object |
+| Create-only UCP cart (F15): keep the declaration and record that `PUT` update is unsupported; confirm with Google in Task 9 | Plan 3 | Default taken; owner may object |
+| Gated cart responses: `404 cart_unavailable` when not enrolled, `503 cart_availability_unknown` when enrollment cannot be read | Plan 3 | Default taken; owner may object |
 
 ## Latest-docs log
 
@@ -176,6 +182,13 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | 31 Oct | MCP | `2026-07-28` still latest; Baci's server card advertises `2025-06-18` | New finding F40 |
 | 31 Oct | OpenAI ACP | `2026-04-17` still the newest release; OpenAI's page still shows `2025-09-12`; Baci advertises `2026-04-30`, which has no release | New finding F41 |
 | 31 Oct | Capability gate | Paths and links cited in the access map are bound sources | Plans 3 to 6 re-review the map when they edit a path its evidence table cites |
+| 31 Oct | UCP | `2026-08-25` is the latest release; Google documents only `2026-04-08` | Plan 3 stays on `2026-04-08` |
+| 31 Oct | UCP `2026-04-08` overview and REST bindings | Each capability needs `version`, `spec` and `schema`; catalog is two capabilities (search and lookup) with their own spec and schema URLs | Plan 3 Task 1 (F7) |
+| 31 Oct | Google Pay UCP config (updated 15 Oct) | `com.google.pay` is versioned `2026-01-23` with `merchant_info` and `allowed_payment_methods`; the PSP must process Google's tokens | Plan 3 withholds Google Pay; Task 13 |
+| 31 Oct | Google cart guides (updated 9–19 Oct) | Cart transfer uses `CreateCart` only; get, update and cancel are optional in the test tool | Plan 3 keeps the create-only cart (F15) |
+| 31 Oct | Google Merchant Center (updated 29 Oct) | Cart transfer is opt-out once cart is declared; checkout eligibility defaults false; the group is overwritten on each upload; US rollout only | Plan 3 owner decision; Task 8 (F25) |
+| 31 Oct | OpenAI product feed | `is_eligible_search` and `is_eligible_checkout` are current; `enable_*` aliases win when both are sent; checkout needs a separately approved integration | Plan 3 Task 5 (F6) |
+| 31 Oct | ACP | `2026-04-17` is still the latest; no `2026-04-30` exists | F41 unchanged (Task 5) |
 
 ## Review log
 
@@ -188,6 +201,8 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | 31 Oct | Plan 2 | Orchestrator | Accepted Task 1's queries and probes, the evidence table and the Production-cell rule; moved the validator and MCP fixtures under `src` for CI type-checking |
 | 31 Oct | Plan 2 | Codex on PR #3851 (commit `c699994a3d`) | Didn't find any major issues |
 | 31 Oct | Plan 2 code | Codex on PR #3873 | Two P1s (one primary export per file) fixed in `3778e7aaa2`; re-requested for the final head `e4eacf287a` |
+| 31 Oct | Plan 2 code | Codex on PR #3873 | Clean on `e4eacf287a`; two earlier P1 threads (fixture helpers with several exports) were still open, fixed in `f119a47ba9`, threads resolved, re-requested for `1537b8d0a7` |
+| 31 Oct | Plan 1 code | Codex on PR #3869 at `ede636ee97` | One P1: `merchant-context.test.ts` over 300 lines; fixed in `598f51421c`, thread resolved, re-requested for `26fc3d4011` |
 
 ## Change log
 
@@ -201,3 +216,5 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | 31 Oct | Plan 1 opened as draft PR #3869. Main's two failing tests were fixed by #3860; plan 1 rebuilt on top of it. |
 | 31 Oct | Plan 2 written and rehearsed; published to docs PR #3851 for Codex review. New finding F42. |
 | 31 Oct | Plan 2 built and opened as draft PR #3873. Read-only baseline: shared cart enrolled, VAT registered at 7.50%, migration ledger matches, public profile 200 for plain and browser requests (F8's 403 did not reproduce) with no checkout declared. |
+| 31 Oct | PR branches are brought up to date by merging main in (allowed because PRs squash-merge) rather than rebasing, so no force-push is needed; the push script now replays merge commits with identical IDs. |
+| 31 Oct | Plan 3 written after the latest-docs check; plans 1 and 2 synced and back in review. |

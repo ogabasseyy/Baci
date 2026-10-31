@@ -9,9 +9,9 @@ The single place to see where the agentic commerce work stands and what happens 
 
 | | |
 | --- | --- |
-| **Current plan** | Milestone 0: plan 1 ([ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869), head `26fc3d4011`) and plan 2 ([ogabasseyy/Baci#3873](https://github.com/ogabasseyy/Baci/pull/3873), stacked, head `1537b8d0a7`) are back in Codex review after their fixes and a sync with main. Plan 3 is written: [2026-10-31-agentic-m0-3-truthful-claims.md](2026-10-31-agentic-m0-3-truthful-claims.md) |
-| **Next action** | Independent review of plan 3, then build it on a branch stacked on #3873 (until plans 1 and 2 merge). Fix Codex findings on #3869 and #3873 as they arrive. When #3869 merges, retarget #3873 to main, merge main into it (no force-push) and redo its register re-review |
-| **Waiting on the owner** | Merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851) (recommended after Milestone 0); merge approval for #3869, then #3873, once their gates are green; the plan 5 VAT decision (the merchant is VAT-registered at 7.50%); plan 3's four decisions, which proceed on their defaults unless the owner objects |
+| **Current plan** | Milestone 0: plan 1 ([ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869), head `26fc3d4011`) and plan 2 ([ogabasseyy/Baci#3873](https://github.com/ogabasseyy/Baci/pull/3873), stacked, head `1537b8d0a7`) are Codex-clean on their heads. Plan 3 is built and open as draft [ogabasseyy/Baci#3884](https://github.com/ogabasseyy/Baci/pull/3884) (stacked on #3873, head `da9c6a5ccc`), in Codex review |
+| **Next action** | Fix Codex findings on #3884 as they arrive; write plan 4 (minor units and the confirmation contract) while reviews run. With the owner's merge approval: merge main into #3869 (it is behind), wait for CI and Codex on that head, merge; then retarget #3873 to main, merge main into it (no force-push) and redo its register re-review; then the same for #3884 |
+| **Waiting on the owner** | Merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851) (recommended after Milestone 0); merge approval for #3869, then #3873, then #3884 (each merge deploys); the plan 5 VAT decision (the merchant is VAT-registered at 7.50%); plan 3's four decisions, which proceed on their defaults unless the owner objects |
 | **Last updated** | 31 October 2026 |
 
 ## How every plan moves (the loop)
@@ -60,6 +60,7 @@ Plan: [2026-10-30-agentic-m0-1-admin-client-removal.md](2026-10-30-agentic-m0-1-
 - [x] PR opened (owner OK): draft [ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869), 31 Oct; Codex review requested
 - [x] Branch synced with main after #3860 (31 Oct, owner OK): rebuilt on `bec52f6033`, inventory and capability record regenerated once; pushed as `ede636ee97` with identical commit IDs
 - [x] Codex P1 fixed and synced with main (31 Oct): payment-split tests moved to their own file (`598f51421c`); main merged in (`e8c6adf908`) instead of a rebase, so no force-push; inventory and register regenerated (`d05d0e0f6e`, `26fc3d4011`); 143 agentic tests, typecheck and capability gate pass; pushed with identical IDs, Codex re-requested
+- [x] Codex clean on `26fc3d4011` (31 Oct); one CI shard failed on an unrelated timing test (`postcss-selector-parser` "scales linearly"), re-run. The branch is behind main again, so it is synced right before merging
 - [ ] PR gates green
 - [ ] Merged (owner OK, deploys)
 - [ ] Production check: payment-split function live, `anon` cannot execute it
@@ -73,6 +74,7 @@ Plan: [2026-10-30-agentic-m0-1-admin-client-removal.md](2026-10-30-agentic-m0-1-
 - [x] Local gates passed (31 Oct): web typecheck, affected-package lint, capability gate `OK` (178 tests), register `fresh`; re-reviewed at `76b52d16ce`
 - [x] PR opened (owner OK): draft [ogabasseyy/Baci#3873](https://github.com/ogabasseyy/Baci/pull/3873), base `fix/agentic-remove-admin-client`; final head `e4eacf287a`, Codex review requested
 - [x] Codex P1s fixed and synced with plan 1 (31 Oct): conformance and Paystack fixture helpers split into one module each (`f119a47ba9`); plan 1's new head merged in (`33e82e0d65`); register re-reviewed (`1537b8d0a7`); 154 tests pass with 9 known gaps, web typecheck, lint, capability gate `OK`; pushed with identical IDs, Codex re-requested
+- [x] Codex clean and CI green on `1537b8d0a7` (31 Oct)
 - [ ] PR gates green
 - [ ] Merged (owner OK, deploys)
 - [x] Production check (none beyond Task 1, which ran read-only on 31 Oct: shared cart enrolled, VAT registered at 7.50%, migration ledger matches the repository, public profile 200 for plain and browser requests with no checkout declared)
@@ -81,13 +83,13 @@ Plan: [2026-10-30-agentic-m0-1-admin-client-removal.md](2026-10-30-agentic-m0-1-
 
 - [x] Latest-docs check (31 Oct; see the docs log): stay on UCP `2026-04-08`; cart and catalog need `schema`; Google cart transfer is create-only and opt-out per product (US rollout only); OpenAI feed flags are `is_eligible_*` with `enable_*` aliases
 - [x] Plan written (31 Oct): [2026-10-31-agentic-m0-3-truthful-claims.md](2026-10-31-agentic-m0-3-truthful-claims.md), 9 tasks; stacked on #3873 until plans 1 and 2 merge
-- [ ] Independent review, fixes applied
-- [ ] Built with TDD
-- [ ] Local gates passed
-- [ ] PR opened (owner OK):
+- [x] Independent review, fixes applied (31 Oct): Codex on #3851 found one P2, fixed; clean at `91dfa63e86`. Jules naming fix applied
+- [x] Built with TDD (31 Oct): tasks 1–5 red then green: schemas on every UCP capability (`4410218bb1`, F7), Google Pay withheld (`34bc91c812`), cart declared only for shared-cart merchants (`01089b9e73`, `a8f0665ba7`), cart routes fail closed before any reservation (`6d609958f6`, F34), feed `enable_checkout: false` (`f0dfa72a0a`, F6); F7 and F34 now pass in the conformance suite
+- [x] Local gates passed (31 Oct): 427 agentic files, 25 `.well-known` files, the feed suites (127 tests) and the evidence tests (44) pass; two load timeouts passed on re-run. Full web typecheck clean on `6d609958f6`; lint in pre-commit. Inventory regenerated (`b7dc11a0c3`, 585 rows); register re-reviewed (`da9c6a5ccc`); capability gate `OK` (179 tests) against the PR base, register `fresh`. CodeRabbit rate-limited, skipped
+- [x] PR opened (owner OK): draft [ogabasseyy/Baci#3884](https://github.com/ogabasseyy/Baci/pull/3884), base `chore/agentic-baseline-evidence`, head `da9c6a5ccc` pushed with identical IDs; Codex review requested
 - [ ] PR gates green
 - [ ] Merged (owner OK, deploys)
-- [ ] Production check
+- [ ] Production check: `/.well-known/ucp` declares `schema` on every capability and no `com.google.pay`; the OpenAI feed rows say `enable_checkout: false`
 
 ### Plan 4: minor units and the confirmation contract (roadmap Task 4)
 
@@ -203,6 +205,10 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | 31 Oct | Plan 2 code | Codex on PR #3873 | Two P1s (one primary export per file) fixed in `3778e7aaa2`; re-requested for the final head `e4eacf287a` |
 | 31 Oct | Plan 2 code | Codex on PR #3873 | Clean on `e4eacf287a`; two earlier P1 threads (fixture helpers with several exports) were still open, fixed in `f119a47ba9`, threads resolved, re-requested for `1537b8d0a7` |
 | 31 Oct | Plan 1 code | Codex on PR #3869 at `ede636ee97` | One P1: `merchant-context.test.ts` over 300 lines; fixed in `598f51421c`, thread resolved, re-requested for `26fc3d4011` |
+| 31 Oct | Plan 3 | Codex and Jules on PR #3851 | Codex: one P2, fixed; clean at `91dfa63e86`. Jules: a naming fix, applied; then clean |
+| 31 Oct | Plan 1 code | Codex on PR #3869 | Clean on `26fc3d4011` |
+| 31 Oct | Plan 2 code | Codex on PR #3873 | Clean on `1537b8d0a7` |
+| 31 Oct | Plan 3 code | Orchestrator | Reviewed each task's diff: the cart gate runs before every reservation, scoped client and insert in all five handlers; `route.test.ts` split to stay under 300 lines |
 
 ## Change log
 
@@ -218,3 +224,4 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | 31 Oct | Plan 2 built and opened as draft PR #3873. Read-only baseline: shared cart enrolled, VAT registered at 7.50%, migration ledger matches, public profile 200 for plain and browser requests (F8's 403 did not reproduce) with no checkout declared. |
 | 31 Oct | PR branches are brought up to date by merging main in (allowed because PRs squash-merge) rather than rebasing, so no force-push is needed; the push script now replays merge commits with identical IDs. |
 | 31 Oct | Plan 3 written after the latest-docs check; plans 1 and 2 synced and back in review. |
+| 31 Oct | Plan 3 built (8 commits) and opened as draft PR #3884, stacked on #3873. Plans 1 and 2 are Codex-clean on their heads. |

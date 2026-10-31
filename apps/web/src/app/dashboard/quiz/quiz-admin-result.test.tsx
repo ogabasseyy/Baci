@@ -156,6 +156,21 @@ describe('QuizAdminResult', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('stops asking the merchant to review questions once the quiz is launched', () => {
+    render(
+      <QuizAdminResult
+        configuration={configuration}
+        result={{
+          ...draftResult(),
+          event: { ...draftResult().event, status: 'active' },
+        }}
+      />
+    );
+
+    expect(screen.getByText('Questions: 1')).toBeInTheDocument();
+    expect(screen.queryByText(/questions to review/i)).not.toBeInTheDocument();
+  });
+
   it('closes the confirmation dialog when the quiz becomes launched', async () => {
     const user = userEvent.setup();
     const { rerender } = render(

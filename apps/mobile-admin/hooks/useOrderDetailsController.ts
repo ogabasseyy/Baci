@@ -59,7 +59,6 @@ export function useOrderDetailsController() {
   const validatedParams = routeResult.success ? routeResult.data : null;
   const orderId = validatedParams?.id;
   const actionParam = validatedParams?.action;
-
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { data: order, error, isLoading } = useOrder(orderId ?? '');
@@ -91,6 +90,7 @@ export function useOrderDetailsController() {
       providerLabel,
       shipmentFlowStep: uiState.shipmentFlowStep,
       showShipmentFlow: uiState.showShipmentFlow,
+      showStatusModal: uiState.showStatusModal,
       userId: user?.id,
     });
 

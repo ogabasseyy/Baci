@@ -159,7 +159,7 @@ export function QuizLeaderboardScreen() {
             </View>
           }
           ListEmptyComponent={
-            loading || error ? null : (
+            loading || error ? undefined : (
               <Text style={styles.state}>No standings are available yet.</Text>
             )
           }
@@ -192,7 +192,7 @@ export function QuizLeaderboardScreen() {
         ListEmptyComponent={
           loading ? (
             <ActivityIndicator accessibilityLabel="Loading past quiz leaderboards" />
-          ) : error ? null : (
+          ) : error ? undefined : (
             <Text style={styles.state}>No previous quiz leaderboards yet.</Text>
           )
         }

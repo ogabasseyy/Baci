@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
-import { serializeAndEvaluate } from '@expo/config/build/Serialize.js';
+
+const require = createRequire(import.meta.url);
+const { getConfig } = require('@expo/config');
+
 import { buildLocalStorefrontEnvironment } from '../../../tools/test/local-storefront-environment.mjs';
 import configuration from './local-storefront-expo-config.js';
 
@@ -46,11 +53,31 @@ test('replaces all manifest extras and provider configuration with local values'
 });
 
 test('keeps disabled credentials falsy after Expo public manifest serialization', () => {
-  const config = serializeAndEvaluate(
-    configuration.buildLocalStorefrontExpoConfig(environment)
-  );
-  assert.equal(Boolean(config.extra.facebookAppId), false);
-  assert.equal(Boolean(config.extra.facebookClientToken), false);
+  const projectRoot = mkdtempSync(join(tmpdir(), 'baci-local-expo-config-'));
+  try {
+    writeFileSync(
+      join(projectRoot, 'package.json'),
+      JSON.stringify({ name: 'local-config-fixture', version: '1.0.0' })
+    );
+    writeFileSync(
+      join(projectRoot, 'app.json'),
+      JSON.stringify({
+        expo: {
+          ...configuration.buildLocalStorefrontExpoConfig(environment),
+          sdkVersion: '58.0.0',
+        },
+      })
+    );
+    const { exp: config } = getConfig(projectRoot, {
+      isPublicConfig: true,
+      skipPlugins: true,
+    });
+    assert.equal(config.extra.localStorefront, true);
+    assert.equal(Boolean(config.extra.facebookAppId), false);
+    assert.equal(Boolean(config.extra.facebookClientToken), false);
+  } finally {
+    rmSync(projectRoot, { recursive: true, force: true });
+  }
 });
 
 test('rejects missing, non-loopback and malformed expected Auth issuers', () => {

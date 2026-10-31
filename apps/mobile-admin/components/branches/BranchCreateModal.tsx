@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRef } from 'react';
+import type { TextInputInstance } from 'react-native';
 import {
   ActivityIndicator,
   Modal,
@@ -50,7 +51,7 @@ export function BranchCreateModal({
   isLoading,
   colors,
 }: BranchCreateModalProps) {
-  const branchAddressRef = useRef<TextInput>(null);
+  const branchAddressRef = useRef<TextInputInstance>(null);
 
   return (
     <Modal

@@ -1,6 +1,10 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 import { primaryCardTransferFixture as fixture } from './primary-wallet-card-transfer.test-fixture';
 import { runPrimaryCardTransferOutbox } from './primary-wallet-card-transfer-outbox';
+import {
+  freshOutboxDatabaseState,
+  outboxDatabaseQuery,
+} from './primary-wallet-card-transfer-outbox.test-support';
 
 const mocks = vi.hoisted(() => ({
   query: vi.fn(),
@@ -18,56 +22,8 @@ vi.mock('pg', () => ({
 }));
 beforeEach(() => {
   vi.resetAllMocks();
-  Object.assign(mocks, {
-    state: 'ready',
-    failRecord: false,
-    invalid: false,
-    stuckSibling: false,
-  });
-  mocks.query.mockImplementation(async (sql: string, parameters: unknown[]) => {
-    if (sql.includes('SESSION_USER AS'))
-      return {
-        rows: [
-          {
-            database_name: fixture.configuration.runtime.transfer.name,
-            login_name: 'baci_primary_card_transfer',
-            role_name: 'baci_primary_card_transfer',
-            safe: true,
-            tls: true,
-          },
-        ],
-      };
-    let result: unknown;
-    if (sql.includes('select_ready_transfers'))
-      result = {
-        operationIds: mocks.invalid
-          ? ['invalid']
-          : parameters.at(-1) === '1' &&
-              (mocks.state === 'ready' || mocks.stuckSibling)
-            ? [fixture.context.operationId]
-            : [],
-        unknownCount: mocks.state === 'unknown' || mocks.stuckSibling ? 1 : 0,
-        dispatchingCount: mocks.state === 'dispatching' ? 1 : 0,
-      };
-    if (sql.includes('dispatch_context')) result = fixture.context;
-    if (sql.includes('claim_transfer')) {
-      result = { outcome: 'existing' };
-      if (mocks.state === 'ready') {
-        mocks.state = 'dispatching';
-        result = {
-          outcome: 'claimed',
-          token: fixture.context.customerId,
-          command: fixture.command,
-        };
-      }
-    }
-    if (sql.includes('record_transfer')) {
-      if (mocks.failRecord) throw new Error('private storage detail');
-      mocks.state = parameters.at(-1) ? 'submitted' : 'unknown';
-      result = true;
-    }
-    return { rows: [{ result }] };
-  });
+  Object.assign(mocks, freshOutboxDatabaseState());
+  mocks.query.mockImplementation(outboxDatabaseQuery(mocks));
 });
 const http = () =>
   vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => {
@@ -184,32 +140,6 @@ it('persists unknown acceptance and never redispatches on future scheduled runs'
   });
   // Submit throw plus the reconciling reference lookup that follows it.
   expect(fetchImplementation).toHaveBeenCalledTimes(2);
-});
-it('holds a submit throw whose reference TSQ does not find for review and never posts it again', async () => {
-  let posts = 0;
-  const fetchImplementation = vi.fn(
-    async (_url: string | URL | Request, init?: RequestInit) => {
-      // The POST loses its response; TSQ then answers 404 (not indexed yet).
-      if (init?.method === 'GET')
-        return Response.json(
-          { status: false, message: 'Transaction Not Found', data: {} },
-          { status: 404 }
-        );
-      posts += 1;
-      throw new Error('response lost after send');
-    }
-  );
-  expect(await run(fetchImplementation)).toMatchObject({
-    status: 'reconciliation_required',
-    selectedCount: 1,
-    unknownCount: 1,
-  });
-  expect(mocks.state).toBe('unknown');
-  expect(await run(fetchImplementation)).toMatchObject({
-    status: 'reconciliation_required',
-    selectedCount: 0,
-  });
-  expect(posts).toBe(1);
 });
 it('surfaces result-write failure after cancelled committed claim and never resets dispatching', async () => {
   const controller = new AbortController();

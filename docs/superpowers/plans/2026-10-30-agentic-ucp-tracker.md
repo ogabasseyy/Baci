@@ -9,8 +9,8 @@ The single place to see where the agentic commerce work stands and what happens 
 
 | | |
 | --- | --- |
-| **Current plan** | Milestone 0: plan 1 ([ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869), head `26fc3d4011`) and plan 2 ([ogabasseyy/Baci#3873](https://github.com/ogabasseyy/Baci/pull/3873), stacked, head `1537b8d0a7`) are Codex-clean on their heads. Plan 3 is built and open as draft [ogabasseyy/Baci#3884](https://github.com/ogabasseyy/Baci/pull/3884) (stacked on #3873, head `da9c6a5ccc`), in Codex review |
-| **Next action** | Fix Codex findings on #3884 as they arrive; write plan 4 (minor units and the confirmation contract) while reviews run. With the owner's merge approval: merge main into #3869 (it is behind), wait for CI and Codex on that head, merge; then retarget #3873 to main, merge main into it (no force-push) and redo its register re-review; then the same for #3884 |
+| **Current plan** | Milestone 0: plan 1 ([ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869), head `83270eaf68`), plan 2 ([ogabasseyy/Baci#3873](https://github.com/ogabasseyy/Baci/pull/3873), stacked, head `dded9ca801`) and plan 3 ([ogabasseyy/Baci#3884](https://github.com/ogabasseyy/Baci/pull/3884), stacked on #3873, head `bcf4117fa3`) were synced with main on 31 Oct and are back in Codex review; each was Codex-clean on its previous head |
+| **Next action** | Fix Codex findings on #3884 as they arrive; write plan 4 (minor units and the confirmation contract) while reviews run. With the owner's merge approval: wait for CI and Codex on #3869's head (merge main in again first if it has moved), merge; then retarget #3873 to main, merge main into it (no force-push) and redo its register re-review; then the same for #3884 |
 | **Waiting on the owner** | Merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851) (recommended after Milestone 0); merge approval for #3869, then #3873, then #3884 (each merge deploys); the plan 5 VAT decision (the merchant is VAT-registered at 7.50%); plan 3's four decisions, which proceed on their defaults unless the owner objects |
 | **Last updated** | 31 October 2026 |
 
@@ -225,3 +225,4 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | 31 Oct | PR branches are brought up to date by merging main in (allowed because PRs squash-merge) rather than rebasing, so no force-push is needed; the push script now replays merge commits with identical IDs. |
 | 31 Oct | Plan 3 written after the latest-docs check; plans 1 and 2 synced and back in review. |
 | 31 Oct | Plan 3 built (8 commits) and opened as draft PR #3884, stacked on #3873. Plans 1 and 2 are Codex-clean on their heads. |
+| 31 Oct | All three code PRs synced with main by merging (no force-push): main into #3869 (`4ea8ba1280`), #3869 into #3873 (`6696156a8e`), #3873 into #3884 (`5c3c4744a4`); each register re-stamped on its merge commit (`83270eaf68`, `dded9ca801`, `bcf4117fa3`). Inventory unchanged; gates `OK`, registers `fresh`; Codex re-requested on all three. The register's `review_scope` is capped at 1000 characters. |

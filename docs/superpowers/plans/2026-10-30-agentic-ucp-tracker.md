@@ -2,7 +2,7 @@
 
 The single place to see where the agentic commerce work stands and what happens next. Update it whenever a step finishes: tick the box, add the date, and add the PR link or commit.
 
-- **Roadmap:** [2026-10-29-agentic-ucp-completion.md](2026-10-29-agentic-ucp-completion.md). It holds the findings (F1–F41), the milestones and the tasks.
+- **Roadmap:** [2026-10-29-agentic-ucp-completion.md](2026-10-29-agentic-ucp-completion.md). It holds the findings (F1–F42), the milestones and the tasks.
 - **Plans:** one executable plan per pull request, saved as `2026-MM-DD-agentic-m<milestone>-<n>-<name>.md` in this folder.
 
 ## Now
@@ -10,8 +10,8 @@ The single place to see where the agentic commerce work stands and what happens 
 | | |
 | --- | --- |
 | **Current plan** | Milestone 0, plan 1 is built and in review as draft PR [ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869); plan 2 is next |
-| **Next action** | Plan 2: draft being written (latest-docs check done 31 Oct); then independent review |
-| **Waiting on the owner** | Merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851); read-only production queries for plan 2 |
+| **Next action** | Plan 2: Codex review on docs PR #3851; then the owner-approved read-only baseline (plan 2 Task 1) and the build |
+| **Waiting on the owner** | Approval of plan 2 Task 1's read-only production queries and profile probes; merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851); read-only production queries for plan 2 |
 | **Last updated** | 31 October 2026 |
 
 ## How every plan moves (the loop)
@@ -66,14 +66,14 @@ Plan: [2026-10-30-agentic-m0-1-admin-client-removal.md](2026-10-30-agentic-m0-1-
 ### Plan 2: baseline and evidence (roadmap Task 1)
 
 - [x] Latest-docs check (31 Oct: no new protocol versions; fixtures pin UCP by commit because its tags were re-cut; new findings F40 and F41)
-- [ ] Plan written. Needs an owner-approved, read-only production check: whether the agentic merchant's `premium_features` includes `shared_cart` (there is no `shared_cart_enabled` column), its `vat_registration_status`, the migration ledger, and a plain GET of its public UCP profile.
-- [ ] Independent review, fixes applied
+- [x] Plan written (31 Oct): [2026-10-31-agentic-m0-2-baseline-evidence.md](2026-10-31-agentic-m0-2-baseline-evidence.md), 10 tasks, rehearsed in a scratch copy of plan 1's head (106 tests pass, 9 known gaps fail as expected, capability gate OK). Task 1 needs the owner's OK: read-only queries of the agentic merchant's `premium_features` (`shared_cart`), `vat_registration_status` and the migration ledger, plus a plain GET of its public UCP profile.
+- [ ] Independent review, fixes applied (orchestrator review done: validator and MCP fixtures moved under `src` so CI type-checks them; Codex review requested on #3851)
 - [ ] Built with TDD
 - [ ] Local gates passed
 - [ ] PR opened (owner OK):
 - [ ] PR gates green
 - [ ] Merged (owner OK, deploys)
-- [ ] Production check
+- [ ] Production check (none beyond Task 1: nothing runtime changes)
 
 ### Plan 3: truthful capability claims and the shared-cart gate (roadmap Task 3)
 
@@ -175,6 +175,7 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | 31 Oct | Google Merchant UCP | Still `2026-04-08` (and `2026-01-23`) only; a `2026-04-08` cart page exists (updated 9 Oct): Google creates and transfers carts with `POST /carts` only, and update/cancel are optional sandbox tests | Task 9 scope; profile must be public and unauthenticated (F8) |
 | 31 Oct | MCP | `2026-07-28` still latest; Baci's server card advertises `2025-06-18` | New finding F40 |
 | 31 Oct | OpenAI ACP | `2026-04-17` still the newest release; OpenAI's page still shows `2025-09-12`; Baci advertises `2026-04-30`, which has no release | New finding F41 |
+| 31 Oct | Capability gate | Paths and links cited in the access map are bound sources | Plans 3 to 6 re-review the map when they edit a path its evidence table cites |
 
 ## Review log
 
@@ -184,6 +185,7 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | 30 Oct | Plan 1 | Codex on PR #3851 (commit `faf0ddf`) | One P2: the edge inventory binds the edited agentic route files, so it must be regenerated after they are committed. Fixed in plan 1 Task 8. |
 | 31 Oct | Plan 1 code | Codex on PR #3869 | Clean on `d43c97b7fc` ("Didn't find any major issues"); re-requested for the rebuilt head `ede636ee97` |
 | 31 Oct | Plan 1 branch | Orchestrator | The first push rewrote commit IDs, so the capability record named a commit only this Mac had. Fixed: the push script now keeps IDs identical and stops on any mismatch. |
+| 31 Oct | Plan 2 | Orchestrator | Accepted Task 1's queries and probes, the evidence table and the Production-cell rule; moved the validator and MCP fixtures under `src` for CI type-checking |
 
 ## Change log
 
@@ -195,3 +197,4 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | 30 Oct | Plan 1 built (11 commits) and checked locally. |
 | 31 Oct | Workflow change (owner): skip CodeRabbit when unavailable; draft PR plus `@codex review` early; keep building while reviews run. |
 | 31 Oct | Plan 1 opened as draft PR #3869. Main's two failing tests were fixed by #3860; plan 1 rebuilt on top of it. |
+| 31 Oct | Plan 2 written and rehearsed; published to docs PR #3851 for Codex review. New finding F42. |

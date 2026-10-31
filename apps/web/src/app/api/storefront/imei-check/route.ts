@@ -1,12 +1,4 @@
-import {
-  IMEI_IDENTIFIER_BY_DEVICE,
-  IMEI_SERVICE_TIERS,
-  type ImeiIdentifierType,
-  isValidDeviceIdentifier,
-  normalizeDeviceIdentifier,
-  PUBLIC_IMEI_SERVICE_TIERS,
-  resolveInputIdentifier,
-} from '@baci/shared/imei';
+import { PUBLIC_IMEI_SERVICE_TIERS } from '@baci/shared/imei';
 import type { NextRequest } from 'next/server';
 import {
   getImeiDisabledTierKeys,
@@ -29,15 +21,18 @@ import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
 import { imeiCheckSchema } from '@/schemas/imei-check';
 import { createImeiCapabilitiesHandler } from './capabilities-handler';
-import { claimImeiAttempt } from './claim-imei-attempt';
+import {
+  claimImeiAttempt,
+  reconcileExistingImeiAttempt,
+} from './claim-imei-attempt';
 import { executeImeiLookup } from './execute-imei-lookup';
 import { prepareImeiProvider } from './prepare-imei-provider';
+import { resolveImeiIdentifier } from './resolve-imei-identifier';
 import {
   errorBody,
   findLookupByIdempotencyKey,
   hashImei,
   json,
-  mapExistingLookup,
   mapExistingTerminalLookupWithoutImeiHash,
   UUID_PATTERN,
 } from './route-helpers';
@@ -45,12 +40,6 @@ import {
 const PUBLIC_IMEI_SERVICE_TIER_KEYS = new Set<string>(
   PUBLIC_IMEI_SERVICE_TIERS
 );
-
-const INVALID_IDENTIFIER_MESSAGE: Record<ImeiIdentifierType, string> = {
-  imei: 'Invalid IMEI number',
-  serial: 'Invalid serial number',
-  both: 'Invalid IMEI or serial number',
-};
 
 export async function POST(request: NextRequest) {
   try {
@@ -159,34 +148,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const tierIdentifier = IMEI_SERVICE_TIERS[requestedTier].identifier;
-    const requestedIdentifier = deviceCategory
-      ? resolveInputIdentifier(
-          tierIdentifier,
-          IMEI_IDENTIFIER_BY_DEVICE[deviceCategory]
-        )
-      : tierIdentifier;
-    // Validate the RAW submitted value first. Normalizing before validating
-    // would silently truncate an over-length input (e.g. a 15-char serial
-    // sliced to 14) into a spurious "valid" value that then bills a wallet
-    // debit + paid provider call. Reject first, THEN normalize.
-    if (!isValidDeviceIdentifier(bodyParse.data.imei, requestedIdentifier)) {
-      return json(
-        errorBody({
-          code: 'INVALID_IMEI',
-          error: INVALID_IDENTIFIER_MESSAGE[requestedIdentifier],
-        }),
-        400
-      );
-    }
-    // Canonicalize (uppercase serials, strip separators) so replay hashing and
-    // the provider call key off the same value — a mixed-case serial otherwise
-    // hashes differently on replay. A raw-valid identifier has no separators
-    // and is already within length, so this only case-folds it.
-    const normalizedImei = normalizeDeviceIdentifier(
+    const identifier = resolveImeiIdentifier(
       bodyParse.data.imei,
-      requestedIdentifier
+      requestedTier,
+      deviceCategory
     );
+    if (identifier.response) return identifier.response;
+    const normalizedImei = identifier.normalized;
 
     const customer = await resolveImeiCustomer({
       merchantId,
@@ -258,7 +226,12 @@ export async function POST(request: NextRequest) {
       idempotencyKey
     );
     if (existingLookup) {
-      return mapExistingLookup(existingLookup, replayContext);
+      return reconcileExistingImeiAttempt({
+        access: supabaseAdmin,
+        context: replayContext,
+        requestedKey: idempotencyKey,
+        existing: existingLookup,
+      });
     }
 
     const claim = await claimImeiAttempt({

@@ -62,6 +62,7 @@ try:
     sql((ROOT/'supabase/tests/imei_attempt_legacy_fixture.sql').read_text())
     run_attempt_cutover(database, (ROOT/'supabase/migrations/20261031124500_imei_attempt_coordination.sql').read_text())
     sql((ROOT/'supabase/migrations/20261031143353_imei_reconcile_sickw_refunds.sql').read_text())
+    sql((ROOT/'supabase/migrations/20261031144206_imei_reconcile_legacy_sickw_refunds.sql').read_text())
     sql((ROOT/'supabase/tests/imei_attempt_coordination.sql').read_text())
     run_attempt_concurrency(database)
     print('IMEI authenticated access SQL contracts passed on disposable database.')

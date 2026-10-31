@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   capSrcSetWidthRungs,
+  MOBILE_HERO_LCP_MAX_BYTES,
   MOBILE_HERO_MAX_SRCSET_WIDTH,
   MOBILE_HERO_MIN_SRCSET_WIDTH,
+  MOBILE_HERO_QUALITY_STEPS,
 } from './hero-mobile-image-config';
 
 describe('hero-mobile-image-config', () => {
@@ -47,5 +49,10 @@ describe('hero-mobile-image-config', () => {
     expect(capSrcSetWidthRungs(overCapOnly, 750, 384)).toBe(
       'https://cdn.ogabassey.com/image/width=750/hero.avif 750w'
     );
+  });
+
+  it('exposes the 20 KB byte cap and quality ladder', () => {
+    expect(MOBILE_HERO_LCP_MAX_BYTES).toBe(20_000);
+    expect(MOBILE_HERO_QUALITY_STEPS).toEqual([70, 60, 50]);
   });
 });

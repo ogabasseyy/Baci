@@ -12,7 +12,7 @@ export const PETROCK_DEVICE_IMEI_SERVICE_TIERS = {
     tagline: 'Will this device use eSIM?',
     description: 'Check Apple eSIM support before buying or travelling',
     detail: 'Shows whether the device supports an electronic SIM profile.',
-    price: 700,
+    price: 400,
     costUsd: 0.04,
     features: ['eSIM Compatibility', 'Device Model', 'IMEI Lookup'],
     checksIncluded: ['device', 'modelNumber', 'esimCompatibility'],

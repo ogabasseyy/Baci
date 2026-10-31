@@ -38,7 +38,7 @@ describe('ImeiCheckerTierSelector', () => {
 
     expect(
       screen.getByRole('radio', {
-        name: /full report, .*, ₦1,500/i,
+        name: /full report, .*, ₦1,000/i,
       })
     ).toBeTruthy();
   });

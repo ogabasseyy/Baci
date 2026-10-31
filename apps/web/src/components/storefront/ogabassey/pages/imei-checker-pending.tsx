@@ -1,6 +1,12 @@
 import { Clock3, Loader2 } from 'lucide-react';
 
-export function ImeiCheckerPending({ paused }: { paused: boolean }) {
+export function ImeiCheckerPending({
+  paused,
+  canResume = true,
+}: {
+  paused: boolean;
+  canResume?: boolean;
+}) {
   return (
     <div
       aria-live="polite"
@@ -20,9 +26,11 @@ export function ImeiCheckerPending({ paused }: { paused: boolean }) {
           {paused ? 'Your check is still processing' : "We're checking"}
         </p>
         <p className="mt-1">
-          {paused
-            ? "You can close this page and check back later. We'll keep processing it safely."
-            : 'This is usually under a minute. You can leave this page and return without paying again.'}
+          {!canResume
+            ? `${paused ? '' : 'This is usually under a minute. '}Keep this page open until your check finishes so you can receive the result here.`
+            : paused
+              ? "You can close this page and check back later. We'll keep processing it safely."
+              : 'This is usually under a minute. You can leave this page and return without paying again.'}
         </p>
       </div>
     </div>

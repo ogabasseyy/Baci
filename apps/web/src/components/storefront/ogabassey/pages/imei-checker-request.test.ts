@@ -188,3 +188,8 @@ it('retains the key when a success response contains a malformed report', async 
   expect(outcome.keepRequestIdentity).toBe(true);
   expect(outcome.result).toBeNull();
 });
+
+it('marks a polled Petrock rejection as a confirmed refund', async () => {
+  mockFetchWithCsrf.mockResolvedValue({ ok: false, status: 404, json: async () => ({ success: false, status: 'error', code: 'PETROCK_REJECTED', error: 'Refunded' }) });
+  expect(await pollImeiCheck('lookup-1', 'ogabassey')).toMatchObject({ kind: 'error', confirmedRefund: true });
+});

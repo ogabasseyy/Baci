@@ -177,3 +177,18 @@ it('retains the retry key after an unexpected server error', () => {
   expect(outcome.shouldPreserveIdempotencyKey).toBe(true);
   expect(outcome.shouldClearIdempotencyKey).toBe(false);
 });
+
+it.each([
+  [404, 'PETROCK_REJECTED'],
+  [502, 'PETROCK_REJECTED'],
+  [502, 'PETROCK_UNAVAILABLE'],
+])('retires keys after confirmed Petrock refund %s %s', (responseStatus, code) => {
+  const outcome = resolveImeiCheckFailure({
+    currentTierPrice: 700,
+    walletBalance: 0,
+    responseStatus,
+    payload: { code },
+  });
+  expect(outcome.shouldClearIdempotencyKey).toBe(true);
+  expect(outcome.shouldPreserveIdempotencyKey).toBe(false);
+});

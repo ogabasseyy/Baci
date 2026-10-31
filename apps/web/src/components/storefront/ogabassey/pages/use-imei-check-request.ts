@@ -58,7 +58,7 @@ export function useImeiCheckRequest(merchantSlug?: string) {
     const terminal = pendingLookup.terminal;
     if (!terminal) return;
 
-    if (terminal.kind === 'complete' && terminal.recovery) {
+    if ((terminal.kind === 'complete' || terminal.confirmedRefund === true) && terminal.recovery) {
       void clearImeiRecoveryKey(terminal.recovery.storageKey, terminal.recovery.idempotencyKey).catch(() => undefined);
     }
     submitting.current = false;

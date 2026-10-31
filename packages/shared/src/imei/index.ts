@@ -7,6 +7,7 @@ export type {
 export * from './create-runtime-availability';
 export * from './device-profile';
 export * from './identifier';
+export * from './refund-status';
 export * from './report-history';
 export * from './result-verdict';
 export * from './runtime-availability';

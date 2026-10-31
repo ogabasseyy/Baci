@@ -1,6 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
-import { vi } from 'vitest';
+import { type Mock, vi } from 'vitest';
 
 /**
  * Fixtures shared by the PiggyVest receiver suites (route.test.ts and
@@ -18,9 +18,12 @@ export const SECRET = createHash('sha256')
 export function chainable(
   result: { data: unknown; error: unknown },
   existing: unknown = MATCHING_ENVELOPE
-): { query: Record<string, unknown>; upsert: ReturnType<typeof vi.fn> } {
+): {
+  query: Record<string, unknown>;
+  upsert: Mock<(...args: unknown[]) => Record<string, unknown>>;
+} {
   const query: Record<string, unknown> = {};
-  const upsert = vi.fn(() => query);
+  const upsert = vi.fn((..._args: unknown[]) => query);
   // select() is both awaitable (upsert result) and chainable (duplicate
   // verify read via .eq().maybeSingle()).
   const select = vi.fn(() =>

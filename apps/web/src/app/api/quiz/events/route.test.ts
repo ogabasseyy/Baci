@@ -741,7 +741,7 @@ describe('quiz events route', () => {
     );
     expect(queryBuilder.eq).toHaveBeenCalledWith('merchant_id', MERCHANT_ID);
     // bugfix: v2 (app-only) rows visible to store staff must not be listed.
-    expect(queryBuilder.eq).toHaveBeenCalledWith('contract_version', 1);
+    expect(queryBuilder.eq).toHaveBeenCalledWith('contract_version', '1');
     expect(queryBuilder.eq).toHaveBeenCalledWith(
       'quiz_question_slots.active',
       'true'

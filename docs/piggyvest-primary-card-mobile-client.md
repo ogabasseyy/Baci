@@ -1,5 +1,7 @@
 # Primary mobile card funding connection
 
+> **Retired.** The server now answers every primary-card `initialize` request, including a replay of a saved record that never learned its operation ID, with `410` and code `PRIMARY_CARD_FUNDING_RETIRED`. Existing operations still resolve through `status`. Released builds reach `initialize` only after the PiggyVest capability probe reports the merchant as enabled; until the client stops offering card funding, that probe must keep answering not-ready to them. See `docs/primary-wallet-card-checkout.md`.
+
 The primary merchant's existing wallet/card action now branches in
 `wallet-screen.handlers.ts` to `fund-primary-wallet-card.ts`. Other merchants
 retain generic wallet top-up initialization and confirmation. The hosted

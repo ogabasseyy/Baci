@@ -5,6 +5,7 @@ BEGIN
   IF value IS DISTINCT FROM true THEN RAISE EXCEPTION 'Assertion failed: %', label; END IF;
   RAISE NOTICE 'PASS assertion: %', label;
 END $$;
+GRANT EXECUTE ON FUNCTION pg_temp.isolation_assert(boolean, text) TO PUBLIC; -- called after SET ROLE
 CREATE FUNCTION pg_temp.isolation_reject(command text, expected_state text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
   BEGIN EXECUTE command;
@@ -17,6 +18,7 @@ BEGIN
   END;
   RAISE EXCEPTION 'Expected SQLSTATE %', expected_state;
 END $$;
+GRANT EXECUTE ON FUNCTION pg_temp.isolation_reject(text, text) TO PUBLIC; -- called after SET ROLE
 SELECT pg_temp.isolation_assert(current_database() = 'postgres' AND inet_client_addr() IS NULL,
   'reviewed full-schema local socket database required');
 SELECT pg_temp.isolation_assert(EXISTS(SELECT 1 FROM public.customer_savings_drafts
@@ -38,6 +40,7 @@ BEGIN
         (draft.catalogue->>'price')::numeric), 'paused', 'manual', 'canonical_local', draft.id, draft.revision_id, draft.actor_id
     FROM public.customer_savings_drafts draft WHERE draft.id = p_draft;
 END $$;
+GRANT EXECUTE ON FUNCTION pg_temp.insert_canonical(uuid, uuid) TO PUBLIC; -- called after SET ROLE
 
 SELECT pg_temp.isolation_reject(format('SELECT pg_temp.insert_canonical(%L,%L)', :'canonical_goal', :'draft'), '42501');
 INSERT INTO savings_draft_private.canonical_creation_scopes(merchant_id) VALUES(:'merchant');

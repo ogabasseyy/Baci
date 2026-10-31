@@ -20,14 +20,14 @@ function buildRequest() {
   );
 }
 
-describe('Admin order GIGL quote alias dispatcher', () => {
+describe('bugfix: admin GIG quote crashed with "#state" when the route re-wrapped the request', () => {
   beforeEach(() => {
     postAdminOrderGiglQuote.mockReset();
   });
 
   // Production crashed with "Cannot read private member #state" when this
   // route re-wrapped the incoming request with `new NextRequest(request, …)`.
-  it('hands the original request to the quote handler instead of re-wrapping it', async () => {
+  it('delegates the original request with the path order id when the admin app asks for a GIG quote', async () => {
     postAdminOrderGiglQuote.mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), { status: 200 })
     );
@@ -44,8 +44,10 @@ describe('Admin order GIGL quote alias dispatcher', () => {
     });
   });
 
-  it('returns a readable error when the quote handler throws', async () => {
-    postAdminOrderGiglQuote.mockRejectedValue(new Error('boom'));
+  it('returns a readable error without logging error details when the quote handler throws', async () => {
+    postAdminOrderGiglQuote.mockRejectedValue(
+      new Error('provider body: secret-token')
+    );
     const consoleError = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
@@ -59,6 +61,13 @@ describe('Admin order GIGL quote alias dispatcher', () => {
     expect(await response.json()).toEqual({
       error: 'Failed to get GIG quote',
     });
+    expect(consoleError).toHaveBeenCalledWith(
+      'Error getting admin order GIGL quote',
+      { errorName: 'Error' }
+    );
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain(
+      'secret-token'
+    );
     consoleError.mockRestore();
   });
 });

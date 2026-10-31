@@ -11,7 +11,10 @@ export async function POST(request: NextRequest, context: Params) {
     // "Cannot read private member #state". The path id is the order.
     return await postAdminOrderGiglQuote(request, { admin_order_id: id });
   } catch (error) {
-    console.error('Error getting admin order GIGL quote:', error);
+    // Log only the error type: messages and bodies can carry provider data.
+    console.error('Error getting admin order GIGL quote', {
+      errorName: error instanceof Error ? error.name : typeof error,
+    });
     return NextResponse.json(
       { error: 'Failed to get GIG quote' },
       { status: 500 }

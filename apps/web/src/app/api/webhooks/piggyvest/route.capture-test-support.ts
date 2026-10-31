@@ -111,9 +111,13 @@ export function createFakeCaptureStore() {
       const row = store.rows.find((candidate) => candidate.id === args.p_id);
       if (!row) return false;
       const token = args.p_claim_token as string | null;
+      // Tokenless inline completion: only a pending row, except that a
+      // successful retry also closes a needs_review row (as the SQL does).
       const fenced =
         token === null
-          ? row.processingState === 'pending'
+          ? row.processingState === 'pending' ||
+            (args.p_state === 'processed' &&
+              row.processingState === 'needs_review')
           : row.processingState === 'claimed' && row.claimToken === token;
       if (!fenced) return false;
       // 'deferred' releases the row to pending and refunds the claim's

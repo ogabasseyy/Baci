@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { PiggyvestClientConfig } from '@/lib/piggyvest/client';
 import { redactEventDetails } from '@/lib/piggyvest/event-redaction';
+import {
+  authorizesLegacyHandling,
+  primaryOwnerFamily,
+} from '@/lib/piggyvest/primary-event-owner';
 import { recordPiggyvestEvent } from '@/lib/piggyvest/webhook-inbox';
 import type { WebhookKeyScope } from '@/lib/piggyvest/webhook-key-archive';
 import { processPiggyvestEvent } from '@/lib/piggyvest/webhook-processor';
@@ -8,7 +12,6 @@ import type { PiggyvestWebhookKeyFamily } from '@/lib/piggyvest/webhook-secret-u
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import { piggyvestWebhookEventSchema } from '@/schemas/piggyvest/events';
 import { piggyvestWebhookCorrelationSchema } from '@/schemas/piggyvest/webhook-correlation';
-import { primaryOwnerFamily } from './primary-event-owner';
 import { dispatchPrimaryPiggyvestIntake } from './primary-webhook-dispatch';
 import { quarantineAndAck } from './quarantine-and-ack';
 import { toRecordInput } from './record-input';
@@ -70,6 +73,26 @@ export interface ProcessDeliveryDeps {
 // provider-facing Response untouched: nothing internal leaks into headers.
 const authorizationQuarantines = new WeakSet<Response>();
 
+// Acknowledged quarantines of an authentic delivery the parser could not
+// accept (unparseable or schema-rejected). Like an authorization quarantine
+// the capture must stay unresolved: a parser fix makes the very same bytes
+// processable, and a processed capture would swallow the resend as a
+// duplicate.
+const contentQuarantines = new WeakSet<Response>();
+
+export function isContentQuarantine(response: Response): boolean {
+  return contentQuarantines.has(response);
+}
+
+async function quarantineContent(
+  ...args: Parameters<typeof quarantineAndAck>
+): Promise<Response> {
+  const response = await quarantineAndAck(...args);
+  // A failed durable write is a retryable 503, not a quarantine.
+  if (response.ok) contentQuarantines.add(response);
+  return response;
+}
+
 // Retryable answers for a delivery whose family authority cannot be decided
 // while the key set is incomplete. Same side-table idea: the provider-facing
 // Response stays identical to the unconfigured-server 503.
@@ -124,7 +147,7 @@ export async function processVerifiedDelivery(
     );
   } catch {
     console.warn('[PiggyVest Webhook] Authentic delivery with invalid JSON');
-    return quarantineAndAck(rawBody, 'unparseable', {}, null, createClient);
+    return quarantineContent(rawBody, 'unparseable', {}, null, createClient);
   }
 
   const parsed = piggyvestWebhookEventSchema.safeParse(jsonPayload);
@@ -132,7 +155,7 @@ export async function processVerifiedDelivery(
     console.warn('[PiggyVest Webhook] Authentic delivery, unknown event shape');
     const correlation =
       piggyvestWebhookCorrelationSchema.safeParse(jsonPayload);
-    return quarantineAndAck(
+    return quarantineContent(
       rawBody,
       'unknown-event',
       correlation.success ? correlation.data : {},
@@ -179,7 +202,7 @@ export async function processVerifiedDelivery(
     // writes. A delivery signed solely by a primary family key that no
     // specialized intake claimed is quarantined, never legacy-processed —
     // otherwise a compromised narrow key could forge unrelated events.
-    if (!families.includes('legacy')) {
+    if (!authorizesLegacyHandling(parsed.data.eventType, families)) {
       if (incompleteKeySet) {
         // Not a verdict yet: a family that failed to load may be the one
         // that authorizes this event. A quarantine 200 would end the

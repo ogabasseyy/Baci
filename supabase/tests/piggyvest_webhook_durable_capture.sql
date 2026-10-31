@@ -49,6 +49,8 @@ AS $$ SELECT count(*) FROM public.piggyvest_webhook_captures $$;
 
 \ir piggyvest_webhook_durable_capture_claim.inc.sql
 
+\ir piggyvest_webhook_durable_capture_review.inc.sql
+
 \ir piggyvest_webhook_durable_capture_roles.inc.sql
 
 ROLLBACK;

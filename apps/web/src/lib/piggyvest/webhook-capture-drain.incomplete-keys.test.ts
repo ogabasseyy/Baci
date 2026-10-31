@@ -61,7 +61,7 @@ const verified = (
 });
 
 const processed: DrainDeps['process'] = async () => ({ status: 200 });
-const OUTCOMES: [string, DrainDeps['process']][] = [
+const RETRYABLE: [string, DrainDeps['process']][] = [
   ['an ordinary 503 from the legacy ledger', async () => ({ status: 503 })],
   [
     'a thrown error',
@@ -69,6 +69,11 @@ const OUTCOMES: [string, DrainDeps['process']][] = [
       throw new Error('ledger unavailable');
     },
   ],
+];
+// With a complete key set an authorization quarantine can never succeed (see
+// webhook-capture-drain.quarantine.test.ts); with an incomplete one it defers.
+const OUTCOMES: [string, DrainDeps['process']][] = [
+  ...RETRYABLE,
   [
     'an authorization quarantine',
     async () => ({ status: 200, authorizationQuarantine: true }),
@@ -163,7 +168,7 @@ describe('replay with an INCOMPLETE key set', () => {
 
 describe('replay with a COMPLETE key set (behaviour unchanged)', () => {
   it.each(
-    OUTCOMES
+    RETRYABLE
   )('keeps %s as a plain retry that spends the attempt', async (_name, process) => {
     const summary = await drainOnce({
       incompleteKeySet: false,
@@ -184,7 +189,7 @@ describe('replay with a COMPLETE key set (behaviour unchanged)', () => {
   });
 
   it.each(
-    OUTCOMES
+    RETRYABLE
   )('escalates %s to review once the attempt budget is spent', async (_name, process) => {
     const summary = await drainOnce({
       incompleteKeySet: false,

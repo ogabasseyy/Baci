@@ -101,10 +101,13 @@ const DEFERRED = {
   keys: { processing: 'deferred' },
   state: 'pending',
 } satisfies Result;
+// Acknowledged, but the capture stays unresolved: a wrong-family event is
+// recovered by a correctly signed redelivery, a rejected body by a resend
+// after the parser fix. Neither may be swallowed as a processed duplicate.
 const QUARANTINED = {
   status: 200,
   keys: { quarantined: true },
-  state: 'processed',
+  state: 'pending',
 } satisfies Result;
 
 interface Case {
@@ -150,7 +153,13 @@ const CASES: Case[] = [
     name: 'bank event signed by a family that cannot authorize it',
     payload: inflow,
     key: interestKey,
-    expected: (incomplete) => (incomplete ? NOT_READY : QUARANTINED_PENDING),
+    expected: (incomplete) => (incomplete ? NOT_READY : QUARANTINED),
+  },
+  {
+    name: 'interest accrual signed by the interest family (record-only)',
+    payload: accrual,
+    key: interestKey,
+    expected: () => ({ status: 200, state: 'processed' }),
   },
   {
     name: 'unparseable body',
@@ -176,11 +185,6 @@ const CASES: Case[] = [
     }),
   },
 ];
-// The wrong-family quarantine acknowledges but leaves the capture pending.
-const QUARANTINED_PENDING = {
-  ...QUARANTINED,
-  state: 'pending',
-} satisfies Result;
 
 let store: ReturnType<typeof createFakeCaptureStore>;
 

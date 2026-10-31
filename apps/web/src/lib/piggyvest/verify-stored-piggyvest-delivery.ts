@@ -23,6 +23,13 @@ export type StoredPiggyvestDeliveryVerification =
       keyStatus: PiggyvestWebhookKeyStatus;
       /** Part of the key set was unavailable; see the ingress verdict. */
       incompleteKeySet?: boolean;
+      /**
+       * Every family the matched key holds right now, BEFORE narrowing to
+       * what admission recorded. Replay authority is `families`; this only
+       * lets the drain tell an owning family that was dropped or never
+       * recorded from one the key never held.
+       */
+      keyFamilies?: PiggyvestWebhookKeyFamily[];
     };
 
 /**
@@ -66,7 +73,12 @@ export function verifyStoredPiggyvestDelivery(input: {
   });
   if (match) {
     if (!input.recordedFamilies)
-      return { status: 'verified', ...match, incompleteKeySet: misconfigured };
+      return {
+        status: 'verified',
+        ...match,
+        keyFamilies: match.families,
+        incompleteKeySet: misconfigured,
+      };
     const families = narrowToRecordedFamilies(
       match.families,
       input.recordedFamilies
@@ -76,6 +88,7 @@ export function verifyStoredPiggyvestDelivery(input: {
         status: 'verified',
         ...match,
         families,
+        keyFamilies: match.families,
         incompleteKeySet: misconfigured,
       };
     // An empty intersection proves authority was lost only when the key set

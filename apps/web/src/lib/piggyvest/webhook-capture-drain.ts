@@ -1,10 +1,17 @@
 import 'server-only';
 import type { PiggyvestClaimedCapture } from '@/schemas/piggyvest/webhook-capture';
+import { primaryOwnerFamily } from './primary-event-owner';
 import {
   narrowToRecordedFamilies,
   type StoredPiggyvestDeliveryVerification,
 } from './verify-stored-piggyvest-delivery';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
+import {
+  deferForIncompleteKeySet,
+  parkForReview,
+  type RowOutcome,
+  settle,
+} from './webhook-capture-drain-settle';
 import type { CaptureResolution } from './webhook-capture-queue';
 import type { PiggyvestWebhookKeyFamily } from './webhook-secret-union';
 
@@ -57,16 +64,17 @@ export interface DrainDeps {
   }): StoredPiggyvestDeliveryVerification;
   /**
    * Runs the shared processing pipeline. A non-2xx status means incomplete,
-   * and so does an authorization quarantine (the wrong key family signed
-   * and so does an authorization quarantine (the wrong key family signed
-   * it, so no financial handler ran): that row is never resolved processed.
-   * `keySetIncomplete` marks a retry that only a complete key set can settle
-   * (the loaded families could not authorize the event): that row is
-   * deferred, not failed.
+   * and so does an acknowledged quarantine, which ran no financial handler:
+   * `authorizationQuarantine` (the wrong key family signed it) and
+   * `contentQuarantine` (the body was unparseable or schema-rejected). Such a
+   * row is never resolved processed. `keySetIncomplete` marks a retry that
+   * only a complete key set can settle (the loaded families could not
+   * authorize the event): that row is deferred, not failed.
    */
   process(delivery: ReplayDelivery): Promise<{
     status: number;
     authorizationQuarantine?: boolean;
+    contentQuarantine?: boolean;
     keySetIncomplete?: boolean;
   }>;
 }
@@ -76,41 +84,6 @@ export interface DrainSummary {
   processed: number;
   retried: number;
   needsReview: number;
-}
-
-type RowOutcome = 'processed' | 'retried' | 'needsReview';
-
-async function settle(
-  deps: DrainDeps,
-  row: PiggyvestClaimedCapture,
-  state: CaptureResolution,
-  error: string | null
-): Promise<void> {
-  try {
-    await deps.resolve(row.capture_id, row.claim_token, state, error);
-  } catch {
-    // The lease expires and the row is claimed again; replay is idempotent.
-    console.warn('[PiggyVest Webhook] Failed to resolve captured delivery');
-  }
-}
-
-/**
- * Defer a row because the key set is incomplete. Nothing about the row is
- * judged (even a permanent failure stays recoverable), so the deferral must
- * be visible: operators learn about the incomplete configuration from the
- * alert instead of finding stuck rows later. No secret or body is logged.
- */
-async function deferForIncompleteKeySet(
-  deps: DrainDeps,
-  row: PiggyvestClaimedCapture,
-  reason: string
-): Promise<void> {
-  emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_KEYS_UNCONFIGURED', {
-    captureId: row.capture_id,
-    eventType: row.event_type,
-    reason: `replay deferred, key set incomplete: ${reason}`,
-  });
-  await settle(deps, row, 'deferred', 'KEY_SET_INCOMPLETE');
 }
 
 async function drainRow(
@@ -159,18 +132,47 @@ async function drainRow(
     return 'retried';
   }
   if (verification.status !== 'verified' || families.length === 0) {
-    emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_NEEDS_REVIEW', {
-      captureId: row.capture_id,
-      eventType: row.event_type,
-      keyVersion: row.key_version,
-      reason: 'replay authority not recorded at admission',
-    });
-    await settle(deps, row, 'needs_review', 'REPLAY_AUTHORITY_NOT_RECORDED');
-    return 'needsReview';
+    return parkForReview(
+      deps,
+      row,
+      'REPLAY_AUTHORITY_NOT_RECORDED',
+      'replay authority not recorded at admission'
+    );
+  }
+
+  // A primary-owned event type is never completed by the legacy fallback
+  // while its owning family is missing from the processing families. The
+  // recorded authority is immutable and replay never widens it.
+  const owner = primaryOwnerFamily(row.event_type ?? '');
+  if (owner && !families.includes(owner)) {
+    const heldButNotRecorded = verification.keyFamilies?.includes(owner);
+    const recordedButLost = row.key_families.includes(owner);
+    if (heldButNotRecorded || recordedButLost) {
+      if (!heldButNotRecorded && verification.incompleteKeySet === true) {
+        // The recorded owner's assignment may simply not be loaded right now.
+        await deferForIncompleteKeySet(deps, row, 'owner family not loaded');
+        return 'retried';
+      }
+      return heldButNotRecorded
+        ? parkForReview(
+            deps,
+            row,
+            'OWNER_FAMILY_NOT_RECORDED',
+            'owning family not recorded at admission; request a resend'
+          )
+        : parkForReview(
+            deps,
+            row,
+            'OWNER_AUTHORITY_LOST',
+            'recorded owning family no longer held by the key'
+          );
+    }
   }
 
   let completed = false;
   let keySetIncomplete = false;
+  let authorizationQuarantine = false;
+  let contentQuarantine = false;
   try {
     const result = await deps.process({
       rawBody,
@@ -180,10 +182,13 @@ async function drainRow(
       incompleteKeySet: verification.incompleteKeySet,
       keyScope: 'replay',
     });
+    authorizationQuarantine = result.authorizationQuarantine === true;
+    contentQuarantine = result.contentQuarantine === true;
     completed =
       result.status >= 200 &&
       result.status < 300 &&
-      result.authorizationQuarantine !== true;
+      !authorizationQuarantine &&
+      !contentQuarantine;
     keySetIncomplete = result.keySetIncomplete === true;
   } catch {
     completed = false;
@@ -191,6 +196,16 @@ async function drainRow(
   if (completed) {
     await settle(deps, row, 'processed', null);
     return 'processed';
+  }
+  if (contentQuarantine) {
+    // The bytes verified, so the key set cannot change this outcome: only a
+    // parser fix plus a resend can make them processable.
+    return parkForReview(
+      deps,
+      row,
+      'REPLAY_CONTENT_QUARANTINED',
+      'body rejected by the parser; request a resend after the fix'
+    );
   }
   if (keySetIncomplete || verification.incompleteKeySet === true) {
     // The key set is incomplete (the replay verified under only the
@@ -202,15 +217,26 @@ async function drainRow(
     await deferForIncompleteKeySet(deps, row, 'processing incomplete');
     return 'retried';
   }
+  if (authorizationQuarantine) {
+    // Signed by a family not authorized for this event, with a complete key
+    // set and immutable recorded authority: replay can never succeed, so it
+    // must not take 20 batch slots. A correctly signed redelivery has its
+    // own capture row.
+    return parkForReview(
+      deps,
+      row,
+      'REPLAY_AUTHORIZATION_QUARANTINED',
+      'signed by a key family not authorized for this event'
+    );
+  }
   if (row.attempts >= MAX_DRAIN_ATTEMPTS) {
-    emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_NEEDS_REVIEW', {
-      captureId: row.capture_id,
-      eventType: row.event_type,
-      attempts: row.attempts,
-      reason: 'processing attempts exhausted',
-    });
-    await settle(deps, row, 'needs_review', 'PROCESSING_ATTEMPTS_EXHAUSTED');
-    return 'needsReview';
+    return parkForReview(
+      deps,
+      row,
+      'PROCESSING_ATTEMPTS_EXHAUSTED',
+      'processing attempts exhausted',
+      row.attempts
+    );
   }
   await settle(deps, row, 'pending', 'PROCESSING_INCOMPLETE');
   return 'retried';

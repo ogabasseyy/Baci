@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import type { PiggyvestClaimedCapture } from '@/schemas/piggyvest/webhook-capture';
+import { deterministicTestUuid } from './deterministic-test-data.test-support';
 import { verifyStoredPiggyvestDelivery } from './verify-stored-piggyvest-delivery';
 import { describeDelivery } from './webhook-capture';
 import type { DrainDeps } from './webhook-capture-drain';
@@ -23,14 +24,16 @@ function describeEvent(body: string) {
   };
 }
 
+let rowSequence = 0;
+
 export function row(
   body: string,
   signature: string,
   overrides: Partial<PiggyvestClaimedCapture> = {}
 ): PiggyvestClaimedCapture {
   return {
-    capture_id: crypto.randomUUID(),
-    claim_token: crypto.randomUUID(),
+    capture_id: deterministicTestUuid(`drain-row:${++rowSequence}:capture`),
+    claim_token: deterministicTestUuid(`drain-row:${rowSequence}:claim`),
     raw_hex: Buffer.from(body).toString('hex'),
     signature,
     key_version: 'k-0123456789abcdef',

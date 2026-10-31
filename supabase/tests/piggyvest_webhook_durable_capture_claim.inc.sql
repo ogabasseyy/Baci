@@ -64,8 +64,8 @@ $$;
 -- cannot verify yet (keys unconfigured, an unreadable archive or family
 -- configuration) is released with a bounded backoff: never dead-lettered,
 -- without spending the processing attempt budget, and re-entering the queue
--- behind fresher work instead of ahead of it. Plain 'pending' keeps its
--- semantics (immediately claimable, attempt spent).
+-- behind fresher work instead of ahead of it. A plain 'pending' release (a
+-- processing failure) keeps its spent attempt but also backs off.
 DO $$
 DECLARE
   v_blocked uuid;
@@ -163,8 +163,10 @@ BEGIN
     RAISE EXCEPTION 'the backoff must cap at one hour and never dead-letter the row: %', v_row;
   END IF;
 
-  -- Plain pending keeps its semantics: immediately claimable, attempt spent,
-  -- configuration counter untouched.
+  -- A plain pending release (a processing failure) keeps its spent attempt
+  -- and the configuration counter, but backs off 30s * 2^attempts (capped at
+  -- one hour): a short outage cannot burn the 20-attempt budget in minutes,
+  -- and a failing row cannot take every batch ahead of fresher work.
   UPDATE public.piggyvest_webhook_captures
     SET next_attempt_at = clock_timestamp() - interval '1 second', attempts = 3
     WHERE id = v_blocked;
@@ -180,12 +182,45 @@ BEGIN
   IF v_row.processing_state IS DISTINCT FROM 'pending'
     OR v_row.attempts <> v_attempts
     OR v_row.config_deferrals <> 1000
-    OR v_row.next_attempt_at > clock_timestamp() THEN
-    RAISE EXCEPTION 'a plain pending release must keep its attempt and stay immediately claimable: %', v_row;
+    OR v_row.next_attempt_at NOT BETWEEN clock_timestamp() + interval '470 seconds'
+                                      AND clock_timestamp() + interval '490 seconds' THEN
+    RAISE EXCEPTION 'a plain pending release must keep its attempt and back off ~30s * 2^attempts: %', v_row;
   END IF;
+  IF EXISTS (SELECT 1 FROM public.claim_piggyvest_webhook_captures(10, 60, 0)) THEN
+    RAISE EXCEPTION 'a backed-off pending row must not be claimable before its retry time';
+  END IF;
+
+  -- Once its retry time passes it sorts behind work that arrived earlier.
+  v_healthy := (public.capture_piggyvest_webhook_delivery(
+    pg_temp.pv_cmd('\x7b2268223a337d'::bytea, 'evt-fresh', 'bank-transfer.inflow.success', 'txn-fresh')))->>'id';
+  UPDATE public.piggyvest_webhook_captures
+    SET next_attempt_at = clock_timestamp() WHERE id = v_blocked;
   SELECT * INTO v_claim FROM public.claim_piggyvest_webhook_captures(1, 60, 0);
-  IF v_claim.capture_id IS DISTINCT FROM v_blocked OR v_claim.attempts <> v_attempts + 1 THEN
-    RAISE EXCEPTION 'a plain pending row must be re-claimed at once: %', v_claim;
+  IF v_claim.capture_id IS DISTINCT FROM v_healthy THEN
+    RAISE EXCEPTION 'a failing row that is due again must queue behind fresher work: %', v_claim;
+  END IF;
+  PERFORM public.resolve_piggyvest_webhook_capture(v_healthy, v_claim.claim_token, 'processed', NULL);
+
+  -- The backoff is capped at one hour however many attempts were spent.
+  SELECT * INTO v_claim FROM public.claim_piggyvest_webhook_captures(1, 60, 0);
+  IF v_claim.capture_id IS DISTINCT FROM v_blocked THEN
+    RAISE EXCEPTION 'the failing row must be claimed once nothing is ahead of it: %', v_claim;
+  END IF;
+  UPDATE public.piggyvest_webhook_captures SET attempts = 12 WHERE id = v_blocked;
+  IF NOT public.resolve_piggyvest_webhook_capture(v_blocked, v_claim.claim_token, 'pending', 'PROCESSING_INCOMPLETE') THEN
+    RAISE EXCEPTION 'the capped release must succeed';
+  END IF;
+  SELECT * INTO v_row FROM public.piggyvest_webhook_captures WHERE id = v_blocked;
+  IF v_row.attempts <> 12
+    OR v_row.next_attempt_at NOT BETWEEN clock_timestamp() + interval '3590 seconds'
+                                      AND clock_timestamp() + interval '3601 seconds' THEN
+    RAISE EXCEPTION 'a plain pending backoff must cap at one hour: %', v_row;
+  END IF;
+  UPDATE public.piggyvest_webhook_captures
+    SET next_attempt_at = clock_timestamp() - interval '1 second' WHERE id = v_blocked;
+  SELECT * INTO v_claim FROM public.claim_piggyvest_webhook_captures(1, 60, 0);
+  IF v_claim.capture_id IS DISTINCT FROM v_blocked OR v_claim.attempts <> 13 THEN
+    RAISE EXCEPTION 'a due pending row must be claimable again with its attempts kept: %', v_claim;
   END IF;
   IF NOT public.resolve_piggyvest_webhook_capture(v_blocked, v_claim.claim_token, 'processed', NULL) THEN
     RAISE EXCEPTION 'the row must resolve once it can be processed';

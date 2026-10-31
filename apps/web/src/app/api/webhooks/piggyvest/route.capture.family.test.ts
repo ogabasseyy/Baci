@@ -269,7 +269,11 @@ describe('a transient failure on the corrected delivery, then a drain run', () =
 
     // The wrong-family row is replayed under its OWN signature (still the
     // wrong family, never the bank handler); the corrected row credits.
-    expect(summary).toMatchObject({ claimed: 2, processed: 1, retried: 1 });
+    expect(summary).toMatchObject({
+      claimed: 2,
+      processed: 1,
+      needsReview: 1,
+    });
     expect(mocks.bankIntake).toHaveBeenCalledTimes(2);
     // One call failed transiently, exactly one was accepted.
     const settled = await Promise.allSettled(
@@ -282,7 +286,9 @@ describe('a transient failure on the corrected delivery, then a drain run', () =
       store.rows.filter((row) => row.processingState === 'processed')
     ).toHaveLength(1);
     expect(store.rows[1]?.processingState).toBe('processed');
-    expect(store.rows[0]?.processingState).toBe('pending');
+    // It can never succeed (its recorded authority is immutable), so the
+    // drain parks it for review instead of retrying it 20 times.
+    expect(store.rows[0]?.processingState).toBe('needs_review');
 
     // Replaying again must not credit a second time.
     await drain();

@@ -175,8 +175,13 @@ $$;
 -- Completion. With a claim token the row must be leased to the caller. With
 -- none (inline processing right after capture) only a still-pending row can
 -- be completed, so a stale inline finisher can never overwrite worker state.
+-- The one exception: a successful inline retry ('processed') also closes a
+-- dead-lettered (needs_review) row, so a resend that finally succeeds clears
+-- the review state; no other tokenless transition may touch such a row.
 --
--- 'pending' releases the row at once and keeps the attempt it spent.
+-- 'pending' releases a failed row and keeps the attempt it spent, backed off
+-- 30s * 2^attempts (capped at one hour): a short outage cannot burn the
+-- attempt budget in minutes and a failing row cannot take every batch.
 -- 'deferred' is for a row that cannot be verified yet because key
 -- configuration is incomplete: it returns to pending, refunds the attempt
 -- the claim spent (so a configuration outage never exhausts the processing
@@ -214,6 +219,9 @@ BEGIN
         WHEN p_state = 'deferred' THEN clock_timestamp() + make_interval(
           secs => least(3600::double precision, 60 * power(2, least(c.config_deferrals, 10)))
         )
+        WHEN p_state = 'pending' AND p_claim_token IS NOT NULL THEN clock_timestamp() + make_interval(
+          secs => least(3600::double precision, 30 * power(2, least(c.attempts, 10)))
+        )
         ELSE c.next_attempt_at
       END,
       processed_at = CASE WHEN p_state = 'processed' THEN clock_timestamp() ELSE c.processed_at END,
@@ -223,7 +231,10 @@ BEGIN
   WHERE c.id = p_id
     AND (
       (p_claim_token IS NOT NULL AND c.processing_state = 'claimed' AND c.claim_token = p_claim_token)
-      OR (p_claim_token IS NULL AND c.processing_state = 'pending')
+      OR (p_claim_token IS NULL AND (
+        c.processing_state = 'pending'
+        OR (p_state = 'processed' AND c.processing_state = 'needs_review')
+      ))
     );
   RETURN FOUND;
 END

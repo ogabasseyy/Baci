@@ -7,6 +7,6 @@ export const EXPECTED_PIGGYVEST_CAPTURE_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261030231100_piggyvest_webhook_durable_capture_functions.sql',
-    sha256: '01afa9873f3a91fca01121fa384693e42e776238b021547d0cd1148294c38d6e',
+    sha256: '4c50df132fec581479ae4f31ad5f096a73acab6676e241582720c26321aa8b51',
   },
 ];

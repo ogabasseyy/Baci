@@ -197,6 +197,43 @@ describe('an incomplete key set cannot prove that authority was lost', () => {
     });
   });
 
+  it('also reports the un-narrowed families, so replay can tell a dropped owner from one never held', () => {
+    const { shared } = bankRecordedSetup('[]');
+    const setup = bankRecordedSetup(
+      archiveEnv([
+        { version: 'bank-old', family: 'bank', secret: shared, hours: 200 },
+      ])
+    );
+    setup.env.PIGGYVEST_SECRET_KEY = shared;
+    const verifyRecorded = (families: ('bank' | 'legacy')[]) =>
+      verifyStoredPiggyvestDelivery({
+        rawBody,
+        signature: sign(shared),
+        env: setup.env,
+        now: NOW,
+        recordedFamilies: families,
+      });
+
+    // Authority is narrowed to what admission recorded...
+    expect(verifyRecorded(['legacy'])).toMatchObject({
+      status: 'verified',
+      families: ['legacy'],
+    });
+    // ...but the key's own families stay visible next to it.
+    expect(verifyRecorded(['legacy'])).toMatchObject({
+      keyFamilies: expect.arrayContaining(['legacy', 'bank']),
+    });
+    expect(
+      verifyStoredPiggyvestDelivery({
+        rawBody,
+        signature: sign(shared),
+        env: { NODE_ENV: 'test', PIGGYVEST_SECRET_KEY: shared },
+        now: NOW,
+        recordedFamilies: ['legacy'],
+      })
+    ).toMatchObject({ keyFamilies: ['legacy'] });
+  });
+
   it('resumes with the recorded family only once the archive is readable, never the legacy family', () => {
     const { shared } = bankRecordedSetup('[]');
     const setup = bankRecordedSetup(

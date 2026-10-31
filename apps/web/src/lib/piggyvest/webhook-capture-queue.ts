@@ -16,10 +16,11 @@ const LEASE_SECONDS = 300;
 const MIN_AGE_SECONDS = 120;
 
 /**
- * 'pending' releases the row at once (a processing failure, bounded by the
- * attempt budget). 'deferred' releases a row blocked by incomplete key
- * configuration: the database refunds the attempt, schedules a bounded
- * backoff and never dead-letters it.
+ * 'pending' releases a failed row: it keeps the attempt it spent (bounded by
+ * the attempt budget) and the database backs the retry off, 30s * 2^attempts
+ * capped at one hour. 'deferred' releases a row blocked by incomplete key
+ * configuration: the database refunds the attempt, schedules a longer
+ * bounded backoff and never dead-letters it.
  */
 export type CaptureResolution =
   | 'pending'

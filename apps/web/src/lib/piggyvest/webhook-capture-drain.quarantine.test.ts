@@ -1,5 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/piggyvest/primary-wallet-bank-inbox-runtime', () => ({
@@ -12,66 +11,133 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime', () => ({
   readPrimaryWalletPaidInterestInboxSecrets: () => null,
 }));
 
-import { verifyStoredPiggyvestDelivery } from './verify-stored-piggyvest-delivery';
-import { drainPiggyvestWebhookCaptures } from './webhook-capture-drain';
+import { deterministicTestKey } from './deterministic-test-data.test-support';
+import {
+  drainPiggyvestWebhookCaptures,
+  MAX_DRAIN_ATTEMPTS,
+} from './webhook-capture-drain';
+import {
+  drainDeps,
+  type ResolvedCall,
+  row,
+  sign,
+} from './webhook-capture-drain.test-support';
 
+const key = deterministicTestKey('drain-quarantine');
 const body = JSON.stringify({ eventId: 'evt-q', eventType: 'x' });
+const COMPLETE: NodeJS.ProcessEnv = {
+  NODE_ENV: 'test',
+  PIGGYVEST_SECRET_KEY: key,
+};
+const INCOMPLETE: NodeJS.ProcessEnv = {
+  ...COMPLETE,
+  PIGGYVEST_WEBHOOK_KEY_ARCHIVE: '{not json',
+};
 
-function setup(result: { status: number; authorizationQuarantine?: boolean }) {
-  const key = randomBytes(32).toString('hex');
-  const resolved: { state: string; error: string | null }[] = [];
-  const row = {
-    capture_id: crypto.randomUUID(),
-    claim_token: crypto.randomUUID(),
-    raw_hex: Buffer.from(body).toString('hex'),
-    signature: createHmac('sha512', key).update(body).digest('hex'),
-    key_version: 'k-0123456789abcdef',
-    key_families: ['legacy' as const],
-    attempts: 1,
-    event_type: 'x',
-    provider_transaction_id: null,
-  };
-  const deps = {
-    claim: async () => [row],
-    resolve: async (
-      _id: string,
-      _token: string,
-      state: 'pending' | 'processed' | 'needs_review',
-      error: string | null
-    ) => {
-      resolved.push({ state, error });
-      return true;
-    },
-    verify: (input: { rawBody: Buffer; signature: string }) =>
-      verifyStoredPiggyvestDelivery({
-        ...input,
-        env: { NODE_ENV: 'test' as const, PIGGYVEST_SECRET_KEY: key },
-      }),
-    process: async () => result,
-  };
-  return { deps, resolved };
+type Result = {
+  status: number;
+  authorizationQuarantine?: boolean;
+  contentQuarantine?: boolean;
+};
+let alerts: ReturnType<typeof vi.spyOn>;
+let resolved: ResolvedCall[];
+
+beforeEach(() => {
+  resolved = [];
+  alerts = vi.spyOn(console, 'error').mockImplementation(() => {});
+  alerts.mockClear();
+});
+
+function replay(result: Result, env: NodeJS.ProcessEnv, attempts = 1) {
+  const stored = row(body, sign(key, body), { attempts });
+  const deps = drainDeps(
+    () => ({ env, resolved }),
+    [[stored]],
+    async () => result
+  );
+  return { stored, run: () => drainPiggyvestWebhookCaptures(deps) };
 }
 
-describe('authorization quarantine during replay', () => {
-  it('never resolves a wrong-family quarantine as processed', async () => {
-    const { deps, resolved } = setup({
-      status: 200,
-      authorizationQuarantine: true,
-    });
+describe('authorization quarantine during replay (complete key set)', () => {
+  it.each([
+    1,
+    MAX_DRAIN_ATTEMPTS,
+  ])('goes straight to review at attempt %i: it can never succeed, and never resolves as processed', async (attempts) => {
+    const { stored, run } = replay(
+      { status: 200, authorizationQuarantine: true },
+      COMPLETE,
+      attempts
+    );
 
-    const summary = await drainPiggyvestWebhookCaptures(deps);
+    const summary = await run();
 
     expect(resolved).toEqual([
-      { state: 'pending', error: 'PROCESSING_INCOMPLETE' },
+      {
+        id: stored.capture_id,
+        state: 'needs_review',
+        error: 'REPLAY_AUTHORIZATION_QUARANTINED',
+      },
     ]);
-    expect(summary).toMatchObject({ processed: 0, retried: 1 });
+    expect(summary).toMatchObject({ needsReview: 1, retried: 0, processed: 0 });
+    expect(alerts).toHaveBeenCalledWith(
+      expect.stringContaining('PIGGYVEST_WEBHOOK_NEEDS_REVIEW')
+    );
+    expect(alerts).toHaveBeenCalledWith(
+      expect.stringContaining(stored.capture_id)
+    );
   });
 
   it('still resolves an ordinary completed result as processed', async () => {
-    const { deps, resolved } = setup({ status: 200 });
+    const { run } = replay({ status: 200 }, COMPLETE);
 
-    await drainPiggyvestWebhookCaptures(deps);
+    await run();
 
-    expect(resolved).toEqual([{ state: 'processed', error: null }]);
+    expect(resolved).toEqual([
+      expect.objectContaining({ state: 'processed', error: null }),
+    ]);
+  });
+
+  it('defers instead while the key set is incomplete (the right family may load)', async () => {
+    const { run } = replay(
+      { status: 200, authorizationQuarantine: true },
+      INCOMPLETE
+    );
+
+    await run();
+
+    expect(resolved).toEqual([
+      expect.objectContaining({
+        state: 'deferred',
+        error: 'KEY_SET_INCOMPLETE',
+      }),
+    ]);
+  });
+});
+
+describe('content quarantine during replay (unparseable or schema-rejected body)', () => {
+  it.each([
+    ['complete', COMPLETE],
+    ['incomplete', INCOMPLETE],
+  ])('is parked for review, never processed, with a %s key set', async (_label, env) => {
+    const { stored, run } = replay(
+      { status: 200, contentQuarantine: true },
+      env
+    );
+
+    const summary = await run();
+
+    // The bytes verified, so the key set cannot change the content outcome:
+    // a resend after the schema fix is what makes it processable again.
+    expect(resolved).toEqual([
+      {
+        id: stored.capture_id,
+        state: 'needs_review',
+        error: 'REPLAY_CONTENT_QUARANTINED',
+      },
+    ]);
+    expect(summary).toMatchObject({ needsReview: 1, processed: 0, retried: 0 });
+    expect(alerts).toHaveBeenCalledWith(
+      expect.stringContaining(stored.capture_id)
+    );
   });
 });

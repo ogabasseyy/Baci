@@ -22,3 +22,25 @@ export function primaryOwnerFamily(
 ): PiggyvestWebhookKeyFamily | undefined {
   return PRIMARY_OWNER_FAMILY.get(eventType);
 }
+
+/**
+ * Event types the legacy handler only RECORDS (no ledger write), which a
+ * second key family may legitimately deliver. The interest integration
+ * sends its daily accruals signed with the interest key, never the legacy
+ * one, so without this they would be quarantined for the wrong family
+ * forever. Everything else stays legacy-only: a narrow family key must not
+ * authorize legacy ledger writes.
+ */
+const RECORD_ONLY_FAMILIES: ReadonlyMap<
+  string,
+  readonly PiggyvestWebhookKeyFamily[]
+> = new Map([['interest-accrued.success', ['interest']]]);
+
+export function authorizesLegacyHandling(
+  eventType: string,
+  families: readonly PiggyvestWebhookKeyFamily[]
+): boolean {
+  if (families.includes('legacy')) return true;
+  const allowed = RECORD_ONLY_FAMILIES.get(eventType) ?? [];
+  return allowed.some((family) => families.includes(family));
+}

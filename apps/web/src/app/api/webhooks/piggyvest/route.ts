@@ -8,6 +8,7 @@ import { readBoundedWebhookBody } from '@/lib/piggyvest/webhook-request';
 import { admitPiggyvestDelivery } from './ingress';
 import {
   isAuthorizationQuarantine,
+  isContentQuarantine,
   isKeySetIncompleteRetry,
   processVerifiedDelivery,
 } from './process-delivery';
@@ -36,9 +37,11 @@ import {
  * - Invalid signature, or a key revoked at ingress -> 401 + alert.
  * - Capture write fails -> 503 + alert (the provider retries; no row).
  * - Captured but processing incomplete -> 503 until the drain is attested,
- *   200 deferred once it is (alert either way). While the key set is
- *   incomplete the reply stays 503 even when attested: the capture is
- *   limited to the families that loaded and replay cannot widen it.
+ *   200 deferred once it is (alert either way). The reply stays 503 even
+ *   when attested while the key set is incomplete (the capture is limited to
+ *   the families that loaded and replay cannot widen it) and for a resend of
+ *   a needs_review capture (the drain never claims it again). A successful
+ *   inline retry closes a needs_review capture as processed.
  * - Captured, but the loaded key families cannot authorize the event while
  *   the key set is incomplete -> 503 + alert even when the drain is
  *   attested: the capture's recorded authority is immutable, so only the
@@ -141,7 +144,12 @@ export async function POST(request: NextRequest): Promise<Response> {
     // financial handler: acknowledge it, but leave the capture unresolved so
     // a correctly signed redelivery of the same bytes is processed rather
     // than short-circuited as an already-processed duplicate.
-    if (!isAuthorizationQuarantine(processing)) {
+    // The same holds for a body the parser rejected: a resend after the fix
+    // must be processed, not swallowed as a processed duplicate.
+    if (
+      !isAuthorizationQuarantine(processing) &&
+      !isContentQuarantine(processing)
+    ) {
       await markCaptureProcessed(createClient(), capture.id);
     }
     return processing;
@@ -152,7 +160,16 @@ export async function POST(request: NextRequest): Promise<Response> {
       ? `processing answered ${processing.status}; row kept for retry`
       : 'processing threw; row kept for retry',
   });
-  if (isPiggyvestCaptureDrainScheduled() && !incompleteKeySet) {
+  // The drain claims only pending rows (and ones whose lease expired), never
+  // needs_review: a resend of a dead-lettered capture has no drain behind it.
+  const drainCanRetry =
+    capture.processingState === 'pending' ||
+    capture.processingState === 'claimed';
+  if (
+    isPiggyvestCaptureDrainScheduled() &&
+    !incompleteKeySet &&
+    drainCanRetry
+  ) {
     // The drain owns the retry; the provider can stop redelivering. Not
     // while the key set is incomplete: the delivery was admitted with only
     // the families that happened to load, the capture's recorded authority

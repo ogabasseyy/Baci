@@ -6,6 +6,12 @@
 \set ON_ERROR_STOP on
 BEGIN;
 
+-- The merchants audit trigger refuses writes without an actor (28000), and
+-- the fixture insert runs before any JWT claims exist.
+SELECT pg_catalog.set_config(
+  'app.audit_actor_user_id', 'a3300000-0000-4000-8000-000000000001', true
+);
+
 DO $$
 DECLARE
   v_user_id uuid := 'a3300000-0000-4000-8000-000000000001';

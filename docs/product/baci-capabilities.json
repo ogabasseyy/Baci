@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-31T13:27:22+00:00",
-  "source_revision": "5c3c4744a4a455f73b0be757c790cd6d4e0a0af4",
-  "evidence_digest": "31fed9f6d1aa324d2682381bb0ca26de455bafbcea1ae9ecd6907a4f113a5bf2",
-  "claims_digest": "9d5cf7056035020c0213ecd3e9312701d72e152ec2302a70df15803b31076f47",
+  "reviewed_at": "2026-10-31T17:05:37+00:00",
+  "source_revision": "f5d79e5c40bcada163a82644848ae5728d9f69a8",
+  "evidence_digest": "4f888529f9869666a3e748fbb26c6b12e1fc3a823ed0c6f247851bd05bf3babf",
+  "claims_digest": "5094d44d7e684668c19d7f9b98c835378514934404fb69c0e4b753532de035d0",
   "review_scope": "Source evidence only. Re-reviewed agent-protocols after its capability claims were made truthful: every UCP shopping capability declares its schema, the catalog specs point at the search and lookup pages, cart is declared and served only for shared-cart merchants, Google Pay is no longer advertised and the OpenAI legacy feed opts no product into native checkout. The claim and status are unchanged; the limitations now record the create-only cart, the shared-cart condition, the withheld Google Pay and the feed. Re-stamped after the 31 October base sync. The support-chat health probe, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
   "capabilities": [
     {

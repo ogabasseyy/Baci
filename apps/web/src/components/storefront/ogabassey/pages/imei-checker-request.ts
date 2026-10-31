@@ -1,4 +1,4 @@
-import type { ImeiDeviceCategory, ImeiServiceTierKey } from '@baci/shared/imei';
+import { isConfirmedImeiRefund, type ImeiDeviceCategory, type ImeiServiceTierKey } from '@baci/shared/imei';
 import { fetchWithCsrf } from '@/lib/api-client';
 import {
   DEFAULT_IMEI_CHECK_ERROR_MESSAGE,
@@ -37,7 +37,7 @@ interface ImeiApiPayload {
 
 export type ImeiPollOutcome =
   | { kind: 'complete'; lookupId: string | null; result: ImeiResult }
-  | { error: string; kind: 'error' }
+  | { confirmedRefund?: boolean; error: string; kind: 'error' }
   | { kind: 'pending'; pollAfterMs: number }
   | { kind: 'retry'; pollAfterMs: number };
 
@@ -192,6 +192,7 @@ export async function pollImeiCheck(
     }
     return {
       error: data.error || DEFAULT_IMEI_CHECK_ERROR_MESSAGE,
+      ...(isConfirmedImeiRefund(response.status, data.code) ? { confirmedRefund: true } : {}),
       kind: 'error',
     };
   } catch (error) {

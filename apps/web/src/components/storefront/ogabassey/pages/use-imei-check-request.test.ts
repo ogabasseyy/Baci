@@ -284,3 +284,17 @@ it('does not authorize a fresh order from an unconfirmed error lookup', async ()
   await act(async () => result.current.runCheck('blacklist', report.imei, 'smartphone'));
   expect(mocks.check.mock.calls[1]?.[7]).toBeUndefined();
 });
+
+it.each([true, false])('only clears a polled failed attempt when refund confirmation is %s', async (confirmedRefund) => {
+  localStorage.clear();
+  mocks.signedIn = true;
+  mocks.check.mockReset().mockResolvedValue({ ...outcome, pending: { lookupId, pollAfterMs: 0 }, keepRequestIdentity: true });
+  mocks.poll.mockReset().mockResolvedValue({ kind: 'error', error: 'Check failed', confirmedRefund });
+  const { result, unmount } = renderHook(() => useImeiCheckRequest('ogabassey'));
+  await act(async () => { await result.current.runCheck('simLock', report.imei, 'smartphone'); });
+  await waitFor(() => expect(result.current.error).toBe('Check failed'));
+  const attempts = () => Object.keys(localStorage).filter((item) => item.startsWith('baci:imei-attempt:v1:'));
+  if (confirmedRefund) await waitFor(() => expect(attempts()).toHaveLength(0));
+  else expect(attempts()).toHaveLength(1);
+  unmount();
+});

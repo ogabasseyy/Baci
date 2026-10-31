@@ -28,7 +28,13 @@ type PendingTerminal = (
       tier: ImeiServiceTierKey;
       recovery?: PendingImeiLookup['recovery'];
     }
-  | { error: string; kind: 'error'; tier: ImeiServiceTierKey }
+  | {
+      confirmedRefund?: boolean;
+      error: string;
+      kind: 'error';
+      recovery?: PendingImeiLookup['recovery'];
+      tier: ImeiServiceTierKey;
+    }
 ) & { scopeKey: string | null };
 
 export function useImeiPendingLookup({
@@ -135,7 +141,13 @@ export function useImeiPendingLookup({
                 device: pending.device,
                 recovery: pending.recovery,
               }
-            : { error: outcome.error, kind: 'error', tier: pending.tier }),
+            : {
+                error: outcome.error,
+                kind: 'error',
+                tier: pending.tier,
+                recovery: pending.recovery,
+                confirmedRefund: outcome.confirmedRefund,
+              }),
         });
       },
       isStale ? PAUSED_POLL_MS : pending.pollAfterMs

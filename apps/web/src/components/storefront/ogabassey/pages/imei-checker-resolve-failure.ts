@@ -1,3 +1,5 @@
+import { isConfirmedImeiRefund } from '@baci/shared/imei';
+
 /**
  * Translates an IMEI-check API failure (HTTP status + JSON payload) into
  * user-facing outcome flags. Ported verbatim from the mobile checker
@@ -57,9 +59,7 @@ export function resolveImeiCheckFailure(
   // Authentication and intermediary errors can follow an earlier uncertain POST.
   const shouldClearIdempotencyKey =
     (input.responseStatus === 402 && code === 'WALLET_INSUFFICIENT') ||
-    (input.responseStatus === 404 && code === 'SICKW_NOT_FOUND') ||
-    (input.responseStatus === 502 &&
-      (code === 'SICKW_UNAVAILABLE' || code === 'PETROCK_NOT_SUBMITTED'));
+    isConfirmedImeiRefund(input.responseStatus, code);
   const shouldPreserveIdempotencyKey = !shouldClearIdempotencyKey;
 
   if (input.responseStatus === 401) {
@@ -116,7 +116,7 @@ export function resolveImeiCheckFailure(
   }
 
   if (
-    (input.responseStatus === 404 && code === 'SICKW_NOT_FOUND') ||
+    (input.responseStatus === 404 && (code === 'SICKW_NOT_FOUND' || code === 'PETROCK_REJECTED')) ||
     (input.responseStatus === 502 && code === 'SICKW_UNAVAILABLE')
   ) {
     return {

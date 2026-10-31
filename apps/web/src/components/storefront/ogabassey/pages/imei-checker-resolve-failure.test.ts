@@ -130,3 +130,9 @@ it('keeps an earlier uncertain key when authentication expires', () => {
   expect(outcome.shouldPreserveIdempotencyKey).toBe(true);
   expect(outcome.shouldClearIdempotencyKey).toBe(false);
 });
+
+it.each([[404, 'PETROCK_REJECTED'], [502, 'PETROCK_REJECTED'], [502, 'PETROCK_UNAVAILABLE']])('retires keys after confirmed Petrock refund %s %s', (responseStatus, code) => {
+  const outcome = resolveImeiCheckFailure({ ...baseInput, responseStatus, payload: { code } });
+  expect(outcome.shouldClearIdempotencyKey).toBe(true);
+  expect(outcome.shouldPreserveIdempotencyKey).toBe(false);
+});

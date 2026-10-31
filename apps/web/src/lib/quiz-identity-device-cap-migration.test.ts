@@ -11,13 +11,17 @@ const migrationSql = readFileSync(
   ),
   'utf8'
 );
-const identityDeviceTestSql = readFileSync(
-  resolve(
-    currentDirectory,
-    '../../../../supabase/migrations/tests/quiz_identity_device_caps.sql'
-  ),
-  'utf8'
-);
+const identityDeviceTestSql = [
+  'quiz_identity_device_caps.sql',
+  'quiz_identity_device_caps.helpers.inc.sql',
+]
+  .map((file) =>
+    readFileSync(
+      resolve(currentDirectory, '../../../../supabase/migrations/tests', file),
+      'utf8'
+    )
+  )
+  .join('\n');
 const leaderboardTestSql = readFileSync(
   resolve(
     currentDirectory,

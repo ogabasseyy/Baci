@@ -202,8 +202,6 @@ SELECT * FROM (VALUES
    'guest or bearer flow; token/secret verified in the body'),
   ('public.unsubscribe_newsletter(text,uuid)',
    'FOLLOW-UP: anon can unsubscribe any email (no token) and probe membership'),
-  ('public.finalize_wallet_order_payment(uuid,numeric)',
-   'PENDING: PR 3864 (20261030230000) revokes anon and PUBLIC; delete row once merged'),
   ('public.refund_customer_wallet_for_vtu(uuid,uuid,numeric,uuid,text,text)',
    'PENDING: PR 3853 (20261030165610) revokes anon; prod already fixed; delete row once merged')
 ) AS allowlist(signature, reason);

@@ -1,46 +1,64 @@
 import { NextRequest } from 'next/server';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const delegatedPost = vi.fn();
+const postAdminOrderGiglQuote = vi.fn();
 
-vi.mock('@/app/api/shipping/quotes/route', () => ({ POST: delegatedPost }));
+vi.mock('@/app/api/shipping/quotes/admin-order-gigl-quote', () => ({
+  postAdminOrderGiglQuote,
+}));
+
+const ORDER_ID = '11111111-1111-4111-8111-111111111111';
+
+function buildRequest() {
+  return new NextRequest(
+    `https://usebaci.com/api/orders/${ORDER_ID}/shipping/gigl-quote`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ receiver: { address: 'x', phone: 'y' } }),
+    }
+  );
+}
 
 describe('Admin order GIGL quote alias dispatcher', () => {
-  it('adds the protected order-mode headers and preserves the request body', async () => {
-    delegatedPost.mockResolvedValue(
+  beforeEach(() => {
+    postAdminOrderGiglQuote.mockReset();
+  });
+
+  // Production crashed with "Cannot read private member #state" when this
+  // route re-wrapped the incoming request with `new NextRequest(request, …)`.
+  it('hands the original request to the quote handler instead of re-wrapping it', async () => {
+    postAdminOrderGiglQuote.mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), { status: 200 })
     );
-    const body = {
-      receiver: {
-        address: '5 Balogun Street',
-        city: 'Ikeja',
-        state: 'Lagos',
-        phone: '08011112222',
-      },
-    };
-    const request = new NextRequest(
-      'https://usebaci.com/api/orders/11111111-1111-4111-8111-111111111111/shipping/gigl-quote',
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      }
-    );
+    const request = buildRequest();
     const { POST } = await import('./route');
+
     const response = await POST(request, {
-      params: Promise.resolve({ id: '11111111-1111-4111-8111-111111111111' }),
+      params: Promise.resolve({ id: ORDER_ID }),
     });
+
     expect(response.status).toBe(200);
-    expect(delegatedPost).toHaveBeenCalledTimes(1);
-    const delegated = delegatedPost.mock.calls[0][0] as NextRequest;
-    expect(delegated).toBeInstanceOf(NextRequest);
-    expect(delegated.headers.get('x-baci-admin-order-mode')).toBe('1');
-    expect(delegated.headers.get('x-baci-admin-order-id')).toBe(
-      '11111111-1111-4111-8111-111111111111'
-    );
-    expect(delegated.nextUrl.pathname).toBe(
-      '/api/orders/11111111-1111-4111-8111-111111111111/shipping/gigl-quote'
-    );
-    expect(await delegated.json()).toEqual(body);
+    expect(postAdminOrderGiglQuote).toHaveBeenCalledWith(request, {
+      admin_order_id: ORDER_ID,
+    });
+  });
+
+  it('returns a readable error when the quote handler throws', async () => {
+    postAdminOrderGiglQuote.mockRejectedValue(new Error('boom'));
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const { POST } = await import('./route');
+
+    const response = await POST(buildRequest(), {
+      params: Promise.resolve({ id: ORDER_ID }),
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: 'Failed to get GIG quote',
+    });
+    consoleError.mockRestore();
   });
 });

@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -44,6 +44,7 @@ vi.mock('@/lib/piggyvest/event-quarantine', () => ({
   recordQuarantineEvent: (...args: unknown[]) => mocks.quarantine(...args),
 }));
 
+import { deterministicKeySource } from '@/lib/piggyvest/deterministic-test-data.test-support';
 import { verifyStoredPiggyvestDelivery } from '@/lib/piggyvest/verify-stored-piggyvest-delivery';
 import { drainPiggyvestWebhookCaptures } from '@/lib/piggyvest/webhook-capture-drain';
 import {
@@ -52,6 +53,8 @@ import {
 } from './process-delivery';
 import { POST } from './route';
 import { createFakeCaptureStore } from './route.capture-test-support';
+
+const freshKey = deterministicKeySource('route.capture.family');
 
 const HOUR = 3_600_000;
 const sign = (secret: string, body: string) =>
@@ -110,10 +113,10 @@ function post(secret: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   store = createFakeCaptureStore();
-  wrongFamilyKey = randomBytes(32).toString('hex');
-  bankKey = randomBytes(32).toString('hex');
+  wrongFamilyKey = freshKey();
+  bankKey = freshKey();
   const retiredAt = new Date(Date.now() - 2 * HOUR).toISOString();
-  vi.stubEnv('PIGGYVEST_SECRET_KEY', randomBytes(32).toString('hex'));
+  vi.stubEnv('PIGGYVEST_SECRET_KEY', freshKey());
   vi.stubEnv('PVB_SECRET_KEY', '');
   vi.stubEnv('VERCEL_ENV', 'preview');
   vi.stubEnv('PIGGYVEST_WEBHOOK_KEY_OVERLAP_HOURS', '');

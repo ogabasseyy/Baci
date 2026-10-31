@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -17,8 +17,13 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime', () => ({
   readPrimaryWalletPaidInterestInboxSecrets: mocks.interest,
 }));
 
+import { deterministicKeySource } from '@/lib/piggyvest/deterministic-test-data.test-support';
 import { verifyStoredPiggyvestDelivery } from './verify-stored-piggyvest-delivery';
 import { verifyPiggyvestWebhookSecrets } from './webhook-secret-union';
+
+const freshKey = deterministicKeySource(
+  'verify-stored-piggyvest-delivery.authority'
+);
 
 const NOW = new Date('2026-10-30T12:00:00.000Z');
 const HOUR = 3_600_000;
@@ -27,7 +32,7 @@ const rawBody = new TextEncoder().encode(
 );
 
 function ephemeralKey(): string {
-  return randomBytes(32).toString('hex');
+  return freshKey();
 }
 
 function sign(secret: string, body: Uint8Array = rawBody): string {

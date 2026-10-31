@@ -1,13 +1,20 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
+import {
+  deterministicKeySource,
+  deterministicUuidSource,
+} from '@/lib/piggyvest/deterministic-test-data.test-support';
 import type { PiggyvestClaimedCapture } from '@/schemas/piggyvest/webhook-capture';
 import {
   type DrainDeps,
   drainPiggyvestWebhookCaptures,
 } from './webhook-capture-drain';
+
+const freshKey = deterministicKeySource('webhook-capture-drain.authority');
+const freshUuid = deterministicUuidSource('webhook-capture-drain.authority');
 
 /**
  * Replay re-verifies authenticity, but processing authority is the
@@ -17,12 +24,12 @@ import {
  */
 
 const body = JSON.stringify({ eventId: 'evt-a', eventType: 'x' });
-const key = randomBytes(32).toString('hex');
+const key = freshKey();
 
 function row(families: PiggyvestClaimedCapture['key_families']) {
   return {
-    capture_id: crypto.randomUUID(),
-    claim_token: crypto.randomUUID(),
+    capture_id: freshUuid(),
+    claim_token: freshUuid(),
     raw_hex: Buffer.from(body).toString('hex'),
     signature: createHmac('sha512', key).update(body).digest('hex'),
     key_version: 'k-0123456789abcdef',

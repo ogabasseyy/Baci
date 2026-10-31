@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -14,10 +13,11 @@ vi.mock('@/lib/piggyvest/webhook-capture', () => ({
   captureVerifiedDelivery: (...args: unknown[]) => mocks.capture(...args),
 }));
 
+import { deterministicTestSignature } from '@/lib/piggyvest/deterministic-test-data.test-support';
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import { admitPiggyvestDelivery } from './ingress';
 
-const signature = randomBytes(64).toString('hex');
+const signature = deterministicTestSignature('ingress');
 const rawBody = Buffer.from(' {"eventId":"evt-1"}\n');
 const client = {} as PiggyvestIntakeServiceClient;
 const receipt = {

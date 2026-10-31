@@ -25,3 +25,18 @@ export const deterministicTestUuid = (label: string): string => {
   const variant = (Number.parseInt(hex[16] ?? '0', 16) % 4) + 8;
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${variant.toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 };
+
+/**
+ * Successive distinct keys for a suite that needs several: the nth call
+ * always returns the same key, so runs reproduce exactly.
+ */
+export function deterministicKeySource(scope: string): () => string {
+  let next = 0;
+  return () => deterministicTestKey(`${scope}:${++next}`);
+}
+
+/** Successive distinct UUIDs for a suite, reproducible run to run. */
+export function deterministicUuidSource(scope: string): () => string {
+  let next = 0;
+  return () => deterministicTestUuid(`${scope}:${++next}`);
+}

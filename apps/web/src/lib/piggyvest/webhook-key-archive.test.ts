@@ -1,8 +1,8 @@
-import { randomBytes } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
+import { deterministicKeySource } from '@/lib/piggyvest/deterministic-test-data.test-support';
 import {
   acceptedWebhookSecrets,
   DEFAULT_WEBHOOK_KEY_OVERLAP_HOURS,
@@ -14,6 +14,8 @@ import {
   readWebhookKeyArchive,
   readWebhookKeyOverlapMs,
 } from './webhook-key-archive';
+
+const freshKey = deterministicKeySource('webhook-key-archive');
 
 const HOUR = 3_600_000;
 const NOW = new Date('2026-10-30T12:00:00.000Z');
@@ -112,8 +114,8 @@ describe('partitionArchivedKeys', () => {
 
 describe('derivePiggyvestKeyVersion', () => {
   it('is stable per key, different across keys and never contains the key', () => {
-    const first = randomBytes(32).toString('hex');
-    const second = randomBytes(32).toString('hex');
+    const first = freshKey();
+    const second = freshKey();
     const version = derivePiggyvestKeyVersion(first);
     expect(version).toMatch(/^k-[0-9a-f]{16}$/);
     expect(derivePiggyvestKeyVersion(first)).toBe(version);

@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -30,8 +30,11 @@ vi.mock('@/lib/piggyvest/webhook-inbox', () => ({
     mocks.recordPiggyvestEvent(...args),
 }));
 
+import { deterministicKeySource } from '@/lib/piggyvest/deterministic-test-data.test-support';
 import { POST } from './route';
 import { createFakeCaptureStore } from './route.capture-test-support';
+
+const freshKey = deterministicKeySource('route.capture');
 
 const sign = (secret: string, body: string) =>
   createHmac('sha512', secret).update(body).digest('hex');
@@ -69,7 +72,7 @@ beforeEach(() => {
   // scheduled, so a failed processing attempt answers the deferred 200.
   vi.stubEnv('PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED', 'true');
   store = createFakeCaptureStore();
-  current = randomBytes(32).toString('hex');
+  current = freshKey();
   vi.stubEnv('PIGGYVEST_SECRET_KEY', current);
   vi.stubEnv('PVB_SECRET_KEY', '');
   vi.stubEnv('PIGGYVEST_WEBHOOK_KEY_ARCHIVE', '');

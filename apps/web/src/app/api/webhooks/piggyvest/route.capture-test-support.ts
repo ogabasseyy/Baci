@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { vi } from 'vitest';
+import { deterministicTestUuid } from '@/lib/piggyvest/deterministic-test-data.test-support';
 import type { PiggyvestClaimedCapture } from '@/schemas/piggyvest/webhook-capture';
 
 /**
@@ -72,6 +73,7 @@ export interface FakeCaptureRow {
  * the worker claim/lease/resolve cycle. `failCapture` simulates an outage.
  */
 export function createFakeCaptureStore() {
+  let claimSequence = 0;
   const store = {
     rows: [] as FakeCaptureRow[],
     resolveCalls: [] as Record<string, unknown>[],
@@ -137,7 +139,9 @@ export function createFakeCaptureStore() {
         .slice(0, limit);
       return due.map((row) => {
         row.processingState = 'claimed';
-        row.claimToken = crypto.randomUUID();
+        row.claimToken = deterministicTestUuid(
+          `fake-store-claim:${++claimSequence}`
+        );
         row.attempts += 1;
         return {
           capture_id: row.id,

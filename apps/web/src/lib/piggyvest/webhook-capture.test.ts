@@ -1,8 +1,9 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
+import { deterministicTestSignature } from '@/lib/piggyvest/deterministic-test-data.test-support';
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import {
   captureVerifiedDelivery,
@@ -27,7 +28,7 @@ function clientWith(
 }
 
 const base = {
-  signature: randomBytes(64).toString('hex'),
+  signature: deterministicTestSignature('webhook-capture'),
   keyVersion: 'k-0123456789abcdef',
   keyFamilies: ['legacy', 'bank'] as const,
   keyStatus: 'current' as const,

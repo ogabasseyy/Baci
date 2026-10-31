@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -46,9 +46,12 @@ vi.mock('./process-delivery', async (importOriginal) => {
   };
 });
 
+import { deterministicKeySource } from '@/lib/piggyvest/deterministic-test-data.test-support';
 import type * as ProcessDeliveryModule from './process-delivery';
 import { POST } from './route';
 import { createFakeCaptureStore } from './route.capture-test-support';
+
+const freshKey = deterministicKeySource('route.capture.retry');
 
 const DRAIN_FLAG = 'PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED';
 
@@ -90,7 +93,7 @@ const RETRY_BODY = {
 beforeEach(() => {
   vi.clearAllMocks();
   store = createFakeCaptureStore();
-  current = randomBytes(32).toString('hex');
+  current = freshKey();
   mocks.throwFromProcessing = false;
   vi.stubEnv('PIGGYVEST_SECRET_KEY', current);
   vi.stubEnv('PVB_SECRET_KEY', '');

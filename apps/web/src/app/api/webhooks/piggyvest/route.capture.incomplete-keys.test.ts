@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -52,6 +51,7 @@ vi.mock('@/lib/piggyvest/event-quarantine', () => ({
   recordQuarantineEvent: (...args: unknown[]) => mocks.quarantine(...args),
 }));
 
+import { deterministicKeySource } from '@/lib/piggyvest/deterministic-test-data.test-support';
 import { POST } from './route';
 import {
   archiveWithBankAssignment as bankAssignmentArchive,
@@ -62,6 +62,8 @@ import {
   UNREADABLE_ARCHIVE,
 } from './route.capture.incomplete-keys.test-support';
 import { createFakeCaptureStore } from './route.capture-test-support';
+
+const freshKey = deterministicKeySource('route.capture.incomplete-keys');
 
 let store: ReturnType<typeof createFakeCaptureStore>;
 /** Current for the interest family AND archived (overlap) for bank. */
@@ -87,8 +89,8 @@ function post() {
 beforeEach(() => {
   vi.clearAllMocks();
   store = createFakeCaptureStore();
-  sharedKey = randomBytes(32).toString('hex');
-  vi.stubEnv('PIGGYVEST_SECRET_KEY', randomBytes(32).toString('hex'));
+  sharedKey = freshKey();
+  vi.stubEnv('PIGGYVEST_SECRET_KEY', freshKey());
   vi.stubEnv('PVB_SECRET_KEY', '');
   // The interest family only reads its key in production.
   vi.stubEnv('VERCEL_ENV', 'production');

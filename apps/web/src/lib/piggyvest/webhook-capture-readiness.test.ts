@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
@@ -12,12 +11,15 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime', () => ({
   readPrimaryWalletPaidInterestInboxSecrets: () => null,
 }));
 
+import { deterministicKeySource } from '@/lib/piggyvest/deterministic-test-data.test-support';
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import {
   collectPiggyvestWebhookCaptureEvidence,
   inspectPiggyvestWebhookCaptureReadiness,
   type WebhookCaptureEvidence,
 } from './webhook-capture-readiness';
+
+const freshKey = deterministicKeySource('webhook-capture-readiness');
 
 const NOW = new Date('2026-10-30T12:00:00.000Z');
 const MINUTE = 60_000;
@@ -26,7 +28,7 @@ let key: string;
 let ready: WebhookCaptureEvidence;
 
 beforeEach(() => {
-  key = randomBytes(32).toString('hex');
+  key = freshKey();
   ready = {
     env: {
       NODE_ENV: 'test',

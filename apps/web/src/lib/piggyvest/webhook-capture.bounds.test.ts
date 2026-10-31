@@ -1,8 +1,8 @@
-import { randomBytes } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
+import { deterministicTestSignature } from '@/lib/piggyvest/deterministic-test-data.test-support';
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import {
   captureVerifiedDelivery,
@@ -106,7 +106,7 @@ describe('selectCapturedHeaders stays inside the database byte budget', () => {
 
 describe('captureVerifiedDelivery always captures the raw body', () => {
   const base = {
-    signature: randomBytes(64).toString('hex'),
+    signature: deterministicTestSignature('webhook-capture.bounds'),
     keyVersion: 'k-0123456789abcdef',
     keyFamilies: ['legacy'] as const,
     keyStatus: 'current' as const,

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { deterministicTestUuid } from '@/lib/piggyvest/deterministic-test-data.test-support';
 import {
   CAPTURE_ID,
   capturedReceipt,
@@ -164,7 +165,7 @@ describe('createFakeCaptureStore', () => {
     expect(
       store.resolve({
         p_id: row?.id,
-        p_claim_token: crypto.randomUUID(),
+        p_claim_token: deterministicTestUuid('wrong-claim-token'),
         p_state: 'processed',
       })
     ).toBe(false);

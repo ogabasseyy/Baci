@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -30,8 +30,11 @@ vi.mock('@/lib/piggyvest/webhook-inbox', () => ({
     mocks.recordPiggyvestEvent(...args),
 }));
 
+import { deterministicKeySource } from '@/lib/piggyvest/deterministic-test-data.test-support';
 import { POST } from './route';
 import { createFakeCaptureStore } from './route.capture-test-support';
+
+const freshKey = deterministicKeySource('route.capture.keys');
 
 const sign = (secret: string, body: string) =>
   createHmac('sha512', secret).update(body).digest('hex');
@@ -66,7 +69,7 @@ let warns: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   vi.clearAllMocks();
   store = createFakeCaptureStore();
-  current = randomBytes(32).toString('hex');
+  current = freshKey();
   vi.stubEnv('PIGGYVEST_SECRET_KEY', current);
   vi.stubEnv('PVB_SECRET_KEY', '');
   vi.stubEnv('PIGGYVEST_WEBHOOK_KEY_ARCHIVE', '');
@@ -99,7 +102,7 @@ describe('R5 key rotation at ingress', () => {
     ]);
 
   it('accepts and captures a retired key inside the overlap window', async () => {
-    const old = randomBytes(32).toString('hex');
+    const old = freshKey();
     vi.stubEnv('PIGGYVEST_WEBHOOK_KEY_ARCHIVE', archive(old, 10));
 
     const response = await post(accrued, sign(old, accrued));
@@ -112,7 +115,7 @@ describe('R5 key rotation at ingress', () => {
   });
 
   it('rejects a revoked key with 401 and an alert, storing nothing', async () => {
-    const old = randomBytes(32).toString('hex');
+    const old = freshKey();
     vi.stubEnv('PIGGYVEST_WEBHOOK_KEY_ARCHIVE', archive(old, 100));
 
     const response = await post(accrued, sign(old, accrued));
@@ -143,7 +146,7 @@ describe('R5 key rotation for a primary family key', () => {
     ]);
 
   it('captures a delivery signed by a bank archived key inside its overlap, tagged with the bank family', async () => {
-    const old = randomBytes(32).toString('hex');
+    const old = freshKey();
     vi.stubEnv('PIGGYVEST_WEBHOOK_KEY_ARCHIVE', bankArchive(old, 5));
     // A bank-only key is quarantined by the legacy path, whose storage is
     // mocked out here; the capture is what this test is about.
@@ -160,7 +163,7 @@ describe('R5 key rotation for a primary family key', () => {
   });
 
   it('rejects a bank archived key past its overlap with 401 at ingress, storing nothing', async () => {
-    const old = randomBytes(32).toString('hex');
+    const old = freshKey();
     vi.stubEnv('PIGGYVEST_WEBHOOK_KEY_ARCHIVE', bankArchive(old, 100));
 
     const response = await post(accrued, sign(old, accrued));
@@ -175,10 +178,7 @@ describe('R5 key rotation for a primary family key', () => {
 
 describe('R5 distinct failure statuses', () => {
   it('answers 401, warns and stores nothing for an invalid signature', async () => {
-    const response = await post(
-      accrued,
-      sign(randomBytes(32).toString('hex'), accrued)
-    );
+    const response = await post(accrued, sign(freshKey(), accrued));
 
     expect(response.status).toBe(401);
     expect(store.rows).toEqual([]);

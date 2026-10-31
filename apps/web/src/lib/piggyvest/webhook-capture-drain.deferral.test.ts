@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
@@ -12,6 +11,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime', () => ({
   readPrimaryWalletPaidInterestInboxSecrets: () => null,
 }));
 
+import { deterministicKeySource } from '@/lib/piggyvest/deterministic-test-data.test-support';
 import type { PiggyvestClaimedCapture } from '@/schemas/piggyvest/webhook-capture';
 import {
   type DrainDeps,
@@ -25,6 +25,8 @@ import {
   row,
   sign,
 } from './webhook-capture-drain.test-support';
+
+const freshKey = deterministicKeySource('webhook-capture-drain.deferral');
 
 /**
  * Configuration-blocked and incomplete-key-set scenarios: a row the drain
@@ -44,7 +46,7 @@ const deps = (
 ) => drainDeps(() => ({ env, resolved }), claimed, process);
 
 beforeEach(() => {
-  current = randomBytes(32).toString('hex');
+  current = freshKey();
   env = { NODE_ENV: 'test', PIGGYVEST_SECRET_KEY: current };
   resolved = [];
   alerts = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -72,7 +74,7 @@ describe('drainPiggyvestWebhookCaptures deferral', () => {
   });
 
   it('defers an unreadable-archive row instead of judging it unverifiable', async () => {
-    const old = randomBytes(32).toString('hex');
+    const old = freshKey();
     env = {
       NODE_ENV: 'test',
       PIGGYVEST_SECRET_KEY: current,

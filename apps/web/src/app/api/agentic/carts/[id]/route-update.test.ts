@@ -67,6 +67,10 @@ vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: vi.fn(() => ({})),
 }));
 
+vi.mock('@/lib/agentic/is-ucp-shared-cart-enabled', () => ({
+  isUcpSharedCartEnabled: vi.fn(async () => true),
+}));
+
 function createChain(result: { data: unknown; error: unknown }) {
   const chain = {
     eq: vi.fn(() => chain),

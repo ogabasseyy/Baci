@@ -1,26 +1,17 @@
 import type { AgentCommerceManifest } from '@/lib/agentic/agent-commerce-manifest';
 import {
+  CART_TRANSFER_CAPABILITY,
   CHECKOUT_SESSION_CAPABILITIES,
   UCP_PROFILE_VERSION,
 } from '@/lib/agentic/ucp-profile-constants';
+import { UCP_SHOPPING_URLS } from '@/lib/agentic/ucp-shopping-capability-urls';
 
-const UCP_PROFILE_BASE_URL = `https://ucp.dev/${UCP_PROFILE_VERSION}`;
-const UCP_SPEC_BASE_URL = `${UCP_PROFILE_BASE_URL}/specification`;
-const UCP_SCHEMA_BASE_URL = `${UCP_PROFILE_BASE_URL}/schemas/shopping`;
-const UCP_SHOPPING_REST_SCHEMA_URL = `${UCP_PROFILE_BASE_URL}/services/shopping/rest.openapi.json`;
 const UCP_CHECKOUT_CAPABILITY = 'dev.ucp.shopping.checkout';
 const UCP_CART_CAPABILITY = 'dev.ucp.shopping.cart';
 const UCP_CATALOG_SEARCH_CAPABILITY = 'dev.ucp.shopping.catalog.search';
 const UCP_CATALOG_LOOKUP_CAPABILITY = 'dev.ucp.shopping.catalog.lookup';
 const UCP_ORDER_CAPABILITY = 'dev.ucp.shopping.order';
 const UCP_SHOPPING_SERVICE = 'dev.ucp.shopping';
-const UCP_SHOPPING_SPEC_URL = `${UCP_SPEC_BASE_URL}/overview`;
-const UCP_CHECKOUT_SPEC_URL = `${UCP_SPEC_BASE_URL}/checkout`;
-const UCP_CART_SPEC_URL = `${UCP_SPEC_BASE_URL}/cart`;
-const UCP_CATALOG_SPEC_URL = `${UCP_SPEC_BASE_URL}/catalog`;
-const UCP_ORDER_SPEC_URL = `${UCP_SPEC_BASE_URL}/order`;
-const UCP_CHECKOUT_SCHEMA_URL = `${UCP_SCHEMA_BASE_URL}/checkout.json`;
-const UCP_ORDER_SCHEMA_URL = `${UCP_SCHEMA_BASE_URL}/order.json`;
 type OperationMap = Record<string, string>;
 
 export function buildUcpCapabilities({
@@ -58,7 +49,7 @@ export function buildUcpCapabilities({
               'catalog/search'
             ),
           },
-          spec: UCP_CATALOG_SPEC_URL,
+          ...UCP_SHOPPING_URLS.catalogSearch,
         })
       : null
   );
@@ -77,7 +68,7 @@ export function buildUcpCapabilities({
               'catalog/lookup'
             ),
           },
-          spec: UCP_CATALOG_SPEC_URL,
+          ...UCP_SHOPPING_URLS.catalogLookup,
         })
       : null
   );
@@ -99,7 +90,7 @@ export function buildUcpCapabilities({
             get_cart: buildUcpOperationUrl(agenticApiBaseUrl, 'carts/{id}'),
             update_cart: buildUcpOperationUrl(agenticApiBaseUrl, 'carts/{id}'),
           },
-          spec: UCP_CART_SPEC_URL,
+          ...UCP_SHOPPING_URLS.cart,
         })
       : null
   );
@@ -134,8 +125,7 @@ export function buildUcpServices({
     [UCP_SHOPPING_SERVICE]: [
       {
         endpoint: agenticApiBaseUrl,
-        schema: UCP_SHOPPING_REST_SCHEMA_URL,
-        spec: UCP_SHOPPING_SPEC_URL,
+        ...UCP_SHOPPING_URLS.service,
         transport: 'rest',
         version: UCP_PROFILE_VERSION,
       },
@@ -185,8 +175,7 @@ function buildUcpCheckoutCapability({
         manifest.links.checkout_session ?? ''
       ),
     },
-    schema: UCP_CHECKOUT_SCHEMA_URL,
-    spec: UCP_CHECKOUT_SPEC_URL,
+    ...UCP_SHOPPING_URLS.checkout,
   });
 }
 
@@ -207,8 +196,7 @@ function buildUcpOrderCapability({
     operations: {
       get_order: toUcpOperationUrlTemplate(manifest.links.order ?? ''),
     },
-    schema: UCP_ORDER_SCHEMA_URL,
-    spec: UCP_ORDER_SPEC_URL,
+    ...UCP_SHOPPING_URLS.order,
   });
 }
 
@@ -222,13 +210,13 @@ function buildRestCapability({
   agenticApiBaseUrl: string;
   manifest: AgentCommerceManifest;
   operations: OperationMap;
-  schema?: string;
+  schema: string;
   spec: string;
 }) {
   return {
     version: UCP_PROFILE_VERSION,
     spec,
-    ...(schema ? { schema } : {}),
+    schema,
     config: {
       auth: buildUcpAuthConfig(manifest),
       rest: {
@@ -259,9 +247,10 @@ function hasCheckoutCapabilities(manifest: AgentCommerceManifest): boolean {
 }
 
 function hasCartCapability(manifest: AgentCommerceManifest): boolean {
-  // Signed cart transfers are available independently of native checkout.
-  // This does not advertise payment or order operations.
-  return manifest.auth !== null;
+  // The manifest grants cart.transfer only for signed agent access to a
+  // merchant enrolled in shared cart (decide-ucp-cart-transfer.ts). Cart
+  // transfer is independent of native checkout and declares no payment.
+  return manifest.capabilities.includes(CART_TRANSFER_CAPABILITY);
 }
 
 function hasNativeCatalogCapability(manifest: AgentCommerceManifest): boolean {

@@ -5,10 +5,8 @@ import {
   openLegacyCanonicalCart,
   operateLegacyCanonicalCart,
 } from '@/lib/cart/legacy-canonical-bridge';
-import { createAnonMerchantFeatureLookup } from '@/lib/cart/merchant-resolution';
 import { buildCartSnapshot } from '@/lib/cart/pricing';
-import { merchantHasFeature } from '@/lib/merchant-has-feature';
-import { createAnonClient } from '@/lib/supabase/anon';
+import { isUcpSharedCartEnabled } from './is-ucp-shared-cart-enabled';
 import { buildUcpCartResponse } from './ucp-cart-response';
 
 interface Input {
@@ -22,13 +20,7 @@ interface Input {
   detailsRequireHandoff?: boolean;
 }
 const defaults = {
-  enabled: async (id: string) => {
-    const features = await createAnonMerchantFeatureLookup(createAnonClient())(
-      id
-    );
-    if (!features) throw new Error('Merchant unavailable');
-    return merchantHasFeature(features, 'shared_cart');
-  },
+  enabled: isUcpSharedCartEnabled,
   readOperationId: randomUUID,
   open: openLegacyCanonicalCart,
   operate: operateLegacyCanonicalCart,

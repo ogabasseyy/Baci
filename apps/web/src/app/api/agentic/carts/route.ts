@@ -12,6 +12,7 @@ import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
 import { getAgenticReplayErrorStatus } from '@/lib/agentic/request-replay-response';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
 import { handleCanonicalUcpCart } from '@/lib/agentic/ucp-canonical-cart';
+import { checkUcpCartAvailability } from '@/lib/agentic/ucp-cart-availability';
 import {
   toCheckoutLaneItem,
   toPersistedUcpItems,
@@ -73,6 +74,9 @@ export async function POST(request: NextRequest) {
   if (!agentAccess.ok) {
     return NextResponse.json({ error: agentAccess.error }, { status: 403 });
   }
+
+  const availability = await checkUcpCartAvailability(merchant.id);
+  if (!availability.ok) return availability.response;
 
   const supabase = createAgenticScopedSupabaseClient({
     merchantId: merchant.id,

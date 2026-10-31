@@ -11,5 +11,6 @@ export const MERCHANT: ManifestMerchant = {
   business_name: 'Ogabassey',
   feature_settings: { pay_on_delivery_enabled: true },
   paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
+  shared_cart_enabled: true,
   slug: 'ogabassey',
 };

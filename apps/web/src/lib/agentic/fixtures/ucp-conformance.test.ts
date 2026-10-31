@@ -8,17 +8,17 @@ import {
 } from '@/lib/agentic/ucp-catalog-adapters';
 import { buildUcpOrderResponse } from '@/lib/agentic/ucp-response-adapters';
 import { stubAgenticEnv } from '../test-support/stub-agentic-env';
+import { cartResponse } from './ucp-conformance-cart-response';
 import {
-  buildProfile,
-  cartResponse,
   LINE_MINOR,
   MAJOR_PRICE,
   type ManifestMerchant,
   MERCHANT,
-  orderBody,
-  searchResponse,
   UNIT_MINOR,
-} from './ucp-conformance-inputs';
+} from './ucp-conformance-data';
+import { orderBody } from './ucp-conformance-order-body';
+import { buildProfile } from './ucp-conformance-profile';
+import { searchResponse } from './ucp-conformance-search-response';
 import { UCP_SCHEMAS, validateUcpDocument } from './ucp-schema-validator';
 
 describe('Baci UCP responses against the vendored 2026-04-08 schemas', () => {

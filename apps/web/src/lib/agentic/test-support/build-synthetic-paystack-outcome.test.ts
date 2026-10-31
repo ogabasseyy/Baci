@@ -1,14 +1,15 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import { confirmAgenticPaystackDvaPayment } from '@/lib/agentic/paystack-dva-webhook';
-import { SYNTHETIC_MERCHANT_A } from './synthetic-merchants';
 import {
   buildSyntheticDvaSession,
-  buildSyntheticPaystackOutcome,
   SYNTHETIC_DVA_ACCOUNT_NUMBER,
+} from './build-synthetic-dva-session';
+import {
+  buildSyntheticPaystackOutcome,
   type SyntheticPaystackOutcomeKind,
-  signPaystackWebhook,
-} from './synthetic-paystack';
+} from './build-synthetic-paystack-outcome';
+import { SYNTHETIC_MERCHANT_A } from './synthetic-merchants';
 
 const KINDS: SyntheticPaystackOutcomeKind[] = [
   'paid_exact',
@@ -78,19 +79,6 @@ describe('synthetic Paystack outcomes', () => {
     });
     expect(amount('paid_short')).toEqual({ amount: 79.95, currency: 'NGN' });
     expect(amount('timeout')).toBeNull();
-  });
-
-  it('repeats the identical, identically signed webhook for a duplicate', () => {
-    const { webhooks } = buildSyntheticPaystackOutcome(
-      'duplicate_webhook',
-      SESSION
-    );
-    const [first, second] = webhooks.map((event) =>
-      signPaystackWebhook(event, 'synthetic-secret')
-    );
-
-    expect(first).toEqual(second);
-    expect(first.signature).toMatch(/^[0-9a-f]{128}$/);
   });
 
   it('is identical on every build', () => {

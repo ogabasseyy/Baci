@@ -83,6 +83,21 @@ test('keeps full affected tests when web test setup changes', () => {
   );
 });
 
+test('keeps full affected tests when replay registry lists change', () => {
+  // Registry lists are read through fs, so `vitest --changed` cannot see
+  // which tests consume them; a targeted run would skip their validation.
+  assert.equal(
+    resolveCiTestPlan({
+      baseRef: 'origin/main',
+      changedFiles: [
+        'apps/web/tools/db/replay-registry/20261101090000_goals/pending-sources.txt',
+      ],
+      eventName: 'pull_request',
+    }).mode,
+    'full-affected'
+  );
+});
+
 test('keeps full affected tests when mobile storefront test setup changes', () => {
   assert.equal(
     resolveCiTestPlan({

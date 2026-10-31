@@ -5,6 +5,7 @@ BEGIN
   IF value IS DISTINCT FROM true THEN RAISE EXCEPTION 'Assertion failed: %', label; END IF;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_true(boolean, text) TO PUBLIC; -- called after SET ROLE
 CREATE FUNCTION pg_temp.expect_denied(command text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
   BEGIN
@@ -14,6 +15,7 @@ BEGIN
   RAISE EXCEPTION 'Expected authorization denial';
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.expect_denied(text) TO PUBLIC; -- called after SET ROLE
 
 CREATE FUNCTION pg_temp.expect_state(command text, expected_state text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
@@ -26,6 +28,7 @@ BEGIN
   RAISE EXCEPTION 'Expected SQLSTATE %', expected_state;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.expect_state(text, text) TO PUBLIC; -- called after SET ROLE
 
 SELECT pg_temp.assert_true(session_user = 'supabase_admin' AND current_user = 'supabase_admin'
   AND inet_client_addr() IS NULL AND current_database() = 'postgres'

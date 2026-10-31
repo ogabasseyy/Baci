@@ -1,10 +1,9 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import z from 'zod';
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import {
   type PiggyvestClaimedCapture,
-  piggyvestClaimedCaptureSchema,
+  piggyvestClaimedCapturesSchema,
 } from '@/schemas/piggyvest/webhook-capture';
 
 /**
@@ -39,7 +38,7 @@ export function createCaptureQueue(
         p_lease_seconds: LEASE_SECONDS,
         p_min_age_seconds: MIN_AGE_SECONDS,
       });
-      const parsed = z.array(piggyvestClaimedCaptureSchema).safeParse(data);
+      const parsed = piggyvestClaimedCapturesSchema.safeParse(data);
       if (error || !parsed.success) {
         throw new Error('PiggyVest capture claim failed');
       }

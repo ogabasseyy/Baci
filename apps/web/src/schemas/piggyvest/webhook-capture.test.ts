@@ -4,6 +4,7 @@ import {
   piggyvestCaptureResultSchema,
   piggyvestCaptureStatusSchema,
   piggyvestClaimedCaptureSchema,
+  piggyvestClaimedCapturesSchema,
 } from './webhook-capture';
 
 const id = '4204dc18-efb3-44d0-b9a2-1362448d4f21';
@@ -87,6 +88,44 @@ describe('piggyvestClaimedCaptureSchema', () => {
     ['an empty key version', { key_version: '' }],
   ])('rejects %s', (_name, override) => {
     expect(parse(override).success).toBe(false);
+  });
+});
+
+describe('piggyvestClaimedCapturesSchema', () => {
+  const claim = {
+    capture_id: id,
+    claim_token: '0c0e3c1f-7a43-4b55-9c0e-6a3d2b1f9e10',
+    raw_hex: '7b7d',
+    signature: 'ab'.repeat(64),
+    key_version: 'k-0123456789abcdef',
+    key_families: ['legacy'],
+    attempts: 1,
+    event_type: null,
+    provider_transaction_id: null,
+  };
+
+  it('accepts an empty claim and a list of valid claims', () => {
+    expect(piggyvestClaimedCapturesSchema.safeParse([]).success).toBe(true);
+    expect(
+      piggyvestClaimedCapturesSchema.safeParse([claim, claim]).success
+    ).toBe(true);
+  });
+
+  it('rejects the whole batch when any claim is malformed', () => {
+    expect(
+      piggyvestClaimedCapturesSchema.safeParse([
+        claim,
+        { ...claim, attempts: 0 },
+      ]).success
+    ).toBe(false);
+  });
+
+  it('rejects a response that is not a list', () => {
+    for (const value of [null, undefined, claim, 'rows']) {
+      expect(piggyvestClaimedCapturesSchema.safeParse(value).success).toBe(
+        false
+      );
+    }
   });
 });
 

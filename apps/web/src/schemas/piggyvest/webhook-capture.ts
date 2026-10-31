@@ -40,6 +40,10 @@ export type PiggyvestClaimedCapture = z.infer<
   typeof piggyvestClaimedCaptureSchema
 >;
 
+export const piggyvestClaimedCapturesSchema = z.array(
+  piggyvestClaimedCaptureSchema
+);
+
 const nullableTimestampSchema = z.string().nullable();
 
 export const piggyvestCaptureStatusSchema = z.object({

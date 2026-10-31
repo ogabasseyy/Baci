@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import z from 'zod';
 import type { PiggyvestClientConfig } from '@/lib/piggyvest/client';
 import { redactEventDetails } from '@/lib/piggyvest/event-redaction';
 import { recordPiggyvestEvent } from '@/lib/piggyvest/webhook-inbox';
@@ -8,6 +7,7 @@ import { processPiggyvestEvent } from '@/lib/piggyvest/webhook-processor';
 import type { PiggyvestWebhookKeyFamily } from '@/lib/piggyvest/webhook-secret-union';
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import { piggyvestWebhookEventSchema } from '@/schemas/piggyvest/events';
+import { piggyvestWebhookCorrelationSchema } from '@/schemas/piggyvest/webhook-correlation';
 import { dispatchPrimaryPiggyvestIntake } from './primary-webhook-dispatch';
 import { quarantineAndAck } from './quarantine-and-ack';
 import { toRecordInput } from './record-input';
@@ -64,11 +64,6 @@ export function isAuthorizationQuarantine(response: Response): boolean {
   return authorizationQuarantines.has(response);
 }
 
-const correlationSchema = z.object({
-  eventId: z.string().min(1).max(200).optional(),
-  eventType: z.string().min(1).max(200).optional(),
-});
-
 export async function processVerifiedDelivery(
   delivery: VerifiedDelivery,
   deps: ProcessDeliveryDeps
@@ -88,7 +83,8 @@ export async function processVerifiedDelivery(
   const parsed = piggyvestWebhookEventSchema.safeParse(jsonPayload);
   if (!parsed.success) {
     console.warn('[PiggyVest Webhook] Authentic delivery, unknown event shape');
-    const correlation = correlationSchema.safeParse(jsonPayload);
+    const correlation =
+      piggyvestWebhookCorrelationSchema.safeParse(jsonPayload);
     return quarantineAndAck(
       rawBody,
       'unknown-event',

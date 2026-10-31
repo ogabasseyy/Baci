@@ -30,7 +30,7 @@ const parsedAndroidVersionCode =
     : Number(rawAndroidVersionCode);
 let androidVersionCode;
 const appVersion = '2.0.1';
-const androidRuntimeVersion = `${appVersion}-android-sdk57-rn0862`;
+const androidRuntimeVersion = `${appVersion}-android-sdk58-rn0880`;
 const DEFAULT_ANDROID_VERSION_CODE = 741;
 
 if (parsedAndroidVersionCode !== undefined) {
@@ -78,7 +78,8 @@ if (rawIosAppVersion !== undefined && rawIosAppVersion.trim().length > 0) {
   _iosAppVersion = trimmed;
 }
 
-const runtimeVersion = _iosAppVersion ?? appVersion;
+const iosAppVersion = _iosAppVersion ?? appVersion;
+const runtimeVersion = `${iosAppVersion}-ios-sdk58-rn0880`;
 const tiktokIosAppStoreId =
   process.env.STOREFRONT_TIKTOK_APP_STORE_ID?.trim() ||
   DEFAULT_STOREFRONT_TIKTOK_IOS_APP_STORE_ID;
@@ -186,7 +187,7 @@ const buildStorefrontConfig = ({ config }) => ({
   name: 'Ogabassey',
   slug: 'ogabassey-store',
   owner: 'ogabassey-services-limited',
-  version: runtimeVersion,
+  version: iosAppVersion,
   orientation: 'default',
   icon: './assets/images/icon.png',
   userInterfaceStyle: 'automatic',

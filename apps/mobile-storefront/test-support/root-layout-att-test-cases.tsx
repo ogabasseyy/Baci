@@ -1,3 +1,4 @@
+import type { jest } from '@jest/globals';
 import { expect, it } from '@jest/globals';
 import {
   fireEvent,
@@ -5,7 +6,6 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react-native';
-import type { Mock } from 'jest-mock';
 import type React from 'react';
 
 interface AuthState {
@@ -16,11 +16,11 @@ interface AuthState {
 interface AttTestDependencies {
   RootLayout: React.ComponentType;
   authState: AuthState;
-  initializeStorage: Mock<() => Promise<void>>;
-  initializeAdTrackingForStartup: Mock<() => Promise<void>>;
-  registerPushNotifications: Mock;
-  activateDueSavingsReminderNotification: Mock;
-  useAppTrackingTransparency: Mock;
+  initializeStorage: jest.Mock<() => Promise<void>>;
+  initializeAdTrackingForStartup: jest.Mock<() => Promise<void>>;
+  registerPushNotifications: jest.Mock;
+  activateDueSavingsReminderNotification: jest.Mock;
+  useAppTrackingTransparency: jest.Mock;
   setTrackingAuthorizationSettled: (settled: boolean) => void;
 }
 

@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loader';
 import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
+import { toOgabasseySameOriginTransformUrl } from '@/lib/ogabassey-same-origin-hero-url';
+import { toOgabasseySameOriginSrcSet } from '@/lib/ogabassey-same-origin-srcset';
 import { asRoute } from '@/lib/routes';
 import {
   capSrcSetWidthRungs,
@@ -57,7 +59,7 @@ function HeroBigImage({ alt, src }: { alt: string; src: string }) {
     width: BIG_IMAGE_WIDTH,
   });
 
-  const fallbackSrcSet =
+  const rawFallbackSrcSet =
     capSrcSetWidthRungs(
       srcSet,
       DESKTOP_HERO_BIG_MAX_SRCSET_WIDTH,
@@ -66,7 +68,12 @@ function HeroBigImage({ alt, src }: { alt: string; src: string }) {
   // AVIF twin (per-format URL) so AVIF-capable browsers keep AVIF: CF Free
   // ignores `Vary: Accept`, so one `format=auto` body can't serve both tiers.
   // `null` for external images — the plain `<source>` then serves everyone.
-  const avifSrcSet = buildOgabasseyAvifSrcSet(fallbackSrcSet);
+  const avifSrcSet =
+    toOgabasseySameOriginSrcSet(buildOgabasseyAvifSrcSet(rawFallbackSrcSet)) ??
+    null;
+  const sameOriginImgSrc = toOgabasseySameOriginTransformUrl(imgSrc);
+  const fallbackSrcSet =
+    toOgabasseySameOriginSrcSet(rawFallbackSrcSet) ?? sameOriginImgSrc;
 
   return (
     <picture className="absolute inset-0 block h-full w-full">
@@ -93,7 +100,7 @@ function HeroBigImage({ alt, src }: { alt: string; src: string }) {
       <img
         {...imgProps}
         alt={alt}
-        src={imgSrc}
+        src={sameOriginImgSrc}
         className="h-full w-full object-contain p-4 transition-transform duration-700 group-hover:scale-105"
       />
     </picture>

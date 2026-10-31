@@ -2,6 +2,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import type { TextInputInstance } from 'react-native';
 import {
   ActivityIndicator,
   Alert,
@@ -50,7 +51,7 @@ export default function VerifyScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [timer, setTimer] = useState(30);
-  const inputs = useRef<Array<TextInput | null>>([]);
+  const inputs = useRef<Array<TextInputInstance | null>>([]);
 
   useEffect(() => {
     if (timer <= 0) return;

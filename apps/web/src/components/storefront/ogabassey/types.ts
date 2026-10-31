@@ -72,6 +72,7 @@ export interface Product {
   matchOfferId?: string;
   matchCondition?: string;
   slug?: string;
+  created_at?: string | null;
   name: string;
   price: string;
   rawPrice?: number;
@@ -85,6 +86,7 @@ export interface Product {
   category_id?: string; // FK to categories table
   categories?: Category; // Joined category object (Supabase convention: singular)
   categorySlug?: string;
+  category_slug?: string;
   condition?:
     | 'New'
     | 'Used'

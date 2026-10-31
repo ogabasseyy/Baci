@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-30T23:17:19+00:00",
-  "source_revision": "09e2b99a55d9e2d514fe227ca9cac0a809564e14",
-  "evidence_digest": "a529e3c6c4013d7585c53546e1e6ec18e858440b43e177aa238b370c6bea3fc7",
-  "claims_digest": "be00eb5b7a4f93df9b14364a9b7972a52c2f8b7ee296abd96110566deafd95b0",
-  "review_scope": "Source evidence only. Rechecked the agent-protocols sources after the agentic catalog, checkout-session and order routes moved from a service-role client to the scoped agentic merchant-context RPC, with a separate scoped payment-split lookup for checkout completion; the agent-protocols claim, limitations and status are unchanged. Other cited capability and access-map sources are unchanged since the previous review. The support-chat health probe, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
+  "reviewed_at": "2026-10-30T12:10:27+00:00",
+  "source_revision": "a53802c1d138abcd175e5ed29196f9070697686e",
+  "evidence_digest": "2eebd66c58d9675e5e611a07cc88e0a1f188da707def0333153cdf9eb04607fa",
+  "claims_digest": "ac54e0b0278a33c5e9078b7592120d9e2258fa503c083e4f22fb1072309867ce",
+  "review_scope": "Source evidence only. Rechecked the support-chat health probe: catalog and conversation checks run concurrently, with Ogabassey tenant and catalog markers. Across this main integration the cited capability and access-map sources are unchanged except the mobile admin inventory sheet empty footer, which now uses undefined; the inventory capability remains unchanged. OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment, native acceptance and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

@@ -1,5 +1,31 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { requestPrefundedCardProviderJson } from './prefunded-card-provider-request';
+
+// The provider deadline is a setTimeout: every test drives it with a fake
+// clock, so no test waits on wall-clock time.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+// Records how the request settles without awaiting it, so a test can step
+// the fake clock and check whether the request has settled yet.
+function track(promise: Promise<unknown>) {
+  const state: { settled: boolean; error?: unknown } = { settled: false };
+  promise.then(
+    () => {
+      state.settled = true;
+    },
+    (error: unknown) => {
+      state.settled = true;
+      state.error = error;
+    }
+  );
+  return state;
+}
 
 it('cancels an unbounded response stream as soon as it exceeds the byte cap', async () => {
   const cancel = vi.fn();
@@ -26,16 +52,21 @@ it('cancels an unbounded response stream as soon as it exceeds the byte cap', as
 });
 
 it('aborts a provider request at the configured timeout', async () => {
-  await expect(
+  const request = track(
     requestPrefundedCardProviderJson({
       url: 'https://api.paystack.co/transaction/verify/reference',
       token: 'sk_test_example',
-      timeoutMs: 1,
+      timeoutMs: 1000,
       maxResponseBytes: 1024,
       fetchImplementation: vi.fn(() => new Promise<Response>(() => undefined)),
       init: { method: 'GET' },
     })
-  ).rejects.toThrow('PROVIDER_TIMEOUT');
+  );
+
+  await vi.advanceTimersByTimeAsync(999);
+  expect(request.settled).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(request.error).toMatchObject({ message: 'PROVIDER_TIMEOUT' });
 });
 
 it('attaches the bounded HTTP error body for definitive-rejection detection', async () => {
@@ -106,22 +137,6 @@ function requestWith(
   });
 }
 
-// Settles with whichever comes first, so a request that never returns
-// fails the test instead of hanging it.
-async function settleWithin<T>(promise: Promise<T>, ms: number) {
-  let guard: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_resolve, reject) => {
-        guard = setTimeout(() => reject(new Error('STILL_PENDING')), ms);
-      }),
-    ]);
-  } finally {
-    clearTimeout(guard);
-  }
-}
-
 describe('provider request abort fence', () => {
   it('aborts the request when a streamed body passes the byte cap', async () => {
     const body = new ReadableStream<Uint8Array>({
@@ -165,9 +180,14 @@ describe('provider request abort fence', () => {
       new Response(body, { status: 200 })
     );
 
-    await expect(
-      settleWithin(requestWith(fetchImplementation), 1000)
-    ).rejects.toThrow('PROVIDER_RESPONSE_TOO_LARGE');
+    const request = track(requestWith(fetchImplementation));
+
+    // No clock time passes: the cap alone must settle the request.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(request.settled).toBe(true);
+    expect(request.error).toMatchObject({
+      message: 'PROVIDER_RESPONSE_TOO_LARGE',
+    });
     expect(signals[0]?.aborted).toBe(true);
   });
 
@@ -180,9 +200,15 @@ describe('provider request abort fence', () => {
       new Response(body, { status: 200 })
     );
 
-    await expect(
-      settleWithin(requestWith(fetchImplementation, { timeoutMs: 1 }), 1000)
-    ).rejects.toThrow('PROVIDER_TIMEOUT');
+    const request = track(requestWith(fetchImplementation));
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(request.settled).toBe(false);
+    expect(signals[0]?.aborted).toBe(false);
+    // The 1000ms provider deadline passes: the request settles at once.
+    await vi.advanceTimersByTimeAsync(1);
+    expect(request.settled).toBe(true);
+    expect(request.error).toMatchObject({ message: 'PROVIDER_TIMEOUT' });
     expect(signals[0]?.aborted).toBe(true);
   });
 

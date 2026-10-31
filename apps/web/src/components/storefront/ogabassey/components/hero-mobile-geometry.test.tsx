@@ -1,6 +1,8 @@
 import { render } from '@testing-library/react';
 import type React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { computeHeroMobileHeadingMaxAreaPx2 } from './compute-hero-mobile-heading-max-area-px2';
+import { computeHeroMobileImageMinAreaPx2 } from './compute-hero-mobile-image-min-area-px2';
 import { HeroMobileCarousel } from './hero-mobile-carousel';
 import {
   HERO_MOBILE_CONTROLS_ROW_CLASSES,
@@ -130,8 +132,49 @@ describe('permanent hero mobile geometry', () => {
     const carousel = render(<HeroMobileCarousel slides={SLIDES} />).container;
 
     const carouselSource = carousel.querySelector('picture source');
-    expect(carouselSource?.getAttribute('srcset')).toContain(SLIDES[0].imageUrl);
+    expect(carouselSource?.getAttribute('srcset')).toContain(
+      '/core-assets/products/tecno.avif'
+    );
     const carouselImg = carousel.querySelector('picture img');
     expect(carouselImg?.getAttribute('alt')).toBe(SLIDES[0].imageAlt);
+  });
+
+  it('guarantees the slide-0 hero image painted area strictly exceeds a 3-line h2 heading at 360px, 390px, and 412px viewports for product aspect ratios (1:1, 3:4, 4:3) while bounding 16:9 wide crops', () => {
+    const threeLineSlide = {
+      ...SLIDES[0],
+      name: 'Redmi Note 17 Pro Max 5G (512GB / 16GB RAM) Global Edition',
+    };
+    const { getByAltText, getByRole } = render(
+      <HeroMobileCarousel slides={[threeLineSlide]} />
+    );
+
+    expect(
+      getByRole('heading', { level: 2, name: threeLineSlide.name })
+    ).toBeTruthy();
+    const heroImg = getByAltText(threeLineSlide.imageAlt);
+    expect(heroImg.getAttribute('fetchpriority')).toBe('high');
+
+    // Product catalog images use fit=inside without a forced height crop so
+    // square (1:1), portrait (3:4), and 4:3 renders preserve their aspect ratio
+    // and strictly exceed the 3-line heading at 360px, 390px, and 412px; a 16:9
+    // letterboxed image is narrower at 360px/390px and overtakes at 412px+.
+    const productAspectRatios = [1, 3 / 4, 4 / 3];
+    for (const viewportWidthPx of [360, 390, 412]) {
+      const maxHeadingArea =
+        computeHeroMobileHeadingMaxAreaPx2(viewportWidthPx);
+      for (const aspectRatio of productAspectRatios) {
+        const visiblePaintedAreaPx2 = computeHeroMobileImageMinAreaPx2(
+          viewportWidthPx,
+          aspectRatio
+        );
+        expect(visiblePaintedAreaPx2).toBeGreaterThan(maxHeadingArea);
+      }
+    }
+    expect(computeHeroMobileImageMinAreaPx2(360, 16 / 9)).toBeLessThan(
+      computeHeroMobileHeadingMaxAreaPx2(360)
+    );
+    expect(computeHeroMobileImageMinAreaPx2(480, 16 / 9)).toBeGreaterThan(
+      computeHeroMobileHeadingMaxAreaPx2(480)
+    );
   });
 });

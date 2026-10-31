@@ -49,4 +49,9 @@ export const EXPECTED_IMEI_PENDING_SOURCES = [
       'supabase/migrations/20261030181744_imei_approved_price_reductions.sql',
     sha256: '08e262540899c9a2ec179b9e0892fbe90a6fbd11a9f052a36934d905d73de8df',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261031061214_imei_report_history_device_read.sql',
+    sha256: 'c3179d4170004038302d9637c2c79edb94ddd709a70b8713fbb235241e24018c',
+  },
 ];

@@ -90,7 +90,7 @@ The roadmap assigns these to other tasks, so do not change them here:
 - **Format with the repository's Biome.** From the worktree root: `./node_modules/.bin/biome check --write <files>`. Never use `npx`.
 - **Commit with `LEFTHOOK_EXCLUDE=knip git commit -F <message file>`.** Never use `--no-verify`. End each message with `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>` (or the model you are). Keep the word "main" out of commit messages.
 - **Do not push.** The orchestrator pushes, keeping commit IDs identical.
-- **CodeRabbit is optional.** Run `coderabbit review --agent -t uncommitted` before each commit if it is available. If it is rate-limited or errors, skip it and say so in your report.
+- **CodeRabbit before each commit, with the owner's exception.** Run `coderabbit review --agent -t uncommitted` before each commit and fix valid critical or high findings. If it is rate-limited or errors, the owner's 31 Oct instruction (tracker, step 5) is to continue: report the gate as not run, never claim it ran; the draft PR's Codex review and the required AI-review gate still apply before merge.
 
 ---
 

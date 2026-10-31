@@ -228,10 +228,22 @@ BEGIN
      OR pg_catalog.has_column_privilege(
        'authenticated', 'public.merchant_shipping_charges', 'reserved_by', 'UPDATE')
      OR pg_catalog.has_column_privilege(
-       'authenticated', 'public.merchant_wallet_funding_account_requests', 'requested_by', 'UPDATE')
-     OR pg_catalog.has_column_privilege(
-       'anon', 'public.merchant_shipping_charges', 'reserved_by', 'SELECT') THEN
+       'authenticated', 'public.merchant_wallet_funding_account_requests', 'requested_by', 'UPDATE') THEN
     RAISE EXCEPTION 'actor columns must be readable, never client-writable after insert';
+  END IF;
+  -- anon keeps a pre-existing table-level SELECT grant on
+  -- merchant_shipping_charges (Supabase default privileges), so a column
+  -- privilege check is meaningless there. What keeps the actor column from
+  -- anon is RLS: it must stay enabled with no policy that applies to anon.
+  IF NOT (SELECT c.relrowsecurity FROM pg_catalog.pg_class c
+          WHERE c.oid = 'public.merchant_shipping_charges'::regclass)
+     OR EXISTS (
+       SELECT 1 FROM pg_catalog.pg_policy pol
+       WHERE pol.polrelid = 'public.merchant_shipping_charges'::regclass
+         AND (pol.polroles = ARRAY[0::oid]
+              OR 'anon'::regrole::oid = ANY (pol.polroles))
+     ) THEN
+    RAISE EXCEPTION 'merchant_shipping_charges must stay RLS-protected from anon';
   END IF;
 END;
 $actor$;

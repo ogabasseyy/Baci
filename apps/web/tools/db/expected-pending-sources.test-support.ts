@@ -5,8 +5,10 @@ import { EXPECTED_BUILDER_PENDING_SOURCES } from './expected-builder-pending-sou
 import { EXPECTED_CART_PENDING_SOURCES } from './expected-cart-pending-sources.test-support';
 import { EXPECTED_CATALOG_CACHE_PENDING_SOURCES } from './expected-catalog-cache-pending-sources.test-support';
 import { EXPECTED_CONNECTOR_PENDING_SOURCES } from './expected-connector-pending-sources.test-support';
+import { EXPECTED_DEFINER_PRIVILEGES_PENDING_SOURCES } from './expected-definer-privileges-pending-sources.test-support';
 import { EXPECTED_DISCOVERY_PENDING_SOURCES } from './expected-discovery-pending-sources.test-support';
 import { EXPECTED_EXPENSE_PENDING_SOURCES } from './expected-expense-pending-sources.test-support';
+import { EXPECTED_GIGL_STAFF_ACCESS_PENDING_SOURCES } from './expected-gigl-staff-access-pending-sources.test-support';
 import { EXPECTED_GIGL_TRACKING_HARDENING_PENDING_SOURCES } from './expected-gigl-tracking-hardening-pending-sources.test-support';
 import { EXPECTED_GIGL_TRACKING_PENDING_SOURCES } from './expected-gigl-tracking-pending-sources.test-support';
 import { EXPECTED_GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './expected-gigl-wallet-shipping-pending-sources.test-support';
@@ -43,8 +45,10 @@ import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-
 import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 
 export const EXPECTED_PENDING_SOURCES = [
+  ...EXPECTED_GIGL_STAFF_ACCESS_PENDING_SOURCES,
   ...EXPECTED_STORE_CREDIT_PENDING_SOURCES,
   ...EXPECTED_IMEI_PENDING_SOURCES,
+  ...EXPECTED_DEFINER_PRIVILEGES_PENDING_SOURCES,
   ...EXPECTED_ADS_PENDING_SOURCES,
   {
     repositoryPath:

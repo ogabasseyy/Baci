@@ -38,6 +38,7 @@ import { EXPECTED_PENDING_SEPT_SOURCES } from './expected-pending-sept-sources.t
 import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.test-fixture';
 import { EXPECTED_PENDING_VTU_REPLAY_SOURCES } from './expected-pending-vtu-replay-sources.test-support';
 import { EXPECTED_PIGGYVEST_CAPTURE_PENDING_SOURCES } from './expected-piggyvest-capture-pending-sources.test-support';
+import { EXPECTED_PIGGYVEST_ENROLL_NAME_PENDING_SOURCES } from './expected-piggyvest-enroll-name-pending-sources.test-support';
 import { EXPECTED_PLAN_TIER_PENDING_SOURCES } from './expected-plan-tier-pending-sources.test-support';
 import { EXPECTED_PRIMARY_PENDING_SOURCES } from './expected-primary-pending-sources.test-support';
 import { EXPECTED_QUIZ_LIVE_PENDING_SOURCES } from './expected-quiz-live-pending-sources.test-support';
@@ -56,6 +57,7 @@ export const EXPECTED_LEGACY_PENDING_SOURCES: readonly {
   repositoryPath: string;
   sha256: string;
 }[] = [
+  ...EXPECTED_PIGGYVEST_ENROLL_NAME_PENDING_SOURCES,
   ...EXPECTED_MERCHANT_CONTACT_PHONE_PENDING_SOURCES,
   ...EXPECTED_PIGGYVEST_CAPTURE_PENDING_SOURCES,
   ...EXPECTED_GIGL_STAFF_ACCESS_PENDING_SOURCES,

@@ -173,7 +173,7 @@ describe('replay SQL-check registry', () => {
   it('resolves every checked-in suite that CI runs', () => {
     const suites = replaySqlCheckRegistry.readSuites(REPOSITORY_ROOT, REGISTRY);
 
-    expect(suites.length).toBeGreaterThanOrEqual(187);
+    expect(suites.length).toBeGreaterThanOrEqual(188);
     expect(new Set(suites).size).toBe(suites.length);
   });
 });

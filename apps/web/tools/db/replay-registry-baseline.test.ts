@@ -18,16 +18,16 @@ import { REPLAY_SOURCE_DATA } from './supabase-history-replay-sources';
 // a new registry folder never touches this file.
 const FROZEN = {
   expected: {
-    count: 1645,
-    sha256: '6954f0d3e2c1a3775d574641e8c16cfb3b6d96fa59cd4e0e6a36f98854e50e24',
+    count: 1646,
+    sha256: '0e213372b96e44a415b00e7d05284c69293231f0aec848b7743ae7c1906dc35e',
   },
   pending: {
-    count: 1645,
-    sha256: '6717ee2d191d2a63189638a27e5e44f98baac305b262c57bbc0a3fbcb8581e11',
+    count: 1646,
+    sha256: '45c97d7aa760ce30195cdf48bbfcfd61d7031475264c09c1430fcb26008e0d78',
   },
   sqlChecks: {
-    count: 187,
-    sha256: 'e3043151c70b1c14f71d16c44f288265b56551b00cad0dff37e792f82eecf68b',
+    count: 188,
+    sha256: 'dbd78e0f366d3592857190e5b58651712cd06357381e48a69198c1bf90d461fd',
   },
 };
 const BASELINE = '00000000000000_baseline';

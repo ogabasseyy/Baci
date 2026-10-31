@@ -30,6 +30,7 @@ import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-repla
 import { ONBOARDING_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-onboarding-pending-sources';
 import { PENDING_SOURCES_HEAD } from './supabase-history-replay-pending-sources-head';
 import { PIGGYVEST_CAPTURE_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-piggyvest-capture-sources';
+import { PIGGYVEST_ENROLL_NAME_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-piggyvest-enroll-name-sources';
 import { PRIMARY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-primary-pending-sources';
 import { REDVAULT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-redvault-pending-sources';
 import { REFUND_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-refund-pending-sources';
@@ -52,6 +53,7 @@ import { VTU_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-pe
 import { WALLET_ORDER_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-wallet-order-sources';
 
 export const LEGACY_PENDING_SOURCE_BLOCKS: readonly string[] = [
+  PIGGYVEST_ENROLL_NAME_PENDING_REPLAY_SOURCE_ROWS,
   PIGGYVEST_CAPTURE_PENDING_REPLAY_SOURCE_ROWS,
   GIGL_STAFF_ACCESS_PENDING_REPLAY_SOURCE_ROWS,
   STORE_CREDIT_PENDING_REPLAY_SOURCE_ROWS,

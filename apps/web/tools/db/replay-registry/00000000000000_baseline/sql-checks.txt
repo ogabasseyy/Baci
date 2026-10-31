@@ -93,6 +93,7 @@ supabase/migrations/tests/credit_direct_inventory_proof.sql
 supabase/migrations/tests/jumia_variant_price_optimistic_guard.sql
 supabase/migrations/tests/jumia_submitted_price_update_faults.sql
 supabase/tests/piggyvest_webhook_durable_capture.sql
+supabase/tests/piggyvest_primary_enroll_goal_wallet_name.sql
 supabase/tests/jumia_product_export_selections.sql
 supabase/tests/jumia_product_export_selection_merchant_page.sql
 supabase/tests/storefront_order_claim_loop_ordering.sql

@@ -1,6 +1,6 @@
 import type { MutableRefObject } from 'react';
 import { useEffect } from 'react';
-import type { AppStateStatus } from 'react-native';
+import type { AppState } from 'react-native';
 import type { QuizEvent } from '@/services/quiz-types';
 import { flushPendingQuizStart } from './quiz-pending-start';
 
@@ -21,7 +21,7 @@ export function useQuizStartHold({
   startedRef,
   stoppedRef,
 }: {
-  appStateRef: MutableRefObject<AppStateStatus>;
+  appStateRef: MutableRefObject<typeof AppState.currentState>;
   isFullscreenAdActiveRef: MutableRefObject<boolean>;
   isStartBlocked: boolean;
   isStartBlockedRef: MutableRefObject<boolean>;

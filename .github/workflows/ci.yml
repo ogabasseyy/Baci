@@ -54,6 +54,8 @@ jobs:
       # files. The contract checker enforces this ordering.
       - name: Test capability register binding
         uses: ./.github/actions/capability-gate
+      - name: Test Android release SDK alignment
+        run: node --test .github/scripts/android-release-sdk.test.mjs .github/scripts/mobile-gradle-wrapper.test.mjs .github/scripts/rn-suite-migration.test.mjs
       - name: Test release retries and dependency update policy
         run: node --test .github/scripts/muse-dependabot-policy.test.mjs .github/scripts/posthog-release-cli.test.mjs
       - name: Test pnpm store action input hardening
@@ -502,6 +504,9 @@ jobs:
           --sql-check supabase/migrations/tests/enroll_customer_loyalty_concurrency.sql
           --sql-check supabase/tests/vtu_intent_claim.sql
           --sql-check supabase/tests/vtu_intent_claim_concurrency.sql
+          --sql-check supabase/tests/finalize_store_credit_order_payment_refusals.sql
+          --sql-check supabase/tests/finalize_store_credit_order_payment_legitimate.sql
+          --sql-check supabase/tests/finalize_store_credit_order_payment_privileges.sql
           --sql-check supabase/migrations/tests/chatgpt_ads_settings_and_destination.sql
           --sql-check supabase/migrations/tests/chatgpt_ads_admin_destination.sql
           --sql-check supabase/migrations/tests/x_ads_settings_and_destination.sql

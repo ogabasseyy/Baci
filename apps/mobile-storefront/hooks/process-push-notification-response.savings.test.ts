@@ -36,6 +36,10 @@ it.each([
         identifier: `savings-retry-${failure}`,
         trigger: null,
         content: {
+          launchImageName: null,
+          badge: null,
+          attachments: [],
+          threadIdentifier: null,
           title: null,
           subtitle: null,
           body: null,

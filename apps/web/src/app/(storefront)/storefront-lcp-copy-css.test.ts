@@ -106,4 +106,12 @@ describe('STOREFRONT_LCP_COPY_CSS', () => {
       'var(--color-gray-50, #f9fafb)'
     );
   });
+  it('locks the brand/family hub intro to the fallback face at its Tailwind sizes without overriding header spacing', () => {
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /\[data-cwv-lcp-copy="authority-hub"\]\s*\{\s*font-size: 1rem !important;\s*line-height: 1\.75rem !important;\s*\}/
+    );
+    expect(STOREFRONT_LCP_COPY_CSS).toMatch(
+      /@media \(min-width: 640px\)\s*\{\s*\[data-cwv-lcp-copy="authority-hub"\]\s*\{\s*font-size: 1\.125rem !important;/
+    );
+  });
 });

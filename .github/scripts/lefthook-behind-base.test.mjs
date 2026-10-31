@@ -97,19 +97,21 @@ test(
         detached: true,
       });
       let stdout = '';
-      const killTimer = setTimeout(() => {
+      const deadline = AbortSignal.timeout(STALLED_REMOTE_DEADLINE_MS);
+      const onDeadline = () => {
         try {
           process.kill(-child.pid, 'SIGKILL');
         } catch {
           child.kill('SIGKILL');
         }
         resolve({ status: null, stdout, timedOut: true });
-      }, STALLED_REMOTE_DEADLINE_MS);
+      };
+      deadline.addEventListener('abort', onDeadline, { once: true });
       child.stdout.on('data', (chunk) => {
         stdout += chunk;
       });
       child.on('close', (status) => {
-        clearTimeout(killTimer);
+        deadline.removeEventListener('abort', onDeadline);
         resolve({ status, stdout, timedOut: false });
       });
       child.stdin.end(

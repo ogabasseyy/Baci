@@ -1,6 +1,7 @@
 import type { PaymentStatus, ShippingStatus } from '@baci/shared';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRef } from 'react';
+import type { ViewInstance } from 'react-native';
 import {
   type GestureResponderEvent,
   Pressable,
@@ -58,7 +59,7 @@ export function OrderItem({
   );
   const sourceConfig = getSourceConfig(item.source);
   const itemCount = item.item_count ?? 0;
-  const statusBadgeRef = useRef<View>(null);
+  const statusBadgeRef = useRef<ViewInstance>(null);
 
   const handleStatusPress = (event: GestureResponderEvent) => {
     event.stopPropagation();

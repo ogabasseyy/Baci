@@ -6,7 +6,6 @@ import {
   Alert,
   BackHandler,
   Dimensions,
-  InteractionManager,
   Platform,
   Pressable,
   StyleSheet,
@@ -21,6 +20,7 @@ import { GadgetPattern } from '@/components/storefront/GadgetPattern';
 import { Logo } from '@/components/ui/Logo';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND } from '@/constants/Colors';
+import { useConfirmSignOut } from '@/hooks/use-confirm-sign-out';
 import { getOptionalGestureHandlerRuntime } from '@/lib/optional-gesture-handler';
 import { useAuthStore } from '@/stores/auth-store';
 import { useDrawerStore } from '@/stores/drawer-store';
@@ -113,29 +113,11 @@ export function DrawerMenu() {
   // H4 fix: Use isOpen directly for style.pointerEvents since useDerivedValue
   // reads .value at render time (JS thread snapshot), not reactively during animation.
 
+  const confirmSignOut = useConfirmSignOut(signOut);
+
   const handleNavigate = (path: string) => {
     closeDrawer();
     router.push(path as import('expo-router').Href);
-  };
-
-  const confirmSignOut = () => {
-    InteractionManager.runAfterInteractions(() => {
-      signOut()
-        .then(() => {
-          router.replace('/');
-        })
-        .catch((err: unknown) => {
-          console.error('Sign-out failed:', err);
-          Alert.alert(
-            'Sign Out Failed',
-            'Unable to complete sign out. Please try again.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Retry', onPress: confirmSignOut },
-            ]
-          );
-        });
-    });
   };
 
   const handleSignOut = () => {

@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const pollImeiCheck = vi.hoisted(() => vi.fn());
 vi.mock('./imei-checker-request', () => ({ pollImeiCheck }));
@@ -8,9 +8,49 @@ import { pendingImeiStorageKey } from './imei-pending-storage';
 import { useImeiPendingLookup } from './use-imei-pending-lookup';
 
 describe('useImeiPendingLookup', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   beforeEach(() => {
     localStorage.clear();
     pollImeiCheck.mockReset();
+  });
+
+  it.each([
+    'getter',
+    'remove',
+  ])('polls, completes and clears despite a denied storage %s', async (failure) => {
+    pollImeiCheck.mockResolvedValue({
+      kind: 'complete',
+      result: { device: 'iPhone', imei: '490154203237518' },
+    });
+    if (failure === 'getter')
+      vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
+        throw new DOMException('denied', 'SecurityError');
+      });
+    else
+      vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+        throw new DOMException('denied', 'SecurityError');
+      });
+    const { result } = renderHook(() =>
+      useImeiPendingLookup({
+        customerId: 'customer-1',
+        host: 'shop.example.com',
+        merchantSlug: 'ogabassey',
+      })
+    );
+    act(() => {
+      result.current.start({
+        lookupId: '11111111-1111-4111-8111-111111111111',
+        tier: 'simLock',
+        device: 'smartphone',
+        pollAfterMs: 0,
+      });
+    });
+    if (failure === 'getter') expect(result.current.canResume).toBe(false);
+    await waitFor(() => expect(result.current.terminal?.kind).toBe('complete'));
+    expect(() => act(() => result.current.clear())).not.toThrow();
+    expect(result.current.pending).toBeNull();
   });
 
   it('persists, polls, and clears a completed lookup', async () => {
@@ -31,6 +71,7 @@ describe('useImeiPendingLookup', () => {
         lookupId: '11111111-1111-4111-8111-111111111111',
         pollAfterMs: 0,
         tier: 'blacklist',
+        device: 'smartphone',
       });
     });
 
@@ -43,6 +84,7 @@ describe('useImeiPendingLookup', () => {
     await waitFor(() => expect(result.current.terminal?.kind).toBe('complete'));
     expect(result.current.terminal).toMatchObject({
       lookupId: '11111111-1111-4111-8111-111111111111',
+      device: 'smartphone',
     });
     expect(localStorage.getItem(key)).toBeNull();
     expect(result.current.pending).toBeNull();

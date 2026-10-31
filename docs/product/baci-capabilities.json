@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-30T08:07:40+00:00",
-  "source_revision": "c346c35d5c6b8e176028e57a182bc2faca2cfb33",
-  "evidence_digest": "884ec712bc68c759e59b0de3f2d07fe260a2fc08529a2ac66a1fe0ddfff8a018",
-  "claims_digest": "a5eb837dea04dc2f6441b9c038557f5d03e4c0c5ff6a3bb94b1c1cbe94dece19",
-  "review_scope": "Source evidence only. Rechecked the support-chat health probe: catalog and conversation checks run concurrently, with Ogabassey tenant and catalog markers. All cited capability and access-map sources remain unchanged since the previous source review across this main integration. OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
+  "reviewed_at": "2026-10-30T12:10:27+00:00",
+  "source_revision": "a53802c1d138abcd175e5ed29196f9070697686e",
+  "evidence_digest": "2eebd66c58d9675e5e611a07cc88e0a1f188da707def0333153cdf9eb04607fa",
+  "claims_digest": "ac54e0b0278a33c5e9078b7592120d9e2258fa503c083e4f22fb1072309867ce",
+  "review_scope": "Source evidence only. Rechecked the support-chat health probe: catalog and conversation checks run concurrently, with Ogabassey tenant and catalog markers. Across this main integration the cited capability and access-map sources are unchanged except the mobile admin inventory sheet empty footer, which now uses undefined; the inventory capability remains unchanged. OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment, native acceptance and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

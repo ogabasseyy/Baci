@@ -119,7 +119,7 @@ describe('saved GIG checkout booking integration', () => {
       code: 'GIGL_COST_EXCEEDS_CUSTOMER_PAID',
       status: 409,
       message:
-        'GIG now charges ₦2,600 to deliver this order, more than the ₦2,500 the customer paid. No booking was made.',
+        "GIG's current price for this delivery is higher than the ₦2,500 the customer paid. No booking was made.",
     });
     expect(shippingService.bookShipment).not.toHaveBeenCalled();
     expect(client.rpc).not.toHaveBeenCalledWith(

@@ -216,6 +216,21 @@ describe('saved paid GIG quote validation', () => {
     });
     expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
   });
+  it.each([
+    1000,
+    '1100.01',
+    null,
+    undefined,
+    '',
+  ])('requires recovery before fetching when the order shipping fee %j differs from the saved quote price', async (expectedFee) => {
+    await expect(
+      validateSavedGiglCheckoutQuote(quote, sender, expectedFee)
+    ).rejects.toMatchObject({
+      code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+      status: 409,
+    });
+    expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
+  });
   it('reports unavailable pricing without claiming that details changed', async () => {
     vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([]);
     await expect(
@@ -304,7 +319,7 @@ describe('saved paid GIG quote validation', () => {
     expect(result).toBe(quote);
     expect(result).toMatchObject({ id: 'saved', price: 1100 });
   });
-  it('refuses with an explicit code and both amounts when GIG now costs more than the customer paid', async () => {
+  it('refuses with an explicit code and only the paid price when GIG now costs more than the customer paid', async () => {
     vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([
       { ...fresh, providerCost: 1250, price: 1375, platformMargin: 125 },
     ]);
@@ -314,7 +329,7 @@ describe('saved paid GIG quote validation', () => {
       code: 'GIGL_COST_EXCEEDS_CUSTOMER_PAID',
       status: 409,
       message:
-        'GIG now charges ₦1,250 to deliver this order, more than the ₦1,100 the customer paid. No booking was made.',
+        "GIG's current price for this delivery is higher than the ₦1,100 the customer paid. No booking was made.",
     });
   });
 });

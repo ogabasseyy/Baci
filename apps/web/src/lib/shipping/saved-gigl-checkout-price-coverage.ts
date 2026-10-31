@@ -15,7 +15,7 @@ const EXACT_MINOR_UNITS = {
 
 type SavedCheckoutQuote = Pick<
   OrderShipmentQuoteRecord,
-  'id' | 'merchant_id' | 'price' | 'currency' | 'provider_cost'
+  'id' | 'merchant_id' | 'price' | 'currency'
 >;
 
 function toMinorUnits(value: number | string | null | undefined) {
@@ -39,8 +39,9 @@ function formatAmount(minorUnits: number, currency: string): string {
 /**
  * Covered rule for a paid checkout quote: Baci books at the price the customer
  * already paid when GIG's live cost for the same service is no more than that
- * price. Any difference is absorbed by Baci's margin and logged (amounts and
- * ids only, no customer or sender details) for reconciliation.
+ * price. GIG's cost and Baci's margin are internal booking economics, so they
+ * never enter logs or errors; only the verdict, ids, currency and the price
+ * the customer paid are logged for reconciliation.
  */
 export function assertSavedGiglCheckoutPriceCovered(
   quote: SavedCheckoutQuote,
@@ -53,7 +54,7 @@ export function assertSavedGiglCheckoutPriceCovered(
   if (
     paid === null ||
     liveCosts.length === 0 ||
-    liveCosts.some((cost) => cost === null)
+    !liveCosts.every((cost): cost is number => cost !== null)
   ) {
     throw new OrderShipmentBookingError(
       'Could not verify the current shipping price. No booking was submitted. Please try again.',
@@ -62,21 +63,18 @@ export function assertSavedGiglCheckoutPriceCovered(
     );
   }
   // Duplicate live rows for one service are unexpected; trust the dearest.
-  const liveCost = Math.max(...(liveCosts as number[]));
-  const covered = liveCost <= paid;
+  const covered = Math.max(...liveCosts) <= paid;
   (covered ? logger.info : logger.warn)({
     message: 'Saved GIG checkout quote price check',
     quoteId: quote.id,
     merchantId: quote.merchant_id,
     currency: quote.currency,
     paidPrice: paid / 100,
-    savedProviderCost: quote.provider_cost ?? null,
-    liveProviderCost: liveCost / 100,
     covered,
   });
   if (covered) return;
   throw new OrderShipmentBookingError(
-    `GIG now charges ${formatAmount(liveCost, quote.currency)} to deliver this order, more than the ${formatAmount(paid, quote.currency)} the customer paid. No booking was made.`,
+    `GIG's current price for this delivery is higher than the ${formatAmount(paid, quote.currency)} the customer paid. No booking was made.`,
     409,
     GIGL_COST_EXCEEDS_CUSTOMER_PAID
   );

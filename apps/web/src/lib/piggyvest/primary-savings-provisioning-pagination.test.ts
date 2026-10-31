@@ -58,14 +58,34 @@ it('retains ambiguity across pages rather than choosing the first exact name', a
     .mockResolvedValueOnce(page([{ ...target, id: 'second-wallet' }]));
   expect(await list()).toEqual([target, { ...target, id: 'second-wallet' }]);
 });
-it('does not normalize hyphens, phones, or near-matching wallet names', async () => {
-  mocks.request.mockResolvedValue(
-    page([{ ...target, name: input.walletName.replaceAll('-', '') }])
-  );
-  expect(await list()).toEqual([]);
+it('finds the wallet under the name the provider rewrote, without touching the customer id', async () => {
+  // Sandbox, 2026-10-31: PiggyVest listed a created wallet back with every
+  // `-` removed. Case and other punctuation are not proven either way.
+  const rewritten = { ...target, name: 'BACISAVEINTEGRATIONGOAL' };
+  mocks.request.mockResolvedValue(page([rewritten]));
+  expect(await list()).toEqual([rewritten]);
   expect(mocks.request.mock.calls[0][3].query.customer_id).toBe(
     'customer-with-hyphens'
   );
+});
+it('does not match near-matching wallet names', async () => {
+  mocks.request.mockResolvedValue(
+    page([
+      { ...target, name: 'baci-save:integration:goal2' },
+      { ...target, id: 'w2', name: 'baci-save:integration:goa' },
+      { ...target, id: 'w3', name: 'baci-save:other:goal' },
+    ])
+  );
+  expect(await list()).toEqual([]);
+});
+it('keeps an exact and a rewritten name as two matches so the caller refuses both', async () => {
+  const rewritten = {
+    ...target,
+    id: 'second-wallet',
+    name: 'bacisaveintegrationgoal',
+  };
+  mocks.request.mockResolvedValue(page([target, rewritten]));
+  expect(await list()).toEqual([target, rewritten]);
 });
 it('discards an exact first-page match if a later request fails', async () => {
   mocks.request

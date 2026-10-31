@@ -16,6 +16,8 @@ export interface ShipmentFlowSheetProps {
   hasExistingFulfillment: boolean;
   isSubmitting: boolean;
   onClose: () => void;
+  // Fires once the closed sheet's modal has gone, so a dialog can present.
+  onDismissed?: () => void;
   // Fires once the sheet is on screen, so whatever opened it can close
   // underneath without the dimmed background flashing off in between.
   onPresented?: () => void;

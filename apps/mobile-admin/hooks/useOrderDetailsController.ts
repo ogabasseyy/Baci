@@ -178,6 +178,7 @@ export function useOrderDetailsController() {
     queryClient,
     requiresShipmentDetails,
     riderPhone: uiState.riderPhone,
+    runAfterShipmentFlowDismissed: uiState.runAfterShipmentFlowDismissed,
     setFulfillmentDetails: uiState.setFulfillmentDetails,
     setFulfillmentItemIndex: uiState.setFulfillmentItemIndex,
     setIsShipmentSubmitting: uiState.setIsShipmentSubmitting,

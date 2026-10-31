@@ -39,6 +39,8 @@ interface CreateOrderDetailsShipmentActionsParams {
   queryClient: QueryClient;
   requiresShipmentDetails: boolean;
   riderPhone: string;
+  /** Runs a task once the shipment sheet's modal has fully closed. */
+  runAfterShipmentFlowDismissed: (task: () => void) => void;
   setFulfillmentDetails: (value: ShipmentFulfillmentDetails) => void;
   setFulfillmentItemIndex: (value: number) => void;
   setIsShipmentSubmitting: (value: boolean) => void;
@@ -73,6 +75,7 @@ export function createOrderDetailsShipmentActions({
   queryClient,
   requiresShipmentDetails,
   riderPhone,
+  runAfterShipmentFlowDismissed,
   setFulfillmentDetails,
   setFulfillmentItemIndex,
   setIsShipmentSubmitting,
@@ -163,7 +166,9 @@ export function createOrderDetailsShipmentActions({
 
       closeShipmentFlow();
       setFulfillmentDetails({ imei: '', items: [], serialNumber: '' });
-      setSuccessModal({ ...modalState, visible: true });
+      runAfterShipmentFlowDismissed(() =>
+        setSuccessModal({ ...modalState, visible: true })
+      );
     } finally {
       setIsShipmentSubmitting(false);
     }
@@ -225,17 +230,21 @@ export function createOrderDetailsShipmentActions({
       }
       const code =
         error instanceof OrderStatusUpdateError ? error.code : undefined;
+      const showError = () =>
+        Alert.alert(
+          code === 'MERCHANT_WALLET_QUOTE_RECONFIRM_REQUIRED'
+            ? 'Quote updated'
+            : code === 'SHIPMENT_BOOKING_UNCONFIRMED'
+              ? 'Check shipment status'
+              : 'Error',
+          (error as Error).message || 'Failed to mark order as shipped'
+        );
       if (code === 'SHIPMENT_BOOKING_UNCONFIRMED') {
         closeShipmentFlow();
+        runAfterShipmentFlowDismissed(showError);
+      } else {
+        showError();
       }
-      Alert.alert(
-        code === 'MERCHANT_WALLET_QUOTE_RECONFIRM_REQUIRED'
-          ? 'Quote updated'
-          : code === 'SHIPMENT_BOOKING_UNCONFIRMED'
-            ? 'Check shipment status'
-            : 'Error',
-        (error as Error).message || 'Failed to mark order as shipped'
-      );
     }
   };
 

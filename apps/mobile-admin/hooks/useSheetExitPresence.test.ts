@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  SHEET_DISMISS_REPORT_MS,
   SHEET_EXIT_FALLBACK_MS,
   useSheetExitPresence,
 } from './useSheetExitPresence';
@@ -71,5 +72,55 @@ describe('useSheetExitPresence', () => {
     });
 
     expect(result.current.isPresented).toBe(true);
+  });
+
+  describe('dismissal report', () => {
+    function closeAndRelease(onDismissed: () => void) {
+      const hook = renderHook(
+        ({ visible }) => useSheetExitPresence(visible, onDismissed),
+        { initialProps: { visible: true } }
+      );
+      hook.rerender({ visible: false });
+      act(() => hook.result.current.finishExit());
+      return hook;
+    }
+
+    it('reports once when the native modal says it has gone', () => {
+      const onDismissed = vi.fn();
+      const { result } = closeAndRelease(onDismissed);
+
+      act(() => result.current.reportDismissed());
+      act(() => {
+        vi.advanceTimersByTime(SHEET_DISMISS_REPORT_MS);
+      });
+
+      expect(onDismissed).toHaveBeenCalledOnce();
+    });
+
+    it('still reports once after a delay when no native dismissal event arrives', () => {
+      const onDismissed = vi.fn();
+      closeAndRelease(onDismissed);
+      expect(onDismissed).not.toHaveBeenCalled();
+
+      act(() => {
+        vi.advanceTimersByTime(SHEET_DISMISS_REPORT_MS);
+      });
+
+      expect(onDismissed).toHaveBeenCalledOnce();
+    });
+
+    it('does not report for a sheet that was never opened', () => {
+      const onDismissed = vi.fn();
+      const { result } = renderHook(() =>
+        useSheetExitPresence(false, onDismissed)
+      );
+
+      act(() => {
+        result.current.reportDismissed();
+        vi.advanceTimersByTime(SHEET_DISMISS_REPORT_MS);
+      });
+
+      expect(onDismissed).not.toHaveBeenCalled();
+    });
   });
 });

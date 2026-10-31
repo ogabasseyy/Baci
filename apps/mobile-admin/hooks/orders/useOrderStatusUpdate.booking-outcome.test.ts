@@ -66,6 +66,7 @@ function useBookingActions() {
     queryClient: client,
     requiresShipmentDetails: false,
     riderPhone: '',
+    runAfterShipmentFlowDismissed: (task: () => void) => task(),
     setFulfillmentDetails: vi.fn(),
     setFulfillmentItemIndex: vi.fn(),
     setIsShipmentSubmitting: vi.fn(),

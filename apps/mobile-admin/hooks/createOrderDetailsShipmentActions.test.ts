@@ -42,6 +42,7 @@ function makeActions(
     queryClient: {} as never,
     requiresShipmentDetails: false,
     riderPhone: '',
+    runAfterShipmentFlowDismissed: (task: () => void) => task(),
     setFulfillmentDetails: vi.fn(),
     setFulfillmentItemIndex: vi.fn(),
     setIsShipmentSubmitting: vi.fn(),
@@ -58,8 +59,10 @@ function makeActions(
 }
 
 describe('createOrderDetailsShipmentActions', () => {
-  it('closes the booking flow and asks the merchant to check status when the shipment outcome is unconfirmed', async () => {
+  it('closes the booking flow and asks the merchant to check status once the sheet has gone when the shipment outcome is unconfirmed', async () => {
+    vi.mocked(Alert.alert).mockClear();
     const setShowShipmentFlow = vi.fn();
+    const afterDismiss: Array<() => void> = [];
     vi.mocked(completeOrderShipment).mockRejectedValueOnce(
       new OrderStatusUpdateError(
         'Check the order before booking again.',
@@ -70,15 +73,47 @@ describe('createOrderDetailsShipmentActions', () => {
       order: { id: 'order-1' } as never,
       pendingShipmentMode: 'provider',
       providerBookingAvailable: true,
+      runAfterShipmentFlowDismissed: (task) => afterDismiss.push(task),
       setShowShipmentFlow,
     });
 
     await actions.proceedFromShipmentMethod();
 
     expect(setShowShipmentFlow).toHaveBeenCalledWith(false);
+    expect(Alert.alert).not.toHaveBeenCalled();
+
+    for (const task of afterDismiss) task();
     expect(Alert.alert).toHaveBeenCalledWith(
       'Check shipment status',
       'Check the order before booking again.'
+    );
+  });
+
+  it('bugfix: opens the success dialog only after the shipment sheet has gone', async () => {
+    const setSuccessModal = vi.fn();
+    const afterDismiss: Array<() => void> = [];
+    vi.mocked(completeOrderShipment).mockResolvedValueOnce({
+      actionLabel: '',
+      actionVariant: 'default',
+      message: 'Shipment booked',
+      showAction: false,
+      subMessage: '',
+      title: 'Shipment Booked',
+    } as never);
+    const actions = makeActions({
+      order: { id: 'order-1' } as never,
+      pendingShipmentMode: 'provider',
+      providerBookingAvailable: true,
+      runAfterShipmentFlowDismissed: (task) => afterDismiss.push(task),
+      setSuccessModal,
+    });
+
+    await actions.proceedFromShipmentMethod();
+
+    expect(setSuccessModal).not.toHaveBeenCalled();
+    for (const task of afterDismiss) task();
+    expect(setSuccessModal).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Shipment Booked', visible: true })
     );
   });
 

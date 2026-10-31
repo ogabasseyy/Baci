@@ -34,6 +34,7 @@ export function ShipmentFlowSheet({
   onContinueFromDetails,
   onContinueFromMethod,
   onConfirmSelfFulfillment,
+  onDismissed,
   onFulfillmentDetailsChange,
   onModeChange,
   onPresented,
@@ -143,6 +144,7 @@ export function ShipmentFlowSheet({
           visible={activeScanField !== null}
         />
       }
+      onDismissed={onDismissed}
       onRequestClose={handleRequestClose}
       onShow={onPresented}
       visible={visible}

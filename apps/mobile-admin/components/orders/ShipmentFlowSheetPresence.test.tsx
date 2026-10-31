@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShipmentFlowSheetPresence } from './ShipmentFlowSheetPresence';
 
 const mocks = vi.hoisted(() => ({
+  onDismiss: null as (() => void) | null,
   onExit: null as ((finished: boolean) => void) | null,
   onShow: null as (() => void) | null,
 }));
@@ -41,14 +42,17 @@ vi.mock('react-native', () => ({
   Modal: ({
     animationType,
     children,
+    onDismiss,
     onShow,
     visible,
   }: {
     animationType?: string;
     children?: ReactNode;
+    onDismiss?: () => void;
     onShow?: () => void;
     visible?: boolean;
   }) => {
+    mocks.onDismiss = onDismiss ?? null;
     mocks.onShow = onShow ?? null;
     return visible ? (
       <section data-animation={animationType} data-testid="ship-modal">
@@ -168,5 +172,26 @@ describe('ShipmentFlowSheetPresence', () => {
     renderSheet(false);
 
     expect(screen.queryByTestId('ship-modal')).not.toBeInTheDocument();
+  });
+
+  it('reports the dismissal once the native modal has gone, so a dialog can open next', () => {
+    const onDismissed = vi.fn();
+    const sheet = (visible: boolean) => (
+      <ShipmentFlowSheetPresence
+        onDismissed={onDismissed}
+        onRequestClose={vi.fn()}
+        visible={visible}
+      >
+        <p>Fulfillment Details</p>
+      </ShipmentFlowSheetPresence>
+    );
+    const { rerender } = render(sheet(true));
+    rerender(sheet(false));
+    act(() => mocks.onExit?.(true));
+    expect(onDismissed).not.toHaveBeenCalled();
+
+    act(() => mocks.onDismiss?.());
+
+    expect(onDismissed).toHaveBeenCalledOnce();
   });
 });

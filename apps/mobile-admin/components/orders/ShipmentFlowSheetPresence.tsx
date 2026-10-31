@@ -17,6 +17,8 @@ interface ShipmentFlowSheetPresenceProps {
   // Rendered above the sheet without its slide (e.g. the identifier scanner).
   accessory?: ReactNode;
   children: ReactNode;
+  /** Called once the native modal has gone, so another can present. */
+  onDismissed?: () => void;
   onRequestClose: () => void;
   onShow?: () => void;
   visible: boolean;
@@ -29,11 +31,15 @@ interface ShipmentFlowSheetPresenceProps {
 export function ShipmentFlowSheetPresence({
   accessory,
   children,
+  onDismissed,
   onRequestClose,
   onShow,
   visible,
 }: ShipmentFlowSheetPresenceProps) {
-  const { finishExit, isPresented } = useSheetExitPresence(visible);
+  const { finishExit, isPresented, reportDismissed } = useSheetExitPresence(
+    visible,
+    onDismissed
+  );
   const onShowRef = useRef(onShow);
 
   useEffect(() => {
@@ -51,15 +57,16 @@ export function ShipmentFlowSheetPresence({
     return () => clearTimeout(timer);
   }, [visible]);
 
-  if (!isPresented) return null;
-
+  // The modal stays mounted and is hidden through `visible`, so iOS reports
+  // the dismissal (onDismiss) before anything else tries to present.
   return (
     <Modal
       animationType="none"
+      onDismiss={reportDismissed}
       onRequestClose={onRequestClose}
       onShow={() => onShowRef.current?.()}
       transparent
-      visible
+      visible={isPresented}
     >
       <View style={styles.overlay}>
         {visible ? (

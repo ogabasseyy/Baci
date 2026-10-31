@@ -6,26 +6,34 @@ import { z } from 'zod';
  * list, so an unexpected shape becomes a finding rather than a crash.
  */
 
-export const createDataSchema = z.looseObject({
-  customer_id: z.string().min(1),
-  wallet_id: z.string().min(1),
-  new_customer: z.boolean().optional(),
-});
+// `.catchall(z.unknown())` keeps keys the schema does not name (the echo and
+// interest-field checks read them), the same as a loose object.
+export const createDataSchema = z
+  .object({
+    customer_id: z.string().min(1),
+    wallet_id: z.string().min(1),
+    new_customer: z.boolean().optional(),
+  })
+  .catchall(z.unknown());
 
-export const walletDataSchema = z.looseObject({
-  id: z.string().min(1),
-  api_customer_id: z.string().nullish(),
-  balance: z.number().int(),
-  withdrawal_count: z.number().int().nonnegative().optional(),
-  created_at: z.string().nullish(),
-  name: z.string().nullish(),
-});
+export const walletDataSchema = z
+  .object({
+    id: z.string().min(1),
+    api_customer_id: z.string().nullish(),
+    balance: z.number().int(),
+    withdrawal_count: z.number().int().nonnegative().optional(),
+    created_at: z.string().nullish(),
+    name: z.string().nullish(),
+  })
+  .catchall(z.unknown());
 
-const pageInfoSchema = z.looseObject({
-  hasNextPage: z.boolean().optional(),
-  endCursor: z.string().nullish(),
-  previousCursor: z.string().nullish(),
-});
+const pageInfoSchema = z
+  .object({
+    hasNextPage: z.boolean().optional(),
+    endCursor: z.string().nullish(),
+    previousCursor: z.string().nullish(),
+  })
+  .catchall(z.unknown());
 
 export type ListContainer =
   | 'paginatedPayload.edges'

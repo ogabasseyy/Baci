@@ -20,6 +20,8 @@ export type { MockOptions, MockReply } from './mock-sandbox-types';
 export { DEFAULT_MOCK_OPTIONS } from './mock-sandbox-types';
 
 /** Customers and wallets. Transactions live in MockLedger. */
+const CLOCK_BASE_MS = Date.parse('2026-10-30T10:00:00.000Z');
+
 export class MockSandbox {
   readonly options: MockOptions;
   customers: Customer[] = [];
@@ -34,9 +36,10 @@ export class MockSandbox {
     this.options = { ...DEFAULT_MOCK_OPTIONS, ...options };
   }
 
+  /** One second per call from a fixed base, so minutes and hours roll over correctly. */
   now(): string {
     this.clock += 1;
-    return `2026-10-30T10:${String(Math.floor(this.clock / 60)).padStart(2, '0')}:${String(this.clock % 60).padStart(2, '0')}.000Z`;
+    return new Date(CLOCK_BASE_MS + this.clock * 1000).toISOString();
   }
   id(): number {
     this.counter += 1;

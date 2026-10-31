@@ -58,33 +58,35 @@ function forwardedHeaders(upstream: Headers): Headers {
 }
 
 /**
- * The request body must be one the scans can read. A Request object carrying
- * a body, or any non-string body (Blob, FormData, stream, URLSearchParams,
- * ArrayBuffer...), would otherwise reach the network unchecked, so it is
+ * A Request object carries its own headers, method, body, signal and other
+ * settings, and this wrapper reads only the `init` argument, so anything on
+ * the Request would be dropped or never inspected. Only a URL string or URL
+ * plus init is accepted (what the typed client passes); anything else is
  * refused rather than guessed at.
  */
-function inspectableBody(
-  input: RequestInfo | URL,
-  init: RequestInit | undefined
-): string | undefined {
-  const refuse = (): never => {
+function stringOrUrl(input: RequestInfo | URL): string | URL {
+  if (typeof input === 'string' || input instanceof URL) return input;
+  throw new HarnessRefusal(
+    'REQUEST_OBJECT_NOT_SUPPORTED',
+    'pass a URL string or URL plus init: a Request object carries settings that cannot be checked'
+  );
+}
+
+/**
+ * The request body must be one the scans can read. Any non-string body (Blob,
+ * FormData, stream, URLSearchParams, ArrayBuffer...) would otherwise reach the
+ * network unchecked, so it is refused.
+ */
+function inspectableBody(init: RequestInit | undefined): string | undefined {
+  const body = init?.body;
+  if (body === undefined || body === null) return undefined;
+  if (typeof body !== 'string') {
     throw new HarnessRefusal(
       'BODY_NOT_INSPECTABLE',
       'only string bodies passed in the init argument can be checked'
     );
-  };
-  if (
-    typeof input === 'object' &&
-    !(input instanceof URL) &&
-    'method' in input &&
-    (input.body !== null || input.bodyUsed)
-  ) {
-    refuse();
   }
-  const body = init?.body;
-  if (body === undefined || body === null) return undefined;
-  if (typeof body !== 'string') refuse();
-  return body as string;
+  return body;
 }
 
 function readHeader(
@@ -101,13 +103,8 @@ function readHeader(
   return null;
 }
 
-function requestUrl(input: RequestInfo | URL): URL {
-  const raw =
-    typeof input === 'string'
-      ? input
-      : input instanceof URL
-        ? input.href
-        : input.url;
+function requestUrl(input: string | URL): URL {
+  const raw = typeof input === 'string' ? input : input.href;
   try {
     return new URL(raw);
   } catch {
@@ -131,7 +128,7 @@ export function createGuardedFetch(options: GuardedFetchOptions): typeof fetch {
     input: RequestInfo | URL,
     init: RequestInit | undefined
   ) => {
-    const url = requestUrl(input);
+    const url = requestUrl(stringOrUrl(input));
     if (url.origin !== origin || url.username !== '' || url.password !== '') {
       throw new HarnessRefusal(
         'HOST_NOT_ALLOWED',
@@ -141,11 +138,8 @@ export function createGuardedFetch(options: GuardedFetchOptions): typeof fetch {
     if (!url.pathname.startsWith('/api/v1/')) {
       throw new HarnessRefusal('PATH_NOT_ALLOWED', 'path is outside /api/v1/');
     }
-    const method = (
-      init?.method ??
-      (typeof input === 'object' && 'method' in input ? input.method : 'GET')
-    ).toUpperCase();
-    const body = inspectableBody(input, init);
+    const method = (init?.method ?? 'GET').toUpperCase();
+    const body = inspectableBody(init);
     assertNoRecordingAccount('request', [url.pathname, url.search, body ?? '']);
 
     if (method === 'POST') {

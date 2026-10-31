@@ -25,7 +25,9 @@ describe('guarded fetch: the body must be inspectable (fail closed)', () => {
       headers: AUTH,
       body: '{"amount":1}',
     });
-    expect(await refusal(() => guarded(request))).toBe('BODY_NOT_INSPECTABLE');
+    expect(await refusal(() => guarded(request))).toBe(
+      'REQUEST_OBJECT_NOT_SUPPORTED'
+    );
     expect(baseFetch).not.toHaveBeenCalled();
   });
 
@@ -43,7 +45,9 @@ describe('guarded fetch: the body must be inspectable (fail closed)', () => {
         reference: begun.reference,
       }),
     });
-    expect(await refusal(() => guarded(request))).toBe('BODY_NOT_INSPECTABLE');
+    expect(await refusal(() => guarded(request))).toBe(
+      'REQUEST_OBJECT_NOT_SUPPORTED'
+    );
     gate.complete(begun.permit, 'accepted', 202);
     expect(journal.entries().at(-1)).toMatchObject({ outcome: 'not_sent' });
     expect(baseFetch).not.toHaveBeenCalled();
@@ -83,11 +87,33 @@ describe('guarded fetch: the body must be inspectable (fail closed)', () => {
     expect(baseFetch).not.toHaveBeenCalled();
   });
 
-  it('still allows a body-less GET given as a Request object, and forwards its method', async () => {
+  it('refuses ANY Request object, even a body-less GET, because its headers and settings would be dropped', async () => {
     const { guarded, baseFetch } = build('live-readonly');
-    await guarded(new Request(`${ORIGIN}/api/v1/wallet/x`), { headers: AUTH });
-    expect(baseFetch).toHaveBeenCalledTimes(1);
+    expect(
+      await refusal(() =>
+        guarded(new Request(`${ORIGIN}/api/v1/wallet/x`), { headers: AUTH })
+      )
+    ).toBe('REQUEST_OBJECT_NOT_SUPPORTED');
+    expect(
+      await refusal(() =>
+        guarded(
+          new Request(`${ORIGIN}/api/v1/wallet/x`, {
+            headers: { ...AUTH, 'x-extra': '1' },
+            cache: 'no-store',
+          })
+        )
+      )
+    ).toBe('REQUEST_OBJECT_NOT_SUPPORTED');
+    expect(baseFetch).not.toHaveBeenCalled();
+  });
+
+  it('still allows a string or URL plus init, and forwards the method', async () => {
+    const { guarded, baseFetch } = build('live-readonly');
+    await guarded(`${ORIGIN}/api/v1/wallet/x`, { headers: AUTH });
+    await guarded(new URL(`${ORIGIN}/api/v1/wallet/y`), { headers: AUTH });
+    expect(baseFetch).toHaveBeenCalledTimes(2);
     expect(baseFetch.mock.calls[0][1]).toMatchObject({ method: 'GET' });
+    expect(baseFetch.mock.calls[1][1]).toMatchObject({ method: 'GET' });
   });
 });
 

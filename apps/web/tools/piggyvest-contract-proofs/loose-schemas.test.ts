@@ -75,3 +75,53 @@ describe('schemas and ownership', () => {
     expect(isOwnedBy(null, 'cust-1')).toBe(false);
   });
 });
+
+describe('schemas keep keys they do not know about', () => {
+  it('createDataSchema passes unknown keys through (the echo checks read them)', () => {
+    const parsed = createDataSchema.parse({
+      customer_id: 'c1',
+      wallet_id: 'w1',
+      third_party_identifier: 'echoed',
+      brand_new_field: { nested: true },
+    });
+    expect(parsed).toMatchObject({
+      customer_id: 'c1',
+      wallet_id: 'w1',
+      third_party_identifier: 'echoed',
+      brand_new_field: { nested: true },
+    });
+  });
+
+  it('walletDataSchema passes unknown keys through (interest and rate fields)', () => {
+    const parsed = walletDataSchema.parse({
+      id: 'w1',
+      balance: 5,
+      current_interest_rate: 0.1,
+      interest_payout_wallet: 'x',
+    });
+    expect(parsed).toMatchObject({
+      current_interest_rate: 0.1,
+      interest_payout_wallet: 'x',
+    });
+  });
+
+  it('still validates the keys it does know', () => {
+    expect(createDataSchema.safeParse({ extra: 1 }).success).toBe(false);
+    expect(
+      walletDataSchema.safeParse({ id: 'w', balance: 'lots' }).success
+    ).toBe(false);
+  });
+
+  it('page info keeps unknown keys, so the recorded field names are complete', () => {
+    const list = extractEdges({
+      edges: [{ id: 'a' }],
+      pageInfo: { hasNextPage: false, endCursor: 'c', totalCount: 9 },
+    });
+    expect(list.pageInfo).toMatchObject({ hasNextPage: false, totalCount: 9 });
+    expect(Object.keys(list.pageInfo ?? {}).sort()).toEqual([
+      'endCursor',
+      'hasNextPage',
+      'totalCount',
+    ]);
+  });
+});

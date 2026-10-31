@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   listedTransactions,
   markStaleBalance,
+  payoutVisible,
   settingsVisible,
   visibleBalance,
 } from './mock-sandbox-lag';
@@ -19,6 +20,7 @@ const wallet = (over: Partial<Wallet> = {}): Wallet => ({
   interestEnabled: false,
   staleBalance: null,
   settingsHiddenReads: 0,
+  payoutHiddenReads: 0,
   account: '9000000000',
   ...over,
 });
@@ -87,5 +89,18 @@ describe('settings lag', () => {
       settingsVisible(w),
     ]).toEqual([false, false, true]);
     expect(settingsVisible(wallet())).toBe(true);
+  });
+});
+
+describe('payout field lag', () => {
+  it('hides only the payout destination for N readbacks, independently of the other settings', () => {
+    const w = wallet({ payoutHiddenReads: 2, settingsHiddenReads: 0 });
+    expect([payoutVisible(w), payoutVisible(w), payoutVisible(w)]).toEqual([
+      false,
+      false,
+      true,
+    ]);
+    expect(settingsVisible(w)).toBe(true);
+    expect(payoutVisible(wallet())).toBe(true);
   });
 });

@@ -1,4 +1,8 @@
-import { settingsVisible, visibleBalance } from './mock-sandbox-lag';
+import {
+  payoutVisible,
+  settingsVisible,
+  visibleBalance,
+} from './mock-sandbox-lag';
 import { MockLedger } from './mock-sandbox-ledger';
 import {
   type Body,
@@ -57,6 +61,7 @@ export class MockSandbox {
       lagged: null,
       staleBalance: null,
       settingsHiddenReads: this.options.settingsLagReads,
+      payoutHiddenReads: this.options.payoutFieldLagReads,
       ...settings,
       account: `90${String(n).padStart(8, '0')}`,
     };
@@ -256,7 +261,8 @@ export class MockSandbox {
             ...(this.options.payoutReadback === 'accrual_only' ||
             (this.options.goalReadbackOmitsPayout &&
               this.customers.find((c) => c.id === w.customerId)
-                ?.defaultWalletId !== w.id)
+                ?.defaultWalletId !== w.id) ||
+            !payoutVisible(w)
               ? {}
               : { interest_payout_wallet: w.payoutWalletId }),
           }

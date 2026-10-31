@@ -146,4 +146,25 @@ describe('mock provider follows the documented sandbox contract', () => {
       (await call(mock, 'POST', '/api/v1/transfer/wallet', {})).status
     ).toBe(400);
   });
+
+  it('answers a 503 without data by default, and keeps configured data in the failed envelope', async () => {
+    const plain = createMockProvider({
+      serverErrorPaths: ['/api/v1/wallet/x'],
+    });
+    const bare = await call(plain, 'GET', '/api/v1/wallet/x');
+    expect(bare.status).toBe(503);
+    expect(bare.json).toMatchObject({ status: false });
+    expect(bare.json.data).toBeUndefined();
+
+    const retaining = createMockProvider({
+      serverErrorPaths: ['/api/v1/wallet/x'],
+      serverErrorData: { id: 'x', balance: 0, withdrawal_count: 0 },
+    });
+    const kept = await call(retaining, 'GET', '/api/v1/wallet/x');
+    expect(kept.status).toBe(503);
+    expect(kept.json).toMatchObject({
+      status: false,
+      data: { id: 'x', balance: 0, withdrawal_count: 0 },
+    });
+  });
 });

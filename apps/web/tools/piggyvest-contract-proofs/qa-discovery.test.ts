@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { resolvePiggyvestStagingSyntheticIdentity } from '@/lib/piggyvest/staging-synthetic-identity';
-import { qaIdentityFor } from './provider-ops';
+import { type CallResult, qaIdentityFor } from './provider-ops';
 import { discoverQaCustomer, selectQaCustomer } from './qa-discovery';
 import { makeHarness } from './test-harness.test-support';
 
@@ -78,5 +78,51 @@ describe('discoverQaCustomer (through the guarded client)', () => {
       (await discoverQaCustomer(h.api, qaIdentityFor('qa-customer-0002')))
         .customerId
     ).toBeNull();
+  });
+});
+
+describe('discoverQaCustomer: a failed lookup is not a discovery', () => {
+  const failedCall = (data: unknown): CallResult => ({
+    ok: false,
+    httpStatus: 503,
+    data,
+    envelope: null,
+    message: null,
+    declined: false,
+    errorCode: null,
+    typedAccepted: null,
+  });
+
+  it('does not select a customer from a 503 that kept a matching row', async () => {
+    const api = { customersByIdentifier: async () => failedCall([mine]) };
+    expect(await discoverQaCustomer(api, qa)).toMatchObject({
+      customerId: null,
+      reason: 'unverifiable',
+    });
+  });
+
+  it('does not select a customer from a 200 whose list is not recognised', async () => {
+    const api = {
+      customersByIdentifier: async () => ({
+        ...failedCall({ unexpected: [mine] }),
+        ok: true,
+        httpStatus: 200,
+      }),
+    };
+    expect(await discoverQaCustomer(api, qa)).toMatchObject({
+      customerId: null,
+      reason: 'unverifiable',
+    });
+  });
+
+  it('still reports an empty, recognised list as none', async () => {
+    const api = {
+      customersByIdentifier: async () => ({
+        ...failedCall([]),
+        ok: true,
+        httpStatus: 200,
+      }),
+    };
+    expect((await discoverQaCustomer(api, qa)).reason).toBe('none');
   });
 });

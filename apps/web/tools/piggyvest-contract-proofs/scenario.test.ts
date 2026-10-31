@@ -161,3 +161,57 @@ describe('setupScenario: re-listing after an uncertain goal wallet creation uses
     expect(listCalls).toHaveLength(1 + 5);
   });
 });
+
+describe('setupScenario: a failed read that kept data is not a measurement', () => {
+  const fundingPosts = (h: ReturnType<typeof makeHarness>) =>
+    h.mock.calls.filter((c) => c.pathname === '/api/v1/transfer/test/funding');
+  it('does not fund, or load wallets, from a 503 that kept a plausible body', async () => {
+    const h = harness();
+    const original = h.api.wallet.bind(h.api);
+    h.api.wallet = async (walletId) =>
+      h.state.goalWalletId
+        ? {
+            ...(await original(walletId)),
+            ok: false,
+            httpStatus: 503,
+            data: { id: walletId, balance: 0, withdrawal_count: 0 },
+          }
+        : original(walletId);
+    await setupScenario(h.ctx);
+    expect(fundingPosts(h)).toHaveLength(0);
+    expect(h.state.notes.join(' ')).toMatch(/balance could not be read/);
+  });
+
+  it('ignores a customer wallet list that came back as a failure but kept its rows', async () => {
+    const h = harness();
+    const original = h.api.customerWallets.bind(h.api);
+    h.api.customerWallets = async (customerId, order) => ({
+      ...(await original(customerId, order)),
+      ok: false,
+      httpStatus: 503,
+    });
+    await setupScenario(h.ctx);
+    expect(h.state.wallets).toEqual([]);
+    expect(h.state.notes.join(' ')).toMatch(/wallet list could not be read/);
+  });
+
+  it('does not take a wallet creation date from a failed read that kept one', async () => {
+    const h = harness({ mock: { walletListIncludesCreatedAt: false } });
+    await setupScenario(h.ctx);
+    h.state.wallets = [];
+    h.state.authorized.clear();
+    const original = h.api.wallet.bind(h.api);
+    h.api.wallet = async (walletId) => ({
+      ...(await original(walletId)),
+      ok: false,
+      httpStatus: 503,
+      data: { id: walletId, balance: 0, created_at: '2000-01-01' },
+    });
+    await setupScenario(h.ctx);
+    const created = h.state.wallets.find(
+      (wallet) => wallet.id === h.state.createdWalletId
+    );
+    expect(created).toBeDefined();
+    expect(created?.createdAt ?? null).toBeNull();
+  });
+});

@@ -67,6 +67,48 @@ describe('readbackPayout', () => {
     expect((await readbackPayout(h.ctx, main, business)).facts).toBeNull();
   });
 
+  it('keeps polling until the payout destination appears, even though the accrual flag is visible at once', async () => {
+    const { h, main, business } = await ready({ maxPolls: 6 });
+    const w = h.mock.sandbox.wallet(main);
+    if (!w) throw new Error('wallet missing');
+    w.payoutHiddenReads = 2;
+    const read = await readbackPayout(h.ctx, main, business);
+    expect(read).toMatchObject({ settled: true, polls: 3 });
+    expect(read.facts?.payoutFieldPaths).toEqual(['interest_payout_wallet']);
+    expect(read.facts?.accrualEnabled).not.toBeNull();
+  });
+
+  it('reports unsettled, but keeps the interest flags it saw, when the destination never appears', async () => {
+    const { h, main, business } = await ready({
+      maxPolls: 3,
+      mock: { payoutReadback: 'accrual_only' },
+    });
+    const read = await readbackPayout(h.ctx, main, business);
+    expect(read).toMatchObject({ settled: false, polls: 4 });
+    expect(read.facts?.interestFieldPaths).toEqual(['enable_interest_accrual']);
+    expect(read.facts?.accrualEnabled).not.toBeNull();
+    expect(read.facts?.payoutFieldPaths).toEqual([]);
+  });
+
+  it('keeps flags from an earlier read when later reads show no settings at all', async () => {
+    const { h, main, business } = await ready({
+      maxPolls: 3,
+      mock: { payoutReadback: 'accrual_only' },
+    });
+    const w = h.mock.sandbox.wallet(main);
+    if (!w) throw new Error('wallet missing');
+    const original = h.api.wallet.bind(h.api);
+    let reads = 0;
+    h.api.wallet = async (id) => {
+      reads += 1;
+      if (reads === 2) w.settingsHiddenReads = 50;
+      return original(id);
+    };
+    const read = await readbackPayout(h.ctx, main, business);
+    expect(read.settled).toBe(false);
+    expect(read.facts?.accrualEnabled).not.toBeNull();
+  });
+
   it('sleeps between reads using the configured interval', async () => {
     const { h, main, business } = await ready({ maxPolls: 2 });
     const w = h.mock.sandbox.wallet(main);

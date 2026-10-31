@@ -3,7 +3,7 @@ import type { PayoutReadback } from './payout-analysis';
 import { readbackPayout } from './proof-7-readback';
 import type { ProofContext } from './proof-context';
 import type { QaIdentity } from './provider-ops';
-import { usableList } from './read-rules';
+import { okData, usableList } from './read-rules';
 
 export interface GoalOwner {
   qa: QaIdentity;
@@ -73,7 +73,7 @@ export async function runGoalVariant(
     result.httpStatus = sent.call.httpStatus;
     if (sent.call.ok) {
       result.accepted = true;
-      walletId = pickString(sent.call.data, ['id']);
+      walletId = pickString(okData(sent.call), ['id']);
       result.exists = walletId !== null;
     } else {
       result.accepted = sent.outcome === 'rejected' ? false : null;

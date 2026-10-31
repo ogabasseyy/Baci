@@ -7,7 +7,7 @@ import {
 } from './proof-1-support';
 import { answerOf, ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
-import { pollSettled, recordOf, usableList } from './read-rules';
+import { okData, pollSettled, recordOf, usableList } from './read-rules';
 import type { Answer, ProofResult } from './types';
 
 export async function runProof1(ctx: ProofContext): Promise<ProofResult> {
@@ -87,7 +87,7 @@ export async function runProof1(ctx: ProofContext): Promise<ProofResult> {
       for (const [id, question] of REPOST_QUESTIONS)
         b.finding(id, question, 'unknown', 'slot already executed');
     } else {
-      const parsed = createDataSchema.safeParse(repost.call.data);
+      const parsed = createDataSchema.safeParse(okData(repost.call));
       b.shape(
         'POST /customers (re-POST)',
         repost.call.httpStatus,
@@ -234,13 +234,14 @@ export async function runProof1(ctx: ProofContext): Promise<ProofResult> {
   );
 
   const detail = ground ? await api.wallet(ground) : null;
+  const detailRecord = detail ? recordOf(detail) : null;
   if (detail)
     b.shape('GET /wallet/:id (default wallet)', detail.httpStatus, detail.data);
   b.finding(
     'wallet_retrieve_exposes_customer_binding',
     'Does GET /wallet/:id expose api_customer_id (owner binding)?',
-    detail && recordOf(detail)
-      ? answerOf(pickString(detail.data, ['api_customer_id']) !== null)
+    detailRecord
+      ? answerOf(pickString(detailRecord, ['api_customer_id']) !== null)
       : 'unknown'
   );
 

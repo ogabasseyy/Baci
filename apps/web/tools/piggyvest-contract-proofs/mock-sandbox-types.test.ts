@@ -10,6 +10,8 @@ describe('DEFAULT_MOCK_OPTIONS', () => {
       balanceLagReads: 0,
       listLagReads: 0,
       settingsLagReads: 0,
+      payoutFieldLagReads: 0,
+      serverErrorData: null,
       accruedEdgeCount: 0,
       customerPayoutWallet: 'accepted',
       subAccountAcceptsPayout: true,

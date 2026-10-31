@@ -1,13 +1,13 @@
 import { AMOUNTS_KOBO, FUNDING_FLOOR_KOBO } from './constants';
 import {
   createDataSchema,
-  extractEdges,
   isOwnedBy,
   pickString,
   walletDataSchema,
 } from './loose-schemas';
 import type { ProofContext, WalletView } from './proof-context';
 import { discoverQaCustomer } from './qa-discovery';
+import { okData, usableList } from './read-rules';
 
 /**
  * Prepares the QA customer every proof works on: the customer, its default
@@ -42,22 +42,26 @@ async function loadWallets(ctx: ProofContext): Promise<void> {
   const { state, api } = ctx;
   const customerId = state.customerId;
   if (!customerId) return;
-  const call = await api.customerWallets(customerId, 'ASC');
+  const list = usableList(await api.customerWallets(customerId, 'ASC'));
+  if (!list) {
+    state.notes.push('the customer wallet list could not be read');
+    return;
+  }
   const views: WalletView[] = [];
-  for (const edge of extractEdges(call.data).edges) {
+  for (const edge of list.edges) {
     const id = pickString(edge, ['id']);
     if (!id) continue;
     register(ctx, 'W', id);
     const detail = await api.wallet(id);
     const owned =
       id === state.createdWalletId ||
-      (detail.ok && isOwnedBy(detail.data, customerId));
+      (detail.ok && isOwnedBy(okData(detail), customerId));
     if (owned) state.authorized.add(id);
     else
       state.notes.push(
         'a listed wallet could not be proven QA-owned and is excluded'
       );
-    const parsed = walletDataSchema.safeParse(detail.data);
+    const parsed = walletDataSchema.safeParse(okData(detail));
     views.push({
       id,
       role: 'other',
@@ -115,7 +119,7 @@ async function ensureGoalWallet(ctx: ProofContext): Promise<void> {
       `goal wallet slot resumed from journal (${created.priorOutcome})`
     );
   } else if (created.call.ok && created.call.typedAccepted) {
-    const id = pickString(created.call.data, ['id']);
+    const id = pickString(okData(created.call), ['id']);
     if (id) {
       register(ctx, 'W', id);
       state.authorized.add(id);
@@ -146,7 +150,7 @@ async function ensureFundedMain(ctx: ProofContext): Promise<void> {
     return;
   }
   const before = walletDataSchema.safeParse(
-    (await api.wallet(state.mainWalletId)).data
+    okData(await api.wallet(state.mainWalletId))
   );
   if (!before.success) {
     state.notes.push(
@@ -170,7 +174,7 @@ async function ensureFundedMain(ctx: ProofContext): Promise<void> {
   }
   for (let poll = 0; poll < ctx.maxPolls; poll += 1) {
     const now = walletDataSchema.safeParse(
-      (await api.wallet(state.mainWalletId)).data
+      okData(await api.wallet(state.mainWalletId))
     );
     if (now.success && now.data.balance > balance) return;
     await ctx.sleep(ctx.pollIntervalMs);
@@ -193,7 +197,7 @@ export async function setupScenario(ctx: ProofContext): Promise<void> {
         `customer create slot resumed from journal (${created.priorOutcome}); rediscovering by identifier`
       );
     } else {
-      const parsed = createDataSchema.safeParse(created.call.data);
+      const parsed = createDataSchema.safeParse(okData(created.call));
       if (created.call.ok && parsed.success) {
         state.customerId = parsed.data.customer_id;
         state.createdNewCustomer = parsed.data.new_customer ?? null;

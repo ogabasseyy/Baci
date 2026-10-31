@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { analysePayoutReadback, inheritanceAnswer } from './payout-analysis';
+import {
+  analysePayoutReadback,
+  destinationAnswer,
+  destinationReadable,
+  inheritanceAnswer,
+  mergePayoutReadbacks,
+} from './payout-analysis';
 
 const TARGET = 'business-wallet-0001';
 const OWN = 'customer-wallet-0001';
@@ -130,5 +136,92 @@ describe('payoutFieldPaths and inheritanceAnswer', () => {
 
   it('unknown: no readback at all', () => {
     expect(inheritanceAnswer(null, MAIN_PATHS)).toBe('unknown');
+  });
+});
+
+describe('destinationReadable / destinationAnswer', () => {
+  const facts = (data: Record<string, unknown>) =>
+    analysePayoutReadback(data, TARGET, OWN);
+
+  it('is readable once any field naming a payout destination is present, whatever its value', () => {
+    expect(destinationReadable(facts({ enable_interest_accrual: true }))).toBe(
+      false
+    );
+    expect(destinationReadable(facts({ interest_payout_wallet: null }))).toBe(
+      true
+    );
+    expect(destinationReadable(facts({ interest_destination: TARGET }))).toBe(
+      true
+    );
+    expect(destinationReadable(null)).toBe(false);
+  });
+
+  it('answers yes for a match, no only for a readable field that differs, else unknown', () => {
+    expect(destinationAnswer(facts({ interest_payout_wallet: TARGET }))).toBe(
+      'yes'
+    );
+    expect(destinationAnswer(facts({ interest_payout_wallet: null }))).toBe(
+      'no'
+    );
+    expect(destinationAnswer(facts({ interest_payout_wallet: OWN }))).toBe(
+      'no'
+    );
+    expect(destinationAnswer(facts({ enable_interest_accrual: true }))).toBe(
+      'unknown'
+    );
+    expect(destinationAnswer(null)).toBe('unknown');
+  });
+});
+
+describe('mergePayoutReadbacks', () => {
+  const flagOnly = analysePayoutReadback(
+    { enable_interest_accrual: true },
+    TARGET,
+    OWN
+  );
+  const withPayout = analysePayoutReadback(
+    { enable_interest_accrual: true, interest_payout_wallet: TARGET },
+    TARGET,
+    OWN
+  );
+
+  it('starts from the first reading', () => {
+    expect(mergePayoutReadbacks(null, flagOnly)).toEqual(flagOnly);
+  });
+
+  it('keeps flags already seen and adds the fields a later reading shows', () => {
+    const merged = mergePayoutReadbacks(flagOnly, withPayout);
+    expect(merged.accrualEnabled).toBe(true);
+    expect([...merged.interestFieldPaths].sort()).toEqual([
+      'enable_interest_accrual',
+      'interest_payout_wallet',
+    ]);
+    expect(merged.matchesTarget).toEqual(['interest_payout_wallet']);
+    expect(merged.payoutFieldPaths).toEqual(['interest_payout_wallet']);
+  });
+
+  it('does not lose the flag when a later reading has none, and never duplicates a path', () => {
+    const later = analysePayoutReadback(
+      { interest_payout_wallet: null },
+      TARGET,
+      OWN
+    );
+    const merged = mergePayoutReadbacks(
+      mergePayoutReadbacks(null, flagOnly),
+      later
+    );
+    expect(merged.accrualEnabled).toBe(true);
+    expect(mergePayoutReadbacks(merged, merged).interestFieldPaths).toEqual(
+      merged.interestFieldPaths
+    );
+  });
+
+  it('lets a later reading change the flag value', () => {
+    const off = analysePayoutReadback(
+      { enable_interest_accrual: false },
+      TARGET,
+      OWN
+    );
+    expect(mergePayoutReadbacks(flagOnly, off).accrualEnabled).toBe(false);
   });
 });

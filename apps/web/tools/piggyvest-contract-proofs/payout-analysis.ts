@@ -72,6 +72,51 @@ export function analysePayoutReadback(
   return out;
 }
 
+/** A field that can name the payout destination is visible (whatever its value). */
+export function destinationReadable(facts: PayoutReadback | null): boolean {
+  return (
+    facts !== null &&
+    (facts.payoutFieldPaths.length > 0 || facts.matchesTarget.length > 0)
+  );
+}
+
+/**
+ * Does the readback name the payout wallet that was set? `yes` on a match;
+ * `no` only once a destination field is READABLE and does not match; `unknown`
+ * while no destination field has been seen (it may simply not have appeared).
+ */
+export function destinationAnswer(facts: PayoutReadback | null): Answer {
+  if (!facts) return 'unknown';
+  if (facts.matchesTarget.length > 0) return 'yes';
+  return destinationReadable(facts) ? 'no' : 'unknown';
+}
+
+const union = (a: readonly string[], b: readonly string[]): string[] => [
+  ...new Set([...a, ...b]),
+];
+
+/**
+ * Accumulates successive readbacks of one wallet: field paths are unioned and
+ * a flag already seen is kept unless a later reading restates it.
+ */
+export function mergePayoutReadbacks(
+  prior: PayoutReadback | null,
+  next: PayoutReadback
+): PayoutReadback {
+  if (!prior) return next;
+  return {
+    interestFieldPaths: union(
+      prior.interestFieldPaths,
+      next.interestFieldPaths
+    ),
+    rateFieldPaths: union(prior.rateFieldPaths, next.rateFieldPaths),
+    payoutFieldPaths: union(prior.payoutFieldPaths, next.payoutFieldPaths),
+    matchesTarget: union(prior.matchesTarget, next.matchesTarget),
+    matchesOwn: union(prior.matchesOwn, next.matchesOwn),
+    accrualEnabled: next.accrualEnabled ?? prior.accrualEnabled,
+  };
+}
+
 /**
  * Does a goal wallet with no payout of its own inherit the business wallet?
  * `no` needs a READABLE destination field (the very field that names the

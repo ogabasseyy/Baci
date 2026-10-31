@@ -3,6 +3,7 @@ import type { CallResult } from './provider-ops';
 import {
   foundAnswer,
   isTransientFailure,
+  okData,
   pollSettled,
   recordOf,
   usableList,
@@ -138,5 +139,24 @@ describe('pollSettled', () => {
     );
     expect(result).toEqual({ value: 5, settled: false, polls: 5 });
     expect(b.sleep).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe('okData', () => {
+  it('returns the data of a successful call', () => {
+    expect(okData(call({ data: { balance: 1 } }))).toEqual({ balance: 1 });
+    expect(okData(call({ data: [1, 2] }))).toEqual([1, 2]);
+  });
+
+  it('returns undefined for a failed call, even when it kept a valid-looking envelope', () => {
+    const failed = call({
+      ok: false,
+      httpStatus: 503,
+      data: { id: 'w', balance: 0, withdrawal_count: 0 },
+    });
+    expect(okData(failed)).toBeUndefined();
+    expect(
+      okData(call({ ok: false, httpStatus: null, data: [1] }))
+    ).toBeUndefined();
   });
 });

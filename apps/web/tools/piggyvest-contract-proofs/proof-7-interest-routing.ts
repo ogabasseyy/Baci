@@ -1,5 +1,5 @@
-import { createDataSchema, extractEdges, pickString } from './loose-schemas';
-import { analysePayoutReadback } from './payout-analysis';
+import { createDataSchema, pickString } from './loose-schemas';
+import { analysePayoutReadback, destinationAnswer } from './payout-analysis';
 import type { GoalOwner } from './proof-7-goal-variants';
 import { recordGoalWallets } from './proof-7-goals';
 import { readbackPayout } from './proof-7-readback';
@@ -8,7 +8,7 @@ import type { ProofContext } from './proof-context';
 import { qaIdentityFor } from './provider-ops';
 import { discoverQaCustomer } from './qa-discovery';
 import { proof7Key } from './qa-keys';
-import { usableList } from './read-rules';
+import { okData, usableList } from './read-rules';
 import type { ProofResult } from './types';
 
 const TITLE = 'Main-wallet interest routing at creation';
@@ -70,8 +70,8 @@ export async function runProof7(ctx: ProofContext): Promise<ProofResult> {
     );
     customerId = (await discoverQaCustomer(api, qa7)).customerId;
     if (customerId) {
-      const wallets = await api.customerWallets(customerId, 'ASC');
-      mainWalletId = pickString(extractEdges(wallets.data).edges[0], ['id']);
+      const wallets = usableList(await api.customerWallets(customerId, 'ASC'));
+      mainWalletId = pickString(wallets?.edges[0], ['id']);
     }
   } else {
     const call = created.call;
@@ -86,7 +86,7 @@ export async function runProof7(ctx: ProofContext): Promise<ProofResult> {
       answerOf(accepted)
     );
     if (call.ok) {
-      const parsed = createDataSchema.safeParse(call.data);
+      const parsed = createDataSchema.safeParse(okData(call));
       if (parsed.success) {
         customerId = parsed.data.customer_id;
         mainWalletId = parsed.data.wallet_id;
@@ -149,8 +149,9 @@ export async function runProof7(ctx: ProofContext): Promise<ProofResult> {
     );
   }
   const facts = mainRead?.facts ?? null;
-  if (mainWalletId && facts) {
-    namesDestination = facts.matchesTarget.length > 0;
+  if (mainWalletId && mainRead && facts) {
+    const destination = destinationAnswer(facts);
+    namesDestination = destination === 'unknown' ? null : destination === 'yes';
     mainDestinationPaths = facts.matchesTarget;
     b.value(
       'main_wallet_interest_field_names',
@@ -169,13 +170,26 @@ export async function runProof7(ctx: ProofContext): Promise<ProofResult> {
     b.finding(
       mainQuestions[1][0],
       mainQuestions[1][1],
-      answerOf(namesDestination)
+      destination,
+      destination === 'unknown'
+        ? `no payout destination field appeared in the wallet readback within ${mainRead.polls} reads`
+        : undefined
     );
+    // An absent flag is "no" only once the readback is complete.
     b.finding(
       mainQuestions[2][0],
       mainQuestions[2][1],
-      answerOf(facts.accrualEnabled !== null)
+      facts.accrualEnabled !== null
+        ? 'yes'
+        : mainRead.settled
+          ? 'no'
+          : 'unknown'
     );
+    if (destination === 'unknown') {
+      b.inconclusive(
+        'the main wallet readback never showed a payout destination field'
+      );
+    }
     const list = usableList(await api.customerWallets(customerId ?? '', 'ASC'));
     const edge = list?.edges.find(
       (e) => pickString(e, ['id']) === mainWalletId
@@ -228,7 +242,7 @@ export async function runProof7(ctx: ProofContext): Promise<ProofResult> {
           : 'unconfirmed';
   b.value('interest_routing_verdict', verdict);
   b.note(
-    'verdict: verified = accepted and readable, so route at creation; rejected or unverifiable = sweep the interest after it lands with a main to Ogabassey wallet-to-wallet transfer (proofs 2 and 4 cover that transfer).'
+    'verdict: verified = accepted and readable, so route at creation; rejected or unverifiable = sweep the interest after it lands with a main to Ogabassey wallet-to-wallet transfer (proofs 2 and 4 cover that transfer); unconfirmed = the readback never showed a payout destination field within the polling budget, so re-run before deciding.'
   );
   return b.build(ctx);
 }

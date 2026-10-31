@@ -28,12 +28,16 @@ export interface MockOptions {
   failNetworkOnce: string[];
   /** GET paths containing any of these answer HTTP 503 until the list is cleared. */
   serverErrorPaths: string[];
+  /** When set, a 503 keeps this object as the envelope `data` (a failed read that still looks valid). */
+  serverErrorData: Record<string, unknown> | null;
   /** Wallet reads keep showing the pre-settlement balance for this many reads. */
   balanceLagReads: number;
   /** New transactions are missing from list reads for this many list reads. */
   listLagReads: number;
   /** A new wallet's readback omits interest settings for this many reads. */
   settingsLagReads: number;
+  /** A new wallet's readback omits ONLY the payout destination field for this many reads. */
+  payoutFieldLagReads: number;
   accruedEdgeCount: number;
   /** Wallet reads that must pass before a settled outflow shows in withdrawal_count. */
   counterLagReads: number;
@@ -65,9 +69,11 @@ export const DEFAULT_MOCK_OPTIONS: MockOptions = {
   fundingSettles: true,
   failNetworkOnce: [],
   serverErrorPaths: [],
+  serverErrorData: null,
   balanceLagReads: 0,
   listLagReads: 0,
   settingsLagReads: 0,
+  payoutFieldLagReads: 0,
   accruedEdgeCount: 0,
   counterLagReads: 0,
   customerPayoutWallet: 'accepted',
@@ -103,6 +109,7 @@ export interface Wallet {
   interestEnabled: boolean;
   staleBalance: { value: number; readsLeft: number } | null;
   settingsHiddenReads: number;
+  payoutHiddenReads: number;
   account: string;
 }
 export interface Customer {

@@ -2,7 +2,7 @@ import { extractEdges, pickString, walletDataSchema } from './loose-schemas';
 import { answerOf, ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
 import type { CallResult } from './provider-ops';
-import { usableList } from './read-rules';
+import { okData, usableList } from './read-rules';
 import type { ProofResult } from './types';
 
 const TITLE = 'Interest visibility (development evidence only)';
@@ -50,7 +50,7 @@ async function walk(
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const call = await fetchPage(cursor);
     result.lastCall = call;
-    const list = extractEdges(call.data);
+    const list = extractEdges(okData(call));
     // A page counts only if the request succeeded AND its list was recognised.
     if (!call.ok || list.container === 'unknown') break;
     result.pages += 1;
@@ -82,7 +82,7 @@ export async function runProof5(ctx: ProofContext): Promise<ProofResult> {
   let ratesRead = 0;
   for (const wallet of state.wallets) {
     const call = await api.wallet(wallet.id);
-    const parsed = walletDataSchema.safeParse(call.data);
+    const parsed = walletDataSchema.safeParse(okData(call));
     const rate =
       call.ok && parsed.success
         ? (parsed.data as Record<string, unknown>).current_interest_rate
@@ -97,7 +97,7 @@ export async function runProof5(ctx: ProofContext): Promise<ProofResult> {
 
   // Accrual read: default window.
   const def = await api.accrued(target, {});
-  const defList = extractEdges(def.data);
+  const defList = extractEdges(okData(def));
   const defUsable = def.ok && defList.container !== 'unknown';
   b.shape('GET accrued interest (page)', def.httpStatus, def.data);
   b.value(
@@ -202,7 +202,7 @@ export async function runProof5(ctx: ProofContext): Promise<ProofResult> {
     txWalk.advances === null ? 'unknown' : answerOf(txWalk.advances)
   );
   const page = await api.transactions({ wallet_id: target, limit: '20' });
-  const pageList = extractEdges(page.data);
+  const pageList = extractEdges(okData(page));
   const pageUsable = page.ok && pageList.container !== 'unknown';
   const rows = pageList.edges;
   const interestRows = countInterestRows(rows);

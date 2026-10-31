@@ -1,4 +1,4 @@
-import { inheritanceAnswer } from './payout-analysis';
+import { destinationAnswer, inheritanceAnswer } from './payout-analysis';
 import { type GoalOwner, runGoalVariant } from './proof-7-goal-variants';
 import { answerOf, type ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
@@ -55,9 +55,7 @@ export async function recordGoalWallets(
     b.finding(
       'goal_explicit_readback_names_payout_destination',
       'Does the explicit goal wallet readback name that payout wallet?',
-      explicit.readback === null
-        ? 'unknown'
-        : answerOf(explicit.readback.matchesTarget.length > 0)
+      destinationAnswer(explicit.readback)
     );
     b.value(
       'goal_explicit_error_message',

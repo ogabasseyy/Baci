@@ -116,7 +116,13 @@ export function createMockProvider(
     ) {
       return Promise.resolve(
         new Response(
-          JSON.stringify({ status: false, message: 'Service unavailable' }),
+          JSON.stringify({
+            status: false,
+            message: 'Service unavailable',
+            ...(sandbox.options.serverErrorData
+              ? { data: sandbox.options.serverErrorData }
+              : {}),
+          }),
           { status: 503 }
         )
       );

@@ -1,6 +1,7 @@
 import { walletDataSchema } from './loose-schemas';
 import type { ProofContext } from './proof-context';
 import type { CallResult } from './provider-ops';
+import { okData } from './read-rules';
 
 export interface TerminalWatch {
   terminal: 'success' | 'failed' | 'timeout';
@@ -59,7 +60,8 @@ export async function readWallet(
   walletId: string
 ): Promise<WalletReading> {
   const call = await ctx.api.wallet(walletId);
-  const parsed = walletDataSchema.safeParse(call.data);
+  // A failed read may keep a schema-valid body: only a successful one counts.
+  const parsed = walletDataSchema.safeParse(okData(call));
   return {
     balance: parsed.success ? parsed.data.balance : null,
     withdrawalCount: parsed.success

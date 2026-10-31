@@ -3,18 +3,25 @@ import { pickString } from './loose-schemas';
 import { delta, readWallet } from './poll';
 import { answerOf, ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
+import type { CallResult } from './provider-ops';
 import { pollSettled, recordOf, usableList } from './read-rules';
 import { analyseRecord, relationOfCredit } from './tsq-analysis';
 import type { ProofResult } from './types';
 
 const TITLE = "Bank deposit into a goal sub-wallet's own virtual account";
 
-function accountNumbers(ctx: ProofContext, data: unknown): string[] {
-  const entries = Array.isArray(data) ? data : [];
+/**
+ * Whatever an accounts read returned is registered with the redactor (a
+ * failed body may still hold real numbers), but only a successful read yields
+ * numbers to reason about.
+ */
+function accountNumbers(ctx: ProofContext, call: CallResult): string[] {
+  const entries = Array.isArray(call.data) ? call.data : [];
   for (const entry of entries) {
     ctx.redactor.register('A', pickString(entry, ['account_number']));
     ctx.redactor.register('N', pickString(entry, ['account_name']));
   }
+  if (!call.ok) return [];
   return entries
     .map((entry) => pickString(entry, ['account_number']))
     .filter((n): n is string => n !== null);
@@ -82,14 +89,14 @@ export async function runProof3(ctx: ProofContext): Promise<ProofResult> {
     goalAccounts.httpStatus,
     goalAccounts.data
   );
-  const goalNumbers = accountNumbers(ctx, goalAccounts.data);
-  const mainNumbers = accountNumbers(ctx, mainAccounts.data);
-  b.value('goal_account_count', goalNumbers.length);
+  const goalNumbers = accountNumbers(ctx, goalAccounts);
+  const mainNumbers = accountNumbers(ctx, mainAccounts);
   // Absence needs a successful read of a recognised list (an array of accounts).
   const goalAccountsUsable =
     goalAccounts.ok && Array.isArray(goalAccounts.data);
   const mainAccountsUsable =
     mainAccounts.ok && Array.isArray(mainAccounts.data);
+  b.value('goal_account_count', goalAccountsUsable ? goalNumbers.length : null);
   b.finding(
     'goal_wallet_has_own_virtual_account',
     'Does the goal sub-wallet have its own virtual account?',

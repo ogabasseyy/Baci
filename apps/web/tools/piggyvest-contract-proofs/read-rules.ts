@@ -20,6 +20,16 @@ export function isTransientFailure(status: number | null): boolean {
   return status === null || status >= 500 || status === 429 || status === 408;
 }
 
+/**
+ * The data a call carried, only if the request SUCCEEDED. A failed response
+ * may retain a schema-valid envelope (`ProviderReads.runCall` keeps the raw
+ * data on purpose); such data is never a measurement, so every parser that
+ * turns a call into a measurement reads it through here.
+ */
+export function okData(call: CallResult): unknown {
+  return call.ok ? call.data : undefined;
+}
+
 /** The data as a plain object, only if the request succeeded. */
 export function recordOf(call: CallResult): Record<string, unknown> | null {
   const data = call.data;

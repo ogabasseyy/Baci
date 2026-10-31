@@ -243,6 +243,22 @@ describe('proof 3: unreadable or lagging reads are not "absent"', () => {
     );
   });
 
+  it('publishes no account count from a failed accounts read that kept its rows', async () => {
+    const h = await prepared();
+    const original = h.api.walletAccounts.bind(h.api);
+    h.api.walletAccounts = async (id) => ({
+      ...(await original(id)),
+      ok: false,
+      httpStatus: 503,
+    });
+    const result = await runProof3(h.ctx);
+    expect(result.values.goal_account_count ?? null).toBeNull();
+    expect(answer(result, 'goal_wallet_has_own_virtual_account')).toBe(
+      'unknown'
+    );
+    expect(answer(result, 'goal_account_differs_from_main')).toBe('unknown');
+  });
+
   it('reports unknown when the single record is not an object', async () => {
     const h = await prepared();
     const original = h.api.transaction.bind(h.api);

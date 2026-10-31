@@ -26,6 +26,31 @@ async function run(options: Parameters<typeof makeHarness>[0] = {}) {
 const deltaKeys = (result: ProofResult, prefix: string) =>
   Object.keys(result.values).filter((key) => key.startsWith(prefix));
 
+describe('proof 4: a failed wallet read is not a measurement', () => {
+  it('does not turn a 503 that keeps zero counters into "the bank outflow changed nothing"', async () => {
+    const h = harness({
+      mock: {
+        serverErrorData: { id: 'w', balance: 0, withdrawal_count: 0 },
+      },
+    });
+    await setupScenario(h.ctx);
+    const send = h.api.transferBank.bind(h.api);
+    // Wallet reads fail only after the bank transfer went out and succeeded.
+    h.api.transferBank = async (...args) => {
+      const sent = await send(...args);
+      h.mock.sandbox.options.serverErrorPaths = ['/api/v1/wallet/'];
+      return sent;
+    };
+    const result = await runProof4(h.ctx);
+    expect(
+      h.mock.sandbox.wallet(h.state.mainWalletId ?? '')?.withdrawalCount
+    ).toBe(1);
+    expect(answer(result, 'bank_outflow_changes_counter')).toBe('unknown');
+    expect(result.status).toBe('inconclusive');
+    expect(result.values.counter_scope).toBe('unknown');
+  });
+});
+
 describe('proof 4: withdrawal counter', () => {
   it('shows wallet-to-wallet leaving the counter alone and a bank outflow raising it on the source wallet only', async () => {
     const { h, result } = await run();

@@ -163,6 +163,23 @@ describe('readWallet / readAllWallets', () => {
     );
   });
 
+  it('returns nulls when a FAILED read kept a schema-valid envelope (retained zero counters)', async () => {
+    const h = harness({
+      mock: {
+        serverErrorData: { id: 'w', balance: 0, withdrawal_count: 0 },
+      },
+    });
+    await setupScenario(h.ctx);
+    h.mock.sandbox.options.serverErrorPaths = ['/api/v1/wallet/'];
+    const failed = await h.api.wallet(h.state.mainWalletId ?? '');
+    expect(failed).toMatchObject({ ok: false, httpStatus: 503 });
+    expect(failed.data).toMatchObject({ balance: 0, withdrawal_count: 0 });
+    expect(await readWallet(h.ctx, h.state.mainWalletId ?? '')).toEqual({
+      balance: null,
+      withdrawalCount: null,
+    });
+  });
+
   it('returns nulls, not zeros, when the read fails or is malformed', async () => {
     const h = harness();
     await setupScenario(h.ctx);

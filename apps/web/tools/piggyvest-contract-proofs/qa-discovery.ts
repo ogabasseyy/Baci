@@ -1,7 +1,8 @@
 import { resolvePiggyvestStagingSyntheticIdentity } from '@/lib/piggyvest/staging-synthetic-identity';
-import { extractEdges, pickString } from './loose-schemas';
+import { pickString } from './loose-schemas';
 import type { QaIdentity } from './provider-ops';
 import type { ProviderReads } from './provider-reads';
+import { usableList } from './read-rules';
 
 export type DiscoveryReason = 'found' | 'none' | 'ambiguous' | 'unverifiable';
 
@@ -47,5 +48,10 @@ export async function discoverQaCustomer(
   qa: QaIdentity
 ): Promise<Discovery> {
   const call = await api.customersByIdentifier(qa.thirdPartyIdentifier);
-  return selectQaCustomer(extractEdges(call.data).edges, qa);
+  // A failed lookup, or a list we do not recognise, proves nothing about who
+  // exists: never read it as "no customer" and never select from its rows.
+  const list = usableList(call);
+  if (!list)
+    return { customerId: null, reason: 'unverifiable', row: undefined };
+  return selectQaCustomer(list.edges, qa);
 }

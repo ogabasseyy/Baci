@@ -41,3 +41,10 @@ export function settingsVisible(wallet: Wallet): boolean {
   wallet.settingsHiddenReads -= 1;
   return false;
 }
+
+/** Whether a wallet readback shows its payout destination yet; consumes one hidden read. */
+export function payoutVisible(wallet: Wallet): boolean {
+  if (wallet.payoutHiddenReads <= 0) return true;
+  wallet.payoutHiddenReads -= 1;
+  return false;
+}

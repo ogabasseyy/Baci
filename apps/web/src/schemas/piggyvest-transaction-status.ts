@@ -39,6 +39,9 @@ const walletTransfer = z
     fee: z.int().nonnegative(),
     currency: z.literal('NGN').optional(),
     customer_id: identifier,
+    // Not in the observed record; typed so a consumer can refuse a
+    // mismatching business when PiggyVest does send it.
+    business_id: identifier.optional(),
     source_wallet: identifier,
     destination_wallet: identifier,
     category: text.optional(),

@@ -180,6 +180,21 @@ describe('primary wallet savings settlement proof', () => {
       });
     });
 
+    it.each([
+      ['the unobserved status "success"', { status: 'success' }],
+      ['no internal reference', { internal_reference: undefined }],
+      ['an internal reference unlike the id', { internal_reference: 'other' }],
+      ['another business', { business_id: 'another-business' }],
+    ])('neither settles nor releases a record with %s', (_label, change) => {
+      const live = liveTransactionStatus(binding, 'successful');
+      expect(
+        verifyPrimaryWalletSavingsProof(reservation, {
+          ...live,
+          data: { ...live.data, ...change },
+        })
+      ).toEqual({ status: 'unverified' });
+    });
+
     it('neither settles nor releases a pending record', () => {
       expect(
         verifyPrimaryWalletSavingsProof(

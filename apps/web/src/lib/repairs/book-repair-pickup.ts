@@ -28,6 +28,7 @@ import {
 } from '@/lib/repairs/repair-status';
 import { shippingService } from '@/lib/shipping';
 import { shouldReleaseBookingLock } from '@/lib/shipping/order-shipment-booking-lock-errors';
+import { repriceGiglQuoteForPaidFee } from '@/lib/shipping/reprice-gigl-quote-for-paid-fee';
 import type {
   BookingRequest,
   ShipmentBookingResult,
@@ -108,10 +109,13 @@ export async function bookRepairPickup(
     console.error('Repair pickup quote failed:', error);
     return pickupFailure('gigl_unavailable');
   }
-  const { quote, request: quoteRequest } = quoteResult;
-  if (!quote) {
+  const { quote: freshQuote, request: quoteRequest } = quoteResult;
+  if (!freshQuote) {
     return pickupFailure('gigl_unavailable');
   }
+  // Pickups paid before GIG prices were rounded to whole NGN 100 keep the
+  // price they paid when GIG's cost is unchanged.
+  const quote = repriceGiglQuoteForPaidFee(freshQuote, repair.pickup_fee);
 
   if (isRepairPickupQuoteAbovePaidFee(quote.price, repair.pickup_fee)) {
     return pickupFailure('quote_increased');

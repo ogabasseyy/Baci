@@ -93,4 +93,9 @@ export const EXPECTED_PENDING_VTU_REPLAY_SOURCES = [
       'supabase/migrations/20261020073000_vtu_admission_proof_index.sql',
     sha256: '56003d758b19b39621cbe8801b82f2d14552778174fd5adb3e01f26a34b25b3c',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261030165610_revoke_public_vtu_refund_wallet_credit.sql',
+    sha256: '85c444fe26dd4c36f104216824d21a37ea58780ebc30f9d9f13b1641627b1fde',
+  },
 ];

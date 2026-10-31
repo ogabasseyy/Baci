@@ -515,6 +515,7 @@ jobs:
           --sql-check supabase/tests/finalize_wallet_order_payment_privileges.sql
           --sql-check supabase/tests/vtu_checkout_rls.sql
           --sql-check supabase/tests/vtu_checkout_write_rpcs.sql
+          --sql-check supabase/tests/vtu_refund_wallet_credit_privileges.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

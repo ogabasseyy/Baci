@@ -2,17 +2,21 @@
 
 import {
   IMEI_SERVICE_TIERS,
+  IMEI_IDENTIFIER_BY_DEVICE,
+  normalizeDeviceIdentifier,
+  resolveInputIdentifier,
   type ImeiDeviceCategory,
   type ImeiReport,
   type ImeiServiceTierDefinition,
   type ImeiServiceTierKey,
   isValidDeviceIdentifier,
 } from '@baci/shared/imei';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useOptionalCustomerAuth } from '@/contexts/customer-auth-context';
 import { createImeiIdempotencyKey } from './imei-checker-idempotency-key';
+import { acquireImeiRecoveryKey, clearImeiRecoveryKey } from './imei-request-recovery';
 import { performImeiCheck } from './imei-checker-request';
-import type { ImeiRequestIdentity, ImeiResult } from './imei-checker-types';
+import type { ImeiResult } from './imei-checker-types';
 import { useImeiPendingLookup } from './use-imei-pending-lookup';
 
 export function useImeiCheckRequest(merchantSlug?: string) {
@@ -30,14 +34,12 @@ export function useImeiCheckRequest(merchantSlug?: string) {
   // a completed, paid-for result.
   const [resultTier, setResultTier] =
     useState<ImeiServiceTierDefinition | null>(null);
-  const requestIdentityRef = useRef<
-    (ImeiRequestIdentity & { scope: string }) | null
-  >(null);
   const requestScope = `${merchantSlug ?? ''}:${customerAuth?.customer?.id ?? 'anonymous'}:${customerAuth?.user?.id ?? ''}`;
   const submitting = useRef(false);
+  const lastSeen = useRef(new Map<string, string>());
   const [resultScope, setResultScope] = useState('');
   const activeScope = useRef(requestScope);
-  useEffect(() => {
+  useLayoutEffect(() => {
     activeScope.current = requestScope;
     setResult(null);
     setResultLookupId(null);
@@ -56,7 +58,9 @@ export function useImeiCheckRequest(merchantSlug?: string) {
     const terminal = pendingLookup.terminal;
     if (!terminal) return;
 
-    requestIdentityRef.current = null;
+    if (terminal.kind === 'complete' && terminal.recovery) {
+      void clearImeiRecoveryKey(terminal.recovery.storageKey, terminal.recovery.idempotencyKey).catch(() => undefined);
+    }
     submitting.current = false;
     setIsLoading(false);
     if (terminal.kind === 'complete') {
@@ -64,6 +68,7 @@ export function useImeiCheckRequest(merchantSlug?: string) {
       setResultScope(requestScope);
       setResult(terminal.result);
       setResultLookupId(terminal.lookupId);
+      if (terminal.lookupId) lastSeen.current.set(JSON.stringify([requestScope, terminal.tier, terminal.result.imei.trim().toUpperCase()]), terminal.lookupId);
       setResultTier(IMEI_SERVICE_TIERS[terminal.tier]);
       const categories = IMEI_SERVICE_TIERS[terminal.tier].deviceCategories;
       // Old saved lookups have no device. Infer only an unambiguous tier;
@@ -87,7 +92,6 @@ export function useImeiCheckRequest(merchantSlug?: string) {
     const currentTier = IMEI_SERVICE_TIERS[tier];
     if (!isValidDeviceIdentifier(imei, currentTier.identifier)) return;
     const selectedTier = tier;
-    const requestIdentity = requestIdentityRef.current;
     if (!merchantSlug) {
       setNeedsSignIn(false);
       setError('This storefront is unavailable. Refresh and try again.');
@@ -95,6 +99,11 @@ export function useImeiCheckRequest(merchantSlug?: string) {
       return;
     }
 
+    if (!customerAuth?.user?.id || !customerAuth.customer?.id) {
+      setNeedsSignIn(!customerAuth?.isLoading);
+      setError(customerAuth?.isLoading ? 'Loading your account. Please try again.' : 'Please sign in to check this device.');
+      return;
+    }
     setNeedsSignIn(false);
     submitting.current = true;
     setIsLoading(true);
@@ -104,24 +113,17 @@ export function useImeiCheckRequest(merchantSlug?: string) {
     setNeedsWalletFunding(false);
 
     try {
-      const normalizedImei = imei.trim();
-      const existingIdentityMatches =
-        requestIdentity?.scope === requestScope &&
-        requestIdentity?.imei === normalizedImei &&
-        requestIdentity.tier === selectedTier;
-
-      const idempotencyKey = existingIdentityMatches
-        ? requestIdentity.key
-        : createImeiIdempotencyKey();
-
-      if (idempotencyKey !== requestIdentity?.key) {
-        requestIdentityRef.current = {
-          imei: normalizedImei,
-          tier: selectedTier,
-          key: idempotencyKey,
-          scope: requestScope,
-        };
+      const normalizedImei = normalizeDeviceIdentifier(imei, resolveInputIdentifier(currentTier.identifier, IMEI_IDENTIFIER_BY_DEVICE[device]));
+      let recovery: Awaited<ReturnType<typeof acquireImeiRecoveryKey>>;
+      try {
+        recovery = await acquireImeiRecoveryKey([requestScope, selectedTier, normalizedImei], createImeiIdempotencyKey);
+      } catch {
+        if (activeScope.current !== requestScope) return;
+        setError('Your browser cannot safely resume this check. Enable storage or try a current browser.');
+        return;
       }
+      if (activeScope.current !== requestScope) return;
+      const { idempotencyKey } = recovery;
 
       const outcome = await performImeiCheck(
         normalizedImei,
@@ -129,7 +131,9 @@ export function useImeiCheckRequest(merchantSlug?: string) {
         currentTier.price,
         idempotencyKey,
         merchantSlug,
-        device
+        device,
+        customerAuth.user.id,
+        lastSeen.current.get(JSON.stringify([requestScope, selectedTier, normalizedImei]))
       );
 
       if (activeScope.current !== requestScope) return;
@@ -139,13 +143,16 @@ export function useImeiCheckRequest(merchantSlug?: string) {
           pollAfterMs: outcome.pending.pollAfterMs,
           tier: selectedTier,
           device,
+          recovery,
         });
       } else if (outcome.error !== null) {
+        if (outcome.previousReportAvailable && outcome.lookupId) lastSeen.current.set(JSON.stringify([requestScope, selectedTier, normalizedImei]), outcome.lookupId);
         setError(outcome.error);
       } else {
         setResultScope(requestScope);
         setResult(outcome.result);
         setResultLookupId(outcome.lookupId);
+        if (outcome.lookupId) lastSeen.current.set(JSON.stringify([requestScope, selectedTier, normalizedImei]), outcome.lookupId);
         // `currentTier` here is the value closed over at submit time, not the
         // hook's live value at response time — exactly the snapshot needed.
         setResultTier(currentTier);
@@ -153,7 +160,7 @@ export function useImeiCheckRequest(merchantSlug?: string) {
       setNeedsSignIn(outcome.needsSignIn);
       setNeedsWalletFunding(outcome.needsWalletFunding);
       if (!outcome.keepRequestIdentity) {
-        requestIdentityRef.current = null;
+        await clearImeiRecoveryKey(recovery.storageKey, recovery.idempotencyKey).catch(() => undefined);
       }
     } catch {
       if (activeScope.current !== requestScope) return;
@@ -184,6 +191,7 @@ export function useImeiCheckRequest(merchantSlug?: string) {
       setResultScope(requestScope);
       setResult(report.result);
       setResultLookupId(report.lookupId);
+      lastSeen.current.set(JSON.stringify([requestScope, report.tier, report.result.imei.trim().toUpperCase()]), report.lookupId);
       setResultTier(IMEI_SERVICE_TIERS[report.tier]);
       setResultDevice(report.device);
       setError(null);

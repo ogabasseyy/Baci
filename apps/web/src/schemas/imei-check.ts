@@ -14,6 +14,8 @@ export const imeiCheckSchema = z
       .optional()
       .default([]),
     device: z.enum(['smartphone', 'tablet', 'laptop', 'watch']).optional(),
+    expectedUserId: z.string().uuid().optional(),
+    previousLookupId: z.string().uuid().optional(),
     // Accepts an IMEI (15 digits) or an Apple serial (8–14 alphanumeric). The
     // route enforces the exact rule for the selected tier's identifier type.
     imei: z

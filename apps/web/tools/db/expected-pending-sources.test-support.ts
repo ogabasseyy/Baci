@@ -37,6 +37,7 @@ import { EXPECTED_SAVINGS_PENDING_SOURCES } from './expected-savings-pending-sou
 import { EXPECTED_SAVINGS_RUNTIME_PENDING_SOURCES } from './expected-savings-runtime-pending-sources.test-support';
 import { EXPECTED_SEARCH_PENDING_SOURCES } from './expected-search-pending-sources.test-support';
 import { EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES } from './expected-storefront-order-pending-sources.test-support';
+import { EXPECTED_WALLET_ORDER_PENDING_SOURCES } from './expected-wallet-order-pending-sources.test-support';
 import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-outbox-pending-sources.test-fixture';
 import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 
@@ -480,6 +481,7 @@ export const EXPECTED_PENDING_SOURCES = [
   },
   ...EXPECTED_PENDING_TAIL_SOURCES.recent,
   ...EXPECTED_PRIMARY_PENDING_SOURCES,
+  ...EXPECTED_WALLET_ORDER_PENDING_SOURCES,
 ]
   .sort((left, right) =>
     left.repositoryPath.localeCompare(right.repositoryPath)

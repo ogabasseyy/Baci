@@ -54,7 +54,7 @@ export async function generateMetadata({
   const canonicalUrl = `${buildStoreUrl(merchant)}/faq`;
 
   return {
-    title: `FAQ | ${merchant.business_name}`,
+    title: 'FAQ',
     description: `Frequently asked questions about ${merchant.business_name}.`,
     openGraph: {
       title: `FAQ | ${merchant.business_name}`,

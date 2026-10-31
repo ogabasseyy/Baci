@@ -84,13 +84,13 @@ export function buildCategoryProductMetadata({
   );
   const metadataTitleSource =
     normalizedProductMetaTitle || normalizedGeneratedTitle;
-  const { metadataTitle, title: metadataTitleText } =
-    buildStorefrontMetadataTitle({
-      title: metadataTitleSource,
-      suffix: merchantDisplayName,
-      fallback:
-        normalizeSeoProductText(product.name, product) || productCategoryName,
-    });
+  const { metadataTitle, socialTitle } = buildStorefrontMetadataTitle({
+    dropSuffixWhenTooLong: true,
+    title: metadataTitleSource,
+    suffix: merchantDisplayName,
+    fallback:
+      normalizeSeoProductText(product.name, product) || productCategoryName,
+  });
   const socialMedia = merchant.social_media as
     | Record<string, string>
     | undefined;
@@ -126,7 +126,7 @@ export function buildCategoryProductMetadata({
       googleBot: { ...baseGoogleBot, index: robots.index, follow: true },
     },
     openGraph: {
-      title: metadataTitleText,
+      title: socialTitle,
       description: seoDescription,
       images: socialMetadata.openGraphImages,
       url: canonicalUrl,
@@ -135,7 +135,7 @@ export function buildCategoryProductMetadata({
     },
     twitter: {
       card: 'summary_large_image',
-      title: metadataTitleText,
+      title: socialTitle,
       description: seoDescription,
       images: socialMetadata.twitterImages,
       ...(twitterHandle && { site: twitterHandle, creator: twitterHandle }),

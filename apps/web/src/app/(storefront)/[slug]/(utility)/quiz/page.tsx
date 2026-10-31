@@ -20,7 +20,7 @@ const QUIZ_DESCRIPTION =
 
 export const metadata: Metadata = {
   description: QUIZ_DESCRIPTION,
-  title: 'Super Quiz | Ogabassey',
+  title: 'Super Quiz',
 };
 
 export default async function QuizPage({

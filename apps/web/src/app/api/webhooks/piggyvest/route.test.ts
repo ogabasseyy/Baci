@@ -179,8 +179,7 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // These suites exercise the deployment where the capture drain is
-  // scheduled, so a failed processing attempt answers the deferred 200.
+  // Drain scheduled: a failed processing attempt answers the deferred 200.
   vi.stubEnv('PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED', 'true');
   mocks.processPiggyvestEvent.mockResolvedValue('processed');
   // The union gate reads every secret var directly; pin the rotation vars
@@ -203,6 +202,8 @@ describe('GET reachability probe', () => {
     });
   });
 });
+
+const DEFERRED = { received: true, captured: true, processing: 'deferred' };
 
 describe('POST event intake', () => {
   it('acknowledges deferred processing as durable backlog', async () => {
@@ -383,14 +384,9 @@ describe('POST event intake', () => {
 
     const response = await POST(createRequest(rawBody, signPayload(rawBody)));
 
-    // The unknown-event body is already durably captured; the failed digest
-    // quarantine is processing, which never changes the reply.
+    // Already captured; the failed digest quarantine never changes the reply.
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      received: true,
-      captured: true,
-      processing: 'deferred',
-    });
+    expect(await response.json()).toEqual(DEFERRED);
   });
 
   it('processes duplicate deliveries so crashed credits still land', async () => {
@@ -421,11 +417,7 @@ describe('POST event intake', () => {
     const response = await POST(createRequest(rawBody, signPayload(rawBody)));
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      received: true,
-      captured: true,
-      processing: 'deferred',
-    });
+    expect(await response.json()).toEqual(DEFERRED);
   });
 
   it('answers 200 without leaking internals when the inbox write fails after capture', async () => {

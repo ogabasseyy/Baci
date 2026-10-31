@@ -45,6 +45,21 @@ describe('settingsSchema', () => {
     ).toBe(false);
   });
 
+  it('rejects a truncated +234 support phone that the database refuses', () => {
+    const result = settingsSchema.safeParse({
+      business_name: 'My Store',
+      country: 'NG',
+      site_description: '',
+      support_email: '',
+      support_phone: '+23415781',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.path).toEqual(['support_phone']);
+    }
+  });
+
   it('rejects an oversized storefront description', () => {
     expect(
       settingsSchema.safeParse({

@@ -1,3 +1,7 @@
+import {
+  isPlausibleMerchantContactPhone,
+  normalizePhoneToE164,
+} from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { buildMerchantSenderInfo } from '@/lib/shipping/merchant-sender-location';
 import type { ShippingAddress } from '@/lib/shipping/types';
@@ -12,7 +16,23 @@ type MerchantSenderRow = {
 
 export type ResolveBookingMerchantSenderResult =
   | { ok: true; sender: ShippingAddress }
-  | { error: string; ok: false; status: number };
+  | {
+      code?: 'MERCHANT_SENDER_PHONE_INVALID';
+      error: string;
+      ok: false;
+      status: number;
+    };
+
+/**
+ * Couriers call the sender on this number, so a blank or truncated store phone
+ * (for example "+23415781") must stop booking before any provider request.
+ * Domestic origins are Nigerian, so national-format numbers are read as +234.
+ */
+function isBookableSenderPhone(phone: string): boolean {
+  if (!isPlausibleMerchantContactPhone(phone)) return false;
+  const e164 = normalizePhoneToE164(phone);
+  return e164 !== null && (!e164.startsWith('234') || e164.length === 13);
+}
 
 function isMissingMerchantRow(error: unknown, data: unknown): boolean {
   if (data || !error || typeof error !== 'object') return !data && !error;
@@ -64,6 +84,15 @@ export async function resolveBookingMerchantSender(
   if (!sender) {
     return {
       error: 'Merchant shipping origin is not configured',
+      ok: false,
+      status: 400,
+    };
+  }
+  if (!isBookableSenderPhone(sender.phone)) {
+    return {
+      code: 'MERCHANT_SENDER_PHONE_INVALID',
+      error:
+        'Your store phone number is missing or incomplete. Update it in Store Settings, then try again.',
       ok: false,
       status: 400,
     };

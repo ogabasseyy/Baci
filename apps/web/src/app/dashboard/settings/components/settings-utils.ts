@@ -1,3 +1,4 @@
+import { isPlausibleMerchantContactPhone } from '@baci/shared/lib';
 import z from 'zod';
 
 export { extractBrandColorsFromImage as extractColorsFromImage } from '@/lib/extract-brand-colors';
@@ -39,8 +40,8 @@ export const settingsSchema = z.object({
     .trim()
     .max(32, 'Support phone must be 32 characters or fewer.')
     .refine(
-      (value) => value === '' || /^[+0-9() .-]{7,32}$/.test(value),
-      'Enter a valid support phone number.'
+      (value) => value === '' || isPlausibleMerchantContactPhone(value),
+      'Enter a full support phone number, for example +234 801 234 5678.'
     )
     .default(''),
 });

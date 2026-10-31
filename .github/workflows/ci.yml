@@ -507,6 +507,7 @@ jobs:
           --sql-check supabase/tests/finalize_store_credit_order_payment_refusals.sql
           --sql-check supabase/tests/finalize_store_credit_order_payment_legitimate.sql
           --sql-check supabase/tests/finalize_store_credit_order_payment_privileges.sql
+          --sql-check supabase/migrations/tests/merchant_identity_settings_phone_shape.sql
           --sql-check supabase/migrations/tests/chatgpt_ads_settings_and_destination.sql
           --sql-check supabase/migrations/tests/chatgpt_ads_admin_destination.sql
           --sql-check supabase/migrations/tests/x_ads_settings_and_destination.sql

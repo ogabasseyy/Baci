@@ -40,9 +40,7 @@ describe('Baci UCP responses against the vendored 2026-04-08 schemas', () => {
       );
     });
 
-    // Roadmap Task 3 (plan 3) adds the schema URL to the catalog and cart
-    // declarations; this test then starts failing and `.fails` must go.
-    it.fails('F7: every dev.ucp.shopping capability declares schema', async () => {
+    it('F7: every dev.ucp.shopping capability declares schema', async () => {
       const profile = await buildProfile();
       const shopping = Object.entries(profile.ucp.capabilities).filter(
         ([name]) => name.startsWith('dev.ucp.shopping.')

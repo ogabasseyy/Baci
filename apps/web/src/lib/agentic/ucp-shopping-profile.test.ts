@@ -144,4 +144,32 @@ describe('ucp shopping profile builders', () => {
       'https://ogabassey.com/api/agentic/catalog/search'
     );
   });
+
+  it('declares spec and schema on the cart and both catalog capabilities', () => {
+    const capabilities = buildUcpCapabilities({
+      agentCommerceManifestUrl: 'https://ogabassey.com/agent-commerce.json',
+      agenticApiBaseUrl: 'https://ogabassey.com/api/agentic',
+      manifest: signedManifest(),
+    });
+    const pick = (name: string) => {
+      const [declaration] = capabilities[name] as Array<{
+        schema?: string;
+        spec?: string;
+      }>;
+      return { schema: declaration.schema, spec: declaration.spec };
+    };
+
+    expect(pick('dev.ucp.shopping.cart')).toEqual({
+      schema: 'https://ucp.dev/2026-04-08/schemas/shopping/cart.json',
+      spec: 'https://ucp.dev/2026-04-08/specification/cart',
+    });
+    expect(pick('dev.ucp.shopping.catalog.search')).toEqual({
+      schema: 'https://ucp.dev/2026-04-08/schemas/shopping/catalog_search.json',
+      spec: 'https://ucp.dev/2026-04-08/specification/catalog/search',
+    });
+    expect(pick('dev.ucp.shopping.catalog.lookup')).toEqual({
+      schema: 'https://ucp.dev/2026-04-08/schemas/shopping/catalog_lookup.json',
+      spec: 'https://ucp.dev/2026-04-08/specification/catalog/lookup',
+    });
+  });
 });

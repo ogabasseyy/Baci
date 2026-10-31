@@ -1,6 +1,9 @@
 import 'server-only';
 import type { PiggyvestClaimedCapture } from '@/schemas/piggyvest/webhook-capture';
-import type { StoredPiggyvestDeliveryVerification } from './verify-stored-piggyvest-delivery';
+import {
+  narrowToRecordedFamilies,
+  type StoredPiggyvestDeliveryVerification,
+} from './verify-stored-piggyvest-delivery';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 import type { CaptureResolution } from './webhook-capture-queue';
 import type { PiggyvestWebhookKeyFamily } from './webhook-secret-union';
@@ -44,6 +47,8 @@ export interface DrainDeps {
   verify(input: {
     rawBody: Buffer;
     signature: string;
+    /** Families durably recorded at admission: the ceiling on authority. */
+    recordedFamilies: readonly PiggyvestWebhookKeyFamily[];
   }): StoredPiggyvestDeliveryVerification;
   /**
    * Runs the shared processing pipeline. A non-2xx status means incomplete,
@@ -83,7 +88,11 @@ async function drainRow(
   row: PiggyvestClaimedCapture
 ): Promise<RowOutcome> {
   const rawBody = Buffer.from(row.raw_hex, 'hex');
-  const verification = deps.verify({ rawBody, signature: row.signature });
+  const verification = deps.verify({
+    rawBody,
+    signature: row.signature,
+    recordedFamilies: row.key_families,
+  });
 
   if (verification.status === 'unconfigured') {
     await settle(deps, row, 'pending', 'KEYS_UNCONFIGURED');
@@ -98,13 +107,31 @@ async function drainRow(
     return 'needsReview';
   }
 
+  // Authority is the intersection of what replay verification reports and
+  // what admission recorded, whatever the injected verifier did: replay
+  // re-proves authenticity but never widens what ingress authorised.
+  const families =
+    verification.status === 'verified'
+      ? narrowToRecordedFamilies(verification.families, row.key_families)
+      : [];
+  if (verification.status !== 'verified' || families.length === 0) {
+    emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_NEEDS_REVIEW', {
+      captureId: row.capture_id,
+      eventType: row.event_type,
+      keyVersion: row.key_version,
+      reason: 'replay authority not recorded at admission',
+    });
+    await settle(deps, row, 'needs_review', 'REPLAY_AUTHORITY_NOT_RECORDED');
+    return 'needsReview';
+  }
+
   let completed = false;
   try {
     const result = await deps.process({
       rawBody,
       signature: row.signature,
       matchedSecret: verification.secret,
-      families: verification.families,
+      families,
       keyScope: 'replay',
     });
     completed =

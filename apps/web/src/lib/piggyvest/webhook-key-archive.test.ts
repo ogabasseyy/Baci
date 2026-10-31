@@ -75,7 +75,7 @@ describe('readWebhookKeyArchive', () => {
       JSON.stringify([entry('dup', 1), entry('dup', 2)]),
       JSON.stringify(Array.from({ length: 25 }, (_, i) => entry(`v${i}`, 1))),
     ]) {
-      expect(read(value)).toEqual({ ok: false });
+      expect(read(value)).toMatchObject({ ok: false });
     }
   });
 });
@@ -177,18 +177,41 @@ describe('family-scoped archived secrets for the primary intakes', () => {
     ).toEqual([]);
   });
 
-  it('bounds the archived contribution and keeps the newest retirements', () => {
-    const many = Array.from({ length: 20 }, (_, index) => ({
+  it('returns every in-scope key of the family (at most the schema cap), newest first, with no silent truncation', () => {
+    const eight = Array.from(
+      { length: MAX_FAMILY_ARCHIVED_SECRETS },
+      (_, index) => ({
+        ...entry(`old-${index}`, 100 + index, `old-secret-${index}`),
+        family: 'bank',
+      })
+    );
+    const secrets = familyArchivedSecrets('bank', env(eight), NOW, 'replay');
+    expect(secrets).toHaveLength(MAX_FAMILY_ARCHIVED_SECRETS);
+    expect(secrets[0]).toBe('old-secret-0');
+    expect(secrets.at(-1)).toBe('old-secret-7');
+    expect(familyArchivedSecrets('bank', env(eight), NOW, 'ingress')).toEqual(
+      []
+    );
+  });
+
+  it('an archive over the per-family cap contributes nothing and reports why', () => {
+    const nine = Array.from({ length: 9 }, (_, index) => ({
       ...entry(`old-${index}`, 100 + index, `old-secret-${index}`),
       family: 'bank',
     }));
-    const secrets = familyArchivedSecrets('bank', env(many), NOW, 'replay');
-    expect(secrets).toHaveLength(MAX_FAMILY_ARCHIVED_SECRETS);
-    expect(secrets[0]).toBe('old-secret-0');
-    expect(secrets).not.toContain('old-secret-19');
-    expect(familyArchivedSecrets('bank', env(many), NOW, 'ingress')).toEqual(
-      []
-    );
+    expect(familyArchivedSecrets('bank', env(nine), NOW, 'replay')).toEqual([]);
+    expect(readWebhookKeyArchive(env(nine))).toEqual({
+      ok: false,
+      reason: 'FAMILY_CAP_EXCEEDED',
+    });
+    expect(
+      readWebhookKeyArchive({
+        PIGGYVEST_WEBHOOK_KEY_ARCHIVE: '{broken',
+      } as unknown as NodeJS.ProcessEnv)
+    ).toEqual({
+      ok: false,
+      reason: 'UNREADABLE',
+    });
   });
 });
 
@@ -229,9 +252,14 @@ describe('acceptedWebhookSecrets', () => {
     ).toEqual(['current', 'a', 'b']);
   });
 
-  it('never lets the derived list exceed its bound', () => {
-    const derived = Array.from({ length: 40 }, (_, index) => `d-${index}`);
-    const accepted = acceptedWebhookSecrets({ webhookSecret: 'c' }, derived);
-    expect(accepted).toHaveLength(1 + MAX_FAMILY_ARCHIVED_SECRETS);
+  it('passes the derived list through whole: the schema cap, not a silent slice, is the bound', () => {
+    const derived = Array.from(
+      { length: MAX_FAMILY_ARCHIVED_SECRETS },
+      (_, index) => `d-${index}`
+    );
+    expect(acceptedWebhookSecrets({ webhookSecret: 'c' }, derived)).toEqual([
+      'c',
+      ...derived,
+    ]);
   });
 });

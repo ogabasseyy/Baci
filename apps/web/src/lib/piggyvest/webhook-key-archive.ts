@@ -1,6 +1,7 @@
 import 'server-only';
 import { createHmac } from 'node:crypto';
 import {
+  MAX_ARCHIVED_KEYS_PER_FAMILY,
   type PiggyvestArchivedWebhookKey,
   piggyvestWebhookKeyArchiveSchema,
 } from '@/schemas/piggyvest/webhook-key-archive';
@@ -12,9 +13,14 @@ const HOUR_MS = 3_600_000;
 // it stand would keep a key accepted far past any bounded overlap.
 const CLOCK_SKEW_MS = 5 * 60_000;
 
+export type WebhookKeyArchiveIssue =
+  | 'UNREADABLE'
+  | 'FAMILY_CAP_EXCEEDED'
+  | 'INVALID';
+
 export type WebhookKeyArchive =
   | { ok: true; entries: PiggyvestArchivedWebhookKey[]; overlapMs: number }
-  | { ok: false };
+  | { ok: false; reason: WebhookKeyArchiveIssue };
 
 /**
  * Overlap window for a rotated-out key. Bounded on both sides: an unset or
@@ -43,11 +49,13 @@ export function readWebhookKeyArchive(
   if (!raw) return { ok: true, entries: [], overlapMs };
   try {
     const parsed = piggyvestWebhookKeyArchiveSchema.safeParse(JSON.parse(raw));
-    return parsed.success
-      ? { ok: true, entries: parsed.data, overlapMs }
-      : { ok: false };
+    if (parsed.success) return { ok: true, entries: parsed.data, overlapMs };
+    const overCap = parsed.error.issues.some((issue) =>
+      issue.message.includes('archived keys per family')
+    );
+    return { ok: false, reason: overCap ? 'FAMILY_CAP_EXCEEDED' : 'INVALID' };
   } catch {
-    return { ok: false };
+    return { ok: false, reason: 'UNREADABLE' };
   }
 }
 
@@ -97,16 +105,15 @@ export function derivePiggyvestKeyVersion(secret: string): string {
 export type WebhookKeyScope = 'ingress' | 'replay';
 
 /**
- * Hard bound on the derived (archive-sourced) verification list per family.
- * The archive itself holds up to 24 entries, most of them long expired;
- * only the newest retirements matter for replay, and the bound keeps every
- * verifier's key loop small and predictable.
+ * The per-family bound is owned by the archive config schema (see
+ * MAX_ARCHIVED_KEYS_PER_FAMILY): an archive over it is rejected whole, so
+ * every layer sees the same in-scope keys and nothing is truncated.
  */
-export const MAX_FAMILY_ARCHIVED_SECRETS = 8;
+export const MAX_FAMILY_ARCHIVED_SECRETS = MAX_ARCHIVED_KEYS_PER_FAMILY;
 
 /**
  * Archived secrets belonging to exactly one key family, in scope, newest
- * retirement first, at most MAX_FAMILY_ARCHIVED_SECRETS. The primary
+ * retirement first (at most the schema cap, never truncated). The primary
  * intakes (bank, custody, interest) and their workers re-verify with their
  * own runtime keys, so this is how a key moved into the archive at
  * rotation keeps working for the family it was issued for, and only that
@@ -131,7 +138,6 @@ export function familyArchivedSecrets(
   return allowed
     .filter((entry) => entry.family === family)
     .sort((a, b) => Date.parse(b.retiredAt) - Date.parse(a.retiredAt))
-    .slice(0, MAX_FAMILY_ARCHIVED_SECRETS)
     .map((entry) => entry.secret);
 }
 
@@ -155,7 +161,7 @@ export function acceptedWebhookSecrets(
         config.webhookSecret,
         ...(config.retainedWebhookSecrets ?? []),
       ].filter(usable),
-      ...archived.filter(usable).slice(0, MAX_FAMILY_ARCHIVED_SECRETS),
+      ...archived.filter(usable),
     ]),
   ];
 }

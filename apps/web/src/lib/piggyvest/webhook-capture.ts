@@ -22,9 +22,22 @@ import type {
  * intermediate importer, so this module never imports it.
  */
 
-const MAX_IDENTIFIER_LENGTH = 512;
+// Optional metadata is bounded by UTF-8 BYTES with the migration's own
+// limits (octet_length checks), not by character count: 300 two-byte
+// characters fit a 512-character bound but not the 512-byte column check,
+// and a failed check would fail the whole insert and 503 a verified
+// delivery. Anything over, empty, or not storable is omitted instead; the
+// raw body is always captured.
+const MAX_EVENT_ID_BYTES = 512;
+const MAX_EVENT_TYPE_BYTES = 200;
+const MAX_TRANSACTION_ID_BYTES = 512;
 const MAX_HEADER_VALUE_LENGTH = 512;
 const MAX_CAPTURED_HEADERS = 24;
+// octet_length(request_headers::text) <= 8192 in the database; jsonb text
+// output spends two more bytes per entry than compact JSON.
+const MAX_HEADER_PAYLOAD_BYTES = 8000;
+const LONE_SURROGATE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 const CAPTURED_HEADER_NAMES = new Set([
   'content-type',
   'content-length',
@@ -49,10 +62,12 @@ export interface DeliveryDescription {
   providerTransactionId: string | null;
 }
 
-function boundedString(value: unknown, limit: number): string | null {
-  return typeof value === 'string' && value.length > 0 && value.length <= limit
-    ? value
-    : null;
+function boundedIdentifier(value: unknown, maxBytes: number): string | null {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  if (Buffer.byteLength(value, 'utf8') > maxBytes) return null;
+  // PostgreSQL text cannot hold NUL, and jsonb rejects unpaired surrogates.
+  if (value.includes('\u0000') || LONE_SURROGATE.test(value)) return null;
+  return value;
 }
 
 /**
@@ -88,13 +103,13 @@ export function describeDelivery(rawBody: Uint8Array): DeliveryDescription {
       ? (envelope.eventData as Record<string, unknown>)
       : {};
   return {
-    eventId: boundedString(envelope.eventId, MAX_IDENTIFIER_LENGTH),
-    eventType: boundedString(envelope.eventType, 200),
+    eventId: boundedIdentifier(envelope.eventId, MAX_EVENT_ID_BYTES),
+    eventType: boundedIdentifier(envelope.eventType, MAX_EVENT_TYPE_BYTES),
     // Inflows carry transaction_id; payouts and most other events carry the
     // provider record id as eventData.id.
     providerTransactionId:
-      boundedString(data.transaction_id, MAX_IDENTIFIER_LENGTH) ??
-      boundedString(data.id, MAX_IDENTIFIER_LENGTH),
+      boundedIdentifier(data.transaction_id, MAX_TRANSACTION_ID_BYTES) ??
+      boundedIdentifier(data.id, MAX_TRANSACTION_ID_BYTES),
   };
 }
 
@@ -105,13 +120,28 @@ export function describeDelivery(rawBody: Uint8Array): DeliveryDescription {
 export function selectCapturedHeaders(
   headers: Headers
 ): Record<string, string> {
+  const priority = (name: string) =>
+    name === 'x-pvb-signature' ? 0 : name === 'content-type' ? 1 : 2;
+  const candidates = [...headers.entries()]
+    .map(([name, value]): [string, string] => [
+      name.toLowerCase(),
+      value.slice(0, MAX_HEADER_VALUE_LENGTH),
+    ])
+    .filter(
+      ([name]) => CAPTURED_HEADER_NAMES.has(name) || name.startsWith('x-pvb-')
+    )
+    .sort((a, b) => priority(a[0]) - priority(b[0]));
+  const payloadBytes = (selected: Record<string, string>) =>
+    Buffer.byteLength(JSON.stringify(selected), 'utf8') +
+    2 * Object.keys(selected).length;
   const selected: Record<string, string> = {};
-  for (const [name, value] of headers.entries()) {
+  for (const [name, value] of candidates) {
     if (Object.keys(selected).length >= MAX_CAPTURED_HEADERS) break;
-    const key = name.toLowerCase();
-    if (CAPTURED_HEADER_NAMES.has(key) || key.startsWith('x-pvb-')) {
-      selected[key] = value.slice(0, MAX_HEADER_VALUE_LENGTH);
-    }
+    // The signature and content type go first; anything that would push the
+    // serialised object over the database byte budget is omitted.
+    if (payloadBytes({ ...selected, [name]: value }) > MAX_HEADER_PAYLOAD_BYTES)
+      continue;
+    selected[name] = value;
   }
   return selected;
 }

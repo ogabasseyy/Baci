@@ -106,6 +106,22 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     ]);
   });
 
+  it('names an archive over the per-family cap instead of calling it unreadable', () => {
+    const nine = Array.from({ length: 9 }, (_, index) => ({
+      version: `old-${index}`,
+      family: 'bank',
+      secret: `old-secret-${index}`,
+      retiredAt: new Date(NOW.getTime() - (200 + index) * MINUTE).toISOString(),
+    }));
+    ready.env = {
+      ...ready.env,
+      PIGGYVEST_WEBHOOK_KEY_ARCHIVE: JSON.stringify(nine),
+    };
+    expect(notReadyGates(ready)).toEqual([
+      'key_configuration:KEY_ARCHIVE_FAMILY_CAP_EXCEEDED',
+    ]);
+  });
+
   it('distinguishes unreachable storage from a missing migration', () => {
     ready.storage = { ok: false, reason: 'unreachable' };
     expect(notReadyGates(ready)).toEqual([

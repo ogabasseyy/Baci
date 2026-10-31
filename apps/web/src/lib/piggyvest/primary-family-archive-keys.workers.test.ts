@@ -22,6 +22,7 @@ import { drainPrimaryWalletBankInbox } from './primary-wallet-bank-inbox-worker'
 import { primaryCardCustodyInboxFixture as custody } from './primary-wallet-card-custody-inbox.test-fixture';
 import { createPrimaryCardCustodyInboxIntake } from './primary-wallet-card-custody-inbox-intake';
 import { createPrimaryCardCustodyInboxWorker } from './primary-wallet-card-custody-inbox-worker';
+import { verifyPiggyvestWebhookSecrets } from './webhook-secret-union';
 
 const HOUR = 3_600_000;
 const sign = (secret: string, body: Uint8Array) =>
@@ -57,11 +58,11 @@ describe('bank worker drain with archived keys', () => {
     signature: sign(secret, bank.rawBody),
   });
 
-  it('many expired archive entries do not disable the drain, and the store gets the operator config', async () => {
+  it('a full archive (8 keys for the family) does not disable the drain and the store gets the operator config', async () => {
     store.claim.mockResolvedValue([]);
 
     await expect(
-      drainPrimaryWalletBankInbox({ env: env(expired(24, 'bank')) })
+      drainPrimaryWalletBankInbox({ env: env(expired(8, 'bank')) })
     ).resolves.toEqual({ claimed: 0, processed: 0, deferred: 0, blocked: 0 });
 
     expect(
@@ -70,35 +71,82 @@ describe('bank worker drain with archived keys', () => {
     ).toEqual(['retained-1', 'retained-2', 'retained-3']);
   });
 
-  it('replays a stored row signed by a revoked bank key within the newest archived keys', async () => {
-    store.claim.mockResolvedValue([claimSignedBy(key('old-0'))]);
-
-    await expect(
-      drainPrimaryWalletBankInbox({ env: env(expired(24, 'bank')) })
-    ).resolves.toMatchObject({ claimed: 1, deferred: 1 });
+  it('accepts exactly the same keys as ingress: every one of the 8, including the oldest', async () => {
+    const entries = expired(8, 'bank');
+    for (const index of [0, 7]) {
+      store.claim.mockResolvedValue([claimSignedBy(key(`old-${index}`))]);
+      await expect(
+        drainPrimaryWalletBankInbox({ env: env(entries) })
+      ).resolves.toMatchObject({ claimed: 1, deferred: 1 });
+    }
     expect(store.retry).not.toHaveBeenCalled();
   });
 
-  it('a key beyond the bound, or archived for another family, is not accepted by the worker', async () => {
-    store.claim.mockResolvedValue([claimSignedBy(key('old-23'))]);
-    await expect(
-      drainPrimaryWalletBankInbox({ env: env(expired(24, 'bank')) })
-    ).rejects.toThrow('signing key unavailable');
+  it('an accepted receipt stays drainable after one more rotation within the cap', async () => {
+    const seven = [
+      {
+        version: 'recent',
+        family: 'bank',
+        secret: key('recent'),
+        retiredAt: new Date(Date.now() - HOUR).toISOString(),
+      },
+      ...expired(6, 'bank'),
+    ];
+    // Accepted at ingress while inside its overlap...
+    expect(
+      verifyPiggyvestWebhookSecrets({
+        rawBody: bank.rawBody,
+        signature: sign(key('recent'), bank.rawBody),
+        env: env(seven),
+      })
+    ).toMatchObject({ status: 'verified', keyStatus: 'overlap' });
 
+    // ...then the operator rotates once more (7 -> 8 entries, still in cap).
+    const eight = [
+      ...seven,
+      {
+        version: 'newest',
+        family: 'bank',
+        secret: key('newest'),
+        retiredAt: new Date(Date.now() - 30 * 60_000).toISOString(),
+      },
+    ];
+    store.claim.mockResolvedValue([claimSignedBy(key('recent'))]);
+    await expect(
+      drainPrimaryWalletBankInbox({ env: env(eight) })
+    ).resolves.toMatchObject({ claimed: 1, deferred: 1 });
+  });
+
+  it('a 9th entry for the family rejects the archive everywhere: ingress never trusts it and the worker adds nothing', async () => {
+    const nine = expired(9, 'bank');
+    expect(
+      verifyPiggyvestWebhookSecrets({
+        rawBody: bank.rawBody,
+        signature: sign(key('old-0'), bank.rawBody),
+        env: env(nine),
+      })
+    ).toEqual({ status: 'unconfigured' });
+
+    // Current and retained keys keep draining; archive keys are refused.
+    store.claim.mockResolvedValue([claimSignedBy('retained-2')]);
+    await expect(
+      drainPrimaryWalletBankInbox({ env: env(nine) })
+    ).resolves.toMatchObject({ claimed: 1, deferred: 1 });
     store.claim.mockResolvedValue([claimSignedBy(key('old-0'))]);
     await expect(
-      drainPrimaryWalletBankInbox({ env: env(expired(24, 'interest')) })
+      drainPrimaryWalletBankInbox({ env: env(nine) })
+    ).rejects.toThrow('signing key unavailable');
+  });
+
+  it('a key archived for another family is not accepted by the bank worker', async () => {
+    store.claim.mockResolvedValue([claimSignedBy(key('old-0'))]);
+    await expect(
+      drainPrimaryWalletBankInbox({ env: env(expired(8, 'interest')) })
     ).rejects.toThrow('signing key unavailable');
   });
 
   it('the current and retained keys still verify exactly as before', async () => {
-    store.claim.mockResolvedValue([
-      claimSignedBy(bank.config.webhookSecret),
-      claimSignedBy('retained-2'),
-    ]);
-    store.claim.mockResolvedValueOnce([
-      claimSignedBy(bank.config.webhookSecret),
-    ]);
+    store.claim.mockResolvedValue([claimSignedBy(bank.config.webhookSecret)]);
 
     await expect(
       drainPrimaryWalletBankInbox({ env: env([]) })

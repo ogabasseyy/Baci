@@ -7,6 +7,7 @@ import {
   derivePiggyvestKeyVersion,
   partitionArchivedKeys,
   readWebhookKeyArchive,
+  type WebhookKeyArchiveIssue,
 } from './webhook-key-archive';
 
 interface WebhookSecretConfig {
@@ -80,6 +81,8 @@ interface CollectedKeys {
   /** Archived keys past the overlap: replay re-checks only. */
   replayOnly: PiggyvestFamilySecret[];
   misconfigured: boolean;
+  /** Why the retired-key archive could not be used, when it could not. */
+  archiveIssue?: WebhookKeyArchiveIssue;
 }
 
 export function collectPiggyvestWebhookSecretsWithStatus(
@@ -138,8 +141,10 @@ export function collectPiggyvestWebhookSecretsWithStatus(
   // Archived (retired) keys: accepted only inside the overlap window, and
   // never shadowing a key that is current under the same family.
   const archive = readWebhookKeyArchive(env);
+  let archiveIssue: WebhookKeyArchiveIssue | undefined;
   if (!archive.ok) {
     misconfigured = true;
+    archiveIssue = archive.reason;
   } else {
     const { overlap, replayOnly: expired } = partitionArchivedKeys(
       archive,
@@ -166,7 +171,7 @@ export function collectPiggyvestWebhookSecretsWithStatus(
     add(overlap, secrets, 'overlap');
     add(expired, replayOnly, 'replay-only');
   }
-  return { secrets, replayOnly, misconfigured };
+  return { secrets, replayOnly, misconfigured, archiveIssue };
 }
 
 /**

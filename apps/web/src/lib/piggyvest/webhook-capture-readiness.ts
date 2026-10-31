@@ -70,7 +70,13 @@ function keyConfiguration(evidence: WebhookCaptureEvidence) {
     replayOnlyKeys: collected.replayOnly.length,
   };
   if (collected.misconfigured) {
-    return { details, reason: 'KEY_CONFIGURATION_UNREADABLE' };
+    return {
+      details,
+      reason:
+        collected.archiveIssue === 'FAMILY_CAP_EXCEEDED'
+          ? 'KEY_ARCHIVE_FAMILY_CAP_EXCEEDED'
+          : 'KEY_CONFIGURATION_UNREADABLE',
+    };
   }
   return { details, reason: current.length === 0 ? 'NO_CURRENT_KEY' : null };
 }

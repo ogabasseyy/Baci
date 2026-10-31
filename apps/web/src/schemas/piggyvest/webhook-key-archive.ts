@@ -29,13 +29,36 @@ const archivedKeySchema = z.strictObject({
   retiredAt: z.iso.datetime({ offset: true }),
 });
 
+/**
+ * The single bound for archived keys, per family. Every layer (ingress,
+ * stored-delivery verification, the family intakes and workers) uses the
+ * full in-scope set, so the cap lives here in the config schema: an archive
+ * that exceeds it is rejected as a whole with a clear error instead of
+ * being silently truncated somewhere downstream.
+ */
+export const MAX_ARCHIVED_KEYS_PER_FAMILY = 8;
+
 export const piggyvestWebhookKeyArchiveSchema = z
   .array(archivedKeySchema)
-  .max(24)
+  .max(
+    MAX_ARCHIVED_KEYS_PER_FAMILY *
+      piggyvestWebhookKeyFamilySchema.options.length
+  )
   .refine(
     (entries) =>
       new Set(entries.map((entry) => entry.version)).size === entries.length,
     { message: 'Archived key versions must be unique' }
+  )
+  .refine(
+    (entries) =>
+      piggyvestWebhookKeyFamilySchema.options.every(
+        (family) =>
+          entries.filter((entry) => entry.family === family).length <=
+          MAX_ARCHIVED_KEYS_PER_FAMILY
+      ),
+    {
+      message: `An archive may hold at most ${MAX_ARCHIVED_KEYS_PER_FAMILY} archived keys per family`,
+    }
   );
 
 export type PiggyvestArchivedWebhookKey = z.infer<typeof archivedKeySchema>;
@@ -47,5 +70,5 @@ export type PiggyvestArchivedWebhookKey = z.infer<typeof archivedKeySchema>;
  */
 export const piggyvestArchivedVerificationSecretsSchema = z
   .array(z.string().min(1).max(4096))
-  .max(8)
+  .max(MAX_ARCHIVED_KEYS_PER_FAMILY)
   .default([]);

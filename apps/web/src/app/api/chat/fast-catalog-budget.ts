@@ -174,7 +174,7 @@ export function analyzeFastCatalogBudget(
     const amountTail = tail.slice(prefixCurrency?.length ?? 0);
     const amount = AMOUNT.exec(amountTail);
     const afterAmount = amount ? amountTail.slice(amount[0].length) : '';
-    const range = /^\s{0,64}[-–—]\s{0,64}(?:\p{Sc}\s{0,64})?\d/u.test(
+    const range = /^\s{0,64}(?:[-–—]|to\b)\s{0,64}(?:\p{Sc}\s{0,64})?\d/iu.test(
       afterAmount
     );
     if (range) hasRange = true;

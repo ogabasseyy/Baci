@@ -8,6 +8,8 @@ describe('dollar-denominated catalog budgets', () => {
   it.each([
     'budget $500-$1000',
     'budget $500 – $1000',
+    'budget $500 to $1000',
+    'budget $500 TO 1000',
     'budget $500-$1000 under $900',
   ])('clarifies unsupported ranges: %s', (budget) => {
     expect(

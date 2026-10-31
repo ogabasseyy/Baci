@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 31 October 2026 against source revision
-`4ea8ba12803d63c4e7e4398573ddbccf1a75e033`. Agentic routes now resolve the merchant through the
+`9a63e18f6d016855ef44ff4ee57de5b4690c2dc2`. Agentic routes now resolve the merchant through the
 scoped context RPC instead of a service-role client; the cited claims are
 unchanged. This is a navigation map, not authorization or proof of current
 deployment. Check the current implementation, live tool discovery and merchant

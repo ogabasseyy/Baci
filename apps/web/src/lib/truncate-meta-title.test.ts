@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { truncateMetaTitle } from './truncate-meta-title';
 
 describe('truncateMetaTitle', () => {
+  it('truncates at a word boundary without a suffix when none is given', () => {
+    expect(
+      truncateMetaTitle(
+        'Sony Alpha a7S III Mirrorless Camera Body Price in Nigeria with Warranty',
+        undefined,
+        60
+      )
+    ).toBe('Sony Alpha a7S III Mirrorless Camera Body Price in...');
+  });
+
   it('returns titles that already fit unchanged', () => {
     expect(
       truncateMetaTitle(

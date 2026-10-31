@@ -31,7 +31,7 @@ function truncateAtWord(text: string, limit: number): string {
  */
 export function truncateMetaTitle(
   title: string,
-  suffix: string,
+  suffix: string | undefined,
   maxLength: number,
   options: { dropSuffixWhenTooLong?: boolean } = {}
 ): string {

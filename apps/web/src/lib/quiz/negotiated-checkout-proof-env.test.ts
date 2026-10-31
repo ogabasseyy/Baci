@@ -47,6 +47,17 @@ describe('negotiated checkout proof environment validation', () => {
     ).toBe(false);
   });
 
+  it.each([
+    'jumia-order-sync',
+    'import-jobs',
+  ])('allows the %s worker without negotiated checkout credentials', (profile) => {
+    expect(
+      isNegotiatedCheckoutProofSecretMissing(productionPhaseOneA, {
+        BACI_WORKER_PROFILE: profile,
+      })
+    ).toBe(false);
+  });
+
   it('does not require the secret outside production phase 1a', () => {
     expect(
       isNegotiatedCheckoutProofSecretMissing(

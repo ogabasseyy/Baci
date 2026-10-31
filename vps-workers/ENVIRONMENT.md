@@ -77,3 +77,13 @@ JWT signing keys nor negotiated-checkout proof credentials. Its links use
 normalized to its origin. Verify this is the Baci application host (normally
 `https://usebaci.com`), where `/dashboard` and `/onboarding/email-preferences` are
 served, before enabling the journey. Do not point it at an unrelated storefront.
+
+## Jumia order sync and import job workers
+
+`bin/sync-jumia-orders.sh` and `bin/process-import-jobs.sh` default
+`BACI_WORKER_PROFILE` to `jumia-order-sync` and `import-jobs` (cron also sets
+them explicitly, and the import trigger server reaches the same wrapper). These
+bounded workers never serve negotiated checkout or sign agentic JWTs, so they boot
+without `QUIZ_RPC_SERVER_SECRET` while `QUIZ_PHASE` stays `1a`. Do not copy that
+secret into the worker environment to make them start; the production web app
+still requires it.

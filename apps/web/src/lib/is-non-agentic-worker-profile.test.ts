@@ -6,6 +6,8 @@ describe('isNonAgenticWorkerProfile', () => {
     'ai-storefront-jobs',
     'event-pipeline',
     'gigl-tracking',
+    'import-jobs',
+    'jumia-order-sync',
     'merchant-onboarding-emails',
     'petrock-reconciliation',
     'quiz-finalization',

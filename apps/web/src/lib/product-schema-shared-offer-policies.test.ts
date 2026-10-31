@@ -16,6 +16,7 @@ describe('buildSharedOfferPolicies', () => {
   it('defines both policies with page-scoped ids on the first variant', () => {
     const policiesFor = buildSharedOfferPolicies(
       new URL('https://shop.example/phones/x?variantId=a#top'),
+      'x',
       shipping,
       returns
     );
@@ -35,6 +36,7 @@ describe('buildSharedOfferPolicies', () => {
   it('references the first variant policies from later variants', () => {
     const policiesFor = buildSharedOfferPolicies(
       new URL('https://shop.example/phones/x'),
+      'x',
       shipping,
       returns
     );
@@ -49,15 +51,45 @@ describe('buildSharedOfferPolicies', () => {
     });
   });
 
-  it('falls back to fragment ids when the product URL is unknown', () => {
-    const policiesFor = buildSharedOfferPolicies(undefined, shipping, returns);
+  it('scopes fallback ids to the product group when the URL is unknown', () => {
+    const phone = buildSharedOfferPolicies(
+      undefined,
+      'phone x',
+      shipping,
+      returns
+    );
+    const laptop = buildSharedOfferPolicies(
+      undefined,
+      'laptop',
+      shipping,
+      returns
+    );
 
-    expect(policiesFor(1).shippingDetails).toEqual({
-      '@id': '#shipping-policy',
+    expect(phone(1).shippingDetails).toEqual({
+      '@id': '#phone%20x-shipping-policy',
     });
-    expect(policiesFor(0).hasMerchantReturnPolicy).toMatchObject({
-      '@id': '#return-policy',
+    expect(phone(0).hasMerchantReturnPolicy).toMatchObject({
+      '@id': '#phone%20x-return-policy',
       merchantReturnDays: 7,
+    });
+    expect(laptop(1).shippingDetails).toEqual({
+      '@id': '#laptop-shipping-policy',
+    });
+  });
+
+  it('keeps its own id when a policy object already carries one', () => {
+    const policiesFor = buildSharedOfferPolicies(
+      new URL('https://shop.example/phones/x'),
+      'x',
+      {
+        ...shipping,
+        '@id': 'https://elsewhere.example/#ship',
+      } as OfferShippingDetails,
+      returns
+    );
+
+    expect(policiesFor(0).shippingDetails).toMatchObject({
+      '@id': 'https://shop.example/phones/x#shipping-policy',
     });
   });
 });

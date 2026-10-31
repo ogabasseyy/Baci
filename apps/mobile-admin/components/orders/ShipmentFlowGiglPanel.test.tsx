@@ -54,11 +54,13 @@ const base = {
 };
 
 describe('ShipmentFlowGiglPanel', () => {
-  it('shows one bundled GIG price and exact wallet shortfall', () => {
+  it('shows one bundled GIG price, the balance and the top-up when the wallet is short', () => {
     render(<ShipmentFlowGiglPanel {...base} />);
     expect(screen.getByText('Ship with GIG')).toBeTruthy();
     expect(screen.getByText('₦11,000')).toBeTruthy();
-    expect(screen.getByText(/Shortfall: ₦10,000/)).toBeTruthy();
+    expect(screen.getByText('Wallet balance: ₦1,000')).toBeTruthy();
+    expect(screen.getByText('Top up ₦10,000 to book')).toBeTruthy();
+    expect(screen.queryByText('Paid from your wallet')).toBeNull();
     expect(screen.queryByText(/margin|provider cost/i)).toBeNull();
   });
 
@@ -76,8 +78,35 @@ describe('ShipmentFlowGiglPanel', () => {
     expect(
       screen.getByRole('radio', { name: /Ship with GIG.*₦48,500\.40/ })
     ).toBeTruthy();
-    expect(screen.getByText('Wallet balance: ₦10,552,284.41')).toBeTruthy();
-    expect(screen.queryByText(/Shortfall/)).toBeNull();
+  });
+
+  it('shows the service, destination and wallet payment instead of the balance', () => {
+    render(
+      <ShipmentFlowGiglPanel
+        {...base}
+        addressDraft={{ city: 'Abakaliki', state: 'Ebonyi' }}
+        quote={{ ...base.quote, serviceTier: 'GoStandard' }}
+        wallet={{ availableBalance: 10552284.41, canBook: true, shortfall: 0 }}
+      />
+    );
+
+    expect(screen.getByText('GoStandard · 2 days')).toBeTruthy();
+    expect(screen.getByText('To Abakaliki, Ebonyi')).toBeTruthy();
+    expect(screen.getByText('Paid from your wallet')).toBeTruthy();
+    expect(screen.queryByText(/Wallet balance/)).toBeNull();
+  });
+
+  it('leaves out the destination line when the order has no city or state', () => {
+    render(
+      <ShipmentFlowGiglPanel
+        {...base}
+        addressDraft={{ city: ' ', state: '' }}
+        wallet={{ availableBalance: 20000, canBook: true, shortfall: 0 }}
+      />
+    );
+
+    expect(screen.queryByText(/^To /)).toBeNull();
+    expect(screen.getByText('Express · 2 days')).toBeTruthy();
   });
 
   it('shows only server-reported accessible address fields', () => {

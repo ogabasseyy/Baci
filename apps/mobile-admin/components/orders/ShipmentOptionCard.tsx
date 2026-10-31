@@ -12,6 +12,8 @@ export interface ShipmentOptionDetail {
 }
 
 interface ShipmentOptionCardProps {
+  /** A second muted line under the description, e.g. the destination. */
+  caption?: string;
   colors: ThemeColors;
   description: string;
   details?: ShipmentOptionDetail[];
@@ -24,6 +26,7 @@ interface ShipmentOptionCardProps {
 }
 
 export function ShipmentOptionCard({
+  caption,
   colors,
   description,
   details = [],
@@ -37,6 +40,7 @@ export function ShipmentOptionCard({
   const accessibilityLabel = [
     title,
     description,
+    caption,
     price,
     ...details.map((detail) => detail.text),
   ]
@@ -84,6 +88,13 @@ export function ShipmentOptionCard({
         >
           {description}
         </Text>
+        {caption ? (
+          <Text
+            style={[styles.optionDescription, { color: colors.textSecondary }]}
+          >
+            {caption}
+          </Text>
+        ) : null}
         {price ? (
           <Text style={[cardStyles.price, { color: colors.text }]}>
             {price}

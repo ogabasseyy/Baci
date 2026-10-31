@@ -17,20 +17,27 @@ import {
 const formatPrice = (amount: number) =>
   formatMerchantPrice(amount, { payout_currency: 'NGN' });
 
+// The balance only matters when it cannot cover the delivery.
 function getWalletDetails(wallet: Props['wallet']): ShipmentOptionDetail[] {
   if (!wallet) return [];
-  const balance: ShipmentOptionDetail = {
-    text: `Wallet balance: ${formatPrice(wallet.availableBalance)}`,
-  };
-  return wallet.canBook
-    ? [balance]
-    : [
-        balance,
-        {
-          text: `Shortfall: ${formatPrice(wallet.shortfall)}`,
-          tone: 'warning',
-        },
-      ];
+  if (wallet.canBook) return [{ text: 'Paid from your wallet' }];
+  return [
+    { text: `Wallet balance: ${formatPrice(wallet.availableBalance)}` },
+    {
+      text: `Top up ${formatPrice(wallet.shortfall)} to book`,
+      tone: 'warning',
+    },
+  ];
+}
+
+function getDestination(
+  address: Partial<OrderGiglReceiver>
+): string | undefined {
+  const place = [address.city, address.state]
+    .map((part) => part?.trim())
+    .filter(Boolean)
+    .join(', ');
+  return place ? `To ${place}` : undefined;
 }
 
 interface Props {
@@ -106,7 +113,7 @@ export function ShipmentFlowGiglPanel({
   const { colors } = useTheme();
   const loading = state === 'loading';
   const description = quote
-    ? `${quote.displayName} · ${quote.estimatedDays} day${quote.estimatedDays === 1 ? '' : 's'}`
+    ? `${quote.serviceTier || quote.displayName} · ${quote.estimatedDays} day${quote.estimatedDays === 1 ? '' : 's'}`
     : loading
       ? 'Getting a fresh delivery price…'
       : 'Get a fresh GIG delivery price for this order.';
@@ -114,6 +121,7 @@ export function ShipmentFlowGiglPanel({
   return (
     <View>
       <ShipmentOptionCard
+        caption={quote ? getDestination(addressDraft) : undefined}
         colors={colors}
         description={description}
         details={quote ? getWalletDetails(wallet) : []}

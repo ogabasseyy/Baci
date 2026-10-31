@@ -110,6 +110,17 @@ describe('ShipmentOptionCard', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows the caption under the description and reads it in the accessibility label', () => {
+    renderCard({ caption: 'To Abakaliki, Ebonyi', price: '₦48,600' });
+
+    expect(screen.getByText('To Abakaliki, Ebonyi')).toBeInTheDocument();
+    expect(
+      screen.getByRole('radio', {
+        name: 'Ship with GIG. GIG Logistics · 2 days. To Abakaliki, Ebonyi. ₦48,600',
+      })
+    ).toBeInTheDocument();
+  });
+
   it('colours warning details with the warning colour and others as secondary text', () => {
     renderCard({
       details: [

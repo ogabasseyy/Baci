@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   store: vi.fn(),
   provider: vi.fn(),
   wallet: vi.fn(),
+  lookup: vi.fn(),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
@@ -37,6 +38,9 @@ vi.mock('@/lib/piggyvest/primary-wallet-provider', () => ({
 }));
 vi.mock('@/lib/piggyvest/wallets', () => ({
   retrievePiggyvestWallet: mocks.wallet,
+}));
+vi.mock('@/lib/piggyvest/customers', () => ({
+  findPiggyvestCustomersByThirdPartyIdentifier: mocks.lookup,
 }));
 
 const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
@@ -116,6 +120,11 @@ describe('primary wallet onboarding interest routing API', () => {
     expect(mocks.wallet).toHaveBeenCalledWith(
       { token: 'test-token', baseUrl: 'https://staging.piggyvest.business' },
       'created-wallet'
+    );
+    await command.findCustomers('baci:test-integration:test-customer');
+    expect(mocks.lookup).toHaveBeenCalledWith(
+      { token: 'test-token', baseUrl: 'https://staging.piggyvest.business' },
+      'baci:test-integration:test-customer'
     );
   });
 

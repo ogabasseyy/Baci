@@ -26,6 +26,22 @@ function reclaimedExisting() {
   return input;
 }
 
+// A contradicted wallet holds a real DVA: its ids are kept (routing pending,
+// then rejected) for review and closure, never usable and never accepted.
+function expectKeptForReview(input: ReturnType<typeof onboardingFixture>) {
+  expect(input.storage.recordRoutingPending).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      providerCustomerId: 'customer-fixture',
+      providerWalletId: 'wallet-fixture',
+    })
+  );
+  expect(input.storage.resolveRoutingPending).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ routed: false })
+  );
+  expect(input.storage.recordRejected).not.toHaveBeenCalled();
+  expect(input.storage.recordAccepted).not.toHaveBeenCalled();
+}
+
 const REVIEW = {
   status: 'conflict',
   code: 'INTEREST_ROUTING_REVIEW_REQUIRED',
@@ -86,8 +102,7 @@ describe('primary wallet onboarding interest routing', () => {
     const input = onboardingFixture();
     input.retrieveWallet.mockResolvedValue(routedWallet(overrides));
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual(REVIEW);
-    expect(input.storage.recordRejected).toHaveBeenCalledOnce();
-    expect(input.storage.recordAccepted).not.toHaveBeenCalled();
+    expectKeptForReview(input);
     expect(input.storage.recordUncertain).not.toHaveBeenCalled();
   });
 
@@ -103,7 +118,18 @@ describe('primary wallet onboarding interest routing', () => {
     const input = reclaimedExisting();
     input.retrieveWallet.mockResolvedValue(routedWallet(overrides));
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual(REVIEW);
+    expectKeptForReview(input);
+  });
+
+  it('still rejects a contradicted wallet when its ids cannot be kept', async () => {
+    const input = onboardingFixture();
+    input.storage.recordRoutingPending.mockResolvedValue(false);
+    input.retrieveWallet.mockResolvedValue(
+      routedWallet({ interest_payout_wallet: OTHER_WALLET_ID })
+    );
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual(REVIEW);
     expect(input.storage.recordRejected).toHaveBeenCalledOnce();
+    expect(input.storage.resolveRoutingPending).not.toHaveBeenCalled();
     expect(input.storage.recordAccepted).not.toHaveBeenCalled();
   });
 
@@ -182,14 +208,21 @@ describe('primary wallet onboarding interest routing', () => {
     expect(input.storage.recordRejected).not.toHaveBeenCalled();
   });
 
-  it('binds the payout wallet into the idempotency fingerprint', async () => {
+  it('keeps the payout wallet out of the fingerprint, so correcting it never strands an intent', async () => {
     const first = onboardingFixture();
     const second = onboardingFixture();
     second.configuration.interestPayoutWalletId = OTHER_WALLET_ID;
     await onboardPiggyvestPrimaryWallet(first);
     await onboardPiggyvestPrimaryWallet(second);
-    expect(first.storage.claim.mock.calls[0][0].requestFingerprint).not.toBe(
+    expect(first.storage.claim.mock.calls[0][0].requestFingerprint).toBe(
       second.storage.claim.mock.calls[0][0].requestFingerprint
+    );
+    // The customer's own identity still binds it.
+    const third = onboardingFixture();
+    third.request.bvn = '00000000001';
+    await onboardPiggyvestPrimaryWallet(third);
+    expect(third.storage.claim.mock.calls[0][0].requestFingerprint).not.toBe(
+      first.storage.claim.mock.calls[0][0].requestFingerprint
     );
   });
 });

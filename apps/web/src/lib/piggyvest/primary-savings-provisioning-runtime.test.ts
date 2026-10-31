@@ -130,7 +130,7 @@ it('wires durable storage and documented provider adapters with a fixed environm
     mode: 'recover',
   });
   const adapter = mocks.provision.mock.calls[0][0];
-  await adapter.listWallets('customer');
+  await adapter.listWallets('customer', provisioningFixture.walletName);
   await adapter.retrieveWallet('wallet');
   await adapter.retrieveAccounts('wallet');
   await adapter.createWallet({

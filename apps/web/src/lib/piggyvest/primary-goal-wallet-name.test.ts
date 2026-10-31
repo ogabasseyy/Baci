@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildPiggyvestPlanWalletName } from './plan-wallet-name';
-import { buildPrimaryGoalWalletName } from './primary-goal-wallet-name';
+import {
+  buildPrimaryGoalWalletName,
+  isPrimaryGoalWalletName,
+} from './primary-goal-wallet-name';
 import { matchesProviderWalletName } from './provider-wallet-name';
 import { PIGGYVEST_SUBACCOUNT_NAME_MAX_CHARACTERS } from './provider-wallet-name.constants';
 
@@ -59,5 +62,40 @@ describe('primary goal wallet name', () => {
     expect(
       matchesProviderWalletName(`baci-save:${integrationId}:${goalId}`, GOLDEN)
     ).toBe(false);
+  });
+
+  describe('stored name check', () => {
+    const legacy = `baci-save:${integrationId}:${goalId}`;
+    const goal = (hasProviderWallet: boolean) => ({
+      integrationId,
+      goalId,
+      hasProviderWallet,
+    });
+
+    it.each([
+      true,
+      false,
+    ])('accepts the current name whether or not a wallet is held (%s)', (held) => {
+      expect(isPrimaryGoalWalletName(GOLDEN, goal(held))).toBe(true);
+    });
+
+    it('accepts the legacy name only on an intent that holds a provider wallet', () => {
+      expect(isPrimaryGoalWalletName(legacy, goal(true))).toBe(true);
+      expect(isPrimaryGoalWalletName(legacy.toUpperCase(), goal(true))).toBe(
+        true
+      );
+      expect(isPrimaryGoalWalletName(legacy, goal(false))).toBe(false);
+    });
+
+    it.each([
+      `baci-save:${integrationId}:00000000-0000-4000-8000-000000000007`,
+      buildPrimaryGoalWalletName(
+        integrationId,
+        '00000000-0000-4000-8000-000000000007'
+      ),
+      'baci-save',
+    ])('refuses another goal name %j', (name) => {
+      expect(isPrimaryGoalWalletName(name, goal(true))).toBe(false);
+    });
   });
 });

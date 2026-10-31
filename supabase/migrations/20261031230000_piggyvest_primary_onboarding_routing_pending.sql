@@ -6,10 +6,17 @@
 -- customer had to resubmit their BVN to finish setup.
 --
 -- New state 'routing_pending' keeps the provider customer and wallet ids of
--- such a wallet without making it usable: every reader of usable wallets
--- (read_onboarding, inflows, savings, deletion and DVA closure) accepts only
--- 'accepted' or 'verified', and claim_onboarding reports it as pending
--- without ever re-dispatching creation.
+-- such a wallet without making it usable: every spend, credit or usable read
+-- (read_onboarding, verify_onboarding, inflows, bank inbox, savings, card,
+-- interest) accepts only 'accepted' or 'verified', and claim_onboarding
+-- reports it as pending without ever re-dispatching creation.
+--
+-- Wallet-bearing protections, by contrast, must follow the provider wallet,
+-- not the state: a routing_pending intent, and one rejected over its routing,
+-- still hold a real PiggyVest wallet with an open DVA. The customer-deletion
+-- guard and both DVA-closure checks (20261008095500) are redefined to cover
+-- every intent that holds provider ids, so the DVA must be closed before the
+-- customer can be deleted, whatever the onboarding state.
 --   * record_onboarding_routing_pending: dispatched -> routing_pending, ids
 --     kept together with the payout wallet the customer was created with
 --     (settings are fixed at creation, so a later configuration change must
@@ -18,7 +25,8 @@
 --     wallet, read-only, for the scoped owner.
 --   * resolve_onboarding_routing: after the application re-reads the wallet,
 --     routing_pending -> accepted when the routing is proven, or -> rejected
---     (ids cleared, terminal review) when the readback contradicts it.
+--     (terminal review; the ids are kept for review and DVA closure) when
+--     the readback contradicts it.
 -- All three are SECURITY DEFINER with a pinned search_path and are executable
 -- only by the onboarding provisioner.
 BEGIN;
@@ -45,7 +53,8 @@ BEGIN
     AND pg_catalog.pg_get_constraintdef(constraint_entry.oid) LIKE '%claim_token IS NOT NULL%';
   EXECUTE format(
     'ALTER TABLE piggyvest_primary.onboarding_intents DROP CONSTRAINT %I, ADD CHECK ((state = ''dispatched'' AND claim_token IS NOT NULL AND provider_customer_id IS NULL AND provider_wallet_id IS NULL)'
-    ' OR (state IN (''unknown'', ''rejected'') AND claim_token IS NULL AND provider_customer_id IS NULL AND provider_wallet_id IS NULL)'
+    ' OR (state = ''unknown'' AND claim_token IS NULL AND provider_customer_id IS NULL AND provider_wallet_id IS NULL)'
+    ' OR (state = ''rejected'' AND claim_token IS NULL AND (provider_customer_id IS NULL) = (provider_wallet_id IS NULL))'
     ' OR (state IN (''accepted'', ''verified'', ''routing_pending'') AND claim_token IS NULL AND provider_customer_id IS NOT NULL AND provider_wallet_id IS NOT NULL))',
     constraint_name
   );
@@ -101,8 +110,6 @@ BEGIN
   END IF;
   UPDATE piggyvest_primary.onboarding_intents SET
     state = CASE WHEN routed THEN 'accepted' ELSE 'rejected' END,
-    provider_customer_id = CASE WHEN routed THEN provider_customer_id ELSE NULL END,
-    provider_wallet_id = CASE WHEN routed THEN provider_wallet_id ELSE NULL END,
     routing_payout_wallet_id = NULL,
     updated_at = pg_catalog.clock_timestamp()
   WHERE integration_id = (scope->>'integrationId')::uuid
@@ -112,6 +119,73 @@ BEGIN
     AND provider_wallet_id = proof->>'providerWalletId';
   RETURN FOUND;
 END $$;
+
+-- Wallet-bearing protections, redefined from 20261008095500 so they key on
+-- the provider wallet instead of the onboarding state. Bodies are otherwise
+-- unchanged; the unsettled-deposit check is preserved verbatim.
+CREATE OR REPLACE FUNCTION piggyvest_primary.guard_intent_provider_closure()
+RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog AS $$
+BEGIN
+  IF TG_OP = 'INSERT' AND NEW.provider_closed_at IS NOT NULL THEN
+    RAISE EXCEPTION 'provider DVA closure requires a mapped intent' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'UPDATE' AND NEW.provider_closed_at IS DISTINCT FROM OLD.provider_closed_at THEN
+    IF OLD.provider_closed_at IS NOT NULL THEN
+      RAISE EXCEPTION 'provider DVA closure is immutable' USING ERRCODE = '23514';
+    END IF;
+    IF NEW.provider_wallet_id IS NULL OR NEW.provider_customer_id IS NULL THEN
+      RAISE EXCEPTION 'provider DVA closure requires a mapped intent' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+CREATE OR REPLACE FUNCTION piggyvest_primary.attest_provider_dva_closure(p_intent uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
+DECLARE intent piggyvest_primary.onboarding_intents%ROWTYPE;
+BEGIN
+  IF p_intent IS NULL THEN
+    RAISE EXCEPTION 'invalid closure intent' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO STRICT intent FROM piggyvest_primary.onboarding_intents WHERE id = p_intent FOR UPDATE;
+  IF intent.provider_wallet_id IS NULL OR intent.provider_customer_id IS NULL THEN
+    RAISE EXCEPTION 'provider DVA closure requires a mapped intent' USING ERRCODE = '22023';
+  END IF;
+  IF intent.provider_closed_at IS NOT NULL THEN RETURN; END IF;
+  UPDATE piggyvest_primary.onboarding_intents
+    SET provider_closed_at = clock_timestamp(), updated_at = clock_timestamp()
+    WHERE id = p_intent;
+END $$;
+CREATE OR REPLACE FUNCTION piggyvest_primary.block_unsettled_bank_inbox_customer_deletion()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM piggyvest_primary.bank_signed_inbox inbox
+    WHERE inbox.state IN ('pending','processing')
+      AND EXISTS (
+        SELECT 1 FROM piggyvest_primary.onboarding_intents intent
+        WHERE intent.customer_id = OLD.id
+          AND intent.provider_wallet_id = (convert_from(inbox.payload,'UTF8')::jsonb->>'pvb_wallet')
+          AND intent.provider_customer_id = (convert_from(inbox.payload,'UTF8')::jsonb->>'customer_id')
+      )
+  ) THEN
+    RAISE EXCEPTION 'cannot delete customer with unsettled bank deposits' USING ERRCODE = 'P0001';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM piggyvest_primary.onboarding_intents intent
+    WHERE intent.customer_id = OLD.id
+      AND intent.provider_wallet_id IS NOT NULL
+      AND intent.provider_closed_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'cannot delete customer with open provider DVA' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN OLD;
+END $$;
+REVOKE ALL ON FUNCTION piggyvest_primary.guard_intent_provider_closure(),
+  piggyvest_primary.block_unsettled_bank_inbox_customer_deletion(),
+  piggyvest_primary.attest_provider_dva_closure(uuid)
+  FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.attest_provider_dva_closure(uuid)
+  TO piggyvest_primary_provisioner;
 
 REVOKE ALL ON FUNCTION piggyvest_primary.record_onboarding_routing_pending(jsonb,uuid,uuid,text,text,text),
   piggyvest_primary.read_onboarding_routing(jsonb),

@@ -6,8 +6,12 @@
 --     that state is never exposed as a usable wallet (read_onboarding NULL);
 --   * claim_onboarding reports it pending and never re-dispatches creation;
 --   * only the scoped owner's exact kept ids resolve it: proven routing makes
---     it 'accepted' (usable), a contradiction makes it 'rejected' (ids
---     cleared, terminal);
+--     it 'accepted' (usable), a contradiction makes it 'rejected' (terminal,
+--     ids kept for review and DVA closure);
+--   * wallet-bearing protections follow the provider wallet, not the state:
+--     DVA closure can be attested for routing-pending and routing-rejected
+--     intents, and the deletion guard keys on the provider wallet; every
+--     spend, credit or usable predicate still ignores routing_pending;
 --   * stale claim tokens and mismatched ids change nothing;
 --   * grants and shape, asserted through the catalog (a denied EXECUTE cannot
 --     be trapped on the replay image, so no denial is probed by calling).
@@ -57,14 +61,17 @@ $$;
 -- merchant insert guards need a service_role claim, as in the other suites.
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 INSERT INTO auth.users(id) VALUES
-  ('a3300000-0000-4000-8000-000000000021'), ('a3300000-0000-4000-8000-000000000022');
+  ('a3300000-0000-4000-8000-000000000021'), ('a3300000-0000-4000-8000-000000000022'),
+  ('a3300000-0000-4000-8000-000000000023');
 INSERT INTO public.merchants(id, email)
   VALUES ('a3300000-0000-4000-8000-000000000002', 'routing-pending@example.com');
 INSERT INTO public.customers(id, merchant_id, user_id) VALUES
   ('a3300000-0000-4000-8000-000000000011', 'a3300000-0000-4000-8000-000000000002',
    'a3300000-0000-4000-8000-000000000021'),
   ('a3300000-0000-4000-8000-000000000012', 'a3300000-0000-4000-8000-000000000002',
-   'a3300000-0000-4000-8000-000000000022');
+   'a3300000-0000-4000-8000-000000000022'),
+  ('a3300000-0000-4000-8000-000000000013', 'a3300000-0000-4000-8000-000000000002',
+   'a3300000-0000-4000-8000-000000000023');
 INSERT INTO piggyvest_primary.integrations(id, merchant_id, business_id, environment, executor_login, enabled)
   VALUES ('a3300000-0000-4000-8000-000000000005', 'a3300000-0000-4000-8000-000000000002',
     'routing-pending-business', 'staging', session_user, true);
@@ -149,12 +156,70 @@ BEGIN
     'second routing-pending ids not recorded');
   PERFORM pg_temp.check(piggyvest_primary.resolve_onboarding_routing(pg_temp.scope(2),
     pg_temp.ids('pv-customer-2', 'pv-wallet-2'), false), 'a contradicted routing did not resolve');
-  PERFORM pg_temp.check(pg_temp.state(2) = 'rejected:-:-', 'not rejected with cleared ids: ' || pg_temp.state(2));
+  PERFORM pg_temp.check(pg_temp.state(2) = 'rejected:pv-customer-2:pv-wallet-2', 'not rejected with kept ids: ' || pg_temp.state(2));
+  PERFORM pg_temp.check(piggyvest_primary.read_onboarding(pg_temp.scope(2)) IS NULL, 'a rejected wallet must not be usable');
   PERFORM pg_temp.check(piggyvest_primary.claim_onboarding(pg_temp.scope(2), repeat('d', 64)) = '{"status":"conflict"}'::jsonb,
     'a rejected routing must stay in review');
 END $$;
 
--- 5. Shape, constraints and grants, through the catalog only.
+-- 5. DVA closure follows the provider wallet: routing-pending and
+--    routing-rejected intents can be attested closed before deletion.
+DO $$
+DECLARE v_claim jsonb;
+BEGIN
+  v_claim := piggyvest_primary.claim_onboarding(pg_temp.scope(3), repeat('e', 64));
+  PERFORM pg_temp.check(piggyvest_primary.record_onboarding_routing_pending(pg_temp.scope(3),
+    (v_claim->>'intentId')::uuid, (v_claim->>'claimToken')::uuid, 'pv-customer-3', 'pv-wallet-3', '01JBZ8Q5W3X9R2K4M6N8P0T2V4'),
+    'third routing-pending ids not recorded');
+  PERFORM piggyvest_primary.attest_provider_dva_closure((v_claim->>'intentId')::uuid);
+  PERFORM pg_temp.check(
+    (SELECT provider_closed_at IS NOT NULL FROM piggyvest_primary.onboarding_intents WHERE id = (v_claim->>'intentId')::uuid),
+    'DVA closure must be attestable for a routing-pending wallet');
+  PERFORM piggyvest_primary.attest_provider_dva_closure(
+    (SELECT id FROM piggyvest_primary.onboarding_intents
+     WHERE integration_id = 'a3300000-0000-4000-8000-000000000005'
+       AND customer_id = 'a3300000-0000-4000-8000-000000000012'));
+  PERFORM pg_temp.check(
+    (SELECT provider_closed_at IS NOT NULL FROM piggyvest_primary.onboarding_intents
+     WHERE integration_id = 'a3300000-0000-4000-8000-000000000005'
+       AND customer_id = 'a3300000-0000-4000-8000-000000000012'),
+    'DVA closure must be attestable for a routing-rejected wallet');
+END $$;
+
+-- 6. Wallet-bearing protections key on the provider wallet; every spend,
+--    credit or usable predicate still excludes routing_pending.
+DO $$
+DECLARE v_name text;
+BEGIN
+  FOREACH v_name IN ARRAY ARRAY[
+    'block_unsettled_bank_inbox_customer_deletion', 'attest_provider_dva_closure', 'guard_intent_provider_closure'
+  ] LOOP
+    PERFORM pg_temp.check(
+      (SELECT bool_and(pg_catalog.pg_get_functiondef(p.oid) LIKE '%provider_wallet_id IS NULL%'
+                       OR pg_catalog.pg_get_functiondef(p.oid) LIKE '%provider_wallet_id IS NOT NULL%')
+         AND bool_and(pg_catalog.pg_get_functiondef(p.oid) NOT LIKE '%''accepted''%')
+       FROM pg_catalog.pg_proc p WHERE p.pronamespace = 'piggyvest_primary'::regnamespace AND p.proname = v_name),
+      v_name || ' must follow the provider wallet, not the onboarding state');
+  END LOOP;
+  FOREACH v_name IN ARRAY ARRAY[
+    'read_onboarding', 'verify_onboarding', 'apply_inflow', 'enqueue_bank_inbox', 'process_bank_inbox',
+    'assert_savings_scope', 'assert_goal_wallet_scope', 'read_dispatched_savings',
+    'find_dispatched_savings_by_reference', 'release_failed_savings', 'settle_savings',
+    'eligible_interest_crosswalk'
+  ] LOOP
+    PERFORM pg_temp.check(
+      (SELECT count(*) > 0 AND bool_and(pg_catalog.pg_get_functiondef(p.oid) NOT LIKE '%routing_pending%')
+       FROM pg_catalog.pg_proc p WHERE p.pronamespace = 'piggyvest_primary'::regnamespace AND p.proname = v_name),
+      v_name || ' must keep routing_pending wallets unusable');
+  END LOOP;
+  PERFORM pg_temp.check(
+    (SELECT count(DISTINCT p.proname) = 5 AND bool_and(pg_catalog.pg_get_functiondef(p.oid) NOT LIKE '%routing_pending%')
+     FROM pg_catalog.pg_proc p WHERE p.pronamespace = 'piggyvest_primary_card'::regnamespace
+       AND p.proname IN ('dispatch_context', 'reserve', 'select_ready_transfers', 'settle_custody_ledger_impl', 'transfer_context')),
+    'card spend predicates must keep routing_pending wallets unusable');
+END $$;
+
+-- 7. Shape, constraints and grants, through the catalog only.
 DO $$
 DECLARE
   v_fn regprocedure;

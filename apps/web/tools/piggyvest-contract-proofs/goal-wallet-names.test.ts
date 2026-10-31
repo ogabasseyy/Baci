@@ -42,6 +42,25 @@ describe('harness goal wallet names', () => {
     );
   });
 
+  it.each([
+    33, 36,
+  ])('keeps the readable unsuffixed name of a %i-character key that already fit', (length) => {
+    // Earlier runs created and look up exactly this name; hashing it would
+    // miss the existing wallet and create a duplicate.
+    const qaKey = 'q'.repeat(length);
+    expect(goalWalletBaseName(qaKey)).toBe(`pvbproof-goal-${qaKey}`);
+    expect(goalWalletName(goalWalletBaseName(qaKey))).toHaveLength(14 + length);
+  });
+
+  it('refuses a suffix that would push a readable name over the limit instead of sending it', () => {
+    expect(() =>
+      goalWalletName(
+        goalWalletBaseName('q'.repeat(36)),
+        p7GoalSuffix('unset', 1)
+      )
+    ).toThrow();
+  });
+
   it('hashes the full key when the readable name would not fit, and stays distinct', () => {
     const a = goalWalletBaseName(longestKey);
     const b = goalWalletBaseName(`${'k'.repeat(63)}j`);

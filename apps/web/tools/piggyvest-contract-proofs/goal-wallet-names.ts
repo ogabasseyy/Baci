@@ -8,19 +8,18 @@ import { PIGGYVEST_SUBACCOUNT_NAME_MAX_CHARACTERS as MAX } from '@/lib/piggyvest
  */
 
 const PREFIX = 'pvbproof-goal-';
-// Room reserved for the suffix a proof appends ('-u' or '-x' plus a 1-2
-// digit attempt) when choosing the base name.
-const SUFFIX_MAX = 4;
 
 /**
- * Keeps the readable `pvbproof-goal-<qaKey>` whenever a suffix still fits,
- * so goal wallets created earlier are found by name; a longer key (up to the
- * journal's 64 characters) is hashed in full, never truncated, so two keys
- * sharing a prefix never share a goal wallet.
+ * Keeps the readable `pvbproof-goal-<qaKey>` whenever it fits on its own, so
+ * the unsuffixed goal wallets earlier runs created are still found by that
+ * exact name; a longer key (up to the journal's 64 characters) is hashed in
+ * full, never truncated, so two keys sharing a prefix never share a goal
+ * wallet. Suffixed names (proof 7, whose derived keys always leave room) go
+ * through goalWalletName, which refuses anything over the limit.
  */
 export function goalWalletBaseName(qaKey: string): string {
   const readable = `${PREFIX}${qaKey}`;
-  if (readable.length + SUFFIX_MAX <= MAX) return readable;
+  if (readable.length <= MAX) return readable;
   const digest = createHash('sha256').update(qaKey).digest('hex');
   return `${PREFIX}h${digest.slice(0, 24)}`;
 }

@@ -1,5 +1,6 @@
 import 'server-only';
 import z from 'zod';
+import { piggyvestCustomerLookupSchema } from '@/schemas/piggyvest-customer-lookup';
 import { type PiggyvestClientConfig, piggyvestRequest } from './client';
 
 /**
@@ -69,5 +70,22 @@ export function createPiggyvestCustomer(
       },
       query: { returnIfExist: String(parsed.returnIfExist) },
     }
+  );
+}
+
+/**
+ * Lists the provider customers carrying our third_party_identifier. Read
+ * only; callers decide what an empty, single or ambiguous answer proves.
+ */
+export function findPiggyvestCustomersByThirdPartyIdentifier(
+  config: PiggyvestClientConfig,
+  thirdPartyIdentifier: string
+): Promise<z.infer<typeof piggyvestCustomerLookupSchema>> {
+  const identifier = z.string().min(1).max(200).parse(thirdPartyIdentifier);
+  return piggyvestRequest(
+    config,
+    piggyvestCustomerLookupSchema,
+    '/api/v1/customers',
+    { query: { third_party_identifier: identifier } }
   );
 }

@@ -17,6 +17,22 @@ export function routedWallet(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// Our idempotency identifier for the fixture scope.
+export const THIRD_PARTY_IDENTIFIER =
+  'baci:d91d9e87-8e0d-44de-9b84-1e1d709633d2:e648eb14-928a-427b-9719-b105f6d4b8b4';
+
+export function customerListing(
+  ids: string[],
+  { hasNextPage = false, identifier = THIRD_PARTY_IDENTIFIER } = {}
+) {
+  return {
+    paginatedPayload: {
+      edges: ids.map((id) => ({ id, third_party_identifier: identifier })),
+      pageInfo: { hasNextPage },
+    },
+  };
+}
+
 export function onboardingFixture() {
   return {
     configuration: {
@@ -47,6 +63,7 @@ export function onboardingFixture() {
       recordAccepted: vi.fn().mockResolvedValue(true),
       recordUncertain: vi.fn().mockResolvedValue(undefined),
       recordRoutingPending: vi.fn().mockResolvedValue(true),
+      resolveRoutingPending: vi.fn().mockResolvedValue(true),
       recordRejected: vi.fn().mockResolvedValue(undefined),
       releaseIntent: vi.fn().mockResolvedValue(true),
     },
@@ -56,5 +73,10 @@ export function onboardingFixture() {
       new_customer: true,
     }),
     retrieveWallet: vi.fn().mockResolvedValue(routedWallet()),
+    // A reclaim first asks PiggyVest whether the customer already exists;
+    // by default it finds the one the earlier dispatch created.
+    findCustomers: vi
+      .fn()
+      .mockResolvedValue(customerListing(['customer-fixture'])),
   };
 }

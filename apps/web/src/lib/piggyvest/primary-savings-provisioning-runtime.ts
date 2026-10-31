@@ -1,6 +1,5 @@
 import 'server-only';
 import { primarySavingsProvisioningSchemas as schemas } from '@/schemas/primary-savings-provisioning';
-import { buildPrimaryGoalWalletName } from './primary-goal-wallet-name';
 import { provisionPrimarySavingsWallet } from './primary-savings-provisioning';
 import { createPrimarySavingsProvisioningExecutor } from './primary-savings-provisioning-executor';
 import { listPrimarySavingsProvisioningWallets } from './primary-savings-provisioning-pagination';
@@ -76,10 +75,13 @@ export async function runPrimarySavingsProvisioning(input: {
       execute: createPrimarySavingsProvisioningExecutor(configuration),
     }),
     createWallet: (request) => createPiggyvestWallet(provider, request),
-    listWallets: (customerId) =>
+    // Lists by the intent's stored name, which provisioning has already
+    // checked belongs to this goal (the current name, or a wallet-bound
+    // legacy one).
+    listWallets: (customerId, walletName) =>
       listPrimarySavingsProvisioningWallets(provider, {
         customerId,
-        walletName: buildPrimaryGoalWalletName(scope.integrationId, goalId),
+        walletName,
       }),
     retrieveWallet: (walletId) => retrievePiggyvestWallet(provider, walletId),
     retrieveAccounts: (walletId) =>

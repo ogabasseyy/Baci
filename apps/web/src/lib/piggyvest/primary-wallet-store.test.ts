@@ -161,4 +161,27 @@ describe('primary wallet storage boundary', () => {
     ).rejects.toThrow('Primary wallet storage unavailable');
     expect(execute).not.toHaveBeenCalled();
   });
+
+  it('resolves a routing-pending wallet through the fenced RPC with only its kept ids', async () => {
+    const execute = vi.fn().mockResolvedValue({ rows: [{ result: true }] });
+    await expect(
+      createPrimaryWalletStore({ scope, execute }).resolveRoutingPending({
+        ...scope,
+        providerCustomerId: 'provider-customer',
+        providerWalletId: 'provider-wallet',
+        routed: false,
+      })
+    ).resolves.toBe(true);
+    expect(execute).toHaveBeenCalledWith(
+      expect.stringContaining('piggyvest_primary.resolve_onboarding_routing'),
+      [
+        JSON.stringify(scope),
+        JSON.stringify({
+          providerCustomerId: 'provider-customer',
+          providerWalletId: 'provider-wallet',
+        }),
+        'false',
+      ]
+    );
+  });
 });

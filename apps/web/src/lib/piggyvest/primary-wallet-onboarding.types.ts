@@ -47,6 +47,14 @@ export interface PrimaryWalletOnboardingStorage {
       interestPayoutWalletId: string;
     }
   ): Promise<boolean>;
+  /** Routing-pending only: accepted when routed, else rejected (ids kept). */
+  resolveRoutingPending(
+    input: PrimaryWalletIntentScope & {
+      providerCustomerId: string;
+      providerWalletId: string;
+      routed: boolean;
+    }
+  ): Promise<boolean>;
   recordRejected(
     input: PrimaryWalletIntentScope & {
       intentId: string;

@@ -23,3 +23,24 @@ export function buildPrimaryGoalWalletName(
     throw new Error('Goal wallet name exceeds the PiggyVest limit');
   return name;
 }
+
+/**
+ * Whether a goal intent's stored wallet name is this goal's. New intents
+ * carry the current name; the pre-short-name 'baci-save:<integration>:<goal>'
+ * survives (migration 20261031221500) only on intents that already hold a
+ * provider wallet, so it is accepted only there.
+ */
+export function isPrimaryGoalWalletName(
+  storedName: string,
+  goal: { integrationId: string; goalId: string; hasProviderWallet: boolean }
+): boolean {
+  if (
+    storedName === buildPrimaryGoalWalletName(goal.integrationId, goal.goalId)
+  )
+    return true;
+  return (
+    goal.hasProviderWallet &&
+    storedName.toLowerCase() ===
+      `baci-save:${goal.integrationId.toLowerCase()}:${goal.goalId.toLowerCase()}`
+  );
+}

@@ -1,7 +1,7 @@
 import 'server-only';
 import { primarySavingsProvisioningSchemas as schemas } from '@/schemas/primary-savings-provisioning';
 import { PiggyvestApiError } from './client';
-import { buildPrimaryGoalWalletName } from './primary-goal-wallet-name';
+import { isPrimaryGoalWalletName } from './primary-goal-wallet-name';
 import type { createPrimarySavingsProvisioningStore } from './primary-savings-provisioning-store';
 import { matchesProviderWalletName } from './provider-wallet-name';
 import type { CreatePiggyvestWalletInput } from './wallets';
@@ -23,7 +23,7 @@ type Input = {
   interestAccepted?: boolean;
   store: ReturnType<typeof createPrimarySavingsProvisioningStore>;
   createWallet: (request: GoalWalletRequest) => Promise<unknown>;
-  listWallets: (customerId: string) => Promise<unknown>;
+  listWallets: (customerId: string, walletName: string) => Promise<unknown>;
   retrieveWallet: (walletId: string) => Promise<unknown>;
   retrieveAccounts: (walletId: string) => Promise<unknown>;
 };
@@ -75,8 +75,11 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       return outcome('conflict');
     // The database names the goal wallet; it must be this goal's name.
     if (
-      intent.walletName !==
-      buildPrimaryGoalWalletName(scope.integrationId, goalId)
+      !isPrimaryGoalWalletName(intent.walletName, {
+        integrationId: scope.integrationId,
+        goalId,
+        hasProviderWallet: intent.providerWalletId !== null,
+      })
     )
       return outcome('conflict');
     if (intent.status === 'conflict') return outcome('conflict');
@@ -96,7 +99,7 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       const walletName = intent.walletName;
       const providerCustomerId = intent.providerCustomerId;
       try {
-        const listed = await input.listWallets(providerCustomerId);
+        const listed = await input.listWallets(providerCustomerId, walletName);
         prelisted =
           listed === null
             ? null
@@ -153,7 +156,10 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       intent = await input.store.read(goalId);
       if (!intent) return outcome('unavailable');
     }
-    const listed = await input.listWallets(intent.providerCustomerId);
+    const listed = await input.listWallets(
+      intent.providerCustomerId,
+      intent.walletName
+    );
     // An incomplete listing proves nothing: keep waiting, never conclude.
     if (listed === null) return outcome('pending');
     const candidates = schemas.wallets

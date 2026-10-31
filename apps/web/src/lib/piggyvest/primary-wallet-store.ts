@@ -92,6 +92,26 @@ export function createPrimaryWalletStore(input: {
         throw new Error('Primary wallet storage unavailable');
       }
     },
+    async resolveRoutingPending(command) {
+      try {
+        const parsed = schemas.routingResolution.parse(command);
+        assertScope(parsed);
+        const response = await input.execute(
+          PRIMARY_WALLET_STATEMENTS.resolveRouting,
+          [
+            scopeJson,
+            JSON.stringify({
+              providerCustomerId: parsed.providerCustomerId,
+              providerWalletId: parsed.providerWalletId,
+            }),
+            String(parsed.routed),
+          ]
+        );
+        return schemas.recordedRows.parse(response.rows)[0].result;
+      } catch {
+        throw new Error('Primary wallet storage unavailable');
+      }
+    },
     async recordRejected(command) {
       try {
         const parsed = schemas.rejected.parse(command);

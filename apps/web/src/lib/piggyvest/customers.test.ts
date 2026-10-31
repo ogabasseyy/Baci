@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createPiggyvestCustomer } from './customers';
+import {
+  createPiggyvestCustomer,
+  findPiggyvestCustomersByThirdPartyIdentifier,
+} from './customers';
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -128,5 +131,37 @@ describe('createPiggyvestCustomer', () => {
     ).toThrow();
     expect(fetchMock).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
+  });
+
+  it('looks customers up by our third_party_identifier with a read-only GET', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        status: true,
+        message: 'Customers fetched',
+        data: {
+          paginatedPayload: {
+            edges: [
+              { id: 'customer-test', third_party_identifier: 'baci:i:c' },
+            ],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const listing = await findPiggyvestCustomersByThirdPartyIdentifier(
+      { token: 'test-only-token' },
+      'baci:i:c'
+    );
+    expect(listing.paginatedPayload.edges).toEqual([
+      { id: 'customer-test', third_party_identifier: 'baci:i:c' },
+    ]);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(new URL(url).pathname).toBe('/api/v1/customers');
+    expect(new URL(url).searchParams.get('third_party_identifier')).toBe(
+      'baci:i:c'
+    );
+    expect(init.method ?? 'GET').toBe('GET');
+    expect(init.body).toBeUndefined();
   });
 });

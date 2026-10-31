@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { findPiggyvestCustomersByThirdPartyIdentifier } from '@/lib/piggyvest/customers';
 import { createPrimaryWalletExecutor } from '@/lib/piggyvest/primary-wallet-executor';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import { readPrimaryWalletMapping } from '@/lib/piggyvest/primary-wallet-mapping';
@@ -236,6 +237,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         createPrimaryWalletProviderCustomer(providerConfig, command),
       retrieveWallet: (walletId) =>
         retrievePiggyvestWallet(providerConfig, walletId),
+      findCustomers: (thirdPartyIdentifier) =>
+        findPiggyvestCustomersByThirdPartyIdentifier(
+          providerConfig,
+          thirdPartyIdentifier
+        ),
     });
     if (outcome.status === 'unavailable') {
       return NextResponse.json(

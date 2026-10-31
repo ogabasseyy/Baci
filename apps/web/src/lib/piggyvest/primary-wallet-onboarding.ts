@@ -7,6 +7,7 @@ import {
   piggyvestPrimaryWalletOnboardingSchema,
 } from '@/schemas/piggyvest-primary-wallet-onboarding';
 import { PiggyvestApiError } from './client';
+import { lookupPrimaryWalletCustomer } from './primary-wallet-customer-lookup';
 import { readPrimaryWalletInterestRouting } from './primary-wallet-interest-routing';
 import type {
   PrimaryWalletCustomerRequest,
@@ -22,6 +23,7 @@ type Input = {
   storage: PrimaryWalletOnboardingStorage;
   createCustomer: (request: PrimaryWalletCustomerRequest) => Promise<unknown>;
   retrieveWallet: (walletId: string) => Promise<unknown>;
+  findCustomers: (thirdPartyIdentifier: string) => Promise<unknown>;
 };
 
 type Outcome = {
@@ -82,8 +84,19 @@ export async function onboardPiggyvestPrimaryWallet(
   // dedup cannot work). Only the 64-hex digest is persisted or compared
   // (see the never-raw-BVN test); the raw value travels solely to the
   // provider request, and nothing on this path logs the HMAC input.
+  // The fingerprint pins the customer's own submitted identity. The interest
+  // routing is server configuration, kept out of it so that correcting the
+  // payout wallet never turns an in-flight intent into a permanent conflict;
+  // every reclaim is gated on a provider lookup below instead.
+  const customerRequest = {
+    bvn: providerRequest.bvn,
+    email: providerRequest.email,
+    name: providerRequest.name,
+    phone: providerRequest.phone,
+    third_party_identifier: providerRequest.third_party_identifier,
+  };
   const requestFingerprint = createHmac('sha256', config.data.fingerprintKey)
-    .update(JSON.stringify({ scope, request: providerRequest }))
+    .update(JSON.stringify({ scope, request: customerRequest }))
     .digest('hex');
 
   let claim: Awaited<ReturnType<PrimaryWalletOnboardingStorage['claim']>>;
@@ -98,6 +111,25 @@ export async function onboardPiggyvestPrimaryWallet(
     intentId: claim.intentId,
     claimToken: claim.claimToken,
   };
+  // A reclaimed intent follows an ambiguous earlier dispatch: never dispatch
+  // again unless PiggyVest's own listing proves no customer was created, or
+  // finds the one that was (then adopted through the routing readback).
+  let existingCustomerId: string | null = null;
+  if (claim.reclaimed === true) {
+    const lookup = await lookupPrimaryWalletCustomer({
+      thirdPartyIdentifier: providerRequest.third_party_identifier,
+      findCustomers: input.findCustomers,
+    });
+    if (lookup.kind === 'unknown') {
+      try {
+        await input.storage.recordUncertain(claimedScope);
+      } catch {
+        return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
+      }
+      return { status: 'pending' };
+    }
+    if (lookup.kind === 'found') existingCustomerId = lookup.customerId;
+  }
 
   try {
     const result = piggyvestPrimaryWalletCreationSchema.safeParse(
@@ -112,6 +144,16 @@ export async function onboardPiggyvestPrimaryWallet(
       // not transport ambiguity: record it as terminally rejected so a
       // retry can never reclaim this intent and adopt the unrelated
       // provider wallet behind the reviewer's back.
+      await input.storage.recordRejected(claimedScope);
+      return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
+    }
+    // The lookup proved a customer exists: only that same customer, returned
+    // as existing, may be adopted; anything else is never adopted.
+    if (
+      existingCustomerId !== null &&
+      (result.data.new_customer ||
+        result.data.customer_id !== existingCustomerId)
+    ) {
       await input.storage.recordRejected(claimedScope);
       return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
     }
@@ -149,7 +191,29 @@ export async function onboardPiggyvestPrimaryWallet(
         : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
     }
     if (routing !== 'routed') {
-      await input.storage.recordRejected(claimedScope);
+      // The created wallet holds a real DVA: keep its ids (routing pending,
+      // then rejected) for review and DVA closure before any deletion. If
+      // they cannot be kept, a plain rejection still stops it; a wallet left
+      // routing pending is re-rejected by the next recheck.
+      let kept = false;
+      try {
+        kept = await input.storage.recordRoutingPending({
+          ...claimedScope,
+          providerCustomerId: result.data.customer_id,
+          providerWalletId: result.data.wallet_id,
+          interestPayoutWalletId: config.data.interestPayoutWalletId,
+        });
+        if (kept)
+          await input.storage.resolveRoutingPending({
+            ...scope,
+            providerCustomerId: result.data.customer_id,
+            providerWalletId: result.data.wallet_id,
+            routed: false,
+          });
+      } catch {
+        // Kept as routing pending, or not kept: handled below or on recheck.
+      }
+      if (!kept) await input.storage.recordRejected(claimedScope);
       // Interest settings are immutable: operations must review this one.
       emitPiggyvestWebhookAlert('PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW', {
         reason: 'main wallet interest routing contradicted at onboarding',

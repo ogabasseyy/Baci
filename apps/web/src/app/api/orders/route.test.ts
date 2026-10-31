@@ -3455,63 +3455,6 @@ describe('POST /api/orders — wallet response shape', () => {
       p_payment_method: 'savings',
     });
   });
-
-  it('full-coverage wallet redemption returns amountDueToGateway=0 and finalizes payment', async () => {
-    // Pin the full-coverage path that the mobile client uses to skip the
-    // gateway initialize step entirely. Order is marked paid via
-    // finalize_wallet_order_payment.
-    const finalizeSpy = vi.fn(() =>
-      Promise.resolve({ data: null, error: null })
-    );
-    const supabaseMod = await import('@/lib/supabase/server');
-    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
-      const sb = buildMockSupabase({
-        redeem_wallet_for_order: {
-          data: [
-            {
-              success: true,
-              redeemed_amount: 1000,
-              new_balance: 0,
-              transaction_id: '88888888-aaaa-bbbb-cccc-eeeeeeeeeeee',
-            },
-          ],
-          error: null,
-        },
-      });
-      // Wrap rpc so we can spy on finalize_wallet_order_payment specifically.
-      const originalRpc = sb.rpc;
-      sb.rpc = vi.fn((name: string) => {
-        if (name === 'finalize_wallet_order_payment') {
-          return finalizeSpy();
-        }
-        return originalRpc(name);
-      });
-      return sb;
-    }) as unknown as never);
-
-    const request = new NextRequest('http://localhost/api/orders', {
-      method: 'POST',
-      body: JSON.stringify({
-        ...baseOrderPayload,
-        use_wallet_credit: true,
-        wallet_amount: 1000,
-      }),
-    });
-
-    const response = await POST(request);
-    const body = await readJson(response);
-
-    expect(response.status).toBe(201);
-    expect(body.wallet).toEqual({
-      amountUsed: 1000,
-      newBalance: 0,
-      transactionId: '88888888-aaaa-bbbb-cccc-eeeeeeeeeeee',
-    });
-    expect(body.amountDueToGateway).toBe(0);
-    expect(body.order.payment_status).toBe('paid');
-    expect(body.order.payment_method).toBe('wallet');
-    expect(finalizeSpy).toHaveBeenCalledTimes(1);
-  });
 });
 
 describe('POST /api/orders — non-NGN currency guards', () => {

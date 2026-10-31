@@ -1,5 +1,13 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { beforeEach, expect, it, vi } from 'vitest';
+
+// Random per run: these tests only need distinct signing keys, never fixed ones.
+const testKey = (label: string): string =>
+  `${label}-${randomBytes(16).toString('hex')}`;
+const RETAINED_SECRET = testKey('retained');
+const UNLOADED_RETAINED_SECRET = testKey('unloaded-retained');
+const INTEREST_SECRET = testKey('interest');
+const SHARED_SECRET = testKey('shared');
 
 const mocks = vi.hoisted(() => ({
   bank: vi.fn(),
@@ -59,8 +67,8 @@ it('unions current and retained primary keys with the legacy secret', () => {
     retainedWebhookSecrets: ['custody-retained-secret'],
   });
   mocks.interest.mockReturnValue({
-    webhookSecret: 'interest-secret',
-    retainedWebhookSecrets: ['retained-secret', 'legacy-secret', '', 42],
+    webhookSecret: INTEREST_SECRET,
+    retainedWebhookSecrets: [RETAINED_SECRET, 'legacy-secret', '', 42],
   });
   expect(
     collectPiggyvestWebhookSecrets({
@@ -72,8 +80,8 @@ it('unions current and retained primary keys with the legacy secret', () => {
     'bank-secret',
     'custody-secret',
     'custody-retained-secret',
-    'interest-secret',
-    'retained-secret',
+    INTEREST_SECRET,
+    RETAINED_SECRET,
   ]);
 });
 
@@ -82,12 +90,12 @@ it('skips disabled runtimes and tolerates misconfigured ones', () => {
     throw new Error('misconfigured');
   });
   mocks.interest.mockReturnValue({
-    webhookSecret: 'interest-secret',
-    retainedWebhookSecrets: ['retained-secret'],
+    webhookSecret: INTEREST_SECRET,
+    retainedWebhookSecrets: [RETAINED_SECRET],
   });
   expect(collectPiggyvestWebhookSecrets({ NODE_ENV: 'test' })).toEqual([
-    'interest-secret',
-    'retained-secret',
+    INTEREST_SECRET,
+    RETAINED_SECRET,
   ]);
 });
 
@@ -98,21 +106,21 @@ it('returns no secrets when nothing is configured', () => {
 it('matches the retained key that verifies the delivery', async () => {
   const { createHmac } = await import('node:crypto');
   const rawBody = Buffer.from('{"event":"interest-payout.success"}');
-  const signature = createHmac('sha512', 'retained-secret')
+  const signature = createHmac('sha512', RETAINED_SECRET)
     .update(rawBody)
     .digest('hex');
   expect(
     matchPiggyvestWebhookSecret({
       rawBody,
       signature,
-      secrets: ['current-secret', 'retained-secret'],
+      secrets: ['current-secret', RETAINED_SECRET],
     })
-  ).toBe('retained-secret');
+  ).toBe(RETAINED_SECRET);
   expect(
     matchPiggyvestWebhookSecret({
       rawBody,
       signature: '0'.repeat(128),
-      secrets: ['current-secret', 'retained-secret'],
+      secrets: ['current-secret', RETAINED_SECRET],
     })
   ).toBeUndefined();
 });
@@ -131,10 +139,10 @@ it('verifies with a retained key and reports the matched secret', async () => {
   const { createHmac } = await import('node:crypto');
   mocks.interest.mockReturnValue({
     webhookSecret: 'current-secret',
-    retainedWebhookSecrets: ['retained-secret'],
+    retainedWebhookSecrets: [RETAINED_SECRET],
   });
   const rawBody = Buffer.from('{"event":"interest-payout.success"}');
-  const signature = createHmac('sha512', 'retained-secret')
+  const signature = createHmac('sha512', RETAINED_SECRET)
     .update(rawBody)
     .digest('hex');
   expect(
@@ -145,7 +153,7 @@ it('verifies with a retained key and reports the matched secret', async () => {
     })
   ).toMatchObject({
     status: 'verified',
-    secret: 'retained-secret',
+    secret: RETAINED_SECRET,
     families: ['interest'],
     keyStatus: 'current',
   });
@@ -163,11 +171,11 @@ it('reports unconfigured instead of invalid when a family fails to load', async 
   mocks.bank.mockImplementation(() => {
     throw new Error('Primary bank inbox secrets unavailable');
   });
-  mocks.interest.mockReturnValue({ webhookSecret: 'interest-secret' });
+  mocks.interest.mockReturnValue({ webhookSecret: INTEREST_SECRET });
   const rawBody = Buffer.from('{"event":"bank-transfer.inflow.success"}');
   // Signed with a key the failed reader could not load: the key set is
   // incomplete, so the delivery must retry, not 200-ack as invalid.
-  const signature = createHmac('sha512', 'unloaded-retained-secret')
+  const signature = createHmac('sha512', UNLOADED_RETAINED_SECRET)
     .update(rawBody)
     .digest('hex');
   expect(
@@ -178,7 +186,7 @@ it('reports unconfigured instead of invalid when a family fails to load', async 
     })
   ).toEqual({ status: 'unconfigured' });
   // A delivery that verifies against a loaded key still flows.
-  const valid = createHmac('sha512', 'interest-secret')
+  const valid = createHmac('sha512', INTEREST_SECRET)
     .update(rawBody)
     .digest('hex');
   expect(
@@ -197,8 +205,8 @@ it('tags each secret with the family that configured it', () => {
     retainedWebhookSecrets: ['custody-retained-secret'],
   });
   mocks.interest.mockReturnValue({
-    webhookSecret: 'interest-secret',
-    retainedWebhookSecrets: ['retained-secret'],
+    webhookSecret: INTEREST_SECRET,
+    retainedWebhookSecrets: [RETAINED_SECRET],
   });
   expect(
     collectPiggyvestWebhookSecretsWithFamilies({
@@ -210,27 +218,27 @@ it('tags each secret with the family that configured it', () => {
     { secret: 'bank-secret', family: 'bank' },
     { secret: 'custody-secret', family: 'custody' },
     { secret: 'custody-retained-secret', family: 'custody' },
-    { secret: 'interest-secret', family: 'interest' },
-    { secret: 'retained-secret', family: 'interest' },
+    { secret: INTEREST_SECRET, family: 'interest' },
+    { secret: RETAINED_SECRET, family: 'interest' },
   ]);
 });
 
 it('authorizes every family sharing the matched secret value', async () => {
   const { createHmac } = await import('node:crypto');
-  mocks.bank.mockReturnValue({ webhookSecret: 'shared-secret' });
+  mocks.bank.mockReturnValue({ webhookSecret: SHARED_SECRET });
   const rawBody = Buffer.from('{}');
-  const signature = createHmac('sha512', 'shared-secret')
+  const signature = createHmac('sha512', SHARED_SECRET)
     .update(rawBody)
     .digest('hex');
   expect(
     verifyPiggyvestWebhookSecrets({
       rawBody,
       signature,
-      env: { NODE_ENV: 'test', PIGGYVEST_SECRET_KEY: 'shared-secret' },
+      env: { NODE_ENV: 'test', PIGGYVEST_SECRET_KEY: SHARED_SECRET },
     })
   ).toMatchObject({
     status: 'verified',
-    secret: 'shared-secret',
+    secret: SHARED_SECRET,
     families: ['legacy', 'bank'],
   });
 });
@@ -239,7 +247,7 @@ it('keeps healthy families when one secrets reader throws', () => {
   mocks.bank.mockImplementation(() => {
     throw new Error('incomplete provisioning');
   });
-  mocks.interest.mockReturnValue({ webhookSecret: 'interest-secret' });
+  mocks.interest.mockReturnValue({ webhookSecret: INTEREST_SECRET });
   expect(
     collectPiggyvestWebhookSecretsWithFamilies({
       NODE_ENV: 'test',
@@ -247,7 +255,7 @@ it('keeps healthy families when one secrets reader throws', () => {
     })
   ).toEqual([
     { secret: 'legacy-secret', family: 'legacy' },
-    { secret: 'interest-secret', family: 'interest' },
+    { secret: INTEREST_SECRET, family: 'interest' },
   ]);
 });
 
@@ -257,7 +265,7 @@ const signWith = (secret: string) =>
 
 it('reports an incomplete key set on a verified delivery when a family failed to load', () => {
   mocks.interest.mockReturnValue({
-    webhookSecret: 'interest-secret',
+    webhookSecret: INTEREST_SECRET,
     retainedWebhookSecrets: [],
   });
   mocks.bank.mockImplementation(() => {
@@ -267,7 +275,7 @@ it('reports an incomplete key set on a verified delivery when a family failed to
   expect(
     verifyPiggyvestWebhookSecrets({
       rawBody: incompleteBody,
-      signature: signWith('interest-secret'),
+      signature: signWith(INTEREST_SECRET),
       env: { NODE_ENV: 'test', PIGGYVEST_SECRET_KEY: 'legacy-secret' },
     })
   ).toMatchObject({
@@ -279,14 +287,14 @@ it('reports an incomplete key set on a verified delivery when a family failed to
 
 it('reports an incomplete key set on a verified delivery when the archive is unreadable', () => {
   mocks.interest.mockReturnValue({
-    webhookSecret: 'interest-secret',
+    webhookSecret: INTEREST_SECRET,
     retainedWebhookSecrets: [],
   });
 
   expect(
     verifyPiggyvestWebhookSecrets({
       rawBody: incompleteBody,
-      signature: signWith('interest-secret'),
+      signature: signWith(INTEREST_SECRET),
       env: {
         NODE_ENV: 'test',
         PIGGYVEST_SECRET_KEY: 'legacy-secret',
@@ -298,14 +306,14 @@ it('reports an incomplete key set on a verified delivery when the archive is unr
 
 it('does not report an incomplete key set when every family loaded', () => {
   mocks.interest.mockReturnValue({
-    webhookSecret: 'interest-secret',
+    webhookSecret: INTEREST_SECRET,
     retainedWebhookSecrets: [],
   });
 
   expect(
     verifyPiggyvestWebhookSecrets({
       rawBody: incompleteBody,
-      signature: signWith('interest-secret'),
+      signature: signWith(INTEREST_SECRET),
       env: { NODE_ENV: 'test', PIGGYVEST_SECRET_KEY: 'legacy-secret' },
     })
   ).toMatchObject({ status: 'verified', incompleteKeySet: false });

@@ -2,8 +2,12 @@ import { renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 const shippingHook = vi.hoisted(() => vi.fn());
+const prefetchHook = vi.hoisted(() => vi.fn(() => 'preview-scope'));
 vi.mock('@/hooks/orders/useOrderGiglShipping', () => ({
   useOrderGiglShipping: shippingHook,
+}));
+vi.mock('@/hooks/orders/useOrderGiglPreviewPrefetch', () => ({
+  useOrderGiglPreviewPrefetch: prefetchHook,
 }));
 vi.mock('@/lib/order-shipment', async (importOriginal) => {
   const actual = await importOriginal<OrderShipmentModule>();

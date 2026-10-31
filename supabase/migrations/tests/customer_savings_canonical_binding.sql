@@ -4,6 +4,7 @@ CREATE FUNCTION pg_temp.binding_assert(value boolean, label text) RETURNS void L
 BEGIN
   IF value IS DISTINCT FROM true THEN RAISE EXCEPTION 'Assertion failed: %', label; END IF;
 END $$;
+GRANT EXECUTE ON FUNCTION pg_temp.binding_assert(boolean, text) TO PUBLIC; -- called after SET ROLE
 CREATE FUNCTION pg_temp.binding_reject(command text, expected_state text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
   BEGIN EXECUTE command;
@@ -13,6 +14,7 @@ BEGIN
   END;
   RAISE EXCEPTION 'Expected SQLSTATE %', expected_state;
 END $$;
+GRANT EXECUTE ON FUNCTION pg_temp.binding_reject(text, text) TO PUBLIC; -- called after SET ROLE
 
 SELECT pg_temp.binding_assert(current_database() = 'piggyvest_local' AND inet_client_addr() IS NULL,
   'reviewed socket database required');

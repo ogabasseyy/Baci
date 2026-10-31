@@ -1,6 +1,7 @@
 import 'server-only';
 import { primarySavingsProvisioningSchemas as schemas } from '@/schemas/primary-savings-provisioning';
 import type { createPrimarySavingsProvisioningStore } from './primary-savings-provisioning-store';
+import { matchesProviderWalletName } from './provider-wallet-name';
 import type { CreatePiggyvestWalletInput } from './wallets';
 
 type Input = {
@@ -62,7 +63,8 @@ export async function provisionPrimarySavingsWallet(input: Input) {
         return outcome('unavailable');
       // A reclaimed claim may already have its wallet at the provider:
       // creation succeeded but the response was lost. The wallet name is
-      // deterministic, so adopt a listed match instead of reposting —
+      // deterministic (PiggyVest may strip its punctuation, so it matches
+      // on letters and digits), so adopt a listed match instead of reposting —
       // subaccount_name is provider-unique, so a repost would be rejected
       // as a duplicate and strand recovery for another request. A list
       // failure falls through to creation: failing closed here would turn
@@ -73,7 +75,9 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       try {
         prelisted = schemas.wallets
           .parse(await input.listWallets(providerCustomerId))
-          .filter((wallet) => wallet.name === walletName);
+          .filter((wallet) =>
+            matchesProviderWalletName(wallet.name, walletName)
+          );
       } catch {
         prelisted = null;
       }
@@ -112,7 +116,9 @@ export async function provisionPrimarySavingsWallet(input: Input) {
     }
     const candidates = schemas.wallets
       .parse(await input.listWallets(intent.providerCustomerId))
-      .filter((wallet) => wallet.name === intent.walletName);
+      .filter((wallet) =>
+        matchesProviderWalletName(wallet.name, intent.walletName)
+      );
     if (candidates.length === 0) return outcome('pending');
     if (candidates.length !== 1) return outcome('conflict');
     const candidate = candidates[0];
@@ -133,7 +139,7 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       wallet.id !== candidate.id ||
       wallet.api_customer_id !== intent.providerCustomerId ||
       wallet.business_id !== scope.businessId ||
-      wallet.name !== intent.walletName
+      !matchesProviderWalletName(wallet.name, intent.walletName)
     )
       return outcome('conflict');
     if (wallet.status !== 'active') return outcome('pending');
@@ -145,6 +151,8 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       // compares it against the onboarding mapping as a second factor.
       providerCustomerId: wallet.api_customer_id,
       providerWalletId: wallet.id,
+      // Still compared exactly by enroll_goal_wallet, so a name PiggyVest
+      // rewrote is refused there (conflict) until that check normalises.
       walletName: wallet.name,
       businessId: wallet.business_id,
       currency: wallet.currency,

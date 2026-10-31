@@ -1,3 +1,4 @@
+import { matchesProviderWalletName } from '@/lib/piggyvest/provider-wallet-name';
 import { AMOUNTS_KOBO, FUNDING_FLOOR_KOBO } from './constants';
 import {
   createDataSchema,
@@ -76,13 +77,28 @@ async function loadWallets(ctx: ProofContext): Promise<void> {
   state.wallets = views.filter((view) => state.authorized.has(view.id));
 }
 
-function assignRoles(ctx: ProofContext): void {
-  const { state, qa } = ctx;
-  const goal = state.wallets.find(
-    (wallet) => wallet.name === qa.goalWalletName
+const AMBIGUOUS_GOAL_NOTE =
+  'more than one QA wallet reads as the goal wallet name; none is used as the goal or main wallet and no other goal wallet is created';
+
+/**
+ * QA wallets that read as the goal wallet. The sandbox rewrites names (every
+ * `-` was gone on 2026-10-31), so this compares letters and digits only and
+ * is a set, never a pick: more than one match leaves the goal unassigned.
+ */
+function goalNamedWallets(ctx: ProofContext): WalletView[] {
+  return ctx.state.wallets.filter((wallet) =>
+    matchesProviderWalletName(wallet.name, ctx.qa.goalWalletName)
   );
+}
+
+function assignRoles(ctx: ProofContext): void {
+  const { state } = ctx;
+  const named = goalNamedWallets(ctx);
+  if (named.length > 1 && !state.notes.includes(AMBIGUOUS_GOAL_NOTE))
+    state.notes.push(AMBIGUOUS_GOAL_NOTE);
+  const goal = named.length === 1 ? named[0] : undefined;
   state.goalWalletId = goal?.id ?? null;
-  const candidates = state.wallets.filter((wallet) => wallet.id !== goal?.id);
+  const candidates = state.wallets.filter((wallet) => !named.includes(wallet));
   if (
     state.createdWalletId &&
     candidates.some((w) => w.id === state.createdWalletId)
@@ -109,6 +125,7 @@ function assignRoles(ctx: ProofContext): void {
 async function ensureGoalWallet(ctx: ProofContext): Promise<void> {
   const { api, qa, state } = ctx;
   if (state.goalWalletId || !state.customerId) return;
+  if (goalNamedWallets(ctx).length > 1) return;
   const created = await api.createGoalWallet(
     qa,
     state.customerId,
@@ -132,7 +149,9 @@ async function ensureGoalWallet(ctx: ProofContext): Promise<void> {
   // A new wallet may not be listed yet: re-list within the polling budget.
   for (
     let attempt = 0;
-    attempt < ctx.maxPolls && !state.goalWalletId;
+    attempt < ctx.maxPolls &&
+    !state.goalWalletId &&
+    goalNamedWallets(ctx).length < 2;
     attempt += 1
   ) {
     await loadWallets(ctx);
@@ -189,6 +208,9 @@ export async function setupScenario(ctx: ProofContext): Promise<void> {
   redactor.register('Q', qa.qaKey);
   redactor.register('Q', qa.thirdPartyIdentifier);
   redactor.register('Q', qa.goalWalletName);
+  // The form the sandbox lists it under, which the harness-reference
+  // pattern (`pvbproof-...`) no longer catches.
+  redactor.register('Q', qa.goalWalletName.replaceAll('-', ''));
 
   if (mode !== 'live-readonly') {
     const created = await api.createCustomer(qa, 'scenario/create');

@@ -29,4 +29,37 @@ describe('merchant wallet payment-account provisioning — get', () => {
       status: 'active',
     });
   });
+
+  it('reads through the fulfil-gated RPC, not the owner-only table', async () => {
+    const supabase = client();
+    const from = vi.spyOn(supabase, 'from');
+    await getMerchantWalletAccount(supabase, 'm');
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'get_merchant_wallet_funding_account',
+      { p_merchant_id: 'm' }
+    );
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a forbidden read for callers without orders.fulfill', async () => {
+    await expect(
+      getMerchantWalletAccount(
+        client([], { accountRpcError: new Error('forbidden') }),
+        'm'
+      )
+    ).rejects.toThrow('forbidden');
+  });
+
+  it('rejects more than one live account like maybeSingle', async () => {
+    const row = { account_number: '1234567890', status: 'active' };
+    await expect(
+      getMerchantWalletAccount(
+        client([
+          { ...row, account_name: null, bank_name: null },
+          { ...row, account_name: null, bank_name: null, status: 'pending' },
+        ]),
+        'm'
+      )
+    ).rejects.toThrow('MULTIPLE_FUNDING_ACCOUNTS');
+  });
 });

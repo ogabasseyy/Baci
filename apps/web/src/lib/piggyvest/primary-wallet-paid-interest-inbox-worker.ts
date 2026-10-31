@@ -7,6 +7,10 @@ import { dispatchPrimaryWalletPaidInterest } from './primary-wallet-paid-interes
 import { readPrimaryWalletPaidInterestInboxRuntime } from './primary-wallet-paid-interest-inbox-runtime';
 import { createPrimaryWalletPaidInterestInboxStore } from './primary-wallet-paid-interest-inbox-store';
 import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
+import {
+  acceptedWebhookSecrets,
+  familyArchivedSecrets,
+} from './webhook-key-archive';
 
 export async function drainPrimaryWalletPaidInterestInbox(input: {
   env?: NodeJS.ProcessEnv;
@@ -26,14 +30,21 @@ export async function drainPrimaryWalletPaidInterestInbox(input: {
   )
     throw new Error('Primary interest inbox claims unavailable');
   totals.claimed = claims.length;
+  // Stored rows replay: see the bank worker. Derived and bounded.
+  const signingSecrets = acceptedWebhookSecrets(
+    config,
+    familyArchivedSecrets(
+      'interest',
+      input.env ?? process.env,
+      new Date(),
+      'replay'
+    )
+  );
   for (const claim of claims) {
     if (input.signal?.aborted) break;
     let outcome: z.infer<typeof schemas.finish>['outcome'];
     const rawBody = Buffer.from(claim.rawHex, 'hex');
-    const signingSecret = [
-      config.webhookSecret,
-      ...(config.retainedWebhookSecrets ?? []),
-    ].find((secret) =>
+    const signingSecret = signingSecrets.find((secret) =>
       verifyPiggyvestPayloadSignature({
         payload: rawBody,
         signature: claim.signature,

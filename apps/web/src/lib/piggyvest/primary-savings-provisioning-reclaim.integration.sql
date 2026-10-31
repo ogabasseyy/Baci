@@ -11,6 +11,7 @@ SELECT ('00000000-0000-4000-8000-' || lpad(sequence::text,12,'0'))::uuid,
 \ir ../../../../../supabase/migrations/20261007144000_piggyvest_primary_savings_reservations.sql
 \ir ../../../../../supabase/migrations/20261007190000_piggyvest_primary_savings_provisioning.sql
 \ir ../../../../../supabase/migrations/20261008092200_piggyvest_primary_provisioning_reclaim.sql
+\ir ../../../../../supabase/migrations/20261031220000_piggyvest_primary_goal_wallet_short_name.sql
 CREATE ROLE goal_fixture LOGIN;
 GRANT piggyvest_primary_goal_provisioner TO goal_fixture;
 INSERT INTO piggyvest_primary.goal_provisioning_authorities

@@ -1,0 +1,7 @@
+export const EXPECTED_PIGGYVEST_GOAL_NAME_PENDING_SOURCES = [
+  {
+    repositoryPath:
+      'supabase/migrations/20261031220000_piggyvest_primary_goal_wallet_short_name.sql',
+    sha256: '103761995480c5ddeaf61a3f26c9e174f8fb4d93300a9da074b406f318466fc8',
+  },
+];

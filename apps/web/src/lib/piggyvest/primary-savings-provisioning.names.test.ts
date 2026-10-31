@@ -11,8 +11,8 @@ vi.mock('server-only', () => ({}));
 
 /**
  * PiggyVest rewrites sub-wallet names (sandbox, 2026-10-31: every `-` was
- * gone when the wallet was listed back). `baci-save:<integration>:<goal>`
- * can therefore list as letters and digits only.
+ * gone when the wallet was listed back). `baci-save-<hash>` can therefore
+ * list as letters and digits only.
  */
 const sanitisedName = walletName.replace(/[^A-Za-z0-9]/g, '');
 

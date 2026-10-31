@@ -4,7 +4,7 @@
 --
 -- PiggyVest rewrites the names of the sub-wallets it creates (every "-"
 -- removed), so the name it lists back is not the stored
--- 'baci-save:<integration>:<goal>'. Proves, against live PostgreSQL:
+-- 'baci-save-<hash>' (20261031220000). Proves, against live PostgreSQL:
 --   * a listed name with dashes stripped, or only its case changed, enrols;
 --   * a genuinely different name is refused, and every other check (provider
 --     customer, primary wallet, a wallet used by another goal, the interest
@@ -44,9 +44,9 @@ CREATE FUNCTION pg_temp.scope() RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
     'environment', 'staging')
 $$;
 
--- The name the application stores and sends to the provider.
+-- The name the application stores and sends to the provider (20261031220000).
 CREATE FUNCTION pg_temp.stored_name(p_goal uuid) RETURNS text LANGUAGE sql IMMUTABLE AS $$
-  SELECT 'baci-save:a3100000-0000-4000-8000-000000000005:' || p_goal::text
+  SELECT 'baci-save-' || substr(encode(sha256(convert_to('a3100000-0000-4000-8000-000000000005:' || p_goal::text, 'UTF8')), 'hex'), 1, 32)
 $$;
 
 CREATE FUNCTION pg_temp.proof(

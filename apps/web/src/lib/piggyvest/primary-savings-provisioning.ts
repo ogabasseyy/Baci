@@ -1,6 +1,7 @@
 import 'server-only';
 import { primarySavingsProvisioningSchemas as schemas } from '@/schemas/primary-savings-provisioning';
 import { PiggyvestApiError } from './client';
+import { buildPrimaryGoalWalletName } from './primary-goal-wallet-name';
 import type { createPrimarySavingsProvisioningStore } from './primary-savings-provisioning-store';
 import { matchesProviderWalletName } from './provider-wallet-name';
 import type { CreatePiggyvestWalletInput } from './wallets';
@@ -72,7 +73,11 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       interestAccepted !== input.interestAccepted
     )
       return outcome('conflict');
-    if (intent.walletName !== `baci-save:${scope.integrationId}:${goalId}`)
+    // The database names the goal wallet; it must be this goal's name.
+    if (
+      intent.walletName !==
+      buildPrimaryGoalWalletName(scope.integrationId, goalId)
+    )
       return outcome('conflict');
     if (intent.status === 'conflict') return outcome('conflict');
     if (intent.status === 'claimed') {

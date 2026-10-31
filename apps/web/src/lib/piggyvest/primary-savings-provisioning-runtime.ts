@@ -1,5 +1,6 @@
 import 'server-only';
 import { primarySavingsProvisioningSchemas as schemas } from '@/schemas/primary-savings-provisioning';
+import { buildPrimaryGoalWalletName } from './primary-goal-wallet-name';
 import { provisionPrimarySavingsWallet } from './primary-savings-provisioning';
 import { createPrimarySavingsProvisioningExecutor } from './primary-savings-provisioning-executor';
 import { listPrimarySavingsProvisioningWallets } from './primary-savings-provisioning-pagination';
@@ -78,7 +79,7 @@ export async function runPrimarySavingsProvisioning(input: {
     listWallets: (customerId) =>
       listPrimarySavingsProvisioningWallets(provider, {
         customerId,
-        walletName: `baci-save:${scope.integrationId}:${goalId}`,
+        walletName: buildPrimaryGoalWalletName(scope.integrationId, goalId),
       }),
     retrieveWallet: (walletId) => retrievePiggyvestWallet(provider, walletId),
     retrieveAccounts: (walletId) =>

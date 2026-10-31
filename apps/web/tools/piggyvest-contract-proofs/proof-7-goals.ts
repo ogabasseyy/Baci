@@ -1,3 +1,4 @@
+import { p7GoalSuffix } from './goal-wallet-names';
 import { destinationAnswer, inheritanceAnswer } from './payout-analysis';
 import { type GoalOwner, runGoalVariant } from './proof-7-goal-variants';
 import { answerOf, type ProofBuilder } from './proof-builder';
@@ -22,12 +23,12 @@ export async function recordGoalWallets(
   if (owner) {
     const unset = await runGoalVariant(ctx, owner, business, {
       slot: 'p7/goal_unset',
-      nameSuffix: `-p7unset-a${ctx.attempt}`,
+      nameSuffix: p7GoalSuffix('unset', ctx.attempt),
       payoutWalletId: null,
     });
     const explicit = await runGoalVariant(ctx, owner, business, {
       slot: 'p7/goal_explicit',
-      nameSuffix: `-p7explicit-a${ctx.attempt}`,
+      nameSuffix: p7GoalSuffix('explicit', ctx.attempt),
       payoutWalletId: business,
     });
     const unsetInherits: Answer = inheritanceAnswer(

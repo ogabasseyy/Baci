@@ -33,6 +33,7 @@ import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.t
 import { EXPECTED_PENDING_VTU_REPLAY_SOURCES } from './expected-pending-vtu-replay-sources.test-support';
 import { EXPECTED_PIGGYVEST_CAPTURE_PENDING_SOURCES } from './expected-piggyvest-capture-pending-sources.test-support';
 import { EXPECTED_PIGGYVEST_ENROLL_NAME_PENDING_SOURCES } from './expected-piggyvest-enroll-name-pending-sources.test-support';
+import { EXPECTED_PIGGYVEST_GOAL_NAME_PENDING_SOURCES } from './expected-piggyvest-goal-name-pending-sources.test-support';
 import { EXPECTED_PLAN_TIER_PENDING_SOURCES } from './expected-plan-tier-pending-sources.test-support';
 import { EXPECTED_PRIMARY_PENDING_SOURCES } from './expected-primary-pending-sources.test-support';
 import { EXPECTED_QUIZ_LIVE_PENDING_SOURCES } from './expected-quiz-live-pending-sources.test-support';
@@ -48,6 +49,7 @@ import { ORDER_NOTIFICATION_OUTBOX_PENDING_SOURCES } from './order-notification-
 import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 
 export const EXPECTED_PENDING_SOURCES = [
+  ...EXPECTED_PIGGYVEST_GOAL_NAME_PENDING_SOURCES,
   ...EXPECTED_PIGGYVEST_ENROLL_NAME_PENDING_SOURCES,
   ...EXPECTED_MERCHANT_CONTACT_PHONE_PENDING_SOURCES,
   ...EXPECTED_PIGGYVEST_CAPTURE_PENDING_SOURCES,

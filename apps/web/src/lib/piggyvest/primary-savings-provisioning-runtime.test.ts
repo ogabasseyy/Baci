@@ -145,7 +145,7 @@ it('wires durable storage and documented provider adapters with a fixed environm
   };
   expect(mocks.list).toHaveBeenCalledWith(provider, {
     customerId: 'customer',
-    walletName: `baci-save:${provisioningFixture.scope.integrationId}:${provisioningFixture.goalId}`,
+    walletName: provisioningFixture.walletName,
   });
   expect(mocks.wallet).toHaveBeenCalledWith(provider, 'wallet');
   expect(mocks.accounts).toHaveBeenCalledWith(provider, 'wallet');

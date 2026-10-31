@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import type { TextInputInstance } from 'react-native';
 import { Keyboard, Pressable, Text, TextInput, View } from 'react-native';
 import { AppDialogModal } from '@/components/ui/AppDialogModal';
 import type { useNewOrderController } from '@/hooks/useNewOrderController';
@@ -26,7 +27,7 @@ export function NewOrderQuickAddDialog({
     showCustomItemModal,
   } = controller;
 
-  const priceInputRef = useRef<TextInput>(null);
+  const priceInputRef = useRef<TextInputInstance>(null);
   const merchantCurrency =
     merchant?.payout_currency?.trim().toUpperCase() || 'NGN';
 

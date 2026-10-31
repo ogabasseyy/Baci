@@ -10,14 +10,14 @@
     <true/>
     <key>EXUpdatesLaunchWaitMs</key>
     <integer>0</integer>
-	<key>EXUpdatesRuntimeVersion</key>
-	<string>2.0.1</string>
-	<key>EXUpdatesRequestHeaders</key>
-	<dict>
-		<key>expo-channel-name</key>
-		<string>production</string>
-	</dict>
-	<key>EXUpdatesURL</key>
-	<string>https://u.expo.dev/c6c1897b-cac8-49b0-85f9-3d277aecc379</string>
+    <key>EXUpdatesRequestHeaders</key>
+    <dict>
+      <key>expo-channel-name</key>
+      <string>production</string>
+    </dict>
+    <key>EXUpdatesRuntimeVersion</key>
+    <string>2.0.1-ios-sdk58-rn0880</string>
+    <key>EXUpdatesURL</key>
+    <string>https://u.expo.dev/c6c1897b-cac8-49b0-85f9-3d277aecc379</string>
   </dict>
 </plist>

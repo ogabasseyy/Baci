@@ -1,0 +1,23 @@
+diff --git a/android/build.gradle b/android/build.gradle
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -51,7 +51,7 @@
+       namespace "com.reactcommunity.rndatetimepicker"
+     }
+ 
+-    compileSdkVersion getExtOrIntegerDefault('compileSdkVersion')
++    compileSdk getExtOrIntegerDefault('compileSdkVersion')
+ 
+     // Used to override the NDK path/version on internal CI or by allowing
+     // users to customize the NDK path/version from their root project (e.g. for M1 support)
+@@ -63,8 +63,8 @@
+     }
+ 
+     defaultConfig {
+-        minSdkVersion getExtOrIntegerDefault('minSdkVersion')
+-        targetSdkVersion getExtOrIntegerDefault('targetSdkVersion')
++        minSdk getExtOrIntegerDefault('minSdkVersion')
++        targetSdk getExtOrIntegerDefault('targetSdkVersion')
+         buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
+     }
+ 

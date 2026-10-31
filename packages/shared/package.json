@@ -7,6 +7,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./android-system-bars": "./android-system-bars.cjs",
+    "./resolve-mobile-react": "./resolve-mobile-react.cjs",
     "./types": "./src/types/index.ts",
     "./constants": "./src/constants/index.ts",
     "./contracts": "./src/contracts/index.ts",
@@ -46,7 +48,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "node --test resolve-mobile-react.node-test.cjs && vitest run"
   },
   "peerDependencies": {
     "zod": "^3.0.0 || ^4.0.0"

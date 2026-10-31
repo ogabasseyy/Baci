@@ -83,6 +83,9 @@ describe('BrandAuthorityPageContent', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Samsung Galaxy A56')).toBeInTheDocument();
     expect(
+      screen.getByText('Compare six active Samsung phones.')
+    ).toHaveAttribute('data-cwv-lcp-copy', 'authority-hub');
+    expect(
       screen.getByRole('link', { name: 'Browse all smartphones' })
     ).toHaveAttribute('href', 'https://ogabassey.com/smartphones');
     expect(

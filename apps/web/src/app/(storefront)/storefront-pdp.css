@@ -64,3 +64,6 @@
     bottom: calc(env(safe-area-inset-bottom, 0px) + 9rem);
   }
 }
+
+/* The deferred launcher loads this runtime after interaction. */
+@source "../../components/storefront/ogabassey/components/chat/ChatWidget.tsx";

@@ -10,14 +10,14 @@ const packagePath = require.resolve('expo-linear-gradient/package.json');
 
 test('installed iOS gradients retain the composition fix for main-thread bitmap hangs', () => {
   const version = JSON.parse(readFileSync(packagePath, 'utf8')).version;
-  assert.equal(version, '57.0.1');
+  assert.equal(version, '58.0.3');
   const workspace = readFileSync(resolve(root, 'pnpm-workspace.yaml'), 'utf8');
   assert.match(
     workspace,
-    /expo-linear-gradient@57\.0\.1.*patches\/expo-linear-gradient@57\.0\.1\.patch/
+    /expo-linear-gradient@58\.0\.3.*patches\/expo-linear-gradient@58\.0\.3\.patch/
   );
   const lockfile = readFileSync(resolve(root, 'pnpm-lock.yaml'), 'utf8');
-  assert.match(lockfile, /expo-linear-gradient@57\.0\.1: [a-f0-9]{64}/);
+  assert.match(lockfile, /expo-linear-gradient@58\.0\.3: [a-f0-9]{64}/);
   const source = readFileSync(
     resolve(dirname(packagePath), 'ios/LinearGradientLayer.swift'),
     'utf8'

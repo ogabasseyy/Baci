@@ -1,4 +1,5 @@
 apply plugin: "com.android.application"
+apply plugin: "com.posthog.android"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
@@ -94,6 +95,9 @@ def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBu
  * this variant is about 6MiB larger per architecture than default.
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
+
+project.ext.posthogReactNativeSkipOnConflict = true
+apply from: new File(["node", "--print", "require('path').join(require('path').dirname(require.resolve('posthog-react-native')), '..', 'tooling', 'posthog.gradle')"].execute().text.trim())
 
 android {
     ndkVersion rootProject.ext.ndkVersion

@@ -1,0 +1,94 @@
+{
+  "$comment": "Money-path PR assurance configuration, read from the default branch by .github/workflows/money-pr-assurance.yml. See docs/runbooks/money-pr-assurance.md. Changing this file is itself a money-path change.",
+  "version": 1,
+  "statusContext": "money-pr-assurance",
+  "moneyPaths": [
+    "apps/web/src/lib/piggyvest/**",
+    "apps/web/src/lib/wallet/**",
+    "apps/web/src/lib/savings-notifications/**",
+    "apps/web/src/lib/*piggyvest*",
+    "apps/web/src/lib/*wallet*",
+    "apps/web/src/lib/*savings*",
+    "apps/web/src/schemas/piggyvest/**",
+    "apps/web/src/app/api/webhooks/piggyvest/**",
+    "apps/web/src/app/api/storefront/customer/wallet/**",
+    "apps/web/src/app/api/storefront/customer/savings/**",
+    "apps/web/src/app/api/cron/customer-savings/**",
+    "apps/web/src/app/api/cron/wallet-payouts/**",
+    "apps/web/tools/piggyvest-*/**",
+    "apps/web/tools/db/replay-registry/*piggyvest*/**",
+    "apps/web/tools/db/replay-registry/*wallet*/**",
+    "apps/web/tools/db/replay-registry/*savings*/**",
+    "packages/shared/src/piggyvest/**",
+    "supabase/migrations/*piggyvest*",
+    "supabase/migrations/*wallet*",
+    "supabase/migrations/*savings*",
+    "supabase/migrations/tests/*piggyvest*",
+    "supabase/migrations/tests/*wallet*",
+    "supabase/migrations/tests/*savings*",
+    "supabase/tests/*piggyvest*",
+    "supabase/tests/*wallet*",
+    "supabase/tests/*savings*"
+  ],
+  "governancePaths": [
+    ".github/money-path-paths.json",
+    ".github/prompts/money-rules-adversarial-review.md",
+    ".github/scripts/money-pr-assurance*",
+    ".github/workflows/money-pr-assurance.yml"
+  ],
+  "summary": {
+    "directory": "docs/piggyvest-change-summaries",
+    "ignoredFiles": ["TEMPLATE.md", "README.md"],
+    "maxWords": 450,
+    "headings": [
+      "What changes",
+      "Why",
+      "What could go wrong and how it is prevented",
+      "How it is tested",
+      "How it stays switched off"
+    ]
+  },
+  "evidence": {
+    "directory": "docs/piggyvest-contract-evidence"
+  },
+  "reviewers": {
+    "promptPath": ".github/prompts/money-rules-adversarial-review.md",
+    "promptVersion": "money-rules-adversarial-review/v1",
+    "groups": [["codex"], ["claude", "gemini"]],
+    "families": {
+      "codex": {
+        "kind": "codex-clean-comment",
+        "logins": ["chatgpt-codex-connector[bot]"],
+        "cleanPhrases": [
+          "Didn't find any major issues",
+          "Didn’t find any major issues"
+        ]
+      },
+      "claude": {
+        "kind": "verdict-block",
+        "logins": ["claude[bot]"]
+      },
+      "gemini": {
+        "kind": "verdict-block",
+        "logins": ["github-actions[bot]"],
+        "requiredMarker": "<!-- gemini-code-review sha:{head} -->"
+      }
+    }
+  },
+  "ownerSignoff": {
+    "logins": ["ogabasseyy"],
+    "label": "owner-signoff",
+    "phrase": "summary-approved"
+  },
+  "requiredChecks": [
+    { "name": "Quality Gate" },
+    {
+      "name": "Quality Gate - DB Replay",
+      "skipAllowedUnlessChanged": ["supabase/**", "apps/web/tools/db/**"]
+    },
+    {
+      "name": "Quality Gate - Disposable SQL Suites",
+      "skipAllowedUnlessChanged": ["supabase/**", "apps/web/tools/db/**"]
+    }
+  ]
+}

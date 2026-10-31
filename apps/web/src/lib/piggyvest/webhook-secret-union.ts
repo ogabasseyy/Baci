@@ -245,11 +245,9 @@ export type PiggyvestWebhookVerification =
       keyVersion?: string;
       keyStatus?: Exclude<PiggyvestWebhookKeyStatus, 'replay-only'>;
       /**
-       * True when part of the key set could not be loaded (unreadable
-       * archive, a family that failed to load). `families` is then only
-       * what WAS loaded for this secret: an event those families cannot
-       * authorize may still be authorized by the missing assignment, so the
-       * caller must treat "not authorized" as retryable, never terminal.
+       * Part of the key set could not be loaded (unreadable archive, failed
+       * family), so `families` is only what WAS loaded: treat "not
+       * authorized" as retryable, never terminal.
        */
       incompleteKeySet?: boolean;
     };
@@ -278,10 +276,8 @@ export function verifyPiggyvestWebhookSecrets(input: {
     return { status: 'unconfigured' };
   }
   const match = matchPiggyvestWebhookSecretWithFamilies({ ...input, secrets });
-  // A delivery that matches no loaded key is invalid — unless a family
-  // failed to load, in which case the key set is incomplete and the
-  // delivery may be legitimate. Report unconfigured (retryable 503) so
-  // the provider retries instead of the route rejecting it as invalid.
+  // No loaded key matches: invalid, unless a family failed to load. Then the
+  // delivery may be legitimate, so report unconfigured (retryable 503).
   if (!match) {
     if (misconfigured) return { status: 'unconfigured' };
     const revoked = matchPiggyvestWebhookSecretWithFamilies({

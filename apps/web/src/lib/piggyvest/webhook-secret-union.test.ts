@@ -1,9 +1,12 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { beforeEach, expect, it, vi } from 'vitest';
 
-// Random per run: these tests only need distinct signing keys, never fixed ones.
+// Deterministic, distinct signing keys derived from a label, so no signing
+// key is a hardcoded literal and every run uses the same inputs.
 const testKey = (label: string): string =>
-  `${label}-${randomBytes(16).toString('hex')}`;
+  createHash('sha256')
+    .update(`webhook-secret-union-test:${label}`)
+    .digest('hex');
 const RETAINED_SECRET = testKey('retained');
 const UNLOADED_RETAINED_SECRET = testKey('unloaded-retained');
 const INTEREST_SECRET = testKey('interest');

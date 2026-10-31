@@ -4,31 +4,35 @@ import type { QuizV2Event } from '@baci/shared/schemas';
 import { useEffect, useState } from 'react';
 import { fetchAppQuizEvents } from './fetch-app-quiz-events';
 
+type LoadedEvents = { events: QuizV2Event[]; userId: string };
+
 /**
- * Loads the app-only Super Quiz events once the shopper is signed in (the
- * listing is customer-scoped). A failed lookup degrades to the generic
- * "play in the app" call to action instead of an error on the page.
+ * Loads the app-only Super Quiz events for the signed-in shopper. The listing
+ * is caller-scoped (private test quizzes depend on tester/merchant access), so
+ * results are bound to the user they were fetched for: after an account
+ * switch nothing is shown until the new user's lookup completes. A failed
+ * lookup degrades to the generic "play in the app" call to action.
  */
-export function useAppQuizEvents(merchantSlug: string, enabled: boolean) {
-  const [events, setEvents] = useState<QuizV2Event[]>([]);
+export function useAppQuizEvents(merchantSlug: string, userId: string | null) {
+  const [loaded, setLoaded] = useState<LoadedEvents | null>(null);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!userId) return;
     let cancelled = false;
     const load = async () => {
-      let next: QuizV2Event[] = [];
+      let events: QuizV2Event[] = [];
       try {
-        next = await fetchAppQuizEvents(merchantSlug);
+        events = await fetchAppQuizEvents(merchantSlug);
       } catch {
-        next = [];
+        events = [];
       }
-      if (!cancelled) setEvents(next);
+      if (!cancelled) setLoaded({ events, userId });
     };
     void load();
     return () => {
       cancelled = true;
     };
-  }, [enabled, merchantSlug]);
+  }, [merchantSlug, userId]);
 
-  return enabled ? events : [];
+  return userId && loaded?.userId === userId ? loaded.events : [];
 }

@@ -59,7 +59,10 @@ export function OgabasseyV2Quiz({ merchantSlug }: OgabasseyV2QuizProps) {
 
   // Current prize quizzes are app-only; the web lists them with app links and
   // keeps the legacy web flow only for quizzes the app listing does not cover.
-  const appEvents = useAppQuizEvents(merchantSlug, !isLoading && isAuthenticated);
+  const appEvents = useAppQuizEvents(
+    merchantSlug,
+    !isLoading && isAuthenticated ? (user?.id ?? customer?.id ?? null) : null
+  );
   const appEventIds = new Set(appEvents.map((event) => event.id));
   const webEvents = events.filter((event) => !appEventIds.has(event.id));
 

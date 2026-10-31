@@ -30,12 +30,15 @@ export function appQuizEvent(overrides: Partial<QuizV2Event> = {}): QuizV2Event 
   };
 }
 
-export function appQuizEventsResponse(events: QuizV2Event[]) {
+export function appQuizEventsResponse(
+  events: QuizV2Event[],
+  pagination = { hasMore: false, nextOffset: null as number | null, offset: 0 }
+) {
   return {
     contractVersion: 2,
     entryMode: 'free-v1',
     events,
-    pagination: { hasMore: false, limit: 20, nextOffset: null, offset: 0 },
+    pagination: { limit: 50, ...pagination },
     serverNow: '2026-08-05T10:00:01.000Z',
   };
 }

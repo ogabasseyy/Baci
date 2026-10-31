@@ -1009,6 +1009,50 @@ describe('POST /api/storefront/imei-check', () => {
     expect(mocks.mockRefundImeiWalletPayment).not.toHaveBeenCalled();
   });
 
+  it('reconciles a refunded same-key retry before replaying it', async () => {
+    const adminSupabase = createSupabaseMock([
+      {
+        amount_ngn: 700,
+        cached_response: null,
+        cached_status: null,
+        customer_id: 'customer-1',
+        device_category: 'smartphone',
+        id: 'lookup-existing',
+        idempotency_key: IDEMPOTENCY_KEY,
+        imei_hash: hashImeiForTest(VALID_IMEI),
+        merchant_id: 'merchant-1',
+        status: 'pending',
+        tier: 'blacklist',
+      },
+    ]);
+    vi.spyOn(adminSupabase, 'claimAttempt').mockImplementation(async (args) => {
+      Object.assign(adminSupabase.__rows[0], {
+        status: 'refunded_error',
+        cached_status: 502,
+        cached_response: {
+          success: false,
+          status: 'error',
+          code: 'SICKW_UNAVAILABLE',
+          error: 'Refunded',
+        },
+      });
+      return { data: { idempotency_key: args.idempotency_key }, error: null };
+    });
+    mockAuthenticatedUser({ adminSupabase });
+    const { POST } = await importRoute();
+    const response = await POST(
+      createRequest({
+        device: 'smartphone',
+        imei: VALID_IMEI,
+        tier: 'blacklist',
+      })
+    );
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ code: 'SICKW_UNAVAILABLE' });
+    expect(mocks.mockRedeemImeiWalletPayment).not.toHaveBeenCalled();
+    expect(mocks.mockRequestSickwCheck).not.toHaveBeenCalled();
+  });
+
   it('replays a pending Petrock lookup without placing another order', async () => {
     const adminSupabase = createSupabaseMock([
       {

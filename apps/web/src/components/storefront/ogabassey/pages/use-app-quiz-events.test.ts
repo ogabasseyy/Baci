@@ -14,7 +14,7 @@ describe('useAppQuizEvents', () => {
   it('does not fetch while the shopper is signed out', () => {
     const { result } = renderHook(() => useAppQuizEvents('ogabassey', null));
 
-    expect(result.current).toEqual([]);
+    expect(result.current).toEqual({ events: [], settled: true });
     expect(fetchAppQuizEvents).not.toHaveBeenCalled();
   });
 
@@ -24,7 +24,10 @@ describe('useAppQuizEvents', () => {
 
     const { result } = renderHook(() => useAppQuizEvents('ogabassey', 'user-a'));
 
-    await waitFor(() => expect(result.current).toEqual([event]));
+    expect(result.current.settled).toBe(false);
+    await waitFor(() =>
+      expect(result.current).toEqual({ events: [event], settled: true })
+    );
     expect(fetchAppQuizEvents).toHaveBeenCalledWith('ogabassey');
   });
 
@@ -35,8 +38,8 @@ describe('useAppQuizEvents', () => {
 
     const { result } = renderHook(() => useAppQuizEvents('ogabassey', 'user-a'));
 
-    await waitFor(() => expect(fetchAppQuizEvents).toHaveBeenCalled());
-    expect(result.current).toEqual([]);
+    await waitFor(() => expect(result.current.settled).toBe(true));
+    expect(result.current.events).toEqual([]);
   });
 
   describe('bugfix: previous account events leaked after an account switch', () => {
@@ -56,14 +59,16 @@ describe('useAppQuizEvents', () => {
         ({ userId }) => useAppQuizEvents('ogabassey', userId),
         { initialProps: { userId: 'user-a' as string | null } }
       );
-      await waitFor(() => expect(result.current).toEqual([privateEvent]));
+      await waitFor(() => expect(result.current.events).toEqual([privateEvent]));
 
       rerender({ userId: 'user-b' });
 
-      expect(result.current).toEqual([]);
+      expect(result.current).toEqual({ events: [], settled: false });
       expect(fetchAppQuizEvents).toHaveBeenCalledTimes(2);
       resolveSecond([]);
-      await waitFor(() => expect(result.current).toEqual([]));
+      await waitFor(() =>
+        expect(result.current).toEqual({ events: [], settled: true })
+      );
     });
 
     it('drops the events on sign-out', async () => {
@@ -72,11 +77,11 @@ describe('useAppQuizEvents', () => {
         ({ userId }) => useAppQuizEvents('ogabassey', userId),
         { initialProps: { userId: 'user-a' as string | null } }
       );
-      await waitFor(() => expect(result.current).toHaveLength(1));
+      await waitFor(() => expect(result.current.events).toHaveLength(1));
 
       rerender({ userId: null });
 
-      expect(result.current).toEqual([]);
+      expect(result.current).toEqual({ events: [], settled: true });
     });
   });
 });

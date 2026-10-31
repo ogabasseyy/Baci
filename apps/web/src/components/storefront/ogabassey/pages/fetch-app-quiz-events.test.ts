@@ -45,45 +45,62 @@ describe('fetchAppQuizEvents', () => {
   });
 
   describe('bugfix: live quiz pushed off the first page', () => {
-    it('follows pagination so a live quiz on a later page is still listed', async () => {
-      apiGetMock
-        .mockResolvedValueOnce(
-          appQuizEventsResponse([appQuizEvent({ id: id(1), status: 'completed' })], {
-            hasMore: true,
-            nextOffset: 50,
-            offset: 0,
-          })
-        )
-        .mockResolvedValueOnce(
-          appQuizEventsResponse([appQuizEvent({ id: id(2) })], {
+    const offsetOf = (url: string) =>
+      Number(new URL(url, 'https://x.test').searchParams.get('offset'));
+
+    it('reads later pages so a live quiz on page two is still listed', async () => {
+      apiGetMock.mockImplementation(async (url: string) => {
+        const offset = offsetOf(url);
+        if (offset === 0) {
+          return appQuizEventsResponse(
+            [appQuizEvent({ id: id(1), status: 'completed' })],
+            { hasMore: true, nextOffset: 50, offset }
+          );
+        }
+        if (offset === 50) {
+          return appQuizEventsResponse([appQuizEvent({ id: id(2) })], {
             hasMore: false,
             nextOffset: null,
-            offset: 50,
-          })
-        );
-
-      const events = await fetchAppQuizEvents('ogabassey');
-
-      expect(events.map((event) => event.id)).toEqual([id(2)]);
-      expect(apiGetMock).toHaveBeenLastCalledWith(
-        '/api/quiz/events?limit=50&merchantSlug=ogabassey&offset=50',
-        { headers: { 'X-Baci-Quiz-Contract': '2' } }
-      );
-    });
-
-    it('stops after a bounded number of pages', async () => {
-      apiGetMock.mockImplementation(async (url: string) => {
-        const offset = Number(new URL(url, 'https://x.test').searchParams.get('offset'));
-        return appQuizEventsResponse([], {
-          hasMore: true,
-          nextOffset: offset + 50,
+            offset,
+          });
+        }
+        // Pages past the end are empty and must not contribute events.
+        return appQuizEventsResponse([appQuizEvent({ id: id(99) })], {
+          hasMore: false,
+          nextOffset: null,
           offset,
         });
       });
 
-      await fetchAppQuizEvents('ogabassey');
+      const events = await fetchAppQuizEvents('ogabassey');
+
+      expect(events.map((event) => event.id)).toEqual([id(2)]);
+    });
+
+    it('fetches the remaining pages in parallel, bounded to ten pages', async () => {
+      const pending: Array<() => void> = [];
+      apiGetMock.mockImplementation((url: string) => {
+        const offset = offsetOf(url);
+        const page = appQuizEventsResponse([], {
+          hasMore: true,
+          nextOffset: offset + 50,
+          offset,
+        });
+        if (offset === 0) return Promise.resolve(page);
+        return new Promise((resolve) => pending.push(() => resolve(page)));
+      });
+
+      const result = fetchAppQuizEvents('ogabassey');
+      await vi.waitFor(() => expect(apiGetMock).toHaveBeenCalledTimes(10));
+      // All nine follow-up requests are in flight before any has resolved.
+      expect(pending).toHaveLength(9);
+      for (const resolve of pending) resolve();
+      await result;
 
       expect(apiGetMock).toHaveBeenCalledTimes(10);
+      expect(apiGetMock.mock.calls.map(([url]) => offsetOf(url))).toEqual([
+        0, 50, 100, 150, 200, 250, 300, 350, 400, 450,
+      ]);
     });
   });
 

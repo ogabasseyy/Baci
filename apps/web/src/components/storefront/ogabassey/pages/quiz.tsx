@@ -59,12 +59,16 @@ export function OgabasseyV2Quiz({ merchantSlug }: OgabasseyV2QuizProps) {
 
   // Current prize quizzes are app-only; the web lists them with app links and
   // keeps the legacy web flow only for quizzes the app listing does not cover.
-  const appEvents = useAppQuizEvents(
+  const { events: appEvents, settled: appEventsSettled } = useAppQuizEvents(
     merchantSlug,
     !isLoading && isAuthenticated ? (user?.id ?? customer?.id ?? null) : null
   );
   const appEventIds = new Set(appEvents.map((event) => event.id));
-  const webEvents = events.filter((event) => !appEventIds.has(event.id));
+  // Hold the legacy cards until the app listing settles so a v2 quiz never
+  // flashes as a web "Start exam" card and then disappears.
+  const webEvents = appEventsSettled
+    ? events.filter((event) => !appEventIds.has(event.id))
+    : [];
 
   const loadEvents = () =>
     loadQuizEvents(merchantSlug, { setError, setEvents, setStatus });

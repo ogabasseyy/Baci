@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
@@ -57,6 +57,25 @@ describe('OgabasseyV2Quiz app-only prize quizzes', () => {
     expect(
       screen.queryByRole('button', { name: `Start exam for ${APP_EVENT.title}` })
     ).toBeNull();
+  });
+
+  it('bugfix: never flashes a web start card while the app listing is loading', async () => {
+    vi.mocked(apiGet).mockImplementation((_url, options) => {
+      const headers = (options?.headers ?? {}) as Record<string, string>;
+      return headers['X-Baci-Quiz-Contract'] === '2'
+        ? new Promise(() => undefined)
+        : Promise.resolve({
+            ...eventResponse,
+            events: [{ ...eventResponse.events[0], id: APP_EVENT.id }],
+          });
+    });
+
+    render(<OgabasseyV2Quiz merchantSlug="ogabassey" />);
+
+    await waitFor(() =>
+      expect(screen.queryByText('Loading quiz events…')).toBeNull()
+    );
+    expect(screen.queryByRole('button', { name: /Start exam/ })).toBeNull();
   });
 
   it('keeps the web flow for a legacy quiz the app listing does not cover', async () => {

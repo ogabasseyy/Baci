@@ -14,7 +14,8 @@ const EAS_UPDATE_URL = `https://u.expo.dev/${EAS_PROJECT_ID}`;
 function buildEasUpdateConfig(environment = process.env) {
   const isDevelopmentBuild =
     environment.EAS_BUILD_PROFILE?.trim() === 'development';
-  const runtimeVersion = resolveAppVersion(environment) ?? DEFAULT_APP_VERSION;
+  const appVersion = resolveAppVersion(environment) ?? DEFAULT_APP_VERSION;
+  const runtimeVersion = `${appVersion}-sdk58-rn0880`;
 
   if (isDevelopmentBuild) {
     return {

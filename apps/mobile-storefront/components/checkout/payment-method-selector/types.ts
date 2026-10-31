@@ -1,6 +1,6 @@
 import type { IoniconsIconName } from '@react-native-vector-icons/ionicons';
 import type { RefObject } from 'react';
-import type { ScrollView } from 'react-native';
+import type { ScrollViewInstance } from 'react-native';
 import type {
   SavingsSelection,
   WalletSelection,
@@ -69,7 +69,7 @@ export interface PaymentMethodSelectorProps {
    * step so the intent accordion can keep the just-selected card in view when a
    * sibling collapses. Optional — omitted by VTU / tests.
    */
-  paymentScrollRef?: RefObject<ScrollView | null>;
+  paymentScrollRef?: RefObject<ScrollViewInstance | null>;
   paymentScrollOffsetRef?: RefObject<number>;
   /** Open the intent accordion fully collapsed (all options at a glance). */
   initiallyCollapsed?: boolean;

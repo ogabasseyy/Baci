@@ -192,7 +192,7 @@ export default function DashboardClientLayout({
 
           <main
             id="main-content"
-            className="flex-1 transition-all duration-300 ease-in-out p-4 md:p-6 lg:p-8 overflow-auto"
+            className="flex-1 transition-all duration-300 ease-in-out p-4 pb-[calc(6rem+env(safe-area-inset-bottom))] md:p-6 lg:p-8 overflow-auto"
           >
             <NotificationBanner />
             {user && merchant?.user_id === user.id && (

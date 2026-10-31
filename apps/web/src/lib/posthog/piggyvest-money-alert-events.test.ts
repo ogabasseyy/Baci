@@ -100,6 +100,21 @@ describe('buildPiggyvestMoneyAlertProperties', () => {
     expect(reason).toBe('lien on [Filtered] for [Filtered], phone +[Filtered]');
   });
 
+  it('filters numbers written with spaces or dashes between digit groups', () => {
+    const { reason } = buildPiggyvestMoneyAlertProperties(
+      'PIGGYVEST_RESTRICTION_BLOCKED',
+      {
+        reason:
+          'lien on 0123-456-789, phone +234 801 234 5678 or 0801 234 5678, try 3 of 5',
+      },
+      ENV
+    );
+
+    expect(reason).toBe(
+      'lien on [Filtered], phone +[Filtered] or [Filtered], try 3 of 5'
+    );
+  });
+
   it('drops identifiers that are not plain identifiers, and bad attempt counts', () => {
     const properties = buildPiggyvestMoneyAlertProperties(
       'PIGGYVEST_WEBHOOK_REPLAY_UNVERIFIABLE',

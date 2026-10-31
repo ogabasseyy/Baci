@@ -37,7 +37,8 @@ The server PostHog helper also stamps `app_surface` and `runtime`.
 Never sent: request bodies, signatures, key material, customer names, emails,
 phone, account or card numbers. Identifier fields that are not plain
 identifiers are dropped. Emails and runs of seven or more digits inside
-`reason` are replaced with `[Filtered]`.
+`reason`, including digits grouped by single spaces or dashes, are replaced
+with `[Filtered]`.
 
 ## Delivery rules
 
@@ -49,8 +50,11 @@ identifiers are dropped. Emails and runs of seven or more digits inside
   for the same `capture_id` is sent once. Alerts with no capture use
   `operation_id` instead. Alerts with neither (for example a missing key
   configuration) are sent at most once per code and key version every 10
-  minutes. Each event id is derived from the dedupe key, so PostHog can also
-  drop copies sent by other instances.
+  minutes. Each event id is derived from the dedupe key, so copies sent by
+  other instances share one id and are easy to group. PostHog itself only
+  drops an exact duplicate (same id and same timestamp), so another instance
+  can still send its own copy: expect at most one page per instance, never
+  fewer than one.
 - **A failed send can retry.** If PostHog fails or times out, the dedupe slot is
   released and the next occurrence of that alert is sent again.
 

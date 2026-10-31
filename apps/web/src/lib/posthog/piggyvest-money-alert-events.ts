@@ -19,9 +19,11 @@ import { captureServerEvent } from '@/lib/posthog/server';
  * - Fire-and-forget: the send is bounded by a timeout, never throws and never
  *   rejects, so it cannot change any reply.
  * - Deduped per capture (or operation) and code within this process, with a
- *   deterministic event id so PostHog can also drop cross-instance copies.
- *   An alert without either id repeats at most once per window. A failed or
- *   timed-out send releases its slot so the next occurrence can retry.
+ *   deterministic event id so cross-instance copies share one id. PostHog
+ *   only drops a copy whose timestamp also matches, so another instance may
+ *   still page once. An alert without either id repeats at most once per
+ *   window. A failed or timed-out send releases its slot so the next
+ *   occurrence can retry.
  */
 export const PIGGYVEST_MONEY_ALERT_EVENT = 'piggyvest_money_alert';
 export const PIGGYVEST_MONEY_ALERT_TIMEOUT_MS = 2_000;
@@ -31,8 +33,9 @@ const DEDUPE_CAPACITY = 512;
 const MAX_REASON_LENGTH = 120;
 const SAFE_IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/;
 const EMAIL_VALUE = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
-// Phone, account and card numbers are long digit runs; no alert needs one.
-const LONG_DIGIT_RUN = /\d{7,}/g;
+// Phone, account and card numbers are long digit runs, sometimes grouped by
+// single spaces or dashes; no alert needs one (dates are filtered too).
+const LONG_DIGIT_RUN = /\d(?:[\s-]?\d){6,}/g;
 const FILTERED = '[Filtered]';
 
 export interface PiggyvestMoneyAlertProperties {

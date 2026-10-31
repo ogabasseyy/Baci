@@ -8,6 +8,7 @@ import { readBoundedWebhookBody } from '@/lib/piggyvest/webhook-request';
 import { admitPiggyvestDelivery } from './ingress';
 import {
   isAuthorizationQuarantine,
+  isKeySetIncompleteRetry,
   processVerifiedDelivery,
 } from './process-delivery';
 
@@ -36,6 +37,10 @@ import {
  * - Capture write fails -> 503 + alert (the provider retries; no row).
  * - Captured but processing incomplete -> 503 until the drain is attested,
  *   200 deferred once it is (alert either way).
+ * - Captured, but the loaded key families cannot authorize the event while
+ *   the key set is incomplete -> 503 + alert even when the drain is
+ *   attested: the capture's recorded authority is immutable, so only the
+ *   provider's redelivery (verified under the full set) can recover it.
  * - Everything else -> 200.
  */
 
@@ -92,7 +97,8 @@ export async function POST(request: NextRequest): Promise<Response> {
     createClient,
   });
   if (admission.kind === 'rejected') return admission.response;
-  const { capture, signature, matchedSecret, families } = admission.delivery;
+  const { capture, signature, matchedSecret, families, incompleteKeySet } =
+    admission.delivery;
 
   // An identical redelivery of a row already processed needs no work.
   if (
@@ -112,11 +118,21 @@ export async function POST(request: NextRequest): Promise<Response> {
     // but crashed before the ledger write, the redelivery must still
     // credit. The inbox claim and ledger dedupe keys make that safe.
     processing = await processVerifiedDelivery(
-      { rawBody, signature, matchedSecret, families },
+      { rawBody, signature, matchedSecret, families, incompleteKeySet },
       { createClient, getPiggyvestConfig: getPiggyvestApiConfig }
     );
   } catch {
     processing = null;
+  }
+  if (processing && isKeySetIncompleteRetry(processing)) {
+    // Retryable regardless of the drain attestation: replay is bounded by
+    // the families recorded at admission and can never reach the handler
+    // this event needs, so the provider's redelivery is the only recovery.
+    emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_KEYS_UNCONFIGURED', {
+      captureId: capture.id,
+      reason: 'key set incomplete; event not authorized by the loaded families',
+    });
+    return processing;
   }
   if (processing && processing.status >= 200 && processing.status < 300) {
     // A delivery quarantined for the wrong signing key family never ran a

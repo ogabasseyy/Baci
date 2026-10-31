@@ -264,6 +264,44 @@ describe('drainPiggyvestWebhookCaptures', () => {
     expect(summary.needsReview).toBe(1);
   });
 
+  it('defers, never dead-letters, a row whose processing needs a key family that is not loaded yet', async () => {
+    // The replay verified under part of the key set; processing could not
+    // decide the family authority and asks for a retry once config is whole.
+    const stored = row(inflow, sign(current, inflow), {
+      attempts: MAX_DRAIN_ATTEMPTS + 5,
+    });
+    const process = vi.fn(async () => ({
+      status: 503,
+      keySetIncomplete: true,
+    }));
+
+    const summary = await drainPiggyvestWebhookCaptures(
+      deps([[stored]], process)
+    );
+
+    expect(process).toHaveBeenCalledTimes(1);
+    expect(resolved).toEqual([
+      { id: stored.capture_id, state: 'deferred', error: 'KEY_SET_INCOMPLETE' },
+    ]);
+    expect(summary).toMatchObject({ retried: 1, needsReview: 0 });
+  });
+
+  it('hands the replay the incomplete-key-set signal from verification', async () => {
+    env = {
+      NODE_ENV: 'test',
+      PIGGYVEST_SECRET_KEY: current,
+      PIGGYVEST_WEBHOOK_KEY_ARCHIVE: '{not json',
+    };
+    const stored = row(inflow, sign(current, inflow));
+    const process = vi.fn(async () => ({ status: 200 }));
+
+    await drainPiggyvestWebhookCaptures(deps([[stored]], process));
+
+    expect(process).toHaveBeenCalledWith(
+      expect.objectContaining({ incompleteKeySet: true })
+    );
+  });
+
   it('never dead-letters a configuration-blocked row, whatever its attempt count', async () => {
     env = { NODE_ENV: 'test' };
     const stored = row(inflow, sign(current, inflow), {

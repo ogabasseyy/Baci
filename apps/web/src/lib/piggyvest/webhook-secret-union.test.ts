@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -248,4 +249,64 @@ it('keeps healthy families when one secrets reader throws', () => {
     { secret: 'legacy-secret', family: 'legacy' },
     { secret: 'interest-secret', family: 'interest' },
   ]);
+});
+
+const incompleteBody = new TextEncoder().encode('{"eventId":"evt-incomplete"}');
+const signWith = (secret: string) =>
+  createHmac('sha512', secret).update(incompleteBody).digest('hex');
+
+it('reports an incomplete key set on a verified delivery when a family failed to load', () => {
+  mocks.interest.mockReturnValue({
+    webhookSecret: 'interest-secret',
+    retainedWebhookSecrets: [],
+  });
+  mocks.bank.mockImplementation(() => {
+    throw new Error('unreadable bank configuration');
+  });
+
+  expect(
+    verifyPiggyvestWebhookSecrets({
+      rawBody: incompleteBody,
+      signature: signWith('interest-secret'),
+      env: { NODE_ENV: 'test', PIGGYVEST_SECRET_KEY: 'legacy-secret' },
+    })
+  ).toMatchObject({
+    status: 'verified',
+    families: ['interest'],
+    incompleteKeySet: true,
+  });
+});
+
+it('reports an incomplete key set on a verified delivery when the archive is unreadable', () => {
+  mocks.interest.mockReturnValue({
+    webhookSecret: 'interest-secret',
+    retainedWebhookSecrets: [],
+  });
+
+  expect(
+    verifyPiggyvestWebhookSecrets({
+      rawBody: incompleteBody,
+      signature: signWith('interest-secret'),
+      env: {
+        NODE_ENV: 'test',
+        PIGGYVEST_SECRET_KEY: 'legacy-secret',
+        PIGGYVEST_WEBHOOK_KEY_ARCHIVE: '{not json',
+      },
+    })
+  ).toMatchObject({ status: 'verified', incompleteKeySet: true });
+});
+
+it('does not report an incomplete key set when every family loaded', () => {
+  mocks.interest.mockReturnValue({
+    webhookSecret: 'interest-secret',
+    retainedWebhookSecrets: [],
+  });
+
+  expect(
+    verifyPiggyvestWebhookSecrets({
+      rawBody: incompleteBody,
+      signature: signWith('interest-secret'),
+      env: { NODE_ENV: 'test', PIGGYVEST_SECRET_KEY: 'legacy-secret' },
+    })
+  ).toMatchObject({ status: 'verified', incompleteKeySet: false });
 });

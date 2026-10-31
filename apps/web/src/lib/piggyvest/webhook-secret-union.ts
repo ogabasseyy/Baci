@@ -244,6 +244,14 @@ export type PiggyvestWebhookVerification =
       families: PiggyvestWebhookKeyFamily[];
       keyVersion?: string;
       keyStatus?: Exclude<PiggyvestWebhookKeyStatus, 'replay-only'>;
+      /**
+       * True when part of the key set could not be loaded (unreadable
+       * archive, a family that failed to load). `families` is then only
+       * what WAS loaded for this secret: an event those families cannot
+       * authorize may still be authorized by the missing assignment, so the
+       * caller must treat "not authorized" as retryable, never terminal.
+       */
+      incompleteKeySet?: boolean;
     };
 
 /**
@@ -290,5 +298,6 @@ export function verifyPiggyvestWebhookSecrets(input: {
     families: match.families,
     keyVersion: match.keyVersion,
     keyStatus: match.keyStatus === 'overlap' ? 'overlap' : 'current',
+    incompleteKeySet: misconfigured,
   };
 }

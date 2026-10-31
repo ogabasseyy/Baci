@@ -21,6 +21,8 @@ export type StoredPiggyvestDeliveryVerification =
       families: PiggyvestWebhookKeyFamily[];
       keyVersion: string;
       keyStatus: PiggyvestWebhookKeyStatus;
+      /** Part of the key set was unavailable; see the ingress verdict. */
+      incompleteKeySet?: boolean;
     };
 
 /**
@@ -63,12 +65,19 @@ export function verifyStoredPiggyvestDelivery(input: {
     secrets: candidates,
   });
   if (match) {
-    if (!input.recordedFamilies) return { status: 'verified', ...match };
+    if (!input.recordedFamilies)
+      return { status: 'verified', ...match, incompleteKeySet: misconfigured };
     const families = narrowToRecordedFamilies(
       match.families,
       input.recordedFamilies
     );
-    if (families.length > 0) return { status: 'verified', ...match, families };
+    if (families.length > 0)
+      return {
+        status: 'verified',
+        ...match,
+        families,
+        incompleteKeySet: misconfigured,
+      };
     // An empty intersection proves authority was lost only when the key set
     // is complete. With an unreadable archive or a family that failed to
     // load, the assignment that carried the recorded family may simply not

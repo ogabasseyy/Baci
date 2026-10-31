@@ -143,6 +143,7 @@ describe('admitPiggyvestDelivery', () => {
       delivery: {
         matchedSecret: 'matched-secret',
         families: ['legacy', 'interest'],
+        incompleteKeySet: false,
         signature,
         capture: receipt,
       },
@@ -155,6 +156,32 @@ describe('admitPiggyvestDelivery', () => {
       keyFamilies: ['legacy', 'interest'],
       keyStatus: 'overlap',
     });
+  });
+
+  it('carries the incomplete-key-set signal through admission without changing the captured evidence', async () => {
+    mocks.verify.mockReturnValue({
+      status: 'verified',
+      secret: 'matched-secret',
+      families: ['interest'],
+      keyVersion: 'pv-2026-10',
+      keyStatus: 'current',
+      incompleteKeySet: true,
+    });
+
+    const result = await admit({
+      'x-pvb-signature': signature,
+      'content-type': 'application/json',
+    });
+
+    expect(result).toMatchObject({
+      kind: 'admitted',
+      delivery: { families: ['interest'], incompleteKeySet: true },
+    });
+    // The stored row keeps exactly the families the loaded keys proved.
+    expect(mocks.capture).toHaveBeenCalledWith(
+      client,
+      expect.objectContaining({ keyFamilies: ['interest'] })
+    );
   });
 
   it('derives a non-secret key version and defaults to current when the verifier gives none', async () => {

@@ -174,6 +174,29 @@ describe('an incomplete key set cannot prove that authority was lost', () => {
     expect(verify(setup)).toEqual({ status: 'authority_lost' });
   });
 
+  it('marks a verified replay as incomplete only while part of the key set is unavailable', () => {
+    const setup = bankRecordedSetup('{not json');
+    const verifyRecorded = (families: ('bank' | 'legacy')[]) =>
+      verifyStoredPiggyvestDelivery({
+        rawBody,
+        signature: setup.signature,
+        env: setup.env,
+        now: NOW,
+        recordedFamilies: families,
+      });
+
+    expect(verifyRecorded(['legacy'])).toMatchObject({
+      status: 'verified',
+      families: ['legacy'],
+      incompleteKeySet: true,
+    });
+    setup.env.PIGGYVEST_WEBHOOK_KEY_ARCHIVE = '[]';
+    expect(verifyRecorded(['legacy'])).toMatchObject({
+      status: 'verified',
+      incompleteKeySet: false,
+    });
+  });
+
   it('resumes with the recorded family only once the archive is readable, never the legacy family', () => {
     const { shared } = bankRecordedSetup('[]');
     const setup = bankRecordedSetup(

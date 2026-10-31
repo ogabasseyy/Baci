@@ -23,6 +23,11 @@ import { toRecordInput } from './record-input';
  * - Authentic but unparseable/unknown/conflicting event, or a delivery
  *   signed by a key family unauthorized for legacy handling -> quarantine
  *   (durable receipt of a non-retryable observation) -> 200.
+ * - The same key-family case while the key set is INCOMPLETE (unreadable
+ *   archive, a family that failed to load): the missing assignment may be
+ *   the one that authorizes the event, so it is NOT quarantined. It answers
+ *   the retryable 503 of an unconfigured server, writes no quarantine, and
+ *   the caller keeps the capture exactly as admitted.
  * - Completed processing -> 200 (deferred backlog included).
  * - Inbox/quarantine write fails, or a specialized intake is unavailable
  *   -> 503.
@@ -40,6 +45,11 @@ export interface VerifiedDelivery {
   signature: string;
   matchedSecret: string;
   families: readonly PiggyvestWebhookKeyFamily[];
+  /**
+   * Part of the key set was unavailable when this delivery verified, so
+   * `families` may be only part of what the secret authorizes.
+   */
+  incompleteKeySet?: boolean;
   /** `replay` for a stored row; the receiver's own deliveries use ingress. */
   keyScope?: WebhookKeyScope;
 }
@@ -53,6 +63,21 @@ export interface ProcessDeliveryDeps {
 // key family signed it) rather than handled. A side table keeps the
 // provider-facing Response untouched: nothing internal leaks into headers.
 const authorizationQuarantines = new WeakSet<Response>();
+
+// Retryable answers for a delivery whose family authority cannot be decided
+// while the key set is incomplete. Same side-table idea: the provider-facing
+// Response stays identical to the unconfigured-server 503.
+const keySetIncompleteRetries = new WeakSet<Response>();
+
+/**
+ * True when `response` asks for a retry because the key set was incomplete
+ * and the loaded families could not authorize the event. Recovery is the
+ * provider's redelivery (it verifies under the full set and is captured on
+ * its own row); this row's recorded authority is never widened.
+ */
+export function isKeySetIncompleteRetry(response: Response): boolean {
+  return keySetIncompleteRetries.has(response);
+}
 
 /**
  * True when `response` is the acknowledgement of a delivery that was
@@ -68,7 +93,14 @@ export async function processVerifiedDelivery(
   delivery: VerifiedDelivery,
   deps: ProcessDeliveryDeps
 ): Promise<Response> {
-  const { rawBody, signature, matchedSecret, families, keyScope } = delivery;
+  const {
+    rawBody,
+    signature,
+    matchedSecret,
+    families,
+    keyScope,
+    incompleteKeySet,
+  } = delivery;
   const { createClient } = deps;
   let jsonPayload: unknown;
   try {
@@ -120,6 +152,18 @@ export async function processVerifiedDelivery(
     // specialized intake claimed is quarantined, never legacy-processed —
     // otherwise a compromised narrow key could forge unrelated events.
     if (!families.includes('legacy')) {
+      if (incompleteKeySet) {
+        // Not a verdict yet: a family that failed to load may be the one
+        // that authorizes this event. A quarantine 200 would end the
+        // provider's retries and no later repair could recover the event,
+        // so answer like an unconfigured server and write nothing.
+        const retry = NextResponse.json(
+          { error: 'Integration unavailable', code: 'PIGGYVEST_NOT_READY' },
+          { status: 503, headers: noStore }
+        );
+        keySetIncompleteRetries.add(retry);
+        return retry;
+      }
       const quarantined = await quarantineAndAck(
         rawBody,
         'key-family',

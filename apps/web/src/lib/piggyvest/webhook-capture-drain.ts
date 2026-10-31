@@ -32,6 +32,11 @@ export interface ReplayDelivery {
   signature: string;
   matchedSecret: string;
   families: readonly PiggyvestWebhookKeyFamily[];
+  /**
+   * Part of the key set was unavailable when the replay verified, so
+   * `families` may be only part of what the recorded authority covers.
+   */
+  incompleteKeySet?: boolean;
   /** Stored bytes may use the family's archived keys past their overlap. */
   keyScope: 'replay';
 }
@@ -53,11 +58,17 @@ export interface DrainDeps {
   /**
    * Runs the shared processing pipeline. A non-2xx status means incomplete,
    * and so does an authorization quarantine (the wrong key family signed
+   * and so does an authorization quarantine (the wrong key family signed
    * it, so no financial handler ran): that row is never resolved processed.
+   * `keySetIncomplete` marks a retry that only a complete key set can settle
+   * (the loaded families could not authorize the event): that row is
+   * deferred, not failed.
    */
-  process(
-    delivery: ReplayDelivery
-  ): Promise<{ status: number; authorizationQuarantine?: boolean }>;
+  process(delivery: ReplayDelivery): Promise<{
+    status: number;
+    authorizationQuarantine?: boolean;
+    keySetIncomplete?: boolean;
+  }>;
 }
 
 export interface DrainSummary {
@@ -131,24 +142,34 @@ async function drainRow(
   }
 
   let completed = false;
+  let keySetIncomplete = false;
   try {
     const result = await deps.process({
       rawBody,
       signature: row.signature,
       matchedSecret: verification.secret,
       families,
+      incompleteKeySet: verification.incompleteKeySet,
       keyScope: 'replay',
     });
     completed =
       result.status >= 200 &&
       result.status < 300 &&
       result.authorizationQuarantine !== true;
+    keySetIncomplete = result.keySetIncomplete === true;
   } catch {
     completed = false;
   }
   if (completed) {
     await settle(deps, row, 'processed', null);
     return 'processed';
+  }
+  if (keySetIncomplete) {
+    // The loaded families could not authorize the event but the key set is
+    // incomplete: not a failure. Defer (attempt refunded, bounded backoff,
+    // never dead-lettered) so a repaired configuration resumes the row.
+    await settle(deps, row, 'deferred', 'KEY_SET_INCOMPLETE');
+    return 'retried';
   }
   if (row.attempts >= MAX_DRAIN_ATTEMPTS) {
     emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_NEEDS_REVIEW', {

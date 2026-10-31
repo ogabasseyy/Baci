@@ -35,6 +35,11 @@ const noStore = { 'Cache-Control': 'no-store' };
 export interface AdmittedDelivery {
   matchedSecret: string;
   families: readonly PiggyvestWebhookKeyFamily[];
+  /**
+   * Part of the key set was unavailable when this delivery verified, so
+   * `families` may be only part of what the secret really authorizes.
+   */
+  incompleteKeySet: boolean;
   /** Canonical lowercase hex signature that verified. */
   signature: string;
   capture: PiggyvestCaptureResult;
@@ -117,6 +122,7 @@ export async function admitPiggyvestDelivery(input: {
       delivery: {
         matchedSecret: verification.secret,
         families: verification.families,
+        incompleteKeySet: verification.incompleteKeySet === true,
         signature,
         capture,
       },

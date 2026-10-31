@@ -144,6 +144,8 @@ SELECT * FROM (VALUES
    'guest or bearer flow; token/secret verified in the body'),
   ('public.prepare_storefront_order_for_checkout(uuid,uuid,text,text,text,text,uuid,jsonb,boolean)',
    'FOLLOW-UP: token holder can skip route-side quote validation and pin pod inventory'),
+  ('public.preview_receipt_claim(text)',
+   'FOLLOW-UP: legacy anon caller still active (pg_stat_statements: 7 anon calls 2026-10-22..10-31); retire once callers are gone'),
   ('public.preview_receipt_claim_v3(text)',
    'guest or bearer flow; token/secret verified in the body'),
   ('public.record_analytics_domain_event_v1(uuid,text,text,jsonb,jsonb,jsonb,text,text,text,text,timestamp with time zone,jsonb)',

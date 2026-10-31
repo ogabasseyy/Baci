@@ -24,7 +24,6 @@ SELECT * FROM (VALUES
   ('public.prevent_rest_of_world_zone_disable()', ARRAY['anon','authenticated'], ARRAY['service_role']),
   ('public.prevent_rest_of_world_zone_location()', ARRAY['anon','authenticated'], ARRAY['service_role']),
   ('public.prevent_used_discount_code_identity_mutation()', ARRAY['anon','authenticated'], ARRAY['service_role']),
-  ('public.preview_receipt_claim(text)', ARRAY['anon','authenticated'], ARRAY['service_role']),
   ('public.quiz_enforce_identity_attempt_cap()', ARRAY['anon','authenticated'], ARRAY['service_role']),
   ('public.refresh_pending_shipment_notification_snapshot()', ARRAY['anon','authenticated'], ARRAY['service_role']),
   ('public.reject_cross_order_paystack_dva_alias()', ARRAY['anon','authenticated'], ARRAY['service_role']),

@@ -15,17 +15,20 @@
 --    global default). service_role and postgres keep their grants. The
 --    defaults of supabase_admin are left alone: it is a managed role that
 --    migrations never create objects as, and postgres cannot change them.
--- 2. Revoke EXECUTE on 63 public SECURITY DEFINER functions that a read-only
+-- 2. Revoke EXECUTE on 62 public SECURITY DEFINER functions that a read-only
 --    production triage of the 159 functions executable with the anon key found
---    to have no anon caller: 33 from PUBLIC, anon and authenticated (27
---    trigger functions, which fire without EXECUTE, and 6 internal helpers),
+--    to have no anon caller: 32 from PUBLIC, anon and authenticated (27
+--    trigger functions, which fire without EXECUTE, and 5 internal helpers),
 --    and 30 from PUBLIC and anon (authenticated keeps the grant its callers
 --    use). Every entry was re-checked against origin/main callers, and the SQL
 --    suites run against the migrated replay. get_storefront_cluster_guide_
 --    candidates_v1 and create_storefront_order_with_loyalty_code stay as they
---    are because existing suites pin their anon EXECUTE grants. Triage items
---    marked keep, investigate or add_authorization_check are not changed; the
---    suite supabase/tests/public_definer_function_exposure.sql pins them on an
+--    are because existing suites pin their anon EXECUTE grants. The legacy
+--    preview_receipt_claim(text) stays too: production pg_stat_statements
+--    shows 7 anon calls (2026-10-22..10-31) from an old client, so it keeps
+--    its grants until those callers are gone. Triage items marked keep,
+--    investigate or add_authorization_check are not changed; the suite
+--    supabase/tests/public_definer_function_exposure.sql pins them on an
 --    explicit allowlist.
 --
 -- Behaviour change for future functions: new functions created by postgres no
@@ -107,8 +110,6 @@ GRANT EXECUTE ON FUNCTION public.version_active_paystack_alias_snapshot() TO ser
 REVOKE ALL ON FUNCTION public.commerce_cart_prepare_checkout(uuid, integer, text)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.commerce_cart_prepare_checkout(uuid, integer, text) TO service_role;
-REVOKE ALL ON FUNCTION public.preview_receipt_claim(text) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.preview_receipt_claim(text) TO service_role;
 REVOKE ALL ON FUNCTION public.select_abandoned_paystack_attempt_candidates_v1(
   integer, timestamp with time zone, timestamp with time zone
 )

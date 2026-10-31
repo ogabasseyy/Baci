@@ -1,2 +1,2 @@
 // Pending default-privilege and public SECURITY DEFINER exposure migration; never registered as applied production history.
-export const DEFINER_PRIVILEGES_PENDING_REPLAY_SOURCE_ROWS = `f707b49992ac1df5f98ad4fc1c6fc62a3ef9cf44d4b8aabfed6e41930b31c3b9 20261030233000_harden_public_definer_function_privileges.sql`;
+export const DEFINER_PRIVILEGES_PENDING_REPLAY_SOURCE_ROWS = `5afc14c1ba336a840cd7a9baf1b5310b5f3562aab1af7cecaa803880c139626d 20261030233000_harden_public_definer_function_privileges.sql`;

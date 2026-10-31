@@ -1,10 +1,12 @@
 import 'server-only';
+import { piggyvestArchivedVerificationSecretsSchema } from '@/schemas/piggyvest/webhook-key-archive';
 import { primaryCardCustodyInboxSchemas as schemas } from '@/schemas/primary-wallet-card-custody-inbox';
 import type { createPrimaryCardCustodyExecutor } from './primary-wallet-card-custody-executor';
 import type { createPrimaryCardCustodyInboxMapping } from './primary-wallet-card-custody-inbox-mapping';
 import type { createPrimaryCardCustodyReader } from './primary-wallet-card-custody-reader';
 import { applyPrimaryCardSignedCustody } from './primary-wallet-card-custody-signed';
 import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
+import { acceptedWebhookSecrets } from './webhook-key-archive';
 
 export function createPrimaryCardCustodyInboxWorker(input: {
   configuration: unknown;
@@ -13,8 +15,14 @@ export function createPrimaryCardCustodyInboxWorker(input: {
   resolveOperation: ReturnType<typeof createPrimaryCardCustodyInboxMapping>;
   observe: ReturnType<typeof createPrimaryCardCustodyReader>;
   now?: () => number;
+  /** Derived archive-sourced keys (replay scope), validated and bounded. */
+  archivedSecrets?: readonly string[];
 }) {
   const config = schemas.runtime.parse(input.configuration);
+  const archivedSecrets = piggyvestArchivedVerificationSecretsSchema.parse(
+    input.archivedSecrets
+  );
+  const verificationSecrets = acceptedWebhookSecrets(config, archivedSecrets);
   return async (signal?: AbortSignal) => {
     const totals = {
       claimed: 0,
@@ -51,10 +59,7 @@ export function createPrimaryCardCustodyInboxWorker(input: {
       try {
         const payload = Buffer.from(claim.rawHex, 'hex');
         if (
-          ![
-            config.webhookSecret,
-            ...(config.retainedWebhookSecrets ?? []),
-          ].some((secret) =>
+          !verificationSecrets.some((secret) =>
             verifyPiggyvestPayloadSignature({
               payload,
               signature: claim.signature,
@@ -93,7 +98,9 @@ export function createPrimaryCardCustodyInboxWorker(input: {
                     rawBody: payload,
                     signature: claim.signature,
                     secret: config.webhookSecret,
-                    retainedSecrets: config.retainedWebhookSecrets,
+                    retainedSecrets: verificationSecrets.filter(
+                      (secret) => secret !== config.webhookSecret
+                    ),
                     operationId,
                     inboxToken: claim.token,
                     loadContext: (selected) =>

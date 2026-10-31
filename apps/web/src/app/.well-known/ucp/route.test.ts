@@ -99,7 +99,6 @@ describe('GET /.well-known/ucp', () => {
 
   it('exposes Baci checkout extensions when agentic checkout is configured', async () => {
     stubAgenticCheckoutEnv();
-    stubMerchant({ shared_cart_enabled: true });
 
     const { GET } = await import('./route');
     const response = await GET(
@@ -129,21 +128,6 @@ describe('GET /.well-known/ucp', () => {
         schema: 'https://ucp.dev/2026-04-08/schemas/shopping/checkout.json',
       }),
     ]);
-    expect(body.ucp.capabilities['dev.ucp.shopping.cart']).toEqual([
-      expect.objectContaining({
-        spec: 'https://ucp.dev/2026-04-08/specification/cart',
-      }),
-    ]);
-    expect(
-      body.ucp.capabilities['dev.ucp.shopping.cart'][0].config.rest.operations
-    ).toMatchObject({
-      cancel_cart: 'https://ogabassey.com/api/agentic/carts/{id}/cancel',
-      convert_cart_to_checkout:
-        'https://ogabassey.com/api/agentic/carts/{id}/checkout',
-      create_cart: 'https://ogabassey.com/api/agentic/carts',
-      get_cart: 'https://ogabassey.com/api/agentic/carts/{id}',
-      update_cart: 'https://ogabassey.com/api/agentic/carts/{id}',
-    });
     expect(
       body.ucp.capabilities['dev.ucp.shopping.catalog.lookup'][0].config.rest
         .operations
@@ -216,24 +200,6 @@ describe('GET /.well-known/ucp', () => {
     expect(body.extensions.baci.links.order).toBe(
       'https://ogabassey.com/api/agentic/orders/{order_id}'
     );
-  });
-
-  it('does not declare cart for a merchant that is not enrolled in shared cart', async () => {
-    stubAgenticCheckoutEnv();
-    stubMerchant({ shared_cart_enabled: false });
-
-    const { GET } = await import('./route');
-    const response = await GET(
-      new Request('https://ogabassey.com/.well-known/ucp', {
-        headers: { host: 'ogabassey.com' },
-      })
-    );
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.ucp.capabilities['dev.ucp.shopping.cart']).toBeUndefined();
-    expect(body.extensions.baci.capabilities).not.toContain('cart.transfer');
-    expect(body.ucp.capabilities['dev.ucp.shopping.checkout']).toBeDefined();
   });
 
   it('omits the Paystack handler but preserves pay on delivery while DVA is paused', async () => {

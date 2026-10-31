@@ -100,6 +100,15 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
     if (primary === 'conflict') {
       return 'conflict';
     }
+    // The engine readiness gate refused the credit (not ready, or the check
+    // failed). Retryable, never a fall-through: the captured delivery stays
+    // pending and replays once the engine is ready, and no other credit
+    // path may handle it meanwhile.
+    if (primary === 'prerequisite')
+      return retryable(
+        'PIGGYVEST_PRIMARY_INFLOW_NOT_READY',
+        'Primary wallet inflow not ready'
+      );
     // Rollback order matters: the legacy inflow runs first so a
     // rollback-to-legacy still credits; 503 only when it too is
     // unavailable and the inbox already declined as disabled.

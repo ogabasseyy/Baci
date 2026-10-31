@@ -221,3 +221,20 @@ it('falls through when an enabled bank inbox declines an unmapped receipt', asyn
   });
   expect(response).toBeNull();
 });
+
+it('answers retryable, never falling through, while the engine refuses the inflow', async () => {
+  mocks.bank.mockResolvedValue({ outcome: 'not_handled', response: null });
+  mocks.inflow.mockResolvedValue('prerequisite');
+  const response = (await dispatchPrimaryPiggyvestIntake({
+    ...base,
+    event: { eventType: 'bank-transfer.inflow.success' } as never,
+    families: ['legacy', 'bank'],
+  })) as Response;
+  expect(response).toBeInstanceOf(Response);
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({
+    received: false,
+    code: 'PIGGYVEST_PRIMARY_INFLOW_NOT_READY',
+    error: 'Primary wallet inflow not ready',
+  });
+});

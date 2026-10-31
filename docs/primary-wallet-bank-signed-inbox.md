@@ -69,6 +69,31 @@ Inventory all nonsystem effective ACLs in the real target before approval. The
 fixture's blanket PUBLIC-function revokes are test baseline isolation, **not** a
 production installer or instruction to revoke live grants wholesale.
 
+## Engine readiness gate
+
+After its session check and before any claim, the worker asks
+`piggyvest_primary.engine_ready('bank_inbox')` whether the PiggyVest ledger and
+transfer engine fences are in place. Until the enforcing readiness check
+replaces the stub (`20261031225605`), the answer is always not ready, so the
+worker claims nothing: stored receipts stay pending exactly as captured, with no
+attempt spent and no lease taken, and credit once after readiness passes. A
+failed or malformed answer counts as not ready. A gated drain returns zero
+counters plus `engineNotReady` (the missing marker ids, never customer data),
+so it is distinguishable from an empty inbox.
+
+The worker capability role holds exactly one membership,
+`piggyvest_primary_readiness_reader` (NOLOGIN, inherit only), which can execute
+`engine_ready` and nothing else. `bank_role_safe` accepts that membership and
+function for the worker only and still rejects any other membership, any reader
+that is itself a member of a role or can log in, and any other effective grant.
+The intake never holds the reader. The rules live in
+`bank_role_violations(login, worker)`, which lists each violation so the SQL
+suite can test them without logging in as the worker.
+
+The activation inventory in `tools/staging/primary-wallet-bank-inbox/` still
+expects no capability membership and five RPCs. It rejects the new shape, so
+update it with the enforcing readiness check, before any worker activation.
+
 ## Stable SHA-256 values
 
 ```text

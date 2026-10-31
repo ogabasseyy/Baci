@@ -1,8 +1,13 @@
 import { z } from 'zod';
 import { createAuthenticatedFetch } from '@/hooks/orders/authenticated-fetch';
 import { BASE_URL } from '@/lib/api-client';
+import {
+  orderShippingAddressSaveErrorSchema,
+  orderShippingAddressSaveResponseSchema,
+} from '@/schemas/order-shipping-address-save';
 
 const REQUEST_TIMEOUT_MS = 20_000;
+const SAVE_ADDRESS_TIMEOUT_MS = 15_000;
 
 const quoteSchema = z.object({
   id: z.string().uuid(),
@@ -123,6 +128,40 @@ export async function getOrderGiglQuote(
     REQUEST_TIMEOUT_MS
   );
   return parseResponse(response, quoteResultSchema);
+}
+
+/**
+ * Saves a completed delivery address through the existing order edit, so a
+ * bound GIG quote can be requested without a receiver override.
+ */
+export async function saveOrderGiglShippingAddress(
+  orderId: string,
+  shippingAddress: Record<string, unknown>,
+  signal?: AbortSignal
+) {
+  const response = await createAuthenticatedFetch(
+    `${BASE_URL}/api/orders/${encodeURIComponent(orderId)}`,
+    {
+      body: JSON.stringify({ shipping_address: shippingAddress }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'PATCH',
+      signal,
+    },
+    SAVE_ADDRESS_TIMEOUT_MS
+  );
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = orderShippingAddressSaveErrorSchema.safeParse(body);
+    throw new OrderGiglShippingError(
+      (error.success && error.data.error) ||
+        'Could not save the delivery address. Please try again.',
+      response.status,
+      error.success ? error.data.code : undefined
+    );
+  }
+  if (!orderShippingAddressSaveResponseSchema.safeParse(body).success) {
+    throw new Error('Invalid server response');
+  }
 }
 
 export async function getMerchantWalletFundingAccount(signal?: AbortSignal) {

@@ -9,6 +9,7 @@ import type {
 export interface ShipmentFlowSheetProps {
   recoveryOrder?: Order;
   canUseProvider: boolean;
+  checkoutPaidShippingLabel?: string | null;
   fulfillmentDetails: ShipmentFulfillmentDetails;
   fulfillmentItemIndex: number;
   giglShipping?: ReturnType<typeof useOrderGiglShipping>;

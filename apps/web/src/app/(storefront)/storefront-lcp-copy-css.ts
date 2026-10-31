@@ -1,3 +1,4 @@
+import { AUTHORITY_HUB_LCP_CSS } from './authority-hub-lcp-css';
 import { REPAIR_BOOKING_LCP_CSS } from './repair-booking-lcp-css';
 
 /**
@@ -66,7 +67,7 @@ html:has([data-storefront-shell]) *::after {
   margin: 0 !important;
 }
 
-${REPAIR_BOOKING_LCP_CSS}
+${REPAIR_BOOKING_LCP_CSS}${AUTHORITY_HUB_LCP_CSS}
 
 [data-cwv-lcp-copy="imei"] {
   color: var(--store-background-text, #111827) !important;
@@ -82,19 +83,6 @@ ${REPAIR_BOOKING_LCP_CSS}
   font-weight: 800 !important;
   line-height: 2.25rem !important;
   margin: 0 0 1rem !important;
-}
-
-/* Brand/family hub intro: the measured LCP node. Margin stays with the
-   header's space-y utility. Sizes mirror text-base/leading-7 and sm:text-lg. */
-[data-cwv-lcp-copy="authority-hub"] {
-  font-size: 1rem !important;
-  line-height: 1.75rem !important;
-}
-
-@media (min-width: 640px) {
-  [data-cwv-lcp-copy="authority-hub"] {
-    font-size: 1.125rem !important;
-  }
 }
 
 @media (min-width: 768px) {

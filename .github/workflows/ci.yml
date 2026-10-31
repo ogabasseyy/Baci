@@ -64,6 +64,8 @@ jobs:
         run: node --test .github/scripts/sentry-storefront-provenance.test.mjs
       - name: Test pilot change-detection contract
         run: node --test .github/scripts/pilot-change-detection-contract.test.mjs
+      - name: Test merge queue regression protections
+        run: node --test .github/scripts/merge-queue-workflow.test.mjs .github/scripts/resolve-queue-revert-allowance.test.mjs
       - name: Test CI change-scope resolver
         run: bash .github/scripts/resolve-ci-change-scope.test.sh
       # paths-filter can't infer a base on merge_group events, so skip it there
@@ -595,6 +597,9 @@ jobs:
           filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
+      - name: Test Semgrep coverage contracts
+        if: needs.changes.outputs.quiz_db == 'true'
+        run: node --test .github/scripts/security-analysis-diagnostics.test.mjs .github/scripts/security-pr-scope.test.mjs
       - name: Run backfill scripts unit tests
         run: pnpm exec vitest run scripts/lib
       - name: Test Migration Version Guard
@@ -770,24 +775,39 @@ jobs:
 
   silent-revert-guard:
     name: Silent Revert Guard
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Fetch base branch history
+          ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+      - if: github.event_name == 'pull_request'
+        name: Fetch base branch history
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: git fetch --filter=blob:none --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+      - name: Resolve intentional revert allowance for an exact queue tree
+        if: github.event_name == 'merge_group'
+        id: queue-revert-allowance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_HOST: github.com
+          QUEUE_BASE_REF: ${{ github.event.merge_group.base_ref }}
+          QUEUE_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: node .github/scripts/resolve-queue-revert-allowance.mjs
       - name: Detect silent reverts of recent main commits
         env:
-          ALLOW_SILENT_REVERT: ${{ contains(github.event.pull_request.labels.*.name, 'allow-silent-revert') }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ALLOW_SILENT_REVERT: ${{ (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'allow-silent-revert')) || steps.queue-revert-allowance.outputs.allowed == 'true' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
           SILENT_REVERT_LOOKBACK: '80'
         run: node ci_scripts/detect-silent-reverts.mjs
 
@@ -811,6 +831,7 @@ jobs:
           WEB_TEST_RESULT: ${{ needs['quality-test-web'].result }}
           MOBILE_QUALITY_RESULT: ${{ needs['mobile-quality'].result }}
           SILENT_REVERT_GUARD_RESULT: ${{ needs['silent-revert-guard'].result }}
+          EVENT_NAME: ${{ github.event_name }}
           QUIZ_DB_CHANGED: ${{ needs.changes.outputs.quiz_db }}
           TEST_PLAN_MODE: ${{ needs.changes.outputs.test_plan_mode }}
         run: |
@@ -832,6 +853,11 @@ jobs:
                 exit 1
               fi
             done
+          fi
+
+          if [[ "$EVENT_NAME" == "merge_group" && "$SILENT_REVERT_GUARD_RESULT" != "success" ]]; then
+            echo "Merge queue requires a successful silent revert guard."
+            exit 1
           fi
 
           for result in "$CWV_RUNNER_CONTRACTS_RESULT" "$LINT_RESULT" "$TYPECHECK_RESULT" "$TEST_RESULT" "$WEB_TEST_RESULT" "$MISC_RESULT" "$DB_REPLAY_RESULT" "$DISPOSABLE_SQL_RESULT" "$MOBILE_QUALITY_RESULT" "$SILENT_REVERT_GUARD_RESULT"; do

@@ -8,6 +8,8 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  # Validate the actual integration commit before a queued PR can merge.
+  merge_group:
   schedule:
     # Run daily at 3:00 AM UTC
     - cron: '0 3 * * *'
@@ -270,8 +272,8 @@ jobs:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
 
-      - name: Run scoped Semgrep on protected branch pushes
-        if: github.event_name == 'push'
+      - name: Run scoped Semgrep on protected branch pushes and merge groups
+        if: github.event_name == 'push' || github.event_name == 'merge_group'
         id: semgrep_push
         shell: bash
         run: |
@@ -330,7 +332,7 @@ jobs:
         run: echo "::warning::Optional PostgreSQL diagnostics failed; inspect the synthetic summary and step status. The required full Semgrep scan remains enforced."
 
       - name: Run full Semgrep on scheduled and manual scans
-        if: github.event_name != 'pull_request' && github.event_name != 'push'
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         id: semgrep_full
         run: semgrep ci --no-suppress-errors --timeout 15 --sarif --output=semgrep.sarif --json-output=semgrep.raw.json
         env:

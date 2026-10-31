@@ -53,4 +53,29 @@ describe('buildStorefrontMetadataTitle', () => {
     expect(result.title).toBe('Apple Magic Keyboard... | Ogabassey');
     expect(result.title.length).toBeLessThanOrEqual(42);
   });
+
+  it('keeps the merchant suffix on social titles when the SERP title drops it', () => {
+    const result = buildStorefrontMetadataTitle({
+      dropSuffixWhenTooLong: true,
+      suffix: 'Ogabassey',
+      title: 'Sony Alpha a7S III Mirrorless Camera Body Price in Nigeria',
+    });
+
+    expect(result.title).toBe(
+      'Sony Alpha a7S III Mirrorless Camera Body Price in Nigeria'
+    );
+    expect(result.socialTitle).toMatch(/\.\.\. \| Ogabassey$/);
+    expect(result.socialTitle.length).toBeLessThanOrEqual(60);
+  });
+
+  it('reuses the SERP title for social titles when nothing was dropped', () => {
+    const result = buildStorefrontMetadataTitle({
+      dropSuffixWhenTooLong: true,
+      suffix: 'Ogabassey',
+      title: 'Tecno Spark 30',
+    });
+
+    expect(result.socialTitle).toBe(result.title);
+    expect(result.title).toBe('Tecno Spark 30 | Ogabassey');
+  });
 });

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import type { CachedMerchant } from '@/lib/cached-data';
+import { mockMerchant } from '@/lib/cached-data.test-utils';
 import { buildStorefrontMerchantMetadata } from './build-storefront-merchant-metadata';
 
-type Merchant = Parameters<typeof buildStorefrontMerchantMetadata>[0];
-
-const merchant = {
+const merchant: CachedMerchant = {
+  ...mockMerchant,
   business_name: 'Ogabassey',
   site_title: 'Ogabassey | Gadgets in Nigeria',
   slug: 'ogabassey',
@@ -15,7 +16,7 @@ const merchant = {
   published_config: null,
   country: 'NG',
   is_published: true,
-} as unknown as Merchant;
+};
 
 describe('buildStorefrontMerchantMetadata', () => {
   it('brands relative child titles with the merchant instead of the platform', () => {
@@ -29,7 +30,7 @@ describe('buildStorefrontMerchantMetadata', () => {
 
   it('falls back to the business name when no site title is authored', () => {
     const metadata = buildStorefrontMerchantMetadata(
-      { ...merchant, site_title: undefined } as unknown as Merchant,
+      { ...merchant, site_title: '' },
       'ogabassey'
     );
 

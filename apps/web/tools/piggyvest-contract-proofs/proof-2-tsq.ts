@@ -1,7 +1,14 @@
 import { randomBytes } from 'node:crypto';
 import { AMOUNTS_KOBO } from './constants';
 import { pickString } from './loose-schemas';
-import { awaitTerminal, delta, readWallet, statusOf } from './poll';
+import {
+  awaitTerminal,
+  delta,
+  readingOf,
+  readWallet,
+  settledWallets,
+  statusOf,
+} from './poll';
 import { answerOf, ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
 import {
@@ -76,9 +83,12 @@ export async function runProof2(ctx: ProofContext): Promise<ProofResult> {
 
   // B. A real wallet-to-wallet transfer, then TSQ on our own reference.
   const amount = AMOUNTS_KOBO.walletTransfer;
+  // A clean baseline: balances that still lag an earlier transfer would put
+  // that transfer's effect into this one's delta.
+  const baseline = await settledWallets(ctx, [main, goal]);
   const before = {
-    main: await readWallet(ctx, main),
-    goal: await readWallet(ctx, goal),
+    main: readingOf(baseline, main),
+    goal: readingOf(baseline, goal),
   };
   const sent = await api.transferWallet(qa, main, goal, amount, 'p2/w2w');
   redactor.register('R', sent.reference);
@@ -109,7 +119,7 @@ export async function runProof2(ctx: ProofContext): Promise<ProofResult> {
     immediate.ok ? immediate.data : immediate.envelope
   );
   b.value('status_immediately_after_submit', immediateStatus);
-  const watch = await awaitTerminal(ctx, sent.reference, main);
+  const watch = await awaitTerminal(ctx, sent.reference, main, immediate);
   const sequence = [immediateStatus, ...watch.statuses].filter(
     (status, i, all) => all.indexOf(status) === i
   );
@@ -251,7 +261,13 @@ export async function runProof2(ctx: ProofContext): Promise<ProofResult> {
       'balance readbacks did not show the settled transfer within the polling budget'
     );
   }
-  const after = settledBalances?.settled ? settledBalances.value : null;
+  if (measuring && !baseline.settled) {
+    b.inconclusive(
+      'the starting balances were still moving, so no balance delta is published'
+    );
+  }
+  const after =
+    settledBalances?.settled && baseline.settled ? settledBalances.value : null;
   // A fee field is "absent" only if every record we meant to read was read.
   const recordsShowFee = [
     tsqRecord ? facts.hasFee : null,

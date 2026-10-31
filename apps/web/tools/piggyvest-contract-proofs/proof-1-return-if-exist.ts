@@ -187,10 +187,18 @@ export async function runProof1(ctx: ProofContext): Promise<ProofResult> {
       'No create response in this run, so there is no ground truth for the default wallet; position facts omitted.'
     );
   }
-  const dated = asc.edges.map((edge) => ({
-    id: pickString(edge, ['id']),
-    at: pickString(edge, ['created_at']),
-  }));
+  // A list row without a creation time falls back to the time read from the
+  // wallet itself when the scenario was set up.
+  const dated = asc.edges.map((edge) => {
+    const id = pickString(edge, ['id']);
+    return {
+      id,
+      at:
+        pickString(edge, ['created_at']) ??
+        state.wallets.find((wallet) => wallet.id === id)?.createdAt ??
+        null,
+    };
+  });
   const canOrder = dated.length > 0 && dated.every((row) => row.at !== null);
   const earliest = canOrder
     ? [...dated].sort((a, c) => (a.at ?? '').localeCompare(c.at ?? ''))[0]?.id
@@ -201,7 +209,9 @@ export async function runProof1(ctx: ProofContext): Promise<ProofResult> {
     ground && ascList && canOrder && asc.ids.includes(ground)
       ? answerOf(earliest === ground)
       : 'unknown',
-    canOrder ? undefined : 'wallet list rows carry no creation time'
+    canOrder
+      ? undefined
+      : 'no creation time could be read for every wallet (neither the list nor the wallet itself)'
   );
 
   const defaultEdge = asc.edges.find(

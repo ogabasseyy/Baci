@@ -1,4 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import {
+  dataOf,
+  type MockCreated,
+  type MockPage,
+} from './mock-reply.test-support';
 import { MockSandbox } from './mock-sandbox';
 
 const identity = {
@@ -7,7 +12,6 @@ const identity = {
   name: 'Synthetic Customer',
   phone: '+234000123456',
 };
-const data = (reply: { body: unknown }) => (reply.body as { data: any }).data;
 const message = (reply: { body: unknown }) =>
   (reply.body as { message: string }).message;
 const q = (params: Record<string, string>) => new URLSearchParams(params);
@@ -15,8 +19,8 @@ const q = (params: Record<string, string>) => new URLSearchParams(params);
 /** A customer with a main and a goal wallet, both usable as transfer endpoints. */
 function setup(options = {}) {
   const sandbox = new MockSandbox(options);
-  const created = data(sandbox.createCustomer(identity, true));
-  const goal = data(
+  const created = dataOf<MockCreated>(sandbox.createCustomer(identity, true));
+  const goal = dataOf<{ id: string }>(
     sandbox.createWallet({
       subaccount_name: 'goal',
       customer_id: created.customer_id,
@@ -30,9 +34,9 @@ function setup(options = {}) {
   };
 }
 const balance = (s: MockSandbox, id: string) =>
-  data(s.retrieveWallet(id)).balance as number;
+  dataOf<{ balance: number }>(s.retrieveWallet(id)).balance;
 const count = (s: MockSandbox, id: string) =>
-  data(s.retrieveWallet(id)).withdrawal_count as number;
+  dataOf<{ withdrawal_count: number }>(s.retrieveWallet(id)).withdrawal_count;
 
 describe('MockLedger.fund', () => {
   it('credits the wallet net of the deposit fee and lists an inflow row', () => {
@@ -41,7 +45,7 @@ describe('MockLedger.fund', () => {
       sandbox.ledger.fund({ wallet_id: main, amount: 200_000 }).status
     ).toBe(200);
     expect(balance(sandbox, main)).toBe(195_000);
-    const rows = data(
+    const rows = dataOf<MockPage>(
       sandbox.ledger.listTransactions(q({ wallet_id: main }))
     ).edges;
     expect(rows).toHaveLength(1);
@@ -115,8 +119,8 @@ describe('MockLedger.transfer and verify', () => {
     const reply = send(s);
     expect(reply.status).toBe(202);
     expect(balance(s.sandbox, s.goal)).toBe(0);
-    expect(data(poll(s)).status).toBe('pending');
-    expect(data(poll(s)).status).toBe('success');
+    expect(dataOf(poll(s)).status).toBe('pending');
+    expect(dataOf(poll(s)).status).toBe('success');
     expect(balance(s.sandbox, s.goal)).toBe(100_000);
     expect(balance(s.sandbox, s.main)).toBe(495_000 - 100_000);
   });
@@ -142,14 +146,14 @@ describe('MockLedger.transfer and verify', () => {
     expect(poll(s, 'never-sent').status).toBe(404);
     send(s);
     expect(poll(s).status).toBe(404);
-    expect(data(poll(s)).status).toBe('pending');
+    expect(dataOf(poll(s)).status).toBe('pending');
   });
 
   it('shapes the TSQ record like the docs, or richly with both wallets and the fee', () => {
     const docs = funded();
     send(docs);
     poll(docs);
-    expect(Object.keys(data(poll(docs))).sort()).toEqual([
+    expect(Object.keys(dataOf(poll(docs))).sort()).toEqual([
       'amount',
       'bank',
       'created_at',
@@ -160,7 +164,7 @@ describe('MockLedger.transfer and verify', () => {
     const rich = funded({ tsqShape: 'rich' });
     send(rich);
     poll(rich);
-    expect(data(poll(rich))).toMatchObject({
+    expect(dataOf(poll(rich))).toMatchObject({
       currency: 'NGN',
       fee: 0,
       source_wallet: rich.main,
@@ -200,6 +204,27 @@ describe('MockLedger.transfer and verify', () => {
     poll(s, 'bank-1');
     expect([count(s.sandbox, s.main), count(s.sandbox, s.goal)]).toEqual([
       1, 1,
+    ]);
+  });
+
+  it('lets goal wallets lag differently from the default wallet', () => {
+    const s = funded({
+      counterScope: 'customer',
+      counterLagReads: 0,
+      counterLagReadsGoal: 3,
+    });
+    s.sandbox.ledger.transfer('bank', {
+      amount: 100_000,
+      source: s.main,
+      accountNumber: '0123456789',
+      bankCode: '058',
+      reference: 'bank-1',
+    });
+    poll(s, 'bank-1');
+    poll(s, 'bank-1');
+    expect(count(s.sandbox, s.main)).toBe(1);
+    expect([1, 2, 3, 4].map(() => count(s.sandbox, s.goal))).toEqual([
+      0, 0, 0, 1,
     ]);
   });
 

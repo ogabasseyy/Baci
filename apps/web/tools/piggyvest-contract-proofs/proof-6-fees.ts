@@ -54,16 +54,11 @@ export async function runProof6(ctx: ProofContext): Promise<ProofResult> {
   const { deposit, walletTransfer: transfer } = ctx.state;
 
   if (deposit) {
-    // With the fee unknown, a credit that is not the gross cannot be classified.
-    const relation =
-      deposit.feeFromRecordKobo === null &&
-      deposit.creditedKobo !== deposit.grossKobo
-        ? 'unknown'
-        : relationOfCredit(
-            deposit.grossKobo,
-            deposit.creditedKobo,
-            deposit.feeFromRecordKobo
-          );
+    const relation = relationOfCredit(
+      deposit.grossKobo,
+      deposit.creditedKobo,
+      deposit.feeFromRecordKobo
+    );
     b.value('deposit_fee_kobo', deposit.feeFromRecordKobo).value(
       'deposit_credit_relation',
       relation

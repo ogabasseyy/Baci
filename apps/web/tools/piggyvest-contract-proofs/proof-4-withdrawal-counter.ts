@@ -55,27 +55,35 @@ const signature = (counts: Counts) =>
     .sort()
     .join('|');
 
+interface CountsReading {
+  counts: Counts;
+  /** Nothing moved on any wallet in the final round of the polling budget. */
+  settled: boolean;
+}
+
 /**
- * Reads counters until they are SETTLED, using the configured polling budget.
- * A change is settled once two consecutive reads agree after it appeared; with
- * no change, the whole budget is spent before "no change" is concluded. The
- * next measurement starts from this settled reading, never from a mid-update one.
+ * Reads every wallet's counter for the whole polling budget after a transfer
+ * went through. Counters can become visible on different wallets at different
+ * times, so two equal snapshots do not show that the others have settled, and
+ * no early exit is taken: the reading is "settled" only if nothing moved in the
+ * final round. A change still arriving then (or an unreadable wallet) leaves
+ * the measurement unsettled and the caller reports `unknown`. The next
+ * measurement starts from this reading, never from a mid-update one.
  */
 async function settledCounts(
   ctx: ProofContext,
-  previous: Counts,
   expectChange: boolean
-): Promise<Counts> {
+): Promise<CountsReading> {
   let current = await readCounts(ctx);
-  if (!expectChange) return current;
+  if (!expectChange) return { counts: current, settled: false };
+  let movedInFinalRound = true;
   for (let poll = 0; poll < ctx.maxPolls; poll += 1) {
-    const moved = changed(deltasOf(previous, current)).length > 0;
     await ctx.sleep(ctx.pollIntervalMs);
     const next = await readCounts(ctx);
-    if (moved && signature(next) === signature(current)) return next;
+    movedInFinalRound = signature(next) !== signature(current);
     current = next;
   }
-  return current;
+  return { counts: current, settled: ctx.maxPolls > 0 && !movedInFinalRound };
 }
 
 export async function runProof4(ctx: ProofContext): Promise<ProofResult> {
@@ -111,7 +119,7 @@ export async function runProof4(ctx: ProofContext): Promise<ProofResult> {
   }
 
   // (a) wallet-to-wallet
-  let afterW2w = base;
+  let afterW2w: CountsReading = { counts: base, settled: false };
   const w2w = await api.transferWallet(
     qa,
     main,
@@ -129,18 +137,25 @@ export async function runProof4(ctx: ProofContext): Promise<ProofResult> {
   } else {
     w2wWatch = await awaitTerminal(ctx, w2w.reference, main);
     b.value('w2w_terminal', w2wWatch.terminal);
-    afterW2w = await settledCounts(ctx, base, w2wWatch.terminal === 'success');
+    afterW2w = await settledCounts(ctx, w2wWatch.terminal === 'success');
   }
-  const w2wDeltas = deltasOf(base, afterW2w);
+  const w2wDeltas = deltasOf(base, afterW2w.counts);
   recordDeltas(b, ctx, 'w2w_delta', w2wDeltas);
-  const w2wSettled = w2wWatch?.terminal === 'success' && known(w2wDeltas);
+  const w2wSettled =
+    w2wWatch?.terminal === 'success' && known(w2wDeltas) && afterW2w.settled;
+  // The bank baseline is only clean if the wallet transfer's effects are all in
+  // it, or the transfer demonstrably had none.
+  const baselineClean =
+    w2wSettled ||
+    (w2w.kind === 'sent' && w2w.outcome === 'rejected') ||
+    w2wWatch?.terminal === 'failed';
   b.finding(
     'w2w_changes_counter',
     'Does a wallet-to-wallet transfer change withdrawal_count on any wallet?',
     w2wSettled ? answerOf(changed(w2wDeltas).length > 0) : 'unknown',
     w2wSettled
       ? undefined
-      : 'transfer did not reach a successful terminal state in this run'
+      : 'transfer did not reach a successful terminal state, or its counters had not settled, in this run'
   );
 
   // (b) bank outflow from the main wallet
@@ -185,20 +200,20 @@ export async function runProof4(ctx: ProofContext): Promise<ProofResult> {
   );
   const bankWatch = await awaitTerminal(ctx, bank.reference, main);
   b.value('bank_terminal', bankWatch.terminal);
-  const afterBank = await settledCounts(
-    ctx,
-    afterW2w,
-    bankWatch.terminal === 'success'
-  );
-  const bankDeltas = deltasOf(afterW2w, afterBank);
+  const afterBank = await settledCounts(ctx, bankWatch.terminal === 'success');
+  const bankDeltas = deltasOf(afterW2w.counts, afterBank.counts);
   recordDeltas(b, ctx, 'bank_delta', bankDeltas);
-  const bankSettled = bankWatch.terminal === 'success' && known(bankDeltas);
+  const bankSettled =
+    bankWatch.terminal === 'success' &&
+    known(bankDeltas) &&
+    afterBank.settled &&
+    baselineClean;
   const moved = changed(bankDeltas);
   bankFinding(
     bankSettled ? answerOf(moved.length > 0) : 'unknown',
     bankSettled
       ? undefined
-      : 'bank outflow did not reach a successful terminal state in this run'
+      : 'bank outflow did not reach a successful terminal state, or the counters (or the wallet-transfer baseline) had not settled, in this run'
   );
   b.value(
     'counter_scope',
@@ -211,7 +226,9 @@ export async function runProof4(ctx: ProofContext): Promise<ProofResult> {
           : 'unknown'
   );
   if (!bankSettled || !w2wSettled)
-    b.inconclusive('a transfer did not reach a successful terminal state');
+    b.inconclusive(
+      'a transfer did not reach a successful terminal state, or its counters did not settle'
+    );
   state.bankTransfer = {
     kind: 'bank',
     amountKobo: AMOUNTS_KOBO.bankOutflow,

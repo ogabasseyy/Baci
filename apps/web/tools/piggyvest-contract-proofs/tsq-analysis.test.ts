@@ -81,8 +81,14 @@ describe('relationOfCredit', () => {
     expect(relationOfCredit(200000, 200000, 5000)).toBe('gross');
     expect(relationOfCredit(200000, 195000, 5000)).toBe('net_of_fee');
     expect(relationOfCredit(200000, 190000, 5000)).toBe('other');
-    expect(relationOfCredit(200000, 195000, null)).toBe('other');
     expect(relationOfCredit(200000, 0, 5000)).toBe('none');
     expect(relationOfCredit(200000, null, 5000)).toBe('none');
+  });
+
+  it('cannot classify a credit below the gross when the fee is not known', () => {
+    // Net of a fee that was never read, or something else entirely: unknown.
+    expect(relationOfCredit(200000, 195000, null)).toBe('unknown');
+    expect(relationOfCredit(200000, 200000, null)).toBe('gross');
+    expect(relationOfCredit(200000, 0, null)).toBe('none');
   });
 });

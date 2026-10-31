@@ -1,4 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import {
+  envelopeOf,
+  type MockCreated,
+  type MockPagedData,
+} from './mock-reply.test-support';
 import { MockSandbox } from './mock-sandbox';
 
 const identity = {
@@ -8,14 +13,15 @@ const identity = {
   phone: '+234000123456',
   third_party_identifier: 'pvbproof:qa-1',
 };
-const body = (reply: { body: unknown }) =>
-  reply.body as { status: boolean; message: string; data: any };
+const body = envelopeOf;
 const paged = (reply: { body: unknown }) =>
-  body(reply).data.paginatedPayload.edges as Record<string, unknown>[];
+  envelopeOf<MockPagedData>(reply).data.paginatedPayload.edges;
 
 function withCustomer(options = {}) {
   const sandbox = new MockSandbox(options);
-  const created = body(sandbox.createCustomer(identity, true)).data;
+  const created = body<MockCreated>(
+    sandbox.createCustomer(identity, true)
+  ).data;
   return { sandbox, created };
 }
 
@@ -30,7 +36,9 @@ describe('MockSandbox.createCustomer', () => {
 
   it('returns the same customer and default wallet for an existing one, with new_customer:false', () => {
     const { sandbox, created } = withCustomer();
-    const again = body(sandbox.createCustomer(identity, true)).data;
+    const again = body<MockCreated>(
+      sandbox.createCustomer(identity, true)
+    ).data;
     expect(again).toMatchObject({
       customer_id: created.customer_id,
       wallet_id: created.wallet_id,
@@ -52,7 +60,9 @@ describe('MockSandbox.createCustomer', () => {
       subaccount_name: 'goal',
       customer_id: created.customer_id,
     });
-    const again = body(sandbox.createCustomer(identity, true)).data;
+    const again = body<MockCreated>(
+      sandbox.createCustomer(identity, true)
+    ).data;
     expect(again.wallet_id).not.toBe(created.wallet_id);
   });
 
@@ -124,9 +134,13 @@ describe('MockSandbox.listCustomers', () => {
   });
 
   it.each([
-    ['paginatedPayload', (d: any) => d.paginatedPayload.edges],
-    ['edges', (d: any) => d.edges],
-    ['array', (d: any) => d],
+    [
+      'paginatedPayload',
+      (d: Record<string, unknown>) =>
+        (d.paginatedPayload as { edges: unknown[] }).edges,
+    ],
+    ['edges', (d: Record<string, unknown>) => d.edges],
+    ['array', (d: Record<string, unknown>) => d],
   ] as const)('puts the rows in the %s container when configured', (container, rows) => {
     const { sandbox } = withCustomer({ customerListContainer: container });
     expect(
@@ -180,7 +194,7 @@ describe('MockSandbox wallets', () => {
       sandbox.businessWalletId
     );
     const strict = new MockSandbox({ subAccountAcceptsPayout: false });
-    const c = body(strict.createCustomer(identity, true)).data;
+    const c = body<MockCreated>(strict.createCustomer(identity, true)).data;
     expect(
       body(
         strict.createWallet({
@@ -244,52 +258,11 @@ describe('MockSandbox wallets', () => {
 
   it('lists a wallet funding account, or declines an unknown wallet', () => {
     const { sandbox, created } = withCustomer();
-    const accounts = body(sandbox.walletAccounts(created.wallet_id)).data;
+    const accounts = body<{ account_number: string }[]>(
+      sandbox.walletAccounts(created.wallet_id)
+    ).data;
     expect(accounts).toHaveLength(1);
     expect(accounts[0].account_number).toMatch(/^\d{10}$/);
     expect(sandbox.walletAccounts('missing').status).toBe(400);
-  });
-});
-
-describe('MockSandbox readback modes', () => {
-  const fieldsOf = (options: object) => {
-    const { sandbox, created } = withCustomer(options);
-    return body(sandbox.retrieveWallet(created.wallet_id)).data;
-  };
-  it("'fields' shows accrual and payout; 'accrual_only' drops the payout; 'none' drops both", () => {
-    expect(fieldsOf({ payoutReadback: 'fields' })).toHaveProperty(
-      'interest_payout_wallet'
-    );
-    const accrualOnly = fieldsOf({ payoutReadback: 'accrual_only' });
-    expect(accrualOnly).toHaveProperty('enable_interest_accrual');
-    expect(accrualOnly).not.toHaveProperty('interest_payout_wallet');
-    const none = fieldsOf({ payoutReadback: 'none' });
-    expect(none).not.toHaveProperty('enable_interest_accrual');
-  });
-
-  it('hides settings for the configured number of readbacks', () => {
-    const { sandbox, created } = withCustomer({ settingsLagReads: 2 });
-    const has = () =>
-      'enable_interest_accrual' in
-      body(sandbox.retrieveWallet(created.wallet_id)).data;
-    expect([has(), has(), has()]).toEqual([false, false, true]);
-  });
-
-  it('drops the payout field on sub-wallets only when asked, keeping it on the main wallet', () => {
-    const { sandbox, created } = withCustomer({
-      goalReadbackOmitsPayout: true,
-    });
-    const goal = body(
-      sandbox.createWallet({
-        subaccount_name: 'g',
-        customer_id: created.customer_id,
-      })
-    ).data.id;
-    expect(body(sandbox.retrieveWallet(created.wallet_id)).data).toHaveProperty(
-      'interest_payout_wallet'
-    );
-    expect(body(sandbox.retrieveWallet(goal)).data).not.toHaveProperty(
-      'interest_payout_wallet'
-    );
   });
 });

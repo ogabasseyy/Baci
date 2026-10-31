@@ -114,3 +114,54 @@ describe('answerOf', () => {
     expect(answerOf(null)).toBe('unknown');
   });
 });
+
+describe('ProofBuilder: observed means no finding is left unanswered', () => {
+  it('turns an observed proof into inconclusive when a finding is unknown, naming it', () => {
+    const result = new ProofBuilder('p5', 'T')
+      .finding('answered', 'Q1', 'yes')
+      .finding('unanswered', 'Q2', 'unknown', 'a read failed')
+      .build(ctx());
+    expect(result.status).toBe('inconclusive');
+    expect(result.reason).toMatch(/unanswered/);
+    expect(result.reason).not.toMatch(/answered,/);
+  });
+
+  it('keeps an explicit reason that was set first', () => {
+    const result = new ProofBuilder('p5', 'T')
+      .inconclusive('the transfer was rejected')
+      .finding('f', 'Q', 'unknown')
+      .build(ctx());
+    expect(result.reason).toBe('the transfer was rejected');
+  });
+
+  it('does not count a finding declared unobservable, and records it as unknown', () => {
+    const result = new ProofBuilder('p3', 'T')
+      .finding('f', 'Q', 'yes')
+      .unobservable('webhook', 'Q?', 'the harness has no receiver')
+      .build(ctx());
+    expect(result.status).toBe('observed');
+    expect(result.findings[1]).toMatchObject({
+      id: 'webhook',
+      answer: 'unknown',
+      detail: 'the harness has no receiver',
+    });
+  });
+
+  it('never upgrades a skipped or failed proof, and leaves an all-answered one observed', () => {
+    expect(
+      new ProofBuilder('p1', 'T')
+        .finding('f', 'Q', 'unknown')
+        .skip('off')
+        .build(ctx()).status
+    ).toBe('skipped');
+    expect(
+      new ProofBuilder('p1', 'T')
+        .finding('f', 'Q', 'unknown')
+        .fail('bad')
+        .build(ctx()).status
+    ).toBe('failed');
+    expect(
+      new ProofBuilder('p1', 'T').finding('f', 'Q', 'no').build(ctx()).status
+    ).toBe('observed');
+  });
+});

@@ -22,6 +22,8 @@ export class ProofBuilder {
   private readonly shapes: ShapeRecord[] = [];
   private readonly values: Record<string, Scalar> = {};
   private readonly notes: string[] = [];
+  /** Findings whose answer this scenario cannot provide; they do not stop a proof being observed. */
+  private readonly unobservableIds = new Set<string>();
 
   constructor(
     private readonly proof: ProofId,
@@ -31,6 +33,16 @@ export class ProofBuilder {
   finding(id: string, question: string, answer: Answer, detail?: string): this {
     this.findings.push({ id, question, answer, ...(detail ? { detail } : {}) });
     return this;
+  }
+
+  /**
+   * A finding the harness structurally cannot answer here (no receiver, a
+   * single page to follow...). It stays `unknown` without making the proof
+   * inconclusive; every OTHER unknown does.
+   */
+  unobservable(id: string, question: string, reason: string): this {
+    this.unobservableIds.add(id);
+    return this.finding(id, question, 'unknown', reason);
   }
 
   shape(name: string, httpStatus: number | null, value: unknown): this {
@@ -70,11 +82,19 @@ export class ProofBuilder {
 
   build(ctx: Pick<ProofContext, 'redactor'>): ProofResult {
     const { redactor } = ctx;
+    // A proof is never `observed` while a finding it reports is unanswered.
+    const unanswered = this.findings
+      .filter((f) => f.answer === 'unknown' && !this.unobservableIds.has(f.id))
+      .map((f) => f.id);
+    const downgrade = this.status === 'observed' && unanswered.length > 0;
+    const reason = downgrade
+      ? `these findings could not be established: ${unanswered.join(', ')}`
+      : this.reason;
     return {
       proof: this.proof,
       title: this.title,
-      status: this.status,
-      ...(this.reason ? { reason: redactor.text(this.reason) } : {}),
+      status: downgrade ? 'inconclusive' : this.status,
+      ...(reason ? { reason: redactor.text(reason) } : {}),
       findings: this.findings.map((f) => ({
         ...f,
         ...(f.detail ? { detail: redactor.text(f.detail) } : {}),

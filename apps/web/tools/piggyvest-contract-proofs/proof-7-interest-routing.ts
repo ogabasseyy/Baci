@@ -105,11 +105,21 @@ export async function runProof7(ctx: ProofContext): Promise<ProofResult> {
       b.value('create_error_field_code', errorCodeField(call.envelope));
       b.shape('POST /customers (rejected)', call.httpStatus, call.envelope);
     }
-    b.finding(
-      'customer_created_fresh',
-      'Was a new customer created (so the settings were actually applied)?',
-      call.ok ? answerOf(fresh) : 'unknown'
-    );
+    const freshQuestion =
+      'Was a new customer created (so the settings were actually applied)?';
+    if (!call.ok && created.outcome === 'rejected') {
+      b.unobservable(
+        'customer_created_fresh',
+        freshQuestion,
+        'the creation request was rejected, so no customer exists to ask about'
+      );
+    } else {
+      b.finding(
+        'customer_created_fresh',
+        freshQuestion,
+        call.ok ? answerOf(fresh) : 'unknown'
+      );
+    }
     if (call.ok && fresh === false) {
       b.inconclusive('the customer already existed');
       b.note(

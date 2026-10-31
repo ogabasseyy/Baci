@@ -231,12 +231,11 @@ describe('proof 7: a new attempt re-tests with fresh names', () => {
   it('creates a new payout customer and fresh sub-wallet names instead of tripping over attempt 1', async () => {
     const journal = createMemoryJournal();
     const first = await run({ journal });
-    const { customers, wallets } = first.h.mock.sandbox;
+    const earlier = first.h.mock.sandbox;
     first.h.dispose();
 
     const h = harness({ journal, attempt: 2, runId: 'run2' });
-    h.mock.sandbox.customers = customers;
-    h.mock.sandbox.wallets = wallets;
+    h.mock.sandbox.adopt(earlier);
     await setupScenario(h.ctx);
     const result = await runProof7(h.ctx);
     expect(result.status).toBe('observed');

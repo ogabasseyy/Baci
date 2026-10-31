@@ -7,6 +7,8 @@ import { createHash } from 'node:crypto';
  * in MockOptions, so proof logic is tested against both outcomes.
  */
 
+import type { PagingMode } from './mock-paging';
+
 export interface MockOptions {
   repostReturnsOriginalDefault: boolean;
   echoThirdPartyIdentifierOnCreate: boolean;
@@ -17,6 +19,10 @@ export interface MockOptions {
   tsqShape: 'docs' | 'rich';
   tsqNotFoundPolls: number;
   tsqPendingPolls: number;
+  /** The transfer's money and counters move at the FIRST status check, though TSQ keeps saying pending. */
+  tsqSettleEarly: boolean;
+  /** Pending polls for BANK outflows; null = tsqPendingPolls. */
+  tsqPendingPollsBank: number | null;
   depositFeeKobo: number;
   depositFeeBorneByWallet: boolean;
   transferFeeKobo: number;
@@ -39,8 +45,16 @@ export interface MockOptions {
   /** A new wallet's readback omits ONLY the payout destination field for this many reads. */
   payoutFieldLagReads: number;
   accruedEdgeCount: number;
+  /** The interest rate goal (non-default) wallets show; the default wallet always shows 0. */
+  goalInterestRate: number;
+  /** How cursor paging behaves on the accrual and transaction lists. */
+  pagingMode: PagingMode;
+  /** GET paths that fail only for a stretch: `skip` succeed, then `fail` answer 503, then recover; with `every`, every Nth matching request fails instead. */
+  flakyPaths: { needle: string; skip: number; fail: number; every?: number }[];
   /** Wallet reads that must pass before a settled outflow shows in withdrawal_count. */
   counterLagReads: number;
+  /** Same, for wallets other than the customer's default one; null = counterLagReads. */
+  counterLagReadsGoal: number | null;
   customerPayoutWallet: 'accepted' | 'rejected';
   subAccountAcceptsPayout: boolean;
   subWalletInheritsPayout: boolean;
@@ -59,6 +73,8 @@ export const DEFAULT_MOCK_OPTIONS: MockOptions = {
   tsqShape: 'docs',
   tsqNotFoundPolls: 0,
   tsqPendingPolls: 1,
+  tsqSettleEarly: false,
+  tsqPendingPollsBank: null,
   depositFeeKobo: 5_000,
   depositFeeBorneByWallet: true,
   transferFeeKobo: 0,
@@ -75,7 +91,11 @@ export const DEFAULT_MOCK_OPTIONS: MockOptions = {
   settingsLagReads: 0,
   payoutFieldLagReads: 0,
   accruedEdgeCount: 0,
+  goalInterestRate: 0,
+  pagingMode: 'advance',
+  flakyPaths: [],
   counterLagReads: 0,
+  counterLagReadsGoal: null,
   customerPayoutWallet: 'accepted',
   subAccountAcceptsPayout: true,
   subWalletInheritsPayout: false,

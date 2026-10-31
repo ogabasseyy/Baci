@@ -104,10 +104,10 @@ export function relationOfCredit(
   grossKobo: number,
   creditedKobo: number | null,
   feeKobo: number | null
-): 'gross' | 'net_of_fee' | 'other' | 'none' {
+): 'gross' | 'net_of_fee' | 'other' | 'unknown' | 'none' {
   if (creditedKobo === null || creditedKobo <= 0) return 'none';
   if (creditedKobo === grossKobo) return 'gross';
-  if (feeKobo !== null && creditedKobo === grossKobo - feeKobo)
-    return 'net_of_fee';
-  return 'other';
+  // Without the fee, a credit below the gross cannot be told from "something else".
+  if (feeKobo === null) return 'unknown';
+  return creditedKobo === grossKobo - feeKobo ? 'net_of_fee' : 'other';
 }

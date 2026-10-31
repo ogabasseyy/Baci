@@ -1,8 +1,5 @@
-import {
-  payoutVisible,
-  settingsVisible,
-  visibleBalance,
-} from './mock-sandbox-lag';
+import { interestSettings } from './mock-readback';
+import { visibleBalance } from './mock-sandbox-lag';
 import { MockLedger } from './mock-sandbox-ledger';
 import {
   type Body,
@@ -44,6 +41,17 @@ export class MockSandbox {
   id(): number {
     this.counter += 1;
     return this.counter;
+  }
+  /**
+   * Continue from another sandbox's customers and wallets (a later run against
+   * the same sandbox). Ids and timestamps carry on from where it stopped, so
+   * anything created now cannot collide with what is adopted.
+   */
+  adopt(from: MockSandbox): void {
+    this.customers = from.customers;
+    this.wallets = from.wallets;
+    this.counter = Math.max(this.counter, from.counter);
+    this.clock = Math.max(this.clock, from.clock);
   }
   private addWallet(
     customerId: string,
@@ -242,6 +250,9 @@ export class MockSandbox {
         w.lagged = null;
       }
     }
+    const isDefault =
+      this.customers.find((c) => c.id === w.customerId)?.defaultWalletId ===
+      w.id;
     return ok({
       id: w.id,
       api_customer_id: w.customerId,
@@ -257,19 +268,8 @@ export class MockSandbox {
       balance: visibleBalance(w),
       withdrawal_count: w.withdrawalCount,
       creation_interest_rate: 0,
-      current_interest_rate: 0,
-      ...(this.options.payoutReadback !== 'none' && settingsVisible(w)
-        ? {
-            enable_interest_accrual: w.interestEnabled,
-            ...(this.options.payoutReadback === 'accrual_only' ||
-            (this.options.goalReadbackOmitsPayout &&
-              this.customers.find((c) => c.id === w.customerId)
-                ?.defaultWalletId !== w.id) ||
-            !payoutVisible(w)
-              ? {}
-              : { interest_payout_wallet: w.payoutWalletId }),
-          }
-        : {}),
+      current_interest_rate: isDefault ? 0 : this.options.goalInterestRate,
+      ...interestSettings(w, this.options, isDefault),
     });
   }
 

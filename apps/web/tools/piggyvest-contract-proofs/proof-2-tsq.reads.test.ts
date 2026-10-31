@@ -15,6 +15,58 @@ function harness(...args: Parameters<typeof makeHarness>) {
 const answer = (result: ProofResult, id: string) =>
   result.findings.find((f) => f.id === id)?.answer;
 
+describe('proof 2: balance deltas need a settled baseline', () => {
+  it('publishes no delta when the starting balances never stop moving', async () => {
+    const h = harness();
+    await setupScenario(h.ctx);
+    const original = h.api.wallet.bind(h.api);
+    let reads = 0;
+    h.api.wallet = async (id) => {
+      reads += 1;
+      const read = await original(id);
+      const data = (read.data ?? {}) as Record<string, unknown>;
+      return { ...read, data: { ...data, balance: 700_000 + reads } };
+    };
+    const result = await runProof2(h.ctx);
+    expect(result.status).toBe('inconclusive');
+    expect(h.state.walletTransfer?.sourceDeltaKobo).toBeNull();
+    expect(h.state.walletTransfer?.destinationDeltaKobo).toBeNull();
+  });
+});
+
+describe('proof 2: terminal evidence from the immediate TSQ read is kept', () => {
+  it('uses an already-terminal immediate response even when every later read fails', async () => {
+    const h = harness({ mock: { tsqPendingPolls: 0 } });
+    await setupScenario(h.ctx);
+    const original = h.api.verify.bind(h.api);
+    const seen = new Set<string>();
+    // Each reference is read successfully once (the immediate read); every
+    // repeat read of it fails.
+    h.api.verify = async (reference, walletId) => {
+      if (!seen.has(reference)) {
+        seen.add(reference);
+        return original(reference, walletId);
+      }
+      return {
+        ok: false,
+        httpStatus: 503,
+        data: undefined,
+        envelope: null,
+        message: null,
+        declined: false,
+        errorCode: null,
+        typedAccepted: false,
+      };
+    };
+    const result = await runProof2(h.ctx);
+    expect(result.values.status_immediately_after_submit).toBe('success');
+    expect(result.values.terminal).toBe('success');
+    expect(answer(result, 'tsq_shows_amount')).toBe('yes');
+    expect(answer(result, 'tsq_names_source_wallet')).not.toBe('unknown');
+    expect(h.state.walletTransfer?.terminal).toBe('success');
+  });
+});
+
 describe('proof 2: unreadable, lagging or unsettled reads are never "no"', () => {
   async function prepared(options: Parameters<typeof makeHarness>[0] = {}) {
     const h = harness(options);

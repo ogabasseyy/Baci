@@ -78,6 +78,10 @@ export function createMockProvider(
 ): MockProvider {
   const sandbox = new MockSandbox(options);
   const pendingFailures = [...sandbox.options.failNetworkOnce];
+  const flaky = sandbox.options.flakyPaths.map((rule) => ({
+    ...rule,
+    seen: 0,
+  }));
   const calls: MockProvider['calls'] = [];
   const mockFetch = (
     input: RequestInfo | URL,
@@ -108,11 +112,21 @@ export function createMockProvider(
         )
       );
     }
+    const target = `${url.pathname}${url.search}`;
+    const flakyDown =
+      method === 'GET' &&
+      flaky.some((rule) => {
+        if (!target.includes(rule.needle)) return false;
+        rule.seen += 1;
+        if (rule.every) return rule.seen % rule.every === 0;
+        return rule.seen > rule.skip && rule.seen <= rule.skip + rule.fail;
+      });
     if (
       method === 'GET' &&
-      sandbox.options.serverErrorPaths.some((needle) =>
-        `${url.pathname}${url.search}`.includes(needle)
-      )
+      (flakyDown ||
+        sandbox.options.serverErrorPaths.some((needle) =>
+          target.includes(needle)
+        ))
     ) {
       return Promise.resolve(
         new Response(

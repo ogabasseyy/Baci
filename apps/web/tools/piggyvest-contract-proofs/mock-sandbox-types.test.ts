@@ -11,6 +11,11 @@ describe('DEFAULT_MOCK_OPTIONS', () => {
       listLagReads: 0,
       settingsLagReads: 0,
       payoutFieldLagReads: 0,
+      counterLagReadsGoal: null,
+      pagingMode: 'advance',
+      goalInterestRate: 0,
+      tsqSettleEarly: false,
+      tsqPendingPollsBank: null,
       serverErrorData: null,
       accruedEdgeCount: 0,
       customerPayoutWallet: 'accepted',
@@ -21,6 +26,7 @@ describe('DEFAULT_MOCK_OPTIONS', () => {
     });
     expect(DEFAULT_MOCK_OPTIONS.failNetworkOnce).toEqual([]);
     expect(DEFAULT_MOCK_OPTIONS.serverErrorPaths).toEqual([]);
+    expect(DEFAULT_MOCK_OPTIONS.flakyPaths).toEqual([]);
   });
 
   it('models the documented fees and a wallet transfer that does not touch the counter', () => {

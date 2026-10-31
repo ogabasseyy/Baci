@@ -168,3 +168,36 @@ describe('mock provider follows the documented sandbox contract', () => {
     });
   });
 });
+
+describe('mock provider: flaky paths', () => {
+  it('lets `skip` requests through, fails the next `fail` with a 503, then recovers', async () => {
+    const mock = createMockProvider({
+      flakyPaths: [{ needle: '/api/v1/wallet/x', skip: 1, fail: 2 }],
+    });
+    const statuses: number[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      statuses.push((await call(mock, 'GET', '/api/v1/wallet/x')).status);
+    }
+    expect(statuses).toEqual([400, 503, 503, 400, 400]);
+  });
+
+  it('does not touch other paths or POSTs', async () => {
+    const mock = createMockProvider({
+      flakyPaths: [{ needle: '/api/v1/wallet/x', skip: 0, fail: 9 }],
+    });
+    expect((await call(mock, 'GET', '/api/v1/wallet/y')).status).toBe(400);
+  });
+});
+
+describe('mock provider: every Nth request fails', () => {
+  it('fails each Nth matching GET and lets the rest through', async () => {
+    const mock = createMockProvider({
+      flakyPaths: [{ needle: '/api/v1/wallet/x', skip: 0, fail: 0, every: 3 }],
+    });
+    const statuses: number[] = [];
+    for (let i = 0; i < 7; i += 1) {
+      statuses.push((await call(mock, 'GET', '/api/v1/wallet/x')).status);
+    }
+    expect(statuses).toEqual([400, 400, 503, 400, 400, 503, 400]);
+  });
+});

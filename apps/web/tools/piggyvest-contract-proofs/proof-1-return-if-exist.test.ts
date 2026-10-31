@@ -94,13 +94,22 @@ describe('proof 1: create-customer re-POST with returnIfExist=true', () => {
     expect(result.values.lookup_list_container).toBe('array');
   });
 
-  it('cannot identify the default wallet by order when the list has no creation time', async () => {
+  it('reads the creation times from the wallets themselves when the list rows carry none', async () => {
     const { result } = await run({
       mock: { walletListIncludesCreatedAt: false },
     });
+    expect(answer(result, 'default_wallet_is_earliest_created')).toBe('yes');
+  });
+
+  it('cannot identify the default wallet by order when no creation time can be read anywhere', async () => {
+    const h = harness({ mock: { walletListIncludesCreatedAt: false } });
+    await setupScenario(h.ctx);
+    for (const view of h.state.wallets) view.createdAt = null;
+    const result = await runProof1(h.ctx);
     expect(answer(result, 'default_wallet_is_earliest_created')).toBe(
       'unknown'
     );
+    expect(result.status).toBe('inconclusive');
   });
 
   it('read-only mode sends no POST and leaves the re-POST questions unknown', async () => {

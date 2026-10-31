@@ -1,6 +1,6 @@
 import { AMOUNTS_KOBO } from './constants';
 import { pickString } from './loose-schemas';
-import { delta, readWallet } from './poll';
+import { delta, readingOf, settledWallets } from './poll';
 import { answerOf, ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
 import type { CallResult } from './provider-ops';
@@ -114,10 +114,9 @@ export async function runProof3(ctx: ProofContext): Promise<ProofResult> {
   );
 
   // B. The deposit. The sandbox stand-in for a bank transfer is the test-funding API.
-  b.finding(
+  b.unobservable(
     'webhook_names_goal_wallet',
     'Does the bank-inflow webhook name the goal wallet?',
-    'unknown',
     'The harness has no receiver. Confirm from the durable inbox which field names the credited wallet (pvb_wallet vs eventData.destination_wallet_id); see docs/piggyvest-contract-register.md section 7.'
   );
   b.note(
@@ -131,9 +130,12 @@ export async function runProof3(ctx: ProofContext): Promise<ProofResult> {
   }
 
   const gross = AMOUNTS_KOBO.fundGoal;
+  // A clean baseline: a balance still lagging an earlier transfer would put
+  // that transfer into this deposit's credit.
+  const baseline = await settledWallets(ctx, [goal, main]);
   const before = {
-    goal: await readWallet(ctx, goal),
-    main: await readWallet(ctx, main),
+    goal: readingOf(baseline, goal),
+    main: readingOf(baseline, main),
   };
   // Rows that exist before this deposit can never be "this deposit's row".
   const priorList = usableList(
@@ -159,20 +161,21 @@ export async function runProof3(ctx: ProofContext): Promise<ProofResult> {
     funded.outcome
   );
 
-  let after = before;
-  for (let poll = 0; poll < ctx.maxPolls; poll += 1) {
-    after = {
-      goal: await readWallet(ctx, goal),
-      main: await readWallet(ctx, main),
-    };
-    if ((delta(before.goal.balance, after.goal.balance) ?? 0) !== 0) break;
-    await ctx.sleep(ctx.pollIntervalMs);
-  }
+  const result = await settledWallets(ctx, [goal, main]);
+  const after = {
+    goal: readingOf(result, goal),
+    main: readingOf(result, main),
+  };
   const credited = delta(before.goal.balance, after.goal.balance);
   const mainDelta = delta(before.main.balance, after.main.balance);
-  const settled = credited !== null && credited > 0;
+  const balancesSettled = baseline.settled && result.settled;
+  const settled = balancesSettled && credited !== null && credited > 0;
   if (!settled) {
-    b.inconclusive('the deposit did not settle within the polling window');
+    b.inconclusive(
+      balancesSettled
+        ? 'the deposit did not settle within the polling window'
+        : 'the balances were still moving, so no clean credit could be measured'
+    );
     b.note(
       'A non-settling sandbox funding call has been seen before (17 Sep); this is not evidence that goal deposits are not credited.'
     );

@@ -67,6 +67,54 @@ describe('delta', () => {
   });
 });
 
+describe('awaitTerminal: seeded with an earlier read', () => {
+  const terminalRead = call({ data: { status: 'success', amount: 1 } });
+  const ctxStub = (verify: () => Promise<CallResult>) =>
+    ({
+      api: { verify },
+      maxPolls: 3,
+      pollIntervalMs: 0,
+      sleep: async () => undefined,
+    }) as unknown as Parameters<typeof awaitTerminal>[0];
+
+  it('returns a terminal seed without any further read', async () => {
+    const verify = vi.fn(async () => call({ ok: false, httpStatus: 503 }));
+    const watch = await awaitTerminal(
+      ctxStub(verify),
+      'ref',
+      'w',
+      terminalRead
+    );
+    expect(verify).not.toHaveBeenCalled();
+    expect(watch).toMatchObject({
+      terminal: 'success',
+      polls: 0,
+      statuses: ['success'],
+      lastOk: terminalRead,
+    });
+  });
+
+  it('keeps a pending seed in the status sequence and keeps polling', async () => {
+    const verify = vi.fn(async () => terminalRead);
+    const pending = call({ data: { status: 'pending' } });
+    const watch = await awaitTerminal(ctxStub(verify), 'ref', 'w', pending);
+    expect(watch.statuses).toEqual(['pending', 'success']);
+    expect(watch).toMatchObject({ terminal: 'success', polls: 1 });
+  });
+
+  it('treats a failed seed as terminal failure and an unreadable seed as not terminal', async () => {
+    const failed = call({ data: { status: 'failed' } });
+    const noRead = vi.fn(async () => call({ ok: false, httpStatus: 503 }));
+    expect(
+      await awaitTerminal(ctxStub(noRead), 'ref', 'w', failed)
+    ).toMatchObject({ terminal: 'failed', polls: 0 });
+    const down = call({ ok: false, httpStatus: 503 });
+    const watch = await awaitTerminal(ctxStub(noRead), 'ref', 'w', down);
+    expect(watch.terminal).toBe('timeout');
+    expect(watch.statuses).toEqual(['http_503']);
+  });
+});
+
 describe('awaitTerminal', () => {
   async function submitted(options: Parameters<typeof makeHarness>[0] = {}) {
     const h = harness(options);

@@ -1,3 +1,5 @@
+import { accruedInterestReply } from './mock-accruals';
+import { pageWindow } from './mock-paging';
 import type { MockSandbox } from './mock-sandbox';
 import { listedTransactions, markStaleBalance } from './mock-sandbox-lag';
 import {
@@ -14,6 +16,17 @@ export class MockLedger {
   private txns: Txn[] = [];
 
   constructor(private readonly host: MockSandbox) {}
+
+  /** Ground truth for tests: debit plus credit rows a wallet has, shown or not. */
+  rowCount(walletId: string): number {
+    return this.txns.reduce(
+      (sum, t) =>
+        sum +
+        (t.source === walletId ? 1 : 0) +
+        (t.destination === walletId ? 1 : 0),
+      0
+    );
+  }
 
   fund(body: Body): MockReply {
     const w = this.host.wallet(body.wallet_id);
@@ -94,6 +107,17 @@ export class MockLedger {
     };
   }
 
+  /** Goal (non-default) wallets may lag differently from the default one. */
+  private counterLagFor(walletId: string, customerId: string): number {
+    const { counterLagReads, counterLagReadsGoal } = this.host.options;
+    const isDefault =
+      this.host.customers.find((c) => c.id === customerId)?.defaultWalletId ===
+      walletId;
+    return !isDefault && counterLagReadsGoal !== null
+      ? counterLagReadsGoal
+      : counterLagReads;
+  }
+
   private settle(txn: Txn): void {
     txn.status = 'success';
     const source = this.host.wallet(txn.source);
@@ -114,8 +138,8 @@ export class MockLedger {
         this.host.options.counterScope === 'customer'
           ? this.host.wallets.filter((w) => w.customerId === source.customerId)
           : [source];
-      const lag = this.host.options.counterLagReads;
       for (const wallet of scope) {
+        const lag = this.counterLagFor(wallet.id, wallet.customerId);
         if (lag > 0) {
           wallet.lagged = {
             count: (wallet.lagged?.count ?? 0) + 1,
@@ -134,10 +158,14 @@ export class MockLedger {
     if (!txn) return notFound;
     txn.polls += 1;
     if (txn.polls <= this.host.options.tsqNotFoundPolls) return notFound;
-    if (
-      txn.polls <=
-      this.host.options.tsqNotFoundPolls + this.host.options.tsqPendingPolls
-    ) {
+    const pendingPolls =
+      txn.category === 'bank-outflow'
+        ? (this.host.options.tsqPendingPollsBank ??
+          this.host.options.tsqPendingPolls)
+        : this.host.options.tsqPendingPolls;
+    if (txn.polls <= this.host.options.tsqNotFoundPolls + pendingPolls) {
+      if (this.host.options.tsqSettleEarly && txn.status === 'pending')
+        this.settle(txn);
       return ok(this.tsqData(txn, 'pending'), 'Transaction status retrieved');
     }
     if (txn.status === 'pending') this.settle(txn);
@@ -190,9 +218,13 @@ export class MockLedger {
       ])
       .filter((row) => !walletId || row.wallet === walletId)
       .reverse();
-    const start = Number(query.get('cursor') ?? 0);
-    const page = rows.slice(start, start + limit);
-    const end = start + page.length;
+    const window = pageWindow(
+      this.host.options.pagingMode,
+      query.get('cursor'),
+      limit,
+      rows.length
+    );
+    const page = rows.slice(window.start, window.end);
     return ok({
       edges: page.map(({ t, id, type, wallet }) => ({
         id,
@@ -209,9 +241,9 @@ export class MockLedger {
         batch_transaction_id: null,
       })),
       pageInfo: {
-        hasNextPage: end < rows.length,
-        endCursor: end < rows.length ? String(end) : null,
-        previousCursor: start > 0 ? String(Math.max(0, start - limit)) : null,
+        hasNextPage: window.hasNextPage,
+        endCursor: window.endCursor,
+        previousCursor: window.previousCursor,
       },
     });
   }
@@ -244,39 +276,6 @@ export class MockLedger {
   }
 
   accruedInterest(walletId: string, query: URLSearchParams): MockReply {
-    const limit = Number(query.get('limit') ?? 31);
-    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
-      return fail('limit must be between 1 and 100');
-    }
-    const total = this.host.options.accruedEdgeCount;
-    const start = Number(query.get('cursor') ?? 0) || 0;
-    const count = Math.min(limit, Math.max(0, total - start));
-    const edges = Array.from({ length: count }, (_, index) => ({
-      id: ulid('i', start + index),
-      business_id: 'business-00000001',
-      wallet_id: walletId,
-      wallet_name: 'Default Wallet',
-      amount: 0,
-      balance: 0,
-      percentage: 0,
-      interest_date: '2026-10-01',
-      interest_date_timestamp: `2026-10-01T00:00:${String(start + index).padStart(2, '0')}.000Z`,
-      interest_type: query.get('interest_type') ?? 'original',
-      differential_wallet_id: null,
-      differential_wallet_name: null,
-      created_at: '2026-10-01T00:00:00.000Z',
-      updated_at: '2026-10-01T00:00:00.000Z',
-    }));
-    const end = start + count;
-    return ok({
-      paginatedPayload: {
-        edges,
-        pageInfo: {
-          hasNextPage: end < total,
-          endCursor: end < total ? String(end) : null,
-          previousCursor: start > 0 ? String(Math.max(0, start - limit)) : null,
-        },
-      },
-    });
+    return accruedInterestReply(this.host.options, walletId, query);
   }
 }

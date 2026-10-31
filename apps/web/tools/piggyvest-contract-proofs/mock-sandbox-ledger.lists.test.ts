@@ -1,4 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import {
+  dataOf,
+  type MockCreated,
+  type MockPage,
+  type MockPagedData,
+} from './mock-reply.test-support';
 import { MockSandbox } from './mock-sandbox';
 
 const identity = {
@@ -7,7 +13,6 @@ const identity = {
   name: 'Synthetic Customer',
   phone: '+234000123456',
 };
-const data = (reply: { body: unknown }) => (reply.body as { data: any }).data;
 const _message = (reply: { body: unknown }) =>
   (reply.body as { message: string }).message;
 const q = (params: Record<string, string>) => new URLSearchParams(params);
@@ -15,8 +20,8 @@ const q = (params: Record<string, string>) => new URLSearchParams(params);
 /** A customer with a main and a goal wallet, both usable as transfer endpoints. */
 function setup(options = {}) {
   const sandbox = new MockSandbox(options);
-  const created = data(sandbox.createCustomer(identity, true));
-  const goal = data(
+  const created = dataOf<MockCreated>(sandbox.createCustomer(identity, true));
+  const goal = dataOf<{ id: string }>(
     sandbox.createWallet({
       subaccount_name: 'goal',
       customer_id: created.customer_id,
@@ -39,7 +44,7 @@ describe('MockLedger.listTransactions and transaction', () => {
 
   it('pages with a cursor and reports whether there is a next page', () => {
     const { sandbox, main } = withRows(3);
-    const first = data(
+    const first = dataOf<MockPage>(
       sandbox.ledger.listTransactions(q({ wallet_id: main, limit: '2' }))
     );
     expect(first.edges).toHaveLength(2);
@@ -48,7 +53,7 @@ describe('MockLedger.listTransactions and transaction', () => {
       endCursor: '2',
       previousCursor: null,
     });
-    const second = data(
+    const second = dataOf<MockPage>(
       sandbox.ledger.listTransactions(
         q({ wallet_id: main, limit: '2', cursor: '2' })
       )
@@ -70,16 +75,17 @@ describe('MockLedger.listTransactions and transaction', () => {
   it('hides new rows for the configured number of list reads', () => {
     const { sandbox, main } = withRows(1, { listLagReads: 2 });
     const rows = () =>
-      data(sandbox.ledger.listTransactions(q({ wallet_id: main }))).edges
-        .length;
+      dataOf<MockPage>(sandbox.ledger.listTransactions(q({ wallet_id: main })))
+        .edges.length;
     expect([rows(), rows(), rows()]).toEqual([0, 0, 1]);
   });
 
   it('returns a single record with both wallet fields and the fee, or 404', () => {
     const { sandbox, main } = withRows(1);
-    const row = data(sandbox.ledger.listTransactions(q({ wallet_id: main })))
-      .edges[0];
-    expect(data(sandbox.ledger.transaction(row.id))).toMatchObject({
+    const row = dataOf<MockPage>(
+      sandbox.ledger.listTransactions(q({ wallet_id: main }))
+    ).edges[0];
+    expect(dataOf(sandbox.ledger.transaction(row.id))).toMatchObject({
       fee: 5000,
       source_wallet: null,
       destination_wallet: main,
@@ -92,7 +98,8 @@ describe('MockLedger.accruedInterest', () => {
   it('has no accrual records at the default 0% and refuses an oversize page', () => {
     const { sandbox, main } = setup();
     expect(
-      data(sandbox.ledger.accruedInterest(main, q({}))).paginatedPayload.edges
+      dataOf<MockPagedData>(sandbox.ledger.accruedInterest(main, q({})))
+        .paginatedPayload.edges
     ).toEqual([]);
     expect(
       sandbox.ledger.accruedInterest(main, q({ limit: '101' })).status
@@ -101,15 +108,15 @@ describe('MockLedger.accruedInterest', () => {
 
   it('serves the configured records page by page with a cursor', () => {
     const { sandbox, main } = setup({ accruedEdgeCount: 3 });
-    const first = data(
+    const first = dataOf<MockPagedData>(
       sandbox.ledger.accruedInterest(main, q({ limit: '2' }))
     ).paginatedPayload;
     expect(first.edges).toHaveLength(2);
     expect(first.pageInfo.hasNextPage).toBe(true);
-    const last = data(
+    const last = dataOf<MockPagedData>(
       sandbox.ledger.accruedInterest(
         main,
-        q({ limit: '2', cursor: first.pageInfo.endCursor })
+        q({ limit: '2', cursor: String(first.pageInfo.endCursor) })
       )
     ).paginatedPayload;
     expect(last.edges).toHaveLength(1);

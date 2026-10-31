@@ -26,6 +26,60 @@ async function run(options: Parameters<typeof makeHarness>[0] = {}) {
 const deltaKeys = (result: ProofResult, prefix: string) =>
   Object.keys(result.values).filter((key) => key.startsWith(prefix));
 
+describe('proof 4: counters that settle independently', () => {
+  it('does not blame the bank outflow for a wallet-transfer increment that lands late on another wallet', async () => {
+    // Customer-scoped counters: the wallet transfer moves every wallet, but the
+    // goal wallet shows it only after 5 reads; the bank outflow moves nothing.
+    const { result } = await run({
+      maxPolls: 15,
+      mock: {
+        counterScope: 'customer',
+        w2wIncrementsCounter: true,
+        bankIncrementsCounter: false,
+        counterLagReads: 0,
+        counterLagReadsGoal: 5,
+      },
+    });
+    expect(answer(result, 'w2w_changes_counter')).toBe('yes');
+    expect(answer(result, 'bank_outflow_changes_counter')).toBe('no');
+  });
+
+  it('leaves the bank measurement unknown when a counter is still moving in the final round of the budget', async () => {
+    const { result } = await run({
+      maxPolls: 3,
+      mock: {
+        counterScope: 'customer',
+        w2wIncrementsCounter: true,
+        bankIncrementsCounter: false,
+        counterLagReadsGoal: 3,
+      },
+    });
+    expect(answer(result, 'bank_outflow_changes_counter')).toBe('unknown');
+    expect(result.status).toBe('inconclusive');
+  });
+
+  it('leaves the bank measurement unknown when the wallet transfer never settled, whatever the bank outflow did', async () => {
+    // The wallet transfer stays "pending" for the whole run, so a late counter
+    // increment from it could still land on top of the bank baseline.
+    const h = harness({ maxPolls: 3, mock: { bankIncrementsCounter: true } });
+    await setupScenario(h.ctx);
+    const original = h.api.verify.bind(h.api);
+    let walletTransfer: string | null = null;
+    h.api.verify = async (reference, walletId) => {
+      walletTransfer ??= reference;
+      if (reference !== walletTransfer) return original(reference, walletId);
+      return {
+        ...(await original(reference, walletId)),
+        data: { status: 'pending' },
+      };
+    };
+    const result = await runProof4(h.ctx);
+    expect(answer(result, 'w2w_changes_counter')).toBe('unknown');
+    expect(answer(result, 'bank_outflow_changes_counter')).toBe('unknown');
+    expect(result.status).toBe('inconclusive');
+  });
+});
+
 describe('proof 4: a failed wallet read is not a measurement', () => {
   it('does not turn a 503 that keeps zero counters into "the bank outflow changed nothing"', async () => {
     const h = harness({

@@ -77,7 +77,7 @@ describe('buildSharedOfferPolicies', () => {
     });
   });
 
-  it('keeps its own id when a policy object already carries one', () => {
+  it('replaces an incoming @id with the page-scoped id so references resolve', () => {
     const policiesFor = buildSharedOfferPolicies(
       new URL('https://shop.example/phones/x'),
       'x',

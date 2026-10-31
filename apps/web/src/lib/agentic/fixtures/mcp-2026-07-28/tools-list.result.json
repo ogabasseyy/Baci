@@ -1,0 +1,46 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "resultType": "complete",
+    "tools": [
+      {
+        "name": "search_ucp_catalog",
+        "title": "Search UCP Catalog",
+        "description": "Search Ogabassey products through the signed UCP catalog search route.",
+        "inputSchema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "properties": {
+            "cursor": { "type": "string", "minLength": 1 },
+            "filters": {
+              "type": "object",
+              "propertyNames": { "type": "string" },
+              "additionalProperties": {}
+            },
+            "limit": {
+              "default": 20,
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 50
+            },
+            "query": { "type": "string", "minLength": 1 }
+          }
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "destructiveHint": false,
+          "openWorldHint": true
+        }
+      }
+    ],
+    "ttlMs": 300000,
+    "cacheScope": "public",
+    "_meta": {
+      "io.modelcontextprotocol/serverInfo": {
+        "name": "ogabassey-store",
+        "version": "1.0.0"
+      }
+    }
+  }
+}

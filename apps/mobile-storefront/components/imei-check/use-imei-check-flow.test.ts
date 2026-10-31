@@ -498,3 +498,36 @@ it('does not authorize a fresh order from an unconfirmed error lookup', async ()
       .previousLookupId
   ).toBeUndefined();
 });
+
+it.each([
+  true,
+  false,
+])('only clears a recovered failed attempt when refund confirmation is %s', async (confirmedRefund) => {
+  const { acquireImeiRecoveryKey } = await import(
+    '@/lib/imei-request-recovery'
+  );
+  const recovery = await acquireImeiRecoveryKey(
+    ['merchant:customer:user-a', 'blacklist', report.result.imei],
+    mockUuid
+  );
+  Object.assign(mockPending, {
+    terminal: {
+      kind: 'error',
+      error: 'Check failed',
+      tier: 'blacklist',
+      recovery,
+      confirmedRefund,
+    },
+  });
+  const { result, unmount } = renderHook(() =>
+    useImeiCheckFlow('smartphone', 'https://test.invalid')
+  );
+  await waitFor(() => expect(result.current.error).toBe('Check failed'));
+  if (confirmedRefund)
+    await waitFor(() =>
+      expect(mockSecureEntries.has(recovery.storageKey)).toBe(false)
+    );
+  else expect(mockSecureEntries.has(recovery.storageKey)).toBe(true);
+  Object.assign(mockPending, { terminal: null });
+  unmount();
+});

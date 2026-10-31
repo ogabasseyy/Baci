@@ -74,7 +74,10 @@ export function useImeiCheckFlow(
 
   const handlePendingTerminal = useEffectEvent(
     (terminal: NonNullable<typeof pendingLookup.terminal>) => {
-      if (terminal.kind === 'complete' && terminal.recovery) {
+      if (
+        (terminal.kind === 'complete' || terminal.confirmedRefund === true) &&
+        terminal.recovery
+      ) {
         void clearImeiRecoveryKey(
           terminal.recovery.storageKey,
           terminal.recovery.idempotencyKey

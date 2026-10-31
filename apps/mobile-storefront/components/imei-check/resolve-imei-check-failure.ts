@@ -2,6 +2,7 @@ import {
   filterRuntimeImeiTierKeys,
   type ImeiBrandFilter,
   type ImeiServiceTierKey,
+  isConfirmedImeiRefund,
   PUBLIC_IMEI_SERVICE_TIERS,
 } from '@baci/shared/imei';
 
@@ -54,9 +55,7 @@ export function resolveImeiCheckFailure(
   // Authentication and intermediary errors can follow an earlier uncertain POST.
   const shouldClearIdempotencyKey =
     (input.responseStatus === 402 && code === 'WALLET_INSUFFICIENT') ||
-    (input.responseStatus === 404 && code === 'SICKW_NOT_FOUND') ||
-    (input.responseStatus === 502 &&
-      (code === 'SICKW_UNAVAILABLE' || code === 'PETROCK_NOT_SUBMITTED'));
+    isConfirmedImeiRefund(input.responseStatus, code);
   const shouldPreserveIdempotencyKey = !shouldClearIdempotencyKey;
 
   if (input.responseStatus === 401) {
@@ -113,7 +112,8 @@ export function resolveImeiCheckFailure(
   }
 
   if (
-    (input.responseStatus === 404 && code === 'SICKW_NOT_FOUND') ||
+    (input.responseStatus === 404 &&
+      (code === 'SICKW_NOT_FOUND' || code === 'PETROCK_REJECTED')) ||
     (input.responseStatus === 502 && code === 'SICKW_UNAVAILABLE')
   ) {
     return {

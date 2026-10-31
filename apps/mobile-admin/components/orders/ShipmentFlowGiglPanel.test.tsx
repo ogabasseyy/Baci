@@ -15,6 +15,7 @@ vi.mock('@/hooks/useTheme', () => ({
       text: '#111',
       textMuted: '#777',
       textSecondary: '#555',
+      warning: '#CA8A04',
     },
   }),
 }));
@@ -59,6 +60,24 @@ describe('ShipmentFlowGiglPanel', () => {
     expect(screen.getByText('₦11,000')).toBeTruthy();
     expect(screen.getByText(/Shortfall: ₦10,000/)).toBeTruthy();
     expect(screen.queryByText(/margin|provider cost/i)).toBeNull();
+  });
+
+  it('bugfix: shows the GIG price with two decimals inside the GIG option', () => {
+    render(
+      <ShipmentFlowGiglPanel
+        {...base}
+        quote={{ ...base.quote, price: 48500.4 }}
+        wallet={{ availableBalance: 10552284.41, canBook: true, shortfall: 0 }}
+      />
+    );
+
+    expect(screen.getByText('₦48,500.40')).toBeTruthy();
+    expect(screen.queryByText('₦48,500.4')).toBeNull();
+    expect(
+      screen.getByRole('radio', { name: /Ship with GIG.*₦48,500\.40/ })
+    ).toBeTruthy();
+    expect(screen.getByText('Wallet balance: ₦10,552,284.41')).toBeTruthy();
+    expect(screen.queryByText(/Shortfall/)).toBeNull();
   });
 
   it('shows only server-reported accessible address fields', () => {

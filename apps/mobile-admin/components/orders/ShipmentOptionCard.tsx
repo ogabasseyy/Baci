@@ -1,16 +1,24 @@
 import Ionicons, {
   type IoniconsIconName,
 } from '@react-native-vector-icons/ionicons';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { ThemeColors } from '@/constants/theme';
+import { TYPOGRAPHY } from '@/constants/theme';
 import { styles } from './ShipmentFlowSheet.styles';
+
+export interface ShipmentOptionDetail {
+  text: string;
+  tone?: 'muted' | 'warning';
+}
 
 interface ShipmentOptionCardProps {
   colors: ThemeColors;
   description: string;
+  details?: ShipmentOptionDetail[];
   disabled?: boolean;
   icon: IoniconsIconName;
   onPress: () => void;
+  price?: string;
   selected: boolean;
   title: string;
 }
@@ -18,15 +26,26 @@ interface ShipmentOptionCardProps {
 export function ShipmentOptionCard({
   colors,
   description,
+  details = [],
   disabled = false,
   icon,
   onPress,
+  price,
   selected,
   title,
 }: ShipmentOptionCardProps) {
+  const accessibilityLabel = [
+    title,
+    description,
+    price,
+    ...details.map((detail) => detail.text),
+  ]
+    .filter(Boolean)
+    .join('. ');
+
   return (
     <Pressable
-      accessibilityLabel={`${title}. ${description}`}
+      accessibilityLabel={accessibilityLabel}
       accessibilityRole="radio"
       accessibilityState={{ disabled, checked: selected }}
       disabled={disabled}
@@ -65,6 +84,27 @@ export function ShipmentOptionCard({
         >
           {description}
         </Text>
+        {price ? (
+          <Text style={[cardStyles.price, { color: colors.text }]}>
+            {price}
+          </Text>
+        ) : null}
+        {details.map((detail) => (
+          <Text
+            key={detail.text}
+            style={[
+              cardStyles.detail,
+              {
+                color:
+                  detail.tone === 'warning'
+                    ? colors.warning
+                    : colors.textSecondary,
+              },
+            ]}
+          >
+            {detail.text}
+          </Text>
+        ))}
       </View>
       <Ionicons
         color={selected ? colors.primary : colors.textMuted}
@@ -74,3 +114,15 @@ export function ShipmentOptionCard({
     </Pressable>
   );
 }
+
+const cardStyles = StyleSheet.create({
+  detail: {
+    fontSize: TYPOGRAPHY.size.sm,
+  },
+  price: {
+    fontSize: TYPOGRAPHY.size.xl,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '700',
+    marginTop: 2,
+  },
+});

@@ -2,21 +2,36 @@ import * as Clipboard from 'expo-clipboard';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { OrderGiglShippingState } from '@/hooks/orders/useOrderGiglShipping';
 import { useTheme } from '@/hooks/useTheme';
-import { formatMerchantAmount } from '@/lib/format-merchant-currency';
+import { formatMerchantPrice } from '@/lib/format-merchant-currency';
 import type {
   MerchantWalletFundingAccount,
   OrderGiglMissingField,
   OrderGiglQuote,
   OrderGiglReceiver,
 } from '@/lib/order-gigl-shipping';
-import { ShipmentOptionCard } from './ShipmentOptionCard';
+import {
+  ShipmentOptionCard,
+  type ShipmentOptionDetail,
+} from './ShipmentOptionCard';
 
 const formatPrice = (amount: number) =>
-  formatMerchantAmount(
-    amount,
-    { payout_currency: 'NGN' },
-    { minimumFractionDigits: 0 }
-  );
+  formatMerchantPrice(amount, { payout_currency: 'NGN' });
+
+function getWalletDetails(wallet: Props['wallet']): ShipmentOptionDetail[] {
+  if (!wallet) return [];
+  const balance: ShipmentOptionDetail = {
+    text: `Wallet balance: ${formatPrice(wallet.availableBalance)}`,
+  };
+  return wallet.canBook
+    ? [balance]
+    : [
+        balance,
+        {
+          text: `Shortfall: ${formatPrice(wallet.shortfall)}`,
+          tone: 'warning',
+        },
+      ];
+}
 
 interface Props {
   addressDraft: Partial<OrderGiglReceiver>;
@@ -101,32 +116,14 @@ export function ShipmentFlowGiglPanel({
       <ShipmentOptionCard
         colors={colors}
         description={description}
+        details={quote ? getWalletDetails(wallet) : []}
         disabled={loading}
         icon="paper-plane-outline"
         onPress={onModeChange}
+        price={quote ? formatPrice(quote.price) : undefined}
         selected={selected}
         title="Ship with GIG"
       />
-
-      {quote ? (
-        <View style={panelStyles.summary}>
-          <Text style={[panelStyles.price, { color: colors.text }]}>
-            {formatPrice(quote.price)}
-          </Text>
-          {wallet ? (
-            <>
-              <Text style={{ color: colors.textSecondary }}>
-                Wallet balance: {formatPrice(wallet.availableBalance)}
-              </Text>
-              {!wallet.canBook ? (
-                <Text style={{ color: colors.textSecondary }}>
-                  Shortfall: {formatPrice(wallet.shortfall)}
-                </Text>
-              ) : null}
-            </>
-          ) : null}
-        </View>
-      ) : null}
 
       {missingFields.map((field) => (
         <View key={field} style={panelStyles.field}>
@@ -242,6 +239,4 @@ const panelStyles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 12,
   },
-  price: { fontSize: 20, fontWeight: '700' },
-  summary: { gap: 4, marginBottom: 12, paddingHorizontal: 12 },
 });

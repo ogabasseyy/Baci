@@ -54,3 +54,19 @@ export function formatMerchantAmount(
   const locale = MERCHANT_CURRENCY_LOCALES[currency];
   return formatCurrency(amount, options, currency, locale);
 }
+
+/**
+ * Formats a price for display: whole amounts drop the decimals (₦44,850)
+ * and anything with a fractional part always shows two (₦48,500.40), so a
+ * price never renders with a single trailing decimal digit.
+ */
+export function formatMerchantPrice(
+  amount: number,
+  merchant?: MerchantCurrencyProfile | null
+): string {
+  const hasFraction = Math.round(amount * 100) % 100 !== 0;
+  return formatMerchantAmount(amount, merchant, {
+    minimumFractionDigits: hasFraction ? 2 : 0,
+    maximumFractionDigits: 2,
+  });
+}

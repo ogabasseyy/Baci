@@ -97,9 +97,13 @@ describe('quiz event service', () => {
   });
 
   it('fetches all quiz event pages before returning the mobile list', async () => {
+    let deviceNowMs = Date.parse('2026-05-20T09:00:00.000Z');
+    jest.spyOn(Date, 'now').mockImplementation(() => deviceNowMs);
+    // Each page arrives at a different device time; each keeps its own receipt.
     mockFetch
-      .mockResolvedValueOnce(
-        new Response(
+      .mockImplementationOnce(async () => {
+        deviceNowMs += 1_000;
+        return new Response(
           JSON.stringify({
             entryMode: 'free-v1',
             events: [
@@ -121,10 +125,11 @@ describe('quiz event service', () => {
             },
           }),
           { status: 200 }
-        )
-      )
-      .mockResolvedValueOnce(
-        new Response(
+        );
+      })
+      .mockImplementationOnce(async () => {
+        deviceNowMs += 4_000;
+        return new Response(
           JSON.stringify({
             entryMode: 'free-v1',
             events: [
@@ -146,8 +151,8 @@ describe('quiz event service', () => {
             },
           }),
           { status: 200 }
-        )
-      );
+        );
+      });
 
     await expect(
       fetchQuizEvents({ baseUrl: 'https://example.com' })
@@ -157,12 +162,14 @@ describe('quiz event service', () => {
         id: 'event-1',
         liveWindowSeconds: 600,
         maximumPlaySeconds: 150,
+        serverNowReceivedAtMs: Date.parse('2026-05-20T09:00:01.000Z'),
       }),
       expect.objectContaining({
         ...legacyQuizEventDefaults,
         id: 'event-2',
         liveWindowSeconds: 600,
         maximumPlaySeconds: 90,
+        serverNowReceivedAtMs: Date.parse('2026-05-20T09:00:05.000Z'),
       }),
     ]);
     expect(mockFetch).toHaveBeenNthCalledWith(
@@ -254,6 +261,9 @@ describe('quiz event service', () => {
       timeZone: 'Africa/Lagos',
       title: 'Redmi Warriors',
     };
+    jest
+      .spyOn(Date, 'now')
+      .mockReturnValue(Date.parse('2026-08-04T12:00:03.000Z'));
     mockFetch.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -270,7 +280,7 @@ describe('quiz event service', () => {
       {
         ...event,
         serverNow: '2026-08-04T12:00:00.000Z',
-        serverNowReceivedAtMs: expect.any(Number),
+        serverNowReceivedAtMs: Date.parse('2026-08-04T12:00:03.000Z'),
       },
     ]);
     expect(

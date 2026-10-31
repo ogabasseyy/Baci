@@ -77,7 +77,7 @@ export function QuizLaunchDialog({
       <section
         aria-labelledby="launch-dialog-title"
         aria-modal="true"
-        className="w-full max-w-lg rounded-xl border bg-card p-6 shadow-2xl"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border bg-card p-6 shadow-2xl"
         role="dialog"
       >
         <p className="text-xs font-semibold uppercase tracking-widest text-primary">

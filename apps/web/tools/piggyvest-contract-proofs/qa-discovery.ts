@@ -55,3 +55,19 @@ export async function discoverQaCustomer(
     return { customerId: null, reason: 'unverifiable', row: undefined };
   return selectQaCustomer(list.edges, qa);
 }
+
+/**
+ * A create answer that is not provably a brand-new customer (`new_customer`
+ * false or absent) may belong to someone else: returnIfExist matches on BVN or
+ * email, and two QA keys can derive the same synthetic BVN. Such a customer is
+ * usable only if a lookup by THIS key's identifier verifies that same id.
+ * Anything else, including a lookup that failed, is refused (fails closed).
+ */
+export async function verifiesCreatedCustomer(
+  api: Pick<ProviderReads, 'customersByIdentifier'>,
+  qa: QaIdentity,
+  customerId: string
+): Promise<boolean> {
+  const found = await discoverQaCustomer(api, qa);
+  return found.reason === 'found' && found.customerId === customerId;
+}

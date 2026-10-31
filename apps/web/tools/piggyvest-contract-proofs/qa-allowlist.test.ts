@@ -35,6 +35,10 @@ describe('parseAllowlist', () => {
     ['duplicates', `{"qaCustomerIds":["${GOOD}","${GOOD}"]}`],
     ['unknown extra key', `{"qaCustomerIds":["${GOOD}"],"extra":true}`],
     [
+      'two keys that derive the same synthetic BVN',
+      '{"qaCustomerIds":["qa-customer-011234","qa-customer-012514"]}',
+    ],
+    [
       'too many entries',
       JSON.stringify({
         qaCustomerIds: Array.from(

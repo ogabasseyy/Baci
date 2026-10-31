@@ -6,7 +6,7 @@ import { readbackPayout } from './proof-7-readback';
 import { answerOf, ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
 import { qaIdentityFor } from './provider-ops';
-import { discoverQaCustomer } from './qa-discovery';
+import { discoverQaCustomer, verifiesCreatedCustomer } from './qa-discovery';
 import { proof7Key } from './qa-keys';
 import { okData, usableList } from './read-rules';
 import type { ProofResult } from './types';
@@ -125,6 +125,23 @@ export async function runProof7(ctx: ProofContext): Promise<ProofResult> {
       b.note(
         'The QA customer already existed, so the interest settings were not re-applied; the readback reflects its original creation, not this request.'
       );
+    }
+    // Anything but a brand-new customer may be another key's (returnIfExist
+    // matches on BVN or email): it owns sub-wallets below only once a lookup by
+    // THIS proof's identifier proves it.
+    if (customerId && fresh !== true) {
+      if (!(await verifiesCreatedCustomer(api, qa7, customerId))) {
+        redactor.register('C', customerId);
+        redactor.register('W', mainWalletId);
+        customerId = null;
+        mainWalletId = null;
+        b.inconclusive(
+          "the returned customer is not proven to be this proof's"
+        );
+        b.note(
+          'The existing customer returned by the create is not proven to belong to this proof (a lookup by its identifier did not verify it), so nothing was read from or created under it.'
+        );
+      }
     }
   }
   if (customerId) redactor.register('C', customerId);

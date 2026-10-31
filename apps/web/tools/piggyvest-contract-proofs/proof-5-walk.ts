@@ -73,7 +73,10 @@ export async function walk(
 }
 
 export interface SettledWalk extends Walk {
-  /** The full list as it stood once it had stopped changing; null if it never did. */
+  /**
+   * The full list as it stood once it had stopped changing, and still stood
+   * after the walk; null if it never settled or changed (or failed) after.
+   */
   settledList: ReturnType<typeof extractEdges> | null;
   settledCall: CallResult | null;
 }
@@ -114,9 +117,12 @@ export async function stableWalk(
     walked.advances = null;
     walked.singlePage = false; // not a clean "nothing to follow": the list was unstable
   }
+  // The snapshot is evidence only if it still held when the walk was over: a
+  // row that appeared (or a read that failed) after the walk invalidates it, so
+  // no absence or count claim may rest on it.
   return {
     ...walked,
-    settledList: settled ? usableList(call) : null,
-    settledCall: settled ? call : null,
+    settledList: clean ? usableList(call) : null,
+    settledCall: clean ? call : null,
   };
 }

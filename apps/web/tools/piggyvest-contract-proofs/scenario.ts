@@ -6,7 +6,7 @@ import {
   walletDataSchema,
 } from './loose-schemas';
 import type { ProofContext, WalletView } from './proof-context';
-import { discoverQaCustomer } from './qa-discovery';
+import { discoverQaCustomer, verifiesCreatedCustomer } from './qa-discovery';
 import { okData, usableList } from './read-rules';
 
 /**
@@ -199,13 +199,29 @@ export async function setupScenario(ctx: ProofContext): Promise<void> {
     } else {
       const parsed = createDataSchema.safeParse(okData(created.call));
       if (created.call.ok && parsed.success) {
+        // Registered first so nothing the answer named can ever be emitted.
+        register(ctx, 'C', parsed.data.customer_id);
+        register(ctx, 'W', parsed.data.wallet_id);
+        // A brand-new customer was built from this key's own body. Any other
+        // answer (existing, or not saying) may be another key's customer, found
+        // through a BVN/email collision: it is used only once a lookup by this
+        // key's identifier proves it, before any customer-scoped mutation.
+        const fresh = parsed.data.new_customer === true;
+        if (
+          !fresh &&
+          !(await verifiesCreatedCustomer(api, qa, parsed.data.customer_id))
+        ) {
+          state.createdNewCustomer = parsed.data.new_customer ?? null;
+          state.notes.push(
+            'customer create returned an existing customer that is not proven to belong to this QA key (verified lookup by its identifier failed or named another customer); it is refused and nothing was created or moved under it'
+          );
+          return;
+        }
         state.customerId = parsed.data.customer_id;
         state.createdNewCustomer = parsed.data.new_customer ?? null;
         // Only a brand-new customer proves which wallet is the default; an
         // existing customer's re-POST answer is exactly what proof 1 tests.
-        state.createdWalletId =
-          parsed.data.new_customer === true ? parsed.data.wallet_id : null;
-        register(ctx, 'W', parsed.data.wallet_id);
+        state.createdWalletId = fresh ? parsed.data.wallet_id : null;
       } else {
         state.notes.push('customer create did not return usable ids');
       }

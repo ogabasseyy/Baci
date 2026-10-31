@@ -6,6 +6,8 @@ import { okData, usableList } from './read-rules';
 import type { ProofResult } from './types';
 
 const TITLE = 'Interest visibility (development evidence only)';
+/** Rows requested by the transaction list snapshot (the provider's maximum). */
+const SNAPSHOT_LIMIT = 100;
 
 export function countInterestRows(edges: unknown[]): number {
   return edges.filter((edge) =>
@@ -14,6 +16,18 @@ export function countInterestRows(edges: unknown[]): number {
 }
 
 const isoDate = (date: Date) => date.toISOString().slice(0, 10);
+
+/**
+ * Could the history hold rows the snapshot did not show? Yes if the provider
+ * says there is a next page, or if a FULL page came back without an explicit
+ * "no next page" (it may have been cut short).
+ */
+function historyMayContinue(list: ReturnType<typeof extractEdges>): boolean {
+  const next = list.pageInfo?.hasNextPage;
+  return (
+    next === true || (next !== false && list.edges.length >= SNAPSHOT_LIMIT)
+  );
+}
 
 function cursorFinding(
   b: ProofBuilder,
@@ -114,8 +128,10 @@ export async function runProof5(ctx: ProofContext): Promise<ProofResult> {
   );
   const observed =
     (defUsable && defList.edges.length > 0) || accrual.firstEdge !== undefined;
-  // Absence is only evidence if both accrual reads succeeded with a list we recognise.
-  const absenceEstablished = defUsable && accrual.pages > 0;
+  // Absence is only evidence if both accrual reads succeeded with a list we
+  // recognise AND the list was still unchanged after the walk.
+  const absenceEstablished =
+    defUsable && accrual.pages > 0 && accrual.settledList !== null;
   const accrualAnswer = observed
     ? 'yes'
     : absenceEstablished
@@ -184,6 +200,10 @@ export async function runProof5(ctx: ProofContext): Promise<ProofResult> {
   const pageList = txWalk.settledList;
   const rows = pageList?.edges ?? [];
   const interestRows = countInterestRows(rows);
+  // Only the newest page was inspected. A match on it is still a `yes`, but
+  // "no interest rows" needs the whole history, so it is `unknown` when more
+  // pages may exist.
+  const historyComplete = pageList ? !historyMayContinue(pageList) : null;
   if (txWalk.settledCall) {
     b.shape(
       'GET /transaction (page)',
@@ -191,17 +211,22 @@ export async function runProof5(ctx: ProofContext): Promise<ProofResult> {
       txWalk.settledCall.data
     );
   }
-  b.value('transaction_list_rows_read', pageList ? rows.length : null).value(
-    'transaction_list_interest_rows',
-    pageList ? interestRows : null
-  );
+  b.value('transaction_list_rows_read', pageList ? rows.length : null)
+    .value('transaction_list_history_complete', historyComplete)
+    .value('transaction_list_interest_rows', pageList ? interestRows : null);
+  const interestAnswer =
+    !pageList || (interestRows === 0 && !historyComplete)
+      ? 'unknown'
+      : answerOf(interestRows > 0);
   b.finding(
     'transaction_list_has_interest_rows',
     'Does the transaction list contain interest rows?',
-    pageList ? answerOf(interestRows > 0) : 'unknown',
-    pageList
-      ? undefined
-      : 'the transaction list never settled (or could not be read) within the polling budget'
+    interestAnswer,
+    !pageList
+      ? 'the transaction list never settled (or could not be read) within the polling budget'
+      : interestAnswer === 'unknown'
+        ? `only the newest ${rows.length} rows were inspected and more history may exist, so the absence of interest rows is not established`
+        : undefined
   );
   b.value(
     'transaction_list_limit_101_http_status',

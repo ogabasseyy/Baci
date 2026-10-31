@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from 'node:fs';
 import { z } from 'zod';
+import { resolvePiggyvestStagingSyntheticIdentity } from '@/lib/piggyvest/staging-synthetic-identity';
 import { assertNoRecordingAccount, HarnessRefusal } from './safety-guards';
 
 /**
@@ -42,7 +43,30 @@ export function parseAllowlist(text: string): QaAllowlist {
       'allowlist must be {"qaCustomerIds": [8-64 char ids]} with no duplicates'
     );
   }
+  assertDistinctSyntheticIdentities(parsed.data.qaCustomerIds);
   return parsed.data;
+}
+
+/**
+ * The provider matches an existing customer on BVN or email, so two keys that
+ * derive the same synthetic BVN or email would be handed each other's customer.
+ * The BVN is only 8 hashed digits, so this can happen; refuse such a list.
+ * (The setup also verifies every existing customer it is handed.)
+ */
+function assertDistinctSyntheticIdentities(keys: readonly string[]): void {
+  const seen = new Set<string>();
+  for (const key of keys) {
+    const { bvn, email } = resolvePiggyvestStagingSyntheticIdentity(key);
+    for (const fingerprint of [`bvn:${bvn}`, `email:${email.toLowerCase()}`]) {
+      if (seen.has(fingerprint)) {
+        throw new HarnessRefusal(
+          'ALLOWLIST_INVALID',
+          'two allowlisted QA keys derive the same synthetic BVN or email; remove one of them'
+        );
+      }
+      seen.add(fingerprint);
+    }
+  }
 }
 
 export function loadAllowlist(filePath: string): QaAllowlist {

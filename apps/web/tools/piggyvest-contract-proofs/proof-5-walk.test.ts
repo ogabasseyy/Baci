@@ -142,6 +142,32 @@ describe('stableWalk', () => {
     expect(walked.singlePage).toBe(false);
   });
 
+  it('returns no settled snapshot when a row appears after the walk (the post-walk read invalidates it)', async () => {
+    let reads = 0;
+    const lateRow = async () =>
+      page([{ id: 'a' }, ...(reads++ > 3 ? [{ id: 'z' }] : [])], null);
+    const walked = await stableWalk(
+      ctxFor(3),
+      pager([page([{ id: 'a' }], '1'), page([{ id: 'b' }], null)]),
+      lateRow
+    );
+    expect(walked.settledList).toBeNull();
+    expect(walked.settledCall).toBeNull();
+  });
+
+  it('returns no settled snapshot when the post-walk read fails', async () => {
+    let reads = 0;
+    const failsAfterWalk = async () =>
+      reads++ > 3 ? page([], null, false) : page([{ id: 'a' }], null);
+    const walked = await stableWalk(
+      ctxFor(3),
+      pager([page([{ id: 'a' }], '1'), page([{ id: 'b' }], null)]),
+      failsAfterWalk
+    );
+    expect(walked.settledList).toBeNull();
+    expect(walked.settledCall).toBeNull();
+  });
+
   it('does not call a never-readable list settled', async () => {
     const walked = await stableWalk(
       ctxFor(2),

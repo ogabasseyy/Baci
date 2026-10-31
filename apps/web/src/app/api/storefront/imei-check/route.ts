@@ -1,12 +1,4 @@
-import {
-  IMEI_IDENTIFIER_BY_DEVICE,
-  IMEI_SERVICE_TIERS,
-  type ImeiIdentifierType,
-  isValidDeviceIdentifier,
-  normalizeDeviceIdentifier,
-  PUBLIC_IMEI_SERVICE_TIERS,
-  resolveInputIdentifier,
-} from '@baci/shared/imei';
+import { PUBLIC_IMEI_SERVICE_TIERS } from '@baci/shared/imei';
 import type { NextRequest } from 'next/server';
 import { getImeiHashSalt, getRootDomain } from '@/env';
 import { authenticateApiRequest } from '@/lib/api-auth';
@@ -20,9 +12,10 @@ import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
 import { imeiCheckSchema } from '@/schemas/imei-check';
 import { createImeiCapabilitiesHandler } from './capabilities-handler';
-import { claimImeiAttempt } from './claim-imei-attempt';
+import { claimImeiAttempt, reconcileExistingImeiAttempt } from './claim-imei-attempt';
 import { imeiProviderConfiguration } from './imei-provider-configuration';
 import { prepareImeiProvider } from './prepare-imei-provider';
+import { resolveImeiIdentifier } from './resolve-imei-identifier';
 import {
   errorBody,
   findLookupByIdempotencyKey,
@@ -33,7 +26,6 @@ import {
 } from './route-helpers';
 import {
   continuesWalletPayment,
-  replayFor,
   runImeiLookup,
 } from './run-imei-lookup';
 import { resumePaidImeiWalletPayment } from './wallet-pay/resume-paid-imei-wallet-payment';
@@ -41,12 +33,6 @@ import { resumePaidImeiWalletPayment } from './wallet-pay/resume-paid-imei-walle
 const PUBLIC_IMEI_SERVICE_TIER_KEYS = new Set<string>(
   PUBLIC_IMEI_SERVICE_TIERS
 );
-
-const INVALID_IDENTIFIER_MESSAGE: Record<ImeiIdentifierType, string> = {
-  imei: 'Invalid IMEI number',
-  serial: 'Invalid serial number',
-  both: 'Invalid IMEI or serial number',
-};
 
 export async function POST(request: NextRequest) {
   try {
@@ -155,30 +141,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const tierIdentifier = IMEI_SERVICE_TIERS[requestedTier].identifier;
-    const requestedIdentifier = deviceCategory
-      ? resolveInputIdentifier(
-          tierIdentifier,
-          IMEI_IDENTIFIER_BY_DEVICE[deviceCategory]
-        )
-      : tierIdentifier;
-    // Validate the RAW value first: normalizing first could shorten an
-    // over-length input into a spurious valid one that bills. Then normalize.
-    if (!isValidDeviceIdentifier(bodyParse.data.imei, requestedIdentifier)) {
-      return json(
-        errorBody({
-          code: 'INVALID_IMEI',
-          error: INVALID_IDENTIFIER_MESSAGE[requestedIdentifier],
-        }),
-        400
-      );
-    }
-    // Canonicalize so replay hashing and the provider call share one value
-    // (a raw-valid identifier is only case-folded here).
-    const normalizedImei = normalizeDeviceIdentifier(
+    const identifier = resolveImeiIdentifier(
       bodyParse.data.imei,
-      requestedIdentifier
+      requestedTier,
+      deviceCategory
     );
+    if (identifier.response) return identifier.response;
+    const normalizedImei = identifier.normalized;
 
     const customer = await resolveImeiCustomer({
       merchantId,
@@ -249,10 +218,11 @@ export async function POST(request: NextRequest) {
       supabaseAdmin,
       idempotencyKey
     );
-    const replay = replayFor(existingLookup, bodyParse.data, replayContext);
-    if (replay) return replay;
+    if (existingLookup && !continuesWalletPayment(bodyParse.data, existingLookup)) {
+      return reconcileExistingImeiAttempt({ access: supabaseAdmin, context: replayContext, requestedKey: idempotencyKey, existing: existingLookup });
+    }
 
-    const claim = await claimImeiAttempt({
+    const claim = existingLookup ? { canonicalKey: idempotencyKey, response: null } : await claimImeiAttempt({
       access: supabaseAdmin,
       context: replayContext,
       requestedKey: idempotencyKey,

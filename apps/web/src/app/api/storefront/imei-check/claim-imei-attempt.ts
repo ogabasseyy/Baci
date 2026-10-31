@@ -66,3 +66,36 @@ export async function claimImeiAttempt({
   }
   return { response: mapExistingLookup(existing, context), canonicalKey: null };
 }
+
+/** Reconcile a same-key retry before returning a still-pending cached result. */
+export async function reconcileExistingImeiAttempt({
+  access,
+  context,
+  requestedKey,
+  existing,
+}: {
+  access: ImeiAccessClient;
+  context: ReplayContext;
+  requestedKey: string;
+  existing: NonNullable<Awaited<ReturnType<typeof findLookupByIdempotencyKey>>>;
+}) {
+  if (
+    (existing.status === 'pending' || existing.status === 'refund_pending') &&
+    existing.customer_id === context.customerId &&
+    existing.merchant_id === context.merchantId &&
+    existing.tier === context.tier &&
+    existing.imei_hash === context.imeiHash &&
+    (existing.device_category ?? null) === (context.deviceCategory ?? null)
+  ) {
+    const claim = await access.claimAttempt({
+      tier: context.tier,
+      imei_hash: context.imeiHash,
+      idempotency_key: requestedKey,
+    });
+    if (!claim.error) {
+      const refreshed = await findLookupByIdempotencyKey(access, requestedKey);
+      if (refreshed) return mapExistingLookup(refreshed, context);
+    }
+  }
+  return mapExistingLookup(existing, context);
+}

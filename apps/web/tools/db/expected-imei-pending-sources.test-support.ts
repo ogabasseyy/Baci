@@ -64,4 +64,9 @@ export const EXPECTED_IMEI_PENDING_SOURCES = [
       'supabase/migrations/20261031143353_imei_reconcile_sickw_refunds.sql',
     sha256: '821f4bef4d2683d800041b24e60c914654c967ecf97b4e80c2e84edec0090963',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261031144206_imei_reconcile_legacy_sickw_refunds.sql',
+    sha256: 'beca8ff159c6bc50bc4e778b89b465b5ca2d7b4aff3e88d31e03aeb2c1af4817',
+  },
 ];

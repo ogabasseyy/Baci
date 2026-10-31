@@ -1,10 +1,11 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import {
+  readMigration as read,
+  readFulfilStaffMigrationSeries,
+} from './allow-fulfil-staff-gigl-wallet-booking-migrations.test-support';
 
-const migrations = resolve(process.cwd(), '../../supabase/migrations');
-const read = (name: string) => readFileSync(resolve(migrations, name), 'utf8');
-const sql = read('20261031130000_allow_fulfil_staff_gigl_wallet_booking.sql');
+// The ordered fulfil-staff migrations, concatenated as they apply.
+const sql = readFulfilStaffMigrationSeries();
 
 function definition(source: string, name: string): string {
   const start = source.indexOf(`CREATE OR REPLACE FUNCTION ${name}(`);

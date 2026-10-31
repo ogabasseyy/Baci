@@ -71,9 +71,9 @@ export function createCustomerCheckoutShippingRecoveryTestDatabase({
         }
         if (!beforeActivationGate) {
           // The newest recovery gates (owner or orders.fulfill staff) live in
-          // the GIG fulfil-staff migration, not a recovery-named file.
+          // the GIG fulfil-staff migration, which the name filter above skips.
           const staffAccess =
-            '20261031130000_allow_fulfil_staff_gigl_wallet_booking.sql';
+            '20261031130500_allow_fulfil_staff_checkout_shipping_recovery.sql';
           database.query(
             definition(
               staffAccess,

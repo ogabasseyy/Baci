@@ -68,19 +68,21 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Allow the app to scan barcodes for inventory.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your Face ID biometric data.</string>
+	<string>Allow Baci Admin to protect your merchant account credentials.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>This app uses the local network to communicate with nearby devices for sharing and printing.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Allow $(PRODUCT_NAME) to access your microphone</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Allow the app to access photos for product images.</string>
-	<key>NSUserTrackingUsageDescription</key>
-	<string>Your data will be used to measure ad performance and improve Baci app promotion.</string>
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>
 	</array>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Your data will be used to measure ad performance and improve Baci app promotion.</string>
+	<key>RCTMetroPort</key>
+	<string>$(RCT_METRO_PORT)</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UIAppFonts</key>
@@ -88,6 +90,23 @@
 		<string>FontAwesome.ttf</string>
 		<string>Ionicons.ttf</string>
 	</array>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Default Configuration</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UILaunchStoryboardName</key>
 	<string>SplashScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

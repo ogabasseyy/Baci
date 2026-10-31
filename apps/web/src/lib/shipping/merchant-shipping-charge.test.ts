@@ -37,17 +37,18 @@ describe('merchant shipping charge RPC adapter', () => {
   });
 
   it('maps insufficient funds to a stable booking error', async () => {
-    const rpc = vi.fn().mockResolvedValue({
-      data: null,
-      error: { message: 'MERCHANT_WALLET_INSUFFICIENT' },
-    });
+    const rpc = vi.fn(async (name: string) =>
+      name === 'get_merchant_shipping_wallet_balance'
+        ? { data: 1200, error: null }
+        : { data: null, error: { message: 'MERCHANT_WALLET_INSUFFICIENT' } }
+    );
     const from = vi.fn((table: string) => {
+      if (table === 'merchant_wallets')
+        throw new Error('merchant_wallets is owner-only under RLS');
       const result =
         table === 'orders'
           ? { merchant_id: 'm1', shipping_fee: 4500 }
-          : table === 'shipping_quotes'
-            ? { price: 4500 }
-            : { available_balance: 1200 };
+          : { price: 4500 };
       const query = {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
@@ -64,6 +65,37 @@ describe('merchant shipping charge RPC adapter', () => {
         chargedAmount: 4500,
         shortfall: 3300,
       },
+    });
+    expect(rpc).toHaveBeenCalledWith('get_merchant_shipping_wallet_balance', {
+      p_merchant_id: 'm1',
+    });
+  });
+
+  it('omits shortfall details instead of reporting the full price when the balance read fails', async () => {
+    const rpc = vi.fn(async (name: string) =>
+      name === 'get_merchant_shipping_wallet_balance'
+        ? { data: null, error: { code: '42501', message: 'forbidden' } }
+        : { data: null, error: { message: 'MERCHANT_WALLET_INSUFFICIENT' } }
+    );
+    const from = vi.fn((table: string) => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data:
+          table === 'orders'
+            ? { merchant_id: 'm1', shipping_fee: 4500 }
+            : { price: 4500 },
+        error: null,
+      }),
+    }));
+    const error = await reserveMerchantShippingCharge(
+      { rpc, from } as never,
+      'o1',
+      'q1'
+    ).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({
+      code: 'MERCHANT_WALLET_INSUFFICIENT',
+      details: undefined,
     });
   });
 

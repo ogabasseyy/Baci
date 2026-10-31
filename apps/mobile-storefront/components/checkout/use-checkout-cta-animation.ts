@@ -1,6 +1,6 @@
 import { useIsFocused } from 'expo-router/react-navigation';
 import { useEffect } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
+import { AppState } from 'react-native';
 import {
   cancelAnimation,
   useAnimatedStyle,
@@ -19,7 +19,7 @@ export function useCheckoutCtaAnimation(isProcessing: boolean, duration = 800) {
       cancelAnimation(ctaArrowTranslateX);
       ctaArrowTranslateX.set(0);
     };
-    const sync = (state: AppStateStatus) => {
+    const sync = (state: typeof AppState.currentState) => {
       if (isProcessing || !isFocused || state !== 'active') {
         stop();
         return;

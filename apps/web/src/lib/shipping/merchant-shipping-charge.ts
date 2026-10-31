@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { readMerchantShippingWalletBalance } from './merchant-shipping-wallet-balance';
 import { shouldReleaseBookingLock } from './order-shipment-booking-lock-errors';
 import { OrderShipmentBookingError } from './order-shipment-booking-utils';
 
@@ -37,14 +38,16 @@ async function readInsufficientWalletDetails(
       .eq('id', quoteId)
       .eq('merchant_id', order.merchant_id)
       .maybeSingle();
-    const { data: wallet } = await supabase
-      .from('merchant_wallets')
-      .select('available_balance')
-      .eq('merchant_id', order.merchant_id)
-      .maybeSingle();
+    // merchant_wallets RLS is owner-only; the narrow RPC also serves
+    // orders.fulfill staff, so their shortfall is not the full price.
+    const wallet = await readMerchantShippingWalletBalance(
+      supabase,
+      order.merchant_id
+    );
+    if (!wallet.ok) return undefined;
     const chargedAmount = Number(quote?.price ?? order.shipping_fee ?? 0);
-    const availableBalance = Number(wallet?.available_balance ?? 0);
-    if (!Number.isFinite(chargedAmount) || !Number.isFinite(availableBalance)) {
+    const availableBalance = wallet.availableBalance;
+    if (!Number.isFinite(chargedAmount)) {
       return undefined;
     }
     return {

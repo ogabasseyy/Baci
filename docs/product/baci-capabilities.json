@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-30T08:07:40+00:00",
-  "source_revision": "c346c35d5c6b8e176028e57a182bc2faca2cfb33",
-  "evidence_digest": "884ec712bc68c759e59b0de3f2d07fe260a2fc08529a2ac66a1fe0ddfff8a018",
-  "claims_digest": "a5eb837dea04dc2f6441b9c038557f5d03e4c0c5ff6a3bb94b1c1cbe94dece19",
-  "review_scope": "Source evidence only. Rechecked the support-chat health probe: catalog and conversation checks run concurrently, with Ogabassey tenant and catalog markers. All cited capability and access-map sources remain unchanged since the previous source review across this main integration. OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
+  "reviewed_at": "2026-10-31T12:06:59+00:00",
+  "source_revision": "add71b5ae9b1e0a31a9cdf62b408b4dc7e916ac2",
+  "evidence_digest": "14c97ea35e13bd435c76163a03f3cb8ce99b4581f5942887395d25642566524e",
+  "claims_digest": "e12b8accdf684f987dc2480453286a56f4ea3a50b32d9927c363a60f789f9486",
+  "review_scope": "Source evidence only. Re-reviewed shipping after the booking sender change: for domestic order bookings, a blank or implausible store phone now stops booking with 400 MERCHANT_SENDER_PHONE_INVALID before any provider request; origin-missing, merchant-missing and lookup-failure codes are unchanged. The shipping claim and its merchant-configuration limitation remain accurate. Across this main integration all other cited capability and access-map sources are unchanged. Support-chat health, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment, native acceptance and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

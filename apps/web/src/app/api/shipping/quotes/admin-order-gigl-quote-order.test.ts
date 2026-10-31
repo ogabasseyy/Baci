@@ -9,6 +9,9 @@ describe('ADMIN_ORDER_GIGL_QUOTE_ORDER_SELECT', () => {
     expect(ADMIN_ORDER_GIGL_QUOTE_ORDER_SELECT).toContain('shipping_status');
     expect(ADMIN_ORDER_GIGL_QUOTE_ORDER_SELECT).toContain('shipment_id');
     expect(ADMIN_ORDER_GIGL_QUOTE_ORDER_SELECT).toContain('order_items(');
+    expect(ADMIN_ORDER_GIGL_QUOTE_ORDER_SELECT).toContain(
+      'shipping_funding_source'
+    );
     expect(ADMIN_ORDER_GIGL_QUOTE_ORDER_SELECT).not.toContain('*');
   });
 });

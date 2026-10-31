@@ -1,5 +1,9 @@
 import 'server-only';
 import z from 'zod';
+import {
+  type PiggyvestTransactionStatus,
+  piggyvestTransactionStatusSchemas,
+} from '@/schemas/piggyvest-transaction-status';
 import { type PiggyvestClientConfig, piggyvestRequest } from './client';
 
 /**
@@ -11,6 +15,10 @@ import { type PiggyvestClientConfig, piggyvestRequest } from './client';
  *   `bank-transfer.outflow.failed`, or `wallet-transfer.outflow.success`
  *   webhooks, or via TSQ on our own reference. Callers must treat the
  *   accepted response as "submitted", not "settled".
+ * - TSQ answers HTTP 404 for a just-accepted transfer until PiggyVest
+ *   indexes it (docs/piggyvest-contract-evidence/2026-10-31.md, P2:
+ *   transfer 202, then TSQ http_404 > pending > successful in 9 polls). A
+ *   TSQ 404 is never proof that a transfer does not exist.
  * - Our `reference` is the idempotency key: reuse it for TSQ and webhook
  *   correlation, never mint a second reference for the same payout.
  * - Resolve the recipient with name enquiry (bank_code + account_number)
@@ -90,18 +98,7 @@ const bankListDataSchema = z.array(
 
 export type PiggyvestBank = z.infer<typeof bankListDataSchema>[number];
 
-const transactionStatusDataSchema = z.object({
-  reference: z.string().min(1),
-  status: z.enum(['success', 'pending', 'failed']),
-  amount: z.int().nonnegative(),
-  recipient: z.string(),
-  bank: z.string(),
-  created_at: z.iso.datetime({ offset: true }),
-});
-
-export type QueryTransactionStatusResult = z.infer<
-  typeof transactionStatusDataSchema
->;
+export type QueryTransactionStatusResult = PiggyvestTransactionStatus;
 
 export async function transferToWallet(
   config: PiggyvestClientConfig,
@@ -185,7 +182,7 @@ export function queryTransactionStatus(
   const parsed = transactionStatusQuerySchema.parse(input);
   return piggyvestRequest(
     config,
-    transactionStatusDataSchema,
+    piggyvestTransactionStatusSchemas.data,
     '/api/v1/transaction/verify',
     {
       query: {

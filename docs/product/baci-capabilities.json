@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-31T05:33:07+00:00",
-  "source_revision": "76b52d16ce856105e0be54f9d264e9457369f305",
-  "evidence_digest": "93c5159342afb3b2b7e570a3557626985faa8bbcf122a03179eaa6acd56b6ae4",
-  "claims_digest": "ee86a3f22b03ea3d00a7ae2b38b1c5a931f55a26ff447b46f61bd3fa8531f7c1",
-  "review_scope": "Source evidence only. Added the agent surface evidence table to the access map from the cited agentic sources, the 31 October 2026 production profile baseline and new local fixture and conformance tests; no cited capability source changed and the agent-protocols claim, limitations and status are unchanged. The support-chat health probe, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
+  "reviewed_at": "2026-10-31T08:47:44+00:00",
+  "source_revision": "33e82e0d65bb0925b4364c0300174066731d4f3b",
+  "evidence_digest": "1a304556874fb2b95967cdd754a8cb99d6280ee908706398b814830f280beaf3",
+  "claims_digest": "1b4cfef4a83a14ec7d5225805ecb8afe0970cb56a2eb4f687063429084aa20f6",
+  "review_scope": "Source evidence only. Added the agent surface evidence table to the access map from the cited agentic sources, the 31 October 2026 production profile baseline and new local fixture and conformance tests, on top of the stacked admin-client change: the agentic catalog, checkout-session and order routes resolve the merchant through the scoped merchant-context RPC, with a separate scoped payment-split lookup for checkout completion. The agent-protocols claim, limitations and status are unchanged. Other cited sources are unchanged except the mobile admin inventory sheet empty footer, which now uses undefined; the inventory capability remains unchanged. The support-chat health probe, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

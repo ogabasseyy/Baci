@@ -72,7 +72,8 @@ position. Anything else fails loudly instead of being skipped:
 - a source row that is not `<64 lowercase hex> <YYYYMMDDHHMMSS>_<name>.sql`;
 - a migration registered twice in the same list;
 - a SQL suite that is missing, an `.inc.sql` part, outside
-  `supabase/tests/` or `supabase/migrations/tests/`, or listed twice.
+  `supabase/tests/` or `supabase/migrations/tests/`, listed twice, or also
+  passed to the replay as an explicit `--sql-check` (it would run twice).
 
 ## Check locally
 

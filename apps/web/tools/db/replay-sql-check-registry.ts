@@ -20,10 +20,10 @@ function isFile(filePath: string): boolean {
  * against one database, so this order is the execution order. `\ir` parts,
  * duplicates, and missing files fail loudly instead of being skipped.
  */
-function readReplaySqlChecks(
+function readRegisteredSuites(
   repositoryRoot: string,
   registryPath: string
-): string[] {
+): { location: string; value: string }[] {
   const directory = replayRepository.path(repositoryRoot, registryPath);
   const registeredAt = new Map<string, string>();
   return replayRegistry
@@ -49,19 +49,32 @@ function readReplaySqlChecks(
         throw replayRegistry.error(`${location} lists missing file ${value}`);
       }
       registeredAt.set(value, location);
-      return value;
+      return { location, value };
     });
+}
+
+function readReplaySqlChecks(
+  repositoryRoot: string,
+  registryPath: string
+): string[] {
+  return readRegisteredSuites(repositoryRoot, registryPath).map(
+    ({ value }) => value
+  );
 }
 
 /**
  * Replaces `--sql-check-registry <dir>` with the registered `--sql-check`
  * pairs in place, so explicit `--sql-check` flags keep their relative order.
- * Every other argument passes through for the strict replay parser.
+ * A registered suite that is also passed explicitly is rejected, so no suite
+ * runs twice. Every other argument passes through for the strict parser.
  */
 function expandSqlCheckRegistryArguments(
   argv: readonly string[],
   repositoryRoot: string
 ): string[] {
+  const explicit = new Set(
+    argv.filter((_value, index) => argv[index - 1] === '--sql-check')
+  );
   const expanded: string[] = [];
   let registries = 0;
   for (let index = 0; index < argv.length; index += 2) {
@@ -75,8 +88,13 @@ function expandSqlCheckRegistryArguments(
     if (registries > 1) {
       throw replayRegistry.error(`${SQL_CHECK_REGISTRY_FLAG} may appear once`);
     }
-    for (const suite of readReplaySqlChecks(repositoryRoot, value)) {
-      expanded.push('--sql-check', suite);
+    for (const suite of readRegisteredSuites(repositoryRoot, value)) {
+      if (explicit.has(suite.value)) {
+        throw replayRegistry.error(
+          `${suite.location} lists ${suite.value}, which is also passed as an explicit --sql-check`
+        );
+      }
+      expanded.push('--sql-check', suite.value);
     }
   }
   return expanded;

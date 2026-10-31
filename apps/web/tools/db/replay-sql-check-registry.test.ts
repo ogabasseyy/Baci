@@ -2,7 +2,6 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { parseReplayCliArguments } from './parse-replay-cli-arguments';
 import { replaySqlCheckRegistry } from './replay-sql-check-registry';
 
 const REPOSITORY_ROOT = path.resolve(import.meta.dirname, '../../../..');
@@ -130,6 +129,36 @@ describe('replay SQL-check registry', () => {
     ]);
   });
 
+  it.each([
+    [
+      'before',
+      [
+        '--sql-check',
+        'supabase/tests/beta.sql',
+        '--sql-check-registry',
+        'registry',
+      ],
+    ],
+    [
+      'after',
+      [
+        '--sql-check-registry',
+        'registry',
+        '--sql-check',
+        'supabase/tests/beta.sql',
+      ],
+    ],
+  ])('rejects a registered suite also passed explicitly %s the flag', (_case, argv) => {
+    const root = repository({
+      'registry/20261101090000_a/sql-checks.txt':
+        'supabase/tests/alpha.sql\nsupabase/tests/beta.sql\n',
+    });
+
+    expect(() => replaySqlCheckRegistry.expandArguments(argv, root)).toThrow(
+      '20261101090000_a/sql-checks.txt:2 lists supabase/tests/beta.sql, which is also passed as an explicit --sql-check'
+    );
+  });
+
   it('rejects a second registry flag', () => {
     const root = repository({
       'registry/20261101090000_a/sql-checks.txt': 'supabase/tests/alpha.sql\n',
@@ -146,28 +175,6 @@ describe('replay SQL-check registry', () => {
         root
       )
     ).toThrow('--sql-check-registry may appear once');
-  });
-
-  it('feeds the expanded suites through the strict replay parser', () => {
-    const root = repository({
-      'registry/20261101090000_a/sql-checks.txt': 'supabase/tests/beta.sql\n',
-    });
-    const base = [
-      '--mode',
-      'chronological',
-      '--pending-repair-state',
-      'materialized',
-    ];
-
-    expect(
-      parseReplayCliArguments(
-        [...base, '--sql-check-registry', 'registry'],
-        root
-      ).sqlChecks
-    ).toEqual(['supabase/tests/beta.sql']);
-    expect(() =>
-      parseReplayCliArguments([...base, '--unknown', 'value'], root)
-    ).toThrow('Invalid Supabase replay arguments');
   });
 
   it('resolves every checked-in suite that CI runs', () => {

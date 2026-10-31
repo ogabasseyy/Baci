@@ -45,6 +45,12 @@ charged_total_kobo = ceil(provider_cost_kobo * 110 / 100)
 platform_margin_kobo = charged_total_kobo - provider_cost_kobo
 ```
 
+> Update (2026-10-31): new GIGL quotes round `charged_total_kobo` up to the next
+> multiple of 10,000 kobo (NGN 100), so 10% is now the minimum margin. The
+> pricing version stays `gigl_platform_margin_v1`; v1 rows created before that
+> deploy hold the unrounded price, and migration
+> `20261031220000_gigl_round_price_to_ngn_100.sql` accepts either v1 price.
+
 All arithmetic uses integer kobo. The public quote's `price` is
 `charged_total_kobo / 100`. Non-GIGL quotes are unchanged. Applying the helper to
 an already-priced snapshot is forbidden; call sites must always project from a

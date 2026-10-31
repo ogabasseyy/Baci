@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import type { OrderGiglStoredAddressSource } from './order-gigl-address-save-plan';
 import type { OrderGiglQuote, OrderGiglReceiver } from './order-gigl-shipping';
 
 export const GIGL_CONFIRMATION_SAFETY_MS = 30_000;
@@ -56,6 +57,10 @@ export interface OrderGiglShippingParams {
   initialAddress?: OrderGiglInitialAddress;
   orderId: string;
   preview?: boolean;
+  /** Shares previews with the background prefetch when provided. */
+  previewCacheScope?: string;
+  /** The order as stored, so bound quotes save typed details first. */
+  storedOrder?: OrderGiglStoredAddressSource;
 }
 
 export function getOrderGiglAddressSignature(

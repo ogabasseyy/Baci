@@ -11,6 +11,9 @@ const migrationSql = readFileSync(
   ),
   'utf8'
 );
+// The suite and its included helpers, read as text for the regex checks below.
+// Only psql (in DB Replay) executes them; the `\ir` include line is dropped so
+// this string holds the SQL itself rather than the psql meta-command.
 const identityDeviceTestSql = [
   'quiz_identity_device_caps.sql',
   'quiz_identity_device_caps.helpers.inc.sql',
@@ -21,7 +24,8 @@ const identityDeviceTestSql = [
       'utf8'
     )
   )
-  .join('\n');
+  .join('\n')
+  .replace(/^\\ir .*$/gm, '');
 const leaderboardTestSql = readFileSync(
   resolve(
     currentDirectory,

@@ -144,4 +144,36 @@ describe('v2 start production gates', () => {
       )
     ).rejects.toMatchObject({ code: 'quiz_production_not_approved' });
   });
+  it('refuses a browser-session start of a live prize quiz', async () => {
+    vi.stubEnv('QUIZ_PHASE', 'production');
+    vi.stubEnv('QUIZ_PRODUCTION_APPROVED', 'true');
+    await expect(
+      enforceQuizStartGuards(client(), 'event-1', 'user-1', 'cookie')
+    ).rejects.toMatchObject({ code: 'QUIZ_APP_ONLY' });
+  });
+  it('lets an app (bearer) session start the same live quiz', async () => {
+    vi.stubEnv('QUIZ_PHASE', 'production');
+    vi.stubEnv('QUIZ_PRODUCTION_APPROVED', 'true');
+    await expect(
+      enforceQuizStartGuards(client(), 'event-1', 'user-1', 'bearer')
+    ).resolves.toBeUndefined();
+  });
+  it('still allows a browser-session start of a private test quiz', async () => {
+    vi.stubEnv('QUIZ_PHASE', 'production');
+    await expect(
+      enforceQuizStartGuards(
+        client({
+          context: {
+            found: true,
+            merchant_id: 'merchant-1',
+            mode: 'test',
+            prize_approved: false,
+          },
+        }),
+        'event-1',
+        'user-1',
+        'cookie'
+      )
+    ).resolves.toBeUndefined();
+  });
 });

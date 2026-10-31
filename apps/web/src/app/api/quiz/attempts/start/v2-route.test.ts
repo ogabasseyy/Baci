@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { QuizAppOnlyError } from '@/app/api/quiz/_shared/quiz-app-only-error';
 import {
   createRouteProof,
   requireQuizCsrf,
@@ -118,6 +119,32 @@ describe('v2 quiz start route', () => {
     expect(rpc).not.toHaveBeenCalledWith(
       expect.stringMatching(/^start_quiz_attempt/),
       expect.anything()
+    );
+  });
+  it('refuses a live prize start from a browser session without starting', async () => {
+    const rpc = authenticated();
+    vi.mocked(enforceQuizStartGuards).mockRejectedValueOnce(
+      new QuizAppOnlyError()
+    );
+    const response = await postQuizStartV2(request({}));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      code: 'QUIZ_APP_ONLY',
+      error: 'Prize quizzes are played in the Ogabassey app.',
+    });
+    expect(rpc).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^start_quiz_attempt/),
+      expect.anything()
+    );
+  });
+  it('passes the caller auth method to the start guards', async () => {
+    authenticated();
+    await postQuizStartV2(request({}));
+    expect(enforceQuizStartGuards).toHaveBeenCalledWith(
+      expect.anything(),
+      EVENT_ID,
+      USER_ID,
+      'bearer'
     );
   });
   it('fails closed with a stable JSON error when guard lookup fails', async () => {

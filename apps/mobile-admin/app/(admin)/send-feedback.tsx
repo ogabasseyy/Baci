@@ -1,5 +1,6 @@
-import { useRouter } from 'expo-router';
-import { Alert, ScrollView, StyleSheet } from 'react-native';
+import Ionicons from '@react-native-vector-icons/ionicons';
+import { Stack, useRouter } from 'expo-router';
+import { Alert, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FeedbackForm } from '@/components/feedback/FeedbackForm';
 import { SPACING } from '@/constants/theme';
@@ -17,26 +18,44 @@ export default function SendFeedbackScreen() {
   };
 
   return (
-    <SafeAreaView
-      edges={['bottom']}
-      style={[styles.container, { backgroundColor: colors.background }]}
-    >
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
+    <>
+      <Stack.Screen
+        options={{
+          title: 'Send Feedback',
+          headerLeft: () => (
+            <Pressable
+              accessibilityLabel="Go back"
+              accessibilityRole="button"
+              onPress={() => router.back()}
+              style={styles.backButton}
+            >
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
+            </Pressable>
+          ),
+        }}
+      />
+      <SafeAreaView
+        edges={['bottom']}
+        style={[styles.container, { backgroundColor: colors.background }]}
       >
-        <FeedbackForm
-          onCancel={() => router.back()}
-          onSent={handleSent}
-          screen="/send-feedback"
-          showTitle={false}
-        />
-      </ScrollView>
-    </SafeAreaView>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
+          <FeedbackForm
+            onCancel={() => router.back()}
+            onSent={handleSent}
+            screen="/send-feedback"
+            showTitle={false}
+          />
+        </ScrollView>
+      </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  backButton: { padding: SPACING.sm, marginLeft: -SPACING.sm },
   container: {
     flex: 1,
   },

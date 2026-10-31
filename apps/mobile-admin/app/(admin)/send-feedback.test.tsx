@@ -5,7 +5,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockBack } = vi.hoisted(() => ({ mockBack: vi.fn() }));
 
-vi.mock('expo-router', () => ({ useRouter: () => ({ back: mockBack }) }));
+vi.mock('expo-router', () => ({
+  Stack: {
+    Screen: ({
+      options,
+    }: {
+      options: { title: string; headerLeft: () => React.ReactNode };
+    }) => (
+      <header>
+        <h1>{options.title}</h1>
+        {options.headerLeft()}
+      </header>
+    ),
+  },
+  useRouter: () => ({ back: mockBack }),
+}));
+
+vi.mock('@react-native-vector-icons/ionicons', () => ({
+  default: ({ name }: { name: string }) => <span>{name}</span>,
+}));
 
 vi.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children }: { children: React.ReactNode }) => (
@@ -14,7 +32,7 @@ vi.mock('react-native-safe-area-context', () => ({
 }));
 
 vi.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({ colors: { background: '#000' } }),
+  useTheme: () => ({ colors: { background: '#000', text: '#fff' } }),
 }));
 
 vi.mock('@/components/feedback/FeedbackForm', () => ({
@@ -57,6 +75,17 @@ describe('SendFeedbackScreen', () => {
     expect(
       screen.getByText('form for /send-feedback title false')
     ).toBeInTheDocument();
+  });
+
+  it('shows the Send Feedback header with a back arrow', () => {
+    render(<SendFeedbackScreen />);
+
+    expect(
+      screen.getByRole('heading', { name: 'Send Feedback' })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Go back'));
+
+    expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
   it('goes back when cancelled', () => {

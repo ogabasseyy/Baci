@@ -77,3 +77,21 @@ JWT signing keys nor negotiated-checkout proof credentials. Its links use
 normalized to its origin. Verify this is the Baci application host (normally
 `https://usebaci.com`), where `/dashboard` and `/onboarding/email-preferences` are
 served, before enabling the journey. Do not point it at an unrelated storefront.
+
+## PiggyVest webhook capture drain
+
+Cron runs `bin/process-piggyvest-webhook-capture-drain.sh --once` every minute
+under its own lock. It stays a no-op that opens no database connection until
+the owner turns it on; see `docs/piggyvest-webhook-capture-drain-runbook.md`.
+
+- `PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_ENABLED`: exactly `true` enables the drain on
+  this host. Anything else (including unset) keeps it off.
+- `PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_DB_PASSWORD`: password of the dedicated
+  `baci_piggyvest_webhook_capture_drain` login (the login name is fixed in
+  code). Never the service-role key.
+- `PIGGYVEST_PRIMARY_DB_HOST`, `PIGGYVEST_PRIMARY_DB_PORT`,
+  `PIGGYVEST_PRIMARY_DB_NAME`, `PIGGYVEST_PRIMARY_DB_CA`: the database the
+  PiggyVest primary logins share; the connection verifies the certificate.
+- The webhook signing keys of the families the drain replays (bank, custody,
+  interest) and those intakes' own configuration: the drain re-verifies every
+  stored signature and replays through the same intakes the web receiver uses.

@@ -4,6 +4,8 @@ import { deterministicTestUuid } from './deterministic-test-data.test-support';
 import { verifyStoredPiggyvestDelivery } from './verify-stored-piggyvest-delivery';
 import { describeDelivery } from './webhook-capture';
 import type { DrainDeps } from './webhook-capture-drain';
+import { scriptedCaptureExecutor } from './webhook-capture-pg-executor.test-support';
+import { createPgCaptureQueue } from './webhook-capture-queue';
 
 /**
  * Shared fixtures for the capture drain suites. The suites keep their own
@@ -57,22 +59,32 @@ export interface ResolvedCall {
 }
 
 /**
- * Drain dependencies over an in-memory queue. `state` is read lazily, at
- * resolve and verify time, so a test may replace its `env` after building
- * the deps exactly as it could with module-level variables.
+ * Drain dependencies whose claim and resolve go through the worker host's
+ * pg queue over a scripted executor double, so every drain suite also runs
+ * the statement mapping and the row parsing the dedicated drain login
+ * uses. `state` is read lazily, at resolve and verify time, so a test may
+ * replace its `env` after building the deps exactly as it could with
+ * module-level variables.
  */
 export function drainDeps(
   state: () => { env: NodeJS.ProcessEnv; resolved: ResolvedCall[] },
   claimed: PiggyvestClaimedCapture[][],
   process: DrainDeps['process']
 ): DrainDeps {
-  const queue = [...claimed];
+  const queue = createPgCaptureQueue(
+    scriptedCaptureExecutor(claimed, (call) => {
+      state().resolved.push({
+        id: call.id,
+        state: call.state,
+        error: call.error,
+      });
+      return true;
+    })
+  );
   return {
-    claim: () => Promise.resolve(queue.shift() ?? []),
-    resolve: (id, _token, status, error) => {
-      state().resolved.push({ id, state: status, error });
-      return Promise.resolve(true);
-    },
+    claim: (limit) => queue.claim(limit),
+    resolve: (id, token, status, error) =>
+      queue.resolve(id, token, status, error),
     verify: (input) =>
       verifyStoredPiggyvestDelivery({ ...input, env: state().env, now: NOW }),
     process,

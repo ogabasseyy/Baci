@@ -1,0 +1,113 @@
+import 'server-only';
+import type { PiggyvestClaimedCapture } from '@/schemas/piggyvest/webhook-capture';
+import type { DrainDeps } from './webhook-capture-drain';
+import {
+  deferForIncompleteKeySet,
+  deferOutOfScope,
+  parkForReview,
+  type RowOutcome,
+  settle,
+} from './webhook-capture-drain-settle';
+
+/**
+ * How the drain settles a verified row after its processing attempt.
+ * Kept apart from the pre-processing authority checks in
+ * webhook-capture-drain.ts; the order of the branches is the contract.
+ */
+
+export const MAX_DRAIN_ATTEMPTS = 20;
+
+/**
+ * What one processing attempt reported. A non-2xx status means incomplete,
+ * and so does every marker: none of them is ever resolved processed.
+ */
+export interface ReplayProcessResult {
+  status: number;
+  /** The wrong key family signed it; no financial handler ran. */
+  authorizationQuarantine?: boolean;
+  /** The body was unparseable or schema-rejected. */
+  contentQuarantine?: boolean;
+  /** Only a complete key set can settle it (a family failed to load). */
+  keySetIncomplete?: boolean;
+  /** Same event identity, different content: a person must decide. */
+  conflict?: boolean;
+  /** The row needs a processing path this runtime does not hold. */
+  outOfScope?: string;
+}
+
+/** `result` is null when processing threw. */
+export async function settleReplayResult(
+  deps: DrainDeps,
+  row: PiggyvestClaimedCapture,
+  result: ReplayProcessResult | null,
+  verifiedWithIncompleteKeySet: boolean
+): Promise<RowOutcome> {
+  const completed =
+    result !== null &&
+    result.status >= 200 &&
+    result.status < 300 &&
+    result.authorizationQuarantine !== true &&
+    result.contentQuarantine !== true &&
+    result.conflict !== true &&
+    result.outOfScope === undefined;
+  if (completed) {
+    await settle(deps, row, 'processed', null);
+    return 'processed';
+  }
+  if (result?.outOfScope !== undefined) {
+    // Not this runtime's to judge: the key set and attempt count are
+    // irrelevant, the path it needs simply is not here.
+    return deferOutOfScope(deps, row, result.outOfScope);
+  }
+  if (result?.conflict === true) {
+    return parkForReview(
+      deps,
+      row,
+      'REPLAY_CONFLICT',
+      'same event identity with different content; review before any credit'
+    );
+  }
+  if (result?.contentQuarantine === true) {
+    // The bytes verified, so the key set cannot change this outcome: only a
+    // parser fix plus a resend can make them processable.
+    return parkForReview(
+      deps,
+      row,
+      'REPLAY_CONTENT_QUARANTINED',
+      'body rejected by the parser; request a resend after the fix'
+    );
+  }
+  if (result?.keySetIncomplete === true || verifiedWithIncompleteKeySet) {
+    // The key set is incomplete (the replay verified under only the
+    // families that loaded), so ANY unsuccessful outcome (a non-2xx answer,
+    // a thrown error, an authorization quarantine, or the explicit marker)
+    // may just be the missing assignment. It is not a failure of the row:
+    // defer (attempt refunded, bounded backoff, never dead-lettered) so a
+    // repaired configuration resumes it.
+    await deferForIncompleteKeySet(deps, row, 'processing incomplete');
+    return 'retried';
+  }
+  if (result?.authorizationQuarantine === true) {
+    // Signed by a family not authorized for this event, with a complete key
+    // set and immutable recorded authority: replay can never succeed, so it
+    // must not take 20 batch slots. A correctly signed redelivery has its
+    // own capture row.
+    return parkForReview(
+      deps,
+      row,
+      'REPLAY_AUTHORIZATION_QUARANTINED',
+      'signed by a key family not authorized for this event'
+    );
+  }
+  if (row.attempts >= MAX_DRAIN_ATTEMPTS) {
+    return parkForReview(
+      deps,
+      row,
+      'PROCESSING_ATTEMPTS_EXHAUSTED',
+      'processing attempts exhausted',
+      row.attempts
+    );
+  }
+  await settle(deps, row, 'pending', 'PROCESSING_INCOMPLETE');
+  return 'retried';
+}

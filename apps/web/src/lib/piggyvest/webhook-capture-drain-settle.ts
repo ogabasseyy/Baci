@@ -46,6 +46,27 @@ export async function deferForIncompleteKeySet(
 }
 
 /**
+ * Defer a row this drain runtime must not replay (`scope` names why, for
+ * example LEGACY_FAMILY: the worker host holds no service-role authority).
+ * The row is not judged: the deferral spends no attempt and never
+ * dead-letters, so the web receiver's own retry can still complete it, and
+ * the alert makes every such row visible. No secret or body is logged.
+ */
+export async function deferOutOfScope(
+  deps: DrainDeps,
+  row: PiggyvestClaimedCapture,
+  scope: string
+): Promise<RowOutcome> {
+  emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_REPLAY_DEFERRED', {
+    captureId: row.capture_id,
+    eventType: row.event_type,
+    reason: `replay deferred: ${scope}`,
+  });
+  await settle(deps, row, 'deferred', `REPLAY_DEFERRED_${scope}`);
+  return 'retried';
+}
+
+/**
  * Park a row for review: the alert names the capture (and never a secret or
  * the body) so operators can act, and the row leaves the claimable set.
  */

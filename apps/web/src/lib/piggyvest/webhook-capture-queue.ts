@@ -2,9 +2,15 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import {
+  type PiggyvestCaptureStatus,
   type PiggyvestClaimedCapture,
   piggyvestClaimedCapturesSchema,
 } from '@/schemas/piggyvest/webhook-capture';
+import {
+  piggyvestCaptureResolveRowSchema,
+  piggyvestCaptureStatusRowSchema,
+} from '@/schemas/piggyvest/webhook-capture-drain-runtime';
+import type { CaptureDrainExecutor } from './webhook-capture-pg-executor';
 
 /**
  * Database-backed queue over the captured deliveries, for the drain. A row
@@ -67,6 +73,47 @@ export function createCaptureQueue(
       );
       if (error) throw new Error('PiggyVest capture resolve failed');
       return data === true;
+    },
+  };
+}
+
+/**
+ * The same queue over the worker host's dedicated drain login (see
+ * webhook-capture-pg-executor.ts) instead of a service-role client: same
+ * lease, same grace period, same fenced resolve. Every response is parsed
+ * before it is trusted and every failure is reported without detail.
+ */
+export function createPgCaptureQueue(
+  executor: CaptureDrainExecutor
+): CaptureQueue & { status(): Promise<PiggyvestCaptureStatus> } {
+  return {
+    async claim(limit) {
+      const rows = await executor
+        .query('claim', [limit, LEASE_SECONDS, MIN_AGE_SECONDS])
+        .catch(() => null);
+      const parsed = piggyvestClaimedCapturesSchema.safeParse(rows);
+      if (!parsed.success) throw new Error('PiggyVest capture claim failed');
+      return parsed.data;
+    },
+    async resolve(captureId, claimToken, state, errorCode) {
+      const rows = await executor
+        .query('resolve', [captureId, claimToken, state, errorCode])
+        .catch(() => null);
+      const parsed =
+        rows?.length === 1
+          ? piggyvestCaptureResolveRowSchema.safeParse(rows[0])
+          : null;
+      if (!parsed?.success) throw new Error('PiggyVest capture resolve failed');
+      return parsed.data.resolved;
+    },
+    async status() {
+      const rows = await executor.query('status', []).catch(() => null);
+      const parsed =
+        rows?.length === 1
+          ? piggyvestCaptureStatusRowSchema.safeParse(rows[0])
+          : null;
+      if (!parsed?.success) throw new Error('PiggyVest capture status failed');
+      return parsed.data.status;
     },
   };
 }

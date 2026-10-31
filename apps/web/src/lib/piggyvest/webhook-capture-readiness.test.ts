@@ -47,6 +47,10 @@ beforeEach(() => {
         lastProcessedAt: new Date(NOW.getTime() - MINUTE).toISOString(),
       },
     },
+    drain: {
+      login: { ok: true },
+      schedule: { enabled: true, cron: 'installed' },
+    },
   };
 });
 
@@ -64,8 +68,11 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
       'key_configuration',
       'migration_and_table',
       'storage',
+      'drain_login',
+      'drain_schedule',
       'worker',
     ]);
+    expect(report.readyToAttest).toBe(true);
   });
 
   it('reports every missing piece at once as a clear not-ready list', () => {
@@ -81,8 +88,41 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
       'key_configuration:NO_CURRENT_KEY',
       'migration_and_table:CAPTURE_FUNCTIONS_MISSING',
       'storage:NOT_VERIFIABLE_WITHOUT_MIGRATION',
+      'drain_login:DRAIN_LOGIN_NOT_CHECKED',
+      'drain_schedule:DRAIN_SCHEDULE_NOT_CHECKED',
       'worker:DRAIN_NOT_SCHEDULED',
     ]);
+    expect(report.readyToAttest).toBe(false);
+  });
+
+  it('requires the dedicated drain login and an enabled, installed schedule', () => {
+    ready.drain = {
+      login: { ok: false, reason: 'unsafe', failedChecks: ['membership'] },
+      schedule: { enabled: false, cron: 'missing' },
+    };
+    expect(notReadyGates(ready)).toEqual([
+      'drain_login:DRAIN_LOGIN_UNSAFE',
+      'drain_schedule:DRAIN_NOT_ENABLED',
+    ]);
+    expect(inspectPiggyvestWebhookCaptureReadiness(ready).readyToAttest).toBe(
+      false
+    );
+
+    ready.drain = {
+      login: { ok: true },
+      schedule: { enabled: true, cron: 'missing' },
+    };
+    expect(notReadyGates(ready)).toEqual([
+      'drain_schedule:DRAIN_CRON_NOT_INSTALLED',
+    ]);
+  });
+
+  it('is ready to attest when only the attestation itself is missing', () => {
+    ready.env = { ...ready.env, PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: '' };
+    const report = inspectPiggyvestWebhookCaptureReadiness(ready);
+    expect(report.status).toBe('not-ready');
+    expect(notReadyGates(ready)).toEqual(['worker:DRAIN_NOT_SCHEDULED']);
+    expect(report.readyToAttest).toBe(true);
   });
 
   it('does not count an overlap-only key as configuration', () => {
@@ -167,13 +207,17 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
   it('states which reply a processing failure gets, and that deferred 200 needs the drain', () => {
     const attested = inspectPiggyvestWebhookCaptureReadiness(ready);
     expect(attested.processingFailureReply).toBe('200-deferred');
-    expect(attested.notes).toEqual([]);
+    expect(attested.notes).toEqual([
+      expect.stringContaining('replays only deliveries a primary intake owns'),
+    ]);
+    expect(attested.notes[0]).toContain('legacy-family webhook key');
 
     ready.env = { ...ready.env, PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: '' };
     const unattested = inspectPiggyvestWebhookCaptureReadiness(ready);
     expect(unattested.processingFailureReply).toBe('503-retry');
     expect(unattested.notes).toEqual([
       expect.stringContaining('deferred 200 reply'),
+      expect.stringContaining('replays only deliveries a primary intake owns'),
     ]);
     expect(unattested.notes[0]).toContain('is only active once the drain');
     expect(unattested.notes[0]).toContain(

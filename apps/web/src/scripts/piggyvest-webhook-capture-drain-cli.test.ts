@@ -1,0 +1,165 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), execFile: vi.fn() }));
+
+vi.mock('server-only', () => ({}));
+vi.mock('dotenv/config', () => ({}));
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return {
+    ...actual,
+    default: { ...actual, execFile: mocks.execFile },
+    execFile: mocks.execFile,
+  };
+});
+vi.mock('@/app/api/webhooks/piggyvest/primary-webhook-dispatch', () => ({
+  dispatchPrimaryPiggyvestIntake: mocks.dispatch,
+}));
+vi.mock('@/lib/piggyvest/primary-wallet-bank-inbox-runtime', () => ({
+  readPrimaryWalletBankInboxSecrets: () => null,
+}));
+vi.mock('@/lib/piggyvest/primary-wallet-card-custody-intake-runtime', () => ({
+  readPrimaryCardCustodyIntakeSecrets: () => null,
+}));
+vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime', () => ({
+  readPrimaryWalletPaidInterestInboxSecrets: () => null,
+}));
+
+import { deterministicTestKey } from '@/lib/piggyvest/deterministic-test-data.test-support';
+import type { CaptureDrainExecutor } from '@/lib/piggyvest/webhook-capture-pg-executor';
+import { scriptedCaptureExecutor } from '@/lib/piggyvest/webhook-capture-pg-executor.test-support';
+import {
+  readInstalledCrontab,
+  runPiggyvestWebhookCaptureDrainCli,
+} from './piggyvest-webhook-capture-drain-cli';
+
+const PASSWORD = 'drain-password-never-printed';
+const KEY = deterministicTestKey('capture-drain-cli');
+const ENV: NodeJS.ProcessEnv = {
+  NODE_ENV: 'test',
+  PIGGYVEST_SECRET_KEY: KEY,
+  PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_ENABLED: 'true',
+  PIGGYVEST_PRIMARY_DB_HOST: 'db.example.supabase.co',
+  PIGGYVEST_PRIMARY_DB_PORT: '5432',
+  PIGGYVEST_PRIMARY_DB_NAME: 'postgres',
+  PIGGYVEST_PRIMARY_DB_CA: 'placeholder-ca',
+  PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_DB_PASSWORD: PASSWORD,
+};
+const CRON = `* * * * * flock -n /w/locks/piggyvest-webhook-capture-drain.lock bash -lc 'cd /w && timeout 50s /w/bin/process-piggyvest-webhook-capture-drain.sh --once' >> /w/logs/x.log 2>&1`;
+
+let output: string[];
+let createExecutor: ReturnType<typeof vi.fn<(runtime: unknown) => CaptureDrainExecutor>>;
+
+const cli = (argv: string[], env: NodeJS.ProcessEnv = ENV, crontab = CRON) =>
+  runPiggyvestWebhookCaptureDrainCli({
+    argv,
+    env,
+    write: (text) => output.push(text),
+    deps: { createExecutor, readCrontab: async () => crontab },
+  });
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  output = [];
+  createExecutor = vi.fn(() => scriptedCaptureExecutor([]));
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+});
+
+describe('runPiggyvestWebhookCaptureDrainCli', () => {
+  it('prints the plan without reading configuration or connecting', async () => {
+    await expect(cli(['--plan'], {})).resolves.toBe(0);
+    expect(output[0]).toContain('Plan only');
+    expect(createExecutor).not.toHaveBeenCalled();
+  });
+
+  it.each([[[]], [['--once', '--plan']], [['--loop']]])('rejects %j without running', async (argv) => {
+    await expect(cli(argv)).resolves.toBe(1);
+    expect(createExecutor).not.toHaveBeenCalled();
+  });
+
+  it('is a no-op with no connection while the host flag is off', async () => {
+    const env = { ...ENV, PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_ENABLED: 'false' };
+    await expect(cli(['--once'], env)).resolves.toBe(0);
+    expect(output).toEqual(['{"status":"disabled"}']);
+    expect(createExecutor).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the drain login is not configured', async () => {
+    const env = { ...ENV, PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_DB_PASSWORD: '' };
+    await expect(cli(['--once'], env)).resolves.toBe(1);
+    expect(output[0]).toContain('not configured');
+    expect(createExecutor).not.toHaveBeenCalled();
+  });
+
+  it('runs one bounded pass and prints counts only', async () => {
+    const claims: unknown[] = [];
+    createExecutor.mockImplementation(() => {
+      const executor = scriptedCaptureExecutor([]);
+      return {
+        ...executor,
+        query: async (statement, parameters) => {
+          if (statement === 'claim') claims.push(parameters);
+          return executor.query(statement, parameters);
+        },
+      };
+    });
+    await expect(cli(['--once'])).resolves.toBe(0);
+    expect(claims).toEqual([[10, 300, 120]]);
+    expect(JSON.parse(output[0] ?? '')).toEqual({
+      status: 'drained',
+      claimed: 0,
+      processed: 0,
+      retried: 0,
+      needsReview: 0,
+    });
+  });
+
+  it('redacts a database failure and says the rows stay pending', async () => {
+    createExecutor.mockImplementation(() => ({
+      query: async () => {
+        throw new Error(`password ${PASSWORD} rejected by db.example.supabase.co`);
+      },
+      verifySession: async () => ({ ok: true }),
+    }));
+    await expect(cli(['--once'])).resolves.toBe(1);
+    expect(output.join('\n')).not.toMatch(new RegExp(`${PASSWORD}|db\\.example`));
+    expect(output[0]).toContain('stay pending');
+  });
+
+  it('prints a readiness report with no secrets and passes once only the attestation is missing', async () => {
+    await expect(cli(['--readiness'])).resolves.toBe(0);
+    const report = JSON.parse(output[0] ?? '');
+    expect(report.readyToAttest).toBe(true);
+    expect(report.notReady).toEqual([{ gate: 'worker', reason: 'DRAIN_NOT_SCHEDULED' }]);
+    expect(output[0]).not.toContain(PASSWORD);
+    expect(output[0]).not.toContain(KEY);
+  });
+
+  it('reports a missing cron entry as not ready to attest', async () => {
+    await expect(cli(['--readiness'], ENV, '')).resolves.toBe(1);
+    expect(JSON.parse(output[0] ?? '').notReady).toContainEqual({
+      gate: 'drain_schedule',
+      reason: 'DRAIN_CRON_NOT_INSTALLED',
+    });
+  });
+});
+
+describe('readInstalledCrontab', () => {
+  it('returns the crontab, or null when it cannot be read', async () => {
+    mocks.execFile.mockImplementationOnce((_file, _args, _options, callback) =>
+      callback(null, CRON, '')
+    );
+    await expect(readInstalledCrontab()).resolves.toBe(CRON);
+    expect(mocks.execFile).toHaveBeenCalledWith(
+      'crontab',
+      ['-l'],
+      expect.objectContaining({ timeout: expect.any(Number) }),
+      expect.any(Function)
+    );
+
+    mocks.execFile.mockImplementationOnce((_file, _args, _options, callback) =>
+      callback(new Error('no crontab for baci-worker'), '', '')
+    );
+    await expect(readInstalledCrontab()).resolves.toBeNull();
+  });
+});

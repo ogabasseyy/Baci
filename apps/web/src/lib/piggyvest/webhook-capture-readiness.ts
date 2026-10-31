@@ -6,6 +6,11 @@ import {
   piggyvestCaptureStatusSchema,
 } from '@/schemas/piggyvest/webhook-capture';
 import { isPiggyvestCaptureDrainScheduled } from './webhook-capture-attestation';
+import {
+  type CaptureDrainEvidence,
+  drainLoginReason,
+  drainScheduleReason,
+} from './webhook-capture-drain-readiness';
 import { collectPiggyvestWebhookSecretsWithStatus } from './webhook-secret-union';
 
 /**
@@ -18,10 +23,17 @@ import { collectPiggyvestWebhookSecretsWithStatus } from './webhook-secret-union
 
 const STALE_BACKLOG_MS = 15 * 60_000;
 
+// The attestation turns every failed processing attempt into a deferred
+// 200, but the worker-host drain cannot finish legacy-family deliveries.
+const SCOPE_NOTE =
+  'The worker-host drain replays only deliveries a primary intake owns; legacy-family deliveries are deferred there with an alert and rely on provider redelivery. Attest the drain only while the web app holds no legacy-family webhook key.';
+
 export type CaptureReadinessGate =
   | 'key_configuration'
   | 'migration_and_table'
   | 'storage'
+  | 'drain_login'
+  | 'drain_schedule'
   | 'worker';
 
 export type CaptureStorageEvidence =
@@ -35,6 +47,11 @@ export interface WebhookCaptureEvidence {
   env: NodeJS.ProcessEnv;
   now: Date;
   storage: CaptureStorageEvidence;
+  /**
+   * Worker-host evidence (dedicated login session, enable flag, cron entry);
+   * absent where it cannot be collected, which reports NOT_CHECKED.
+   */
+  drain?: CaptureDrainEvidence;
 }
 
 export interface CaptureReadinessEntry {
@@ -52,6 +69,11 @@ export interface WebhookCaptureReadinessReport {
    * attested, a deferred 200 once it is.
    */
   processingFailureReply: '503-retry' | '200-deferred';
+  /**
+   * Every gate the attestation depends on passes: only the worker gate (the
+   * attestation itself, or a stale backlog once attested) may be open.
+   */
+  readyToAttest: boolean;
   notes: string[];
   checks: { gate: CaptureReadinessGate; passed: boolean }[];
   notReady: CaptureReadinessEntry[];
@@ -127,6 +149,8 @@ export function inspectPiggyvestWebhookCaptureReadiness(
     ['key_configuration', keys.reason],
     ['migration_and_table', storage.migration],
     ['storage', storage.storage],
+    ['drain_login', drainLoginReason(evidence.drain)],
+    ['drain_schedule', drainScheduleReason(evidence.drain)],
     ['worker', workerReason(evidence)],
   ];
   const notReady = results.flatMap(([gate, reason]) =>
@@ -137,11 +161,15 @@ export function inspectPiggyvestWebhookCaptureReadiness(
     status: notReady.length === 0 ? 'ready' : 'not-ready',
     enforced: false,
     processingFailureReply: drainAttested ? '200-deferred' : '503-retry',
-    notes: drainAttested
-      ? []
-      : [
-          'The deferred 200 reply for a failed processing attempt is only active once the drain is scheduled (PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED=true). Until then the receiver answers 503 so the provider redelivers.',
-        ],
+    readyToAttest: notReady.every((entry) => entry.gate === 'worker'),
+    notes: [
+      ...(drainAttested
+        ? []
+        : [
+            'The deferred 200 reply for a failed processing attempt is only active once the drain is scheduled (PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED=true). Until then the receiver answers 503 so the provider redelivers.',
+          ]),
+      SCOPE_NOTE,
+    ],
     checks: results.map(([gate, reason]) => ({
       gate,
       passed: reason === null,

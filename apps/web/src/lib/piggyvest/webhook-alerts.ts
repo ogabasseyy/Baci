@@ -11,6 +11,10 @@ export type PiggyvestWebhookAlertCode =
   | 'PIGGYVEST_WEBHOOK_PROCESSING_DEFERRED'
   | 'PIGGYVEST_WEBHOOK_REPLAY_UNVERIFIABLE'
   | 'PIGGYVEST_WEBHOOK_NEEDS_REVIEW'
+  // A captured delivery the worker-host drain is not allowed to replay
+  // (it holds no service-role authority): left pending for the web
+  // receiver's own retry path, never dropped.
+  | 'PIGGYVEST_WEBHOOK_REPLAY_DEFERRED'
   // A transfer reference still unconfirmed past its retry window (TSQ 404
   // or provider-failed): held, never resubmitted or released; an operator
   // must resolve it.

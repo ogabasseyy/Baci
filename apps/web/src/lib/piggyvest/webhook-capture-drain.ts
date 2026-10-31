@@ -7,7 +7,13 @@ import {
 } from './verify-stored-piggyvest-delivery';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 import {
+  MAX_DRAIN_ATTEMPTS,
+  type ReplayProcessResult,
+  settleReplayResult,
+} from './webhook-capture-drain-result';
+import {
   deferForIncompleteKeySet,
+  deferOutOfScope,
   parkForReview,
   type RowOutcome,
   settle,
@@ -31,7 +37,8 @@ import type { PiggyvestWebhookKeyFamily } from './webhook-secret-union';
  * signed, while bytes that no key vouches for are never processed.
  */
 
-export const MAX_DRAIN_ATTEMPTS = 20;
+export { MAX_DRAIN_ATTEMPTS, type ReplayProcessResult };
+
 const DEFAULT_BATCH = 25;
 
 export interface ReplayDelivery {
@@ -63,20 +70,19 @@ export interface DrainDeps {
     recordedFamilies: readonly PiggyvestWebhookKeyFamily[];
   }): StoredPiggyvestDeliveryVerification;
   /**
-   * Runs the shared processing pipeline. A non-2xx status means incomplete,
-   * and so does an acknowledged quarantine, which ran no financial handler:
-   * `authorizationQuarantine` (the wrong key family signed it) and
-   * `contentQuarantine` (the body was unparseable or schema-rejected). Such a
-   * row is never resolved processed. `keySetIncomplete` marks a retry that
-   * only a complete key set can settle (the loaded families could not
-   * authorize the event): that row is deferred, not failed.
+   * Runs a processing pipeline over the stored bytes. A non-2xx status
+   * means incomplete, and so does every marker of ReplayProcessResult (an
+   * acknowledged quarantine ran no financial handler): such a row is never
+   * resolved processed. See webhook-capture-drain-result.ts.
    */
-  process(delivery: ReplayDelivery): Promise<{
-    status: number;
-    authorizationQuarantine?: boolean;
-    contentQuarantine?: boolean;
-    keySetIncomplete?: boolean;
-  }>;
+  process(delivery: ReplayDelivery): Promise<ReplayProcessResult>;
+  /**
+   * Optional replay scope, checked before anything else. A runtime that
+   * does not hold every processing path (the worker-host drain holds no
+   * service-role authority) names why it must leave a row alone; the row
+   * is then deferred with an alert, unverified and unprocessed.
+   */
+  outOfScope?(row: PiggyvestClaimedCapture): string | null;
 }
 
 export interface DrainSummary {
@@ -90,6 +96,9 @@ async function drainRow(
   deps: DrainDeps,
   row: PiggyvestClaimedCapture
 ): Promise<RowOutcome> {
+  const scope = deps.outOfScope?.(row) ?? null;
+  if (scope) return deferOutOfScope(deps, row, scope);
+
   const rawBody = Buffer.from(row.raw_hex, 'hex');
   const verification = deps.verify({
     rawBody,
@@ -169,12 +178,9 @@ async function drainRow(
     }
   }
 
-  let completed = false;
-  let keySetIncomplete = false;
-  let authorizationQuarantine = false;
-  let contentQuarantine = false;
+  let result: ReplayProcessResult | null = null;
   try {
-    const result = await deps.process({
+    result = await deps.process({
       rawBody,
       signature: row.signature,
       matchedSecret: verification.secret,
@@ -182,64 +188,15 @@ async function drainRow(
       incompleteKeySet: verification.incompleteKeySet,
       keyScope: 'replay',
     });
-    authorizationQuarantine = result.authorizationQuarantine === true;
-    contentQuarantine = result.contentQuarantine === true;
-    completed =
-      result.status >= 200 &&
-      result.status < 300 &&
-      !authorizationQuarantine &&
-      !contentQuarantine;
-    keySetIncomplete = result.keySetIncomplete === true;
   } catch {
-    completed = false;
+    result = null;
   }
-  if (completed) {
-    await settle(deps, row, 'processed', null);
-    return 'processed';
-  }
-  if (contentQuarantine) {
-    // The bytes verified, so the key set cannot change this outcome: only a
-    // parser fix plus a resend can make them processable.
-    return parkForReview(
-      deps,
-      row,
-      'REPLAY_CONTENT_QUARANTINED',
-      'body rejected by the parser; request a resend after the fix'
-    );
-  }
-  if (keySetIncomplete || verification.incompleteKeySet === true) {
-    // The key set is incomplete (the replay verified under only the
-    // families that loaded), so ANY unsuccessful outcome (a non-2xx answer,
-    // a thrown error, an authorization quarantine, or the explicit marker)
-    // may just be the missing assignment. It is not a failure of the row:
-    // defer (attempt refunded, bounded backoff, never dead-lettered) so a
-    // repaired configuration resumes it.
-    await deferForIncompleteKeySet(deps, row, 'processing incomplete');
-    return 'retried';
-  }
-  if (authorizationQuarantine) {
-    // Signed by a family not authorized for this event, with a complete key
-    // set and immutable recorded authority: replay can never succeed, so it
-    // must not take 20 batch slots. A correctly signed redelivery has its
-    // own capture row.
-    return parkForReview(
-      deps,
-      row,
-      'REPLAY_AUTHORIZATION_QUARANTINED',
-      'signed by a key family not authorized for this event'
-    );
-  }
-  if (row.attempts >= MAX_DRAIN_ATTEMPTS) {
-    return parkForReview(
-      deps,
-      row,
-      'PROCESSING_ATTEMPTS_EXHAUSTED',
-      'processing attempts exhausted',
-      row.attempts
-    );
-  }
-  await settle(deps, row, 'pending', 'PROCESSING_INCOMPLETE');
-  return 'retried';
+  return settleReplayResult(
+    deps,
+    row,
+    result,
+    verification.incompleteKeySet === true
+  );
 }
 
 export async function drainPiggyvestWebhookCaptures(

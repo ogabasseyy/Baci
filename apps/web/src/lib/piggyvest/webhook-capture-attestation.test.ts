@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  isPiggyvestCaptureDrainEnabled,
   isPiggyvestCaptureDrainScheduled,
   PIGGYVEST_CAPTURE_DRAIN_ATTESTATION_ENV,
+  PIGGYVEST_CAPTURE_DRAIN_ENABLED_ENV,
 } from './webhook-capture-attestation';
 
 afterEach(() => {
@@ -44,5 +46,33 @@ describe('isPiggyvestCaptureDrainScheduled', () => {
     expect(isPiggyvestCaptureDrainScheduled()).toBe(true);
     vi.stubEnv(PIGGYVEST_CAPTURE_DRAIN_ATTESTATION_ENV, '');
     expect(isPiggyvestCaptureDrainScheduled()).toBe(false);
+  });
+});
+
+describe('isPiggyvestCaptureDrainEnabled', () => {
+  it('is a separate worker-host switch from the web attestation', () => {
+    expect(PIGGYVEST_CAPTURE_DRAIN_ENABLED_ENV).toBe(
+      'PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_ENABLED'
+    );
+    expect(
+      isPiggyvestCaptureDrainEnabled({
+        [PIGGYVEST_CAPTURE_DRAIN_ATTESTATION_ENV]: 'true',
+      } as unknown as NodeJS.ProcessEnv)
+    ).toBe(false);
+  });
+
+  it.each([
+    ['true', true],
+    ['TRUE', false],
+    ['1', false],
+    [' true', false],
+    ['', false],
+    [undefined, false],
+  ])('treats %s as %s', (value, enabled) => {
+    expect(
+      isPiggyvestCaptureDrainEnabled({
+        [PIGGYVEST_CAPTURE_DRAIN_ENABLED_ENV]: value,
+      } as unknown as NodeJS.ProcessEnv)
+    ).toBe(enabled);
   });
 });

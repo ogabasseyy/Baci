@@ -1,8 +1,28 @@
 import 'server-only';
+import { piggyvestInterestPayoutWalletIdSchema } from '@/schemas/piggyvest-primary-wallet-onboarding';
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
 
 export function readPrimaryWalletRuntime(env: NodeJS.ProcessEnv = process.env) {
   return parseRuntime(env, false);
+}
+
+/**
+ * Onboarding reader: the base runtime plus the Ogabassey wallet that
+ * receives main-wallet interest (server-only, never sent to a client).
+ * PiggyVest fixes interest settings at customer creation, so a missing or
+ * malformed id makes onboarding not ready instead of creating a main wallet
+ * that can never be routed. Reads, savings and drain never depend on it.
+ */
+export function readPrimaryWalletOnboardingRuntime(
+  env: NodeJS.ProcessEnv = process.env
+) {
+  const runtime = parseRuntime(env, false);
+  const payout = piggyvestInterestPayoutWalletIdSchema.safeParse(
+    env.PIGGYVEST_PRIMARY_INTEREST_PAYOUT_WALLET_ID
+  );
+  return runtime && payout.success
+    ? { runtime, interestPayoutWalletId: payout.data }
+    : null;
 }
 
 /**

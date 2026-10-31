@@ -1,47 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PiggyvestApiError } from './client';
 import { onboardPiggyvestPrimaryWallet } from './primary-wallet-onboarding';
+import { onboardingFixture } from './primary-wallet-onboarding.test-fixture';
 
 vi.mock('server-only', () => ({}));
 
-function fixture() {
-  return {
-    configuration: {
-      environment: 'production',
-      merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-      integrationId: 'd91d9e87-8e0d-44de-9b84-1e1d709633d2',
-      businessId: 'business-fixture',
-      businessBindingVerified: true,
-      fingerprintKey: 'test-only-fingerprint-key-not-a-real-secret',
-    },
-    verifiedIdentity: {
-      merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-      customerId: 'e648eb14-928a-427b-9719-b105f6d4b8b4',
-      userId: 'f4f01e61-691f-494a-a895-872f17f8e55e',
-      email: 'TEST@example.com',
-      emailVerified: true,
-      name: 'Test Customer',
-      phone: '08000000000',
-    },
-    request: { consent: true, bvn: '00000000000' },
-    storage: {
-      claim: vi.fn().mockResolvedValue({
-        status: 'claimed',
-        intentId: 'intent',
-        claimToken: 'claim',
-      }),
-      recordAccepted: vi.fn().mockResolvedValue(true),
-      recordUncertain: vi.fn().mockResolvedValue(undefined),
-      recordRejected: vi.fn().mockResolvedValue(undefined),
-      releaseIntent: vi.fn().mockResolvedValue(true),
-    },
-    createCustomer: vi.fn().mockResolvedValue({
-      customer_id: 'customer-fixture',
-      wallet_id: 'wallet-fixture',
-      new_customer: true,
-    }),
-  };
-}
+const fixture = onboardingFixture;
 
 describe('primary wallet onboarding', () => {
   it('rejects missing consent before storage or provider contact', async () => {
@@ -95,7 +59,7 @@ describe('primary wallet onboarding', () => {
       expect.objectContaining({
         bvn: '00000000000',
         email: 'test@example.com',
-        enable_interest_accrual: false,
+        enable_interest_accrual: true,
       })
     );
     const persisted = JSON.stringify([

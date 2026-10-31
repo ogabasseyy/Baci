@@ -1,8 +1,19 @@
 import 'server-only';
 import { primarySavingsProvisioningSchemas as schemas } from '@/schemas/primary-savings-provisioning';
+import { PiggyvestApiError } from './client';
 import type { createPrimarySavingsProvisioningStore } from './primary-savings-provisioning-store';
 import { matchesProviderWalletName } from './provider-wallet-name';
 import type { CreatePiggyvestWalletInput } from './wallets';
+
+/**
+ * Goal interest belongs to the customer (or is declined), never to the main
+ * wallet's Ogabassey payout: the request type forbids a payout wallet and
+ * makes accrual an explicit choice.
+ */
+type GoalWalletRequest = Omit<
+  CreatePiggyvestWalletInput,
+  'enableInterestAccrual' | 'interestPayoutWallet'
+> & { enableInterestAccrual: boolean; interestPayoutWallet?: never };
 
 type Input = {
   scope: unknown;
@@ -10,7 +21,7 @@ type Input = {
   mode: 'provision' | 'recover';
   interestAccepted?: boolean;
   store: ReturnType<typeof createPrimarySavingsProvisioningStore>;
-  createWallet: (request: CreatePiggyvestWalletInput) => Promise<unknown>;
+  createWallet: (request: GoalWalletRequest) => Promise<unknown>;
   listWallets: (customerId: string) => Promise<unknown>;
   retrieveWallet: (walletId: string) => Promise<unknown>;
   retrieveAccounts: (walletId: string) => Promise<unknown>;
@@ -21,7 +32,13 @@ export async function provisionPrimarySavingsWallet(input: Input) {
   const goalId = schemas.goalId.parse(input.goalId);
   let interestAccepted: boolean | null = null;
   const outcome = (
-    status: 'pending' | 'ready' | 'conflict' | 'not_found' | 'unavailable',
+    status:
+      | 'pending'
+      | 'ready'
+      | 'conflict'
+      | 'not_found'
+      | 'rejected'
+      | 'unavailable',
     accounts: {
       accountNumber: string;
       accountName: string;
@@ -106,9 +123,13 @@ export async function provisionPrimarySavingsWallet(input: Input) {
             !(await input.store.record(goalId, intent.claimToken, created.id))
           )
             return outcome('unavailable');
-        } catch {
+        } catch (error) {
           await input.store.record(goalId, intent.claimToken, null);
-          return outcome('pending');
+          // A 422 decline envelope ("One or more validation errors
+          // occurred", seen in the 2026-10-31 sandbox for a fresh customer)
+          // created nothing; report it as rejected, not in flight. Nothing
+          // here retries it, and no money moves on this path.
+          return outcome(isValidationDecline(error) ? 'rejected' : 'pending');
         }
       }
       intent = await input.store.read(goalId);
@@ -140,6 +161,16 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       wallet.api_customer_id !== intent.providerCustomerId ||
       wallet.business_id !== scope.businessId ||
       !matchesProviderWalletName(wallet.name, intent.walletName)
+    )
+      return outcome('conflict');
+    // Whether a goal with no payout of its own inherits the customer's
+    // Ogabassey payout wallet is unproven (p7), so a readback naming any
+    // payout outside the customer's own wallets never enrolls.
+    const payout = wallet.interest_payout_wallet ?? null;
+    if (
+      payout !== null &&
+      payout !== wallet.id &&
+      payout !== intent.primaryWalletId
     )
       return outcome('conflict');
     if (wallet.status !== 'active') return outcome('pending');
@@ -174,4 +205,10 @@ export async function provisionPrimarySavingsWallet(input: Input) {
   } catch {
     return outcome('unavailable');
   }
+}
+
+function isValidationDecline(error: unknown) {
+  return (
+    error instanceof PiggyvestApiError && error.status === 422 && error.declined
+  );
 }

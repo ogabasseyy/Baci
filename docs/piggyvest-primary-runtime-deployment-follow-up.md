@@ -8,7 +8,12 @@ remote database, provider account or nginx configuration were changed.
 
 - `/api/storefront/customer/wallet/piggyvest-primary`: authenticated GET reads
   owned wallet/accounts and persists exact accepted-to-verified proof; CSRF
-  protected POST dispatches ordinary, non-interest-bearing customer setup.
+  protected POST creates the customer with main-wallet interest accrual on and
+  routed to the configured Ogabassey payout wallet (fixed at creation), then
+  records the wallet only after `GET /wallet/:id` reads that routing back.
+  A contradicting readback, or an existing `returnIfExist` customer without
+  it, goes to review (`INTEREST_ROUTING_REVIEW_REQUIRED`); a failed or
+  not-yet-settled readback of a new wallet stays reclaimable, never ready.
 - `/api/storefront/customer/savings/primary-provisioning`: authenticated,
   CSRF-protected POST persists explicit immutable interest choice before the
   single creation dispatch; PATCH recovers via provider reads without another
@@ -31,6 +36,11 @@ Primary onboarding requires all of these server-only settings:
 - `PIGGYVEST_PRIMARY_FINGERPRINT_KEY`, stable across retries and at least 32
   characters; rotating it requires a separately reviewed replay policy
 - `PIGGYVEST_PRIMARY_PROVIDER_TOKEN`, belonging to that business/environment
+- `PIGGYVEST_PRIMARY_INTEREST_PAYOUT_WALLET_ID`, the Ogabassey business wallet
+  (26-character uppercase PiggyVest wallet ULID, no whitespace) that receives
+  main-wallet interest. Onboarding alone needs it: when it is missing or
+  malformed, POST returns `PIGGYVEST_NOT_READY` and no customer is created.
+  Each customer's routing is immutable, so set it before any onboarding.
 - `PIGGYVEST_PRIMARY_DB_HOST`, `PIGGYVEST_PRIMARY_DB_PORT`,
   `PIGGYVEST_PRIMARY_DB_NAME`, `PIGGYVEST_PRIMARY_DB_PASSWORD`,
   `PIGGYVEST_PRIMARY_DB_CA`

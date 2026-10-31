@@ -28,6 +28,8 @@ const createCustomerInputSchema = z.object({
   thirdPartyIdentifier: z.string().min(1).max(200),
   returnIfExist: z.boolean().default(true),
   enableInterestAccrual: z.boolean().optional(),
+  // Destination for this customer's main-wallet interest. Fixed at creation.
+  interestPayoutWallet: z.string().min(1).optional(),
 });
 
 export type CreatePiggyvestCustomerInput = z.input<
@@ -60,6 +62,7 @@ export function createPiggyvestCustomer(
         enable_interest_accrual: parsed.enableInterestAccrual,
         id_number: parsed.idNumber,
         id_type: parsed.idType,
+        interest_payout_wallet: parsed.interestPayoutWallet,
         name: parsed.name.normalize('NFKC'),
         phone: parsed.phone,
         third_party_identifier: parsed.thirdPartyIdentifier,

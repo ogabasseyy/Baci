@@ -1,12 +1,13 @@
 import 'server-only';
 import { createHmac } from 'node:crypto';
 import {
-  piggyvestPrimaryWalletConfigurationSchema,
   piggyvestPrimaryWalletCreationSchema,
   piggyvestPrimaryWalletIdentitySchema,
+  piggyvestPrimaryWalletOnboardingConfigurationSchema,
   piggyvestPrimaryWalletOnboardingSchema,
 } from '@/schemas/piggyvest-primary-wallet-onboarding';
 import { PiggyvestApiError } from './client';
+import { readPrimaryWalletInterestRouting } from './primary-wallet-interest-routing';
 import type {
   PrimaryWalletCustomerRequest,
   PrimaryWalletIntentScope,
@@ -19,6 +20,7 @@ type Input = {
   request: unknown;
   storage: PrimaryWalletOnboardingStorage;
   createCustomer: (request: PrimaryWalletCustomerRequest) => Promise<unknown>;
+  retrieveWallet: (walletId: string) => Promise<unknown>;
 };
 
 type Outcome = {
@@ -28,13 +30,16 @@ type Outcome = {
     | 'INVALID_INPUT'
     | 'INVALID_BVN'
     | 'OWNERSHIP_REVIEW_REQUIRED'
+    | 'INTEREST_ROUTING_REVIEW_REQUIRED'
     | 'STORAGE_UNAVAILABLE';
 };
 
 export async function onboardPiggyvestPrimaryWallet(
   input: Input
 ): Promise<Outcome> {
-  const config = piggyvestPrimaryWalletConfigurationSchema.safeParse(
+  // Without a valid Ogabassey payout wallet nothing is claimed or created:
+  // interest settings are immutable, so an unrouted main wallet is forever.
+  const config = piggyvestPrimaryWalletOnboardingConfigurationSchema.safeParse(
     input.configuration
   );
   const identity = piggyvestPrimaryWalletIdentitySchema.safeParse(
@@ -64,7 +69,10 @@ export async function onboardPiggyvestPrimaryWallet(
     name: identity.data.name.normalize('NFKC'),
     phone: identity.data.phone,
     third_party_identifier: `baci:${scope.integrationId}:${scope.customerId}`,
-    enable_interest_accrual: false,
+    // Owner decision: main-wallet interest goes to Ogabassey (the customer
+    // terms say the wallet balance earns no interest). It must be set here.
+    enable_interest_accrual: true,
+    interest_payout_wallet: config.data.interestPayoutWalletId,
   };
   // Idempotency commitment: HMAC-SHA256 keyed by a server secret is
   // already one-way — hashing the BVN before this step would be
@@ -106,19 +114,33 @@ export async function onboardPiggyvestPrimaryWallet(
       await input.storage.recordRejected(claimedScope);
       return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
     }
-    // A reclaimed intent retries the same fingerprinted request, so when
-    // the provider's idempotent creation returns the existing customer,
-    // adopt those identifiers instead of stranding the wallet unknown.
-    if (!result.data.new_customer) {
-      const adopted = await input.storage.recordAccepted({
-        ...claimedScope,
-        providerCustomerId: result.data.customer_id,
-        providerWalletId: result.data.wallet_id,
-      });
-      return adopted
-        ? { status: 'pending' }
-        : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
+    // Read the wallet back before recording it: accepted intents are usable,
+    // so routing must be proven first, and never assumed on a failed read.
+    const routing = await readPrimaryWalletInterestRouting({
+      walletId: result.data.wallet_id,
+      customerId: result.data.customer_id,
+      businessId: scope.businessId,
+      payoutWalletId: config.data.interestPayoutWalletId,
+      retrieveWallet: input.retrieveWallet,
+    });
+    // A wallet created by this very request may still be settling, so an
+    // unsettled answer stays reclaimable; the retry re-reads it. An existing
+    // customer (returnIfExist) may predate routing and never settle.
+    if (
+      routing === 'unreadable' ||
+      (routing === 'unsettled' && result.data.new_customer)
+    ) {
+      await input.storage.recordUncertain(claimedScope);
+      return { status: 'pending' };
     }
+    if (routing !== 'routed') {
+      await input.storage.recordRejected(claimedScope);
+      return { status: 'conflict', code: 'INTEREST_ROUTING_REVIEW_REQUIRED' };
+    }
+    // A reclaimed intent retries the same fingerprinted request, so when
+    // the provider's idempotent creation returns the existing customer
+    // (now proven routed), adopt those identifiers instead of stranding
+    // the wallet unknown.
     const recorded = await input.storage.recordAccepted({
       ...claimedScope,
       providerCustomerId: result.data.customer_id,

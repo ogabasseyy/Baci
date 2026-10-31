@@ -7,7 +7,10 @@ import { readPrimaryWalletMapping } from '@/lib/piggyvest/primary-wallet-mapping
 import { onboardPiggyvestPrimaryWallet } from '@/lib/piggyvest/primary-wallet-onboarding';
 import { createPrimaryWalletProviderCustomer } from '@/lib/piggyvest/primary-wallet-provider';
 import { getPrimaryWalletProviderOrigin } from '@/lib/piggyvest/primary-wallet-provider-origin';
-import { readPrimaryWalletRuntime } from '@/lib/piggyvest/primary-wallet-runtime';
+import {
+  readPrimaryWalletOnboardingRuntime,
+  readPrimaryWalletRuntime,
+} from '@/lib/piggyvest/primary-wallet-runtime';
 import { readPrimaryWalletSnapshot } from '@/lib/piggyvest/primary-wallet-snapshot';
 import { createPrimaryWalletStore } from '@/lib/piggyvest/primary-wallet-store';
 import { verifyPrimaryWalletMapping } from '@/lib/piggyvest/primary-wallet-verification';
@@ -145,8 +148,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
   try {
-    const runtime = readPrimaryWalletRuntime();
-    if (!runtime || runtime.onboarding.merchantId !== parsed.data.merchantId) {
+    // Onboarding also needs the main-wallet interest payout wallet; without
+    // it (or with a malformed one) setup is not ready and nothing is sent.
+    const onboardingRuntime = readPrimaryWalletOnboardingRuntime();
+    if (
+      !onboardingRuntime ||
+      onboardingRuntime.runtime.onboarding.merchantId !== parsed.data.merchantId
+    ) {
       return NextResponse.json(
         {
           error: 'Wallet setup is temporarily unavailable.',
@@ -155,6 +163,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 503 }
       );
     }
+    const { runtime, interestPayoutWalletId } = onboardingRuntime;
     const identity = await resolvePrimaryWalletIdentity({
       supabase: auth.supabase,
       user: auth.user,
@@ -179,8 +188,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       businessId: runtime.onboarding.businessId,
       environment: runtime.onboarding.environment,
     };
+    const providerConfig = {
+      token: runtime.providerToken,
+      baseUrl: getPrimaryWalletProviderOrigin(runtime.onboarding.environment),
+    };
     const outcome = await onboardPiggyvestPrimaryWallet({
-      configuration: runtime.onboarding,
+      configuration: {
+        ...runtime.onboarding,
+        interestPayoutWalletId,
+      },
       verifiedIdentity: identity,
       request: { bvn: parsed.data.bvn, consent: parsed.data.consent },
       storage: createPrimaryWalletStore({
@@ -188,15 +204,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         execute: createPrimaryWalletExecutor(runtime),
       }),
       createCustomer: (command) =>
-        createPrimaryWalletProviderCustomer(
-          {
-            token: runtime.providerToken,
-            baseUrl: getPrimaryWalletProviderOrigin(
-              runtime.onboarding.environment
-            ),
-          },
-          command
-        ),
+        createPrimaryWalletProviderCustomer(providerConfig, command),
+      retrieveWallet: (walletId) =>
+        retrievePiggyvestWallet(providerConfig, walletId),
     });
     if (outcome.status === 'unavailable') {
       return NextResponse.json(
@@ -213,7 +223,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         {
           error:
             'Your wallet identity needs verification. Please contact support; no duplicate wallet will be created.',
-          code: 'OWNERSHIP_REVIEW_REQUIRED',
+          code: outcome.code ?? 'OWNERSHIP_REVIEW_REQUIRED',
         },
         { status: 409 }
       );

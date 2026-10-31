@@ -190,6 +190,7 @@ it.each([
   { status: 'ready', code: 200 },
   { status: 'conflict', code: 409 },
   { status: 'not_found', code: 404 },
+  { status: 'rejected', code: 422 },
   { status: 'unavailable', code: 503 },
 ])('maps provisioning status $status to HTTP $code', async ({
   status,
@@ -212,6 +213,25 @@ it.each([
         : [],
   });
   expect((await POST(request())).status).toBe(code);
+});
+it('reports a provider-declined goal wallet as a clear non-retryable error', async () => {
+  mocks.run.mockResolvedValue({
+    goalId: body.goalId,
+    status: 'rejected',
+    interestAccepted: false,
+    interestEnrollment: 'not_requested',
+    accounts: [],
+  });
+  const response = await POST(request());
+  expect(response.status).toBe(422);
+  expect(await response.json()).toEqual(
+    expect.objectContaining({
+      code: 'SAVINGS_WALLET_PROVIDER_REJECTED',
+      status: 'rejected',
+      accounts: [],
+      error: expect.stringContaining('No money was moved'),
+    })
+  );
 });
 it('passes only explicit authenticated request interest consent to provisioning', async () => {
   expect(

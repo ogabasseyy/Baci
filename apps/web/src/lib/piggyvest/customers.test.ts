@@ -46,6 +46,44 @@ describe('createPiggyvestCustomer', () => {
       false
     );
   });
+  it('sends the interest payout wallet only when one is given', async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        jsonResponse({
+          status: true,
+          message: 'Created',
+          data: {
+            customer_id: 'customer-test',
+            wallet_id: 'wallet-test',
+            new_customer: true,
+          },
+        })
+      )
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await createPiggyvestCustomer(
+      { token: 'test-only-token' },
+      {
+        ...input,
+        enableInterestAccrual: true,
+        interestPayoutWallet: '01JBZ8Q5W3X9R2K4M6N8P0T2V4',
+      }
+    );
+    await createPiggyvestCustomer(
+      { token: 'test-only-token' },
+      { ...input, enableInterestAccrual: false }
+    );
+    const bodies = fetchMock.mock.calls.map(([, init]) =>
+      JSON.parse(String((init as RequestInit).body))
+    );
+    expect(bodies[0]).toEqual(
+      expect.objectContaining({
+        enable_interest_accrual: true,
+        interest_payout_wallet: '01JBZ8Q5W3X9R2K4M6N8P0T2V4',
+      })
+    );
+    expect(bodies[1]).not.toHaveProperty('interest_payout_wallet');
+  });
   it('creates idempotently and returns the default wallet', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({

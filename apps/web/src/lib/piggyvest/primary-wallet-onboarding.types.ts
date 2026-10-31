@@ -54,5 +54,8 @@ export interface PrimaryWalletCustomerRequest {
   name: string;
   phone: string;
   third_party_identifier: string;
-  enable_interest_accrual: false;
+  // Main-wallet interest is routed to the configured Ogabassey wallet at
+  // creation; PiggyVest does not allow changing it afterwards.
+  enable_interest_accrual: true;
+  interest_payout_wallet: string;
 }

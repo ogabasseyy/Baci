@@ -46,6 +46,10 @@ const retrieveWalletDataSchema = z.object({
   withdrawal_count: z.int().nonnegative(),
   creation_interest_rate: z.number(),
   current_interest_rate: z.number(),
+  // Interest settings fixed at creation. Optional so unrelated consumers
+  // stay liberal; onboarding and goal enrollment check them strictly.
+  interest_enabled: z.boolean().nullable().optional(),
+  interest_payout_wallet: z.string().min(1).nullable().optional(),
 });
 
 export type RetrievePiggyvestWalletResult = z.infer<

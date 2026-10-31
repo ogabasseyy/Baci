@@ -5,19 +5,17 @@
 -- PiggyVest rewrites the names of the sub-wallets it creates (every "-"
 -- removed), so the name it lists back is not the stored
 -- 'baci-save:<integration>:<goal>'. Proves, against live PostgreSQL:
---   * a listed name equal to the stored name with dashes stripped, or with
---     only its case changed, is accepted and enrols the destination;
---   * a genuinely different name is refused, and every other check (the
---     provider customer, the primary wallet, a wallet already used by
---     another goal, the interest choice) still refuses a matching name;
---   * two goal intents of one integration that normalise to the same name
---     fail closed: nothing is enrolled for either, even for an exact match;
+--   * a listed name with dashes stripped, or only its case changed, enrols;
+--   * a genuinely different name is refused, and every other check (provider
+--     customer, primary wallet, a wallet used by another goal, the interest
+--     choice) still refuses a matching name;
+--   * goal intents of one integration that normalise to the same name fail
+--     closed: nothing is enrolled for either, even for an exact match;
 --   * a stored name with no letters or digits matches nothing;
 --   * an exact stored name keeps working, and replays stay idempotent;
 --   * grants are unchanged, asserted through the catalog (a denied EXECUTE
---     cannot be trapped by an exception handler on the replay image, so no
---     denial is ever probed by calling the function).
---
+--     cannot be trapped on the replay image, so no denial is ever probed by
+--     calling the function).
 -- The calls run as the session role, registered as the goal executor.
 --
 -- Usage:
@@ -92,6 +90,8 @@ CREATE FUNCTION pg_temp.destinations(p_goal uuid) RETURNS bigint LANGUAGE sql AS
 $$;
 
 -- Fixture: a verified primary wallet and nine active goals for one customer.
+-- The merchant insert guards need a service_role claim, as in the other suites.
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 INSERT INTO auth.users(id) VALUES ('a3100000-0000-4000-8000-000000000001');
 INSERT INTO public.merchants(id, email)
   VALUES ('a3100000-0000-4000-8000-000000000002', 'enroll-name@example.com');

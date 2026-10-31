@@ -18,6 +18,7 @@ import { EXPECTED_JUMIA_PENDING_SOURCES } from './expected-jumia-pending-sources
 import { EXPECTED_LOYALTY_PENDING_SOURCES } from './expected-loyalty-pending-sources.test-support';
 import { EXPECTED_MANUAL_DOCUMENT_PENDING_SOURCES } from './expected-manual-document-pending-sources.test-support';
 import { EXPECTED_MERCHANT_CLASSIFICATION_PENDING_SOURCES } from './expected-merchant-classification-pending-sources.test-support';
+import { EXPECTED_MERCHANT_CONTACT_PHONE_PENDING_SOURCES } from './expected-merchant-contact-phone-pending-sources.test-support';
 import { EXPECTED_MERCHANT_INVOICE_PENDING_SOURCES } from './expected-merchant-invoice-pending-sources.test-support';
 import { EXPECTED_MERCHANT_PAYMENT_PENDING_SOURCES } from './expected-merchant-payment-pending-sources.test-support';
 import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pending-sources.test-support';
@@ -48,6 +49,7 @@ import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 
 export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_PIGGYVEST_ENROLL_NAME_PENDING_SOURCES,
+  ...EXPECTED_MERCHANT_CONTACT_PHONE_PENDING_SOURCES,
   ...EXPECTED_PIGGYVEST_CAPTURE_PENDING_SOURCES,
   ...EXPECTED_GIGL_STAFF_ACCESS_PENDING_SOURCES,
   ...EXPECTED_STORE_CREDIT_PENDING_SOURCES,

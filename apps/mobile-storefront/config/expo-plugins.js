@@ -10,6 +10,8 @@ function createExpoPlugins({
   const googleMobileAdsPlugin = buildGoogleMobileAdsExpoPlugin(process.env);
   return [
     'expo-router',
+    // Register before Expo adds the storyboard provider; mods execute in reverse.
+    './config/withBackgroundOnlyIosSplash.js',
     [
       'expo-splash-screen',
       {
@@ -25,7 +27,7 @@ function createExpoPlugins({
       },
     ],
     'expo-font',
-    'expo-audio',
+    ['expo-audio', { enableBackgroundPlayback: false }],
     'expo-image',
     'expo-secure-store',
     'expo-sharing',
@@ -57,9 +59,9 @@ function createExpoPlugins({
           // (idempotent settings.gradle includeBuild). Do not also set
           // buildReactNativeFromSource — expo-build-properties appends without
           // deduping; the custom plugin survives clean and incremental prebuild.
-          compileSdkVersion: 36,
+          compileSdkVersion: 37,
           targetSdkVersion: 36,
-          buildToolsVersion: '36.0.0',
+          buildToolsVersion: '37.0.0',
           // Compress native libraries in Play-generated splits. Some Android
           // 11/Huawei installs report an incorrect nativeLibraryDir while
           // using direct APK loading, so extracted libraries give SoLoader a
@@ -77,8 +79,6 @@ function createExpoPlugins({
           // The clipping traversal fix must be compiled into Fabric. Expo's
           // prebuilt React Native core does not include local pnpm patches.
           buildReactNativeFromSource: true,
-          // SDK 57 opt-in forwards scene startup and link callbacks on iOS 27.
-          enableSceneSupport: true,
           useFrameworks: 'static',
           // Keep Expo consumers and their JSI provider on the same native ABI.
           usePrecompiledModules: false,

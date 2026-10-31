@@ -4,7 +4,6 @@ import { useIsFocused } from 'expo-router/react-navigation';
 import {
   ActivityIndicator,
   Alert,
-  InteractionManager,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,6 +21,7 @@ import Colors from '@/constants/Colors';
 import { useMerchant } from '@/hooks';
 import { useAccountLoyaltyPoints } from '@/hooks/use-account-loyalty-points';
 import { useAuthStatus } from '@/hooks/use-auth-guard';
+import { useConfirmSignOut } from '@/hooks/use-confirm-sign-out';
 import { useStorefrontInsets } from '@/hooks/use-storefront-insets';
 import { type Customer, useAuthStore } from '@/stores/auth-store';
 
@@ -74,6 +74,8 @@ export default function AccountScreen() {
     hasCustomerProfile: Boolean(safeCustomer),
   });
 
+  const confirmSignOut = useConfirmSignOut(signOut);
+
   if (!isInitialized) {
     return (
       <View
@@ -94,26 +96,6 @@ export default function AccountScreen() {
   if (!authUser) {
     return null;
   }
-
-  const confirmSignOut = () => {
-    InteractionManager.runAfterInteractions(() => {
-      signOut()
-        .then(() => {
-          router.replace('/');
-        })
-        .catch((err: unknown) => {
-          console.error('Sign-out failed:', err);
-          Alert.alert(
-            'Sign Out Failed',
-            'Unable to complete sign out. Please try again.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Retry', onPress: confirmSignOut },
-            ]
-          );
-        });
-    });
-  };
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [

@@ -54,7 +54,9 @@ export function LegacyStartSavingsScreen() {
         refreshControl={
           <RefreshControl
             refreshing={controller.isRefetching}
-            onRefresh={controller.refetch}
+            onRefresh={() => {
+              void controller.refetch();
+            }}
             tintColor={BRAND.primary}
           />
         }

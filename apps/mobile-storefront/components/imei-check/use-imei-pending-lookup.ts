@@ -144,6 +144,8 @@ export function useImeiPendingLookup({
     };
   }, [accessToken, apiBaseUrl, pending, storageKey, scopeKey]);
 
+  const visiblePending = pending?.scopeKey === scopeKey ? pending : null;
+
   return {
     async clear() {
       pendingMutation.current += 1;
@@ -155,8 +157,8 @@ export function useImeiPendingLookup({
       setTerminal(null);
     },
     paused,
-    pending: pending?.scopeKey === scopeKey ? pending : null,
-    canResume: pending?.canResume ?? false,
+    pending: visiblePending,
+    canResume: visiblePending?.canResume ?? true,
     async start({
       lookupId,
       pollAfterMs,

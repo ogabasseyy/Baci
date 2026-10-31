@@ -7,6 +7,8 @@ import { ShipmentOptionCard } from './ShipmentOptionCard';
 
 interface ShipmentFlowMethodStepProps {
   canUseProvider: boolean;
+  /** Formatted shipping price the customer paid with a saved checkout quote. */
+  checkoutPaidShippingLabel?: string | null;
   giglPanel?: ReactNode;
   onModeChange: (mode: ShipmentCompletionMode) => void;
   providerLabel: string | null;
@@ -15,6 +17,7 @@ interface ShipmentFlowMethodStepProps {
 
 export function ShipmentFlowMethodStep({
   canUseProvider,
+  checkoutPaidShippingLabel,
   giglPanel,
   onModeChange,
   providerLabel,
@@ -24,6 +27,10 @@ export function ShipmentFlowMethodStep({
   const providerDescription = providerLabel
     ? `This will book the shipment with ${providerLabel} using the saved checkout quote for this order.`
     : 'This will use the selected provider and saved checkout quote for this order.';
+  // A fact only: booking can still ask for a new price (stale sender or price).
+  const paidNote = checkoutPaidShippingLabel
+    ? ` Customer paid ${checkoutPaidShippingLabel} for GIG delivery at checkout.`
+    : '';
 
   return (
     <>
@@ -43,7 +50,7 @@ export function ShipmentFlowMethodStep({
                 ? providerLabel
                   ? `${providerLabel} was selected for checkout, but this order does not have a saved quote to book against anymore.`
                   : 'No provider-backed shipping quote is currently saved on this order.'
-                : providerDescription
+                : `${providerDescription}${paidNote}`
             }
             disabled={!canUseProvider}
             icon="paper-plane-outline"

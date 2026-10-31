@@ -13,6 +13,7 @@ import {
   getOrderGiglQuote,
   getOrRequestMerchantWalletFundingAccount,
   requestMerchantWalletFundingAccount,
+  saveOrderGiglShippingAddress,
 } from './order-gigl-shipping';
 
 function response(body: unknown, status = 200) {
@@ -146,6 +147,64 @@ describe('order GIG shipping API', () => {
       code: 'ORDER_SHIPPING_ADDRESS_INCOMPLETE',
       missing: ['city', 'state'],
     });
+  });
+
+  it('saves a completed delivery address through the order edit', async () => {
+    fetchMock.mockResolvedValue(response({ order: { id: 'order 1' } }));
+    const controller = new AbortController();
+    const shippingAddress = {
+      address: '1 Allen',
+      city: 'Ikeja',
+      phone: '0801',
+    };
+    await saveOrderGiglShippingAddress(
+      'order 1',
+      shippingAddress,
+      controller.signal
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://example.test/api/orders/order%201',
+      {
+        body: JSON.stringify({ shipping_address: shippingAddress }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH',
+        signal: controller.signal,
+      },
+      15_000
+    );
+  });
+
+  it('surfaces the safe server error when the address cannot be saved', async () => {
+    fetchMock.mockResolvedValue(
+      response(
+        {
+          code: 'FUNDED_CHECKOUT_ADDRESS_LOCKED',
+          error: 'This order already has prepaid checkout shipping.',
+        },
+        409
+      )
+    );
+    await expect(
+      saveOrderGiglShippingAddress('order-1', { address: '1 Allen' })
+    ).rejects.toMatchObject({
+      code: 'FUNDED_CHECKOUT_ADDRESS_LOCKED',
+      message: 'This order already has prepaid checkout shipping.',
+      status: 409,
+    });
+  });
+
+  it('uses a generic message when an address save fails without a body', async () => {
+    fetchMock.mockResolvedValue(new Response('oops', { status: 500 }));
+    await expect(
+      saveOrderGiglShippingAddress('order-1', { address: '1 Allen' })
+    ).rejects.toThrow('Could not save the delivery address. Please try again.');
+  });
+
+  it('rejects a malformed address save response', async () => {
+    fetchMock.mockResolvedValue(response({ ok: true }));
+    await expect(
+      saveOrderGiglShippingAddress('order-1', { address: '1 Allen' })
+    ).rejects.toThrow('Invalid server response');
   });
 
   it('rejects malformed success payloads', async () => {

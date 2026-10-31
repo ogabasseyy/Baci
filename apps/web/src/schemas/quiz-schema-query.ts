@@ -11,6 +11,8 @@ export const quizEventsQuerySchema = z
     merchantId: quizUuidSchema.optional(),
     merchantSlug: z.string().trim().min(1).max(120).optional(),
     offset: z.coerce.number().int().min(0).prefault(0),
+    // v2 only: return every active/scheduled event (server-side paging).
+    current: z.literal('1').optional(),
   })
   .refine((value) => value.merchantId || value.merchantSlug, {
     path: ['merchantId'],

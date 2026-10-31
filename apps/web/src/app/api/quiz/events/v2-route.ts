@@ -13,6 +13,7 @@ import {
 } from '@/app/api/quiz/_shared/route-auth';
 import { logger } from '@/lib/logger';
 import { quizEventsQuerySchema } from '@/schemas/quiz';
+import { listCurrentQuizEventsV2 } from './list-current-quiz-events-v2';
 
 function merchantIdFromRow(value: unknown): string | null {
   if (!value || typeof value !== 'object') return null;
@@ -44,7 +45,7 @@ export async function getQuizEventsV2(request: NextRequest) {
   const runtimeResponse = await requireQuizV2Runtime(auth.supabase);
   if (runtimeResponse) return runtimeResponse;
 
-  const { limit, merchantId, merchantSlug, offset } = parsedQuery.data;
+  const { current, limit, merchantId, merchantSlug, offset } = parsedQuery.data;
   let merchantQuery = auth.supabase.from('merchants').select('id');
   if (merchantId) merchantQuery = merchantQuery.eq('id', merchantId);
   if (merchantSlug) merchantQuery = merchantQuery.eq('slug', merchantSlug);
@@ -55,6 +56,30 @@ export async function getQuizEventsV2(request: NextRequest) {
   const resolvedMerchantId = merchantIdFromRow(merchant);
   if (!resolvedMerchantId) {
     return NextResponse.json({ error: 'Store not found' }, { status: 404 });
+  }
+
+  if (current) {
+    const result = await listCurrentQuizEventsV2(
+      auth.supabase,
+      resolvedMerchantId
+    );
+    if (!result.ok) {
+      const clientResponse = quizRpcClientErrorResponse(result.error);
+      if (clientResponse) return clientResponse;
+      logger.error({
+        event: 'list_current_quiz_events_v2_failed',
+        message: 'Current quiz events could not be listed',
+        merchantId: resolvedMerchantId,
+        userId: auth.user.id,
+      });
+      return rpcErrorResponse();
+    }
+    return NextResponse.json({
+      contractVersion: 2,
+      entryMode: QUIZ_FREE_ENTRY_MODE,
+      events: result.events,
+      serverNow: result.serverNow,
+    });
   }
 
   const { data, error } = await auth.supabase.rpc('list_quiz_events_v2', {

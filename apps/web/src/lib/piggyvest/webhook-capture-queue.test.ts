@@ -78,6 +78,25 @@ describe('createCaptureQueue', () => {
     });
   });
 
+  it('defers a configuration-blocked row through the same fenced resolve call', async () => {
+    const { client, rpc } = clientWith({ data: true, error: null });
+
+    await expect(
+      createCaptureQueue(client).resolve(
+        claimRow.capture_id,
+        claimRow.claim_token,
+        'deferred',
+        'KEYS_UNCONFIGURED'
+      )
+    ).resolves.toBe(true);
+    expect(rpc).toHaveBeenCalledWith('resolve_piggyvest_webhook_capture', {
+      p_id: claimRow.capture_id,
+      p_claim_token: claimRow.claim_token,
+      p_state: 'deferred',
+      p_error: 'KEYS_UNCONFIGURED',
+    });
+  });
+
   it('reports a lost lease as false instead of throwing', async () => {
     const { client } = clientWith({ data: false, error: null });
     await expect(

@@ -116,7 +116,13 @@ export function createFakeCaptureStore() {
           ? row.processingState === 'pending'
           : row.processingState === 'claimed' && row.claimToken === token;
       if (!fenced) return false;
-      row.processingState = args.p_state as FakeCaptureRow['processingState'];
+      // 'deferred' releases the row to pending and refunds the claim's
+      // attempt, as resolve_piggyvest_webhook_capture does.
+      const deferred = args.p_state === 'deferred';
+      row.processingState = deferred
+        ? 'pending'
+        : (args.p_state as FakeCaptureRow['processingState']);
+      if (deferred) row.attempts = Math.max(row.attempts - 1, 0);
       row.claimToken = null;
       return true;
     },

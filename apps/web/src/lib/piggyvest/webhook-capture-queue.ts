@@ -15,7 +15,17 @@ import {
 const LEASE_SECONDS = 300;
 const MIN_AGE_SECONDS = 120;
 
-export type CaptureResolution = 'pending' | 'processed' | 'needs_review';
+/**
+ * 'pending' releases the row at once (a processing failure, bounded by the
+ * attempt budget). 'deferred' releases a row blocked by incomplete key
+ * configuration: the database refunds the attempt, schedules a bounded
+ * backoff and never dead-letters it.
+ */
+export type CaptureResolution =
+  | 'pending'
+  | 'deferred'
+  | 'processed'
+  | 'needs_review';
 
 export interface CaptureQueue {
   claim(limit: number): Promise<PiggyvestClaimedCapture[]>;

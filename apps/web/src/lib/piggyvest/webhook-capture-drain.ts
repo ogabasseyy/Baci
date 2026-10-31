@@ -95,7 +95,12 @@ async function drainRow(
   });
 
   if (verification.status === 'unconfigured') {
-    await settle(deps, row, 'pending', 'KEYS_UNCONFIGURED');
+    // An incomplete key set says nothing about the row, so it is deferred,
+    // not failed: the database refunds the attempt the claim spent, backs
+    // the retry off (bounded) and orders the row behind fresher captures.
+    // Releasing it as plain 'pending' would re-claim the same oldest blocked
+    // rows first on every run and starve every later capture.
+    await settle(deps, row, 'deferred', 'KEYS_UNCONFIGURED');
     return 'retried';
   }
   if (verification.status === 'unverifiable') {

@@ -170,7 +170,7 @@ describe('drainPiggyvestWebhookCaptures', () => {
     );
   });
 
-  it('releases the row for retry when keys are not configured', async () => {
+  it('defers the row with a backoff when keys are not configured', async () => {
     env = { NODE_ENV: 'test' };
     const stored = row(inflow, sign(current, inflow));
     const process = vi.fn(async () => ({ status: 200 }));
@@ -180,11 +180,55 @@ describe('drainPiggyvestWebhookCaptures', () => {
     );
 
     expect(process).not.toHaveBeenCalled();
-    expect(resolved[0]).toMatchObject({
-      state: 'pending',
-      error: 'KEYS_UNCONFIGURED',
-    });
+    // 'deferred' (not 'pending') is what lets the database schedule a retry
+    // time, so a configuration-blocked old row stops being re-claimed ahead
+    // of every later capture on each drain run.
+    expect(resolved).toEqual([
+      { id: stored.capture_id, state: 'deferred', error: 'KEYS_UNCONFIGURED' },
+    ]);
     expect(summary.retried).toBe(1);
+  });
+
+  it('defers an unreadable-archive row instead of judging it unverifiable', async () => {
+    const old = randomBytes(32).toString('hex');
+    env = {
+      NODE_ENV: 'test',
+      PIGGYVEST_SECRET_KEY: current,
+      PIGGYVEST_WEBHOOK_KEY_ARCHIVE: '{not json',
+    };
+    const stored = row(inflow, sign(old, inflow), {
+      key_version: 'pv-2026-07',
+    });
+    const process = vi.fn(async () => ({ status: 200 }));
+
+    const summary = await drainPiggyvestWebhookCaptures(
+      deps([[stored]], process)
+    );
+
+    expect(process).not.toHaveBeenCalled();
+    expect(resolved).toEqual([
+      { id: stored.capture_id, state: 'deferred', error: 'KEYS_UNCONFIGURED' },
+    ]);
+    expect(summary).toMatchObject({ retried: 1, needsReview: 0 });
+  });
+
+  it('never dead-letters a configuration-blocked row, whatever its attempt count', async () => {
+    env = { NODE_ENV: 'test' };
+    const stored = row(inflow, sign(current, inflow), {
+      attempts: MAX_DRAIN_ATTEMPTS + 5,
+    });
+
+    const summary = await drainPiggyvestWebhookCaptures(
+      deps([[stored]], async () => ({ status: 200 }))
+    );
+
+    expect(resolved).toEqual([
+      { id: stored.capture_id, state: 'deferred', error: 'KEYS_UNCONFIGURED' },
+    ]);
+    expect(summary).toMatchObject({ retried: 1, needsReview: 0 });
+    expect(alerts).not.toHaveBeenCalledWith(
+      expect.stringContaining('PIGGYVEST_WEBHOOK_NEEDS_REVIEW')
+    );
   });
 
   it.each([

@@ -64,6 +64,16 @@ CREATE TABLE public.piggyvest_webhook_captures (
     CHECK (processing_state IN ('pending', 'claimed', 'processed', 'needs_review')),
   attempts integer NOT NULL DEFAULT 0
     CONSTRAINT piggyvest_webhook_captures_attempts_check CHECK (attempts >= 0),
+  -- Retry scheduling for rows the drain cannot verify YET because the key
+  -- configuration is incomplete (keys unconfigured, an unreadable archive or
+  -- family). Such a row is not failing: it is released with a bounded
+  -- backoff, does not spend `attempts`, and is never dead-lettered. Without
+  -- this the oldest blocked rows would be re-claimed first on every run and
+  -- starve every later capture. NULL means no retry time is pending.
+  config_deferrals integer NOT NULL DEFAULT 0
+    CONSTRAINT piggyvest_webhook_captures_config_deferrals_check
+    CHECK (config_deferrals BETWEEN 0 AND 1000),
+  next_attempt_at timestamptz NULL,
   last_error text NULL
     CONSTRAINT piggyvest_webhook_captures_last_error_check
     CHECK (last_error IS NULL OR char_length(last_error) <= 200),
@@ -75,8 +85,12 @@ CREATE TABLE public.piggyvest_webhook_captures (
     UNIQUE (event_key, body_digest, signing_families)
 );
 
+-- Claim order: a deferred row sorts by when it becomes retryable, so it
+-- re-enters the queue behind work that arrived earlier.
 CREATE INDEX piggyvest_webhook_captures_unprocessed_idx
-  ON public.piggyvest_webhook_captures (received_at)
+  ON public.piggyvest_webhook_captures (
+    (COALESCE(next_attempt_at, received_at)), received_at, id
+  )
   WHERE processing_state IN ('pending', 'claimed');
 
 CREATE INDEX piggyvest_webhook_captures_transaction_idx
@@ -210,7 +224,10 @@ END
 $$;
 
 -- Worker claim: leases due rows (pending long enough for inline processing
--- to have finished, or an expired lease from a crashed worker).
+-- to have finished and past any deferral retry time, or an expired lease
+-- from a crashed worker). Rows are taken in the order they became eligible,
+-- COALESCE(next_attempt_at, received_at), so a configuration-deferred row
+-- cannot monopolise a batch ahead of fresher work.
 CREATE FUNCTION public.claim_piggyvest_webhook_captures(
   p_limit integer,
   p_lease_seconds integer,
@@ -237,11 +254,12 @@ AS $$
     WHERE (
       c.processing_state = 'pending'
       AND c.received_at <= clock_timestamp() - make_interval(secs => greatest(p_min_age_seconds, 0))
+      AND (c.next_attempt_at IS NULL OR c.next_attempt_at <= clock_timestamp())
     ) OR (
       c.processing_state = 'claimed'
       AND c.lease_until < clock_timestamp()
     )
-    ORDER BY c.received_at, c.id
+    ORDER BY COALESCE(c.next_attempt_at, c.received_at), c.received_at, c.id
     LIMIT least(greatest(p_limit, 1), 100)
     FOR UPDATE SKIP LOCKED
   ), taken AS (
@@ -254,17 +272,24 @@ AS $$
     FROM due
     WHERE c.id = due.id
     RETURNING c.id, c.claim_token, c.raw_body, c.signature, c.key_version,
-      c.key_families, c.attempts, c.event_type, c.provider_transaction_id, c.received_at
+      c.key_families, c.attempts, c.event_type, c.provider_transaction_id, c.received_at,
+      c.next_attempt_at
   )
   SELECT t.id, t.claim_token, encode(t.raw_body, 'hex'), t.signature,
     t.key_version, t.key_families, t.attempts, t.event_type, t.provider_transaction_id
   FROM taken t
-  ORDER BY t.received_at, t.id
+  ORDER BY COALESCE(t.next_attempt_at, t.received_at), t.received_at, t.id
 $$;
 
 -- Completion. With a claim token the row must be leased to the caller. With
 -- none (inline processing right after capture) only a still-pending row can
 -- be completed, so a stale inline finisher can never overwrite worker state.
+--
+-- 'pending' releases the row at once and keeps the attempt it spent.
+-- 'deferred' is for a row that cannot be verified yet because key
+-- configuration is incomplete: it returns to pending, refunds the attempt
+-- the claim spent (so a configuration outage never exhausts the processing
+-- budget), and schedules a retry 60s * 2^deferrals out, capped at one hour.
 CREATE FUNCTION public.resolve_piggyvest_webhook_capture(
   p_id uuid,
   p_claim_token uuid,
@@ -277,15 +302,29 @@ SECURITY DEFINER
 SET search_path = pg_catalog
 AS $$
 BEGIN
-  IF p_state IS NULL OR p_state NOT IN ('pending', 'processed', 'needs_review') THEN
+  IF p_state IS NULL OR p_state NOT IN ('pending', 'processed', 'needs_review', 'deferred') THEN
     RAISE EXCEPTION 'invalid webhook capture state' USING ERRCODE = '22023';
   END IF;
-  IF p_claim_token IS NULL AND p_state = 'needs_review' THEN
-    RAISE EXCEPTION 'review state requires a claim' USING ERRCODE = '22023';
+  IF p_claim_token IS NULL AND p_state IN ('needs_review', 'deferred') THEN
+    RAISE EXCEPTION 'review and deferral states require a claim' USING ERRCODE = '22023';
   END IF;
   UPDATE public.piggyvest_webhook_captures c
-  SET processing_state = p_state,
+  SET processing_state = CASE WHEN p_state = 'deferred' THEN 'pending' ELSE p_state END,
       last_error = left(p_error, 200),
+      attempts = CASE
+        WHEN p_state = 'deferred' THEN greatest(c.attempts - 1, 0)
+        ELSE c.attempts
+      END,
+      config_deferrals = CASE
+        WHEN p_state = 'deferred' THEN least(c.config_deferrals + 1, 1000)
+        ELSE c.config_deferrals
+      END,
+      next_attempt_at = CASE
+        WHEN p_state = 'deferred' THEN clock_timestamp() + make_interval(
+          secs => least(3600::double precision, 60 * power(2, least(c.config_deferrals, 10)))
+        )
+        ELSE c.next_attempt_at
+      END,
       processed_at = CASE WHEN p_state = 'processed' THEN clock_timestamp() ELSE c.processed_at END,
       claim_token = NULL,
       lease_until = NULL,

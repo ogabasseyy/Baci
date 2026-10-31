@@ -4,7 +4,7 @@ import { verifyAgenticRequestAccess } from '@/lib/agentic/agent-request-controls
 import { verifyAgenticApiKey } from '@/lib/agentic/auth';
 import {
   type AgenticMerchantContext,
-  resolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc,
 } from '@/lib/agentic/merchant-context';
 import { readAgenticQueryRequest } from '@/lib/agentic/mutation-request';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
@@ -16,7 +16,6 @@ import {
   type UcpCatalogProductRow,
 } from '@/lib/agentic/ucp-catalog-adapters';
 import { buildRequestScopedStoreUrl } from '@/lib/store-url';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { ucpCatalogLookupRequestSchema } from '@/schemas/ucp-catalog-request';
 
 const CATALOG_CURRENCY = 'NGN';
@@ -98,7 +97,7 @@ async function resolveCatalogContext(
   | { ok: true; merchant: AgenticMerchantContext; supabase: SupabaseClient }
   | { ok: false; response: NextResponse }
 > {
-  const merchant = await resolveAgenticMerchantContext(createAdminClient());
+  const merchant = await resolveAgenticMerchantContextFromRpc();
   if (!merchant) {
     return {
       ok: false,

@@ -1,7 +1,7 @@
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { verifyAgenticRequestAccess } from '@/lib/agentic/agent-request-controls';
 import { verifyAgenticApiKey } from '@/lib/agentic/auth';
-import { resolveAgenticMerchantContext } from '@/lib/agentic/merchant-context';
+import { resolveAgenticMerchantContextFromRpc } from '@/lib/agentic/merchant-context';
 import { readAgenticQueryRequest } from '@/lib/agentic/mutation-request';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
 import {
@@ -11,7 +11,6 @@ import {
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { buildStoreUrl } from '@/lib/store-url';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { agenticOrderRouteParamsSchema } from '@/schemas/agentic-order-route-params';
 
 const AGENTIC_ORDER_SELECT =
@@ -114,8 +113,7 @@ export async function GET(
     return adaptOrderResponseToUcp(signedRead.response);
   }
 
-  const bootstrap = createAdminClient();
-  const merchant = await resolveAgenticMerchantContext(bootstrap);
+  const merchant = await resolveAgenticMerchantContextFromRpc();
   if (!merchant) {
     return adaptOrderResponseToUcp(
       NextResponse.json(

@@ -18,7 +18,7 @@ vi.mock('@/lib/agentic/agent-request-controls', () => ({
 }));
 
 vi.mock('@/lib/agentic/merchant-context', () => ({
-  resolveAgenticMerchantContext: vi.fn(async () => ({
+  resolveAgenticMerchantContextFromRpc: vi.fn(async () => ({
     agent_user_agent_allowlist: [],
     agent_user_agent_denylist: [],
     agentic_checkout_enabled: true,

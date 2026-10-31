@@ -1,17 +1,26 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { replaySqlCheckRegistry } from '../../tools/db/replay-sql-check-registry';
 
 const migrationsDirectory = resolve(process.cwd(), '../../supabase/migrations');
 const ciWorkflow = readFileSync(
   resolve(process.cwd(), '../../.github/workflows/ci.yml'),
   'utf8'
 );
+// CI's replay step runs every suite registered in the replay registry.
+const registeredReplaySuites = replaySqlCheckRegistry.readSuites(
+  resolve(process.cwd(), '../..'),
+  'apps/web/tools/db/replay-registry'
+);
 const readMigration = (file: string) =>
   readFileSync(resolve(migrationsDirectory, file), 'utf8');
 
 describe('quiz deadline review contracts', () => {
   it('runs every deadline repair SQL proof in chronological replay CI', () => {
+    expect(ciWorkflow).toContain(
+      '--sql-check-registry apps/web/tools/db/replay-registry'
+    );
     for (const file of [
       'quiz_live_score_publication_gate_v2.sql',
       'quiz_instant_deadline_publication_v2.sql',
@@ -25,8 +34,8 @@ describe('quiz deadline review contracts', () => {
       'quiz_runtime_gate_stale_health_v2.sql',
       'quiz_score_repair_quiescence_gate_v2.sql',
     ]) {
-      expect(ciWorkflow).toContain(
-        `--sql-check supabase/migrations/tests/${file}`
+      expect(registeredReplaySuites).toContain(
+        `supabase/migrations/tests/${file}`
       );
     }
   });

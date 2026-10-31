@@ -130,3 +130,67 @@ describe('replay never widens the authority recorded at admission', () => {
     ).toEqual({ status: 'authority_lost' });
   });
 });
+
+describe('an incomplete key set cannot prove that authority was lost', () => {
+  // The delivery was admitted as bank-only. Its key is now also configured
+  // as the legacy secret, while the archive that holds its bank assignment
+  // is either unreadable or intact.
+  function bankRecordedSetup(archive: string) {
+    const shared = ephemeralKey();
+    const env = {
+      NODE_ENV: 'test' as const,
+      PIGGYVEST_SECRET_KEY: shared,
+      PIGGYVEST_WEBHOOK_KEY_ARCHIVE: archive,
+    };
+    return { shared, env, signature: sign(shared) };
+  }
+  const verify = (setup: ReturnType<typeof bankRecordedSetup>) =>
+    verifyStoredPiggyvestDelivery({
+      rawBody,
+      signature: setup.signature,
+      env: setup.env,
+      now: NOW,
+      recordedFamilies: ['bank'],
+    });
+
+  it('is retryable (unconfigured), not authority_lost, while the archive is unreadable', () => {
+    const setup = bankRecordedSetup('{not json');
+
+    expect(verify(setup)).toEqual({ status: 'unconfigured' });
+  });
+
+  it('keeps authority_lost when the configuration is complete and the intersection is really empty', () => {
+    const setup = bankRecordedSetup(
+      archiveEnv([
+        {
+          version: 'bank-other',
+          family: 'bank',
+          secret: ephemeralKey(),
+          hours: 200,
+        },
+      ])
+    );
+
+    expect(verify(setup)).toEqual({ status: 'authority_lost' });
+  });
+
+  it('resumes with the recorded family only once the archive is readable, never the legacy family', () => {
+    const { shared } = bankRecordedSetup('[]');
+    const setup = bankRecordedSetup(
+      archiveEnv([
+        { version: 'bank-old', family: 'bank', secret: shared, hours: 200 },
+      ])
+    );
+    setup.env.PIGGYVEST_SECRET_KEY = shared;
+
+    expect(
+      verifyStoredPiggyvestDelivery({
+        rawBody,
+        signature: sign(shared),
+        env: setup.env,
+        now: NOW,
+        recordedFamilies: ['bank'],
+      })
+    ).toMatchObject({ status: 'verified', families: ['bank'] });
+  });
+});

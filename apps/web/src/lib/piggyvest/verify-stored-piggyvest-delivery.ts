@@ -9,7 +9,11 @@ import {
 export type StoredPiggyvestDeliveryVerification =
   | { status: 'unconfigured' }
   | { status: 'unverifiable' }
-  /** Authentic, but the key holds none of the families recorded at admission. */
+  /**
+   * Authentic, but the key holds none of the families recorded at admission
+   * and the key set is complete, so this is terminal. An incomplete key set
+   * reports `unconfigured` instead.
+   */
   | { status: 'authority_lost' }
   | {
       status: 'verified';
@@ -64,8 +68,15 @@ export function verifyStoredPiggyvestDelivery(input: {
       match.families,
       input.recordedFamilies
     );
-    return families.length > 0
-      ? { status: 'verified', ...match, families }
+    if (families.length > 0) return { status: 'verified', ...match, families };
+    // An empty intersection proves authority was lost only when the key set
+    // is complete. With an unreadable archive or a family that failed to
+    // load, the assignment that carried the recorded family may simply not
+    // be loaded (the key can match another family in the meantime), so the
+    // verdict is retryable, never terminal. Nothing is granted either way:
+    // authority never exceeds the families recorded at admission.
+    return misconfigured
+      ? { status: 'unconfigured' }
       : { status: 'authority_lost' };
   }
   // An incomplete key set (unreadable archive, a family that failed to

@@ -151,8 +151,9 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       // compares it against the onboarding mapping as a second factor.
       providerCustomerId: wallet.api_customer_id,
       providerWalletId: wallet.id,
-      // Still compared exactly by enroll_goal_wallet, so a name PiggyVest
-      // rewrote is refused there (conflict) until that check normalises.
+      // enroll_goal_wallet compares it on lowercase letters and digits only
+      // (migration 20261031210000), like matchesProviderWalletName, so a
+      // name PiggyVest rewrote still enrols; an ambiguous name is refused.
       walletName: wallet.name,
       businessId: wallet.business_id,
       currency: wallet.currency,

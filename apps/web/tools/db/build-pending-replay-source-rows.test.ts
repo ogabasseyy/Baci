@@ -76,6 +76,41 @@ describe('registry-driven pending replay inputs', () => {
     );
   });
 
+  it('orders and de-duplicates both inventories with one shared rule', () => {
+    const rows = [
+      `${'1'.repeat(64)} 20991231235900_probe_ab_c.sql`,
+      `${'2'.repeat(64)} 20991231235900_probe_ab1.sql`,
+    ].join('\n');
+    const directory = registryWith({
+      [`${NEW_FOLDER}/pending-sources.txt`]: `${rows}\n`,
+      [`${NEW_FOLDER}/expected-pending-sources.txt`]: `${rows}\n`,
+    });
+    const pendingFilenames = buildPendingReplaySourceRows(directory)
+      .split('\n')
+      .map((row) => row.slice(65));
+    const expectedFilenames = buildExpectedPendingSources(directory).map(
+      ({ repositoryPath }) => repositoryPath.replace('supabase/migrations/', '')
+    );
+
+    expect(expectedFilenames).toEqual(pendingFilenames);
+    expect(pendingFilenames.slice(-2)).toEqual([
+      '20991231235900_probe_ab1.sql',
+      '20991231235900_probe_ab_c.sql',
+    ]);
+  });
+
+  it('makes both inventories reject a re-registered legacy migration', () => {
+    const legacyRow = buildPendingReplaySourceRows().split('\n')[0] ?? '';
+    const directory = registryWith({
+      [`${NEW_FOLDER}/pending-sources.txt`]: `${legacyRow}\n`,
+      [`${NEW_FOLDER}/expected-pending-sources.txt`]: `${legacyRow}\n`,
+    });
+    const message = `${legacyRow.slice(65)} is already registered in the frozen legacy set`;
+
+    expect(() => buildPendingReplaySourceRows(directory)).toThrow(message);
+    expect(() => buildExpectedPendingSources(directory)).toThrow(message);
+  });
+
   it('fails the manifest build when a new folder is malformed', () => {
     const directory = registryWith({
       [`${NEW_FOLDER}/pending-sources.txt`]: `${NEW_ROW.toUpperCase()}\n`,

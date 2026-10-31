@@ -159,6 +159,75 @@ describe('replay SQL-check registry', () => {
     );
   });
 
+  it.each([
+    [
+      'after a valueless flag',
+      ['--verbose', '--sql-check-registry', 'registry'],
+    ],
+    [
+      'after an inline flag',
+      ['--mode=chronological', '--sql-check-registry', 'registry'],
+    ],
+    [
+      'in inline form',
+      ['--mode', 'chronological', '--sql-check-registry=registry'],
+    ],
+  ])('finds the registry flag %s', (_case, argv) => {
+    const root = repository({
+      'registry/20261101090000_a/sql-checks.txt': 'supabase/tests/alpha.sql\n',
+    });
+    const expanded = replaySqlCheckRegistry.expandArguments(argv, root);
+
+    expect(expanded.slice(-2)).toEqual([
+      '--sql-check',
+      'supabase/tests/alpha.sql',
+    ]);
+    expect(expanded.join(' ')).not.toContain('--sql-check-registry');
+  });
+
+  it.each([
+    ['a missing value', ['--mode', 'chronological', '--sql-check-registry']],
+    [
+      'a flag as its value',
+      ['--sql-check-registry', '--mode', 'chronological'],
+    ],
+    ['an empty inline value', ['--sql-check-registry=']],
+  ])('rejects a registry flag with %s', (_case, argv) => {
+    expect(() =>
+      replaySqlCheckRegistry.expandArguments(argv, repository({}))
+    ).toThrow('--sql-check-registry needs a registry directory');
+  });
+
+  it('rejects an inline and a spaced registry flag together', () => {
+    const root = repository({
+      'registry/20261101090000_a/sql-checks.txt': 'supabase/tests/alpha.sql\n',
+    });
+
+    expect(() =>
+      replaySqlCheckRegistry.expandArguments(
+        ['--sql-check-registry=registry', '--sql-check-registry', 'registry'],
+        root
+      )
+    ).toThrow('--sql-check-registry may appear once');
+  });
+
+  it('detects an inline explicit --sql-check overlap', () => {
+    const root = repository({
+      'registry/20261101090000_a/sql-checks.txt': 'supabase/tests/alpha.sql\n',
+    });
+
+    expect(() =>
+      replaySqlCheckRegistry.expandArguments(
+        [
+          '--sql-check=supabase/tests/alpha.sql',
+          '--sql-check-registry',
+          'registry',
+        ],
+        root
+      )
+    ).toThrow('also passed as an explicit --sql-check');
+  });
+
   it('rejects a second registry flag', () => {
     const root = repository({
       'registry/20261101090000_a/sql-checks.txt': 'supabase/tests/alpha.sql\n',

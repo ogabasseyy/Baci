@@ -65,6 +65,23 @@ describe('parseReplayCliArguments', () => {
     ).toThrow('Invalid Supabase replay arguments');
   });
 
+  it.each([
+    ['a valueless flag', ['--verbose']],
+    ['an inline flag', ['--comparison-mode=enforce']],
+  ])('expands the registry but still rejects %s', (_case, extra) => {
+    const root = repository({
+      'supabase/tests/alpha.sql': 'SELECT 1;\n',
+      'registry/20261101090000_a/sql-checks.txt': 'supabase/tests/alpha.sql\n',
+    });
+
+    expect(() =>
+      parseReplayCliArguments(
+        [...extra, ...BASE, '--sql-check-registry', 'registry'],
+        root
+      )
+    ).toThrow('Invalid Supabase replay arguments');
+  });
+
   it('fails before the replay starts when the registry is malformed', () => {
     const root = repository({
       'registry/misnamed/sql-checks.txt': 'supabase/tests/alpha.sql\n',

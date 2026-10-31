@@ -1,4 +1,5 @@
 import { EXPECTED_LEGACY_PENDING_SOURCES } from './expected-legacy-pending-sources.test-support';
+import { mergePendingReplaySourceRows } from './merge-pending-replay-source-rows';
 import { replayRegistry } from './replay-registry';
 
 type ExpectedPendingSource = {
@@ -6,29 +7,34 @@ type ExpectedPendingSource = {
   sha256: string;
 };
 
+const MIGRATIONS = 'supabase/migrations/';
+
+function toRow({ repositoryPath, sha256 }: ExpectedPendingSource): string {
+  if (!repositoryPath.startsWith(MIGRATIONS)) {
+    throw new Error(
+      `Expected pending source outside ${MIGRATIONS}: ${repositoryPath}`
+    );
+  }
+  return `${sha256} ${repositoryPath.slice(MIGRATIONS.length)}`;
+}
+
 /**
  * The independent expected pending-source inventory the manifest is checked
  * against: the frozen pre-registry entries plus every registry
- * `expected-pending-sources.txt`, sorted by repository path and de-duplicated
- * (first occurrence wins), exactly as the hand-listed aggregator did.
+ * `expected-pending-sources.txt`, merged with the same ordering and
+ * de-duplication rule as the manifest rows (merge-pending-replay-source-rows.ts).
  */
 export function buildExpectedPendingSources(
   registryDirectory: string = replayRegistry.directory
 ): ExpectedPendingSource[] {
-  const registered = replayRegistry
-    .readSourceRows('expected-pending-sources.txt', registryDirectory)
-    .map((row) => ({
-      repositoryPath: `supabase/migrations/${row.slice(65)}`,
-      sha256: row.slice(0, 64),
-    }));
-  return [...EXPECTED_LEGACY_PENDING_SOURCES, ...registered]
-    .sort((left, right) =>
-      left.repositoryPath.localeCompare(right.repositoryPath)
+  return mergePendingReplaySourceRows(
+    EXPECTED_LEGACY_PENDING_SOURCES.map(toRow),
+    replayRegistry.readSourceRows(
+      'expected-pending-sources.txt',
+      registryDirectory
     )
-    .filter(
-      (source, index, sources) =>
-        sources.findIndex(
-          (candidate) => candidate.repositoryPath === source.repositoryPath
-        ) === index
-    );
+  ).map((row) => ({
+    repositoryPath: `${MIGRATIONS}${row.slice(65)}`,
+    sha256: row.slice(0, 64),
+  }));
 }

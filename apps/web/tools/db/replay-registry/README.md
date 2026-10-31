@@ -11,7 +11,8 @@ The tools discover the folders at runtime:
 - `expected-pending-sources.txt` rows feed the independent expected inventory
   the manifest is checked against (`expected-pending-sources.test-support.ts`).
 - `sql-checks.txt` suites are run by the CI "DB Replay" step
-  (`--sql-check-registry apps/web/tools/db/replay-registry`).
+  (`--sql-check-registry apps/web/tools/db/replay-registry`, or the
+  `--sql-check-registry=<dir>` form).
 
 ## Add a migration
 
@@ -70,7 +71,8 @@ position. Anything else fails loudly instead of being skipped:
 - an empty folder, or a list with no entries;
 - a blank line, surrounding whitespace, or a CRLF line ending;
 - a source row that is not `<64 lowercase hex> <YYYYMMDDHHMMSS>_<name>.sql`;
-- a migration registered twice in the same list;
+- a migration registered twice in the same list, or one the frozen legacy
+  modules already register (both inventories share one merge rule);
 - a SQL suite that is missing, an `.inc.sql` part, outside
   `supabase/tests/` or `supabase/migrations/tests/`, listed twice, or also
   passed to the replay as an explicit `--sql-check` (it would run twice).

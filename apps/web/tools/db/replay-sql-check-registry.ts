@@ -62,27 +62,45 @@ function readReplaySqlChecks(
   );
 }
 
+/** Values given to `flag` as `flag value` or `flag=value`, token by token. */
+function flagValues(argv: readonly string[], flag: string): string[] {
+  return argv.flatMap((token, index) => {
+    if (token === flag) return [argv[index + 1] ?? ''];
+    return token.startsWith(`${flag}=`) ? [token.slice(flag.length + 1)] : [];
+  });
+}
+
 /**
- * Replaces `--sql-check-registry <dir>` with the registered `--sql-check`
- * pairs in place, so explicit `--sql-check` flags keep their relative order.
- * A registered suite that is also passed explicitly is rejected, so no suite
- * runs twice. Every other argument passes through for the strict parser.
+ * Replaces `--sql-check-registry <dir>` (or `--sql-check-registry=<dir>`) with
+ * the registered `--sql-check` pairs in place, so explicit `--sql-check` flags
+ * keep their relative order. Tokens are scanned one at a time, so valueless or
+ * `--flag=value` arguments elsewhere cannot hide the registry flag; they pass
+ * through untouched for the strict parser, which rejects them. A registry flag
+ * without a directory, a repeated registry flag, and a registered suite that
+ * is also passed explicitly (it would run twice) all fail loudly.
  */
 function expandSqlCheckRegistryArguments(
   argv: readonly string[],
   repositoryRoot: string
 ): string[] {
-  const explicit = new Set(
-    argv.filter((_value, index) => argv[index - 1] === '--sql-check')
-  );
+  const explicit = new Set(flagValues(argv, '--sql-check'));
   const expanded: string[] = [];
   let registries = 0;
-  for (let index = 0; index < argv.length; index += 2) {
-    const flag = argv[index];
-    const value = argv[index + 1];
-    if (flag !== SQL_CHECK_REGISTRY_FLAG || value === undefined) {
-      expanded.push(...argv.slice(index, index + 2));
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index] ?? '';
+    const inline = token.startsWith(`${SQL_CHECK_REGISTRY_FLAG}=`);
+    if (token !== SQL_CHECK_REGISTRY_FLAG && !inline) {
+      expanded.push(token);
       continue;
+    }
+    const value = inline
+      ? token.slice(SQL_CHECK_REGISTRY_FLAG.length + 1)
+      : argv[index + 1];
+    if (!inline) index += 1;
+    if (!value || value.startsWith('--')) {
+      throw replayRegistry.error(
+        `${SQL_CHECK_REGISTRY_FLAG} needs a registry directory`
+      );
     }
     registries += 1;
     if (registries > 1) {

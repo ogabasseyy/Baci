@@ -113,6 +113,23 @@ describe('primary wallet restricted executor', () => {
       ]
     );
   });
+  it.each([
+    ['routingPending', 5],
+    ['readRouting', 1],
+    ['resolveRouting', 3],
+  ] as const)('permits the %s RPC only with its %i bound arguments', async (name, arity) => {
+    const statement = PRIMARY_WALLET_STATEMENTS[name];
+    const parameters = Array.from({ length: arity }, (_unused, index) =>
+      String(index)
+    );
+    await createPrimaryWalletExecutor(config)(statement, parameters);
+    expect(mocks.query).toHaveBeenLastCalledWith(statement, parameters);
+    mocks.construct.mockClear();
+    await expect(
+      createPrimaryWalletExecutor(config)(statement, [...parameters, 'extra'])
+    ).rejects.toThrow('Primary wallet database unavailable');
+    expect(mocks.construct).not.toHaveBeenCalled();
+  });
   it('rejects arbitrary SQL before opening a connection', async () => {
     await expect(
       createPrimaryWalletExecutor(config)('SELECT * FROM public.customers', [])

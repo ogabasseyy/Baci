@@ -22,6 +22,22 @@ export const piggyvestPrimaryWalletStoreSchemas = {
   }),
   uncertain: recorded,
   rejected: recorded,
+  routingPending: recorded.extend({
+    providerCustomerId: piggyvestProviderIdSchema,
+    providerWalletId: piggyvestProviderIdSchema,
+  }),
+  routingRows: z
+    .array(
+      z.strictObject({
+        result: z
+          .strictObject({
+            providerCustomerId: piggyvestProviderIdSchema,
+            providerWalletId: piggyvestProviderIdSchema,
+          })
+          .nullable(),
+      })
+    )
+    .length(1),
   claimedRows: z
     .array(
       z.strictObject({

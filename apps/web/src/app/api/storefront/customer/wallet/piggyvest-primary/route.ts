@@ -7,6 +7,7 @@ import { readPrimaryWalletMapping } from '@/lib/piggyvest/primary-wallet-mapping
 import { onboardPiggyvestPrimaryWallet } from '@/lib/piggyvest/primary-wallet-onboarding';
 import { createPrimaryWalletProviderCustomer } from '@/lib/piggyvest/primary-wallet-provider';
 import { getPrimaryWalletProviderOrigin } from '@/lib/piggyvest/primary-wallet-provider-origin';
+import { recoverPrimaryWalletRouting } from '@/lib/piggyvest/primary-wallet-routing-recovery';
 import {
   readPrimaryWalletOnboardingRuntime,
   readPrimaryWalletRuntime,
@@ -78,6 +79,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       token: runtime.providerToken,
       baseUrl: getPrimaryWalletProviderOrigin(runtime.onboarding.environment),
     };
+    // A wallet created while its interest routing was not readable is kept
+    // unusable; each refresh re-reads it (read-only, never re-creating) so
+    // setup can finish without a second BVN submission. Best effort: the
+    // snapshot below reads whatever state the database now holds.
+    const onboardingRuntime = readPrimaryWalletOnboardingRuntime();
+    if (onboardingRuntime) {
+      await recoverPrimaryWalletRouting({
+        scope,
+        execute,
+        payoutWalletId: onboardingRuntime.interestPayoutWalletId,
+        retrieveWallet: (walletId) =>
+          retrievePiggyvestWallet(providerConfig, walletId),
+      }).catch(() => 'unavailable');
+    }
     const snapshot = await readPrimaryWalletSnapshot({
       businessId: runtime.onboarding.businessId,
       loadMapping: () => readPrimaryWalletMapping(scope, execute),

@@ -16,25 +16,27 @@ const VERIFY_SESSION = `SELECT current_database() AS database_name,
   EXISTS(SELECT 1 FROM pg_stat_ssl WHERE pid = pg_backend_pid() AND ssl) AS tls
   FROM pg_roles role WHERE role.rolname = SESSION_USER`;
 
+// Every statement this executor may run, with its exact bound-argument count.
+const STATEMENT_ARITY = new Map<string, number>([
+  [PRIMARY_WALLET_STATEMENTS.read, 1],
+  [PRIMARY_WALLET_STATEMENTS.claim, 2],
+  [PRIMARY_WALLET_VERIFICATION_STATEMENT, 2],
+  [PRIMARY_WALLET_STATEMENTS.record, 5],
+  [PRIMARY_WALLET_STATEMENTS.uncertain, 3],
+  [PRIMARY_WALLET_STATEMENTS.reject, 3],
+  [PRIMARY_WALLET_STATEMENTS.release, 3],
+  [PRIMARY_WALLET_STATEMENTS.routingPending, 5],
+  [PRIMARY_WALLET_STATEMENTS.readRouting, 1],
+  [PRIMARY_WALLET_STATEMENTS.resolveRouting, 3],
+]);
+
 export function createPrimaryWalletExecutor(
   configuration: unknown
 ): PiggyvestProvisioningExecutor {
   const config =
     piggyvestPrimaryWalletRuntimeSchema.parse(configuration).database;
   return async (statement, parameters) => {
-    const expectedCount =
-      statement === PRIMARY_WALLET_STATEMENTS.read
-        ? 1
-        : statement === PRIMARY_WALLET_STATEMENTS.claim ||
-            statement === PRIMARY_WALLET_VERIFICATION_STATEMENT
-          ? 2
-          : statement === PRIMARY_WALLET_STATEMENTS.record
-            ? 5
-            : statement === PRIMARY_WALLET_STATEMENTS.uncertain ||
-                statement === PRIMARY_WALLET_STATEMENTS.reject ||
-                statement === PRIMARY_WALLET_STATEMENTS.release
-              ? 3
-              : null;
+    const expectedCount = STATEMENT_ARITY.get(statement) ?? null;
     if (
       expectedCount === null ||
       parameters.length !== expectedCount ||

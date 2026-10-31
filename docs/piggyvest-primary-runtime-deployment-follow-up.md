@@ -12,8 +12,12 @@ remote database, provider account or nginx configuration were changed.
   routed to the configured Ogabassey payout wallet (fixed at creation), then
   records the wallet only after `GET /wallet/:id` reads that routing back.
   A contradicting readback, or an existing `returnIfExist` customer without
-  it, goes to review (`INTEREST_ROUTING_REVIEW_REQUIRED`); a failed or
-  not-yet-settled readback of a new wallet stays reclaimable, never ready.
+  it, goes to review (`INTEREST_ROUTING_REVIEW_REQUIRED`). A failed or
+  not-yet-settled readback keeps the created wallet's ids in an unusable
+  `routing_pending` state (migration 20261031230000): it is never exposed or
+  credited, setup is never re-dispatched, and each GET re-reads it read-only,
+  making it usable once the routing is proven or rejecting it (with a
+  `PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW` alert) when contradicted.
 - `/api/storefront/customer/savings/primary-provisioning`: authenticated,
   CSRF-protected POST persists explicit immutable interest choice before the
   single creation dispatch; PATCH recovers via provider reads without another

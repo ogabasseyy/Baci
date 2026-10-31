@@ -34,6 +34,15 @@ export interface PrimaryWalletOnboardingStorage {
       claimToken: string;
     }
   ): Promise<void>;
+  /** Created, routing not proven yet: ids kept, never usable. */
+  recordRoutingPending(
+    input: PrimaryWalletIntentScope & {
+      intentId: string;
+      claimToken: string;
+      providerCustomerId: string;
+      providerWalletId: string;
+    }
+  ): Promise<boolean>;
   recordRejected(
     input: PrimaryWalletIntentScope & {
       intentId: string;

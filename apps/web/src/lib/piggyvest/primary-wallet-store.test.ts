@@ -115,4 +115,43 @@ describe('primary wallet storage boundary', () => {
       })
     ).rejects.toThrow('Primary wallet storage unavailable');
   });
+
+  it('keeps routing-pending identifiers through the dedicated parameterized RPC', async () => {
+    const execute = vi.fn().mockResolvedValue({ rows: [{ result: true }] });
+    await expect(
+      createPrimaryWalletStore({ scope, execute }).recordRoutingPending({
+        ...scope,
+        intentId,
+        claimToken,
+        providerCustomerId: 'provider-customer',
+        providerWalletId: 'provider-wallet',
+      })
+    ).resolves.toBe(true);
+    expect(execute).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'piggyvest_primary.record_onboarding_routing_pending'
+      ),
+      [
+        JSON.stringify(scope),
+        intentId,
+        claimToken,
+        'provider-customer',
+        'provider-wallet',
+      ]
+    );
+  });
+
+  it('refuses incomplete routing-pending identifiers without querying', async () => {
+    const execute = vi.fn();
+    await expect(
+      createPrimaryWalletStore({ scope, execute }).recordRoutingPending({
+        ...scope,
+        intentId,
+        claimToken,
+        providerCustomerId: '',
+        providerWalletId: 'provider-wallet',
+      })
+    ).rejects.toThrow('Primary wallet storage unavailable');
+    expect(execute).not.toHaveBeenCalled();
+  });
 });

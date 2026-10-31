@@ -102,6 +102,9 @@ export function primaryReadinessFixture() {
         'piggyvest_primary.record_onboarding_rejection(jsonb,uuid,uuid)',
         'piggyvest_primary.read_onboarding(jsonb)',
         'piggyvest_primary.verify_onboarding(jsonb,jsonb)',
+        'piggyvest_primary.record_onboarding_routing_pending(jsonb,uuid,uuid,text,text)',
+        'piggyvest_primary.read_onboarding_routing(jsonb)',
+        'piggyvest_primary.resolve_onboarding_routing(jsonb,jsonb,boolean)',
       ]),
       role(provisioning, 'piggyvest_primary_goal_provisioner', [
         'piggyvest_primary.read_goal_wallet(jsonb,uuid)',

@@ -46,6 +46,7 @@ export function onboardingFixture() {
       }),
       recordAccepted: vi.fn().mockResolvedValue(true),
       recordUncertain: vi.fn().mockResolvedValue(undefined),
+      recordRoutingPending: vi.fn().mockResolvedValue(true),
       recordRejected: vi.fn().mockResolvedValue(undefined),
       releaseIntent: vi.fn().mockResolvedValue(true),
     },

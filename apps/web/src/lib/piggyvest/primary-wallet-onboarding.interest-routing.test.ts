@@ -108,61 +108,6 @@ describe('primary wallet onboarding interest routing', () => {
   });
 
   it.each([
-    [
-      'settings absent',
-      { interest_enabled: undefined, interest_payout_wallet: undefined },
-    ],
-    ['payout not shown yet', { interest_payout_wallet: null }],
-  ])('keeps an existing returnIfExist customer with %s reclaimable, never adopted or rejected', async (_label, overrides) => {
-    const input = reclaimedExisting();
-    input.retrieveWallet.mockResolvedValue(routedWallet(overrides));
-    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
-      status: 'pending',
-    });
-    expect(input.storage.recordUncertain).toHaveBeenCalledOnce();
-    expect(input.storage.recordRejected).not.toHaveBeenCalled();
-    expect(input.storage.recordAccepted).not.toHaveBeenCalled();
-  });
-
-  it('lets a wallet this flow created keep settling across reclaimed retries until its routing reads back', async () => {
-    const reclaimed = {
-      status: 'claimed',
-      intentId: 'intent',
-      claimToken: 'claim',
-      reclaimed: true,
-    };
-    const input = onboardingFixture();
-    input.retrieveWallet
-      .mockResolvedValueOnce(routedWallet({ interest_payout_wallet: null }))
-      .mockResolvedValueOnce(routedWallet({ interest_payout_wallet: null }))
-      .mockResolvedValueOnce(routedWallet());
-    // Call 1: fresh claim, new customer, payout not readable yet.
-    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
-      status: 'pending',
-    });
-    // Call 2: the unknown intent is reclaimed and returnIfExist hands back
-    // the same customer (new_customer false), still settling.
-    input.storage.claim.mockResolvedValue(reclaimed);
-    input.createCustomer.mockResolvedValue({
-      customer_id: 'customer-fixture',
-      wallet_id: 'wallet-fixture',
-      new_customer: false,
-    });
-    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
-      status: 'pending',
-    });
-    expect(input.storage.recordUncertain).toHaveBeenCalledTimes(2);
-    expect(input.storage.recordRejected).not.toHaveBeenCalled();
-    expect(input.storage.recordAccepted).not.toHaveBeenCalled();
-    // Call 3: reclaimed again, and now the routing reads back.
-    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
-      status: 'pending',
-    });
-    expect(input.storage.recordAccepted).toHaveBeenCalledOnce();
-    expect(input.storage.recordRejected).not.toHaveBeenCalled();
-  });
-
-  it.each([
     [400, 'Invalid interest payout wallet'],
     [422, 'interest_payout_wallet must be a business wallet'],
   ])('reports a %s decline of the payout wallet as not configured, never as an invalid BVN', async (status, message) => {
@@ -235,40 +180,6 @@ describe('primary wallet onboarding interest routing', () => {
     });
     expect(input.storage.recordAccepted).toHaveBeenCalledOnce();
     expect(input.storage.recordRejected).not.toHaveBeenCalled();
-  });
-
-  it('keeps a just-created wallet whose interest settings are not readable yet uncertain, never ready or rejected', async () => {
-    const input = onboardingFixture();
-    input.retrieveWallet.mockResolvedValue(
-      routedWallet({ interest_payout_wallet: null })
-    );
-    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
-      status: 'pending',
-    });
-    expect(input.storage.recordUncertain).toHaveBeenCalledOnce();
-    expect(input.storage.recordAccepted).not.toHaveBeenCalled();
-    expect(input.storage.recordRejected).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ['times out', new PiggyvestApiError('PIGGYVEST_NETWORK_ERROR', 'timeout')],
-    [
-      'is declined with 400',
-      new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'Bad request', 400),
-    ],
-    ['fails unexpectedly', new Error('private provider response')],
-  ])('never assumes routing when the readback %s', async (_label, error) => {
-    const input = onboardingFixture();
-    input.retrieveWallet.mockRejectedValue(error);
-    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
-      status: 'pending',
-    });
-    // The customer exists at the provider: a readback failure must never
-    // release the intent as if creation had been declined.
-    expect(input.storage.releaseIntent).not.toHaveBeenCalled();
-    expect(input.storage.recordUncertain).toHaveBeenCalledOnce();
-    expect(input.storage.recordAccepted).not.toHaveBeenCalled();
-    expect(input.createCustomer).toHaveBeenCalledOnce();
   });
 
   it('binds the payout wallet into the idempotency fingerprint', async () => {

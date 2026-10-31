@@ -123,14 +123,21 @@ export async function onboardPiggyvestPrimaryWallet(
       payoutWalletId: config.data.interestPayoutWalletId,
       retrieveWallet: input.retrieveWallet,
     });
-    // A failed read, or settings not shown yet, proves nothing either way:
-    // keep the intent reclaimable so a retry re-reads it. A reclaimed retry
-    // of a wallet this flow created comes back new_customer false, so that
-    // flag cannot tell "still settling" from "predates routing"; only a
-    // contradicting readback is final.
+    // A failed read, or settings not shown yet, proves nothing either way,
+    // and new_customer cannot tell "still settling" from "predates routing";
+    // only a contradicting readback is final. The customer exists, so keep
+    // its ids in the unusable routing-pending state: a status refresh
+    // re-reads it (recoverPrimaryWalletRouting) without another create or a
+    // second BVN submission, and claim_onboarding never re-dispatches it.
     if (routing === 'unreadable' || routing === 'unsettled') {
-      await input.storage.recordUncertain(claimedScope);
-      return { status: 'pending' };
+      const kept = await input.storage.recordRoutingPending({
+        ...claimedScope,
+        providerCustomerId: result.data.customer_id,
+        providerWalletId: result.data.wallet_id,
+      });
+      return kept
+        ? { status: 'pending' }
+        : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
     }
     if (routing !== 'routed') {
       await input.storage.recordRejected(claimedScope);

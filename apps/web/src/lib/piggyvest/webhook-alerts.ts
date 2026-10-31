@@ -14,7 +14,10 @@ export type PiggyvestWebhookAlertCode =
   // A transfer reference still unconfirmed past its retry window (TSQ 404
   // or provider-failed): held, never resubmitted or released; an operator
   // must resolve it.
-  | 'PIGGYVEST_TRANSFER_NEEDS_REVIEW';
+  | 'PIGGYVEST_TRANSFER_NEEDS_REVIEW'
+  // A primary main wallet kept routing-pending whose recheck showed its
+  // interest routing contradicted: blocked as rejected; an operator reviews.
+  | 'PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW';
 
 export interface PiggyvestWebhookAlertDetail {
   keyVersion?: string;

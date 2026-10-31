@@ -152,6 +152,24 @@ test('bounds SSH remotes with connect and keepalive timeouts by default', () => 
   }
 });
 
+test('bounds the default-branch lookup when origin/HEAD is unset', () => {
+  const { root, work, featureSha } = setup();
+  try {
+    const { log } = fakeSsh(root, 'ssh');
+    git(work, 'remote', 'set-head', 'origin', '--delete');
+    git(work, 'remote', 'set-url', 'origin', 'ssh://git@example.invalid/repo.git');
+    const result = runHookWith(work, featureSha, {
+      PATH: `${root}:${process.env.PATH}`,
+    });
+
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /Could not determine default branch/);
+    assert.match(readFileSync(log, 'utf8'), /ConnectTimeout=15/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("never overrides a developer's core.sshCommand", () => {
   const { root, work, featureSha } = setup();
   try {

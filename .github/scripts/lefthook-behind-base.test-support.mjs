@@ -37,9 +37,23 @@ function behindBaseScript() {
 const emptyGlobalConfig = join(mkdtempSync(join(tmpdir(), 'git-cfg-')), 'gitconfig');
 writeFileSync(emptyGlobalConfig, '');
 // Drop inherited SSH transport overrides so each SSH test controls exactly
-// which of GIT_SSH_COMMAND / GIT_SSH / core.sshCommand is in play.
-const { GIT_SSH_COMMAND: _sshCommand, GIT_SSH: _ssh, ...inheritedEnv } =
-  process.env;
+// which of GIT_SSH_COMMAND / GIT_SSH / core.sshCommand is in play, and the
+// repository-location variables git exports when it runs a hook, so a suite
+// launched from a hook never writes to the caller's repository.
+const SCRUBBED_ENV = new Set([
+  'GIT_SSH_COMMAND',
+  'GIT_SSH',
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_INDEX_FILE',
+  'GIT_COMMON_DIR',
+  'GIT_OBJECT_DIRECTORY',
+  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+  'GIT_PREFIX',
+]);
+const inheritedEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => !SCRUBBED_ENV.has(key))
+);
 
 const gitEnv = {
   ...inheritedEnv,

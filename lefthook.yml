@@ -144,9 +144,27 @@ pre-push:
         #      rather than silently defaulting to a guessed branch name.
         #      Under-block is the right failure mode for "we don't know
         #      what to gate against," but it MUST be visible.
+        # Every remote read goes through one bounded ls-remote. A plain
+        # fetch/ls-remote negotiates with no stall limit, so a slow or
+        # contended remote hung the push indefinitely. lowSpeed* aborts a
+        # stalled HTTP transfer; GIT_TERMINAL_PROMPT=0 keeps a credential
+        # prompt from blocking a non-interactive push.
+        # The http.* limits do not cover SSH remotes, so bound those with
+        # connect and keepalive timeouts too — but only when none of
+        # GIT_SSH_COMMAND, GIT_SSH or core.sshCommand is set, so a
+        # developer's own SSH transport/wrapper is never overridden.
+        bounded_ls_remote() (
+          if [ -z "${GIT_SSH_COMMAND:-}" ] && [ -z "${GIT_SSH:-}" ] && \
+            [ -z "$(git config --get core.sshCommand 2>/dev/null)" ]; then
+            export GIT_SSH_COMMAND='ssh -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=4'
+          fi
+          GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1000 \
+            -c http.lowSpeedTime=20 ls-remote "$@"
+        )
+
         default_branch=$(git symbolic-ref -q --short "refs/remotes/${remote}/HEAD" 2>/dev/null | sed "s|^${remote}/||")
         if [ -z "$default_branch" ]; then
-          default_branch=$(git ls-remote --symref "$remote" HEAD 2>/dev/null \
+          default_branch=$(bounded_ls_remote --symref "$remote" HEAD 2>/dev/null \
             | awk 'NR==1 && /^ref:/ { sub("^refs/heads/", "", $2); print $2; exit }')
         fi
         if [ -z "$default_branch" ]; then
@@ -210,25 +228,10 @@ pre-push:
           fi
 
           base_ref=${base#${remote}/}
-          # Read only the base tip with one bounded ls-remote round trip
-          # instead of `git fetch`: a fetch in this many-worktree repo
-          # negotiates packs (30s+) and has no stall limit, so a slow or
-          # contended remote hung the push indefinitely. lowSpeed* aborts a
-          # stalled HTTP transfer; GIT_TERMINAL_PROMPT=0 keeps a credential
-          # prompt from blocking a non-interactive push.
-          # The http.* limits do not cover SSH remotes, so bound those with
-          # connect and keepalive timeouts too — but only when none of
-          # GIT_SSH_COMMAND, GIT_SSH or core.sshCommand is set, so a
-          # developer's own SSH transport/wrapper is never overridden.
-          base_sha=$(
-            if [ -z "${GIT_SSH_COMMAND:-}" ] && [ -z "${GIT_SSH:-}" ] && \
-              [ -z "$(git config --get core.sshCommand 2>/dev/null)" ]; then
-              export GIT_SSH_COMMAND='ssh -o ConnectTimeout=15 -o ServerAliveInterval=5 -o ServerAliveCountMax=4'
-            fi
-            GIT_TERMINAL_PROMPT=0 git -c http.lowSpeedLimit=1000 \
-              -c http.lowSpeedTime=20 ls-remote "$remote" "refs/heads/$base_ref" \
-              2>/dev/null | awk 'NR==1 { print $1 }'
-          )
+          # Read only the base tip (bounded, see bounded_ls_remote) instead
+          # of `git fetch`, which negotiates packs (30s+) in this repo.
+          base_sha=$(bounded_ls_remote "$remote" "refs/heads/$base_ref" \
+            2>/dev/null | awk 'NR==1 { print $1 }')
           if [ -z "$base_sha" ]; then
             echo "⚠️  Couldn't read $base for '$branch' — skipping behind-base check (offline?)."
             continue

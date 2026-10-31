@@ -1,0 +1,20 @@
+{
+  "headers": {
+    "API-Version": "2026-04-17",
+    "Authorization": "Bearer REDACTED",
+    "Content-Type": "application/json",
+    "Idempotency-Key": "idem_create_0001",
+    "Request-Id": "request_0001"
+  },
+  "body": {
+    "capabilities": {},
+    "currency": "ngn",
+    "line_items": [
+      {
+        "id": "variant-1",
+        "name": "Kobo phone",
+        "unit_amount": 3998
+      }
+    ]
+  }
+}

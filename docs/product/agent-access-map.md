@@ -1,11 +1,11 @@
 # Baci capabilities and agent access
 
 Reviewed 31 October 2026 against source revision
-`9a63e18f6d016855ef44ff4ee57de5b4690c2dc2`. Agentic routes now resolve the merchant through the
-scoped context RPC instead of a service-role client; the cited claims are
-unchanged. This is a navigation map, not authorization or proof of current
-deployment. Check the current implementation, live tool discovery and merchant
-entitlement before calling or claiming a tool.
+`05fd9b3dbaae2306fb25aad1bb07e2d8150948bf`. Added an agent surface evidence
+table with explicit unknowns for the seven agent surfaces; the cited capability
+claims are unchanged. This is a navigation map, not authorization or proof of
+current deployment. Check the current implementation, live tool discovery and
+merchant entitlement before calling or claiming a tool.
 
 Baci's positioning is **agent-native commerce infrastructure for African
 merchants**: merchant-owned stores, structured discovery, controlled transactions
@@ -54,6 +54,29 @@ passing probe does not establish deployment or transaction readiness.
 The merchant connector's runtime and revision must be freshly verified before
 use. Older R0 notes advertise unavailable inventory/analytics operations; current
 R1 source exists, but source alone does not prove the deployed gateway version.
+
+## Agent surface evidence
+
+One row per agent surface, so an unproven surface cannot borrow another's
+status. Status columns hold `unknown` (nothing evidenced), `not applicable` (the
+check does not apply to the surface), or `pass` or `fail` followed by a date and
+a link or commit as evidence. A test that pins a known gap (`it.fails`) or a
+documented limitation is recorded as `fail`, because what it pins is a failure
+of the surface. `Source revision` is the commit the row was reviewed against.
+The table is validated by
+`apps/web/src/lib/agentic/evidence/agent-surface-evidence.repository.test.ts`; the
+production observations come from the
+[31 October 2026 baseline](../superpowers/evidence/agentic/2026-10-31-baseline.md).
+
+| Surface | Partner | Protocol version | Merchant | Source revision | Local test | Staging | Production | Partner receipt | Market and currency | Eligible products | Authentication | Next check owner |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| OpenAI MCP handoff | OpenAI (ChatGPT apps over MCP) | MCP `2025-06-18`, advertised by `apps/web/src/app/.well-known/mcp/server-card.json/route.ts`; the latest spec is `2026-07-28` (F40) | Ogabassey only (`OGABASSEY_SLUG` in `apps/web/mcp-server/server.ts`) | 05fd9b3dbaae2306fb25aad1bb07e2d8150948bf | fail 2026-10-31 [MCP 2026-07-28 fixtures](../../apps/web/src/lib/agentic/fixtures/mcp-2026-07-28/mcp-fixtures.test.ts) | unknown | unknown | unknown | Nigeria, NGN | Ogabassey catalog tools; the shopping checkout tools register only when `MCP_ENABLE_AGENTIC_CHECKOUT_TOOLS` is `true` or `1` (default false) | Anonymous discovery (the server card says authentication is not required); checkout tools call the signed agentic API with a server-held credential | ogabasseyy; roadmap Task 5 |
+| ACP direct checkout | OpenAI (ChatGPT checkout over ACP) | `2026-04-30`, `2026-04-17` and `2026-01-01` in `apps/web/src/lib/agentic/request-integrity.ts` (lines 5 to 10); `2026-04-30` has no ACP release and `2026-04-17` is the latest (F41) | The one configured agentic merchant (Ogabassey) | 05fd9b3dbaae2306fb25aad1bb07e2d8150948bf | fail 2026-10-31 [ACP 2026-04-17 fixtures](../../apps/web/src/lib/agentic/fixtures/acp-fixtures.test.ts) | unknown | unknown | unknown | Nigeria, NGN (`apps/web/src/lib/agentic/acp-discovery-profile.ts` lists NGN and en-NG only) | Merchant products the checkout quote can price; used and refurbished eligibility is not evidenced (roadmap Task 8) | Bearer API key plus HMAC-SHA256 request signing declared in `apps/web/src/lib/agentic/agent-commerce-manifest.ts`; not partner-scoped | ogabasseyy; roadmap Task 5 |
+| Google UCP cart | Google (UCP cart transfer) | UCP `2026-04-08` (`apps/web/src/lib/agentic/ucp-profile-constants.ts`); Google's cart supports create-and-transfer (`POST /carts`), and update and cancel are optional in the sandbox | The one configured agentic merchant (Ogabassey) | 05fd9b3dbaae2306fb25aad1bb07e2d8150948bf | fail 2026-10-31 [UCP conformance baseline](../../apps/web/src/lib/agentic/fixtures/ucp-conformance.test.ts) | unknown | unknown | unknown | Nigeria, NGN | Storefront carts; `apps/web/src/lib/agentic/ucp-shopping-profile.ts` declares cart whenever agent auth is configured, even for a merchant not enrolled in shared cart (F34) | The same bearer and HMAC scheme as ACP; whether Google can authenticate is unverified (F8) | ogabasseyy; roadmap Task 3, then Task 9 |
+| Google UCP native checkout | Google (UCP checkout) | UCP `2026-04-08`; declared only when all five checkout session capabilities and links exist (`apps/web/src/lib/agentic/ucp-shopping-profile.ts`) | The one configured agentic merchant (Ogabassey) | 05fd9b3dbaae2306fb25aad1bb07e2d8150948bf | unknown | unknown | fail 2026-10-31 [production baseline](../superpowers/evidence/agentic/2026-10-31-baseline.md) | unknown | Nigeria, NGN | Not decided; used and refurbished goods must not be marked eligible (roadmap Task 8) | The same bearer and HMAC scheme as ACP; Google enrollment and merchant account linking are roadmap Task 11 | ogabasseyy; roadmap Task 11 |
+| Paystack-hosted Google Pay | Google Pay through Paystack | Handler `com.google.pay`, versioned `2026-04-08`, built at lines 102 to 119 of `apps/web/src/lib/agentic/ucp-discovery-profile.ts` | The one configured agentic merchant (Ogabassey) | 05fd9b3dbaae2306fb25aad1bb07e2d8150948bf | unknown | unknown | unknown | unknown | Nigeria, NGN | None established: once its Paystack gateway configuration is set the profile lists Google Pay, but completion creates a Paystack dedicated virtual account instead of charging the Google Pay token (`apps/web/src/lib/agentic/agent-commerce-manifest.ts`) | Paystack gateway merchant id and Google merchant id from environment configuration; no token-charging path | ogabasseyy; roadmap Task 13 |
+| First-party storefront chat | none (Baci storefront chat) | none (first-party HTTP API) | Ogabassey (tenant echoed by `apps/web/src/app/api/chat/chat-tenant.ts`) | 05fd9b3dbaae2306fb25aad1bb07e2d8150948bf | unknown | unknown | unknown | not applicable | Nigeria, NGN (Ogabassey storefront); other currencies unverified | Ogabassey products from the chat's own projection of `products` and `get_storefront_product_variants` (`apps/web/src/app/api/chat/fast-catalog-data.ts`); price, offer and stock parity with UCP and ACP is unverified (F30) | Anonymous storefront visitors with IP rate limiting (`apps/web/src/app/api/chat/route.ts`); the chat can cancel an unpaid, unfulfilled order given its order reference and the customer's email (`apps/web/src/ai/chat-order-cancellation.ts`) | ogabasseyy; roadmap Task 7 |
+| Multi-merchant onboarding | none yet | none (applies to ACP, UCP and MCP) | One merchant: `apps/web/src/lib/agentic/agentic-merchant-slug.ts` reads a single configured slug and `apps/web/src/lib/agentic/agent-commerce-manifest.ts` enables signed reads only for it | 05fd9b3dbaae2306fb25aad1bb07e2d8150948bf | fail 2026-10-31 [two synthetic merchants](../../apps/web/src/lib/agentic/test-support/synthetic-merchants.test.ts) | unknown | unknown | unknown | Nigeria, NGN only so far | None beyond the configured merchant | One shared agentic API key and signing key; no partner-scoped credentials (roadmap Task 5) | ogabasseyy; roadmap Task 5 |
 
 ## Next connector implementation slice (planned, not shipped here)
 

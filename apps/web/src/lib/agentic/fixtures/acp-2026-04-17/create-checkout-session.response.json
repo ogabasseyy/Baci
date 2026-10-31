@@ -1,0 +1,41 @@
+{
+  "status": 201,
+  "headers": {
+    "Content-Type": "application/json",
+    "Idempotency-Key": "idem_create_0001",
+    "Request-Id": "request_0001"
+  },
+  "body": {
+    "capabilities": {},
+    "currency": "ngn",
+    "fulfillment_options": [],
+    "id": "checkout_session_0001",
+    "line_items": [
+      {
+        "id": "line_item_0001",
+        "item": { "id": "variant-1" },
+        "name": "Kobo phone",
+        "quantity": 1,
+        "totals": [
+          {
+            "type": "items_base_amount",
+            "display_text": "Item price",
+            "amount": 3998
+          },
+          { "type": "subtotal", "display_text": "Subtotal", "amount": 3998 },
+          { "type": "total", "display_text": "Total", "amount": 3998 }
+        ],
+        "unit_amount": 3998
+      }
+    ],
+    "links": [],
+    "messages": [],
+    "protocol": { "version": "2026-04-17" },
+    "status": "ready_for_payment",
+    "totals": [
+      { "type": "items_base_amount", "display_text": "Items", "amount": 3998 },
+      { "type": "subtotal", "display_text": "Subtotal", "amount": 3998 },
+      { "type": "total", "display_text": "Total", "amount": 3998 }
+    ]
+  }
+}

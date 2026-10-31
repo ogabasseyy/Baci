@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-31T13:09:08+00:00",
-  "source_revision": "4ea8ba12803d63c4e7e4398573ddbccf1a75e033",
-  "evidence_digest": "0014a885209877ace730fccc27aa13a5b2a53f2c78106057c8ef5711653307f6",
-  "claims_digest": "24ef091ce65067ba1f7496b1a28dd5121b31291bea0255dbfd1baea6eed22995",
-  "review_scope": "Source evidence only. Rechecked the agent-protocols sources after the agentic catalog, checkout-session and order routes moved from a service-role client to the scoped agentic merchant-context RPC, with a separate scoped payment-split lookup for checkout completion; the agent-protocols claim, limitations and status are unchanged. Other cited capability and access-map sources are unchanged since the previous review except the mobile admin inventory sheet empty footer, which now uses undefined; the inventory capability remains unchanged. Re-stamped on the 31 October sync with the latest base: no cited source changed since the previous review. The support-chat health probe, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment, native acceptance and transaction readiness require separate verification.",
+  "reviewed_at": "2026-10-31T13:15:45+00:00",
+  "source_revision": "6696156a8ed99dd474b701dc2843b6fb5e14f01c",
+  "evidence_digest": "28e50063a7e9f961a40d4a19689f10203e0e29bc2f0fcc77701cf08f9a326647",
+  "claims_digest": "e6ff237515e48c0671ee4ce6c7851a0c4cf8ac62adc67955aa2030d7a96a9e2c",
+  "review_scope": "Source evidence only. Added the agent surface evidence table to the access map from the cited agentic sources, the 31 October 2026 production profile baseline and new local fixture and conformance tests, on top of the stacked admin-client change: the agentic catalog, checkout-session and order routes resolve the merchant through the scoped merchant-context RPC, with a separate scoped payment-split lookup for checkout completion. The agent-protocols claim, limitations and status are unchanged. Other cited sources are unchanged except the mobile admin inventory sheet empty footer, which now uses undefined; the inventory capability remains unchanged. Re-stamped after the 31 October base sync. The support-chat health probe, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

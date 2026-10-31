@@ -66,10 +66,11 @@ export const eventPipelineShippingCredentialPaths = [
   [adminGiglQuotePath, persistAdminPath, proofPath, envPath],
   [quotesRoutePath, adminGiglQuotePath, persistAdminPath, proofPath, envPath],
   [quotesRoutePath, adminPath, envPath],
-  [giglQuoteRoutePath, quotesRoutePath, adminPath, envPath],
+  // The admin GIG quote route calls the admin-order quote handler directly
+  // (#3876 removed the crashing re-wrap through the public quotes route), so
+  // it signs through the same persist/proof chain without the extra hop.
   [
     giglQuoteRoutePath,
-    quotesRoutePath,
     adminGiglQuotePath,
     persistAdminPath,
     proofPath,

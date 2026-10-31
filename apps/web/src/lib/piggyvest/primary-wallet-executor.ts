@@ -25,7 +25,7 @@ const STATEMENT_ARITY = new Map<string, number>([
   [PRIMARY_WALLET_STATEMENTS.uncertain, 3],
   [PRIMARY_WALLET_STATEMENTS.reject, 3],
   [PRIMARY_WALLET_STATEMENTS.release, 3],
-  [PRIMARY_WALLET_STATEMENTS.routingPending, 5],
+  [PRIMARY_WALLET_STATEMENTS.routingPending, 6],
   [PRIMARY_WALLET_STATEMENTS.readRouting, 1],
   [PRIMARY_WALLET_STATEMENTS.resolveRouting, 3],
 ]);

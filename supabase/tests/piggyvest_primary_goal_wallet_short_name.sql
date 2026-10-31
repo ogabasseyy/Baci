@@ -1,6 +1,6 @@
 -- Contract test: piggyvest_primary.prepare_goal_wallet names goal wallets
 -- within PiggyVest's 50-character subaccount_name limit
--- (20261031220000_piggyvest_primary_goal_wallet_short_name.sql).
+-- (20261031221500_piggyvest_primary_goal_wallet_short_name.sql).
 --
 -- Proves, against live PostgreSQL:
 --   * a new goal wallet is named 'baci-save-' plus 32 hex characters of

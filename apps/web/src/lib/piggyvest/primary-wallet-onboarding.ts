@@ -13,6 +13,7 @@ import type {
   PrimaryWalletIntentScope,
   PrimaryWalletOnboardingStorage,
 } from './primary-wallet-onboarding.types';
+import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 
 type Input = {
   configuration: unknown;
@@ -130,17 +131,30 @@ export async function onboardPiggyvestPrimaryWallet(
     // re-reads it (recoverPrimaryWalletRouting) without another create or a
     // second BVN submission, and claim_onboarding never re-dispatches it.
     if (routing === 'unreadable' || routing === 'unsettled') {
-      const kept = await input.storage.recordRoutingPending({
-        ...claimedScope,
-        providerCustomerId: result.data.customer_id,
-        providerWalletId: result.data.wallet_id,
-      });
+      // A storage failure here is reported as such, never folded into the
+      // generic catch below (which would discard the ids as 'unknown').
+      let kept = false;
+      try {
+        kept = await input.storage.recordRoutingPending({
+          ...claimedScope,
+          providerCustomerId: result.data.customer_id,
+          providerWalletId: result.data.wallet_id,
+          interestPayoutWalletId: config.data.interestPayoutWalletId,
+        });
+      } catch {
+        kept = false;
+      }
       return kept
         ? { status: 'pending' }
         : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
     }
     if (routing !== 'routed') {
       await input.storage.recordRejected(claimedScope);
+      // Interest settings are immutable: operations must review this one.
+      emitPiggyvestWebhookAlert('PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW', {
+        reason: 'main wallet interest routing contradicted at onboarding',
+        operationId: claimedScope.intentId,
+      });
       return { status: 'conflict', code: 'INTEREST_ROUTING_REVIEW_REQUIRED' };
     }
     // A reclaimed intent retries the same fingerprinted request, so when

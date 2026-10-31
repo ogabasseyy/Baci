@@ -13,7 +13,7 @@ describe('PRIMARY_WALLET_STATEMENTS', () => {
 
   it('pins the routing-pending statements', () => {
     expect(PRIMARY_WALLET_STATEMENTS.routingPending).toBe(
-      'SELECT piggyvest_primary.record_onboarding_routing_pending($1::jsonb, $2::uuid, $3::uuid, $4::text, $5::text) AS result'
+      'SELECT piggyvest_primary.record_onboarding_routing_pending($1::jsonb, $2::uuid, $3::uuid, $4::text, $5::text, $6::text) AS result'
     );
     expect(PRIMARY_WALLET_STATEMENTS.readRouting).toBe(
       'SELECT piggyvest_primary.read_onboarding_routing($1::jsonb) AS result'

@@ -47,6 +47,12 @@ CREATE FUNCTION pg_temp.ids(p_customer text, p_wallet text) RETURNS jsonb LANGUA
   SELECT jsonb_build_object('providerCustomerId', p_customer, 'providerWalletId', p_wallet)
 $$;
 
+-- The proof verify_onboarding takes for a usable wallet with a funding account.
+CREATE FUNCTION pg_temp.verify_proof(p_customer text, p_wallet text) RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
+  SELECT pg_temp.ids(p_customer, p_wallet) || jsonb_build_object('businessId', 'routing-pending-business',
+    'currency', 'NGN', 'status', 'active', 'hasFundingAccount', true)
+$$;
+
 -- Fixture: one merchant, two customers, one enabled integration. The
 -- merchant insert guards need a service_role claim, as in the other suites.
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
@@ -73,16 +79,24 @@ BEGIN
   PERFORM pg_temp.check(v_claim->>'status' = 'claimed', 'fresh onboarding not claimed');
   INSERT INTO claims VALUES (1, (v_claim->>'intentId')::uuid, (v_claim->>'claimToken')::uuid);
   PERFORM pg_temp.check(piggyvest_primary.record_onboarding_routing_pending(pg_temp.scope(1),
-    (v_claim->>'intentId')::uuid, (v_claim->>'claimToken')::uuid, 'pv-customer-1', 'pv-wallet-1'),
+    (v_claim->>'intentId')::uuid, (v_claim->>'claimToken')::uuid, 'pv-customer-1', 'pv-wallet-1', '01JBZ8Q5W3X9R2K4M6N8P0T2V4'),
     'routing-pending ids not recorded');
   PERFORM pg_temp.check(pg_temp.state(1) = 'routing_pending:pv-customer-1:pv-wallet-1', 'ids not kept: ' || pg_temp.state(1));
   PERFORM pg_temp.check(piggyvest_primary.read_onboarding(pg_temp.scope(1)) IS NULL,
     'a routing-pending wallet must not be exposed as usable');
-  PERFORM pg_temp.check(piggyvest_primary.read_onboarding_routing(pg_temp.scope(1)) = pg_temp.ids('pv-customer-1', 'pv-wallet-1'),
-    'the kept ids must be readable for recovery');
+  PERFORM pg_temp.check(piggyvest_primary.read_onboarding_routing(pg_temp.scope(1)) = pg_temp.ids('pv-customer-1', 'pv-wallet-1')
+      || jsonb_build_object('intentId', v_claim->>'intentId', 'payoutWalletId', '01JBZ8Q5W3X9R2K4M6N8P0T2V4'),
+    'the kept ids and creation-time payout must be readable for recovery');
+  PERFORM pg_temp.check(NOT piggyvest_primary.verify_onboarding(pg_temp.scope(1), pg_temp.verify_proof('pv-customer-1', 'pv-wallet-1')),
+    'a routing-pending wallet must never be verified as usable');
   PERFORM pg_temp.check(piggyvest_primary.claim_onboarding(pg_temp.scope(1), repeat('c', 64)) = '{"status":"pending"}'::jsonb,
     'a routing-pending intent must report pending and never be re-claimed');
   PERFORM pg_temp.check(pg_temp.state(1) = 'routing_pending:pv-customer-1:pv-wallet-1', 'a repeated claim changed the intent');
+  -- Even past the five-minute dispatch lease it is never re-claimed.
+  UPDATE piggyvest_primary.onboarding_intents SET updated_at = pg_catalog.clock_timestamp() - interval '10 minutes'
+    WHERE id = (v_claim->>'intentId')::uuid;
+  PERFORM pg_temp.check(piggyvest_primary.claim_onboarding(pg_temp.scope(1), repeat('c', 64)) = '{"status":"pending"}'::jsonb,
+    'a stale routing-pending intent must still never be re-claimed');
 END $$;
 
 -- 2. Stale tokens, another customer's scope and mismatched ids change nothing.
@@ -91,9 +105,11 @@ DECLARE v_claim claims%ROWTYPE;
 BEGIN
   SELECT * INTO STRICT v_claim FROM claims WHERE n = 1;
   PERFORM pg_temp.check(NOT piggyvest_primary.record_onboarding_routing_pending(pg_temp.scope(1),
-    v_claim.intent, v_claim.token, 'pv-customer-x', 'pv-wallet-x'), 'a spent claim token re-recorded ids');
+    v_claim.intent, v_claim.token, 'pv-customer-x', 'pv-wallet-x', '01JBZ8Q5W3X9R2K4M6N8P0T2V4'), 'a spent claim token re-recorded ids');
   PERFORM pg_temp.check(NOT piggyvest_primary.resolve_onboarding_routing(pg_temp.scope(1),
-    pg_temp.ids('pv-customer-1', 'pv-wallet-other'), true), 'mismatched ids resolved the intent');
+    pg_temp.ids('pv-customer-1', 'pv-wallet-other'), true), 'a mismatched wallet id resolved the intent');
+  PERFORM pg_temp.check(NOT piggyvest_primary.resolve_onboarding_routing(pg_temp.scope(1),
+    pg_temp.ids('pv-customer-other', 'pv-wallet-1'), true), 'a mismatched customer id resolved the intent');
   PERFORM pg_temp.check(piggyvest_primary.read_onboarding_routing(pg_temp.scope(2)) IS NULL,
     'another customer read the kept ids');
   PERFORM pg_temp.check(NOT piggyvest_primary.resolve_onboarding_routing(pg_temp.scope(2),
@@ -113,6 +129,9 @@ BEGIN
     'an accepted wallet is no longer routing pending');
   PERFORM pg_temp.check(NOT piggyvest_primary.resolve_onboarding_routing(pg_temp.scope(1),
     pg_temp.ids('pv-customer-1', 'pv-wallet-1'), false), 'an accepted wallet was resolved again');
+  PERFORM pg_temp.check(piggyvest_primary.verify_onboarding(pg_temp.scope(1), pg_temp.verify_proof('pv-customer-1', 'pv-wallet-1')),
+    'the accepted wallet must verify once its funding account is proven');
+  PERFORM pg_temp.check(pg_temp.state(1) = 'verified:pv-customer-1:pv-wallet-1', 'not verified: ' || pg_temp.state(1));
 END $$;
 
 -- 4. A contradicted routing is terminal review: ids cleared, never re-claimed.
@@ -120,8 +139,13 @@ DO $$
 DECLARE v_claim jsonb;
 BEGIN
   v_claim := piggyvest_primary.claim_onboarding(pg_temp.scope(2), repeat('d', 64));
+  -- The claim-token fence: a different token never records over a live dispatch.
+  PERFORM pg_temp.check(NOT piggyvest_primary.record_onboarding_routing_pending(pg_temp.scope(2),
+    (v_claim->>'intentId')::uuid, 'a3300000-0000-4000-8000-0000000000ff', 'pv-customer-2', 'pv-wallet-2', '01JBZ8Q5W3X9R2K4M6N8P0T2V4'),
+    'a foreign claim token recorded ids');
+  PERFORM pg_temp.check(pg_temp.state(2) = 'dispatched:-:-', 'a foreign token changed the dispatch: ' || pg_temp.state(2));
   PERFORM pg_temp.check(piggyvest_primary.record_onboarding_routing_pending(pg_temp.scope(2),
-    (v_claim->>'intentId')::uuid, (v_claim->>'claimToken')::uuid, 'pv-customer-2', 'pv-wallet-2'),
+    (v_claim->>'intentId')::uuid, (v_claim->>'claimToken')::uuid, 'pv-customer-2', 'pv-wallet-2', '01JBZ8Q5W3X9R2K4M6N8P0T2V4'),
     'second routing-pending ids not recorded');
   PERFORM pg_temp.check(piggyvest_primary.resolve_onboarding_routing(pg_temp.scope(2),
     pg_temp.ids('pv-customer-2', 'pv-wallet-2'), false), 'a contradicted routing did not resolve');
@@ -139,10 +163,10 @@ BEGIN
   PERFORM pg_temp.check(
     (SELECT count(*) FROM pg_catalog.pg_constraint
      WHERE conrelid = 'piggyvest_primary.onboarding_intents'::regclass AND contype = 'c'
-       AND pg_catalog.pg_get_constraintdef(oid) LIKE '%routing_pending%') = 2,
-    'routing_pending must be in both the state and the coherence checks');
+       AND pg_catalog.pg_get_constraintdef(oid) LIKE '%routing_pending%') = 3,
+    'routing_pending must be in the state, coherence and stored-payout checks');
   FOREACH v_fn IN ARRAY ARRAY[
-    'piggyvest_primary.record_onboarding_routing_pending(jsonb,uuid,uuid,text,text)'::regprocedure,
+    'piggyvest_primary.record_onboarding_routing_pending(jsonb,uuid,uuid,text,text,text)'::regprocedure,
     'piggyvest_primary.read_onboarding_routing(jsonb)'::regprocedure,
     'piggyvest_primary.resolve_onboarding_routing(jsonb,jsonb,boolean)'::regprocedure
   ] LOOP

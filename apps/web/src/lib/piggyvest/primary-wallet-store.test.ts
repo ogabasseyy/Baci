@@ -125,6 +125,7 @@ describe('primary wallet storage boundary', () => {
         claimToken,
         providerCustomerId: 'provider-customer',
         providerWalletId: 'provider-wallet',
+        interestPayoutWalletId: '01JBZ8Q5W3X9R2K4M6N8P0T2V4',
       })
     ).resolves.toBe(true);
     expect(execute).toHaveBeenCalledWith(
@@ -137,19 +138,25 @@ describe('primary wallet storage boundary', () => {
         claimToken,
         'provider-customer',
         'provider-wallet',
+        '01JBZ8Q5W3X9R2K4M6N8P0T2V4',
       ]
     );
   });
 
-  it('refuses incomplete routing-pending identifiers without querying', async () => {
+  it.each([
+    ['an empty provider customer', { providerCustomerId: '' }],
+    ['a malformed payout wallet', { interestPayoutWalletId: 'payout' }],
+  ])('refuses routing-pending identifiers with %s without querying', async (_label, change) => {
     const execute = vi.fn();
     await expect(
       createPrimaryWalletStore({ scope, execute }).recordRoutingPending({
         ...scope,
         intentId,
         claimToken,
-        providerCustomerId: '',
+        providerCustomerId: 'provider-customer',
         providerWalletId: 'provider-wallet',
+        interestPayoutWalletId: '01JBZ8Q5W3X9R2K4M6N8P0T2V4',
+        ...change,
       })
     ).rejects.toThrow('Primary wallet storage unavailable');
     expect(execute).not.toHaveBeenCalled();

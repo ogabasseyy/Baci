@@ -13,7 +13,7 @@ export const PRIMARY_WALLET_STATEMENTS = {
   // A created wallet whose interest routing is not proven yet: ids kept,
   // never usable, re-read read-only until resolved (20261031230000).
   routingPending:
-    'SELECT piggyvest_primary.record_onboarding_routing_pending($1::jsonb, $2::uuid, $3::uuid, $4::text, $5::text) AS result',
+    'SELECT piggyvest_primary.record_onboarding_routing_pending($1::jsonb, $2::uuid, $3::uuid, $4::text, $5::text, $6::text) AS result',
   readRouting:
     'SELECT piggyvest_primary.read_onboarding_routing($1::jsonb) AS result',
   resolveRouting:

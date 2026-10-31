@@ -11,13 +11,17 @@ remote database, provider account or nginx configuration were changed.
   protected POST creates the customer with main-wallet interest accrual on and
   routed to the configured Ogabassey payout wallet (fixed at creation), then
   records the wallet only after `GET /wallet/:id` reads that routing back.
-  A contradicting readback, or an existing `returnIfExist` customer without
-  it, goes to review (`INTEREST_ROUTING_REVIEW_REQUIRED`). A failed or
-  not-yet-settled readback keeps the created wallet's ids in an unusable
-  `routing_pending` state (migration 20261031230000): it is never exposed or
-  credited, setup is never re-dispatched, and each GET re-reads it read-only,
-  making it usable once the routing is proven or rejecting it (with a
-  `PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW` alert) when contradicted.
+  An existing customer returned on a fresh claim is an ownership verdict
+  (`OWNERSHIP_REVIEW_REQUIRED`, terminal). A readback that contradicts the
+  routing (another wallet, customer, business or payout wallet, or accrual
+  explicitly off) goes to review (`INTEREST_ROUTING_REVIEW_REQUIRED`, with a
+  `PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW` alert carrying the intent id). A
+  failed or not-yet-settled readback, including a reclaimed existing
+  customer's, keeps the created wallet's ids and its creation-time payout
+  wallet in an unusable `routing_pending` state (migration 20261031230000): it
+  is never exposed or credited, setup is never re-dispatched, and each GET
+  re-reads it read-only against that stored payout wallet, making it usable
+  once the routing is proven or rejecting it (same alert) when contradicted.
 - `/api/storefront/customer/savings/primary-provisioning`: authenticated,
   CSRF-protected POST persists explicit immutable interest choice before the
   single creation dispatch; PATCH recovers via provider reads without another
@@ -42,9 +46,13 @@ Primary onboarding requires all of these server-only settings:
 - `PIGGYVEST_PRIMARY_PROVIDER_TOKEN`, belonging to that business/environment
 - `PIGGYVEST_PRIMARY_INTEREST_PAYOUT_WALLET_ID`, the Ogabassey business wallet
   (26-character uppercase PiggyVest wallet ULID, no whitespace) that receives
-  main-wallet interest. Onboarding alone needs it: when it is missing or
-  malformed, POST returns `PIGGYVEST_NOT_READY` and no customer is created.
-  Each customer's routing is immutable, so set it before any onboarding.
+  main-wallet interest. Only new setups need it: when it is missing or
+  malformed, POST returns `PIGGYVEST_ONBOARDING_NOT_READY` (not the
+  merchant-wide `PIGGYVEST_NOT_READY`, so clients never fall back to a legacy
+  account) and no customer is created. Reads, savings and the recheck of
+  routing-pending wallets keep working without it, because each pending
+  wallet stores the payout wallet it was created with. Each customer's
+  routing is immutable, so set it before any onboarding.
 - `PIGGYVEST_PRIMARY_DB_HOST`, `PIGGYVEST_PRIMARY_DB_PORT`,
   `PIGGYVEST_PRIMARY_DB_NAME`, `PIGGYVEST_PRIMARY_DB_PASSWORD`,
   `PIGGYVEST_PRIMARY_DB_CA`

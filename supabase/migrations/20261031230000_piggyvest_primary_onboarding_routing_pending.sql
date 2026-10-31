@@ -10,14 +10,21 @@
 -- (read_onboarding, inflows, savings, deletion and DVA closure) accepts only
 -- 'accepted' or 'verified', and claim_onboarding reports it as pending
 -- without ever re-dispatching creation.
---   * record_onboarding_routing_pending: dispatched -> routing_pending, ids kept.
---   * read_onboarding_routing: the kept ids, read-only, for the scoped owner.
+--   * record_onboarding_routing_pending: dispatched -> routing_pending, ids
+--     kept together with the payout wallet the customer was created with
+--     (settings are fixed at creation, so a later configuration change must
+--     not make a correctly routed wallet look contradicted).
+--   * read_onboarding_routing: the intent id, kept ids and that payout
+--     wallet, read-only, for the scoped owner.
 --   * resolve_onboarding_routing: after the application re-reads the wallet,
 --     routing_pending -> accepted when the routing is proven, or -> rejected
 --     (ids cleared, terminal review) when the readback contradicts it.
 -- All three are SECURITY DEFINER with a pinned search_path and are executable
 -- only by the onboarding provisioner.
 BEGIN;
+ALTER TABLE piggyvest_primary.onboarding_intents
+  ADD COLUMN routing_payout_wallet_id text
+    CHECK (octet_length(routing_payout_wallet_id) BETWEEN 1 AND 512);
 DO $$
 DECLARE constraint_name text;
 BEGIN
@@ -43,17 +50,21 @@ BEGIN
     constraint_name
   );
 END $$;
+-- The creation-time payout wallet exists exactly while routing is pending.
+ALTER TABLE piggyvest_primary.onboarding_intents
+  ADD CHECK ((state = 'routing_pending') = (routing_payout_wallet_id IS NOT NULL));
 
-CREATE FUNCTION piggyvest_primary.record_onboarding_routing_pending(scope jsonb, intent_id uuid, token uuid, provider_customer text, provider_wallet text)
+CREATE FUNCTION piggyvest_primary.record_onboarding_routing_pending(scope jsonb, intent_id uuid, token uuid, provider_customer text, provider_wallet text, payout_wallet text)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
 BEGIN
   PERFORM piggyvest_primary.assert_onboarding_scope(scope);
-  IF provider_customer IS NULL OR provider_wallet IS NULL THEN
+  IF provider_customer IS NULL OR provider_wallet IS NULL OR payout_wallet IS NULL THEN
     RAISE EXCEPTION 'incomplete provider identity' USING ERRCODE = '22023';
   END IF;
   UPDATE piggyvest_primary.onboarding_intents SET
     state = 'routing_pending', claim_token = NULL,
     provider_customer_id = provider_customer, provider_wallet_id = provider_wallet,
+    routing_payout_wallet_id = payout_wallet,
     updated_at = pg_catalog.clock_timestamp()
   WHERE id = intent_id AND integration_id = (scope->>'integrationId')::uuid
     AND merchant_id = (scope->>'merchantId')::uuid AND customer_id = (scope->>'customerId')::uuid
@@ -73,7 +84,8 @@ BEGIN
       AND customer_id = (scope->>'customerId')::uuid
       AND user_id = (scope->>'userId')::uuid;
   IF NOT FOUND OR intent.state <> 'routing_pending' THEN RETURN NULL; END IF;
-  RETURN jsonb_build_object('providerCustomerId', intent.provider_customer_id, 'providerWalletId', intent.provider_wallet_id);
+  RETURN jsonb_build_object('intentId', intent.id, 'providerCustomerId', intent.provider_customer_id,
+    'providerWalletId', intent.provider_wallet_id, 'payoutWalletId', intent.routing_payout_wallet_id);
 END $$;
 
 CREATE FUNCTION piggyvest_primary.resolve_onboarding_routing(scope jsonb, proof jsonb, routed boolean)
@@ -91,6 +103,7 @@ BEGIN
     state = CASE WHEN routed THEN 'accepted' ELSE 'rejected' END,
     provider_customer_id = CASE WHEN routed THEN provider_customer_id ELSE NULL END,
     provider_wallet_id = CASE WHEN routed THEN provider_wallet_id ELSE NULL END,
+    routing_payout_wallet_id = NULL,
     updated_at = pg_catalog.clock_timestamp()
   WHERE integration_id = (scope->>'integrationId')::uuid
     AND merchant_id = (scope->>'merchantId')::uuid AND customer_id = (scope->>'customerId')::uuid
@@ -100,11 +113,11 @@ BEGIN
   RETURN FOUND;
 END $$;
 
-REVOKE ALL ON FUNCTION piggyvest_primary.record_onboarding_routing_pending(jsonb,uuid,uuid,text,text),
+REVOKE ALL ON FUNCTION piggyvest_primary.record_onboarding_routing_pending(jsonb,uuid,uuid,text,text,text),
   piggyvest_primary.read_onboarding_routing(jsonb),
   piggyvest_primary.resolve_onboarding_routing(jsonb,jsonb,boolean)
   FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION piggyvest_primary.record_onboarding_routing_pending(jsonb,uuid,uuid,text,text),
+GRANT EXECUTE ON FUNCTION piggyvest_primary.record_onboarding_routing_pending(jsonb,uuid,uuid,text,text,text),
   piggyvest_primary.read_onboarding_routing(jsonb),
   piggyvest_primary.resolve_onboarding_routing(jsonb,jsonb,boolean)
   TO piggyvest_primary_provisioner;

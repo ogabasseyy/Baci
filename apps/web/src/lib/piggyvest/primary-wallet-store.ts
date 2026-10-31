@@ -84,6 +84,7 @@ export function createPrimaryWalletStore(input: {
             parsed.claimToken,
             parsed.providerCustomerId,
             parsed.providerWalletId,
+            parsed.interestPayoutWalletId,
           ]
         );
         return schemas.recordedRows.parse(response.rows)[0].result;

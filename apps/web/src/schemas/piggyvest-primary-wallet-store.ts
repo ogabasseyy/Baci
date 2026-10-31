@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { piggyvestInterestPayoutWalletIdSchema } from './piggyvest-primary-wallet-onboarding';
 import { piggyvestProviderIdSchema } from './piggyvest-provider-id';
 
 const scope = z.strictObject({
@@ -25,14 +26,17 @@ export const piggyvestPrimaryWalletStoreSchemas = {
   routingPending: recorded.extend({
     providerCustomerId: piggyvestProviderIdSchema,
     providerWalletId: piggyvestProviderIdSchema,
+    interestPayoutWalletId: piggyvestInterestPayoutWalletIdSchema,
   }),
   routingRows: z
     .array(
       z.strictObject({
         result: z
           .strictObject({
+            intentId: z.uuid(),
             providerCustomerId: piggyvestProviderIdSchema,
             providerWalletId: piggyvestProviderIdSchema,
+            payoutWalletId: piggyvestInterestPayoutWalletIdSchema,
           })
           .nullable(),
       })

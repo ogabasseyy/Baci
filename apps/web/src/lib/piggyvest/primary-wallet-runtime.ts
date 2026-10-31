@@ -11,7 +11,9 @@ export function readPrimaryWalletRuntime(env: NodeJS.ProcessEnv = process.env) {
  * receives main-wallet interest (server-only, never sent to a client).
  * PiggyVest fixes interest settings at customer creation, so a missing or
  * malformed id makes onboarding not ready instead of creating a main wallet
- * that can never be routed. Reads, savings and drain never depend on it.
+ * that can never be routed. Reads, savings, drain and the GET recheck of
+ * routing-pending wallets (which compares against the payout wallet stored
+ * at creation) never depend on it.
  */
 export function readPrimaryWalletOnboardingRuntime(
   env: NodeJS.ProcessEnv = process.env

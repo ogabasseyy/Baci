@@ -4,14 +4,14 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 /**
- * CI-run guard for the one-time rename in migration 20261031220000. The
+ * CI-run guard for the one-time rename in migration 20261031221500. The
  * seeded end-to-end check lives in primary-savings-provisioning-reclaim.
  * integration.sql, which only runs with BACI_PRIMARY_WALLET_SQL_TESTS.
  */
 const migrationSql = readFileSync(
   resolve(
     dirname(fileURLToPath(import.meta.url)),
-    '../../../../../supabase/migrations/20261031220000_piggyvest_primary_goal_wallet_short_name.sql'
+    '../../../../../supabase/migrations/20261031221500_piggyvest_primary_goal_wallet_short_name.sql'
   ),
   'utf8'
 );
@@ -64,7 +64,7 @@ function renameViolations(sql: string): string[] {
   return violations;
 }
 
-describe('20261031220000 one-time goal wallet rename', () => {
+describe('20261031221500 one-time goal wallet rename', () => {
   it('renames only wallet-less old-name intents, case-insensitively, inside one guarded statement', () => {
     expect(renameViolations(migrationSql)).toEqual([]);
   });

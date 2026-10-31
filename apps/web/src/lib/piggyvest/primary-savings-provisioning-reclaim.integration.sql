@@ -12,7 +12,7 @@ SELECT ('00000000-0000-4000-8000-' || lpad(sequence::text,12,'0'))::uuid,
 \ir ../../../../../supabase/migrations/20261007190000_piggyvest_primary_savings_provisioning.sql
 \ir ../../../../../supabase/migrations/20261008092200_piggyvest_primary_provisioning_reclaim.sql
 -- Old 83-character names as the previous prepare_goal_wallet stored them,
--- seeded before 20261031220000 so its one-time rename runs on real rows: a
+-- seeded before 20261031221500 so its one-time rename runs on real rows: a
 -- live dispatch, a stale unknown outcome (upper-case, so the match must be
 -- case-insensitive) and a wallet-bound intent that must keep its name.
 INSERT INTO piggyvest_primary.goal_wallet_intents(integration_id,goal_id,primary_intent_id,wallet_name,
@@ -26,7 +26,7 @@ FROM piggyvest_primary.onboarding_intents intent,(VALUES
   ('00000000-0000-4000-8000-000000000010'::uuid,'baci-save:00000000-0000-4000-8000-000000000004:00000000-0000-4000-8000-000000000010',
     'accepted',NULL::uuid,'legacy-wallet',clock_timestamp())) seed(goal,name,state,token,wallet,updated)
 WHERE intent.integration_id='00000000-0000-4000-8000-000000000004' AND intent.customer_id='00000000-0000-4000-8000-000000000002';
-\ir ../../../../../supabase/migrations/20261031220000_piggyvest_primary_goal_wallet_short_name.sql
+\ir ../../../../../supabase/migrations/20261031221500_piggyvest_primary_goal_wallet_short_name.sql
 DO $$ BEGIN
   IF (SELECT count(*) FROM piggyvest_primary.goal_wallet_intents
     WHERE goal_id IN ('00000000-0000-4000-8000-000000000008','00000000-0000-4000-8000-000000000009')

@@ -1,16 +1,22 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PiggyvestApiError } from './client';
 import { onboardPiggyvestPrimaryWallet } from './primary-wallet-onboarding';
 import {
+  OTHER_WALLET_ID,
   onboardingFixture,
+  PAYOUT_WALLET_ID,
   routedWallet,
 } from './primary-wallet-onboarding.test-fixture';
 
+const mocks = vi.hoisted(() => ({ alert: vi.fn() }));
 vi.mock('server-only', () => ({}));
+vi.mock('./webhook-alerts', () => ({ emitPiggyvestWebhookAlert: mocks.alert }));
 
 const KEPT = {
   providerCustomerId: 'customer-fixture',
   providerWalletId: 'wallet-fixture',
+  // The routing the customer was created with, rechecked later.
+  interestPayoutWalletId: PAYOUT_WALLET_ID,
 };
 
 function existingCustomer() {
@@ -30,6 +36,8 @@ function existingCustomer() {
 }
 
 describe('primary wallet onboarding: routing not proven yet', () => {
+  beforeEach(() => vi.clearAllMocks());
+
   it.each([
     ['the payout is not shown yet', { interest_payout_wallet: null }],
     [
@@ -91,14 +99,67 @@ describe('primary wallet onboarding: routing not proven yet', () => {
     input.retrieveWallet.mockResolvedValue(
       routedWallet({ interest_payout_wallet: null })
     );
+    // claim_onboarding as the database answers it: an 'unknown' intent is
+    // re-claimed (creation re-dispatched), a routing-pending one is not.
+    let state: 'none' | 'unknown' | 'routing_pending' = 'none';
+    input.storage.recordUncertain.mockImplementation(async () => {
+      state = 'unknown';
+    });
+    input.storage.recordRoutingPending.mockImplementation(async () => {
+      state = 'routing_pending';
+      return true;
+    });
+    input.storage.claim.mockImplementation(async () =>
+      state === 'routing_pending'
+        ? { status: 'pending' }
+        : {
+            status: 'claimed',
+            intentId: 'intent',
+            claimToken: 'claim',
+            reclaimed: state === 'unknown',
+          }
+    );
     await onboardPiggyvestPrimaryWallet(input);
-    // claim_onboarding never reclaims a routing-pending intent.
-    input.storage.claim.mockResolvedValue({ status: 'pending' });
+    expect(state).toBe('routing_pending');
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
       status: 'pending',
     });
     expect(input.createCustomer).toHaveBeenCalledOnce();
     expect(input.retrieveWallet).toHaveBeenCalledOnce();
+  });
+
+  it('alerts operations, with only the intent id, when the readback contradicts the routing at onboarding', async () => {
+    const input = onboardingFixture();
+    input.retrieveWallet.mockResolvedValue(
+      routedWallet({ interest_payout_wallet: OTHER_WALLET_ID })
+    );
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'conflict',
+      code: 'INTEREST_ROUTING_REVIEW_REQUIRED',
+    });
+    expect(mocks.alert).toHaveBeenCalledExactlyOnceWith(
+      'PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW',
+      expect.objectContaining({ operationId: 'intent' })
+    );
+    const alerted = JSON.stringify(mocks.alert.mock.calls);
+    for (const secret of [OTHER_WALLET_ID, PAYOUT_WALLET_ID, 'wallet-fixture'])
+      expect(alerted).not.toContain(secret);
+  });
+
+  it('reports storage unavailable, never discarding the ids as unknown, when keeping them throws', async () => {
+    const input = onboardingFixture();
+    input.storage.recordRoutingPending.mockRejectedValue(
+      new Error('Primary wallet storage unavailable')
+    );
+    input.retrieveWallet.mockResolvedValue(
+      routedWallet({ interest_payout_wallet: null })
+    );
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'unavailable',
+      code: 'STORAGE_UNAVAILABLE',
+    });
+    expect(input.storage.recordUncertain).not.toHaveBeenCalled();
+    expect(input.storage.releaseIntent).not.toHaveBeenCalled();
   });
 
   it('reports storage unavailable when the pending wallet cannot be kept', async () => {

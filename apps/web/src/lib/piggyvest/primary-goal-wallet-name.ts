@@ -8,7 +8,7 @@ import { PIGGYVEST_SUBACCOUNT_NAME_MAX_CHARACTERS } from './provider-wallet-name
  * sha256('<integrationId>:<goalId>') over lowercase UUID text. 42
  * characters, inside the provider's 50-character limit, and unique per
  * integration and goal. The database builds the identical name in
- * piggyvest_primary.prepare_goal_wallet (migration 20261031220000), so the
+ * piggyvest_primary.prepare_goal_wallet (migration 20261031221500), so the
  * two must change together.
  */
 export function buildPrimaryGoalWalletName(

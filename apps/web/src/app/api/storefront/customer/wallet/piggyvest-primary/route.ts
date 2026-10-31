@@ -80,19 +80,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       baseUrl: getPrimaryWalletProviderOrigin(runtime.onboarding.environment),
     };
     // A wallet created while its interest routing was not readable is kept
-    // unusable; each refresh re-reads it (read-only, never re-creating) so
-    // setup can finish without a second BVN submission. Best effort: the
-    // snapshot below reads whatever state the database now holds.
-    const onboardingRuntime = readPrimaryWalletOnboardingRuntime();
-    if (onboardingRuntime) {
-      await recoverPrimaryWalletRouting({
-        scope,
-        execute,
-        payoutWalletId: onboardingRuntime.interestPayoutWalletId,
-        retrieveWallet: (walletId) =>
-          retrievePiggyvestWallet(providerConfig, walletId),
-      }).catch(() => 'unavailable');
-    }
+    // unusable; each refresh re-reads it (read-only, never re-creating, and
+    // against the payout wallet stored at creation) so setup can finish
+    // without a second BVN submission. Best effort: the snapshot below reads
+    // whatever state the database now holds.
+    await recoverPrimaryWalletRouting({
+      scope,
+      execute,
+      retrieveWallet: (walletId) =>
+        retrievePiggyvestWallet(providerConfig, walletId),
+    }).catch(() => 'unavailable');
     const snapshot = await readPrimaryWalletSnapshot({
       businessId: runtime.onboarding.businessId,
       loadMapping: () => readPrimaryWalletMapping(scope, execute),
@@ -165,15 +162,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     // Onboarding also needs the main-wallet interest payout wallet; without
     // it (or with a malformed one) setup is not ready and nothing is sent.
-    const onboardingRuntime = readPrimaryWalletOnboardingRuntime();
+    const baseRuntime = readPrimaryWalletRuntime();
     if (
-      !onboardingRuntime ||
-      onboardingRuntime.runtime.onboarding.merchantId !== parsed.data.merchantId
+      !baseRuntime ||
+      baseRuntime.onboarding.merchantId !== parsed.data.merchantId
     ) {
       return NextResponse.json(
         {
           error: 'Wallet setup is temporarily unavailable.',
           code: 'PIGGYVEST_NOT_READY',
+        },
+        { status: 503 }
+      );
+    }
+    // The primary rail is up (reads keep working) but new setups cannot
+    // route interest yet. A distinct code: clients must not treat this as
+    // "primary is off" and fall back to creating a legacy account.
+    const onboardingRuntime = readPrimaryWalletOnboardingRuntime();
+    if (!onboardingRuntime) {
+      return NextResponse.json(
+        {
+          error: 'Wallet setup is temporarily unavailable.',
+          code: 'PIGGYVEST_ONBOARDING_NOT_READY',
         },
         { status: 503 }
       );

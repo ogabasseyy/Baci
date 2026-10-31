@@ -82,18 +82,27 @@ beforeEach(() => {
 });
 
 describe('primary wallet onboarding interest routing API', () => {
-  it('is not ready, and contacts no provider, while the payout wallet is unconfigured', async () => {
-    // The base runtime alone (reads, savings) is configured.
+  it('is not ready for setup, with a code clients must not treat as primary being off, while only the payout wallet is unconfigured', async () => {
+    // The base runtime (reads, savings) stays up, so this is not the
+    // merchant-wide PIGGYVEST_NOT_READY that sends mobile to legacy setup.
     mocks.onboardingRuntime.mockReturnValue(null);
     const response = await POST(request());
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({
       error: 'Wallet setup is temporarily unavailable.',
-      code: 'PIGGYVEST_NOT_READY',
+      code: 'PIGGYVEST_ONBOARDING_NOT_READY',
     });
     expect(mocks.onboard).not.toHaveBeenCalled();
     expect(mocks.provider).not.toHaveBeenCalled();
     expect(mocks.wallet).not.toHaveBeenCalled();
+  });
+
+  it('keeps the merchant-wide not-ready code when the primary runtime itself is off', async () => {
+    mocks.runtime.mockReturnValue(null);
+    const response = await POST(request());
+    expect(response.status).toBe(503);
+    expect((await response.json()).code).toBe('PIGGYVEST_NOT_READY');
+    expect(mocks.onboard).not.toHaveBeenCalled();
   });
 
   it('passes the server-configured payout wallet and a scoped provider readback', async () => {

@@ -81,7 +81,24 @@ beforeEach(() => {
 });
 
 describe('primary wallet GET: routing-pending recovery', () => {
-  it('re-reads a routing-pending wallet before the snapshot, read-only and scoped, with no customer creation', async () => {
+  it('finishes recovery before reading the snapshot', async () => {
+    let finish: (value: string) => void = () => {};
+    mocks.recover.mockImplementation(
+      () =>
+        new Promise<string>((resolve) => {
+          finish = resolve;
+        })
+    );
+    const pending = GET(new NextRequest(url));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(mocks.recover).toHaveBeenCalledOnce();
+    expect(mocks.snapshot).not.toHaveBeenCalled();
+    finish('promoted');
+    expect((await pending).status).toBe(200);
+    expect(mocks.snapshot).toHaveBeenCalledOnce();
+  });
+
+  it('re-reads a routing-pending wallet read-only and scoped, with no customer creation', async () => {
     expect((await GET(new NextRequest(url))).status).toBe(200);
     expect(mocks.order).toEqual(['recover', 'snapshot']);
     const command = mocks.recover.mock.calls[0][0];
@@ -94,9 +111,9 @@ describe('primary wallet GET: routing-pending recovery', () => {
           businessId: 'test-business',
         }),
         execute: mocks.execute,
-        payoutWalletId: '01JBZ8Q5W3X9R2K4M6N8P0T2V4',
       })
     );
+    expect(command).not.toHaveProperty('payoutWalletId');
     await command.retrieveWallet('pending-wallet');
     expect(mocks.wallet).toHaveBeenCalledWith(
       { token: 'test-token', baseUrl: 'https://staging.piggyvest.business' },
@@ -105,18 +122,11 @@ describe('primary wallet GET: routing-pending recovery', () => {
     expect(mocks.provider).not.toHaveBeenCalled();
   });
 
-  it('skips recovery, but still answers, when the payout wallet is not configured', async () => {
+  it('still recovers when the payout wallet setting is gone: it checks the payout stored at creation', async () => {
     mocks.onboardingRuntime.mockReturnValue(null);
     expect((await GET(new NextRequest(url))).status).toBe(200);
-    expect(mocks.recover).not.toHaveBeenCalled();
+    expect(mocks.recover).toHaveBeenCalledOnce();
     expect(mocks.snapshot).toHaveBeenCalledOnce();
-  });
-
-  it('never exposes an account while the wallet stays routing pending', async () => {
-    mocks.recover.mockResolvedValue('pending');
-    const response = await GET(new NextRequest(url));
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ status: 'pending', account: null });
   });
 
   it('still answers from the snapshot when recovery is unavailable', async () => {

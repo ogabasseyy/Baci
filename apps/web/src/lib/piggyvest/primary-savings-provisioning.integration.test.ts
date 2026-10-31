@@ -98,7 +98,7 @@ it.runIf(process.env.BACI_PRIMARY_WALLET_SQL_TESTS === 'true')(
           '-f',
           path.join(
             migrations,
-            '20261031220000_piggyvest_primary_goal_wallet_short_name.sql'
+            '20261031221500_piggyvest_primary_goal_wallet_short_name.sql'
           ),
         ],
         options

@@ -1347,6 +1347,22 @@ describe('generateMetaTitle', () => {
     expect(title.length).toBeLessThanOrEqual(70);
   });
 
+  it('keeps or drops a whitespace-padded suffix whole when truncating', () => {
+    const longTitle =
+      'Sony Alpha a7S III Mirrorless Camera Body Price in Nigeria';
+
+    expect(
+      generateMetaTitle(longTitle, { suffix: '  Ogabassey  ', maxLength: 60 })
+    ).toBe('Sony Alpha a7S III Mirrorless Camera Body... | Ogabassey');
+    expect(
+      generateMetaTitle(longTitle, {
+        suffix: '  Ogabassey  ',
+        maxLength: 60,
+        dropSuffixWhenTooLong: true,
+      })
+    ).toBe(longTitle);
+  });
+
   it('deduplicates suffixes that include regex metacharacters', () => {
     expect(
       generateMetaTitle('Buy Smartphones | Oga(bassey)+? | Oga(bassey)+?', {

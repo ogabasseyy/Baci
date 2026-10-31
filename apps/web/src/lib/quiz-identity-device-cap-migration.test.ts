@@ -11,21 +11,19 @@ const migrationSql = readFileSync(
   ),
   'utf8'
 );
-// The suite and its included helpers, read as text for the regex checks below.
-// Only psql (in DB Replay) executes them; the `\ir` include line is dropped so
-// this string holds the SQL itself rather than the psql meta-command.
-const identityDeviceTestSql = [
-  'quiz_identity_device_caps.sql',
-  'quiz_identity_device_caps.helpers.inc.sql',
-]
-  .map((file) =>
-    readFileSync(
-      resolve(currentDirectory, '../../../../supabase/migrations/tests', file),
-      'utf8'
-    )
-  )
-  .join('\n')
-  .replace(/^\\ir .*$/gm, '');
+const sqlTestsDirectory = resolve(
+  currentDirectory,
+  '../../../../supabase/migrations/tests'
+);
+// The suite as psql runs it in DB Replay: each `\ir <file>` line is replaced by
+// that file's contents at the same position. This test never executes the SQL;
+// the checks below only read it as text.
+const identityDeviceTestSql = readFileSync(
+  resolve(sqlTestsDirectory, 'quiz_identity_device_caps.sql'),
+  'utf8'
+).replace(/^\\ir (\S+)[ \t]*$/gm, (_line, file: string) =>
+  readFileSync(resolve(sqlTestsDirectory, file), 'utf8')
+);
 const leaderboardTestSql = readFileSync(
   resolve(
     currentDirectory,

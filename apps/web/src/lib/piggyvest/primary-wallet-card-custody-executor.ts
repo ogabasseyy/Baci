@@ -29,12 +29,6 @@ const statements = {
     sql: 'SELECT piggyvest_primary_card.record_transfer($1::uuid,$2::text,$3::uuid,$4::uuid,$5::boolean) AS result',
     count: 3,
   },
-  requeue: {
-    role: 'transfer',
-    capability: 'primary_card_transfer_worker',
-    sql: 'SELECT piggyvest_primary_card.requeue_transfer($1::uuid,$2::text,$3::uuid,$4::uuid) AS result',
-    count: 2,
-  },
   context: {
     role: 'custody',
     capability: 'primary_card_custody_evidence',
@@ -96,13 +90,9 @@ export function createPrimaryCardCustodyExecutor(configuration: unknown) {
     const selected = statements[action];
     if (
       'transferOnly' in config &&
-      ![
-        'selectReadyTransfers',
-        'dispatchContext',
-        'claim',
-        'record',
-        'requeue',
-      ].includes(action)
+      !['selectReadyTransfers', 'dispatchContext', 'claim', 'record'].includes(
+        action
+      )
     )
       throw new Error('Custody storage unavailable');
     if (

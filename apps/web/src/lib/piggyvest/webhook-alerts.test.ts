@@ -20,6 +20,17 @@ describe('emitPiggyvestWebhookAlert', () => {
     );
   });
 
+  it('names the operation of a transfer held for review', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    emitPiggyvestWebhookAlert('PIGGYVEST_TRANSFER_NEEDS_REVIEW', {
+      reason: 'savings_reference_not_found',
+      operationId: '00000000-0000-4000-8000-000000000002',
+    });
+    expect(error).toHaveBeenCalledWith(
+      '[PiggyVest Webhook][ALERT] PIGGYVEST_TRANSFER_NEEDS_REVIEW {"reason":"savings_reference_not_found","operationId":"00000000-0000-4000-8000-000000000002"}'
+    );
+  });
+
   it('bounds free-text detail', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_CAPTURE_FAILED', {

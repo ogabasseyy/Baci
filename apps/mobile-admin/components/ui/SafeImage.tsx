@@ -3,10 +3,9 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
-  type ImageErrorEventData,
+  type ImageErrorEvent,
   type ImageProps,
   type ImageSourcePropType,
-  type NativeSyntheticEvent,
   type StyleProp,
   StyleSheet,
   View,
@@ -120,7 +119,7 @@ function SafeImage({
   }, [isSvg, uri]);
 
   // Handle image load errors gracefully
-  const handleError = (e: NativeSyntheticEvent<ImageErrorEventData>) => {
+  const handleError = (e: ImageErrorEvent) => {
     // Prevent infinite error loops
     if (errorCount >= 2) return;
 

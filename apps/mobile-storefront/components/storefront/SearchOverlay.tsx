@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import type { TextInputInstance } from 'react-native';
 import {
   Keyboard,
   Pressable,
@@ -42,7 +43,7 @@ export function SearchOverlay({
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme as 'light' | 'dark'];
   const router = useRouter();
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
 
   const [query, setQuery] = useState(initialQuery);
   const debouncedQuery = useDebounce(query, 300);

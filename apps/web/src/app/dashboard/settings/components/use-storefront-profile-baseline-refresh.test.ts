@@ -14,6 +14,7 @@ vi.mock('./refresh-merchant-settings-snapshot', () => ({
 const baseline = {
   business_name: 'Store',
   country: 'NG',
+  phone: '+2348012345678',
   site_description: 'Old description',
   support_email: 'old@example.com',
   support_phone: '+2348000000000',

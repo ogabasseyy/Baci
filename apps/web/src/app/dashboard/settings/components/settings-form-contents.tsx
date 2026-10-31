@@ -30,6 +30,7 @@ import { type SettingsFormValues, settingsSchema } from './settings-utils';
 import { SocialMediaCard } from './social-media-card';
 import { StoreFeaturesCard } from './store-features-card';
 import { StorefrontProfileFields } from './storefront-profile-fields';
+import { getStorefrontProfileValues } from './storefront-profile-values';
 import {
   type StorefrontProfileBaseline,
   useStorefrontProfileBaselineRefresh,
@@ -70,20 +71,10 @@ export function SettingsFormContents({
     SettingsFormValues
   >({
     resolver: zodResolver(settingsSchema),
-    defaultValues: {
-      business_name: initialMerchant.business_name || '',
-      country: initialMerchant.country || 'NG',
-      site_description: initialMerchant.site_description || '',
-      support_email: initialMerchant.support_email || '',
-      support_phone: initialMerchant.support_phone || '',
-    },
+    defaultValues: getStorefrontProfileValues(initialMerchant),
   });
   const profileBaselineRef = useRef<StorefrontProfileBaseline>({
-    business_name: initialMerchant.business_name || '',
-    country: initialMerchant.country || 'NG',
-    site_description: initialMerchant.site_description || '',
-    support_email: initialMerchant.support_email || '',
-    support_phone: initialMerchant.support_phone || '',
+    ...getStorefrontProfileValues(initialMerchant),
     updated_at: initialMerchant.updated_at,
   });
   const refreshProfileBaseline = useStorefrontProfileBaselineRefresh({
@@ -125,20 +116,10 @@ export function SettingsFormContents({
     heroDraftRevisionRef.current = 0;
     profileBaselineMerchantIdRef.current = initialMerchant.id;
     profileBaselineRef.current = {
-      business_name: initialMerchant.business_name || '',
-      country: initialMerchant.country || 'NG',
-      site_description: initialMerchant.site_description || '',
-      support_email: initialMerchant.support_email || '',
-      support_phone: initialMerchant.support_phone || '',
+      ...getStorefrontProfileValues(initialMerchant),
       updated_at: initialMerchant.updated_at,
     };
-    form.reset({
-      business_name: initialMerchant.business_name || '',
-      country: initialMerchant.country || 'NG',
-      site_description: initialMerchant.site_description || '',
-      support_email: initialMerchant.support_email || '',
-      support_phone: initialMerchant.support_phone || '',
-    });
+    form.reset(getStorefrontProfileValues(initialMerchant));
   }
   const handleLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];

@@ -49,13 +49,18 @@ function getStorefrontProfilePatch(
   const settings = {
     business_name: data.business_name,
     country: data.country,
+    phone: data.phone,
     site_description: data.site_description,
     support_email: data.support_email,
     support_phone: data.support_phone,
   };
+  // A field the submission did not carry is never sent: writing it would
+  // clear the stored value (for example the courier pickup phone).
   const changedSettings = Object.fromEntries(
     Object.entries(settings).filter(
-      ([key, value]) => value !== profileBaseline[key as keyof typeof settings]
+      ([key, value]) =>
+        value !== undefined &&
+        value !== (profileBaseline[key as keyof typeof settings] ?? '')
     )
   );
 

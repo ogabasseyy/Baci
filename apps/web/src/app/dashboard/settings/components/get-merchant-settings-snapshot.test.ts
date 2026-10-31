@@ -18,6 +18,7 @@ describe('getMerchantSettingsSnapshot', () => {
       data: {
         business_name: 'Merchant A',
         country: 'NG',
+        phone: '+2348012345678',
         site_description: 'Useful goods.',
         support_email: 'support@example.com',
         support_phone: '+2348000000000',
@@ -32,6 +33,7 @@ describe('getMerchantSettingsSnapshot', () => {
     await expect(getMerchantSettingsSnapshot('merchant-a')).resolves.toEqual({
       business_name: 'Merchant A',
       country: 'NG',
+      phone: '+2348012345678',
       site_description: 'Useful goods.',
       support_email: 'support@example.com',
       support_phone: '+2348000000000',
@@ -40,7 +42,7 @@ describe('getMerchantSettingsSnapshot', () => {
 
     expect(from).toHaveBeenCalledWith('merchants');
     expect(select).toHaveBeenCalledWith(
-      'business_name, country, site_description, support_email, support_phone, updated_at'
+      'business_name, country, phone, site_description, support_email, support_phone, updated_at'
     );
     expect(eq).toHaveBeenCalledWith('id', 'merchant-a');
   });

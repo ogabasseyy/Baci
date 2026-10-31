@@ -94,7 +94,7 @@ export async function resolveBookingMerchantSender(
     return {
       code: 'MERCHANT_SENDER_PHONE_INVALID',
       error:
-        'Your store phone number is missing or incomplete. Update it in Store Settings, then try again.',
+        'Your business phone number is missing or incomplete. Update it in Store Settings in the Baci app, or under Settings > Storefront profile on the web dashboard, then try again.',
       ok: false,
       status: 400,
     };

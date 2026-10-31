@@ -60,6 +60,35 @@ describe('settingsSchema', () => {
     }
   });
 
+  it('keeps a complete business phone and allows clearing it', () => {
+    const base = { business_name: 'My Store', country: 'NG' };
+
+    const complete = settingsSchema.safeParse({
+      ...base,
+      phone: ' +234 803 123 4567 ',
+    });
+    expect(complete.success && complete.data.phone).toBe('+234 803 123 4567');
+    const cleared = settingsSchema.safeParse({ ...base, phone: '' });
+    expect(cleared.success && cleared.data.phone).toBe('');
+  });
+
+  it('rejects the truncated business phone couriers could not call', () => {
+    const result = settingsSchema.safeParse({
+      business_name: 'My Store',
+      country: 'NG',
+      phone: '+23415781',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]).toMatchObject({
+        message:
+          'Enter the full business phone number with its country code, for example +234 801 234 5678.',
+        path: ['phone'],
+      });
+    }
+  });
+
   it('rejects an oversized storefront description', () => {
     expect(
       settingsSchema.safeParse({

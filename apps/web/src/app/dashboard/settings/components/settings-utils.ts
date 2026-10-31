@@ -44,6 +44,18 @@ export const settingsSchema = z.object({
       'Enter a full support phone number, for example +234 801 234 5678.'
     )
     .default(''),
+  // merchants.phone: the number couriers call to arrange pickups. Blank keeps
+  // the mobile Store Settings contract (the save clears it, and booking then
+  // asks for a full number); anything else must be a complete number.
+  phone: z
+    .string()
+    .trim()
+    .max(32, 'Business phone must be 32 characters or fewer.')
+    .refine(
+      (value) => value === '' || isPlausibleMerchantContactPhone(value),
+      'Enter the full business phone number with its country code, for example +234 801 234 5678.'
+    )
+    .default(''),
 });
 
 export type SettingsFormValues = z.infer<typeof settingsSchema>;

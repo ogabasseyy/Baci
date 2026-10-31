@@ -1005,6 +1005,7 @@ export function generateProductSchema(
     // referenced by @id (2026 best practice)
     const variantOfferPolicies = buildSharedOfferPolicies(
       structuredDataProductUrl,
+      String(schema.productGroupID),
       buildOfferShippingDetails(country, currency, trustProfile),
       buildMerchantReturnPolicyFromTrustProfile(country, trustProfile)
     );

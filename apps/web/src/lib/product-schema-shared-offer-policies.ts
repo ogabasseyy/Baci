@@ -12,21 +12,26 @@ export interface SharedOfferPolicies {
  * policy. Define both nodes once (on the first Offer) with an `@id` and point
  * later Offers at them, matching Google's product-variants example. The JSON-LD
  * graph is unchanged, but a 50-variant PDP stops repeating ~1KB per variant in
- * both the HTML and the RSC payload.
+ * both the HTML and the RSC payload. Ids are page-scoped by the product URL,
+ * or by the product group id when the URL is unknown, so two products on one
+ * page never share a node.
  * @see https://developers.google.com/search/docs/appearance/structured-data/product-variants
  */
 export function buildSharedOfferPolicies(
   productUrl: URL | undefined,
+  productGroupId: string,
   shippingDetails: OfferShippingDetails,
   returnPolicy: MerchantReturnPolicy
 ): (variantIndex: number) => SharedOfferPolicies {
-  const base = productUrl ? `${productUrl.origin}${productUrl.pathname}` : '';
-  const shippingId = `${base}#shipping-policy`;
-  const returnPolicyId = `${base}#return-policy`;
+  const prefix = productUrl
+    ? `${productUrl.origin}${productUrl.pathname}#`
+    : `#${encodeURIComponent(productGroupId)}-`;
+  const shippingId = `${prefix}shipping-policy`;
+  const returnPolicyId = `${prefix}return-policy`;
 
   const definitions: SharedOfferPolicies = {
-    shippingDetails: { '@id': shippingId, ...shippingDetails },
-    hasMerchantReturnPolicy: { '@id': returnPolicyId, ...returnPolicy },
+    shippingDetails: { ...shippingDetails, '@id': shippingId },
+    hasMerchantReturnPolicy: { ...returnPolicy, '@id': returnPolicyId },
   };
   const references: SharedOfferPolicies = {
     shippingDetails: { '@id': shippingId },

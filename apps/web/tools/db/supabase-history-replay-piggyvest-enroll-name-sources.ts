@@ -1,0 +1,2 @@
+// Pending PiggyVest goal-wallet enrolment name normalisation; never registered as an applied production migration.
+export const PIGGYVEST_ENROLL_NAME_PENDING_REPLAY_SOURCE_ROWS = `4d14bbf5abbbc456d30893e1e5780e7898106d3138eb143a29edc57ccdfc34a5 20261031210000_piggyvest_enroll_goal_wallet_name_normalisation.sql`;

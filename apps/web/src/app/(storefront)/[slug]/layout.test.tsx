@@ -281,7 +281,7 @@ describe('storefront layout', () => {
     // Relative child titles ('Cart') must not fall through to the platform's
     // root `%s | Baci` template on a merchant storefront.
     expect(metadata.title).toEqual({
-      default: baseMerchant.site_title || baseMerchant.business_name,
+      absolute: baseMerchant.site_title || baseMerchant.business_name,
       template: `%s | ${baseMerchant.business_name}`,
     });
   });

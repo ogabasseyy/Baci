@@ -41,7 +41,7 @@ describe('storefront layout SEO metadata', () => {
     });
 
     expect(metadata.title).toEqual({
-      default: 'Foodflow',
+      absolute: 'Foodflow',
       template: '%s | Foodflow',
     });
     expect(metadata.description).toBe('Foodflow storefront in NG.');
@@ -66,7 +66,7 @@ describe('storefront layout SEO metadata', () => {
     });
 
     expect(metadata.title).toEqual({
-      default: 'Medplus | Buy Gadgets Pay Later',
+      absolute: 'Medplus | Buy Gadgets Pay Later',
       template: '%s | Medplus',
     });
     expect(metadata.openGraph?.title).toBe('Medplus | Buy Gadgets Pay Later');

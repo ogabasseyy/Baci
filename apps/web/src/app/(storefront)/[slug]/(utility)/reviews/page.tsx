@@ -12,7 +12,7 @@ import {
 } from '@/lib/validation';
 
 export const metadata: Metadata = {
-  title: 'My Reviews | Ogabassey',
+  title: 'My Reviews',
   description: 'Manage your product reviews and ratings',
 };
 

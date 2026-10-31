@@ -69,9 +69,11 @@ export function buildStorefrontMerchantMetadata(
     metadataBase,
     // Brand child-page titles with the merchant, not the platform: without a
     // storefront template, relative titles ('Cart') inherit the root
-    // `%s | Baci` template. Absolute titles are unaffected.
+    // `%s | Baci` template. The fallback must be `absolute`: Next resolves a
+    // `default` against the parent's template, so it would still end in
+    // `| Baci` on pages without their own title.
     title: {
-      default: merchant.site_title || merchant.business_name,
+      absolute: merchant.site_title || merchant.business_name,
       template: `%s | ${merchant.business_name}`,
     },
     description,

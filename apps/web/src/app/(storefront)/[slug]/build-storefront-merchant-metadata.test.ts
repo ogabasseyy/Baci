@@ -22,7 +22,7 @@ describe('buildStorefrontMerchantMetadata', () => {
     const metadata = buildStorefrontMerchantMetadata(merchant, 'ogabassey');
 
     expect(metadata.title).toEqual({
-      default: 'Ogabassey | Gadgets in Nigeria',
+      absolute: 'Ogabassey | Gadgets in Nigeria',
       template: '%s | Ogabassey',
     });
   });
@@ -34,7 +34,7 @@ describe('buildStorefrontMerchantMetadata', () => {
     );
 
     expect(metadata.title).toEqual({
-      default: 'Ogabassey',
+      absolute: 'Ogabassey',
       template: '%s | Ogabassey',
     });
   });

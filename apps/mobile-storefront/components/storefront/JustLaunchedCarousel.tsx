@@ -8,11 +8,11 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import {
   FlatList,
+  type FlatListProps,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
-  type ViewToken,
 } from 'react-native';
 import { JustLaunchedSkeleton } from '@/components/storefront/JustLaunchedSkeleton';
 import { LaunchAdCard } from '@/components/storefront/LaunchAdCard';
@@ -137,7 +137,9 @@ export function JustLaunchedCarousel({
   const handleViewableItemsChanged = ({
     viewableItems,
   }: {
-    viewableItems: ViewToken[];
+    viewableItems: Parameters<
+      NonNullable<FlatListProps<unknown>['onViewableItemsChanged']>
+    >[0]['viewableItems'];
   }) => {
     setIsAdVisible(
       viewableItems.some(

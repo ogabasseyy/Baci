@@ -44,9 +44,14 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$IOS_RUNTIME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "$IOS_BUILD" =~ ^[1-9][0-9]*$ ]]
-          [[ "$IOS_RUNTIME" == *".$IOS_BUILD" ]]
+          IOS_APP_VERSION="$(node --input-type=module -e "
+            import { parseIosRuntime } from './.github/scripts/storefront-ota-constants.mjs';
+            const { appVersion, buildNumber } = parseIosRuntime(process.env.IOS_RUNTIME);
+            if (buildNumber !== process.env.IOS_BUILD) throw new Error('iOS build does not match the runtime.');
+            process.stdout.write(appVersion);
+          ")"
+          echo "IOS_APP_VERSION=$IOS_APP_VERSION" >> "$GITHUB_ENV"
           git merge-base --is-ancestor "$SOURCE_SHA" "$GITHUB_SHA"
           if ! git grep -q -F 'process.env.EXPO_PUBLIC_BUILD_SHA' "$SOURCE_SHA" -- apps/mobile-storefront; then
             echo 'Selected source does not embed the build SHA. Create a reviewed forward revert instead of exporting this older revision.' >&2
@@ -102,7 +107,7 @@ jobs:
           NODE_OPTIONS: --no-experimental-strip-types
           BACI_MOBILE_BUILD_PLATFORM: ios
           EXPO_NO_DOTENV: '1'
-          IOS_APP_VERSION: ${{ inputs.ios_runtime }}
+          IOS_APP_VERSION: ${{ env.IOS_APP_VERSION }}
           IOS_BUILD_NUMBER: ${{ inputs.ios_build }}
           IOS_TIKTOK_CONFIGURED: ${{ inputs.ios_tiktok_configured }}
           EXPO_PUBLIC_BUILD_SHA: ${{ inputs.source_sha }}

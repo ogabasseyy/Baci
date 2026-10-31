@@ -43,9 +43,9 @@ describe('mobile admin Android Gradle build config', () => {
       'utf8'
     );
 
-    expect(gradleProperties).toContain('android.compileSdkVersion=36');
+    expect(gradleProperties).toContain('android.compileSdkVersion=37');
     expect(gradleProperties).toContain('android.targetSdkVersion=36');
-    expect(gradleProperties).toContain('android.buildToolsVersion=36.0.0');
+    expect(gradleProperties).toContain('android.buildToolsVersion=37.0.0');
     expect(appBuildGradle).toContain('minSdkVersion rootProject.ext.minSdkVersion');
     expect(appBuildGradle).toContain('targetSdkVersion rootProject.ext.targetSdkVersion');
   });

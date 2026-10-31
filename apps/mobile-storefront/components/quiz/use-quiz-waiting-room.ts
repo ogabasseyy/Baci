@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
+import { AppState } from 'react-native';
 import { isQuizRewardedFlowActive } from '@/lib/quiz-fullscreen-ownership';
 import type { QuizEvent } from '@/services/quiz-types';
 import { calculateQuizServerClockOffset } from './use-quiz-server-clock';
@@ -100,7 +100,9 @@ export function useQuizWaitingRoom({
   const stoppedRef = useRef(false);
   const suspendedRef = useRef(suspended);
   const lastBoundaryRefreshAtRef = useRef(0);
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const appStateRef = useRef<typeof AppState.currentState>(
+    AppState.currentState
+  );
 
   refreshRef.current = refresh;
   onEventsUpdatedRef.current = onEventsUpdated;

@@ -36,7 +36,9 @@ import {
  * - Invalid signature, or a key revoked at ingress -> 401 + alert.
  * - Capture write fails -> 503 + alert (the provider retries; no row).
  * - Captured but processing incomplete -> 503 until the drain is attested,
- *   200 deferred once it is (alert either way).
+ *   200 deferred once it is (alert either way). While the key set is
+ *   incomplete the reply stays 503 even when attested: the capture is
+ *   limited to the families that loaded and replay cannot widen it.
  * - Captured, but the loaded key families cannot authorize the event while
  *   the key set is incomplete -> 503 + alert even when the drain is
  *   attested: the capture's recorded authority is immutable, so only the
@@ -150,8 +152,13 @@ export async function POST(request: NextRequest): Promise<Response> {
       ? `processing answered ${processing.status}; row kept for retry`
       : 'processing threw; row kept for retry',
   });
-  if (isPiggyvestCaptureDrainScheduled()) {
-    // The drain owns the retry; the provider can stop redelivering.
+  if (isPiggyvestCaptureDrainScheduled() && !incompleteKeySet) {
+    // The drain owns the retry; the provider can stop redelivering. Not
+    // while the key set is incomplete: the delivery was admitted with only
+    // the families that happened to load, the capture's recorded authority
+    // is immutable and replay cannot widen it, so the drain may never be
+    // able to finish this row. The provider's redelivery (verified under
+    // the full set once configuration is whole) is the reliable retry.
     return NextResponse.json(
       { received: true, captured: true, processing: 'deferred' },
       { status: 200, headers: noStore }

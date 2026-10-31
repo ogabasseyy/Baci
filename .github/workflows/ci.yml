@@ -507,6 +507,9 @@ jobs:
           --sql-check supabase/migrations/tests/chatgpt_ads_settings_and_destination.sql
           --sql-check supabase/migrations/tests/chatgpt_ads_admin_destination.sql
           --sql-check supabase/migrations/tests/x_ads_settings_and_destination.sql
+          --sql-check supabase/tests/finalize_wallet_order_payment_refusals.sql
+          --sql-check supabase/tests/finalize_wallet_order_payment_finalization.sql
+          --sql-check supabase/tests/finalize_wallet_order_payment_privileges.sql
           --sql-check supabase/tests/vtu_checkout_rls.sql
           --sql-check supabase/tests/vtu_checkout_write_rpcs.sql
       - name: Run migration replay regression test

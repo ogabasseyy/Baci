@@ -31,7 +31,7 @@
 - **ALWAYS** validate API inputs with Zod before any database operation.
 - **ALWAYS** check auth (`supabase.auth.getUser()`) as the first operation in protected API routes.
 - **ALWAYS** add RLS policies when creating new database tables.
-- **ALWAYS** run `pnpm turbo lint && pnpm turbo typecheck` after writing or modifying code.
+- **ALWAYS** run lint and typecheck for the affected packages after writing or modifying code (see "Local Runs vs CI"); CI runs the full gate.
 - **ALWAYS** include a regression test when fixing a bug — the test must reproduce the exact failing condition.
 - **ALWAYS** follow the Boy Scout Rule: when editing a file over 300 lines, extract the logic you touched into smaller files (hooks, utils, sub-components, schemas). Don't refactor the whole file — just leave it better than you found it.
 

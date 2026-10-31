@@ -10,6 +10,7 @@ BEGIN
   IF p_condition IS DISTINCT FROM true THEN RAISE EXCEPTION '%', p_message; END IF;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_true(boolean, text) TO PUBLIC; -- called after SET ROLE
 
 -- Simulate an authenticated storefront caller for auth.uid().
 CREATE FUNCTION pg_temp.as_user(p_user uuid)

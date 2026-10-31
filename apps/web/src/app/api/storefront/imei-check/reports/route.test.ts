@@ -19,7 +19,6 @@ vi.mock('@/lib/rate-limit', () => ({
   checkImeiPollRateLimit: async () => ({ allowed: true }),
   createRateLimitResponse: () => Response.json({}, { status: 429 }),
 }));
-vi.mock('@/env', () => ({ getRootDomain: () => 'usebaci.com' }));
 
 import { GET } from './route';
 

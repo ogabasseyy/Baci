@@ -5,8 +5,8 @@ import {
 } from '@baci/shared/imei';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { getRootDomain } from '@/env';
 import { authenticateApiRequest } from '@/lib/api-auth';
+import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
 import {
   checkImeiPollRateLimit,
   createRateLimitResponse,
@@ -38,7 +38,7 @@ export async function GET(request: Request | NextRequest) {
     request: request as NextRequest,
     lookupError: 'Failed to validate storefront host',
     notFoundError: 'Storefront not found',
-    rootDomain: getRootDomain() || 'usebaci.com',
+    rootDomain: process.env.NEXT_PUBLIC_ROOT_DOMAIN || DEFAULT_ROOT_DOMAIN,
   });
   if (!merchant.success)
     return json({ error: merchant.error }, merchant.status);

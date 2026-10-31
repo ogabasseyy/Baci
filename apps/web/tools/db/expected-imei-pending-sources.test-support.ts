@@ -59,4 +59,9 @@ export const EXPECTED_IMEI_PENDING_SOURCES = [
       'supabase/migrations/20261031124500_imei_attempt_coordination.sql',
     sha256: 'e61a5b459a78b5428890d6fc554f935c48a47d48029fa525457de8b1eb875ab7',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261031143353_imei_reconcile_sickw_refunds.sql',
+    sha256: '821f4bef4d2683d800041b24e60c914654c967ecf97b4e80c2e84edec0090963',
+  },
 ];

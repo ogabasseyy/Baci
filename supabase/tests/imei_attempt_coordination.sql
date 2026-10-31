@@ -122,4 +122,43 @@ BEGIN
   END IF;
 END $$;
 
+
+-- A durable matching refund recovers a Sickw row when both response writes failed.
+RESET ROLE;
+INSERT INTO public.imei_lookups(id, customer_id, merchant_id, tier, imei_hash, idempotency_key, amount_ngn, status, provider)
+VALUES ('50000000-0000-4000-8000-000000000041','30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','blacklist',repeat('8',64),'40000000-0000-4000-8000-000000000041',700,'pending','sickw');
+INSERT INTO public.customer_wallet_transactions(customer_id,merchant_id,type,status,amount,source_type,source_id)
+VALUES ('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','redemption','completed',700,'imei_wallet_payment','50000000-0000-4000-8000-000000000041'),
+('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','refund','completed',700,'imei_wallet_refund','50000000-0000-4000-8000-000000000041');
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE r jsonb; BEGIN
+  r := pg_temp.claim_attempt(jsonb_build_object('tier','blacklist','imei_hash',repeat('8',64),'idempotency_key','40000000-0000-4000-8000-000000000042'));
+  IF r->>'idempotency_key' IS DISTINCT FROM '40000000-0000-4000-8000-000000000042' THEN
+    RAISE EXCEPTION 'confirmed Sickw refund remained stuck pending';
+  END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.imei_lookups WHERE id='50000000-0000-4000-8000-000000000041' AND status='refunded_error' AND cached_response->>'code'='SICKW_UNAVAILABLE' AND cached_status=502) THEN
+    RAISE EXCEPTION 'refund recovery did not persist a replayable terminal response';
+  END IF;
+END $$;
+
+-- Wrong refund amount or a Petrock attempt never gains retry authority.
+INSERT INTO public.imei_lookups(id,customer_id,merchant_id,tier,imei_hash,idempotency_key,amount_ngn,status,provider)
+VALUES ('50000000-0000-4000-8000-000000000051','30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','blacklist',repeat('7',64),'40000000-0000-4000-8000-000000000051',700,'pending','sickw'),
+('50000000-0000-4000-8000-000000000061','30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','blacklist',repeat('6',64),'40000000-0000-4000-8000-000000000061',700,'pending_provider','petrock');
+INSERT INTO public.customer_wallet_transactions(customer_id,merchant_id,type,status,amount,source_type,source_id)
+VALUES ('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','redemption','completed',700,'imei_wallet_payment','50000000-0000-4000-8000-000000000051'),
+('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','refund','completed',699,'imei_wallet_refund','50000000-0000-4000-8000-000000000051'),
+('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','redemption','completed',700,'imei_wallet_payment','50000000-0000-4000-8000-000000000061'),
+('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','refund','completed',700,'imei_wallet_refund','50000000-0000-4000-8000-000000000061');
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE r jsonb; BEGIN
+  r := pg_temp.claim_attempt(jsonb_build_object('tier','blacklist','imei_hash',repeat('7',64),'idempotency_key','40000000-0000-4000-8000-000000000052'));
+  IF r->>'idempotency_key' IS DISTINCT FROM '40000000-0000-4000-8000-000000000051' THEN RAISE EXCEPTION 'mismatched refund incorrectly advanced'; END IF;
+  r := pg_temp.claim_attempt(jsonb_build_object('tier','blacklist','imei_hash',repeat('6',64),'idempotency_key','40000000-0000-4000-8000-000000000062'));
+  IF r->>'idempotency_key' IS DISTINCT FROM '40000000-0000-4000-8000-000000000061' THEN RAISE EXCEPTION 'Petrock attempt incorrectly reconciled as Sickw'; END IF;
+END $$;
+
 ROLLBACK;

@@ -4,13 +4,11 @@ import {
   type ImeiDeviceCategory,
   type ImeiReport,
   type ImeiServiceTierKey,
-  isValidDeviceIdentifier,
   normalizeDeviceIdentifier,
   resolveImeiReportDevice,
   resolveInputIdentifier,
 } from '@baci/shared/imei';
 import * as Crypto from 'expo-crypto';
-import { router } from 'expo-router';
 import {
   useEffect,
   useEffectEvent,
@@ -18,7 +16,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Alert, Keyboard } from 'react-native';
+import { Keyboard } from 'react-native';
 import { useWallet } from '@/hooks/use-wallet';
 import { clearImeiRecoveryKey } from '@/lib/imei-request-recovery';
 import { createLogger } from '@/lib/logger';
@@ -28,9 +26,14 @@ import {
   parseApiResponse,
 } from '@/lib/validation';
 import { useAuthStore } from '@/stores/auth-store';
+import {
+  handleImeiCheckFailure,
+  handleImeiPreparationFailure,
+  imeiReportScopeKey,
+  validateImeiCheckInput,
+} from './handle-imei-check-failure';
 import { imeiCheckScreenActions } from './imei-check-screen-actions';
 import { prepareImeiAttempt } from './prepare-imei-attempt';
-import { resolveImeiCheckFailure } from './resolve-imei-check-failure';
 import { submitImeiCheck } from './submit-imei-check';
 import { useImeiPendingLookup } from './use-imei-pending-lookup';
 
@@ -93,11 +96,7 @@ export function useImeiCheckFlow(
         setResultTier(terminal.tier);
         setResultLookupId(terminal.lookupId);
         lastSeen.current.set(
-          JSON.stringify([
-            scope,
-            terminal.tier,
-            terminal.result.imei.trim().toUpperCase(),
-          ]),
+          imeiReportScopeKey(scope, terminal.tier, terminal.result.imei),
           terminal.lookupId
         );
         setResult(terminal.result);
@@ -124,19 +123,7 @@ export function useImeiCheckFlow(
     if (submitting.current || pendingLookup.pending) return;
 
     const serviceTier = IMEI_SERVICE_TIERS[tier];
-    if (!isValidDeviceIdentifier(imei, serviceTier.identifier)) {
-      Alert.alert(
-        serviceTier.identifier === 'serial'
-          ? 'Invalid serial'
-          : 'Invalid number',
-        serviceTier.identifier === 'serial'
-          ? 'Please enter a valid device serial number.'
-          : serviceTier.identifier === 'imei'
-            ? 'Please enter a valid 15-digit IMEI number.'
-            : 'Please enter a valid IMEI or serial number.'
-      );
-      return;
-    }
+    if (!validateImeiCheckInput(imei, serviceTier.identifier)) return;
 
     if (!session?.user?.id || !customerId || !merchantId) {
       setError(
@@ -172,22 +159,8 @@ export function useImeiCheckFlow(
         createKey: Crypto.randomUUID,
       });
       if (scopeRef.current !== submittedScope) return;
-      if (preparation.kind === 'storage_error') {
-        setError('This device cannot save check recovery. Please try again.');
-        return;
-      }
-      if (preparation.kind === 'wallet_loading') {
-        setError('Loading wallet balance. Please wait a moment and try again.');
-        return;
-      }
-      if (preparation.kind === 'wallet_error') {
-        setError(
-          'Wallet balance unavailable. Refresh your wallet and try again.'
-        );
-        return;
-      }
-      if (preparation.kind === 'insufficient') {
-        imeiCheckScreenActions.fundWallet(preparation.shortfall);
+      if (preparation.kind !== 'ready') {
+        handleImeiPreparationFailure(preparation, setError);
         return;
       }
       const { recovery } = preparation;
@@ -199,50 +172,27 @@ export function useImeiCheckFlow(
         idempotencyKey,
         identifier: imei,
         previousLookupId: lastSeen.current.get(
-          JSON.stringify([submittedScope, tier, imei.trim().toUpperCase()])
+          imeiReportScopeKey(submittedScope, tier, imei)
         ),
         signal: controller.signal,
         tier,
       });
       if (scopeRef.current !== submittedScope) return;
       if (!response.ok || rawData?.error) {
-        const failure = ImeiCheckApiResponseSchema.safeParse(rawData);
-        if (
-          failure.success &&
-          rawData?.code === 'PREVIOUS_REPORT_AVAILABLE' &&
-          failure.data.lookupId
-        )
-          lastSeen.current.set(
-            JSON.stringify([submittedScope, tier, imei.trim().toUpperCase()]),
-            failure.data.lookupId
-          );
-        const outcome = resolveImeiCheckFailure({
-          currentTierPrice: serviceTier.price,
-          payload: rawData,
+        await handleImeiCheckFailure({
+          rawData,
           responseStatus: response.status,
+          price: serviceTier.price,
           walletBalance,
+          recovery,
+          refetchWallet: walletQuery.refetch,
+          setError,
+          onPreviousReport: (id) =>
+            lastSeen.current.set(
+              imeiReportScopeKey(submittedScope, tier, imei),
+              id
+            ),
         });
-
-        if (outcome.shouldClearIdempotencyKey) {
-          await clearImeiRecoveryKey(
-            recovery.storageKey,
-            recovery.idempotencyKey
-          ).catch(() => undefined);
-        }
-        if (outcome.shouldRedirectToLogin) {
-          router.push('/auth/login?returnTo=/imei-check');
-          return;
-        }
-        if (outcome.topUpAmount !== null) {
-          imeiCheckScreenActions.fundWallet(outcome.topUpAmount);
-          return;
-        }
-        if (outcome.shouldRefetchWallet) {
-          await walletQuery.refetch?.();
-        }
-        if (outcome.errorMessage) {
-          setError(outcome.errorMessage);
-        }
         return;
       }
 
@@ -284,7 +234,7 @@ export function useImeiCheckFlow(
       setResultLookupId(validated.lookupId ?? null);
       if (validated.lookupId)
         lastSeen.current.set(
-          JSON.stringify([submittedScope, tier, imei.trim().toUpperCase()]),
+          imeiReportScopeKey(submittedScope, tier, imei),
           validated.lookupId
         );
       setResult(validated.data);
@@ -338,11 +288,7 @@ export function useImeiCheckFlow(
       setResultDevice(report.device);
       setResultLookupId(report.lookupId);
       lastSeen.current.set(
-        JSON.stringify([
-          scope,
-          report.tier,
-          report.result.imei.trim().toUpperCase(),
-        ]),
+        imeiReportScopeKey(scope, report.tier, report.result.imei),
         report.lookupId
       );
       setResultTier(report.tier);

@@ -12,6 +12,7 @@ const mockPreventRemoveState: {
 } = { prevent: false, callback: null };
 
 const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+const mockSecureEntries = new Map<string, string>();
 const mockWalletRefetch = jest.fn();
 let mockWalletBalance = 5000;
 let mockUserId = 'user-a';
@@ -29,6 +30,7 @@ beforeEach(async () => {
   global.fetch = jest.fn() as typeof fetch;
   mockPreventRemoveState.prevent = false;
   mockPreventRemoveState.callback = null;
+  mockSecureEntries.clear();
   await AsyncStorage.clear();
 });
 
@@ -46,7 +48,20 @@ jest.mock('@react-native-vector-icons/ionicons', () => ({
   __esModule: true,
 }));
 
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: async (key: string) => mockSecureEntries.get(key) ?? null,
+  setItemAsync: async (key: string, value: string) => {
+    mockSecureEntries.set(key, value);
+  },
+  deleteItemAsync: async (key: string) => {
+    mockSecureEntries.delete(key);
+  },
+}));
+
 jest.mock('expo-crypto', () => ({
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+  digestStringAsync: async (_algorithm: string, value: string) =>
+    require('node:crypto').createHash('sha256').update(value).digest('hex'),
   randomUUID: jest.fn(() => '11111111-1111-4111-8111-111111111111'),
 }));
 

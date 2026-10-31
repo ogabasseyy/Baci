@@ -18,9 +18,8 @@ function setup() {
       },
     }),
     submitTransfer: vi.fn().mockResolvedValue(undefined),
-    lookupTransfer: vi.fn().mockResolvedValue('absent'),
+    lookupTransfer: vi.fn().mockResolvedValue('not_found'),
     record: vi.fn().mockResolvedValue(true),
-    requeue: vi.fn().mockResolvedValue(true),
   };
 }
 describe('irreversible primary transfer dispatch', () => {
@@ -48,21 +47,26 @@ describe('irreversible primary transfer dispatch', () => {
       fixture.context.customerId,
       false
     );
-    expect(input.requeue).not.toHaveBeenCalled();
     input.claim.mockResolvedValue({ outcome: 'existing' });
     expect(await runPrimaryCardTransfer(input)).toBe('existing');
     expect(input.submitTransfer).toHaveBeenCalledTimes(1);
   });
-  it('requeues a proven-absent reference after a submit throw instead of stranding it unknown', async () => {
+  it.each([
+    'not_found',
+    'pending',
+    'failed',
+  ] as const)('holds a submit throw observed as %s unknown for review, never resubmitting the reference', async (observed) => {
+    // Live sandbox: a 202-accepted transfer answers TSQ 404 before it is
+    // indexed, so a 404 after a lost response is never proof of absence.
     const input = setup();
     input.submitTransfer.mockRejectedValue(new Error('timeout before commit'));
-    input.lookupTransfer.mockResolvedValue('absent');
-    expect(await runPrimaryCardTransfer(input)).toBe('requeued');
-    expect(input.requeue).toHaveBeenCalledWith(
+    input.lookupTransfer.mockResolvedValue(observed);
+    expect(await runPrimaryCardTransfer(input)).toBe('unknown');
+    expect(input.record).toHaveBeenCalledWith(
       input.operationId,
-      fixture.context.customerId
+      fixture.context.customerId,
+      false
     );
-    expect(input.record).not.toHaveBeenCalled();
     expect(input.submitTransfer).toHaveBeenCalledTimes(1);
   });
   it('records submitted without resubmitting when the reference exists despite the submit throw', async () => {
@@ -75,7 +79,6 @@ describe('irreversible primary transfer dispatch', () => {
       fixture.context.customerId,
       true
     );
-    expect(input.requeue).not.toHaveBeenCalled();
     expect(input.submitTransfer).toHaveBeenCalledTimes(1);
   });
   it('records unknown when the post-failure lookup itself crashes', async () => {
@@ -88,7 +91,6 @@ describe('irreversible primary transfer dispatch', () => {
       fixture.context.customerId,
       false
     );
-    expect(input.requeue).not.toHaveBeenCalled();
   });
   it('does not call a financial adapter for an invalid claim', async () => {
     const input = setup();
@@ -136,30 +138,10 @@ describe('irreversible primary transfer dispatch', () => {
       true
     );
   });
-  it('submits fresh only when the reclaimed reference is proven absent', async () => {
-    const input = setup();
-    input.claim.mockResolvedValue({
-      outcome: 'reclaimed',
-      token: fixture.context.customerId,
-      command: {
-        operationId: fixture.context.operationId,
-        sourceWalletId: fixture.context.sourceWalletId,
-        destinationWalletId: fixture.context.destinationWalletId,
-        amountKobo: 25000,
-        currency: 'NGN',
-        reference: fixture.context.reference,
-      },
-    });
-    input.lookupTransfer.mockResolvedValue('absent');
-    expect(await runPrimaryCardTransfer(input)).toBe('submitted');
-    expect(input.submitTransfer).toHaveBeenCalledTimes(1);
-    expect(input.record).toHaveBeenCalledWith(
-      input.operationId,
-      fixture.context.customerId,
-      true
-    );
-  });
   it.each([
+    'not_found',
+    'pending',
+    'failed',
     'uncertain',
     'lookup-crash',
   ] as const)('records unknown without resubmitting when the reclaimed lookup is %s', async (mode) => {
@@ -178,7 +160,7 @@ describe('irreversible primary transfer dispatch', () => {
     });
     if (mode === 'lookup-crash')
       input.lookupTransfer.mockRejectedValue(new Error('private lookup bug'));
-    else input.lookupTransfer.mockResolvedValue('uncertain');
+    else input.lookupTransfer.mockResolvedValue(mode);
     expect(await runPrimaryCardTransfer(input)).toBe('unknown');
     expect(input.submitTransfer).not.toHaveBeenCalled();
     expect(input.record).toHaveBeenCalledWith(

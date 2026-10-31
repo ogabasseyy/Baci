@@ -130,10 +130,11 @@ it('reconciles only a dispatched operation selected by the authenticated scope',
     operationId,
   });
 });
-it('resubmits a stale dispatched operation the provider never received', async () => {
-  // claimDispatch succeeded but the provider request died pre-transfer:
-  // the wallet hold and goal slot pin forever unless status drives the
-  // lookup-gated reclaim — the client only polls status, never re-posts.
+it('never resubmits a stale dispatch whose reference TSQ still does not find', async () => {
+  // The client only polls status. A stale dispatch may still be a
+  // 202-accepted transfer the provider has not indexed (live sandbox:
+  // 404, then pending, then successful), so a 404 never re-posts the
+  // same reference; the dispatch stays pending for reconciliation.
   const reservation = {
     operationId,
     goalId: '33333333-3333-4333-8333-333333333333',
@@ -146,7 +147,7 @@ it('resubmits a stale dispatched operation the provider never received', async (
   };
   mocks.readStatus.mockResolvedValue('dispatched');
   mocks.adoptPending.mockResolvedValue({ status: 'reclaimed', reservation });
-  mocks.lookupTransfer.mockResolvedValue('absent');
+  mocks.lookupTransfer.mockResolvedValue('not_found');
   mocks.retrieveWallet.mockImplementation(
     async (_provider: unknown, walletId: string) => ({
       id: walletId,
@@ -162,7 +163,8 @@ it('resubmits a stale dispatched operation the provider never received', async (
   expect(await checkPrimaryWalletSavingsStatus(input)).toEqual({
     status: 'pending',
   });
-  expect(mocks.transfer).toHaveBeenCalledTimes(1);
+  expect(mocks.transfer).not.toHaveBeenCalled();
+  expect(mocks.releaseAfterRejection).not.toHaveBeenCalled();
   expect(mocks.reconcile).toHaveBeenCalledTimes(1);
 });
 it('leaves a fresh dispatched operation to its live holder', async () => {
@@ -176,11 +178,7 @@ it('leaves a fresh dispatched operation to its live holder', async () => {
   expect(mocks.transfer).not.toHaveBeenCalled();
   expect(mocks.reconcile).toHaveBeenCalledTimes(1);
 });
-it('reports cancelled when the reclaim releases after a definitive rejection', async () => {
-  // The reclaimed dispatch proves absent, the retry is definitively
-  // rejected, and the hold releases: the balance is restored, so the
-  // first status answer must be cancelled — not pending from a
-  // reconciliation that only reads dispatched rows.
+it('never releases a stale dispatch on a TSQ 404, even when a retry would be rejected', async () => {
   mocks.readStatus.mockResolvedValue('dispatched');
   mocks.adoptPending.mockResolvedValue({
     status: 'reclaimed',
@@ -195,7 +193,7 @@ it('reports cancelled when the reclaim releases after a definitive rejection', a
       providerCustomerId: 'provider-customer',
     },
   });
-  mocks.lookupTransfer.mockResolvedValue('absent');
+  mocks.lookupTransfer.mockResolvedValue('not_found');
   mocks.retrieveWallet.mockImplementation(
     async (_provider: unknown, walletId: string) => ({
       id: walletId,
@@ -210,10 +208,13 @@ it('reports cancelled when the reclaim releases after a definitive rejection', a
     new PiggyvestApiError('PIGGYVEST_AUTH_ERROR', 'rejected', 401)
   );
   mocks.releaseAfterRejection.mockResolvedValue(true);
+  mocks.reconcile.mockResolvedValue({ status: 'pending' });
   expect(await checkPrimaryWalletSavingsStatus(input)).toEqual({
-    status: 'cancelled',
+    status: 'pending',
   });
-  expect(mocks.reconcile).not.toHaveBeenCalled();
+  expect(mocks.transfer).not.toHaveBeenCalled();
+  expect(mocks.releaseAfterRejection).not.toHaveBeenCalled();
+  expect(mocks.reconcile).toHaveBeenCalledTimes(1);
 });
 it('does not resubmit when the provider already holds the transfer', async () => {
   mocks.readStatus.mockResolvedValue('dispatched');

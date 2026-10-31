@@ -66,10 +66,6 @@ beforeEach(() => {
       mocks.state = parameters.at(-1) ? 'submitted' : 'unknown';
       result = true;
     }
-    if (sql.includes('requeue_transfer')) {
-      mocks.state = 'ready';
-      result = true;
-    }
     return { rows: [{ result }] };
   });
 });
@@ -189,28 +185,31 @@ it('persists unknown acceptance and never redispatches on future scheduled runs'
   // Submit throw plus the reconciling reference lookup that follows it.
   expect(fetchImplementation).toHaveBeenCalledTimes(2);
 });
-it('requeues a proven-absent reference after a submit throw and submits it on the next run', async () => {
-  let calls = 0;
+it('holds a submit throw whose reference TSQ does not find for review and never posts it again', async () => {
+  let posts = 0;
   const fetchImplementation = vi.fn(
     async (_url: string | URL | Request, init?: RequestInit) => {
-      calls++;
-      // First the provider POST throws before commit; the reconciling
-      // GET then proves the reference absent; the next run's POST lands.
+      // The POST loses its response; TSQ then answers 404 (not indexed yet).
       if (init?.method === 'GET')
-        return Response.json({ status: false }, { status: 404 });
-      if (calls === 1) throw new Error('timeout before commit');
-      return Response.json({ status: true }, { status: 202 });
+        return Response.json(
+          { status: false, message: 'Transaction Not Found', data: {} },
+          { status: 404 }
+        );
+      posts += 1;
+      throw new Error('response lost after send');
     }
   );
   expect(await run(fetchImplementation)).toMatchObject({
-    status: 'requeued_for_retry',
+    status: 'reconciliation_required',
     selectedCount: 1,
+    unknownCount: 1,
   });
-  expect(mocks.state).toBe('ready');
+  expect(mocks.state).toBe('unknown');
   expect(await run(fetchImplementation)).toMatchObject({
-    status: 'submitted_for_custody',
+    status: 'reconciliation_required',
+    selectedCount: 0,
   });
-  expect(mocks.state).toBe('submitted');
+  expect(posts).toBe(1);
 });
 it('surfaces result-write failure after cancelled committed claim and never resets dispatching', async () => {
   const controller = new AbortController();

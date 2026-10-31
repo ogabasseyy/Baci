@@ -145,11 +145,11 @@ describe('HeroDesktopGrid', () => {
     expect(sources).toHaveLength(2);
     expect(sources?.[0]).toHaveAttribute('type', 'image/avif');
     expect(sources?.[0]?.getAttribute('srcset')).toBe(
-      'https://cdn.ogabassey.com/image/width=800,quality=70,format=avif/core-assets/products/product-1.avif 800w'
+      '/cdn-image/width=800,quality=70,format=avif/core-assets/products/product-1.avif 800w'
     );
     expect(sources?.[1]).not.toHaveAttribute('type');
     expect(sources?.[1]?.getAttribute('srcset')).toBe(
-      'https://cdn.ogabassey.com/image/width=800,quality=70,format=jpeg/core-assets/products/product-1.avif 800w'
+      '/cdn-image/width=800,quality=70,format=jpeg/core-assets/products/product-1.avif 800w'
     );
     expect(container.innerHTML).not.toContain('format=auto');
 
@@ -158,7 +158,7 @@ describe('HeroDesktopGrid', () => {
     expect(img).toHaveAttribute('fetchpriority', 'high');
     expect(img).toHaveAttribute(
       'src',
-      'https://cdn.ogabassey.com/image/width=800,quality=70,format=jpeg/core-assets/products/product-1.avif'
+      '/cdn-image/width=800,quality=70,format=jpeg/core-assets/products/product-1.avif'
     );
     const mobileMuteSource = bigPicture?.querySelector(
       'source[media="(max-width: 767px)"]'

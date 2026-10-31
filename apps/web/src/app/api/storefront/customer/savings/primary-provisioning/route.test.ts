@@ -214,7 +214,7 @@ it.each([
   });
   expect((await POST(request())).status).toBe(code);
 });
-it('reports a provider-declined goal wallet as a clear non-retryable error', async () => {
+it('reports a provider-declined goal wallet without moving money, and says a retry is possible', async () => {
   mocks.run.mockResolvedValue({
     goalId: body.goalId,
     status: 'rejected',
@@ -229,7 +229,7 @@ it('reports a provider-declined goal wallet as a clear non-retryable error', asy
       code: 'SAVINGS_WALLET_PROVIDER_REJECTED',
       status: 'rejected',
       accounts: [],
-      error: expect.stringContaining('No money was moved'),
+      error: expect.stringMatching(/No money was moved.*try again/),
     })
   );
 });

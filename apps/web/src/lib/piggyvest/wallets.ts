@@ -47,7 +47,9 @@ const retrieveWalletDataSchema = z.object({
   creation_interest_rate: z.number(),
   current_interest_rate: z.number(),
   // Interest settings fixed at creation. Optional so unrelated consumers
-  // stay liberal; onboarding and goal enrollment check them strictly.
+  // stay liberal. Onboarding requires both to prove main-wallet routing;
+  // goal enrollment refuses a foreign payout wallet, and accrual on a goal
+  // whose customer declined interest.
   interest_enabled: z.boolean().nullable().optional(),
   interest_payout_wallet: z.string().min(1).nullable().optional(),
 });

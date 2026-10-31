@@ -134,7 +134,7 @@ async function handle(
       return NextResponse.json(
         {
           error:
-            'PiggyVest declined this savings wallet setup. No money was moved. Please contact support before trying again.',
+            'PiggyVest declined this savings wallet setup. No money was moved. You can try again in a few minutes, or contact support if it keeps failing.',
           code: 'SAVINGS_WALLET_PROVIDER_REJECTED',
           ...result,
         },

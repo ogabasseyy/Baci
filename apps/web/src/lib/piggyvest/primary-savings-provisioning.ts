@@ -85,16 +85,21 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       // subaccount_name is provider-unique, so a repost would be rejected
       // as a duplicate and strand recovery for another request. A list
       // failure falls through to creation: failing closed here would turn
-      // a transient list outage into a provisioning outage.
+      // a transient list outage into a provisioning outage. `prelisted`
+      // stays null unless a complete listing answered.
       let prelisted: { id: string }[] | null = null;
       const walletName = intent.walletName;
       const providerCustomerId = intent.providerCustomerId;
       try {
-        prelisted = schemas.wallets
-          .parse(await input.listWallets(providerCustomerId))
-          .filter((wallet) =>
-            matchesProviderWalletName(wallet.name, walletName)
-          );
+        const listed = await input.listWallets(providerCustomerId);
+        prelisted =
+          listed === null
+            ? null
+            : schemas.wallets
+                .parse(listed)
+                .filter((wallet) =>
+                  matchesProviderWalletName(wallet.name, walletName)
+                );
       } catch {
         prelisted = null;
       }
@@ -126,17 +131,28 @@ export async function provisionPrimarySavingsWallet(input: Input) {
         } catch (error) {
           await input.store.record(goalId, intent.claimToken, null);
           // A 422 decline envelope ("One or more validation errors
-          // occurred", seen in the 2026-10-31 sandbox for a fresh customer)
-          // created nothing; report it as rejected, not in flight. Nothing
-          // here retries it, and no money moves on this path.
-          return outcome(isValidationDecline(error) ? 'rejected' : 'pending');
+          // occurred") counts as "nothing created" only after a complete
+          // pre-list proved the name absent; otherwise it may be refusing a
+          // duplicate of a wallet an earlier attempt created. No money moves
+          // on this path. The intent is stored unknown (no terminal state
+          // exists), so status reads say pending and prepare_goal_wallet
+          // re-claims it after five minutes: a later setup sends one fresh
+          // create, never an automatic retry from here.
+          return outcome(
+            prelisted !== null && isValidationDecline(error)
+              ? 'rejected'
+              : 'pending'
+          );
         }
       }
       intent = await input.store.read(goalId);
       if (!intent) return outcome('unavailable');
     }
+    const listed = await input.listWallets(intent.providerCustomerId);
+    // An incomplete listing proves nothing: keep waiting, never conclude.
+    if (listed === null) return outcome('pending');
     const candidates = schemas.wallets
-      .parse(await input.listWallets(intent.providerCustomerId))
+      .parse(listed)
       .filter((wallet) =>
         matchesProviderWalletName(wallet.name, intent.walletName)
       );
@@ -172,6 +188,11 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       payout !== wallet.id &&
       payout !== intent.primaryWalletId
     )
+      return outcome('conflict');
+    // A declined goal must never be funded while the provider shows it
+    // accruing (customers are now created with accrual on, and goal
+    // inheritance is unproven). Null or absent is not evidence either way.
+    if (wallet.interest_enabled === true && !intent.interestAccepted)
       return outcome('conflict');
     if (wallet.status !== 'active') return outcome('pending');
     const accounts = await input.retrieveAccounts(wallet.id);

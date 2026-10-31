@@ -123,4 +123,86 @@ describe('primary savings goal wallet interest', () => {
     expect(await provisionPrimarySavingsWallet(input)).toEqual(ready);
     expect(input.store.enroll).toHaveBeenCalledOnce();
   });
+
+  it('never funds a declined goal whose readback shows it accruing interest', async () => {
+    const input = fixture();
+    input.retrieveWallet.mockResolvedValue({
+      ...(await goalWallet(input)),
+      interest_enabled: true,
+      interest_payout_wallet: null,
+    });
+    expect((await provisionPrimarySavingsWallet(input)).status).toBe(
+      'conflict'
+    );
+    expect(input.store.enroll).not.toHaveBeenCalled();
+    expect(input.retrieveAccounts).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    false,
+    null,
+  ])('enrolls a declined goal whose readback shows accrual %s', async (interestEnabled) => {
+    const input = fixture();
+    input.retrieveWallet.mockResolvedValue({
+      ...(await goalWallet(input)),
+      interest_enabled: interestEnabled,
+    });
+    expect(await provisionPrimarySavingsWallet(input)).toEqual(ready);
+    expect(input.store.enroll).toHaveBeenCalledOnce();
+  });
+
+  it('still enrolls an opted-in goal that accrues interest', async () => {
+    const input = withInterestChoice(true);
+    input.retrieveWallet.mockResolvedValue({
+      ...(await goalWallet(input)),
+      interest_enabled: true,
+    });
+    const outcome = await provisionPrimarySavingsWallet(input);
+    expect(outcome.status).toBe('ready');
+    expect(outcome.interestEnrollment).toBe('requested');
+    expect(input.store.enroll).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['fails', () => Promise.reject(new Error('list down'))],
+    ['cannot be completed', () => Promise.resolve(null)],
+  ])('keeps a 422 ambiguous when the pre-list %s, since it may refuse a duplicate of a wallet that exists', async (_label, prelist) => {
+    const input = withInterestChoice(true);
+    input.listWallets.mockReset().mockImplementationOnce(prelist);
+    input.createWallet.mockRejectedValueOnce(
+      new PiggyvestApiError(
+        'PIGGYVEST_REQUEST_ERROR',
+        'One or more validation errors occurred',
+        422,
+        true
+      )
+    );
+    expect((await provisionPrimarySavingsWallet(input)).status).toBe('pending');
+    expect(input.store.record).toHaveBeenCalledExactlyOnceWith(
+      goalId,
+      'claim',
+      null
+    );
+    expect(input.store.enroll).not.toHaveBeenCalled();
+  });
+
+  it('keeps recovery pending when the provider listing cannot be completed', async () => {
+    const input = fixture();
+    input.mode = 'recover';
+    input.listWallets.mockResolvedValue(null);
+    expect((await provisionPrimarySavingsWallet(input)).status).toBe('pending');
+    expect(input.retrieveWallet).not.toHaveBeenCalled();
+    expect(input.store.enroll).not.toHaveBeenCalled();
+  });
+
+  it('reads a declined goal as pending afterwards, since its intent stays reclaimable', async () => {
+    // No terminal goal-intent state exists without a migration: the decline
+    // is stored as unknown, so a later status read reports pending and
+    // prepare_goal_wallet re-claims it after five minutes.
+    const input = fixture();
+    input.mode = 'recover';
+    input.listWallets.mockResolvedValue([]);
+    expect((await provisionPrimarySavingsWallet(input)).status).toBe('pending');
+    expect(input.createWallet).not.toHaveBeenCalled();
+  });
 });

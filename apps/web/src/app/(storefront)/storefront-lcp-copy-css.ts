@@ -1,3 +1,4 @@
+import { AUTHORITY_HUB_LCP_CSS } from './authority-hub-lcp-css';
 import { REPAIR_BOOKING_LCP_CSS } from './repair-booking-lcp-css';
 
 /**
@@ -66,7 +67,7 @@ html:has([data-storefront-shell]) *::after {
   margin: 0 !important;
 }
 
-${REPAIR_BOOKING_LCP_CSS}
+${REPAIR_BOOKING_LCP_CSS}${AUTHORITY_HUB_LCP_CSS}
 
 [data-cwv-lcp-copy="imei"] {
   color: var(--store-background-text, #111827) !important;

@@ -24,7 +24,7 @@ describe('QuizMissionHero', () => {
   });
 
   it('opens an addressed sponsorship email', () => {
-    const openUrl = jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    const openUrl = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
     render(<QuizMissionHero />);
 
     fireEvent.press(screen.getByRole('link', { name: 'Sponsor SuperQuiz' }));

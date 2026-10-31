@@ -23,7 +23,7 @@ describe('mobile-admin EAS Update foundation', () => {
     const config = buildConfig(TEST_CONFIG_CONTEXT);
 
     expect(config.version).toBe('2.0.42');
-    expect(config.runtimeVersion).toBe('2.0.42');
+    expect(config.runtimeVersion).toBe('2.0.42-sdk58-rn0880');
     expect(config.extra?.eas).toEqual({
       projectId: '4b258ae6-fc8a-4b3d-bcbe-dfb3402203c9',
     });

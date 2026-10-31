@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import type { RefObject } from 'react';
 import { useEffect, useState } from 'react';
+import type { TextInputInstance } from 'react-native';
 import {
   ActivityIndicator,
   Alert,
@@ -28,7 +29,7 @@ interface LoginOtpStepProps {
   onResendOtp: () => Promise<boolean | undefined>;
   otp: string;
   otpError: string | null;
-  otpInputRef: RefObject<TextInput | null>;
+  otpInputRef: RefObject<TextInputInstance | null>;
   setOtp: (value: string) => void;
   setOtpError: (value: string | null) => void;
   verifyOtp: (

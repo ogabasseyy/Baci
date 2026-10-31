@@ -1,8 +1,16 @@
 'use client';
 
+import {
+  effectiveLaunchPins,
+  LAUNCH_CAROUSEL_LIMIT,
+  OGABASSEY_LAUNCH_PINS_SINCE,
+  OGABASSEY_PINNED_LAUNCH_SLUGS,
+  selectLaunchProducts,
+} from '@baci/shared/storefront';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { isExternalPlaceholderImageUrl } from '@/lib/image-utils';
+import { preferFirstPartyCdnLeadItem } from '@/lib/prefer-first-party-cdn-lead-item';
 import { getProductUrl } from '@/lib/product-url';
 import {
   AD_CONFIG,
@@ -16,7 +24,7 @@ import {
   type LaunchSlide,
 } from './LaunchCarousel';
 
-const RECENT_SLIDE_LIMIT = 6;
+const RECENT_SLIDE_LIMIT = LAUNCH_CAROUSEL_LIMIT;
 
 // Normalized products carry `/placeholder.svg` (or `.png`) when no image was
 // uploaded; imported ones may carry external placeholder-service URLs (which the
@@ -75,6 +83,15 @@ interface CategoryRecentCarouselProps {
  * product has a usable image it falls back to the category artwork (preserving
  * the legacy banner behaviour) and otherwise renders nothing.
  */
+interface CategoryLaunchCandidate {
+  created_at?: string | null;
+  category?: string;
+  category_slug?: string;
+  imageUrl: string;
+  product: Product;
+  slug?: string;
+}
+
 export function CategoryRecentCarousel({
   categoryName,
   categoryImage,
@@ -83,24 +100,46 @@ export function CategoryRecentCarousel({
   const merchant = useMerchantSafe();
   const basePath = merchant?.basePath || '';
 
-  const productSlides: LaunchProductSlide[] = products
-    .map((product) => ({ product, imageUrl: usableImageUrl(product) }))
-    .filter(
-      (entry): entry is { product: Product; imageUrl: string } =>
-        entry.imageUrl !== undefined
-    )
-    .slice(0, RECENT_SLIDE_LIMIT)
-    .map(({ product, imageUrl }) => ({
-      kind: 'product',
-      id: String(product.id),
-      name: product.name,
-      priceLabel: product.price,
-      // Raw path; LaunchCarousel applies asRoute() at the link.
-      href: `${basePath}${getProductUrl({ ...product, id: String(product.id) })}`,
-      imageUrl,
-      imageAlt: product.name,
-      ctaLabel: 'Shop now',
-    }));
+  const candidates: CategoryLaunchCandidate[] = products.flatMap((product) => {
+    const imageUrl = usableImageUrl(product);
+    if (!imageUrl) {
+      return [];
+    }
+    return [
+      {
+        created_at: product.created_at,
+        category: product.category,
+        category_slug: product.category_slug ?? product.categorySlug,
+        imageUrl,
+        product,
+        slug: product.slug,
+      },
+    ];
+  });
+
+  const launchPins = effectiveLaunchPins(
+    candidates,
+    OGABASSEY_PINNED_LAUNCH_SLUGS,
+    OGABASSEY_LAUNCH_PINS_SINCE
+  );
+
+  const productSlides: LaunchProductSlide[] = preferFirstPartyCdnLeadItem(
+    selectLaunchProducts(candidates, {
+      pinned: launchPins,
+      limit: RECENT_SLIDE_LIMIT,
+    }),
+    (entry) => entry.imageUrl
+  ).map(({ product, imageUrl }) => ({
+    kind: 'product',
+    id: String(product.id),
+    name: product.name,
+    priceLabel: product.price,
+    // Raw path; LaunchCarousel applies asRoute() at the link.
+    href: `${basePath}${getProductUrl({ ...product, id: String(product.id) })}`,
+    imageUrl,
+    imageAlt: product.name,
+    ctaLabel: 'Shop now',
+  }));
 
   if (productSlides.length === 0) {
     // Fall back to the category artwork banner (legacy behaviour) if present.

@@ -6,8 +6,6 @@ const REACT_NATIVE_FROM_SOURCE_BLOCK = `${INCLUDE_BUILD_PREFIX} {
   dependencySubstitution {
     substitute(module("com.facebook.react:react-android")).using(project(":packages:react-native:ReactAndroid"))
     substitute(module("com.facebook.react:react-native")).using(project(":packages:react-native:ReactAndroid"))
-    substitute(module("com.facebook.react:hermes-android")).using(project(":packages:react-native:ReactAndroid:hermes-engine"))
-    substitute(module("com.facebook.react:hermes-engine")).using(project(":packages:react-native:ReactAndroid:hermes-engine"))
   }
 }
 `;

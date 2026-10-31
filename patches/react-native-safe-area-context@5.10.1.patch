@@ -1,0 +1,32 @@
+diff --git a/android/build.gradle b/android/build.gradle
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -63,7 +63,7 @@
+         }
+     }
+ 
+-    compileSdkVersion getExtOrDefault('compileSdkVersion', 30)
++    compileSdk getExtOrDefault('compileSdkVersion', 30)
+ 
+     // Used to override the NDK path/version on internal CI or by allowing
+     // users to customize the NDK path/version from their root project (e.g. for M1 support)
+@@ -75,8 +75,8 @@
+     }
+ 
+     defaultConfig {
+-        minSdkVersion getExtOrDefault('minSdkVersion', 16)
+-        targetSdkVersion getExtOrDefault('targetSdkVersion', 28)
++        minSdk getExtOrDefault('minSdkVersion', 16)
++        targetSdk getExtOrDefault('targetSdkVersion', 28)
+         versionCode 1
+         versionName "1.0"
+         buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
+@@ -86,7 +86,7 @@
+         }
+     }
+ 
+-    lintOptions{
++    lint {
+         abortOnError false
+     }
+ 

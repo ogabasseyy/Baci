@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 30 October 2026 against source revision
-`c346c35d5c6b8e176028e57a182bc2faca2cfb33`. The support-chat health changes
+`a53802c1d138abcd175e5ed29196f9070697686e`. The support-chat health changes
 were re-reviewed and tested; cited source evidence remains unchanged across the
 latest main sync. This is a navigation map, not authorization or proof of current
 deployment. Check the current implementation, live tool discovery and merchant

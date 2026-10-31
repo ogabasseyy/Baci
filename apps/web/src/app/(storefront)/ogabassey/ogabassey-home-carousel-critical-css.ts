@@ -34,12 +34,12 @@ div:has(>.ogabassey-ad-slot){display:flex;flex-direction:column;align-items:cent
 [data-ogabassey-mobile-hero-panel] > [aria-hidden="true"]{opacity:0;z-index:0}
 [data-ogabassey-mobile-hero-panel] > [aria-hidden="false"]{opacity:1;z-index:10}
 [data-ogabassey-mobile-hero-panel]>[role="group"]>:first-child{grid-column:span 3/span 3;display:flex;flex-direction:column;justify-content:center;gap:.25rem;padding:1rem 1.25rem}
-[data-ogabassey-mobile-hero-panel] h2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;font-size:1.65rem;font-weight:800;line-height:1.05;color:var(--store-secondary-text,#111827)}
+[data-ogabassey-mobile-hero-panel] h2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;font-size:1.25rem;font-weight:800;line-height:1.05;color:var(--store-secondary-text,#111827)}
 [data-ogabassey-mobile-hero-panel] p{font-size:11px;font-weight:600;color:var(--store-secondary-text,#111827)}
 [data-ogabassey-mobile-hero-panel]>[role="group"]>:first-child>span:first-child{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:var(--store-primary,#d62027)}
 [data-ogabassey-mobile-hero-panel]>[role="group"]>:first-child>span:last-child{margin-top:.5rem;display:inline-flex;width:fit-content;align-items:center;border-radius:9999px;background:var(--store-primary,#d62027);padding:.375rem 1rem;font-size:11px;font-weight:700;color:var(--store-on-primary,#ffffff)}
-[data-ogabassey-mobile-hero-panel]>[role="group"]>:nth-child(2){position:relative;grid-column:span 2/span 2;display:flex;align-items:center;justify-content:center;padding:.5rem}
-[data-ogabassey-mobile-hero-panel] img{height:100%;width:100%;object-fit:contain;object-position:right;padding:.5rem}
+[data-ogabassey-mobile-hero-panel]>[role="group"]>:nth-child(2){position:relative;grid-column:span 2/span 2;display:flex;align-items:center;justify-content:center;padding:.25rem}
+[data-ogabassey-mobile-hero-panel] img{height:100%;width:100%;object-fit:contain;object-position:right;padding:.25rem}
 [data-ogabassey-mobile-hero-panel]>[role="group"]>a{position:absolute;inset:0}
 [data-ogabassey-mobile-hero]>:last-child:not([role="region"]),[data-ogabassey-home-hero-reserve-mobile]>:last-child{margin-top:.5rem;min-height:2.75rem;display:flex;align-items:center;gap:.5rem;padding:0 .25rem}
 [data-ogabassey-mobile-hero] [aria-label="Hero carousel slide controls"]{display:flex;flex:1;align-items:center;gap:.375rem}

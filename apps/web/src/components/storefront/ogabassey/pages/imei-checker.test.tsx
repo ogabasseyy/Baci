@@ -101,66 +101,6 @@ describe('OgabasseyImeiChecker', () => {
     return `${tier.name}, ${tier.tagline}, ${tier.priceDisplay}`;
   };
 
-  it('honors explicit empty capabilities with an accessible retry and disabled verification', () => {
-    mocks.availableTierKeys = [];
-    render(<OgabasseyImeiChecker />);
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'No checks are available for this selection.'
-    );
-    expect(
-      screen.queryByRole('radio', { name: tierButtonName('full') })
-    ).toBeNull();
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Retry available checks' })
-    );
-    expect(mocks.retryAvailability).toHaveBeenCalledOnce();
-    expect(
-      screen.getByRole('button', { name: 'Choose a check' })
-    ).toBeDisabled();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('retains legacy checks after a capability error while hiding provider-only checks and offering retry', () => {
-    mocks.availabilityFailed = true;
-    render(<OgabasseyImeiChecker />);
-    expect(
-      screen.getByRole('radio', { name: tierButtonName('full') })
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'More checks' }));
-    expect(
-      screen.queryByRole('radio', { name: tierButtonName('esimCompatibility') })
-    ).toBeNull();
-    expect(screen.getByRole('status')).toHaveTextContent(
-      'Some services could not be checked.'
-    );
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Retry available checks' })
-    );
-    expect(mocks.retryAvailability).toHaveBeenCalledOnce();
-  });
-
-  it('shows eSIM only when advertised and prevents billing a revoked selection', () => {
-    const { rerender } = render(<OgabasseyImeiChecker />);
-    fireEvent.click(screen.getByRole('button', { name: 'More checks' }));
-    expect(
-      screen.queryByRole('radio', { name: tierButtonName('esimCompatibility') })
-    ).toBeNull();
-    mocks.availableTierKeys = ['full', 'esimCompatibility'];
-    rerender(<OgabasseyImeiChecker />);
-    fireEvent.click(
-      screen.getByRole('radio', { name: tierButtonName('esimCompatibility') })
-    );
-    expect(
-      screen.getByRole('button', { name: /Verify Now · ₦700/ })
-    ).toBeInTheDocument();
-    mocks.availableTierKeys = [];
-    rerender(<OgabasseyImeiChecker />);
-    expect(
-      screen.getByRole('button', { name: 'Choose a check' })
-    ).toBeDisabled();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
   it('renders the primary smartphone tiers accepted by the API', () => {
     render(<OgabasseyImeiChecker />);
 

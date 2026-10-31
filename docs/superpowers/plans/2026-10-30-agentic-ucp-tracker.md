@@ -10,7 +10,7 @@ The single place to see where the agentic commerce work stands and what happens 
 | | |
 | --- | --- |
 | **Current plan** | Milestone 0, plan 1 is built and in review as draft PR [ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869); plan 2 is next |
-| **Next action** | Plan 2: Codex review on docs PR #3851; then the owner-approved read-only baseline (plan 2 Task 1) and the build |
+| **Next action** | Plan 2 build in `.worktrees/agentic-baseline-evidence` (stacked on plan 1): Tasks 2 and 4 in progress; Task 1 waits for the owner's OK |
 | **Waiting on the owner** | Approval of plan 2 Task 1's read-only production queries and profile probes; merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851); read-only production queries for plan 2 |
 | **Last updated** | 31 October 2026 |
 
@@ -67,7 +67,7 @@ Plan: [2026-10-30-agentic-m0-1-admin-client-removal.md](2026-10-30-agentic-m0-1-
 
 - [x] Latest-docs check (31 Oct: no new protocol versions; fixtures pin UCP by commit because its tags were re-cut; new findings F40 and F41)
 - [x] Plan written (31 Oct): [2026-10-31-agentic-m0-2-baseline-evidence.md](2026-10-31-agentic-m0-2-baseline-evidence.md), 10 tasks, rehearsed in a scratch copy of plan 1's head (106 tests pass, 9 known gaps fail as expected, capability gate OK). Task 1 needs the owner's OK: read-only queries of the agentic merchant's `premium_features` (`shared_cart`), `vat_registration_status` and the migration ledger, plus a plain GET of its public UCP profile.
-- [ ] Independent review, fixes applied (orchestrator review done: validator and MCP fixtures moved under `src` so CI type-checks them; Codex review requested on #3851)
+- [x] Independent review, fixes applied (31 Oct): orchestrator review moved the validator and MCP fixtures under `src` so CI type-checks them; Codex on #3851 at `c699994a3d`: "Didn't find any major issues"
 - [ ] Built with TDD
 - [ ] Local gates passed
 - [ ] PR opened (owner OK):
@@ -186,6 +186,7 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | 31 Oct | Plan 1 code | Codex on PR #3869 | Clean on `d43c97b7fc` ("Didn't find any major issues"); re-requested for the rebuilt head `ede636ee97` |
 | 31 Oct | Plan 1 branch | Orchestrator | The first push rewrote commit IDs, so the capability record named a commit only this Mac had. Fixed: the push script now keeps IDs identical and stops on any mismatch. |
 | 31 Oct | Plan 2 | Orchestrator | Accepted Task 1's queries and probes, the evidence table and the Production-cell rule; moved the validator and MCP fixtures under `src` for CI type-checking |
+| 31 Oct | Plan 2 | Codex on PR #3851 (commit `c699994a3d`) | Didn't find any major issues |
 
 ## Change log
 

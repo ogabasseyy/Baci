@@ -107,3 +107,31 @@ it('binds known-unsubmitted cancellation to the signed actor and owned lookup', 
     args: { p_lookup_id: 'lookup' },
   });
 });
+
+it('signs attempt claims for the authenticated customer and fingerprint', async () => {
+  vi.stubEnv('IMEI_ACCESS_SIGNING_SECRET', 'x'.repeat(32));
+  const rpc = vi
+    .fn()
+    .mockResolvedValue({ data: { idempotency_key: 'canonical' }, error: null });
+  const access = createImeiAccessClient({
+    ...context,
+    supabase: { rpc } as unknown as SupabaseClient,
+  });
+  await access.claimAttempt({
+    tier: 'blacklist',
+    imei_hash: 'a'.repeat(64),
+    idempotency_key: 'requested',
+  });
+  expect(rpc.mock.calls[0][0]).toBe('imei_claim_attempt');
+  expect(JSON.parse(rpc.mock.calls[0][1].p_payload)).toMatchObject({
+    actor: context.userId,
+    customer: context.customerId,
+    merchant: context.merchantId,
+    operation: 'claim_attempt',
+    args: {
+      tier: 'blacklist',
+      imei_hash: 'a'.repeat(64),
+      idempotency_key: 'requested',
+    },
+  });
+});

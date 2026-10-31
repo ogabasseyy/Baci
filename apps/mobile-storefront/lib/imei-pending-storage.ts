@@ -14,6 +14,7 @@ export interface PendingImeiLookup {
   lookupId: string;
   tier: ImeiServiceTierKey;
   device?: ImeiDeviceCategory;
+  recovery?: { storageKey: string; idempotencyKey: string };
 }
 
 export function pendingImeiStorageKey(merchantId: string, customerId: string) {
@@ -62,7 +63,23 @@ export async function loadPendingImeiLookup(
     ) {
       throw new Error('Invalid pending IMEI lookup');
     }
+    const recovery = value.recovery;
+    const validRecovery =
+      recovery &&
+      typeof recovery === 'object' &&
+      'storageKey' in recovery &&
+      typeof recovery.storageKey === 'string' &&
+      /^imei-attempt-v1-[0-9a-f]{64}$/.test(recovery.storageKey) &&
+      'idempotencyKey' in recovery &&
+      typeof recovery.idempotencyKey === 'string' &&
+      UUID_PATTERN.test(recovery.idempotencyKey)
+        ? {
+            storageKey: recovery.storageKey,
+            idempotencyKey: recovery.idempotencyKey,
+          }
+        : undefined;
     return {
+      ...(validRecovery ? { recovery: validRecovery } : {}),
       createdAt: value.createdAt,
       lookupId: value.lookupId,
       tier: value.tier,

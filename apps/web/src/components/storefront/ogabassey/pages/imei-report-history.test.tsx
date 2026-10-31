@@ -19,7 +19,7 @@ vi.mock('./use-imei-runtime-availability', () => ({
   }),
 }));
 vi.mock('@/contexts/customer-auth-context', () => ({
-  useOptionalCustomerAuth: () => ({ customer: { id: mocks.customerId } }),
+  useOptionalCustomerAuth: () => ({ customer: { id: mocks.customerId }, user: { id: '11111111-1111-4111-8111-111111111111' }, isLoading: false }),
 }));
 vi.mock('./imei-checker-request', () => ({
   performImeiCheck: mocks.check,
@@ -105,6 +105,8 @@ async function start() {
 
 describe('completed report reopening', () => {
   beforeEach(() => {
+    localStorage.clear();
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: { request: async (_name: string, fn: () => unknown) => fn() } });
     mocks.check.mockReset();
     mocks.poll.mockReset();
     mocks.available = true;

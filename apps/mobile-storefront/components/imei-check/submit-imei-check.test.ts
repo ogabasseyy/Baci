@@ -17,15 +17,17 @@ describe('submitImeiCheck', () => {
       fetchImpl,
       idempotencyKey: '11111111-1111-4111-8111-111111111111',
       identifier: '490154203237518',
+      previousLookupId: '22222222-2222-4222-8222-222222222222',
       signal: new AbortController().signal,
       tier: 'blacklist',
     });
 
     const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body));
     expect(body).toEqual({
-      clientCapabilities: ['imei-async-v1'],
+      clientCapabilities: ['imei-async-v1', 'imei-attempt-coordination-v1'],
       device: 'smartphone',
       imei: '490154203237518',
+      previousLookupId: '22222222-2222-4222-8222-222222222222',
       tier: 'blacklist',
     });
   });

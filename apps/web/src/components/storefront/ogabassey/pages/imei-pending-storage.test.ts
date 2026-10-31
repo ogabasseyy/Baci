@@ -107,3 +107,9 @@ describe('pending IMEI storage', () => {
     expect(removeItem).toHaveBeenCalledWith('key');
   });
 });
+
+it('restores the recovery identity associated with a pending lookup', () => {
+  const recovery = { storageKey: `baci:imei-attempt:v1:${'a'.repeat(64)}`, idempotencyKey: '11111111-1111-4111-8111-111111111111' };
+  const adapter = { getItem: () => JSON.stringify({ createdAt: '2026-07-10T12:00:00.000Z', lookupId: '22222222-2222-4222-8222-222222222222', tier: 'simLock', recovery }), removeItem: vi.fn(), setItem: vi.fn() };
+  expect(loadPendingImeiLookup(adapter, 'key')?.recovery).toEqual(recovery);
+});

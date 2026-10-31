@@ -8,15 +8,6 @@
  * since the storefront has no wallet top-up route today.
  */
 
-const UNRESOLVED_IMEI_RESPONSE_CODES = new Set([
-  'DEBIT_FAILURE_STATE_SAVE_FAILED',
-  'IDEMPOTENT_REQUEST_IN_FLIGHT',
-  'LOOKUP_RESULT_SAVE_FAILED',
-  'REFUND_PENDING',
-  'REFUND_STATE_SAVE_FAILED',
-  'REFUNDED_STATE_SAVE_FAILED',
-]);
-
 export const DEFAULT_IMEI_CHECK_ERROR_MESSAGE =
   'Unable to check IMEI. Please try again.';
 
@@ -56,40 +47,26 @@ function getErrorMessage(payload: Record<string, unknown>): string | null {
   return typeof payload.error === 'string' ? payload.error : null;
 }
 
-function shouldClearImeiIdempotencyKey(
-  responseStatus: number,
-  code: string | null,
-  shouldPreserveIdempotencyKey: boolean
-): boolean {
-  if (shouldPreserveIdempotencyKey) {
-    return false;
-  }
-
-  return (
-    [200, 402, 404].includes(responseStatus) ||
-    (responseStatus === 502 && code !== 'REFUND_PENDING')
-  );
-}
-
 export function resolveImeiCheckFailure(
   input: ResolveImeiCheckFailureInput
 ): ResolveImeiCheckFailureOutcome {
   const payload = asRecord(input.payload);
   const code = getCode(payload);
   const errorMessage = getErrorMessage(payload);
-  const shouldPreserveIdempotencyKey =
-    code !== null && UNRESOLVED_IMEI_RESPONSE_CODES.has(code);
-  const shouldClearIdempotencyKey = shouldClearImeiIdempotencyKey(
-    input.responseStatus,
-    code,
-    shouldPreserveIdempotencyKey
-  );
+  // Only a confirmed no-debit or refunded terminal response may retire a key.
+  // Authentication and intermediary errors can follow an earlier uncertain POST.
+  const shouldClearIdempotencyKey =
+    (input.responseStatus === 402 && code === 'WALLET_INSUFFICIENT') ||
+    (input.responseStatus === 404 && code === 'SICKW_NOT_FOUND') ||
+    (input.responseStatus === 502 &&
+      (code === 'SICKW_UNAVAILABLE' || code === 'PETROCK_NOT_SUBMITTED'));
+  const shouldPreserveIdempotencyKey = !shouldClearIdempotencyKey;
 
   if (input.responseStatus === 401) {
     return {
       errorMessage: null,
-      shouldClearIdempotencyKey: true,
-      shouldPreserveIdempotencyKey: false,
+      shouldClearIdempotencyKey: false,
+      shouldPreserveIdempotencyKey: true,
       shouldRefetchWallet: false,
       shouldRedirectToLogin: true,
       topUpAmount: null,
@@ -154,7 +131,7 @@ export function resolveImeiCheckFailure(
 
   return {
     errorMessage: errorMessage ?? DEFAULT_IMEI_CHECK_ERROR_MESSAGE,
-    shouldClearIdempotencyKey: !shouldPreserveIdempotencyKey,
+    shouldClearIdempotencyKey,
     shouldPreserveIdempotencyKey,
     shouldRefetchWallet: false,
     shouldRedirectToLogin: false,

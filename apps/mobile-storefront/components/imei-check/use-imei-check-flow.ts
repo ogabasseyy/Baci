@@ -1,16 +1,26 @@
 import {
+  IMEI_IDENTIFIER_BY_DEVICE,
   IMEI_SERVICE_TIERS,
   type ImeiDeviceCategory,
   type ImeiReport,
   type ImeiServiceTierKey,
   isValidDeviceIdentifier,
+  normalizeDeviceIdentifier,
   resolveImeiReportDevice,
+  resolveInputIdentifier,
 } from '@baci/shared/imei';
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { Alert, Keyboard } from 'react-native';
 import { useWallet } from '@/hooks/use-wallet';
+import { clearImeiRecoveryKey } from '@/lib/imei-request-recovery';
 import { createLogger } from '@/lib/logger';
 import {
   ImeiCheckApiResponseSchema,
@@ -19,10 +29,10 @@ import {
 } from '@/lib/validation';
 import { useAuthStore } from '@/stores/auth-store';
 import { imeiCheckScreenActions } from './imei-check-screen-actions';
+import { prepareImeiAttempt } from './prepare-imei-attempt';
 import { resolveImeiCheckFailure } from './resolve-imei-check-failure';
 import { submitImeiCheck } from './submit-imei-check';
 import { useImeiPendingLookup } from './use-imei-pending-lookup';
-import { useImeiRequestIdentity } from './use-imei-request-identity';
 
 const log = createLogger('ImeiChecker');
 export function useImeiCheckFlow(
@@ -49,11 +59,11 @@ export function useImeiCheckFlow(
     customerId,
     merchantId,
   });
-  const requestIdentity = useImeiRequestIdentity(Crypto.randomUUID);
   const scope = `${merchantId}:${customerId}:${session?.user?.id ?? ''}`;
   const scopeRef = useRef(scope);
   const submitting = useRef(false);
-  useEffect(() => {
+  const lastSeen = useRef(new Map<string, string>());
+  useLayoutEffect(() => {
     scopeRef.current = scope;
     setResult(null);
     setResultLookupId(null);
@@ -62,13 +72,14 @@ export function useImeiCheckFlow(
 
   const walletBalance = walletQuery.data?.wallet.balance ?? 0;
 
-  const clearIdempotencyKey = () => {
-    requestIdentity.clear();
-  };
-
   const handlePendingTerminal = useEffectEvent(
     (terminal: NonNullable<typeof pendingLookup.terminal>) => {
-      clearIdempotencyKey();
+      if (terminal.kind === 'complete' && terminal.recovery) {
+        void clearImeiRecoveryKey(
+          terminal.recovery.storageKey,
+          terminal.recovery.idempotencyKey
+        ).catch(() => undefined);
+      }
       setIsLoading(false);
       if (terminal.kind === 'complete') {
         setError(null);
@@ -78,6 +89,14 @@ export function useImeiCheckFlow(
         setResultScope(scope);
         setResultTier(terminal.tier);
         setResultLookupId(terminal.lookupId);
+        lastSeen.current.set(
+          JSON.stringify([
+            scope,
+            terminal.tier,
+            terminal.result.imei.trim().toUpperCase(),
+          ]),
+          terminal.lookupId
+        );
         setResult(terminal.result);
       } else {
         setError(terminal.error);
@@ -116,18 +135,10 @@ export function useImeiCheckFlow(
       return;
     }
 
-    if (walletQuery.isLoading) {
-      setError('Loading wallet balance. Please wait a moment and try again.');
-      return;
-    }
-    if (walletQuery.isError) {
+    if (!session?.user?.id || !customerId || !merchantId) {
       setError(
-        'Wallet balance unavailable. Refresh your wallet and try again.'
+        'Please sign in and wait for your account to load before checking.'
       );
-      return;
-    }
-    if (walletBalance < serviceTier.price) {
-      imeiCheckScreenActions.fundWallet(serviceTier.price - walletBalance);
       return;
     }
 
@@ -141,18 +152,67 @@ export function useImeiCheckFlow(
     const timeoutId = setTimeout(() => controller.abort(), 30_000);
 
     const performCheck = async () => {
-      const idempotencyKey = requestIdentity.get(tier, imei, scope);
+      const preparation = await prepareImeiAttempt({
+        scope,
+        tier,
+        identifier: normalizeDeviceIdentifier(
+          imei,
+          resolveInputIdentifier(
+            serviceTier.identifier,
+            IMEI_IDENTIFIER_BY_DEVICE[device]
+          )
+        ),
+        price: serviceTier.price,
+        balance: walletBalance,
+        walletLoading: walletQuery.isLoading,
+        walletError: walletQuery.isError,
+        createKey: Crypto.randomUUID,
+      });
+      if (scopeRef.current !== submittedScope) return;
+      if (preparation.kind === 'storage_error') {
+        setError('This device cannot save check recovery. Please try again.');
+        return;
+      }
+      if (preparation.kind === 'wallet_loading') {
+        setError('Loading wallet balance. Please wait a moment and try again.');
+        return;
+      }
+      if (preparation.kind === 'wallet_error') {
+        setError(
+          'Wallet balance unavailable. Refresh your wallet and try again.'
+        );
+        return;
+      }
+      if (preparation.kind === 'insufficient') {
+        imeiCheckScreenActions.fundWallet(preparation.shortfall);
+        return;
+      }
+      const { recovery } = preparation;
+      const { idempotencyKey } = recovery;
       const { rawData, response } = await submitImeiCheck({
         accessToken: session?.access_token,
         apiBaseUrl: API_BASE_URL,
         device,
         idempotencyKey,
         identifier: imei,
+        previousLookupId: lastSeen.current.get(
+          JSON.stringify([submittedScope, tier, imei.trim().toUpperCase()])
+        ),
         signal: controller.signal,
         tier,
       });
       if (scopeRef.current !== submittedScope) return;
       if (!response.ok || rawData?.error) {
+        const failure = ImeiCheckApiResponseSchema.safeParse(rawData);
+        if (
+          failure.success &&
+          rawData?.code === 'PREVIOUS_REPORT_AVAILABLE' &&
+          failure.data.lookupId
+        )
+          lastSeen.current.set(
+            JSON.stringify([submittedScope, tier, imei.trim().toUpperCase()]),
+            failure.data.lookupId
+          );
         const outcome = resolveImeiCheckFailure({
           currentTierPrice: serviceTier.price,
           payload: rawData,
@@ -161,7 +221,10 @@ export function useImeiCheckFlow(
         });
 
         if (outcome.shouldClearIdempotencyKey) {
-          clearIdempotencyKey();
+          await clearImeiRecoveryKey(
+            recovery.storageKey,
+            recovery.idempotencyKey
+          ).catch(() => undefined);
         }
         if (outcome.shouldRedirectToLogin) {
           router.push('/auth/login?returnTo=/imei-check');
@@ -193,6 +256,10 @@ export function useImeiCheckFlow(
         await pendingLookup.start({
           lookupId: validated.lookupId,
           pollAfterMs: validated.pollAfterMs ?? 2_000,
+          recovery: {
+            storageKey: recovery.storageKey,
+            idempotencyKey: recovery.idempotencyKey,
+          },
           tier,
           device,
         });
@@ -204,11 +271,19 @@ export function useImeiCheckFlow(
         return;
       }
 
-      clearIdempotencyKey();
+      await clearImeiRecoveryKey(
+        recovery.storageKey,
+        recovery.idempotencyKey
+      ).catch(() => undefined);
       setResultDevice(device);
       setResultScope(submittedScope);
       setResultTier(tier);
       setResultLookupId(validated.lookupId ?? null);
+      if (validated.lookupId)
+        lastSeen.current.set(
+          JSON.stringify([submittedScope, tier, imei.trim().toUpperCase()]),
+          validated.lookupId
+        );
       setResult(validated.data);
     };
 
@@ -259,6 +334,14 @@ export function useImeiCheckFlow(
       setResultScope(scope);
       setResultDevice(report.device);
       setResultLookupId(report.lookupId);
+      lastSeen.current.set(
+        JSON.stringify([
+          scope,
+          report.tier,
+          report.result.imei.trim().toUpperCase(),
+        ]),
+        report.lookupId
+      );
       setResultTier(report.tier);
       setResult(report.result);
     },

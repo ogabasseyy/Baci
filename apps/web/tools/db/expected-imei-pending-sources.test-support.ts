@@ -54,4 +54,9 @@ export const EXPECTED_IMEI_PENDING_SOURCES = [
       'supabase/migrations/20261031061214_imei_report_history_device_read.sql',
     sha256: 'c3179d4170004038302d9637c2c79edb94ddd709a70b8713fbb235241e24018c',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261031124500_imei_attempt_coordination.sql',
+    sha256: 'e61a5b459a78b5428890d6fc554f935c48a47d48029fa525457de8b1eb875ab7',
+  },
 ];

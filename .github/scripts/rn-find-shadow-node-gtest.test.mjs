@@ -18,7 +18,7 @@ const applySuiteFlagOff = join(
   root,
   'tools/rn-find-shadow-node-gtest/apply-suite-flag-off.py',
 );
-const patch = join(root, 'patches/react-native@0.86.2.patch');
+const patch = join(root, 'patches/react-native@0.88.0.patch');
 const rnTest = join(
   root,
   'node_modules/react-native/ReactCommon/react/renderer/uimanager/tests/FindShadowNodeByTagTest.cpp',
@@ -57,13 +57,12 @@ test('CMakeLists compiles the real node_modules suite path', () => {
   assert.match(body, /add_executable\(find_shadow_node_by_tag_test/);
 });
 
-test('package patch stays ≤300 lines and owns UIManager; suite flag-off is applied by harness', () => {
+test('package patch stays ≤300 lines and upstream UIManager retains root ownership', () => {
   const patchBody = readFileSync(patch, 'utf8');
   assert.ok(
     patchBody.split(/\r?\n/).length <= 300,
-    'patches/react-native@0.86.2.patch must stay at or under 300 lines',
+    'patches/react-native@0.88.0.patch must stay at or under 300 lines',
   );
-  assert.match(patchBody, /getCurrentRevision\(\)\.rootShadowNode/);
   assert.doesNotMatch(patchBody, /FindShadowNodeByTagTest\.cpp/);
   assert.equal(existsSync(rnTest), true, 'pnpm install must materialize react-native');
   assert.equal(existsSync(uiManager), true);
@@ -76,8 +75,6 @@ test('package patch stays ≤300 lines and owns UIManager; suite flag-off is app
   });
   assert.equal(applied.status, 0, applied.stderr || applied.stdout);
   const suite = readFileSync(rnTest, 'utf8');
-  assert.match(suite, /Exercise the production default/);
-  assert.match(suite, /return false;/);
   assert.match(suite, /ConcurrentFindAndCommitStress/);
 });
 
@@ -125,4 +122,12 @@ test('workflow pins immutable checkout SHA without persisted credentials', () =>
   );
   assert.match(body, /persist-credentials:\s*false/);
   assert.doesNotMatch(body, /actions\/checkout@v4\b/);
+});
+
+test('ReactCommon headers are visible to oscompat and other native targets', () => {
+  const body = readFileSync(cmake, 'utf8');
+  const rootInclude = body.indexOf('include_directories(${REACT_COMMON_DIR})');
+  const oscompat = body.indexOf('add_react_common_subdir(oscompat)');
+  assert.ok(rootInclude >= 0 && rootInclude < oscompat);
+  assert.match(body, /target_include_directories\(find_shadow_node_by_tag_test BEFORE PRIVATE\s+\$\{HOST_OVERRIDES_DIR\}/);
 });

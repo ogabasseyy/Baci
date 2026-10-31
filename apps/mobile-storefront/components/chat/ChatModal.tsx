@@ -1,6 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import type { RefObject } from 'react';
+import type { TextInputInstance } from 'react-native';
 import {
   Keyboard,
   Modal,
@@ -31,7 +32,7 @@ interface ChatModalProps {
   input: string;
   isLoading: boolean;
   flatListRef: RefObject<FlashListRef<ChatMessage> | null>;
-  inputRef: RefObject<TextInput | null>;
+  inputRef: RefObject<TextInputInstance | null>;
   onClose: () => void;
   onSend: (text: string) => void;
   onChangeInput: (text: string) => void;

@@ -11,12 +11,18 @@ const migrationSql = readFileSync(
   ),
   'utf8'
 );
+const sqlTestsDirectory = resolve(
+  currentDirectory,
+  '../../../../supabase/migrations/tests'
+);
+// The suite as psql runs it in DB Replay: each `\ir <file>` line is replaced by
+// that file's contents at the same position. This test never executes the SQL;
+// the checks below only read it as text.
 const identityDeviceTestSql = readFileSync(
-  resolve(
-    currentDirectory,
-    '../../../../supabase/migrations/tests/quiz_identity_device_caps.sql'
-  ),
+  resolve(sqlTestsDirectory, 'quiz_identity_device_caps.sql'),
   'utf8'
+).replace(/^\\ir (\S+)[ \t]*$/gm, (_line, file: string) =>
+  readFileSync(resolve(sqlTestsDirectory, file), 'utf8')
 );
 const leaderboardTestSql = readFileSync(
   resolve(

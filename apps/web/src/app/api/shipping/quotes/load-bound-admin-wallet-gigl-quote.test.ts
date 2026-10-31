@@ -152,7 +152,7 @@ describe('loadBoundAdminWalletGiglQuoteResponse', () => {
     const supabase = {
       from,
       rpc: vi.fn().mockResolvedValue({
-        data: [{ available_balance: 10_000 }],
+        data: 10_000,
         error: null,
       }),
     } as unknown as Parameters<typeof loadBoundAdminWalletGiglQuoteResponse>[0];
@@ -168,9 +168,14 @@ describe('loadBoundAdminWalletGiglQuoteResponse', () => {
       quote: { id: 'quote-1', provider: 'GIGL' },
       canBook: true,
     });
-    expect(supabase.rpc).toHaveBeenCalledWith('get_wallet_summary', {
-      p_merchant_id: 'merchant-1',
-    });
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'get_merchant_shipping_wallet_balance',
+      { p_merchant_id: 'merchant-1' }
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'get_wallet_summary',
+      expect.anything()
+    );
   });
 
   it('allows booking resume when a reserved charge exists even if wallet balance is short', async () => {
@@ -204,7 +209,7 @@ describe('loadBoundAdminWalletGiglQuoteResponse', () => {
     const supabase = {
       from,
       rpc: vi.fn().mockResolvedValue({
-        data: [{ available_balance: 100 }],
+        data: 100,
         error: null,
       }),
     } as unknown as Parameters<typeof loadBoundAdminWalletGiglQuoteResponse>[0];
@@ -448,7 +453,7 @@ describe('loadBoundAdminWalletGiglQuoteResponse', () => {
     const supabase = {
       from,
       rpc: vi.fn().mockResolvedValue({
-        data: [{ available_balance: 0 }],
+        data: 0,
         error: null,
       }),
     } as unknown as Parameters<typeof loadBoundAdminWalletGiglQuoteResponse>[0];
@@ -523,7 +528,7 @@ describe('loadBoundAdminWalletGiglQuoteResponse', () => {
     const supabase = {
       from,
       rpc: vi.fn().mockResolvedValue({
-        data: [{ available_balance: 10_000 }],
+        data: 10_000,
         error: null,
       }),
     } as unknown as Parameters<typeof loadBoundAdminWalletGiglQuoteResponse>[0];

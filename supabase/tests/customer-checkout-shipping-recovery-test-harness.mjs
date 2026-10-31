@@ -69,6 +69,26 @@ export function createCustomerCheckoutShippingRecoveryTestDatabase({
           if (beforeActivationGate && name.includes('_activation_gate.')) continue;
           database.query(readFileSync(resolve(migrations, name), 'utf8'));
         }
+        if (!beforeActivationGate) {
+          // The newest recovery gates (owner or orders.fulfill staff) live in
+          // the GIG fulfil-staff migration, not a recovery-named file.
+          const staffAccess =
+            '20261031130000_allow_fulfil_staff_gigl_wallet_booking.sql';
+          database.query(
+            definition(
+              staffAccess,
+              'private',
+              'assert_customer_checkout_shipping_recovery'
+            )
+          );
+          database.query(
+            definition(
+              staffAccess,
+              'public',
+              'confirm_customer_checkout_shipping_recovery'
+            )
+          );
+        }
         if (activateRecovery && !beforeActivationGate) {
           database.query(`UPDATE private.checkout_shipping_recovery_release_activation
             SET enabled=true, rollback_deployment_id='dpl_syntheticCompatible',

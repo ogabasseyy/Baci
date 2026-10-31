@@ -1,0 +1,41 @@
+# PiggyVest transfer-engine function ownership.
+#
+# Fails a pull request whose migrations redefine, alter or drop an engine
+# function without its owner's marker, define settle_attempt or
+# fail_attempt twice, or give a hook a body that writes the wallet tables.
+# The rules and the manifest are described in
+# .github/scripts/piggyvest-hook-ownership.mjs and
+# supabase/tests/piggyvest_hook_ownership.inc.sql.
+
+name: PiggyVest Engine Ownership
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/piggyvest_hook_ownership.inc.sql'
+      - '.github/scripts/piggyvest-hook-ownership*.mjs'
+      - '.github/workflows/piggyvest-engine-ownership.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: piggyvest-engine-ownership-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ownership:
+    name: PiggyVest engine ownership
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test the ownership check
+        run: node --test .github/scripts/piggyvest-hook-ownership.test.mjs
+      - name: Check engine function ownership
+        run: node .github/scripts/piggyvest-hook-ownership.mjs

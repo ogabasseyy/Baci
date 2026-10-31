@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type * as ProcessDeliveryModule from './process-delivery';
 
 const mocks = vi.hoisted(() => ({
   createServiceClient: vi.fn(),
@@ -41,7 +42,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-bank-inbox-intake', () => ({
 }));
 // Real processing by default; a case can make it throw out of the route.
 vi.mock('./process-delivery', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./process-delivery')>();
+  const actual = await importOriginal<typeof ProcessDeliveryModule>();
   mocks.realProcessVerified = actual.processVerifiedDelivery as never;
   return { ...actual, processVerifiedDelivery: mocks.processVerified };
 });

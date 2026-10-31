@@ -31,6 +31,7 @@ import { PAYMENT_INGRESS_AND_PROVENANCE_PENDING_SOURCES } from './expected-pendi
 import { EXPECTED_PENDING_SEPT_SOURCES } from './expected-pending-sept-sources.test-support';
 import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.test-fixture';
 import { EXPECTED_PENDING_VTU_REPLAY_SOURCES } from './expected-pending-vtu-replay-sources.test-support';
+import { EXPECTED_PIGGYVEST_CAPTURE_PENDING_SOURCES } from './expected-piggyvest-capture-pending-sources.test-support';
 import { EXPECTED_PLAN_TIER_PENDING_SOURCES } from './expected-plan-tier-pending-sources.test-support';
 import { EXPECTED_PRIMARY_PENDING_SOURCES } from './expected-primary-pending-sources.test-support';
 import { EXPECTED_QUIZ_LIVE_PENDING_SOURCES } from './expected-quiz-live-pending-sources.test-support';
@@ -47,6 +48,7 @@ import { RECENT_PENDING_SOURCES } from './recent-pending-sources.test-fixture';
 
 export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_MERCHANT_CONTACT_PHONE_PENDING_SOURCES,
+  ...EXPECTED_PIGGYVEST_CAPTURE_PENDING_SOURCES,
   ...EXPECTED_GIGL_STAFF_ACCESS_PENDING_SOURCES,
   ...EXPECTED_STORE_CREDIT_PENDING_SOURCES,
   ...EXPECTED_IMEI_PENDING_SOURCES,

@@ -18,7 +18,7 @@ vi.mock('@/env', () => ({
   getPiggyvestApiConfig: () => null,
 }));
 vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => mocks.createServiceClient(),
+  createServiceClient: () => withCaptureRpc(mocks.createServiceClient()),
 }));
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: (...args: unknown[]) =>
@@ -26,6 +26,7 @@ vi.mock('@/lib/piggyvest/webhook-processor', () => ({
 }));
 
 import { POST } from './route';
+import { withCaptureRpc } from './route.capture-test-support';
 
 const restrictionEvent = {
   eventId: '6b9d2f4a-3c1e-4a5b-9d8f-2e4b6a8c0d12',

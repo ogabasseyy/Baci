@@ -57,7 +57,8 @@ type HandledEvent = Extract<
       | 'restriction-lifted.success'
       | 'bank-transfer.outflow.success'
       | 'bank-transfer.outflow.failed'
-      | 'wallet-transfer.outflow.success';
+      | 'wallet-transfer.outflow.success'
+      | 'interest-accrued.success';
   }
 >;
 
@@ -69,7 +70,8 @@ function isHandledEvent(event: PiggyvestWebhookEvent): event is HandledEvent {
     event.eventType === 'restriction-lifted.success' ||
     event.eventType === 'bank-transfer.outflow.success' ||
     event.eventType === 'bank-transfer.outflow.failed' ||
-    event.eventType === 'wallet-transfer.outflow.success'
+    event.eventType === 'wallet-transfer.outflow.success' ||
+    event.eventType === 'interest-accrued.success'
   );
 }
 
@@ -82,6 +84,11 @@ async function applyEvent(
   event: HandledEvent,
   deps: ProcessPiggyvestEventDeps
 ): Promise<void> {
+  if (event.eventType === 'interest-accrued.success') {
+    // Acknowledge-and-record only: the inbox row is the record. Accrual is
+    // a notification, not money; payouts credit via interest-payout.success.
+    return;
+  }
   if (event.eventType === 'interest-payout.success') {
     await recordInterestPayout(supabase, event);
     return;

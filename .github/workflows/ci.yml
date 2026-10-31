@@ -202,7 +202,8 @@ jobs:
             src/lib/shipping/customer-checkout-shipping-recovery-quantity.postgres.test.ts \
             src/lib/shipping/customer-checkout-shipping-recovery-aliases.postgres.test.ts \
             src/lib/shipping/customer-checkout-shipping-recovery-delivery.postgres.test.ts \
-            src/lib/shipping/customer-checkout-shipping-recovery-retry.postgres.test.ts
+            src/lib/shipping/customer-checkout-shipping-recovery-retry.postgres.test.ts \
+            src/lib/shipping/gigl-wallet-staff-access.postgres.test.ts
       - name: Run Tests
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -333,6 +334,7 @@ jobs:
       - name: Test final order-notification outbox RPC privileges
         run: >-
           pnpm --filter @baci/web db:replay:chronological
+          --sql-check supabase/tests/public_definer_function_exposure.sql
           --sql-check supabase/tests/order_notification_outbox_rpc_privileges.sql
           --sql-check supabase/tests/paystack_order_dva_balance_refresh_permissions.sql
           --sql-check supabase/migrations/tests/immediate_order_notification_claims.sql
@@ -340,6 +342,7 @@ jobs:
           --sql-check supabase/migrations/tests/sessionless_payment_reference_snapshot.sql
           --sql-check supabase/migrations/tests/order_notification_delivered_lookup.sql
           --sql-check supabase/migrations/tests/tracking_order_notification_delivered_token.sql
+          --sql-check supabase/migrations/tests/gigl_wallet_fulfil_staff_access.sql
           --sql-check supabase/migrations/tests/tracking_order_notification_pending.sql
           --sql-check supabase/migrations/tests/tracking_order_notification_privileges.sql
           --sql-check supabase/tests/paystack_order_dva_balance_refresh_history.sql
@@ -420,6 +423,7 @@ jobs:
           --sql-check supabase/migrations/tests/credit_direct_inventory_proof.sql
           --sql-check supabase/migrations/tests/jumia_variant_price_optimistic_guard.sql
           --sql-check supabase/migrations/tests/jumia_submitted_price_update_faults.sql
+          --sql-check supabase/tests/piggyvest_webhook_durable_capture.sql
           --sql-check supabase/tests/jumia_product_export_selections.sql
           --sql-check supabase/tests/jumia_product_export_selection_merchant_page.sql
           --sql-check supabase/tests/storefront_order_claim_loop_ordering.sql
@@ -507,6 +511,7 @@ jobs:
           --sql-check supabase/tests/finalize_store_credit_order_payment_refusals.sql
           --sql-check supabase/tests/finalize_store_credit_order_payment_legitimate.sql
           --sql-check supabase/tests/finalize_store_credit_order_payment_privileges.sql
+          --sql-check supabase/migrations/tests/merchant_identity_settings_phone_shape.sql
           --sql-check supabase/migrations/tests/chatgpt_ads_settings_and_destination.sql
           --sql-check supabase/migrations/tests/chatgpt_ads_admin_destination.sql
           --sql-check supabase/migrations/tests/x_ads_settings_and_destination.sql

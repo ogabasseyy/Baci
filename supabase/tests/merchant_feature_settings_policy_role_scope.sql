@@ -101,6 +101,7 @@ BEGIN
   END IF;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_feature_setting_count(text, uuid, integer) TO PUBLIC; -- called after SET ROLE
 
 SET LOCAL ROLE anon;
 DO $anonymous_access_denied$

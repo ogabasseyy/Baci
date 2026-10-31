@@ -50,7 +50,12 @@ export function QuizLobbyEventCard({
 }: QuizLobbyEventCardProps) {
   const { colors } = useTheme();
   const [imageFailed, setImageFailed] = useState(false);
-  const serverClock = useQuizServerClock(serverNow ?? null);
+  const serverClock = useQuizServerClock(
+    serverNow ?? null,
+    serverNow && serverNow === event.serverNow
+      ? event.serverNowReceivedAtMs
+      : undefined
+  );
   const { hasEnded, remainingSeconds } = useQuizEventTimer({
     eventEndsAt: event.endsAt,
     isActive: event.status === 'active',
@@ -85,10 +90,12 @@ export function QuizLobbyEventCard({
     >
       <View style={styles.eventTopline}>
         <Text style={styles.prizeMoment}>
-          {getPrizeMomentLabel(
-            event,
-            new Date(serverClock.serverNowMs).toISOString()
-          )}
+          {isClosed
+            ? 'Quiz ended'
+            : getPrizeMomentLabel(
+                event,
+                new Date(serverClock.serverNowMs).toISOString()
+              )}
         </Text>
         <View
           style={event.mode === 'test' ? styles.testBadge : styles.liveBadge}

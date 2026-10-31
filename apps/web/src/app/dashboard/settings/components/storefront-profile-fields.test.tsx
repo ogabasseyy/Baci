@@ -14,6 +14,7 @@ function StorefrontProfileFieldsHarness() {
     defaultValues: {
       business_name: 'Merchant A',
       country: 'NG',
+      phone: '+2348031234567',
       site_description: 'Quality products for everyday life.',
       support_email: 'support@example.com',
       support_phone: '+2348000000000',
@@ -37,6 +38,18 @@ describe('StorefrontProfileFields', () => {
     );
     expect(screen.getByLabelText('Public support phone')).toHaveValue(
       '+2348000000000'
+    );
+  });
+
+  it('shows the business phone couriers call as its own clearly labelled field', () => {
+    render(<StorefrontProfileFieldsHarness />);
+
+    const businessPhone = screen.getByRole('textbox', {
+      name: 'Business phone (used for courier pickups)',
+    });
+    expect(businessPhone).toHaveValue('+2348031234567');
+    expect(businessPhone).toHaveAccessibleDescription(
+      'Couriers call this number to collect your orders. Enter the full number with its country code, for example +234 801 234 5678.'
     );
   });
 

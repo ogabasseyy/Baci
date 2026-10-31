@@ -1,6 +1,6 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import { useEffect } from 'react';
-import type { AppStateStatus } from 'react-native';
+import type { AppState } from 'react-native';
 import { isQuizRewardedFlowActive } from '@/lib/quiz-fullscreen-ownership';
 import { maybeShowQuizStartInterstitial } from '@/lib/quiz-start-interstitial';
 import type { QuizEvent } from '@/services/quiz-types';
@@ -33,7 +33,7 @@ export function useQuizStartInterstitialRequest({
   stoppedRef,
   suspendedRef,
 }: {
-  appStateRef: MutableRefObject<AppStateStatus>;
+  appStateRef: MutableRefObject<typeof AppState.currentState>;
   getRemainingSeconds: () => number;
   isFullscreenAdActiveRef: MutableRefObject<boolean>;
   isStartBlockedRef: MutableRefObject<boolean>;

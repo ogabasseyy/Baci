@@ -2,6 +2,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import Constants from 'expo-constants';
 import { type Href, router } from 'expo-router';
 import { useEffect, useRef } from 'react';
+import type { TextInputInstance } from 'react-native';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HeaderMinimal } from '@/components/storefront/HeaderMinimal';
@@ -41,7 +42,7 @@ export function Header({
   isScrolled = false,
 }: HeaderProps) {
   const insets = useSafeAreaInsets();
-  const searchInputRef = useRef<TextInput>(null);
+  const searchInputRef = useRef<TextInputInstance>(null);
   const itemCount = useCartStore((state) => state.itemCount());
   const openDrawer = useDrawerStore((state) => state.openDrawer);
   const template = getTemplateConfig(CONFIG.BUSINESS_TYPE, CONFIG.TEMPLATE_ID);

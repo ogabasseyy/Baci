@@ -6,6 +6,19 @@ const categories = [{ id: 'phones', name: 'Smartphones', slug: 'smartphones' }];
 
 describe('dollar-denominated catalog budgets', () => {
   it.each([
+    'budget $500-$1000',
+    'budget $500 – $1000',
+    'budget $500-$1000 under $900',
+  ])('clarifies unsupported ranges: %s', (budget) => {
+    expect(
+      interpretFastCatalogIntent(
+        [`Show Samsung phones ${budget}`],
+        categories,
+        'USD'
+      )
+    ).toMatchObject({ kind: 'clarify' });
+  });
+  it.each([
     ['Show Samsung phones under $500', 500, true],
     ['Show Samsung phones at most $500 USD', 500, false],
     ['Show Samsung phones below 500$', 500, true],

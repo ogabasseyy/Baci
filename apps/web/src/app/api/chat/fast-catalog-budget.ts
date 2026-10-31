@@ -162,6 +162,7 @@ export function analyzeFastCatalogBudget(
   let price: { amount: number; exclusive: boolean } | undefined;
   let hasBudget = false;
   let invalid = false;
+  let hasRange = false;
   let ambiguousMax = false;
   let ambiguousCurrency = false;
   let unsupportedCurrency = false;
@@ -173,6 +174,10 @@ export function analyzeFastCatalogBudget(
     const amountTail = tail.slice(prefixCurrency?.length ?? 0);
     const amount = AMOUNT.exec(amountTail);
     const afterAmount = amount ? amountTail.slice(amount[0].length) : '';
+    const range = /^\s{0,64}[-–—]\s{0,64}(?:\p{Sc}\s{0,64})?\d/u.test(
+      afterAmount
+    );
+    if (range) hasRange = true;
     const suffix = amount ? suffixCurrencies(afterAmount) : undefined;
     const malformedMultiplier = amount
       ? /^\s*(?:million|thousand)[\p{L}\p{N}_]+/iu.exec(afterAmount)
@@ -233,6 +238,7 @@ export function analyzeFastCatalogBudget(
     if (wrongCurrency) unsupportedCurrency = true;
     if (
       /^between\b/i.test(cue[0]) ||
+      range ||
       !amount ||
       wrongCurrency ||
       malformedMultiplier
@@ -240,7 +246,7 @@ export function analyzeFastCatalogBudget(
       invalid = true;
       // Keep a range in the query so its lower bound cannot be discarded by a
       // later maximum. Other incomplete cues can be superseded by an answer.
-      if (!/^between\b/i.test(cue[0]))
+      if (!/^between\b/i.test(cue[0]) && !range)
         spans.push({ start, end: start + cue[0].length + consumed });
       continue;
     }
@@ -274,7 +280,7 @@ export function analyzeFastCatalogBudget(
     price,
     searchText: fragments.join(''),
     hasBudget,
-    invalid,
+    invalid: invalid || hasRange,
     ambiguousMax,
     ambiguousCurrency,
     unsupportedCurrency,

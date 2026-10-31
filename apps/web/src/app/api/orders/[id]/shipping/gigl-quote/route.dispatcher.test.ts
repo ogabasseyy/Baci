@@ -1,30 +1,37 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { postAdminOrderGiglQuote } = vi.hoisted(() => ({
-  postAdminOrderGiglQuote: vi.fn(),
+const { postShippingQuotes } = vi.hoisted(() => ({
+  postShippingQuotes: vi.fn(),
 }));
 
-vi.mock('@/app/api/shipping/quotes/admin-order-gigl-quote', () => ({
-  postAdminOrderGiglQuote,
+vi.mock('@/app/api/shipping/quotes/route', () => ({
+  POST: postShippingQuotes,
 }));
 
 const ORDER_ID = '11111111-1111-4111-8111-111111111111';
+const BODY = {
+  receiver: { address: '5 Balogun Street', phone: '08011112222' },
+};
 
 function buildRequest() {
   return new NextRequest(
     `https://usebaci.com/api/orders/${ORDER_ID}/shipping/gigl-quote`,
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ receiver: { address: 'x', phone: 'y' } }),
+      headers: {
+        authorization: 'Bearer token',
+        'content-type': 'application/json',
+        cookie: 'sb-session=abc',
+      },
+      body: JSON.stringify(BODY),
     }
   );
 }
 
 describe('bugfix: admin GIG quote crashed with "#state" when the route re-wrapped the request', () => {
   beforeEach(() => {
-    postAdminOrderGiglQuote.mockReset();
+    postShippingQuotes.mockReset();
   });
 
   afterEach(() => {
@@ -32,9 +39,9 @@ describe('bugfix: admin GIG quote crashed with "#state" when the route re-wrappe
   });
 
   // Production crashed with "Cannot read private member #state" when this
-  // route re-wrapped the incoming request with `new NextRequest(request, …)`.
-  it('delegates the original request with the path order id when the admin app asks for a GIG quote', async () => {
-    postAdminOrderGiglQuote.mockResolvedValue(
+  // route passed the incoming request object to `new NextRequest(request, …)`.
+  it('delegates a freshly built request with the order headers when the admin app asks for a GIG quote', async () => {
+    postShippingQuotes.mockResolvedValue(
       new Response(JSON.stringify({ ok: true }), { status: 200 })
     );
     const request = buildRequest();
@@ -45,13 +52,23 @@ describe('bugfix: admin GIG quote crashed with "#state" when the route re-wrappe
     });
 
     expect(response.status).toBe(200);
-    expect(postAdminOrderGiglQuote).toHaveBeenCalledWith(request, {
-      admin_order_id: ORDER_ID,
-    });
+    expect(postShippingQuotes).toHaveBeenCalledTimes(1);
+    const delegated = postShippingQuotes.mock.calls[0][0] as NextRequest;
+    expect(delegated).not.toBe(request);
+    expect(delegated).toBeInstanceOf(NextRequest);
+    expect(delegated.method).toBe('POST');
+    expect(delegated.nextUrl.pathname).toBe(
+      `/api/orders/${ORDER_ID}/shipping/gigl-quote`
+    );
+    expect(delegated.headers.get('x-baci-admin-order-mode')).toBe('1');
+    expect(delegated.headers.get('x-baci-admin-order-id')).toBe(ORDER_ID);
+    expect(delegated.headers.get('authorization')).toBe('Bearer token');
+    expect(delegated.cookies.get('sb-session')?.value).toBe('abc');
+    expect(await delegated.json()).toEqual(BODY);
   });
 
-  it('returns a readable error without logging error details when the quote handler throws', async () => {
-    postAdminOrderGiglQuote.mockRejectedValue(
+  it('returns a readable error without logging error details when the quotes route throws', async () => {
+    postShippingQuotes.mockRejectedValue(
       new Error('provider body: secret-token')
     );
     const consoleError = vi

@@ -1,15 +1,26 @@
-import { type NextRequest, NextResponse } from 'next/server';
-import { postAdminOrderGiglQuote } from '@/app/api/shipping/quotes/admin-order-gigl-quote';
+import { NextRequest, NextResponse } from 'next/server';
+import { POST as postShippingQuotes } from '@/app/api/shipping/quotes/route';
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, context: Params) {
   const { id } = await context.params;
   try {
-    // Pass the original request through: re-wrapping it with
-    // `new NextRequest(request, …)` crashes in production with
-    // "Cannot read private member #state". The path id is the order.
-    return await postAdminOrderGiglQuote(request, { admin_order_id: id });
+    const headers = new Headers(request.headers);
+    headers.set('x-baci-admin-order-mode', '1');
+    headers.set('x-baci-admin-order-id', id);
+    const body = await request.text();
+    // Build a fresh request from the URL instead of passing the incoming
+    // request object to `new NextRequest(request, …)`: that copy throws
+    // "Cannot read private member #state" on the production runtime.
+    // Delegating through the quotes route keeps this route's import graph
+    // (and credential reach) identical to the governed shipping-quotes path.
+    const delegated = new NextRequest(request.url, {
+      body: body || undefined,
+      headers,
+      method: request.method,
+    });
+    return await postShippingQuotes(delegated);
   } catch (error) {
     // Log only the error type: messages and bodies can carry provider data.
     console.error('Error getting admin order GIGL quote', {

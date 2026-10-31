@@ -631,6 +631,7 @@ describe('OgabasseyImeiChecker', () => {
     fireEvent.click(submitButton);
 
     await waitFor(() => expect(submitButton).toBeDisabled());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
     resolveRequest({
       ok: true,

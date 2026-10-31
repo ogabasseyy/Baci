@@ -20,6 +20,7 @@ const mockPreventRemoveState: {
 } = { prevent: false, callback: null };
 
 const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+const mockSecureEntries = new Map<string, string>();
 const mockWalletRefetch = jest.fn();
 let mockWalletBalance = 5000;
 let mockWalletIsError = false;
@@ -35,6 +36,7 @@ beforeEach(async () => {
   global.fetch = jest.fn() as typeof fetch;
   mockPreventRemoveState.prevent = false;
   mockPreventRemoveState.callback = null;
+  mockSecureEntries.clear();
   await AsyncStorage.clear();
 });
 
@@ -52,7 +54,20 @@ jest.mock('@react-native-vector-icons/ionicons', () => ({
   __esModule: true,
 }));
 
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: async (key: string) => mockSecureEntries.get(key) ?? null,
+  setItemAsync: async (key: string, value: string) => {
+    mockSecureEntries.set(key, value);
+  },
+  deleteItemAsync: async (key: string) => {
+    mockSecureEntries.delete(key);
+  },
+}));
+
 jest.mock('expo-crypto', () => ({
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+  digestStringAsync: async (_algorithm: string, value: string) =>
+    require('node:crypto').createHash('sha256').update(value).digest('hex'),
   randomUUID: jest.fn(() => '11111111-1111-4111-8111-111111111111'),
 }));
 
@@ -99,7 +114,7 @@ jest.mock('@/stores/auth-store', () => ({
     selector({
       customer: { id: 'customer-1' },
       merchantId: 'merchant-1',
-      session: { access_token: 'token-123' },
+      session: { access_token: 'token-123', user: { id: 'user-1' } },
     }),
 }));
 
@@ -126,6 +141,7 @@ describe('ImeiCheckerScreen', () => {
   });
 
   it('handles a pending response and polls it to completion', async () => {
+    let finishPoll!: (value: Response) => void;
     jest
       .mocked(fetch)
       .mockResolvedValueOnce({
@@ -139,31 +155,37 @@ describe('ImeiCheckerScreen', () => {
         ok: true,
         status: 202,
       } as Response)
-      .mockResolvedValueOnce({
-        json: () =>
-          Promise.resolve({
-            data: {
-              blacklistStatus: 'Clean',
-              carrier: 'Unlocked',
-              device: 'iPhone 13 Pro',
-              deviceImage: '',
-              deviceType: 'apple',
-              icloud: 'Off',
-              icloudLock: 'Off',
-              imei: '490154203237518',
-              modelNumber: 'A2638',
-              score: 98,
-              simLock: 'Unlocked',
-              status: 'Clean',
-              verdict: 'Safe to buy',
-              verdictType: 'safe',
-            },
-            status: 'complete',
-            success: true,
-          }),
-        ok: true,
-        status: 200,
-      } as Response);
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishPoll = resolve;
+          })
+      );
+    const completedResponse = {
+      json: () =>
+        Promise.resolve({
+          data: {
+            blacklistStatus: 'Clean',
+            carrier: 'Unlocked',
+            device: 'iPhone 13 Pro',
+            deviceImage: '',
+            deviceType: 'apple',
+            icloud: 'Off',
+            icloudLock: 'Off',
+            imei: '490154203237518',
+            modelNumber: 'A2638',
+            score: 98,
+            simLock: 'Unlocked',
+            status: 'Clean',
+            verdict: 'Safe to buy',
+            verdictType: 'safe',
+          },
+          status: 'complete',
+          success: true,
+        }),
+      ok: true,
+      status: 200,
+    } as Response;
     render(<ImeiCheckerScreen />);
 
     fireEvent.changeText(
@@ -172,12 +194,14 @@ describe('ImeiCheckerScreen', () => {
     );
     fireEvent.press(screen.getByText(approvedPrice.fullLabel));
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
     await screen.findByText(/usually under a minute/i);
+    await waitFor(() => expect(finishPoll).toBeDefined());
+    await act(async () => finishPoll(completedResponse));
     await screen.findByText('iPhone 13 Pro');
     const firstInit = jest.mocked(fetch).mock.calls[0]?.[1] as RequestInit;
     expect(JSON.parse(String(firstInit.body))).toMatchObject({
-      clientCapabilities: ['imei-async-v1'],
+      clientCapabilities: ['imei-async-v1', 'imei-attempt-coordination-v1'],
       device: 'smartphone',
     });
   });
@@ -225,7 +249,7 @@ describe('ImeiCheckerScreen', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('routes to wallet top-up instead of requesting when keyboard submit has insufficient balance', () => {
+  it('routes to wallet top-up instead of requesting when keyboard submit has insufficient balance', async () => {
     mockWalletBalance = 500;
     render(<ImeiCheckerScreen />);
 
@@ -234,7 +258,9 @@ describe('ImeiCheckerScreen', () => {
     fireEvent(input, 'submitEditing');
 
     expect(fetch).not.toHaveBeenCalled();
-    expect(router.push).toHaveBeenCalledWith(approvedPrice.topUpFrom500);
+    await waitFor(() =>
+      expect(router.push).toHaveBeenCalledWith(approvedPrice.topUpFrom500)
+    );
   });
 
   it('routes unauthenticated customers to login on 401', async () => {

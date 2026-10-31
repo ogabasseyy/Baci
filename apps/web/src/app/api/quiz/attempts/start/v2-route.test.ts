@@ -78,7 +78,7 @@ function request(body: Record<string, unknown>, headers = {}) {
   });
 }
 
-function authenticated() {
+function authenticated(authMethod: 'bearer' | 'cookie' = 'bearer') {
   const rpc = vi.fn((name: string) =>
     Promise.resolve(
       name === 'quiz_runtime_contract_version'
@@ -87,7 +87,7 @@ function authenticated() {
     )
   );
   vi.mocked(requireQuizUser).mockResolvedValue({
-    authMethod: 'bearer',
+    authMethod,
     response: null,
     supabase: { rpc },
     user: { id: USER_ID },
@@ -122,7 +122,7 @@ describe('v2 quiz start route', () => {
     );
   });
   it('refuses a live prize start from a browser session without starting', async () => {
-    const rpc = authenticated();
+    const rpc = authenticated('cookie');
     vi.mocked(enforceQuizStartGuards).mockRejectedValueOnce(
       new QuizAppOnlyError()
     );
@@ -132,6 +132,12 @@ describe('v2 quiz start route', () => {
       code: 'QUIZ_APP_ONLY',
       error: 'Prize quizzes are played in the Ogabassey app.',
     });
+    expect(enforceQuizStartGuards).toHaveBeenCalledWith(
+      expect.anything(),
+      EVENT_ID,
+      USER_ID,
+      'cookie'
+    );
     expect(rpc).not.toHaveBeenCalledWith(
       expect.stringMatching(/^start_quiz_attempt/),
       expect.anything()

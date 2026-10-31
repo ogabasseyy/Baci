@@ -204,6 +204,10 @@ export async function getLegacyQuizEvents(request: NextRequest) {
         'id, title, status, starts_at, ends_at, settings, regulatory_basis, regulatory_jurisdiction, regulatory_evidence_ref, compliance_verified, quiz_question_slots!inner(id, active)'
       )
       .eq('merchant_id', merchantId)
+      // Contract-v2 quizzes are app-only and listed by the v2 route; store
+      // staff can read v2 rows here under RLS, so exclude them explicitly or
+      // they surface as web "Start exam" cards the legacy start then refuses.
+      .eq('contract_version', 1)
       .eq('quiz_question_slots.active', 'true')
       .order('starts_at', { ascending: false })
       .order('id', { ascending: true })

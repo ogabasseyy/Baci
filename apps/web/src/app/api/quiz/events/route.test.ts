@@ -740,6 +740,8 @@ describe('quiz events route', () => {
       'id, title, status, starts_at, ends_at, settings, regulatory_basis, regulatory_jurisdiction, regulatory_evidence_ref, compliance_verified, quiz_question_slots!inner(id, active)'
     );
     expect(queryBuilder.eq).toHaveBeenCalledWith('merchant_id', MERCHANT_ID);
+    // bugfix: v2 (app-only) rows visible to store staff must not be listed.
+    expect(queryBuilder.eq).toHaveBeenCalledWith('contract_version', 1);
     expect(queryBuilder.eq).toHaveBeenCalledWith(
       'quiz_question_slots.active',
       'true'

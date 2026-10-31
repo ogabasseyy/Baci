@@ -9,10 +9,8 @@ type LoadedEvents = { events: QuizV2Event[]; userId: string };
  * is caller-scoped (private test quizzes depend on tester/merchant access), so
  * results are bound to the user they were fetched for: after an account
  * switch nothing is shown until the new user's lookup completes. A failed
- * lookup degrades to the generic "play in the app" call to action.
- *
- * `settled` is true once the current user's lookup has finished (or there is
- * no user), so callers can hold back dependent UI instead of flickering.
+ * lookup degrades to the generic "play in the app" call to action; the legacy
+ * web listing never contains these quizzes, so nothing else depends on it.
  */
 export function useAppQuizEvents(merchantSlug: string, userId: string | null) {
   const [loaded, setLoaded] = useState<LoadedEvents | null>(null);
@@ -35,9 +33,5 @@ export function useAppQuizEvents(merchantSlug: string, userId: string | null) {
     };
   }, [merchantSlug, userId]);
 
-  const settled = !userId || loaded?.userId === userId;
-  return {
-    events: userId && loaded?.userId === userId ? loaded.events : [],
-    settled,
-  };
+  return userId && loaded?.userId === userId ? loaded.events : [];
 }

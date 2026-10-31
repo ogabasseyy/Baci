@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
@@ -44,38 +44,6 @@ describe('OgabasseyV2Quiz app-only prize quizzes', () => {
     const list = await screen.findByRole('list', { name: 'Quizzes in the app' });
     expect(within(list).getByText('Redmi Warriors')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Get it on Google Play' })).toBeInTheDocument();
-  });
-
-  it('does not offer a web start for a quiz the app listing covers', async () => {
-    // Store staff can read v2 rows through the legacy listing, so the same
-    // quiz arrives twice; it must only appear as an app quiz.
-    mockListings([{ ...eventResponse.events[0], id: APP_EVENT.id, title: APP_EVENT.title }]);
-
-    render(<OgabasseyV2Quiz merchantSlug="ogabassey" />);
-
-    await screen.findByRole('list', { name: 'Quizzes in the app' });
-    expect(
-      screen.queryByRole('button', { name: `Start exam for ${APP_EVENT.title}` })
-    ).toBeNull();
-  });
-
-  it('bugfix: never flashes a web start card while the app listing is loading', async () => {
-    vi.mocked(apiGet).mockImplementation((_url, options) => {
-      const headers = (options?.headers ?? {}) as Record<string, string>;
-      return headers['X-Baci-Quiz-Contract'] === '2'
-        ? new Promise(() => undefined)
-        : Promise.resolve({
-            ...eventResponse,
-            events: [{ ...eventResponse.events[0], id: APP_EVENT.id }],
-          });
-    });
-
-    render(<OgabasseyV2Quiz merchantSlug="ogabassey" />);
-
-    await waitFor(() =>
-      expect(screen.queryByText('Loading quiz events…')).toBeNull()
-    );
-    expect(screen.queryByRole('button', { name: /Start exam/ })).toBeNull();
   });
 
   it('keeps the web flow for a legacy quiz the app listing does not cover', async () => {

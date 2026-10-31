@@ -57,18 +57,12 @@ export function OgabasseyV2Quiz({ merchantSlug }: OgabasseyV2QuizProps) {
   const quizPath = pathname || `${routePrefix}/quiz`;
   const loginHref = `${routePrefix}/account/login?redirect=${encodeURIComponent(quizPath)}`;
 
-  // Current prize quizzes are app-only; the web lists them with app links and
-  // keeps the legacy web flow only for quizzes the app listing does not cover.
-  const { events: appEvents, settled: appEventsSettled } = useAppQuizEvents(
+  // Current prize quizzes are app-only: the v2 listing feeds the app panel and
+  // the legacy listing carries only contract-v1 quizzes (filtered server-side).
+  const appEvents = useAppQuizEvents(
     merchantSlug,
     !isLoading && isAuthenticated ? (user?.id ?? customer?.id ?? null) : null
   );
-  const appEventIds = new Set(appEvents.map((event) => event.id));
-  // Hold the legacy cards until the app listing settles so a v2 quiz never
-  // flashes as a web "Start exam" card and then disappears.
-  const webEvents = appEventsSettled
-    ? events.filter((event) => !appEventIds.has(event.id))
-    : [];
 
   const loadEvents = () =>
     loadQuizEvents(merchantSlug, { setError, setEvents, setStatus });
@@ -222,9 +216,9 @@ export function OgabasseyV2Quiz({ merchantSlug }: OgabasseyV2QuizProps) {
 
         {isAuthenticated &&
         (status === 'ready' || status === 'starting') &&
-        webEvents.length > 0 ? (
+        events.length > 0 ? (
           <section aria-label="Available quiz events" className="grid gap-4 md:grid-cols-2">
-            {webEvents.map((event) => {
+            {events.map((event) => {
               const disabled = status === 'starting' || event.status !== 'open';
               return (
                 <article key={event.id} className={panel}>

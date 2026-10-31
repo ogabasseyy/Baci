@@ -1,18 +1,11 @@
 name: Android Storefront Production Release
 
 on:
+  # Storefront release gate: while .github/storefront-release-gate.json exists,
+  # a store release starts only from an owner tag or a manual dispatch, never
+  # from a push to main. docs/runbooks/storefront-release-gate.md records the
+  # push trigger to restore when the gate ends.
   push:
-    branches:
-      - main
-    paths:
-      - 'apps/mobile-storefront/**'
-      - 'packages/shared/**'
-      - 'package.json'
-      - 'pnpm-workspace.yaml'
-      - '.npmrc'
-      # Patch/lockfile changes rebuild ReactAndroid from source.
-      - 'patches/**'
-      - 'pnpm-lock.yaml'
     tags:
       - "v*-storefront"
   workflow_dispatch:

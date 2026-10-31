@@ -1,5 +1,4 @@
 import {
-  AGENTIC_PAYMENT_METHOD_GOOGLE_PAY,
   AGENTIC_PAYMENT_METHOD_PAY_ON_DELIVERY,
   AGENTIC_PAYMENT_METHOD_PAYSTACK_BANK_TRANSFER,
 } from '@/config/agentic-payment-methods';
@@ -69,10 +68,7 @@ export function buildUcpDiscoveryProfile(manifest: AgentCommerceManifest) {
 
 function buildUcpPaymentHandlers(
   agentCommerceManifestUrl: string,
-  manifest: Pick<
-    AgentCommerceManifest,
-    'payment_handler_configs' | 'payment_methods' | 'schema_version'
-  >
+  manifest: Pick<AgentCommerceManifest, 'payment_methods' | 'schema_version'>
 ) {
   const handlers: Record<string, unknown[]> = {};
   const paymentMethods = manifest.payment_methods;
@@ -97,25 +93,6 @@ function buildUcpPaymentHandlers(
         available_instruments: [{ type: 'pay_on_delivery' }],
       },
     ];
-  }
-
-  if (paymentMethods.includes(AGENTIC_PAYMENT_METHOD_GOOGLE_PAY)) {
-    const googlePayConfig = manifest.payment_handler_configs?.google_pay;
-    if (googlePayConfig?.gateway === 'paystack') {
-      handlers['com.google.pay'] = [
-        {
-          id: AGENTIC_PAYMENT_METHOD_GOOGLE_PAY,
-          version: UCP_PROFILE_VERSION,
-          spec: 'https://developers.google.com/pay/api/web/overview',
-          available_instruments: [{ type: 'google_pay', currency: 'NGN' }],
-          config: {
-            gateway: googlePayConfig.gateway,
-            gateway_merchant_id: googlePayConfig.gatewayMerchantId,
-            merchant_id: googlePayConfig.merchantId,
-          },
-        },
-      ];
-    }
   }
 
   return handlers;

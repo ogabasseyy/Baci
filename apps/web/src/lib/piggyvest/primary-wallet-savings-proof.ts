@@ -1,6 +1,5 @@
 import 'server-only';
 import { piggyvestPrimarySavingsTransferSchemas } from '@/schemas/piggyvest-primary-savings-transfer';
-import { prefundedCardProviderEvidenceSchemas } from '@/schemas/prefunded-card-provider-evidence';
 import { prefundedCardTransferVerificationSchemas } from '@/schemas/prefunded-card-transfer-verification';
 
 export function verifyPrimaryWalletSavingsProof(
@@ -20,43 +19,16 @@ export function verifyPrimaryWalletSavingsProof(
     : prefundedCardTransferVerificationSchemas.richFailed.safeParse(
         providerResponse
       );
-  if (!success.success && !failure?.success) {
-    // The transaction-verify endpoint answers the minimal TSQ shape
-    // ({reference, status: success|pending|failed, amount}) — never the
-    // rich single-transaction envelope. Requiring rich bindings here
-    // would hold every reconciled contribution in pending forever, so
-    // accept a TSQ success/failure bound to the reservation's unique
-    // reference and amount. The reference is unguessable
-    // (pvb-save-<operation uuid>), the channel is the authenticated
-    // provider session, and wallets/customer/business stay bound by the
-    // server-side reservation the submit path stored. TSQ exposes no
-    // provider transaction id, so the provider-echoed reference serves
-    // as the settlement idempotency key: unique per operation, so the
-    // database duplicate/conflict handling behaves identically. Rich
-    // stays first so a fully-bound response keeps its provider id.
-    const tsq =
-      prefundedCardProviderEvidenceSchemas.tsq.safeParse(providerResponse);
-    if (!tsq.success) return { status: 'unverified' as const };
-    const observation = tsq.data.data;
-    if (
-      observation.reference !== expected.reference ||
-      observation.amount !== expected.amountKobo ||
-      observation.status === 'pending'
-    )
-      return { status: 'unverified' as const };
-    const bindings = {
-      providerTransactionId: expected.reference,
-      operationId: expected.operationId,
-      reference: expected.reference,
-      amountKobo: expected.amountKobo,
-      sourceWalletId: expected.sourceWalletId,
-      destinationWalletId: expected.destinationWalletId,
-      businessId: expected.businessId,
-    };
-    if (observation.status === 'success')
-      return { status: 'verified' as const, ...bindings };
-    return { status: 'failed' as const, ...bindings };
-  }
+  // Money moves only on the full TSQ record bound to this reservation
+  // (docs/piggyvest-contract-evidence/2026-10-31.md, P2): our reference in
+  // third_party_reference, the exact amount, a zero fee, the reserved
+  // provider customer, source = the customer's main wallet, destination =
+  // the goal wallet, and a terminal status ('successful' settles, 'failed'
+  // releases). A body matching only reference, amount and status ("success
+  // by reference") proves neither direction, fee nor either wallet, so it
+  // never settles or releases; it stays unverified (pending).
+  if (!success.success && !failure?.success)
+    return { status: 'unverified' as const };
   const actual = (success.success ? success.data : failure?.data)?.data;
   if (!actual) return { status: 'unverified' as const };
   if (

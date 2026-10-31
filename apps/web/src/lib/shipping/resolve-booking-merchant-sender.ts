@@ -30,6 +30,8 @@ export type ResolveBookingMerchantSenderResult =
  */
 function isBookableSenderPhone(phone: string): boolean {
   if (!isPlausibleMerchantContactPhone(phone)) return false;
+  // normalizePhoneToE164 returns digits only, without a leading "+"
+  // (e.g. "2348146978921"), so a Nigerian number must be 234 + 10 digits.
   const e164 = normalizePhoneToE164(phone);
   return e164 !== null && (!e164.startsWith('234') || e164.length === 13);
 }

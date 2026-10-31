@@ -116,6 +116,7 @@ describe('resolveBookingMerchantSender', () => {
     it.each([
       ['+23415781'],
       ['+23444633'],
+      ['+234814697892'],
       [''],
       [null],
     ])('fails closed when merchants.phone is %j', async (phone) => {

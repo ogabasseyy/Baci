@@ -11,7 +11,31 @@ SELECT ('00000000-0000-4000-8000-' || lpad(sequence::text,12,'0'))::uuid,
 \ir ../../../../../supabase/migrations/20261007144000_piggyvest_primary_savings_reservations.sql
 \ir ../../../../../supabase/migrations/20261007190000_piggyvest_primary_savings_provisioning.sql
 \ir ../../../../../supabase/migrations/20261008092200_piggyvest_primary_provisioning_reclaim.sql
+-- Old 83-character names as the previous prepare_goal_wallet stored them,
+-- seeded before 20261031220000 so its one-time rename runs on real rows: a
+-- live dispatch, a stale unknown outcome (upper-case, so the match must be
+-- case-insensitive) and a wallet-bound intent that must keep its name.
+INSERT INTO piggyvest_primary.goal_wallet_intents(integration_id,goal_id,primary_intent_id,wallet_name,
+  state,claim_token,provider_wallet_id,interest_accepted,updated_at)
+SELECT intent.integration_id,seed.goal,intent.id,seed.name,seed.state,seed.token,seed.wallet,false,seed.updated
+FROM piggyvest_primary.onboarding_intents intent,(VALUES
+  ('00000000-0000-4000-8000-000000000008'::uuid,'baci-save:00000000-0000-4000-8000-000000000004:00000000-0000-4000-8000-000000000008',
+    'dispatched',gen_random_uuid(),NULL::text,clock_timestamp()),
+  ('00000000-0000-4000-8000-000000000009'::uuid,'BACI-SAVE:00000000-0000-4000-8000-000000000004:00000000-0000-4000-8000-000000000009',
+    'unknown',NULL::uuid,NULL::text,clock_timestamp()-interval '6 minutes'),
+  ('00000000-0000-4000-8000-000000000010'::uuid,'baci-save:00000000-0000-4000-8000-000000000004:00000000-0000-4000-8000-000000000010',
+    'accepted',NULL::uuid,'legacy-wallet',clock_timestamp())) seed(goal,name,state,token,wallet,updated)
+WHERE intent.integration_id='00000000-0000-4000-8000-000000000004' AND intent.customer_id='00000000-0000-4000-8000-000000000002';
 \ir ../../../../../supabase/migrations/20261031220000_piggyvest_primary_goal_wallet_short_name.sql
+DO $$ BEGIN
+  IF (SELECT count(*) FROM piggyvest_primary.goal_wallet_intents
+    WHERE goal_id IN ('00000000-0000-4000-8000-000000000008','00000000-0000-4000-8000-000000000009')
+      AND wallet_name='baci-save-'||substr(encode(sha256(convert_to(integration_id::text||':'||goal_id::text,'UTF8')),'hex'),1,32)
+      AND length(wallet_name)=42)<>2 THEN RAISE EXCEPTION 'old-name intents without a wallet were not renamed'; END IF;
+  IF (SELECT wallet_name FROM piggyvest_primary.goal_wallet_intents WHERE goal_id='00000000-0000-4000-8000-000000000010')
+    <>'baci-save:00000000-0000-4000-8000-000000000004:00000000-0000-4000-8000-000000000010' THEN RAISE EXCEPTION 'a wallet-bound intent was renamed'; END IF;
+  IF (SELECT tgenabled FROM pg_trigger WHERE tgname='primary_goal_wallet_choice_immutable')<>'O' THEN RAISE EXCEPTION 'name guard left disabled'; END IF;
+END $$;
 CREATE ROLE goal_fixture LOGIN;
 GRANT piggyvest_primary_goal_provisioner TO goal_fixture;
 INSERT INTO piggyvest_primary.goal_provisioning_authorities
@@ -73,3 +97,16 @@ DO $$ BEGIN
   IF (SELECT provider_wallet_id FROM piggyvest_primary.goal_wallet_intents WHERE goal_id='00000000-0000-4000-8000-000000000006')<>'retry-destination' THEN RAISE EXCEPTION 'retry wallet not stored'; END IF;
   IF has_function_privilege('authenticated','piggyvest_primary.prepare_goal_wallet(jsonb,uuid,boolean)','EXECUTE') THEN RAISE EXCEPTION 'public preparation enabled'; END IF;
 END $$;
+SET SESSION AUTHORIZATION goal_fixture;
+DO $$
+DECLARE
+  scope jsonb := '{"merchantId":"00000000-0000-4000-8000-000000000001","customerId":"00000000-0000-4000-8000-000000000002","userId":"00000000-0000-4000-8000-000000000003","integrationId":"00000000-0000-4000-8000-000000000004","businessId":"fixture-business","environment":"staging"}';
+  goal uuid := '00000000-0000-4000-8000-000000000009';
+  retry jsonb;
+BEGIN
+  retry:=piggyvest_primary.prepare_goal_wallet(scope,goal,false);
+  IF retry->>'status'<>'claimed' THEN RAISE EXCEPTION 'renamed stale intent not reclaimable'; END IF;
+  IF retry->>'walletName'<>'baci-save-'||substr(encode(sha256(convert_to((scope->>'integrationId')||':'||goal::text,'UTF8')),'hex'),1,32)
+    THEN RAISE EXCEPTION 'reclaim returned the old name: %', retry->>'walletName'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;

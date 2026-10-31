@@ -194,10 +194,15 @@ export async function provisionPrimarySavingsWallet(input: Input) {
       payout !== intent.primaryWalletId
     )
       return outcome('conflict');
-    // A declined goal must never be funded while the provider shows it
+    // Accrual is fixed when the goal is created, so an explicit readback that
+    // disagrees with the customer's choice is final: a declined goal shown
     // accruing (customers are now created with accrual on, and goal
-    // inheritance is unproven). Null or absent is not evidence either way.
-    if (wallet.interest_enabled === true && !intent.interestAccepted)
+    // inheritance is unproven), or an opted-in goal shown not accruing,
+    // never enrolls. Null or absent is not evidence either way.
+    if (
+      typeof wallet.interest_enabled === 'boolean' &&
+      wallet.interest_enabled !== intent.interestAccepted
+    )
       return outcome('conflict');
     if (wallet.status !== 'active') return outcome('pending');
     const accounts = await input.retrieveAccounts(wallet.id);

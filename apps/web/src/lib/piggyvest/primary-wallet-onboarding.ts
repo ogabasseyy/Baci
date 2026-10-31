@@ -149,12 +149,24 @@ export async function onboardPiggyvestPrimaryWallet(
       ? { status: 'pending' }
       : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
   } catch (error) {
-    // A definitive decline means nothing was created: release the intent so
-    // a corrected request can claim again. Recording it uncertain would pin
-    // the declined fingerprint and conflict every corrected retry. A decline
-    // that names the interest settings is our configured payout wallet being
-    // refused, never the customer's BVN. Every other throw stays ambiguous.
+    // A decline that names the interest settings is our configured payout
+    // wallet being refused, never the customer's BVN. On a fresh claim it
+    // proves nothing was created, so the intent is released for a corrected
+    // request (recording it uncertain would pin the declined fingerprint).
+    // On a reclaimed claim it proves only that THIS attempt created nothing:
+    // the earlier ambiguous dispatch may have created the customer, so the
+    // intent stays reclaimable and a later retry can adopt it. A BVN decline
+    // is released either way, so a corrected BVN can be claimed. Every other
+    // throw stays ambiguous.
     const decline = classifyCreationDecline(error);
+    if (decline === 'interest_routing' && claim.reclaimed === true) {
+      try {
+        await input.storage.recordUncertain(claimedScope);
+      } catch {
+        return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
+      }
+      return { status: 'unavailable', code: 'NOT_CONFIGURED' };
+    }
     if (decline !== null) {
       try {
         if (!(await input.storage.releaseIntent(claimedScope)))

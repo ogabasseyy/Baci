@@ -151,6 +151,33 @@ describe('primary savings goal wallet interest', () => {
     expect(input.store.enroll).toHaveBeenCalledOnce();
   });
 
+  it('never enrolls an opted-in goal whose readback shows accrual off', async () => {
+    const input = withInterestChoice(true);
+    input.retrieveWallet.mockResolvedValue({
+      ...(await goalWallet(input)),
+      interest_enabled: false,
+    });
+    expect((await provisionPrimarySavingsWallet(input)).status).toBe(
+      'conflict'
+    );
+    expect(input.store.enroll).not.toHaveBeenCalled();
+    expect(input.retrieveAccounts).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    null,
+    undefined,
+  ])('still enrolls an opted-in goal whose readback shows accrual %s', async (interestEnabled) => {
+    const input = withInterestChoice(true);
+    input.retrieveWallet.mockResolvedValue({
+      ...(await goalWallet(input)),
+      interest_enabled: interestEnabled,
+    });
+    const outcome = await provisionPrimarySavingsWallet(input);
+    expect(outcome.status).toBe('ready');
+    expect(outcome.interestEnrollment).toBe('requested');
+  });
+
   it('still enrolls an opted-in goal that accrues interest', async () => {
     const input = withInterestChoice(true);
     input.retrieveWallet.mockResolvedValue({

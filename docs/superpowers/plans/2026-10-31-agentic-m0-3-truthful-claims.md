@@ -26,6 +26,13 @@ Task 0 picks the base:
 - **Case A:** both have merged. Branch from `origin/main`.
 - **Case B:** #3873 is still open. Branch from `origin/chore/agentic-baseline-evidence`; the orchestrator opens this pull request against that branch.
 
+Plan 2 shipped with one change from its plan text. A Codex review of #3873 split two test-support modules into one module per export (`f119a47ba9`):
+
+- `fixtures/ucp-conformance-inputs.ts` became `ucp-conformance-data.ts` (`MERCHANT`, `ManifestMerchant` and the price constants) plus `ucp-conformance-profile.ts`, `ucp-conformance-search-response.ts`, `ucp-conformance-cart-response.ts` and `ucp-conformance-order-body.ts`.
+- `test-support/synthetic-paystack.ts` became `build-synthetic-dva-session.ts`, `build-synthetic-paystack-outcome.ts` and `sign-paystack-webhook.ts`.
+
+This plan names the shipped files. Task 0 Step 2 checks that they exist.
+
 ### Latest protocol rules (checked 31 October 2026)
 
 | Topic | Rule | Source |
@@ -108,7 +115,7 @@ The roadmap assigns these to other tasks, so do not change them here:
 | Modify | five existing cart route tests | Mock the reader as enrolled |
 | Create | `apps/web/src/config/openai-legacy-feed-eligibility.ts` | Search on, checkout off |
 | Modify | `apps/web/src/app/api/feed/openai/legacy-feed-generator.ts` (+ test) | Use the eligibility constant |
-| Modify | `apps/web/src/lib/agentic/fixtures/ucp-conformance.test.ts`, `ucp-conformance-data.ts` | F7 and F34 are no longer known gaps |
+| Modify | `apps/web/src/lib/agentic/fixtures/ucp-conformance.test.ts`, `ucp-conformance-data.ts` (`ucp-conformance-inputs.ts` on a base before `f119a47ba9`) | F7 and F34 are no longer known gaps |
 | Modify | `docs/product/baci-capabilities.json`, `docs/product/agent-access-map.md` | Limitations, evidence cells, re-review (last) |
 
 ---
@@ -149,6 +156,14 @@ npm_config_verify_deps_before_run=false pnpm exec vitest run src/lib/agentic src
 ```
 
 Expected: everything passes, apart from the `.fails` known-gap tests, which Vitest counts as expected failures. Write the totals down; Task 7 compares against them.
+
+Then confirm the base has the split fixture modules:
+
+```bash
+grep -n "export const MERCHANT" src/lib/agentic/fixtures/*.ts
+```
+
+Expected: one line, in `src/lib/agentic/fixtures/ucp-conformance-data.ts`. If it names `ucp-conformance-inputs.ts` instead, the base predates `f119a47ba9`. Edit `MERCHANT` there in Task 3 Step 2, wherever this plan says `ucp-conformance-data.ts`. Edit whichever file `ucp-conformance.test.ts` imports `MERCHANT` from.
 
 ---
 
@@ -913,7 +928,7 @@ describe('decideUcpCartTransfer', () => {
 
 1. In `apps/web/src/lib/agentic/fixtures/ucp-conformance.test.ts`, delete the comment line `// Roadmap Task 3 (plan 3) withholds cart when shared_cart_enabled is off.` and change `it.fails('F34: the cart capability follows shared_cart_enabled'` to `it('F34: the cart capability follows shared_cart_enabled'`.
 2. In the same test's `buildProfile({ ...MERCHANT, shared_cart_enabled: false } as ManifestMerchant)`, drop the `as ManifestMerchant` cast. The type now has the field, and if the cast is needed, the manifest change is wrong. If `ManifestMerchant` becomes unused in that file, remove it from the import.
-3. In `apps/web/src/lib/agentic/fixtures/ucp-conformance-data.ts`, add `shared_cart_enabled: true,` to `MERCHANT`, after `paystack_subaccount_code`. The F7 test expects cart in the profile, and Ogabassey is enrolled in production.
+3. In the module `ucp-conformance.test.ts` imports `MERCHANT` from (`apps/web/src/lib/agentic/fixtures/ucp-conformance-data.ts` on the shipped plan 2 branch; see Task 0 Step 2), add `shared_cart_enabled: true,` to `MERCHANT`, after `paystack_subaccount_code`. The F7 test expects cart in the profile, and Ogabassey is enrolled in production.
 
 - [ ] **Step 3: Run the tests and watch them fail**
 

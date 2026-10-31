@@ -178,6 +178,7 @@ BEGIN
   END IF;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_customer_policy_counts(uuid, integer) TO PUBLIC; -- called after SET ROLE
 
 CREATE FUNCTION pg_temp.assert_customer_policy_initplan(
   p_table_name text
@@ -211,6 +212,7 @@ BEGIN
   END IF;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_customer_policy_initplan(text) TO PUBLIC; -- called after SET ROLE
 
 SET LOCAL ROLE authenticated;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);

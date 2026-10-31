@@ -1,13 +1,18 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import {
+  REPLAY_SQL_CHECK_REGISTRY_ARGUMENT,
+  readRegisteredReplaySqlChecks,
+} from './replay-sql-check-registry.test-support.mjs';
 
 const workflow = readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8');
 const filters = readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8');
 const databaseFilter = filters.split(/^quiz_db:\s*$/m)[1]?.split(/^\S/m)[0] ?? '';
 const patterns = [...databaseFilter.matchAll(/^\s+- '([^']+)'/gm)].map((match) => match[1]);
-const fixtures = [...workflow.matchAll(/--sql-check\s+(supabase\/tests\/(?:product_discovery_|mcp_search_)[\w-]+\.sql)/g)]
-  .map((match) => match[1]);
+const fixtures = readRegisteredReplaySqlChecks().filter((suite) =>
+  /^supabase\/tests\/(?:product_discovery_|mcp_search_)[\w-]+\.sql$/.test(suite)
+);
 
 function matches(pattern, path) {
   const expression = pattern.split('*')
@@ -17,6 +22,7 @@ function matches(pattern, path) {
 }
 
 test('every executed discovery SQL fixture independently triggers database replay', () => {
+  assert.ok(workflow.includes(REPLAY_SQL_CHECK_REGISTRY_ARGUMENT), 'replay runs the registered suites');
   assert.ok(fixtures.length > 10, 'expected the discovery runtime fixtures');
   for (const fixture of fixtures) {
     assert.ok(patterns.some((pattern) => matches(pattern, fixture)), `${fixture} must trigger quiz_db`);

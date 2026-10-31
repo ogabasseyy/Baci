@@ -21,6 +21,41 @@ const prize = {
 };
 
 describe('QuizAuthoringForm', () => {
+  describe('bugfix: form overflowed and zoomed on phone screens', () => {
+    it('lets the fieldset shrink to the viewport instead of its widest control', () => {
+      const { container } = render(
+        <QuizAuthoringForm
+          disabled={false}
+          initialProducts={[prize]}
+          isGenerating={false}
+          onGenerate={vi.fn()}
+        />
+      );
+      // Browsers default fieldsets to min-inline-size: min-content, so the
+      // long Mode option text pushed the whole card past a 402px viewport.
+      expect(container.querySelector('fieldset')).toHaveClass('min-w-0');
+    });
+
+    it('renders controls at 16px on mobile so iOS Safari does not zoom on focus', () => {
+      render(
+        <QuizAuthoringForm
+          disabled={false}
+          initialProducts={[prize]}
+          isGenerating={false}
+          onGenerate={vi.fn()}
+        />
+      );
+      for (const control of [
+        screen.getByLabelText(/quiz title/i),
+        screen.getByLabelText(/^mode$/i),
+        screen.getByLabelText(/time per question/i),
+        screen.getByLabelText(/launch timing/i),
+      ]) {
+        expect(control).toHaveClass('text-base', 'md:text-sm', 'min-w-0');
+      }
+    });
+  });
+
   it('labels per-question time and emits a complete draft configuration', async () => {
     const onGenerate = vi.fn();
     const user = userEvent.setup();

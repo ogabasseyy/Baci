@@ -81,18 +81,16 @@ export function useOrderDetailsController() {
   const recordPaymentMutation = useRecordPayment();
   const providerLabel = formatShippingProviderName(order?.shipping_provider);
   const uiState = useOrderDetailsUiState();
-  const { effectiveProviderLabel, giglShipping, providerBookingAvailable } =
-    useOrderDetailsGiglShipping({
-      giglEligible: giglEligibility.isEligible,
-      merchant,
-      order,
-      pendingShipmentMode: uiState.pendingShipmentMode,
-      providerLabel,
-      shipmentFlowStep: uiState.shipmentFlowStep,
-      showShipmentFlow: uiState.showShipmentFlow,
-      showStatusModal: uiState.showStatusModal,
-      userId: user?.id,
-    });
+  const gigl = useOrderDetailsGiglShipping({
+    giglEligible: giglEligibility.isEligible,
+    order,
+    pendingShipmentMode: uiState.pendingShipmentMode,
+    providerLabel,
+    shipmentFlowStep: uiState.shipmentFlowStep,
+    showShipmentFlow: uiState.showShipmentFlow,
+    showStatusModal: uiState.showStatusModal,
+    userId: user?.id,
+  });
 
   const requiresShipmentDetails = orderRequiresFulfillment(
     order?.items,
@@ -173,8 +171,9 @@ export function useOrderDetailsController() {
     order,
     pendingShipmentMode: uiState.pendingShipmentMode,
     providerBookingAvailable:
-      providerBookingAvailable || Boolean(giglShipping?.wallet?.canBook),
-    providerLabel: effectiveProviderLabel,
+      gigl.providerBookingAvailable ||
+      Boolean(gigl.canBookGigl && gigl.giglShipping?.wallet?.canBook),
+    providerLabel: gigl.effectiveProviderLabel,
     queryClient,
     requiresShipmentDetails,
     riderPhone: uiState.riderPhone,
@@ -193,8 +192,8 @@ export function useOrderDetailsController() {
     onProviderBookingError: (error) =>
       handleOrderDetailsProviderBookingError(
         error,
-        giglShipping,
-        canUseCheckoutShippingRecovery(order, merchant, user?.id)
+        gigl.giglShipping,
+        canUseCheckoutShippingRecovery(order, merchant, gigl.canBookGigl)
       ),
   });
 
@@ -251,6 +250,7 @@ export function useOrderDetailsController() {
   return {
     ...uiState,
     auditEvents: auditEventsQuery.data ?? [],
+    canBookGigl: gigl.canBookGigl,
     closeShipmentFlow: shipmentActions.closeShipmentFlow,
     colors,
     currencySymbol,
@@ -258,7 +258,7 @@ export function useOrderDetailsController() {
     formatAddress: formatOrderAddress,
     formatDate: formatOrderDetailsDate,
     formatPrice,
-    giglShipping,
+    giglShipping: gigl.giglShipping,
     handleCall: contactActions.handleCall,
     handleEmail: contactActions.handleEmail,
     handlePaymentAmountChange: paymentActions.handlePaymentAmountChange,
@@ -286,8 +286,8 @@ export function useOrderDetailsController() {
     proceedFromFulfillmentDetails:
       shipmentActions.proceedFromFulfillmentDetails,
     proceedFromShipmentMethod: shipmentActions.proceedFromShipmentMethod,
-    providerBookingAvailable,
-    providerLabel: effectiveProviderLabel,
+    providerBookingAvailable: gigl.providerBookingAvailable,
+    providerLabel: gigl.effectiveProviderLabel,
     recordPaymentMutation,
     requiresShipmentDetails,
     shipOnCreditMutation,

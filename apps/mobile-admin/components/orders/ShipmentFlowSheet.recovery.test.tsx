@@ -14,15 +14,11 @@ import {
 import { ShipmentFlowSheet } from './ShipmentFlowSheet';
 
 const state = vi.hoisted(() => ({
-  userId: 'owner',
   busy: false,
   confirmed: false,
   preview: vi.fn(),
   confirm: vi.fn(),
   update: vi.fn(),
-}));
-vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ user: { id: state.userId } }),
 }));
 vi.mock('@/hooks/useMerchant', () => ({
   useMerchant: () => ({ merchant: { id: 'merchant', user_id: 'owner' } }),
@@ -112,6 +108,7 @@ const actions = {
 };
 const props = {
   ...actions,
+  canBookGigl: true,
   recoveryOrder: order,
   canUseProvider: canUseSelectedShippingProvider(order),
   fulfillmentDetails: { imei: '', serialNumber: '', items: [] },
@@ -135,7 +132,6 @@ const recoveryLabel = 'Confirm destination and refresh paid quote';
 describe('ShipmentFlowSheet prepaid recovery reachability', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    state.userId = 'owner';
     state.busy = false;
     state.confirmed = false;
   });
@@ -364,13 +360,13 @@ describe('ShipmentFlowSheet prepaid recovery reachability', () => {
     expect(actions.onContinueFromMethod).not.toHaveBeenCalled();
     expect(actions.onModeChange).not.toHaveBeenCalled();
   });
-  it('preserves owner and paid checkout eligibility when recovery is exposed outside provider mode', () => {
-    state.userId = 'staff';
-    const { rerender } = render(<ShipmentFlowSheet {...props} />);
+  it('preserves GIG booking rights and paid checkout eligibility when recovery is exposed outside provider mode', () => {
+    const { rerender } = render(
+      <ShipmentFlowSheet {...props} canBookGigl={false} />
+    );
     expect(
       screen.queryByRole('button', { name: recoveryLabel })
     ).not.toBeInTheDocument();
-    state.userId = 'owner';
     rerender(
       <ShipmentFlowSheet
         {...props}

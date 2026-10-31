@@ -3,6 +3,10 @@ import { primaryCardCustodyInboxSchemas as schemas } from '@/schemas/primary-wal
 import { createPrimaryCardCustodyExecutor } from './primary-wallet-card-custody-executor';
 import { createPrimaryCardCustodyInboxIntake } from './primary-wallet-card-custody-inbox-intake';
 import { readPrimaryCardCustodyIntakeRuntime } from './primary-wallet-card-custody-intake-runtime';
+import {
+  familyArchivedSecrets,
+  type WebhookKeyScope,
+} from './webhook-key-archive';
 
 type IntakeResult =
   | { outcome: 'disabled' | 'not_handled'; response: null }
@@ -23,6 +27,8 @@ export async function dispatchPrimaryCardSignedCustodyIntake(input: {
   signature: string | null;
   environment?: NodeJS.ProcessEnv;
   now?: () => number;
+  /** `replay` also accepts this family's archived keys past their overlap. */
+  keyScope?: WebhookKeyScope;
 }): Promise<IntakeResult> {
   const environment = input.environment ?? process.env;
   const reply = (
@@ -95,6 +101,12 @@ export async function dispatchPrimaryCardSignedCustodyIntake(input: {
       configuration: config,
       capability,
       execute: createPrimaryCardCustodyExecutor(config),
+      archivedSecrets: familyArchivedSecrets(
+        'custody',
+        environment,
+        new Date((input.now ?? Date.now)()),
+        input.keyScope ?? 'ingress'
+      ),
     });
     const outcome = await accept(input.rawBody, input.signature);
     if (outcome === 'not_handled') return { outcome, response: null };

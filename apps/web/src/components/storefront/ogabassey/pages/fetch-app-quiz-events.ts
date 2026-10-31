@@ -37,9 +37,8 @@ export async function fetchAppQuizEvents(
     );
     if (!parsed.success) throw new Error('Invalid quiz response');
     events.push(...parsed.data.events);
-    offset = parsed.data.pagination.hasMore
-      ? parsed.data.pagination.nextOffset
-      : null;
+    const { pagination } = parsed.data;
+    offset = pagination?.hasMore ? pagination.nextOffset : null;
   }
   // Only quizzes a shopper can still join are worth sending to the app.
   return events.filter(

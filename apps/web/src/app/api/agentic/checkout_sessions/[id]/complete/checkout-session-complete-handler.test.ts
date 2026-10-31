@@ -41,7 +41,7 @@ vi.mock('@/lib/agentic/merchant-context', () => ({
   isAgenticMerchantCheckoutEnabled: (merchant: {
     agentic_checkout_enabled?: boolean;
   }) => merchant.agentic_checkout_enabled !== false,
-  resolveAgenticMerchantContext: mockResolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc: mockResolveAgenticMerchantContext,
 }));
 vi.mock('@/lib/agentic/checkout', () => ({
   calculateCheckoutSession: vi.fn(),

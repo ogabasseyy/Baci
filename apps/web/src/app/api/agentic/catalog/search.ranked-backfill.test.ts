@@ -27,7 +27,7 @@ vi.mock('@/lib/agentic/agent-request-controls', () => ({
   verifyAgenticRequestAccess: vi.fn(() => ({ ok: true })),
 }));
 vi.mock('@/lib/agentic/merchant-context', () => ({
-  resolveAgenticMerchantContext: mockResolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc: mockResolveAgenticMerchantContext,
 }));
 vi.mock('@/lib/agentic/scoped-supabase', () => ({
   createAgenticScopedSupabaseClient: vi.fn(),

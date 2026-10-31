@@ -38,7 +38,7 @@ vi.mock('@/lib/agentic/merchant-context', () => ({
   isAgenticMerchantCheckoutEnabled: (merchant: {
     agentic_checkout_enabled?: boolean;
   }) => merchant.agentic_checkout_enabled !== false,
-  resolveAgenticMerchantContext: mockResolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc: mockResolveAgenticMerchantContext,
 }));
 vi.mock('@/lib/agentic/checkout', () => ({
   calculateCheckoutSession: vi.fn(),
@@ -275,6 +275,9 @@ describe('POST /api/agentic/checkout_sessions/[id]/complete', () => {
       expect.any(Object),
       { subaccount: 'ACCT_TESTMOCK1234567' }
     );
+    expect(mockResolveAgenticMerchantContext).toHaveBeenCalledWith({
+      includePaymentSplit: true,
+    });
     expect(readChain.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
     expect(updateSpy).toHaveBeenCalledWith(
       expect.objectContaining({

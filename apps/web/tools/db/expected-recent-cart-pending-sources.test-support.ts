@@ -180,4 +180,9 @@ export const EXPECTED_RECENT_CART_PENDING_SOURCES = [
       'supabase/migrations/20261029212802_redvault_checkout_reconciliation.sql',
     sha256: '258767d07ecdd594fb9c0b7df117646c7aae2da682c04ea60d86369d842f7fe0',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261030190000_agentic_merchant_payment_split.sql',
+    sha256: '769b93607eab5062a318176dc58b809649cf264c2516bd8792cff26364d63b3e',
+  },
 ] as const;

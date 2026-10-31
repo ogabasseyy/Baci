@@ -15,7 +15,7 @@ import { buildStoredAgenticIdempotencyResponse } from '@/lib/agentic/idempotency
 import {
   AGENTIC_CHECKOUT_DISABLED_ERROR,
   isAgenticMerchantCheckoutEnabled,
-  resolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc,
 } from '@/lib/agentic/merchant-context';
 import { readAgenticMutationRequest } from '@/lib/agentic/mutation-request';
 import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
@@ -24,7 +24,6 @@ import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { buildStoreUrl } from '@/lib/store-url';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { agenticCheckoutItemsSchema } from '@/schemas/agentic-checkout';
 import { agenticCheckoutSessionRouteParamsSchema } from '@/schemas/agentic-checkout-session-route-params';
 
@@ -61,8 +60,7 @@ export async function POST(
     | null = null;
 
   try {
-    const bootstrap = createAdminClient();
-    const merchant = await resolveAgenticMerchantContext(bootstrap);
+    const merchant = await resolveAgenticMerchantContextFromRpc();
     if (!merchant) {
       return NextResponse.json(
         { error: 'Agentic merchant not found' },

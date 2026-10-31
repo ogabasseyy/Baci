@@ -6,6 +6,7 @@ import { BUILDER_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-bu
 import { CART_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-cart-pending-sources';
 import { CHECKOUT_RECOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-checkout-recovery-pending-sources';
 import { CONNECTOR_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-connector-pending-sources';
+import { DEFINER_PRIVILEGES_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-definer-privileges-sources';
 import { DISCOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-discovery-pending-sources';
 import { EXPENSE_QUIZ_PAYSTACK_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-expense-pending-sources';
 import { FEED_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-feed-pending-sources';
@@ -109,6 +110,7 @@ const PENDING_SOURCES = [
   GIGL_STAFF_ACCESS_PENDING_REPLAY_SOURCE_ROWS,
   STORE_CREDIT_PENDING_REPLAY_SOURCE_ROWS,
   IMEI_PENDING_REPLAY_SOURCE_ROWS,
+  DEFINER_PRIVILEGES_PENDING_REPLAY_SOURCE_ROWS,
   REFUND_PENDING_REPLAY_SOURCE_ROWS,
   CART_PENDING_REPLAY_SOURCE_ROWS,
   BUILDER_PENDING_REPLAY_SOURCE_ROWS,

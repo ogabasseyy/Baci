@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { POST as postShippingQuotes } from '@/app/api/shipping/quotes/route';
+import { authenticateApiRequest } from '@/lib/api-auth';
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, context: Params) {
   const { id } = await context.params;
   try {
+    // Authenticate before buffering the body so an unauthenticated caller
+    // cannot make the route hold an upload in memory. The quotes handler
+    // authenticates again and applies the order/merchant checks.
+    const auth = await authenticateApiRequest(request);
+    if (!auth.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     const headers = new Headers(request.headers);
     headers.set('x-baci-admin-order-mode', '1');
     headers.set('x-baci-admin-order-id', id);

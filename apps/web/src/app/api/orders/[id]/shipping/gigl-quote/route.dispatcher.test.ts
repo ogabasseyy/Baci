@@ -1,13 +1,16 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { postShippingQuotes } = vi.hoisted(() => ({
+const { authenticateApiRequest, postShippingQuotes } = vi.hoisted(() => ({
+  authenticateApiRequest: vi.fn(),
   postShippingQuotes: vi.fn(),
 }));
 
 vi.mock('@/app/api/shipping/quotes/route', () => ({
   POST: postShippingQuotes,
 }));
+
+vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest }));
 
 const ORDER_ID = '11111111-1111-4111-8111-111111111111';
 const BODY = {
@@ -32,6 +35,31 @@ function buildRequest() {
 describe('bugfix: admin GIG quote crashed with "#state" when the route re-wrapped the request', () => {
   beforeEach(() => {
     postShippingQuotes.mockReset();
+    authenticateApiRequest.mockReset();
+    authenticateApiRequest.mockResolvedValue({
+      error: null,
+      supabase: {},
+      user: { id: 'user-1' },
+    });
+  });
+
+  it('rejects an unauthenticated caller before reading the body or delegating', async () => {
+    authenticateApiRequest.mockResolvedValue({
+      error: 'Unauthorized',
+      supabase: null,
+      user: null,
+    });
+    const request = buildRequest();
+    const { POST } = await import('./route');
+
+    const response = await POST(request, {
+      params: Promise.resolve({ id: ORDER_ID }),
+    });
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'Unauthorized' });
+    expect(request.bodyUsed).toBe(false);
+    expect(postShippingQuotes).not.toHaveBeenCalled();
   });
 
   afterEach(() => {

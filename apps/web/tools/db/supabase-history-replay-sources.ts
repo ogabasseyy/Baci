@@ -41,6 +41,7 @@ import { STOREFRONT_SEMANTIC_PENDING_SOURCE_ROWS } from './supabase-history-repl
 import { VTU_CHECKOUT_RLS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-checkout-rls-pending-sources';
 import { VTU_EMAIL_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-email-pending-sources';
 import { VTU_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-pending-sources';
+import { WALLET_ORDER_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-wallet-order-sources';
 
 const TRACKING_ORDER_AMOUNT_PAID_PENDING_SOURCES = `2dfc3e7d95e55cd202ee973cbf149f0e0447cf1d6248c7c6132348f3cc78c0df 20260921130000_include_tracking_order_amount_paid.sql`;
 const TRACKING_ORDER_PAYMENT_ACCOUNTS_PENDING_SOURCES = `e4cc677df89fc76136e7ad3d6439d07893df34d6e064f0941951ec1d0c2723c9 20260921180100_include_tracking_order_payment_accounts.sql`;
@@ -177,6 +178,7 @@ const PENDING_SOURCES = [
   SAVINGS_ENGAGEMENT_PENDING_REPLAY_SOURCE_ROWS,
   SAVINGS_RUNTIME_PENDING_REPLAY_SOURCE_ROWS,
   VTU_CHECKOUT_RLS_PENDING_REPLAY_SOURCE_ROWS,
+  WALLET_ORDER_PENDING_REPLAY_SOURCE_ROWS,
 ]
   .flatMap((sourceBlock) => sourceBlock.trim().split('\n'))
   .sort((left, right) => { const l = left.split(' ')[1] ?? ''; const r = right.split(' ')[1] ?? ''; if (l < r) return -1; if (l > r) return 1; return 0; })

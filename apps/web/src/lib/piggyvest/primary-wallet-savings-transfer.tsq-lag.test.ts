@@ -9,9 +9,11 @@ import {
   liveTransactionStatus,
 } from './transaction-status-live.test-support';
 
-// Live sandbox, 2026-10-31 (proof p2): a 202-accepted wallet transfer
-// answers TSQ 404, then pending, then successful. The stale-dispatch
-// reclaim lands inside that window, so its lookup sees the 404 too.
+// docs/piggyvest-contract-evidence/2026-10-31.md, P2 (observed): a
+// 202-accepted wallet transfer answers TSQ http_404 > pending > successful
+// in 9 polls. The test also has the five-minute stale-dispatch reclaim see
+// a 404 (indexing lagging past the lease, or a holder that died before its
+// POST): the worst case, where re-posting the reference could pay twice.
 const operationId = '00000000-0000-4000-8000-000000000002';
 const reservation = {
   operationId,

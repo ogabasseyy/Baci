@@ -132,8 +132,9 @@ it('reconciles only a dispatched operation selected by the authenticated scope',
 });
 it('never resubmits a stale dispatch whose reference TSQ still does not find', async () => {
   // The client only polls status. A stale dispatch may still be a
-  // 202-accepted transfer the provider has not indexed (live sandbox:
-  // 404, then pending, then successful), so a 404 never re-posts the
+  // 202-accepted transfer the provider has not indexed
+  // (docs/piggyvest-contract-evidence/2026-10-31.md, P2: http_404 >
+  // pending > successful), so a 404 never re-posts the
   // same reference; the dispatch stays pending for reconciliation.
   const reservation = {
     operationId,

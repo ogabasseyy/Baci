@@ -4,9 +4,12 @@ import { piggyvestProviderIdSchema } from './piggyvest-provider-id';
 /**
  * GET /api/v1/transaction/verify (transaction status query, TSQ).
  *
- * Live sandbox evidence, 2026-10-31 (proof p2,
- * docs/piggyvest-contract-evidence): for a wallet-to-wallet transfer the
- * found record names `reference` (the provider's id), `third_party_reference`
+ * Evidence: docs/piggyvest-contract-evidence/2026-10-31.md (and .json), P2
+ * (observed: transfer 202, then TSQ http_404 > pending > successful in 9
+ * polls; no currency field; existing typed TSQ schema rejected the live
+ * body). The separate 2026-10-31-2 run's P2 was inconclusive (QA wallets
+ * unavailable) and proves none of this. For a wallet-to-wallet transfer the
+ * terminal record names `reference` (the provider's id), `third_party_reference`
  * (our reference), `amount`, `fee`, `status` (`pending` then `successful`),
  * `customer_id`, `source_wallet` and `destination_wallet`, and carries no
  * currency field. An unknown reference and a just-submitted one both answer

@@ -12,9 +12,10 @@ import { PiggyvestApiError } from './client';
  * - `failed`: the provider reports that bound transfer as failed. Nothing
  *   moved under it, but the SAME reference must never be sent again; a new
  *   attempt would need a new reference, which these flows do not mint.
- * - `not_found`: HTTP 404. In the live sandbox (2026-10-31, proof p2) a
- *   202-accepted transfer answered 404, then pending, then successful, and
- *   an unknown reference answered the same 404 "Transaction Not Found". A
+ * - `not_found`: HTTP 404. In docs/piggyvest-contract-evidence/2026-10-31.md,
+ *   P2 (observed: transfer 202, then TSQ http_404 > pending > successful in
+ *   9 polls), and an unknown reference answered the same 404 "Transaction
+ *   Not Found". A
  *   404 is therefore "not indexed yet" as much as "never sent": it never
  *   resubmits, releases or otherwise moves money.
  * - `uncertain`: anything else (transport failure, other HTTP status,

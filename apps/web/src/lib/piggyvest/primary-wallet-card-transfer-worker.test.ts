@@ -56,8 +56,9 @@ describe('irreversible primary transfer dispatch', () => {
     'pending',
     'failed',
   ] as const)('holds a submit throw observed as %s unknown for review, never resubmitting the reference', async (observed) => {
-    // Live sandbox: a 202-accepted transfer answers TSQ 404 before it is
-    // indexed, so a 404 after a lost response is never proof of absence.
+    // docs/piggyvest-contract-evidence/2026-10-31.md, P2: a 202-accepted
+    // transfer answers TSQ 404 before it is indexed, so a 404 after a lost
+    // response is never proof of absence.
     const input = setup();
     input.submitTransfer.mockRejectedValue(new Error('timeout before commit'));
     input.lookupTransfer.mockResolvedValue(observed);

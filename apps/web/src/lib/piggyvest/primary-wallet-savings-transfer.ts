@@ -128,9 +128,10 @@ export async function submitPrimaryWalletSavingsTransfer(
 
 /**
  * Observe a reclaimed dispatch — one whose dispatch stamp is older than
- * five minutes — WITHOUT resubmitting or releasing it. The live sandbox
- * (2026-10-31) answered TSQ 404 for a just-accepted transfer before it
- * was indexed, so the deterministic reference may already carry money:
+ * five minutes — WITHOUT resubmitting or releasing it. The sandbox answered
+ * TSQ 404 for a 202-accepted transfer before it was indexed
+ * (docs/piggyvest-contract-evidence/2026-10-31.md, P2: http_404 > pending >
+ * successful in 9 polls), so the deterministic reference may carry money:
  * re-posting it could transfer twice, and releasing its hold could free
  * funds that moved. A reference still not found this far past the
  * indexing window is escalated to 'review' and raised for operator review

@@ -78,8 +78,9 @@ describe('savings transfer reference lookup', () => {
     }
   });
   it('reports a 404 as not found, never as proof the transfer is absent', async () => {
-    // Live sandbox: a just-accepted transfer answers 404 before it is
-    // indexed, exactly like a reference that never existed.
+    // docs/piggyvest-contract-evidence/2026-10-31.md, P2: a just-accepted
+    // transfer answers 404 before it is indexed, exactly like a reference
+    // that never existed.
     const { lookup } = lookupWith(
       { status: false, message: 'Transaction Not Found', data: {} },
       404

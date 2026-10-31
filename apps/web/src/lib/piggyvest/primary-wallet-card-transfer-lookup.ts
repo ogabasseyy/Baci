@@ -50,7 +50,8 @@ export function createPrimaryCardTransferLookup(input: {
     } catch (error) {
       // A 404 is 'not_found', never proof that the previous holder died
       // before submitting: a just-accepted transfer answers 404 until
-      // PiggyVest indexes it. The worker never resubmits on it.
+      // PiggyVest indexes it (docs/piggyvest-contract-evidence/2026-10-31.md,
+      // P2). The worker never resubmits on it.
       return classifyTransferReferenceFailure(error);
     }
     return classifyTransferReferenceResponse(response, {

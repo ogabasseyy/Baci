@@ -38,8 +38,9 @@ async function failureFor(body: unknown, status: number) {
 
 describe('transfer reference lookup classification', () => {
   it('has no positive proof of absence: unknown and just-submitted references answer the same 404', async () => {
-    // Live sandbox, 2026-10-31: both cases answer HTTP 404 "Transaction
-    // Not Found". Neither may be read as "never happened".
+    // docs/piggyvest-contract-evidence/2026-10-31.md, P2: both cases answer
+    // HTTP 404 "Transaction Not Found". Neither may be read as "never
+    // happened".
     for (const body of [
       liveUnknownReferenceNotFound,
       liveJustSubmittedNotFound,

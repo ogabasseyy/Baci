@@ -27,7 +27,8 @@ export async function lookupSavingsTransferReference(input: {
     });
   } catch (error) {
     // A 404 is 'not_found', never proof that nothing was submitted: a
-    // just-accepted transfer answers 404 until PiggyVest indexes it.
+    // just-accepted transfer answers 404 until PiggyVest indexes it
+    // (docs/piggyvest-contract-evidence/2026-10-31.md, P2).
     return classifyTransferReferenceFailure(error);
   }
   return classifyTransferReferenceResponse(response, {

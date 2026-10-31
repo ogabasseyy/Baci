@@ -1,8 +1,13 @@
 /**
- * TSQ (GET /api/v1/transaction/verify) envelopes shaped like the live
- * PiggyVest sandbox answers recorded on 2026-10-31 (proof p2,
- * docs/piggyvest-contract-evidence). Every value is synthetic; only the
- * field names, types and envelope layout follow the evidence.
+ * TSQ (GET /api/v1/transaction/verify) envelopes shaped like the PiggyVest
+ * sandbox answers recorded in docs/piggyvest-contract-evidence/2026-10-31.md
+ * (and .json), P2 (observed: transfer 202, then TSQ http_404 > pending >
+ * successful in 9 polls; no currency field). Every value is synthetic; only
+ * the field names, types and envelope layout follow the evidence.
+ *
+ * That run recorded only the 404 bodies and the terminal (successful) body.
+ * The pending body was NOT captured, so the pending and failed fixtures
+ * assume the terminal layout with a different status.
  *
  * Observed facts the fixtures encode:
  * - a wallet-to-wallet transfer POST answers 202, then TSQ answers HTTP 404

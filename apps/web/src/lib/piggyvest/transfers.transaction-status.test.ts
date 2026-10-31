@@ -18,6 +18,8 @@ const binding = {
 
 afterEach(() => vi.unstubAllGlobals());
 
+// Shape: docs/piggyvest-contract-evidence/2026-10-31.md, P2 (terminal
+// record; existing typed TSQ schema rejected it before this change).
 describe('queryTransactionStatus against the live sandbox TSQ shape', () => {
   it.each([
     'pending',

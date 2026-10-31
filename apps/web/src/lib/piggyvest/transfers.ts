@@ -16,8 +16,9 @@ import { type PiggyvestClientConfig, piggyvestRequest } from './client';
  *   webhooks, or via TSQ on our own reference. Callers must treat the
  *   accepted response as "submitted", not "settled".
  * - TSQ answers HTTP 404 for a just-accepted transfer until PiggyVest
- *   indexes it (live sandbox, 2026-10-31: 404, then pending, then
- *   successful). A TSQ 404 is never proof that a transfer does not exist.
+ *   indexes it (docs/piggyvest-contract-evidence/2026-10-31.md, P2:
+ *   transfer 202, then TSQ http_404 > pending > successful in 9 polls). A
+ *   TSQ 404 is never proof that a transfer does not exist.
  * - Our `reference` is the idempotency key: reuse it for TSQ and webhook
  *   correlation, never mint a second reference for the same payout.
  * - Resolve the recipient with name enquiry (bank_code + account_number)

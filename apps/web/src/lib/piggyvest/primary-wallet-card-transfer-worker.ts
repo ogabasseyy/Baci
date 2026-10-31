@@ -40,9 +40,10 @@ export async function runPrimaryCardTransfer(input: {
   // A reclaimed lease (stale dispatch, or an 'unknown' row revisited after
   // its five-minute backoff) may follow a submission that already reached
   // PiggyVest, so it NEVER submits again. Only a successful bound transfer
-  // records submitted; everything else — including a 404, which the live
-  // sandbox returns for a just-accepted transfer before it is indexed —
-  // records unknown, which keeps reconciliation_required and is re-probed.
+  // records submitted; everything else — including a 404, which the sandbox
+  // returned for a 202-accepted transfer before it was indexed
+  // (docs/piggyvest-contract-evidence/2026-10-31.md, P2) — records unknown,
+  // which keeps reconciliation_required and is re-probed.
   // A reference still not found (or reported failed) this far past the
   // indexing window is raised for operator review on every revisit.
   if (claim.outcome === 'reclaimed') {

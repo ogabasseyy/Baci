@@ -16,6 +16,9 @@ BEGIN
   RETURN public.imei_lookup_access(payload,encode(extensions.hmac('baci:imei-access:v1:'||payload,
     'test-imei-access-secret-at-least-32-bytes','sha256'),'hex'));
 END $$;
+-- New functions are no longer executable by other roles by default; the helper is
+-- called after SET LOCAL ROLE authenticated.
+GRANT EXECUTE ON FUNCTION pg_temp.imei_price_test_call(text, jsonb) TO PUBLIC;
 SET LOCAL ROLE authenticated;
 DO $$ DECLARE args jsonb; r jsonb; lookup_id uuid; price numeric; balance numeric; after_balance numeric;
 BEGIN

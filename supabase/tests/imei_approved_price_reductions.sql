@@ -12,6 +12,9 @@ BEGIN
   RETURN public.imei_lookup_access(payload,encode(extensions.hmac('baci:imei-access:v1:'||payload,
     'test-imei-access-secret-at-least-32-bytes','sha256'),'hex'));
 END $$;
+-- New functions are no longer executable by other roles by default; the helper is
+-- called after SET LOCAL ROLE authenticated.
+GRANT EXECUTE ON FUNCTION pg_temp.approved_price_call(text, jsonb) TO PUBLIC;
 -- An old charged lookup keeps its original amount after the price reduction.
 DO $$ DECLARE legacy record; balance numeric;
 BEGIN

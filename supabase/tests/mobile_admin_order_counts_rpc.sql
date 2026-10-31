@@ -145,6 +145,7 @@ BEGIN
   END IF;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_mobile_admin_order_counts(text, uuid, uuid, uuid, jsonb) TO PUBLIC; -- called after SET ROLE
 
 SET LOCAL ROLE authenticated;
 SELECT pg_temp.assert_mobile_admin_order_counts(

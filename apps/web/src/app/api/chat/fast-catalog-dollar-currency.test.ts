@@ -10,6 +10,7 @@ describe('dollar-denominated catalog budgets', () => {
     'budget $500 – $1000',
     'budget $500 to $1000',
     'budget $500 TO 1000',
+    'budget $500 USD to $1000',
     'budget $500-$1000 under $900',
   ])('clarifies unsupported ranges: %s', (budget) => {
     expect(

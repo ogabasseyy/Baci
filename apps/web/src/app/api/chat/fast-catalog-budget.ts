@@ -174,11 +174,13 @@ export function analyzeFastCatalogBudget(
     const amountTail = tail.slice(prefixCurrency?.length ?? 0);
     const amount = AMOUNT.exec(amountTail);
     const afterAmount = amount ? amountTail.slice(amount[0].length) : '';
-    const range = /^\s{0,64}(?:[-–—]|to\b)\s{0,64}(?:\p{Sc}\s{0,64})?\d/iu.test(
-      afterAmount
-    );
-    if (range) hasRange = true;
     const suffix = amount ? suffixCurrencies(afterAmount) : undefined;
+    const rangePattern =
+      /^\s{0,64}(?:[-–—]|to\b)\s{0,64}(?:\p{Sc}\s{0,64})?\d/iu;
+    const range =
+      rangePattern.test(afterAmount) ||
+      rangePattern.test(afterAmount.slice(suffix?.length ?? 0));
+    if (range) hasRange = true;
     const malformedMultiplier = amount
       ? /^\s*(?:million|thousand)[\p{L}\p{N}_]+/iu.exec(afterAmount)
       : null;

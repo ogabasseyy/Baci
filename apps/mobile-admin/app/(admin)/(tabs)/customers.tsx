@@ -685,7 +685,9 @@ export default function CustomersScreen() {
             refreshControl={
               <RefreshControl
                 refreshing={isLoading}
-                onRefresh={refetch}
+                onRefresh={() => {
+                  void refetch();
+                }}
                 tintColor={colors.gold}
                 colors={[colors.gold]}
               />

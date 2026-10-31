@@ -327,9 +327,10 @@ describe('ProductDetailScreen', () => {
   });
 
   it('tracks wishlist adds and shares product links from loaded view callbacks', async () => {
-    jest
-      .spyOn(Share, 'share')
-      .mockResolvedValue({ action: Share.sharedAction });
+    jest.spyOn(Share, 'share').mockResolvedValue({
+      action: Share.sharedAction,
+      activityType: undefined,
+    });
 
     render(
       <ProductDetailScreen

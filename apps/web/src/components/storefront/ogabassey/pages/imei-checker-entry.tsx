@@ -48,6 +48,7 @@ interface OgabasseyImeiEntryProps {
   onSelectTier: (tier: ImeiServiceTierKey) => void;
   onToggleServices: () => void;
   pendingPaused: boolean;
+  pendingCanResume?: boolean;
   searchLoading: boolean;
   selectedDeviceSuggestion: ProductSuggestion | null;
   selectedTier: ImeiServiceTierKey | null;
@@ -86,6 +87,7 @@ export const OgabasseyImeiEntry = ({
   onSelectTier,
   onToggleServices,
   pendingPaused,
+  pendingCanResume = true,
   searchLoading,
   selectedDeviceSuggestion,
   selectedTier,
@@ -218,7 +220,12 @@ export const OgabasseyImeiEntry = ({
             </button>
           </form>
         </div>
-        {isPending ? <ImeiCheckerPending paused={pendingPaused} /> : null}
+        {isPending ? (
+          <ImeiCheckerPending
+            paused={pendingPaused}
+            canResume={pendingCanResume}
+          />
+        ) : null}
         {error ? (
           <ImeiCheckerError
             error={error}

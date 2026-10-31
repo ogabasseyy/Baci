@@ -1,11 +1,12 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Tabs } from 'expo-router';
-import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { StyleSheet, View } from 'react-native';
 import { FeedbackLauncher } from '@/components/feedback/FeedbackLauncher';
 import { AdminFloatingTabBar } from '@/components/navigation/AdminFloatingTabBar';
 import { useFailedOrders } from '@/hooks/useFailedOrders';
 import { useTheme } from '@/hooks/useTheme';
+
+export const unstable_settings = { initialRouteName: 'index' };
 
 export default function TabLayout() {
   if (__DEV__) {
@@ -22,10 +23,7 @@ export default function TabLayout() {
     >
       <Tabs
         detachInactiveScreens={false}
-        initialRouteName="index"
-        tabBar={(props) => (
-          <AdminFloatingTabBar {...(props as unknown as BottomTabBarProps)} />
-        )}
+        tabBar={(props) => <AdminFloatingTabBar {...props} />}
         screenOptions={{
           freezeOnBlur: false,
           headerShown: false,

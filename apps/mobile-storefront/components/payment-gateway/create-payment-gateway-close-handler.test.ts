@@ -12,7 +12,10 @@ it('routes a pending Redvault attempt to its order after the customer leaves', (
   const spy = jest
     .spyOn(Alert, 'alert')
     .mockImplementation((_title, _message, buttons) => {
-      leave = buttons?.find((button) => button.text === 'Leave')?.onPress;
+      const onPress = buttons?.find(
+        (button) => button.text === 'Leave'
+      )?.onPress;
+      leave = onPress ? () => onPress() : undefined;
     });
   const close = createPaymentGatewayCloseHandler({
     customerId: 'customer-1',

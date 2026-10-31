@@ -82,7 +82,7 @@ export interface StorefrontCwvGuardBudgets {
  */
 export const STOREFRONT_CWV_GUARD_BUDGETS: StorefrontCwvGuardBudgets = {
   homepageHtml: {
-    allowedHeroOrigins: ['https://cdn.ogabassey.com', 'https://ogabassey.com'],
+    allowedHeroOrigins: ['https://ogabassey.com'],
     baseOrigin: 'https://ogabassey.com',
     forbidDataGifHeroSrc: true,
     maxHeadImagePreloads: 1,

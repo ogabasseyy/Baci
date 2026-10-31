@@ -127,3 +127,34 @@ it('keeps polling in memory when optional pending storage fails', async () => {
   await waitFor(() => expect(mockPollImeiLookup).toHaveBeenCalled());
   expect(result.current.pending?.device).toBe('smartphone');
 });
+
+it('does not report failed persistence without a visible pending lookup', async () => {
+  await AsyncStorage.clear();
+  const { result, rerender } = renderHook(
+    ({ customerId }: { customerId: string }) =>
+      useImeiPendingLookup({
+        apiBaseUrl: 'https://test.invalid',
+        customerId,
+        merchantId: 'merchant-1',
+      }),
+    { initialProps: { customerId: 'customer-1' } }
+  );
+  expect(result.current.pending).toBeNull();
+  expect(result.current.canResume).toBe(true);
+  jest
+    .spyOn(AsyncStorage, 'setItem')
+    .mockRejectedValueOnce(new Error('Storage full'));
+  await act(async () => {
+    await result.current.start({
+      lookupId: '11111111-1111-4111-8111-111111111111',
+      pollAfterMs: 60000,
+      tier: 'blacklist',
+    });
+  });
+  expect(result.current.canResume).toBe(false);
+  await act(async () => {
+    rerender({ customerId: 'customer-2' });
+  });
+  expect(result.current.pending).toBeNull();
+  expect(result.current.canResume).toBe(true);
+});

@@ -92,6 +92,66 @@ describe('resolveBookingMerchantSender', () => {
     });
   });
 
+  function createMerchantSupabase(phone: string | null) {
+    const single = vi.fn().mockResolvedValue({
+      data: {
+        business_name: 'Registered Store',
+        business_address: '2 Olaide Tomori Street, Ikeja, 100001',
+        phone,
+        registered_address: null,
+        state_code: 'LA',
+      },
+      error: null,
+    });
+    return {
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({ single })),
+        })),
+      })),
+    };
+  }
+
+  describe('bugfix: truncated store phone was sent to the courier', () => {
+    it.each([
+      ['+23415781'],
+      ['+23444633'],
+      ['+234814697892'],
+      [''],
+      [null],
+    ])('fails closed when merchants.phone is %j', async (phone) => {
+      await expect(
+        resolveBookingMerchantSender(
+          createMerchantSupabase(phone) as never,
+          'merchant-1'
+        )
+      ).resolves.toEqual({
+        ok: false,
+        code: 'MERCHANT_SENDER_PHONE_INVALID',
+        error:
+          'Your business phone number is missing or incomplete. Update it in Store Settings in the Baci app, or under Settings > Storefront profile on the web dashboard, then try again.',
+        status: 400,
+      });
+    });
+
+    it.each([
+      ['+2348146978921'],
+      ['+234 814 697 8921'],
+      ['08146978921'],
+      ['+14165550123'],
+    ])('keeps a complete store phone %s', async (phone) => {
+      await expect(
+        resolveBookingMerchantSender(
+          createMerchantSupabase(phone) as never,
+          'merchant-1'
+        )
+      ).resolves.toMatchObject({
+        ok: true,
+        sender: expect.objectContaining({ phone }),
+      });
+    });
+  });
+
   it('returns an error when the merchant has no usable shipping origin', async () => {
     const single = vi.fn().mockResolvedValue({
       data: {

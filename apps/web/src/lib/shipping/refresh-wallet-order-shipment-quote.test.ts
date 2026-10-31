@@ -291,6 +291,21 @@ describe('refreshWalletOrderShipmentQuote', () => {
     expect(mocks.refreshOrderShipmentQuote).not.toHaveBeenCalled();
   });
 
+  it('keeps MERCHANT_SENDER_PHONE_INVALID when the store phone is incomplete', async () => {
+    mocks.resolveBookingMerchantSender.mockResolvedValue({
+      ok: false,
+      code: 'MERCHANT_SENDER_PHONE_INVALID',
+      error: 'Update your store phone number.',
+      status: 400,
+    });
+
+    await expect(refresh()).rejects.toMatchObject({
+      status: 400,
+      code: 'MERCHANT_SENDER_PHONE_INVALID',
+    });
+    expect(mocks.refreshOrderShipmentQuote).not.toHaveBeenCalled();
+  });
+
   it('skips merchant sender lookup for international quotes', async () => {
     await refresh(
       createSupabase({

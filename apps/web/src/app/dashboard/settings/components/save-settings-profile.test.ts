@@ -19,6 +19,7 @@ vi.mock('./get-merchant-settings-snapshot', () => ({
 const profileBaseline = {
   business_name: 'Test Store',
   country: 'NG',
+  phone: '+2348012345678',
   site_description: '',
   support_email: '',
   support_phone: '',
@@ -205,5 +206,56 @@ describe('saveSettings storefront profile', () => {
       description: 'Saved your storefront profile, but Social update failed',
       variant: 'destructive',
     });
+  });
+  it('sends the business phone couriers call when the merchant changes it', async () => {
+    mockUpdateStorefrontProfile.mockResolvedValue(undefined);
+
+    await saveSettings({
+      data: { ...profileBaseline, phone: '+234 803 123 4567' },
+      heroSlides: [],
+      heroSlidesEdited: false,
+      merchantId: 'merchant-1',
+      profileBaseline,
+      socialMedia: null,
+      updateMerchant: vi.fn(),
+      reloadMerchant: vi.fn(),
+      isCurrentSave: () => true,
+      toast: vi.fn(),
+      setIsSaving: vi.fn(),
+    });
+
+    expect(mockUpdateStorefrontProfile).toHaveBeenCalledWith({
+      merchantId: 'merchant-1',
+      expectedUpdatedAt: '2026-08-04T05:00:00.000Z',
+      settings: { phone: '+234 803 123 4567' },
+    });
+  });
+
+  it('never clears the stored business phone when a submission omits it', async () => {
+    mockUpdateStorefrontProfile.mockResolvedValue(undefined);
+
+    await saveSettings({
+      data: {
+        ...profileBaseline,
+        phone: undefined as unknown as string,
+        site_description: 'Updated description',
+      },
+      heroSlides: [],
+      heroSlidesEdited: false,
+      merchantId: 'merchant-1',
+      profileBaseline,
+      socialMedia: null,
+      updateMerchant: vi.fn(),
+      reloadMerchant: vi.fn(),
+      isCurrentSave: () => true,
+      toast: vi.fn(),
+      setIsSaving: vi.fn(),
+    });
+
+    expect(mockUpdateStorefrontProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        settings: { site_description: 'Updated description' },
+      })
+    );
   });
 });

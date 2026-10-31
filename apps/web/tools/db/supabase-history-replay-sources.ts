@@ -18,6 +18,7 @@ import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumi
 import { LOYALTY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-loyalty-pending-sources';
 import { MANUAL_DOCUMENT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-manual-document-pending-sources';
 import { MERCHANT_CLASSIFICATION_PENDING_SOURCES } from './supabase-history-replay-merchant-classification-sources';
+import { MERCHANT_CONTACT_PHONE_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-merchant-contact-phone-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
 import { ONBOARDING_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-onboarding-pending-sources';
 import { PENDING_SOURCES_HEAD } from './supabase-history-replay-pending-sources-head';
@@ -106,6 +107,7 @@ e8aab2aed87c3ae93090db6343ac125210d1fd90f80de1cff51772ef33b29750 20260718070005_
 // PayPal/Korapay BYOK migrations land in PENDING before the 20260721 cancellation batch (version-earlier, unattested).
 const PENDING_SOURCES = [
   STORE_CREDIT_PENDING_REPLAY_SOURCE_ROWS,
+  MERCHANT_CONTACT_PHONE_PENDING_REPLAY_SOURCE_ROWS,
   IMEI_PENDING_REPLAY_SOURCE_ROWS,
   REFUND_PENDING_REPLAY_SOURCE_ROWS,
   CART_PENDING_REPLAY_SOURCE_ROWS,

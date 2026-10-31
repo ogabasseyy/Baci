@@ -8,9 +8,8 @@ import { resolveOrderGiglQuoteConfirmationGate } from '@/lib/order-gigl-quote-co
 import { resolveOrderGiglQuoteFailure } from '@/lib/order-gigl-quote-failure';
 import {
   getMerchantWalletSummary,
-  getOrderGiglQuote,
   type OrderGiglMissingField,
-  type OrderGiglQuote,
+  type OrderGiglQuoteResult,
   type OrderGiglReceiver,
 } from '@/lib/order-gigl-shipping';
 import { bindOrderGiglShippingAppState } from '@/lib/order-gigl-shipping-app-state';
@@ -20,12 +19,12 @@ import {
   isOrderGiglQuoteFresh,
   type OrderGiglShippingParams,
   type OrderGiglShippingState,
-  type OrderGiglWalletState,
-  toCompleteOrderGiglReceiver,
   toOrderGiglAddressDraft,
   toOrderGiglWalletState,
 } from '@/lib/order-gigl-shipping-state';
 import { useOrderGiglFunding } from './useOrderGiglFunding';
+import { useOrderGiglQuoteRequester } from './useOrderGiglQuoteRequester';
+import { useOrderGiglQuoteState } from './useOrderGiglQuoteState';
 
 export type { OrderGiglShippingState } from '@/lib/order-gigl-shipping-state';
 
@@ -34,16 +33,30 @@ export function useOrderGiglShipping({
   initialAddress,
   orderId,
   preview = false,
+  previewCacheScope,
+  storedOrder,
 }: OrderGiglShippingParams) {
   const queryClient = useQueryClient();
-  const [quote, setQuote] = useState<OrderGiglQuote | null>(null);
-  const quoteRef = useRef<OrderGiglQuote | null>(null);
-  const [wallet, setWallet] = useState<OrderGiglWalletState | null>(null);
-  const walletRef = useRef<OrderGiglWalletState | null>(null);
+  const {
+    applyQuote,
+    invalidateQuote,
+    isBoundTo,
+    quote,
+    quoteBoundRef,
+    quoteRef,
+    setWallet,
+    wallet,
+    walletRef,
+  } = useOrderGiglQuoteState();
   const [addressDraft, setAddressDraft] = useState<Partial<OrderGiglReceiver>>(
     toOrderGiglAddressDraft(initialAddress)
   );
   const addressRef = useRef(addressDraft);
+  const requester = useOrderGiglQuoteRequester({
+    addressRef,
+    previewCacheScope,
+    storedOrder,
+  });
   const [missingFields, setMissingFields] = useState<OrderGiglMissingField[]>(
     []
   );
@@ -53,7 +66,6 @@ export function useOrderGiglShipping({
   const controllerRef = useRef<AbortController | null>(null);
   const pollerRef = useRef<OrderGiglFundingPoller | null>(null);
   const confirmationRef = useRef(false);
-  const quoteBoundRef = useRef(false);
   const enabledRef = useRef(enabled);
   const previewRef = useRef(preview);
   const appActiveRef = useRef(true);
@@ -72,29 +84,13 @@ export function useOrderGiglShipping({
   });
   enabledRef.current = enabled;
   previewRef.current = preview;
-  quoteRef.current = quote;
   const stopPolling = () => {
     pollerRef.current?.stop();
     pollerRef.current = null;
     controllerRef.current?.abort();
   };
-  const invalidateQuote = () => {
-    setQuote(null);
-    quoteRef.current = null;
-    quoteBoundRef.current = false;
-    setWallet(null);
-    walletRef.current = null;
-  };
-  const applyQuoteResult = (
-    result: Awaited<ReturnType<typeof getOrderGiglQuote>>,
-    bound: boolean
-  ) => {
-    setQuote(result.quote);
-    quoteRef.current = result.quote;
-    quoteBoundRef.current = bound;
-    const nextWallet = toOrderGiglWalletState(result);
-    setWallet(nextWallet);
-    walletRef.current = nextWallet;
+  const applyQuoteResult = (result: OrderGiglQuoteResult, bound: boolean) => {
+    applyQuote(result, bound ? requester.storedAddressSignature() : null);
     setMissingFields([]);
     setError(null);
     setState('ready');
@@ -107,11 +103,8 @@ export function useOrderGiglShipping({
     setState('loading');
     setError(null);
     try {
-      const receiver = toCompleteOrderGiglReceiver(addressRef.current);
       const bound = !previewRef.current;
-      const result = bound
-        ? await getOrderGiglQuote(orderId, receiver, controller.signal)
-        : await getOrderGiglQuote(orderId, receiver, controller.signal, true);
+      const result = await requester.fetch(orderId, !bound, controller.signal);
       if (!controller.signal.aborted && isValid()) {
         applyQuoteResult(result, bound);
         return result;
@@ -153,10 +146,8 @@ export function useOrderGiglShipping({
       shortfall,
     };
     setWallet(next);
-    walletRef.current = next;
     if (next.canBook) {
       setWallet({ ...next, canBook: false });
-      walletRef.current = { ...next, canBook: false };
       if (!isCurrent()) return null;
       const refreshed = await requestQuote(isCurrent);
       if (!isCurrent()) return null;
@@ -228,6 +219,7 @@ export function useOrderGiglShipping({
   const clearOrderScopedState = () => {
     reset();
     invalidateQuote();
+    requester.clear();
     confirmationRef.current = false;
   };
   // biome-ignore lint/correctness/useExhaustiveDependencies: orderId boundary
@@ -251,11 +243,19 @@ export function useOrderGiglShipping({
   ]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: render-local request
   useEffect(() => {
-    if (enabled) {
+    // The order refetch after an address save carries the address the bound
+    // quote was priced from: keep that quote instead of asking again.
+    const keepBound =
+      !preview && state === 'ready' && isBoundTo(initialAddressSignature);
+    if (!enabled) reset();
+    else if (!keepBound) {
       invalidateQuote();
       resetFunding();
-      void requestQuote();
-    } else reset();
+      // A fresh background preview shows the price at once, with no request.
+      const cached = preview ? requester.readCachedPreview(orderId) : null;
+      if (cached) applyQuoteResult(cached, false);
+      else void requestQuote();
+    }
     return () => {
       controllerRef.current?.abort();
       stopPolling();

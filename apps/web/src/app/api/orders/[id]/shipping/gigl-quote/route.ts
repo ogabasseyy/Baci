@@ -9,14 +9,15 @@ export async function POST(request: NextRequest, context: Params) {
     const headers = new Headers(request.headers);
     headers.set('x-baci-admin-order-mode', '1');
     headers.set('x-baci-admin-order-id', id);
-    const body = await request.text();
+    // Forward the raw bytes so the body is passed through unchanged.
+    const body = await request.arrayBuffer();
     // Build a fresh request from the URL instead of passing the incoming
     // request object to `new NextRequest(request, …)`: that copy throws
     // "Cannot read private member #state" on the production runtime.
     // Delegating through the quotes route keeps this route's import graph
     // (and credential reach) identical to the governed shipping-quotes path.
     const delegated = new NextRequest(request.url, {
-      body: body || undefined,
+      body: body.byteLength > 0 ? body : undefined,
       headers,
       method: request.method,
     });

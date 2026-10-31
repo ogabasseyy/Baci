@@ -59,14 +59,17 @@ vi.mock('@/components/orders/RecordPaymentSheet', async () => {
 
 const shipmentFlow = vi.hoisted(() => ({
   presented: undefined as undefined | (() => void),
+  checkoutPaidShippingLabel: undefined as string | null | undefined,
   proceed: undefined as undefined | (() => unknown),
 }));
 vi.mock('@/components/orders/ShipmentFlowSheet', () => ({
   ShipmentFlowSheet: (props: {
+    checkoutPaidShippingLabel?: string | null;
     onContinueFromMethod: () => unknown;
     onPresented?: () => void;
   }) => {
     shipmentFlow.presented = props.onPresented;
+    shipmentFlow.checkoutPaidShippingLabel = props.checkoutPaidShippingLabel;
     shipmentFlow.proceed = props.onContinueFromMethod;
     return null;
   },
@@ -199,6 +202,15 @@ function createController(
   } as ModalProps['controller'];
 }
 
+const paidCheckoutGiglOrder = {
+  payment_method: 'paystack',
+  payment_status: 'paid' as const,
+  selected_quote_id: 'quote-1',
+  shipping_fee: 4500,
+  shipping_funding_source: 'customer_checkout' as const,
+  shipping_provider: 'GIGL',
+};
+
 describe('OrderDetailsScreenModals', () => {
   it('closes the status menu only once the shipping sheet is on screen', () => {
     const controller = createController({ showStatusModal: true });
@@ -212,6 +224,34 @@ describe('OrderDetailsScreenModals', () => {
     shipmentFlow.presented?.();
 
     expect(controller.setShowStatusModal).toHaveBeenCalledWith(false);
+  });
+
+  it('passes the customer-paid GIG price to the Shipping step for a saved checkout quote', () => {
+    render(
+      <OrderDetailsScreenModals
+        controller={createController()}
+        order={createOrder(paidCheckoutGiglOrder)}
+      />
+    );
+
+    expect(shipmentFlow.checkoutPaidShippingLabel).toBe('₦4500');
+  });
+
+  it.each([
+    ['without a saved checkout GIG quote', { shipping_fee: 4500 }],
+    [
+      'while a checkout GIG order is not fully paid',
+      { ...paidCheckoutGiglOrder, payment_status: 'partially_paid' as const },
+    ],
+  ])('passes no customer-paid price %s', (_case, overrides) => {
+    render(
+      <OrderDetailsScreenModals
+        controller={createController()}
+        order={createOrder(overrides)}
+      />
+    );
+
+    expect(shipmentFlow.checkoutPaidShippingLabel).toBeNull();
   });
 
   it('wires the balance payment helper to controller modal state', () => {

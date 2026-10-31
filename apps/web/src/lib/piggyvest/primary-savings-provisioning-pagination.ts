@@ -3,6 +3,7 @@ import type { z } from 'zod';
 import { primarySavingsProvisioningPaginationSchemas as schemas } from '@/schemas/primary-savings-provisioning-pagination';
 import { type PiggyvestClientConfig, piggyvestRequest } from './client';
 import { primarySavingsProvisioningPaginationLimits as limits } from './primary-savings-provisioning-pagination.constants';
+import { matchesProviderWalletName } from './provider-wallet-name';
 
 export async function listPrimarySavingsProvisioningWallets(
   config: PiggyvestClientConfig,
@@ -50,7 +51,10 @@ export async function listPrimarySavingsProvisioningWallets(
       for (const wallet of edges) {
         if (walletIds.has(wallet.id)) return [];
         walletIds.add(wallet.id);
-        if (wallet.name === walletName && matches.length < 2)
+        if (
+          matchesProviderWalletName(wallet.name, walletName) &&
+          matches.length < 2
+        )
           matches.push(wallet);
       }
       if (!pageInfo.hasNextPage) return matches;

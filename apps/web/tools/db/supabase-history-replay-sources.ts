@@ -6,10 +6,12 @@ import { BUILDER_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-bu
 import { CART_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-cart-pending-sources';
 import { CHECKOUT_RECOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-checkout-recovery-pending-sources';
 import { CONNECTOR_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-connector-pending-sources';
+import { DEFINER_PRIVILEGES_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-definer-privileges-sources';
 import { DISCOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-discovery-pending-sources';
 import { EXPENSE_QUIZ_PAYSTACK_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-expense-pending-sources';
 import { FEED_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-feed-pending-sources';
 import { FOLLOW_UP_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-follow-up-pending-sources';
+import { GIGL_STAFF_ACCESS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-gigl-staff-access-sources';
 import { GIGL_TRACKING_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-gigl-tracking-pending-sources';
 import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-gigl-wallet-sources';
 import { IMEI_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-imei-sources';
@@ -18,9 +20,12 @@ import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumi
 import { LOYALTY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-loyalty-pending-sources';
 import { MANUAL_DOCUMENT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-manual-document-pending-sources';
 import { MERCHANT_CLASSIFICATION_PENDING_SOURCES } from './supabase-history-replay-merchant-classification-sources';
+import { MERCHANT_CONTACT_PHONE_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-merchant-contact-phone-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
 import { ONBOARDING_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-onboarding-pending-sources';
 import { PENDING_SOURCES_HEAD } from './supabase-history-replay-pending-sources-head';
+import { PIGGYVEST_CAPTURE_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-piggyvest-capture-sources';
+import { PIGGYVEST_ENROLL_NAME_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-piggyvest-enroll-name-sources';
 import { PRIMARY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-primary-pending-sources';
 import { PRODUCTION_MAPPINGS } from './supabase-history-replay-production-mappings';
 import { REDVAULT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-redvault-pending-sources';
@@ -32,6 +37,7 @@ import {
 } from './supabase-history-replay-savings-pending-sources';
 import { SAVINGS_RUNTIME_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-savings-runtime-pending-sources';
 import { SEARCH_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-search-pending-sources';
+import { STORE_CREDIT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-store-credit-sources';
 import { STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES } from './supabase-history-replay-storefront-cluster-guide-pending-sources';
 import { STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW } from './supabase-history-replay-storefront-comparison-pending-sources';
 import { STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-storefront-order-pending-sources';
@@ -104,7 +110,13 @@ e8aab2aed87c3ae93090db6343ac125210d1fd90f80de1cff51772ef33b29750 20260718070005_
 395cfdef9ec80858ce34b031df0b642e51b3ba4d5d81922a9687a58962e35c5e 20260718070011_require_credit_direct_guest_tracking_token.sql`;
 // PayPal/Korapay BYOK migrations land in PENDING before the 20260721 cancellation batch (version-earlier, unattested).
 const PENDING_SOURCES = [
+  PIGGYVEST_ENROLL_NAME_PENDING_REPLAY_SOURCE_ROWS,
+  PIGGYVEST_CAPTURE_PENDING_REPLAY_SOURCE_ROWS,
+  GIGL_STAFF_ACCESS_PENDING_REPLAY_SOURCE_ROWS,
+  STORE_CREDIT_PENDING_REPLAY_SOURCE_ROWS,
+  MERCHANT_CONTACT_PHONE_PENDING_REPLAY_SOURCE_ROWS,
   IMEI_PENDING_REPLAY_SOURCE_ROWS,
+  DEFINER_PRIVILEGES_PENDING_REPLAY_SOURCE_ROWS,
   REFUND_PENDING_REPLAY_SOURCE_ROWS,
   CART_PENDING_REPLAY_SOURCE_ROWS,
   BUILDER_PENDING_REPLAY_SOURCE_ROWS,

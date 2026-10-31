@@ -225,6 +225,23 @@ describe('merchant settings mutation clients', () => {
     ).rejects.toThrow('These settings changed elsewhere');
   });
 
+  it('explains a phone number the database refuses', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { message: 'invalid_support_phone' },
+    });
+
+    await expect(
+      updateMerchantIdentitySettings({
+        expectedUpdatedAt: '2026-07-29T10:00:00Z',
+        merchantId: 'merchant-1',
+        settings: { phone: '+23415781' },
+      })
+    ).rejects.toThrow(
+      'Enter the full phone number with its country code, for example +234 801 234 5678.'
+    );
+  });
+
   it('preserves an unexpected database error message', async () => {
     mocks.rpc.mockResolvedValue({
       data: null,

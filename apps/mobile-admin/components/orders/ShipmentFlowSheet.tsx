@@ -24,6 +24,7 @@ const DEFAULT_SHIPMENT_KEYBOARD_VERTICAL_OFFSET = 24;
 export function ShipmentFlowSheet({
   recoveryOrder,
   canUseProvider,
+  checkoutPaidShippingLabel,
   fulfillmentDetails,
   fulfillmentItemIndex,
   giglShipping,
@@ -199,6 +200,7 @@ export function ShipmentFlowSheet({
             {step === 'method' ? (
               <ShipmentFlowMethodStep
                 canUseProvider={canUseProvider}
+                checkoutPaidShippingLabel={checkoutPaidShippingLabel}
                 giglPanel={
                   !giglShipping ? undefined : (
                     <ShipmentFlowGiglPanel

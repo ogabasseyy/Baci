@@ -7,6 +7,7 @@ import { ShipOnCreditDialog } from '@/components/orders/ShipOnCreditDialog';
 import { ReceiptPreviewModal } from '@/components/ui/ReceiptPreviewModal';
 import { SuccessModal } from '@/components/ui/SuccessModal';
 import type { useOrderDetailsController } from '@/hooks/useOrderDetailsController';
+import { getCheckoutGiglPaidShippingFee } from '@/lib/order-checkout-gigl-paid-fee';
 
 type OrderDetailsController = ReturnType<typeof useOrderDetailsController>;
 
@@ -31,6 +32,7 @@ export function OrderDetailsScreenModals({
   controller,
   order,
 }: OrderDetailsScreenModalsProps) {
+  const checkoutPaidShippingFee = getCheckoutGiglPaidShippingFee(order);
   return (
     <>
       <OrderStatusSheet
@@ -54,6 +56,11 @@ export function OrderDetailsScreenModals({
       <ShipmentFlowSheet
         recoveryOrder={order}
         canUseProvider={controller.providerBookingAvailable}
+        checkoutPaidShippingLabel={
+          checkoutPaidShippingFee === null
+            ? null
+            : controller.formatPrice(checkoutPaidShippingFee)
+        }
         fulfillmentDetails={controller.fulfillmentDetails}
         fulfillmentItemIndex={controller.fulfillmentItemIndex}
         giglShipping={controller.giglShipping}

@@ -2,6 +2,7 @@
 -- Fixtures are disposable; no provider calls or hosted data are involved.
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+\ir pgtap_public_execute.sql
 SET LOCAL search_path = public, extensions;
 SELECT plan(3);
 SELECT pg_catalog.set_config('request.jwt.claims', '{"role":"service_role","sub":"00000000-0000-0000-0000-000000000000"}', true);

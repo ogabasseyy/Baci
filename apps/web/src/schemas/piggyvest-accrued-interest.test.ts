@@ -56,7 +56,8 @@ describe('piggyvestAccruedInterestSchemas', () => {
     { hasNextPage: false, endCursor: 'duplicate', previousCursor: 'duplicate' },
     { hasNextPage: 'true', endCursor: null, previousCursor: null },
     { hasNextPage: false, endCursor: 'x'.repeat(513), previousCursor: null },
-    { hasNextPage: false, endCursor: null },
+    { hasNextPage: true, endCursor: null },
+    { hasNextPage: false },
   ])('rejects malformed pagination %j', (pageInfo) => {
     expect(
       piggyvestAccruedInterestSchemas.response.safeParse({
@@ -78,5 +79,45 @@ describe('piggyvestAccruedInterestSchemas', () => {
         data: { paginatedPayload: page },
       })
     ).toEqual({ status: true, data: { paginatedPayload: page } });
+  });
+
+  describe('bugfix: live sandbox accrual envelope was rejected', () => {
+    // GET /api/v1/wallet/interests/accrued/:walletId on a wallet with no
+    // accrual history (staging.piggyvest.business, 2026-10-31). The page
+    // info carries only hasNextPage and endCursor: there is no
+    // previousCursor. The evidence records types only, so the integers
+    // here are placeholders.
+    const observed = {
+      status: true,
+      message: 'Accrued interest fetched',
+      data: {
+        withdrawal_count: 0,
+        interest_forfeiture_minimum_transactions: 4,
+        paginatedPayload: {
+          edges: [],
+          pageInfo: { hasNextPage: false, endCursor: null },
+        },
+      },
+    };
+
+    it('accepts the observed empty-history envelope without a previousCursor', () => {
+      expect(piggyvestAccruedInterestSchemas.response.parse(observed)).toEqual({
+        status: true,
+        data: {
+          paginatedPayload: {
+            edges: [],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      });
+    });
+
+    it('still refuses a continuing page that omits previousCursor and has no endCursor', () => {
+      const continuing = structuredClone(observed);
+      continuing.data.paginatedPayload.pageInfo.hasNextPage = true;
+      expect(
+        piggyvestAccruedInterestSchemas.response.safeParse(continuing).success
+      ).toBe(false);
+    });
   });
 });

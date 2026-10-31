@@ -33,6 +33,7 @@ export async function sendFeedbackReportEmail(
       signal: AbortSignal.timeout(FEEDBACK_EMAIL_BUDGET_MS),
       maxAttemptsPerSender: 1,
       fallbackDeadlineMs: deadline,
+      redactProviderErrorLog: true,
     });
     if (!result.success) {
       console.error('Feedback email not sent:', result.errorCode ?? 'unknown');

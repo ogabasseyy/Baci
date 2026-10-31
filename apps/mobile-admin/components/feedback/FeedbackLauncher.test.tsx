@@ -1,10 +1,13 @@
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { Alert } from 'react-native';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { pathname } = vi.hoisted(() => ({ pathname: { current: '/orders' } }));
+const { pathname, sentCallbacks } = vi.hoisted(() => ({
+  pathname: { current: '/orders' },
+  sentCallbacks: [] as Array<() => void>,
+}));
 
 vi.mock('expo-router', () => ({ usePathname: () => pathname.current }));
 
@@ -34,17 +37,20 @@ vi.mock('./FeedbackForm', () => ({
     screen: string | null;
     onCancel: () => void;
     onSent: () => void;
-  }) => (
-    <div>
-      <span>form for {reportedScreen}</span>
-      <button onClick={onCancel} type="button">
-        cancel form
-      </button>
-      <button onClick={onSent} type="button">
-        finish form
-      </button>
-    </div>
-  ),
+  }) => {
+    sentCallbacks.push(onSent);
+    return (
+      <div>
+        <span>form for {reportedScreen}</span>
+        <button onClick={onCancel} type="button">
+          cancel form
+        </button>
+        <button onClick={onSent} type="button">
+          finish form
+        </button>
+      </div>
+    );
+  },
 }));
 
 import { FeedbackLauncher } from './FeedbackLauncher';
@@ -53,6 +59,7 @@ const bugButton = () => screen.getByRole('button', { name: 'Send feedback' });
 
 beforeEach(() => {
   pathname.current = '/orders';
+  sentCallbacks.length = 0;
   vi.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 });
 
@@ -90,6 +97,22 @@ describe('FeedbackLauncher', () => {
     fireEvent.click(screen.getByRole('button', { name: 'finish form' }));
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Thanks for the feedback',
+      'The Baci team will look into it.'
+    );
+  });
+
+  it('keeps a reopened sheet open when an earlier dismissed send completes', () => {
+    render(<FeedbackLauncher />);
+    fireEvent.click(bugButton());
+    const staleOnSent = sentCallbacks.at(-1);
+    fireEvent.click(screen.getByRole('button', { name: 'cancel form' }));
+    fireEvent.click(bugButton());
+
+    act(() => staleOnSent?.());
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(Alert.alert).toHaveBeenCalledWith(
       'Thanks for the feedback',
       'The Baci team will look into it.'

@@ -40,6 +40,7 @@ describe('sendFeedbackReportEmail', () => {
         replyTo: 'owner@example.com',
         subject: 'Feedback from Ogabassey: Orders list is empty',
         emailType: 'notifications',
+        redactProviderErrorLog: true,
       })
     );
   });

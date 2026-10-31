@@ -1,6 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { usePathname } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet } from 'react-native';
 import { AppSheetModal } from '@/components/ui/AppSheetModal';
 import { SPACING } from '@/constants/theme';
@@ -17,14 +17,22 @@ export function FeedbackLauncher() {
   const [isOpen, setIsOpen] = useState(false);
   // Captured when opened so the report names the screen the merchant was on.
   const [screen, setScreen] = useState<string | null>(null);
+  // Each opening is a new session. A send still in flight from a dismissed
+  // sheet must not close a newer one and discard its unsent message.
+  const sessionRef = useRef(0);
+  const [session, setSession] = useState(0);
 
   const open = () => {
+    sessionRef.current += 1;
+    setSession(sessionRef.current);
     setScreen(pathname);
     setIsOpen(true);
   };
   const close = () => setIsOpen(false);
-  const handleSent = () => {
-    setIsOpen(false);
+  const handleSentFor = (sentSession: number) => () => {
+    if (sentSession === sessionRef.current) {
+      setIsOpen(false);
+    }
     Alert.alert('Thanks for the feedback', 'The Baci team will look into it.');
   };
 
@@ -54,7 +62,12 @@ export function FeedbackLauncher() {
         visible={isOpen}
       >
         {isOpen ? (
-          <FeedbackForm onCancel={close} onSent={handleSent} screen={screen} />
+          <FeedbackForm
+            key={session}
+            onCancel={close}
+            onSent={handleSentFor(session)}
+            screen={screen}
+          />
         ) : null}
       </AppSheetModal>
     </>

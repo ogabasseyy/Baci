@@ -1,6 +1,8 @@
 import {
+  type ImeiDeviceCategory,
   type ImeiServiceTierKey,
   isImeiServiceTierKey,
+  resolveImeiReportDevice,
 } from '@baci/shared/imei';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -11,6 +13,7 @@ export interface PendingImeiLookup {
   createdAt: string;
   lookupId: string;
   tier: ImeiServiceTierKey;
+  device?: ImeiDeviceCategory;
 }
 
 export function pendingImeiStorageKey(merchantId: string, customerId: string) {
@@ -21,19 +24,32 @@ export async function savePendingImeiLookup(
   key: string,
   pending: PendingImeiLookup
 ) {
-  await AsyncStorage.setItem(key, JSON.stringify(pending));
+  try {
+    await AsyncStorage.setItem(key, JSON.stringify(pending));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function clearPendingImeiLookup(key: string) {
-  await AsyncStorage.removeItem(key);
+  try {
+    await AsyncStorage.removeItem(key);
+  } catch {
+    /* Recovery storage is optional. */
+  }
 }
 
 export async function loadPendingImeiLookup(
   key: string
 ): Promise<PendingImeiLookup | null> {
-  const raw = await AsyncStorage.getItem(key);
+  let raw: string | null;
+  try {
+    raw = await AsyncStorage.getItem(key);
+  } catch {
+    return null;
+  }
   if (!raw) return null;
-
   try {
     const value = JSON.parse(raw) as Record<string, unknown>;
     if (
@@ -50,9 +66,19 @@ export async function loadPendingImeiLookup(
       createdAt: value.createdAt,
       lookupId: value.lookupId,
       tier: value.tier,
+      ...(value.device == null
+        ? {}
+        : {
+            device:
+              resolveImeiReportDevice(value.tier, value.device) ?? undefined,
+          }),
     };
   } catch {
-    await AsyncStorage.removeItem(key);
+    try {
+      await AsyncStorage.removeItem(key);
+    } catch {
+      /* Recovery storage is optional. */
+    }
     return null;
   }
 }

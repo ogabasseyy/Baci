@@ -3,6 +3,7 @@
 import {
   IMEI_SERVICE_TIERS,
   type ImeiDeviceCategory,
+  type ImeiReport,
   type ImeiServiceTierDefinition,
   type ImeiServiceTierKey,
   isValidDeviceIdentifier,
@@ -32,13 +33,22 @@ export function useImeiCheckRequest(merchantSlug?: string) {
   const requestIdentityRef = useRef<
     (ImeiRequestIdentity & { scope: string }) | null
   >(null);
-  const requestScope = `${merchantSlug ?? ''}:${customerAuth?.customer?.id ?? 'anonymous'}`;
+  const requestScope = `${merchantSlug ?? ''}:${customerAuth?.customer?.id ?? 'anonymous'}:${customerAuth?.user?.id ?? ''}`;
   const submitting = useRef(false);
+  const [resultScope, setResultScope] = useState('');
+  const activeScope = useRef(requestScope);
+  useEffect(() => {
+    activeScope.current = requestScope;
+    setResult(null);
+    setResultLookupId(null);
+    setError(null);
+  }, [requestScope]);
   const [resultDevice, setResultDevice] = useState<ImeiDeviceCategory | null>(
     null
   );
   const pendingLookup = useImeiPendingLookup({
     customerId: customerAuth?.customer?.id,
+    userId: customerAuth?.user?.id,
     merchantSlug,
   });
 
@@ -51,6 +61,7 @@ export function useImeiCheckRequest(merchantSlug?: string) {
     setIsLoading(false);
     if (terminal.kind === 'complete') {
       setError(null);
+      setResultScope(requestScope);
       setResult(terminal.result);
       setResultLookupId(terminal.lookupId);
       setResultTier(IMEI_SERVICE_TIERS[terminal.tier]);
@@ -64,7 +75,7 @@ export function useImeiCheckRequest(merchantSlug?: string) {
       setError(terminal.error);
     }
     pendingLookup.clearTerminal();
-  }, [pendingLookup]);
+  }, [pendingLookup, requestScope]);
 
   const runCheck = async (
     tier: ImeiServiceTierKey,
@@ -121,6 +132,7 @@ export function useImeiCheckRequest(merchantSlug?: string) {
         device
       );
 
+      if (activeScope.current !== requestScope) return;
       if (outcome.pending) {
         pendingLookup.start({
           lookupId: outcome.pending.lookupId,
@@ -131,6 +143,7 @@ export function useImeiCheckRequest(merchantSlug?: string) {
       } else if (outcome.error !== null) {
         setError(outcome.error);
       } else {
+        setResultScope(requestScope);
         setResult(outcome.result);
         setResultLookupId(outcome.lookupId);
         // `currentTier` here is the value closed over at submit time, not the
@@ -143,6 +156,7 @@ export function useImeiCheckRequest(merchantSlug?: string) {
         requestIdentityRef.current = null;
       }
     } catch {
+      if (activeScope.current !== requestScope) return;
       // An uncertain outcome keeps its identity for an explicit safe retry.
       setError('Network error. Please check your connection and try again.');
       setNeedsWalletFunding(false);
@@ -160,11 +174,22 @@ export function useImeiCheckRequest(merchantSlug?: string) {
     needsSignIn,
     needsWalletFunding,
     pendingLookup,
-    result,
+    result: resultScope === requestScope ? result : null,
     resultDevice,
     resultLookupId,
     resultTier,
     runCheck,
+    openReport(report: ImeiReport) {
+      if (submitting.current || pendingLookup.pending) return;
+      setResultScope(requestScope);
+      setResult(report.result);
+      setResultLookupId(report.lookupId);
+      setResultTier(IMEI_SERVICE_TIERS[report.tier]);
+      setResultDevice(report.device);
+      setError(null);
+      setNeedsSignIn(false);
+      setNeedsWalletFunding(false);
+    },
     reset() {
       pendingLookup.clear();
       setResult(null);

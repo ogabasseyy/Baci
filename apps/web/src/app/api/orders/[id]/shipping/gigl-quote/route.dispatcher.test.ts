@@ -1,7 +1,9 @@
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const postAdminOrderGiglQuote = vi.fn();
+const { postAdminOrderGiglQuote } = vi.hoisted(() => ({
+  postAdminOrderGiglQuote: vi.fn(),
+}));
 
 vi.mock('@/app/api/shipping/quotes/admin-order-gigl-quote', () => ({
   postAdminOrderGiglQuote,
@@ -23,6 +25,10 @@ function buildRequest() {
 describe('bugfix: admin GIG quote crashed with "#state" when the route re-wrapped the request', () => {
   beforeEach(() => {
     postAdminOrderGiglQuote.mockReset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   // Production crashed with "Cannot read private member #state" when this
@@ -68,6 +74,5 @@ describe('bugfix: admin GIG quote crashed with "#state" when the route re-wrappe
     expect(JSON.stringify(consoleError.mock.calls)).not.toContain(
       'secret-token'
     );
-    consoleError.mockRestore();
   });
 });

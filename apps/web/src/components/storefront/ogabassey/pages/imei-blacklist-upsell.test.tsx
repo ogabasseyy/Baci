@@ -49,7 +49,7 @@ vi.mock('./use-imei-tier-selection', () => ({
   useImeiTierSelection: () => ({
     brand: 'apple',
     device: mocks.device,
-    imei: '352313505010646',
+    imei: '490154203237518',
     selectedTier: 'simLock',
     currentTier: IMEI_SERVICE_TIERS.simLock,
     identifier: 'imei',

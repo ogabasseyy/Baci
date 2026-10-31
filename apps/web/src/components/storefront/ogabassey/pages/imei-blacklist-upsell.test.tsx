@@ -25,7 +25,7 @@ vi.mock('./use-imei-runtime-availability', () => ({
   }),
 }));
 vi.mock('@/contexts/customer-auth-context', () => ({
-  useOptionalCustomerAuth: () => ({ customer: { id: mocks.customerId } }),
+  useOptionalCustomerAuth: () => ({ customer: { id: mocks.customerId }, user: { id: '11111111-1111-4111-8111-111111111111' }, isLoading: false }),
 }));
 vi.mock('./imei-checker-request', () => ({
   performImeiCheck: mocks.check,
@@ -105,6 +105,7 @@ async function start() {
 
 describe('blacklist result upsell', () => {
   beforeEach(() => {
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: { request: async (_name: string, fn: () => unknown) => fn() } });
     mocks.available = true;
     mocks.customerId = 'upsell-customer';
     mocks.device = 'smartphone';
@@ -128,6 +129,8 @@ describe('blacklist result upsell', () => {
       expect.any(String),
       'ogabassey',
       'smartphone',
+      '11111111-1111-4111-8111-111111111111',
+      undefined,
     ]);
     await waitFor(() =>
       expect(
@@ -143,7 +146,7 @@ describe('blacklist result upsell', () => {
     const button = upsell();
     fireEvent.click(button);
     fireEvent.click(button);
-    expect(mocks.check).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(mocks.check).toHaveBeenCalledTimes(2));
     expect(
       screen.getByRole('heading', { name: result.device })
     ).toBeInTheDocument();
@@ -235,6 +238,7 @@ describe('blacklist result upsell', () => {
     );
     const view = render(<OgabasseyImeiChecker />);
     fireEvent.click(screen.getByRole('button', { name: 'Run SIM Lock' }));
+    await waitFor(() => expect(finish).toBeDefined());
     mocks.device = 'tablet';
     view.rerender(<OgabasseyImeiChecker />);
     await act(async () => {
@@ -242,6 +246,7 @@ describe('blacklist result upsell', () => {
     });
     expect(upsell()).toBeEnabled();
     fireEvent.click(upsell());
+    await waitFor(() => expect(mocks.check).toHaveBeenCalledTimes(2));
     expect(mocks.check.mock.calls[1]).toEqual([
       result.imei,
       'blacklist',
@@ -249,6 +254,8 @@ describe('blacklist result upsell', () => {
       expect.any(String),
       'ogabassey',
       'smartphone',
+      '11111111-1111-4111-8111-111111111111',
+      undefined,
     ]);
   });
 
@@ -268,13 +275,16 @@ describe('blacklist result upsell', () => {
     );
     mocks.customerId = 'another-customer';
     view.rerender(<OgabasseyImeiChecker />);
+    expect(screen.queryByRole('heading', { name: result.device })).toBeNull();
+    mocks.check.mockResolvedValue(success());
+    fireEvent.click(screen.getByRole('button', { name: 'Run SIM Lock' }));
     await waitFor(() => expect(upsell()).toBeEnabled());
     mocks.check.mockResolvedValue(
       success({ ...result, blacklistStatus: 'Clean' })
     );
     fireEvent.click(upsell());
     await screen.findByText('Blacklist Status');
-    expect(mocks.check).toHaveBeenCalledTimes(3);
-    expect(mocks.check.mock.calls[2][3]).not.toBe(mocks.check.mock.calls[1][3]);
+    expect(mocks.check).toHaveBeenCalledTimes(4);
+    expect(mocks.check.mock.calls[3][3]).not.toBe(mocks.check.mock.calls[1][3]);
   });
 });

@@ -8,7 +8,7 @@ import {
 } from './resolve-imei-check-failure';
 
 describe('resolveImeiCheckFailure', () => {
-  it('requests login redirect and key rotation on 401 responses', () => {
+  it('requests login while preserving an uncertain key on 401 responses', () => {
     const outcome = resolveImeiCheckFailure({
       currentTierPrice: 1500,
       payload: { code: 'AUTH_REQUIRED', error: 'Unauthorized' },
@@ -18,8 +18,8 @@ describe('resolveImeiCheckFailure', () => {
 
     expect(outcome).toEqual({
       errorMessage: null,
-      shouldClearIdempotencyKey: true,
-      shouldPreserveIdempotencyKey: false,
+      shouldClearIdempotencyKey: false,
+      shouldPreserveIdempotencyKey: true,
       shouldRefetchWallet: false,
       shouldRedirectToLogin: true,
       topUpAmount: null,
@@ -117,8 +117,8 @@ describe('resolveImeiCheckFailure', () => {
 
     expect(outcome).toEqual({
       errorMessage: DEFAULT_IMEI_CHECK_ERROR_MESSAGE,
-      shouldClearIdempotencyKey: true,
-      shouldPreserveIdempotencyKey: false,
+      shouldClearIdempotencyKey: false,
+      shouldPreserveIdempotencyKey: true,
       shouldRefetchWallet: false,
       shouldRedirectToLogin: false,
       topUpAmount: null,
@@ -165,4 +165,30 @@ describe('tier visibility helpers', () => {
       hasAdditionalPublicImeiServiceTierKeys(getVisibleTiers, 'apple')
     ).toBe(false);
   });
+});
+
+it('retains the retry key after an unexpected server error', () => {
+  const outcome = resolveImeiCheckFailure({
+    currentTierPrice: 500,
+    walletBalance: 1000,
+    payload: { code: 'INTERNAL_ERROR' },
+    responseStatus: 500,
+  });
+  expect(outcome.shouldPreserveIdempotencyKey).toBe(true);
+  expect(outcome.shouldClearIdempotencyKey).toBe(false);
+});
+
+it.each([
+  [404, 'PETROCK_REJECTED'],
+  [502, 'PETROCK_REJECTED'],
+  [502, 'PETROCK_UNAVAILABLE'],
+])('retires keys after confirmed Petrock refund %s %s', (responseStatus, code) => {
+  const outcome = resolveImeiCheckFailure({
+    currentTierPrice: 700,
+    walletBalance: 0,
+    responseStatus,
+    payload: { code },
+  });
+  expect(outcome.shouldClearIdempotencyKey).toBe(true);
+  expect(outcome.shouldPreserveIdempotencyKey).toBe(false);
 });

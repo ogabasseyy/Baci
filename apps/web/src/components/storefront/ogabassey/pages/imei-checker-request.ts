@@ -1,4 +1,4 @@
-import type { ImeiDeviceCategory, ImeiServiceTierKey } from '@baci/shared/imei';
+import { isConfirmedImeiRefund, type ImeiDeviceCategory, type ImeiServiceTierKey } from '@baci/shared/imei';
 import { fetchWithCsrf } from '@/lib/api-client';
 import {
   DEFAULT_IMEI_CHECK_ERROR_MESSAGE,
@@ -18,6 +18,7 @@ interface ImeiCheckOutcome {
   keepRequestIdentity: boolean;
   lookupId: string | null;
   needsWalletFunding: boolean;
+  previousReportAvailable?: boolean;
   needsSignIn: boolean;
   pending: { lookupId: string; pollAfterMs: number } | null;
 }
@@ -36,7 +37,7 @@ interface ImeiApiPayload {
 
 export type ImeiPollOutcome =
   | { kind: 'complete'; lookupId: string | null; result: ImeiResult }
-  | { error: string; kind: 'error' }
+  | { confirmedRefund?: boolean; error: string; kind: 'error' }
   | { kind: 'pending'; pollAfterMs: number }
   | { kind: 'retry'; pollAfterMs: number };
 
@@ -64,7 +65,9 @@ export async function performImeiCheck(
   tierPrice: number,
   idempotencyKey: string,
   merchantSlug: string,
-  device?: ImeiDeviceCategory
+  device?: ImeiDeviceCategory,
+  expectedUserId?: string,
+  previousLookupId?: string
 ): Promise<ImeiCheckOutcome> {
   try {
     const response = await fetchWithCsrf('/api/storefront/imei-check', {
@@ -74,8 +77,10 @@ export async function performImeiCheck(
         'Idempotency-Key': idempotencyKey,
       },
       body: JSON.stringify({
-        clientCapabilities: ['imei-async-v1'],
+        clientCapabilities: ['imei-async-v1', 'imei-attempt-coordination-v1'],
         ...(device ? { device } : {}),
+        ...(expectedUserId ? { expectedUserId } : {}),
+        ...(previousLookupId ? { previousLookupId } : {}),
         imei,
         merchantSlug,
         tier,
@@ -116,7 +121,8 @@ export async function performImeiCheck(
         result: null,
         error: describeCheckFailure(outcome),
         keepRequestIdentity: outcome.shouldPreserveIdempotencyKey,
-        lookupId: null,
+        lookupId: data.lookupId ?? null,
+        ...(data.code === 'PREVIOUS_REPORT_AVAILABLE' ? { previousReportAvailable: true } : {}),
         needsSignIn: outcome.shouldRedirectToLogin,
         needsWalletFunding:
           response.status === 402 && data.code === 'WALLET_INSUFFICIENT',
@@ -124,8 +130,13 @@ export async function performImeiCheck(
       };
     }
 
+    const { ImeiResultSchema } = await import('@baci/shared/imei');
+    const parsedResult = ImeiResultSchema.safeParse(data.data);
+    if (!parsedResult.success) {
+      return { result: null, error: 'The check response was incomplete. Please retry.', keepRequestIdentity: true, lookupId: null, needsSignIn: false, needsWalletFunding: false, pending: null };
+    }
     return {
-      result: data.data ?? null,
+      result: parsedResult.data,
       error: null,
       keepRequestIdentity: false,
       lookupId: data.lookupId ?? null,
@@ -170,14 +181,18 @@ export async function pollImeiCheck(
       data.status === 'complete' &&
       data.data
     ) {
+      const { ImeiResultSchema } = await import('@baci/shared/imei');
+      const parsedResult = ImeiResultSchema.safeParse(data.data);
+      if (!parsedResult.success) return { kind: 'retry', pollAfterMs: 10_000 };
       return {
         kind: 'complete',
         lookupId: data.lookupId ?? null,
-        result: data.data,
+        result: parsedResult.data,
       };
     }
     return {
       error: data.error || DEFAULT_IMEI_CHECK_ERROR_MESSAGE,
+      ...(isConfirmedImeiRefund(response.status, data.code) ? { confirmedRefund: true } : {}),
       kind: 'error',
     };
   } catch (error) {

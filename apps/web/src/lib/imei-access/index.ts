@@ -48,7 +48,11 @@ export function createImeiAccessClient({
   if (!secret || Buffer.byteLength(secret) < 32) {
     throw new Error('IMEI access signing configuration is unavailable');
   }
-  async function call<T>(operation: string, args: Record<string, unknown>) {
+  async function call<T>(
+    operation: string,
+    args: Record<string, unknown>,
+    rpcName: 'imei_lookup_access' | 'imei_claim_attempt' = 'imei_lookup_access'
+  ) {
     const issuedAt = Math.floor(Date.now() / 1000);
     const payload = JSON.stringify({
       version: 1,
@@ -63,7 +67,7 @@ export function createImeiAccessClient({
     const signature = createHmac('sha256', secret as string)
       .update(`baci:imei-access:v1:${payload}`)
       .digest('hex');
-    const result = await supabase.rpc('imei_lookup_access', {
+    const result = await supabase.rpc(rpcName, {
       p_payload: payload,
       p_signature: signature,
     });
@@ -75,6 +79,17 @@ export function createImeiAccessClient({
       if (!RPC_NAMES.has(name)) throw new Error('Unsupported IMEI operation');
       return call(name, args);
     },
+    claimAttempt: (args: {
+      tier: string;
+      imei_hash: string;
+      idempotency_key: string;
+      previous_lookup_id?: string;
+    }) =>
+      call<{ idempotency_key: string }>(
+        'claim_attempt',
+        args,
+        'imei_claim_attempt'
+      ),
     readReplay: (idempotencyKey: string) =>
       call<ImeiLookupRow>('read_replay', { idempotency_key: idempotencyKey }),
     readSnapshot: (productId: string) =>

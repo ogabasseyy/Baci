@@ -42,32 +42,15 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
-const cleanResult: ImeiResult = {
-  imei: '490154203237518',
-  device: 'iPhone 13 Pro',
-  modelNumber: 'A2638',
-  status: 'Clean',
-  icloud: 'Off',
-  icloudLock: 'Unlocked',
-  simLock: 'Unlocked',
-  blacklistStatus: 'Not Blacklisted',
-  carrier: 'Unlocked',
-  deviceImage: 'https://cdn.example.com/iphone13pro.jpg',
-  score: 94,
-  activationStatus: 'Activated',
-  serialNumber: 'F2LDN12345',
-  purchaseDate: '2025-09-22',
-  purchaseCountry: 'Nigeria',
-  warranty: 'Limited Warranty',
-  refurbished: 'No',
-  demoUnit: 'No',
-  mdmStatus: 'OFF',
-  miLockStatus: 'Unlocked',
-  miLostStatus: 'Clean',
-  deviceType: 'apple',
-  verdict: 'Safe to buy',
-  verdictType: 'safe',
-};
+jest.mock('./use-imei-runtime-availability', () => ({
+  useImeiRuntimeAvailability: () => ({
+    loading: false,
+    failed: false,
+    availableTierKeys: ['blacklist'],
+  }),
+}));
+
+import { cleanResult } from './imei-result.test-fixture';
 
 const baseProps = {
   colors: Colors.light,

@@ -157,6 +157,7 @@ function createRequest(
 }
 
 function createSupabaseMock(rows: ImeiLookupRow[] = []) {
+  const claims = new Map<string, string>();
   const updates: Array<{
     filters: Record<string, unknown>;
     payload: Record<string, unknown>;
@@ -318,8 +319,38 @@ function createSupabaseMock(rows: ImeiLookupRow[] = []) {
       data: await mocks.mockReadPetrockProductSnapshot({ productId }),
       error: null,
     }),
+    claimAttempt: async (args: {
+      tier: string;
+      imei_hash: string;
+      idempotency_key: string;
+      previous_lookup_id?: string;
+    }) => {
+      const key = `${args.tier}:${args.imei_hash}`;
+      let canonical =
+        claims.get(key) ??
+        rows.find(
+          (row) => row.tier === args.tier && row.imei_hash === args.imei_hash
+        )?.idempotency_key ??
+        args.idempotency_key;
+      const prior = rows.find(
+        (row) =>
+          row.id === args.previous_lookup_id &&
+          row.idempotency_key === canonical &&
+          row.status === 'completed'
+      );
+      if (prior) canonical = args.idempotency_key;
+      claims.set(key, canonical);
+      return { data: { idempotency_key: canonical }, error: null };
+    },
     insertPending: (row: Record<string, unknown>) =>
-      supabase.from('imei_lookups').insert(row).select().single(),
+      rows.some(
+        (candidate) => candidate.idempotency_key === row.idempotency_key
+      )
+        ? Promise.resolve({
+            data: null,
+            error: { code: '23505', message: 'duplicate key' },
+          })
+        : supabase.from('imei_lookups').insert(row).select().single(),
     cache: (lookupId: string, patch: Record<string, unknown>) =>
       supabase
         .from('imei_lookups')
@@ -449,6 +480,81 @@ describe('POST /api/storefront/imei-check', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  it('does not charge twice for concurrent attempts with different client keys', async () => {
+    const { POST } = await importRoute();
+    const first = createRequest(
+      { imei: VALID_IMEI, tier: 'full' },
+      { 'idempotency-key': '11111111-1111-4111-8111-111111111111' }
+    );
+    const second = createRequest(
+      { imei: VALID_IMEI, tier: 'full' },
+      { 'idempotency-key': '22222222-2222-4222-8222-222222222222' }
+    );
+    await Promise.all([POST(first), POST(second)]);
+    expect(mocks.mockRedeemImeiWalletPayment).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires an explicit repeat after returning an earlier completed report', async () => {
+    const priorId = '33333333-3333-4333-8333-333333333333';
+    const priorKey = '44444444-4444-4444-8444-444444444444';
+    const nextKey = '55555555-5555-4555-8555-555555555555';
+    const adminSupabase = createSupabaseMock([
+      {
+        id: priorId,
+        idempotency_key: priorKey,
+        imei_hash: hashImeiForTest(VALID_IMEI),
+        tier: 'full',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-1',
+        amount_ngn: 1000,
+        status: 'completed',
+        cached_status: 200,
+        cached_response: {
+          success: true,
+          data: { imei: VALID_IMEI, device: 'iPhone' },
+        },
+      },
+    ]);
+    mockAuthenticatedUser({ adminSupabase });
+    const { POST } = await importRoute();
+    const first = await POST(
+      createRequest(
+        { imei: VALID_IMEI, tier: 'full' },
+        { 'idempotency-key': nextKey }
+      )
+    );
+    expect(first.status).toBe(409);
+    expect(await first.json()).toMatchObject({
+      code: 'PREVIOUS_REPORT_AVAILABLE',
+      lookupId: priorId,
+    });
+    expect(mocks.mockRedeemImeiWalletPayment).not.toHaveBeenCalled();
+    const second = await POST(
+      createRequest(
+        { imei: VALID_IMEI, tier: 'full', previousLookupId: priorId },
+        { 'idempotency-key': nextKey }
+      )
+    );
+    expect(second.status).toBe(200);
+    expect(mocks.mockRedeemImeiWalletPayment).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a request bound to another authenticated user before lookup', async () => {
+    const { POST } = await importRoute();
+    const response = await POST(
+      createRequest({
+        imei: VALID_IMEI,
+        tier: 'full',
+        expectedUserId: '11111111-1111-4111-8111-111111111111',
+      })
+    );
+    expect(response.status).toBe(409);
+    expect(
+      mocks.mockResolveStorefrontMerchantFromRequest
+    ).not.toHaveBeenCalled();
+    expect(mocks.mockRedeemImeiWalletPayment).not.toHaveBeenCalled();
   });
 
   it('refunds the confirmed durable Sickw debit after its response is lost without calling the provider', async () => {
@@ -777,7 +883,7 @@ describe('POST /api/storefront/imei-check', () => {
 
     expect(response.status).toBe(503);
     expect(body.code).toBe('SICKW_API_KEY_MISSING');
-    expect(adminSupabase.from).toHaveBeenCalledOnce();
+    expect(adminSupabase.__rows).toHaveLength(0);
     expect(mocks.mockCreateAccessClient).toHaveBeenCalled();
     expect(mocks.mockRedeemImeiWalletPayment).not.toHaveBeenCalled();
   });
@@ -903,6 +1009,50 @@ describe('POST /api/storefront/imei-check', () => {
     expect(mocks.mockRefundImeiWalletPayment).not.toHaveBeenCalled();
   });
 
+  it('reconciles a refunded same-key retry before replaying it', async () => {
+    const adminSupabase = createSupabaseMock([
+      {
+        amount_ngn: 700,
+        cached_response: null,
+        cached_status: null,
+        customer_id: 'customer-1',
+        device_category: 'smartphone',
+        id: 'lookup-existing',
+        idempotency_key: IDEMPOTENCY_KEY,
+        imei_hash: hashImeiForTest(VALID_IMEI),
+        merchant_id: 'merchant-1',
+        status: 'pending',
+        tier: 'blacklist',
+      },
+    ]);
+    vi.spyOn(adminSupabase, 'claimAttempt').mockImplementation(async (args) => {
+      Object.assign(adminSupabase.__rows[0], {
+        status: 'refunded_error',
+        cached_status: 502,
+        cached_response: {
+          success: false,
+          status: 'error',
+          code: 'SICKW_UNAVAILABLE',
+          error: 'Refunded',
+        },
+      });
+      return { data: { idempotency_key: args.idempotency_key }, error: null };
+    });
+    mockAuthenticatedUser({ adminSupabase });
+    const { POST } = await importRoute();
+    const response = await POST(
+      createRequest({
+        device: 'smartphone',
+        imei: VALID_IMEI,
+        tier: 'blacklist',
+      })
+    );
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({ code: 'SICKW_UNAVAILABLE' });
+    expect(mocks.mockRedeemImeiWalletPayment).not.toHaveBeenCalled();
+    expect(mocks.mockRequestSickwCheck).not.toHaveBeenCalled();
+  });
+
   it('replays a pending Petrock lookup without placing another order', async () => {
     const adminSupabase = createSupabaseMock([
       {
@@ -964,10 +1114,12 @@ describe('POST /api/storefront/imei-check', () => {
     expect(response.status).toBe(402);
     expectImeiWalletShortage(body, { balance: 500, required: 1000 });
     expect(mocks.mockRequestSickwCheck).not.toHaveBeenCalled();
-    expect(adminSupabase.__deletes.at(-1)).toMatchObject({
+    expect(adminSupabase.__deletes).toHaveLength(0);
+    expect(adminSupabase.__updates.at(-1)).toMatchObject({
       filters: { id: 'lookup-1' },
+      payload: { status: 'wallet_rejected', cached_status: 402 },
     });
-    expect(adminSupabase.__updates).toHaveLength(0);
+    expect(body).toMatchObject({ lookupId: 'lookup-1' });
   });
 
   it('continues the paid lookup when the preflight wallet balance read fails', async () => {

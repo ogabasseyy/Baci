@@ -65,3 +65,23 @@ describe('pollImeiLookup', () => {
     });
   });
 });
+
+it('marks a polled Petrock rejection as a confirmed refund', async () => {
+  const fetchImpl = jest.fn<typeof fetch>().mockResolvedValue({
+    ok: false,
+    status: 404,
+    json: async () => ({
+      success: false,
+      status: 'error',
+      code: 'PETROCK_REJECTED',
+      error: 'Refunded',
+    }),
+  } as Response);
+  expect(
+    await pollImeiLookup({
+      apiBaseUrl: 'https://test.invalid',
+      lookupId: '11111111-1111-4111-8111-111111111111',
+      fetchImpl,
+    })
+  ).toMatchObject({ kind: 'error', confirmedRefund: true });
+});

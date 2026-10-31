@@ -192,19 +192,24 @@ export async function cacheInsufficientBalanceResponse({
     console.error('[IMEI Check] Failed to reread wallet balance:', readError);
   }
 
-  const body = errorBody({
-    balance: currentBalance,
-    code: 'WALLET_INSUFFICIENT',
-    error: 'Insufficient wallet balance',
-    required: amount,
+  const body = {
+    ...errorBody({
+      balance: currentBalance,
+      code: 'WALLET_INSUFFICIENT',
+      error: 'Insufficient wallet balance',
+      required: amount,
+    }),
+    lookupId,
+  };
+  // Retain a no-debit terminal row so a deliberate retry can atomically
+  // replace this exact attempt without racing another device.
+  await cacheLookupResponse({
+    body,
+    lookupId,
+    status: 402,
+    supabaseAdmin,
+    terminalStatus: 'wallet_rejected',
   });
-  const { error } = await supabaseAdmin.deletePending(lookupId);
-
-  if (error) {
-    throw new Error(
-      `Failed to remove insufficient-balance IMEI lookup: ${error.message}`
-    );
-  }
 
   return json(body, 402);
 }

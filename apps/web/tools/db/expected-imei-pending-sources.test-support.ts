@@ -49,4 +49,24 @@ export const EXPECTED_IMEI_PENDING_SOURCES = [
       'supabase/migrations/20261030181744_imei_approved_price_reductions.sql',
     sha256: '08e262540899c9a2ec179b9e0892fbe90a6fbd11a9f052a36934d905d73de8df',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261031061214_imei_report_history_device_read.sql',
+    sha256: 'c3179d4170004038302d9637c2c79edb94ddd709a70b8713fbb235241e24018c',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261031124500_imei_attempt_coordination.sql',
+    sha256: 'e61a5b459a78b5428890d6fc554f935c48a47d48029fa525457de8b1eb875ab7',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261031143353_imei_reconcile_sickw_refunds.sql',
+    sha256: '821f4bef4d2683d800041b24e60c914654c967ecf97b4e80c2e84edec0090963',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261031144206_imei_reconcile_legacy_sickw_refunds.sql',
+    sha256: 'beca8ff159c6bc50bc4e778b89b465b5ca2d7b4aff3e88d31e03aeb2c1af4817',
+  },
 ];

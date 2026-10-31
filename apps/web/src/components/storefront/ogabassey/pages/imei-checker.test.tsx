@@ -43,12 +43,18 @@ vi.mock('next/link', () => ({
     </a>
   ),
 }));
+vi.mock('@/contexts/customer-auth-context', () => ({
+  useOptionalCustomerAuth: () => ({ user: { id: '11111111-1111-4111-8111-111111111111' }, customer: { id: 'customer-1' }, isLoading: false }),
+}));
+
 vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: mocks.useMerchantSafe,
 }));
 
 describe('OgabasseyImeiChecker', () => {
   beforeEach(() => {
+    localStorage.clear();
+    Object.defineProperty(navigator, 'locks', { configurable: true, value: { request: async (_name: string, fn: () => unknown) => fn() } });
     mocks.availableTierKeys = null;
     mocks.availabilityFailed = false;
     mocks.retryAvailability.mockClear();
@@ -152,7 +158,7 @@ describe('OgabasseyImeiChecker', () => {
       )
     );
     expect(JSON.parse(init.body)).toMatchObject({
-      clientCapabilities: ['imei-async-v1'],
+      clientCapabilities: ['imei-async-v1', 'imei-attempt-coordination-v1'],
       device: 'smartphone',
       imei: '354442067957452',
       merchantSlug: 'ogabassey',
@@ -625,6 +631,7 @@ describe('OgabasseyImeiChecker', () => {
     fireEvent.click(submitButton);
 
     await waitFor(() => expect(submitButton).toBeDisabled());
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
     resolveRequest({
       ok: true,

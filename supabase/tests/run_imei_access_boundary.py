@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Replay actual IMEI migrations in an isolated scratch database, then drop it."""
 import os
+from imei_attempt_claim_concurrency import run as run_attempt_concurrency
+from imei_attempt_cutover import run as run_attempt_cutover
 from pathlib import Path
 import re
 import subprocess
@@ -55,6 +57,14 @@ try:
     sql((ROOT/'supabase/tests/imei_approved_price_reductions.sql').read_text())
     # The price-only replacement must retain the latest pre-submit refund behavior.
     sql((ROOT/'supabase/tests/imei_unsubmitted_petrock_refund.sql').read_text())
+    sql((ROOT/'supabase/migrations/20261031061214_imei_report_history_device_read.sql').read_text())
+    sql((ROOT/'supabase/tests/imei_report_history.sql').read_text())
+    sql((ROOT/'supabase/tests/imei_attempt_legacy_fixture.sql').read_text())
+    run_attempt_cutover(database, (ROOT/'supabase/migrations/20261031124500_imei_attempt_coordination.sql').read_text())
+    sql((ROOT/'supabase/migrations/20261031143353_imei_reconcile_sickw_refunds.sql').read_text())
+    sql((ROOT/'supabase/migrations/20261031144206_imei_reconcile_legacy_sickw_refunds.sql').read_text())
+    sql((ROOT/'supabase/tests/imei_attempt_coordination.sql').read_text())
+    run_attempt_concurrency(database)
     print('IMEI authenticated access SQL contracts passed on disposable database.')
 finally:
     sql('DROP DATABASE IF EXISTS '+database+' WITH (FORCE);', 'postgres')

@@ -1,8 +1,9 @@
+import { isConfirmedImeiRefund } from '@baci/shared/imei';
 import { ImeiCheckApiResponseSchema, type ImeiResult } from './validation';
 
 export type ImeiPollOutcome =
   | { kind: 'complete'; result: ImeiResult }
-  | { error: string; kind: 'error' }
+  | { confirmedRefund?: boolean; error: string; kind: 'error' }
   | { kind: 'pending'; pollAfterMs: number }
   | { kind: 'retry'; pollAfterMs: number };
 
@@ -49,7 +50,17 @@ export async function pollImeiLookup({
     ) {
       return { kind: 'complete', result: data.data };
     }
+    const code =
+      typeof raw === 'object' &&
+      raw !== null &&
+      'code' in raw &&
+      typeof raw.code === 'string'
+        ? raw.code
+        : undefined;
     return {
+      ...(isConfirmedImeiRefund(response.status, code)
+        ? { confirmedRefund: true }
+        : {}),
       error: data.error ?? 'Unable to complete this IMEI check.',
       kind: 'error',
     };

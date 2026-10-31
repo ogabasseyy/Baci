@@ -1,4 +1,4 @@
-import type { ImeiServiceTierKey } from '@baci/shared/imei';
+import type { ImeiDeviceCategory, ImeiServiceTierKey } from '@baci/shared/imei';
 import { useEffect, useRef, useState } from 'react';
 import {
   clearPendingImeiLookup,
@@ -15,24 +15,37 @@ const PAUSED_POLL_MS = 60 * 1000;
 
 interface ActivePendingLookup extends PendingImeiLookup {
   pollAfterMs: number;
+  scopeKey: string | null;
+  canResume: boolean;
 }
 
-type PendingTerminal =
+type PendingTerminal = (
   | {
       kind: 'complete';
+      device?: ImeiDeviceCategory;
       lookupId: string;
       result: ImeiResult;
       tier: ImeiServiceTierKey;
+      recovery?: PendingImeiLookup['recovery'];
     }
-  | { error: string; kind: 'error'; tier: ImeiServiceTierKey };
+  | {
+      confirmedRefund?: boolean;
+      error: string;
+      kind: 'error';
+      recovery?: PendingImeiLookup['recovery'];
+      tier: ImeiServiceTierKey;
+    }
+) & { scopeKey: string | null };
 
 export function useImeiPendingLookup({
   accessToken,
+  userId,
   apiBaseUrl,
   customerId,
   merchantId,
 }: {
   accessToken?: string;
+  userId?: string;
   apiBaseUrl: string;
   customerId?: string;
   merchantId?: string;
@@ -41,6 +54,7 @@ export function useImeiPendingLookup({
     merchantId && customerId
       ? pendingImeiStorageKey(merchantId, customerId)
       : null;
+  const scopeKey = `${storageKey}:${userId ?? ''}`;
   const previousStorageKey = useRef<string | null>(null);
   const pendingMutation = useRef(0);
   const [pending, setPending] = useState<ActivePendingLookup | null>(null);
@@ -70,7 +84,12 @@ export function useImeiPendingLookup({
       const saved = await loadPendingImeiLookup(storageKey);
       if (!cancelled && pendingMutation.current === restoreGeneration) {
         if (saved) {
-          setPending({ ...saved, pollAfterMs: 0 });
+          setPending({
+            ...saved,
+            pollAfterMs: 0,
+            scopeKey,
+            canResume: true,
+          });
         } else if (previous && previous !== storageKey) {
           setPending(null);
         }
@@ -80,10 +99,10 @@ export function useImeiPendingLookup({
     return () => {
       cancelled = true;
     };
-  }, [storageKey]);
+  }, [storageKey, scopeKey]);
 
   useEffect(() => {
-    if (!pending) return;
+    if (!pending || pending.scopeKey !== scopeKey) return;
     const isStale =
       Date.now() - Date.parse(pending.createdAt) >= MAX_ACTIVE_POLL_MS;
     if (isStale) {
@@ -108,18 +127,28 @@ export function useImeiPendingLookup({
         }
 
         if (storageKey) await clearPendingImeiLookup(storageKey);
+        if (cancelled) return;
         setPending(null);
         setPaused(false);
-        setTerminal(
-          outcome.kind === 'complete'
+        setTerminal({
+          scopeKey,
+          ...(outcome.kind === 'complete'
             ? {
                 kind: 'complete',
                 lookupId: pending.lookupId,
                 result: outcome.result,
                 tier: pending.tier,
+                device: pending.device,
+                recovery: pending.recovery,
               }
-            : { error: outcome.error, kind: 'error', tier: pending.tier }
-        );
+            : {
+                error: outcome.error,
+                kind: 'error',
+                tier: pending.tier,
+                recovery: pending.recovery,
+                confirmedRefund: outcome.confirmedRefund,
+              }),
+        });
       },
       isStale ? PAUSED_POLL_MS : pending.pollAfterMs
     );
@@ -127,7 +156,9 @@ export function useImeiPendingLookup({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [accessToken, apiBaseUrl, pending, storageKey]);
+  }, [accessToken, apiBaseUrl, pending, storageKey, scopeKey]);
+
+  const visiblePending = pending?.scopeKey === scopeKey ? pending : null;
 
   return {
     async clear() {
@@ -140,15 +171,20 @@ export function useImeiPendingLookup({
       setTerminal(null);
     },
     paused,
-    pending,
+    pending: visiblePending,
+    canResume: visiblePending?.canResume ?? true,
     async start({
       lookupId,
       pollAfterMs,
       tier,
+      device,
+      recovery,
     }: {
       lookupId: string;
       pollAfterMs: number;
       tier: ImeiServiceTierKey;
+      device?: ImeiDeviceCategory;
+      recovery?: PendingImeiLookup['recovery'];
     }) {
       pendingMutation.current += 1;
       const next = {
@@ -156,12 +192,23 @@ export function useImeiPendingLookup({
         lookupId,
         pollAfterMs,
         tier,
+        device,
+        recovery,
+        scopeKey,
+        canResume: false,
       };
-      if (storageKey) await savePendingImeiLookup(storageKey, next);
       setTerminal(null);
       setPaused(false);
       setPending(next);
+      const canResume = storageKey
+        ? await savePendingImeiLookup(storageKey, next)
+        : false;
+      setPending((current) =>
+        current?.lookupId === lookupId && current.scopeKey === scopeKey
+          ? { ...current, canResume }
+          : current
+      );
     },
-    terminal,
+    terminal: terminal?.scopeKey === scopeKey ? terminal : null,
   };
 }

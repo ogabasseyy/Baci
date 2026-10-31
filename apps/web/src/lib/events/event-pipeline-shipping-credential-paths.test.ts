@@ -25,7 +25,9 @@ describe('eventPipelineShippingCredentialPaths', () => {
     });
 
     it('no longer lets the route reach credentials through the public quotes route', () => {
-      const viaQuotesRoute = eventPipelineShippingCredentialPaths.filter(
+      const paths: readonly (readonly string[])[] =
+        eventPipelineShippingCredentialPaths;
+      const viaQuotesRoute = paths.filter(
         (path) =>
           path[0] === giglQuoteRoute &&
           path.includes('apps/web/src/app/api/shipping/quotes/route.ts')

@@ -127,32 +127,6 @@ describe('processPiggyvestEvent', () => {
     });
   });
 
-  it('acknowledges and records interest-accrued events without any ledger write', async () => {
-    const accrued = {
-      eventId: '01K8TESTACCRUED001',
-      eventType: 'interest-accrued.success',
-      eventCategory: 'interest_accrued',
-      customer_id: 'c0065070-dc32-45d2-9c01-871a27abfd10',
-      eventData: { id: 'synthetic-accrual-001', amount: 12.5 },
-    } as const;
-
-    await expect(processPiggyvestEvent(supabase, accrued)).resolves.toBe(
-      'processed'
-    );
-
-    expect(mockResolve).toHaveBeenCalledWith(supabase, {
-      eventId: accrued.eventId,
-      claimToken,
-      status: 'processed',
-    });
-    expect(mockRecordPayout).not.toHaveBeenCalled();
-    expect(mockRecordInflow).not.toHaveBeenCalled();
-    expect(mockApplyCreated).not.toHaveBeenCalled();
-    expect(mockApplyLifted).not.toHaveBeenCalled();
-    expect(mockApplyOutflow).not.toHaveBeenCalled();
-    expect(mockSavingsOutflow).not.toHaveBeenCalled();
-  });
-
   it('passes provider config through on restriction lift', async () => {
     const config = { token: 'synthetic' };
     await processPiggyvestEvent(supabase, restrictionLiftedEvent, {

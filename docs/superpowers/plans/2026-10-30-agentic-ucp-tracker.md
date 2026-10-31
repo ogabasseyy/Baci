@@ -9,9 +9,9 @@ The single place to see where the agentic commerce work stands and what happens 
 
 | | |
 | --- | --- |
-| **Current plan** | Milestone 0, plan 1 is built and in review as draft PR [ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869); plan 2 is next |
-| **Next action** | Plan 2 build in `.worktrees/agentic-baseline-evidence` (stacked on plan 1): Tasks 2 and 4 in progress; Task 1 waits for the owner's OK |
-| **Waiting on the owner** | Approval of plan 2 Task 1's read-only production queries and profile probes; merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851); read-only production queries for plan 2 |
+| **Current plan** | Milestone 0: plan 1 in review as draft PR [ogabasseyy/Baci#3869](https://github.com/ogabasseyy/Baci/pull/3869); plan 2 built and in review as draft PR [ogabasseyy/Baci#3873](https://github.com/ogabasseyy/Baci/pull/3873), stacked on plan 1 |
+| **Next action** | Plan 3: latest-docs check, then write the plan. Fix Codex findings on #3869 and #3873 as they arrive. When #3869 merges, retarget #3873 to main, rebase it and redo its Task 8 (register re-review) |
+| **Waiting on the owner** | Merge of docs PR [ogabasseyy/Baci#3851](https://github.com/ogabasseyy/Baci/pull/3851); merge approval for #3869, then #3873, once their gates are green; the plan 5 VAT decision (the merchant is VAT-registered at 7.50%) |
 | **Last updated** | 31 October 2026 |
 
 ## How every plan moves (the loop)
@@ -68,12 +68,12 @@ Plan: [2026-10-30-agentic-m0-1-admin-client-removal.md](2026-10-30-agentic-m0-1-
 - [x] Latest-docs check (31 Oct: no new protocol versions; fixtures pin UCP by commit because its tags were re-cut; new findings F40 and F41)
 - [x] Plan written (31 Oct): [2026-10-31-agentic-m0-2-baseline-evidence.md](2026-10-31-agentic-m0-2-baseline-evidence.md), 10 tasks, rehearsed in a scratch copy of plan 1's head (106 tests pass, 9 known gaps fail as expected, capability gate OK). Task 1 needs the owner's OK: read-only queries of the agentic merchant's `premium_features` (`shared_cart`), `vat_registration_status` and the migration ledger, plus a plain GET of its public UCP profile.
 - [x] Independent review, fixes applied (31 Oct): orchestrator review moved the validator and MCP fixtures under `src` so CI type-checks them; Codex on #3851 at `c699994a3d`: "Didn't find any major issues"
-- [ ] Built with TDD
-- [ ] Local gates passed
-- [ ] PR opened (owner OK):
+- [x] Built with TDD (31 Oct): 21 test files, 127 pass and 9 known gaps fail as expected; Codex's two P1s (one primary export per file) fixed in `3778e7aaa2`
+- [x] Local gates passed (31 Oct): web typecheck, affected-package lint, capability gate `OK` (178 tests), register `fresh`; re-reviewed at `76b52d16ce`
+- [x] PR opened (owner OK): draft [ogabasseyy/Baci#3873](https://github.com/ogabasseyy/Baci/pull/3873), base `fix/agentic-remove-admin-client`; final head `e4eacf287a`, Codex review requested
 - [ ] PR gates green
 - [ ] Merged (owner OK, deploys)
-- [ ] Production check (none beyond Task 1: nothing runtime changes)
+- [x] Production check (none beyond Task 1, which ran read-only on 31 Oct: shared cart enrolled, VAT registered at 7.50%, migration ledger matches the repository, public profile 200 for plain and browser requests with no checkout declared)
 
 ### Plan 3: truthful capability claims and the shared-cart gate (roadmap Task 3)
 
@@ -150,8 +150,8 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | Decision | Needed for | Status |
 | --- | --- | --- |
 | Commit the roadmap, plan 1 and this tracker to main in a docs-only PR, so every worktree and agent sees the same files | All plans | Approved 30 Oct; [#3851](https://github.com/ogabasseyy/Baci/pull/3851) open |
-| Approve read-only production queries for plan 2's baseline (shared cart and VAT state) | Plan 2 | Open |
-| If the agentic merchant charges VAT: block its agentic completion until roadmap Task 6, or pull tax parity into Milestone 0 | Plan 5 | Waiting on plan 2's answer |
+| Approve read-only production queries for plan 2's baseline (shared cart and VAT state) | Plan 2 | Approved and run 31 Oct |
+| If the agentic merchant charges VAT: block its agentic completion until roadmap Task 6, or pull tax parity into Milestone 0 | Plan 5 | Open: it applies (VAT registered at 7.50%, per plan 2's baseline) |
 | Fix the Context7 API key: Context7 rejects it ("Invalid API key"), so library-doc checks currently fall back to the official websites | Latest-docs rule | Open |
 | Free space in Docker Desktop (its own disk is full; tests currently run the database in memory instead) | Convenience | Open |
 | Verify Paystack's Google Pay page by hand: it blocks automated reads, so the 3DS and `PAN_ONLY` details are unconfirmed | Milestone C | Open |
@@ -187,6 +187,7 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | 31 Oct | Plan 1 branch | Orchestrator | The first push rewrote commit IDs, so the capability record named a commit only this Mac had. Fixed: the push script now keeps IDs identical and stops on any mismatch. |
 | 31 Oct | Plan 2 | Orchestrator | Accepted Task 1's queries and probes, the evidence table and the Production-cell rule; moved the validator and MCP fixtures under `src` for CI type-checking |
 | 31 Oct | Plan 2 | Codex on PR #3851 (commit `c699994a3d`) | Didn't find any major issues |
+| 31 Oct | Plan 2 code | Codex on PR #3873 | Two P1s (one primary export per file) fixed in `3778e7aaa2`; re-requested for the final head `e4eacf287a` |
 
 ## Change log
 
@@ -199,3 +200,4 @@ Plans for these are written only when their milestone starts. Each row gets the 
 | 31 Oct | Workflow change (owner): skip CodeRabbit when unavailable; draft PR plus `@codex review` early; keep building while reviews run. |
 | 31 Oct | Plan 1 opened as draft PR #3869. Main's two failing tests were fixed by #3860; plan 1 rebuilt on top of it. |
 | 31 Oct | Plan 2 written and rehearsed; published to docs PR #3851 for Codex review. New finding F42. |
+| 31 Oct | Plan 2 built and opened as draft PR #3873. Read-only baseline: shared cart enrolled, VAT registered at 7.50%, migration ledger matches, public profile 200 for plain and browser requests (F8's 403 did not reproduce) with no checkout declared. |

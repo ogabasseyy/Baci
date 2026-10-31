@@ -58,10 +58,15 @@ vi.mock('@/components/orders/RecordPaymentSheet', async () => {
 });
 
 const shipmentFlow = vi.hoisted(() => ({
+  presented: undefined as undefined | (() => void),
   proceed: undefined as undefined | (() => unknown),
 }));
 vi.mock('@/components/orders/ShipmentFlowSheet', () => ({
-  ShipmentFlowSheet: (props: { onContinueFromMethod: () => unknown }) => {
+  ShipmentFlowSheet: (props: {
+    onContinueFromMethod: () => unknown;
+    onPresented?: () => void;
+  }) => {
+    shipmentFlow.presented = props.onPresented;
     shipmentFlow.proceed = props.onContinueFromMethod;
     return null;
   },
@@ -195,6 +200,20 @@ function createController(
 }
 
 describe('OrderDetailsScreenModals', () => {
+  it('closes the status menu only once the shipping sheet is on screen', () => {
+    const controller = createController({ showStatusModal: true });
+
+    render(
+      <OrderDetailsScreenModals controller={controller} order={createOrder()} />
+    );
+
+    expect(controller.setShowStatusModal).not.toHaveBeenCalled();
+
+    shipmentFlow.presented?.();
+
+    expect(controller.setShowStatusModal).toHaveBeenCalledWith(false);
+  });
+
   it('wires the balance payment helper to controller modal state', () => {
     const controller = createController();
 

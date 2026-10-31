@@ -46,7 +46,6 @@ interface CreateOrderDetailsShipmentActionsParams {
   setRiderPhone: (value: string) => void;
   setShipmentFlowStep: (value: ShipmentFlowStep) => void;
   setShowShipmentFlow: (value: boolean) => void;
-  setShowStatusModal: (value: boolean) => void;
   setSuccessModal: (value: SuccessModalState) => void;
   shipmentFlowStep: ShipmentFlowStep;
   showShipmentFlow: boolean;
@@ -81,7 +80,6 @@ export function createOrderDetailsShipmentActions({
   setRiderPhone,
   setShipmentFlowStep,
   setShowShipmentFlow,
-  setShowStatusModal,
   setSuccessModal,
   shipmentFlowStep,
   showShipmentFlow,
@@ -123,7 +121,6 @@ export function createOrderDetailsShipmentActions({
       return;
     }
 
-    setShowStatusModal(false);
     setFulfillmentDetails(
       getInitialFulfillmentDetails(order.fulfillment_details, fulfillmentItems)
     );

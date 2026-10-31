@@ -73,7 +73,6 @@ function useBookingActions() {
     setRiderPhone: vi.fn(),
     setShipmentFlowStep: vi.fn(),
     setShowShipmentFlow,
-    setShowStatusModal: vi.fn(),
     setSuccessModal: vi.fn(),
     shipmentFlowStep: 'method',
     showShipmentFlow: true,

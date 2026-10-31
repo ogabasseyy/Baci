@@ -185,7 +185,6 @@ export function useOrderDetailsController() {
     setRiderPhone: uiState.setRiderPhone,
     setShipmentFlowStep: uiState.setShipmentFlowStep,
     setShowShipmentFlow: uiState.setShowShipmentFlow,
-    setShowStatusModal: uiState.setShowStatusModal,
     setSuccessModal: uiState.setSuccessModal,
     shipmentFlowStep: uiState.shipmentFlowStep,
     showShipmentFlow: uiState.showShipmentFlow,

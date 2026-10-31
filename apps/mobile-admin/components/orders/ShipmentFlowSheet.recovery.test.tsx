@@ -21,6 +21,24 @@ const state = vi.hoisted(() => ({
   confirm: vi.fn(),
   update: vi.fn(),
 }));
+vi.mock('./ShipmentFlowSheetPresence', () => ({
+  ShipmentFlowSheetPresence: ({
+    accessory,
+    children,
+    visible,
+  }: {
+    accessory?: ReactNode;
+    children?: ReactNode;
+    visible: boolean;
+  }) =>
+    visible ? (
+      <section>
+        {children}
+        {accessory}
+      </section>
+    ) : null,
+}));
+
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ user: { id: state.userId } }),
 }));
@@ -186,7 +204,6 @@ describe('ShipmentFlowSheet prepaid recovery reachability', () => {
       setRiderPhone: vi.fn(),
       setShipmentFlowStep: vi.fn(),
       setShowShipmentFlow: vi.fn(),
-      setShowStatusModal: vi.fn(),
       setSuccessModal: vi.fn(),
       shipmentFlowStep: 'method',
       showShipmentFlow: true,
@@ -279,7 +296,6 @@ describe('ShipmentFlowSheet prepaid recovery reachability', () => {
         setRiderPhone: vi.fn(),
         setShipmentFlowStep: setStep,
         setShowShipmentFlow: setVisible,
-        setShowStatusModal: vi.fn(),
         setSuccessModal: vi.fn(),
         shipmentFlowStep: step,
         showShipmentFlow: visible,

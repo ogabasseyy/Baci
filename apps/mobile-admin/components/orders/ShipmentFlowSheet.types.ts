@@ -15,6 +15,9 @@ export interface ShipmentFlowSheetProps {
   hasExistingFulfillment: boolean;
   isSubmitting: boolean;
   onClose: () => void;
+  // Fires once the sheet is on screen, so whatever opened it can close
+  // underneath without the dimmed background flashing off in between.
+  onPresented?: () => void;
   onContinueFromDetails: () => void;
   onContinueFromMethod:
     | (() => void)

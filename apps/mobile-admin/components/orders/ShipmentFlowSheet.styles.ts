@@ -19,6 +19,9 @@ export const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     backgroundColor: SHEET_BACKDROP_COLOR,
   },
+  sheetLayer: {
+    flex: 1,
+  },
   dismissRegion: {
     flex: 1,
     width: '100%',

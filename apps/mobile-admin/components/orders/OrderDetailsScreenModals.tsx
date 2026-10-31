@@ -73,6 +73,7 @@ export function OrderDetailsScreenModals({
         }
         onFulfillmentDetailsChange={controller.updateFulfillmentDetails}
         onModeChange={controller.setPendingShipmentMode}
+        onPresented={() => controller.setShowStatusModal(false)}
         onRiderPhoneChange={controller.setRiderPhone}
         onSelectSavedRider={controller.setRiderPhone}
         onStepBack={controller.handleShipmentFlowBack}

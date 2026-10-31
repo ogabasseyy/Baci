@@ -49,7 +49,6 @@ function makeActions(
     setRiderPhone: vi.fn(),
     setShipmentFlowStep: vi.fn(),
     setShowShipmentFlow: vi.fn(),
-    setShowStatusModal: vi.fn(),
     setSuccessModal: vi.fn(),
     shipmentFlowStep: 'details',
     showShipmentFlow: false,

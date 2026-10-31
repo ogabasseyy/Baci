@@ -6,6 +6,7 @@ import { pollImeiCheck } from './imei-checker-request';
 import type { ImeiResult } from './imei-checker-types';
 import {
   clearPendingImeiLookup,
+  getPendingImeiStorage,
   loadPendingImeiLookup,
   type PendingImeiLookup,
   pendingImeiStorageKey,
@@ -16,6 +17,7 @@ const MAX_ACTIVE_POLL_MS = 5 * 60 * 1000;
 const PAUSED_POLL_MS = 60 * 1000;
 
 interface ActivePendingImeiLookup extends PendingImeiLookup {
+  canResume: boolean;
   pollAfterMs: number;
   scopeKey: string;
 }
@@ -59,9 +61,11 @@ export function useImeiPendingLookup({
       setPending(null);
       return;
     }
-    const saved = loadPendingImeiLookup(localStorage, storageKey);
+    const saved = loadPendingImeiLookup(getPendingImeiStorage(), storageKey);
     setPending(
-      saved && scopeKey ? { ...saved, pollAfterMs: 0, scopeKey } : null
+      saved && scopeKey
+        ? { ...saved, canResume: true, pollAfterMs: 0, scopeKey }
+        : null
     );
   }, [scopeKey, storageKey]);
 
@@ -87,7 +91,8 @@ export function useImeiPendingLookup({
           return;
         }
 
-        if (storageKey) clearPendingImeiLookup(localStorage, storageKey);
+        if (storageKey)
+          clearPendingImeiLookup(getPendingImeiStorage(), storageKey);
         setPending(null);
         setPaused(false);
         setTerminal(
@@ -113,7 +118,8 @@ export function useImeiPendingLookup({
 
   return {
     clear() {
-      if (storageKey) clearPendingImeiLookup(localStorage, storageKey);
+      if (storageKey)
+        clearPendingImeiLookup(getPendingImeiStorage(), storageKey);
       setPending(null);
       setPaused(false);
     },
@@ -121,6 +127,7 @@ export function useImeiPendingLookup({
       setTerminal(null);
     },
     paused,
+    canResume: pending?.canResume ?? false,
     pending,
     start({
       lookupId,
@@ -142,17 +149,17 @@ export function useImeiPendingLookup({
         tier,
         device,
       };
-      if (storageKey) {
-        savePendingImeiLookup(localStorage, storageKey, {
-          createdAt: next.createdAt,
-          lookupId,
-          tier,
-          device,
-        });
-      }
+      const canResume = storageKey
+        ? savePendingImeiLookup(getPendingImeiStorage(), storageKey, {
+            createdAt: next.createdAt,
+            lookupId,
+            tier,
+            device,
+          })
+        : false;
       setTerminal(null);
       setPaused(false);
-      setPending(next);
+      setPending({ ...next, canResume });
     },
     terminal,
   };

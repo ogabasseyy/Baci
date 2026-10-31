@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pendingImeiStorageKey } from './imei-pending-storage';
 import { useImeiCheckRequest } from './use-imei-check-request';
 
@@ -31,12 +31,88 @@ const outcome = {
 };
 
 describe('useImeiCheckRequest', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   beforeEach(() => {
     localStorage.clear();
     mocks.check.mockReset();
     mocks.poll
       .mockReset()
       .mockResolvedValue({ kind: 'complete', lookupId, result: report });
+  });
+
+  it('finishes an accepted paid check in memory when saving recovery data throws', async () => {
+    let finishPoll:
+      | ((value: {
+          kind: 'complete';
+          lookupId: string;
+          result: typeof report;
+        }) => void)
+      | undefined;
+    mocks.poll.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishPoll = resolve;
+        })
+    );
+    mocks.check.mockResolvedValue({
+      ...outcome,
+      pending: { lookupId, pollAfterMs: 0 },
+      keepRequestIdentity: true,
+    });
+    const { result } = renderHook(() => useImeiCheckRequest('ogabassey'));
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    });
+    await act(async () => {
+      await expect(
+        result.current.runCheck('simLock', report.imei, 'smartphone')
+      ).resolves.toBeUndefined();
+    });
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.pendingLookup.pending).not.toBeNull();
+    expect(result.current.pendingLookup.canResume).toBe(false);
+    await act(async () => {
+      await result.current.runCheck('simLock', report.imei, 'smartphone');
+    });
+    expect(mocks.check).toHaveBeenCalledOnce();
+    await waitFor(() =>
+      expect(mocks.poll).toHaveBeenCalledWith(lookupId, 'ogabassey')
+    );
+    await act(async () => {
+      finishPoll?.({ kind: 'complete', lookupId, result: report });
+    });
+    await waitFor(() => expect(result.current.result).toEqual(report));
+    expect(mocks.check).toHaveBeenCalledOnce();
+    expect(mocks.poll).toHaveBeenCalledWith(lookupId, 'ogabassey');
+  });
+
+  it('releases the latch after an unexpected rejection and retries explicitly with the same identity', async () => {
+    mocks.check.mockResolvedValue({ ...outcome, result: report, lookupId });
+    const { result } = renderHook(() => useImeiCheckRequest('ogabassey'));
+    await act(async () => {
+      await result.current.runCheck('simLock', report.imei, 'smartphone');
+    });
+    mocks.check.mockRejectedValueOnce(new Error('unexpected'));
+    await act(async () => {
+      await expect(
+        result.current.runCheck('blacklist', report.imei, 'smartphone', true)
+      ).resolves.toBeUndefined();
+    });
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.error).toMatch(/network error/i);
+    expect(result.current.result).toEqual(report);
+    await act(async () => {
+      await result.current.runCheck(
+        'blacklist',
+        report.imei,
+        'smartphone',
+        true
+      );
+    });
+    expect(mocks.check).toHaveBeenCalledTimes(3);
+    expect(mocks.check.mock.calls[2][3]).toBe(mocks.check.mock.calls[1][3]);
   });
 
   it.each([

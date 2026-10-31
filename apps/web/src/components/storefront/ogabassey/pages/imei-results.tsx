@@ -27,6 +27,7 @@ interface OgabasseyImeiResultsProps {
   onCheckBlacklist?: () => void;
   isChecking?: boolean;
   pendingPaused?: boolean;
+  pendingCanResume?: boolean;
   checkError?: string | null;
   needsSignIn?: boolean;
   needsWalletFunding?: boolean;
@@ -40,6 +41,7 @@ export function OgabasseyImeiResults({
   onCheckBlacklist,
   isChecking = false,
   pendingPaused = false,
+  pendingCanResume = true,
   checkError,
   needsSignIn = false,
   needsWalletFunding = false,
@@ -183,7 +185,12 @@ export function OgabasseyImeiResults({
         </div>
       </div>
 
-      {isChecking ? <ImeiCheckerPending paused={pendingPaused} /> : null}
+      {isChecking ? (
+        <ImeiCheckerPending
+          paused={pendingPaused}
+          canResume={pendingCanResume}
+        />
+      ) : null}
       {checkError ? (
         <ImeiCheckerError
           error={checkError}

@@ -132,6 +132,7 @@ export const OgabasseyImeiChecker: React.FC<OgabasseyImeiCheckerProps> = ({
           onSelectTier={onSelectTier}
           onToggleServices={onToggleServices}
           pendingPaused={pendingLookup.paused}
+          pendingCanResume={pendingLookup.canResume}
           searchLoading={searchLoading}
           selectedDeviceSuggestion={selectedDeviceSuggestion}
           selectedTier={selectedTier}
@@ -156,6 +157,7 @@ export const OgabasseyImeiChecker: React.FC<OgabasseyImeiCheckerProps> = ({
         }
         isChecking={isLoading || pendingLookup.pending !== null}
         pendingPaused={pendingLookup.paused}
+        pendingCanResume={pendingLookup.canResume}
         checkError={error}
         needsSignIn={needsSignIn}
         needsWalletFunding={needsWalletFunding}

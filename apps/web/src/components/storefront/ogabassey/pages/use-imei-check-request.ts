@@ -92,70 +92,66 @@ export function useImeiCheckRequest(merchantSlug?: string) {
     setError(null);
     setNeedsWalletFunding(false);
 
-    const normalizedImei = imei.trim();
-    const existingIdentityMatches =
-      requestIdentity?.scope === requestScope &&
-      requestIdentity?.imei === normalizedImei &&
-      requestIdentity.tier === selectedTier;
-
-    let idempotencyKey: string;
     try {
-      idempotencyKey = existingIdentityMatches
+      const normalizedImei = imei.trim();
+      const existingIdentityMatches =
+        requestIdentity?.scope === requestScope &&
+        requestIdentity?.imei === normalizedImei &&
+        requestIdentity.tier === selectedTier;
+
+      const idempotencyKey = existingIdentityMatches
         ? requestIdentity.key
         : createImeiIdempotencyKey();
-    } catch (err) {
-      console.error('IMEI check failed:', err);
+
+      if (idempotencyKey !== requestIdentity?.key) {
+        requestIdentityRef.current = {
+          imei: normalizedImei,
+          tier: selectedTier,
+          key: idempotencyKey,
+          scope: requestScope,
+        };
+      }
+
+      const outcome = await performImeiCheck(
+        normalizedImei,
+        selectedTier,
+        currentTier.price,
+        idempotencyKey,
+        merchantSlug,
+        device
+      );
+
+      if (outcome.pending) {
+        pendingLookup.start({
+          lookupId: outcome.pending.lookupId,
+          pollAfterMs: outcome.pending.pollAfterMs,
+          tier: selectedTier,
+          device,
+        });
+      } else if (outcome.error !== null) {
+        setError(outcome.error);
+      } else {
+        setResult(outcome.result);
+        setResultLookupId(outcome.lookupId);
+        // `currentTier` here is the value closed over at submit time, not the
+        // hook's live value at response time — exactly the snapshot needed.
+        setResultTier(currentTier);
+      }
+      setNeedsSignIn(outcome.needsSignIn);
+      setNeedsWalletFunding(outcome.needsWalletFunding);
+      if (!outcome.keepRequestIdentity) {
+        requestIdentityRef.current = null;
+      }
+    } catch {
+      // An uncertain outcome keeps its identity for an explicit safe retry.
       setError('Network error. Please check your connection and try again.');
       setNeedsWalletFunding(false);
+      setNeedsSignIn(false);
+    } finally {
+      // The POST latch must release even when optional recovery work fails.
       submitting.current = false;
       setIsLoading(false);
-      return;
     }
-
-    if (idempotencyKey !== requestIdentity?.key) {
-      requestIdentityRef.current = {
-        imei: normalizedImei,
-        tier: selectedTier,
-        key: idempotencyKey,
-        scope: requestScope,
-      };
-    }
-
-    const outcome = await performImeiCheck(
-      normalizedImei,
-      selectedTier,
-      currentTier.price,
-      idempotencyKey,
-      merchantSlug,
-      device
-    );
-
-    if (!outcome.keepRequestIdentity) {
-      requestIdentityRef.current = null;
-    }
-
-    if (outcome.pending) {
-      pendingLookup.start({
-        lookupId: outcome.pending.lookupId,
-        pollAfterMs: outcome.pending.pollAfterMs,
-        tier: selectedTier,
-        device,
-      });
-    } else if (outcome.error !== null) {
-      setError(outcome.error);
-    } else {
-      setResult(outcome.result);
-      setResultLookupId(outcome.lookupId);
-      // `currentTier` here is the value closed over at submit time, not the
-      // hook's live value at response time — exactly the snapshot needed.
-      setResultTier(currentTier);
-    }
-    setNeedsSignIn(outcome.needsSignIn);
-    setNeedsWalletFunding(outcome.needsWalletFunding);
-    // This latch covers only the POST. Pending state owns the polling lock,
-    // including clearing it when the authenticated customer changes.
-    submitting.current = false;
-    setIsLoading(false);
   };
 
   return {

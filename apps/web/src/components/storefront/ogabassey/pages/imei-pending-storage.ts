@@ -15,6 +15,16 @@ interface StorageAdapter {
   setItem(key: string, value: string): unknown;
 }
 
+/** Persistence assists recovery; it must never prevent a paid lookup progressing. */
+export function getPendingImeiStorage(): StorageAdapter | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
 export interface PendingImeiLookup {
   createdAt: string;
   lookupId: string;
@@ -31,22 +41,42 @@ export function pendingImeiStorageKey(
 }
 
 export function savePendingImeiLookup(
-  storage: StorageAdapter,
+  storage: StorageAdapter | null,
   key: string,
   pending: PendingImeiLookup
 ) {
-  storage.setItem(key, JSON.stringify(pending));
+  if (!storage) return false;
+  try {
+    storage.setItem(key, JSON.stringify(pending));
+    return true;
+  } catch {
+    console.warn('Pending IMEI recovery could not be saved.');
+    return false;
+  }
 }
 
-export function clearPendingImeiLookup(storage: StorageAdapter, key: string) {
-  storage.removeItem(key);
+export function clearPendingImeiLookup(
+  storage: StorageAdapter | null,
+  key: string
+) {
+  try {
+    storage?.removeItem(key);
+  } catch {
+    // In-memory completion and reset still work if recovery data cannot clear.
+  }
 }
 
 export function loadPendingImeiLookup(
-  storage: StorageAdapter,
+  storage: StorageAdapter | null,
   key: string
 ): PendingImeiLookup | null {
-  const raw = storage.getItem(key);
+  if (!storage) return null;
+  let raw: string | null;
+  try {
+    raw = storage.getItem(key);
+  } catch {
+    return null;
+  }
   if (!raw) return null;
 
   try {
@@ -75,7 +105,7 @@ export function loadPendingImeiLookup(
       ...(supportedDevice ? { device: supportedDevice } : {}),
     };
   } catch {
-    storage.removeItem(key);
+    clearPendingImeiLookup(storage, key);
     return null;
   }
 }

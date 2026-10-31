@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
@@ -13,72 +13,31 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime', () => ({
 }));
 
 import type { PiggyvestClaimedCapture } from '@/schemas/piggyvest/webhook-capture';
-import { verifyStoredPiggyvestDelivery } from './verify-stored-piggyvest-delivery';
 import { describeDelivery } from './webhook-capture';
 import {
   type DrainDeps,
   drainPiggyvestWebhookCaptures,
   MAX_DRAIN_ATTEMPTS,
 } from './webhook-capture-drain';
-
-const NOW = new Date('2026-10-30T12:00:00.000Z');
-const HOUR = 3_600_000;
-const sign = (secret: string, body: string) =>
-  createHmac('sha512', secret).update(body).digest('hex');
-
-function row(
-  body: string,
-  signature: string,
-  overrides: Partial<PiggyvestClaimedCapture> = {}
-): PiggyvestClaimedCapture {
-  return {
-    capture_id: crypto.randomUUID(),
-    claim_token: crypto.randomUUID(),
-    raw_hex: Buffer.from(body).toString('hex'),
-    signature,
-    key_version: 'k-0123456789abcdef',
-    key_families: ['legacy'],
-    attempts: 1,
-    ...describeEvent(body),
-    ...overrides,
-  };
-}
-
-function describeEvent(body: string) {
-  const description = describeDelivery(new TextEncoder().encode(body));
-  return {
-    event_type: description.eventType,
-    provider_transaction_id: description.providerTransactionId,
-  };
-}
-
-const inflow = JSON.stringify({
-  eventId: 'evt-inflow-1',
-  eventType: 'bank-transfer.inflow.success',
-  eventData: { transaction_id: 'txn-77', amount: 1000 },
-});
+import {
+  drainDeps,
+  HOUR,
+  inflow,
+  NOW,
+  type ResolvedCall,
+  row,
+  sign,
+} from './webhook-capture-drain.test-support';
 
 let current: string;
 let env: NodeJS.ProcessEnv;
-let resolved: { id: string; state: string; error: string | null }[];
+let resolved: ResolvedCall[];
 let alerts: ReturnType<typeof vi.spyOn>;
 
-function deps(
+const deps = (
   claimed: PiggyvestClaimedCapture[][],
   process: DrainDeps['process']
-): DrainDeps {
-  const queue = [...claimed];
-  return {
-    claim: async () => queue.shift() ?? [],
-    resolve: async (id, _token, state, error) => {
-      resolved.push({ id, state, error });
-      return true;
-    },
-    verify: (input) =>
-      verifyStoredPiggyvestDelivery({ ...input, env, now: NOW }),
-    process,
-  };
-}
+) => drainDeps(() => ({ env, resolved }), claimed, process);
 
 beforeEach(() => {
   current = randomBytes(32).toString('hex');
@@ -168,156 +127,6 @@ describe('drainPiggyvestWebhookCaptures', () => {
     expect(summary.needsReview).toBe(1);
     expect(alerts).toHaveBeenCalledWith(
       expect.stringContaining('PIGGYVEST_WEBHOOK_REPLAY_UNVERIFIABLE')
-    );
-  });
-
-  it('defers the row with a backoff when keys are not configured', async () => {
-    env = { NODE_ENV: 'test' };
-    const stored = row(inflow, sign(current, inflow));
-    const process = vi.fn(async () => ({ status: 200 }));
-
-    const summary = await drainPiggyvestWebhookCaptures(
-      deps([[stored]], process)
-    );
-
-    expect(process).not.toHaveBeenCalled();
-    // 'deferred' (not 'pending') is what lets the database schedule a retry
-    // time, so a configuration-blocked old row stops being re-claimed ahead
-    // of every later capture on each drain run.
-    expect(resolved).toEqual([
-      { id: stored.capture_id, state: 'deferred', error: 'KEYS_UNCONFIGURED' },
-    ]);
-    expect(summary.retried).toBe(1);
-  });
-
-  it('defers an unreadable-archive row instead of judging it unverifiable', async () => {
-    const old = randomBytes(32).toString('hex');
-    env = {
-      NODE_ENV: 'test',
-      PIGGYVEST_SECRET_KEY: current,
-      PIGGYVEST_WEBHOOK_KEY_ARCHIVE: '{not json',
-    };
-    const stored = row(inflow, sign(old, inflow), {
-      key_version: 'pv-2026-07',
-    });
-    const process = vi.fn(async () => ({ status: 200 }));
-
-    const summary = await drainPiggyvestWebhookCaptures(
-      deps([[stored]], process)
-    );
-
-    expect(process).not.toHaveBeenCalled();
-    expect(resolved).toEqual([
-      { id: stored.capture_id, state: 'deferred', error: 'KEYS_UNCONFIGURED' },
-    ]);
-    expect(summary).toMatchObject({ retried: 1, needsReview: 0 });
-  });
-
-  it('defers, not escalates, a bank-only row whose archive is unreadable while its key matches another family', async () => {
-    // Recorded as bank-only; the same key is now also the legacy secret and
-    // the archive holding its bank assignment is malformed. Replay cannot
-    // tell "authority lost" from "assignment not loaded", so it must retry.
-    env = {
-      NODE_ENV: 'test',
-      PIGGYVEST_SECRET_KEY: current,
-      PIGGYVEST_WEBHOOK_KEY_ARCHIVE: '{not json',
-    };
-    const stored = row(inflow, sign(current, inflow), {
-      key_families: ['bank'],
-    });
-    const process = vi.fn(async () => ({ status: 200 }));
-
-    const summary = await drainPiggyvestWebhookCaptures(
-      deps([[stored]], process)
-    );
-
-    expect(process).not.toHaveBeenCalled();
-    expect(resolved).toEqual([
-      { id: stored.capture_id, state: 'deferred', error: 'KEYS_UNCONFIGURED' },
-    ]);
-    expect(summary).toMatchObject({ retried: 1, needsReview: 0 });
-  });
-
-  it('still escalates a bank-only row to review when the configuration is complete and bank authority is really gone', async () => {
-    env = {
-      NODE_ENV: 'test',
-      PIGGYVEST_SECRET_KEY: current,
-      PIGGYVEST_WEBHOOK_KEY_ARCHIVE: '[]',
-    };
-    const stored = row(inflow, sign(current, inflow), {
-      key_families: ['bank'],
-    });
-    const process = vi.fn(async () => ({ status: 200 }));
-
-    const summary = await drainPiggyvestWebhookCaptures(
-      deps([[stored]], process)
-    );
-
-    expect(process).not.toHaveBeenCalled();
-    expect(resolved).toEqual([
-      {
-        id: stored.capture_id,
-        state: 'needs_review',
-        error: 'REPLAY_AUTHORITY_NOT_RECORDED',
-      },
-    ]);
-    expect(summary.needsReview).toBe(1);
-  });
-
-  it('defers, never dead-letters, a row whose processing needs a key family that is not loaded yet', async () => {
-    // The replay verified under part of the key set; processing could not
-    // decide the family authority and asks for a retry once config is whole.
-    const stored = row(inflow, sign(current, inflow), {
-      attempts: MAX_DRAIN_ATTEMPTS + 5,
-    });
-    const process = vi.fn(async () => ({
-      status: 503,
-      keySetIncomplete: true,
-    }));
-
-    const summary = await drainPiggyvestWebhookCaptures(
-      deps([[stored]], process)
-    );
-
-    expect(process).toHaveBeenCalledTimes(1);
-    expect(resolved).toEqual([
-      { id: stored.capture_id, state: 'deferred', error: 'KEY_SET_INCOMPLETE' },
-    ]);
-    expect(summary).toMatchObject({ retried: 1, needsReview: 0 });
-  });
-
-  it('hands the replay the incomplete-key-set signal from verification', async () => {
-    env = {
-      NODE_ENV: 'test',
-      PIGGYVEST_SECRET_KEY: current,
-      PIGGYVEST_WEBHOOK_KEY_ARCHIVE: '{not json',
-    };
-    const stored = row(inflow, sign(current, inflow));
-    const process = vi.fn(async () => ({ status: 200 }));
-
-    await drainPiggyvestWebhookCaptures(deps([[stored]], process));
-
-    expect(process).toHaveBeenCalledWith(
-      expect.objectContaining({ incompleteKeySet: true })
-    );
-  });
-
-  it('never dead-letters a configuration-blocked row, whatever its attempt count', async () => {
-    env = { NODE_ENV: 'test' };
-    const stored = row(inflow, sign(current, inflow), {
-      attempts: MAX_DRAIN_ATTEMPTS + 5,
-    });
-
-    const summary = await drainPiggyvestWebhookCaptures(
-      deps([[stored]], async () => ({ status: 200 }))
-    );
-
-    expect(resolved).toEqual([
-      { id: stored.capture_id, state: 'deferred', error: 'KEYS_UNCONFIGURED' },
-    ]);
-    expect(summary).toMatchObject({ retried: 1, needsReview: 0 });
-    expect(alerts).not.toHaveBeenCalledWith(
-      expect.stringContaining('PIGGYVEST_WEBHOOK_NEEDS_REVIEW')
     );
   });
 

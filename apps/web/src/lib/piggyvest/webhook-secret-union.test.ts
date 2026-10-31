@@ -1,12 +1,6 @@
-import { createHash, createHmac } from 'node:crypto';
 import { beforeEach, expect, it, vi } from 'vitest';
+import { testKey } from './webhook-secret-union.test-support';
 
-// Deterministic, distinct signing keys derived from a label, so no signing
-// key is a hardcoded literal and every run uses the same inputs.
-const testKey = (label: string): string =>
-  createHash('sha256')
-    .update(`webhook-secret-union-test:${label}`)
-    .digest('hex');
 const RETAINED_SECRET = testKey('retained');
 const UNLOADED_RETAINED_SECRET = testKey('unloaded-retained');
 const INTEREST_SECRET = testKey('interest');
@@ -260,64 +254,4 @@ it('keeps healthy families when one secrets reader throws', () => {
     { secret: 'legacy-secret', family: 'legacy' },
     { secret: INTEREST_SECRET, family: 'interest' },
   ]);
-});
-
-const incompleteBody = new TextEncoder().encode('{"eventId":"evt-incomplete"}');
-const signWith = (secret: string) =>
-  createHmac('sha512', secret).update(incompleteBody).digest('hex');
-
-it('reports an incomplete key set on a verified delivery when a family failed to load', () => {
-  mocks.interest.mockReturnValue({
-    webhookSecret: INTEREST_SECRET,
-    retainedWebhookSecrets: [],
-  });
-  mocks.bank.mockImplementation(() => {
-    throw new Error('unreadable bank configuration');
-  });
-
-  expect(
-    verifyPiggyvestWebhookSecrets({
-      rawBody: incompleteBody,
-      signature: signWith(INTEREST_SECRET),
-      env: { NODE_ENV: 'test', PIGGYVEST_SECRET_KEY: 'legacy-secret' },
-    })
-  ).toMatchObject({
-    status: 'verified',
-    families: ['interest'],
-    incompleteKeySet: true,
-  });
-});
-
-it('reports an incomplete key set on a verified delivery when the archive is unreadable', () => {
-  mocks.interest.mockReturnValue({
-    webhookSecret: INTEREST_SECRET,
-    retainedWebhookSecrets: [],
-  });
-
-  expect(
-    verifyPiggyvestWebhookSecrets({
-      rawBody: incompleteBody,
-      signature: signWith(INTEREST_SECRET),
-      env: {
-        NODE_ENV: 'test',
-        PIGGYVEST_SECRET_KEY: 'legacy-secret',
-        PIGGYVEST_WEBHOOK_KEY_ARCHIVE: '{not json',
-      },
-    })
-  ).toMatchObject({ status: 'verified', incompleteKeySet: true });
-});
-
-it('does not report an incomplete key set when every family loaded', () => {
-  mocks.interest.mockReturnValue({
-    webhookSecret: INTEREST_SECRET,
-    retainedWebhookSecrets: [],
-  });
-
-  expect(
-    verifyPiggyvestWebhookSecrets({
-      rawBody: incompleteBody,
-      signature: signWith(INTEREST_SECRET),
-      env: { NODE_ENV: 'test', PIGGYVEST_SECRET_KEY: 'legacy-secret' },
-    })
-  ).toMatchObject({ status: 'verified', incompleteKeySet: false });
 });

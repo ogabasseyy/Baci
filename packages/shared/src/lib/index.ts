@@ -24,6 +24,8 @@ export * from './is-same-facet-choice';
 export * from './kuda-data-plan-bill-items';
 export * from './kuda-electricity-bill-items';
 export * from './location-state-aliases';
+export * from './merchant-contact-phone';
+export * from './merchant-sender-phone';
 export * from './negotiation-cart-snapshot';
 export * from './negotiation-contact';
 export * from './negotiation-email';

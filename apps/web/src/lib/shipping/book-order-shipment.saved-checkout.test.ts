@@ -177,9 +177,14 @@ describe('saved GIG checkout booking integration', () => {
     const client = await fixture();
     const merchant = await client.from('merchants').select().single();
     Object.assign(merchant.data, { phone: '+23415781' });
+    // Sender resolution refuses the incomplete store phone first, with the
+    // message that points the merchant to Store Settings.
     await expect(
       bookOrderShipment(client, 'merchant-1', 'order-1')
-    ).rejects.toMatchObject({ code: 'MERCHANT_SENDER_REQUIRED', status: 409 });
+    ).rejects.toMatchObject({
+      code: 'MERCHANT_SENDER_PHONE_INVALID',
+      status: 400,
+    });
     expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
     expect(shippingService.bookShipment).not.toHaveBeenCalled();
   });

@@ -1,25 +1,8 @@
-import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync } from 'node:fs';
-import { dirname, join, posix, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import type { ErrorObject } from 'ajv';
 import Ajv2020 from 'ajv/dist/2020';
 import addFormats from 'ajv-formats';
-
-export const UCP_FIXTURE_DIR = join(
-  dirname(fileURLToPath(import.meta.url)),
-  'ucp-2026-04-08'
-);
-
-/** Schema files the closure check starts from (paths inside UCP_FIXTURE_DIR). */
-export const UCP_ROOT_SCHEMA_FILES = [
-  'discovery/profile_schema.json',
-  'schemas/ucp.json',
-  'schemas/shopping/catalog_search.json',
-  'schemas/shopping/catalog_lookup.json',
-  'schemas/shopping/cart.json',
-  'schemas/shopping/order.json',
-] as const;
+import { listUcpSchemaFiles } from './list-ucp-schema-files';
+import { readUcpSchemaFile } from './read-ucp-schema-file';
 
 // The schemas' $id values are identifiers, not downloadable pages (the
 // unversioned URLs return 404), so only the origin appears as a literal.
@@ -48,54 +31,6 @@ const PROFILE_FILE = 'discovery/profile_schema.json';
 // while its own $refs ("../schemas/ucp.json") assume it sits one level higher.
 // Registering it under the matching base keeps every reference local.
 const PROFILE_BASE_URI = `${ID_ORIGIN}/discovery/profile.json`;
-
-export function listUcpSchemaFiles(): string[] {
-  const walk = (directory: string): string[] =>
-    readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) return walk(path);
-      return entry.name.endsWith('.json') ? [path] : [];
-    });
-  return ['discovery', 'schemas']
-    .flatMap((folder) => walk(join(UCP_FIXTURE_DIR, folder)))
-    .map((path) => relative(UCP_FIXTURE_DIR, path).split('\\').join('/'))
-    .sort();
-}
-
-export function readUcpSchemaFile(file: string): unknown {
-  return JSON.parse(readFileSync(join(UCP_FIXTURE_DIR, file), 'utf8'));
-}
-
-/** Hash of the parsed JSON, so reformatting a vendored file cannot change it. */
-export function canonicalJsonSha256(bytes: Buffer | string): string {
-  return createHash('sha256')
-    .update(JSON.stringify(JSON.parse(bytes.toString())))
-    .digest('hex');
-}
-
-/** Files a schema references through relative $ref values (fragments dropped). */
-export function relativeSchemaRefs(file: string, schema: unknown): string[] {
-  const refs = new Set<string>();
-  const visit = (node: unknown) => {
-    if (Array.isArray(node)) {
-      node.forEach(visit);
-      return;
-    }
-    if (!node || typeof node !== 'object') return;
-    for (const [key, value] of Object.entries(node)) {
-      if (key === '$ref' && typeof value === 'string') {
-        const [target] = value.split('#');
-        if (target && !/^[a-z][a-z0-9+.-]*:/i.test(target)) {
-          refs.add(posix.normalize(posix.join(posix.dirname(file), target)));
-        }
-      } else {
-        visit(value);
-      }
-    }
-  };
-  visit(schema);
-  return [...refs].sort();
-}
 
 function createAjv(): Ajv2020 {
   // UCP schemas use `required` without `properties` in allOf branches and

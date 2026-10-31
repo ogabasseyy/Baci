@@ -1,3 +1,5 @@
+import { parseSurfaceStatus } from './agent-surface-status';
+
 const AGENT_SURFACE_EVIDENCE_HEADING = '## Agent surface evidence';
 
 export const AGENT_SURFACE_EVIDENCE_COLUMNS = [
@@ -37,15 +39,6 @@ type Column = (typeof AGENT_SURFACE_EVIDENCE_COLUMNS)[number];
 
 type SurfaceEvidenceRow = Readonly<Record<Column, string>>;
 
-type SurfaceStatus =
-  | { readonly kind: 'unknown' }
-  | { readonly kind: 'not_applicable' }
-  | {
-      readonly kind: 'pass' | 'fail';
-      readonly date: string;
-      readonly evidence: string;
-    };
-
 type SurfaceEvidenceErrorCode =
   | 'section_missing'
   | 'table_missing'
@@ -71,36 +64,7 @@ export type SurfaceEvidenceResult =
 
 const SEPARATOR_ROW = /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?$/;
 const EMPTY_CELL = /^(?:[-–—]*|tbd|todo|n\/a)$/i;
-const STATUS_WITH_EVIDENCE = /^(pass|fail) (\d{4}-\d{2}-\d{2}) (.+)$/;
-const MARKDOWN_LINK = /^\[[^\]\n]+\]\([^)\s]+\)$/;
-const COMMIT = /^[0-9a-f]{7,40}$/;
 const SOURCE_REVISION = /^(?:[0-9a-f]{40}|unknown)$/;
-
-function isCalendarDate(value: string): boolean {
-  const [year, month, day] = value.split('-').map(Number);
-  const parsed = new Date(Date.UTC(year, month - 1, day));
-  return (
-    parsed.getUTCFullYear() === year &&
-    parsed.getUTCMonth() === month - 1 &&
-    parsed.getUTCDate() === day
-  );
-}
-
-/**
- * Parses one status cell. Only an explicit `unknown`, `not applicable`, or a
- * dated `pass`/`fail` with a link or commit as evidence is accepted, so an
- * unproven surface can never read as success.
- */
-export function parseSurfaceStatus(cell: string): SurfaceStatus | null {
-  if (cell === 'unknown') return { kind: 'unknown' };
-  if (cell === 'not applicable') return { kind: 'not_applicable' };
-  const match = STATUS_WITH_EVIDENCE.exec(cell);
-  if (!match) return null;
-  const [, kind, date, evidence] = match;
-  if (!isCalendarDate(date)) return null;
-  if (!MARKDOWN_LINK.test(evidence) && !COMMIT.test(evidence)) return null;
-  return { kind: kind as 'pass' | 'fail', date, evidence };
-}
 
 function splitRow(line: string): string[] {
   const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
@@ -242,10 +206,4 @@ export function validateAgentSurfaceEvidence(
     }
   }
   return errors.length > 0 ? { ok: false, errors } : { ok: true, rows };
-}
-
-export function formatSurfaceEvidenceErrors(
-  errors: readonly SurfaceEvidenceError[]
-): string[] {
-  return errors.map((error) => `${error.code}: ${error.message}`);
 }

@@ -3,8 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENT_SURFACE_EVIDENCE_COLUMNS,
   AGENT_SURFACES,
-  formatSurfaceEvidenceErrors,
-  parseSurfaceStatus,
   type SurfaceEvidenceError,
   type SurfaceEvidenceResult,
   validateAgentSurfaceEvidence,
@@ -244,40 +242,5 @@ describe('validateAgentSurfaceEvidence', () => {
     expect(
       codes(validateAgentSurfaceEvidence(document(renderTable(rows))))
     ).toEqual(['invalid_status', 'invalid_source_revision', 'empty_cell']);
-  });
-});
-
-describe('parseSurfaceStatus', () => {
-  it.each([
-    ['unknown', { kind: 'unknown' }],
-    ['not applicable', { kind: 'not_applicable' }],
-    [
-      'pass 2026-10-31 [test](../x.test.ts)',
-      { kind: 'pass', date: '2026-10-31', evidence: '[test](../x.test.ts)' },
-    ],
-    [
-      'fail 2026-10-30 abc1234',
-      { kind: 'fail', date: '2026-10-30', evidence: 'abc1234' },
-    ],
-    [
-      `pass 2024-02-29 ${COMMIT}`,
-      { kind: 'pass', date: '2024-02-29', evidence: COMMIT },
-    ],
-  ])('parses %j', (cell, expected) => {
-    expect(parseSurfaceStatus(cell)).toEqual(expected);
-  });
-
-  it('returns null for text that is not a status', () => {
-    expect(parseSurfaceStatus('verified')).toBeNull();
-  });
-});
-
-describe('formatSurfaceEvidenceErrors', () => {
-  it('prefixes each message with its code', () => {
-    expect(
-      formatSurfaceEvidenceErrors([
-        { code: 'surface_missing', message: 'Missing a row.' },
-      ])
-    ).toEqual(['surface_missing: Missing a row.']);
   });
 });

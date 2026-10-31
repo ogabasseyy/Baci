@@ -29,7 +29,7 @@ describe('buildStorefrontMerchantMetadata', () => {
 
   it('falls back to the business name when no site title is authored', () => {
     const metadata = buildStorefrontMerchantMetadata(
-      { ...merchant, site_title: null } as Merchant,
+      { ...merchant, site_title: undefined } as unknown as Merchant,
       'ogabassey'
     );
 

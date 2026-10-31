@@ -34,6 +34,16 @@ const shipmentParameters = vi.hoisted(() => ({
 const giglShippingState = vi.hoisted(() => ({
   calls: [] as unknown[],
   prefetchCalls: [] as unknown[],
+  result: { quote: null, wallet: null } as {
+    quote: null;
+    wallet: null | { canBook: boolean };
+  },
+}));
+
+// Staff grants; the owner (merchant.user_id === user.id) always passes, as in
+// useOrderFulfillAccess.
+const staffAccessState = vi.hoisted(() => ({
+  current: { canFulfill: false, canEdit: false },
 }));
 
 const shipmentUiState = vi.hoisted(() => ({
@@ -58,6 +68,18 @@ vi.mock('@/hooks/useMerchant', () => ({
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ user: authState.user }),
+}));
+
+vi.mock('@/hooks/useOrderFulfillAccess', () => ({
+  useOrderFulfillAccess: () => {
+    const merchant = merchantState.current as { user_id?: string } | null;
+    const isOwner = Boolean(
+      authState.user && merchant?.user_id === authState.user.id
+    );
+    return isOwner
+      ? { canFulfill: true, canEdit: true }
+      : staffAccessState.current;
+  },
 }));
 
 vi.mock('@tanstack/react-query', () => ({
@@ -103,7 +125,7 @@ vi.mock('@/hooks/orders/useOrderGiglPreviewPrefetch', () => ({
 vi.mock('@/hooks/orders/useOrderGiglShipping', () => ({
   useOrderGiglShipping: (params: unknown) => {
     giglShippingState.calls.push(params);
-    return { quote: null, wallet: null };
+    return giglShippingState.result;
   },
 }));
 
@@ -252,6 +274,8 @@ describe('useOrderDetailsController', () => {
     authState.user = null;
     giglShippingState.calls = [];
     giglShippingState.prefetchCalls = [];
+    giglShippingState.result = { quote: null, wallet: null };
+    staffAccessState.current = { canFulfill: false, canEdit: false };
     shipmentUiState.current = {
       shipmentFlowStep: 'details',
       showShipmentFlow: false,
@@ -456,6 +480,62 @@ describe('useOrderDetailsController', () => {
     expect(result.current.giglShipping).toBeUndefined();
   });
 
+  it('shows the GIG price to staff with only orders.fulfill but never offers wallet booking', () => {
+    merchantState.current = {
+      id: 'merchant-1',
+      user_id: 'owner-1',
+      country: 'NG',
+      payout_currency: 'NGN',
+    };
+    authState.user = { id: 'staff-1' };
+    staffAccessState.current = { canFulfill: true, canEdit: false };
+    giglShippingState.result = { quote: null, wallet: { canBook: true } };
+    shipmentUiState.current = {
+      shipmentFlowStep: 'method',
+      showShipmentFlow: true,
+    };
+
+    const { result } = renderHook(() => useOrderDetailsController());
+
+    expect(giglShippingState.calls.at(-1)).toMatchObject({
+      enabled: true,
+      preview: true,
+    });
+    expect(result.current.giglShipping).toBeDefined();
+    expect(result.current.canBookGigl).toBe(false);
+    // A funded preview must not open Ship Order on "Book with GIG".
+    expect(shipmentParameters.current).toMatchObject({
+      providerBookingAvailable: false,
+    });
+  });
+
+  it('lets staff with orders.fulfill and orders.edit book GIG from the wallet', () => {
+    merchantState.current = {
+      id: 'merchant-1',
+      user_id: 'owner-1',
+      country: 'NG',
+      payout_currency: 'NGN',
+    };
+    authState.user = { id: 'staff-1' };
+    staffAccessState.current = { canFulfill: true, canEdit: true };
+    giglShippingState.result = { quote: null, wallet: { canBook: true } };
+    shipmentUiState.current = {
+      shipmentFlowStep: 'method',
+      showShipmentFlow: true,
+    };
+
+    const { result } = renderHook(() => useOrderDetailsController());
+
+    expect(giglShippingState.calls.at(-1)).toMatchObject({
+      enabled: true,
+      preview: false,
+    });
+    expect(result.current.canBookGigl).toBe(true);
+    expect(shipmentParameters.current).toMatchObject({
+      providerBookingAvailable: true,
+    });
+  });
+
   it('keeps saved merchant-wallet GIGL orders bookable while funding remains available', () => {
     merchantState.current = {
       id: 'merchant-1',
@@ -541,6 +621,7 @@ it('routes eligible checkout quote rejection through the controller without wall
     )
   ).resolves.toBe('review_checkout_quote');
   authState.user = { id: 'staff' };
+  staffAccessState.current = { canFulfill: true, canEdit: false };
   renderHook(() => useOrderDetailsController());
   await expect(
     shipmentParameters.current?.onProviderBookingError(
@@ -550,4 +631,15 @@ it('routes eligible checkout quote rejection through the controller without wall
       )
     )
   ).resolves.toBeUndefined();
+  staffAccessState.current = { canFulfill: true, canEdit: true };
+  renderHook(() => useOrderDetailsController());
+  await expect(
+    shipmentParameters.current?.onProviderBookingError(
+      new OrderStatusUpdateError(
+        'Review quote',
+        'SHIPPING_QUOTE_RECONFIRM_REQUIRED'
+      )
+    )
+  ).resolves.toBe('review_checkout_quote');
+  staffAccessState.current = { canFulfill: false, canEdit: false };
 });

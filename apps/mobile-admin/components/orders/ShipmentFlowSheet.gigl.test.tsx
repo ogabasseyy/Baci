@@ -132,6 +132,7 @@ function gigl(canBook: boolean, error: string | null = null) {
 }
 
 const base = {
+  canBookGigl: true,
   canUseProvider: false,
   fulfillmentDetails: { imei: '', items: [], serialNumber: '' },
   fulfillmentItemIndex: 0,
@@ -294,6 +295,29 @@ describe('ShipmentFlowSheet manual-order GIG flow', () => {
       />
     );
     expect(screen.getByText('Quote unavailable')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Self Fulfill'));
+    expect(base.onModeChange).toHaveBeenCalledWith('self_fulfillment');
+  });
+
+  it('shows staff without GIG booking rights the price with a note and keeps Book off', () => {
+    render(
+      <ShipmentFlowSheet
+        {...base}
+        canBookGigl={false}
+        giglShipping={gigl(true)}
+      />
+    );
+
+    expect(screen.getByText('₦11,000')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Ask the store owner or an admin to book GIG for this order.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Ship with GIG')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Book with GIG Logistics' })
+    ).toBeDisabled();
     fireEvent.click(screen.getByText('Self Fulfill'));
     expect(base.onModeChange).toHaveBeenCalledWith('self_fulfillment');
   });

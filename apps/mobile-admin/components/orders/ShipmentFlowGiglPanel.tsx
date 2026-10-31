@@ -29,6 +29,8 @@ interface Props {
   onModeChange: () => void;
   onRetryQuote: () => void;
   onTransferred: () => void;
+  /** Merchant-facing provider name, e.g. "GIG" — shown as "Ship with …". */
+  providerName: string;
   quote: OrderGiglQuote | null;
   selected: boolean;
   state: OrderGiglShippingState;
@@ -83,6 +85,7 @@ export function ShipmentFlowGiglPanel({
   onModeChange,
   onRetryQuote,
   onTransferred,
+  providerName,
   quote,
   selected,
   state,
@@ -94,7 +97,7 @@ export function ShipmentFlowGiglPanel({
     ? `${quote.displayName} · ${quote.estimatedDays} day${quote.estimatedDays === 1 ? '' : 's'}`
     : loading
       ? 'Getting a fresh delivery price…'
-      : 'Get a fresh GIG delivery price for this order.';
+      : `Get a fresh ${providerName} delivery price for this order.`;
 
   return (
     <View>
@@ -105,7 +108,7 @@ export function ShipmentFlowGiglPanel({
         icon="paper-plane-outline"
         onPress={onModeChange}
         selected={selected}
-        title="Ship with GIG"
+        title={`Ship with ${providerName}`}
       />
 
       {quote ? (

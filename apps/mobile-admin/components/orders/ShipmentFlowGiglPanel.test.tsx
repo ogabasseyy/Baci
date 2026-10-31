@@ -34,6 +34,7 @@ const base = {
   error: null,
   fundingAccount: null,
   missingFields: [],
+  providerName: 'GIG',
   quote: {
     id: 'quote-1',
     provider: 'GIGL' as const,
@@ -53,6 +54,28 @@ const base = {
 };
 
 describe('ShipmentFlowGiglPanel', () => {
+  describe('bugfix: shipping provider name was hardcoded to GIG', () => {
+    it('names whichever provider it is given in the option and price prompt', () => {
+      render(
+        <ShipmentFlowGiglPanel
+          {...base}
+          providerName="Topship"
+          quote={null}
+          state="idle"
+          wallet={null}
+        />
+      );
+
+      expect(
+        screen.getByRole('radio', { name: /Ship with Topship/ })
+      ).toBeTruthy();
+      expect(
+        screen.getByText('Get a fresh Topship delivery price for this order.')
+      ).toBeTruthy();
+      expect(screen.queryByText(/GIG/)).toBeNull();
+    });
+  });
+
   it('shows one bundled GIG price and exact wallet shortfall', () => {
     render(<ShipmentFlowGiglPanel {...base} />);
     expect(screen.getByText('Ship with GIG')).toBeTruthy();

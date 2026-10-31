@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-31T12:31:02+00:00",
-  "source_revision": "b7dc11a0c3377744e8d6fc150a27ef373d405eac",
-  "evidence_digest": "a794a18a4ff155117f908bd0e3d554dc0e7fc6ddb1bb46712b7b72be7ea462a0",
-  "claims_digest": "458dd77cd637656620fb16ad0f8db25151687fe25c2a7256a09590e73e1a9914",
-  "review_scope": "Source evidence only. Re-reviewed agent-protocols after its capability claims were made truthful: every UCP shopping capability declares its schema, the catalog specs point at the search and lookup pages, cart is declared and served only for shared-cart merchants, Google Pay is no longer advertised and the OpenAI legacy feed opts no product into native checkout. The claim and status are unchanged; the limitations now record the create-only cart, the shared-cart condition, the withheld Google Pay and the feed. The support-chat health probe, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
+  "reviewed_at": "2026-10-31T13:27:22+00:00",
+  "source_revision": "5c3c4744a4a455f73b0be757c790cd6d4e0a0af4",
+  "evidence_digest": "31fed9f6d1aa324d2682381bb0ca26de455bafbcea1ae9ecd6907a4f113a5bf2",
+  "claims_digest": "9d5cf7056035020c0213ecd3e9312701d72e152ec2302a70df15803b31076f47",
+  "review_scope": "Source evidence only. Re-reviewed agent-protocols after its capability claims were made truthful: every UCP shopping capability declares its schema, the catalog specs point at the search and lookup pages, cart is declared and served only for shared-cart merchants, Google Pay is no longer advertised and the OpenAI legacy feed opts no product into native checkout. The claim and status are unchanged; the limitations now record the create-only cart, the shared-cart condition, the withheld Google Pay and the feed. Re-stamped after the 31 October base sync. The support-chat health probe, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

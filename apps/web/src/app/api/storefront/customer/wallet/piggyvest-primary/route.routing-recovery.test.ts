@@ -81,7 +81,23 @@ beforeEach(() => {
 });
 
 describe('primary wallet GET: routing-pending recovery', () => {
-  it('finishes recovery before reading the snapshot', async () => {
+  it('never runs recovery for a wallet that is already ready', async () => {
+    mocks.snapshot.mockResolvedValue({
+      status: 'ready',
+      balanceKobo: 0,
+      account: {
+        accountNumber: '0123456789',
+        accountName: 'Test Customer',
+        bankName: 'Provider Bank',
+        provider: 'piggyvest',
+      },
+    });
+    expect((await GET(new NextRequest(url))).status).toBe(200);
+    expect(mocks.recover).not.toHaveBeenCalled();
+    expect(mocks.snapshot).toHaveBeenCalledOnce();
+  });
+
+  it('re-reads the snapshot only after recovery has finished promoting', async () => {
     let finish: (value: string) => void = () => {};
     mocks.recover.mockImplementation(
       () =>
@@ -92,15 +108,21 @@ describe('primary wallet GET: routing-pending recovery', () => {
     const pending = GET(new NextRequest(url));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(mocks.recover).toHaveBeenCalledOnce();
-    expect(mocks.snapshot).not.toHaveBeenCalled();
+    expect(mocks.snapshot).toHaveBeenCalledOnce();
     finish('promoted');
     expect((await pending).status).toBe(200);
+    expect(mocks.snapshot).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not re-read the snapshot when recovery leaves the wallet pending', async () => {
+    mocks.recover.mockResolvedValue('pending');
+    expect((await GET(new NextRequest(url))).status).toBe(200);
     expect(mocks.snapshot).toHaveBeenCalledOnce();
   });
 
   it('re-reads a routing-pending wallet read-only and scoped, with no customer creation', async () => {
     expect((await GET(new NextRequest(url))).status).toBe(200);
-    expect(mocks.order).toEqual(['recover', 'snapshot']);
+    expect(mocks.order).toEqual(['snapshot', 'recover', 'snapshot']);
     const command = mocks.recover.mock.calls[0][0];
     expect(command).toEqual(
       expect.objectContaining({
@@ -126,7 +148,6 @@ describe('primary wallet GET: routing-pending recovery', () => {
     mocks.onboardingRuntime.mockReturnValue(null);
     expect((await GET(new NextRequest(url))).status).toBe(200);
     expect(mocks.recover).toHaveBeenCalledOnce();
-    expect(mocks.snapshot).toHaveBeenCalledOnce();
   });
 
   it('still answers from the snapshot when recovery is unavailable', async () => {

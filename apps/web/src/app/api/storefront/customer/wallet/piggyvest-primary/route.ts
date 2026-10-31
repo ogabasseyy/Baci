@@ -79,27 +79,31 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       token: runtime.providerToken,
       baseUrl: getPrimaryWalletProviderOrigin(runtime.onboarding.environment),
     };
+    const readSnapshot = () =>
+      readPrimaryWalletSnapshot({
+        businessId: runtime.onboarding.businessId,
+        loadMapping: () => readPrimaryWalletMapping(scope, execute),
+        retrieveWallet: (walletId) =>
+          retrievePiggyvestWallet(providerConfig, walletId),
+        retrieveAccounts: (walletId) =>
+          retrievePiggyvestFundingAccounts(providerConfig, walletId),
+        verifyMapping: (proof) =>
+          verifyPrimaryWalletMapping({ scope, proof, execute }),
+      });
+    let snapshot = await readSnapshot();
     // A wallet created while its interest routing was not readable is kept
-    // unusable; each refresh re-reads it (read-only, never re-creating, and
-    // against the payout wallet stored at creation) so setup can finish
-    // without a second BVN submission. Best effort: the snapshot below reads
-    // whatever state the database now holds.
-    await recoverPrimaryWalletRouting({
-      scope,
-      execute,
-      retrieveWallet: (walletId) =>
-        retrievePiggyvestWallet(providerConfig, walletId),
-    }).catch(() => 'unavailable');
-    const snapshot = await readPrimaryWalletSnapshot({
-      businessId: runtime.onboarding.businessId,
-      loadMapping: () => readPrimaryWalletMapping(scope, execute),
-      retrieveWallet: (walletId) =>
-        retrievePiggyvestWallet(providerConfig, walletId),
-      retrieveAccounts: (walletId) =>
-        retrievePiggyvestFundingAccounts(providerConfig, walletId),
-      verifyMapping: (proof) =>
-        verifyPrimaryWalletMapping({ scope, proof, execute }),
-    });
+    // unusable; a pending refresh re-reads it (read-only, never re-creating,
+    // and against the payout wallet stored at creation) so setup can finish
+    // without a second BVN submission. Ready wallets never pay for this.
+    if (snapshot.status === 'pending') {
+      const recovery = await recoverPrimaryWalletRouting({
+        scope,
+        execute,
+        retrieveWallet: (walletId) =>
+          retrievePiggyvestWallet(providerConfig, walletId),
+      }).catch(() => 'unavailable' as const);
+      if (recovery === 'promoted') snapshot = await readSnapshot();
+    }
     if (snapshot.status === 'unavailable') {
       return NextResponse.json(
         {

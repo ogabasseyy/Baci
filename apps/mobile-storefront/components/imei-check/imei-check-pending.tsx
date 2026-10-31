@@ -5,9 +5,11 @@ import type { ImeiCheckerColors } from './imei-check.types';
 export function ImeiCheckPending({
   colors,
   paused,
+  canResume = true,
 }: {
   colors: ImeiCheckerColors;
   paused: boolean;
+  canResume?: boolean;
 }) {
   return (
     <View
@@ -26,9 +28,11 @@ export function ImeiCheckPending({
           {paused ? 'Your check is still processing' : "We're checking"}
         </Text>
         <Text style={[styles.message, { color: colors.textSecondary }]}>
-          {paused
-            ? "You can leave this screen and check back later. We'll keep processing it safely."
-            : 'This is usually under a minute. You can leave and return without paying again.'}
+          {!canResume
+            ? 'Keep this screen open while we check. Progress could not be saved on this device.'
+            : paused
+              ? "You can leave this screen and check back later. We'll keep processing it safely."
+              : 'This is usually under a minute. You can leave and return without paying again.'}
         </Text>
       </View>
     </View>

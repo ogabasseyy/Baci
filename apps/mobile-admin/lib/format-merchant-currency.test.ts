@@ -90,4 +90,18 @@ describe('bugfix: prices rendered with a single trailing decimal digit', () => {
       '₦10,552,284.41'
     );
   });
+
+  it.each([
+    ['JPY', 'ja-JP'],
+    ['XOF', 'fr-SN'],
+    ['XAF', 'fr-CM'],
+  ])('never shows decimals for the zero-decimal currency %s', (currency, locale) => {
+    const noDecimals = { maximumFractionDigits: 0, minimumFractionDigits: 0 };
+    expect(formatMerchantPrice(1500.5, { payout_currency: currency })).toBe(
+      formatCurrency(1500.5, noDecimals, currency, locale)
+    );
+    expect(formatMerchantPrice(1500, { payout_currency: currency })).toBe(
+      formatCurrency(1500, noDecimals, currency, locale)
+    );
+  });
 });

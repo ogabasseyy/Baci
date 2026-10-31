@@ -26,6 +26,7 @@ type PendingTerminal = (
       lookupId: string;
       result: ImeiResult;
       tier: ImeiServiceTierKey;
+      recovery?: PendingImeiLookup['recovery'];
     }
   | { error: string; kind: 'error'; tier: ImeiServiceTierKey }
 ) & { scopeKey: string | null };
@@ -132,6 +133,7 @@ export function useImeiPendingLookup({
                 result: outcome.result,
                 tier: pending.tier,
                 device: pending.device,
+                recovery: pending.recovery,
               }
             : { error: outcome.error, kind: 'error', tier: pending.tier }),
         });
@@ -164,11 +166,13 @@ export function useImeiPendingLookup({
       pollAfterMs,
       tier,
       device,
+      recovery,
     }: {
       lookupId: string;
       pollAfterMs: number;
       tier: ImeiServiceTierKey;
       device?: ImeiDeviceCategory;
+      recovery?: PendingImeiLookup['recovery'];
     }) {
       pendingMutation.current += 1;
       const next = {
@@ -177,6 +181,7 @@ export function useImeiPendingLookup({
         pollAfterMs,
         tier,
         device,
+        recovery,
         scopeKey,
         canResume: false,
       };

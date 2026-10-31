@@ -29,6 +29,7 @@ import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
 import { imeiCheckSchema } from '@/schemas/imei-check';
 import { createImeiCapabilitiesHandler } from './capabilities-handler';
+import { claimImeiAttempt } from './claim-imei-attempt';
 import { executeImeiLookup } from './execute-imei-lookup';
 import { prepareImeiProvider } from './prepare-imei-provider';
 import {
@@ -113,6 +114,18 @@ export async function POST(request: NextRequest) {
           error: 'Invalid request body',
         }),
         400
+      );
+    }
+    if (
+      bodyParse.data.expectedUserId &&
+      bodyParse.data.expectedUserId !== auth.user.id
+    ) {
+      return json(
+        errorBody({
+          code: 'ACCOUNT_CHANGED',
+          error: 'Your account changed. Please try again.',
+        }),
+        409
       );
     }
     const merchantResolution = await resolveStorefrontMerchantFromRequest({
@@ -248,6 +261,17 @@ export async function POST(request: NextRequest) {
       return mapExistingLookup(existingLookup, replayContext);
     }
 
+    const claim = await claimImeiAttempt({
+      access: supabaseAdmin,
+      context: replayContext,
+      requestedKey: idempotencyKey,
+      previousLookupId: bodyParse.data.previousLookupId,
+      supportsRepeat: bodyParse.data.clientCapabilities.includes(
+        'imei-attempt-coordination-v1'
+      ),
+    });
+    if (claim.response) return claim.response;
+    const canonicalKey = claim.canonicalKey;
     const prepared = await prepareImeiProvider({
       access: supabaseAdmin,
       configuration: {
@@ -267,7 +291,7 @@ export async function POST(request: NextRequest) {
       ...prepared,
       customer,
       deviceCategory,
-      idempotencyKey,
+      idempotencyKey: canonicalKey,
       imeiHash,
       merchantId,
       normalizedImei,

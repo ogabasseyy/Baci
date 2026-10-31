@@ -1,13 +1,23 @@
-import { NextRequest } from 'next/server';
-import { POST as postShippingQuotes } from '@/app/api/shipping/quotes/route';
+import { type NextRequest, NextResponse } from 'next/server';
+import { postAdminOrderGiglQuote } from '@/app/api/shipping/quotes/admin-order-gigl-quote';
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, context: Params) {
   const { id } = await context.params;
-  const headers = new Headers(request.headers);
-  headers.set('x-baci-admin-order-mode', '1');
-  headers.set('x-baci-admin-order-id', id);
-  // Clone as a real NextRequest so cookie/CSRF paths keep cookies + nextUrl.
-  return await postShippingQuotes(new NextRequest(request, { headers }));
+  try {
+    // Pass the original request through: re-wrapping it with
+    // `new NextRequest(request, …)` crashes in production with
+    // "Cannot read private member #state". The path id is the order.
+    return await postAdminOrderGiglQuote(request, { admin_order_id: id });
+  } catch (error) {
+    // Log only the error type: messages and bodies can carry provider data.
+    console.error('Error getting admin order GIGL quote', {
+      errorName: error instanceof Error ? error.name : typeof error,
+    });
+    return NextResponse.json(
+      { error: 'Failed to get GIG quote' },
+      { status: 500 }
+    );
+  }
 }

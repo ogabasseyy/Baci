@@ -1,9 +1,9 @@
 # Baci capabilities and agent access
 
-Reviewed 30 October 2026 against source revision
-`a53802c1d138abcd175e5ed29196f9070697686e`. The support-chat health changes
-were re-reviewed and tested; cited source evidence remains unchanged across the
-latest main sync. This is a navigation map, not authorization or proof of current
+Reviewed 31 October 2026 against source revision
+`d05d0e0f6ef7af33feeba3e81e514702b8eb5488`. Agentic routes now resolve the merchant through the
+scoped context RPC instead of a service-role client; the cited claims are
+unchanged. This is a navigation map, not authorization or proof of current
 deployment. Check the current implementation, live tool discovery and merchant
 entitlement before calling or claiming a tool.
 

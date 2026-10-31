@@ -3,7 +3,8 @@ import { piggyvestWebhookKeyFamilySchema } from './webhook-key-archive';
 
 /**
  * Wire shapes of the durable webhook capture functions
- * (supabase/migrations/20261030231000_piggyvest_webhook_durable_capture.sql).
+ * (supabase/migrations/20261030231100_piggyvest_webhook_durable_capture_functions.sql;
+ * the table is in 20261030231000_piggyvest_webhook_durable_capture.sql).
  * The database is the authority; these schemas only refuse to act on a
  * response that does not look like it.
  */

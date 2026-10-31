@@ -11,6 +11,11 @@ import { persistAdminGiglQuote } from '@/lib/shipping/persist-admin-gigl-quote';
 import { resolveBookingMerchantSender } from '@/lib/shipping/resolve-booking-merchant-sender';
 import type { ShippingQuote } from '@/lib/shipping/types';
 import {
+  CUSTOMER_CHECKOUT_REBIND_FORBIDDEN,
+  customerPaidGiglShippingResponse,
+  getAdminOrderGiglCustomerPaidConflict,
+} from './admin-order-gigl-customer-paid-conflict';
+import {
   calculateAdminWalletFunding,
   selectEligibleAdminGiglQuote,
   toAdminPublicQuote,
@@ -90,6 +95,13 @@ export async function postAdminOrderGiglQuote(
 
   const orderConflict = getAdminOrderGiglQuoteOrderConflict(order);
   if (orderConflict) return orderConflict;
+  const customerPaidConflict = await getAdminOrderGiglCustomerPaidConflict(
+    auth.supabase,
+    access.merchantId,
+    adminOrderId,
+    order
+  );
+  if (customerPaidConflict) return customerPaidConflict;
 
   const boundQuoteId = shouldReuseBoundAdminWalletGiglQuote(order, isPreview);
   if (boundQuoteId) {
@@ -219,6 +231,9 @@ export async function postAdminOrderGiglQuote(
     } as never
   );
   if (bindError) {
+    // Settlement can land between the check above and this bind.
+    if (bindError.message?.includes(CUSTOMER_CHECKOUT_REBIND_FORBIDDEN))
+      return customerPaidGiglShippingResponse();
     const already = bindError.message?.includes('already');
     const staleInputs = bindError.message?.includes('stale_order_quote_inputs');
     return NextResponse.json(

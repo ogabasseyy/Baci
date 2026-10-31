@@ -11,6 +11,9 @@ vi.mock('@/env', async (original) => {
 vi.mock('@/lib/shipping', () => ({
   shippingService: { getProviderQuotes: vi.fn(), bookShipment: vi.fn() },
 }));
+vi.mock('@/lib/logger', () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
 const { shippingService } = await import('@/lib/shipping');
 const { bookOrderShipment } = await import('./book-order-shipment');
 const { createSupabase, correctedSender, stubShippingService } = await import(
@@ -50,6 +53,24 @@ async function fixture() {
   vi.mocked(shippingService.getProviderQuotes).mockClear();
   return client;
 }
+async function withLiveGiglCost(providerCost: number) {
+  const [current] =
+    (await vi
+      .mocked(shippingService.getProviderQuotes)
+      .getMockImplementation()?.('GIGL', {} as never)) ?? [];
+  if (!current) throw new Error('missing test quote');
+  vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([
+    { ...current, providerCost, price: Math.round(providerCost * 1.1) },
+  ]);
+}
+function insertedShipment(client: SupabaseClient) {
+  for (const result of vi.mocked(client.from).mock.results) {
+    const insert = (result.value as { insert?: ReturnType<typeof vi.fn> })
+      .insert;
+    if (insert?.mock.calls.length) return insert.mock.calls[0]?.[0];
+  }
+  return undefined;
+}
 describe('saved GIG checkout booking integration', () => {
   beforeEach(stubShippingService);
   it('books an expired quote with its original ID and quoted pins after unchanged background pricing', async () => {
@@ -68,28 +89,59 @@ describe('saved GIG checkout booking integration', () => {
       expect.anything()
     );
   });
-  it('does not book or replace the paid quote when provider cost changes', async () => {
+  it.each([
+    1800, 2100, 2500,
+  ])('bugfix: books at the price the customer paid when GIG now costs %s', async (liveCost) => {
     const client = await fixture();
-    const current = await vi
-      .mocked(shippingService.getProviderQuotes)
-      .getMockImplementation()?.('GIGL', {} as never);
-    vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([
-      {
-        ...(current?.[0] as NonNullable<typeof current>[number]),
-        providerCost: 2100,
-      },
-    ]);
+    await withLiveGiglCost(liveCost);
+    await expect(
+      bookOrderShipment(client, 'merchant-1', 'order-1')
+    ).resolves.toMatchObject({ quoteId: 'quote-1' });
+    expect(shippingService.bookShipment).toHaveBeenCalledWith(
+      'GIGL',
+      expect.objectContaining({ quoteId: 'quote-1' })
+    );
+    expect(insertedShipment(client)).toMatchObject({
+      shipping_quote_id: 'quote-1',
+      price: 2500,
+    });
+    expect(client.rpc).not.toHaveBeenCalledWith(
+      'persist_refreshed_order_shipping_quote',
+      expect.anything()
+    );
+  });
+  it('refuses without booking or recovery when GIG now costs more than the customer paid', async () => {
+    const client = await fixture();
+    await withLiveGiglCost(2600);
     await expect(
       bookOrderShipment(client, 'merchant-1', 'order-1')
     ).rejects.toMatchObject({
-      code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+      code: 'GIGL_COST_EXCEEDS_CUSTOMER_PAID',
       status: 409,
+      message:
+        'GIG now charges ₦2,600 to deliver this order, more than the ₦2,500 the customer paid. No booking was made.',
     });
     expect(shippingService.bookShipment).not.toHaveBeenCalled();
     expect(client.rpc).not.toHaveBeenCalledWith(
       'persist_refreshed_order_shipping_quote',
       expect.anything()
     );
+  });
+  it('bugfix: books an unpinned paid quote on the station basis GIG priced it on', async () => {
+    const client = await fixture();
+    const saved = await client.from('shipping_quotes').select().single();
+    delete saved.data.quote_request.receiver.latitude;
+    delete saved.data.quote_request.receiver.longitude;
+    await expect(
+      bookOrderShipment(client, 'merchant-1', 'order-1')
+    ).resolves.toMatchObject({ quoteId: 'quote-1' });
+    const [, priced] = vi.mocked(shippingService.getProviderQuotes).mock
+      .calls[0] as [string, { receiver: object }];
+    expect(priced.receiver).not.toHaveProperty('latitude');
+    const [, booked] = vi.mocked(shippingService.bookShipment).mock
+      .calls[0] as [string, { receiver: object }];
+    expect(booked.receiver).not.toHaveProperty('latitude');
+    expect(booked.receiver).not.toHaveProperty('longitude');
   });
   it('requires confirmation when an original parcel snapshot contains now-refunded units', async () => {
     const client = await fixture();
@@ -112,16 +164,22 @@ describe('saved GIG checkout booking integration', () => {
   it.each([
     { business_name: 'Different store' },
     { phone: '08000000002' },
-  ])('does not check prices or submit a booking when only current sender contact changes %j', async (change) => {
+  ])('bugfix: books the paid quote when only the current sender contact changes %j', async (change) => {
     const client = await fixture();
     const merchant = await client.from('merchants').select().single();
     Object.assign(merchant.data, change);
     await expect(
       bookOrderShipment(client, 'merchant-1', 'order-1')
-    ).rejects.toMatchObject({
-      code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
-      status: 409,
-    });
+    ).resolves.toMatchObject({ quoteId: 'quote-1' });
+    expect(shippingService.bookShipment).toHaveBeenCalledOnce();
+  });
+  it('bugfix: never sends the live 8-digit merchant phone to GIG as the sender', async () => {
+    const client = await fixture();
+    const merchant = await client.from('merchants').select().single();
+    Object.assign(merchant.data, { phone: '+23415781' });
+    await expect(
+      bookOrderShipment(client, 'merchant-1', 'order-1')
+    ).rejects.toMatchObject({ code: 'MERCHANT_SENDER_REQUIRED', status: 409 });
     expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
     expect(shippingService.bookShipment).not.toHaveBeenCalled();
   });

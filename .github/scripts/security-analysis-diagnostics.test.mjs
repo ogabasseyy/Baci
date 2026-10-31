@@ -202,3 +202,29 @@ test('optional diagnostic failure emits a warning while required scan failures r
   assert.doesNotMatch(failGate.if, /pg_diagnostic/);
   assert.equal(failGate.run, 'exit 1');
 });
+
+
+test('merge queue triggers required SAST and uses the protected-branch scan', () => {
+  const parsed = parse(workflow);
+  assert.ok(Object.hasOwn(parsed.on, 'merge_group'));
+  const steps = parsed.jobs.semgrep.steps;
+  const scoped = steps.find((step) => step.id === 'semgrep_push');
+  assert.equal(scoped.if, "github.event_name == 'push' || github.event_name == 'merge_group'");
+  const full = steps.find((step) => step.id === 'semgrep_full');
+  assert.equal(full.if, "github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'");
+  assert.match(parsed.jobs.semgrep.if, /github.event_name != 'pull_request'/);
+  assert.equal(parsed.concurrency['cancel-in-progress'], "${{ github.event_name == 'pull_request' }}");
+});
+
+for (const [name, options, report] of [
+  ['complete analysis', {}, complete],
+  ['missing target', { requested: ['probe.ts', 'unscanned.ts'] }, complete],
+  ['missing manifest', { requested: null }, complete],
+  ['skipped target', {}, { ...complete, paths: { ...complete.paths, skipped: [{ path: 'unscanned.ts' }] } }],
+]) {
+  test(`merge queue ${name} enforces manifest completeness`, () => {
+    const result = validate(report, { ...options, event: 'merge_group' });
+    if (name === 'complete analysis') assert.equal(result.status, 0);
+    else assert.notEqual(result.status, 0);
+  });
+}

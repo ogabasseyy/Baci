@@ -89,7 +89,7 @@ def validate():
         skipped = paths.get("skipped", [])
         if not isinstance(skipped, list):
             raise ValueError("invalid skipped targets")
-        if os.environ.get("SCAN_EVENT_NAME") in ("pull_request", "push"):
+        if os.environ.get("SCAN_EVENT_NAME") in ("pull_request", "push", "merge_group"):
             if skipped:
                 raise ValueError("reported skipped targets")
             manifest = pathlib.Path("semgrep.requested-targets").read_bytes()

@@ -94,6 +94,25 @@ async function settle(
   }
 }
 
+/**
+ * Defer a row because the key set is incomplete. Nothing about the row is
+ * judged (even a permanent failure stays recoverable), so the deferral must
+ * be visible: operators learn about the incomplete configuration from the
+ * alert instead of finding stuck rows later. No secret or body is logged.
+ */
+async function deferForIncompleteKeySet(
+  deps: DrainDeps,
+  row: PiggyvestClaimedCapture,
+  reason: string
+): Promise<void> {
+  emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_KEYS_UNCONFIGURED', {
+    captureId: row.capture_id,
+    eventType: row.event_type,
+    reason: `replay deferred, key set incomplete: ${reason}`,
+  });
+  await settle(deps, row, 'deferred', 'KEY_SET_INCOMPLETE');
+}
+
 async function drainRow(
   deps: DrainDeps,
   row: PiggyvestClaimedCapture
@@ -130,6 +149,15 @@ async function drainRow(
     verification.status === 'verified'
       ? narrowToRecordedFamilies(verification.families, row.key_families)
       : [];
+  if (
+    verification.status === 'verified' &&
+    families.length === 0 &&
+    verification.incompleteKeySet === true
+  ) {
+    // The recorded family's assignment may simply not be loaded: not lost.
+    await deferForIncompleteKeySet(deps, row, 'replay authority not loaded');
+    return 'retried';
+  }
   if (verification.status !== 'verified' || families.length === 0) {
     emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_NEEDS_REVIEW', {
       captureId: row.capture_id,
@@ -164,11 +192,14 @@ async function drainRow(
     await settle(deps, row, 'processed', null);
     return 'processed';
   }
-  if (keySetIncomplete) {
-    // The loaded families could not authorize the event but the key set is
-    // incomplete: not a failure. Defer (attempt refunded, bounded backoff,
-    // never dead-lettered) so a repaired configuration resumes the row.
-    await settle(deps, row, 'deferred', 'KEY_SET_INCOMPLETE');
+  if (keySetIncomplete || verification.incompleteKeySet === true) {
+    // The key set is incomplete (the replay verified under only the
+    // families that loaded), so ANY unsuccessful outcome (a non-2xx answer,
+    // a thrown error, an authorization quarantine, or the explicit marker)
+    // may just be the missing assignment. It is not a failure of the row:
+    // defer (attempt refunded, bounded backoff, never dead-lettered) so a
+    // repaired configuration resumes it.
+    await deferForIncompleteKeySet(deps, row, 'processing incomplete');
     return 'retried';
   }
   if (row.attempts >= MAX_DRAIN_ATTEMPTS) {

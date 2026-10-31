@@ -3,14 +3,15 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
- * A secret current for `legacy` and archived for `interest`, with the
- * archive unreadable, is admitted with ['legacy'] only: the primary
- * interest branch is skipped and the legacy interest ledger fails for the
- * wallet. The capture's recorded authority is immutable and replay cannot
- * widen it, so the drain can never recover that row. While the key set is
- * incomplete ANY non-2xx processing outcome must therefore stay
- * provider-retryable (503), attested drain or not; a complete key set keeps
- * the attested deferred 200.
+ * A secret current for `legacy` and archived for another family, with the
+ * archive unreadable, is admitted with ['legacy'] only. The capture's
+ * recorded authority is immutable and replay cannot widen it, so the drain
+ * may never be able to finish that row. While the key set is incomplete ANY
+ * non-2xx processing outcome must therefore stay provider-retryable (503),
+ * attested drain or not; a complete key set keeps the attested deferred
+ * 200. (An event type a primary family owns is retried even earlier, see
+ * process-delivery.incomplete-keys.test.ts; this suite uses a
+ * legacy-handled event to exercise the ordinary-failure path.)
  */
 
 const mocks = vi.hoisted(() => ({
@@ -43,20 +44,27 @@ import {
 import { createFakeCaptureStore } from './route.capture-test-support';
 
 const legacyKey = testKey('retry-legacy');
+const legacyEvent = JSON.stringify({
+  eventId: 'evt-accrued-1',
+  eventType: 'interest-accrued.success',
+  eventCategory: 'interest_accrued',
+  customer_id: 'customer-1',
+  eventData: { id: 'accrual-1', amount: 12.5 },
+});
 const payout = JSON.stringify(paidInterestFixture.event);
 
 let store: ReturnType<typeof createFakeCaptureStore>;
 let alerts: ReturnType<typeof vi.spyOn>;
 
-function post() {
+function post(body = legacyEvent) {
   return POST(
     new NextRequest('https://usebaci.com/api/webhooks/piggyvest', {
       method: 'POST',
-      body: payout,
+      body,
       headers: {
         'content-type': 'application/json',
         'x-pvb-signature': createHmac('sha512', legacyKey)
-          .update(payout)
+          .update(body)
           .digest('hex'),
       },
     })
@@ -131,6 +139,22 @@ describe('while the key set is incomplete', () => {
     expect((await post()).status).toBe(503);
     expect((await post()).status).toBe(503);
     expect(store.rows).toHaveLength(1);
+  });
+
+  it('retries a primary-owned payout that only the legacy fallback could complete, attested or not', async () => {
+    for (const drainAttested of ['true', 'false'] as const) {
+      attested(drainAttested);
+
+      const response = await post(payout);
+
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: 'Integration unavailable',
+        code: 'PIGGYVEST_NOT_READY',
+      });
+    }
+    expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
+    expect(store.rows[0]?.processingState).toBe('pending');
   });
 
   it('does not change a successful delivery: it is processed and acknowledged', async () => {

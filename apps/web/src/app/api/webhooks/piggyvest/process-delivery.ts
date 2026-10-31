@@ -8,6 +8,7 @@ import type { PiggyvestWebhookKeyFamily } from '@/lib/piggyvest/webhook-secret-u
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import { piggyvestWebhookEventSchema } from '@/schemas/piggyvest/events';
 import { piggyvestWebhookCorrelationSchema } from '@/schemas/piggyvest/webhook-correlation';
+import { primaryOwnerFamily } from './primary-event-owner';
 import { dispatchPrimaryPiggyvestIntake } from './primary-webhook-dispatch';
 import { quarantineAndAck } from './quarantine-and-ack';
 import { toRecordInput } from './record-input';
@@ -28,6 +29,11 @@ import { toRecordInput } from './record-input';
  *   the one that authorizes the event, so it is NOT quarantined. It answers
  *   the retryable 503 of an unconfigured server, writes no quarantine, and
  *   the caller keeps the capture exactly as admitted.
+ * - Likewise, while the key set is incomplete, an event type a primary
+ *   intake family owns (custody outflow, paid interest, bank inflow) is not
+ *   completed unless that family is loaded and its intake ran: the legacy
+ *   fallback may report a successful no-op for it, which must not end the
+ *   provider's retries.
  * - Completed processing -> 200 (deferred backlog included).
  * - Inbox/quarantine write fails, or a specialized intake is unavailable
  *   -> 503.
@@ -79,6 +85,15 @@ export function isKeySetIncompleteRetry(response: Response): boolean {
   return keySetIncompleteRetries.has(response);
 }
 
+function retryUntilKeySetComplete(): Response {
+  const retry = NextResponse.json(
+    { error: 'Integration unavailable', code: 'PIGGYVEST_NOT_READY' },
+    { status: 503, headers: noStore }
+  );
+  keySetIncompleteRetries.add(retry);
+  return retry;
+}
+
 /**
  * True when `response` is the acknowledgement of a delivery that was
  * quarantined for authorization and therefore never reached a financial
@@ -126,6 +141,15 @@ export async function processVerifiedDelivery(
     );
   }
 
+  // The owning intake of this event type, if any, can only have run when its
+  // family is among the loaded ones. While the key set is incomplete the
+  // delivery may be missing exactly that assignment.
+  const ownerFamily = primaryOwnerFamily(parsed.data.eventType);
+  const ownerIntakeSkipped =
+    incompleteKeySet === true &&
+    ownerFamily !== undefined &&
+    !families.includes(ownerFamily);
+
   try {
     // Specialized primary intakes claim their deliveries first (each gated
     // on its own key family); null falls through to legacy processing.
@@ -137,6 +161,10 @@ export async function processVerifiedDelivery(
       families,
       keyScope,
     });
+    // Not completed: the owning intake did not run, so whatever else
+    // answered (a legacy path's successful no-op, or an inflow credit that is
+    // idempotent on redelivery) does not end the provider's retries.
+    if (ownerIntakeSkipped) return retryUntilKeySetComplete();
     if (primary === 'conflict') {
       return quarantineAndAck(
         rawBody,
@@ -157,12 +185,7 @@ export async function processVerifiedDelivery(
         // that authorizes this event. A quarantine 200 would end the
         // provider's retries and no later repair could recover the event,
         // so answer like an unconfigured server and write nothing.
-        const retry = NextResponse.json(
-          { error: 'Integration unavailable', code: 'PIGGYVEST_NOT_READY' },
-          { status: 503, headers: noStore }
-        );
-        keySetIncompleteRetries.add(retry);
-        return retry;
+        return retryUntilKeySetComplete();
       }
       const quarantined = await quarantineAndAck(
         rawBody,

@@ -1,4 +1,4 @@
-import type { ScrollView } from 'react-native';
+import type { ScrollViewInstance } from 'react-native';
 import { SPACING } from '@/constants/Colors';
 
 export type DataProvider = 'mtn' | 'airtel' | 'glo' | 't2';
@@ -31,7 +31,7 @@ export function inferProviderFromDataBillerName(
 
 export function scrollToDataPayment(
   paymentY: number,
-  scrollView: ScrollView | null
+  scrollView: ScrollViewInstance | null
 ) {
   requestAnimationFrame(() => {
     scrollView?.scrollTo({

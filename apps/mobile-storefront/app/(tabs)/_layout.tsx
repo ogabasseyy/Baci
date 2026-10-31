@@ -1,5 +1,4 @@
 import { router, Tabs } from 'expo-router';
-import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { useShallow } from 'zustand/react/shallow';
 import { ErrorFallback } from '@/components/ErrorBoundary';
 import { CustomTabBar } from '@/components/navigation/CustomTabBar';
@@ -22,6 +21,8 @@ export function ErrorBoundary({
 }) {
   return <ErrorFallback error={error} retry={retry} />;
 }
+
+export const unstable_settings = { initialRouteName: 'index' };
 
 export default function TabLayout() {
   const { colors } = useTheme();
@@ -60,11 +61,10 @@ export default function TabLayout() {
 
   return (
     <Tabs
-      initialRouteName="index"
       detachInactiveScreens={true}
       tabBar={(props) => (
         <CustomTabBar
-          {...(props as unknown as BottomTabBarProps)}
+          {...props}
           preloadProtectedTabs={shouldPreloadProtectedTabs}
         />
       )}

@@ -1,4 +1,4 @@
-import { STOREFRONT_OTA_CONFIG } from './storefront-ota-constants.mjs';
+import { parseIosRuntime, STOREFRONT_OTA_CONFIG } from './storefront-ota-constants.mjs';
 
 function present(value) {
   return typeof value === 'string' && value.trim().length > 0;
@@ -8,7 +8,7 @@ export function validateOtaConfig(config, runtimeVersion) {
   if ((config.ios?.runtimeVersion ?? config.runtimeVersion) !== runtimeVersion) {
     throw new Error('Export runtime does not match the selected iOS runtime.');
   }
-  if (config.ios?.buildNumber !== runtimeVersion.split('.').at(-1)) {
+  if (config.ios?.buildNumber !== parseIosRuntime(runtimeVersion).buildNumber) {
     throw new Error('Export iOS build number does not match the runtime.');
   }
   if (

@@ -233,7 +233,7 @@ export function CheckoutLocationPickers({
                   >
                     No cities available. Type your city above.
                   </Text>
-                ) : null
+                ) : undefined
               }
             />
           </View>

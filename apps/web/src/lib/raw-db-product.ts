@@ -20,6 +20,7 @@ export interface RawDbProduct {
   category_id?: string;
   category_slug?: string | null;
   brand?: string;
+  created_at?: string | null;
   price: number;
   compare_at_price?: number;
   condition?: string;

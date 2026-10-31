@@ -202,7 +202,8 @@ jobs:
             src/lib/shipping/customer-checkout-shipping-recovery-quantity.postgres.test.ts \
             src/lib/shipping/customer-checkout-shipping-recovery-aliases.postgres.test.ts \
             src/lib/shipping/customer-checkout-shipping-recovery-delivery.postgres.test.ts \
-            src/lib/shipping/customer-checkout-shipping-recovery-retry.postgres.test.ts
+            src/lib/shipping/customer-checkout-shipping-recovery-retry.postgres.test.ts \
+            src/lib/shipping/gigl-wallet-staff-access.postgres.test.ts
       - name: Run Tests
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -340,6 +341,7 @@ jobs:
           --sql-check supabase/migrations/tests/sessionless_payment_reference_snapshot.sql
           --sql-check supabase/migrations/tests/order_notification_delivered_lookup.sql
           --sql-check supabase/migrations/tests/tracking_order_notification_delivered_token.sql
+          --sql-check supabase/migrations/tests/gigl_wallet_fulfil_staff_access.sql
           --sql-check supabase/migrations/tests/tracking_order_notification_pending.sql
           --sql-check supabase/migrations/tests/tracking_order_notification_privileges.sql
           --sql-check supabase/tests/paystack_order_dva_balance_refresh_history.sql

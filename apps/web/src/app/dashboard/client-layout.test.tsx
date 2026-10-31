@@ -157,6 +157,15 @@ describe('DashboardClientLayout', () => {
     renderLayout();
     expect(screen.queryByTestId('onboarding-reminder')).not.toBeInTheDocument();
   });
+  it('reserves space under page content for the fixed mobile bottom nav', () => {
+    renderLayout();
+    // Without this the last action on a page (e.g. Launch quiz) sat under
+    // the h-16 bottom nav on phones.
+    expect(document.getElementById('main-content')).toHaveClass(
+      'pb-[calc(6rem+env(safe-area-inset-bottom))]',
+      'md:p-6'
+    );
+  });
   it('does not subscribe to toast state', () => {
     renderLayout();
 

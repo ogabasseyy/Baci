@@ -63,6 +63,7 @@ describe('quiz event service', () => {
         prizeName: 'N50,000 airtime',
         questionCount: 5,
         startsAt: '2026-05-20T10:00:00.000Z',
+        serverNowReceivedAtMs: expect.any(Number),
         status: 'open',
         title: 'Win airtime',
       },
@@ -266,7 +267,11 @@ describe('quiz event service', () => {
     );
 
     await expect(fetchQuizEvents()).resolves.toEqual([
-      { ...event, serverNow: '2026-08-04T12:00:00.000Z' },
+      {
+        ...event,
+        serverNow: '2026-08-04T12:00:00.000Z',
+        serverNowReceivedAtMs: expect.any(Number),
+      },
     ]);
     expect(
       new Headers(mockFetch.mock.calls[0]?.[1]?.headers).get(

@@ -104,7 +104,7 @@ The roadmap assigns these to other tasks, so do not change them here:
 | Modify | `apps/web/src/lib/agentic/ucp-cart-route-support.ts` (+ new test) | Gate inside `resolveUcpCartContext` |
 | Modify | `apps/web/src/app/api/agentic/carts/route.ts` | Gate before idempotency reservation |
 | Create | `apps/web/src/app/api/agentic/carts/route-shared-cart-gate.test.ts` | Create route fails closed before reservations |
-| Create | `apps/web/src/app/api/agentic/carts/[id]/shared-cart-gate.test.ts` | Read, update, cancel and checkout fail closed before reservations |
+| Create | `apps/web/src/app/api/agentic/carts/[id]/route-shared-cart-gate.test.ts` | Read, update, cancel and checkout fail closed before reservations |
 | Modify | five existing cart route tests | Mock the reader as enrolled |
 | Create | `apps/web/src/config/openai-legacy-feed-eligibility.ts` | Search on, checkout off |
 | Modify | `apps/web/src/app/api/feed/openai/legacy-feed-generator.ts` (+ test) | Use the eligibility constant |
@@ -1061,7 +1061,7 @@ unredeemable ?agentic_cart_id= link (F34).
 ### Task 4: The cart routes fail closed for merchants not enrolled in shared cart (F34, routes)
 
 **Files:**
-- Create: `apps/web/src/lib/agentic/is-ucp-shared-cart-enabled.ts` (+ test), `apps/web/src/lib/agentic/ucp-cart-availability.ts` (+ test), `apps/web/src/lib/agentic/ucp-cart-route-support.test.ts`, `apps/web/src/app/api/agentic/carts/route-shared-cart-gate.test.ts`, `apps/web/src/app/api/agentic/carts/[id]/shared-cart-gate.test.ts`
+- Create: `apps/web/src/lib/agentic/is-ucp-shared-cart-enabled.ts` (+ test), `apps/web/src/lib/agentic/ucp-cart-availability.ts` (+ test), `apps/web/src/lib/agentic/ucp-cart-route-support.test.ts`, `apps/web/src/app/api/agentic/carts/route-shared-cart-gate.test.ts`, `apps/web/src/app/api/agentic/carts/[id]/route-shared-cart-gate.test.ts`
 - Modify: `apps/web/src/lib/agentic/ucp-canonical-cart.ts`, `apps/web/src/lib/agentic/ucp-cart-route-support.ts`, `apps/web/src/app/api/agentic/carts/route.ts`, and five existing route tests
 
 - [ ] **Step 1: Write the reader and gate tests**
@@ -1274,7 +1274,7 @@ describe('POST /api/agentic/carts shared-cart gate', () => {
 
 Add `import { POST } from './route';` with the imports. Delete any copied import Biome reports as unused, such as `calculateCheckoutSession` or `storeAgenticIdempotencyResponse`. If the body shape `{ currency, line_items }` does not match how `route.test.ts` builds a valid create body, use the body from its first passing create test instead.
 
-Create `apps/web/src/app/api/agentic/carts/[id]/shared-cart-gate.test.ts`. Copy lines 1–68 of the sibling `route-update.test.ts` unchanged, from the imports through the `@/lib/supabase/anon` mock. Then add:
+Create `apps/web/src/app/api/agentic/carts/[id]/route-shared-cart-gate.test.ts`. The name follows the repository's `route-<aspect>.test.ts` pattern for route tests (`carts/[id]/route-update.test.ts`, `checkout_sessions/route-idempotency-replay.test.ts`). It also covers the `cancel` and `checkout` sub-routes, because all four handlers share `resolveUcpCartContext`, where the gate lives. Copy lines 1–68 of the sibling `route-update.test.ts` unchanged, from the imports through the `@/lib/supabase/anon` mock. Then add:
 
 ```ts
 vi.mock('@/lib/agentic/ucp-cart-checkout-conversion', () => ({
@@ -1365,7 +1365,7 @@ Merge the first into the existing `@/lib/agentic/mutation-request` import, and d
 
 ```bash
 cd /Users/mac/Baci-app/.worktrees/agentic-m0-3-truthful-claims/apps/web
-npm_config_verify_deps_before_run=false pnpm exec vitest run src/lib/agentic/is-ucp-shared-cart-enabled.test.ts src/lib/agentic/ucp-cart-availability.test.ts src/lib/agentic/ucp-cart-route-support.test.ts src/app/api/agentic/carts/route-shared-cart-gate.test.ts "src/app/api/agentic/carts/[id]/shared-cart-gate.test.ts"
+npm_config_verify_deps_before_run=false pnpm exec vitest run src/lib/agentic/is-ucp-shared-cart-enabled.test.ts src/lib/agentic/ucp-cart-availability.test.ts src/lib/agentic/ucp-cart-route-support.test.ts src/app/api/agentic/carts/route-shared-cart-gate.test.ts "src/app/api/agentic/carts/[id]/route-shared-cart-gate.test.ts"
 ```
 
 Expected:

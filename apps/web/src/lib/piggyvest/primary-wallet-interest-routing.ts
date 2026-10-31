@@ -11,11 +11,12 @@ import { piggyvestPrimaryWalletInterestReadbackSchema as readbackSchema } from '
  *
  * - `routed`: the wallet we were given, accruing, paying the configured wallet.
  * - `contradicted`: a readable answer that can never become routed: another
- *   wallet, customer or business, an unreadable identity, or a different
- *   payout wallet. The setting is immutable, so it needs review.
- * - `unsettled`: consistent so far, but accrual or the payout is not (yet)
- *   shown. A wallet created moments ago may still be settling; a customer
- *   created before routing existed never will. The caller tells them apart.
+ *   wallet, customer or business, an unreadable identity, a different payout
+ *   wallet, or accrual explicitly off. The setting is immutable, so it needs
+ *   review.
+ * - `unsettled`: consistent so far, but accrual or the payout is not shown
+ *   yet (absent or null). A wallet created moments ago may still be
+ *   settling, so it is never treated as final.
  * - `unreadable`: the read itself failed. Nothing was learned.
  */
 export type PrimaryWalletInterestRouting =
@@ -50,6 +51,7 @@ export async function readPrimaryWalletInterestRouting(input: {
     return 'contradicted';
   const payout = wallet.interest_payout_wallet ?? null;
   if (payout !== null && payout !== input.payoutWalletId) return 'contradicted';
+  if (wallet.interest_enabled === false) return 'contradicted';
   return payout === input.payoutWalletId && wallet.interest_enabled === true
     ? 'routed'
     : 'unsettled';

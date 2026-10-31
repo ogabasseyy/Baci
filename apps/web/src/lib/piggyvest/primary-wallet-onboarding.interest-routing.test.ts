@@ -96,17 +96,136 @@ describe('primary wallet onboarding interest routing', () => {
       'interest disabled, no payout',
       { interest_enabled: false, interest_payout_wallet: null },
     ],
-    [
-      'settings absent',
-      { interest_enabled: undefined, interest_payout_wallet: undefined },
-    ],
     ['payout set, accrual off', { interest_enabled: false }],
   ])('sends an existing returnIfExist customer with %s to review instead of adopting it', async (_label, overrides) => {
+    // Interest settings are fixed at creation, so an explicit "accrual off"
+    // is a final answer, not a wallet that is still settling.
     const input = reclaimedExisting();
     input.retrieveWallet.mockResolvedValue(routedWallet(overrides));
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual(REVIEW);
     expect(input.storage.recordRejected).toHaveBeenCalledOnce();
     expect(input.storage.recordAccepted).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'settings absent',
+      { interest_enabled: undefined, interest_payout_wallet: undefined },
+    ],
+    ['payout not shown yet', { interest_payout_wallet: null }],
+  ])('keeps an existing returnIfExist customer with %s reclaimable, never adopted or rejected', async (_label, overrides) => {
+    const input = reclaimedExisting();
+    input.retrieveWallet.mockResolvedValue(routedWallet(overrides));
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'pending',
+    });
+    expect(input.storage.recordUncertain).toHaveBeenCalledOnce();
+    expect(input.storage.recordRejected).not.toHaveBeenCalled();
+    expect(input.storage.recordAccepted).not.toHaveBeenCalled();
+  });
+
+  it('lets a wallet this flow created keep settling across reclaimed retries until its routing reads back', async () => {
+    const reclaimed = {
+      status: 'claimed',
+      intentId: 'intent',
+      claimToken: 'claim',
+      reclaimed: true,
+    };
+    const input = onboardingFixture();
+    input.retrieveWallet
+      .mockResolvedValueOnce(routedWallet({ interest_payout_wallet: null }))
+      .mockResolvedValueOnce(routedWallet({ interest_payout_wallet: null }))
+      .mockResolvedValueOnce(routedWallet());
+    // Call 1: fresh claim, new customer, payout not readable yet.
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'pending',
+    });
+    // Call 2: the unknown intent is reclaimed and returnIfExist hands back
+    // the same customer (new_customer false), still settling.
+    input.storage.claim.mockResolvedValue(reclaimed);
+    input.createCustomer.mockResolvedValue({
+      customer_id: 'customer-fixture',
+      wallet_id: 'wallet-fixture',
+      new_customer: false,
+    });
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'pending',
+    });
+    expect(input.storage.recordUncertain).toHaveBeenCalledTimes(2);
+    expect(input.storage.recordRejected).not.toHaveBeenCalled();
+    expect(input.storage.recordAccepted).not.toHaveBeenCalled();
+    // Call 3: reclaimed again, and now the routing reads back.
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'pending',
+    });
+    expect(input.storage.recordAccepted).toHaveBeenCalledOnce();
+    expect(input.storage.recordRejected).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [400, 'Invalid interest payout wallet'],
+    [422, 'interest_payout_wallet must be a business wallet'],
+  ])('reports a %s decline of the payout wallet as not configured, never as an invalid BVN', async (status, message) => {
+    const input = onboardingFixture();
+    input.createCustomer.mockRejectedValue(
+      new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', message, status, true)
+    );
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'unavailable',
+      code: 'NOT_CONFIGURED',
+    });
+    // Nothing was created: release the intent so a corrected payout wallet
+    // (a new fingerprint) can be claimed, rather than pinning a conflict.
+    expect(input.storage.releaseIntent).toHaveBeenCalledOnce();
+    expect(input.storage.recordUncertain).not.toHaveBeenCalled();
+    expect(input.storage.recordRejected).not.toHaveBeenCalled();
+    expect(input.retrieveWallet).not.toHaveBeenCalled();
+  });
+
+  it('still reports a declined BVN as an invalid BVN', async () => {
+    const input = onboardingFixture();
+    input.createCustomer.mockRejectedValue(
+      new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'Invalid BVN', 400, true)
+    );
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'rejected',
+      code: 'INVALID_BVN',
+    });
+    expect(input.storage.releaseIntent).toHaveBeenCalledOnce();
+  });
+
+  it('keeps an undeclared payout-shaped error ambiguous', async () => {
+    const input = onboardingFixture();
+    input.createCustomer.mockRejectedValue(
+      new PiggyvestApiError(
+        'PIGGYVEST_REQUEST_ERROR',
+        'interest payout service timed out',
+        504,
+        false
+      )
+    );
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'pending',
+    });
+    expect(input.storage.recordUncertain).toHaveBeenCalledOnce();
+    expect(input.storage.releaseIntent).not.toHaveBeenCalled();
+  });
+
+  it('does not claim release succeeded for a payout decline when storage fails', async () => {
+    const input = onboardingFixture();
+    input.storage.releaseIntent.mockResolvedValue(false);
+    input.createCustomer.mockRejectedValue(
+      new PiggyvestApiError(
+        'PIGGYVEST_REQUEST_ERROR',
+        'Invalid interest payout wallet',
+        400,
+        true
+      )
+    );
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'unavailable',
+      code: 'STORAGE_UNAVAILABLE',
+    });
   });
 
   it('adopts an existing returnIfExist customer only when its readback proves the routing', async () => {

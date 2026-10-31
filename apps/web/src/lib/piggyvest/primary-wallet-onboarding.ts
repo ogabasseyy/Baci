@@ -123,13 +123,12 @@ export async function onboardPiggyvestPrimaryWallet(
       payoutWalletId: config.data.interestPayoutWalletId,
       retrieveWallet: input.retrieveWallet,
     });
-    // A wallet created by this very request may still be settling, so an
-    // unsettled answer stays reclaimable; the retry re-reads it. An existing
-    // customer (returnIfExist) may predate routing and never settle.
-    if (
-      routing === 'unreadable' ||
-      (routing === 'unsettled' && result.data.new_customer)
-    ) {
+    // A failed read, or settings not shown yet, proves nothing either way:
+    // keep the intent reclaimable so a retry re-reads it. A reclaimed retry
+    // of a wallet this flow created comes back new_customer false, so that
+    // flag cannot tell "still settling" from "predates routing"; only a
+    // contradicting readback is final.
+    if (routing === 'unreadable' || routing === 'unsettled') {
       await input.storage.recordUncertain(claimedScope);
       return { status: 'pending' };
     }
@@ -150,20 +149,22 @@ export async function onboardPiggyvestPrimaryWallet(
       ? { status: 'pending' }
       : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
   } catch (error) {
-    // A definitive provider validation rejection (HTTP 400) means nothing
-    // was created: release the uncreated intent so the customer can
-    // correct the BVN. Recording it uncertain would pin the wrong-value
-    // fingerprint and conflict every corrected retry permanently. Only
-    // 400 qualifies — every other throw stays transport-ambiguous.
-    if (error instanceof PiggyvestApiError && error.status === 400) {
+    // A definitive decline means nothing was created: release the intent so
+    // a corrected request can claim again. Recording it uncertain would pin
+    // the declined fingerprint and conflict every corrected retry. A decline
+    // that names the interest settings is our configured payout wallet being
+    // refused, never the customer's BVN. Every other throw stays ambiguous.
+    const decline = classifyCreationDecline(error);
+    if (decline !== null) {
       try {
-        const released = await input.storage.releaseIntent(claimedScope);
-        return released
-          ? { status: 'rejected', code: 'INVALID_BVN' }
-          : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
+        if (!(await input.storage.releaseIntent(claimedScope)))
+          return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
       } catch {
         return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
       }
+      return decline === 'interest_routing'
+        ? { status: 'unavailable', code: 'NOT_CONFIGURED' }
+        : { status: 'rejected', code: 'INVALID_BVN' };
     }
     try {
       await input.storage.recordUncertain(claimedScope);
@@ -172,4 +173,18 @@ export async function onboardPiggyvestPrimaryWallet(
     }
     return { status: 'pending' };
   }
+}
+
+function classifyCreationDecline(
+  error: unknown
+): 'interest_routing' | 'bvn' | null {
+  if (!(error instanceof PiggyvestApiError)) return null;
+  if (
+    error.declined &&
+    (error.status === 400 || error.status === 422) &&
+    /payout|interest/i.test(error.message)
+  )
+    return 'interest_routing';
+  // Only 400 is a BVN verdict; every other status stays transport-ambiguous.
+  return error.status === 400 ? 'bvn' : null;
 }

@@ -41,8 +41,13 @@ describe('primary wallet interest routing readback', () => {
     ['contradicted', routedWallet({ interest_payout_wallet: 7 })],
     ['unsettled', routedWallet({ interest_payout_wallet: null })],
     ['unsettled', routedWallet({ interest_payout_wallet: undefined })],
-    ['unsettled', routedWallet({ interest_enabled: false })],
+    ['contradicted', routedWallet({ interest_enabled: false })],
+    [
+      'contradicted',
+      routedWallet({ interest_enabled: false, interest_payout_wallet: null }),
+    ],
     ['unsettled', routedWallet({ interest_enabled: null })],
+    ['unsettled', routedWallet({ interest_enabled: undefined })],
   ])('classifies a readable wallet as %s', async (verdict, wallet) => {
     expect(await read(() => Promise.resolve(wallet))).toBe(verdict);
   });

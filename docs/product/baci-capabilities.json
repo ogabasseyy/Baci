@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-31T08:18:03+00:00",
-  "source_revision": "d05d0e0f6ef7af33feeba3e81e514702b8eb5488",
-  "evidence_digest": "d986393797d7eb307ceda96590f91fda615ca9ca23cd6202a58750f81e5b3744",
-  "claims_digest": "b83564d6bcecd746cf7ec021ae78a6db964ddc7233e64b1385714340cb15479a",
-  "review_scope": "Source evidence only. Rechecked the agent-protocols sources after the agentic catalog, checkout-session and order routes moved from a service-role client to the scoped agentic merchant-context RPC, with a separate scoped payment-split lookup for checkout completion; the agent-protocols claim, limitations and status are unchanged. Other cited capability and access-map sources are unchanged since the previous review except the mobile admin inventory sheet empty footer, which now uses undefined; the inventory capability remains unchanged. The support-chat health probe, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment, native acceptance and transaction readiness require separate verification.",
+  "reviewed_at": "2026-10-31T13:09:08+00:00",
+  "source_revision": "4ea8ba12803d63c4e7e4398573ddbccf1a75e033",
+  "evidence_digest": "0014a885209877ace730fccc27aa13a5b2a53f2c78106057c8ef5711653307f6",
+  "claims_digest": "24ef091ce65067ba1f7496b1a28dd5121b31291bea0255dbfd1baea6eed22995",
+  "review_scope": "Source evidence only. Rechecked the agent-protocols sources after the agentic catalog, checkout-session and order routes moved from a service-role client to the scoped agentic merchant-context RPC, with a separate scoped payment-split lookup for checkout completion; the agent-protocols claim, limitations and status are unchanged. Other cited capability and access-map sources are unchanged since the previous review except the mobile admin inventory sheet empty footer, which now uses undefined; the inventory capability remains unchanged. Re-stamped on the 31 October sync with the latest base: no cited source changed since the previous review. The support-chat health probe, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment, native acceptance and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

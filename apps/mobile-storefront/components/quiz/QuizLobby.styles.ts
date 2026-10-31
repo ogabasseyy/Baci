@@ -34,6 +34,10 @@ export function createQuizLobbyStyles(colors: QuizThemeColors) {
       lineHeight: 20,
       textAlign: 'center',
     },
+    emptyStateAction: {
+      alignSelf: 'stretch',
+      marginTop: 10,
+    },
     eventCard: {
       backgroundColor: colors.card,
       borderColor: colors.border,

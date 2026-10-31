@@ -1,9 +1,14 @@
-import { isPlausibleMerchantContactPhone } from '@baci/shared';
+import {
+  isPlausibleMerchantContactPhone,
+  isPlausibleMerchantSenderPhone,
+} from '@baci/shared';
 import type { EditableMerchantColumns } from './store-settings-payload';
 
+// merchants.phone is the courier sender contact, which booking reads as
+// Nigerian when it has no country code; support_phone keeps the looser rule.
 const PHONE_FIELDS = [
-  ['phone', 'Phone Number'],
-  ['support_phone', 'Support Phone'],
+  ['phone', 'Phone Number', isPlausibleMerchantSenderPhone],
+  ['support_phone', 'Support Phone', isPlausibleMerchantContactPhone],
 ] as const;
 
 /**
@@ -14,13 +19,9 @@ const PHONE_FIELDS = [
 export function validateStoreSettingsPhones(
   payload: Partial<EditableMerchantColumns>
 ): string | null {
-  for (const [key, label] of PHONE_FIELDS) {
+  for (const [key, label, isValid] of PHONE_FIELDS) {
     const value = payload[key];
-    if (
-      typeof value === 'string' &&
-      value.trim() !== '' &&
-      !isPlausibleMerchantContactPhone(value)
-    ) {
+    if (typeof value === 'string' && value.trim() !== '' && !isValid(value)) {
       return `${label} looks incomplete. Enter the full number with its country code, for example +234 801 234 5678.`;
     }
   }

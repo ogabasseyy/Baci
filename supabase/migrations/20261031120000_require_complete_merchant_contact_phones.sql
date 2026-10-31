@@ -10,6 +10,10 @@
 --   0 is tolerated because the mobile phone picker keeps it);
 --   other international numbers must be E.164 (8-15 digits, no leading 0);
 --   national-format numbers carry no country and need 7-15 digits.
+-- merchants.phone also follows packages/shared/src/lib/merchant-sender-phone.ts:
+-- booking treats it as international only when it starts with + or 00 and
+-- reads anything else as Nigerian, so such a number must be a complete
+-- Nigerian number (0XXXXXXXXXX, 234[0]XXXXXXXXXX or ten digits).
 --
 -- Patch the deployed definition in place, as
 -- 20260730084051_repair_merchant_identity_guard_paths.sql does, instead of
@@ -54,6 +58,15 @@ DECLARE
              THEN phone_value.compact ~ '^([+]|00)[1-9][0-9]{7,14}$'
            ELSE phone_value.compact ~ '^[0-9]{7,15}$'
          END
+         -- Booking treats the store phone as international only when it
+         -- starts with + or 00 and reads anything else as Nigerian.
+         AND (
+           phone_key.key <> 'phone'
+           OR pg_catalog.btrim(p_settings ->> phone_key.key) ~ '^[+]'
+           OR phone_value.compact ~ '^00'
+           OR pg_catalog.regexp_replace(phone_value.compact, '^[+]', '')
+              ~ '^(0[1-9][0-9]{9}|2340?[1-9][0-9]{9}|(?!234)[1-9][0-9]{9})$'
+         )
        )
   ) THEN
     RAISE EXCEPTION 'invalid_support_phone' USING ERRCODE = '22023';

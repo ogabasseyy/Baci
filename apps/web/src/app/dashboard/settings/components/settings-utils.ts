@@ -1,4 +1,7 @@
-import { isPlausibleMerchantContactPhone } from '@baci/shared/lib';
+import {
+  isPlausibleMerchantContactPhone,
+  isPlausibleMerchantSenderPhone,
+} from '@baci/shared/lib';
 import z from 'zod';
 
 export { extractBrandColorsFromImage as extractColorsFromImage } from '@/lib/extract-brand-colors';
@@ -25,10 +28,12 @@ export type ContactPhoneBaseline = Partial<
  */
 function contactPhoneSchema({
   baselineValue,
+  isValid,
   label,
   message,
 }: {
   baselineValue: string | undefined;
+  isValid: (value: string) => boolean;
   label: string;
   message: string;
 }) {
@@ -40,7 +45,7 @@ function contactPhoneSchema({
       (value) =>
         value === '' ||
         !isStorefrontProfileValueChanged(value, baselineValue) ||
-        isPlausibleMerchantContactPhone(value),
+        isValid(value),
       message
     )
     .default('');
@@ -83,15 +88,18 @@ export function createSettingsSchema(baseline: ContactPhoneBaseline = {}) {
       .default(''),
     support_phone: contactPhoneSchema({
       baselineValue: baseline.support_phone,
+      isValid: isPlausibleMerchantContactPhone,
       label: 'Support phone',
       message:
         'Enter a full support phone number, for example +234 801 234 5678.',
     }),
     // merchants.phone: the number couriers call to arrange pickups. Blank keeps
     // the mobile Store Settings contract (the save clears it, and booking then
-    // asks for a full number).
+    // asks for a full number). Booking reads a number without a country code
+    // as Nigerian, so this field uses the stricter sender rule.
     phone: contactPhoneSchema({
       baselineValue: baseline.phone,
+      isValid: isPlausibleMerchantSenderPhone,
       label: 'Business phone',
       message:
         'Enter the full business phone number with its country code, for example +234 801 234 5678.',

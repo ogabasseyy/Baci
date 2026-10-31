@@ -93,6 +93,26 @@ describe('settingsSchema', () => {
     }
   });
 
+  it('rejects a bare business phone that booking would read as a short Nigerian number', () => {
+    const base = { business_name: 'My Store', country: 'NG' };
+
+    const bare = settingsSchema.safeParse({ ...base, phone: '15781234' });
+    expect(bare.success).toBe(false);
+    if (!bare.success) {
+      expect(bare.error.issues[0]?.path).toEqual(['phone']);
+    }
+    const national = settingsSchema.safeParse({
+      ...base,
+      phone: '08031234567',
+    });
+    expect(national.success).toBe(true);
+    const support = settingsSchema.safeParse({
+      ...base,
+      support_phone: '15781234',
+    });
+    expect(support.success).toBe(true);
+  });
+
   it('rejects an oversized storefront description', () => {
     expect(
       settingsSchema.safeParse({

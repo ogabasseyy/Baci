@@ -14,6 +14,19 @@ describe('validateStoreSettingsPhones', () => {
     );
   });
 
+  it('rejects a bare store phone that booking would read as a short Nigerian number', () => {
+    expect(validateStoreSettingsPhones({ phone: '15781234' })).toBe(
+      'Phone Number looks incomplete. Enter the full number with its country code, for example +234 801 234 5678.'
+    );
+  });
+
+  it('keeps the bare-number allowance for the support phone', () => {
+    expect(
+      validateStoreSettingsPhones({ support_phone: '15781234' })
+    ).toBeNull();
+    expect(validateStoreSettingsPhones({ phone: '08146978921' })).toBeNull();
+  });
+
   it('accepts complete numbers, including the trunk 0 the picker keeps', () => {
     expect(
       validateStoreSettingsPhones({

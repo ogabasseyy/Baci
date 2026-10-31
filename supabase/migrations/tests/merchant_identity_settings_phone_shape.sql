@@ -102,12 +102,34 @@ BEGIN
       END;
     END LOOP;
   END LOOP;
+
+  -- Booking reads a store phone without a country code as Nigerian, so a
+  -- bare number that is not a complete Nigerian number is refused for phone.
+  FOREACH v_value IN ARRAY ARRAY[
+    '15781234', '1234567', '23415781', '2341234567', '0241234567',
+    '(+44) 7911 123456'
+  ] LOOP
+    BEGIN
+      PERFORM public.update_merchant_identity_settings(
+        'a3300000-0000-4000-8000-000000000002',
+        pg_catalog.jsonb_build_object('phone', v_value),
+        v_token
+      );
+      RAISE EXCEPTION 'bare phone % was accepted', v_value;
+    EXCEPTION
+      WHEN SQLSTATE '22023' THEN
+        IF SQLERRM <> 'invalid_support_phone' THEN
+          RAISE;
+        END IF;
+    END;
+  END LOOP;
 END;
 $$;
 
+-- A national Nigerian store phone and a bare support phone are both allowed.
 SELECT public.update_merchant_identity_settings(
   'a3300000-0000-4000-8000-000000000002',
-  '{"phone":"+234 814 697 8921","support_phone":"+23408146978921"}'::jsonb,
+  '{"phone":"0814 697 8921","support_phone":"15781234"}'::jsonb,
   pg_catalog.current_setting('test.phone_shape_updated_at')::timestamptz
 );
 RESET ROLE;
@@ -118,8 +140,8 @@ BEGIN
     SELECT 1
       FROM public.merchants
      WHERE id = 'a3300000-0000-4000-8000-000000000002'
-       AND phone = '+234 814 697 8921'
-       AND support_phone = '+23408146978921'
+       AND phone = '0814 697 8921'
+       AND support_phone = '15781234'
   ) THEN
     RAISE EXCEPTION 'complete contact phones were not saved';
   END IF;

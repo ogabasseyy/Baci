@@ -2,22 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import {
-  INVALID_UCP_BUSINESS_PROFILE,
-  INVALID_UCP_CART,
-  INVALID_UCP_LOOKUP_RESPONSE,
-  INVALID_UCP_ORDER,
-  INVALID_UCP_PLATFORM_CAPABILITY,
-  INVALID_UCP_RESPONSE_METADATA,
-  INVALID_UCP_SEARCH_RESPONSE,
-  VALID_UCP_BUSINESS_PROFILE,
-  VALID_UCP_CART,
-  VALID_UCP_LOOKUP_RESPONSE,
-  VALID_UCP_ORDER,
-  VALID_UCP_PLATFORM_CAPABILITY,
-  VALID_UCP_RESPONSE_METADATA,
-  VALID_UCP_SEARCH_RESPONSE,
-} from './ucp-schema-samples';
+import { VALID_UCP_CART } from './ucp-schema-samples';
 import {
   canonicalJsonSha256,
   listUcpSchemaFiles,
@@ -26,7 +11,6 @@ import {
   UCP_FIXTURE_DIR,
   UCP_ROOT_SCHEMA_FILES,
   UCP_SCHEMAS,
-  type UcpSchemaRef,
   validateUcpDocument,
 } from './ucp-schema-validator';
 
@@ -92,82 +76,6 @@ describe('vendored UCP 2026-04-08 schemas', () => {
 });
 
 describe('validateUcpDocument', () => {
-  const samples: Array<{
-    invalid: unknown;
-    invalidError: string;
-    name: string;
-    ref: UcpSchemaRef;
-    valid: unknown;
-  }> = [
-    {
-      invalid: INVALID_UCP_BUSINESS_PROFILE,
-      invalidError: "must have required property 'payment_handlers'",
-      name: 'discovery profile (profile_schema.json)',
-      ref: UCP_SCHEMAS.businessProfile,
-      valid: VALID_UCP_BUSINESS_PROFILE,
-    },
-    {
-      invalid: INVALID_UCP_RESPONSE_METADATA,
-      invalidError: 'must match pattern',
-      name: 'response metadata (ucp.json)',
-      ref: UCP_SCHEMAS.responseCartMetadata,
-      valid: VALID_UCP_RESPONSE_METADATA,
-    },
-    {
-      invalid: INVALID_UCP_PLATFORM_CAPABILITY,
-      invalidError: "must have required property 'schema'",
-      name: 'platform capability (capability.json)',
-      ref: UCP_SCHEMAS.platformCapability,
-      valid: VALID_UCP_PLATFORM_CAPABILITY,
-    },
-    {
-      invalid: INVALID_UCP_SEARCH_RESPONSE,
-      invalidError: 'must be integer',
-      name: 'catalog search response (catalog_search.json)',
-      ref: UCP_SCHEMAS.catalogSearchResponse,
-      valid: VALID_UCP_SEARCH_RESPONSE,
-    },
-    {
-      invalid: INVALID_UCP_LOOKUP_RESPONSE,
-      invalidError: "must have required property 'inputs'",
-      name: 'catalog lookup response (catalog_lookup.json)',
-      ref: UCP_SCHEMAS.catalogLookupResponse,
-      valid: VALID_UCP_LOOKUP_RESPONSE,
-    },
-    {
-      invalid: INVALID_UCP_CART,
-      invalidError: "must have required property 'price'",
-      name: 'cart (cart.json)',
-      ref: UCP_SCHEMAS.cart,
-      valid: VALID_UCP_CART,
-    },
-    {
-      invalid: INVALID_UCP_ORDER,
-      invalidError: 'must contain at least 1 and no more than 1 valid item(s)',
-      name: 'order (order.json)',
-      ref: UCP_SCHEMAS.order,
-      valid: VALID_UCP_ORDER,
-    },
-  ];
-
-  it.each(samples)('accepts a valid $name sample', ({ ref, valid }) => {
-    expect(validateUcpDocument(ref, valid)).toEqual({
-      errors: [],
-      valid: true,
-    });
-  });
-
-  it.each(samples)('rejects an invalid $name sample', ({
-    invalid,
-    invalidError,
-    ref,
-  }) => {
-    const result = validateUcpDocument(ref, invalid);
-
-    expect(result.valid).toBe(false);
-    expect(result.errors.join('\n')).toContain(invalidError);
-  });
-
   it('ignores the request-side ucp_request annotation on responses', () => {
     const { errors } = validateUcpDocument(UCP_SCHEMAS.cart, VALID_UCP_CART);
 

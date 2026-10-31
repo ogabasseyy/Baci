@@ -1,3 +1,5 @@
+import { UCP_SCHEMAS, type UcpSchemaRef } from './ucp-schema-validator';
+
 const VERSION = '2026-04-08';
 
 const SUCCESS_TOTALS = [
@@ -41,7 +43,7 @@ const PRODUCT = {
   ],
 };
 
-export const VALID_UCP_BUSINESS_PROFILE = {
+const VALID_UCP_BUSINESS_PROFILE = {
   signing_keys: [],
   ucp: {
     capabilities: {
@@ -79,7 +81,7 @@ export const VALID_UCP_BUSINESS_PROFILE = {
   },
 };
 
-export const INVALID_UCP_BUSINESS_PROFILE = {
+const INVALID_UCP_BUSINESS_PROFILE = {
   ...VALID_UCP_BUSINESS_PROFILE,
   ucp: {
     ...VALID_UCP_BUSINESS_PROFILE.ucp,
@@ -88,13 +90,13 @@ export const INVALID_UCP_BUSINESS_PROFILE = {
   },
 };
 
-export const VALID_UCP_SEARCH_RESPONSE = {
+const VALID_UCP_SEARCH_RESPONSE = {
   pagination: { has_next_page: false },
   products: [PRODUCT],
   ucp: ucpEnvelope('dev.ucp.shopping.catalog.search'),
 };
 
-export const INVALID_UCP_SEARCH_RESPONSE = {
+const INVALID_UCP_SEARCH_RESPONSE = {
   ...VALID_UCP_SEARCH_RESPONSE,
   products: [
     {
@@ -107,12 +109,12 @@ export const INVALID_UCP_SEARCH_RESPONSE = {
   ],
 };
 
-export const VALID_UCP_LOOKUP_RESPONSE = {
+const VALID_UCP_LOOKUP_RESPONSE = {
   products: [PRODUCT],
   ucp: ucpEnvelope('dev.ucp.shopping.catalog.lookup'),
 };
 
-export const INVALID_UCP_LOOKUP_RESPONSE = {
+const INVALID_UCP_LOOKUP_RESPONSE = {
   ...VALID_UCP_LOOKUP_RESPONSE,
   products: [
     {
@@ -141,9 +143,9 @@ function buildUcpCart(itemPrice: number | null) {
 
 export const VALID_UCP_CART = buildUcpCart(3998);
 
-export const INVALID_UCP_CART = buildUcpCart(null);
+const INVALID_UCP_CART = buildUcpCart(null);
 
-export const VALID_UCP_ORDER = {
+const VALID_UCP_ORDER = {
   checkout_id: 'checkout_1',
   currency: 'NGN',
   fulfillment: { events: [], expectations: [] },
@@ -162,22 +164,84 @@ export const VALID_UCP_ORDER = {
   ucp: ucpEnvelope('dev.ucp.shopping.order'),
 };
 
-export const INVALID_UCP_ORDER = {
+const INVALID_UCP_ORDER = {
   ...VALID_UCP_ORDER,
   totals: [SUCCESS_TOTALS[0]],
 };
 
-export const VALID_UCP_RESPONSE_METADATA = ucpEnvelope('dev.ucp.shopping.cart');
+const VALID_UCP_RESPONSE_METADATA = ucpEnvelope('dev.ucp.shopping.cart');
 
-export const INVALID_UCP_RESPONSE_METADATA = {
+const INVALID_UCP_RESPONSE_METADATA = {
   status: 'ok',
   version: 'April 2026',
 };
 
-export const VALID_UCP_PLATFORM_CAPABILITY = {
+const VALID_UCP_PLATFORM_CAPABILITY = {
   schema: 'https://ucp.dev/2026-04-08/schemas/shopping/cart.json',
   spec: 'https://ucp.dev/2026-04-08/specification/cart',
   version: VERSION,
 };
 
-export const INVALID_UCP_PLATFORM_CAPABILITY = { version: VERSION };
+const INVALID_UCP_PLATFORM_CAPABILITY = { version: VERSION };
+
+interface UcpSchemaSampleCase {
+  readonly invalid: unknown;
+  /** A substring of the violation the validator must report for `invalid`. */
+  readonly invalidError: string;
+  readonly name: string;
+  readonly ref: UcpSchemaRef;
+  readonly valid: unknown;
+}
+
+/** One valid and one invalid sample for each schema reference the validator exposes. */
+export const UCP_SCHEMA_SAMPLE_CASES: readonly UcpSchemaSampleCase[] = [
+  {
+    invalid: INVALID_UCP_BUSINESS_PROFILE,
+    invalidError: "must have required property 'payment_handlers'",
+    name: 'discovery profile (profile_schema.json)',
+    ref: UCP_SCHEMAS.businessProfile,
+    valid: VALID_UCP_BUSINESS_PROFILE,
+  },
+  {
+    invalid: INVALID_UCP_RESPONSE_METADATA,
+    invalidError: 'must match pattern',
+    name: 'response metadata (ucp.json)',
+    ref: UCP_SCHEMAS.responseCartMetadata,
+    valid: VALID_UCP_RESPONSE_METADATA,
+  },
+  {
+    invalid: INVALID_UCP_PLATFORM_CAPABILITY,
+    invalidError: "must have required property 'schema'",
+    name: 'platform capability (capability.json)',
+    ref: UCP_SCHEMAS.platformCapability,
+    valid: VALID_UCP_PLATFORM_CAPABILITY,
+  },
+  {
+    invalid: INVALID_UCP_SEARCH_RESPONSE,
+    invalidError: 'must be integer',
+    name: 'catalog search response (catalog_search.json)',
+    ref: UCP_SCHEMAS.catalogSearchResponse,
+    valid: VALID_UCP_SEARCH_RESPONSE,
+  },
+  {
+    invalid: INVALID_UCP_LOOKUP_RESPONSE,
+    invalidError: "must have required property 'inputs'",
+    name: 'catalog lookup response (catalog_lookup.json)',
+    ref: UCP_SCHEMAS.catalogLookupResponse,
+    valid: VALID_UCP_LOOKUP_RESPONSE,
+  },
+  {
+    invalid: INVALID_UCP_CART,
+    invalidError: "must have required property 'price'",
+    name: 'cart (cart.json)',
+    ref: UCP_SCHEMAS.cart,
+    valid: VALID_UCP_CART,
+  },
+  {
+    invalid: INVALID_UCP_ORDER,
+    invalidError: 'must contain at least 1 and no more than 1 valid item(s)',
+    name: 'order (order.json)',
+    ref: UCP_SCHEMAS.order,
+    valid: VALID_UCP_ORDER,
+  },
+];

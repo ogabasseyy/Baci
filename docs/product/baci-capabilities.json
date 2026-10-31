@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-31T13:15:45+00:00",
-  "source_revision": "6696156a8ed99dd474b701dc2843b6fb5e14f01c",
-  "evidence_digest": "28e50063a7e9f961a40d4a19689f10203e0e29bc2f0fcc77701cf08f9a326647",
-  "claims_digest": "e6ff237515e48c0671ee4ce6c7851a0c4cf8ac62adc67955aa2030d7a96a9e2c",
-  "review_scope": "Source evidence only. Added the agent surface evidence table to the access map from the cited agentic sources, the 31 October 2026 production profile baseline and new local fixture and conformance tests, on top of the stacked admin-client change: the agentic catalog, checkout-session and order routes resolve the merchant through the scoped merchant-context RPC, with a separate scoped payment-split lookup for checkout completion. The agent-protocols claim, limitations and status are unchanged. Other cited sources are unchanged except the mobile admin inventory sheet empty footer, which now uses undefined; the inventory capability remains unchanged. Re-stamped after the 31 October base sync. The support-chat health probe, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
+  "reviewed_at": "2026-10-31T13:27:22+00:00",
+  "source_revision": "5c3c4744a4a455f73b0be757c790cd6d4e0a0af4",
+  "evidence_digest": "31fed9f6d1aa324d2682381bb0ca26de455bafbcea1ae9ecd6907a4f113a5bf2",
+  "claims_digest": "9d5cf7056035020c0213ecd3e9312701d72e152ec2302a70df15803b31076f47",
+  "review_scope": "Source evidence only. Re-reviewed agent-protocols after its capability claims were made truthful: every UCP shopping capability declares its schema, the catalog specs point at the search and lookup pages, cart is declared and served only for shared-cart merchants, Google Pay is no longer advertised and the OpenAI legacy feed opts no product into native checkout. The claim and status are unchanged; the limitations now record the create-only cart, the shared-cart condition, the withheld Google Pay and the feed. Re-stamped after the 31 October base sync. The support-chat health probe, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",
@@ -185,7 +185,7 @@
       "title": "ACP and UCP commerce foundations",
       "status": "code_evidenced",
       "claim": "Baci implements ACP and UCP discovery profiles, structured catalog interfaces, UCP carts, checkout-session operations and order-reading interfaces for authorized agents.",
-      "limitations": "Protocol implementation is not certification, partner approval or universal merchant activation. Discovery is merchant-scoped and capability-gated; checkout requires readiness, signed authorization and enabled payment configuration. Do not claim automatic ChatGPT/Google shopping inclusion, independently executable Google Pay, unconstrained autonomous payments or complete current-spec conformance without separate verification. The future-of-commerce mission is positioning, not measured impact.",
+      "limitations": "Protocol implementation is not certification, partner approval or universal merchant activation. Discovery is merchant-scoped and capability-gated; checkout requires readiness, signed authorization and enabled payment configuration. UCP cart is declared and served only for merchants enrolled in shared cart, and cart update (PUT /carts/{id}) is not supported, matching Google's create-only cart transfer. Google Pay is not advertised to agents, because completion would create a Paystack bank transfer instead of charging the token, and the OpenAI product feed opts no product into native checkout. Do not claim automatic ChatGPT/Google shopping inclusion, independently executable Google Pay, unconstrained autonomous payments or complete current-spec conformance without separate verification. The future-of-commerce mission is positioning, not measured impact.",
       "source_refs": [
         "apps/web/src/app/.well-known/acp.json/route.ts",
         "apps/web/src/app/.well-known/ucp/route.ts",

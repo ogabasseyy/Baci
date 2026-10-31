@@ -49,6 +49,10 @@ vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: vi.fn(() => ({})),
 }));
 
+vi.mock('@/lib/agentic/is-ucp-shared-cart-enabled', () => ({
+  isUcpSharedCartEnabled: vi.fn(async () => true),
+}));
+
 function mockMutation() {
   vi.mocked(readAgenticMutationRequest).mockResolvedValue({
     agentId: 'openai-agent',

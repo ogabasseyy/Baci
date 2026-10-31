@@ -123,8 +123,11 @@ describe('agent commerce manifest builder', () => {
     expect(manifest.payment_methods).toEqual(['pay_on_delivery']);
   });
 
-  it('does not include Google Pay when processor config is absent', async () => {
-    vi.stubEnv('BACI_GOOGLE_PAY_ENABLED', '');
+  it('never advertises Google Pay, even with explicit Paystack gateway config', async () => {
+    vi.stubEnv('BACI_GOOGLE_PAY_ENABLED', 'true');
+    vi.stubEnv('BACI_GOOGLE_PAY_GATEWAY', 'paystack');
+    vi.stubEnv('BACI_GOOGLE_PAY_GATEWAY_MERCHANT_ID', 'paystack-merchant-id');
+    vi.stubEnv('BACI_GOOGLE_PAY_MERCHANT_ID', 'google-merchant-id');
 
     const { buildAgentCommerceManifest } = await import(
       '@/lib/agentic/agent-commerce-manifest'
@@ -141,59 +144,7 @@ describe('agent commerce manifest builder', () => {
     );
 
     expect(manifest.payment_methods).toEqual(['paystack_bank_transfer']);
-  });
-
-  it('includes Google Pay only when Paystack gateway config is explicit', async () => {
-    vi.stubEnv('BACI_GOOGLE_PAY_ENABLED', 'true');
-    vi.stubEnv('BACI_GOOGLE_PAY_GATEWAY', 'paystack');
-    vi.stubEnv('BACI_GOOGLE_PAY_GATEWAY_MERCHANT_ID', 'paystack-merchant-id');
-    vi.stubEnv('BACI_GOOGLE_PAY_MERCHANT_ID', 'google-merchant-id');
-
-    const { buildAgentCommerceManifest } = await import(
-      '@/lib/agentic/agent-commerce-manifest'
-    );
-
-    const manifest = buildAgentCommerceManifest(
-      {
-        business_name: 'Ogabassey',
-        feature_settings: { pay_on_delivery_enabled: false },
-        paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
-        slug: 'ogabassey',
-      },
-      'https://ogabassey.com'
-    );
-
-    expect(manifest.payment_methods).toEqual([
-      'paystack_bank_transfer',
-      'google_pay',
-    ]);
-    expect(manifest.payment_handler_configs?.google_pay).toEqual({
-      gateway: 'paystack',
-      gatewayMerchantId: 'paystack-merchant-id',
-      merchantId: 'google-merchant-id',
-    });
-  });
-
-  it('removes only Paystack bank transfer while the DVA mode is paused', async () => {
-    vi.stubEnv('AGENTIC_PAYSTACK_DVA_MODE', 'paused');
-
-    const { buildAgentCommerceManifest } = await import(
-      '@/lib/agentic/agent-commerce-manifest'
-    );
-
-    const manifest = buildAgentCommerceManifest(
-      {
-        business_name: 'Ogabassey',
-        feature_settings: { pay_on_delivery_enabled: true },
-        paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
-        slug: 'ogabassey',
-      },
-      'https://ogabassey.com'
-    );
-
-    expect(manifest.payment_methods).toEqual(['pay_on_delivery']);
-    expect(manifest.capabilities).toContain('checkout.session.complete');
-    expect(manifest.links.checkout_session_complete).toBeDefined();
+    expect(manifest).not.toHaveProperty('payment_handler_configs');
   });
 
   it('suppresses Paystack-backed Google Pay while DVA is paused', async () => {
@@ -202,29 +153,6 @@ describe('agent commerce manifest builder', () => {
     vi.stubEnv('BACI_GOOGLE_PAY_GATEWAY', 'paystack');
     vi.stubEnv('BACI_GOOGLE_PAY_GATEWAY_MERCHANT_ID', 'paystack-merchant-id');
     vi.stubEnv('BACI_GOOGLE_PAY_MERCHANT_ID', 'google-merchant-id');
-
-    const { buildAgentCommerceManifest } = await import(
-      '@/lib/agentic/agent-commerce-manifest'
-    );
-
-    const manifest = buildAgentCommerceManifest(
-      {
-        business_name: 'Ogabassey',
-        feature_settings: { pay_on_delivery_enabled: false },
-        paystack_subaccount_code: 'ACCT_TESTMOCK1234567',
-        slug: 'ogabassey',
-      },
-      'https://ogabassey.com'
-    );
-
-    expect(manifest.payment_methods).toEqual([]);
-    expect(manifest.payment_handler_configs).toBeUndefined();
-    expect(manifest.capabilities).toEqual(['catalog.read', 'order.read']);
-    expect(manifest.links.checkout_session_complete).toBeUndefined();
-  });
-
-  it('removes checkout mutations when paused DVA is the only payment method', async () => {
-    vi.stubEnv('AGENTIC_PAYSTACK_DVA_MODE', 'paused');
 
     const { buildAgentCommerceManifest } = await import(
       '@/lib/agentic/agent-commerce-manifest'

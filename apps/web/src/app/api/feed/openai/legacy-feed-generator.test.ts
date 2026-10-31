@@ -212,4 +212,36 @@ describe('generateOpenAIFeed', () => {
 
     expect(parsed).toMatchObject({ price: '50000.00 NGN' });
   });
+
+  it('keeps search on and opts no row into native checkout (F6)', () => {
+    const lines = generateOpenAIFeed(
+      [
+        product({ manage_stock: false, stock: 0 }),
+        product({
+          id: 'product-2',
+          manage_stock: false,
+          slug: 'variant-phone',
+          variants: [
+            {
+              id: 'variant-1',
+              sku: 'SKU-RED',
+              attributes: { color: 'Red' },
+              stock_quantity: 0,
+            },
+          ],
+        }),
+      ],
+      merchant,
+      'https://ogabassey.com'
+    );
+    const rows = lines.map(parseLine);
+
+    expect(rows.length).toBe(2);
+    for (const row of rows) {
+      expect(row).toMatchObject({
+        enable_checkout: false,
+        enable_search: true,
+      });
+    }
+  });
 });

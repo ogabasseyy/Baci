@@ -96,33 +96,17 @@ describe('buildUcpDiscoveryProfile payment handlers', () => {
     expect(profile.ucp.payment_handlers).not.toHaveProperty('com.google.pay');
   });
 
-  it('advertises Google Pay only when explicitly configured', () => {
+  it('never emits a com.google.pay handler, even if a manifest lists google_pay', () => {
     const profile = buildUcpDiscoveryProfile(
       buildManifest({
-        payment_handler_configs: {
-          google_pay: {
-            gateway: 'paystack',
-            gatewayMerchantId: 'paystack-merchant-id',
-            merchantId: 'google-merchant-id',
-          },
-        },
-        payment_methods: ['paystack_bank_transfer', 'google_pay' as never],
+        payment_methods: ['paystack_bank_transfer', 'google_pay'],
       })
     );
 
-    expect(profile.ucp.payment_handlers['com.google.pay']).toEqual([
-      expect.objectContaining({
-        id: 'google_pay',
-        available_instruments: [
-          expect.objectContaining({ currency: 'NGN', type: 'google_pay' }),
-        ],
-        config: {
-          gateway: 'paystack',
-          gateway_merchant_id: 'paystack-merchant-id',
-          merchant_id: 'google-merchant-id',
-        },
-      }),
-    ]);
+    expect(profile.ucp.payment_handlers).not.toHaveProperty('com.google.pay');
+    expect(profile.ucp.payment_handlers).toHaveProperty(
+      'com.paystack.bank_transfer'
+    );
   });
 
   it('does not advertise AP2 mandate support without an AP2 verifier', () => {

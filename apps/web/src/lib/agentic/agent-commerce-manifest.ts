@@ -1,23 +1,14 @@
-import {
-  AGENTIC_PAYMENT_METHOD_GOOGLE_PAY,
-  AGENTIC_PAYMENT_METHOD_PAY_ON_DELIVERY,
-  AGENTIC_PAYMENT_METHOD_PAYSTACK_BANK_TRANSFER,
-  type AgenticPaymentMethod,
-} from '@/config/agentic-payment-methods';
+import type { AgenticPaymentMethod } from '@/config/agentic-payment-methods';
 import { STOREFRONT_AGENT_ROUTES } from '@/config/storefront-agent-routes';
 import { STOREFRONT_FEED_ROUTES } from '@/config/storefront-feed-routes';
-import {
-  type GooglePayAgenticConfig,
-  getGooglePayAgenticConfig,
-  getPaystackSecretKey,
-} from '@/env';
-import { isAgenticPaystackDvaPaused } from '@/lib/agentic/agentic-paystack-dva-paused';
+import { decideAgenticPaymentMethods } from '@/lib/agentic/decide-agentic-payment-methods';
+import { decideUcpCartTransfer } from '@/lib/agentic/decide-ucp-cart-transfer';
 import {
   getConfiguredAgenticMerchantSlug,
   isAgenticCheckoutRuntimeConfigured,
 } from '@/lib/agentic/merchant-context';
-import { isValidPaystackSubaccountCode } from '@/lib/agentic/paystack';
 import { SUPPORTED_AGENTIC_API_VERSIONS } from '@/lib/agentic/request-integrity';
+import { CART_TRANSFER_CAPABILITY } from '@/lib/agentic/ucp-profile-constants';
 import type { CachedMerchant } from '@/lib/cached-data';
 import {
   type AgentPolicyUrls,
@@ -53,6 +44,7 @@ type MerchantPaymentConfig = Pick<
   | 'feature_settings'
   | 'paystack_subaccount_code'
   | 'paystack_subaccount_configured'
+  | 'shared_cart_enabled'
   | 'slug'
 >;
 
@@ -85,9 +77,6 @@ export type AgentCommerceManifest = {
   auth: ReturnType<typeof buildAgenticCheckoutAuth> | null;
   capabilities: string[];
   links: AgentCommerceLinks;
-  payment_handler_configs?: {
-    google_pay?: GooglePayAgenticConfig;
-  };
   payment_methods: AgenticPaymentMethod[];
   platform: 'baci';
   schema_version: typeof AGENT_COMMERCE_SCHEMA_VERSION;
@@ -116,13 +105,9 @@ export function buildAgentCommerceManifest(
   merchant: MerchantPaymentConfig,
   baseUrl: string
 ): AgentCommerceManifest {
-  const googlePayConfig = getGooglePayAgenticConfig();
-  const paymentMethods = buildAgenticPaymentMethods(merchant, googlePayConfig);
-  const enabledGooglePayConfig = paymentMethods.includes(
-    AGENTIC_PAYMENT_METHOD_GOOGLE_PAY
-  )
-    ? googlePayConfig
-    : null;
+  const paymentMethods = decideAgenticPaymentMethods(merchant)
+    .filter((decision) => decision.ready)
+    .map((decision) => decision.method);
   const signedAgentReadsEnabled =
     isAgenticCheckoutRuntimeConfigured() &&
     merchant.slug === getConfiguredAgenticMerchantSlug();
@@ -132,6 +117,10 @@ export function buildAgentCommerceManifest(
     paymentMethods.length > 0;
   const checkoutLinks = checkoutEnabled ? buildCheckoutLinks(baseUrl) : {};
   const orderLinks = signedAgentReadsEnabled ? buildOrderLinks(baseUrl) : {};
+  const cartTransfer = decideUcpCartTransfer({
+    merchant,
+    signedAgentReadsEnabled,
+  });
 
   return {
     schema_version: AGENT_COMMERCE_SCHEMA_VERSION,
@@ -146,12 +135,10 @@ export function buildAgentCommerceManifest(
       ...(signedAgentReadsEnabled
         ? [AGENT_COMMERCE_ORDER_READ_CAPABILITY]
         : []),
+      ...(cartTransfer.ready ? [CART_TRANSFER_CAPABILITY] : []),
       ...(checkoutEnabled ? [...AGENT_COMMERCE_CHECKOUT_CAPABILITIES] : []),
     ],
     payment_methods: checkoutEnabled ? paymentMethods : [],
-    ...(checkoutEnabled && enabledGooglePayConfig
-      ? { payment_handler_configs: { google_pay: enabledGooglePayConfig } }
-      : {}),
     auth: signedAgentReadsEnabled ? buildAgenticCheckoutAuth() : null,
     links: {
       agent_native_commerce: buildUrl(
@@ -187,40 +174,6 @@ export function buildAgentCommerceManifest(
       ...buildAgentPolicyUrls(baseUrl),
     },
   };
-}
-
-function buildAgenticPaymentMethods(
-  merchant: MerchantPaymentConfig,
-  googlePayConfig: GooglePayAgenticConfig | null
-) {
-  const methods: AgenticPaymentMethod[] = [];
-  const paystackDvaPaused = isAgenticPaystackDvaPaused();
-  // The public storefront snapshot omits the raw paystack_subaccount_code and
-  // exposes the derived paystack_subaccount_configured hint instead, so the
-  // public capability check accepts either signal (mirroring
-  // isPaystackCheckoutAvailable). Private payment paths stay authoritative
-  // over the raw code when a session is actually charged.
-  const paystackReady =
-    getPaystackSecretKey() &&
-    (isValidPaystackSubaccountCode(merchant.paystack_subaccount_code) ||
-      merchant.paystack_subaccount_configured === true);
-  if (paystackReady) {
-    if (!paystackDvaPaused) {
-      methods.push(AGENTIC_PAYMENT_METHOD_PAYSTACK_BANK_TRANSFER);
-    }
-    // Google Pay is not independently executable yet: UCP normalizes it to the
-    // Paystack provider and the current completion setup creates a DVA instead
-    // of charging the supplied token. Do not advertise it through a DVA pause.
-    if (!paystackDvaPaused && googlePayConfig?.gateway === 'paystack') {
-      methods.push(AGENTIC_PAYMENT_METHOD_GOOGLE_PAY);
-    }
-  }
-  const payOnDeliveryEnabled =
-    merchant.feature_settings?.pay_on_delivery_enabled;
-  if (payOnDeliveryEnabled === true) {
-    methods.push(AGENTIC_PAYMENT_METHOD_PAY_ON_DELIVERY);
-  }
-  return methods;
 }
 
 function buildAgenticCheckoutAuth() {

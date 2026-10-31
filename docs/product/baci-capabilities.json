@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-31T13:15:45+00:00",
-  "source_revision": "6696156a8ed99dd474b701dc2843b6fb5e14f01c",
-  "evidence_digest": "28e50063a7e9f961a40d4a19689f10203e0e29bc2f0fcc77701cf08f9a326647",
-  "claims_digest": "e6ff237515e48c0671ee4ce6c7851a0c4cf8ac62adc67955aa2030d7a96a9e2c",
+  "reviewed_at": "2026-10-31T17:01:09+00:00",
+  "source_revision": "05fd9b3dbaae2306fb25aad1bb07e2d8150948bf",
+  "evidence_digest": "74cb65fe01674d25b2d40548d80e3bb5bcad87ec4e39cf3cc26e084fa3c775e6",
+  "claims_digest": "ae92c7364f93be2d036aa07cd8368371cc31f5ddc75d1631f5cf0efbd75d3017",
   "review_scope": "Source evidence only. Added the agent surface evidence table to the access map from the cited agentic sources, the 31 October 2026 production profile baseline and new local fixture and conformance tests, on top of the stacked admin-client change: the agentic catalog, checkout-session and order routes resolve the merchant through the scoped merchant-context RPC, with a separate scoped payment-split lookup for checkout completion. The agent-protocols claim, limitations and status are unchanged. Other cited sources are unchanged except the mobile admin inventory sheet empty footer, which now uses undefined; the inventory capability remains unchanged. Re-stamped after the 31 October base sync. The support-chat health probe, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment and transaction readiness require separate verification.",
   "capabilities": [
     {

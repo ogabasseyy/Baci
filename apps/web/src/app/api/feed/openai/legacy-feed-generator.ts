@@ -1,3 +1,4 @@
+import { OPENAI_LEGACY_FEED_ELIGIBILITY } from '@/config/openai-legacy-feed-eligibility';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { stripHtmlTags } from '@/lib/sanitize-core';
@@ -84,8 +85,7 @@ function buildVariantFeedItem({
   const identifiers = resolveVariantProductIdentifiers(variant.attributes);
 
   return {
-    enable_search: true,
-    enable_checkout: true,
+    ...OPENAI_LEGACY_FEED_ELIGIBILITY,
     id: itemId,
     item_group_id: product.id,
     gtin: identifiers.gtin,
@@ -153,8 +153,7 @@ function buildSimpleFeedItem({
       : undefined;
 
   return {
-    enable_search: true,
-    enable_checkout: true,
+    ...OPENAI_LEGACY_FEED_ELIGIBILITY,
     id: itemId,
     gtin: productIdentifiers.gtin,
     mpn: productIdentifiers.mpn,

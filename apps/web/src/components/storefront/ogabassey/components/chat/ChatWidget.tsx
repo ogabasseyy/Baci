@@ -1,7 +1,7 @@
 'use client';
-
 import '@/app/(storefront)/storefront-chat.css';
 import { Sparkles, X } from 'lucide-react';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import type React from 'react';
 import { useCart } from '@/hooks/cart';
@@ -14,18 +14,15 @@ import { ChatMessageBubble } from './chat-message';
 import { resolveSuggestionNavigationPath, SUGGESTIONS } from './types';
 import { useChatOpenOnMount } from './use-chat-open-on-mount';
 import { useOgabasseyChat } from './use-ogabassey-chat';
-
 export interface ChatWidgetProps {
   openOnMount?: boolean;
 }
-
 const CHAT_MOBILE_OFFSET_ATTRIBUTES = {
   'data-mobile-offset-cart': '6.75rem',
   'data-mobile-offset-default': '5.75rem',
   'data-mobile-offset-product': '6.25rem',
   'data-mobile-offset-screen': '1rem',
 } as const;
-
 export const ChatWidget: React.FC<ChatWidgetProps> = ({
   openOnMount = false,
 }) => {
@@ -71,7 +68,6 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
     handleSend(label);
   };
 
-  // Dynamic bottom positioning based on page type
   const isProductPage =
     pathname?.match(/\/[^/]+\/[^/]+\/[^/]+/) &&
     !pathname?.includes('/cart') &&
@@ -129,9 +125,11 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
 
             <div className="relative z-10 flex items-center gap-3">
               {isSanta ? (
-                <img
+                <Image
                   src="/african-santa-head.svg"
                   alt="Santa"
+                  width={36}
+                  height={36}
                   className="size-9 object-contain rounded-full border-2 border-store-primary/40"
                 />
               ) : (
@@ -194,15 +192,15 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
                   >
                     <div className="flex gap-1">
                       <span
-                        className={`w-1.5 h-1.5 rounded-full animate-bounce ${isSanta ? 'bg-red-400' : 'bg-gray-400'}`}
+                        className={`w-1.5 h-1.5 rounded-full animate-bounce ${isSanta ? 'bg-store-primary/60' : 'bg-store-background-text/40'}`}
                         style={{ animationDelay: '0ms' }}
                       />
                       <span
-                        className={`w-1.5 h-1.5 rounded-full animate-bounce ${isSanta ? 'bg-red-400' : 'bg-gray-400'}`}
+                        className={`w-1.5 h-1.5 rounded-full animate-bounce ${isSanta ? 'bg-store-primary/60' : 'bg-store-background-text/40'}`}
                         style={{ animationDelay: '150ms' }}
                       />
                       <span
-                        className={`w-1.5 h-1.5 rounded-full animate-bounce ${isSanta ? 'bg-red-400' : 'bg-gray-400'}`}
+                        className={`w-1.5 h-1.5 rounded-full animate-bounce ${isSanta ? 'bg-store-primary/60' : 'bg-store-background-text/40'}`}
                         style={{ animationDelay: '300ms' }}
                       />
                     </div>
@@ -273,9 +271,11 @@ export const ChatWidget: React.FC<ChatWidgetProps> = ({
             <>
               {isSanta ? (
                 <div className="relative w-full h-full">
-                  <img
+                  <Image
                     src="/african-santa-head.svg"
                     alt="Santa"
+                    fill
+                    sizes="64px"
                     className="w-full h-full object-contain drop-shadow-xl hover:brightness-110 transition-all filter"
                   />
                 </div>

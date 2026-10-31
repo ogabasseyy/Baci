@@ -64,9 +64,11 @@ function currencyToken(
 function suffixCurrencies(text: string): {
   length: number;
   tokens: CurrencyToken[];
+  boundaries: number[];
 } {
   let length = 0;
   const tokens: CurrencyToken[] = [];
+  const boundaries = [0];
   for (let count = 0; count <= 4; count++) {
     const tail = text.slice(length);
     if (
@@ -111,8 +113,17 @@ function suffixCurrencies(text: string): {
     }
     tokens.push(token);
     length += consumed;
+    boundaries.push(length);
   }
-  return { length, tokens };
+  return { length, tokens, boundaries };
+}
+
+function startsBudgetRange(text: string): boolean {
+  const separator = /^\s{0,64}(?:[-–—]|to\b)\s{0,64}/iu.exec(text);
+  if (!separator) return false;
+  const upper = text.slice(separator[0].length);
+  const currency = currencyToken(upper, true);
+  return /^\s{0,64}\d/u.test(upper.slice(currency?.length ?? 0));
 }
 
 function hasAttachedAmbiguousCode(rawAmount: string | undefined): boolean {
@@ -175,11 +186,9 @@ export function analyzeFastCatalogBudget(
     const amount = AMOUNT.exec(amountTail);
     const afterAmount = amount ? amountTail.slice(amount[0].length) : '';
     const suffix = amount ? suffixCurrencies(afterAmount) : undefined;
-    const rangePattern =
-      /^\s{0,64}(?:[-–—]|to\b)\s{0,64}(?:\p{Sc}\s{0,64})?\d/iu;
-    const range =
-      rangePattern.test(afterAmount) ||
-      rangePattern.test(afterAmount.slice(suffix?.length ?? 0));
+    const range = (suffix?.boundaries ?? [0]).some((boundary) =>
+      startsBudgetRange(afterAmount.slice(boundary))
+    );
     if (range) hasRange = true;
     const malformedMultiplier = amount
       ? /^\s*(?:million|thousand)[\p{L}\p{N}_]+/iu.exec(afterAmount)

@@ -143,6 +143,9 @@ jobs:
     if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -150,6 +153,12 @@ jobs:
           filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
+      - name: Restore TypeScript compiler state
+        id: typecheck-cache
+        uses: ./.github/actions/typecheck-cache
+        continue-on-error: true
+      - name: Test compiler cache invalidation and trust policy
+        run: node --test .github/scripts/ci-typecheck-cache.test.mjs .github/scripts/find-trusted-typecheck-state.test.mjs .github/scripts/diff-guardian-runner.test.mjs
       - name: Install isolated builder auth typecheck dependencies
         run: pnpm --dir apps/web/tools/builder-auth install --ignore-workspace --frozen-lockfile
       - name: Run isolated builder auth tests
@@ -164,6 +173,12 @@ jobs:
           else
             pnpm turbo typecheck
           fi
+      - name: Save TypeScript compiler state
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: ./.github/actions/typecheck-cache
+        continue-on-error: true
+        with:
+          mode: save
 
   quality-test:
     name: Quality Gate - Test

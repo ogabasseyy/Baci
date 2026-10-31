@@ -73,7 +73,8 @@ jobs:
     if: >-
       github.event_name == 'pull_request_target' ||
       github.event_name == 'workflow_run'
-    runs-on: ubuntu-latest
+    # API-only orchestration: same tools and 15-minute deadline, cheaper CPU.
+    runs-on: ubuntu-slim
     timeout-minutes: 15
     steps:
       - name: Tally AI reviewers and gate by quorum

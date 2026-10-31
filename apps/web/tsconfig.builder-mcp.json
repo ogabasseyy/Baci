@@ -1,6 +1,11 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "incremental": false, "plugins": [], "types": ["node"] },
+  "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "tsconfig.builder-mcp.tsbuildinfo",
+    "plugins": [],
+    "types": ["node"]
+  },
   "include": ["builder-mcp-server/**/*.ts"],
   "exclude": ["node_modules", "builder-mcp-server/dist"]
 }

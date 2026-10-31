@@ -99,6 +99,7 @@ describe('GET /.well-known/ucp', () => {
 
   it('exposes Baci checkout extensions when agentic checkout is configured', async () => {
     stubAgenticCheckoutEnv();
+    stubMerchant({ shared_cart_enabled: true });
 
     const { GET } = await import('./route');
     const response = await GET(
@@ -215,6 +216,24 @@ describe('GET /.well-known/ucp', () => {
     expect(body.extensions.baci.links.order).toBe(
       'https://ogabassey.com/api/agentic/orders/{order_id}'
     );
+  });
+
+  it('does not declare cart for a merchant that is not enrolled in shared cart', async () => {
+    stubAgenticCheckoutEnv();
+    stubMerchant({ shared_cart_enabled: false });
+
+    const { GET } = await import('./route');
+    const response = await GET(
+      new Request('https://ogabassey.com/.well-known/ucp', {
+        headers: { host: 'ogabassey.com' },
+      })
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.ucp.capabilities['dev.ucp.shopping.cart']).toBeUndefined();
+    expect(body.extensions.baci.capabilities).not.toContain('cart.transfer');
+    expect(body.ucp.capabilities['dev.ucp.shopping.checkout']).toBeDefined();
   });
 
   it('omits the Paystack handler but preserves pay on delivery while DVA is paused', async () => {

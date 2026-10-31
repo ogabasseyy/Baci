@@ -78,6 +78,7 @@ function signedManifest(): AgentCommerceManifest {
       'checkout.session.complete',
       'checkout.session.cancel',
       'order.read',
+      'cart.transfer',
     ],
     links: {
       ...baseManifest.links,
@@ -112,7 +113,7 @@ describe('ucp shopping profile builders', () => {
     const transferOnly: AgentCommerceManifest = {
       ...baseManifest,
       auth: checkoutAuth,
-      capabilities: ['catalog.read'],
+      capabilities: ['catalog.read', 'cart.transfer'],
       links: { ...baseManifest.links },
     };
     const capabilities = buildUcpCapabilities({
@@ -122,6 +123,22 @@ describe('ucp shopping profile builders', () => {
     });
     expect(capabilities).toHaveProperty('dev.ucp.shopping.cart');
     expect(capabilities).not.toHaveProperty('dev.ucp.shopping.checkout');
+  });
+
+  it('does not declare cart for a signed manifest without cart.transfer', () => {
+    const notEnrolled: AgentCommerceManifest = {
+      ...baseManifest,
+      auth: checkoutAuth,
+      capabilities: ['catalog.read'],
+      links: { ...baseManifest.links },
+    };
+    const capabilities = buildUcpCapabilities({
+      agentCommerceManifestUrl: 'https://ogabassey.com/agent-commerce.json',
+      agenticApiBaseUrl: 'https://ogabassey.com/api/agentic',
+      manifest: notEnrolled,
+    });
+
+    expect(capabilities).not.toHaveProperty('dev.ucp.shopping.cart');
   });
 
   it('builds cart and catalog operations without slash drift', () => {

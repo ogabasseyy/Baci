@@ -12,7 +12,6 @@ import { cartResponse } from './ucp-conformance-cart-response';
 import {
   LINE_MINOR,
   MAJOR_PRICE,
-  type ManifestMerchant,
   MERCHANT,
   UNIT_MINOR,
 } from './ucp-conformance-data';
@@ -66,12 +65,11 @@ describe('Baci UCP responses against the vendored 2026-04-08 schemas', () => {
       expect(withoutSchema).toEqual([]);
     });
 
-    // Roadmap Task 3 (plan 3) withholds cart when shared_cart_enabled is off.
-    it.fails('F34: the cart capability follows shared_cart_enabled', async () => {
+    it('F34: the cart capability follows shared_cart_enabled', async () => {
       const profile = await buildProfile({
         ...MERCHANT,
         shared_cart_enabled: false,
-      } as ManifestMerchant);
+      });
 
       expect(profile.ucp.capabilities['dev.ucp.shopping.cart']).toBeUndefined();
     });

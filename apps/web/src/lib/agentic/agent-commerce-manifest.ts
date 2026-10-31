@@ -2,11 +2,13 @@ import type { AgenticPaymentMethod } from '@/config/agentic-payment-methods';
 import { STOREFRONT_AGENT_ROUTES } from '@/config/storefront-agent-routes';
 import { STOREFRONT_FEED_ROUTES } from '@/config/storefront-feed-routes';
 import { decideAgenticPaymentMethods } from '@/lib/agentic/decide-agentic-payment-methods';
+import { decideUcpCartTransfer } from '@/lib/agentic/decide-ucp-cart-transfer';
 import {
   getConfiguredAgenticMerchantSlug,
   isAgenticCheckoutRuntimeConfigured,
 } from '@/lib/agentic/merchant-context';
 import { SUPPORTED_AGENTIC_API_VERSIONS } from '@/lib/agentic/request-integrity';
+import { CART_TRANSFER_CAPABILITY } from '@/lib/agentic/ucp-profile-constants';
 import type { CachedMerchant } from '@/lib/cached-data';
 import {
   type AgentPolicyUrls,
@@ -42,6 +44,7 @@ type MerchantPaymentConfig = Pick<
   | 'feature_settings'
   | 'paystack_subaccount_code'
   | 'paystack_subaccount_configured'
+  | 'shared_cart_enabled'
   | 'slug'
 >;
 
@@ -114,6 +117,10 @@ export function buildAgentCommerceManifest(
     paymentMethods.length > 0;
   const checkoutLinks = checkoutEnabled ? buildCheckoutLinks(baseUrl) : {};
   const orderLinks = signedAgentReadsEnabled ? buildOrderLinks(baseUrl) : {};
+  const cartTransfer = decideUcpCartTransfer({
+    merchant,
+    signedAgentReadsEnabled,
+  });
 
   return {
     schema_version: AGENT_COMMERCE_SCHEMA_VERSION,
@@ -128,6 +135,7 @@ export function buildAgentCommerceManifest(
       ...(signedAgentReadsEnabled
         ? [AGENT_COMMERCE_ORDER_READ_CAPABILITY]
         : []),
+      ...(cartTransfer.ready ? [CART_TRANSFER_CAPABILITY] : []),
       ...(checkoutEnabled ? [...AGENT_COMMERCE_CHECKOUT_CAPABILITIES] : []),
     ],
     payment_methods: checkoutEnabled ? paymentMethods : [],

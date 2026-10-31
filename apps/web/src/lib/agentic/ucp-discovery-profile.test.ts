@@ -79,6 +79,7 @@ function buildSignedCheckoutManifest(): AgentCommerceManifest {
       'checkout.session.complete',
       'checkout.session.cancel',
       'order.read',
+      'cart.transfer',
     ],
     links: {
       ...baseManifest.links,

@@ -1,5 +1,6 @@
 import type { AgentCommerceManifest } from '@/lib/agentic/agent-commerce-manifest';
 import {
+  CART_TRANSFER_CAPABILITY,
   CHECKOUT_SESSION_CAPABILITIES,
   UCP_PROFILE_VERSION,
 } from '@/lib/agentic/ucp-profile-constants';
@@ -246,9 +247,10 @@ function hasCheckoutCapabilities(manifest: AgentCommerceManifest): boolean {
 }
 
 function hasCartCapability(manifest: AgentCommerceManifest): boolean {
-  // Signed cart transfers are available independently of native checkout.
-  // This does not advertise payment or order operations.
-  return manifest.auth !== null;
+  // The manifest grants cart.transfer only for signed agent access to a
+  // merchant enrolled in shared cart (decide-ucp-cart-transfer.ts). Cart
+  // transfer is independent of native checkout and declares no payment.
+  return manifest.capabilities.includes(CART_TRANSFER_CAPABILITY);
 }
 
 function hasNativeCatalogCapability(manifest: AgentCommerceManifest): boolean {

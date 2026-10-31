@@ -8,3 +8,6 @@ export const CHECKOUT_SESSION_CAPABILITIES = [
   'checkout.session.complete',
   'checkout.session.cancel',
 ] as const;
+
+/** Agent-manifest capability that lets the UCP profile declare cart. */
+export const CART_TRANSFER_CAPABILITY = 'cart.transfer';

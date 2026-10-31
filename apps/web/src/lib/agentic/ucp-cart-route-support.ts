@@ -7,6 +7,7 @@ import {
   resolveAgenticMerchantContextFromRpc,
 } from '@/lib/agentic/merchant-context';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
+import { checkUcpCartAvailability } from '@/lib/agentic/ucp-cart-availability';
 import { buildUcpCartResponse } from '@/lib/agentic/ucp-cart-response';
 import {
   coerceUcpCartItems,
@@ -47,6 +48,11 @@ export async function resolveUcpCartContext(request: NextRequest): Promise<
         { status: 403 }
       ),
     };
+  }
+
+  const availability = await checkUcpCartAvailability(merchant.id);
+  if (!availability.ok) {
+    return { ok: false, response: availability.response };
   }
 
   return {

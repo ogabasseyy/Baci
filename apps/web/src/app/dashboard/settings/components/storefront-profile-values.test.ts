@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { CachedMerchant } from '@/lib/cached-data';
-import { getStorefrontProfileValues } from './storefront-profile-values';
+import {
+  getStorefrontProfileValues,
+  isStorefrontProfileValueChanged,
+} from './storefront-profile-values';
 
 const merchant = {
   business_name: 'Merchant A',
@@ -42,5 +45,29 @@ describe('getStorefrontProfileValues', () => {
       support_email: '',
       support_phone: '',
     });
+  });
+});
+
+describe('isStorefrontProfileValueChanged', () => {
+  it('treats a value equal to its baseline as unchanged', () => {
+    expect(isStorefrontProfileValueChanged('+23415781', '+23415781')).toBe(
+      false
+    );
+  });
+
+  it('treats a blank value against a missing baseline as unchanged', () => {
+    expect(isStorefrontProfileValueChanged('', null)).toBe(false);
+    expect(isStorefrontProfileValueChanged('', undefined)).toBe(false);
+  });
+
+  it('never treats a field the submission did not carry as changed', () => {
+    expect(isStorefrontProfileValueChanged(undefined, '+2348031234567')).toBe(
+      false
+    );
+  });
+
+  it('treats an edited or cleared value as changed', () => {
+    expect(isStorefrontProfileValueChanged('+2341578', '+23415781')).toBe(true);
+    expect(isStorefrontProfileValueChanged('', '+23415781')).toBe(true);
   });
 });

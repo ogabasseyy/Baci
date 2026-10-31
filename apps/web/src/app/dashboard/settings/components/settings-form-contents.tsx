@@ -26,7 +26,11 @@ import { HeroCarouselCard } from './hero-carousel-card';
 import { saveSettings } from './save-settings';
 import { uploadLogoWithColors } from './settings-logo-upload';
 import { buildSocialMediaDraft } from './settings-social-media-draft';
-import { type SettingsFormValues, settingsSchema } from './settings-utils';
+import {
+  createSettingsSchema,
+  type SettingsFormValues,
+  type settingsSchema,
+} from './settings-utils';
 import { SocialMediaCard } from './social-media-card';
 import { StoreFeaturesCard } from './store-features-card';
 import { StorefrontProfileFields } from './storefront-profile-fields';
@@ -65,17 +69,24 @@ export function SettingsFormContents({
     string,
     string
   > | null>(null);
+  const profileBaselineRef = useRef<StorefrontProfileBaseline>({
+    ...getStorefrontProfileValues(initialMerchant),
+    updated_at: initialMerchant.updated_at,
+  });
   const form = useForm<
     z.input<typeof settingsSchema>,
     unknown,
     SettingsFormValues
   >({
-    resolver: zodResolver(settingsSchema),
+    // Validates against the baseline the save compares with, read at
+    // validation time, so an untouched legacy phone never blocks a save.
+    resolver: (values, context, options) =>
+      zodResolver(createSettingsSchema(profileBaselineRef.current))(
+        values,
+        context,
+        options
+      ),
     defaultValues: getStorefrontProfileValues(initialMerchant),
-  });
-  const profileBaselineRef = useRef<StorefrontProfileBaseline>({
-    ...getStorefrontProfileValues(initialMerchant),
-    updated_at: initialMerchant.updated_at,
   });
   const refreshProfileBaseline = useStorefrontProfileBaselineRefresh({
     activeMerchantIdRef: profileBaselineMerchantIdRef,

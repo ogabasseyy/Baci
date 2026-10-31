@@ -7,6 +7,18 @@ export type StorefrontProfileValues = Omit<
 >;
 
 /**
+ * Whether a save would write this submitted profile value: a field the
+ * submission did not carry is never sent, and neither is a value equal to the
+ * loaded baseline (a blank baseline counts as an empty string).
+ */
+export function isStorefrontProfileValueChanged(
+  value: string | undefined,
+  baselineValue: string | null | undefined
+): boolean {
+  return value !== undefined && value !== (baselineValue ?? '');
+}
+
+/**
  * The editable identity/profile values the settings form starts from. Blank
  * database values become empty strings so an untouched field never looks
  * changed (and is never written back) on save.

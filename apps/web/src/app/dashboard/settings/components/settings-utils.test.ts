@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeSocialMedia, settingsSchema } from './settings-utils';
+import {
+  createSettingsSchema,
+  sanitizeSocialMedia,
+  settingsSchema,
+} from './settings-utils';
 
 describe('settingsSchema', () => {
   it('accepts a valid business name and country', () => {
@@ -155,6 +159,47 @@ describe('settingsSchema', () => {
         country: 'Wakanda',
       }).success
     ).toBe(false);
+  });
+});
+
+describe('createSettingsSchema', () => {
+  const base = { business_name: 'My Store', country: 'NG' };
+  const legacyBaseline = { phone: '+23415781', support_phone: '+23480312' };
+
+  it('accepts truncated legacy phones that match the loaded baseline', () => {
+    const result = createSettingsSchema(legacyBaseline).safeParse({
+      ...base,
+      phone: ' +23415781 ',
+      support_phone: '+23480312',
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a truncated phone that differs from the loaded baseline', () => {
+    const result = createSettingsSchema(legacyBaseline).safeParse({
+      ...base,
+      phone: '+2341578',
+      support_phone: '+2348031',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.map((issue) => issue.path)).toEqual([
+        ['support_phone'],
+        ['phone'],
+      ]);
+    }
+  });
+
+  it('still allows clearing a legacy phone', () => {
+    const result = createSettingsSchema(legacyBaseline).safeParse({
+      ...base,
+      phone: '',
+      support_phone: '',
+    });
+
+    expect(result.success).toBe(true);
   });
 });
 

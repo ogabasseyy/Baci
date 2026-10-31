@@ -8,6 +8,7 @@ import {
   type MerchantSettingsSnapshot,
 } from './get-merchant-settings-snapshot';
 import { type SettingsFormValues, sanitizeSocialMedia } from './settings-utils';
+import { isStorefrontProfileValueChanged } from './storefront-profile-values';
 import { updateStorefrontProfile } from './update-storefront-profile';
 
 type UpdateMerchantFn = ReturnType<typeof useMerchant>['updateMerchant'];
@@ -57,10 +58,11 @@ function getStorefrontProfilePatch(
   // A field the submission did not carry is never sent: writing it would
   // clear the stored value (for example the courier pickup phone).
   const changedSettings = Object.fromEntries(
-    Object.entries(settings).filter(
-      ([key, value]) =>
-        value !== undefined &&
-        value !== (profileBaseline[key as keyof typeof settings] ?? '')
+    Object.entries(settings).filter(([key, value]) =>
+      isStorefrontProfileValueChanged(
+        value,
+        profileBaseline[key as keyof typeof settings]
+      )
     )
   );
 

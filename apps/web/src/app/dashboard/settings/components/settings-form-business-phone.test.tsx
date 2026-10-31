@@ -35,8 +35,15 @@ vi.mock('./get-merchant-settings-snapshot', () => ({
 import { SettingsFormContents } from './settings-form-contents';
 
 const BUSINESS_PHONE = 'Business phone (used for courier pickups)';
+const SUPPORT_PHONE = 'Public support phone';
+const STORE_DESCRIPTION = 'Store description';
+/** A legacy value saved before complete numbers were required. */
+const TRUNCATED_PHONE = '+23415781';
 
-function merchantWithPhone(phone: string): CachedMerchant {
+function merchantWithPhone(
+  phone: string,
+  overrides: Partial<CachedMerchant> = {}
+): CachedMerchant {
   return {
     id: 'merchant-a',
     business_name: 'Merchant A',
@@ -56,34 +63,113 @@ function merchantWithPhone(phone: string): CachedMerchant {
     plan_tier: 'free',
     premium_features: null,
     updated_at: '2026-10-31T09:00:00.000Z',
+    ...overrides,
   };
 }
 
-function renderSettings(phone: string) {
+function renderSettings(phone: string, overrides?: Partial<CachedMerchant>) {
   render(
     <SettingsFormContents
-      initialMerchant={merchantWithPhone(phone)}
+      initialMerchant={merchantWithPhone(phone, overrides)}
       initialBlogEnabled={false}
     />
   );
   return screen.getByRole('textbox', { name: BUSINESS_PHONE });
 }
 
-describe('bugfix: web merchants could not repair the courier pickup phone', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.updateStorefrontProfile.mockResolvedValue(undefined);
-    mocks.getMerchantSettingsSnapshot.mockResolvedValue({
-      business_name: 'Merchant A',
-      country: 'NG',
-      phone: '+234 803 123 4567',
-      site_description: '',
-      support_email: '',
-      support_phone: '',
-      updated_at: '2026-10-31T09:05:00.000Z',
+function saveChanges() {
+  fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+}
+
+async function expectSavedSettings(settings: Record<string, string>) {
+  await waitFor(() => {
+    expect(mocks.updateStorefrontProfile).toHaveBeenCalledWith({
+      merchantId: 'merchant-a',
+      expectedUpdatedAt: '2026-10-31T09:00:00.000Z',
+      settings,
     });
   });
+}
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.updateStorefrontProfile.mockResolvedValue(undefined);
+  mocks.getMerchantSettingsSnapshot.mockResolvedValue({
+    business_name: 'Merchant A',
+    country: 'NG',
+    phone: '+234 803 123 4567',
+    site_description: '',
+    support_email: '',
+    support_phone: '',
+    updated_at: '2026-10-31T09:05:00.000Z',
+  });
+});
+
+describe('bugfix: a stored truncated phone blocked unrelated settings saves', () => {
+  it('saves a description change without re-checking or sending the untouched business phone', async () => {
+    const businessPhone = renderSettings(TRUNCATED_PHONE);
+
+    fireEvent.change(screen.getByRole('textbox', { name: STORE_DESCRIPTION }), {
+      target: { value: 'Handmade leather goods.' },
+    });
+    saveChanges();
+
+    await expectSavedSettings({ site_description: 'Handmade leather goods.' });
+    expect(businessPhone).toHaveAttribute('aria-invalid', 'false');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('still refuses a business phone edited to another truncated number', async () => {
+    const businessPhone = renderSettings(TRUNCATED_PHONE);
+
+    fireEvent.change(businessPhone, { target: { value: '+2341578' } });
+    saveChanges();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Enter the full business phone number with its country code, for example +234 801 234 5678.'
+    );
+    expect(businessPhone).toHaveAttribute('aria-invalid', 'true');
+    expect(mocks.updateStorefrontProfile).not.toHaveBeenCalled();
+  });
+
+  it('saves a description change without re-checking or sending an untouched legacy support phone', async () => {
+    renderSettings('+2348031234567', { support_phone: '+23480312' });
+    const supportPhone = screen.getByRole('textbox', { name: SUPPORT_PHONE });
+
+    fireEvent.change(screen.getByRole('textbox', { name: STORE_DESCRIPTION }), {
+      target: { value: 'Handmade leather goods.' },
+    });
+    saveChanges();
+
+    await expectSavedSettings({ site_description: 'Handmade leather goods.' });
+    expect(supportPhone).toHaveAttribute('aria-invalid', 'false');
+  });
+
+  it('still refuses a support phone edited to a truncated number', async () => {
+    renderSettings('+2348031234567', { support_phone: '+23480312' });
+    const supportPhone = screen.getByRole('textbox', { name: SUPPORT_PHONE });
+
+    fireEvent.change(supportPhone, { target: { value: TRUNCATED_PHONE } });
+    saveChanges();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Enter a full support phone number, for example +234 801 234 5678.'
+    );
+    expect(supportPhone).toHaveAttribute('aria-invalid', 'true');
+    expect(mocks.updateStorefrontProfile).not.toHaveBeenCalled();
+  });
+
+  it('still lets a merchant clear the legacy business phone', async () => {
+    const businessPhone = renderSettings(TRUNCATED_PHONE);
+
+    fireEvent.change(businessPhone, { target: { value: '' } });
+    saveChanges();
+
+    await expectSavedSettings({ phone: '' });
+  });
+});
+
+describe('bugfix: web merchants could not repair the courier pickup phone', () => {
   it('loads the current business phone into Store Settings', () => {
     expect(renderSettings('+2348031234567')).toHaveValue('+2348031234567');
   });

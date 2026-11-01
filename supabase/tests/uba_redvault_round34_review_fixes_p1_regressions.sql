@@ -19,6 +19,9 @@ BEGIN
   INSERT INTO public.merchants (id, email, business_name)
   VALUES (v_merchant, 'redvault-p34@example.com', 'Redvault P34')
   ON CONFLICT (id) DO NOTHING;
+  -- POD is an enabled merchant rail in this booking/cancellation fixture.
+  INSERT INTO public.merchant_feature_settings(merchant_id,pay_on_delivery_enabled)
+  VALUES(v_merchant,true) ON CONFLICT(merchant_id) DO UPDATE SET pay_on_delivery_enabled=true;
   INSERT INTO public.customers (id, merchant_id, user_id, email)
   VALUES (v_customer, v_merchant, NULL, 'redvault-p34@example.com');
 

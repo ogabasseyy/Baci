@@ -35,6 +35,11 @@ import { OrderConditionUnavailableError } from '@/lib/checkout/order-condition-p
 import { conditionOfferUnavailableResponse } from '@/lib/checkout/order-condition-response';
 import type { OrderIdempotencyPayloadInput } from '@/lib/checkout/order-idempotency';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
+import {
+  isPayOnDelivery,
+  PAY_ON_DELIVERY_DISABLED_BODY,
+  validatePayOnDeliveryPolicy,
+} from '@/lib/checkout/pay-on-delivery-policy';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
 import { prepareCheckoutQuoteDestination } from '@/lib/checkout/prepare-checkout-quote-destination';
 import { prepareLoyaltyCheckout } from '@/lib/checkout/prepare-loyalty-checkout';
@@ -99,10 +104,6 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
 import { authenticateOrderRequest } from './order-request-auth';
-
-function isPayOnDelivery(paymentMethod: string): boolean {
-  return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
-}
 
 // Both storefront clients mint high-entropy keys (web: UUID, native: 16
 // random bytes encoded), but the header is attacker-controlled: a short or
@@ -2070,6 +2071,18 @@ export async function POST(request: NextRequest) {
       requestIdempotencyKey,
       supabase,
     });
+    const podAdmission = await validatePayOnDeliveryPolicy({
+      client: supabase,
+      merchantId: merchant_id,
+      paymentMethod: effectivePaymentMethod,
+      checkoutRequestHash,
+      requestIdempotencyKey,
+    });
+    if (!podAdmission.ok) {
+      return NextResponse.json(podAdmission.body, {
+        status: podAdmission.status,
+      });
+    }
     // When the replay probe adopts a per-provider alternate, that matched
     // carrier is the original order's provider: the RPC must receive the
     // same carrier the adopted hash encodes, never a leftover null.
@@ -2334,6 +2347,11 @@ export async function POST(request: NextRequest) {
         typeof orderError?.message === 'string'
           ? orderError.message
           : code || 'Failed to create order';
+      if (code === 'P0001' && message === 'pay_on_delivery_disabled') {
+        return NextResponse.json(PAY_ON_DELIVERY_DISABLED_BODY, {
+          status: 403,
+        });
+      }
       const isAirportQuoteDatabaseRejection =
         code === '22023' &&
         (message === 'The selected airport delivery quote has expired' ||

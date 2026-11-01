@@ -31,7 +31,7 @@ for (const [workflow, config, properties] of [
     )?.[1];
     assert.ok(packagesLine, `missing Android setup packages in ${workflow}`);
     const packages = packagesLine.trim().split(/\s+/);
-    const platformPackage = `platforms;android-${compile}.0`;
+    const platformPackage = `platforms;android-${compile}${Number(compile) >= 37 ? '.0' : ''}`;
     assert.ok(packages.includes(platformPackage));
     assert.ok(packages.includes(`build-tools;${tools}`));
     assert.deepEqual(packages.filter((value) => value.startsWith("platforms;")), [platformPackage]);

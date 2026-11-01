@@ -55,7 +55,7 @@ jobs:
       - name: Test capability register binding
         uses: ./.github/actions/capability-gate
       - name: Test Android release SDK alignment
-        run: node --test .github/scripts/android-release-sdk.test.mjs .github/scripts/android-release-sdk-platform.test.mjs .github/scripts/mobile-gradle-wrapper.test.mjs .github/scripts/rn-suite-migration.test.mjs
+        run: node --test .github/scripts/android-release-sdk.test.mjs .github/scripts/android-release-sdk-platform.test.mjs .github/scripts/android-release-sdk-compat.test.mjs .github/scripts/mobile-gradle-wrapper.test.mjs .github/scripts/rn-suite-migration.test.mjs
       - name: Test release retries and dependency update policy
         run: node --test .github/scripts/muse-dependabot-policy.test.mjs .github/scripts/posthog-release-cli.test.mjs
       - name: Test pnpm store action input hardening

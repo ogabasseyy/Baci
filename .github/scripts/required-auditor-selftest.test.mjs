@@ -32,24 +32,21 @@ test('the required quality gate depends on the complete auditor selftest workflo
     quality,
     /AUDITOR_SELFTEST_RESULT: \$\{\{ needs\['quality-auditor-selftest'\]\.result \}\}/
   );
-  assert.match(quality, /\[\[ "\$AUDITOR_SELFTEST_RESULT" != "success" \]\]/);
+  assert.match(quality, /uses: actions\/checkout@[a-f0-9]{40}/);
+  assert.match(quality, /persist-credentials: false/);
+  assert.match(quality, /bash \.github\/scripts\/require-auditor-selftest\.sh/);
 });
 
 test('the aggregator fails closed when the auditor is skipped, cancelled, or fails', () => {
-  const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
-  const match = ci.match(
-    /if \[\[ "\$AUDITOR_SELFTEST_RESULT" != "success" \]\]; then\n([\s\S]*?)\n\s*fi/
-  );
-  assert.ok(match, 'auditor guard must be present');
   for (const status of ['failure', 'cancelled', 'skipped', '']) {
-    const result = spawnSync('bash', ['-c', match[0]], {
+    const result = spawnSync('bash', ['.github/scripts/require-auditor-selftest.sh'], {
       env: { ...process.env, AUDITOR_SELFTEST_RESULT: status },
       encoding: 'utf8',
     });
     assert.notEqual(result.status, 0, status);
   }
   assert.equal(
-    spawnSync('bash', ['-c', match[0]], {
+    spawnSync('bash', ['.github/scripts/require-auditor-selftest.sh'], {
       env: { ...process.env, AUDITOR_SELFTEST_RESULT: 'success' },
     }).status,
     0

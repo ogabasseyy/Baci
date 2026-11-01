@@ -621,6 +621,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Verify split quality gate results
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
@@ -645,10 +648,7 @@ jobs:
             exit 1
           fi
 
-          if [[ "$AUDITOR_SELFTEST_RESULT" != "success" ]]; then
-            echo "Auditor selftest did not pass: $AUDITOR_SELFTEST_RESULT"
-            exit 1
-          fi
+          bash .github/scripts/require-auditor-selftest.sh
 
           # A skipped DB gate is success only when no DB paths changed: if
           # the detector flagged DB changes, replay and the disposable

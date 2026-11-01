@@ -31,11 +31,11 @@ BEGIN
     'fixtures must acquire their initial claims';
 
   PERFORM set_config('request.jwt.claim.role', 'immediate_notification_redrive', true);
-  ASSERT NOT public.begin_immediate_notification_dispatch(uncertain_order, wrong_lease), 'wrong lease must not dispatch';
-  ASSERT public.begin_immediate_notification_dispatch(uncertain_order, uncertain_lease), 'valid dispatch must begin';
+  ASSERT NOT public.begin_immediate_notification_dispatch(uncertain_order, wrong_lease, uncertain_order), 'wrong lease must not dispatch';
+  ASSERT public.begin_immediate_notification_dispatch(uncertain_order, uncertain_lease, uncertain_order), 'valid dispatch must begin';
   ASSERT NOT EXISTS (SELECT 1 FROM public.list_immediate_notification_recovery_candidates(100) c
     WHERE c.order_id = uncertain_order), 'fresh dispatch must not appear as unresolved';
-  ASSERT NOT public.begin_immediate_notification_dispatch(uncertain_order, uncertain_lease),
+  ASSERT NOT public.begin_immediate_notification_dispatch(uncertain_order, uncertain_lease, uncertain_order),
     'a repeated begin must not authorize a second send';
   ASSERT NOT public.recover_immediate_notification_completion(uncertain_order, uncertain_lease),
     'an uncertain dispatch must not be recorded as accepted';
@@ -45,11 +45,11 @@ BEGIN
     WHERE c.order_id = uncertain_order), 'stale dispatch must become visible for reconciliation';
   ASSERT public.has_immediate_notification_reconciliation_backlog(),
     'stale uncertain dispatches must be visible independent of batch selection';
-  ASSERT public.begin_immediate_notification_dispatch(accepted_order, accepted_lease), 'accepted fixture must begin';
-  ASSERT NOT public.record_immediate_notification_acceptance(accepted_order, wrong_lease), 'wrong lease must not accept';
-  ASSERT public.record_immediate_notification_acceptance(accepted_order, accepted_lease), 'acceptance must be recorded';
-  ASSERT public.begin_immediate_notification_dispatch(rejected_order, rejected_lease), 'rejected fixture must begin';
-  ASSERT public.release_immediate_notification_dispatch(rejected_order, rejected_lease), 'definite rejection must release';
+  ASSERT public.begin_immediate_notification_dispatch(accepted_order, accepted_lease, accepted_order), 'accepted fixture must begin';
+  ASSERT NOT public.record_immediate_notification_acceptance(accepted_order, wrong_lease, accepted_order), 'wrong lease must not accept';
+  ASSERT public.record_immediate_notification_acceptance(accepted_order, accepted_lease, accepted_order), 'acceptance must be recorded';
+  ASSERT public.begin_immediate_notification_dispatch(rejected_order, rejected_lease, rejected_order), 'rejected fixture must begin';
+  ASSERT public.release_immediate_notification_dispatch(rejected_order, rejected_lease, rejected_order), 'definite rejection must release';
 
   UPDATE public.immediate_order_notification_claims
   SET locked_at = now() - interval '10 minutes', started_at = now() - interval '10 minutes'
@@ -68,7 +68,7 @@ BEGIN
   SELECT c.claimed, c.claim_status INTO claimed, current_status FROM public.claim_immediate_order_notification(accepted_order) c;
   ASSERT NOT claimed AND current_status = 'sent', 'recovered delivery must remain terminal';
 
-  ASSERT NOT has_function_privilege('anon', 'public.begin_immediate_notification_dispatch(uuid,uuid)', 'EXECUTE'),
+  ASSERT NOT has_function_privilege('anon', 'public.begin_immediate_notification_dispatch(uuid,uuid,uuid)', 'EXECUTE'),
     'anonymous clients must not start dispatches';
   ASSERT NOT has_function_privilege('authenticated', 'public.recover_immediate_notification_completion(uuid,uuid)', 'EXECUTE'),
     'authenticated clients must not forge recovered completions';
@@ -159,8 +159,8 @@ BEGIN
   SELECT c.claim_token INTO lease FROM public.claim_immediate_order_notification(v_order_id) c;
   ASSERT lease IS NOT NULL, 'the order must acquire a delivery claim';
   PERFORM set_config('request.jwt.claim.role', 'immediate_notification_redrive', true);
-  ASSERT public.begin_immediate_notification_dispatch(v_order_id, lease), 'provider dispatch must begin';
-  ASSERT public.record_immediate_notification_acceptance(v_order_id, lease), 'provider acceptance must be recorded';
+  ASSERT public.begin_immediate_notification_dispatch(v_order_id, lease, v_order_id), 'provider dispatch must begin';
+  ASSERT public.record_immediate_notification_acceptance(v_order_id, lease, v_order_id), 'provider acceptance must be recorded';
   PERFORM set_config('request.jwt.claim.role', 'service_role', true);
   PERFORM public.complete_immediate_order_notification_with_proof(v_order_id, 'redrive-hmac', true, lease, 'no-secret');
   SELECT c.status INTO current_status FROM public.immediate_order_notification_claims c WHERE c.order_id = v_order_id;

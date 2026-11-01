@@ -27,7 +27,42 @@ describe('durable immediate notification dispatch', () => {
     expect(rpc).toHaveBeenCalledWith('begin_immediate_notification_dispatch', {
       p_order_id: 'order',
       p_claim_token: 'lease',
+      p_dispatch_token: expect.any(String),
     });
+  });
+
+  it('uses the same attempt identity to reconcile a lost begin response', async () => {
+    rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'connection_lost' },
+    });
+    rpc.mockResolvedValueOnce({ data: true, error: null });
+    const dispatch = createImmediateNotificationDispatch({
+      orderId: 'order',
+      claimToken: 'lease',
+      env: {},
+    });
+    await expect(dispatch.beforeTransportDispatch()).rejects.toThrow();
+    await dispatch.resetTransportDispatch();
+    expect(rpc.mock.calls[0][1].p_dispatch_token).toEqual(expect.any(String));
+    expect(rpc.mock.calls[1][1].p_dispatch_token).toBe(
+      rpc.mock.calls[0][1].p_dispatch_token
+    );
+  });
+
+  it('uses a fresh attempt identity for a later transport attempt', async () => {
+    rpc.mockResolvedValue({ data: true, error: null });
+    const dispatch = createImmediateNotificationDispatch({
+      orderId: 'order',
+      claimToken: 'lease',
+      env: {},
+    });
+    await dispatch.beforeTransportDispatch();
+    await dispatch.resetTransportDispatch();
+    await dispatch.beforeTransportDispatch();
+    expect(rpc.mock.calls[2][1].p_dispatch_token).not.toBe(
+      rpc.mock.calls[0][1].p_dispatch_token
+    );
   });
 
   it.each([
@@ -50,27 +85,34 @@ describe('durable immediate notification dispatch', () => {
       claimToken: 'lease',
       env: {},
     });
+    await dispatch.beforeTransportDispatch();
     await dispatch.recordAcceptance();
     expect(rpc).toHaveBeenCalledWith(
       'record_immediate_notification_acceptance',
       {
         p_order_id: 'order',
         p_claim_token: 'lease',
+        p_dispatch_token: expect.any(String),
       }
     );
   });
 
   it('never turns an unconfirmed acceptance write into permission to resend', async () => {
-    rpc.mockResolvedValue({ data: null, error: { message: 'secret fixture' } });
+    rpc.mockResolvedValueOnce({ data: true, error: null });
+    rpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'secret fixture' },
+    });
     const dispatch = createImmediateNotificationDispatch({
       orderId: 'order',
       claimToken: 'lease',
       env: {},
     });
+    await dispatch.beforeTransportDispatch();
     await expect(dispatch.recordAcceptance()).rejects.toThrow(
       'transition was not confirmed'
     );
-    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledTimes(2);
     expect(rpc).not.toHaveBeenCalledWith(
       'release_immediate_notification_dispatch',
       expect.anything()

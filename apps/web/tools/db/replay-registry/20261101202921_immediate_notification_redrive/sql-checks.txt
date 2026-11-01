@@ -1,1 +1,2 @@
 supabase/tests/immediate_notification_redrive.sql
+supabase/tests/immediate_notification_attempt_ownership.sql

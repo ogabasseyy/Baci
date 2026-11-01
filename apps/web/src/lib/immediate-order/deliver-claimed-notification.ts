@@ -136,12 +136,17 @@ export async function deliverClaimedImmediateOrderNotification(
       claimToken
     );
   } catch (emailError) {
-    if (beginUnconfirmed) {
-      logger.error({
-        message: 'Immediate order notification dispatch start unconfirmed',
-        orderId,
-      });
-      return;
+    if (beginUnconfirmed && dispatch) {
+      try {
+        await dispatch.resetTransportDispatch();
+        beginUnconfirmed = false;
+      } catch {
+        logger.error({
+          message: 'Immediate order notification dispatch start unconfirmed',
+          orderId,
+        });
+        return;
+      }
     }
     if (
       accepted ||

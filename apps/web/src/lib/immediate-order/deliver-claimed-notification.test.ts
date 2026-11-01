@@ -187,10 +187,26 @@ describe('deliverClaimedImmediateOrderNotification', () => {
     expect(retryMocks.complete).not.toHaveBeenCalled();
   });
 
-  it("keeps an unacknowledged begin visible and does not release another worker's fence", async () => {
+  it('releases its own unacknowledged begin before making the claim retryable', async () => {
     dispatchMocks.begin.mockRejectedValueOnce(new Error('begin response lost'));
     await deliverClaimedImmediateOrderNotification(baseInput());
-    expect(dispatchMocks.reset).not.toHaveBeenCalled();
+    expect(dispatchMocks.reset).toHaveBeenCalledOnce();
+    expect(retryMocks.complete).toHaveBeenCalledWith(
+      expect.anything(),
+      'order-1',
+      'track-1',
+      false,
+      'lease-1'
+    );
+  });
+
+  it('keeps an unacknowledged begin fenced when its release is unconfirmed', async () => {
+    dispatchMocks.begin.mockRejectedValueOnce(new Error('begin response lost'));
+    dispatchMocks.reset.mockRejectedValueOnce(
+      new Error('release not confirmed')
+    );
+    await deliverClaimedImmediateOrderNotification(baseInput());
+    expect(dispatchMocks.reset).toHaveBeenCalledOnce();
     expect(retryMocks.complete).not.toHaveBeenCalled();
   });
 

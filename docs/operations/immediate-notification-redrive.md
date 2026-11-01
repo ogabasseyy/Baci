@@ -10,7 +10,10 @@ must not be reclaimed or retried automatically.
 The sender and cron are disabled unless `IMMEDIATE_NOTIFICATION_REDRIVE_ENABLED`
 is exactly `true`. Do not enable that flag merely because the code is deployed.
 The current migrations create the restricted role and stage its request hook;
-they intentionally do **not** grant the role to `authenticator`.
+they intentionally do **not** grant the role to `authenticator`. The
+attempt-ownership migration refuses to run if legacy dispatch rows exist,
+because they cannot be assigned safely to a particular sender. Reconcile any
+such rows before applying it; do not delete them merely to pass the migration.
 
 Before enabling the flag:
 

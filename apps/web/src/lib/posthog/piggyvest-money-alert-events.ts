@@ -125,18 +125,20 @@ async function deliver(
 ): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    // The capture keeps its own rejection handler, so a send that fails
-    // after the timeout has won the race still settles quietly.
-    const captured = deps
-      .capture(
-        PIGGYVEST_MONEY_ALERT_EVENT,
-        properties,
-        undefined,
-        deterministicEventUuid(`${PIGGYVEST_MONEY_ALERT_EVENT}:${key}`)
+    // Late rejections and synchronous throws are swallowed on purpose:
+    // alerts are best effort and must never affect the money path.
+    const sent = Promise.resolve()
+      .then(() =>
+        deps.capture(
+          PIGGYVEST_MONEY_ALERT_EVENT,
+          properties,
+          undefined,
+          deterministicEventUuid(`${PIGGYVEST_MONEY_ALERT_EVENT}:${key}`)
+        )
       )
       .catch(() => false);
     return await Promise.race([
-      captured,
+      sent,
       new Promise<boolean>((resolve) => {
         timer = setTimeout(() => resolve(false), deps.timeoutMs);
       }),
@@ -184,11 +186,15 @@ export function createPiggyvestMoneyAlertSender(
         const oldest = claimed.values().next().value;
         if (oldest !== undefined) claimed.delete(oldest);
       }
-      pending = deliver(deps, properties, key).then((sent) => {
-        if (sent) return 'sent';
-        claimed.delete(key);
-        return 'failed';
-      });
+      // Never rejects, so the promise handed to keepAlive (waitUntil) and
+      // back to the caller always settles as an outcome.
+      pending = deliver(deps, properties, key)
+        .catch(() => false)
+        .then((sent) => {
+          if (sent) return 'sent';
+          claimed.delete(key);
+          return 'failed';
+        });
     } catch {
       return Promise.resolve('failed');
     }

@@ -88,9 +88,10 @@ export function emitPiggyvestWebhookAlert(
   const safe = allowlistedDetail(detail);
   console.error(`[PiggyVest Webhook][ALERT] ${code} ${JSON.stringify(safe)}`);
   try {
-    // Fire-and-forget: the send never rejects and is bounded by a timeout,
-    // so it can never delay or change the caller's reply.
-    void sendPiggyvestMoneyAlert(code, safe);
+    // Fire-and-forget and bounded by a timeout, so it can never delay or
+    // change the caller's reply. Rejections are swallowed on purpose: the
+    // page is best effort and must never affect the money path.
+    sendPiggyvestMoneyAlert(code, safe).catch(() => undefined);
   } catch {
     // The console line above is already written; the page is best effort.
   }

@@ -133,6 +133,43 @@ describe('primary wallet restricted executor', () => {
     ).rejects.toThrow('Primary wallet database unavailable');
     expect(mocks.construct).not.toHaveBeenCalled();
   });
+  it.each([
+    ['resolveRouting', 4],
+    ['review', 6],
+  ] as const)('accepts null only for %s review classification', async (name, arity) => {
+    const parameters: unknown[] = Array.from({ length: arity }, () => 'bound');
+    parameters[arity - 1] = null;
+    await createPrimaryWalletExecutor(config)(
+      PRIMARY_WALLET_STATEMENTS[name],
+      parameters
+    );
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      PRIMARY_WALLET_STATEMENTS[name],
+      parameters
+    );
+    for (let position = 0; position < arity - 1; position++) {
+      mocks.construct.mockClear();
+      const invalid = [...parameters];
+      invalid[position] = null;
+      await expect(
+        createPrimaryWalletExecutor(config)(
+          PRIMARY_WALLET_STATEMENTS[name],
+          invalid
+        )
+      ).rejects.toThrow('Primary wallet database unavailable');
+      expect(mocks.construct).not.toHaveBeenCalled();
+    }
+  });
+
+  it('rejects null on a statement without a review reason', async () => {
+    await expect(
+      createPrimaryWalletExecutor(config)(PRIMARY_WALLET_STATEMENTS.read, [
+        null,
+      ])
+    ).rejects.toThrow('Primary wallet database unavailable');
+    expect(mocks.construct).not.toHaveBeenCalled();
+  });
+
   it('rejects arbitrary SQL before opening a connection', async () => {
     await expect(
       createPrimaryWalletExecutor(config)('SELECT * FROM public.customers', [])

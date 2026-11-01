@@ -44,7 +44,12 @@ export function createPrimaryWalletExecutor(
       expectedCount === null ||
       parameters.length !== expectedCount ||
       !parameters.every(
-        (value) => typeof value === 'string' && value.length <= 4096
+        (value, index) =>
+          (typeof value === 'string' && value.length <= 4096) ||
+          (value === null &&
+            ((statement === PRIMARY_WALLET_STATEMENTS.resolveRouting &&
+              index === 3) ||
+              (statement === PRIMARY_WALLET_STATEMENTS.review && index === 5)))
       )
     ) {
       throw new Error('Primary wallet database unavailable');

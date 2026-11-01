@@ -86,6 +86,20 @@ describe('GIGL tracking token cache', () => {
     ).toBeNull();
   });
 
+  it.each([
+    -1, 1.5,
+  ])('preserves a finite provider customer type %s', async (customerType) => {
+    const { directory } = await fixture();
+    const cache = createGiglTrackingTokenCache({
+      directory,
+      credentials,
+      now: () => now,
+    });
+    const value = { ...token, customerType };
+    await cache.save(value);
+    expect(await cache.load()).toEqual(value);
+  });
+
   it('refuses a symlink cache file without changing its target', async () => {
     const { directory, root } = await fixture();
     const cache = createGiglTrackingTokenCache({

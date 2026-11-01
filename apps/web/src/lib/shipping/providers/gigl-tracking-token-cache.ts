@@ -10,7 +10,7 @@ import type { GiglToken } from './gigl.constants';
 const tokenSchema = z.strictObject({
   token: z.string().min(1).max(8192),
   userChannelCode: z.string().min(1).max(256),
-  customerType: z.number().int().nonnegative(),
+  customerType: z.number().finite(),
   expiresAt: z.number().int().positive(),
 });
 const recordSchema = z.strictObject({

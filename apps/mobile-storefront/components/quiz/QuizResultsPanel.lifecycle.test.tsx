@@ -162,7 +162,7 @@ describe('QuizResultsPanel lifecycle', () => {
     expect(screen.getByText("You're all done!")).toBeTruthy();
     expect(screen.getByText('You finished at')).toBeTruthy();
     expect(
-      screen.getByText('Finish time will be used as a tie breaker')
+      screen.getByText('Ties consider the finish time of your best attempt')
     ).toBeTruthy();
     expect(
       screen.getByText('The leaderboard will appear when the quiz ends in')

@@ -136,3 +136,8 @@ it.each([[404, 'PETROCK_REJECTED'], [502, 'PETROCK_REJECTED'], [502, 'PETROCK_UN
   expect(outcome.shouldClearIdempotencyKey).toBe(true);
   expect(outcome.shouldPreserveIdempotencyKey).toBe(false);
 });
+
+it('retires the key only for an explicitly confirmed no-debit failure', () => {
+  expect(resolveImeiCheckFailure({ responseStatus: 500, payload: { code: 'IMEI_NO_DEBIT', error: 'No debit' }, currentTierPrice: 700, walletBalance: 1000 }).shouldClearIdempotencyKey).toBe(true);
+  expect(resolveImeiCheckFailure({ responseStatus: 500, payload: { code: 'INTERNAL_ERROR', error: 'Unknown' }, currentTierPrice: 700, walletBalance: 1000 }).shouldClearIdempotencyKey).toBe(false);
+});

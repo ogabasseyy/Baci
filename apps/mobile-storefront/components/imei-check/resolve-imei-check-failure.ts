@@ -55,6 +55,7 @@ export function resolveImeiCheckFailure(
   // Authentication and intermediary errors can follow an earlier uncertain POST.
   const shouldClearIdempotencyKey =
     (input.responseStatus === 402 && code === 'WALLET_INSUFFICIENT') ||
+    (input.responseStatus === 500 && code === 'IMEI_NO_DEBIT') ||
     isConfirmedImeiRefund(input.responseStatus, code);
   const shouldPreserveIdempotencyKey = !shouldClearIdempotencyKey;
 

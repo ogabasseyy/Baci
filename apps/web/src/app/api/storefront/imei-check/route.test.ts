@@ -1009,6 +1009,52 @@ describe('POST /api/storefront/imei-check', () => {
     expect(mocks.mockRefundImeiWalletPayment).not.toHaveBeenCalled();
   });
 
+  it('reconciles a confirmed no-debit same-key replay before responding', async () => {
+    const adminSupabase = createSupabaseMock([
+      {
+        amount_ngn: 700,
+        cached_response: {
+          success: false,
+          code: 'INTERNAL_ERROR',
+          error: 'failure',
+        },
+        cached_status: 500,
+        customer_id: 'customer-1',
+        device_category: 'smartphone',
+        id: 'lookup-existing',
+        idempotency_key: IDEMPOTENCY_KEY,
+        imei_hash: hashImeiForTest(VALID_IMEI),
+        merchant_id: 'merchant-1',
+        status: 'failed_error',
+        tier: 'blacklist',
+      },
+    ]);
+    vi.spyOn(adminSupabase, 'claimAttempt').mockImplementation(async (args) => {
+      Object.assign(adminSupabase.__rows[0], {
+        cached_response: {
+          success: false,
+          status: 'error',
+          code: 'IMEI_NO_DEBIT',
+          error: 'No debit',
+        },
+      });
+      return { data: { idempotency_key: args.idempotency_key }, error: null };
+    });
+    mockAuthenticatedUser({ adminSupabase });
+    const { POST } = await importRoute();
+    const response = await POST(
+      createRequest({
+        device: 'smartphone',
+        imei: VALID_IMEI,
+        tier: 'blacklist',
+      })
+    );
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ code: 'IMEI_NO_DEBIT' });
+    expect(mocks.mockRedeemImeiWalletPayment).not.toHaveBeenCalled();
+    expect(mocks.mockRequestSickwCheck).not.toHaveBeenCalled();
+  });
+
   it('reconciles a refunded same-key retry before replaying it', async () => {
     const adminSupabase = createSupabaseMock([
       {
@@ -1162,7 +1208,7 @@ describe('POST /api/storefront/imei-check', () => {
     const body = (await response.json()) as { code: string };
 
     expect(response.status).toBe(500);
-    expect(body.code).toBe('INTERNAL_ERROR');
+    expect(body.code).toBe('IMEI_NO_DEBIT');
     expect(mocks.mockRequestSickwCheck).not.toHaveBeenCalled();
     expect(adminSupabase.__updates.at(-1)).toMatchObject({
       filters: { id: 'lookup-1' },
@@ -1188,7 +1234,7 @@ describe('POST /api/storefront/imei-check', () => {
     const body = (await response.json()) as { code: string };
 
     expect(response.status).toBe(500);
-    expect(body.code).toBe('INTERNAL_ERROR');
+    expect(body.code).toBe('IMEI_NO_DEBIT');
     expect(adminSupabase.__deletes.at(-1)).toMatchObject({
       filters: { id: 'lookup-1' },
     });

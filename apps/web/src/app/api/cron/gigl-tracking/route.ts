@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { hasValidCronSecret } from '@/lib/cron-secret-auth';
-import { createGiglTrackingWorkerClient } from '@/lib/gigl-tracking-worker-client';
+import { createRotatingGiglWorkerClient } from '@/lib/gigl-worker-rotation-client';
 import { logger } from '@/lib/logger';
 import { isGiglRuntimeConfigured } from '@/lib/shipping/providers/gigl.constants';
 import { createCronBatchSizeSchema } from '@/schemas/cron-batch-size';
@@ -35,9 +35,9 @@ export async function GET(request: Request) {
     });
   }
 
-  let supabase: ReturnType<typeof createGiglTrackingWorkerClient>;
+  let supabase: Awaited<ReturnType<typeof createRotatingGiglWorkerClient>>;
   try {
-    supabase = createGiglTrackingWorkerClient(process.env);
+    supabase = await createRotatingGiglWorkerClient(process.env);
   } catch {
     logger.error({ message: 'Invalid GIGL tracking worker token' });
     return NextResponse.json(

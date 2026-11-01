@@ -54,6 +54,37 @@ describe('direct worker environment preflight', () => {
     assert.deepEqual(getDirectWorkerPreflightProblems(commonEnv), []);
   });
 
+  it('accepts an overlapping worker token with sufficient runway when the primary is near expiry', () => {
+    const nearExpiry = Math.floor(Date.now() / 1000) + 60;
+    assert.deepEqual(
+      getDirectWorkerPreflightProblems({
+        ...commonEnv,
+        GIGL_TRACKING_WORKER_TOKEN: token(
+          'gigl_tracking_worker',
+          'ES256',
+          nearExpiry
+        ),
+        GIGL_TRACKING_WORKER_TOKEN_SECONDARY: token('gigl_tracking_worker'),
+      }),
+      []
+    );
+  });
+
+  it('rejects a usable non-worker secondary even when tracking is disabled', () => {
+    for (const enabled of ['true', 'false']) {
+      const problems = getDirectWorkerPreflightProblems({
+        ...commonEnv,
+        GIGL_ENABLED: enabled,
+        GIGL_TRACKING_WORKER_TOKEN_SECONDARY: token('service_role'),
+      });
+      assert.ok(
+        problems.some((problem) =>
+          problem.includes('GIGL_TRACKING_WORKER_TOKEN_SECONDARY')
+        )
+      );
+    }
+  });
+
   it('reports only missing variable names', () => {
     const problems = getDirectWorkerPreflightProblems({
       ...commonEnv,

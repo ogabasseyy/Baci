@@ -46,6 +46,7 @@ function resolve({ envFile = null, processEnv = {} }) {
   delete env.GIGL_ENABLED;
   delete env.GIGL_PASSWORD;
   delete env.GIGL_TRACKING_WORKER_TOKEN;
+  delete env.GIGL_TRACKING_WORKER_TOKEN_SECONDARY;
   delete env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   delete env.NEXT_PUBLIC_SUPABASE_URL;
   Object.assign(env, processEnv);
@@ -115,6 +116,20 @@ describe('GIGL latch identity resolver', () => {
       envFile: 'GIGL_TRACKING_WORKER_TOKEN=aaa.bbb.ccc\n',
     });
     assert.equal(fingerprint, fingerprintOf('aaa.bbb.ccc'));
+  });
+
+  it('invalidates the latch when the secondary credential changes or is added', () => {
+    const base = 'GIGL_TRACKING_WORKER_TOKEN=primary\n';
+    const without = resolve({ envFile: base }).fingerprint;
+    const first = resolve({ envFile: `${base}GIGL_TRACKING_WORKER_TOKEN_SECONDARY=one\n` }).fingerprint;
+    const second = resolve({ envFile: `${base}GIGL_TRACKING_WORKER_TOKEN_SECONDARY=two\n` }).fingerprint;
+    assert.notEqual(without, first);
+    assert.notEqual(first, second);
+  });
+
+  it('does not treat a secondary-only credential as a vacuous identity', () => {
+    const { fingerprint } = resolve({ envFile: 'GIGL_TRACKING_WORKER_TOKEN_SECONDARY=secondary\n' });
+    assert.notEqual(fingerprint, fingerprintOf(''));
   });
 
   it('binds the Supabase URL and anon key into the fingerprint', () => {

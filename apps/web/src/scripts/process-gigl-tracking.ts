@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { runGiglTrackingMonitorBatch } from '@/app/api/cron/gigl-tracking/run-gigl-tracking-monitor-batch';
-import { createGiglTrackingWorkerClient } from '@/lib/gigl-tracking-worker-client';
+import { createRotatingGiglWorkerClient } from '@/lib/gigl-worker-rotation-client';
 
 interface CliLogger {
   error(message: string): void;
@@ -47,7 +47,7 @@ async function runBatchDirectly(
 ) {
   return runGiglTrackingMonitorBatch({
     batchSize,
-    client: createGiglTrackingWorkerClient(env),
+    client: await createRotatingGiglWorkerClient(env),
     workerId: `gigl-tracking-vps-${randomUUID()}`,
   });
 }

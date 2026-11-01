@@ -9,7 +9,7 @@ const {
   verifyPathProbe,
   verifyScopeProbe,
 } = vi.hoisted(() => ({
-  createClient: vi.fn(() => ({ rpc: vi.fn() })),
+  createClient: vi.fn((_env: NodeJS.ProcessEnv) => ({ rpc: vi.fn() })),
   createScopeProbeClient: vi.fn(() => ({ rpc: vi.fn() })),
   verifyCapability: vi.fn(),
   verifyDelegationCanary: vi.fn(),
@@ -43,6 +43,40 @@ vi.mock('@/lib/verify-gigl-tracking-worker-capability', async (importOriginal) =
 
 describe('runGiglTrackingCapabilityVerification', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('checks both live credentials while authenticating the provider once', async () => {
+    verifyCapability.mockResolvedValue(true);
+    verifyDelegationCanary.mockResolvedValue(true);
+    verifyScopeProbe.mockResolvedValue(true);
+    verifyPathProbe.mockResolvedValue(true);
+    const verifyProviderAuth = vi.fn(async () => true);
+    const logger = { error: vi.fn(), info: vi.fn() };
+    await expect(runGiglTrackingCapabilityVerification({
+      env: { NODE_ENV: 'test', GIGL_TRACKING_WORKER_TOKEN: 'primary', GIGL_TRACKING_WORKER_TOKEN_SECONDARY: 'secondary' },
+      logger, verifyProviderAuth,
+    })).resolves.toBe(0);
+    expect(verifyCapability).toHaveBeenCalledTimes(2);
+    expect(verifyScopeProbe).toHaveBeenCalledTimes(2);
+    expect(verifyPathProbe).toHaveBeenCalledTimes(2);
+    expect(verifyProviderAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not certify an invalid configured secondary while enabled', async () => {
+    const { GiglWorkerTokenError } = await import('@/lib/gigl-tracking-worker-client');
+    createClient.mockImplementation((env) => {
+      if (env.GIGL_TRACKING_WORKER_TOKEN === 'secondary') throw new GiglWorkerTokenError();
+      return { rpc: vi.fn() };
+    });
+    verifyCapability.mockResolvedValue(true);
+    verifyDelegationCanary.mockResolvedValue(true);
+    verifyScopeProbe.mockResolvedValue(true);
+    verifyPathProbe.mockResolvedValue(true);
+    const logger = { error: vi.fn(), info: vi.fn() };
+    await expect(runGiglTrackingCapabilityVerification({
+      env: { NODE_ENV: 'test', GIGL_TRACKING_WORKER_TOKEN: 'primary', GIGL_TRACKING_WORKER_TOKEN_SECONDARY: 'secondary' },
+      logger, verifyProviderAuth: vi.fn(async () => true),
+    })).resolves.toBe(1);
+  });
 
   it('passes only after the live restricted wrapper smoke succeeds', async () => {
     verifyCapability.mockResolvedValue(true);

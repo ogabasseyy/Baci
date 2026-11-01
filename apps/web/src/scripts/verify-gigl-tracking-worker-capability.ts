@@ -82,6 +82,49 @@ export async function runGiglTrackingCapabilityVerification({
   logger?: CapabilityLogger;
   verifyProviderAuth?: () => Promise<boolean>;
 } = {}): Promise<number> {
+  const secondary = env.GIGL_TRACKING_WORKER_TOKEN_SECONDARY?.trim();
+  if (secondary) {
+    let checked = 0;
+    let providerResult: Promise<boolean> | undefined;
+    const verifyProviderOnce = () => {
+      providerResult ??= verifyProviderAuth();
+      return providerResult;
+    };
+    for (const [slot, token] of [
+      ['primary', env.GIGL_TRACKING_WORKER_TOKEN?.trim()],
+      ['secondary', secondary],
+    ] as const) {
+      if (!token) continue;
+      const candidateEnv = {
+        ...env,
+        GIGL_TRACKING_WORKER_TOKEN: token,
+        GIGL_TRACKING_WORKER_TOKEN_SECONDARY: undefined,
+      };
+      try {
+        createGiglTrackingWorkerClient(candidateEnv);
+      } catch (error) {
+        if (error instanceof GiglWorkerTokenError) {
+          if (slot !== 'secondary' || isExplicitlyDisabled(env.GIGL_ENABLED)) continue;
+          logger.error('[gigl-capability] secondary worker credential is invalid');
+          return 1;
+        }
+        logger.error('[gigl-capability] worker credential is invalid');
+        return 1;
+      }
+      checked += 1;
+      const result = await runGiglTrackingCapabilityVerification({
+        env: candidateEnv,
+        logger,
+        verifyProviderAuth: verifyProviderOnce,
+      });
+      if (result !== 0) return result;
+    }
+    if (!checked && !isExplicitlyDisabled(env.GIGL_ENABLED)) {
+      logger.error('[gigl-capability] worker credential is invalid');
+      return 1;
+    }
+    return 0;
+  }
   if (isExplicitlyDisabled(env.GIGL_ENABLED)) {
     logger.info('[gigl-capability] skipped while GIGL is disabled');
     let client: ReturnType<typeof createGiglTrackingWorkerClient>;

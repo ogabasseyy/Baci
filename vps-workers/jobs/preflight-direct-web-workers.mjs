@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'dotenv';
+import { isEntrypoint } from '../lib/is-entrypoint.mjs';
 import {
   findMultilineDotenvAssignments,
   findTrailingNewlineValues,
 } from './preflight-dotenv-assignments.mjs';
-import { isEntrypoint } from '../lib/is-entrypoint.mjs';
 
 const REQUIRED_ENV = [
   'BACI_REPO_DIR',
@@ -178,10 +178,23 @@ export function getDirectWorkerPreflightProblems(env) {
   if (
     !isGiglDisabled &&
     isConfigured(env, 'GIGL_TRACKING_WORKER_TOKEN') &&
-    !isRestrictedGiglWorkerToken(env.GIGL_TRACKING_WORKER_TOKEN)
+    ((!isRestrictedGiglWorkerToken(env.GIGL_TRACKING_WORKER_TOKEN) &&
+      (!isConfigured(env, 'GIGL_TRACKING_WORKER_TOKEN_SECONDARY') ||
+        !isRestrictedGiglWorkerToken(
+          env.GIGL_TRACKING_WORKER_TOKEN_SECONDARY
+        ))) ||
+      isUsableNonWorkerGiglToken(env.GIGL_TRACKING_WORKER_TOKEN))
   ) {
     problems.push(
       'GIGL_TRACKING_WORKER_TOKEN must be a current restricted worker token'
+    );
+  }
+  if (
+    isConfigured(env, 'GIGL_TRACKING_WORKER_TOKEN_SECONDARY') &&
+    isUsableNonWorkerGiglToken(env.GIGL_TRACKING_WORKER_TOKEN_SECONDARY)
+  ) {
+    problems.push(
+      'GIGL_TRACKING_WORKER_TOKEN_SECONDARY must not be a usable non-worker token'
     );
   }
   if (
@@ -277,8 +290,6 @@ function main() {
   process.exitCode = runDirectWorkerPreflight({ env: parsed, rawText });
 }
 
-if (
-  isEntrypoint(import.meta.url)
-) {
+if (isEntrypoint(import.meta.url)) {
   main();
 }

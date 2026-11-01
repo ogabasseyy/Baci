@@ -5,15 +5,14 @@
 CI proves the Vercel key is DEFINED, never that the value is real or
 unexpired — do not rely on the green gate. Before merging:
 
-- [ ] Vercel Production `GIGL_TRACKING_WORKER_TOKEN` decodes (payload
-  `exp`, one-liner below) and matches the VPS `.env` value exactly.
-- [ ] `exp` leaves a 14-day runway; otherwise rotate first (steps below).
+- [ ] Both environments hold the intended overlapping primary and secondary
+  worker JWTs, and at least one has more than 14 days of runway.
 - [ ] Manual fallback route returns 200 with the Vercel value.
 
 `GIGL_TRACKING_WORKER_TOKEN` is a signed, time-bounded PostgREST JWT whose
-`role` is exactly `gigl_tracking_worker`. It must hold the SAME value in
-two places or the retained manual fallback route returns 500 while the VPS
-poller keeps working (split brain):
+`role` is exactly `gigl_tracking_worker`. An optional
+`GIGL_TRACKING_WORKER_TOKEN_SECONDARY` supplies an overlapping credential.
+Configure the intended pair in both places:
 
 1. VPS worker env: `$REMOTE_DIR/.env` (default
    `/home/bassey/baci-workers/.env`) on the worker host.
@@ -39,11 +38,12 @@ exp="$(printf '%s' "$token" | cut -d. -f2 | tr '_-' '/+' | awk '{ while (length 
 date -u -d "@$exp" 2>/dev/null || date -u -r "$exp"
 ```
 
-Rotate when expiry is within 14 days, and confirm the Vercel
-Production value decodes to the same `exp`. This is enforced, not
-advisory: the deploy.sh preflight
-(`jobs/preflight-direct-web-workers.mjs`) refuses promotes whose
-token has 14 days or less of runway.
+Repeat the command for `GIGL_TRACKING_WORKER_TOKEN_SECONDARY` during
+overlap, and independently inspect the Vercel Production values through
+the authorized secret-management process. The VPS preflight requires at
+least one configured worker token with more than 14 days of runway; it
+does not verify a JWT signature. The capability smoke verifies usable
+configured worker tokens against PostgREST without claiming work.
 
 ## Rotate
 
@@ -51,8 +51,11 @@ token has 14 days or less of runway.
    trusted Supabase signing key (ES256, RS256, or HS256 — all three are
    accepted; see `vps-workers/README.md`: never copy a signing key or
    service-role credential to the worker host).
-2. Write the new token to the VPS `.env`, then update the Vercel
-   Production env var to the identical value.
+2. Before the old token expires, keep it as primary and install the new
+   token as `GIGL_TRACKING_WORKER_TOKEN_SECONDARY` in the VPS `.env` and
+   Vercel Production. Keep the old token valid throughout rollout. A
+   changed secondary invalidates the VPS capability latch, so rerun the
+   full capability smoke for both credentials.
 3. Redeploy Vercel production via a manual workflow dispatch, or a
    main push that selects the tracking filter — NOT a Vercel
    dashboard redeploy and NOT an ordinary non-tracking push. Env
@@ -86,4 +89,14 @@ token has 14 days or less of runway.
    temporary assignment takes effect, which would point
    `BACI_WORKER_ENV` at `/.env`).
 5. Hit the manual fallback route on the NEW deployment once and expect
-   200, not `GIGL tracking worker unavailable`.
+   200, not `GIGL tracking worker unavailable`. A 200 alone does not
+   prove the fallback token was used: independently validate both Vercel
+   secrets without exposing them in logs.
+6. After both environments have been verified on the overlapping pair,
+   promote the new token to primary in both places while keeping the old
+   one as secondary. Repeat the worker smoke, release workflow and fallback
+   verification. Only after both environments serve the new primary may
+   the old credential be retired. Remove the secondary in both places,
+   rerun the smoke and release verification, and allow the old token to
+   expire or use an issuer-supported individual revocation mechanism if one
+   exists. Do not revoke a shared signing key to retire a single JWT.

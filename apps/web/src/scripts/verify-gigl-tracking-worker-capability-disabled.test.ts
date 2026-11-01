@@ -8,7 +8,7 @@ const {
   verifyPathProbe,
   verifyScopeProbe,
 } = vi.hoisted(() => ({
-  createClient: vi.fn(() => ({ rpc: vi.fn() })),
+  createClient: vi.fn((_env: NodeJS.ProcessEnv) => ({ rpc: vi.fn() })),
   createScopeProbeClient: vi.fn(() => ({ rpc: vi.fn() })),
   verifyCapability: vi.fn(),
   verifyPathProbe: vi.fn(),
@@ -44,6 +44,30 @@ vi.mock('@/lib/verify-gigl-tracking-worker-capability', async (importOriginal) =
 // under the 300-line limit.
 describe('runGiglTrackingCapabilityVerification (disabled)', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('rejects an unsafe secondary even when the primary is absent', async () => {
+    const { GiglWorkerTokenError, GiglWorkerTokenRoleError } = await import('@/lib/gigl-tracking-worker-client');
+    createClient.mockImplementation((env) => {
+      if (env.GIGL_TRACKING_WORKER_TOKEN === 'secondary') throw new GiglWorkerTokenRoleError();
+      throw new GiglWorkerTokenError();
+    });
+    const logger = { error: vi.fn(), info: vi.fn() };
+    await expect(runGiglTrackingCapabilityVerification({
+      env: { GIGL_ENABLED: 'off', GIGL_TRACKING_WORKER_TOKEN_SECONDARY: 'secondary' }, logger,
+    })).resolves.toBe(1);
+  });
+
+  it('probes both configured credentials while disabled', async () => {
+    createClient.mockImplementation(() => ({ rpc: vi.fn() }));
+    verifyScopeProbe.mockResolvedValue(true);
+    verifyPathProbe.mockResolvedValue(true);
+    const logger = { error: vi.fn(), info: vi.fn() };
+    await expect(runGiglTrackingCapabilityVerification({
+      env: { GIGL_ENABLED: 'off', GIGL_TRACKING_WORKER_TOKEN: 'primary', GIGL_TRACKING_WORKER_TOKEN_SECONDARY: 'secondary' }, logger,
+    })).resolves.toBe(0);
+    expect(verifyScopeProbe).toHaveBeenCalledTimes(2);
+    expect(verifyPathProbe).toHaveBeenCalledTimes(2);
+  });
 
   it('probes the scope hook when disabled with a usable token', async () => {
     verifyScopeProbe.mockResolvedValue(true);

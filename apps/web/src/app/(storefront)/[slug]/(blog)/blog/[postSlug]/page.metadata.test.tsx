@@ -250,10 +250,7 @@ describe('storefront blog post metadata', () => {
   it('uses canonical URL from buildCanonicalBlogPostUrl for custom domains', async () => {
     mockGetRequestScopedBlogPost.mockResolvedValue({
       ...liveBlogPost,
-      merchant: {
-        ...liveBlogPost.merchant,
-        custom_domain: 'ogabassey.com',
-      },
+      merchant: { ...liveBlogPost.merchant, custom_domain: 'ogabassey.com' },
     });
 
     const metadata = await generateBlogPostMetadata(
@@ -262,6 +259,9 @@ describe('storefront blog post metadata', () => {
 
     expect(metadata.alternates?.canonical).toBe(
       'https://ogabassey.com/blog/apple-studio-display-review'
+    );
+    expect(metadata.alternates?.types?.['application/rss+xml']).toBe(
+      'https://ogabassey.com/api/blog/feed/ogabassey'
     );
   });
 

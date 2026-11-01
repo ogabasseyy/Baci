@@ -6,7 +6,7 @@ SELECT set_config('test.redvault_refund_failure_phase', '0', true);
 DO $$
 #variable_conflict use_variable
 DECLARE
- merchant_id uuid := '03e10000-0000-4000-8000-000000000001';
+ merchant_id uuid := '6b5cb8a4-5575-456c-b936-8cdfae30db74';
  product_id uuid := '03e10000-0000-4000-8000-000000000002';
  offer_id uuid := '03e10000-0000-4000-8000-000000000003';
  variant_id uuid := '03e10000-0000-4000-8000-000000000004';
@@ -25,7 +25,8 @@ DECLARE
 BEGIN
  INSERT INTO private.uba_redvault_write_context VALUES (pg_catalog.txid_current()) ON CONFLICT DO NOTHING;
  INSERT INTO public.merchants(id,email,business_name,slug,is_published)
- VALUES (merchant_id,'cleanup-refund@example.com','Cleanup refund','cleanup-refund',true);
+ VALUES (merchant_id,'cleanup-refund@example.com','Cleanup refund','cleanup-refund',true)
+ ON CONFLICT (id) DO NOTHING;
  phase := 2;
  INSERT INTO public.products(id,merchant_id,name,price,status,stock_quantity,manage_stock,has_condition_offers,has_variants,inventory_tracking_policy)
  VALUES (product_id,merchant_id,'Cleanup refund phone',50000,'active',12,false,true,false,'serialized_strict');
@@ -55,16 +56,21 @@ BEGIN
  phase := 6;
  INSERT INTO public.discount_codes(id,merchant_id,code,discount_type,discount_value)
  VALUES (discount_id,merchant_id,'CLEANUPREFUND','fixed_amount',100);
+ phase := 9;
  UPDATE private.uba_redvault_runtime SET commercial_terms_confirmed=true,
  commercial_terms=jsonb_build_object('campaign_dates',jsonb_build_object('starts_at','2020-01-01T00:00:00Z','ends_at','2030-01-01T00:00:00Z'),
  'minimum_spend',jsonb_build_object('eligible_subtotal_kobo',1000),'caps',jsonb_build_object('discount_kobo',1000000))
  WHERE partnership='uba_redvault';
+ phase := 10;
  INSERT INTO private.uba_redvault_applications(id,order_id,discount_code_id,merchant_id,quote_version_id,quote_payload_hash,quote_payload,customer_email,checkout_key,request_hash,discount_kobo,eligible_subtotal_kobo,status)
  VALUES(application_id,order_id,discount_id,merchant_id,gen_random_uuid(),h,'{}','cleanup-buyer@example.com','CLEANUP-REFUND','CLEANUP-REFUND',100,50000,'approved');
+ phase := 11;
  INSERT INTO private.uba_redvault_payment_attempts(id,application_id,order_id,merchant_id,reference,quote_payload_hash,amount_kobo,currency,state,provider_response)
  VALUES(attempt_id,application_id,order_id,merchant_id,'CLEANUP-REFUND',h,50000,'NGN','approved',NULL);
+ phase := 12;
  INSERT INTO private.uba_redvault_refunds(id,attempt_id,state,refund_type,idempotency_key,amount_kobo)
  VALUES(refund_id,attempt_id,'processing','merchandise_units','CLEANUP-REFUND',50000);
+ phase := 13;
  INSERT INTO private.uba_redvault_refund_line_allocations(refund_id,application_id,order_item_id,unit_ordinal,net_amount_kobo)
  VALUES(refund_id,application_id,item_id,1,50000);
  phase := 7;
@@ -92,4 +98,9 @@ DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '5' 
 DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '6' THEN RAISE EXCEPTION 'refund fixture phase 6 failed'; END IF; END $$;
 DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '7' THEN RAISE EXCEPTION 'refund fixture phase 7 failed'; END IF; END $$;
 DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '8' THEN RAISE EXCEPTION 'refund fixture phase 8 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '9' THEN RAISE EXCEPTION 'refund fixture phase 9 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '10' THEN RAISE EXCEPTION 'refund fixture phase 10 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '11' THEN RAISE EXCEPTION 'refund fixture phase 11 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '12' THEN RAISE EXCEPTION 'refund fixture phase 12 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '13' THEN RAISE EXCEPTION 'refund fixture phase 13 failed'; END IF; END $$;
 ROLLBACK;

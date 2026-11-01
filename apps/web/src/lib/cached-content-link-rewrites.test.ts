@@ -344,6 +344,34 @@ describe('getCachedContentLinkRewrites', () => {
       '/smartphones/iphone-13-pro'
     );
   });
+
+  it('falls back to stripping trailing RAM/storage capacity suffixes when a variant slug has no archived row', async () => {
+    mockGetCachedProductCanonicalPaths
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        'google-pixel-6': '/smartphones/google-pixel-6',
+      });
+    mockGetCachedStorefrontProductSlugResolution.mockResolvedValueOnce({
+      hasError: false,
+      present: false,
+    });
+
+    const rewrites = await getCachedContentLinkRewrites(
+      'merchant-1',
+      [],
+      ['google-pixel-6-8gb-256gb']
+    );
+
+    expect(rewrites.productPaths['google-pixel-6-8gb-256gb']).toBe(
+      '/smartphones/google-pixel-6'
+    );
+    expect(mockGetCachedProductCanonicalPaths).toHaveBeenNthCalledWith(
+      2,
+      'merchant-1',
+      ['google-pixel-6'],
+      { throwOnQueryError: true }
+    );
+  });
 });
 
 describe('cached-content-link-rewrites cache directive', () => {

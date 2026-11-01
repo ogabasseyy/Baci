@@ -15,6 +15,9 @@ const EMPTY_REWRITES: StorefrontContentLinkRewrites = {
   productPaths: {},
 };
 
+const CAPACITY_VARIANT_SUFFIX_REGEX =
+  /-(?:\d+gb-)?\d+(?:gb|tb)(?:-(?:5g|4g))?$/i;
+
 async function resolveBlogSlugRewrites(
   merchantId: string,
   blogSlugs: string[]
@@ -240,6 +243,33 @@ export async function getCachedContentLinkRewrites(
     productPaths[candidate] = path;
   }
 
+  // Variant capacity suffix fallback: resolve authored RAM/storage variant
+  // slugs (e.g. `google-pixel-6-8gb-256gb`) to the live parent model path.
+  const baseSlugByCandidate = new Map<string, string>();
+  for (const candidate of slugCandidates) {
+    if (Object.hasOwn(productPaths, candidate)) continue;
+    const stripped = candidate.replace(CAPACITY_VARIANT_SUFFIX_REGEX, '');
+    if (stripped && stripped !== candidate) {
+      baseSlugByCandidate.set(candidate, stripped);
+    }
+  }
+  if (baseSlugByCandidate.size > 0) {
+    const baseSlugsToLookup = Array.from(
+      new Set(baseSlugByCandidate.values())
+    ).filter((baseSlug) => !Object.hasOwn(productPaths, baseSlug));
+    const basePaths = baseSlugsToLookup.length
+      ? await getCachedProductCanonicalPaths(merchantId, baseSlugsToLookup, {
+          throwOnQueryError: true,
+        })
+      : {};
+    for (const [candidate, baseSlug] of baseSlugByCandidate) {
+      const basePath = Object.hasOwn(productPaths, baseSlug)
+        ? productPaths[baseSlug]
+        : basePaths[baseSlug];
+      if (basePath) productPaths[candidate] = basePath;
+    }
+  }
+
   // Active products linked by UUID: canonical path of their real slug.
   const activeUuidSlugs = Array.from(new Set(activeSlugByUuid.values())).filter(
     (slug) => !Object.hasOwn(productPaths, slug)
@@ -252,12 +282,8 @@ export async function getCachedContentLinkRewrites(
   for (const [uuid, slug] of activeSlugByUuid) {
     const slugPath = Object.hasOwn(productPaths, slug)
       ? productPaths[slug]
-      : Object.hasOwn(activeUuidPaths, slug)
-        ? activeUuidPaths[slug]
-        : undefined;
-    if (slugPath) {
-      productPaths[uuid] = slugPath;
-    }
+      : activeUuidPaths[slug];
+    if (slugPath) productPaths[uuid] = slugPath;
   }
 
   // Stored category slugs can be legacy aliases (phones, laptop, ...) that

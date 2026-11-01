@@ -77,7 +77,7 @@ const RELATED_BLOG_POSTS_FETCH_LIMIT = 36;
 const RELATED_BLOG_CATEGORY_FETCH_LIMIT = 24;
 
 const RELATED_BLOG_POST_SELECT =
-  'id, title, slug, excerpt, featured_image_url, category, tags, keywords, published_at, reading_time_minutes';
+  'id, title, slug, excerpt, featured_image_url, category, tags, keywords, focus_keyword, published_at, reading_time_minutes';
 
 function getEstimatedPaginationCountFloor({
   count,
@@ -2702,7 +2702,7 @@ async function getCachedBlogListingCore(
   let query = supabase
     .from('blog_posts')
     .select(
-      'id, title, slug, excerpt, featured_image_url, featured_image_alt, featured_image_variants, category, tags, author_name, published_at, classification_revision, reading_time_minutes, view_count',
+      'id, title, slug, excerpt, featured_image_url, featured_image_alt, featured_image_variants, category, tags, keywords, focus_keyword, author_name, published_at, classification_revision, reading_time_minutes, view_count',
       PUBLIC_BLOG_COUNT_OPTIONS
     )
     .eq('merchant_id', merchant.id)

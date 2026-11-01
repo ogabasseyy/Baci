@@ -8,6 +8,7 @@ describe('STOREFRONT_BLOG_POST_SELECT', () => {
     );
 
     expect(fields).toContain('author_image_url');
+    expect(fields).toContain('focus_keyword');
     expect(fields).toContain('seo_title');
     expect(fields).toContain('seo_description');
     expect(fields).toContain('featured_image_width');

@@ -1,9 +1,9 @@
 # Baci capabilities and agent access
 
 Reviewed 31 October 2026 against source revision
-`add71b5ae9b1e0a31a9cdf62b408b4dc7e916ac2`. The shipment-booking merchant sender
-change was re-reviewed and tested; other cited source evidence remains unchanged
-across the latest main sync. This is a navigation map, not authorization or proof
+`740122683e1c16979372ce963ca2aabd0b8f3fed`. The order-details shipment flow
+transition change was re-reviewed and tested; other cited source evidence remains
+unchanged across the latest main sync. This is a navigation map, not authorization or proof
 of current deployment. Check the current implementation, live tool discovery and
 merchant entitlement before calling or claiming a tool.
 

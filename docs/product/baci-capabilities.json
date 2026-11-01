@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-31T12:06:59+00:00",
-  "source_revision": "add71b5ae9b1e0a31a9cdf62b408b4dc7e916ac2",
-  "evidence_digest": "14c97ea35e13bd435c76163a03f3cb8ce99b4581f5942887395d25642566524e",
-  "claims_digest": "e12b8accdf684f987dc2480453286a56f4ea3a50b32d9927c363a60f789f9486",
+  "reviewed_at": "2026-10-31T20:34:23+00:00",
+  "source_revision": "740122683e1c16979372ce963ca2aabd0b8f3fed",
+  "evidence_digest": "0768371803be406d0d4f5c025f46d9162c68f1769b19f3c3894586c642a76fae",
+  "claims_digest": "55262d91c0adc6264e692c92fb5e8608a885c79e68e215d1a6c8b16251b14f60",
   "review_scope": "Source evidence only. Re-reviewed shipping after the booking sender change: for domestic order bookings, a blank or implausible store phone now stops booking with 400 MERCHANT_SENDER_PHONE_INVALID before any provider request; origin-missing, merchant-missing and lookup-failure codes are unchanged. The shipping claim and its merchant-configuration limitation remain accurate. Across this main integration all other cited capability and access-map sources are unchanged. Support-chat health, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment, native acceptance and transaction readiness require separate verification.",
   "capabilities": [
     {

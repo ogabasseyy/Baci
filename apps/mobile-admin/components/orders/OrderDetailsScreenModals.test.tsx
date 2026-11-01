@@ -58,6 +58,8 @@ vi.mock('@/components/orders/RecordPaymentSheet', async () => {
 });
 
 const shipmentFlow = vi.hoisted(() => ({
+  dismissed: undefined as undefined | (() => void),
+  presented: undefined as undefined | (() => void),
   checkoutPaidShippingLabel: undefined as string | null | undefined,
   proceed: undefined as undefined | (() => unknown),
 }));
@@ -65,7 +67,11 @@ vi.mock('@/components/orders/ShipmentFlowSheet', () => ({
   ShipmentFlowSheet: (props: {
     checkoutPaidShippingLabel?: string | null;
     onContinueFromMethod: () => unknown;
+    onDismissed?: () => void;
+    onPresented?: () => void;
   }) => {
+    shipmentFlow.dismissed = props.onDismissed;
+    shipmentFlow.presented = props.onPresented;
     shipmentFlow.checkoutPaidShippingLabel = props.checkoutPaidShippingLabel;
     shipmentFlow.proceed = props.onContinueFromMethod;
     return null;
@@ -145,6 +151,7 @@ function createController(
     handleSendOrderDetailsToRider: vi.fn(),
     handleShareReceiptPdf: vi.fn(),
     handleShipmentFlowBack: vi.fn(),
+    handleShipmentFlowDismissed: vi.fn(),
     handleShipOnCredit: vi.fn(),
     handleStatusUpdate: vi.fn(),
     handleSubmitSelfFulfillment: vi.fn(),
@@ -209,6 +216,31 @@ const paidCheckoutGiglOrder = {
 };
 
 describe('OrderDetailsScreenModals', () => {
+  it('closes the status menu only once the shipping sheet is on screen', () => {
+    const controller = createController({ showStatusModal: true });
+
+    render(
+      <OrderDetailsScreenModals controller={controller} order={createOrder()} />
+    );
+
+    expect(controller.setShowStatusModal).not.toHaveBeenCalled();
+
+    shipmentFlow.presented?.();
+
+    expect(controller.setShowStatusModal).toHaveBeenCalledWith(false);
+  });
+
+  it('runs the dialogs queued for after the shipping sheet once it has gone', () => {
+    const controller = createController();
+
+    render(
+      <OrderDetailsScreenModals controller={controller} order={createOrder()} />
+    );
+    shipmentFlow.dismissed?.();
+
+    expect(controller.handleShipmentFlowDismissed).toHaveBeenCalledOnce();
+  });
+
   it('passes the customer-paid GIG price to the Shipping step for a saved checkout quote', () => {
     render(
       <OrderDetailsScreenModals

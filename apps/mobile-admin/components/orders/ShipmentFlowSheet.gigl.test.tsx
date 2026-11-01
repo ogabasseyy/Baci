@@ -4,6 +4,24 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShipmentFlowSheet } from './ShipmentFlowSheet';
 
+vi.mock('./ShipmentFlowSheetPresence', () => ({
+  ShipmentFlowSheetPresence: ({
+    accessory,
+    children,
+    visible,
+  }: {
+    accessory?: ReactNode;
+    children?: ReactNode;
+    visible: boolean;
+  }) =>
+    visible ? (
+      <section>
+        {children}
+        {accessory}
+      </section>
+    ) : null,
+}));
+
 vi.mock('./CheckoutShippingRecoveryPanel', () => ({
   CheckoutShippingRecoveryPanel: () => null,
 }));

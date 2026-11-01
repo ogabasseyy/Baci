@@ -52,6 +52,7 @@ DECLARE
   before_stock integer;
   n integer;
   shortage boolean := false;
+  has_marker boolean;
   phase integer := 1;
 BEGIN
   RAISE WARNING 'BACI_SERIALIZED_PHASE_1';
@@ -120,10 +121,12 @@ BEGIN
     WHERE order_id=v_order_id AND product_offer_id=used_offer;
   phase := 8;
   RAISE WARNING 'BACI_SERIALIZED_PHASE_8';
-  IF NOT pg_temp.has_serialized_offer_marker(
+  SELECT pg_temp.has_serialized_offer_marker(
     v_order_item_id,
     merchant, used_offer
-  ) THEN
+  ) INTO has_marker;
+  phase := 11;
+  IF NOT has_marker THEN
     RAISE EXCEPTION 'trusted order creation did not record the serialized offer marker';
   END IF;
   phase := 9;
@@ -151,6 +154,7 @@ EXCEPTION WHEN query_canceled OR assert_failure OR OTHERS THEN
   -- The replay runner deliberately redacts database errors. Preserve only
   -- the synthetic fixture phase so each failure has a distinct SQL line.
   PERFORM set_config('test.serialized_offer_failure_phase', phase::text, true);
+  PERFORM set_config('test.serialized_offer_failure_state', SQLSTATE, true);
 END $$;
 $fixture$;
 EXCEPTION WHEN query_canceled OR assert_failure OR OTHERS THEN
@@ -176,8 +180,11 @@ DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '4'
 DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '5' THEN RAISE EXCEPTION 'serialized offer fixture phase 5 failed'; END IF; END $$;
 DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '6' THEN RAISE EXCEPTION 'serialized offer fixture phase 6 failed'; END IF; END $$;
 DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '7' THEN RAISE EXCEPTION 'serialized offer fixture phase 7 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '8' AND current_setting('test.serialized_offer_failure_state',true) = '42501' THEN RAISE EXCEPTION 'serialized marker permission error'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '8' AND current_setting('test.serialized_offer_failure_state',true) = '42883' THEN RAISE EXCEPTION 'serialized marker function missing'; END IF; END $$;
 DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '8' THEN RAISE EXCEPTION 'serialized offer fixture phase 8 failed'; END IF; END $$;
 DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '9' THEN RAISE EXCEPTION 'serialized offer fixture phase 9 failed'; END IF; END $$;
 DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '10' THEN RAISE EXCEPTION 'serialized offer fixture phase 10 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '11' THEN RAISE EXCEPTION 'serialized offer marker missing'; END IF; END $$;
 
 ROLLBACK;

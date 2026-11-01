@@ -15,11 +15,12 @@ export function usePreparedSocialPixel(
 ): void {
   useInsertionEffect(() => {
     if (!merchantId || !pixelId) return;
+    const preparedPixelId = pixelId;
     let release: (() => void) | undefined;
     function syncOwner() {
       if (getSocialMarketingConsent()) {
         if (!release)
-          release = socialPixelContext.prepare(destination, pixelId);
+          release = socialPixelContext.prepare(destination, preparedPixelId);
       } else {
         release?.();
         release = undefined;

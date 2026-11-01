@@ -303,7 +303,7 @@ jobs:
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] http://apt.postgresql.org/pub/repos/apt noble-pgdg main" \
             | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
           sudo apt-get update
-          sudo apt-get install -y postgresql-client-18=18.3-1.pgdg24.04+1
+          sudo apt-get install -y postgresql-18=18.3-1.pgdg24.04+1 postgresql-client-18=18.3-1.pgdg24.04+1
           SUPABASE_ARCHIVE="${RUNNER_TEMP}/supabase_linux_amd64.tar.gz"
           curl --fail --silent --show-error --location \
             "https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_linux_amd64.tar.gz" \
@@ -317,6 +317,10 @@ jobs:
           echo "PSQL_BIN=$PSQL_BIN" >> "$GITHUB_ENV"
       - name: Prepare pinned Supabase database image
         run: bash .github/scripts/prepare-supabase-replay-image.sh
+      - name: Test loyalty checkout replay fixture against PostgreSQL
+        env:
+          PG_BINDIR: /usr/lib/postgresql/18/bin
+        run: node --test tools/test/loyalty-checkout-replay-local.test.mjs
       - name: Test merchant blog classification permissions and lifecycle
         run: bash supabase/tests/run-merchant-blog-classification.sh
       # Every replay SQL suite is registered in

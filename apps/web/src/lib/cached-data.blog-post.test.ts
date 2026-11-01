@@ -416,7 +416,7 @@ describe('getCachedBlogPost', () => {
       'category',
       'Laptops'
     );
-    expect(categoryRelatedPostsBuilder.limit).toHaveBeenCalledWith(24);
+    expect(categoryRelatedPostsBuilder.limit).toHaveBeenCalledWith(80);
     expect(result?.relatedPosts.map((post) => post.id)).toEqual([
       'older-macbook',
       'recent-phone',

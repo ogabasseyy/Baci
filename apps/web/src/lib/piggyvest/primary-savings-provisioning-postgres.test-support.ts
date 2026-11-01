@@ -30,7 +30,7 @@ DECLARE
   scope jsonb := '${scope}';
   goal uuid := '00000000-0000-4000-8000-000000000006';
   claimed jsonb;
-  proof jsonb := '{"providerCustomerId":"customer","providerWalletId":"destination","walletName":"baci-save:00000000-0000-4000-8000-000000000004:00000000-0000-4000-8000-000000000006","businessId":"fixture-business","currency":"NGN","status":"active","type":"api","hasFundingAccount":true,"interestAccepted":false}';
+  proof jsonb := '{"providerCustomerId":"customer","providerWalletId":"destination","walletName":"baci-save-d80a9fbb7f8c666ce4462294b4e53d25","businessId":"fixture-business","currency":"NGN","status":"active","type":"api","hasFundingAccount":true,"interestAccepted":false}';
   field text;
   invalid jsonb;
 BEGIN
@@ -83,7 +83,7 @@ BEGIN
   IF claimed->>'status'<>'claimed' OR claimed->>'interestAccepted'<>'true' THEN RAISE EXCEPTION 'opt-in not persisted'; END IF;
   IF piggyvest_primary.prepare_goal_wallet(scope,goal,false)->>'status'<>'conflict' THEN RAISE EXCEPTION 'opt-in silently downgraded'; END IF;
   IF NOT piggyvest_primary.record_goal_wallet(scope,goal,(claimed->>'claimToken')::uuid,'interest-destination') THEN RAISE EXCEPTION 'accepted opt-in wallet not stored'; END IF;
-  proof := proof||jsonb_build_object('walletName','baci-save:'||(scope->>'integrationId')||':'||goal::text,
+  proof := proof||jsonb_build_object('walletName','baci-save-'||substr(encode(sha256(convert_to((scope->>'integrationId')||':'||goal::text,'UTF8')),'hex'),1,32),
     'providerWalletId','interest-destination','interestAccepted',true);
   IF piggyvest_primary.enroll_goal_wallet(scope,goal,proof||'{"providerWalletId":"changed"}') THEN RAISE EXCEPTION 'accepted wallet replaced'; END IF;
   IF NOT piggyvest_primary.enroll_goal_wallet(scope,goal,proof) THEN RAISE EXCEPTION 'explicit opt-in enrollment failed'; END IF;

@@ -1,4 +1,3 @@
-import { DynamicServerError } from 'next/dist/client/components/hooks-server-context';
 import { notFound, redirect } from 'next/navigation';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -37,7 +36,11 @@ describe('navigation framework control flow', () => {
   it.each([
     ['redirect', () => thrown(() => redirect('/other'))],
     ['not-found', () => thrown(() => notFound())],
-    ['dynamic rendering', () => new DynamicServerError('dynamic')],
+    [
+      'dynamic rendering',
+      () =>
+        Object.assign(new Error('dynamic'), { digest: 'DYNAMIC_SERVER_USAGE' }),
+    ],
   ])('rethrows the original %s error without logging', async (_label, makeError) => {
     const error = makeError();
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);

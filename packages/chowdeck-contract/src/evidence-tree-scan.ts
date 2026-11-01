@@ -107,7 +107,7 @@ export async function scanEvidenceTree(
       if (name === 'README.md') {
         if (
           createHash('sha256').update(content).digest('hex') !==
-          'c5e94323b37a3e0c6737ad840e7ec38d81edbfcbcdef697772d085a2ff58ec9c'
+          '5d67b9ec0673cdb0d67497e5816de67052aee7ecdeb59fcce93fa5fbe9324042'
         )
           unsafe();
       } else {

@@ -180,3 +180,7 @@
     transform: translate(-50%, -50%);
   }
 }
+
+.slots[data-state="pending"] .slot > span {
+  color: var(--store-muted, #6b7280);
+}

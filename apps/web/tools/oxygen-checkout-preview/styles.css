@@ -1,0 +1,36 @@
+@import "tailwindcss";
+@source "../../src/components/payments/oxygen";
+@source "../../src/components/ui/dialog.tsx";
+@source "../../src/components/storefront/shared/checkout-theme.ts";
+
+@theme {
+  --color-store-primary: #006d65;
+  --color-store-primary-text: #ffffff;
+  --color-background: #ffffff;
+  --color-foreground: #111827;
+  --color-muted-foreground: #6b7280;
+  --color-ring: #006d65;
+}
+body {
+  margin: 0;
+  background: #f8fafb;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 2px solid #006d65;
+  outline-offset: 3px;
+}

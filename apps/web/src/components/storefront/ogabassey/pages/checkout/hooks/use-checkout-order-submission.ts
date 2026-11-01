@@ -1,5 +1,6 @@
 'use client';
 
+import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import {
   prepareSharedCartCheckout,
   reviewedCheckoutItems,
@@ -28,6 +29,13 @@ export function useCheckoutOrderSubmission(
     const { cart, navigation, payment, processing } = context;
     const { session: paymentSession } = payment;
 
+    if (paymentSession.method === 'oxygen' &&
+      (!isOxygenStorefrontStagingEnabled() || payment.currencyCode !== 'NGN' ||
+       paymentSession.wallet.amountUsed > 0 || !(await context.account.waitForResolvedCustomerAuth()))) {
+      toast({ title: 'Payment plan unavailable', description: 'Sign in to continue with Oxygen. Wallet credit cannot be combined with this payment plan.', variant: 'destructive' });
+      processing.releaseSubmission();
+      return;
+    }
     const submissionOptions = buildCheckoutOrderSubmissionOptions(
       context,
       merchant.id

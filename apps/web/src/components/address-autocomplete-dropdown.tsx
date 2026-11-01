@@ -45,15 +45,8 @@ export function AddressAutocompleteDropdown({
                 )}
                 onClick={() => onSelect(prediction)}
               >
-                <div
-                  className={cn(
-                    'mt-0.5 p-1.5 rounded-full transition-colors',
-                    highlightedIndex === index
-                      ? 'bg-store-primary/10 text-store-primary'
-                      : 'bg-gray-100 text-gray-500 group-hover/item:bg-store-primary/10 group-hover/item:text-store-primary'
-                  )}
-                >
-                  <MapPin className="size-3.5" />
+                <div className="mt-0.5 rounded-full bg-store-primary/10 p-1.5 text-store-primary">
+                  <MapPin className="size-3.5" aria-hidden="true" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p

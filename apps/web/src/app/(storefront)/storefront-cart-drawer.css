@@ -1,0 +1,10 @@
+/* Loaded by the storefront route layout. Deferred component CSS chunks can be
+   removed on navigation or hot updates; cart actions must remain styled. */
+@import "tailwindcss" source(none);
+@import "./storefront-foundation.css";
+
+@config "../../../tailwind.storefront.scoped.config.mjs";
+
+@source "../../components/storefront/ogabassey/components/CartSidebar.tsx";
+@source "../../components/storefront/ogabassey/components/empty-state.tsx";
+@source "../../components/storefront/ogabassey/components/NegotiationModal.tsx";

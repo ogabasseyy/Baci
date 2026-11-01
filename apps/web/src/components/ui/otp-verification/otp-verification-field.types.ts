@@ -15,6 +15,8 @@ export interface OtpVerificationFieldProps {
   error?: string;
   hint?: string;
   pendingMessage?: string;
+  hidePendingMessage?: boolean;
+  resendAfterExpiry?: boolean;
   successMessage?: string;
   concealDigits?: boolean;
   /** Visual completion only. Never treat animation completion as verification. */

@@ -1,3 +1,4 @@
+import { isOxygenStorefrontStagingEnabled } from '@/config/oxygen-storefront-staging';
 import type { PaymentMethod } from '../types';
 import { isGatewayAmountDifferentFromOrderTotal } from '../utils';
 
@@ -150,6 +151,8 @@ export function isPaymentMethodAvailable({
   payableAmount: number;
 }): boolean {
   switch (paymentMethod) {
+    case 'oxygen':
+      return isOxygenStorefrontStagingEnabled() && isNgnChargeCurrency(currency) && payableAmount > 0 && !isGatewayAmountDifferentFromOrderTotal(payableAmount, orderAmount);
     case 'paystack':
       return paystackCheckoutAvailable;
     case 'uba_redvault':
@@ -208,6 +211,7 @@ export function hasAnyInstallmentOption({
   payableAmount: number;
 }): boolean {
   return Boolean(
+    (isOxygenStorefrontStagingEnabled() && isNgnChargeCurrency(currency) && payableAmount > 0 && !isGatewayAmountDifferentFromOrderTotal(payableAmount, orderAmount)) ||
     (featureSettings?.credpal_enabled && isNgnChargeCurrency(currency)) ||
       isCreditDirectEligible({
         featureSettings,

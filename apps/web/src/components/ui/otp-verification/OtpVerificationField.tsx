@@ -4,6 +4,7 @@ import { Check } from 'lucide-react';
 import { type CSSProperties, useEffect, useId, useRef, useState } from 'react';
 import { InputOTP } from '@/components/ui/input-otp';
 import styles from './OtpVerificationField.module.css';
+import { OtpVerificationFooter } from './OtpVerificationFooter';
 import type { OtpVerificationFieldProps } from './otp-verification-field.types';
 import { OTP_CODE_TTL_SECONDS, useOtpExpiry } from './use-otp-expiry';
 import { useOtpResendCooldown } from './use-otp-resend-cooldown';
@@ -27,6 +28,7 @@ export function OtpVerificationField({
   error,
   hint,
   pendingMessage = 'Checking your code…',
+  hidePendingMessage = false,
   successMessage = 'Code verified.',
   concealDigits = false,
   onStackComplete,
@@ -36,6 +38,7 @@ export function OtpVerificationField({
   resendCooldownSeconds = 0,
   resendSentAt,
   onResend,
+  resendAfterExpiry = false,
 }: OtpVerificationFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const wasPending = useRef(pending);
@@ -194,7 +197,7 @@ export function OtpVerificationField({
                 }
               >
                 <span>
-                  {pending || verified || (!expiryAdvisory && expiry.expired)
+                  {verified || (!pending && !expiryAdvisory && expiry.expired)
                     ? null
                     : concealDigits && slot.char
                       ? '•'
@@ -229,7 +232,9 @@ export function OtpVerificationField({
             {feedbackError}
           </span>
         ) : pending ? (
-          pendingMessage
+          <span className={hidePendingMessage ? 'sr-only' : undefined}>
+            {pendingMessage}
+          </span>
         ) : verified ? (
           successMessage
         ) : expiry.expired ? (
@@ -239,47 +244,23 @@ export function OtpVerificationField({
             'This code has expired. Request a new code.'
           )
         ) : (
-          hint || `Enter the ${length}-digit code.`
+          (hint ?? `Enter the ${length}-digit code.`)
         )}
       </div>
-      {(sentAt !== undefined || onResend) && (
-        <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 text-xs text-[var(--store-foreground,#111827)]">
-          <span
-            role="timer"
-            aria-live="off"
-            aria-label="Code expiry"
-            className="tabular-nums"
-          >
-            {verified
-              ? ''
-              : expiry.expired
-                ? expiryAdvisory
-                  ? 'Code may have expired'
-                  : 'Code expired'
-                : expiry.remainingSeconds === null
-                  ? sentAt === undefined
-                    ? ''
-                    : 'Checking code expiry…'
-                  : `${expiryAdvisory ? 'Estimated time remaining' : 'Code expires in'} ${Math.floor(expiry.remainingSeconds / 60)}:${String(expiry.remainingSeconds % 60).padStart(2, '0')}`}
-          </span>
-          {onResend && (
-            <button
-              type="button"
-              className="min-h-11 font-semibold underline disabled:opacity-50"
-              disabled={
-                disabled || pending || verified || resending || coolingDown
-              }
-              onClick={() => void resend()}
-            >
-              {resending
-                ? 'Sending…'
-                : coolingDown
-                  ? `Resend code in ${cooldown.remainingSeconds}s`
-                  : 'Resend code'}
-            </button>
-          )}
-        </div>
-      )}
+      <OtpVerificationFooter
+        sentAt={sentAt}
+        onResend={onResend}
+        resendAfterExpiry={resendAfterExpiry}
+        expiry={expiry}
+        expiryAdvisory={expiryAdvisory}
+        verified={verified}
+        disabled={disabled}
+        pending={pending}
+        resending={resending}
+        coolingDown={coolingDown}
+        cooldown={cooldown}
+        resend={resend}
+      />
     </div>
   );
 }

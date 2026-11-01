@@ -9,6 +9,7 @@ import {
 } from '../should-fetch-checkout-shipping-quotes';
 import type { ShippingQuote } from '../types';
 import { resetDeliveryQuotesForAddressChange } from '../utils';
+import { currentCheckoutShippingRequestKey } from './checkout-shipping-current-request-key';
 import {
   invalidatePendingQuoteRequests,
   loadCheckoutShippingQuotes,
@@ -57,7 +58,11 @@ export function useCheckoutShippingQuotes({
       matched?.providerRateId?.trim() || ''
     );
   };
-  const [resolvedQuoteRequestKey, setResolvedQuoteRequestKey] = useState('');
+  const [resolvedQuoteRequest, setResolvedQuoteRequest] = useState<{
+    key: string;
+    deliveryPreference: 'door' | 'pickup_station';
+  } | null>(null);
+  const resolvedQuoteRequestKey = resolvedQuoteRequest?.key ?? '';
   const quoteRequestSequence = useRef(0);
   const quoteAbortController = useRef<AbortController | null>(null);
   const resetQuotesForAddressChange = (options?: {
@@ -65,7 +70,7 @@ export function useCheckoutShippingQuotes({
   }) => {
     invalidatePendingQuoteRequests(quoteRequestSequence, quoteAbortController);
     setIsLoadingQuotes(false);
-    setResolvedQuoteRequestKey('');
+    setResolvedQuoteRequest(null);
     resetDeliveryQuotesForAddressChange({
       setDeliveryMethod,
       setSelectedQuoteId,
@@ -112,7 +117,8 @@ export function useCheckoutShippingQuotes({
             preferredSelectedQuoteId: selectedQuoteId || undefined,
             preferredProviderRateId: selectedProviderRateId || undefined,
             requestSequence: quoteRequestSequence,
-            setResolvedQuoteRequestKey,
+            setResolvedQuoteRequestKey: (key) =>
+              setResolvedQuoteRequest(key ? { key, deliveryPreference } : null),
             setIsLoadingQuotes,
             setSelectedQuoteId,
             setSelectedProviderRateId: (providerRateId: string) =>
@@ -130,6 +136,28 @@ export function useCheckoutShippingQuotes({
     state: newAddressState,
     country: getCountryByCode(merchantCountry)?.name ?? 'Nigeria',
   });
+  const currentDeliveryPreference =
+    deliveryMethod === 'pickup'
+      ? 'pickup_station'
+      : checkoutShippingQuoteDeliveryPreference({
+          deliveryMethod,
+          isStreetReady: !isNewAddressMode || isNewDeliveryAddressReady,
+        });
+  const currentRequestKey = currentCheckoutShippingRequestKey({
+    isHydrated,
+    merchantId,
+    merchantCountry,
+    checkoutCart,
+    checkoutCartCatalogSubtotal,
+    deliveryCoordinates,
+    isNewAddressMode,
+    newAddressStreet,
+    newAddressCity,
+    newAddressState,
+    addresses,
+    selectedAddressId,
+    deliveryPreference: currentDeliveryPreference,
+  });
 
   // Refresh is keyed by address/cart inputs; callback identities must not trigger new quotes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: preserve input-keyed refresh semantics
@@ -137,6 +165,7 @@ export function useCheckoutShippingQuotes({
     if (!isHydrated) return;
     if (
       deliveryMethod === 'door' ||
+      deliveryMethod === 'pickup' ||
       deliveryMethod === 'pickup_station' ||
       deliveryMethod === 'airport'
     ) {
@@ -150,6 +179,7 @@ export function useCheckoutShippingQuotes({
           newAddressCity.trim() && newAddressState.trim()
         );
         if (
+          (deliveryMethod === 'pickup' && hasCityState) ||
           shouldFetchCheckoutShippingQuotes({
             deliveryMethod,
             isStreetReady: isNewDeliveryAddressReady,
@@ -168,10 +198,7 @@ export function useCheckoutShippingQuotes({
             firstName,
             lastName,
             customerEmail,
-            checkoutShippingQuoteDeliveryPreference({
-              deliveryMethod,
-              isStreetReady: isNewDeliveryAddressReady,
-            }),
+            currentDeliveryPreference,
             false
           );
         } else {
@@ -199,7 +226,7 @@ export function useCheckoutShippingQuotes({
                 firstName,
                 lastName,
                 customerEmail,
-                deliveryMethod === 'pickup_station' ? 'pickup_station' : 'door',
+                currentDeliveryPreference,
                 false
               );
             }
@@ -218,6 +245,7 @@ export function useCheckoutShippingQuotes({
     newAddressCity,
     addresses,
     merchantId,
+    currentRequestKey,
     quoteItemsFingerprint,
     resolvedQuoteRequestKey,
     deliveryCoordinates?.latitude,
@@ -236,6 +264,10 @@ export function useCheckoutShippingQuotes({
   return {
     shippingQuotes,
     isLoadingQuotes,
+    hasResolvedQuotes:
+      Boolean(resolvedQuoteRequestKey) &&
+      resolvedQuoteRequest?.deliveryPreference === currentDeliveryPreference &&
+      resolvedQuoteRequestKey === currentRequestKey,
     selectedQuoteId,
     setSelectedQuoteId,
     resetQuotesForAddressChange,

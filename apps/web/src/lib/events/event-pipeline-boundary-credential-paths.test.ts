@@ -9,6 +9,7 @@ import { eventPipelineGatewayCronCredentialPaths } from './event-pipeline-gatewa
 import { eventPipelineGiglCredentialPaths } from './event-pipeline-gigl-credential-paths';
 import { eventPipelineImmediateOrderCredentialPaths } from './event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from './event-pipeline-jumia-credential-paths';
+import { eventPipelineManualOrderDocumentCredentialPaths } from './event-pipeline-manual-order-document-credential-paths';
 import { onboardingEmailWorkerAuthority } from './event-pipeline-onboarding-authority-paths';
 import { eventPipelinePaystackRefundCredentialPaths } from './event-pipeline-paystack-refund-credential-paths';
 import { eventPipelinePiggyvestCredentialPaths } from './event-pipeline-piggyvest-credential-paths';
@@ -268,6 +269,7 @@ describe('event pipeline credential-path authority', () => {
       ...eventPipelineChatCredentialPaths,
       ...eventPipelinePaystackRefundCredentialPaths,
       ...eventPipelineGatewayCronCredentialPaths,
+      ...eventPipelineManualOrderDocumentCredentialPaths,
       ...onboardingEmailWorkerAuthority.credentialPaths,
     ]);
   });

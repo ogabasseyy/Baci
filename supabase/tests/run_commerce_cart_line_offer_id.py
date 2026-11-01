@@ -82,6 +82,7 @@ try:
  sql+='\n\\i '+str(root/'supabase/migrations/20261019183000_commerce_cart_default_variant_predicate.sql')
  sql+='\n\\i '+str(root/'supabase/migrations/20261025120000_commerce_cart_line_offer_id.sql')
  sql+='\n\\i '+str(root/'supabase/migrations/20261025190000_commerce_cart_exact_offer_reprice.sql')
+ sql+='\n\\i '+str(root/'supabase/migrations/20261029143946_commerce_cart_redvault_binding.sql')
  if '--before-offer-review-fix' not in sys.argv:
   for f in sorted((root/'supabase/migrations').glob('*_commerce_cart_exact_offer_review_guards.sql')):
    sql+='\n\\i '+str(f)

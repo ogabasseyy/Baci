@@ -111,15 +111,58 @@ describe('bound saved GIG checkout destination', () => {
     ).toMatchObject({ latitude, longitude });
   });
   it.each([
-    { latitude: undefined, longitude: undefined },
+    { latitude: 6.5, longitude: undefined },
+    { latitude: undefined, longitude: 3.3 },
     { latitude: Number.NaN, longitude: 3 },
     { latitude: 91, longitude: 3 },
-  ])('never substitutes a station pin when saved coordinates are missing or invalid %j', (change) => {
+  ])('never substitutes a station pin when saved coordinates are partial or invalid %j', (change) => {
     expect(() =>
       resolveSavedGiglCheckoutDestination(order, {
         ...request,
         receiver: { ...request.receiver, ...change },
       })
+    ).toThrow(
+      expect.objectContaining({ code: 'SHIPPING_QUOTE_RECEIVER_MISMATCH' })
+    );
+  });
+});
+
+describe('bugfix: saved GIG checkout quote priced without a map pin', () => {
+  // GIG priced these on the receiver station's coordinates; booking falls back
+  // to the same station from the saved rate id when the receiver has no pin.
+  // Stored quote_request JSON may carry explicit nulls.
+  const unpinned = (pins: { latitude?: null; longitude?: null }) =>
+    ({
+      ...request,
+      receiver: {
+        ...request.receiver,
+        latitude: undefined,
+        longitude: undefined,
+        ...pins,
+      },
+    }) as unknown as QuoteRequest;
+
+  it.each([
+    {},
+    { latitude: null, longitude: null },
+  ])('books on the unchanged unpinned order destination %j', (pins) => {
+    const resolved = resolveSavedGiglCheckoutDestination(order, unpinned(pins));
+    expect(resolved).toBe(order);
+    expect(resolved.shipping_address).not.toHaveProperty('latitude');
+    expect(resolved.shipping_address).not.toHaveProperty('longitude');
+  });
+
+  it.each([
+    { latitude: 6.5, longitude: 3.3 },
+    { address: 'Other Road' },
+    { city: 'Abuja' },
+    { countryCode: 'GH' },
+  ])('still refuses when the order destination differs from what GIG priced %j', (change) => {
+    expect(() =>
+      resolveSavedGiglCheckoutDestination(
+        { shipping_address: { ...address, ...change } },
+        unpinned({})
+      )
     ).toThrow(
       expect.objectContaining({ code: 'SHIPPING_QUOTE_RECEIVER_MISMATCH' })
     );

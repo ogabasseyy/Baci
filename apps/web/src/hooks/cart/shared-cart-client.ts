@@ -8,6 +8,7 @@ import {
   isCartSessionRetiring,
   runBoundedCartSessionWrite,
 } from './cart-session-write-fence';
+import { cartClientCredentialHeaders } from './client-credential';
 import {
   ensureCartDeviceRevocationCleared,
   isCartDeviceRevocationPending,
@@ -56,11 +57,20 @@ async function requestSharedCartSnapshot(
     response = await fetch(cartRoute('/api/storefront/cart', merchantSlug), {
       cache: 'no-store',
       credentials: 'same-origin',
+      headers: { 'x-baci-cart-probe': '1' },
       method: 'GET',
       signal,
     });
   } catch {
     return UNAVAILABLE_FETCH;
+  }
+  if (response.status === 204) {
+    return {
+      ok: false,
+      code: 'unauthorized',
+      snapshot: null,
+      retryable: false,
+    };
   }
   const body = await readBody(response);
   if (response.ok && body && isSnapshot(body.cart)) {
@@ -115,7 +125,10 @@ async function requestCreateSharedCart(
           ...(input.lines ? { lines: input.lines } : {}),
           operationId: input.operationId,
         }),
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...cartClientCredentialHeaders(merchantSlug),
+        },
         method: 'POST',
         signal,
       }

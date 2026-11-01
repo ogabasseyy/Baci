@@ -35,6 +35,7 @@ describe('shouldReleaseBookingLock', () => {
       'MERCHANT_LOOKUP_FAILED',
       'MERCHANT_SENDER_REQUIRED',
       'MERCHANT_ORIGIN_MISSING',
+      'MERCHANT_SENDER_PHONE_INVALID',
       'INTERNATIONAL_QUOTE_SENDER_MISSING',
       'SHIPPING_QUOTE_RECEIVER_MISMATCH',
       'SHIPPING_QUOTE_ITEMS_MISMATCH',
@@ -42,6 +43,7 @@ describe('shouldReleaseBookingLock', () => {
       'MERCHANT_WALLET_BOOKED_SHIPMENT_MISSING',
       'GIGL_STATION_RESOLUTION_FAILED',
       'GIGL_AUTHENTICATION_FAILED',
+      'GIGL_COST_EXCEEDS_CUSTOMER_PAID',
     ]) {
       expect(
         shouldReleaseBookingLock(

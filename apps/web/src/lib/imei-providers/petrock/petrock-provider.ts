@@ -1,7 +1,6 @@
 import 'server-only';
 
 import type { ImeiCheckResult } from '@/app/api/storefront/imei-check/sickw-parser.types';
-import { getDeviceImage } from '@/lib/device-images';
 import type { ImeiProvider } from '../types';
 import type { createPetrockClient } from './petrock-client';
 import { parsePetrockReplay } from './petrock-parser';
@@ -31,7 +30,8 @@ function buildResult({
     simLock: parsed.simLock || 'Unknown',
     blacklistStatus: parsed.blacklistStatus || 'Unknown',
     carrier: parsed.carrier || 'Unknown',
-    deviceImage: getDeviceImage(device),
+    deviceImage: '',
+    deviceProfile: parsed.deviceProfile,
     score: parsed.score ?? 50,
     activationStatus: parsed.activationStatus,
     serialNumber: parsed.serialNumber,
@@ -91,17 +91,23 @@ export function createPetrockProvider({
       }
 
       if (result.data.status === 'reject') {
+        const unavailable =
+          /unable to check|temporarily unavailable|service unavailable/i.test(
+            result.data.replay
+          );
         return {
           body: {
-            code: 'PETROCK_REJECTED',
-            error: 'IMEI result was rejected; your wallet will be refunded.',
+            code: unavailable ? 'PETROCK_UNAVAILABLE' : 'PETROCK_REJECTED',
+            error: unavailable
+              ? 'The provider could not complete this check; your wallet will be refunded.'
+              : 'IMEI result was rejected; your wallet will be refunded.',
             success: false,
           },
           kind: 'failure',
           providerStatus: 'reject',
           rawResponseText: result.rawText,
-          refundReason: 'not_found',
-          status: 404,
+          refundReason: unavailable ? 'error' : 'not_found',
+          status: unavailable ? 502 : 404,
         };
       }
 

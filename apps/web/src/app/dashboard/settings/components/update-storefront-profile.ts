@@ -2,10 +2,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { BUILDER_PRIVATE_STORAGE_ENABLED } from '@/config/builder-private-storage';
 import { createClient } from '@/lib/supabase/client';
 import type { Json } from '@/types/supabase';
+import { toStorefrontProfileSaveError } from './storefront-profile-save-error';
 
 interface StorefrontProfileSettings {
   business_name?: string;
   country?: string;
+  /** merchants.phone: the business number couriers call for pickups. */
+  phone?: string;
   site_description?: string;
   support_email?: string;
   support_phone?: string;
@@ -45,6 +48,6 @@ export async function updateStorefrontProfile({
     }
   );
 
-  if (error) throw error;
+  if (error) throw toStorefrontProfileSaveError(error);
   assertValidReceipt(data);
 }

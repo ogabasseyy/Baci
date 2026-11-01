@@ -2,6 +2,7 @@
 
 import {
   generateReceiptHtml,
+  type ReceiptDocumentKind,
   type ReceiptMerchant,
   type ReceiptOrder,
 } from '@baci/shared/receipt';
@@ -17,6 +18,8 @@ interface ReceiptModalProps {
   onClose: () => void;
   orderData: ReceiptOrder | null;
   merchantData: ReceiptMerchant | null;
+  /** Resolved kind from the orders API; only proforma changes the output. */
+  documentKind?: ReceiptDocumentKind | null;
 }
 
 export const ReceiptModal: React.FC<ReceiptModalProps> = ({
@@ -24,6 +27,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   onClose,
   orderData,
   merchantData,
+  documentKind,
 }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -50,10 +54,19 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   if (!isModalVisible || !orderData || !merchantData) return null;
 
   const isPaid = orderData.payment_status === 'paid';
-  const documentTitle = isPaid ? 'Receipt' : 'Invoice';
+  // Mirror the generator: paid always renders the commercial receipt even
+  // if a stale proforma kind travels with the order.
+  const isProforma = documentKind === 'proforma' && !isPaid;
+  const documentTitle = isPaid
+    ? 'Receipt'
+    : isProforma
+      ? 'Proforma Invoice'
+      : 'Invoice';
   const documentLabel = documentTitle.toLowerCase();
 
-  const html = generateReceiptHtml(orderData, merchantData);
+  const html = generateReceiptHtml(orderData, merchantData, {
+    documentKind: documentKind ?? undefined,
+  });
 
   const handlePrint = () => {
     const iframe = iframeRef.current;

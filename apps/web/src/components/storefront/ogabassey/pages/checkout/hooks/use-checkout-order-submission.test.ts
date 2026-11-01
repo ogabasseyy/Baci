@@ -4,18 +4,19 @@ import { prepareSharedCartCheckout } from '@/hooks/cart/shared-cart-client';
 import { toast } from '@/hooks/use-toast';
 import { executeResumedDirectPayment } from '../handlers/direct-payment';
 import { submitPreparedCheckout } from '../handlers/submit-prepared-checkout';
-import { prepareCheckoutOrderSubmission } from '../prepare-checkout-order-submission';
 import type { PrepareCheckoutOrderSubmissionResult } from '../prepare-checkout-order-submission';
-import type { ResumedOrder } from '../types';
+import { prepareCheckoutOrderSubmission } from '../prepare-checkout-order-submission';
+import {
+  createContext,
+  resumedOrder,
+} from './checkout-order-submission.test-support';
 import type { CheckoutOrderSubmissionContext } from './checkout-order-submission-types';
 import { useCheckoutOrderSubmission } from './use-checkout-order-submission';
 
 vi.mock('@/hooks/use-toast', () => ({ toast: vi.fn() }));
 vi.mock('@/hooks/cart/shared-cart-client', async (importOriginal) => {
   const actual =
-    await importOriginal<
-      typeof import('@/hooks/cart/shared-cart-client')
-    >();
+    await importOriginal<typeof import('@/hooks/cart/shared-cart-client')>();
   return { ...actual, prepareSharedCartCheckout: vi.fn() };
 });
 vi.mock('../handlers/direct-payment', () => ({
@@ -28,116 +29,6 @@ vi.mock('../prepare-checkout-order-submission', () => ({
   prepareCheckoutOrderSubmission: vi.fn(),
 }));
 afterEach(() => vi.clearAllMocks());
-
-const resumedOrder: ResumedOrder = {
-  id: 'order-1',
-  short_id: 'short-1',
-  subtotal: 1000,
-  shipping_cost: 0,
-  total: 1000,
-  customer_name: 'Ada Okon',
-  customer_email: 'ada@example.com',
-  customer_phone: '+2348000000000',
-  shipping_address: { address: '1 Main St', city: 'Lagos', state: 'Lagos', phone: '+2348000000000' },
-  items: [],
-};
-
-function createContext(): CheckoutOrderSubmissionContext {
-  const isOrderInFlightRef = { current: false };
-  const releaseSubmission = vi.fn(() => {
-    isOrderInFlightRef.current = false;
-  });
-  return {
-    account: {
-      createAccount: false,
-      password: '',
-      user: null,
-      waitForResolvedCustomerAuth: vi.fn().mockResolvedValue(true),
-    },
-    cart: {
-      cart: [],
-      checkoutCart: [],
-      checkoutCartTotal: 1000,
-      clearCart: vi.fn(),
-      removeFromCart: vi.fn(),
-    },
-    contact: {
-      customerEmail: 'ada@example.com',
-      customerPhone: '+2348000000000',
-      firstName: 'Ada',
-      lastName: 'Okon',
-      newsletterOptIn: false,
-    },
-    delivery: {
-      session: {
-        cost: 0,
-        quotes: { selectedId: '', matchesSelectedMethod: false, items: [] },
-        address: { addresses: [], selectedId: null, isNewMode: true },
-      } as unknown as CheckoutOrderSubmissionContext['delivery']['session'],
-      method: 'pickup',
-      airportType: 'delivery',
-      airportRequiresQuote: false,
-      newAddressStreet: '',
-      newAddressCity: '',
-      newAddressState: '',
-      merchantCountry: 'NG',
-      giftWrappingCost: 0,
-      effectiveItemSubtotal: 1000,
-      taxAmount: 0,
-    },
-    merchant: { id: 'merchant-1', slug: 'ada-store' } as CheckoutOrderSubmissionContext['merchant'],
-    navigation: {
-      setCurrentStep: vi.fn(),
-      setCompletedSteps: vi.fn(),
-      pushSuccessRoute: vi.fn(),
-      getHref: (path) => path,
-    },
-    order: {
-      pending: null,
-      clearPending: vi.fn(),
-      setPending: vi.fn(),
-      setOrderCreated: vi.fn(),
-      clearCheckoutSession: vi.fn(),
-      setDvaData: vi.fn(),
-      setIsInitializingDva: vi.fn(),
-      setPendingCryptoOrder: vi.fn(),
-      setShowCryptoSelector: vi.fn(),
-      setCryptoPaymentData: vi.fn(),
-      walletFundedTransfer: {} as CheckoutOrderSubmissionContext['order']['walletFundedTransfer'],
-    },
-    payment: {
-      session: {
-        method: 'paystack',
-        total: 1000,
-        wallet: { remainingAmount: 1000, amountUsed: 0, setBalance: vi.fn() },
-        redvault: { status: 'idle' },
-        checkoutValues: { useWalletCredit: false, discountCode: null, discountAmount: 0 },
-      } as unknown as CheckoutOrderSubmissionContext['payment']['session'],
-      bankTransferAvailable: true,
-      paystackAvailable: true,
-      korapayAvailable: true,
-      redvaultAvailable: true,
-      currencyCode: 'NGN',
-    },
-    resumed: {
-      order: resumedOrder,
-      preferredGateway: 'credpal',
-      trackingToken: 'tracking-token',
-      merchantSlugFromResume: 'ada-store',
-    },
-    processing: {
-      setIsProcessing: vi.fn(),
-      isOrderInFlightRef,
-      tryBeginSubmission: vi.fn((blocked: boolean) => {
-        if (blocked || isOrderInFlightRef.current) return false;
-        isOrderInFlightRef.current = true;
-        return true;
-      }),
-      releaseSubmission,
-      handleSubmissionError: vi.fn(),
-    },
-  };
-}
 
 describe('useCheckoutOrderSubmission', () => {
   it('continues a resumed order through its selected gateway without creating a fresh order', async () => {
@@ -175,8 +66,15 @@ describe('useCheckoutOrderSubmission', () => {
       ...context.payment.session,
       method: 'credpal',
       total: 10_750,
-      wallet: { ...context.payment.session.wallet, remainingAmount: 8_250, amountUsed: 2_500 },
-      checkoutValues: { ...context.payment.session.checkoutValues, useWalletCredit: true },
+      wallet: {
+        ...context.payment.session.wallet,
+        remainingAmount: 8_250,
+        amountUsed: 2_500,
+      },
+      checkoutValues: {
+        ...context.payment.session.checkoutValues,
+        useWalletCredit: true,
+      },
     } as CheckoutOrderSubmissionContext['payment']['session'];
     vi.mocked(prepareCheckoutOrderSubmission).mockReturnValue({
       kind: 'issue',
@@ -207,7 +105,10 @@ describe('useCheckoutOrderSubmission', () => {
     const { result } = renderHook(() => useCheckoutOrderSubmission(context));
     let finishDirectPayment = () => {};
     vi.mocked(executeResumedDirectPayment).mockImplementationOnce(
-      () => new Promise<void>((resolve) => { finishDirectPayment = resolve; })
+      () =>
+        new Promise<void>((resolve) => {
+          finishDirectPayment = resolve;
+        })
     );
 
     const firstSubmit = result.current.handlePlaceOrder();
@@ -231,7 +132,9 @@ describe('useCheckoutOrderSubmission', () => {
 
     await act(async () => result.current.handlePlaceOrder());
 
-    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Missing Information' }));
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Missing Information' })
+    );
     expect(context.processing.isOrderInFlightRef.current).toBe(false);
     expect(executeResumedDirectPayment).not.toHaveBeenCalled();
     expect(submitPreparedCheckout).not.toHaveBeenCalled();
@@ -277,28 +180,47 @@ describe('useCheckoutOrderSubmission', () => {
   });
 
   it.each([
-    { issue: 'delivery-option', step: 'delivery', releasesThroughHelper: false },
+    {
+      issue: 'delivery-option',
+      step: 'delivery',
+      releasesThroughHelper: false,
+    },
     { issue: 'bank-transfer-unavailable', releasesThroughHelper: false },
     { issue: 'paystack-unavailable', releasesThroughHelper: false },
     { issue: 'korapay-unavailable', releasesThroughHelper: false },
     { issue: 'redvault-unavailable', releasesThroughHelper: false },
     { issue: 'klump-unavailable', releasesThroughHelper: true },
-    { issue: 'incomplete-address', step: 'delivery', releasesThroughHelper: false },
+    {
+      issue: 'incomplete-address',
+      step: 'delivery',
+      releasesThroughHelper: false,
+    },
     { issue: 'delivery-required', releasesThroughHelper: true },
     { issue: 'shipping-expired', releasesThroughHelper: true },
-  ] as const)('cleans up and applies recovery for $issue', async ({ issue, step, releasesThroughHelper }) => {
+  ] as const)('cleans up and applies recovery for $issue', async ({
+    issue,
+    step,
+    releasesThroughHelper,
+  }) => {
     const context = createContext();
     context.resumed.order = null;
     context.resumed.preferredGateway = null;
-    vi.mocked(prepareCheckoutOrderSubmission).mockReturnValue({ kind: 'issue', issue });
+    vi.mocked(prepareCheckoutOrderSubmission).mockReturnValue({
+      kind: 'issue',
+      issue,
+    });
     const { result } = renderHook(() => useCheckoutOrderSubmission(context));
 
     await act(async () => result.current.handlePlaceOrder());
 
     expect(toast).toHaveBeenCalled();
     expect(context.processing.isOrderInFlightRef.current).toBe(false);
-    expect(context.processing.releaseSubmission).toHaveBeenCalledTimes(releasesThroughHelper ? 1 : 0);
-    expect(context.navigation.setCurrentStep).toHaveBeenCalledTimes(step ? 1 : 0);
+    expect(context.processing.releaseSubmission).toHaveBeenCalledTimes(
+      releasesThroughHelper ? 1 : 0
+    );
+    expect(context.navigation.setCurrentStep).toHaveBeenCalledTimes(
+      step ? 1 : 0
+    );
     expect(submitPreparedCheckout).not.toHaveBeenCalled();
     if (issue === 'incomplete-address') {
       expect(context.processing.setIsProcessing).toHaveBeenCalledWith(false);
@@ -312,7 +234,9 @@ describe('useCheckoutOrderSubmission', () => {
 
     await act(async () => result.current.handlePlaceOrder());
 
-    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Error' }));
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Error' })
+    );
     expect(context.processing.isOrderInFlightRef.current).toBe(false);
     expect(prepareCheckoutOrderSubmission).not.toHaveBeenCalled();
     expect(submitPreparedCheckout).not.toHaveBeenCalled();
@@ -416,11 +340,14 @@ describe('useCheckoutOrderSubmission', () => {
       const { result } = renderHook(() => useCheckoutOrderSubmission(context));
       await act(async () => result.current.handlePlaceOrder());
 
-      expect(prepareSharedCartCheckout).toHaveBeenCalledWith({
-        cartId: SHARED_REF.cartId,
-        expectedVersion: 3,
-        operationId: expect.any(String),
-      }, 'ada-store');
+      expect(prepareSharedCartCheckout).toHaveBeenCalledWith(
+        {
+          cartId: SHARED_REF.cartId,
+          expectedVersion: 3,
+          operationId: expect.any(String),
+        },
+        'ada-store'
+      );
       expect(submitPreparedCheckout).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
@@ -434,6 +361,84 @@ describe('useCheckoutOrderSubmission', () => {
           }),
         })
       );
+    });
+
+    it('continues a reviewed REDVAULT order without re-preparing its completed cart', async () => {
+      const context = freshContext();
+      context.cart.sharedCartEnabled = true;
+      context.cart.sharedCartRef = SHARED_REF;
+      context.cart.sharedCartSyncStatus = 'synced';
+      context.payment.session.method = 'uba_redvault';
+      context.payment.session.redvault.orderReady = {
+        cartId: SHARED_REF.cartId,
+        orderId: 'redvault-order',
+        checkoutFingerprint: 'fp-1',
+      } as never;
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+      expect(prepareSharedCartCheckout).not.toHaveBeenCalled();
+      expect(submitPreparedCheckout).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ kind: 'ready' }),
+        { redvaultPreparedOnly: true }
+      );
+    });
+
+    it('continues a prepared REDVAULT order after the completed cart is cleared by sync', async () => {
+      const context = freshContext();
+      context.cart.sharedCartEnabled = true;
+      context.cart.sharedCartRef = null;
+      context.cart.checkoutCart = [];
+      context.payment.session.method = 'uba_redvault';
+      const identity = {
+        merchantId: 'merchant-1',
+        customerEmail: 'ada@example.com',
+      };
+      const reviewedFingerprint = `uba_redvault:${JSON.stringify({ ...identity, items: [{ product_id: 'p', quantity: 1, price: 100 }] })}`;
+      context.payment.session.redvault.orderReady = {
+        orderId: 'redvault-order',
+        checkoutFingerprint: reviewedFingerprint,
+      } as never;
+      vi.mocked(prepareCheckoutOrderSubmission).mockReturnValue({
+        kind: 'ready',
+        delivery: {},
+        identity: {
+          checkoutFingerprint: `uba_redvault:${JSON.stringify({ ...identity, items: [] })}`,
+        },
+      } as never);
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+      expect(prepareSharedCartCheckout).not.toHaveBeenCalled();
+      expect(submitPreparedCheckout).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          identity: expect.objectContaining({
+            checkoutFingerprint: reviewedFingerprint,
+          }),
+        }),
+        { redvaultPreparedOnly: true }
+      );
+    });
+
+    it('does not bypass cart review for changed REDVAULT checkout details', async () => {
+      const context = freshContext();
+      context.cart.sharedCartEnabled = true;
+      context.cart.sharedCartRef = SHARED_REF;
+      context.cart.sharedCartSyncStatus = 'synced';
+      context.payment.session.method = 'uba_redvault';
+      context.payment.session.redvault.orderReady = {
+        cartId: SHARED_REF.cartId,
+        orderId: 'redvault-order',
+        checkoutFingerprint: 'changed-fingerprint',
+      } as never;
+      vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
+        ok: false,
+        code: 'refresh_required',
+      } as never);
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+      expect(prepareSharedCartCheckout).toHaveBeenCalledOnce();
+      expect(submitPreparedCheckout).not.toHaveBeenCalled();
     });
 
     it('binds insured shared carts whose display total includes the assurance fee', async () => {
@@ -526,26 +531,24 @@ describe('useCheckoutOrderSubmission', () => {
       expect(context.processing.isOrderInFlightRef.current).toBe(false);
     });
 
-    it.each(['pending', 'retrying'] as const)(
-      'waits for sync instead of submitting while %s',
-      async (syncStatus) => {
-        const context = freshContext();
-        context.cart.sharedCartRef = SHARED_REF;
-        context.cart.sharedCartSyncStatus = syncStatus;
+    it.each([
+      'pending',
+      'retrying',
+    ] as const)('waits for sync instead of submitting while %s', async (syncStatus) => {
+      const context = freshContext();
+      context.cart.sharedCartRef = SHARED_REF;
+      context.cart.sharedCartSyncStatus = syncStatus;
 
-        const { result } = renderHook(() =>
-          useCheckoutOrderSubmission(context)
-        );
-        await act(async () => result.current.handlePlaceOrder());
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
 
-        expect(prepareSharedCartCheckout).not.toHaveBeenCalled();
-        expect(submitPreparedCheckout).not.toHaveBeenCalled();
-        expect(toast).toHaveBeenCalledWith(
-          expect.objectContaining({ title: 'Cart Syncing' })
-        );
-        expect(context.processing.isOrderInFlightRef.current).toBe(false);
-      }
-    );
+      expect(prepareSharedCartCheckout).not.toHaveBeenCalled();
+      expect(submitPreparedCheckout).not.toHaveBeenCalled();
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Cart Syncing' })
+      );
+      expect(context.processing.isOrderInFlightRef.current).toBe(false);
+    });
 
     it('stops the submit when the shared cart failed to sync', async () => {
       const context = freshContext();

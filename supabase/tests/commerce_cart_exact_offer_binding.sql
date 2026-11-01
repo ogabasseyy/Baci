@@ -1,6 +1,18 @@
 -- Runs against the real cart/session/binding functions with a recording order
 -- RPC stub. Verifies the items handed to checkout, not provider fulfillment.
 CREATE TEMP TABLE exact_offer_binding_failures(message text);
+-- Recording-only REDVAULT entrypoint: exercise the current binding dispatch
+-- and preserve its signed-item check without payments or provider access.
+CREATE FUNCTION public.create_storefront_redvault_order(p_order jsonb,p_quote jsonb,p_proof jsonb)
+RETURNS TABLE(id uuid,status text,idempotency_replayed boolean) LANGUAGE plpgsql AS $$
+DECLARE v_id uuid := gen_random_uuid();
+BEGIN
+  INSERT INTO public.order_stub_calls(variant,merchant_id,idempotency_key,items)
+  VALUES('redvault',(p_order->>'merchant_id')::uuid,p_order->>'checkout_idempotency_key',p_order->'items');
+  INSERT INTO public.orders(id,merchant_id,order_number,checkout_idempotency_key,items)
+  VALUES(v_id,(p_order->>'merchant_id')::uuid,'offer-redvault',p_order->>'checkout_idempotency_key',p_order->'items');
+  RETURN QUERY SELECT v_id,'pending'::text,false;
+END $$;
 CREATE FUNCTION pg_temp.check_offer_binding(ok boolean, message text) RETURNS void
 LANGUAGE sql AS $$ INSERT INTO exact_offer_binding_failures SELECT message WHERE NOT coalesce(ok, false) $$;
 DO $$
@@ -27,7 +39,7 @@ BEGIN
   INSERT INTO public.product_offers(id,product_id,merchant_id,condition,price,stock_quantity,status)
   VALUES(offer_a,product,merchant,'used',40,4,'active'),
     (offer_b,product,merchant,'open_box',40,4,'active');
-  FOR mode IN 0..3 LOOP
+  FOR mode IN 0..4 LOOP
     cart := ('eeeeeeee-2514-4000-8000-'||lpad(mode::text,12,'0'))::uuid;
     line_id := ('ffffffff-2514-4000-8000-'||lpad(mode::text,12,'0'))::uuid;
     grant_id := ('bbbbbbbb-2514-4000-8000-'||lpad(mode::text,12,'0'))::uuid;
@@ -52,6 +64,12 @@ BEGIN
       'p_expected_total',40,'p_cart_principal_id','offer-binding',
       'p_checkout_idempotency_key','offer-binding-'||mode::text,
       'p_checkout_request_hash','offer-binding-hash-'||mode::text);
+    IF mode=4 THEN
+      args := args || jsonb_build_object('p_payment_method','uba_redvault',
+        'p_redvault_order',jsonb_build_object('merchant_id',merchant,'customer_email','fixture@example.com',
+          'payment_method','uba_redvault','checkout_idempotency_key','offer-binding-'||mode::text,
+          'items',jsonb_build_array(item)), 'p_redvault_quote','{}'::jsonb,'p_redvault_route_proof','{}'::jsonb);
+    END IF;
     IF mode=1 THEN
       PERFORM set_config('request.jwt.claims',jsonb_build_object('role','authenticated',
         'agentic_context','checkout','agentic_merchant_id',merchant)::text,true);
@@ -63,7 +81,7 @@ BEGIN
     SELECT count(*) INTO calls_before FROM public.order_stub_calls;
     rejected := false;
     BEGIN
-      result := public.create_storefront_order_with_cart_binding('base',
+      result := public.create_storefront_order_with_cart_binding(CASE WHEN mode=4 THEN 'redvault' ELSE 'base' END,
         (prep->'snapshot'->>'checkoutSessionId')::uuid,
         (prep->'snapshot'->>'generation')::integer,args);
     EXCEPTION WHEN SQLSTATE 'P0001' THEN

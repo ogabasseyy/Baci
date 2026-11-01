@@ -10,6 +10,7 @@ import {
 import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
 import { Alert } from 'react-native';
+import { IMEI_SCREEN_PRICE_TEST_FIXTURE as approvedPrice } from './imei-price.test-utils';
 
 // Capture the latest usePreventRemove(preventRemove, callback) args so the
 // back-swipe intercept can be asserted and fired without a nav container.
@@ -109,18 +110,19 @@ describe('ImeiCheckerScreen', () => {
     render(<ImeiCheckerScreen />);
 
     expect(screen.getByText('Full Report')).toBeTruthy();
-    expect(screen.getByText('Non-Active Status PRO')).toBeTruthy();
+    expect(screen.getByText('Quick ID')).toBeTruthy();
     expect(screen.getByText('Stolen Check')).toBeTruthy();
     expect(screen.getByText('Network Check')).toBeTruthy();
-    expect(screen.getByText('Verify Now - ₦1,500')).toBeTruthy();
+    expect(screen.getByText(approvedPrice.fullLabel)).toBeTruthy();
   });
 
   it('updates the CTA price when a different service tier is selected', () => {
     render(<ImeiCheckerScreen />);
 
+    fireEvent.press(screen.getByText('More checks'));
     fireEvent.press(screen.getByText('Non-Active Status PRO'));
 
-    expect(screen.getByText('Verify Now - ₦700')).toBeTruthy();
+    expect(screen.getByText(approvedPrice.activationLabel)).toBeTruthy();
   });
 
   it('handles a pending response and polls it to completion', async () => {
@@ -168,7 +170,7 @@ describe('ImeiCheckerScreen', () => {
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
       '490154203237518'
     );
-    fireEvent.press(screen.getByText('Verify Now - ₦1,500'));
+    fireEvent.press(screen.getByText(approvedPrice.fullLabel));
 
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
     await screen.findByText(/usually under a minute/i);
@@ -184,10 +186,15 @@ describe('ImeiCheckerScreen', () => {
     render(<ImeiCheckerScreen />);
 
     // The full catalog is public now, so the "show all services" toggle appears.
-    expect(screen.getByText('Show all services')).toBeTruthy();
+    expect(screen.getByText('More checks')).toBeTruthy();
     // Selecting a non-Apple brand reveals its checks without needing "show all".
     fireEvent.press(screen.getByText('Samsung'));
 
+    expect(screen.getByText('Quick ID')).toBeTruthy();
+    expect(screen.queryByText('Samsung Info')).toBeNull();
+    expect(screen.queryByText('Samsung Info PRO')).toBeNull();
+    fireEvent.press(screen.getByLabelText('Other options for Device details'));
+    expect(screen.getByText('Samsung Info')).toBeTruthy();
     expect(screen.getByText('Samsung Info PRO')).toBeTruthy();
   });
 
@@ -227,9 +234,7 @@ describe('ImeiCheckerScreen', () => {
     fireEvent(input, 'submitEditing');
 
     expect(fetch).not.toHaveBeenCalled();
-    expect(router.push).toHaveBeenCalledWith(
-      '/wallet?action=fund&requiredAmount=1000&returnTo=/imei-check'
-    );
+    expect(router.push).toHaveBeenCalledWith(approvedPrice.topUpFrom500);
   });
 
   it('routes unauthenticated customers to login on 401', async () => {
@@ -249,7 +254,7 @@ describe('ImeiCheckerScreen', () => {
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
       '490154203237518'
     );
-    fireEvent.press(screen.getByText('Verify Now - ₦1,500'));
+    fireEvent.press(screen.getByText(approvedPrice.fullLabel));
 
     await waitFor(() => {
       expect(router.push).toHaveBeenCalledWith(
@@ -265,7 +270,7 @@ describe('ImeiCheckerScreen', () => {
           balance: 500,
           code: 'WALLET_INSUFFICIENT',
           error: 'Insufficient wallet balance',
-          required: 1500,
+          required: approvedPrice.fullPrice,
           success: false,
         }),
       ok: false,
@@ -277,12 +282,10 @@ describe('ImeiCheckerScreen', () => {
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
       '490154203237518'
     );
-    fireEvent.press(screen.getByText('Verify Now - ₦1,500'));
+    fireEvent.press(screen.getByText(approvedPrice.fullLabel));
 
     await waitFor(() => {
-      expect(router.push).toHaveBeenCalledWith(
-        '/wallet?action=fund&requiredAmount=1000&returnTo=/imei-check'
-      );
+      expect(router.push).toHaveBeenCalledWith(approvedPrice.topUpFrom500);
     });
   });
 
@@ -305,7 +308,7 @@ describe('ImeiCheckerScreen', () => {
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
       '490154203237518'
     );
-    fireEvent.press(screen.getByText('Verify Now - ₦1,500'));
+    fireEvent.press(screen.getByText(approvedPrice.fullLabel));
 
     await waitFor(() => {
       expect(router.push).toHaveBeenCalledWith(
@@ -331,7 +334,7 @@ describe('ImeiCheckerScreen', () => {
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
       '490154203237518'
     );
-    fireEvent.press(screen.getByText('Verify Now - ₦1,500'));
+    fireEvent.press(screen.getByText(approvedPrice.fullLabel));
 
     await waitFor(() => {
       expect(
@@ -342,7 +345,7 @@ describe('ImeiCheckerScreen', () => {
     });
     expect(mockWalletRefetch).toHaveBeenCalled();
 
-    fireEvent.press(screen.getByText('Verify Now - ₦1,500'));
+    fireEvent.press(screen.getByText(approvedPrice.fullLabel));
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledTimes(2);
@@ -423,17 +426,17 @@ describe('ImeiCheckerScreen', () => {
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
       '490154203237518'
     );
-    fireEvent.press(screen.getByText('Verify Now - ₦1,500'));
+    fireEvent.press(screen.getByText(approvedPrice.fullLabel));
 
     await waitFor(() => {
       expect(screen.getByText(error)).toBeTruthy();
     });
     await waitFor(() => {
-      expect(screen.getByText('Verify Now - ₦1,500')).toBeTruthy();
+      expect(screen.getByText(approvedPrice.fullLabel)).toBeTruthy();
     });
     expect(fetch).toHaveBeenCalledTimes(1);
 
-    fireEvent.press(screen.getByText('Verify Now - ₦1,500'));
+    fireEvent.press(screen.getByText(approvedPrice.fullLabel));
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledTimes(2);
@@ -485,7 +488,7 @@ describe('ImeiCheckerScreen', () => {
       screen.getByPlaceholderText('Enter 15-digit IMEI'),
       '490154203237518'
     );
-    fireEvent.press(screen.getByText('Verify Now - ₦1,500'));
+    fireEvent.press(screen.getByText(approvedPrice.fullLabel));
     await screen.findByText('iPhone 13 Pro');
 
     // Result is showing: back-swipe must be intercepted, not pop to home.
@@ -493,7 +496,16 @@ describe('ImeiCheckerScreen', () => {
 
     // Firing the intercept returns to the checker form instead of leaving.
     act(() => mockPreventRemoveState.callback?.());
-    await screen.findByText('Verify Now - ₦1,500');
+    await screen.findByText(approvedPrice.fullLabel);
     expect(screen.queryByText('iPhone 13 Pro')).toBeNull();
   });
 });
+
+jest.mock('@/components/imei-check/use-imei-runtime-availability', () => ({
+  useImeiRuntimeAvailability: () => ({
+    availableTierKeys: null,
+    failed: false,
+    loading: false,
+    retry: () => undefined,
+  }),
+}));

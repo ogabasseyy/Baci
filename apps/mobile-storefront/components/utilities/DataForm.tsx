@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ScrollViewInstance } from 'react-native';
 import { ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -52,7 +53,7 @@ export function DataForm({
     isError: hasPlansError,
     isLoading: plansLoading,
   } = useVTUBillers('data');
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<ScrollViewInstance>(null);
 
   const parsedInitialAmount = Number(initialAmount ?? 0);
 

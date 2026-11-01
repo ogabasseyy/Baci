@@ -1,0 +1,20 @@
+/** One fixture value for every sensitive field type the evidence must exclude. */
+export const SENSITIVE = {
+  email: 'jane.doe+shop@gmail.com',
+  syntheticEmail: 'synthetic+0123456789ab@example.test',
+  phoneIntl: '+2348012345678',
+  phoneSpaced: '+234 801 234 5678',
+  phoneLocal: '08012345678',
+  bvn: '22112200222',
+  nuban: '0123456789',
+  personName: 'Jane Adaeze Okafor',
+  accountName: 'OKAFOR JANE ADAEZE',
+  uuid: '023f843a-be7e-494a-bc5d-9f49f4cc640f',
+  ulid: '01M2T3QAGM4KX9ZV8N7W6P5R4Q',
+  reference: 'pvbproof-run1-wallet_transfer-aaaa1111',
+  testKey: 'test_key_SuperSecret123',
+  liveKey: 'live_key_NeverLogMe999',
+  bearer: 'Bearer abc123.def456-ghi789',
+  hex: 'a'.repeat(40),
+  recording: 'baci-recording-20261013@example.com',
+} as const;

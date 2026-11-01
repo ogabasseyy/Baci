@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
 import { PUBLIC_IMEI_SERVICE_TIERS } from '@baci/shared/imei';
+import { describe, expect, it } from 'vitest';
 import { getDisplayTier } from './imei-checker-tiers';
 
 describe('getDisplayTier', () => {
   it('formats the price as Nigerian naira', () => {
     const tier = getDisplayTier('full');
-    expect(tier.priceDisplay).toBe('₦1,500');
+    expect(tier.priceDisplay).toBe('₦1,000');
   });
 
   it('marks the recommended tier and omits it otherwise', () => {
@@ -22,4 +22,9 @@ describe('getDisplayTier', () => {
       expect(tier.priceDisplay).toMatch(/^₦/);
     }
   });
+});
+
+it('explains activation checks without supplier jargon at the approved price', () => {
+  expect(getDisplayTier('activation').name).toBe('Activation check');
+  expect(getDisplayTier('activation').price).toBe(400);
 });

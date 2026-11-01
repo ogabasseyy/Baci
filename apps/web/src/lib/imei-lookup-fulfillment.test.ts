@@ -21,6 +21,18 @@ describe('requestSickwCheck', () => {
     vi.unstubAllGlobals();
   });
 
+  it('preserves a zero trust score from stacked provider penalties', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      Response.json({
+        status: 'success',
+        result:
+          'Model Name: iPhone 15\nBlacklist Status: Blacklisted\niCloud Lock: ON\nMDM Status: Active',
+      })
+    );
+    const result = await requestSickwCheck(LOOKUP_ARGS);
+    expect(result).toMatchObject({ ok: true, body: { data: { score: 0 } } });
+  });
+
   it('returns normalized lookup data when the provider succeeds', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       Response.json({

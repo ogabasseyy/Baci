@@ -25,6 +25,8 @@ export const BRAND_AUTHORITY_PRODUCTS_SELECT = `
   stock,
   stock_quantity,
   manage_stock,
+  is_parent,
+  parent_product_id,
   ${PRODUCT_KEY_SPECS_RELATION_SELECT},
   has_condition_offers,
   updated_at,

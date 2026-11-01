@@ -9,7 +9,7 @@ import {
 } from '@baci/shared/imei';
 import { Loader2, Sparkles } from 'lucide-react';
 import type React from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { ImeiCheckerBrandChips } from './imei-checker-brand-chips';
 import { ImeiCheckerDeviceSearch } from './imei-checker-device-search';
 import { ImeiCheckerDeviceTabs } from './imei-checker-device-tabs';
@@ -34,6 +34,7 @@ interface OgabasseyImeiEntryProps {
   imei: string;
   isLoading: boolean;
   isPending: boolean;
+  needsSignIn?: boolean;
   needsWalletFunding: boolean;
   /** Set when the parent already committed the IMEI LCP hero. */
   omitHero?: boolean;
@@ -47,15 +48,22 @@ interface OgabasseyImeiEntryProps {
   onSelectTier: (tier: ImeiServiceTierKey) => void;
   onToggleServices: () => void;
   pendingPaused: boolean;
+  pendingCanResume?: boolean;
   searchLoading: boolean;
   selectedDeviceSuggestion: ProductSuggestion | null;
-  selectedTier: ImeiServiceTierKey;
+  selectedTier: ImeiServiceTierKey | null;
+  availabilityFailed?: boolean;
+  availabilityLoading?: boolean;
+  onRetryAvailability?: () => void;
   showAllServices: boolean;
   showSuggestions: boolean;
   suggestions: ProductSuggestion[];
 }
 
 export const OgabasseyImeiEntry = ({
+  availabilityFailed = false,
+  availabilityLoading = false,
+  onRetryAvailability,
   brand,
   canToggleServices,
   device,
@@ -66,6 +74,7 @@ export const OgabasseyImeiEntry = ({
   imei,
   isLoading,
   isPending,
+  needsSignIn = false,
   needsWalletFunding,
   omitHero = false,
   onCheck,
@@ -78,6 +87,7 @@ export const OgabasseyImeiEntry = ({
   onSelectTier,
   onToggleServices,
   pendingPaused,
+  pendingCanResume = true,
   searchLoading,
   selectedDeviceSuggestion,
   selectedTier,
@@ -85,8 +95,12 @@ export const OgabasseyImeiEntry = ({
   showAllServices,
   suggestions,
 }: OgabasseyImeiEntryProps) => {
-  const currentTier = getDisplayTier(selectedTier);
-  const canVerify = isValidDeviceIdentifier(imei, identifier);
+  const currentTier = getDisplayTier(selectedTier ?? 'full');
+  const canVerify =
+    selectedTier !== null &&
+    displayedTierKeys.includes(selectedTier) &&
+    isValidDeviceIdentifier(imei, identifier);
+  const devicePanelId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
 
   // Give this step a focus landing point on mount — covers both the initial
@@ -115,26 +129,59 @@ export const OgabasseyImeiEntry = ({
         <p className="mb-4 text-center text-sm font-medium text-gray-500">
           What are you checking?
         </p>
-        <ImeiCheckerDeviceTabs onSelect={onSelectDevice} selected={device} />
+        <ImeiCheckerDeviceTabs
+          onSelect={onSelectDevice}
+          selected={device}
+          panelId={devicePanelId}
+        />
 
-        {device === 'smartphone' && (
+        <div
+          role="tabpanel"
+          id={devicePanelId}
+          aria-labelledby={`${devicePanelId}-${device}-tab`}
+        >
+          {device === 'smartphone' && (
+            <div className="mt-4">
+              <ImeiCheckerBrandChips
+                onSelectBrand={onSelectBrand}
+                selectedBrand={brand}
+              />
+            </div>
+          )}
+
           <div className="mt-4">
-            <ImeiCheckerBrandChips
-              onSelectBrand={onSelectBrand}
-              selectedBrand={brand}
+            {displayedTierKeys.length === 0 || availabilityFailed ? (
+              <div
+                role="status"
+                className="mb-4 text-center text-sm text-store-foreground"
+              >
+                <p>
+                  {displayedTierKeys.length === 0
+                    ? availabilityLoading
+                      ? 'Checking available services…'
+                      : 'No checks are available for this selection.'
+                    : 'Some services could not be checked.'}
+                </p>
+                {!availabilityLoading && onRetryAvailability ? (
+                  <button
+                    type="button"
+                    className="min-h-11 underline"
+                    onClick={onRetryAvailability}
+                  >
+                    Retry available checks
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+            <ImeiCheckerTierSelector
+              canToggleServices={canToggleServices}
+              displayedTierKeys={displayedTierKeys}
+              onSelectTier={onSelectTier}
+              onToggleServices={onToggleServices}
+              selectedTier={selectedTier}
+              showAllServices={showAllServices}
             />
           </div>
-        )}
-
-        <div className="mt-4">
-          <ImeiCheckerTierSelector
-            canToggleServices={canToggleServices}
-            displayedTierKeys={displayedTierKeys}
-            onSelectTier={onSelectTier}
-            onToggleServices={onToggleServices}
-            selectedTier={selectedTier}
-            showAllServices={showAllServices}
-          />
         </div>
       </div>
 
@@ -152,7 +199,9 @@ export const OgabasseyImeiEntry = ({
                   ? 'Verifying'
                   : isPending
                     ? 'Checking device status'
-                    : `Verify Now · ${currentTier.priceDisplay}`
+                    : selectedTier
+                      ? `Verify Now · ${currentTier.priceDisplay}`
+                      : 'Choose a check'
               }
               className="flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-[var(--store-primary)] px-8 py-4 text-base font-bold text-[var(--store-primary-text,#ffffff)] shadow-lg shadow-[var(--store-primary)]/20 transition-all hover:bg-[var(--store-primary)]/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70"
               disabled={isLoading || isPending || !canVerify}
@@ -162,17 +211,25 @@ export const OgabasseyImeiEntry = ({
                 <Loader2 className="animate-spin" />
               ) : (
                 <>
-                  Verify Now · {currentTier.priceDisplay}
+                  {selectedTier
+                    ? `Verify Now · ${currentTier.priceDisplay}`
+                    : 'Choose a check'}
                   <Sparkles size={18} />
                 </>
               )}
             </button>
           </form>
         </div>
-        {isPending ? <ImeiCheckerPending paused={pendingPaused} /> : null}
+        {isPending ? (
+          <ImeiCheckerPending
+            paused={pendingPaused}
+            canResume={pendingCanResume}
+          />
+        ) : null}
         {error ? (
           <ImeiCheckerError
             error={error}
+            needsSignIn={needsSignIn}
             needsWalletFunding={needsWalletFunding}
           />
         ) : null}

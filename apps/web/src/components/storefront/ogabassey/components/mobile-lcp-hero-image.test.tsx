@@ -1,6 +1,5 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { TRANSPARENT_PIXEL_SRC } from './hero-mobile-image-config';
 import { MobileLcpHeroImage } from './mobile-lcp-hero-image';
 
 // MobileLcpHeroImage takes arbitrary launch product images, so these are plain
@@ -84,7 +83,11 @@ describe('MobileLcpHeroImage', () => {
     });
     expect(lcpImage).toHaveAttribute('loading', 'eager');
     expect(lcpImage).toHaveAttribute('decoding', 'sync');
-    expect(lcpImage).toHaveAttribute('src', TRANSPARENT_PIXEL_SRC);
+    expect(lcpImage).toHaveAttribute(
+      'src',
+      expect.stringContaining('/core-assets/products/a27.avif')
+    );
+    expect(lcpImage.getAttribute('src')).not.toMatch(/^data:image\/gif/i);
     expect(lcpImage).toHaveAttribute('fetchpriority', 'high');
     expect(lcpImage).not.toHaveAttribute('srcset');
 
@@ -101,8 +104,11 @@ describe('MobileLcpHeroImage', () => {
     expect(avifSource?.getAttribute('srcset')).toContain(
       '/core-assets/products/a27.avif'
     );
+    expect(avifSource?.getAttribute('srcset')).toContain('640w');
+    expect(avifSource?.getAttribute('srcset')).not.toContain('960w');
     expect(fallbackSource).not.toHaveAttribute('type');
     expect(fallbackSource?.getAttribute('srcset')).toContain('format=jpeg');
+    expect(fallbackSource?.getAttribute('srcset')).not.toContain('960w');
     expect(fallbackSource).toHaveAttribute(
       'sizes',
       '(max-width: 767px) 40vw, 50vw'
@@ -128,7 +134,10 @@ describe('MobileLcpHeroImage', () => {
     expect(container.querySelector('source')).not.toHaveAttribute('sizes');
     expect(
       screen.getByRole('img', { name: 'Samsung Galaxy A27 5G' })
-    ).toHaveAttribute('src', TRANSPARENT_PIXEL_SRC);
+    ).toHaveAttribute(
+      'src',
+      expect.stringContaining('/core-assets/products/a27.avif')
+    );
   });
 
   it('omits sizes when image props return a single source candidate', () => {
@@ -181,8 +190,8 @@ describe('MobileLcpHeroImage', () => {
     expect(lcpImage).not.toHaveClass('max-h-20', 'max-w-20');
   });
 
-  it('keeps the img fallback transparent so desktop does not fetch the mobile source', () => {
-    render(
+  it('gives the img its real src while media-gating desktop to a transparent source', () => {
+    const { container } = render(
       <MobileLcpHeroImage
         alt="Samsung Galaxy A27 5G"
         imageFit="contain"
@@ -196,9 +205,17 @@ describe('MobileLcpHeroImage', () => {
     });
     expect(lcpImage).toHaveAttribute(
       'src',
-      expect.stringMatching(/^data:image\/gif/)
+      expect.stringContaining('/core-assets/products/a27.avif')
     );
+    expect(lcpImage.getAttribute('src')).not.toMatch(/^data:image\/gif/i);
     expect(lcpImage).not.toHaveAttribute('fetchpriority');
     expect(lcpImage).not.toHaveAttribute('srcset');
+    const desktopSource = container.querySelector(
+      'source[media="(min-width: 768px)"]'
+    );
+    expect(desktopSource).toHaveAttribute(
+      'srcset',
+      expect.stringMatching(/^data:image\/gif/)
+    );
   });
 });

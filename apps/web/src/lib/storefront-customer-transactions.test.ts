@@ -16,6 +16,7 @@ describe('loadStorefrontCustomerTransactions', () => {
           status: 'completed',
           transaction_type: 'payment',
           dva_account_number: '1234567890',
+          payment_method: 'bank_transfer',
         },
       ],
       error: null,
@@ -29,6 +30,8 @@ describe('loadStorefrontCustomerTransactions', () => {
     expect(rpc).toHaveBeenCalledWith('get_customer_order_transactions', {
       p_order_ids: ['order-1'],
     });
+    // The method rides as its own field (not merged into metadata) so
+    // archive previews render the emailed method without the DVA entry.
     expect(result.data).toEqual([
       {
         id: 'transaction-1',
@@ -40,6 +43,7 @@ describe('loadStorefrontCustomerTransactions', () => {
         gateway: 'paystack',
         status: 'completed',
         transaction_type: 'payment',
+        payment_method: 'bank_transfer',
       },
     ]);
   });

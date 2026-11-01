@@ -1,9 +1,11 @@
 # Baci capabilities and agent access
 
-Reviewed 23 October 2026 against source revision
-`e527d1b8bc792002af8d8d7c0525eca40b945bac`. This is a navigation map, not
-authorization or proof of current deployment. Check the current implementation,
-live tool discovery and merchant entitlement before calling or claiming a tool.
+Reviewed 31 October 2026 against source revision
+`add71b5ae9b1e0a31a9cdf62b408b4dc7e916ac2`. The shipment-booking merchant sender
+change was re-reviewed and tested; other cited source evidence remains unchanged
+across the latest main sync. This is a navigation map, not authorization or proof
+of current deployment. Check the current implementation, live tool discovery and
+merchant entitlement before calling or claiming a tool.
 
 Baci's positioning is **agent-native commerce infrastructure for African
 merchants**: merchant-owned stores, structured discovery, controlled transactions
@@ -44,6 +46,10 @@ does not prove a complete supported workflow.
 | Browser tools | `apps/web/src/components/storefront/webmcp-storefront-tools-builder.ts` | Browser-bound storefront tools. Inspect current registrations and browser session authority. |
 | Merchant connector gateway | `apps/web/src/lib/connector/manifest.ts`, `apps/web/tools/connector-gateway/` | R0 manifest names (version `r0.4`, data-only, no routes) for four read-only tools planned for the R1 pilot: `orders.list`, `orders.get`, `inventory.levels`, `analytics.summary`. The gateway implementation — scoped owner grants, branch selection, tool-time permission checks and revocation — lives in `apps/web/tools/connector-gateway/`, but the R1 pilot runtime is unverified; do not treat these tools as pilot-callable. REST/OpenAPI, not a ChatGPT MCP server. |
 | Store-builder ChatGPT integration | Source implementation not established in this audit | Architecture proposals are not deployed tools. Do not claim storefront creation, publishing, domain purchases or Jumia writes are exposed to ChatGPT. |
+
+The storefront support-chat health check probes catalog and conversation paths.
+For Ogabassey it also checks tenant and catalog-lookup response markers. A
+passing probe does not establish deployment or transaction readiness.
 
 The merchant connector's runtime and revision must be freshly verified before
 use. Older R0 notes advertise unavailable inventory/analytics operations; current

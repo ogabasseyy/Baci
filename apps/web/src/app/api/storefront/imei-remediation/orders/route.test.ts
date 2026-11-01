@@ -132,6 +132,16 @@ describe('POST /api/storefront/imei-remediation/orders', () => {
     mocks.createClient.mockReturnValue({});
   });
 
+  it('returns a safe conflict when stored evidence is no longer eligible', async () => {
+    mocks.placeOrder.mockResolvedValue({ kind: 'eligibility_failed' });
+    const response = await POST(request() as never);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'REMEDIATION_NOT_ELIGIBLE',
+      success: false,
+    });
+  });
+
   it('authenticates before feature and request processing', async () => {
     mocks.authenticate.mockResolvedValue({ error: 'Unauthorized' });
 

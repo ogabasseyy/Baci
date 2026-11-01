@@ -1,3 +1,4 @@
+import { AUTHORITY_HUB_LCP_CSS } from './authority-hub-lcp-css';
 import { REPAIR_BOOKING_LCP_CSS } from './repair-booking-lcp-css';
 
 /**
@@ -66,7 +67,7 @@ html:has([data-storefront-shell]) *::after {
   margin: 0 !important;
 }
 
-${REPAIR_BOOKING_LCP_CSS}
+${REPAIR_BOOKING_LCP_CSS}${AUTHORITY_HUB_LCP_CSS}
 
 [data-cwv-lcp-copy="imei"] {
   color: var(--store-background-text, #111827) !important;
@@ -237,11 +238,7 @@ body:has([data-compare-hub-intro-resolved]) [data-compare-hub-intro-pending] {
 }
 
 /*
-  PPR static-shell hide/positioning. storefront-core.css is deferred until
-  first input on tuned mobile routes, so without these rules the resume
-  sibling (ShellChromeLoading) stays in flow as "Loading storefront chrome".
-  Keep the same selectors as storefront-core.css; do not eagerly import that
-  329KB sheet on tuned routes.
+  PPR static-shell hide/positioning (matches storefront-core.css).
 */
 .storefront-ppr-static-shell,
 .storefront-ppr-static-shell__content {
@@ -282,6 +279,21 @@ body:has([data-compare-hub-intro-resolved]) [data-compare-hub-intro-pending] {
       main
     )
     ~ .storefront-ppr-static-shell__fallback {
+    display: none;
+  }
+}
+
+.ogabassey-mobile-footer {
+  bottom: 0;
+  left: 0;
+  overflow: hidden;
+  position: fixed;
+  right: 0;
+  z-index: 70;
+}
+
+@media (min-width: 768px) {
+  .ogabassey-mobile-footer {
     display: none;
   }
 }

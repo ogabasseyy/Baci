@@ -9,21 +9,33 @@ const cases = [
   [
     'expo-modules-core',
     'ios/Utilities/Utilities.swift',
-    /var controller = Self\.keyWindow\(\)/,
+    /var controller = Utilities\.keyWindow\(\)/,
   ],
   [
     'expo-web-browser',
     'ios/WebBrowserSession.swift',
-    /Utilities\.keyWindow\(\)/,
+    /(?:Utilities|SceneGeometry)\.keyWindow\(\)/,
   ],
-  ['expo-web-browser', 'ios/WebAuthSession.swift', /Utilities\.keyWindow\(\)/],
+  [
+    'expo-web-browser',
+    'ios/WebAuthSession.swift',
+    /(?:Utilities|SceneGeometry)\.keyWindow\(\)/,
+  ],
   [
     'expo-apple-authentication',
     'ios/AppleAuthenticationRequest.swift',
-    /Utilities\.keyWindow\(\)/,
+    /(?:Utilities|SceneGeometry)\.keyWindow\(\)/,
   ],
-  ['expo-print', 'ios/ExpoPrinterSelector.swift', /Utilities\.keyWindow\(\)/],
-  ['expo-print', 'ios/ExpoPrintWithPrinter.swift', /Utilities\.keyWindow\(\)/],
+  [
+    'expo-print',
+    'ios/ExpoPrinterSelector.swift',
+    /(?:Utilities|SceneGeometry)\.keyWindow\(\)/,
+  ],
+  [
+    'expo-print',
+    'ios/ExpoPrintWithPrinter.swift',
+    /(?:Utilities|SceneGeometry)\.keyWindow\(\)/,
+  ],
 ];
 
 for (const [name, path, sceneLookup] of cases) {

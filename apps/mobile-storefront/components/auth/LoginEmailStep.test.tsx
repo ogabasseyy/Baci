@@ -20,7 +20,7 @@ describe('LoginEmailStep', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
   });
 
   it('renders code sign-in choices and forwards each action', () => {
@@ -61,6 +61,53 @@ describe('LoginEmailStep', () => {
     expect(onAppleSignIn).toHaveBeenCalledTimes(1);
     expect(Linking.openURL).toHaveBeenCalledWith(TERMS_OF_SERVICE_URL);
     expect(Linking.openURL).toHaveBeenCalledWith(PRIVACY_POLICY_URL);
+  });
+
+  it('shows masked receipt guidance without prefilling the input', () => {
+    const { rerender } = render(
+      <LoginEmailStep
+        authMethod="otp"
+        colors={Colors.light}
+        email=""
+        emailError={null}
+        emailHintGuidance="S***@example.com"
+        isAppleLoading={false}
+        isGoogleLoading={false}
+        isLoading={false}
+        onAppleSignIn={onAppleSignIn}
+        onContinue={onContinue}
+        onEmailChange={onEmailChange}
+        onGoogleSignIn={onGoogleSignIn}
+        onToggleAuthMethod={onToggleAuthMethod}
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'This receipt was sent to S***@example.com — sign in with that address.'
+      )
+    ).toBeTruthy();
+    expect(screen.getByPlaceholderText('john@example.com').props.value).toBe(
+      ''
+    );
+
+    rerender(
+      <LoginEmailStep
+        authMethod="otp"
+        colors={Colors.light}
+        email=""
+        emailError={null}
+        isAppleLoading={false}
+        isGoogleLoading={false}
+        isLoading={false}
+        onAppleSignIn={onAppleSignIn}
+        onContinue={onContinue}
+        onEmailChange={onEmailChange}
+        onGoogleSignIn={onGoogleSignIn}
+        onToggleAuthMethod={onToggleAuthMethod}
+      />
+    );
+    expect(screen.queryByText(/This receipt was sent to/)).toBeNull();
   });
 
   it('shows validation feedback and the password continuation label', () => {

@@ -28,14 +28,13 @@ describe('OgabasseyPdpCriticalVariantSelectors', () => {
         onAttributeSelection={onAttributeSelection}
         renderableVariantAxes={['storage', 'ram']}
         selectedAttributes={{ ram: '4GB', storage: '128GB' }}
-        variantCount={2}
         variants={variants}
       />
     );
 
     expect(
-      screen.getByText('Choose options below before checkout.')
-    ).toBeInTheDocument();
+      screen.queryByText('Choose options below before checkout.')
+    ).toBeNull();
     expect(screen.getByText('Storage:')).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /select 128gb storage/i })
@@ -57,7 +56,6 @@ describe('OgabasseyPdpCriticalVariantSelectors', () => {
         onAttributeSelection={vi.fn()}
         renderableVariantAxes={['storage', 'ram']}
         selectedAttributes={{}}
-        variantCount={2}
         variants={variants}
       />
     );
@@ -72,7 +70,6 @@ describe('OgabasseyPdpCriticalVariantSelectors', () => {
         onAttributeSelection={vi.fn()}
         renderableVariantAxes={['storage', 'ram']}
         selectedAttributes={{ ram: '8GB', storage: '256GB' }}
-        variantCount={2}
         variants={variants}
       />
     );
@@ -87,7 +84,6 @@ describe('OgabasseyPdpCriticalVariantSelectors', () => {
         onAttributeSelection={vi.fn()}
         renderableVariantAxes={['storage']}
         selectedAttributes={{ storage: '128GB' }}
-        variantCount={2}
         variants={[
           {
             attributes: { color: 'Black', storage: '128GB' },
@@ -119,7 +115,6 @@ describe('OgabasseyPdpCriticalVariantSelectors', () => {
         onAttributeSelection={vi.fn()}
         renderableVariantAxes={['storage']}
         selectedAttributes={{ storage: '512GB' }}
-        variantCount={1}
         variants={[
           {
             attributes: { storage: '512GB' },
@@ -149,7 +144,6 @@ describe('OgabasseyPdpCriticalVariantSelectors', () => {
         onAttributeSelection={onAttributeSelection}
         renderableVariantAxes={['condition']}
         selectedAttributes={{ condition: 'used' }}
-        variantCount={2}
         variants={[
           {
             attributes: { storage: '128GB' },
@@ -190,7 +184,6 @@ describe('OgabasseyPdpCriticalVariantSelectors', () => {
         onAttributeSelection={onAttributeSelection}
         renderableVariantAxes={['storage', 'ram']}
         selectedAttributes={{ storage: '256GB' }}
-        variantCount={2}
         variants={variants}
       />
     );
@@ -210,7 +203,6 @@ describe('OgabasseyPdpCriticalVariantSelectors', () => {
         onAttributeSelection={vi.fn()}
         renderableVariantAxes={['storage']}
         selectedAttributes={{ storage: '128GB' }}
-        variantCount={2}
         variants={[
           {
             attributes: { Storage: '128GB' },
@@ -244,7 +236,6 @@ describe('OgabasseyPdpCriticalVariantSelectors', () => {
         onAttributeSelection={vi.fn()}
         renderableVariantAxes={['storage']}
         selectedAttributes={{}}
-        variantCount={2}
         variants={[
           {
             attributes: { storage: null as never },
@@ -275,7 +266,6 @@ describe('OgabasseyPdpCriticalVariantSelectors', () => {
         onAttributeSelection={vi.fn()}
         renderableVariantAxes={[]}
         selectedAttributes={{}}
-        variantCount={2}
         variants={[]}
       />
     );

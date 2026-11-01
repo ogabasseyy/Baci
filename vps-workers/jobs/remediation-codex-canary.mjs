@@ -1,5 +1,4 @@
 import { spawnSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
 import { config } from 'dotenv';
 import { buildRemediationCodexCommand } from '../lib/remediation-codex-command.mjs';
 import {
@@ -12,6 +11,7 @@ import {
   buildRemediationReport,
   sendRemediationReportEmail,
 } from '../lib/remediation-report.mjs';
+import { isEntrypoint } from '../lib/is-entrypoint.mjs';
 
 const CANARY_PROMPT =
   'Run a non-mutating Codex canary. Inspect no files, make no changes, and return a short confirmation.';
@@ -133,8 +133,7 @@ async function main() {
 }
 
 if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
+  isEntrypoint(import.meta.url)
 ) {
   config({ path: new URL('../.env', import.meta.url) });
   const exitCode = await runRemediationJobWithGlobalLock({

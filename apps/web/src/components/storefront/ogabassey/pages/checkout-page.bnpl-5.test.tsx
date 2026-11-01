@@ -5,14 +5,14 @@ import {
 } from './checkout-page-bnpl.test-support';
 import {
   act,
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCaptureCheckoutFunnelEventOnce,
   mockCaptureClientEvent,
   openCredPalCheckout,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useCart,
   useMerchantSafe,
@@ -171,12 +171,10 @@ it('records payment_completed before redirecting a paid wallet-funded transfer',
   );
 
   try {
-    render(<CheckoutPage />);
+    renderCheckoutWithStoreRates();
     fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-    fireEvent.click(
-      screen.getByRole('button', { name: /continue to payment/i })
-    );
+    await continueToPaymentAfterPickupCheck();
     const bankTransferRadio = (
       await screen.findAllByRole('radio', { name: /bank transfer/i })
     ).find((radio) => radio.getAttribute('value') === 'bank_transfer');

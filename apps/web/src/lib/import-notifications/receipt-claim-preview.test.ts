@@ -4,19 +4,17 @@ import { hashReceiptClaimToken } from '@/lib/import-notifications/receipt-claim-
 import {
   loadReceiptClaimLoginEmailHint,
   loadReceiptClaimPreview,
-  loadReceiptClaimPreviewWithLoginEmailHint,
   parseReceiptClaimToken,
 } from '@/lib/import-notifications/receipt-claim-preview';
+import type { ReceiptLoginHintRpcClient } from '@/lib/receipts/server-login-hint-client';
 
 const baseClaim = {
   claimed_at: null,
-  claimed_by_user_id: null,
-  customer_email: 'basseybjohn@yahoo.co.uk',
-  customer_id: 'customer-1',
   customer_name: 'Bassey John',
+  document_kind: 'receipt',
   expires_at: '2099-01-01T00:00:00.000Z',
   id: 'claim-1',
-  merchant_id: 'merchant-1',
+  kind: 'manual',
   merchant: {
     business_name: 'Ogabassey',
     slug: 'ogabassey',
@@ -63,7 +61,7 @@ describe('receipt claim preview', () => {
       token: 'claim-token',
     });
 
-    expect(supabase.rpc).toHaveBeenCalledWith('preview_receipt_claim', {
+    expect(supabase.rpc).toHaveBeenCalledWith('preview_receipt_claim_v3', {
       p_token_hash: hashReceiptClaimToken('claim-token'),
     });
     expect(result).toEqual({
@@ -71,8 +69,43 @@ describe('receipt claim preview', () => {
         claimed: false,
         customerName: 'Bassey John',
         devices: ['iPhone 16 Pro Max', '2 x AirPods Pro'],
+        documentKind: 'receipt',
         merchantName: 'Ogabassey',
       },
+      ok: true,
+    });
+  });
+
+  it('carries the proforma kind through to the claim page', async () => {
+    const supabase = createSupabaseRpcMock({
+      data: { ...baseClaim, document_kind: 'proforma_invoice' },
+      error: null,
+    });
+
+    const result = await loadReceiptClaimPreview({
+      supabase,
+      token: 'claim-token',
+    });
+
+    expect(result).toEqual({
+      claim: expect.objectContaining({ documentKind: 'proforma_invoice' }),
+      ok: true,
+    });
+  });
+
+  it('surfaces legacy claims without a kind as unknown, not receipt', async () => {
+    const supabase = createSupabaseRpcMock({
+      data: { ...baseClaim, document_kind: null },
+      error: null,
+    });
+
+    const result = await loadReceiptClaimPreview({
+      supabase,
+      token: 'claim-token',
+    });
+
+    expect(result).toEqual({
+      claim: expect.objectContaining({ documentKind: 'unknown' }),
       ok: true,
     });
   });
@@ -97,67 +130,100 @@ describe('receipt claim preview', () => {
     });
   });
 
-  it('loads a sanitized login email hint through the preview RPC', async () => {
-    const supabase = createSupabaseRpcMock({
-      data: {
-        ...baseClaim,
-        customer_email: '  BasseyBJohn@Yahoo.CO.UK  ',
-      },
-      error: null,
-    });
+  it('loads a sanitized login email hint through the hint RPC', async () => {
+    const supabase = createSupabaseRpcMock({ data: baseClaim, error: null });
+    // The v3 payload carries no email: the hint function is the single
+    // source of the raw address.
+    const serviceSupabase: ReceiptLoginHintRpcClient = {
+      rpc: vi.fn().mockResolvedValue({
+        data: '  BasseyBJohn@Yahoo.CO.UK  ',
+        error: null,
+      }),
+    };
 
     const result = await loadReceiptClaimLoginEmailHint({
       supabase,
+      serviceSupabase,
       token: 'claim-token',
     });
 
-    expect(supabase.rpc).toHaveBeenCalledWith('preview_receipt_claim', {
+    expect(supabase.rpc).toHaveBeenCalledWith('preview_receipt_claim_v3', {
       p_token_hash: hashReceiptClaimToken('claim-token'),
     });
     expect(result).toEqual({
-      emailHint: 'basseybjohn@yahoo.co.uk',
+      emailHint: 'b***@yahoo.co.uk',
       ok: true,
     });
   });
 
-  it('loads preview data and login email hints from one claim lookup', async () => {
+  it('serves the login hint from the service-role function', async () => {
+    // The v3 preview never carries an email: the hint function is the only
+    // source of the raw address.
     const supabase = createSupabaseRpcMock({
-      data: {
-        ...baseClaim,
-        customer_email: '  BasseyBJohn@Yahoo.CO.UK  ',
-      },
+      data: baseClaim,
       error: null,
     });
+    const serviceSupabase: ReceiptLoginHintRpcClient = {
+      rpc: vi.fn().mockResolvedValue({
+        data: '  BasseyBJohn@Yahoo.CO.UK  ',
+        error: null,
+      }),
+    };
 
-    const result = await loadReceiptClaimPreviewWithLoginEmailHint({
+    const result = await loadReceiptClaimLoginEmailHint({
       supabase,
+      serviceSupabase,
       token: 'claim-token',
     });
 
-    expect(supabase.rpc).toHaveBeenCalledOnce();
+    expect(serviceSupabase.rpc).toHaveBeenCalledWith(
+      'get_receipt_claim_login_hint',
+      { p_token_hash: hashReceiptClaimToken('claim-token') }
+    );
     expect(result).toEqual({
-      claim: {
-        claimed: false,
-        customerName: 'Bassey John',
-        devices: ['iPhone 16 Pro Max', '2 x AirPods Pro'],
-        merchantName: 'Ogabassey',
-      },
-      emailHint: 'basseybjohn@yahoo.co.uk',
+      emailHint: 'b***@yahoo.co.uk',
       ok: true,
     });
+    // The full recipient address never reaches an unauthenticated caller,
+    // even though the service function resolves it.
+    expect(result.ok ? result.emailHint : '').not.toContain('basseybjohn');
   });
 
-  it('drops invalid login email hints from claim data', async () => {
-    const supabase = createSupabaseRpcMock({
-      data: {
-        ...baseClaim,
-        customer_email: 'not-an-email',
-      },
-      error: null,
-    });
+  it('throws when the hint function errors instead of falling back', async () => {
+    // The hint function is predeploy-guaranteed and the v3 payload carries
+    // no email, so there is nothing to fall back to: errors throw.
+    const supabase = createSupabaseRpcMock({ data: baseClaim, error: null });
+    const serviceSupabase: ReceiptLoginHintRpcClient = {
+      rpc: vi.fn().mockResolvedValue({
+        data: null,
+        error: { code: 'PGRST301', message: 'boom' },
+      }),
+    };
 
     await expect(
-      loadReceiptClaimLoginEmailHint({ supabase, token: 'claim-token' })
+      loadReceiptClaimLoginEmailHint({
+        supabase,
+        serviceSupabase,
+        token: 'claim-token',
+      })
+    ).rejects.toThrow('Failed to load receipt claim: boom');
+  });
+
+  it('drops invalid login email hints from the hint function', async () => {
+    const supabase = createSupabaseRpcMock({ data: baseClaim, error: null });
+    const serviceSupabase: ReceiptLoginHintRpcClient = {
+      rpc: vi.fn().mockResolvedValue({
+        data: 'not-an-email',
+        error: null,
+      }),
+    };
+
+    await expect(
+      loadReceiptClaimLoginEmailHint({
+        supabase,
+        serviceSupabase,
+        token: 'claim-token',
+      })
     ).resolves.toEqual({
       emailHint: '',
       ok: true,

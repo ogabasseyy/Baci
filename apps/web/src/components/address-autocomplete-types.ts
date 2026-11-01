@@ -22,6 +22,8 @@ export interface AddressAutocompleteProps
   useThemedInput?: boolean;
   showIcon?: boolean;
   country?: string;
+  /** Invalidates pending suggestions/selections after an external locality edit. */
+  selectionRevision?: number;
   /** Reports failed suggestions so callers can offer manual address entry. */
   onError?: (failed: boolean) => void;
 }

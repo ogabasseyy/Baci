@@ -1,12 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
-import {
-  type NormalizedProduct,
-  normalizeProduct,
-  type RawDbProduct,
-} from '@/lib/normalize-product';
+import type { NormalizedProduct, RawDbProduct } from '@/lib/normalize-product';
 import { STOREFRONT_PRODUCTS_SELECT } from '@/lib/storefront-products-select';
-import { createClient } from '@/lib/supabase/client';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -35,7 +30,7 @@ export function useSearchComparisonFacts(
     error: boolean;
   }>({ key: '', products: [], pending: false, error: false });
   useEffect(() => {
-    if (!open || !key) return;
+    if (!open || !key || !merchantId) return;
     let active = true;
     const controller = new AbortController();
     setState({ key, products: [], pending: true, error: false });
@@ -54,6 +49,14 @@ export function useSearchComparisonFacts(
         return;
       }
       try {
+        // Comparison is opt-in: do not put the database SDK and normalization
+        // graph on the initial results-page transfer path.
+        const [{ createClient }, { normalizeProduct }] = await Promise.all([
+          import('@/lib/supabase/client'),
+          import('@/lib/normalize-product'),
+        ]);
+        if (!active || controller.signal.aborted) return;
+        // Tenant-scoped public catalog read: filter by merchant_id and active status.
         const { data, error } = await createClient()
           .from('products')
           .select(STOREFRONT_PRODUCTS_SELECT)

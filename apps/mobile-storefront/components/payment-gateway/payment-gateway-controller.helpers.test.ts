@@ -4,6 +4,12 @@ import {
   getWalletReturnHref,
 } from './payment-gateway-controller.helpers';
 
+it('advises wallet users to check an existing payment before trying again', () => {
+  expect(getCloseConfirmationMessage('wallet')).toContain(
+    'If you have already paid, check your wallet or funding status before trying again.'
+  );
+});
+
 it('retains primary card recovery without claiming an order or a cancelled charge', () => {
   const message = getCloseConfirmationMessage('primary_wallet_card');
   expect(message).toContain('saved');

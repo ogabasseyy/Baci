@@ -1,0 +1,91 @@
+@import "tailwindcss" source(none);
+@import "./storefront-foundation.css";
+
+/* stylelint-disable-next-line scss/at-rule-no-unknown -- Tailwind v4 config directive. */
+@config "../../../tailwind.storefront.scoped.config.mjs";
+
+/*
+  Catalog listing CSS entrypoint.
+
+  Keep public catalog listing routes (/products, /search, /compare, /[category],
+  and category hub subroutes) off the broad 331 KB storefront-full.css render-
+  blocking path on initial paint via StorefrontEagerListingCssLayout.
+*/
+/* stylelint-disable scss/at-rule-no-unknown -- Tailwind v4 source discovery directives. */
+@source not "./**/*.test.ts";
+@source not "./**/*.test.tsx";
+@source not "../../**/*.test.ts";
+@source not "../../**/*.test.tsx";
+@source "../../components/storefront/cookie-consent.tsx";
+@source "../../components/themed/themed-button.tsx";
+@source "../../components/ui/button.tsx";
+@source "./[slug]/(catalog)/(listing)";
+@source "./[slug]/storefront-loading-ui.tsx";
+@source "./[slug]/storefront-route-not-found-content.tsx";
+@source "../../components/storefront/blocks/ogabassey-nav.tsx";
+@source "../../components/storefront/cdn-format-image.tsx";
+@source "../../components/storefront/search-autocomplete.tsx";
+@source "../../components/storefront/search-refinements";
+@source "../../components/storefront/search-submission-link.tsx";
+@source "../../components/storefront/ogabassey/components/AdUnit.tsx";
+@source "../../components/storefront/ogabassey/components/ad-slot-shell.tsx";
+@source "../../components/storefront/ogabassey/components/CartSidebar.tsx";
+@source "../../components/storefront/ogabassey/components/cart-sidebar*.tsx";
+@source "../../components/storefront/ogabassey/components/cart-variant-details.tsx";
+@source "../../components/storefront/ogabassey/components/CategoryFiltersSidebar.tsx";
+@source "../../components/storefront/ogabassey/components/CategoryRecentCarousel.tsx";
+@source "../../components/storefront/ogabassey/components/Footer.tsx";
+@source "../../components/storefront/ogabassey/components/FooterAppPayments.tsx";
+@source "../../components/storefront/ogabassey/components/GadgetPattern.tsx";
+@source "../../components/storefront/ogabassey/components/LaunchCarousel.tsx";
+@source "../../components/storefront/ogabassey/components/Logo.tsx";
+@source "../../components/storefront/ogabassey/components/MobileFooter.tsx";
+@source "../../components/storefront/ogabassey/components/NegotiationModal.tsx";
+@source "../../components/storefront/ogabassey/components/NegotiationModalStatusContent.tsx";
+@source "../../components/storefront/ogabassey/components/NegotiationUploadForm.tsx";
+@source "../../components/storefront/ogabassey/components/OfflineNotice.tsx";
+@source "../../components/storefront/ogabassey/components/PopupSystem.tsx";
+@source "../../components/storefront/ogabassey/components/ProductCard.tsx";
+@source "../../components/storefront/ogabassey/components/product-card*.tsx";
+@source "../../components/storefront/ogabassey/components/SavedToast.tsx";
+@source "../../components/storefront/ogabassey/components/StorefrontPagination.tsx";
+@source "../../components/storefront/ogabassey/components/UpsellToast.tsx";
+@source "../../components/storefront/ogabassey/components/UtilityModal.tsx";
+@source "../../components/storefront/ogabassey/components/UtilityPaymentMethodSelector.tsx";
+@source "../../components/storefront/ogabassey/components/UtilitySuccessView.tsx";
+@source "../../components/storefront/ogabassey/components/UtilityTabs.tsx";
+@source "../../components/storefront/ogabassey/components/carousel-play-toggle.tsx";
+@source "../../components/storefront/ogabassey/components/carousel-progress-fill.tsx";
+@source "../../components/storefront/ogabassey/components/chat";
+@source "../../components/storefront/ogabassey/components/deferred-ad-unit.tsx";
+@source "../../components/storefront/ogabassey/components/deferred-cart-sidebar.tsx";
+@source "../../components/storefront/ogabassey/components/deferred-shell-feature.tsx";
+@source "../../components/storefront/ogabassey/components/empty-state.tsx";
+@source "../../components/storefront/ogabassey/components/hero-mobile-geometry.ts";
+@source "../../components/storefront/ogabassey/components/launch-slide-item.tsx";
+@source "../../components/storefront/ogabassey/components/product-slide-body.tsx";
+@source "../../components/storefront/ogabassey/components/promo-slide-body.tsx";
+@source "../../components/storefront/ogabassey/components/utility";
+@source "../../components/storefront/ogabassey/layout";
+@source "../../components/storefront/ogabassey/storefront-deferred-footer-chrome.tsx";
+@source "../../components/storefront/ogabassey/storefront-deferred-overlay-chrome.tsx";
+@source "../../components/storefront/ogabassey/storefront-layout-chrome.tsx";
+@source "../../components/storefront/ogabassey/pages/category-page*.tsx";
+@source "../../components/storefront/ogabassey/pages/category-page*.ts";
+@source "../../components/storefront/ogabassey/providers";
+@source "../../components/storefront/ogabassey/seo/category-hub-card-grid.tsx";
+@source "../../components/storefront/ogabassey/seo/category-hub-faq-accordion.tsx";
+@source "../../components/storefront/ogabassey/seo/category-hub-sections.tsx";
+@source "../../components/storefront/ogabassey/seo/storefront-link-modules-section.tsx";
+@source "../../components/storefront/ogabassey/storefront-loading-ui.tsx";
+@source "../../components/themed";
+@source "../../components/ui/accordion.tsx";
+@source "../../components/ui/badge.tsx";
+@source "../../components/ui/card.tsx";
+@source "../../components/ui/input.tsx";
+@source "../../components/ui/label.tsx";
+@source "../../components/ui/safe-html.tsx";
+@source "../../components/ui/sheet.tsx";
+@source "../../components/ui/skeleton.tsx";
+@source "../../components/ui/skeletons.tsx";
+/* stylelint-enable scss/at-rule-no-unknown */

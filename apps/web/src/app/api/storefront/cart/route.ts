@@ -2,6 +2,7 @@ import { CART_FULL_SESSION_OPERATIONS } from '@baci/shared/cart';
 import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import { upgradeLegacySessionPrincipal } from '@/lib/cart/grant-operations';
+import { checkAnonymousCartQuota } from '@/lib/cart/quota-identity';
 import {
   type CartRequestContextDeps,
   checkCartQuota,
@@ -10,9 +11,11 @@ import {
   requestUsesDeviceProof,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
+import { createCartQuotaRequestContext } from '@/lib/cart/request-quota-context';
 import {
   cartErrorResponse,
   cartJsonResponse,
+  emptyCartProbeResponse,
   setCartSessionCookie,
 } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
@@ -24,7 +27,6 @@ import {
 } from '@/lib/cart/session-proof';
 import { voucherAttachmentsValid } from '@/lib/cart/voucher-attachments';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getTrustedClientIdentifier } from '@/lib/rate-limit';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { createCartRequestSchema } from '@/schemas/cart';
@@ -65,6 +67,12 @@ export async function GET(request: NextRequest) {
       contextDeps('session', 'not_found')
     );
     if (!context.ok) {
+      if (
+        context.error === 'missing_proof' &&
+        request.headers.get('x-baci-cart-probe') === '1'
+      ) {
+        return emptyCartProbeResponse();
+      }
       return cartErrorResponse(context.error);
     }
 
@@ -183,22 +191,32 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse('invalid_request');
     }
 
-    const quota = await checkCartQuota({
-      merchantId: context.merchant.id,
-      operation: 'create',
-      subject: context.principal.principalId,
-    });
+    const quotaContext = createCartQuotaRequestContext('required');
+    const quota = await checkCartQuota(
+      {
+        merchantId: context.merchant.id,
+        operation: 'create',
+        subject: context.principal.principalId,
+      },
+      quotaContext
+    );
     if (!quota.allowed) {
       return cartErrorResponse('quota_exceeded');
     }
     // Bootstrap mints a fresh principal per call, so the per-principal
     // budget alone can be reset by rotating bootstrap proofs; the same
-    // budget also applies per client identity.
-    const clientQuota = await checkCartQuota({
-      merchantId: context.merchant.id,
-      operation: 'create',
-      subject: getTrustedClientIdentifier(request),
-    });
+    // budget also applies per quota client identity. A client
+    // credential keys it per shopper (shared-egress shoppers do not
+    // share this bound), always backed by the non-rotatable network
+    // backstop; legacy clients use network identity alone.
+    const clientQuota = await checkAnonymousCartQuota(
+      request,
+      {
+        merchantId: context.merchant.id,
+        operation: 'create',
+      },
+      quotaContext
+    );
     if (!clientQuota.allowed) {
       return cartErrorResponse('quota_exceeded');
     }

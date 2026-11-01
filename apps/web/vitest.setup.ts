@@ -176,8 +176,28 @@ vi.mock('next/image', () => ({
 // quota/429 rejection would otherwise leak that cooldown into the tests that
 // follow it in the same file, silently changing which provider the chain
 // attempts. Reset it globally so each test starts from a clean chain.
+let deterministicUuidCounter = 0;
+
 beforeEach(() => {
   resetProviderCooldowns();
+  // Deterministic UUIDs for every suite: repo rules prohibit random
+  // test data, and production helpers generate UUIDs internally
+  // (operation ids, cart client credentials). A counter-based v4
+  // sequence keeps values distinct yet reproducible; suites that
+  // stub crypto.randomUUID themselves override this per test. The
+  // counter is monotonic per file (never reset) so values also stay
+  // distinct across tests sharing accumulated mock calls.
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    vi.spyOn(crypto, 'randomUUID').mockImplementation(
+      () =>
+        `00000000-0000-4000-8000-${(deterministicUuidCounter++)
+          .toString(16)
+          .padStart(
+            12,
+            '0'
+          )}` as `${string}-${string}-${string}-${string}-${string}`
+    );
+  }
   if (!navigator.locks) {
     const heldLocks = new Set<string>();
     Object.defineProperty(navigator, 'locks', {

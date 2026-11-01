@@ -9,39 +9,51 @@ import type {
 const PETROCK_TIER_BINDINGS: Partial<
   Record<ImeiServiceTierKey, ImeiProviderBinding>
 > = {
-  blacklist: {
-    costUsd: 0.019,
+  applePartNumber: {
+    costUsd: 0.12,
     deviceCategories: ['smartphone'],
     orderFieldName: 'IMEI',
-    productId: '1955',
+    productId: '1963',
     provider: 'petrock',
   },
-  knoxGuard: {
-    costUsd: 0.06,
+  // Captured product 1941 iPhone IMEI response, 2026-10-30. Public selection
+  // remains separately gated; this binding does not enable a customer tier.
+  esimCompatibility: {
+    costUsd: 0.04,
     deviceCategories: ['smartphone'],
-    orderFieldName: 'IMEI/SN',
+    orderFieldName: 'IMEI',
+    productId: '1941',
+    provider: 'petrock',
+  },
+  // 1955 rejected the paid blacklist probe. Keep blacklist on Sickw even
+  // when allowlisted; a catalog annotation alone does not block submissions.
+  knoxGuard: {
+    costUsd: 0.09,
+    deviceCategories: ['smartphone'],
+    orderFieldName: 'IMEI/Serial No',
     productId: '699',
     provider: 'petrock',
   },
   pixel: {
-    costUsd: 0.096,
+    costUsd: 0.09,
     deviceCategories: ['smartphone'],
     orderFieldName: 'IMEI',
     productId: '721',
     provider: 'petrock',
   },
   samsung: {
-    costUsd: 0.057,
+    costUsd: 0.08,
     deviceCategories: ['smartphone'],
     orderFieldName: 'IMEI',
     productId: '741',
     provider: 'petrock',
   },
+  // Product 693 is no longer listed. Product 716 is the current IMEI-only SIM-lock check.
   simLock: {
-    costUsd: 0.019,
+    costUsd: 0.06,
     deviceCategories: ['smartphone'],
-    orderFieldName: 'IMEI or Serial Number',
-    productId: '693',
+    orderFieldName: 'IMEI',
+    productId: '716',
     provider: 'petrock',
   },
 };
@@ -74,6 +86,9 @@ export function resolveImeiProviderBinding(
   }
 
   if (
+    ((input.tierKey === 'esimCompatibility' ||
+      input.tierKey === 'applePartNumber') &&
+      input.deviceCategory !== 'smartphone') ||
     (input.tier.deviceCategories.length > 1 && !input.deviceCategory) ||
     (input.deviceCategory &&
       !binding.deviceCategories.includes(input.deviceCategory))

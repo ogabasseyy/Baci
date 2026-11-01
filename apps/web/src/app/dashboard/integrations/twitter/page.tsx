@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { AdPlatformSetupGuide } from '@/components/analytics/ad-platform-setup-guide';
 import { getMerchantForUser } from '@/lib/merchant-server';
 import { asRoute } from '@/lib/routes';
 import { createClient } from '@/lib/supabase/server';
@@ -21,6 +22,7 @@ export default async function XAdsIntegrationPage() {
         key={merchant.id}
         initialMerchantId={merchant.id}
         initialConnection={initialConnection}
+        setupGuide={<AdPlatformSetupGuide platform="x" />}
       />
     );
   } catch {

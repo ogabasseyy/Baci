@@ -59,6 +59,19 @@ test('POD persistence policy and concurrent flag revocation', async () => {
       CREATE SCHEMA private;
       CREATE TABLE public.merchants(id uuid PRIMARY KEY,email text,business_name text,slug text,is_published boolean);
       CREATE TABLE public.merchant_feature_settings(merchant_id uuid PRIMARY KEY,pay_on_delivery_enabled boolean);
+      CREATE FUNCTION public.fixture_settings_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF current_setting('request.jwt.claim.role',true) IS DISTINCT FROM 'service_role' THEN
+          RAISE EXCEPTION 'audit_actor_required' USING ERRCODE='28000';
+        END IF;
+        RETURN coalesce(NEW,OLD);
+      END $$;
+      CREATE TRIGGER fixture_settings_audit BEFORE INSERT OR UPDATE OR DELETE ON public.merchant_feature_settings
+        FOR EACH ROW EXECUTE FUNCTION public.fixture_settings_audit();
+      CREATE FUNCTION public.fixture_default_settings() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN INSERT INTO public.merchant_feature_settings VALUES(NEW.id,false); RETURN NEW; END $$;
+      CREATE TRIGGER fixture_default_settings AFTER INSERT ON public.merchants
+        FOR EACH ROW EXECUTE FUNCTION public.fixture_default_settings();
       CREATE TABLE public.orders(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),merchant_id uuid,
         order_number text,total numeric,payment_method text,customer_email text);
     `);
@@ -80,11 +93,17 @@ test('POD persistence policy and concurrent flag revocation', async () => {
       )
     );
     const merchant = '36700000-0000-4000-8000-000000000004';
+    await admin.query(
+      "SELECT set_config('request.jwt.claim.role','service_role',false)"
+    );
+    await revocation.query(
+      "SELECT set_config('request.jwt.claim.role','service_role',false)"
+    );
     await admin.query('INSERT INTO public.merchants(id) VALUES($1);', [
       merchant,
     ]);
     await admin.query(
-      'INSERT INTO public.merchant_feature_settings VALUES($1,true)',
+      'UPDATE public.merchant_feature_settings SET pay_on_delivery_enabled=true WHERE merchant_id=$1',
       [merchant]
     );
     await admission.query('BEGIN');

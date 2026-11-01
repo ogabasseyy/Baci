@@ -1,6 +1,9 @@
 -- Business invariant: disabled/missing POD settings cannot create an order
 -- or switch an existing order to POD, regardless of the calling wrapper.
 BEGIN;
+-- Fixture writes use the existing service audit identity, as real setup does.
+SELECT set_config('request.jwt.claims','{"role":"service_role"}',true);
+SELECT set_config('request.jwt.claim.role','service_role',true);
 DO $$
 DECLARE
   enabled uuid := '36700000-0000-4000-8000-000000000001';
@@ -17,7 +20,10 @@ BEGIN
     (disabled,'pod-disabled@example.com','POD disabled','pod-policy-disabled',true),
     (missing,'pod-missing@example.com','POD missing','pod-policy-missing',true);
   INSERT INTO public.merchant_feature_settings(merchant_id,pay_on_delivery_enabled)
-  VALUES(enabled,true),(disabled,false);
+  VALUES(enabled,true),(disabled,false)
+  ON CONFLICT (merchant_id) DO UPDATE SET pay_on_delivery_enabled=EXCLUDED.pay_on_delivery_enabled;
+  -- Real merchant insertion creates default feature rows automatically.
+  DELETE FROM public.merchant_feature_settings WHERE merchant_id=missing;
   FOREACH target IN ARRAY ARRAY[disabled,missing] LOOP
     FOREACH method IN ARRAY ARRAY['pod','pay_on_delivery'] LOOP
       rejected := false;

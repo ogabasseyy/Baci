@@ -16,7 +16,15 @@ const EMPTY_REWRITES: StorefrontContentLinkRewrites = {
 };
 
 const CAPACITY_VARIANT_SUFFIX_REGEX =
-  /-(?:\d+gb-)?\d+(?:gb|tb)(?:-(?:5g|4g))?$/i;
+  /^(.+?)-(?:\d+gb-)?\d+(?:gb|tb)(-(?:5g|4g))?$/i;
+
+function getCapacityBaseSlugs(candidate: string): string[] {
+  const match = CAPACITY_VARIANT_SUFFIX_REGEX.exec(candidate);
+  if (!match?.[1]) return [];
+  return match[2]
+    ? [`${match[1]}${match[2].toLowerCase()}`, match[1]]
+    : [match[1]];
+}
 
 async function resolveBlogSlugRewrites(
   merchantId: string,
@@ -244,29 +252,35 @@ export async function getCachedContentLinkRewrites(
   }
 
   // Variant capacity suffix fallback: resolve authored RAM/storage variant
-  // slugs (e.g. `google-pixel-6-8gb-256gb`) to the live parent model path.
-  const baseSlugByCandidate = new Map<string, string>();
+  // slugs (e.g. `samsung-galaxy-a17-128gb-5g`) to the network-qualified or
+  // unqualified live parent model path.
+  const baseSlugsByCandidate = new Map<string, string[]>();
   for (const candidate of slugCandidates) {
     if (Object.hasOwn(productPaths, candidate)) continue;
-    const stripped = candidate.replace(CAPACITY_VARIANT_SUFFIX_REGEX, '');
-    if (stripped && stripped !== candidate) {
-      baseSlugByCandidate.set(candidate, stripped);
-    }
+    const baseSlugs = getCapacityBaseSlugs(candidate);
+    if (baseSlugs.length > 0) baseSlugsByCandidate.set(candidate, baseSlugs);
   }
-  if (baseSlugByCandidate.size > 0) {
+  if (baseSlugsByCandidate.size > 0) {
     const baseSlugsToLookup = Array.from(
-      new Set(baseSlugByCandidate.values())
+      new Set(Array.from(baseSlugsByCandidate.values()).flat())
     ).filter((baseSlug) => !Object.hasOwn(productPaths, baseSlug));
     const basePaths = baseSlugsToLookup.length
       ? await getCachedProductCanonicalPaths(merchantId, baseSlugsToLookup, {
           throwOnQueryError: true,
         })
       : {};
-    for (const [candidate, baseSlug] of baseSlugByCandidate) {
-      const basePath = Object.hasOwn(productPaths, baseSlug)
-        ? productPaths[baseSlug]
-        : basePaths[baseSlug];
-      if (basePath) productPaths[candidate] = basePath;
+    for (const [candidate, baseSlugs] of baseSlugsByCandidate) {
+      for (const baseSlug of baseSlugs) {
+        const basePath = Object.hasOwn(productPaths, baseSlug)
+          ? productPaths[baseSlug]
+          : Object.hasOwn(basePaths, baseSlug)
+            ? basePaths[baseSlug]
+            : undefined;
+        if (basePath) {
+          productPaths[candidate] = basePath;
+          break;
+        }
+      }
     }
   }
 
@@ -282,7 +296,9 @@ export async function getCachedContentLinkRewrites(
   for (const [uuid, slug] of activeSlugByUuid) {
     const slugPath = Object.hasOwn(productPaths, slug)
       ? productPaths[slug]
-      : activeUuidPaths[slug];
+      : Object.hasOwn(activeUuidPaths, slug)
+        ? activeUuidPaths[slug]
+        : undefined;
     if (slugPath) productPaths[uuid] = slugPath;
   }
 

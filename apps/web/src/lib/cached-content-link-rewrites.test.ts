@@ -372,6 +372,57 @@ describe('getCachedContentLinkRewrites', () => {
       { throwOnQueryError: true }
     );
   });
+
+  it('prefers the network-qualified base slug before the unqualified base slug for capacity variants', async () => {
+    mockGetCachedProductCanonicalPaths
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({
+        'samsung-galaxy-a17': '/smartphones/samsung-galaxy-a17',
+        'samsung-galaxy-a17-5g': '/smartphones/samsung-galaxy-a17-5g',
+      });
+    mockGetCachedStorefrontProductSlugResolution.mockResolvedValueOnce({
+      hasError: false,
+      present: false,
+    });
+
+    const rewrites = await getCachedContentLinkRewrites(
+      'merchant-1',
+      [],
+      ['samsung-galaxy-a17-128gb-5g']
+    );
+
+    expect(rewrites.productPaths['samsung-galaxy-a17-128gb-5g']).toBe(
+      '/smartphones/samsung-galaxy-a17-5g'
+    );
+    expect(mockGetCachedProductCanonicalPaths).toHaveBeenNthCalledWith(
+      2,
+      'merchant-1',
+      ['samsung-galaxy-a17-5g', 'samsung-galaxy-a17'],
+      { throwOnQueryError: true }
+    );
+  });
+
+  it('ignores inherited prototype properties on missing base-path and active-UUID lookups', async () => {
+    setupPublicClient({
+      productResult: {
+        data: [{ id: ACTIVE_UUID, slug: 'toString' }],
+        error: null,
+      },
+    });
+    mockGetCachedProductCanonicalPaths.mockResolvedValue({});
+    mockGetCachedStorefrontProductSlugResolution.mockResolvedValue({
+      hasError: false,
+      present: false,
+    });
+
+    const rewrites = await getCachedContentLinkRewrites(
+      'merchant-1',
+      [],
+      ['constructor-128gb', ACTIVE_UUID]
+    );
+
+    expect(rewrites.productPaths).toEqual({});
+  });
 });
 
 describe('cached-content-link-rewrites cache directive', () => {

@@ -207,6 +207,16 @@ describe('official document recognizer', () => {
     ).toBeUndefined();
   });
 
+  it('leaves a non-object request schema unproven even with object keywords', () => {
+    const markdown = categoryOpenApi().replace(
+      '"type":"object"',
+      '"type":"array"'
+    );
+    expect(
+      parseMarkdown(markdown, 'menu.category.create', CATEGORY_URL).claim
+    ).toBeUndefined();
+  });
+
   it('documents bearer only from an explicit authorization scheme declaration', () => {
     const parsed = parseMarkdown(
       '# Authentication\n\nAuthorization scheme: Bearer.',

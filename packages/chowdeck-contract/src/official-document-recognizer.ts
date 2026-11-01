@@ -84,6 +84,7 @@ function requestShapeMatches(
   const content = own(requestBody, 'content');
   const media = own(content, 'application/json');
   const schema = own(media, 'schema');
+  if (own(schema, 'type') !== 'object') return false;
   // We only certify shapes we can inspect in full. Composed or referenced
   // schemas may impose additional fields that this recognizer cannot resolve.
   if (

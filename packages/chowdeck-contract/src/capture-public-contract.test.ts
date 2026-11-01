@@ -7,6 +7,17 @@ import {
   capturePublicContract,
 } from './capture-public-contract';
 
+it('keeps capture safety limits bounded', () => {
+  expect(CAPTURE_LIMITS).toEqual({
+    aggregateBytes: 5_242_880,
+    documentBytes: 1_048_576,
+    maxDepth: 32,
+    parsedNodes: 20_000,
+    parsedTextBytes: 524_288,
+    timeoutMilliseconds: 10_000,
+  });
+});
+
 const OFFICIAL_URLS = [
   'https://chowdeck-api.readme.io/docs/getting-started.md',
   'https://chowdeck-api.readme.io/reference/authentication-1.md',

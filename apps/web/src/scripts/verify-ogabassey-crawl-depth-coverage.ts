@@ -161,20 +161,33 @@ export function classifyCrawlDepthUrl(url: string): ClassifiedCrawlDepthUrl {
   return { kind: 'product', path: pathWithSearch(parsedUrl) };
 }
 
-function normalizeHref(href: string) {
-  const parsedUrl = new URL(href, 'https://ogabassey.com');
-  return `${parsedUrl.pathname}${parsedUrl.search}`;
+const STOREFRONT_ORIGIN = 'https://ogabassey.com';
+
+function normalizeHref(href: string): string | null {
+  try {
+    const url = new URL(href, STOREFRONT_ORIGIN);
+    if (
+      !href.trim() ||
+      url.origin !== STOREFRONT_ORIGIN ||
+      url.username ||
+      url.password
+    ) {
+      return null;
+    }
+    return pathWithSearch(url);
+  } catch {
+    return null;
+  }
 }
 
 export function isCoveredByMaintainedModules(
   classifiedUrl: ClassifiedCrawlDepthUrl,
   moduleHrefs: Set<string>
 ) {
-  if (CLEANUP_KINDS.has(classifiedUrl.kind)) {
-    return true;
-  }
-
-  return moduleHrefs.has(normalizeHref(classifiedUrl.path));
+  if (CLEANUP_KINDS.has(classifiedUrl.kind)) return true;
+  if (classifiedUrl.kind === 'unparseable') return false;
+  const normalized = normalizeHref(classifiedUrl.path);
+  return normalized !== null && moduleHrefs.has(normalized);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -183,29 +196,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function collectHrefs(value: unknown, hrefs: Set<string>) {
   if (typeof value === 'string') {
-    if (value.startsWith('/') || value.startsWith('https://ogabassey.com')) {
-      hrefs.add(normalizeHref(value));
-    }
+    const href = normalizeHref(value);
+    if (href !== null) hrefs.add(href);
     return;
   }
-
   if (Array.isArray(value)) {
-    for (const item of value) {
-      collectHrefs(item, hrefs);
-    }
+    for (const item of value) collectHrefs(item, hrefs);
     return;
   }
-
-  if (!isRecord(value)) {
-    return;
-  }
-
-  if (typeof value.href === 'string') {
-    hrefs.add(normalizeHref(value.href));
-  }
-
+  if (!isRecord(value)) return;
+  if (typeof value.href === 'string') collectHrefs(value.href, hrefs);
   for (const nestedValue of Object.values(value)) {
-    collectHrefs(nestedValue, hrefs);
+    if (typeof nestedValue === 'object' && nestedValue !== null) {
+      collectHrefs(nestedValue, hrefs);
+    }
   }
 }
 
@@ -275,6 +279,7 @@ export function formatCrawlDepthCoverageReport(
   report: CrawlDepthCoverageReport
 ) {
   const lines = [
+    'module_inventory_coverage (not live crawl or reachability evidence)',
     `total_rows ${report.totalRows}`,
     `covered_maintained_rows ${report.coveredMaintainedRows}`,
     `missing_maintained_rows ${report.missingMaintainedRows}`,

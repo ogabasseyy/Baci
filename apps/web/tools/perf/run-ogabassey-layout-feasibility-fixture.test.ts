@@ -63,6 +63,47 @@ describe('runOgabasseyLayoutFeasibilityFixture', () => {
     ).toEqual(manifest);
   });
 
+  it('does not persist cookies or authorization response headers', async () => {
+    const outputDir = await mkdtemp(
+      path.join(tmpdir(), 'baci-layout-captures-')
+    );
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(
+        typeof input === 'string' || input instanceof URL ? input : input.url
+      );
+      if (url.pathname.startsWith('/_next/'))
+        return new Response('asset', { status: 200 });
+      return new Response('<html></html>', {
+        status: 200,
+        headers: {
+          'content-type': 'text/html',
+          'set-cookie': 'sensitive=fixture',
+          authorization: 'Bearer fixture',
+          'cache-control': 'no-store',
+        },
+      });
+    });
+    const result = await runOgabasseyLayoutFeasibilityFixture({
+      baseUrl: 'http://127.0.0.1:4317',
+      blogPath: 'blog/post',
+      categoryPath: 'phones',
+      fetchImpl,
+      genericIdentifier: 'generic',
+      identifiers: ['ogabassey.com', 'ogabassey'],
+      outputDir,
+      pdpPath: 'phones/product',
+    });
+    const first = result.captures[0];
+    if (!first) throw new Error('No capture produced');
+    const captured = await readFile(
+      path.join(outputDir, first.headersPath),
+      'utf8'
+    );
+    expect(captured).not.toContain('sensitive=fixture');
+    expect(captured).not.toContain('Bearer fixture');
+    expect(captured).toContain('cache-control');
+  });
+
   it('rejects a non-loopback capture server before making requests', async () => {
     const outputDir = await mkdtemp(
       path.join(tmpdir(), 'baci-layout-captures-')

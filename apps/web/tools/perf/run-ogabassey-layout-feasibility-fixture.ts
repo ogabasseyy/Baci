@@ -175,7 +175,21 @@ export async function runOgabasseyLayoutFeasibilityFixture(
     await writeFile(path.join(options.outputDir, htmlPath), html);
     await writeFile(
       path.join(options.outputDir, headersPath),
-      JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)
+      JSON.stringify(
+        Object.fromEntries(
+          [...response.headers.entries()].filter(([name]) =>
+            [
+              'cache-control',
+              'content-type',
+              'vary',
+              'x-nextjs-cache',
+              'x-vercel-cache',
+            ].includes(name.toLowerCase())
+          )
+        ),
+        null,
+        2
+      )
     );
     captures.push({
       dependencyFiles,

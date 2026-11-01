@@ -82,4 +82,20 @@ describe('truncateMetaTitle', () => {
       )
     ).toBe('Introducing the iPhone 15 Series...');
   });
+  it('keeps a complete final word when the cut ends immediately before a space', () => {
+    expect(
+      truncateMetaTitle('Apple Magic Keyboard 11-inch for iPad', '', 31)
+    ).toBe('Apple Magic Keyboard 11-inch...');
+  });
+
+  it('keeps a complete final word before a space while preserving the brand suffix', () => {
+    expect(
+      truncateMetaTitle(
+        'Apple Magic Keyboard 11-inch for iPad | Ogabassey',
+        'Ogabassey',
+        43
+      )
+    ).toBe('Apple Magic Keyboard 11-inch... | Ogabassey');
+  });
+
 });

@@ -15,7 +15,7 @@ function truncateAtWord(text: string, limit: number): string {
   const hardCut = text.slice(0, budget);
   const lastSpace = hardCut.lastIndexOf(' ');
   const cut =
-    lastSpace >= budget * MIN_WORD_BOUNDARY_RATIO
+    text[budget] !== ' ' && lastSpace >= budget * MIN_WORD_BOUNDARY_RATIO
       ? hardCut.slice(0, lastSpace)
       : hardCut;
   return `${cut.replace(TRAILING_SEPARATOR_PATTERN, '')}${ELLIPSIS}`;

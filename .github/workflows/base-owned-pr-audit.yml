@@ -1,0 +1,54 @@
+# Independent base-owned drift audit. PR files are data and are never executed.
+name: Base-owned PR audit
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: base-owned-pr-audit-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Base-owned PR audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout immutable base audit code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Fetch immutable PR objects as data
+        shell: bash
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]
+          [[ "$PR_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 \
+            git -c core.hooksPath=/dev/null fetch --no-tags origin "refs/pull/${PR_NUMBER}/head"
+          [[ "$(git rev-parse FETCH_HEAD)" == "$PR_HEAD_SHA" ]]
+      - name: Stage inert audit inputs and run base auditor
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          scripts="$GITHUB_WORKSPACE/.github/scripts"
+          snapshot="$RUNNER_TEMP/base-owned-audit-snapshot"
+          changed="$(python3 "$scripts/base-owned-audit-snapshot.py" --repo "$GITHUB_WORKSPACE" --base "$PR_BASE_SHA" --head "$PR_HEAD_SHA" --destination "$snapshot")"
+          [[ "$changed" == true || "$changed" == false ]]
+          cd "$snapshot"
+          env -i PATH=/usr/bin:/bin GITHUB_WORKSPACE="$snapshot" TRUSTED_CHANGED="$changed" \
+            TRUSTED_CHANGE_ADVISORY=true PYTHONNOUSERSITE=1 \
+            python3 -I -c 'import runpy, sys; sys.path.insert(0, sys.argv[1]); runpy.run_path(sys.argv[1] + "/semgrep-sarif-filter.py", run_name="__main__")' "$scripts"

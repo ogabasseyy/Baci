@@ -8,3 +8,12 @@ DO $$ DECLARE data jsonb; BEGIN
   RAISE EXCEPTION 'reserved unit must be released';
  END IF;
 END $$;
+
+SELECT private.release_stale_offer_line_serialized_units('00000000-0000-0000-0000-000000000006','00000000-0000-0000-0000-000000000007','00000000-0000-0000-0000-000000000011','00000000-0000-0000-0000-000000000005','{}');
+DO $$ BEGIN
+ IF NOT EXISTS (SELECT 1 FROM private.legacy_offer_cleanup_reservations WHERE order_item_id='00000000-0000-0000-0000-000000000011')
+  OR private.redvault_line_was_serialized('00000000-0000-0000-0000-000000000007','00000000-0000-0000-0000-000000000011') IS DISTINCT FROM false
+  OR private.redvault_line_was_serialized('00000000-0000-0000-0000-000000000007','00000000-0000-0000-0000-000000000001') IS DISTINCT FROM true THEN
+  RAISE EXCEPTION 'cleanup evidence must change routing only when no units remain attached';
+ END IF;
+END $$;

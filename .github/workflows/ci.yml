@@ -399,6 +399,13 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
         run: bash supabase/migrations/tests/run-offer-release-mixed.sh
+      - name: Verify REDVAULT legacy offer refund routing
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/migrations/tests/run-redvault-legacy-offer-routing.sh
       - name: Run disposable search suites
         env:
           PGHOST: localhost

@@ -7,14 +7,16 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 db="codex_offer_confirmation_$$"
 definition="$(mktemp)"
 legacy_patch="$(mktemp)"
+unit_editor="$(mktemp)"
 created=false
-cleanup() { rm -f "$definition" "$legacy_patch"; if "$created"; then dropdb --if-exists "$db" >/dev/null; fi; }
+cleanup() { rm -f "$definition" "$legacy_patch" "$unit_editor"; if "$created"; then dropdb --if-exists "$db" >/dev/null; fi; }
 trap cleanup EXIT
 createdb "$db"
 created=true
 export CODEX_OFFER_TEST_DB="$db"
 export PGPORT="${PGPORT:-5432}" PGUSER="${PGUSER:-$(id -un)}" PGPASSWORD="${PGPASSWORD:-}"
 node "$root/supabase/tests/serialized_variant_inventory_concurrency_fixture_functions.mjs" "$root" > "$definition"
+awk -v function_name=private.update_variant_inventory_unit -f "$root/supabase/migrations/tests/extract-serialized-fixture-function.awk" "$root/supabase/migrations/20260615181534_serialized_variant_inventory.sql" > "$unit_editor"
 awk '/^DO \$claim_exclusion_confirm_3734\$/ { printing=1; found++ } printing { print } printing && /^END \$claim_exclusion_confirm_3734\$;/ { printing=0 } END { if (found != 1 || printing) exit 1 }' "$root/supabase/migrations/20261027004500_storefront_order_serialized_claim_exclusion_3734.sql" > "$legacy_patch"
 psql -v ON_ERROR_STOP=1 -q -d "$db" \
   -f "$root/supabase/tests/serialized_variant_inventory_concurrency_fixture.sql" \
@@ -26,5 +28,8 @@ psql -v ON_ERROR_STOP=1 -q -d "$db" \
   -f "$root/supabase/migrations/20261101190000_serialized_offer_order_protocol.sql" \
   -f "$root/supabase/migrations/tests/serialized_offer_confirmation_protocol_fixture.sql" \
   -f "$root/supabase/migrations/20261101203000_serialized_offer_deleted_condition_confirmation.sql" \
-  -f "$root/supabase/migrations/tests/serialized_offer_confirmation_assert.sql"
+  -f "$root/supabase/migrations/tests/serialized_offer_confirmation_assert.sql" \
+  -f "$unit_editor" \
+  -f "$root/supabase/migrations/20261101210317_serialized_unit_edit_lock_order.sql" \
+  -f "$root/supabase/migrations/tests/serialized_offer_update_lock_order_assert.sql"
 echo 'PASS serialized offer confirmation'

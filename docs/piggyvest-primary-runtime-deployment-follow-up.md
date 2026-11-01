@@ -126,7 +126,8 @@ running it is not a substitute for this preparation.
 
 Apply `20261101171000_piggyvest_primary_onboarding_review_hold.sql`,
 `20261101174000_piggyvest_primary_legacy_review_deletion_hold.sql`, and
-`20261101180000_piggyvest_primary_mapped_ownership_review_hold.sql` before
+`20261101180000_piggyvest_primary_mapped_ownership_review_hold.sql`, and
+`20261101190000_piggyvest_primary_onboarding_review_classification.sql` before
 deploying the review-status reader or ambiguous-onboarding recovery. Include
 `record_onboarding_ownership_hold(jsonb,uuid,uuid)` and
 `read_onboarding_review(jsonb)` in the restricted provisioner's verified grants.
@@ -214,3 +215,5 @@ Current primary runtime/integration tables do not enforce this approval expiry;
 an activation owner must implement and verify the revocation procedure.
 PostgreSQL password validity does not terminate existing sessions. The legacy
 installer or its route/role receipts cannot satisfy missing primary evidence.
+
+Apply the review-classification migration before deploying the new six-argument review and four-argument routing-resolution statements. Verify both overloads in the restricted provisioner readiness check. The old signatures remain conservative wrappers: they do not infer routing-only review from an unclassified contradiction. Identity-matched interest-setting contradictions retain a routing reason atomically; identity mismatches remain ownership-held after the recorded DVA closes.

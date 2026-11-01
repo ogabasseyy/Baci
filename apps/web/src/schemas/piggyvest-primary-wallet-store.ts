@@ -31,6 +31,7 @@ export const piggyvestPrimaryWalletStoreSchemas = {
   review: recorded.extend({
     providerCustomerId: piggyvestProviderIdSchema,
     providerWalletId: piggyvestProviderIdSchema,
+    reviewReason: z.literal('routing').optional(),
   }),
   routingRows: z
     .array(

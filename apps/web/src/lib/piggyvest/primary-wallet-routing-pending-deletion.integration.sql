@@ -15,6 +15,7 @@
 \ir ../../../../../supabase/migrations/20261101171000_piggyvest_primary_onboarding_review_hold.sql
 \ir ../../../../../supabase/migrations/20261101174000_piggyvest_primary_legacy_review_deletion_hold.sql
 \ir ../../../../../supabase/migrations/20261101180000_piggyvest_primary_mapped_ownership_review_hold.sql
+\ir ../../../../../supabase/migrations/20261101190000_piggyvest_primary_onboarding_review_classification.sql
 -- Match production account deletion's nullable SET NULL relation before any
 -- delete probes, so an allowed delete reaches its real terminal outcome.
 ALTER TABLE piggyvest_primary.onboarding_intents ALTER COLUMN customer_id DROP NOT NULL;
@@ -69,7 +70,7 @@ BEGIN
   IF NOT piggyvest_primary.record_onboarding_routing_pending(pg_temp.scope(2), (v_claim->>'intentId')::uuid,
     (v_claim->>'claimToken')::uuid, 'pv-customer-2', 'pv-wallet-2', '01JBZ8Q5W3X9R2K4M6N8P0T2V4') THEN RAISE EXCEPTION 'second routing pending not recorded'; END IF;
   IF NOT piggyvest_primary.resolve_onboarding_routing(pg_temp.scope(2),
-    '{"providerCustomerId":"pv-customer-2","providerWalletId":"pv-wallet-2"}', false) THEN RAISE EXCEPTION 'contradiction not resolved'; END IF;
+    '{"providerCustomerId":"pv-customer-2","providerWalletId":"pv-wallet-2"}', false, 'routing') THEN RAISE EXCEPTION 'contradiction not resolved'; END IF;
   IF pg_temp.delete_customer(2) <> 'dva' THEN RAISE EXCEPTION 'a routing-rejected DVA did not block deletion'; END IF;
   -- Accepted (usable): still blocked until its closure is attested.
   v_claim := piggyvest_primary.claim_onboarding(pg_temp.scope(4), repeat('d', 64));

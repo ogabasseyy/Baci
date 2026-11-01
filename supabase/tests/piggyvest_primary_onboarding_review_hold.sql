@@ -47,7 +47,8 @@ INSERT INTO auth.users(id) VALUES
   ('a3600000-0000-4000-8000-000000000021'), ('a3600000-0000-4000-8000-000000000022'),
   ('a3600000-0000-4000-8000-000000000023'), ('a3600000-0000-4000-8000-000000000024'),
   ('a3600000-0000-4000-8000-000000000025'), ('a3600000-0000-4000-8000-000000000026'),
-  ('a3600000-0000-4000-8000-000000000027');
+  ('a3600000-0000-4000-8000-000000000027'), ('a3600000-0000-4000-8000-000000000028'),
+  ('a3600000-0000-4000-8000-000000000029');
 INSERT INTO public.merchants(id, email)
   VALUES ('a3600000-0000-4000-8000-000000000002', 'review-hold@example.test');
 INSERT INTO public.customers(id, merchant_id, user_id, email) VALUES
@@ -57,7 +58,9 @@ INSERT INTO public.customers(id, merchant_id, user_id, email) VALUES
   ('a3600000-0000-4000-8000-000000000014', 'a3600000-0000-4000-8000-000000000002', 'a3600000-0000-4000-8000-000000000024', 'review-4@example.test'),
   ('a3600000-0000-4000-8000-000000000015', 'a3600000-0000-4000-8000-000000000002', 'a3600000-0000-4000-8000-000000000025', 'review-5@example.test'),
   ('a3600000-0000-4000-8000-000000000016', 'a3600000-0000-4000-8000-000000000002', 'a3600000-0000-4000-8000-000000000026', 'review-6@example.test'),
-  ('a3600000-0000-4000-8000-000000000017', 'a3600000-0000-4000-8000-000000000002', 'a3600000-0000-4000-8000-000000000027', 'review-7@example.test');
+  ('a3600000-0000-4000-8000-000000000017', 'a3600000-0000-4000-8000-000000000002', 'a3600000-0000-4000-8000-000000000027', 'review-7@example.test'),
+  ('a3600000-0000-4000-8000-000000000018', 'a3600000-0000-4000-8000-000000000002', 'a3600000-0000-4000-8000-000000000028', 'review-8@example.test'),
+  ('a3600000-0000-4000-8000-000000000019', 'a3600000-0000-4000-8000-000000000002', 'a3600000-0000-4000-8000-000000000029', 'review-9@example.test');
 INSERT INTO piggyvest_primary.integrations(id, merchant_id, business_id, environment, executor_login, enabled)
   VALUES ('a3600000-0000-4000-8000-000000000005', 'a3600000-0000-4000-8000-000000000002',
     'review-hold-business', 'staging', session_user, true);
@@ -103,6 +106,44 @@ BEGIN
   c2 := piggyvest_primary.claim_onboarding(pg_temp.scope(1), repeat('a', 64));
   PERFORM pg_temp.check(c2 = '{"status":"conflict"}'::jsonb, 'ownership hold was reclaimed');
   PERFORM pg_temp.check(pg_temp.delete_probe(1) = 'unresolved', 'walletless ownership hold allowed deletion');
+END $$;
+
+-- Initial routing-only mismatch is classified atomically; identity mismatch
+-- on recovery remains an ownership hold even after the recorded DVA closes.
+DO $$
+DECLARE c jsonb; intent_id uuid;
+BEGIN
+  c := piggyvest_primary.claim_onboarding(pg_temp.scope(8), repeat('8', 64));
+  intent_id := (c->>'intentId')::uuid;
+  PERFORM pg_temp.check(piggyvest_primary.record_onboarding_review(
+    pg_temp.scope(8), intent_id, (c->>'claimToken')::uuid,
+    'pv-customer-8', 'pv-wallet-8', 'routing'),
+    'routing-only onboarding review write failed');
+  PERFORM pg_temp.check((SELECT state = 'rejected' AND review_reason = 'routing'
+      FROM piggyvest_primary.onboarding_intents WHERE id = intent_id),
+    'routing-only onboarding review lost its classification');
+  PERFORM pg_temp.check(piggyvest_primary.read_onboarding_review(pg_temp.scope(8)) = 'routing',
+    'routing-only onboarding review was read as ownership');
+  PERFORM piggyvest_primary.attest_provider_dva_closure(intent_id);
+  PERFORM pg_temp.check(pg_temp.delete_probe(8) = 'deleted',
+    'closed routing-only onboarding DVA remained under ownership hold');
+
+  c := piggyvest_primary.claim_onboarding(pg_temp.scope(9), repeat('9', 64));
+  intent_id := (c->>'intentId')::uuid;
+  PERFORM pg_temp.check(piggyvest_primary.record_onboarding_routing_pending(pg_temp.scope(9),
+    intent_id, (c->>'claimToken')::uuid, 'pv-customer-9', 'pv-wallet-9',
+    '01JBZ8Q5W3X9R2K4M6N8P0T2V4'), 'identity-mismatch recovery setup failed');
+  PERFORM pg_temp.check(piggyvest_primary.resolve_onboarding_routing(pg_temp.scope(9),
+    '{"providerCustomerId":"pv-customer-9","providerWalletId":"pv-wallet-9"}', false, NULL),
+    'identity-mismatch recovery did not reject');
+  PERFORM pg_temp.check((SELECT state = 'rejected' AND review_reason IS NULL
+      FROM piggyvest_primary.onboarding_intents WHERE id = intent_id),
+    'identity-mismatch recovery was mislabeled as routing');
+  PERFORM pg_temp.check(piggyvest_primary.read_onboarding_review(pg_temp.scope(9)) = 'ownership',
+    'identity-mismatch recovery was not read as ownership');
+  PERFORM piggyvest_primary.attest_provider_dva_closure(intent_id);
+  PERFORM pg_temp.check(pg_temp.delete_probe(9) = 'unresolved',
+    'closed identity-mismatch recovery escaped ownership hold');
 END $$;
 
 -- A live dispatched request and a recorded unknown result both protect the
@@ -164,7 +205,7 @@ BEGIN
     intent_id, (c->>'claimToken')::uuid, 'pv-customer-5', 'pv-wallet-5',
     '01JBZ8Q5W3X9R2K4M6N8P0T2V4'), 'routing-pending setup failed');
   PERFORM pg_temp.check(piggyvest_primary.resolve_onboarding_routing(pg_temp.scope(5),
-    '{"providerCustomerId":"pv-customer-5","providerWalletId":"pv-wallet-5"}', false),
+    '{"providerCustomerId":"pv-customer-5","providerWalletId":"pv-wallet-5"}', false, 'routing'),
     'routing contradiction did not reject');
   PERFORM pg_temp.check((SELECT state = 'rejected' AND review_reason = 'routing'
       AND routing_payout_wallet_id IS NULL
@@ -251,5 +292,6 @@ BEGIN
       principal || ' can execute the review trigger helper');
   END LOOP;
 END $$;
+\ir piggyvest_primary_onboarding_review_permissions_parts.inc.sql
 
 COMMIT;

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   wallet: vi.fn(),
   accounts: vi.fn(),
   provider: vi.fn(),
+  review: vi.fn(),
   state: { value: 'routing_pending' as 'routing_pending' | 'accepted' },
   statements: [] as string[],
 }));
@@ -66,7 +67,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-executor', () => ({
   },
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-review', () => ({
-  readPrimaryWalletReview: async () => null,
+  readPrimaryWalletReview: mocks.review,
 }));
 
 const PAYOUT = '01JBZ8Q5W3X9R2K4M6N8P0T2V4';
@@ -87,6 +88,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.state.value = 'routing_pending';
   mocks.statements.length = 0;
+  mocks.review.mockResolvedValue(null);
   mocks.auth.mockResolvedValue({
     user: { id: 'f4f01e61-691f-494a-a895-872f17f8e55e' },
     supabase: {},
@@ -146,6 +148,39 @@ describe('primary wallet GET with a routing-pending wallet (real recovery and sn
       PRIMARY_WALLET_STATEMENTS.resolveRouting
     );
     expect(mocks.statements).toContain(PRIMARY_WALLET_VERIFICATION_STATEMENT);
+    expect(mocks.provider).not.toHaveBeenCalled();
+  });
+
+  it('classifies a rejected identity-mismatch recovery as an ownership hold', async () => {
+    mocks.wallet.mockResolvedValue({
+      ...wallet(PAYOUT),
+      api_customer_id: 'other-customer',
+    });
+    mocks.review.mockResolvedValueOnce(null).mockResolvedValueOnce('ownership');
+
+    const response = await GET(new NextRequest(url));
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual(
+      expect.objectContaining({ code: 'OWNERSHIP_REVIEW_REQUIRED' })
+    );
+    expect(mocks.review).toHaveBeenCalledTimes(2);
+    expect(mocks.provider).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when rejected recovery has no readable persisted review reason', async () => {
+    mocks.wallet.mockResolvedValue({
+      ...wallet(PAYOUT),
+      api_customer_id: 'other-customer',
+    });
+
+    const response = await GET(new NextRequest(url));
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual(
+      expect.objectContaining({ code: 'PIGGYVEST_UNAVAILABLE' })
+    );
+    expect(mocks.review).toHaveBeenCalledTimes(2);
     expect(mocks.provider).not.toHaveBeenCalled();
   });
 });

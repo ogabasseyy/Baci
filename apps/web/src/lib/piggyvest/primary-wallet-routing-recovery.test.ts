@@ -80,7 +80,7 @@ describe('primary wallet routing recovery', () => {
     expect(resolveCalls(input.execute)).toEqual([
       [
         PRIMARY_WALLET_STATEMENTS.resolveRouting,
-        [JSON.stringify(scope), JSON.stringify(proof), 'true'],
+        [JSON.stringify(scope), JSON.stringify(proof), 'true', null],
       ],
     ]);
     expect(mocks.alert).not.toHaveBeenCalled();
@@ -106,7 +106,7 @@ describe('primary wallet routing recovery', () => {
     expect(resolveCalls(input.execute)).toEqual([
       [
         PRIMARY_WALLET_STATEMENTS.resolveRouting,
-        [JSON.stringify(scope), JSON.stringify(proof), 'false'],
+        [JSON.stringify(scope), JSON.stringify(proof), 'false', 'routing'],
       ],
     ]);
     expect(mocks.alert).toHaveBeenCalledExactlyOnceWith(
@@ -122,6 +122,24 @@ describe('primary wallet routing recovery', () => {
       scope.customerId,
     ])
       expect(alerted).not.toContain(secret);
+  });
+
+  it('keeps an identity mismatch as an ownership hold when resolving routing', async () => {
+    const input = fixture();
+    input.retrieveWallet.mockResolvedValue(
+      routedWallet({ api_customer_id: 'another-customer' })
+    );
+    expect(await input.run()).toBe('rejected');
+    expect(resolveCalls(input.execute)).toEqual([
+      [
+        PRIMARY_WALLET_STATEMENTS.resolveRouting,
+        [JSON.stringify(scope), JSON.stringify(proof), 'false', null],
+      ],
+    ]);
+    expect(mocks.alert).toHaveBeenCalledExactlyOnceWith(
+      'PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW',
+      expect.objectContaining({ operationId: INTENT_ID })
+    );
   });
 
   it('does not alert or claim a resolution another request already made', async () => {

@@ -56,6 +56,7 @@ BEGIN
   END;
 END $$;
 \ir ../../../../../supabase/migrations/20261101180000_piggyvest_primary_mapped_ownership_review_hold.sql
+\ir ../../../../../supabase/migrations/20261101190000_piggyvest_primary_onboarding_review_classification.sql
 CREATE SCHEMA IF NOT EXISTS auth;
 CREATE TABLE IF NOT EXISTS auth.users(id uuid PRIMARY KEY);
 \ir ../../../../../supabase/tests/piggyvest_primary_onboarding_review_hold.sql

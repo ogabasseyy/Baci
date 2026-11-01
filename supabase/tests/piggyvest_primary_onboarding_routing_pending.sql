@@ -170,7 +170,7 @@ BEGIN
     (v_claim->>'intentId')::uuid, (v_claim->>'claimToken')::uuid, 'pv-customer-2', 'pv-wallet-2', '01JBZ8Q5W3X9R2K4M6N8P0T2V4'),
     'second routing-pending ids not recorded');
   PERFORM pg_temp.check(piggyvest_primary.resolve_onboarding_routing(pg_temp.scope(2),
-    pg_temp.ids('pv-customer-2', 'pv-wallet-2'), false), 'a contradicted routing did not resolve');
+    pg_temp.ids('pv-customer-2', 'pv-wallet-2'), false, 'routing'), 'a contradicted routing did not resolve');
   PERFORM pg_temp.check(pg_temp.state(2) = 'rejected:pv-customer-2:pv-wallet-2', 'not rejected with kept ids: ' || pg_temp.state(2));
   PERFORM pg_temp.check(piggyvest_primary.read_onboarding(pg_temp.scope(2)) IS NULL, 'a rejected wallet must not be usable');
   PERFORM pg_temp.check(NOT piggyvest_primary.verify_onboarding(pg_temp.scope(2), pg_temp.verify_proof('pv-customer-2', 'pv-wallet-2')),

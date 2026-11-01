@@ -19,13 +19,13 @@ describe('PRIMARY_WALLET_STATEMENTS', () => {
       'SELECT piggyvest_primary.read_onboarding_routing($1::jsonb) AS result'
     );
     expect(PRIMARY_WALLET_STATEMENTS.resolveRouting).toBe(
-      'SELECT piggyvest_primary.resolve_onboarding_routing($1::jsonb, $2::jsonb, $3::boolean) AS result'
+      'SELECT piggyvest_primary.resolve_onboarding_routing($1::jsonb, $2::jsonb, $3::boolean, $4::text) AS result'
     );
   });
 
   it('pins the one-step review statement', () => {
     expect(PRIMARY_WALLET_STATEMENTS.review).toBe(
-      'SELECT piggyvest_primary.record_onboarding_review($1::jsonb, $2::uuid, $3::uuid, $4::text, $5::text) AS result'
+      'SELECT piggyvest_primary.record_onboarding_review($1::jsonb, $2::uuid, $3::uuid, $4::text, $5::text, $6::text) AS result'
     );
   });
 

@@ -171,6 +171,7 @@ describe('primary wallet GET: routing-pending recovery', () => {
     mocks.recover.mockResolvedValue('rejected');
     mocks.execute
       .mockResolvedValueOnce({ rows: [{ result: null }] })
+      .mockResolvedValueOnce({ rows: [{ result: 'routing' }] })
       .mockResolvedValueOnce({ rows: [{ result: 'routing' }] });
 
     const first = await GET(new NextRequest(url));
@@ -190,7 +191,7 @@ describe('primary wallet GET: routing-pending recovery', () => {
     const refreshBody = await refresh.json();
     expect(refreshBody).toEqual(firstBody);
     expect(mocks.recover).toHaveBeenCalledOnce();
-    expect(mocks.execute).toHaveBeenCalledTimes(2);
+    expect(mocks.execute).toHaveBeenCalledTimes(3);
     expect(JSON.parse(mocks.execute.mock.calls[0][1][0])).toEqual({
       merchantId,
       customerId,

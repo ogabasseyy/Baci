@@ -52,6 +52,7 @@ export async function recoverPrimaryWalletRouting(input: {
   });
   if (routing === 'unreadable' || routing === 'unsettled') return 'pending';
   const routed = routing === 'routed';
+  const reviewReason = routing === 'routing_contradicted' ? 'routing' : null;
   const proof = {
     providerCustomerId: pending.providerCustomerId,
     providerWalletId: pending.providerWalletId,
@@ -60,7 +61,7 @@ export async function recoverPrimaryWalletRouting(input: {
   try {
     const response = await input.execute(
       PRIMARY_WALLET_STATEMENTS.resolveRouting,
-      [scopeJson, JSON.stringify(proof), String(routed)]
+      [scopeJson, JSON.stringify(proof), String(routed), reviewReason]
     );
     resolved = schemas.recordedRows.parse(response.rows)[0].result;
   } catch {

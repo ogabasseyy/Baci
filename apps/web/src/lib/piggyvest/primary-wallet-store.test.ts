@@ -198,6 +198,30 @@ describe('primary wallet storage boundary', () => {
         claimToken,
         'provider-customer',
         'provider-wallet',
+        null,
+      ]
+    );
+  });
+
+  it('records routing-only evidence on the atomic review write', async () => {
+    const execute = vi.fn().mockResolvedValue({ rows: [{ result: true }] });
+    await createPrimaryWalletStore({ scope, execute }).recordReview({
+      ...scope,
+      intentId,
+      claimToken,
+      providerCustomerId: 'provider-customer',
+      providerWalletId: 'provider-wallet',
+      reviewReason: 'routing',
+    });
+    expect(execute).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('piggyvest_primary.record_onboarding_review'),
+      [
+        JSON.stringify(scope),
+        intentId,
+        claimToken,
+        'provider-customer',
+        'provider-wallet',
+        'routing',
       ]
     );
   });

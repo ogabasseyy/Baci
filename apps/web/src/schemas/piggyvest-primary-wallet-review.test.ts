@@ -23,12 +23,16 @@ describe('primary wallet review database response boundary', () => {
     expect(schemas.rows.safeParse([{ result: reason }]).success).toBe(false);
   });
 
-  it.each([
-    [],
-    [{ result: null }, { result: 'ownership' }],
-    [{}],
-    [{ result: null, walletId: 'unexpected' }],
-  ])('rejects missing, ambiguous or overbroad database rows %j', (rows) => {
+  it.each(
+    [
+      [],
+      [{ result: null }, { result: 'ownership' }],
+      [{}],
+      [{ result: null, walletId: 'unexpected' }],
+    ].map((rows) => ({ rows }))
+  )('rejects missing, ambiguous or overbroad database rows $rows', ({
+    rows,
+  }) => {
     expect(schemas.rows.safeParse(rows).success).toBe(false);
   });
 });

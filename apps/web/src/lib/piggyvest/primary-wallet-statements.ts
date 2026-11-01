@@ -17,11 +17,12 @@ export const PRIMARY_WALLET_STATEMENTS = {
   readRouting:
     'SELECT piggyvest_primary.read_onboarding_routing($1::jsonb) AS result',
   resolveRouting:
-    'SELECT piggyvest_primary.resolve_onboarding_routing($1::jsonb, $2::jsonb, $3::boolean) AS result',
+    'SELECT piggyvest_primary.resolve_onboarding_routing($1::jsonb, $2::jsonb, $3::boolean, $4::text) AS result',
   // A created wallet kept only for review: rejected with its ids in one
-  // claim-fenced write, never routing pending (20261031230000).
+  // claim-fenced write, never routing pending (20261031230000). Routing-only
+  // contradictions can carry their narrower review reason atomically.
   review:
-    'SELECT piggyvest_primary.record_onboarding_review($1::jsonb, $2::uuid, $3::uuid, $4::text, $5::text) AS result',
+    'SELECT piggyvest_primary.record_onboarding_review($1::jsonb, $2::uuid, $3::uuid, $4::text, $5::text, $6::text) AS result',
   ownershipHold:
     'SELECT piggyvest_primary.record_onboarding_ownership_hold($1::jsonb, $2::uuid, $3::uuid) AS result',
   readReview:

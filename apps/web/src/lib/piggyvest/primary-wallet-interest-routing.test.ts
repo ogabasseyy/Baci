@@ -33,17 +33,21 @@ describe('primary wallet interest routing readback', () => {
 
   it.each([
     ['routed', routedWallet()],
-    ['contradicted', routedWallet({ interest_payout_wallet: OTHER_WALLET_ID })],
+    [
+      'routing_contradicted',
+      routedWallet({ interest_payout_wallet: OTHER_WALLET_ID }),
+    ],
     ['contradicted', routedWallet({ id: 'another-wallet' })],
     ['contradicted', routedWallet({ api_customer_id: 'another-customer' })],
     ['contradicted', routedWallet({ business_id: 'another-business' })],
     ['contradicted', { interest_enabled: true }],
-    ['contradicted', routedWallet({ interest_payout_wallet: 7 })],
+    ['routing_contradicted', routedWallet({ interest_payout_wallet: 7 })],
+    ['routing_contradicted', routedWallet({ interest_enabled: 'false' })],
     ['unsettled', routedWallet({ interest_payout_wallet: null })],
     ['unsettled', routedWallet({ interest_payout_wallet: undefined })],
-    ['contradicted', routedWallet({ interest_enabled: false })],
+    ['routing_contradicted', routedWallet({ interest_enabled: false })],
     [
-      'contradicted',
+      'routing_contradicted',
       routedWallet({ interest_enabled: false, interest_payout_wallet: null }),
     ],
     ['unsettled', routedWallet({ interest_enabled: null })],

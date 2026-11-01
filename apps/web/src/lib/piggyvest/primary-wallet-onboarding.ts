@@ -211,21 +211,29 @@ export async function onboardPiggyvestPrimaryWallet(
         ? { status: 'pending' }
         : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
     }
-    if (routing !== 'routed') {
+    if (routing === 'contradicted' || routing === 'routing_contradicted') {
       // The created wallet holds a real DVA: keep its ids for review and DVA
       // closure before any deletion. Interest settings are immutable.
       emitPiggyvestWebhookAlert('PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW', {
         reason: 'main wallet interest routing contradicted at onboarding',
         operationId: claimedScope.intentId,
       });
+      const reviewReason =
+        routing === 'routing_contradicted' ? 'routing' : undefined;
       const kept = await keepCreatedWalletForReview({
         storage: input.storage,
         claimedScope,
         providerCustomerId: result.data.customer_id,
         providerWalletId: result.data.wallet_id,
+        reviewReason,
       });
       return kept
-        ? { status: 'conflict', code: 'INTEREST_ROUTING_REVIEW_REQUIRED' }
+        ? {
+            status: 'conflict',
+            code: reviewReason
+              ? 'INTEREST_ROUTING_REVIEW_REQUIRED'
+              : 'OWNERSHIP_REVIEW_REQUIRED',
+          }
         : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
     }
     // A reclaimed intent retries the same fingerprinted request, so when

@@ -31,7 +31,10 @@ function reclaimedExisting() {
 
 // A contradicted wallet holds a real DVA: its ids are kept on the rejected
 // intent in one step for review and closure, never usable or recheckable.
-function expectKeptForReview(input: ReturnType<typeof onboardingFixture>) {
+function expectKeptForReview(
+  input: ReturnType<typeof onboardingFixture>,
+  reviewReason?: 'routing'
+) {
   const scope = {
     merchantId: input.verifiedIdentity.merchantId,
     customerId: input.verifiedIdentity.customerId,
@@ -49,6 +52,7 @@ function expectKeptForReview(input: ReturnType<typeof onboardingFixture>) {
     intentId: 'intent',
     claimToken: 'claim',
     ...ids,
+    ...(reviewReason ? { reviewReason } : {}),
   });
   expect(input.storage.recordRoutingPending).not.toHaveBeenCalled();
   expect(input.storage.recordRejected).not.toHaveBeenCalled();
@@ -108,15 +112,26 @@ describe('primary wallet onboarding interest routing', () => {
       'names another payout wallet',
       { interest_payout_wallet: OTHER_WALLET_ID },
     ],
-    ['belongs to another customer', { api_customer_id: 'someone-else' }],
-    ['is another wallet', { id: 'another-wallet' }],
-    ['belongs to another business', { business_id: 'other-business' }],
-  ])('sends a fresh wallet whose readback %s to review, never ready', async (_label, overrides) => {
+  ])('sends a fresh wallet whose readback %s to routing review, never ready', async (_label, overrides) => {
     const input = onboardingFixture();
     input.retrieveWallet.mockResolvedValue(routedWallet(overrides));
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual(REVIEW);
-    expectKeptForReview(input);
+    expectKeptForReview(input, 'routing');
     expect(input.storage.recordUncertain).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['belongs to another customer', { api_customer_id: 'someone-else' }],
+    ['is another wallet', { id: 'another-wallet' }],
+    ['belongs to another business', { business_id: 'other-business' }],
+  ])('keeps a readable identity mismatch as an ownership hold: %s', async (_label, overrides) => {
+    const input = onboardingFixture();
+    input.retrieveWallet.mockResolvedValue(routedWallet(overrides));
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'conflict',
+      code: 'OWNERSHIP_REVIEW_REQUIRED',
+    });
+    expectKeptForReview(input);
   });
 
   it.each([
@@ -131,7 +146,7 @@ describe('primary wallet onboarding interest routing', () => {
     const input = reclaimedExisting();
     input.retrieveWallet.mockResolvedValue(routedWallet(overrides));
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual(REVIEW);
-    expectKeptForReview(input);
+    expectKeptForReview(input, 'routing');
   });
 
   it.each([

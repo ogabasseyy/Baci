@@ -58,6 +58,7 @@ export interface PrimaryWalletOnboardingStorage {
       claimToken: string;
       providerCustomerId: string;
       providerWalletId: string;
+      reviewReason?: 'routing';
     }
   ): Promise<boolean>;
   recordRejected(

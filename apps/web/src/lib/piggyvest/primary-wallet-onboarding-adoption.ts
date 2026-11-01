@@ -64,12 +64,14 @@ export async function keepCreatedWalletForReview(input: {
   };
   providerCustomerId: string;
   providerWalletId: string;
+  reviewReason?: 'routing';
 }): Promise<boolean> {
   try {
     return await input.storage.recordReview({
       ...input.claimedScope,
       providerCustomerId: input.providerCustomerId,
       providerWalletId: input.providerWalletId,
+      ...(input.reviewReason ? { reviewReason: input.reviewReason } : {}),
     });
   } catch {
     return false;

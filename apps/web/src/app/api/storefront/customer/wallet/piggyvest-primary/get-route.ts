@@ -115,6 +115,29 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           retrievePiggyvestWallet(providerConfig, walletId),
       }).catch(() => 'unavailable' as const);
       if (recovery === 'rejected') {
+        // Recovery can reject for either an ownership contradiction or an
+        // immutable routing contradiction. Re-read the persisted, scoped
+        // classification before choosing the public response; if it cannot
+        // be confirmed, the outer handler fails closed with 503.
+        const rejectedReview = await readPrimaryWalletReview({
+          scope,
+          execute,
+        });
+        if (rejectedReview === 'ownership') {
+          return NextResponse.json(
+            {
+              error:
+                'Your wallet identity needs verification. Please contact support; no duplicate wallet will be created.',
+              code: 'OWNERSHIP_REVIEW_REQUIRED',
+            },
+            { status: 409, headers: { 'Cache-Control': 'no-store' } }
+          );
+        }
+        if (rejectedReview !== 'routing') {
+          throw new Error(
+            'Rejected wallet recovery has no review classification'
+          );
+        }
         return NextResponse.json(
           {
             error:

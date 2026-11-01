@@ -102,6 +102,7 @@ export function createPrimaryWalletStore(input: {
           parsed.claimToken,
           parsed.providerCustomerId,
           parsed.providerWalletId,
+          parsed.reviewReason ?? null,
         ]);
         return schemas.recordedRows.parse(response.rows)[0].result;
       } catch {

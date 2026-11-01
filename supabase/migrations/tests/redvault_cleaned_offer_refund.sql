@@ -64,9 +64,11 @@ BEGIN
  phase := 10;
  INSERT INTO private.uba_redvault_applications(id,order_id,discount_code_id,merchant_id,quote_version_id,quote_payload_hash,quote_payload,customer_email,checkout_key,request_hash,discount_kobo,eligible_subtotal_kobo,status)
  VALUES(application_id,order_id,discount_id,merchant_id,gen_random_uuid(),h,'{}','cleanup-buyer@example.com','CLEANUP-REFUND','CLEANUP-REFUND',100,50000,'approved');
+ -- Leave 10,000 kobo outside the merchandise refund so this exercises
+ -- the partial-unit refund path rather than full-payment reconciliation.
  phase := 11;
  INSERT INTO private.uba_redvault_payment_attempts(id,application_id,order_id,merchant_id,reference,quote_payload_hash,amount_kobo,currency,state,provider_response)
- VALUES(attempt_id,application_id,order_id,merchant_id,'CLEANUP-REFUND',h,50000,'NGN','approved',NULL);
+ VALUES(attempt_id,application_id,order_id,merchant_id,'CLEANUP-REFUND',h,60000,'NGN','approved',NULL);
  phase := 12;
  INSERT INTO private.uba_redvault_refunds(id,attempt_id,state,refund_type,idempotency_key,amount_kobo)
  VALUES(refund_id,attempt_id,'processing','merchandise_units','CLEANUP-REFUND',50000);

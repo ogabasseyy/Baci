@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { beforeEach, vi } from 'vitest';
 
 const operations = vi.hoisted(() => ({
   close: vi.fn(),
@@ -18,6 +18,10 @@ vi.mock('node:fs/promises', () => ({
 
 import { writeEvidenceAtomically } from './atomic-evidence-write';
 
+beforeEach(() => {
+  vi.resetAllMocks();
+});
+
 it('removes its temporary file even when closing it fails', async () => {
   operations.close.mockRejectedValue(new Error('close failed'));
   await expect(
@@ -28,4 +32,14 @@ it('removes its temporary file even when closing it fails', async () => {
     { force: true }
   );
   expect(operations.rename).not.toHaveBeenCalled();
+});
+
+it('preserves the original write failure when cleanup also fails', async () => {
+  operations.writeFile.mockRejectedValue(new Error('write failed'));
+  operations.close.mockRejectedValue(new Error('close failed'));
+  operations.rm.mockRejectedValue(new Error('remove failed'));
+  await expect(
+    writeEvidenceAtomically('/tmp/evidence.json', '{}')
+  ).rejects.toThrow('write failed');
+  expect(operations.rm).toHaveBeenCalled();
 });

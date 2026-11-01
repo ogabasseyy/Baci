@@ -1,10 +1,7 @@
 import { z } from 'zod';
+import { wholeSecondTimestampSchema } from './whole-second-timestamp';
 
 const digestSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
-const timestampSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/)
-  .refine((value) => new Date(value).toISOString() === value);
 const disabledUnprovenSchema = z
   .object({
     enabled: z.literal(false),
@@ -15,7 +12,7 @@ const disabledUnprovenSchema = z
 export const providerContractSchema = z
   .object({
     contractVersion: z.literal(1),
-    capturedAt: timestampSchema,
+    capturedAt: wholeSecondTimestampSchema,
     publicContractDigest: digestSchema,
     observationManifestDigest: digestSchema,
     capabilities: z

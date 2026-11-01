@@ -58,6 +58,15 @@ const errorPaginationLimits = {
 
 describe('core evidence chapter schema', () => {
   it.each([
+    '2026-02-30T00:00:00.000Z',
+    '2026-01-01T25:00:00.000Z',
+  ])('rejects impossible capturedAt %s', (capturedAt) => {
+    expect(
+      coreEvidenceChapterSchema.safeParse({ ...accountRead, capturedAt })
+        .success
+    ).toBe(false);
+  });
+  it.each([
     accountRead,
     menuGroupsItems,
     errorPaginationLimits,

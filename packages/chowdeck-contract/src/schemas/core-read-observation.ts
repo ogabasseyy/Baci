@@ -1,10 +1,7 @@
 import { z } from 'zod';
+import { wholeSecondTimestampSchema } from './whole-second-timestamp';
 
 const digestSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
-const wholeSecondTimestampSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/)
-  .refine((value) => new Date(value).toISOString() === value);
 
 export const coreObservationSchema = z
   .object({

@@ -1,10 +1,11 @@
 import { z } from 'zod';
+import { wholeSecondTimestampSchema } from './whole-second-timestamp';
 
 const status = z.enum(['documented', 'unproven']);
 const unknown = z.literal('unproven');
 const common = {
   version: z.literal(1),
-  capturedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.000Z$/),
+  capturedAt: wholeSecondTimestampSchema,
   publicContractDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
 };
 export const coreEvidenceChapterSchema = z.discriminatedUnion('chapter', [

@@ -3,6 +3,13 @@ import { coreObservationSchema } from './core-read-observation';
 const DIGEST = `sha256:${'d'.repeat(64)}`;
 
 describe('core read observation schema', () => {
+  it('returns a validation failure for an impossible time', () => {
+    expect(
+      coreObservationSchema.safeParse({
+        capturedAt: '2026-13-01T00:00:00.000Z',
+      }).success
+    ).toBe(false);
+  });
   it('rejects identity fields and unknown keys in persisted evidence', () => {
     const evidence = {
       contractVersion: 1,

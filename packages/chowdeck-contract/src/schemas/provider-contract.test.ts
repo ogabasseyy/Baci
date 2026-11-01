@@ -3,6 +3,13 @@ import { providerContractSchema } from './provider-contract';
 const DIGEST = `sha256:${'e'.repeat(64)}`;
 
 describe('provider contract schema', () => {
+  it('returns a validation failure for an impossible time', () => {
+    expect(
+      providerContractSchema.safeParse({
+        capturedAt: '2026-13-01T00:00:00.000Z',
+      }).success
+    ).toBe(false);
+  });
   it('rejects an enabled write capability in the provisional contract', () => {
     const contract = {
       contractVersion: 1,

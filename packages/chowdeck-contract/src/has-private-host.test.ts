@@ -30,6 +30,13 @@ describe('private host detection', () => {
     '[::1]',
     '[fd00::1]',
     '[fe80::1]',
+    '198.18.0.0',
+    '198.19.255.255',
+    '192.0.0.1',
+    '224.0.0.1',
+    '255.255.255.255',
+    '[64:ff9b::7f00:1]',
+    '[::127.0.0.1]',
   ])('rejects private host %s', (host) =>
     expect(hasPrivateHost(`http://${host}/`)).toBe(true));
   it.each([
@@ -37,6 +44,10 @@ describe('private host detection', () => {
     '172.32.0.0',
     '8.8.8.8',
     'chowdeck-api.readme.io',
+    '198.17.255.255',
+    '198.20.0.0',
+    '[fc0::1]',
+    '[fe8::1]',
   ])('accepts public host %s', (host) =>
     expect(hasPrivateHost(`http://${host}/`)).toBe(false));
   it('rejects an unparsable URL candidate', () => {

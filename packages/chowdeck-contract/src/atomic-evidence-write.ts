@@ -8,6 +8,8 @@ export async function writeEvidenceAtomically(
 ): Promise<void> {
   const temporaryPath = `${outputPath}.${randomUUID()}.tmp`;
   let ownsTemporaryPath = false;
+  let failed = false;
+  let operationError: unknown;
   let handle: FileHandle | undefined = await open(temporaryPath, 'wx', 0o600);
   ownsTemporaryPath = true;
 
@@ -17,11 +19,24 @@ export async function writeEvidenceAtomically(
     handle = undefined;
     await rename(temporaryPath, outputPath);
     ownsTemporaryPath = false;
-  } finally {
-    try {
-      await handle?.close();
-    } finally {
-      if (ownsTemporaryPath) await rm(temporaryPath, { force: true });
-    }
+  } catch (error) {
+    failed = true;
+    operationError = error;
   }
+  let cleanupFailed = false;
+  let cleanupError: unknown;
+  try {
+    await handle?.close();
+  } catch (error) {
+    cleanupFailed = true;
+    cleanupError = error;
+  }
+  try {
+    if (ownsTemporaryPath) await rm(temporaryPath, { force: true });
+  } catch (error) {
+    if (!cleanupFailed) cleanupError = error;
+    cleanupFailed = true;
+  }
+  if (failed) throw operationError;
+  if (cleanupFailed) throw cleanupError;
 }

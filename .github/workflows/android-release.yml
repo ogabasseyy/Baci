@@ -65,6 +65,23 @@ jobs:
         with:
           persist-credentials: false
 
+      # Thresholds must come from measured incremental high-water usage for
+      # each path; absence or malformed values fail closed before installs.
+      - name: Verify Android build filesystem capacity
+        env:
+          WORKSPACE_REQUIRED_BYTES: ${{ vars.ANDROID_ADMIN_WORKSPACE_REQUIRED_BYTES }}
+          PNPM_REQUIRED_BYTES: ${{ vars.ANDROID_ADMIN_PNPM_REQUIRED_BYTES }}
+          GRADLE_REQUIRED_BYTES: ${{ vars.ANDROID_ADMIN_GRADLE_REQUIRED_BYTES }}
+          TEMP_REQUIRED_BYTES: ${{ vars.ANDROID_ADMIN_TEMP_REQUIRED_BYTES }}
+        run: |
+          GRADLE_PREFLIGHT_DIR="${GRADLE_USER_HOME:-$HOME/.gradle}"
+          mkdir -p "$PNPM_STORE_DIR" "$GRADLE_PREFLIGHT_DIR"
+          bash .github/scripts/android-disk-preflight.sh \
+            "$WORKSPACE_REQUIRED_BYTES" workspace "$GITHUB_WORKSPACE" \
+            "$PNPM_REQUIRED_BYTES" pnpm "$PNPM_STORE_DIR" \
+            "$GRADLE_REQUIRED_BYTES" gradle "$GRADLE_PREFLIGHT_DIR" \
+            "$TEMP_REQUIRED_BYTES" temp "$RUNNER_TEMP"
+
       - name: Pre-run cleanup of stale secrets
         run: |
           rm -f "${{ runner.temp }}/release.keystore"

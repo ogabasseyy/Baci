@@ -1,0 +1,3 @@
+supabase/migrations/tests/storefront_order_offer_serialized_claim_exclusion.sql
+supabase/migrations/tests/storefront_offer_remaining_unit_snapshot.sql
+supabase/migrations/tests/redvault_offer_shipment_quantity.sql

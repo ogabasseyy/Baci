@@ -374,6 +374,38 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y postgresql-client postgresql-16
+      - name: Test offer-release item-lock concurrency
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+        run: python3 tools/test/offer_release_concurrency.py
+      - name: Verify REDVAULT transfer lock ordering
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/migrations/tests/run-redvault-transfer-lock.sh
+      - name: Verify legacy offer payment proofs
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/migrations/tests/run-offer-payment-proof.sh
+      - name: Verify mixed offer release snapshots
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/migrations/tests/run-offer-release-mixed.sh
+      - name: Verify REDVAULT legacy offer refund routing
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/migrations/tests/run-redvault-legacy-offer-routing.sh
       - name: Run disposable search suites
         env:
           PGHOST: localhost

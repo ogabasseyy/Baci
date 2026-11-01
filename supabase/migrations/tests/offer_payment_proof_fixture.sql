@@ -1,0 +1,15 @@
+CREATE SCHEMA auth;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('test.user_id',true),'')::uuid $$;
+CREATE TABLE public.customers (id uuid PRIMARY KEY, user_id uuid);
+CREATE TABLE public.orders (id uuid PRIMARY KEY, merchant_id uuid, customer_id uuid, tracking_token text, order_number text, payment_status text, shipping_status text, total numeric);
+CREATE TABLE public.transactions (id uuid PRIMARY KEY, order_id uuid, merchant_id uuid, amount numeric, currency text, status text, gateway text, gateway_reference text);
+CREATE TABLE public.products (id uuid PRIMARY KEY, merchant_id uuid, has_variants boolean, variant_model text, inventory_anchor_variant_id uuid, inventory_tracking_policy text);
+CREATE TABLE public.product_variants (id uuid PRIMARY KEY, inventory_tracking_policy text);
+CREATE TABLE public.order_items (id uuid PRIMARY KEY, order_id uuid, product_id uuid, variant_id uuid, quantity integer, offer_line boolean, product_offer_id uuid, offer_labels_snapshotted boolean);
+CREATE TABLE public.variant_inventory (order_item_id uuid, status text, reservation_expires_at timestamptz);
+INSERT INTO public.customers VALUES ('00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000002');
+INSERT INTO public.orders VALUES ('00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000004','00000000-0000-0000-0000-000000000001','offer-token','offer','paid','pending',100), ('00000000-0000-0000-0000-000000000005','00000000-0000-0000-0000-000000000004','00000000-0000-0000-0000-000000000001','plain-token','plain','paid','pending',100);
+INSERT INTO public.transactions VALUES ('00000000-0000-0000-0000-000000000006','00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000004',100,'NGN','success','test','offer-ref'), ('00000000-0000-0000-0000-000000000007','00000000-0000-0000-0000-000000000005','00000000-0000-0000-0000-000000000004',100,'NGN','success','test','plain-ref');
+INSERT INTO public.products VALUES ('00000000-0000-0000-0000-000000000008','00000000-0000-0000-0000-000000000004',false,'legacy',NULL,'serialized_strict');
+INSERT INTO public.order_items VALUES ('00000000-0000-0000-0000-000000000009','00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000008',NULL,1,true,NULL,true), ('00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000005','00000000-0000-0000-0000-000000000008',NULL,1,false,NULL,false);
+SELECT set_config('test.user_id','00000000-0000-0000-0000-000000000002',false);

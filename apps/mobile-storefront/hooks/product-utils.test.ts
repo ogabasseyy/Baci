@@ -39,7 +39,7 @@ jest.mock('@/lib/api', () => ({
 
 jest.mock('@/lib/config', () => ({
   CONFIG: {
-    MERCHANT_ID: 'merchant-1',
+    MERCHANT_ID: '77777777-7777-4777-8777-777777777777',
     MERCHANT_SLUG: 'ogabassey',
   },
 }));
@@ -162,7 +162,7 @@ const validProductRow = {
     {
       id: 'variant-128gb',
       product_id: '123e4567-e89b-12d3-a456-426614174000',
-      merchant_id: 'merchant-1',
+      merchant_id: '77777777-7777-4777-8777-777777777777',
       sku: 'IPHONE-13-PRO-128',
       price_override: 552000,
       primary_image: 'https://cdn.example.com/iphone-13-pro-128.jpg',
@@ -215,7 +215,7 @@ describe('product-utils', () => {
     mockFrom.mockReturnValue(query);
 
     const result = await fetchProductRow(
-      'merchant-1',
+      '77777777-7777-4777-8777-777777777777',
       'iphone-13-pro',
       'Product'
     );
@@ -223,7 +223,10 @@ describe('product-utils', () => {
     expect(result).toEqual({ data: validProductRow, error: null });
     expect(mockFrom).toHaveBeenCalledWith('products');
     expect(query.select).toHaveBeenCalledWith(PRODUCT_DETAIL_SELECT);
-    expect(query.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
+    expect(query.eq).toHaveBeenCalledWith(
+      'merchant_id',
+      '77777777-7777-4777-8777-777777777777'
+    );
     expect(query.eq).toHaveBeenCalledWith('status', 'active');
     expect(query.eq).toHaveBeenCalledWith('slug', 'iphone-13-pro');
   });
@@ -247,14 +250,14 @@ describe('product-utils', () => {
     }));
 
     const result = await resolveProductRow(
-      'merchant-1',
+      '77777777-7777-4777-8777-777777777777',
       'iphone-13-pro-128gb-premium-used'
     );
 
     expect(result).toEqual(validProductRow);
     expect(mockRpc).toHaveBeenCalledTimes(2);
     expect(mockRpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
-      p_merchant_id: null,
+      p_merchant_id: '77777777-7777-4777-8777-777777777777',
       p_product_ids: [validProductRow.id],
     });
   });
@@ -312,7 +315,10 @@ describe('product-utils', () => {
       return Promise.resolve({ data: null, error: null });
     });
 
-    const result = await resolveProductRow('merchant-1', 'iphone-13-pro');
+    const result = await resolveProductRow(
+      '77777777-7777-4777-8777-777777777777',
+      'iphone-13-pro'
+    );
 
     expect(mockFrom).toHaveBeenCalledTimes(1);
     expect(mockRpc).toHaveBeenCalledTimes(2);
@@ -322,7 +328,7 @@ describe('product-utils', () => {
       { count: 'exact' }
     );
     expect(mockRpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
-      p_merchant_id: null,
+      p_merchant_id: '77777777-7777-4777-8777-777777777777',
       p_product_ids: [validProductRow.id],
     });
     expect(
@@ -354,7 +360,7 @@ describe('product-utils', () => {
     mockFrom.mockReturnValue(query);
 
     await expect(
-      resolveProductRow('merchant-1', 'iphone-13-pro')
+      resolveProductRow('77777777-7777-4777-8777-777777777777', 'iphone-13-pro')
     ).resolves.toEqual(simpleProduct);
 
     expect(mockRpc).toHaveBeenCalledTimes(2);
@@ -365,7 +371,7 @@ describe('product-utils', () => {
       }
     );
     expect(mockRpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
-      p_merchant_id: null,
+      p_merchant_id: '77777777-7777-4777-8777-777777777777',
       p_product_ids: [validProductRow.id],
     });
   });
@@ -390,7 +396,10 @@ describe('product-utils', () => {
       error: null,
     }));
 
-    const result = await resolveProductRow('merchant-1', 'iphone-13-pro');
+    const result = await resolveProductRow(
+      '77777777-7777-4777-8777-777777777777',
+      'iphone-13-pro'
+    );
 
     expect(mockRpc).toHaveBeenCalledTimes(2);
     expect(result).toMatchObject({
@@ -413,7 +422,7 @@ describe('product-utils', () => {
     );
 
     await expect(
-      resolveProductRow('merchant-1', 'iphone-13-pro')
+      resolveProductRow('77777777-7777-4777-8777-777777777777', 'iphone-13-pro')
     ).resolves.toEqual({
       ...productWithoutEmbeddedVariants,
       variants_hydration_failed: true,
@@ -453,7 +462,10 @@ describe('product-utils', () => {
       return Promise.resolve({ data: null, error: null });
     });
 
-    const result = await resolveProductRow('merchant-1', 'iphone-13-pro');
+    const result = await resolveProductRow(
+      '77777777-7777-4777-8777-777777777777',
+      'iphone-13-pro'
+    );
 
     expect(result).toMatchObject({
       offers: [
@@ -466,7 +478,7 @@ describe('product-utils', () => {
       ],
     });
     expect(mockRpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
-      p_merchant_id: null,
+      p_merchant_id: '77777777-7777-4777-8777-777777777777',
       p_product_ids: [validProductRow.id],
     });
   });
@@ -480,7 +492,11 @@ describe('product-utils', () => {
     mockFrom.mockReturnValue(missingQuery);
 
     await expect(
-      resolveAndEvictProduct('merchant-1', 'missing-slug', queryClient)
+      resolveAndEvictProduct(
+        '77777777-7777-4777-8777-777777777777',
+        'missing-slug',
+        queryClient
+      )
     ).rejects.toThrow(
       'This product is no longer available. Refresh the app to remove outdated product cards.'
     );
@@ -499,13 +515,17 @@ describe('product-utils', () => {
           'product',
           PRODUCT_QUERY_VERSION,
           'missing-slug',
-          'merchant-1',
+          '77777777-7777-4777-8777-777777777777',
         ],
       })
     ).toBe(true);
     expect(
       predicate({
-        queryKey: ['product', 'missing-slug', 'merchant-1'],
+        queryKey: [
+          'product',
+          'missing-slug',
+          '77777777-7777-4777-8777-777777777777',
+        ],
       })
     ).toBe(true);
     expect(
@@ -514,7 +534,7 @@ describe('product-utils', () => {
           'product',
           PRODUCT_QUERY_VERSION,
           'another-slug',
-          'merchant-1',
+          '77777777-7777-4777-8777-777777777777',
         ],
       })
     ).toBe(false);
@@ -901,7 +921,7 @@ describe('product-utils', () => {
     mockFrom.mockReturnValue(query);
 
     const result = await fetchProductsPage(
-      'merchant-1',
+      '77777777-7777-4777-8777-777777777777',
       {
         category: 'cat-1',
         search: 'iphone14promax',
@@ -923,7 +943,7 @@ describe('product-utils', () => {
         category_id_filter: 'cat-1',
         condition_filter: 'new',
         max_price_filter: 600000,
-        merchant_id_param: 'merchant-1',
+        merchant_id_param: '77777777-7777-4777-8777-777777777777',
         min_price_filter: 400000,
         min_rating_filter: 4,
         result_limit: 2,
@@ -934,7 +954,10 @@ describe('product-utils', () => {
       })
     );
     expect(query.select).toHaveBeenCalledWith(PRODUCT_SELECT);
-    expect(query.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
+    expect(query.eq).toHaveBeenCalledWith(
+      'merchant_id',
+      '77777777-7777-4777-8777-777777777777'
+    );
     expect(query.eq).toHaveBeenCalledWith('status', 'active');
     expect(query.in).toHaveBeenCalledWith('id', [validProductRow.id, 'bad-id']);
     expect(result).toMatchObject({
@@ -953,7 +976,7 @@ describe('product-utils', () => {
 
     await expect(
       fetchProductsPage(
-        'merchant-1',
+        '77777777-7777-4777-8777-777777777777',
         {
           search: 'iphone14promax',
           limit: 2,
@@ -983,7 +1006,7 @@ describe('product-utils', () => {
 
     await expect(
       fetchProductsPage(
-        'merchant-1',
+        '77777777-7777-4777-8777-777777777777',
         {
           search: 'iphone14promax',
           limit: 2,
@@ -1006,7 +1029,7 @@ describe('product-utils', () => {
     mockFrom.mockReturnValue(query);
 
     await expect(
-      fetchAvailableBrands('merchant-1', {
+      fetchAvailableBrands('77777777-7777-4777-8777-777777777777', {
         category: 'cat-1',
         condition: 'Open Box',
         minPrice: 100000,
@@ -1014,7 +1037,10 @@ describe('product-utils', () => {
     ).resolves.toEqual(['Infinix', 'Samsung']);
 
     expect(query.select).toHaveBeenCalledWith('brand');
-    expect(query.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
+    expect(query.eq).toHaveBeenCalledWith(
+      'merchant_id',
+      '77777777-7777-4777-8777-777777777777'
+    );
     expect(query.eq).toHaveBeenCalledWith('status', 'active');
     expect(query.eq).toHaveBeenCalledWith('category_id', 'cat-1');
     expect(query.or).toHaveBeenCalledWith(
@@ -1040,14 +1066,14 @@ describe('product-utils', () => {
     }));
     mockFrom.mockReturnValue(query);
 
-    await fetchAvailableBrands('merchant-1', {
+    await fetchAvailableBrands('77777777-7777-4777-8777-777777777777', {
       search: 'iphone14promax',
     });
 
     expect(mockRpc).toHaveBeenCalledWith(
       'search_products_v2',
       expect.objectContaining({
-        merchant_id_param: 'merchant-1',
+        merchant_id_param: '77777777-7777-4777-8777-777777777777',
         search_query: 'iphone 14 pro max',
         status_filter: 'active',
       })

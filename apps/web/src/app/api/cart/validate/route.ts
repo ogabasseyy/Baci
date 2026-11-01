@@ -23,6 +23,7 @@ import {
 } from './resolve-cart-validation-offer-line';
 
 type CartProductRow = {
+  merchant_id: string;
   id: string;
   name: string;
   price: number | string | null;
@@ -96,22 +97,15 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient();
 
-    // Public-catalog intent: this lookup is deliberately unscoped by
-    // merchant — prices/stock/status are public data (identical values
-    // render on unauthenticated PDPs) and carts carry no merchant session.
-    // Merchant-scoped price enforcement lives in the orders route
-    // (computeOrderNegotiationDiscount + the order RPC), so validating a
-    // foreign active ID here cannot discount or misprice an order.
-    // The offer parent gate lives in the SQL authority (each row
-    // carries parent_eligible), so the variant list is only needed for
-    // variant lines themselves.
+    // Owner identity comes from public product rows, never a caller-selected
+    // lookup fallback. Anonymous offer reads are scoped separately per owner.
     const needsVariantList = validVariantIds.length > 0;
-    const [productsResult, variantsResult, offerMap] = await Promise.all([
+    const [productsResult, variantsResult] = await Promise.all([
       validFormatIds.length > 0
         ? supabase
             .from('products')
             .select(
-              'id, name, price, stock, stock_quantity, status, manage_stock, has_condition_offers, has_variants, variant_model, inventory_tracking_policy'
+              'id, merchant_id, name, price, stock, stock_quantity, status, manage_stock, has_condition_offers, has_variants, variant_model, inventory_tracking_policy'
             )
             .in('id', validFormatIds)
             .returns<CartProductRow[]>()
@@ -122,13 +116,16 @@ export async function POST(request: NextRequest) {
             productIds: Array.from(new Set(validFormatIds)),
           })
         : Promise.resolve({ data: null, error: null }),
-      fetchCartOfferPrices(
-        createOfferAuthorityRpcCall(supabase),
-        validationItems
-      ).catch((error: unknown) =>
-        error instanceof Error ? error : new Error('Offer query failed')
-      ),
     ]);
+    const offerMap = productsResult.error
+      ? new Error('Product query failed')
+      : await fetchCartOfferPrices(
+          createOfferAuthorityRpcCall(supabase),
+          validationItems,
+          productsResult.data ?? []
+        ).catch((error: unknown) =>
+          error instanceof Error ? error : new Error('Offer query failed')
+        );
 
     const catalog = resolveCartValidationCatalog({
       productsResult,

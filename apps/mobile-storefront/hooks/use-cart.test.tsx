@@ -1,3 +1,10 @@
+jest.mock('@/lib/config', () => ({
+  CONFIG: {
+    MERCHANT_ID: '77777777-7777-4777-8777-777777777777',
+    MERCHANT_SLUG: 'ogabassey',
+  },
+}));
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
@@ -195,7 +202,7 @@ describe('useCart stock validation', () => {
         expect(supabase.rpc).toHaveBeenCalledWith(
           'get_storefront_offer_resolution',
           {
-            p_merchant_id: null,
+            p_merchant_id: '77777777-7777-4777-8777-777777777777',
             p_product_ids: ['product-1'],
           }
         );

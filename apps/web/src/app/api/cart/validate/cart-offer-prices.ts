@@ -43,7 +43,8 @@ function toCartOfferRow(resolution: ResolvedOfferResolution): CartOfferRow {
  */
 export async function fetchCartOfferPrices(
   callRpc: OfferAuthorityRpcCall,
-  validationItems: OfferValidationItem[]
+  validationItems: OfferValidationItem[],
+  products: readonly { id: string; merchant_id: string }[]
 ): Promise<Map<string, CartOfferRow>> {
   const offerProductIds = Array.from(
     new Set(
@@ -59,19 +60,30 @@ export async function fetchCartOfferPrices(
     )
   );
 
-  // Public-catalog intent: unscoped by merchant (see the route) — the
-  // authority still gates on published-or-admin merchants.
-  const resolutions = await fetchOfferResolutions(callRpc, {
-    merchantId: null,
-    productIds: offerProductIds,
-  });
-
+  const owners = new Map(
+    products.map((product) => [product.id.toLowerCase(), product.merchant_id])
+  );
+  const groups = new Map<string, string[]>();
+  for (const id of offerProductIds) {
+    if (!owners.has(id.toLowerCase())) continue; // A missing product remains invalid to the route.
+    const merchant = owners.get(id.toLowerCase());
+    if (!merchant || !uuidRegex.test(merchant))
+      throw new Error('Cannot verify offer merchant');
+    const ids = groups.get(merchant) ?? [];
+    ids.push(id);
+    groups.set(merchant, ids);
+  }
   const rows = new Map<string, CartOfferRow>();
-  for (const resolution of resolutions.values()) {
-    rows.set(
-      makeOfferLineKey(resolution.productId, resolution.offerId),
-      toCartOfferRow(resolution)
-    );
+  for (const [merchantId, productIds] of groups) {
+    const resolutions = await fetchOfferResolutions(callRpc, {
+      merchantId,
+      productIds,
+    });
+    for (const resolution of resolutions.values())
+      rows.set(
+        makeOfferLineKey(resolution.productId, resolution.offerId),
+        toCartOfferRow(resolution)
+      );
   }
   return rows;
 }

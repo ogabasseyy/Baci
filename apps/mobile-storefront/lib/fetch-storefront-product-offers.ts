@@ -5,6 +5,7 @@ import {
   type ResolvedOfferResolution,
 } from '@baci/shared/lib';
 import { withSupabaseRetry } from '@/lib/api';
+import { CONFIG } from '@/lib/config';
 import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 
@@ -24,7 +25,7 @@ export interface StorefrontProductConditionOfferRow {
 /**
  * Active condition offers through the single offer-resolution
  * authority (anon-executable, active rows only). Reads through the
- * shared chunking client (200 ids per unscoped call, per the SQL
+ * shared chunking client (1000 ids per merchant-scoped call, per the SQL
  * batch cap) instead of one unbounded call — no per-product fan-out
  * and no 201st-id cliff. Prices read the live basis and quantities
  * the allocatable stock (policy-capped, parent-inherited): exactly
@@ -44,6 +45,8 @@ export async function getStorefrontProductOffersByProductIds(
     return {} as Record<string, StorefrontProductConditionOfferRow[]>;
   }
 
+  if (!isOfferAuthorityId(CONFIG.MERCHANT_ID)) return null;
+
   // Malformed ids cannot join the batched authority call (it throws
   // on any malformed id); they hydrate offerless individually so one
   // stale id never poisons the whole batch (mirrors the blog path).
@@ -51,7 +54,7 @@ export async function getStorefrontProductOffersByProductIds(
     isOfferAuthorityId(id)
   );
 
-  // Retry lives inside the adapter so every 200-id chunk of a large
+  // Retry lives inside the adapter so every merchant-scoped chunk of a large
   // set gets its own retries; a chunk failure still fails the whole
   // lookup soft (null), exactly like the old single call.
   const callRpc: OfferAuthorityRpcCall = (args) =>
@@ -77,7 +80,7 @@ export async function getStorefrontProductOffersByProductIds(
   let resolutions: Map<string, ResolvedOfferResolution>;
   try {
     resolutions = await fetchOfferResolutions(callRpc, {
-      merchantId: null,
+      merchantId: CONFIG.MERCHANT_ID,
       productIds: validProductIds,
     });
   } catch (error) {

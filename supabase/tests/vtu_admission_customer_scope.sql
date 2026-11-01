@@ -177,15 +177,28 @@ END;
 $missing$;
 SET LOCAL ROLE anon;
 SELECT set_config('request.jwt.claim.role', 'anon', true);
+-- Assert the effective anonymous ACL without executing the denied function:
+-- the pinned Supabase PostgreSQL image crashes its backend on that permission
+-- error. has_function_privilege includes PUBLIC and inherited role grants.
 DO $anon$
+BEGIN
+  IF has_function_privilege(current_user, 'public.vtu_admission_proof(text,text)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'anonymous admission execute privilege granted';
+  END IF;
+END;
+$anon$;
+-- Independently exercise the function's claim guard through a role with
+-- EXECUTE. A mismatched anonymous JWT must still be refused internally.
+SET LOCAL ROLE authenticated;
+DO $anon_claim$
 BEGIN
   BEGIN
     PERFORM public.vtu_admission_proof('wrpc-m1', 'wrpc-fp-1');
-    RAISE EXCEPTION 'anonymous admission allowed';
+    RAISE EXCEPTION 'anonymous admission claim accepted';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
 END;
-$anon$;
+$anon_claim$;
 SET LOCAL ROLE service_role;
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
 DO $service$

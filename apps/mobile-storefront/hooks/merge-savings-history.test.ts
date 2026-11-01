@@ -48,7 +48,7 @@ it('keeps undated legacy reversals visible after dated activity without inventin
   ]);
   expect(undated.created_at).toBeNull();
 });
-it('keeps at most twenty entries without changing signed reversal amounts', () => {
+it('keeps all ledger entries without changing signed reversal amounts', () => {
   const reversal: Transaction = {
     ...interest,
     id: 'reversal',
@@ -64,5 +64,15 @@ it('keeps at most twenty entries without changing signed reversal amounts', () =
       })),
       [interest]
     )
-  ).toHaveLength(20);
+  ).toHaveLength(26);
+});
+
+it('preserves a wallet funding credit behind twenty newer interest entries for confirmation', () => {
+  const newerInterest = Array.from({ length: 20 }, (_, index) => ({
+    ...interest,
+    id: `interest-${index}`,
+  }));
+  const merged = mergeSavingsHistory([bank], newerInterest);
+  expect(merged).toHaveLength(21);
+  expect(merged).toContainEqual(bank);
 });

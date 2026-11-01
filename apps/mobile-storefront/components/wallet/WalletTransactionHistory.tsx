@@ -2,6 +2,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import type Colors from '@/constants/Colors';
+import { WALLET_HISTORY_PAGE_SIZE } from '@/constants/wallet-history';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { hexToRgba } from '@/lib/hex-to-rgba';
 import { styles } from './wallet.styles';
@@ -99,7 +100,7 @@ export function WalletTransactionHistory({
           </Text>
         </View>
       ) : (
-        transactions.map((transaction) => {
+        transactions.slice(0, WALLET_HISTORY_PAGE_SIZE).map((transaction) => {
           const amount = transaction.amount;
           const amountAvailable = amount !== null;
           const isCredit =

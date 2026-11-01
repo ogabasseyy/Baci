@@ -1,4 +1,3 @@
-import { WALLET_HISTORY_PAGE_SIZE } from '@/constants/wallet-history';
 import type { Transaction } from './wallet-query';
 
 export function mergeSavingsHistory(
@@ -13,18 +12,18 @@ export function mergeSavingsHistory(
   ]) {
     unique.set(entry.id, entry);
   }
-  return [...unique.values()]
-    .sort((first, second) => {
-      if (first.created_at === null || second.created_at === null) {
-        if (first.created_at !== second.created_at) {
-          return first.created_at === null ? 1 : -1;
-        }
-        return first.id.localeCompare(second.id);
+  // Funding confirmation also consumes these rows. Limit only the rendered
+  // history, so interest entries cannot evict an otherwise fetched top-up.
+  return [...unique.values()].sort((first, second) => {
+    if (first.created_at === null || second.created_at === null) {
+      if (first.created_at !== second.created_at) {
+        return first.created_at === null ? 1 : -1;
       }
-      return (
-        Date.parse(second.created_at) - Date.parse(first.created_at) ||
-        first.id.localeCompare(second.id)
-      );
-    })
-    .slice(0, WALLET_HISTORY_PAGE_SIZE);
+      return first.id.localeCompare(second.id);
+    }
+    return (
+      Date.parse(second.created_at) - Date.parse(first.created_at) ||
+      first.id.localeCompare(second.id)
+    );
+  });
 }

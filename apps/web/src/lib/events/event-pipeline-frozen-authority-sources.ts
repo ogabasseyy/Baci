@@ -119,8 +119,9 @@ export const eventPipelineFrozenRoutes = {
   // notification authority is added.
   // Re-pinned for explicit UBA recovery authentication and proof binding.
   // The recovery changes add no privileged or notification authority.
+  // POD admission uses the normal RLS client; notification/service authority is unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '7f2a55370ed2fe5aa372a1d42c5430d536c274c2ffccf668862bf04ae4e9e1cc',
+    '323e7606dbf97efeca5dce5a98edfdf01df9c49aac617f4fa0549d39594070c3',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

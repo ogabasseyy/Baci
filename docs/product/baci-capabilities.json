@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-31T12:06:59+00:00",
+  "reviewed_at": "2026-11-01T15:08:10+00:00",
   "source_revision": "7c78f7571e3f2449484e15ab5a089707bf141382",
-  "evidence_digest": "bf9b0c4f1f958401868636798143f0372fadc785f0d5d034decdfd4893e18470",
-  "claims_digest": "42b5d7395723eaf918916bc2ef8a29b2e2c15a6fb1139cccaca537dc6366e819",
+  "evidence_digest": "0f68c1575993e0f8ebfa3413a5bae817ee1783cbdcf515fcf74f0d7b83317140",
+  "claims_digest": "91dde0d7c66a8657a20c63cba3c19dfdd574fa6db2c38051a39509d1a36a5208",
   "review_scope": "Source evidence only. Re-reviewed shipping after the booking sender change: for domestic order bookings, a blank or implausible store phone now stops booking with 400 MERCHANT_SENDER_PHONE_INVALID before any provider request; origin-missing, merchant-missing and lookup-failure codes are unchanged. The shipping claim and its merchant-configuration limitation remain accurate. Re-reviewed the serialized inventory sheet after adding merchant assignment controls: it still supports stock-management workflows; the CSV, variants, permissions and other cited capability claims are unchanged.  Support-chat health, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment, native acceptance and transaction readiness require separate verification.",
   "capabilities": [
     {

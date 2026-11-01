@@ -1,9 +1,9 @@
 # Baci capabilities and agent access
 
-Reviewed 31 October 2026 against source revision
-`add71b5ae9b1e0a31a9cdf62b408b4dc7e916ac2`. The shipment-booking merchant sender
-change was re-reviewed and tested; other cited source evidence remains unchanged
-across the latest main sync. This is a navigation map, not authorization or proof
+Reviewed 1 November 2026 against source revision
+`7c78f7571e3f2449484e15ab5a089707bf141382`. The serialized inventory sheet
+and its catalog capability claim were re-reviewed after adding offer assignment;
+the other cited capability and agent-access evidence remains unchanged. This is a navigation map, not authorization or proof
 of current deployment. Check the current implementation, live tool discovery and
 merchant entitlement before calling or claiming a tool.
 

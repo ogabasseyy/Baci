@@ -2,6 +2,7 @@ import { readFlag, readFlags } from './ogabassey-layout-cli-options';
 import { extractDependencyUrls } from './ogabassey-layout-dependencies';
 import {
   firstPostponedBoundaryOffset,
+  hasCompiledMarker,
   hasHeroPreload,
   hasMarker,
   markerNeedles,
@@ -128,7 +129,9 @@ export async function assertOgabasseyLayoutFeasibility(
   const criticalDependencyFiles = [...assetBodies.entries()]
     .filter(
       ([, body]) =>
-        body.includes(options.cssSentinel) || hasMarker(body, needles)
+        body.includes(options.cssSentinel) ||
+        hasMarker(body, needles) ||
+        hasCompiledMarker(body, options.marker)
     )
     .map(([url]) => url)
     .sort();
@@ -215,6 +218,9 @@ export async function assertOgabasseyLayoutFeasibility(
       html,
       options.negativeRouteEvidence
     );
+    if (html.includes(options.cssSentinel)) {
+      throw new Error(`${capture.kind} capture leaked critical CSS`);
+    }
     if (hasMarker(html, needles)) {
       throw new Error(`${capture.kind} capture leaked the critical marker`);
     }
@@ -232,7 +238,8 @@ export async function assertOgabasseyLayoutFeasibility(
       if (
         criticalDependencyFiles.includes(dependency) ||
         body.includes(options.cssSentinel) ||
-        hasMarker(body, needles)
+        hasMarker(body, needles) ||
+        hasCompiledMarker(body, options.marker)
       ) {
         throw new Error(
           `${capture.kind} leaked OgaBassey critical dependency ${dependency}`

@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   firstPostponedBoundaryOffset,
+  hasCompiledMarker,
   hasHeroPreload,
   hasMarker,
   markerNeedles,
 } from './ogabassey-layout-html';
 
 describe('hero preload detection', () => {
+  it('recognizes compiled object properties with optional spacing', () => {
+    expect(hasCompiledMarker('{"data-check": "a.b"}', 'data-check=a.b')).toBe(
+      true
+    );
+    expect(hasCompiledMarker('{"data-check": "axb"}', 'data-check=a.b')).toBe(
+      false
+    );
+  });
   it('recognizes responsive candidates with commas in transformation URLs', () => {
     const hero =
       '/cdn-image/width=750,quality=70,format=avif/core-assets/hero.avif';

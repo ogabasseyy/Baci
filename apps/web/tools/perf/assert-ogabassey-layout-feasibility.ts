@@ -1,3 +1,4 @@
+import { readFlag, readFlags } from './ogabassey-layout-cli-options';
 import { extractDependencyUrls } from './ogabassey-layout-dependencies';
 import {
   firstPostponedBoundaryOffset,
@@ -7,12 +8,18 @@ import {
 } from './ogabassey-layout-html';
 import { validStoreIdentifier } from './ogabassey-layout-identifiers';
 import {
-  type LayoutCaptureManifest,
-  layoutCaptureManifestSchema,
+  parseLayoutCaptureManifest,
   prerenderManifestSchema,
 } from './ogabassey-layout-manifest-schema';
 import { loadAssetBodies } from './ogabassey-layout-prebuilt-assets';
-import { readArtifactFile } from './ogabassey-layout-safe-file';
+import {
+  assertNegativeRouteEvidence,
+  type NegativeRouteKind,
+} from './ogabassey-layout-route-evidence';
+import {
+  readArtifactFile,
+  readRawArtifact,
+} from './ogabassey-layout-safe-file';
 
 interface AssertionOptions {
   captureDir: string;
@@ -22,6 +29,7 @@ interface AssertionOptions {
   identifiers: readonly string[];
   marker: string;
   nextDir: string;
+  negativeRouteEvidence: Record<NegativeRouteKind, string>;
   prebuiltDir: string;
 }
 
@@ -30,38 +38,6 @@ interface AssertionReport {
   generatedIdentifiers: string[];
   markerOffsets: Record<string, number>;
   passed: true;
-}
-
-function asManifest(value: unknown): LayoutCaptureManifest {
-  const parsed = layoutCaptureManifestSchema.safeParse(value);
-  if (!parsed.success)
-    throw new Error('Invalid layout feasibility capture manifest');
-  return parsed.data;
-}
-
-async function readRawArtifact(
-  nextDir: string,
-  identifier: string
-): Promise<string> {
-  const candidates = [
-    `server/app/${identifier}.html`,
-    `server/app/${identifier}/page.html`,
-    `server/app/${identifier}/index.html`,
-  ];
-  for (const candidate of candidates) {
-    try {
-      return (await readArtifactFile(nextDir, candidate)).toString('utf8');
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        'code' in error &&
-        (error.code === 'ENOENT' || error.code === 'ENOTDIR')
-      )
-        continue;
-      throw error;
-    }
-  }
-  throw new Error(`${identifier} raw route artifact was not found`);
 }
 
 export async function assertOgabasseyLayoutFeasibility(
@@ -128,7 +104,7 @@ export async function assertOgabasseyLayoutFeasibility(
     staticShells.set(identifier, html.slice(0, boundaryOffset));
   }
 
-  const manifest = asManifest(
+  const manifest = parseLayoutCaptureManifest(
     JSON.parse(
       (
         await readArtifactFile(options.captureDir, 'capture-manifest.json')
@@ -233,6 +209,12 @@ export async function assertOgabasseyLayoutFeasibility(
     const html = (
       await readArtifactFile(options.captureDir, capture.htmlPath)
     ).toString('utf8');
+    if (capture.kind === 'home') throw new Error('Unexpected home capture');
+    assertNegativeRouteEvidence(
+      capture.kind,
+      html,
+      options.negativeRouteEvidence
+    );
     if (hasMarker(html, needles)) {
       throw new Error(`${capture.kind} capture leaked the critical marker`);
     }
@@ -267,19 +249,6 @@ export async function assertOgabasseyLayoutFeasibility(
   };
 }
 
-function readFlags(name: string): string[] {
-  return process.argv.flatMap((value, index) => {
-    const next = process.argv[index + 1];
-    return value === name && next ? [next] : [];
-  });
-}
-
-function readFlag(name: string): string {
-  const [value] = readFlags(name);
-  if (!value || value.startsWith('--')) throw new Error(`Missing ${name}`);
-  return value;
-}
-
 async function main() {
   const report = await assertOgabasseyLayoutFeasibility({
     captureDir: readFlag('--capture-dir'),
@@ -289,6 +258,12 @@ async function main() {
     identifiers: readFlags('--identifier'),
     marker: readFlag('--marker'),
     nextDir: readFlag('--next-dir'),
+    negativeRouteEvidence: {
+      category: readFlag('--category-evidence'),
+      pdp: readFlag('--pdp-evidence'),
+      blog: readFlag('--blog-evidence'),
+      generic: readFlag('--generic-evidence'),
+    },
     prebuiltDir: readFlag('--prebuilt-dir'),
   });
   console.log(JSON.stringify(report, null, 2));

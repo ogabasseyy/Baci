@@ -32,9 +32,11 @@ export function hasHeroPreload(html: string, heroHint: string): boolean {
       attrs.get('rel')?.toLowerCase() === 'preload' &&
       attrs.get('as')?.toLowerCase() === 'image' &&
       (attrs.get('href') === heroHint ||
-        (attrs.get('imagesrcset') ?? '')
-          .split(',')
-          .some((candidate) => candidate.trim().split(/\s+/)[0] === heroHint))
+        [
+          ...(attrs.get('imagesrcset') ?? '').matchAll(
+            /(?:^|,\s*)(\S+?)\s+(?:\d+w|\d+(?:\.\d+)?x)(?=\s*(?:,|$))/g
+          ),
+        ].some((candidate) => candidate[1] === heroHint))
     );
   });
 }

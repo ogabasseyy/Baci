@@ -9,6 +9,31 @@ import {
 } from './assert-ogabassey-layout-feasibility.test-support';
 
 describe('assertOgabasseyLayoutFeasibility', () => {
+  it('rejects a streamed soft 404 as a negative route capture', async () => {
+    const fixture = await writeFixture();
+    const manifestPath = path.join(fixture.captureDir, 'capture-manifest.json');
+    const { readFile } = await import('node:fs/promises');
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+    const category = manifest.captures.find(
+      (capture: { kind: string }) => capture.kind === 'category'
+    );
+    category.dependencyFiles = [];
+    await writeFile(manifestPath, JSON.stringify(manifest));
+    await writeFile(
+      path.join(fixture.captureDir, category.htmlPath),
+      '<html><meta name="robots" content="noindex"><h1>404: This page could not be found</h1></html>'
+    );
+    await expect(
+      assertOgabasseyLayoutFeasibility({
+        ...fixture,
+        cssSentinel: SENTINEL,
+        genericIdentifier: 'cwv-layout-generic-fixture',
+        identifiers: ['ogabassey.com', 'ogabassey'],
+        marker: 'data-ogabassey-critical-spike=v1',
+        heroHint: HERO_HINT,
+      })
+    ).rejects.toThrow(/category.*route evidence/i);
+  });
   it('rejects missing CSS sentinel even if a script contains the marker', async () => {
     const fixture = await writeFixture();
     await writeFile(

@@ -32,3 +32,12 @@ export const prerenderManifestSchema = z.object({
 });
 
 export type LayoutCaptureManifest = z.infer<typeof layoutCaptureManifestSchema>;
+
+export function parseLayoutCaptureManifest(
+  value: unknown
+): LayoutCaptureManifest {
+  const parsed = layoutCaptureManifestSchema.safeParse(value);
+  if (!parsed.success)
+    throw new Error('Invalid layout feasibility capture manifest');
+  return parsed.data;
+}

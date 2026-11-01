@@ -1,8 +1,19 @@
-import { mkdtemp, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { expect, it } from 'vitest';
-import { readArtifactFile } from './ogabassey-layout-safe-file';
+import {
+  readArtifactFile,
+  readRawArtifact,
+} from './ogabassey-layout-safe-file';
+
+it('finds a route artifact and fails if no candidate exists', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'layout-route-'));
+  await mkdir(path.join(root, 'server/app/shop'), { recursive: true });
+  await writeFile(path.join(root, 'server/app/shop/page.html'), 'route');
+  expect(await readRawArtifact(root, 'shop')).toBe('route');
+  await expect(readRawArtifact(root, 'missing')).rejects.toThrow(/not found/i);
+});
 
 it('reads regular files and rejects traversal and symbolic links', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'layout-safe-'));

@@ -33,6 +33,14 @@ describe('layout feasibility CLI entry points', () => {
         'ogabassey',
         '--marker',
         'data-ogabassey-critical-spike=v1',
+        '--category-evidence',
+        fixture.negativeRouteEvidence.category,
+        '--pdp-evidence',
+        fixture.negativeRouteEvidence.pdp,
+        '--blog-evidence',
+        fixture.negativeRouteEvidence.blog,
+        '--generic-evidence',
+        fixture.negativeRouteEvidence.generic,
       ],
       { encoding: 'utf8' }
     );

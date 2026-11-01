@@ -131,7 +131,7 @@ export async function writeFixture(options?: {
         : '';
     await writeFile(
       path.join(captureDir, capture.htmlPath),
-      `<html><head>${homeHint}${refs}${extra}</head><body>${marker}${homeMarker}</body></html>`
+      `<html><head>${homeHint}${refs}${extra}</head><body>${marker}${homeMarker}fixture-${capture.kind}</body></html>`
     );
   }
   await writeFile(
@@ -198,5 +198,15 @@ export async function writeFixture(options?: {
     await mkdir(path.dirname(output), { recursive: true });
     await copyFile(path.join(captureDir, 'assets', name), output);
   }
-  return { captureDir, nextDir, prebuiltDir };
+  return {
+    captureDir,
+    nextDir,
+    prebuiltDir,
+    negativeRouteEvidence: {
+      category: 'fixture-category',
+      pdp: 'fixture-pdp',
+      blog: 'fixture-blog',
+      generic: 'fixture-generic',
+    },
+  };
 }

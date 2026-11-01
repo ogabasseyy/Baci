@@ -7,6 +7,13 @@ import {
 } from './ogabassey-layout-html';
 
 describe('hero preload detection', () => {
+  it('recognizes responsive candidates with commas in transformation URLs', () => {
+    const hero =
+      '/cdn-image/width=750,quality=70,format=avif/core-assets/hero.avif';
+    const html = `<link rel="preload" as="image" imagesrcset="${hero} 750w, /cdn-image/width=1200,quality=70/hero.avif 1200w">`;
+    expect(hasHeroPreload(html, hero)).toBe(true);
+    expect(hasHeroPreload(html, '/core-assets/hero.avif')).toBe(false);
+  });
   it('recognizes marker variants and finds the first postponed boundary', () => {
     expect(
       hasMarker("<i data-check='yes'>", markerNeedles('data-check=yes'))

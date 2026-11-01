@@ -393,6 +393,14 @@ jobs:
           done
           node --test .github/scripts/x-pixel-token-authentication.sql.test.mjs
 
+      - name: Run exact-offer cart binding SQL contracts
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+        run: |
+          set -euo pipefail
+          export PATH="$PG_BIN:$PATH"
+          python3 supabase/tests/run_commerce_cart_line_offer_id.py
+
       - name: Run IMEI authenticated access SQL contracts
         env:
           IMEI_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}

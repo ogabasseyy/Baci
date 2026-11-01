@@ -15,8 +15,8 @@ DECLARE
   invalid_attachment jsonb;
   version integer;
 BEGIN
-  INSERT INTO public.products(id,merchant_id,price,status,stock_quantity,stock,manage_stock)
-  VALUES(product,merchant,50,'active',20,20,true);
+  INSERT INTO public.products(id,merchant_id,name,slug,price,status,stock_quantity,stock,manage_stock)
+  VALUES(product,merchant,'Exact offer review','exact-offer-review',50,'active',20,20,true);
   INSERT INTO public.product_offers(id,product_id,merchant_id,condition,price,stock_quantity,status)
   VALUES(offer,product,merchant,'used',40,4,'active');
   INSERT INTO public.commerce_carts(id,merchant_id,expires_at) VALUES(cart,merchant,now()+interval '1 day');

@@ -82,7 +82,6 @@ export async function verifyServedPreview({ origin, route, request }) {
       : [];
   });
   if (
-    fonts.length === 0 ||
     fonts.some(
       (font) =>
         !font ||
@@ -90,7 +89,10 @@ export async function verifyServedPreview({ origin, route, request }) {
     )
   )
     throw new Error('Preview font preload is missing or invalid');
-  for (const font of new Set(fonts)) {
+  for (const font of new Set([
+    ...fonts,
+    '/fonts/inter-naira.61440e0f45d4.woff2',
+  ])) {
     const response = await request(new URL(font, base).href);
     if (
       response.status !== 200 ||

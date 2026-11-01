@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { countDroppedRefs } from './preview-dropped-refs.mjs';
 
-test('counts each dropped reference regardless of reason', () => {
+test('counts dropped references while excluding values retained in the map', () => {
   assert.equal(countDroppedRefs({ refs: ['/ok'], skipped: [] }), 0);
   assert.equal(
     countDroppedRefs({
@@ -10,6 +10,21 @@ test('counts each dropped reference regardless of reason', () => {
       skipped: [{ reason: 'missing' }, { reason: 'protected-path' }],
     }),
     2
+  );
+  assert.equal(
+    countDroppedRefs({
+      refs: [],
+      skipped: [
+        { reason: 'inside-output' },
+        { reason: 'absolute' },
+        { reason: 'escapes-root' },
+      ],
+    }),
+    0
+  );
+  assert.throws(
+    () => countDroppedRefs({ refs: [], skipped: [{ reason: 'unrecognized' }] }),
+    /invalid preview refs manifest/i
   );
 });
 

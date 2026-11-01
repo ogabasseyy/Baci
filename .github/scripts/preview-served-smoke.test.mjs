@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { verifyServedPreview } from './preview-served-smoke.mjs';
 
@@ -6,6 +7,32 @@ const origin = 'https://baci-abcd-basseys-projects-d7395611.vercel.app';
 const html =
   '<html><head><link rel="preload" as="font" href="/_next/static/media/a.woff2"></head><body><section data-ogabassey-hero><img src="hero.webp"></section></body></html>';
 const ok = (body, type) => ({ status: 200, contentType: type, body });
+
+test('the checked font path matches the storefront font declaration', () => {
+  const css = readFileSync('apps/web/src/app/inter-naira-font.css', 'utf8');
+  assert.match(css, /\/fonts\/inter-naira\.61440e0f45d4\.woff2/);
+});
+
+test('checks the actual deferred naira font without requiring a preload', async () => {
+  const calls = [];
+  await verifyServedPreview({
+    origin,
+    route: '/ogabassey',
+    request: async (url) => {
+      calls.push(url);
+      return url.endsWith('.woff2')
+        ? ok('font', 'font/woff2')
+        : ok(
+            '<section data-ogabassey-hero><img src="hero.webp"></section>',
+            'text/html'
+          );
+    },
+  });
+  assert.deepEqual(calls, [
+    `${origin}/ogabassey`,
+    `${origin}/fonts/inter-naira.61440e0f45d4.woff2`,
+  ]);
+});
 
 test('checks the home hero payload and each served font', async () => {
   const calls = [];
@@ -19,6 +46,7 @@ test('checks the home hero payload and each served font', async () => {
   assert.deepEqual(calls, [
     `${origin}/ogabassey`,
     `${origin}/_next/static/media/a.woff2`,
+    `${origin}/fonts/inter-naira.61440e0f45d4.woff2`,
   ]);
 });
 

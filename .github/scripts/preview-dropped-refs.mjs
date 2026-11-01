@@ -1,4 +1,12 @@
 export function countDroppedRefs(manifest) {
+  const retained = new Set(['inside-output', 'absolute', 'escapes-root']);
+  const dropped = new Set([
+    'invalid',
+    'protected-path',
+    'missing',
+    'escaped-link',
+    'non-file',
+  ]);
   if (
     !manifest ||
     typeof manifest !== 'object' ||
@@ -10,10 +18,10 @@ export function countDroppedRefs(manifest) {
         !item ||
         typeof item !== 'object' ||
         typeof item.reason !== 'string' ||
-        !item.reason
+        (!retained.has(item.reason) && !dropped.has(item.reason))
     )
   ) {
     throw new Error('Invalid preview refs manifest');
   }
-  return manifest.skipped.length;
+  return manifest.skipped.filter((item) => dropped.has(item.reason)).length;
 }

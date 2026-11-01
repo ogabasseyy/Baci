@@ -19,6 +19,8 @@ psql -v ON_ERROR_STOP=1 -q -d "$db" \
   -f "$definition" \
   -f "$root/supabase/migrations/tests/serialized_offer_claim_fixture.sql" \
   -f "$root/supabase/migrations/20261101160000_serialized_offer_claims.sql" \
+  -f "$root/supabase/migrations/tests/serialized_offer_claim_marker_fixture.sql" \
+  -f "$root/supabase/migrations/20261101204000_serialized_offer_deleted_condition_claim.sql" \
   -f "$root/supabase/migrations/tests/serialized_offer_claim_concurrency.sql" \
   -f "$root/supabase/migrations/tests/serialized_offer_claim_assert.sql"
 echo 'PASS serialized offer claims'

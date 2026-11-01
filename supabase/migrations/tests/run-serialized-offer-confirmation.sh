@@ -25,5 +25,6 @@ psql -v ON_ERROR_STOP=1 -q -d "$db" \
   -f "$root/supabase/migrations/20261101165000_serialized_offer_confirmation.sql" \
   -f "$root/supabase/migrations/20261101190000_serialized_offer_order_protocol.sql" \
   -f "$root/supabase/migrations/tests/serialized_offer_confirmation_protocol_fixture.sql" \
+  -f "$root/supabase/migrations/20261101203000_serialized_offer_deleted_condition_confirmation.sql" \
   -f "$root/supabase/migrations/tests/serialized_offer_confirmation_assert.sql"
 echo 'PASS serialized offer confirmation'

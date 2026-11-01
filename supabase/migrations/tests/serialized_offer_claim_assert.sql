@@ -4,6 +4,38 @@ DO $$ BEGIN
   RAISE EXCEPTION 'wrong condition unit reserved';
  END IF;
 END $$;
+-- Condition-only offers can lose every catalog ID after deletion. The
+-- trusted protocol marker must preserve an already attached unit.
+INSERT INTO private.serialized_offer_order_items VALUES ('00000000-0000-0000-0000-000000000006','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000003');
+UPDATE public.order_items SET product_offer_id=NULL, offer_id=NULL, offer_id_snapshot=NULL WHERE id='00000000-0000-0000-0000-000000000006';
+SELECT private.claim_variant_inventory_units_for_order_item_internal('00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000005','00000000-0000-0000-0000-000000000006');
+UPDATE private.serialized_offer_order_items SET offer_id='00000000-0000-0000-0000-000000000099';
+DO $$ BEGIN
+ BEGIN
+  PERFORM private.claim_variant_inventory_units_for_order_item_internal('00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000005','00000000-0000-0000-0000-000000000006');
+  RAISE EXCEPTION 'wrong offer marker was accepted';
+ EXCEPTION WHEN object_not_in_prerequisite_state THEN NULL; END;
+END $$;
+UPDATE private.serialized_offer_order_items SET offer_id='00000000-0000-0000-0000-000000000003';
+UPDATE private.serialized_offer_order_items SET merchant_id='00000000-0000-0000-0000-000000000099';
+DO $$ BEGIN
+ BEGIN
+  PERFORM private.claim_variant_inventory_units_for_order_item_internal('00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000005','00000000-0000-0000-0000-000000000006');
+  RAISE EXCEPTION 'foreign marker was accepted';
+ EXCEPTION WHEN object_not_in_prerequisite_state THEN NULL; END;
+END $$;
+UPDATE private.serialized_offer_order_items SET merchant_id='00000000-0000-0000-0000-000000000010';
+UPDATE public.variant_inventory SET status='available',order_id=NULL,order_item_id=NULL WHERE id='00000000-0000-0000-0000-000000000008';
+DO $$ BEGIN
+ BEGIN
+  PERFORM private.claim_variant_inventory_units_for_order_item_internal('00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000005','00000000-0000-0000-0000-000000000006');
+  RAISE EXCEPTION 'deleted condition-only offer reclaimed a unit';
+ EXCEPTION WHEN object_not_in_prerequisite_state THEN NULL; END;
+ IF EXISTS (SELECT 1 FROM public.variant_inventory WHERE order_item_id='00000000-0000-0000-0000-000000000006') THEN RAISE EXCEPTION 'deleted offer attached a unit'; END IF;
+END $$;
+UPDATE public.variant_inventory SET status='reserved',order_id='00000000-0000-0000-0000-000000000005',order_item_id='00000000-0000-0000-0000-000000000006' WHERE id='00000000-0000-0000-0000-000000000008';
+UPDATE public.order_items SET product_offer_id='00000000-0000-0000-0000-000000000003', offer_id='00000000-0000-0000-0000-000000000003', offer_id_snapshot='00000000-0000-0000-0000-000000000003' WHERE id='00000000-0000-0000-0000-000000000006';
+DELETE FROM private.serialized_offer_order_items WHERE order_item_id='00000000-0000-0000-0000-000000000006';
 -- Offer deletion clears the live IDs, but the immutable snapshot lets an
 -- already reserved unit survive a replay.
 UPDATE public.order_items SET product_offer_id=NULL, offer_id=NULL WHERE id='00000000-0000-0000-0000-000000000006';

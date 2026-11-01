@@ -23,7 +23,31 @@ DO $$ DECLARE result jsonb; BEGIN
  IF (SELECT fulfillment_data ? 'serializedInventoryException' FROM public.order_items WHERE id='00000000-0000-0000-0000-000000000006') THEN RAISE EXCEPTION 'resolved exception remained in snapshot'; END IF;
  IF (result->>'missingUnitCount')::integer <> 0 OR (SELECT reservation_expires_at FROM public.variant_inventory WHERE id='00000000-0000-0000-0000-000000000008') IS NOT NULL THEN RAISE EXCEPTION 'surviving deleted-offer reservation was not confirmed'; END IF;
 END $$;
+-- A deleted condition-only line has no exact-offer snapshot.
+UPDATE public.order_items SET offer_id_snapshot=NULL WHERE id='00000000-0000-0000-0000-000000000006';
+DO $$ DECLARE result jsonb; BEGIN
+ result := private.confirm_order_inventory_reservations('00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000005');
+ IF (result->>'missingUnitCount')::integer <> 0 THEN
+  RAISE EXCEPTION 'deleted condition-only offer with a surviving unit must confirm';
+ END IF;
+END $$;
+-- A marker from another merchant must never authorize the fallback.
+UPDATE private.serialized_offer_order_items SET merchant_id='00000000-0000-0000-0000-000000000099' WHERE order_item_id='00000000-0000-0000-0000-000000000006';
+DO $$ DECLARE result jsonb; BEGIN
+ result := private.confirm_order_inventory_reservations('00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000005');
+ IF NOT (result->'exceptionCodes' @> '[{"code":"serialized_offer_identity_mismatch"}]'::jsonb) THEN
+  RAISE EXCEPTION 'foreign marker must fail confirmation';
+ END IF;
+END $$;
+UPDATE private.serialized_offer_order_items SET merchant_id='00000000-0000-0000-0000-000000000010' WHERE order_item_id='00000000-0000-0000-0000-000000000006';
 UPDATE public.variant_inventory SET status='available',order_id=NULL,order_item_id=NULL WHERE id='00000000-0000-0000-0000-000000000008';
+DO $$ DECLARE result jsonb; BEGIN
+ result := private.confirm_order_inventory_reservations('00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000005');
+ IF (result->>'missingUnitCount')::integer <> 1 OR EXISTS (
+  SELECT 1 FROM public.variant_inventory WHERE order_item_id='00000000-0000-0000-0000-000000000006'
+ ) THEN RAISE EXCEPTION 'deleted condition-only offer must not reclaim a lost unit'; END IF;
+END $$;
+UPDATE public.order_items SET offer_id_snapshot='00000000-0000-0000-0000-000000000003' WHERE id='00000000-0000-0000-0000-000000000006';
 DO $$ DECLARE result jsonb; BEGIN
  result := private.confirm_order_inventory_reservations('00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000005');
  IF (result->>'missingUnitCount')::integer <> 1 OR NOT (result->'exceptionCodes' @> '[{"code":"late_payment_reservation_lost"}]'::jsonb) THEN RAISE EXCEPTION 'deleted offer must report a lost reservation'; END IF;

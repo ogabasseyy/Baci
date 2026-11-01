@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { STOREFRONT_BLOG_POST_SELECT } from '@/lib/storefront-blog-post-select';
+import {
+  RELATED_BLOG_POST_SELECT,
+  STOREFRONT_BLOG_LISTING_SELECT,
+  STOREFRONT_BLOG_POST_SELECT,
+} from '@/lib/storefront-blog-post-select';
 
 describe('STOREFRONT_BLOG_POST_SELECT', () => {
   it('matches the current public blog_posts schema for storefront detail pages', () => {
@@ -18,5 +22,20 @@ describe('STOREFRONT_BLOG_POST_SELECT', () => {
     expect(fields).not.toContain('author_avatar');
     expect(fields).not.toContain('meta_title');
     expect(fields).not.toContain('meta_description');
+  });
+
+  it('includes focus_keyword and keywords on related-post and listing projections', () => {
+    const relatedFields = RELATED_BLOG_POST_SELECT.split(',').map((field) =>
+      field.trim()
+    );
+    const listingFields = STOREFRONT_BLOG_LISTING_SELECT.split(',').map(
+      (field) => field.trim()
+    );
+
+    expect(relatedFields).toContain('focus_keyword');
+    expect(relatedFields).toContain('keywords');
+    expect(listingFields).toContain('focus_keyword');
+    expect(listingFields).toContain('keywords');
+    expect(listingFields).not.toContain('content');
   });
 });

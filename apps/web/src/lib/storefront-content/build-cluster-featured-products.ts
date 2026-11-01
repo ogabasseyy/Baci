@@ -19,23 +19,65 @@ export interface ClusterFeaturedInventoryProduct {
 }
 
 const GENERIC_CLUSTER_TOKENS = new Set([
+  'a',
+  'an',
+  'and',
+  'are',
+  'at',
+  'best',
+  'buy',
+  'buying',
+  'by',
+  'for',
+  'from',
   'galaxy',
-  'iphone',
-  'macbook',
+  'guide',
+  'how',
+  'in',
   'ipad',
-  'redmi',
-  'phone',
-  'phones',
-  'smartphone',
-  'smartphones',
+  'iphone',
+  'is',
+  'it',
   'laptop',
   'laptops',
+  'macbook',
   'nigeria',
+  'of',
+  'on',
+  'or',
+  'phone',
+  'phones',
+  'pixel',
+  'playstation',
   'price',
-  'specs',
+  'prices',
+  'redmi',
   'review',
-  'guide',
-  'best',
+  'smartphone',
+  'smartphones',
+  'specs',
+  'the',
+  'to',
+  'vs',
+  'with',
+  '2024',
+  '2025',
+  '2026',
+  '2027',
+]);
+
+const TIER_MODIFIER_TOKENS = new Set([
+  'air',
+  'fe',
+  'flip',
+  'fold',
+  'lite',
+  'max',
+  'mini',
+  'plus',
+  'pro',
+  'slim',
+  'ultra',
 ]);
 
 function buildProductHref(
@@ -55,24 +97,41 @@ function scoreProductModelAffinity(
   const articleTokens = articleTitleAndSlug
     .toLowerCase()
     .split(/[^a-z0-9]+/)
-    .filter((token) => token.length >= 2 && !excludedBrandTokens.has(token));
+    .filter((token) => token.length > 0 && !excludedBrandTokens.has(token));
   if (articleTokens.length === 0) {
     return 0;
   }
   const articleTokenSet = new Set(articleTokens);
+  const articleHasPrimaryModelToken = articleTokens.some(
+    (token) => !TIER_MODIFIER_TOKENS.has(token)
+  );
   const productTokens = new Set(
     `${product.name} ${product.slug}`
       .toLowerCase()
       .split(/[^a-z0-9]+/)
-      .filter((token) => token.length >= 2 && !excludedBrandTokens.has(token))
+      .filter((token) => token.length > 0 && !excludedBrandTokens.has(token))
   );
-  let matches = 0;
+  if (productTokens.size === 0) {
+    return 0;
+  }
+  let primaryMatches = 0;
+  let modifierMatches = 0;
   for (const token of productTokens) {
     if (articleTokenSet.has(token)) {
-      matches += 1;
+      if (TIER_MODIFIER_TOKENS.has(token)) {
+        modifierMatches += 1;
+      } else {
+        primaryMatches += 1;
+      }
     }
   }
-  return matches >= 2 ? matches : 0;
+  if (articleHasPrimaryModelToken && primaryMatches === 0) {
+    return 0;
+  }
+  const totalMatches = primaryMatches + modifierMatches;
+  return totalMatches > 0
+    ? primaryMatches * 2 + modifierMatches + totalMatches / productTokens.size
+    : 0;
 }
 
 export function buildClusterFeaturedProducts(

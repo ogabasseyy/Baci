@@ -42,7 +42,11 @@ import { selectBlogCatalogProducts } from '@/lib/select-blog-catalog-products';
 import { selectSemanticRelatedBlogPosts } from '@/lib/semantic-related-blog-posts';
 import { generateSlug } from '@/lib/seo-utils';
 import { normalizeOgabasseyBusinessType } from '@/lib/storefront/ogabassey-entity';
-import { STOREFRONT_BLOG_POST_SELECT } from '@/lib/storefront-blog-post-select';
+import {
+  RELATED_BLOG_POST_SELECT,
+  STOREFRONT_BLOG_LISTING_SELECT,
+  STOREFRONT_BLOG_POST_SELECT,
+} from '@/lib/storefront-blog-post-select';
 import { canonicalizeStorefrontMediaUrl } from '@/lib/storefront-media-cdn-url';
 import { readStorefrontMerchantSnapshot } from '@/lib/storefront-merchant-snapshot';
 import { readStorefrontPdpCoreSnapshot } from '@/lib/storefront-pdp-core-snapshot';
@@ -75,9 +79,6 @@ const PUBLIC_BLOG_COUNT_OPTIONS = { count: 'estimated' as const };
 const RELATED_BLOG_POSTS_LIMIT = 3;
 const RELATED_BLOG_POSTS_FETCH_LIMIT = 36;
 const RELATED_BLOG_CATEGORY_FETCH_LIMIT = 24;
-
-const RELATED_BLOG_POST_SELECT =
-  'id, title, slug, excerpt, featured_image_url, category, tags, keywords, focus_keyword, published_at, reading_time_minutes';
 
 function getEstimatedPaginationCountFloor({
   count,
@@ -2701,10 +2702,7 @@ async function getCachedBlogListingCore(
 
   let query = supabase
     .from('blog_posts')
-    .select(
-      'id, title, slug, excerpt, featured_image_url, featured_image_alt, featured_image_variants, category, tags, keywords, focus_keyword, author_name, published_at, classification_revision, reading_time_minutes, view_count',
-      PUBLIC_BLOG_COUNT_OPTIONS
-    )
+    .select(STOREFRONT_BLOG_LISTING_SELECT, PUBLIC_BLOG_COUNT_OPTIONS)
     .eq('merchant_id', merchant.id)
     .eq('status', 'published')
     .not('published_at', 'is', null)

@@ -424,6 +424,7 @@ jobs:
 
       - name: Test serialized condition-offer inventory
         env:
+          PG_BIN: /usr/lib/postgresql/16/bin
           PGHOST: localhost
           PGPORT: 5432
           PGUSER: postgres
@@ -447,6 +448,8 @@ jobs:
           TEST_LINE_ENDINGS=crlf bash supabase/tests/run-serialized-legacy-offer-cleanup-lock-order.sh
           TEST_LINE_ENDINGS=lf python3 supabase/tests/run_serialized_expired_reservation_regression.py
           TEST_LINE_ENDINGS=crlf python3 supabase/tests/run_serialized_expired_reservation_regression.py
+          TEST_LINE_ENDINGS=lf python3 supabase/tests/run_serialized_quiz_release_lock_regression.py
+          TEST_LINE_ENDINGS=crlf python3 supabase/tests/run_serialized_quiz_release_lock_regression.py
           bash supabase/migrations/tests/run-serialized-offer-payment-proof.sh
           bash supabase/migrations/tests/run-serialized-offer-reuse.sh
           bash supabase/migrations/tests/run-serialized-offer-creation.sh

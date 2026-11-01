@@ -12,7 +12,7 @@ start = source.index('CREATE OR REPLACE FUNCTION private.release_expired_variant
 end = source.index('\n$$;', start) + len('\n$$;')
 function = source[start:end]
 if os.environ.get('TEST_LINE_ENDINGS') == 'crlf': function = function.replace('\n', '\r\n')
-pg_bin = pathlib.Path(subprocess.check_output(['pg_config', '--bindir'], text=True).strip())
+pg_bin = pathlib.Path(os.environ.get('PG_BIN') or subprocess.check_output(['pg_config', '--bindir'], text=True).strip())
 fixture = '''
 CREATE SCHEMA auth; CREATE SCHEMA private;
 CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT 'service_role'::text $$;

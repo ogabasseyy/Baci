@@ -20,6 +20,34 @@ const render = {
 };
 
 describe('native builder preview envelopes', () => {
+  it('accepts only inert placeholders for known refused components', () => {
+    const placeholder = (props: Record<string, unknown>) => ({
+      ...render,
+      candidateConfig: {
+        ...render.candidateConfig,
+        content: [{ type: 'PreviewPlaceholder', props }],
+      },
+    });
+    expect(
+      builderNativePreviewRenderSchema.safeParse(
+        placeholder({ id: 'code-1', label: 'CodeEmbed section' })
+      ).success
+    ).toBe(true);
+    expect(
+      builderNativePreviewRenderSchema.safeParse(
+        placeholder({ id: 'code-1', label: 'Text section' })
+      ).success
+    ).toBe(false);
+    expect(
+      builderNativePreviewRenderSchema.safeParse(
+        placeholder({
+          id: 'code-1',
+          label: 'CodeEmbed section',
+          code: '<script />',
+        })
+      ).success
+    ).toBe(false);
+  });
   it('requires a bounded session nonce for init, render and responses', () => {
     expect(
       builderNativePreviewInitSchema.safeParse({

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { builderDesignCapabilities } from './builder-design-capabilities';
 import { builderPreviewMessageSchema } from './builder-preview-message';
+import { restoreNativePreviewPlaceholders } from './native-preview-placeholder-input';
 
 const sessionNonceSchema = z.string().regex(/^[0-9a-f]{32}$/);
 const revisionSchema = z.number().int().min(0).max(2_147_483_647);
@@ -14,6 +15,10 @@ export const builderNativePreviewInitSchema = z.strictObject({
 
 export const builderNativePreviewRenderSchema =
   builderPreviewMessageSchema.extend({
+    candidateConfig: z.preprocess(
+      restoreNativePreviewPlaceholders,
+      builderPreviewMessageSchema.shape.candidateConfig
+    ),
     sessionNonce: sessionNonceSchema,
     type: z.literal('baci.builder-preview.native-render'),
     version: z.literal(2),

@@ -93,3 +93,37 @@ it('dispatches the validated draft as data to both native message targets', () =
     });
   }
 });
+
+it('sends refused blocks as safe placeholders accepted by the receiving schema', () => {
+  const sent: string[] = [];
+  const target = {
+    dispatchEvent: (event: MessageEvent) => sent.push(event.data),
+  };
+  const script = buildNativePreviewRenderScript({
+    ...input,
+    candidateConfig: {
+      ...input.candidateConfig,
+      content: [
+        {
+          type: 'CodeEmbed',
+          props: { id: 'code-1', code: '<script>ignored()</script>' },
+        },
+      ],
+    },
+  });
+  expect(script).not.toBeNull();
+  runInNewContext(script as string, {
+    window: target,
+    document: target,
+    MessageEvent,
+  });
+  expect(sent).toHaveLength(2);
+  for (const data of sent) {
+    expect(data).not.toContain('ignored');
+    const parsed = builderNativePreviewRenderSchema.parse(JSON.parse(data));
+    expect(parsed.candidateConfig.content[0]).toEqual({
+      type: 'PreviewPlaceholder',
+      props: { id: 'code-1', label: 'CodeEmbed section' },
+    });
+  }
+});

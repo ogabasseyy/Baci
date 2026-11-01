@@ -68,7 +68,7 @@ function baseInput(): DeliveryInput {
 
 describe('deliverClaimedImmediateOrderNotification', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.stubEnv('IMMEDIATE_NOTIFICATION_REDRIVE_ENABLED', 'true');
     artifactMocks.build.mockResolvedValue({
       attachments: [],
@@ -182,6 +182,13 @@ describe('deliverClaimedImmediateOrderNotification', () => {
       await hooks.beforeTransportDispatch();
       throw new ImmediateNotificationDeliveryUnknownError();
     });
+    await deliverClaimedImmediateOrderNotification(baseInput());
+    expect(dispatchMocks.reset).not.toHaveBeenCalled();
+    expect(retryMocks.complete).not.toHaveBeenCalled();
+  });
+
+  it("keeps an unacknowledged begin visible and does not release another worker's fence", async () => {
+    dispatchMocks.begin.mockRejectedValueOnce(new Error('begin response lost'));
     await deliverClaimedImmediateOrderNotification(baseInput());
     expect(dispatchMocks.reset).not.toHaveBeenCalled();
     expect(retryMocks.complete).not.toHaveBeenCalled();

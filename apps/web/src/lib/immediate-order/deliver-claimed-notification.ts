@@ -43,6 +43,7 @@ export async function deliverClaimedImmediateOrderNotification(
     preResponsePayforme,
   } = input;
   let dispatched = false;
+  let beginUnconfirmed = false;
   let accepted = false;
   let dispatch:
     | ReturnType<typeof createImmediateNotificationDispatch>
@@ -104,12 +105,15 @@ export async function deliverClaimedImmediateOrderNotification(
       activeDispatch
         ? {
             beforeTransportDispatch: async () => {
+              beginUnconfirmed = true;
               await activeDispatch.beforeTransportDispatch();
+              beginUnconfirmed = false;
               dispatched = true;
             },
             resetTransportDispatch: async () => {
               await activeDispatch.resetTransportDispatch();
               dispatched = false;
+              beginUnconfirmed = false;
             },
           }
         : undefined
@@ -132,6 +136,13 @@ export async function deliverClaimedImmediateOrderNotification(
       claimToken
     );
   } catch (emailError) {
+    if (beginUnconfirmed) {
+      logger.error({
+        message: 'Immediate order notification dispatch start unconfirmed',
+        orderId,
+      });
+      return;
+    }
     if (
       accepted ||
       (dispatch &&

@@ -33,12 +33,16 @@ BEGIN
   PERFORM set_config('request.jwt.claim.role', 'immediate_notification_redrive', true);
   ASSERT NOT public.begin_immediate_notification_dispatch(uncertain_order, wrong_lease), 'wrong lease must not dispatch';
   ASSERT public.begin_immediate_notification_dispatch(uncertain_order, uncertain_lease), 'valid dispatch must begin';
+  ASSERT NOT EXISTS (SELECT 1 FROM public.list_immediate_notification_recovery_candidates(100) c
+    WHERE c.order_id = uncertain_order), 'fresh dispatch must not appear as unresolved';
   ASSERT NOT public.begin_immediate_notification_dispatch(uncertain_order, uncertain_lease),
     'a repeated begin must not authorize a second send';
   ASSERT NOT public.recover_immediate_notification_completion(uncertain_order, uncertain_lease),
     'an uncertain dispatch must not be recorded as accepted';
   UPDATE private.immediate_notification_dispatches SET updated_at = now() - interval '10 minutes'
   WHERE order_id = uncertain_order;
+  ASSERT EXISTS (SELECT 1 FROM public.list_immediate_notification_recovery_candidates(100) c
+    WHERE c.order_id = uncertain_order), 'stale dispatch must become visible for reconciliation';
   ASSERT public.has_immediate_notification_reconciliation_backlog(),
     'stale uncertain dispatches must be visible independent of batch selection';
   ASSERT public.begin_immediate_notification_dispatch(accepted_order, accepted_lease), 'accepted fixture must begin';

@@ -5,7 +5,7 @@ vi.mock('server-only', () => ({}));
 afterEach(() => vi.unstubAllGlobals());
 
 describe('primary wallet provider adapter', () => {
-  it('uses the existing provider client and transmits explicit ordinary-wallet interest policy', async () => {
+  it('uses the existing provider client and routes main-wallet interest to the configured payout wallet', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -30,7 +30,8 @@ describe('primary wallet provider adapter', () => {
           name: 'Test Customer',
           phone: '08000000000',
           third_party_identifier: 'test-correlation',
-          enable_interest_accrual: false,
+          enable_interest_accrual: true,
+          interest_payout_wallet: '01JBZ8Q5W3X9R2K4M6N8P0T2V4',
         }
       )
     ).resolves.toEqual({
@@ -38,10 +39,14 @@ describe('primary wallet provider adapter', () => {
       wallet_id: 'provider-wallet',
       new_customer: true,
     });
-    expect(fetcher).toHaveBeenCalledWith(
-      'https://api.piggyvest.business/api/v1/customers?returnIfExist=true',
+    const [url, init] = fetcher.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      'https://api.piggyvest.business/api/v1/customers?returnIfExist=true'
+    );
+    expect(JSON.parse(String(init.body))).toEqual(
       expect.objectContaining({
-        body: expect.stringContaining('"enable_interest_accrual":false'),
+        enable_interest_accrual: true,
+        interest_payout_wallet: '01JBZ8Q5W3X9R2K4M6N8P0T2V4',
       })
     );
   });
@@ -58,7 +63,8 @@ describe('primary wallet provider adapter', () => {
           name: 'Test Customer',
           phone: '08000000000',
           third_party_identifier: 'test-correlation',
-          enable_interest_accrual: false,
+          enable_interest_accrual: true,
+          interest_payout_wallet: '01JBZ8Q5W3X9R2K4M6N8P0T2V4',
         }
       )
     ).rejects.toThrow();

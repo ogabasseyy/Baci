@@ -91,6 +91,23 @@ describe('primary wallet storage boundary', () => {
     );
   });
 
+  it('records ambiguous ownership as a claim-fenced durable review hold', async () => {
+    const execute = vi.fn().mockResolvedValue({ rows: [{ result: true }] });
+    await expect(
+      createPrimaryWalletStore({ scope, execute }).recordOwnershipHold({
+        ...scope,
+        intentId,
+        claimToken,
+      })
+    ).resolves.toBe(true);
+    expect(execute).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining(
+        'piggyvest_primary.record_onboarding_ownership_hold'
+      ),
+      [JSON.stringify(scope), intentId, claimToken]
+    );
+  });
+
   it('releases definitively rejected intents through the release statement', async () => {
     const execute = vi.fn().mockResolvedValue({ rows: [{ result: true }] });
     const released = await createPrimaryWalletStore({
@@ -114,5 +131,136 @@ describe('primary wallet storage boundary', () => {
         requestFingerprint: 'a'.repeat(64),
       })
     ).rejects.toThrow('Primary wallet storage unavailable');
+  });
+
+  it('keeps routing-pending identifiers through the dedicated parameterized RPC', async () => {
+    const execute = vi.fn().mockResolvedValue({ rows: [{ result: true }] });
+    await expect(
+      createPrimaryWalletStore({ scope, execute }).recordRoutingPending({
+        ...scope,
+        intentId,
+        claimToken,
+        providerCustomerId: 'provider-customer',
+        providerWalletId: 'provider-wallet',
+        interestPayoutWalletId: '01JBZ8Q5W3X9R2K4M6N8P0T2V4',
+      })
+    ).resolves.toBe(true);
+    expect(execute).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'piggyvest_primary.record_onboarding_routing_pending'
+      ),
+      [
+        JSON.stringify(scope),
+        intentId,
+        claimToken,
+        'provider-customer',
+        'provider-wallet',
+        '01JBZ8Q5W3X9R2K4M6N8P0T2V4',
+      ]
+    );
+  });
+
+  it.each([
+    ['an empty provider customer', { providerCustomerId: '' }],
+    ['a malformed payout wallet', { interestPayoutWalletId: 'payout' }],
+  ])('refuses routing-pending identifiers with %s without querying', async (_label, change) => {
+    const execute = vi.fn();
+    await expect(
+      createPrimaryWalletStore({ scope, execute }).recordRoutingPending({
+        ...scope,
+        intentId,
+        claimToken,
+        providerCustomerId: 'provider-customer',
+        providerWalletId: 'provider-wallet',
+        interestPayoutWalletId: '01JBZ8Q5W3X9R2K4M6N8P0T2V4',
+        ...change,
+      })
+    ).rejects.toThrow('Primary wallet storage unavailable');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('rejects a review-only wallet with its kept ids through one fenced RPC', async () => {
+    const execute = vi.fn().mockResolvedValue({ rows: [{ result: true }] });
+    await expect(
+      createPrimaryWalletStore({ scope, execute }).recordReview({
+        ...scope,
+        intentId,
+        claimToken,
+        providerCustomerId: 'provider-customer',
+        providerWalletId: 'provider-wallet',
+      })
+    ).resolves.toBe(true);
+    expect(execute).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('piggyvest_primary.record_onboarding_review'),
+      [
+        JSON.stringify(scope),
+        intentId,
+        claimToken,
+        'provider-customer',
+        'provider-wallet',
+        null,
+      ]
+    );
+  });
+
+  it('records routing-only evidence on the atomic review write', async () => {
+    const execute = vi.fn().mockResolvedValue({ rows: [{ result: true }] });
+    await createPrimaryWalletStore({ scope, execute }).recordReview({
+      ...scope,
+      intentId,
+      claimToken,
+      providerCustomerId: 'provider-customer',
+      providerWalletId: 'provider-wallet',
+      reviewReason: 'routing',
+    });
+    expect(execute).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('piggyvest_primary.record_onboarding_review'),
+      [
+        JSON.stringify(scope),
+        intentId,
+        claimToken,
+        'provider-customer',
+        'provider-wallet',
+        'routing',
+      ]
+    );
+  });
+
+  it.each([
+    ['another user', { userId: intentId }],
+    ['an empty provider wallet', { providerWalletId: '' }],
+    ['a malformed claim token', { claimToken: 'claim' }],
+    ['an extra payout wallet', { interestPayoutWalletId: 'x' }],
+  ])('refuses a review with %s without querying', async (_label, change) => {
+    const execute = vi.fn();
+    await expect(
+      createPrimaryWalletStore({ scope, execute }).recordReview({
+        ...scope,
+        intentId,
+        claimToken,
+        providerCustomerId: 'provider-customer',
+        providerWalletId: 'provider-wallet',
+        ...change,
+      } as Parameters<
+        ReturnType<typeof createPrimaryWalletStore>['recordReview']
+      >[0])
+    ).rejects.toThrow('Primary wallet storage unavailable');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['the query fails', () => Promise.reject(new Error('private detail'))],
+    ['the result is malformed', async () => ({ rows: [{ result: 'yes' }] })],
+  ])('reports a review as unavailable, without detail, when %s', async (_label, answer) => {
+    const execute = vi.fn().mockImplementation(answer);
+    await expect(
+      createPrimaryWalletStore({ scope, execute }).recordReview({
+        ...scope,
+        intentId,
+        claimToken,
+        providerCustomerId: 'provider-customer',
+        providerWalletId: 'provider-wallet',
+      })
+    ).rejects.toThrow(/^Primary wallet storage unavailable$/);
   });
 });

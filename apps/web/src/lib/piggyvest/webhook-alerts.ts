@@ -22,6 +22,14 @@ export const PIGGYVEST_WEBHOOK_ALERT_CODES = [
   // or provider-failed): held, never resubmitted or released; an operator
   // must resolve it. Also the code for any stale unconfirmed transfer.
   'PIGGYVEST_TRANSFER_NEEDS_REVIEW',
+  // A primary main wallet whose interest routing was contradicted, at
+  // onboarding or on a routing-pending recheck: kept rejected and never
+  // usable; an operator reviews it (interest settings are immutable).
+  'PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW',
+  // A primary onboarding whose PiggyVest customer could not be proven ours
+  // (several customers, a duplicate, or an unlisted existing one): never
+  // adopted; an operator reviews.
+  'PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW',
   // A spend or transfer was refused because PiggyVest reports a freeze or
   // lien on the wallet.
   'PIGGYVEST_RESTRICTION_BLOCKED',

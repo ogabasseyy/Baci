@@ -1,0 +1,2 @@
+supabase/tests/piggyvest_primary_goal_wallet_short_name.sql
+supabase/tests/piggyvest_primary_onboarding_routing_pending.sql

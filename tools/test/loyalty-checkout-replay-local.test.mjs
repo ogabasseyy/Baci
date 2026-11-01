@@ -5,12 +5,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { Client } from 'pg';
+import { resolvePostgresBin } from './loyalty-postgres-bin.mjs';
 
 const repository = resolve(import.meta.dirname, '../..');
-const bin =
-  process.argv
-    .find((arg) => arg.startsWith('--postgres-bin='))
-    ?.slice('--postgres-bin='.length) ?? '/opt/homebrew/opt/postgresql@17/bin';
+const bin = resolvePostgresBin();
 
 test('loyalty checkout replay remains bound to its original redemption', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'baci-loyalty-replay-'));
@@ -19,7 +17,11 @@ test('loyalty checkout replay remains bound to its original redemption', async (
   mkdirSync(socket, { mode: 0o700 });
   function run(command, args) {
     const result = spawnSync(join(bin, command), args, {
-      env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' },
+      env: {
+        PATH: process.env.PATH ?? '/usr/bin:/bin',
+        LANG: 'C',
+        LC_ALL: 'C',
+      },
       encoding: 'utf8',
       timeout: 30000,
     });

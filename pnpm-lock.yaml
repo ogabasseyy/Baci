@@ -41,7 +41,7 @@ overrides:
   underscore: ^1.13.8
   dompurify: 3.4.17
   undici: 7.30.1
-  sanitize-html: 2.18.0
+  sanitize-html: 2.18.1
   protobufjs: 7.6.5
   '@protobufjs/utf8': 1.1.1
   rollup: ^4.59.0
@@ -1207,8 +1207,8 @@ importers:
         specifier: ^3.8.1
         version: 3.8.1(@types/react@19.3.0)(react-dom@19.2.3(react@19.2.3))(react-is@19.3.0)(react@19.2.3)(redux@5.0.1)
       sanitize-html:
-        specifier: 2.18.0
-        version: 2.18.0
+        specifier: 2.18.1
+        version: 2.18.1
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.6.0
@@ -12170,8 +12170,8 @@ packages:
     engines: {node: '>=18.18'}
     hasBin: true
 
-  sanitize-html@2.18.0:
-    resolution: {integrity: sha512-CvY+PV+NBhxe3BnjFI5f//vEDKLULm9OlZArso7gdgVsWvanBuq9PNDx+/2llfL+8XFYa/UNBxvqRBg3TWU2Ug==}
+  sanitize-html@2.18.1:
+    resolution: {integrity: sha512-2X5lC8fYla8YaT8g73Nj+HcLWXan5dLyCWLgVvaOmfw7JI78IRsyNtIDytTHdn7hBQbIkCah7Zbmd5jabzeDig==}
     engines: {node: '>=22.12.0'}
 
   sax@1.6.0:
@@ -26734,9 +26734,8 @@ snapshots:
 
   sandbox-cli-detector@0.2.0: {}
 
-  sanitize-html@2.18.0:
+  sanitize-html@2.18.1:
     dependencies:
-      deepmerge: 4.3.1(patch_hash=a96d564fb5e8a699e9de7c9979c496f0833927a9fbfc7e685b294d0ff83170cd)
       escape-string-regexp: 4.0.0
       htmlparser2: 12.0.0
       is-plain-object: 5.1.0

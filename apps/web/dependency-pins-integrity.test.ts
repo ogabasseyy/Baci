@@ -40,7 +40,7 @@ const PINS: [string, readonly [number, number, number]][] = [
   ['ip-address', [10, 7, 4]],
   ['markdown-it', [14, 3, 3]],
   ['minimatch', [11, 0, 1]],
-  ['sanitize-html', [2, 18, 0]],
+  ['sanitize-html', [2, 18, 1]],
   ['qs', [6, 16, 1]],
   ['graphql-scalars', [2, 0, 1]],
   ['node-forge', [1, 4, 1]],

@@ -1,10 +1,8 @@
 'use client';
 
-import Script from 'next/script';
-import { useLayoutEffect, useSyncExternalStore } from 'react';
-import { socialPixelContext } from '@/lib/analytics/social-pixel-context';
+import { useSyncExternalStore } from 'react';
 import { getStoredConsent } from '@/lib/consent-mode';
-import { isMarketingAllowed } from '@/lib/marketing-consent';
+import { ActiveSnapchatPixel } from './active-snapchat-pixel';
 
 interface SnapchatPixelProps {
   pixelId: string;
@@ -47,46 +45,9 @@ export function SnapchatPixel({ pixelId }: SnapchatPixelProps) {
     getMarketingConsentServerSnapshot
   );
 
-  useLayoutEffect(() => {
-    if (!validPixelId || !isAllowed) return;
-    return socialPixelContext.activate('snapchat', pixelId);
-  }, [pixelId, validPixelId, isAllowed]);
-
-  function notifyPixelReady() {
-    if (
-      !isMarketingAllowed() ||
-      socialPixelContext.get('snapchat')?.id !== pixelId
-    )
-      return;
-    socialPixelContext.markReady('snapchat', pixelId);
-    window.dispatchEvent(new Event('baci-snapchat-ready'));
-  }
-
-  if (!validPixelId || !isAllowed) {
-    return null;
-  }
-
-  return (
-    // biome-ignore lint/correctness/useInlineScriptId: A per-pixel id is present; the rule misreads the onReady attribute.
-    <Script
-      key={pixelId}
-      strategy="afterInteractive"
-      onReady={notifyPixelReady}
-      id={`snapchat-pixel-${pixelId}`}
-    >
-      {`
-        (function(e,t,n){if(e.snaptr)return;var a=e.snaptr=function()
-        {a.handleRequest?a.handleRequest.apply(a,arguments):a.queue.push(arguments)};
-        a.queue=[];var s='script';r=t.createElement(s);r.async=!0;
-        r.src=n;var u=t.getElementsByTagName(s)[0];
-        u.parentNode.insertBefore(r,u);})(window,document,
-        'https://sc-static.net/scevent.min.js');
-
-        snaptr('init', '${pixelId}');
-        snaptr('track', '${pixelId}', 'PAGE_VIEW');
-      `}
-    </Script>
-  );
+  return validPixelId && isAllowed ? (
+    <ActiveSnapchatPixel key={pixelId} pixelId={pixelId} />
+  ) : null;
 }
 
 export { snapchatEvents } from '@/lib/analytics/snapchat-pixel-events';

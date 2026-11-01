@@ -1,0 +1,3 @@
+supabase/tests/commerce_cart_line_offer_id.sql
+supabase/tests/commerce_cart_exact_offer_review.sql
+supabase/tests/commerce_cart_exact_offer_binding.sql

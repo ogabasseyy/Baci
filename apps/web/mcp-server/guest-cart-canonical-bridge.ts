@@ -20,7 +20,7 @@ const replySchema = z.object({
         .array(
           z.object({
             productId: z.string().uuid(),
-            offerId: z.string().uuid().optional(),
+            offerId: z.string().uuid().nullish(),
             quantity: z.number().int().min(1).max(10),
           })
         )

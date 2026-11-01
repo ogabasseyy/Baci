@@ -253,3 +253,36 @@ it('reads authoritative revision four after replaying a revision two mutation re
   expect(result.state?.version).toBe(4);
   expect(deps.read).toHaveBeenCalledTimes(2);
 });
+
+it.each([
+  0, 3,
+])('matches case-equivalent offer UUIDs for absolute quantity %s', async (quantity) => {
+  const { deps } = setup();
+  const offerId = 'abcdefab-abcd-4abc-8abc-abcdefabcdef';
+  deps.read.mockResolvedValue({
+    ok: true,
+    state: {
+      ...state,
+      version: 4,
+      lines: [{ ...state.lines[0], id: 'offer-line', offerId }],
+    },
+  } as never);
+  const cart = await openLegacyCanonicalCart(
+    { provider: 'mcp', handle: 'a'.repeat(64), merchant },
+    deps as never
+  );
+  await operateLegacyCanonicalCart(cart, {
+    edit: { productId, offerId: offerId.toUpperCase(), quantity },
+    expectedVersion: 4,
+    operationId: 'offer-case-edit',
+  });
+  expect(deps.mutate).toHaveBeenCalledWith(expect.anything(), {
+    cartId,
+    command:
+      quantity === 0
+        ? { type: 'remove', lineId: 'offer-line' }
+        : { type: 'set_quantity', lineId: 'offer-line', quantity },
+    expectedVersion: 4,
+    operationId: 'offer-case-edit',
+  });
+});

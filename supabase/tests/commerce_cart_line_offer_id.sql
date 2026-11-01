@@ -1,4 +1,4 @@
--- Exact-offer cart identity. Same condition, different offer => distinct lines.
+-- Exact-offer identity: ID-only offers must remain distinct cart lines.
 -- Omitted offer stays on the null lane and still merges with itself.
 -- Requires the commerce cart fixture (merchant 11111111-1111-4111-8111-111111111111,
 -- product 44444444-4444-4444-8444-444444444444) and 20261025120000 applied.
@@ -20,7 +20,7 @@ DECLARE
 BEGIN
   INSERT INTO public.product_offers (id, product_id, merchant_id, condition, price, stock_quantity, status)
   VALUES
-    (offer_a, product, merchant, 'Used', 20, 4, 'active'),
+    (offer_a, product, merchant, 'open_box', 20, 4, 'active'),
     (offer_b, product, merchant, 'used', 30, 4, 'active');
   INSERT INTO public.commerce_carts (id, merchant_id, expires_at)
   VALUES (cart, merchant, now() + interval '1 day');
@@ -53,7 +53,7 @@ BEGIN
     cart, 'add-offer-a', 1,
     jsonb_build_object(
       'type', 'add',
-      'item', jsonb_build_object('productId', product, 'condition', 'used', 'offerId', offer_a),
+      'item', jsonb_build_object('productId', product, 'offerId', offer_a),
       'quantity', 1
     )
   );
@@ -67,21 +67,21 @@ BEGIN
     cart, 'add-offer-b', 2,
     jsonb_build_object(
       'type', 'add',
-      'item', jsonb_build_object('productId', product, 'condition', 'used', 'offerId', offer_b),
+      'item', jsonb_build_object('productId', product, 'offerId', offer_b),
       'quantity', 1
     )
   );
   PERFORM pg_temp.check_cart_offer(
     result->>'ok' = 'true'
       AND (SELECT count(*) = 2 FROM public.commerce_cart_lines WHERE cart_id = cart),
-    'same condition with a different offer collapsed into one line'
+    'ID-only distinct offers collapsed into one line'
   );
 
   result := public.commerce_cart_mutate(
     cart, 'add-offer-a-again', 3,
     jsonb_build_object(
       'type', 'add',
-      'item', jsonb_build_object('productId', product, 'condition', 'used', 'offerId', offer_a),
+      'item', jsonb_build_object('productId', product, 'offerId', offer_a),
       'quantity', 2
     )
   );
@@ -94,12 +94,12 @@ BEGIN
       ),
     'same exact offer did not merge at that offer price'
   );
-  -- 2940 is inside 2% of the other spelling (3000) and above this offer (2000).
+  -- 2940 is inside 2% of the other offer (3000) and above this offer (2000).
   -- A non-negotiable fixture product stays pending either way.
   PERFORM pg_temp.check_cart_offer(
-    public.commerce_cart_negotiation_status(merchant, product, NULL, 'used', 2940, NULL, offer_a)
+    public.commerce_cart_negotiation_status(merchant, product, NULL, 'open_box', 2940, NULL, offer_a)
       = 'pending',
-    'exact-offer negotiation band followed the other spelling'
+    'exact-offer negotiation band followed the other offer'
   );
 
   result := public.commerce_cart_mutate(

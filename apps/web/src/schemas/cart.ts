@@ -40,13 +40,18 @@ export const cartValidateSchema = z.object({
   cartItems: z.array(cartItemSchema).max(50).optional(),
 });
 
-export const cartItemIdentitySchema = z.strictObject({
-  condition: z.enum(['new', 'used', 'open_box', 'refurbished']).optional(),
-  offerId: offerIdSchema.optional(),
-  options: z.record(z.string().min(1), z.string()).optional(),
-  productId: z.uuid(),
-  variantId: z.uuid().optional(),
-});
+export const cartItemIdentitySchema = z
+  .strictObject({
+    condition: z.enum(['new', 'used', 'open_box', 'refurbished']).optional(),
+    offerId: offerIdSchema.optional(),
+    options: z.record(z.string().min(1), z.string()).optional(),
+    productId: z.uuid(),
+    variantId: z.uuid().optional(),
+  })
+  .refine((item) => !item.offerId || !item.variantId, {
+    message: 'An exact offer cannot also select a variant',
+    path: ['variantId'],
+  });
 
 const cartLineAttachmentsSchema = z.strictObject({
   negotiatedUnitPriceMinor: z.number().int().nonnegative().optional(),
@@ -61,7 +66,15 @@ export const cartInputLineSchema = z
     item: cartItemIdentitySchema,
     quantity: z.number().int().min(1).max(10),
   })
-  .extend(cartLineAttachmentsSchema.shape);
+  .extend(cartLineAttachmentsSchema.shape)
+  .refine(
+    (line) =>
+      !line.item.offerId || (!line.voucherToken && !line.voucherAwardId),
+    {
+      message: 'An exact offer cannot carry a quiz voucher',
+      path: ['item', 'offerId'],
+    }
+  );
 
 const cartCommandSchema = z.discriminatedUnion('type', [
   z
@@ -70,7 +83,15 @@ const cartCommandSchema = z.discriminatedUnion('type', [
       quantity: z.number().int().min(1).max(10),
       type: z.literal('add'),
     })
-    .extend(cartLineAttachmentsSchema.shape),
+    .extend(cartLineAttachmentsSchema.shape)
+    .refine(
+      (line) =>
+        !line.item.offerId || (!line.voucherToken && !line.voucherAwardId),
+      {
+        message: 'An exact offer cannot carry a quiz voucher',
+        path: ['item', 'offerId'],
+      }
+    ),
   z.strictObject({
     lineId: z.string().trim().min(1).max(64),
     quantity: z.number().int().min(1).max(10),
@@ -162,7 +183,7 @@ const handoffResolutionSchema = z.strictObject({
   keep: z.enum(['incoming', 'existing']),
 });
 
-const handoffInputLineSchema = cartInputLineSchema.extend({
+const handoffInputLineSchema = cartInputLineSchema.safeExtend({
   sourceLineId: z.uuid().optional(),
 });
 

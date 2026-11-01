@@ -162,6 +162,7 @@ export function optimisticAddLine(
         ? minorToMajor(attachments.negotiatedUnitPriceMinor)
         : undefined,
     negotiationStatus: attachments?.negotiationStatus ?? 'none',
+    offerId: intentIdentity(intent)?.offerId,
     pendingTempId: intent.tempId,
     quantity: intent.quantity,
     quizAwardId: attachments?.voucherAwardId ?? options?.quizAwardId,

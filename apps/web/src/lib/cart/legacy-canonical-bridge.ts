@@ -186,7 +186,7 @@ export async function operateLegacyCanonicalCart(
     const candidates = state.lines.filter((x) => {
       if (x.productId !== edit.productId) return false;
       if (!edit.offerId) return true;
-      return x.offerId === edit.offerId;
+      return x.offerId?.toLowerCase() === edit.offerId.toLowerCase();
     });
     if (
       candidates.length > 1 ||

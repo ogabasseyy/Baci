@@ -217,6 +217,7 @@ deploy_scripts:
   - '.github/scripts/run-pinned-vercel.sh'
   - '.github/scripts/run-pinned-vercel.test.mjs'
   - '.github/scripts/pnpm-install-with-retry.sh'
+  - '.github/scripts/pnpm-hoisted-patch-install.test.mjs'
   - '.github/scripts/storefront-release-coherence*.mjs'
   - '.github/scripts/storefront-release-config*.mjs'
   - '.github/scripts/storefront-release-marker*.mjs'

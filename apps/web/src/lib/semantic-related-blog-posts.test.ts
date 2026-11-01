@@ -181,3 +181,56 @@ it('scores focus_keyword and tokenized multi-word keyword overlap when keywords[
     scoreSemanticRelatedBlogPost(tecnoSource, unrelatedBrandCandidate)
   );
 });
+
+it('ignores boilerplate category tags and boosts same-brand candidates over cross-brand candidates', () => {
+  const tecnoSource: SemanticBlogPostInput = {
+    id: 'tecno-camon-slim',
+    title: 'Tecno Camon Slim Price in Nigeria',
+    category: 'Smartphones',
+    tags: ['Tecno', 'Smartphones', 'Nigeria buyer guide'],
+    keywords: [
+      'Tecno Camon Slim price in Nigeria',
+      'Smartphones',
+      'Nigeria buyer guide',
+    ],
+  };
+  const sameBrandPost: SemanticBlogPostInput = {
+    id: 'tecno-spark-40',
+    title: 'Spark 40 battery and display checks',
+    category: 'Smartphones',
+    tags: ['Tecno', 'Smartphones'],
+    keywords: ['Tecno Spark 40'],
+  };
+  const crossBrandBoilerplatePost: SemanticBlogPostInput = {
+    id: 'iphone-17-pro',
+    title: 'iPhone 17 Pro Price in Nigeria',
+    category: 'Smartphones',
+    tags: ['Apple', 'iPhone', 'Smartphones', 'Nigeria buyer guide'],
+    keywords: [
+      'iPhone 17 Pro price in Nigeria',
+      'Smartphones',
+      'Nigeria buyer guide',
+    ],
+  };
+
+  expect(
+    scoreSemanticRelatedBlogPost(tecnoSource, sameBrandPost)
+  ).toBeGreaterThan(
+    scoreSemanticRelatedBlogPost(tecnoSource, crossBrandBoilerplatePost)
+  );
+});
+
+it('does not score overlap that consists only of boilerplate tags and keywords', () => {
+  const source: SemanticBlogPostInput = {
+    id: 'source',
+    tags: ['Smartphones', 'Nigeria buyer guide'],
+    keywords: ['Smartphones', 'Nigeria buyer guide'],
+  };
+  const candidate: SemanticBlogPostInput = {
+    id: 'candidate',
+    tags: ['Smartphones', 'Nigeria buyer guide'],
+    keywords: ['Smartphones', 'Nigeria buyer guide'],
+  };
+
+  expect(scoreSemanticRelatedBlogPost(source, candidate)).toBe(0);
+});

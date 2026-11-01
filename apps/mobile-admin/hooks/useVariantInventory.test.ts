@@ -139,6 +139,33 @@ describe('useVariantInventory hooks', () => {
         id: 'unit-1',
       };
       expect(getNext?.({ nextCursor: cursor })).toEqual(cursor);
+
+      mocks.rpc.mockResolvedValueOnce({
+        data: { rows: [{ id: 'unit-2' }], nextCursor: null, hasMore: false },
+        error: null,
+      });
+      const nextPage = await mocks.infiniteQueryConfigs[0].queryFn({
+        pageParam: getNext?.({ nextCursor: cursor }),
+      });
+      expect(mocks.rpc).toHaveBeenLastCalledWith(
+        'list_variant_inventory_units',
+        {
+          p_merchant_id: 'merchant-1',
+          p_product_id: 'product-1',
+          p_variant_id: 'variant-1',
+          p_status: 'available',
+          p_branch_scope: 'all',
+          p_branch_id: 'branch-1',
+          p_limit: 10,
+          p_cursor_created_at: '2026-06-15T00:00:00Z',
+          p_cursor_id: 'unit-1',
+        }
+      );
+      expect(nextPage).toEqual({
+        units: [{ id: 'unit-2' }],
+        nextCursor: null,
+        hasMore: false,
+      });
     });
 
     it('throws when supabase rpc returns an invalid response shape', async () => {

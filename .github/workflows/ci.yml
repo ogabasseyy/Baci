@@ -390,6 +390,14 @@ jobs:
           PGPASSWORD: postgres
         run: bash supabase/migrations/tests/run-serialized-inventory-pagination.sh
 
+      - name: Test serialized inventory listing edit fields
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/tests/run-serialized-inventory-listing-fields.sh
+
       - name: Run X token authentication SQL contract
         env:
           PG_BIN: /usr/lib/postgresql/16/bin

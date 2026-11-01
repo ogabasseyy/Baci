@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { Client } from 'pg';
@@ -12,7 +13,7 @@ const bin =
     ?.slice('--postgres-bin='.length) ?? '/opt/homebrew/opt/postgresql@17/bin';
 
 test('loyalty checkout replay remains bound to its original redemption', async () => {
-  const directory = mkdtempSync('/tmp/baci-loyalty-replay-');
+  const directory = mkdtempSync(join(tmpdir(), 'baci-loyalty-replay-'));
   const socket = join(directory, 'socket');
   const data = join(directory, 'data');
   mkdirSync(socket, { mode: 0o700 });
@@ -73,8 +74,14 @@ test('loyalty checkout replay remains bound to its original redemption', async (
       )
     );
   } finally {
-    await client.end();
-    if (started) run('pg_ctl', ['-D', data, '-m', 'fast', 'stop']);
-    rmSync(directory, { recursive: true });
+    try {
+      await client.end();
+    } finally {
+      try {
+        if (started) run('pg_ctl', ['-D', data, '-m', 'fast', 'stop']);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    }
   }
 });

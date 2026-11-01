@@ -28,6 +28,12 @@ $$;
 SET LOCAL ROLE service_role;
 SELECT set_config('request.jwt.claim.role','service_role',true);
 SELECT set_config('test.serialized_offer_failure_phase','0',true);
+SELECT set_config('test.serialized_offer_outer_error','00000',true);
+-- Catch failures outside the inner handler (including block compilation) and
+-- expose only a synthetic SQLSTATE category through distinct assertion lines.
+DO $diagnostic$
+BEGIN
+EXECUTE $fixture$
 DO $$
 DECLARE
   merchant uuid := '37440000-0000-4000-8000-000000000001';
@@ -126,6 +132,23 @@ EXCEPTION WHEN query_canceled OR assert_failure OR OTHERS THEN
   -- the synthetic fixture phase so each failure has a distinct SQL line.
   PERFORM set_config('test.serialized_offer_failure_phase', phase::text, true);
 END $$;
+$fixture$;
+EXCEPTION WHEN query_canceled OR assert_failure OR OTHERS THEN
+  PERFORM set_config('test.serialized_offer_outer_error', SQLSTATE, true);
+END $diagnostic$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_outer_error',true) LIKE '22%' THEN RAISE EXCEPTION 'serialized fixture data error'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_outer_error',true) LIKE '23%' THEN RAISE EXCEPTION 'serialized fixture constraint error'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_outer_error',true) LIKE '40%' THEN RAISE EXCEPTION 'serialized fixture transaction error'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_outer_error',true) = '42501' THEN RAISE EXCEPTION 'serialized fixture permission error'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_outer_error',true) = '42702' THEN RAISE EXCEPTION 'serialized fixture ambiguous name'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_outer_error',true) = '42703' THEN RAISE EXCEPTION 'serialized fixture undefined column'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_outer_error',true) = '42883' THEN RAISE EXCEPTION 'serialized fixture undefined function'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_outer_error',true) = '42P01' THEN RAISE EXCEPTION 'serialized fixture undefined relation'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_outer_error',true) = '42601' THEN RAISE EXCEPTION 'serialized fixture syntax error'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_outer_error',true) LIKE '42%' THEN RAISE EXCEPTION 'serialized fixture syntax or access error'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_outer_error',true) LIKE '53%' OR current_setting('test.serialized_offer_outer_error',true) LIKE '54%' THEN RAISE EXCEPTION 'serialized fixture resource error'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_outer_error',true) = '57014' THEN RAISE EXCEPTION 'serialized fixture canceled'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_outer_error',true) <> '00000' THEN RAISE EXCEPTION 'serialized fixture other error'; END IF; END $$;
 DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '1' THEN RAISE EXCEPTION 'serialized offer fixture phase 1 failed'; END IF; END $$;
 DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '2' THEN RAISE EXCEPTION 'serialized offer fixture phase 2 failed'; END IF; END $$;
 DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '3' THEN RAISE EXCEPTION 'serialized offer fixture phase 3 failed'; END IF; END $$;

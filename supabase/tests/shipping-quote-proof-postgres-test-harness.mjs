@@ -173,6 +173,8 @@ export function createShippingQuoteProofTestDatabase({
         '20260904123300_preserve_customer_checkout_on_quote_refresh.sql'
       )
     );
+    // Current 2-arg GIGL writers: either v1 price (unrounded or NGN 100).
+    query(readMigration('20261031220000_gigl_round_price_to_ngn_100.sql'));
     query(
       definition(original, 'public', 'persist_refreshed_order_shipping_quote')
     );

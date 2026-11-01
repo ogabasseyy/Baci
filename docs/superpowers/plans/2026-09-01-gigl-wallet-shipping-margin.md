@@ -15,6 +15,7 @@
 - Work only in `/Users/mac/Baci-app/.worktrees/gigl-wallet-shipping-margin` on `codex/gigl-wallet-shipping-margin`; preserve unrelated work and never edit the dirty root checkout.
 - The platform margin is exactly 10% and applies only to GIGL quotes, including domestic and international GIGL options.
 - Calculate money with integer kobo: provider kobo is `Math.round(providerCost * 100)`, charged kobo is `Math.ceil(providerKobo * 11000 / 10000)`, and margin is the difference.
+- Update (2026-10-31): new GIGL quotes now round the charged kobo up to the next whole NGN 100, so 10% is a minimum margin; see the design spec and migration `20261031220000_gigl_round_price_to_ngn_100.sql`.
 - `shipping_quotes.price` remains the one bundled amount shown and charged. Provider cost, margin, pricing version, provider payload, and attempt tokens are internal and never returned by public quote/Admin responses.
 - Storefront-paid GIGL shipping uses `customer_checkout`, is retained at settlement, and never debits the merchant wallet at booking.
 - An order-scoped Admin quote explicitly writes `merchant_wallet`; do not infer funding from `orders.source`, `shipping_fee`, payment status, or the absence of an earlier quote.

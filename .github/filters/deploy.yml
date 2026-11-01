@@ -117,6 +117,7 @@ tracking:
   - 'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-monitor-worker.ts'
   - 'apps/web/src/app/api/cron/gigl-tracking/nullable-supabase-rpc-argument.ts'
   - 'apps/web/src/lib/gigl-tracking-worker-client.ts'
+  - 'apps/web/src/schemas/gigl-tracking-token-cache.ts'
   - 'apps/web/src/lib/verify-gigl-tracking-worker-capability.ts'
   - 'apps/web/src/lib/shipping/gigl*'
   - 'apps/web/src/lib/shipping/providers/gigl*'

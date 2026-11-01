@@ -410,6 +410,10 @@ jobs:
         run: |
           bash supabase/migrations/tests/run-serialized-offer-assignment.sh
           bash supabase/migrations/tests/run-serialized-offer-quiz.sh
+          bash supabase/migrations/tests/run-serialized-offer-voucher.sh
+          OFFER_VOUCHER_ASSERTION=serialized_offer_voucher_foreign_offer_assert.sql bash supabase/migrations/tests/run-serialized-offer-voucher.sh
+          OFFER_VOUCHER_ASSERTION=serialized_offer_voucher_ownership_assert.sql bash supabase/migrations/tests/run-serialized-offer-voucher.sh
+          OFFER_VOUCHER_ASSERTION=serialized_offer_voucher_immutability_assert.sql bash supabase/migrations/tests/run-serialized-offer-voucher.sh
           bash supabase/migrations/tests/run-serialized-offer-claims.sh
           bash supabase/migrations/tests/run-serialized-offer-confirmation.sh
           bash supabase/migrations/tests/run-serialized-offer-reuse.sh

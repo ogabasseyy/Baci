@@ -65,9 +65,21 @@ describe('fetchCartOfferPrices', () => {
     let active = 0;
     let peak = 0;
     const releases: Array<() => void> = [];
+    let signalFirstBatch: () => void = () => {};
+    let signalSecondBatch: () => void = () => {};
+    const firstBatch = new Promise<void>((resolve) => {
+      signalFirstBatch = resolve;
+    });
+    const secondBatch = new Promise<void>((resolve) => {
+      signalSecondBatch = resolve;
+    });
+    let entered = 0;
     const callRpc = vi.fn(async () => {
       active += 1;
       peak = Math.max(peak, active);
+      entered += 1;
+      if (entered === 5) signalFirstBatch();
+      if (entered === 7) signalSecondBatch();
       await new Promise<void>((resolve) => releases.push(resolve));
       active -= 1;
       return { data: [], error: null };
@@ -81,11 +93,11 @@ describe('fetchCartOfferPrices', () => {
       products.map(({ id }) => ({ id, offerId: OFFER_ID })),
       products
     );
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await firstBatch;
     expect(callRpc).toHaveBeenCalledTimes(5);
     expect(peak).toBe(5);
     for (const release of releases.splice(0)) release();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await secondBatch;
     expect(callRpc).toHaveBeenCalledTimes(7);
     for (const release of releases.splice(0)) release();
     await expect(work).resolves.toEqual(new Map());

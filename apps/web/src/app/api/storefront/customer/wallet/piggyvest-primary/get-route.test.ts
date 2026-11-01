@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PRIMARY_WALLET_STATEMENTS } from '@/lib/piggyvest/primary-wallet-statements';
 import { PRIMARY_WALLET_VERIFICATION_STATEMENT } from '@/lib/piggyvest/primary-wallet-verification';
-import { GET } from './route';
+import { GET } from './get-route';
 
 // Real recovery, mapping, snapshot and verification code; only the
 // session, the database and PiggyVest are faked.

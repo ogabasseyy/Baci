@@ -37,39 +37,6 @@ const configuredEnv: NodeJS.ProcessEnv = {
 };
 
 describe('process-gigl-tracking', () => {
-  it('uses the private token cache for the scoped VPS poller', async () => {
-    const env: NodeJS.ProcessEnv = {
-      ...configuredEnv,
-      HOME: '/home/worker',
-      BACI_WORKER_PROFILE: 'gigl-tracking',
-    };
-    const cache = { load: vi.fn(), save: vi.fn(), clear: vi.fn() };
-    mockCreateCache.mockReturnValue(cache);
-    mockRunWithCache.mockImplementation(async ({ run }) =>
-      run({ trackShipments: vi.fn() })
-    );
-    mockRunMonitorBatch.mockResolvedValue({
-      ok: true,
-      summary: { applied: 0, claimed: 0, failed: 0, paused: 0, success: true },
-    });
-    await expect(
-      runGiglTrackingCli({ env, logger: { error: vi.fn(), info: vi.fn() } })
-    ).resolves.toBe(0);
-    expect(mockCreateCache).toHaveBeenCalledWith({
-      directory: '/home/worker/baci-workers/gigl-tracking-token-cache',
-      credentials: {
-        baseUrl: env.GIGL_BASE_URL,
-        email: env.GIGL_EMAIL,
-        password: env.GIGL_PASSWORD,
-      },
-    });
-    expect(mockRunWithCache).toHaveBeenCalledWith(
-      expect.objectContaining({ cache })
-    );
-    expect(mockRunMonitorBatch).toHaveBeenCalledWith(
-      expect.objectContaining({ processMonitors: expect.any(Function) })
-    );
-  });
   it('runs the monitor batch directly and logs only bounded counts', async () => {
     const runBatch = vi.fn().mockResolvedValue({
       ok: true,

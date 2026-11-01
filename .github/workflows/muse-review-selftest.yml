@@ -9,6 +9,7 @@
 name: Muse Review Selftest
 
 on:
+  workflow_call:
   push:
     branches: [main]
     paths:

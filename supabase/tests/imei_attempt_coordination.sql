@@ -168,4 +168,37 @@ DO $$ DECLARE r jsonb; BEGIN
   IF r->>'idempotency_key' IS DISTINCT FROM '40000000-0000-4000-8000-000000000071' THEN RAISE EXCEPTION 'provider marker incorrectly reconciled'; END IF;
 END $$;
 
+RESET ROLE;
+INSERT INTO public.imei_lookups(id,customer_id,merchant_id,tier,imei_hash,idempotency_key,amount_ngn,status,cached_response,cached_status,sickw_status)
+VALUES ('50000000-0000-4000-8000-000000000081','30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','blacklist',repeat('4',64),'40000000-0000-4000-8000-000000000081',700,'failed_error','{"success":false,"code":"INTERNAL_ERROR"}',500,'wallet_debit_error');
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE r jsonb; BEGIN
+  r := pg_temp.claim_attempt(jsonb_build_object('tier','blacklist','imei_hash',repeat('4',64),'idempotency_key','40000000-0000-4000-8000-000000000081'));
+  IF r->>'idempotency_key' IS DISTINCT FROM '40000000-0000-4000-8000-000000000081' THEN RAISE EXCEPTION 'same-key replay changed identity'; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.imei_lookups WHERE id='50000000-0000-4000-8000-000000000081' AND cached_response->>'code'='IMEI_NO_DEBIT') THEN RAISE EXCEPTION 'confirmed no-debit replay did not receive safe retry code'; END IF;
+END $$;
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE r jsonb; BEGIN
+  r := pg_temp.claim_attempt(jsonb_build_object('tier','blacklist','imei_hash',repeat('4',64),'idempotency_key','40000000-0000-4000-8000-000000000082'));
+  IF r->>'idempotency_key' IS DISTINCT FROM '40000000-0000-4000-8000-000000000082' THEN RAISE EXCEPTION 'confirmed no-debit attempt cannot be retried'; END IF;
+END $$;
+
+RESET ROLE;
+INSERT INTO public.imei_lookups(id,customer_id,merchant_id,tier,imei_hash,idempotency_key,amount_ngn,status,cached_response,cached_status,sickw_status)
+VALUES ('50000000-0000-4000-8000-000000000091','30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','blacklist',repeat('3',64),'40000000-0000-4000-8000-000000000091',700,'failed_error','{"success":false,"code":"INTERNAL_ERROR"}',500,'wallet_debit_error');
+INSERT INTO public.customer_wallet_transactions(customer_id,merchant_id,type,status,amount,source_type,source_id)
+VALUES ('30000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','redemption','completed',700,'imei_wallet_payment','50000000-0000-4000-8000-000000000091');
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE r jsonb; BEGIN
+  r := pg_temp.claim_attempt(jsonb_build_object('tier','blacklist','imei_hash',repeat('3',64),'idempotency_key','40000000-0000-4000-8000-000000000092'));
+  IF r->>'idempotency_key' IS DISTINCT FROM '40000000-0000-4000-8000-000000000091' THEN RAISE EXCEPTION 'debited failure advanced'; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT cached_response->>'code' FROM public.imei_lookups WHERE id='50000000-0000-4000-8000-000000000091') IS DISTINCT FROM 'INTERNAL_ERROR' THEN RAISE EXCEPTION 'debited failure labeled no-debit'; END IF;
+END $$;
+
 ROLLBACK;

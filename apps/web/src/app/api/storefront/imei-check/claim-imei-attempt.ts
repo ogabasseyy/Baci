@@ -80,7 +80,9 @@ export async function reconcileExistingImeiAttempt({
   existing: NonNullable<Awaited<ReturnType<typeof findLookupByIdempotencyKey>>>;
 }) {
   if (
-    (existing.status === 'pending' || existing.status === 'refund_pending') &&
+    (existing.status === 'pending' ||
+      existing.status === 'refund_pending' ||
+      existing.status === 'failed_error') &&
     existing.customer_id === context.customerId &&
     existing.merchant_id === context.merchantId &&
     existing.tier === context.tier &&

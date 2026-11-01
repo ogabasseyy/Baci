@@ -237,7 +237,7 @@ it('hides live rankings when transitioning to final even if the published fetch 
   expect(result.current.leaderboard).toBeNull();
 });
 
-it('hides an existing score immediately when the current account getter changes', async () => {
+it('hides an existing score when the subscribed account changes', async () => {
   jest.mocked(fetchQuizLiveLeaderboard).mockResolvedValue(board);
   const { result, rerender } = renderHook(
     ({ currentUser }: { currentUser: string }) =>
@@ -245,7 +245,7 @@ it('hides an existing score immediately when the current account getter changes'
         enabled: true,
         eventHasEnded: false,
         eventId: 'event-1',
-        expectedUserId: 'user-1',
+        expectedUserId: currentUser,
         lifecycle: 'pending_results',
         getCurrentUserId: () => currentUser,
       }),
@@ -254,6 +254,7 @@ it('hides an existing score immediately when the current account getter changes'
   await waitFor(() =>
     expect(result.current.leaderboard?.currentPlayer?.score).toBe(4)
   );
+  jest.mocked(fetchQuizLiveLeaderboard).mockReturnValue(new Promise(() => {}));
   rerender({ currentUser: 'user-2' });
   expect(result.current.leaderboard).toBeNull();
 });

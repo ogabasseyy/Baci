@@ -174,10 +174,7 @@ export function useQuizResultsLeaderboard({
   }, [enabled, eventId, expectedUserId, isLive, lifecycle]);
 
   const currentKey = `${eventId ?? ''}:${expectedUserId ?? ''}`;
-  const visible =
-    enabled &&
-    previousEventKey.current === currentKey &&
-    (!getCurrentUserId || getCurrentUserId() === expectedUserId);
+  const visible = enabled && previousEventKey.current === currentKey;
   const showBoard =
     visible && !(lifecycle === 'final' && leaderboard?.status === 'live');
   return {

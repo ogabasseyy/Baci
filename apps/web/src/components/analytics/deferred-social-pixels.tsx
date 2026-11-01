@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useSyncExternalStore } from 'react';
+import { Suspense, useSyncExternalStore } from 'react';
 import { getSocialMarketingConsent } from '@/lib/analytics/get-social-marketing-consent';
 import { getSocialServerConsent } from '@/lib/analytics/get-social-server-consent';
 import { isValidSnapchatPixelId } from '@/lib/analytics/is-valid-snapchat-pixel-id';
@@ -45,16 +45,20 @@ export function DeferredSocialPixels({
   return (
     <>
       {allowed && merchantId && tiktokId ? (
-        <TikTokPixel
-          key={`tiktok:${merchantId}:${tiktokEpoch}`}
-          pixelId={tiktokId}
-        />
+        <Suspense fallback={null}>
+          <TikTokPixel
+            key={`tiktok:${merchantId}:${tiktokEpoch}`}
+            pixelId={tiktokId}
+          />
+        </Suspense>
       ) : null}
       {allowed && merchantId && snapchatId ? (
-        <SnapchatPixel
-          key={`snapchat:${merchantId}:${snapchatEpoch}`}
-          pixelId={snapchatId}
-        />
+        <Suspense fallback={null}>
+          <SnapchatPixel
+            key={`snapchat:${merchantId}:${snapchatEpoch}`}
+            pixelId={snapchatId}
+          />
+        </Suspense>
       ) : null}
     </>
   );

@@ -1,37 +1,55 @@
 import { describe, expect, it } from 'vitest';
-import {
-  BOILERPLATE_BLOG_METADATA_PHRASES,
-  extractBlogPostBrandFamilies,
-  scoreBlogPostBrandAffinity,
-} from './blog-post-brand-affinity';
+import { scoreBlogPostBrandAffinity } from './blog-post-brand-affinity';
 
-describe('blog-post-brand-affinity', () => {
-  it('maps brand and model-line tokens to canonical brand families', () => {
-    expect(extractBlogPostBrandFamilies(['camon', 'tecno', '5g'])).toEqual([
-      'tecno',
-    ]);
-    expect(extractBlogPostBrandFamilies(['iphone', 'galaxy'])).toEqual([
-      'apple',
-      'samsung',
-    ]);
+describe('scoreBlogPostBrandAffinity', () => {
+  it('boosts posts that share a canonical brand family across sub-brands', () => {
+    expect(
+      scoreBlogPostBrandAffinity(
+        ['Tecno Camon Slim Price in Nigeria'],
+        ['Spark 40 Pro battery life']
+      )
+    ).toBe(20);
+    expect(
+      scoreBlogPostBrandAffinity(
+        ['Redmi Note 15 Pro review'],
+        ['Poco X8 Pro Max gaming performance']
+      )
+    ).toBe(20);
   });
 
-  it('ignores inherited prototype properties when resolving tokens', () => {
-    expect(extractBlogPostBrandFamilies(['constructor', 'toString'])).toEqual(
-      []
-    );
+  it('preserves two-character brands such as HP and LG in multiword phrases', () => {
+    expect(
+      scoreBlogPostBrandAffinity(
+        ['HP ProBook 450 G10 Price in Nigeria'],
+        ['HP ZBook Firefly 14 workstation review']
+      )
+    ).toBe(20);
+    expect(
+      scoreBlogPostBrandAffinity(
+        ['LG C4 OLED TV review'],
+        ['LG UltraGear gaming monitor guide']
+      )
+    ).toBe(20);
+    expect(
+      scoreBlogPostBrandAffinity(
+        ['HP ProBook 450 G10 Price in Nigeria'],
+        ['Dell XPS 13 battery guide']
+      )
+    ).toBe(-8);
   });
 
-  it('rewards shared brand families and penalizes disjoint single-brand matches', () => {
-    expect(scoreBlogPostBrandAffinity(['tecno', 'camon'], ['spark'])).toBe(20);
-    expect(scoreBlogPostBrandAffinity(['tecno', 'camon'], ['iphone'])).toBe(-8);
-    expect(scoreBlogPostBrandAffinity(['budget', 'phone'], ['iphone'])).toBe(0);
+  it('penalizes candidates with disjoint brand families', () => {
+    expect(
+      scoreBlogPostBrandAffinity(['Tecno Camon 50'], ['iPhone 17 Pro'])
+    ).toBe(-8);
   });
 
-  it('includes generic category and Nigeria buyer guide phrases in boilerplate set', () => {
-    expect(BOILERPLATE_BLOG_METADATA_PHRASES.has('smartphones')).toBe(true);
-    expect(BOILERPLATE_BLOG_METADATA_PHRASES.has('nigeria buyer guide')).toBe(
-      true
-    );
+  it('returns 0 when either post has no brand signal', () => {
+    expect(
+      scoreBlogPostBrandAffinity(
+        ['Smartphone battery calibration guide'],
+        ['iPhone 17 Pro']
+      )
+    ).toBe(0);
   });
 });

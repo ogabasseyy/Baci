@@ -234,3 +234,25 @@ it('does not score overlap that consists only of boilerplate tags and keywords',
 
   expect(scoreSemanticRelatedBlogPost(source, candidate)).toBe(0);
 });
+
+it('preserves two-character brands like HP in titles when scoring related posts', () => {
+  const hpSource: SemanticBlogPostInput = {
+    id: 'hp-probook',
+    title: 'HP ProBook 450 G10',
+    category: 'Laptops',
+  };
+  const hpCandidate: SemanticBlogPostInput = {
+    id: 'hp-zbook',
+    title: 'HP ZBook Firefly 14',
+    category: 'Laptops',
+  };
+  const dellCandidate: SemanticBlogPostInput = {
+    id: 'dell-vostro',
+    title: 'Dell Vostro 3520',
+    category: 'Laptops',
+  };
+
+  expect(scoreSemanticRelatedBlogPost(hpSource, hpCandidate)).toBeGreaterThan(
+    scoreSemanticRelatedBlogPost(hpSource, dellCandidate)
+  );
+});

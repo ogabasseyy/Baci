@@ -1,26 +1,3 @@
-export const BOILERPLATE_BLOG_METADATA_PHRASES = new Set([
-  'accessories',
-  'audio',
-  'buyer guide',
-  'buying guide',
-  'gaming',
-  'laptop',
-  'laptops',
-  'monitors',
-  'nigeria',
-  'nigeria buyer guide',
-  'phone',
-  'phones',
-  'price in nigeria',
-  'printers',
-  'smart tvs',
-  'smartphone',
-  'smartphones',
-  'tablet',
-  'tablets',
-  'wearables',
-]);
-
 const BRAND_FAMILY_BY_TOKEN: Readonly<Record<string, string>> = {
   airpods: 'apple',
   apple: 'apple',
@@ -29,6 +6,7 @@ const BRAND_FAMILY_BY_TOKEN: Readonly<Record<string, string>> = {
   canon: 'canon',
   dell: 'dell',
   elitebook: 'hp',
+  envy: 'hp',
   galaxy: 'samsung',
   google: 'google',
   honor: 'honor',
@@ -73,24 +51,38 @@ const BRAND_FAMILY_BY_TOKEN: Readonly<Record<string, string>> = {
   zenbook: 'asus',
 };
 
-export function extractBlogPostBrandFamilies(
-  tokens: Iterable<string>
+function extractBrandFamilies(
+  texts: Iterable<string | null | undefined>
 ): string[] {
   const families = new Set<string>();
-  for (const token of tokens) {
-    if (Object.hasOwn(BRAND_FAMILY_BY_TOKEN, token)) {
-      families.add(BRAND_FAMILY_BY_TOKEN[token]);
+  for (const rawText of texts) {
+    if (!rawText) {
+      continue;
+    }
+    const normalized = rawText
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+    if (!normalized) {
+      continue;
+    }
+    for (const token of normalized.split(/\s+/)) {
+      if (Object.hasOwn(BRAND_FAMILY_BY_TOKEN, token)) {
+        families.add(BRAND_FAMILY_BY_TOKEN[token]);
+      }
     }
   }
   return [...families];
 }
 
 export function scoreBlogPostBrandAffinity(
-  sourceTokens: Iterable<string>,
-  candidateTokens: Iterable<string>
+  sourceTexts: Iterable<string | null | undefined>,
+  candidateTexts: Iterable<string | null | undefined>
 ): number {
-  const sourceBrands = extractBlogPostBrandFamilies(sourceTokens);
-  const candidateBrands = extractBlogPostBrandFamilies(candidateTokens);
+  const sourceBrands = extractBrandFamilies(sourceTexts);
+  const candidateBrands = extractBrandFamilies(candidateTexts);
   if (sourceBrands.length === 0 || candidateBrands.length === 0) {
     return 0;
   }

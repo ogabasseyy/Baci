@@ -1,10 +1,29 @@
-import {
-  BOILERPLATE_BLOG_METADATA_PHRASES,
-  scoreBlogPostBrandAffinity,
-} from './blog-post-brand-affinity';
+import { scoreBlogPostBrandAffinity } from './blog-post-brand-affinity';
 
 const MAX_TOKEN_COUNT = 24;
 const MAX_TEXT_LENGTH = 220;
+const BOILERPLATE_BLOG_METADATA_PHRASES = new Set([
+  'accessories',
+  'audio',
+  'buyer guide',
+  'buying guide',
+  'gaming',
+  'laptop',
+  'laptops',
+  'monitors',
+  'nigeria',
+  'nigeria buyer guide',
+  'phone',
+  'phones',
+  'price in nigeria',
+  'printers',
+  'smart tvs',
+  'smartphone',
+  'smartphones',
+  'tablet',
+  'tablets',
+  'wearables',
+]);
 const STOP_WORDS = new Set([
   'about',
   'after',
@@ -142,6 +161,15 @@ function extractKeywords(input: SemanticBlogPostInput): string[] {
   return normalizeStringArray(combined);
 }
 
+function extractBrandTexts(input: SemanticBlogPostInput): string[] {
+  return [
+    ...(typeof input.title === 'string' ? [input.title] : []),
+    ...(typeof input.focus_keyword === 'string' ? [input.focus_keyword] : []),
+    ...(Array.isArray(input.tags) ? input.tags : []),
+    ...(Array.isArray(input.keywords) ? input.keywords : []),
+  ];
+}
+
 export function scoreSemanticRelatedBlogPost(
   source: SemanticBlogPostInput,
   candidate: SemanticBlogPostInput
@@ -196,7 +224,10 @@ export function scoreSemanticRelatedBlogPost(
   ];
   score +=
     Math.min(intersectionCount(sourceTopicTokens, candidateTopicTokens), 6) * 3;
-  score += scoreBlogPostBrandAffinity(sourceTopicTokens, candidateTopicTokens);
+  score += scoreBlogPostBrandAffinity(
+    extractBrandTexts(source),
+    extractBrandTexts(candidate)
+  );
 
   if (candidate.featured_image_url && score > 0) {
     score += 1;

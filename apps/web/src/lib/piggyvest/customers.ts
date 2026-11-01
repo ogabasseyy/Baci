@@ -1,5 +1,9 @@
 import 'server-only';
 import z from 'zod';
+import {
+  piggyvestCustomerLookupSchema,
+  piggyvestThirdPartyIdentifierSchema,
+} from '@/schemas/piggyvest-customer-lookup';
 import { type PiggyvestClientConfig, piggyvestRequest } from './client';
 
 /**
@@ -25,9 +29,11 @@ const createCustomerInputSchema = z.object({
     .enum(['international_passport', 'nin', 'voter_card', 'driver_license'])
     .optional(),
   idNumber: z.string().min(1).max(100).optional(),
-  thirdPartyIdentifier: z.string().min(1).max(200),
+  thirdPartyIdentifier: piggyvestThirdPartyIdentifierSchema,
   returnIfExist: z.boolean().default(true),
   enableInterestAccrual: z.boolean().optional(),
+  // Destination for this customer's main-wallet interest. Fixed at creation.
+  interestPayoutWallet: z.string().min(1).optional(),
 });
 
 export type CreatePiggyvestCustomerInput = z.input<
@@ -60,11 +66,30 @@ export function createPiggyvestCustomer(
         enable_interest_accrual: parsed.enableInterestAccrual,
         id_number: parsed.idNumber,
         id_type: parsed.idType,
+        interest_payout_wallet: parsed.interestPayoutWallet,
         name: parsed.name.normalize('NFKC'),
         phone: parsed.phone,
         third_party_identifier: parsed.thirdPartyIdentifier,
       },
       query: { returnIfExist: String(parsed.returnIfExist) },
     }
+  );
+}
+
+/**
+ * Lists the provider customers carrying our third_party_identifier. Read
+ * only; callers decide what an empty, single or ambiguous answer proves.
+ */
+export function findPiggyvestCustomersByThirdPartyIdentifier(
+  config: PiggyvestClientConfig,
+  thirdPartyIdentifier: string
+): Promise<z.infer<typeof piggyvestCustomerLookupSchema>> {
+  const identifier =
+    piggyvestThirdPartyIdentifierSchema.parse(thirdPartyIdentifier);
+  return piggyvestRequest(
+    config,
+    piggyvestCustomerLookupSchema,
+    '/api/v1/customers',
+    { query: { third_party_identifier: identifier } }
   );
 }

@@ -190,6 +190,8 @@ $anon$;
 -- Independently exercise the function's claim guard through a role with
 -- EXECUTE. A mismatched anonymous JWT must still be refused internally.
 SET LOCAL ROLE authenticated;
+-- A valid subject isolates the role check from the separate missing-UID guard.
+SELECT set_config('request.jwt.claim.sub', 'b22df000-0000-4000-8000-000000000001', true);
 DO $anon_claim$
 BEGIN
   BEGIN

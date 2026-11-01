@@ -8,6 +8,7 @@ import {
 import { Component, type ReactNode, useEffect, useRef, useState } from 'react';
 import { RenderBuilderConfig } from '@/components/storefront/render-builder-config';
 import { isBuilderPreviewRenderEvent } from './is-builder-preview-render-event';
+import { NativePreviewCanvas } from './native-preview-canvas';
 import { parseBuilderPreviewEvent } from './parse-builder-preview-event';
 
 type PreviewState = {
@@ -90,11 +91,13 @@ function postPreviewResponse(response: BuilderPreviewResponse): void {
     window.parent.postMessage(message, window.location.origin);
 }
 
-export function BuilderPreviewCanvas() {
+function WebPreviewCanvas() {
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const responseKey = useRef<string | null>(null);
 
   useEffect(() => {
+    // A native v2 document must never install the legacy, nonce-free receiver.
+    if (window.location.search === '?native=2') return;
     postPreviewResponse({
       capabilityHash: builderDesignCapabilities.capabilityHash,
       capabilityVersion: builderDesignCapabilities.capabilityVersion,
@@ -180,5 +183,14 @@ export function BuilderPreviewCanvas() {
         onRendered={() => postRenderResult('rendered')}
       />
     </PreviewRenderFailureBoundary>
+  );
+}
+
+export function BuilderPreviewCanvas() {
+  return (
+    <>
+      <WebPreviewCanvas />
+      <NativePreviewCanvas />
+    </>
   );
 }

@@ -79,6 +79,20 @@ describe('BuilderPreviewCanvas', () => {
       .ReactNativeWebView;
   });
 
+  it('rejects legacy render messages in a native v2 document', () => {
+    window.history.replaceState(null, '', '?native=2');
+    try {
+      installBridge();
+      render(<BuilderPreviewCanvas />);
+      send(validMessage(1));
+      expect(
+        screen.queryByTestId('builder-preview-render')
+      ).not.toBeInTheDocument();
+    } finally {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  });
+
   it('announces ready only after mounting and renders no merchant content first', async () => {
     const postMessage = installBridge();
     render(<BuilderPreviewCanvas />);

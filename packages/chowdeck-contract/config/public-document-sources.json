@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "url": "https://chowdeck-api.readme.io/docs/getting-started.md",
+      "kind": "official_markdown",
+      "fetch": true
+    },
+    {
+      "url": "https://chowdeck-api.readme.io/reference/authentication-1.md",
+      "kind": "official_markdown",
+      "fetch": true
+    },
+    {
+      "url": "https://chowdeck-api.readme.io/reference/get-merchant-profile.md",
+      "kind": "official_markdown",
+      "fetch": true
+    },
+    {
+      "url": "https://chowdeck-api.readme.io/docs/managing-your-menu.md",
+      "kind": "official_markdown",
+      "fetch": true
+    },
+    {
+      "url": "https://chowdeck-api.readme.io/reference/create-menu-category.md",
+      "kind": "official_markdown",
+      "fetch": true
+    },
+    {
+      "url": "https://chowdeck-api.readme.io/reference/list-menu-categories.md",
+      "kind": "official_markdown",
+      "fetch": true
+    },
+    {
+      "url": "https://chowdeck-api.readme.io/reference/create-menu-item.md",
+      "kind": "official_markdown",
+      "fetch": true
+    },
+    {
+      "url": "https://chowdeck-api.readme.io/reference/list-menu-items.md",
+      "kind": "official_markdown",
+      "fetch": true
+    },
+    {
+      "url": "https://chowdeck-api.readme.io/reference/get-menu-item.md",
+      "kind": "official_markdown",
+      "fetch": true
+    },
+    {
+      "url": "https://documenter.getpostman.com/view/19177886/2s8Ysrytto",
+      "kind": "quarantined_reference_only",
+      "fetch": false
+    }
+  ]
+}

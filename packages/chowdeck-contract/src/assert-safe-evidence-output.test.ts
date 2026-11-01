@@ -24,6 +24,8 @@ describe('evidence output scanner', () => {
     ],
     ['Supabase project host', { host: 'abcdefghijklmnopqrst.supabase.co' }],
     ['raw body key', { body: '{}' }],
+    ['hyphenated api key', { 'api-key': 'sensitive' }],
+    ['hyphenated raw source', { 'raw-source': 'sensitive' }],
     ['raw header key', { headers: {} }],
     ['raw source digest key', { rawSourceDigest: SHA_A }],
     ['environment key', { environment: 'production' }],

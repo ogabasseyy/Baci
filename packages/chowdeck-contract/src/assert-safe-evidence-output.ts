@@ -27,7 +27,7 @@ function scan(value: unknown): void {
   }
   if (typeof value !== 'object' || value === null) return;
   for (const [key, entry] of Object.entries(value)) {
-    if (UNSAFE_KEY.test(key.replaceAll('_', ''))) {
+    if (UNSAFE_KEY.test(key.replaceAll(/[_-]/g, ''))) {
       throw new Error('Invalid evidence manifest');
     }
     scan(entry);

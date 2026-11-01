@@ -18,7 +18,10 @@ export async function writeEvidenceAtomically(
     await rename(temporaryPath, outputPath);
     ownsTemporaryPath = false;
   } finally {
-    await handle?.close();
-    if (ownsTemporaryPath) await rm(temporaryPath, { force: true });
+    try {
+      await handle?.close();
+    } finally {
+      if (ownsTemporaryPath) await rm(temporaryPath, { force: true });
+    }
   }
 }

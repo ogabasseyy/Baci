@@ -6,7 +6,8 @@ export function hasPrivateHost(value: string): boolean {
     try {
       const hostname = new URL(candidate).hostname
         .toLowerCase()
-        .replace(/^\[|\]$/g, '');
+        .replace(/^\[|\]$/g, '')
+        .replace(/\.$/, '');
       if (isIP(hostname) === 6) {
         return (
           hostname === '::' ||

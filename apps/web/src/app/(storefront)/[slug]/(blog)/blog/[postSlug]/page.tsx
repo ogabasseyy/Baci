@@ -3,6 +3,7 @@ import { unstable_rethrow } from 'next/navigation';
 import { Suspense } from 'react';
 import { getBlogPostSocialImage } from '@/lib/blog-post-social-image';
 import { getRequestScopedBlogPost } from '@/lib/cached-data';
+import { resolveBlogPostKeywords } from '@/lib/resolve-blog-post-keywords';
 import { generateMetaDescription } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
 import { buildStorefrontMetadataTitle } from '@/lib/storefront-metadata-title';
@@ -115,7 +116,7 @@ export async function generateMetadata({
   return {
     title: metadataTitle,
     description,
-    keywords: post.keywords?.join(', '),
+    keywords: resolveBlogPostKeywords(post)?.join(', '),
     authors: [{ name: post.author_name }],
     openGraph: {
       title: metadataTitleText,

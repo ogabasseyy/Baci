@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { fetchQuizLeaderboard } from '@/services/quiz-leaderboard';
 import { fetchQuizLiveLeaderboard } from '@/services/quiz-live-leaderboard';
@@ -31,7 +31,9 @@ export function useQuizResultsLeaderboard({
   const [leaderboardError, setLeaderboardError] = useState(false);
   const [participantCount, setParticipantCount] = useState<number | null>(null);
   const currentUserIdRef = useRef(getCurrentUserId);
-  currentUserIdRef.current = getCurrentUserId;
+  useLayoutEffect(() => {
+    currentUserIdRef.current = getCurrentUserId;
+  }, [getCurrentUserId]);
   const hasLeaderboard = useRef(false);
   const boardStatus = useRef<QuizLeaderboard['status'] | null>(null);
   const previousEventKey = useRef<string | null>(null);
@@ -175,8 +177,7 @@ export function useQuizResultsLeaderboard({
   const visible =
     enabled &&
     previousEventKey.current === currentKey &&
-    (!currentUserIdRef.current ||
-      currentUserIdRef.current() === expectedUserId);
+    (!getCurrentUserId || getCurrentUserId() === expectedUserId);
   const showBoard =
     visible && !(lifecycle === 'final' && leaderboard?.status === 'live');
   return {

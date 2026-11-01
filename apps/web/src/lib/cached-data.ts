@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
 import { cache } from 'react';
 import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
+import { RELATED_BLOG_POST_LIMITS } from '@/config/related-blog-post-limits';
 import { getBlogCacheTag } from '@/lib/blog-cache-tags';
 import { BLOG_LISTING_PAGE_SIZE } from '@/lib/blog-listing-page-size';
 import type {
@@ -33,7 +34,6 @@ import {
 } from '@/lib/public-blog-content-quality';
 import { applyPublicBlogSqlFilters } from '@/lib/public-blog-sql-filters';
 import { getPublicSupabaseClient } from '@/lib/public-supabase-client';
-import { RELATED_BLOG_POST_LIMITS } from '@/lib/related-blog-post-limits';
 import {
   normalizeRelatedBlogProductLinks,
   normalizeRelatedBlogProducts,

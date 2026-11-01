@@ -1,3 +1,8 @@
+-- Feature gate starts closed in production and is overridden in opt-in tests.
+CREATE FUNCTION public.commerce_cart_condition_pool_is_quantity_managed(uuid,uuid)
+RETURNS boolean LANGUAGE sql AS $$
+ SELECT coalesce(current_setting('test.serialized_offer_gate',true),'on')='on'
+$$;
 -- Minimal order-creation loop with the production #3813 exclusion shape.
 CREATE OR REPLACE FUNCTION private.create_storefront_order_unchecked(
  p_merchant_id uuid, text, text, jsonb, text, numeric, numeric, numeric,

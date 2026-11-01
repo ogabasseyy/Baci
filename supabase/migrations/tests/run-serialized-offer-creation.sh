@@ -28,5 +28,6 @@ psql -v ON_ERROR_STOP=1 -q -d "$db" \
  -f "$root/supabase/migrations/20261101190000_serialized_offer_order_protocol.sql" \
  -f "$root/supabase/migrations/20261101193000_serialized_offer_reuse_protocol.sql" \
  -f "$root/supabase/migrations/20261101194500_serialized_offer_order_creation_protocol.sql" \
- -f "$root/supabase/migrations/tests/serialized_offer_creation_assert.sql"
+ -f "$root/supabase/migrations/20261101195000_serialized_offer_order_creation_gate.sql" \
+ -f "$root/supabase/migrations/tests/${OFFER_CREATION_ASSERTION:-serialized_offer_creation_assert.sql}"
 echo 'PASS serialized offer order creation'

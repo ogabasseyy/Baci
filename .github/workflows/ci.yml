@@ -407,6 +407,7 @@ jobs:
           bash supabase/migrations/tests/run-serialized-offer-confirmation.sh
           bash supabase/migrations/tests/run-serialized-offer-reuse.sh
           bash supabase/migrations/tests/run-serialized-offer-creation.sh
+          OFFER_CREATION_ASSERTION=serialized_offer_creation_gate_assert.sql bash supabase/migrations/tests/run-serialized-offer-creation.sh
           bash supabase/migrations/tests/run-serialized-offer-availability.sh
           bash supabase/migrations/tests/run-serialized-offer-cart.sh
           bash supabase/migrations/tests/run-serialized-offer-lifecycle.sh

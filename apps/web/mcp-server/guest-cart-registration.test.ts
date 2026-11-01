@@ -169,6 +169,9 @@ it.each([false, true])('discovers one cart workflow for OAuth connection=%s', as
     expect(tools.map((tool) => tool.name).sort()).toEqual(connected
       ? ['get_ogabassey_guest_cart', 'update_ogabassey_guest_cart']
       : ['add_to_cart', 'prepare_storefront_cart_link', 'update_ogabassey_guest_cart']);
+    const updateTool = tools.find((tool) => tool.name === 'update_ogabassey_guest_cart');
+    expect(updateTool?.inputSchema.properties).toHaveProperty('offer_id');
+    expect(updateTool?.description).toContain('exact offer_id');
     // Discovery must not create a cart or resolve a private cart credential.
     expect(resolveToken).not.toHaveBeenCalled();
     if (connected) {

@@ -47,6 +47,23 @@ BEGIN
     'ID-only review did not resolve the exact offer condition');
   PERFORM pg_temp.check_offer_review((snapshot->'lines'->0->>'available')::boolean,
     'live exact offer was unavailable');
+  -- Exact offer quantities are enforced even when the parent is unmanaged.
+  UPDATE public.products SET manage_stock=false WHERE id=product;
+  UPDATE public.product_offers SET stock_quantity=0 WHERE id=offer;
+  snapshot := public.commerce_cart_build_checkout_snapshot(merchant,cart);
+  PERFORM pg_temp.check_offer_review(NOT (snapshot->'lines'->0->>'available')::boolean,
+    'unmanaged parent bypassed exact offer allocation');
+  UPDATE public.product_offers SET stock_quantity=1 WHERE id=offer;
+  snapshot := public.commerce_cart_build_checkout_snapshot(merchant,cart);
+  PERFORM pg_temp.check_offer_review((snapshot->'lines'->0->>'available')::boolean,
+    'unmanaged parent rejected an in-stock exact offer');
+  UPDATE public.commerce_cart_lines SET quantity=2 WHERE cart_id=cart AND offer_id=offer;
+  snapshot := public.commerce_cart_build_checkout_snapshot(merchant,cart);
+  PERFORM pg_temp.check_offer_review(NOT (snapshot->'lines'->0->>'available')::boolean,
+    'unmanaged parent exceeded exact offer allocation');
+  UPDATE public.commerce_cart_lines SET quantity=1 WHERE cart_id=cart AND offer_id=offer;
+  UPDATE public.products SET manage_stock=true WHERE id=product;
+  UPDATE public.product_offers SET stock_quantity=4 WHERE id=offer;
   UPDATE public.product_offers SET condition='refurbished' WHERE id=offer;
   snapshot := public.commerce_cart_build_checkout_snapshot(merchant,cart);
   PERFORM pg_temp.check_offer_review(snapshot->'lines'->0->>'condition'='refurbished',

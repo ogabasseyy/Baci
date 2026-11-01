@@ -53,6 +53,13 @@ export const guestOAuthGrantSchema = z.object({
 
 export const guestOAuthCartInputSchema = z.object({
   product_id: z.string().uuid(),
+  offer_id: z
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      'Exact offer ID from the cart or catalog when selecting a specific condition offer'
+    ),
   quantity: z.number().int().min(0).max(10).default(1),
   expectedVersion: z.number().int().min(1).optional(),
   operationId: z.string().trim().min(1).max(128).optional(),

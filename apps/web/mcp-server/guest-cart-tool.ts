@@ -14,6 +14,7 @@ import {
   mcpGuestCartOutputSchema,
 } from '../src/schemas/mcp-guest-cart';
 import { prepareCartHandoff } from './cart-handoff';
+import { resolveMcpVariantOffers } from './resolve-mcp-variant-offers';
 import {
   type GuestCartQuotaReservation,
   refundGuestCartCreation,
@@ -69,7 +70,7 @@ export function registerGuestCartTool(
         : mcpGuestCartOutputSchema,
       title: 'Update Ogabassey Guest Cart',
       description: options.connectionCart
-        ? 'Add, change or remove items in this connection’s persistent Ogabassey guest cart. The server holds cart authority; never ask for or supply a cart token. Call get_ogabassey_guest_cart when current cart details are missing or before website checkout. For remove it or remove the charger, resolve the product from the last returned items; ask which item if ambiguous. Quantity is the desired absolute total; zero removes. Retain the version as expectedVersion and the same operationId when retrying an indeterminate write. Do not create another cart to simulate removal. Guest website checkout is optional; this tool never places an order or starts payment.'
+        ? 'Add, change or remove items in this connection’s persistent Ogabassey guest cart. The server holds cart authority; never ask for or supply a cart token. Call get_ogabassey_guest_cart when current cart details are missing or before website checkout. For remove it or remove the charger, resolve the product from the last returned items; ask which item if ambiguous. For a condition offer, pass the exact offer_id from the catalog or current cart; choose other product options on the website. Quantity is the desired absolute total; zero removes. Retain the version as expectedVersion and the same operationId when retrying an indeterminate write. Do not create another cart to simulate removal. Guest website checkout is optional; this tool never places an order or starts payment.'
         : MCP_GUEST_CART_DESCRIPTION,
       inputSchema: options.connectionCart
         ? guestOAuthCartInputSchema
@@ -182,6 +183,19 @@ export function registerGuestCartTool(
               // must stay available when the catalog is unreachable.
               const merchantId = await options.getMerchantId();
               if (!merchantId) throw new Error('Store unavailable');
+              if (args.offer_id) {
+                const resolution = await resolveMcpVariantOffers({
+                  supabase: options.supabase,
+                  merchantId,
+                  productId,
+                });
+                if (resolution.lookupFailed) throw new Error('Offer lookup unavailable');
+                const offer = resolution.offers.find(
+                  (candidate) => candidate.offer_id.toLowerCase() === args.offer_id?.toLowerCase(),
+                );
+                if (!offer || offer.stock_quantity < args.quantity) throw new ProductUnavailable(productId);
+                return;
+              }
               const result = await prepareCartHandoff({
                 supabase: options.supabase,
                 merchantId,

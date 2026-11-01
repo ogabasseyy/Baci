@@ -1,3 +1,4 @@
+import { parseOfferSnapshotAllocation } from '@/lib/offer-snapshot-allocation';
 import {
   normalizeProductCondition,
   type ProductConditionOffer,
@@ -12,6 +13,7 @@ type RawConditionOffer = {
   images?: string[];
   price: number | string;
   stock_quantity?: number;
+  allocatable_stock?: number | string | null;
 };
 
 function parseOfferPrice(value: number | string | null | undefined) {
@@ -67,6 +69,7 @@ export function normalizeProductConditionOffers(
         notes: offer.condition_notes,
         price: formatPrice(rawPrice),
         rawPrice,
+        ...(offer.allocatable_stock !== undefined && { allocatable_stock: parseOfferSnapshotAllocation(offer.allocatable_stock) }),
         stock: offer.stock_quantity,
       },
     ];

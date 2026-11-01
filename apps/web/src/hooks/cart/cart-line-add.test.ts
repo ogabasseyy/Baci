@@ -22,6 +22,32 @@ const assurance = {
 const openCaps = { cappedOfferAllocation: undefined, strictPool: undefined };
 
 describe('applyStorefrontCartLineAdd', () => {
+  it('limits a new distinct line by stock already in another line for the same offer', () => {
+    const previousCart = [
+      {
+        ...product,
+        cartItemId: 'existing',
+        offerId: 'offer-1',
+        condition: 'used',
+        quantity: 1,
+      } as CartItem,
+    ];
+    const result = applyStorefrontCartLineAdd({
+      previousCart,
+      product,
+      productForCart: product,
+      normalizedOptions: {
+        offerId: 'offer-1',
+        condition: 'used',
+        color: 'blue',
+      } as AddToCartOptions,
+      quantity: 2,
+      caps: { cappedOfferAllocation: 2, strictPool: undefined },
+      assurance,
+    });
+    expect(result).toHaveLength(2);
+    expect(result[1].quantity).toBe(1);
+  });
   it('appends a fresh line with the default-on assurance choice', () => {
     const result = applyStorefrontCartLineAdd({
       previousCart: [],

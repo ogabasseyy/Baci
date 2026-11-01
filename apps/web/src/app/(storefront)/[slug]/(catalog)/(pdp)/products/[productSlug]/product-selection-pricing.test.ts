@@ -9,6 +9,27 @@ describe('resolveSelectionPricing', () => {
     stock: 10,
   } as Product;
 
+  it('uses the selected offer allocation even when ordinary serialized stock is empty', () => {
+    const selectedOffer = {
+      price: 80,
+      stock_quantity: 5,
+      allocatable_stock: 2,
+    };
+    expect(
+      resolveSelectionPricing({
+        product: {
+          ...product,
+          effective_policy: 'serialized_strict',
+          stock: 0,
+          stock_quantity: 0,
+        },
+        selectedOffer,
+        displaySelection: null,
+        effectiveVariant: null,
+        isStockManaged: true,
+      })
+    ).toMatchObject({ currentStock: 2, isOutOfStock: false });
+  });
   it('charges the matched offer price over variant and parent prices', () => {
     expect(
       resolveSelectionPricing({

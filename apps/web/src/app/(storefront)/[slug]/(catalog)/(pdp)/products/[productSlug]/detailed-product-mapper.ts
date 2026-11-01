@@ -1,3 +1,4 @@
+import { parseOfferSnapshotAllocation } from '@/lib/offer-snapshot-allocation';
 import { normalizeProductKeySpecs } from '@/lib/product-key-specs-normalize';
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product } from '@/lib/products';
@@ -63,6 +64,11 @@ function normalizeActiveOffers(
         condition: offer.condition,
         price,
         stock_quantity: stockQuantity,
+        ...(offer.allocatable_stock !== undefined && {
+          allocatable_stock: parseOfferSnapshotAllocation(
+            offer.allocatable_stock
+          ),
+        }),
         images: Array.isArray(offer.images) ? offer.images : undefined,
         status: offer.status,
       },
@@ -129,6 +135,7 @@ export interface DetailedCachedProduct {
         condition: 'new' | 'used' | 'open_box' | 'refurbished';
         price: number | string | null;
         stock_quantity?: number | string | null;
+        allocatable_stock?: number | string | null;
         images?: string[];
         status?: string | null;
       }[]

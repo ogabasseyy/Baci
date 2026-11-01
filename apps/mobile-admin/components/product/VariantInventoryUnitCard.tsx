@@ -1,4 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
+import type { ReactNode } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import type { ThemeColors } from '@/constants/theme';
 import type { VariantInventoryUnit } from '@/hooks/variantInventory';
@@ -13,6 +14,7 @@ import {
 import { variantInventoryUnitsSheetStyles as styles } from './VariantInventoryUnitsSheet.styles';
 
 interface VariantInventoryUnitCardProps {
+  assignment?: ReactNode;
   branches: Branch[];
   colors: ThemeColors;
   editBranchId: string | null;
@@ -30,6 +32,7 @@ interface VariantInventoryUnitCardProps {
 }
 
 export function VariantInventoryUnitCard({
+  assignment,
   branches,
   colors,
   editBranchId,
@@ -235,6 +238,8 @@ export function VariantInventoryUnitCard({
           Notes: {unit.notes}
         </Text>
       ) : null}
+
+      {assignment}
 
       <View style={styles.actions}>
         <Pressable

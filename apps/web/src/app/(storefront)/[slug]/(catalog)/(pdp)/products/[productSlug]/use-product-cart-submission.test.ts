@@ -83,6 +83,31 @@ describe('useProductCartSubmission', () => {
     vi.clearAllMocks();
   });
 
+  it('submits the assigned offer allocation instead of the empty ordinary pool', () => {
+    const product = simpleProduct({
+      inventory_tracking_policy: 'serialized_strict',
+      stock: 0,
+      stock_quantity: 0,
+    });
+    const selectedOffer = {
+      id: 'used',
+      condition: 'used' as const,
+      price: 400_000,
+      stock_quantity: 5,
+      allocatable_stock: 2,
+    };
+    const { result } = renderHook(() =>
+      useProductCartSubmission(
+        input({ product, selectedOffer, selectedCondition: 'used' })
+      )
+    );
+    act(() => result.current());
+    expect(mockAddToCart).toHaveBeenCalledWith(
+      expect.objectContaining({ stock: 2 }),
+      1,
+      expect.objectContaining({ offerId: 'used' })
+    );
+  });
   it('adds a simple product with the merchant slug, tracking, and confirmation', () => {
     const { result } = renderHook(() => useProductCartSubmission(input()));
 

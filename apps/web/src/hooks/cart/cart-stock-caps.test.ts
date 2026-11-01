@@ -20,6 +20,14 @@ function line(overrides: Partial<CartItem> = {}): CartItem {
 }
 
 describe('getStrictSerializedPool', () => {
+  it('uses an anchor-derived strict policy ahead of a non-strict product policy', () => {
+    const product = {
+      effective_policy: 'serialized_strict',
+      inventory_tracking_policy: 'off',
+      stock_quantity: 0,
+    };
+    expect(getStrictSerializedPool(product)).toBe(0);
+  });
   it('returns the floored pool for strict products with finite stock', () => {
     expect(
       getStrictSerializedPool({
@@ -68,7 +76,7 @@ describe('getSimpleProductCartTotal', () => {
       line({ id: 'p2', quantity: 9 }),
     ];
 
-    expect(getSimpleProductCartTotal(cart, 'p1')).toBe(3);
+    expect(getSimpleProductCartTotal(cart, 'p1')).toBe(2);
   });
 
   it('excludes the line at excludeIndex', () => {
@@ -186,7 +194,27 @@ describe('resolveSimpleLineAddCaps', () => {
     stock_quantity: 4,
   } as CartItem;
 
-  it('returns the offer allocation and strict pool for simple offer adds', () => {
+  it('uses the assigned offer pool instead of an empty ordinary pool', () => {
+    const caps = resolveSimpleLineAddCaps({
+      product: {
+        inventory_tracking_policy: 'serialized_strict',
+        stock_quantity: 0,
+      },
+      isVoucherLine: false,
+      variantId: null,
+      offerId: 'used',
+      stock: 2,
+    });
+    expect(
+      capAddedSimpleLineQuantity({
+        caps,
+        cart: [],
+        productId: 'p1',
+        quantity: 1,
+      })
+    ).toEqual({ quantity: 1 });
+  });
+  it('returns the offer allocation without the ordinary strict pool', () => {
     expect(
       resolveSimpleLineAddCaps({
         product: strictProduct,
@@ -195,7 +223,7 @@ describe('resolveSimpleLineAddCaps', () => {
         offerId: 'offer-1',
         stock: 6,
       })
-    ).toEqual({ cappedOfferAllocation: 6, strictPool: 4 });
+    ).toEqual({ cappedOfferAllocation: 6, strictPool: undefined });
   });
 
   it('skips the pool for variant and voucher adds', () => {
@@ -217,6 +245,44 @@ describe('resolveSimpleLineAddCaps', () => {
         stock: 6,
       })
     ).toEqual({ cappedOfferAllocation: undefined, strictPool: undefined });
+  });
+});
+
+describe('same-offer allocation across lines', () => {
+  it('reserves headroom for another line naming the same offer on adds', () => {
+    const caps = resolveSimpleLineAddCaps({
+      product: {
+        inventory_tracking_policy: 'serialized_strict',
+        stock_quantity: 0,
+      },
+      isVoucherLine: false,
+      variantId: null,
+      offerId: 'used',
+      stock: 2,
+    });
+    expect(
+      capAddedSimpleLineQuantity({
+        caps,
+        cart: [
+          line({ offerId: 'used', quantity: 1 }),
+          line({ offerId: 'other', quantity: 5 }),
+        ],
+        productId: 'p1',
+        offerId: 'used',
+        quantity: 2,
+      })
+    ).toEqual({ quantity: 1 });
+  });
+  it('reserves headroom for another line naming the same offer on quantity edits', () => {
+    const item = line({ offerId: 'used', stock: 2, quantity: 1 });
+    expect(
+      capUpdatedSimpleLineQuantity({
+        item,
+        cart: [item, line({ offerId: 'used', quantity: 1 })],
+        excludeIndex: 0,
+        quantity: 2,
+      })
+    ).toEqual({ quantity: 1 });
   });
 });
 
@@ -269,7 +335,7 @@ describe('capAddedSimpleLineQuantity', () => {
 describe('capUpdatedSimpleLineQuantity', () => {
   const cart = [line({ quantity: 1 }), line({ quantity: 2 })];
 
-  it('applies the allocation cap then pool headroom outside the line', () => {
+  it('caps an offer update by its own allocation independently of ordinary stock', () => {
     const item = line({
       quantity: 1,
       offerId: 'offer-1',
@@ -279,7 +345,7 @@ describe('capUpdatedSimpleLineQuantity', () => {
     });
     expect(
       capUpdatedSimpleLineQuantity({ item, cart, excludeIndex: 0, quantity: 9 })
-    ).toEqual({ quantity: 2 });
+    ).toEqual({ quantity: 5 });
   });
 
   it('keeps the previous quantity on zero allocation or headroom', () => {

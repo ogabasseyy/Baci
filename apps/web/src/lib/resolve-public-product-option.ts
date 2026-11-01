@@ -2,6 +2,7 @@ import {
   normalizeCanonicalProductCondition,
   resolveOfferAllocatableStock,
 } from '@baci/shared/lib';
+import { parseOfferSnapshotAllocation } from './offer-snapshot-allocation';
 import { getEffectiveStock } from './product-stock';
 import { resolveVariantInventory } from './resolve-variant-inventory';
 
@@ -25,7 +26,11 @@ type Variant = {
   available_units?: number | null;
   stock_quantity?: number | null;
 };
-type Offer = { price?: number | null; stock_quantity?: number | null };
+type Offer = {
+  price?: number | null;
+  stock_quantity?: number | null;
+  allocatable_stock?: number | string | null;
+};
 
 function price(value: number | null | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0
@@ -61,12 +66,18 @@ export function resolvePublicProductOption(
   // exactly the pool the serialized helper used to read.
   const parentStock = getEffectiveStock(parent);
   const offerStock = offer
-    ? resolveOfferAllocatableStock(offer.stock_quantity, {
-        effective_policy: parent.effective_policy,
-        inventory_tracking_policy: parent.inventory_tracking_policy,
-        availableUnits: parent.available_units ?? parentStock,
-        parentStock,
-      })
+    ? (parseOfferSnapshotAllocation(offer.allocatable_stock) ??
+      (offer.allocatable_stock === null
+        ? (parent.effective_policy ?? parent.inventory_tracking_policy) ===
+          'serialized_strict'
+          ? 0
+          : null
+        : resolveOfferAllocatableStock(offer.stock_quantity, {
+            effective_policy: parent.effective_policy,
+            inventory_tracking_policy: parent.inventory_tracking_policy,
+            availableUnits: parent.available_units ?? parentStock,
+            parentStock,
+          })))
     : undefined;
   // An unbounded offer allocation (serialized_then_unlimited with no
   // scalar) stays purchasable with no finite count — the PDP pricing

@@ -301,6 +301,28 @@ describe('mapDetailedCachedProductToProduct', () => {
     ]);
   });
 
+  it('preserves offer-specific availability from the product snapshot', () => {
+    const product = mapDetailedCachedProductToProduct(
+      {
+        id: 'p',
+        name: 'Phone',
+        stock_quantity: 0,
+        offers: [
+          {
+            id: 'o',
+            condition: 'used',
+            price: 100,
+            stock_quantity: 5,
+            allocatable_stock: '2',
+            status: 'active',
+          },
+        ],
+      },
+      'merchant-1'
+    );
+    expect(product.offers?.[0]?.allocatable_stock).toBe(2);
+  });
+
   it('normalizes invalid status, zero compare price, and malformed offers', () => {
     const product = mapDetailedCachedProductToProduct(
       {

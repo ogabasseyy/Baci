@@ -120,7 +120,7 @@ describe('useProductDetailCartState', () => {
     mockCartStoreState.items = [];
   });
 
-  it('totals sibling lines per product while skipping voucher lines', () => {
+  it('totals the selected offer without other offers or vouchers', () => {
     mockCartStoreState.items = [
       {
         cartItemId: 'line-a',
@@ -171,7 +171,7 @@ describe('useProductDetailCartState', () => {
       } as never)
     );
 
-    expect(result.current.productQuantityInCart).toBe(7);
+    expect(result.current.productQuantityInCart).toBe(5);
 
     mockCartStoreState.items = [];
   });

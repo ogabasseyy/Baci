@@ -1033,6 +1033,7 @@ interface CachedStorefrontProductOffer {
   price: number | string | null;
   status: string;
   stock_quantity?: number | string | null;
+  allocatable_stock?: number | string | null;
 }
 
 type CachedStorefrontProductImage =

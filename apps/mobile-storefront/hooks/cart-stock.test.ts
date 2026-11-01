@@ -737,7 +737,27 @@ describe('cart-stock helpers', () => {
     });
   });
 
-  it('caps strict sibling offers at the shared serialized units', async () => {
+  it('checks the selected offer allocation without charging ordinary cart units', async () => {
+    mockProductAndRpc(parent(), {
+      get_storefront_offer_resolution: [
+        {
+          product_id: 'product-1',
+          offer_id: 'offer-7',
+          allocatable_stock: 1,
+          effective_policy: 'serialized_strict',
+          available_units: 1,
+          parent_eligible: true,
+        },
+      ],
+    });
+    await expect(
+      checkStock('product-1', 1, undefined, {
+        offerId: 'offer-7',
+        aggregateQuantity: 2,
+      })
+    ).resolves.toMatchObject({ available: true, currentStock: 1 });
+  });
+  it('does not cap an offer by the ordinary serialized aggregate', async () => {
     mockProductAndRpc(parent(), {
       get_storefront_offer_resolution: [
         {
@@ -751,15 +771,14 @@ describe('cart-stock helpers', () => {
       ],
     });
 
-    // The per-offer total fits its scalar, but a sibling line already
-    // claims the single shared unit.
+    // The offer allocation already counts only its own units.
     await expect(
       checkStock('product-1', 1, undefined, {
         offerId: 'offer-7',
         aggregateQuantity: 2,
       })
     ).resolves.toEqual({
-      available: false,
+      available: true,
       currentStock: 1,
       requestedQuantity: 1,
     });
@@ -1005,7 +1024,7 @@ describe('cart-stock helpers', () => {
     ).toBe(3);
   });
 
-  it('totals the product aggregate across base and sibling offer lines', () => {
+  it('totals ordinary lines without counting assigned offer lines', () => {
     useCartStore.setState({
       items: [
         {
@@ -1038,7 +1057,7 @@ describe('cart-stock helpers', () => {
       lineSequence: 3,
     });
 
-    expect(getExistingProductQuantityForStock('product-1')).toBe(3);
+    expect(getExistingProductQuantityForStock('product-1')).toBe(2);
     expect(getExistingProductQuantityForStock('product-2')).toBe(4);
   });
 

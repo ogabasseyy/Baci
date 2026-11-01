@@ -169,7 +169,7 @@ describe('getInvalidOfferLineKey', () => {
     ).toBe(`${STR_ID}::v1::offer=${OFFER_ID}`);
   });
 
-  it('invalidates simple lines whose aggregate exceeds the strict pool', () => {
+  it('invalidates ordinary lines whose aggregate exceeds the strict pool', () => {
     const base = {
       strId: STR_ID,
       aggregateSimpleQuantity: 2,
@@ -183,7 +183,7 @@ describe('getInvalidOfferLineKey', () => {
         offerId: OFFER_ID,
         offer: { condition: 'used', stock_quantity: 5 },
       })
-    ).toBe(`${STR_ID}::offer=${OFFER_ID}`);
+    ).toBeNull();
   });
 
   it('passes simple lines within the strict pool and skips exempt lines', () => {
@@ -219,8 +219,29 @@ describe('getInvalidOfferLineKey', () => {
   });
 });
 
+describe('separate serialized condition pools', () => {
+  it('does not charge assigned offer units against ordinary stock', () => {
+    const totals = buildSimpleProductQuantityTotals([
+      { id: STR_ID, quantity: 1 },
+      { id: STR_ID, offerId: OFFER_ID, quantity: 2 },
+    ]);
+    expect(readSimpleProductQuantityTotal(totals, STR_ID)).toBe(1);
+    expect(
+      getInvalidOfferLineKey({
+        strId: STR_ID,
+        offerId: OFFER_ID,
+        offer: { condition: 'used', stock_quantity: 2 },
+        quantity: 2,
+        aggregateOfferQuantity: 2,
+        aggregateSimpleQuantity: 1,
+        strictPoolUnits: 0,
+      })
+    ).toBeNull();
+  });
+});
+
 describe('buildSimpleProductQuantityTotals', () => {
-  it('totals base and offer lines while skipping variants and vouchers', () => {
+  it('totals ordinary lines while skipping offers, variants and vouchers', () => {
     const totals = buildSimpleProductQuantityTotals([
       { id: STR_ID, quantity: 1 },
       { id: STR_ID, offerId: OFFER_ID, quantity: 2 },
@@ -229,7 +250,7 @@ describe('buildSimpleProductQuantityTotals', () => {
       { id: STR_ID },
       { id: 'other', quantity: 4 },
     ]);
-    expect(readSimpleProductQuantityTotal(totals, STR_ID)).toBe(3);
+    expect(readSimpleProductQuantityTotal(totals, STR_ID)).toBe(1);
     expect(readSimpleProductQuantityTotal(totals, 'other')).toBe(4);
     expect(readSimpleProductQuantityTotal(totals, 'missing')).toBeUndefined();
   });

@@ -395,7 +395,7 @@ describe('repriceCartItems', () => {
     ]);
   });
 
-  it('flags base and offer lines that jointly exceed a strict pool', async () => {
+  it('keeps base and offer lines in separate strict pools', async () => {
     const lines = [
       createCartItem({
         id: 'base-line',
@@ -432,12 +432,8 @@ describe('repriceCartItems', () => {
 
     const result = await repriceCartItems(lines, 'merchant-1');
 
-    // Each line fits its own allocation (offer 5, unmanaged base), but
-    // the product total (2) exceeds the strict pool (1).
-    expect(result.unavailable).toEqual([
-      { id: 'base-line', name: 'iPhone 13' },
-      { id: 'offer-line', name: 'iPhone 13' },
-    ]);
+    // Each line fits its own ordinary or assigned-offer allocation.
+    expect(result.unavailable).toEqual([]);
   });
 
   it('skips the strict pool check when the fetch fails', async () => {

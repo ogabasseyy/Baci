@@ -390,6 +390,22 @@ jobs:
           PGPASSWORD: postgres
         run: bash supabase/migrations/tests/run-serialized-inventory-pagination.sh
 
+      - name: Test serialized condition-offer inventory
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          bash supabase/migrations/tests/run-serialized-offer-assignment.sh
+          bash supabase/migrations/tests/run-serialized-offer-quiz.sh
+          bash supabase/migrations/tests/run-serialized-offer-claims.sh
+          bash supabase/migrations/tests/run-serialized-offer-confirmation.sh
+          bash supabase/migrations/tests/run-serialized-offer-availability.sh
+          bash supabase/migrations/tests/run-serialized-offer-cart.sh
+          bash supabase/migrations/tests/run-serialized-offer-lifecycle.sh
+          bash supabase/migrations/tests/run-serialized-offer-lifecycle.sh --release-race
+
       - name: Run X token authentication SQL contract
         env:
           PG_BIN: /usr/lib/postgresql/16/bin

@@ -14,6 +14,10 @@ function productWith(overrides: Record<string, unknown>): NormalizedProductDetai
 }
 
 describe('resolveCurrentOffer', () => {
+  it('shows assigned offer stock even when the ordinary pool is empty', () => {
+    const offer = resolveCurrentOffer(productWith({ manage_stock: true, effective_policy: 'serialized_strict', stock_quantity: 0, offers: [{ id: 'used', condition: 'used', rawPrice: 400, stock_quantity: 5, allocatable_stock: 2 }] }), 'used', {});
+    expect(offer.stock).toBe(2);
+  });
   it('resolves merchant-spelled offers through canonical conditions', () => {
     const offer = resolveCurrentOffer(
       productWith({

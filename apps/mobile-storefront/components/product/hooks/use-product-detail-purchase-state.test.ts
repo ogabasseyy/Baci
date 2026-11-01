@@ -148,10 +148,27 @@ it.each([
   expect(result.current.canPurchase).toBe(expected);
 });
 
+it('allows an assigned offer when ordinary serialized stock is empty', () => {
+  mockFindMatchingConditionOffer.mockReturnValue({
+    id: 'o1',
+    stock_quantity: 2,
+  } as never);
+  const product = {
+    id: 'p1',
+    price: 100,
+    base_effective_policy: 'serialized_strict',
+    base_available_units: 0,
+  } as Product;
+  const { result } = renderHook(() =>
+    useProductDetailPurchaseState(routeData({ product }), 0, null, 0)
+  );
+  expect(result.current.canPurchase).toBe(true);
+});
+
 it.each([
   {
-    name: 'strict base caps the offer scalar at available units',
-    offer: { id: 'o1', stock_quantity: 5 },
+    name: 'selected offer uses its own authoritative allocation',
+    offer: { id: 'o1', stock_quantity: 2 },
     product: {
       base_effective_policy: 'serialized_strict',
       base_available_units: 2,
@@ -170,11 +187,11 @@ it.each([
     expected: true,
   },
   {
-    name: 'strict base without a unit count refuses the offer',
+    name: 'an offer uses its own stock when the ordinary count is absent',
     offer: { id: 'o1', stock_quantity: 5 },
     product: { base_effective_policy: 'serialized_strict' },
     quantityInCart: 0,
-    expected: false,
+    expected: true,
   },
   {
     name: 'unlimited base leaves the offer scalar uncapped',
@@ -353,14 +370,12 @@ it('skips offer matching for variant products but keeps price forwarding', () =>
   }
 });
 
-it('compares the strict pool against the product-wide cart total', () => {
+it('checks the selected offer pool independently of ordinary units', () => {
   mockFindMatchingConditionOffer.mockReturnValue({
     id: 'o2',
     stock_quantity: 5,
   } as never);
-  // Sibling offer lines already hold both pool units while the
-  // selected line holds none: the offer allocation fits, the pool
-  // does not, so purchase stays disabled.
+  // Other offers and ordinary stock do not consume this offer's units.
   const { result } = renderHook(() =>
     useProductDetailPurchaseState(
       routeData({
@@ -376,7 +391,7 @@ it('compares the strict pool against the product-wide cart total', () => {
       2
     )
   );
-  expect(result.current.canPurchase).toBe(false);
+  expect(result.current.canPurchase).toBe(true);
 });
 
 it.each([

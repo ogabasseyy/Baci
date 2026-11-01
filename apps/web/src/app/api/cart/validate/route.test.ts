@@ -825,7 +825,7 @@ describe('POST /api/cart/validate', () => {
     expect(body.validProducts).toHaveLength(1);
   });
 
-  it('invalidates sibling simple lines whose aggregate exceeds the strict pool', async () => {
+  it('validates ordinary and assigned-offer stock independently', async () => {
     const { supabase } = buildSupabaseMock();
     mocks.createClient.mockResolvedValue(supabase);
     mocks.products = [
@@ -849,6 +849,7 @@ describe('POST /api/cart/validate', () => {
         offer_id: OFFER_ID,
         condition: 'used',
         price: 400_000,
+        allocatable_stock: 1,
         parent_eligible: true,
       },
     ];
@@ -875,9 +876,28 @@ describe('POST /api/cart/validate', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.invalidProductIds).toEqual([
+    expect(body.invalidProductIds).toEqual([]);
+    mocks.baseInventory = [
+      {
+        product_id: PRODUCT_ID,
+        effective_policy: 'serialized_strict',
+        available_units: 0,
+      },
+    ];
+    const depleted = await postCartValidate({
+      cartItems: [
+        { id: PRODUCT_ID, price: 500_000, quantity: 1 },
+        {
+          id: PRODUCT_ID,
+          price: 400_000,
+          offerId: OFFER_ID,
+          condition: 'Used',
+          quantity: 1,
+        },
+      ],
+    });
+    expect((await depleted.json()).invalidProductIds).toEqual([
       `${PRODUCT_ID}::base`,
-      `${PRODUCT_ID}::offer=${OFFER_ID}`,
     ]);
   });
 });

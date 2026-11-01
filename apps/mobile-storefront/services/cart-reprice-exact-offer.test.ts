@@ -93,6 +93,29 @@ describe('reconcileStrictBasePools', () => {
     p1: { effective_policy: 'serialized_strict', available_units: 3 },
   };
 
+  it('does not charge an assigned offer against the ordinary unit pool', () => {
+    const result = freshResult();
+    reconcileStrictBasePools({
+      baseInventoryByProductId: {
+        p1: { effective_policy: 'serialized_strict', available_units: 0 },
+      },
+      items: [line({ id: 'offer', offer_id: 'used', quantity: 1 })],
+      result,
+    });
+    expect(result.unavailable).toEqual([]);
+  });
+  it('excludes an offer adopted during repricing from the ordinary pool', () => {
+    const result = freshResult();
+    result.offerIdById.legacy = 'used';
+    reconcileStrictBasePools({
+      baseInventoryByProductId: {
+        p1: { effective_policy: 'serialized_strict', available_units: 0 },
+      },
+      items: [line({ id: 'legacy', quantity: 1 })],
+      result,
+    });
+    expect(result.unavailable).toEqual([]);
+  });
   it('skips the check when the inventory projection is missing', () => {
     const result = freshResult();
     reconcileStrictBasePools({

@@ -48,7 +48,7 @@ export function resolveCurrentOffer(
       Number.parseInt(productData.price.replace(/[^0-9]/g, ''), 10) || 0;
   }
 
-  let selectedOffer: { price: number; stock_quantity: number | null } | undefined;
+  let selectedOffer: { price: number; stock_quantity: number | null; allocatable_stock?: number | null } | undefined;
   let resolvedOfferId: string | null = null;
 
   // Canonical on both sides: a legacy-spelled parent (uk_used,
@@ -65,7 +65,7 @@ export function resolveCurrentOffer(
     });
 
     if (offer) {
-      selectedOffer = { price: offer.rawPrice, stock_quantity: offer.stock_quantity ?? offer.stock ?? null };
+      selectedOffer = { price: offer.rawPrice, stock_quantity: offer.stock_quantity ?? offer.stock ?? null, allocatable_stock: offer.allocatable_stock };
       resolvedOfferId = offer.id != null ? String(offer.id) : null;
     }
   }

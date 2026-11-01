@@ -39,7 +39,7 @@ BEGIN
   INSERT INTO public.product_offers(id,product_id,merchant_id,condition,price,stock_quantity,status)
   VALUES(offer_a,product,merchant,'used',40,4,'active'),
     (offer_b,product,merchant,'open_box',40,4,'active');
-  FOR mode IN 0..6 LOOP
+  FOR mode IN 0..8 LOOP
     IF mode=5 THEN UPDATE public.product_offers SET condition='refurbished' WHERE id=offer_a; END IF;
     cart := ('eeeeeeee-2514-4000-8000-'||lpad(mode::text,12,'0'))::uuid;
     line_id := ('ffffffff-2514-4000-8000-'||lpad(mode::text,12,'0'))::uuid;
@@ -58,20 +58,20 @@ BEGIN
     prep := public.commerce_cart_prepare_checkout(cart,1,'offer-binding-'||mode::text);
     PERFORM pg_temp.check_offer_binding(prep->>'ok'='true','preparation failed for mode '||mode);
     item := jsonb_build_object('cart_line_id',line_id,'product_id',product,
-      'offer_id',CASE WHEN mode=2 THEN offer_b ELSE offer_a END,
+      'offer_id',CASE WHEN mode IN (2,7,8) THEN offer_b ELSE offer_a END,
       'condition',CASE WHEN mode>=5 THEN 'refurbished' ELSE 'used' END,'quantity',1,'price',40);
     args := jsonb_build_object('p_merchant_id',merchant,'p_customer_email','fixture@example.com',
       'p_customer_name','Offer fixture','p_items',jsonb_build_array(item),
       'p_expected_total',40,'p_cart_principal_id','offer-binding',
       'p_checkout_idempotency_key','offer-binding-'||mode::text,
       'p_checkout_request_hash','offer-binding-hash-'||mode::text);
-    IF mode=4 THEN
+    IF mode IN (4,8) THEN
       args := args || jsonb_build_object('p_payment_method','uba_redvault',
         'p_redvault_order',jsonb_build_object('merchant_id',merchant,'customer_email','fixture@example.com',
           'payment_method','uba_redvault','checkout_idempotency_key','offer-binding-'||mode::text,
           'items',jsonb_build_array(item)), 'p_redvault_quote','{}'::jsonb,'p_redvault_route_proof','{}'::jsonb);
     END IF;
-    IF mode IN (1,6) THEN
+    IF mode IN (1,6,7) THEN
       PERFORM set_config('request.jwt.claims',jsonb_build_object('role','authenticated',
         'agentic_context','checkout','agentic_merchant_id',merchant)::text,true);
     ELSE
@@ -82,7 +82,7 @@ BEGIN
     SELECT count(*) INTO calls_before FROM public.order_stub_calls;
     rejected := false;
     BEGIN
-      result := public.create_storefront_order_with_cart_binding(CASE WHEN mode=4 THEN 'redvault' ELSE 'base' END,
+      result := public.create_storefront_order_with_cart_binding(CASE WHEN mode IN (4,8) THEN 'redvault' ELSE 'base' END,
         (prep->'snapshot'->>'checkoutSessionId')::uuid,
         (prep->'snapshot'->>'generation')::integer,args);
     EXCEPTION WHEN SQLSTATE 'P0001' THEN
@@ -93,6 +93,13 @@ BEGIN
     IF mode IN (2,3) THEN
       PERFORM pg_temp.check_offer_binding(rejected AND calls_before=calls_after,
         'substituted or stale offer reached the inner order RPC, mode '||mode);
+    ELSIF mode IN (7,8) THEN
+      PERFORM pg_temp.check_offer_binding(
+        (rejected AND calls_before=calls_after) OR
+        (NOT rejected AND result->>'ok'='true' AND calls_after=calls_before+1 AND EXISTS(
+          SELECT 1 FROM public.order_stub_calls WHERE seq=(SELECT max(seq) FROM public.order_stub_calls)
+            AND items->0->>'offer_id'=offer_a::text)),
+        'substituted offer was neither rejected nor restored from the cart, mode '||mode);
     ELSE
       PERFORM pg_temp.check_offer_binding(NOT rejected AND result->>'ok'='true',
         'valid ID-only checkout rejected, mode '||mode);

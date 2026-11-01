@@ -190,7 +190,9 @@ it('targets the sole exact-offer line by id for product-only edits instead of ad
     state: {
       ...state,
       version: 4,
-      lines: [{ ...state.lines[0], id: 'offer-line', offerId }],
+      lines: [
+        { ...state.lines[0], id: 'offer-line', offerId, condition: 'used' },
+      ],
     },
   } as never);
   const cart = await openLegacyCanonicalCart(

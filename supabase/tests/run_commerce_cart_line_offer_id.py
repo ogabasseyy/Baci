@@ -95,11 +95,11 @@ try:
  if '--before-offer-condition-equivalence' not in sys.argv:
   sql+=('\n\\i '+str(root/'supabase/migrations/20261101101758_commerce_cart_offer_condition_equivalence.sql'))*2
  if '--before-exact-condition-writers' not in sys.argv:
-  sql+=('\n\i '+str(root/'supabase/migrations/20261101102756_commerce_cart_exact_offer_condition_writers.sql'))*2
+  sql+=('\n\\i '+str(root/'supabase/migrations/20261101102756_commerce_cart_exact_offer_condition_writers.sql'))*2
  if '--before-staged-handoff-offer-condition' not in sys.argv:
-  sql+=('\n\i '+str(root/'supabase/migrations/20261101103538_commerce_cart_staged_handoff_offer_condition.sql'))*2
+  sql+=('\n\\i '+str(root/'supabase/migrations/20261101103538_commerce_cart_staged_handoff_offer_condition.sql'))*2
  if '--before-exact-offer-allocation-guard' not in sys.argv:
-  sql+=('\n\i '+str(root/'supabase/migrations/20261101104953_commerce_cart_exact_offer_allocation_guard.sql'))*2
+  sql+=('\n\\i '+str(root/'supabase/migrations/20261101104953_commerce_cart_exact_offer_allocation_guard.sql'))*2
  suites=[sys.argv[sys.argv.index('--suite')+1]] if '--suite' in sys.argv else ['commerce_cart_line_offer_id.sql', 'commerce_cart_exact_offer_review.sql', 'commerce_cart_exact_offer_binding.sql', 'commerce_cart_exact_offer_condition_writer.sql']
  for suite in suites:
   sql+='\n'+(root/'supabase/tests'/suite).read_text()

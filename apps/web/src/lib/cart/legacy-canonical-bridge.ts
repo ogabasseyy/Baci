@@ -192,7 +192,7 @@ export async function operateLegacyCanonicalCart(
     if (
       candidates.length > 1 ||
       candidates.some((x) =>
-        hasUnsupportedLegacyEditIdentity(x, Boolean(edit.offerId))
+        hasUnsupportedLegacyEditIdentity(x, Boolean(x.offerId))
       )
     )
       throw new LegacyBridgeError('refresh_required');

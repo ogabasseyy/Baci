@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { applyCriticalRouteOfferToCartProduct } from '@/components/storefront/ogabassey/pdp/critical-commerce-route-offer';
+import type { Product } from '@/lib/products';
 import { buildLcpRouteProductProjection } from './lcp-route-product-projection';
 
 describe('buildLcpRouteProductProjection', () => {
@@ -49,6 +51,56 @@ describe('buildLcpRouteProductProjection', () => {
         },
       ],
     });
+  });
+
+  it('preserves the offer-specific allocation for the strict critical buy box', () => {
+    const projection = buildLcpRouteProductProjection({
+      condition: 'new',
+      product_offers: [
+        {
+          id: 'used-offer',
+          condition: 'used',
+          status: 'active',
+          price: 100,
+          stock_quantity: 2,
+          allocatable_stock: 2,
+        },
+      ],
+    });
+    const product = {
+      inventory_tracking_policy: 'serialized_strict',
+      stock: 0,
+      stock_quantity: 0,
+    } as Product;
+    const offer = projection.offers?.[0];
+    if (!offer) throw new Error('Expected projected offer');
+    expect(
+      applyCriticalRouteOfferToCartProduct(product, offer, product).stock
+    ).toBe(2);
+  });
+
+  it.each([
+    { input: null, expected: null },
+    { input: 0, expected: 0 },
+    { input: '2', expected: 2 },
+    { input: 'invalid', expected: 0 },
+  ])('preserves bounded, unbounded and invalid allocation values', ({
+    input,
+    expected,
+  }) => {
+    const projection = buildLcpRouteProductProjection({
+      condition: 'new',
+      product_offers: [
+        {
+          id: 'offer',
+          condition: 'used',
+          status: 'active',
+          price: 100,
+          allocatable_stock: input,
+        },
+      ],
+    });
+    expect(projection.offers?.[0]?.allocatable_stock).toBe(expected);
   });
 
   it('keeps an absent offer collection absent and reports no variant matrix', () => {

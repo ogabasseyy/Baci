@@ -1,6 +1,8 @@
 import { normalizeProductCondition } from '@/components/storefront/ogabassey/types';
+import { parseOfferSnapshotAllocation } from '@/lib/offer-snapshot-allocation';
 
 interface LcpRouteProductOfferInput {
+  allocatable_stock?: number | string | null;
   condition: string;
   id: string;
   images?: string[];
@@ -56,6 +58,13 @@ export function buildLcpRouteProductProjection({
     return [
       {
         condition: offerCondition,
+        ...(offer.allocatable_stock !== undefined
+          ? {
+              allocatable_stock: parseOfferSnapshotAllocation(
+                offer.allocatable_stock
+              ),
+            }
+          : {}),
         id: offer.id,
         images: offer.images,
         price,

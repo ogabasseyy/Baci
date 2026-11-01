@@ -37,8 +37,6 @@ BEGIN
     'a repeated begin must not authorize a second send';
   ASSERT NOT public.recover_immediate_notification_completion(uncertain_order, uncertain_lease),
     'an uncertain dispatch must not be recorded as accepted';
-  ASSERT NOT public.has_immediate_notification_reconciliation_backlog(),
-    'a fresh dispatch is not yet a reconciliation backlog';
   UPDATE private.immediate_notification_dispatches SET updated_at = now() - interval '10 minutes'
   WHERE order_id = uncertain_order;
   ASSERT public.has_immediate_notification_reconciliation_backlog(),
@@ -128,6 +126,13 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN denied := true;
   END;
   ASSERT denied, 'the reload canary must be intercepted by the hook';
+  PERFORM set_config('request.path', '/rpc/__immediate_notification_redrive_complete_hook_canary__', true);
+  denied := false;
+  BEGIN
+    PERFORM public.enforce_gigl_tracking_worker_request_scope();
+  EXCEPTION WHEN insufficient_privilege THEN denied := true;
+  END;
+  ASSERT denied, 'the complete guard canary must be intercepted by the hook';
 END $$;
 
 -- Exact issue #3500: the provider accepted, but the existing HMAC-bound

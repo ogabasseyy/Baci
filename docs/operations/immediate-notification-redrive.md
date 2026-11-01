@@ -16,8 +16,11 @@ Before enabling the flag:
 
 1. Apply and verify the database migrations through the normal release process.
 2. Verify the anonymous POST to
-   `/rest/v1/rpc/__immediate_notification_redrive_hook_reload_canary__` is
-   rejected with SQLSTATE `42501` and the redrive hook canary message. A normal
+   `/rest/v1/rpc/__immediate_notification_redrive_complete_hook_canary__` is
+   rejected with SQLSTATE `42501` and the `IMMEDIATE NOTIFICATION COMPLETE hook
+   reload canary observed` message. This canary follows the backlog-monitor
+   allowlist change; the earlier redrive canary alone does not prove that later
+   guard is loaded. A normal
    successful response means the serving instance has not loaded the hook.
    Use the existing fleet-aware reload process to verify every serving instance;
    a single successful probe is not fleet-wide evidence.

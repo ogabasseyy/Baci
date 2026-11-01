@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { deliverClaimedImmediateOrderNotification } from './deliver-claimed-notification';
 import { ImmediateNotificationDeliveryUnknownError } from './notification-delivery-unknown-error';
+import { recoverImmediateNotifications } from './notification-redrive-worker';
 
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
@@ -191,6 +192,40 @@ describe('deliverClaimedImmediateOrderNotification', () => {
     await deliverClaimedImmediateOrderNotification(baseInput());
     expect(dispatchMocks.reset).not.toHaveBeenCalled();
     expect(retryMocks.complete).not.toHaveBeenCalled();
+  });
+
+  it('recovers a sent email after completion exhausts without sending it again', async () => {
+    const orderId = 'd0000000-0000-4000-8000-000000000001';
+    const lease = 'd0000000-0000-4000-8000-000000000002';
+    retryMocks.complete.mockResolvedValueOnce({ completed: false });
+    await deliverClaimedImmediateOrderNotification({
+      ...baseInput(),
+      orderId,
+      claimToken: lease,
+    });
+    expect(dispatchMocks.accepted).toHaveBeenCalledOnce();
+    expect(emailMocks.send).toHaveBeenCalledOnce();
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: [{ order_id: orderId, claim_token: lease, status: 'accepted' }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: true, error: null })
+      .mockResolvedValueOnce({ data: false, error: null });
+    await expect(recoverImmediateNotifications({ rpc }, 1)).resolves.toEqual({
+      recovered: 1,
+      unresolved: 0,
+      hasReconciliationBacklog: false,
+    });
+    expect(emailMocks.send).toHaveBeenCalledOnce();
+    expect(rpc).toHaveBeenCalledWith(
+      'recover_immediate_notification_completion',
+      {
+        p_order_id: orderId,
+        p_claim_token: lease,
+      }
+    );
   });
 
   it('releases a fenced dispatch only after a definite rejection', async () => {

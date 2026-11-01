@@ -22,7 +22,7 @@ export const deleteBodySchema = z
   .object({
     path: z.string().min(1).optional(),
     variantPaths: z
-      .union([z.array(z.string().min(1)), variantPathObjectSchema])
+      .union([z.array(z.string().min(1)).max(99), variantPathObjectSchema])
       .optional(),
   })
   .refine(

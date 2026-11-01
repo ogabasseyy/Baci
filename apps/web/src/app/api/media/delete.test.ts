@@ -43,7 +43,7 @@ describe('merchant media deletion safety', () => {
     });
     mocks.remove.mockResolvedValue({ data: [], error: null });
     mocks.rpc.mockImplementation(async (name: string) =>
-      name === 'claim_merchant_media_deletion'
+      name === 'claim_merchant_media_deletion_batch'
         ? {
             data: [{ path, state: 'pending', object_id: identity }],
             error: null,
@@ -90,7 +90,7 @@ describe('merchant media deletion safety', () => {
   });
   it('does not report completion for a no-op Storage response', async () => {
     mocks.rpc.mockImplementation(async (name: string) =>
-      name === 'claim_merchant_media_deletion'
+      name === 'claim_merchant_media_deletion_batch'
         ? {
             data: [{ path, state: 'pending', object_id: identity }],
             error: null,

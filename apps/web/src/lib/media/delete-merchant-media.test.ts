@@ -6,6 +6,25 @@ const object = '36690000-0000-4000-8000-000000000002';
 describe('shared merchant media deletion', () => {
   it('qualifies every variant before removing any bytes', async () => {
     const remove = vi.fn();
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'media_in_use' },
+    });
+    const failure = await deleteMerchantMedia({
+      client: { rpc, storage: { from: () => ({ remove }) } },
+      merchantId: merchant,
+      identities: ['primary.webp', 'variant.webp'],
+    });
+    expect(failure?.status).toBe(409);
+    expect(remove).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).toHaveBeenCalledWith('claim_merchant_media_deletion_batch', {
+      p_merchant_id: merchant,
+      p_identities: ['primary.webp', 'variant.webp'],
+    });
+  });
+  it('removes and completes each admitted file from one successful batch', async () => {
+    const remove = vi.fn().mockResolvedValue({ error: null });
     const rpc = vi
       .fn()
       .mockResolvedValueOnce({
@@ -15,21 +34,37 @@ describe('shared merchant media deletion', () => {
             object_id: object,
             state: 'pending',
           },
+          {
+            path: `${merchant}/variant.webp`,
+            object_id: '36690000-0000-4000-8000-000000000003',
+            state: 'pending',
+          },
         ],
         error: null,
       })
-      .mockResolvedValueOnce({
-        data: null,
-        error: { message: 'media_in_use' },
-      });
-    const failure = await deleteMerchantMedia({
-      client: { rpc, storage: { from: () => ({ remove }) } },
-      merchantId: merchant,
-      identities: ['primary.webp', 'variant.webp'],
+      .mockResolvedValue({ data: true, error: null });
+    await expect(
+      deleteMerchantMedia({
+        client: { rpc, storage: { from: () => ({ remove }) } },
+        merchantId: merchant,
+        identities: ['primary.webp', 'variant.webp'],
+      })
+    ).resolves.toBeNull();
+    expect(remove).toHaveBeenCalledWith([
+      `${merchant}/primary.webp`,
+      `${merchant}/variant.webp`,
+    ]);
+    expect(rpc).toHaveBeenCalledTimes(3);
+    expect(rpc).toHaveBeenCalledWith('complete_merchant_media_deletion', {
+      p_merchant_id: merchant,
+      p_path: `${merchant}/primary.webp`,
     });
-    expect(failure?.status).toBe(409);
-    expect(remove).not.toHaveBeenCalled();
+    expect(rpc).toHaveBeenCalledWith('complete_merchant_media_deletion', {
+      p_merchant_id: merchant,
+      p_path: `${merchant}/variant.webp`,
+    });
   });
+
   it('makes a completed retry idempotent without another Storage call', async () => {
     const remove = vi.fn();
     const rpc = vi.fn().mockResolvedValue({

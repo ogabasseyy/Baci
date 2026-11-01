@@ -68,6 +68,8 @@ test('merchant media deletion admission and reference guards', async () => {
       '20261101080356_merchant_media_deletion_foundation.sql',
       '20261101080419_merchant_media_reference_guards.sql',
       '20261101080442_merchant_media_deletion_admission.sql',
+      '20261101101950_merchant_media_invalid_entity_safety.sql',
+      '20261101102030_merchant_media_batch_deletion_admission.sql',
     ])
       await client.query(
         readFileSync(join(repository, 'supabase/migrations', name), 'utf8')

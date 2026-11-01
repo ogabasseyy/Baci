@@ -18,7 +18,8 @@ const admissionSchema = z
       object_id: z.string().uuid(),
     })
   )
-  .length(1);
+  .min(1)
+  .max(100);
 type Failure = {
   status: 400 | 403 | 404 | 409 | 503;
   body: { code: string; error: string };
@@ -70,15 +71,15 @@ export async function deleteMerchantMedia(input: {
 }): Promise<Failure | null> {
   const paths = new Set<string>();
   try {
-    for (const identity of input.identities) {
-      const { data, error } = await input.client.rpc(
-        'claim_merchant_media_deletion',
-        { p_merchant_id: input.merchantId, p_identity: identity }
-      );
-      if (error) return denied(error);
-      const parsed = admissionSchema.safeParse(data);
-      if (!parsed.success) return denied(null);
-      const row = parsed.data[0];
+    const { data, error: admissionError } = await input.client.rpc(
+      'claim_merchant_media_deletion_batch',
+      { p_merchant_id: input.merchantId, p_identities: input.identities }
+    );
+    if (admissionError) return denied(admissionError);
+    const parsed = admissionSchema.safeParse(data);
+    if (!parsed.success || parsed.data.length !== input.identities.length)
+      return denied(null);
+    for (const row of parsed.data) {
       if (
         !row.path.startsWith(`${input.merchantId}/`) ||
         row.path.includes('..')

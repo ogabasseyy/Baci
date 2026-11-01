@@ -57,6 +57,13 @@ function boundedPsqlDiagnostic(
   }
   const output = Buffer.concat(stderr).toString('utf8');
   const escapedCommandName = commandName.replaceAll('.', '\\.');
+  const lostConnection = new RegExp(
+    `^${escapedCommandName}:[^\\r\\n]*:(\\d+):[ \\t]+error:[ \\t]+connection to server was lost[ \\t]*$`,
+    'm'
+  ).exec(output);
+  const lostLine = Number(lostConnection?.[1]);
+  if (Number.isSafeInteger(lostLine) && lostLine > 0)
+    return ` (line=${lostLine},reason=connection-lost)`;
   const match = new RegExp(
     `^${escapedCommandName}:[^\\r\\n]*:(\\d+):[ \\t]+(?:ERROR|error):(?:[ \\t]+([0-9A-Z]{5})(?=[: \\t]|$))?`,
     'm'

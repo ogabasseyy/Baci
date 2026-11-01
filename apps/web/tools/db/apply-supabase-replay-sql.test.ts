@@ -67,6 +67,23 @@ describe('applySupabaseReplaySql', () => {
     );
   });
 
+  it('preserves the bounded lost-connection diagnostic', async () => {
+    const apply = vi.fn(async () => {
+      throw new Error(
+        'psql failed: non-zero-exit (line=42,reason=connection-lost)'
+      );
+    });
+    await expect(
+      applySupabaseReplaySql(apply, {
+        kind: 'sql-check',
+        ordinal: 1,
+        sqlPath: '/owned/replay/secret.sql',
+      })
+    ).rejects.toThrow(
+      /^Replay SQL check failed at ordinal 1: non-zero-exit \(line=42,reason=connection-lost\)$/
+    );
+  });
+
   it.each([
     [
       'migration',

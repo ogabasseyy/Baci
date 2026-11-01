@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AnalyticsPixelProvider } from '@/components/analytics/analytics-pixel-provider';
 import { StorefrontCartProvider } from '@/hooks/cart/storefront-cart-provider';
@@ -35,6 +35,25 @@ vi.mock('@/components/analytics/facebook-pixel', () => ({
     <span data-testid="facebook-pixel">{pixelId}</span>
   ),
 }));
+
+// Use the test renderer's React instance for Next dynamic boundaries.
+vi.mock('next/dynamic', async () => {
+  const React = await import('react');
+  return {
+    default: (
+      loader: () => Promise<ComponentType<Record<string, unknown>>>
+    ) => {
+      const Component = React.lazy(() =>
+        loader().then((component) => ({ default: component }))
+      );
+      return (props: Record<string, unknown>) => (
+        <React.Suspense fallback={null}>
+          <Component {...props} />
+        </React.Suspense>
+      );
+    },
+  };
+});
 
 vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
@@ -281,7 +300,16 @@ vi.mock('@/components/analytics/snapchat-pixel', () => ({
     <span data-testid="snapchat-pixel">{pixelId}</span>
   ),
 }));
-it('mounts all five merchant advertising pixels once across direct landing and navigation, preserving X event mapping', () => {
+it('mounts all five merchant advertising pixels once across direct landing and navigation, preserving X event mapping', async () => {
+  localStorage.setItem(
+    'baci-cookie-consent',
+    JSON.stringify({
+      necessary: true,
+      functional: true,
+      analytics: true,
+      marketing: true,
+    })
+  );
   const settings = {
     facebook_pixel_id: 'facebook-one',
     chatgpt_pixel_id: 'chatgpt-one',
@@ -315,7 +343,7 @@ it('mounts all five merchant advertising pixels once across direct landing and n
     'snapchat-pixel',
     'x-pixel',
   ])
-    expect(screen.getAllByTestId(id)).toHaveLength(1);
+    expect(await screen.findAllByTestId(id)).toHaveLength(1);
   expect(screen.getByTestId('x-pixel')).toHaveAttribute(
     'data-events',
     JSON.stringify(settings.twitter_event_ids)
@@ -333,5 +361,6 @@ it('mounts all five merchant advertising pixels once across direct landing and n
     'snapchat-pixel',
     'x-pixel',
   ])
-    expect(screen.getAllByTestId(id)).toHaveLength(1);
+    expect(await screen.findAllByTestId(id)).toHaveLength(1);
+  localStorage.removeItem('baci-cookie-consent');
 });

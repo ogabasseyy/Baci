@@ -104,7 +104,9 @@ export function useStorefrontCartLineHandlers({
       cartSlug: merchantSlugRef.current,
     });
 
+    const lineInstanceId = globalThis.crypto?.randomUUID?.();
     const lineAddInput = {
+      lineInstanceId,
       product,
       productForCart,
       normalizedOptions,

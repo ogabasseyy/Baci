@@ -1,4 +1,5 @@
-import importlib.util,os,tempfile,time,unittest
+import base64,importlib.util,os,tempfile,time,unittest
+import png,qrcode
 os.environ.setdefault('OXYGEN_HANDOFF_ORIGIN_FILE', '/tmp/oxygen-test-origin')
 from pathlib import Path
 from unittest.mock import patch
@@ -16,6 +17,20 @@ class HandoffTests(unittest.TestCase):
   with patch.object(handoff.secrets,'token_urlsafe',return_value='a'*43):result=handoff.issue('https://'+handoff.HOST+'/?token=synthetic',time.time()+120)
   self.assertTrue(result['qr'].startswith('data:image/png;base64,'));self.assertNotIn('synthetic',result['qr']);self.assertEqual(handoff.exchange('a'*43)['url'],'https://'+handoff.HOST+'/?token=synthetic')
   with self.assertRaises(ValueError):handoff.exchange('a'*43)
+ def test_qr_is_decodable_png_with_quiet_zone_and_expected_payload(self):
+  token='a'*43
+  with patch.object(handoff.secrets,'token_urlsafe',return_value=token):result=handoff.issue('https://'+handoff.HOST+'/?token=synthetic',time.time()+120)
+  image=base64.b64decode(result['qr'].split(',',1)[1],validate=True)
+  width,height,rows,info=png.Reader(bytes=image).read()
+  rows=list(rows);self.assertEqual(width,height);self.assertEqual(info['planes'],1)
+  expected=qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M,box_size=8,border=4)
+  expected.add_data('https://synthetic-test.trycloudflare.com/selfie#'+token);expected.make(fit=True)
+  matrix=expected.get_matrix();self.assertEqual(width,len(matrix)*8)
+  maximum=(1<<info['bitdepth'])-1
+  for y,row in enumerate(rows):
+   for x,pixel in enumerate(row):self.assertEqual(pixel,0 if matrix[y//8][x//8] else maximum)
+  self.assertTrue(all(pixel==maximum for row in rows[:32] for pixel in row))
+  self.assertTrue(all(row[x]==maximum for row in rows for x in range(32)))
  def test_reject_untrusted_host(self):
   with self.assertRaises(ValueError):handoff.issue('https://evil.test/',time.time()+100)
  def test_expired_link(self):

@@ -3,12 +3,17 @@
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import { logger } from '@/lib/logger';
 import {
+  getCartFromStorage,
   saveCartToStorage,
   saveCartWideNegotiationToStorage,
   saveMerchantSlugToStorage,
 } from './cart-storage';
 import type { CartItem } from './cart-types';
 import { getMerchantCartState } from './merchant-cart-storage';
+import {
+  type OxygenPurchasedCartLine,
+  removeOxygenPurchasedLines,
+} from './oxygen-cart-completion';
 import type { useStorefrontCartDelegation } from './use-storefront-cart-delegation';
 
 type DelegatedActions = ReturnType<
@@ -18,6 +23,7 @@ type DelegatedActions = ReturnType<
 /** Cart clearing and merchant-slug binding for the provider. */
 export function useStorefrontCartSessionHandlers({
   bumpSessionGeneration,
+  cartWideNegotiationActive,
   cartRef,
   delegated,
   delegatedActions,
@@ -32,6 +38,7 @@ export function useStorefrontCartSessionHandlers({
   sharedCartEnabled,
 }: {
   bumpSessionGeneration: () => void;
+  cartWideNegotiationActive: boolean;
   cartRef: RefObject<CartItem[]>;
   delegated: boolean;
   delegatedActions: DelegatedActions;
@@ -100,5 +107,32 @@ export function useStorefrontCartSessionHandlers({
     setCartWideNegotiationActive(merchantCartState.cartWideNegotiationActive);
     setIsHydrated(true);
   };
-  return { clearCart, setMerchantSlug };
+  const completeOxygenPurchasedLines = (
+    expectedSlug: string,
+    lines: OxygenPurchasedCartLine[]
+  ) => {
+    if (delegated || merchantSlugRef.current !== expectedSlug || !lines.length)
+      return;
+    // Refuse to overwrite a newer or not-yet-persisted local snapshot.
+    if (
+      JSON.stringify(getCartFromStorage(expectedSlug)) !==
+      JSON.stringify(cartRef.current)
+    )
+      return;
+    const next = removeOxygenPurchasedLines(cartRef.current, lines);
+    if (JSON.stringify(next) === JSON.stringify(cartRef.current)) return;
+    cartRef.current = next;
+    setCart((previous) => {
+      const remaining = removeOxygenPurchasedLines(previous, lines);
+      return cartWideNegotiationActive
+        ? remaining.map((item) => ({
+            ...item,
+            negotiatedPrice: undefined,
+            negotiationStatus: undefined,
+          }))
+        : remaining;
+    });
+    setCartWideNegotiationActive(false);
+  };
+  return { clearCart, setMerchantSlug, completeOxygenPurchasedLines };
 }

@@ -16,6 +16,7 @@ import { submitOxygenVerificationForm } from './submit-oxygen-verification-form'
 import { useOxygenApprovedPayment } from './use-oxygen-approved-payment';
 import { useOxygenBookingProgress } from './use-oxygen-booking-progress';
 import { useOxygenConfirmationUpdates } from './use-oxygen-confirmation-updates';
+import { useOxygenPlanAcceptance } from './use-oxygen-plan-acceptance';
 import { useOxygenProvider } from './use-oxygen-provider';
 import { useOxygenResidentialContext } from './use-oxygen-residential-context';
 import { useOxygenResidentialSubmission } from './use-oxygen-residential-submission';
@@ -81,6 +82,7 @@ function OxygenProviderSession({
   }, [active, refresh]);
   const s = snapshot?.state;
   const [acceptedPlanReference, setAcceptedPlanReference] = useState<string>();
+  const acceptance = useOxygenPlanAcceptance();
   const reviewBookedPlan = Boolean(
     (snapshot?.stage === 'booked' ||
       (snapshot?.stage === 'approval_required' &&
@@ -208,14 +210,18 @@ function OxygenProviderSession({
             refresh={refresh}
           />
         )}
+        {acceptance.error && <p role="alert">{acceptance.error}</p>}
         <OxygenBookedPlanReview
           key={s.bookingReference}
           workflowId={snapshot.workflowId}
           state={s}
-          busy={disabled}
+          busy={disabled || acceptance.busy}
           onAccept={(reference) => {
-            setAcceptedPlanReference(reference);
-            void readSaved();
+            void acceptance
+              .accept(snapshot.workflowId, reference, readSaved)
+              .then((confirmed) => {
+                if (confirmed) setAcceptedPlanReference(reference);
+              });
           }}
         />
       </section>

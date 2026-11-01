@@ -4,6 +4,7 @@ from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 import qrcode
+from qrcode.image.pure import PyPNGImage
 
 HOST='staging.d1l1k5yxed9cvn.amplifyapp.com'
 ORIGIN_FILE=Path(os.environ['OXYGEN_HANDOFF_ORIGIN_FILE'])
@@ -30,7 +31,7 @@ def issue(url,expires):
   entries[hashlib.sha256(token.encode()).hexdigest()]=(url,expires)
  qr=qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M,box_size=8,border=4)
  qr.add_data(origin+'/selfie#'+token);qr.make(fit=True)
- out=io.BytesIO();qr.make_image(fill_color='black',back_color='white').save(out,format='PNG')
+ out=io.BytesIO();qr.make_image(image_factory=PyPNGImage).save(out)
  return {'qr':'data:image/png;base64,'+base64.b64encode(out.getvalue()).decode(),'expiresAt':int(expires*1000)}
 
 def exchange(token):

@@ -22,7 +22,13 @@ export interface CheckoutPaymentDispatchContext {
   customerPhone: string;
   billingAddress: JuicywayPendingOrder['billingAddress'];
   checkoutFingerprint: string;
-  checkoutCart: readonly { name: string }[];
+  checkoutCart: readonly {
+    name: string;
+    cartItemId?: string;
+    cartLineInstanceId?: string;
+    quantity?: number;
+    serverLineId?: string | null;
+  }[];
   cart: readonly { name: string }[];
   orderItems: CheckoutOrderItem[];
   walletFundedTransfer: Pick<

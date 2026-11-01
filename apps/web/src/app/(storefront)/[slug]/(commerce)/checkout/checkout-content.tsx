@@ -56,6 +56,7 @@ export async function CheckoutContent({
       {oxygenOrderId ? (
         <OxygenOrderConfirmationRedirect
           orderId={oxygenOrderId}
+          merchantId={merchant.id}
           merchantSlug={merchant.slug}
         >
           <OxygenStorefrontCheckout

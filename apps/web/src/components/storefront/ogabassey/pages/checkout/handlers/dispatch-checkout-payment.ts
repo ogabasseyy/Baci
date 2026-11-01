@@ -1,3 +1,4 @@
+import { captureOxygenCheckoutSnapshot } from '@/components/payments/oxygen/oxygen-checkout-snapshot';
 import { toast } from '@/hooks/use-toast';
 import { captureCheckoutPaymentCompleted } from '../capture-checkout-payment-completed';
 import { captureCheckoutPaymentFailed } from '../capture-checkout-payment-failed';
@@ -47,6 +48,8 @@ export async function dispatchCheckoutPayment(
     payForMeDetails,
   } = context;
   if (paymentMethod === 'oxygen') {
+    if (!orderItems.some((item) => item.cart_line_id))
+      captureOxygenCheckoutSnapshot(order.id, merchant.id, checkoutCart);
     const query = new URLSearchParams({ oxygenOrderId: order.id });
     const attempt = oxygenLocalAttempt(
       new URLSearchParams(window.location.search)

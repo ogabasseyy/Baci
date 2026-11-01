@@ -30,6 +30,8 @@ export interface CartItem extends Product {
   variantId?: string;
   variantAttributes?: Record<string, string>;
   cartItemId: string;
+  /** Unique to a locally added line, including after remove and re-add. */
+  cartLineInstanceId?: string;
   selectedColor?: string;
   selectedColorValue?: string;
   secondaryColor?: string;
@@ -92,6 +94,10 @@ export interface CartContextType {
     variantId?: string
   ) => void;
   clearCart: () => void;
+  completeOxygenPurchasedLines?: (
+    merchantSlug: string,
+    lines: import('./oxygen-cart-completion').OxygenPurchasedCartLine[]
+  ) => void;
   setMerchantSlug: (slug: string) => void;
   cartCount: number;
   cartTotal: number;

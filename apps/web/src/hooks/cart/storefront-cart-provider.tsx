@@ -182,21 +182,23 @@ export function StorefrontCartProvider({
     };
   }, []);
 
-  const { clearCart, setMerchantSlug } = useStorefrontCartSessionHandlers({
-    bumpSessionGeneration,
-    cartRef,
-    delegated,
-    delegatedActions,
-    initialMerchantSlug,
-    merchantId,
-    merchantSlug,
-    merchantSlugRef,
-    setCart,
-    setCartWideNegotiationActive,
-    setIsHydrated,
-    setMerchantSlugState,
-    sharedCartEnabled,
-  });
+  const { clearCart, setMerchantSlug, completeOxygenPurchasedLines } =
+    useStorefrontCartSessionHandlers({
+      bumpSessionGeneration,
+      cartWideNegotiationActive,
+      cartRef,
+      delegated,
+      delegatedActions,
+      initialMerchantSlug,
+      merchantId,
+      merchantSlug,
+      merchantSlugRef,
+      setCart,
+      setCartWideNegotiationActive,
+      setIsHydrated,
+      setMerchantSlugState,
+      sharedCartEnabled,
+    });
   const { addToCart, removeFromCart, updateQuantity } =
     useStorefrontCartLineHandlers({
       cartRef,
@@ -247,6 +249,9 @@ export function StorefrontCartProvider({
     removeFromCart,
     updateQuantity,
     clearCart,
+    completeOxygenPurchasedLines: delegated
+      ? undefined
+      : completeOxygenPurchasedLines,
     setMerchantSlug,
     cartCount: delegated ? shared.cartCount : cartCount,
     cartTotal: delegated ? shared.cartTotal : cartTotal,

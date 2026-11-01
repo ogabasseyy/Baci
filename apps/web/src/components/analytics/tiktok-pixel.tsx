@@ -32,30 +32,3 @@ export function TikTokPixel({ pixelId }: TikTokPixelProps) {
 }
 
 export { tiktokEvents } from '@/lib/analytics/tiktok-pixel-events';
-
-// Extend Window type for TikTok
-declare global {
-  interface Window {
-    ttq?: {
-      track: (
-        event: string,
-        params?: Record<string, unknown>,
-        options?: { event_id?: string }
-      ) => void;
-      page: () => void;
-      identify: (params: Record<string, string>) => void;
-      load: (pixelId: string) => void;
-      instance?: (pixelId: string) => {
-        track: (
-          event: string,
-          params?: Record<string, unknown>,
-          options?: { event_id?: string }
-        ) => void;
-        revokeConsent?: () => void;
-        grantConsent?: () => void;
-        page: () => void;
-        identify: (data: Record<string, string>) => void;
-      };
-    };
-  }
-}

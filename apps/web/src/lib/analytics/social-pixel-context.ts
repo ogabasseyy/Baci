@@ -34,3 +34,48 @@ export const socialPixelContext = {
     return active[destination];
   },
 };
+
+declare global {
+  interface Window {
+    snaptr?: {
+      (
+        action: 'init',
+        pixelId: string,
+        userData?: Record<string, string>
+      ): void;
+      (action: 'track', event: string, params?: Record<string, unknown>): void;
+      (
+        action: 'track',
+        pixelId: string,
+        event: string,
+        params?: Record<string, unknown>
+      ): void;
+    };
+  }
+}
+
+declare global {
+  interface Window {
+    ttq?: {
+      track: (
+        event: string,
+        params?: Record<string, unknown>,
+        options?: { event_id?: string }
+      ) => void;
+      page: () => void;
+      identify: (params: Record<string, string>) => void;
+      load: (pixelId: string) => void;
+      instance?: (pixelId: string) => {
+        track: (
+          event: string,
+          params?: Record<string, unknown>,
+          options?: { event_id?: string }
+        ) => void;
+        revokeConsent?: () => void;
+        grantConsent?: () => void;
+        page: () => void;
+        identify: (data: Record<string, string>) => void;
+      };
+    };
+  }
+}

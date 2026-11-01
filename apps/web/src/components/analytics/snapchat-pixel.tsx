@@ -32,23 +32,3 @@ export function SnapchatPixel({ pixelId }: SnapchatPixelProps) {
 }
 
 export { snapchatEvents } from '@/lib/analytics/snapchat-pixel-events';
-
-// Extend Window type for Snapchat
-declare global {
-  interface Window {
-    snaptr?: {
-      (
-        action: 'init',
-        pixelId: string,
-        userData?: Record<string, string>
-      ): void;
-      (action: 'track', event: string, params?: Record<string, unknown>): void;
-      (
-        action: 'track',
-        pixelId: string,
-        event: string,
-        params?: Record<string, unknown>
-      ): void;
-    };
-  }
-}

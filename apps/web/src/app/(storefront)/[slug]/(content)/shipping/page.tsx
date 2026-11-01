@@ -32,7 +32,7 @@ export async function generateMetadata({
   );
 
   return {
-    title: `Shipping Policy | ${context.merchant.business_name}`,
+    title: 'Shipping Policy',
     description,
     alternates: {
       canonical: canonicalUrl,

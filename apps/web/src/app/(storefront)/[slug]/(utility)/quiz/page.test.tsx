@@ -32,9 +32,15 @@ vi.mock('next/navigation', () => ({
   notFound: () => notFound(),
 }));
 
-const { default: QuizPage } = await import('./page');
+const { default: QuizPage, metadata } = await import('./page');
 
 describe('QuizPage', () => {
+  it('leaves the merchant suffix to the storefront title template', () => {
+    // Regression: a hardcoded "| Ogabassey" doubled up once the storefront
+    // layout began appending the merchant name to every relative title.
+    expect(metadata.title).toBe('Super Quiz');
+  });
+
   it('renders the Ogabassey web quiz route with structured data', async () => {
     vi.mocked(getCachedMerchant).mockResolvedValue({
       slug: 'ogabassey',

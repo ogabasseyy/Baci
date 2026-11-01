@@ -37,7 +37,7 @@ export async function generateMetadata({
   );
 
   return {
-    title: `Privacy Policy | ${merchant.business_name}`,
+    title: 'Privacy Policy',
     description,
     openGraph: {
       title: `Privacy Policy | ${merchant.business_name}`,

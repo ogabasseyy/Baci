@@ -46,7 +46,8 @@ SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 INSERT INTO auth.users(id) VALUES
   ('a3600000-0000-4000-8000-000000000021'), ('a3600000-0000-4000-8000-000000000022'),
   ('a3600000-0000-4000-8000-000000000023'), ('a3600000-0000-4000-8000-000000000024'),
-  ('a3600000-0000-4000-8000-000000000025'), ('a3600000-0000-4000-8000-000000000026');
+  ('a3600000-0000-4000-8000-000000000025'), ('a3600000-0000-4000-8000-000000000026'),
+  ('a3600000-0000-4000-8000-000000000027');
 INSERT INTO public.merchants(id, email)
   VALUES ('a3600000-0000-4000-8000-000000000002', 'review-hold@example.test');
 INSERT INTO public.customers(id, merchant_id, user_id, email) VALUES
@@ -55,7 +56,8 @@ INSERT INTO public.customers(id, merchant_id, user_id, email) VALUES
   ('a3600000-0000-4000-8000-000000000013', 'a3600000-0000-4000-8000-000000000002', 'a3600000-0000-4000-8000-000000000023', 'review-3@example.test'),
   ('a3600000-0000-4000-8000-000000000014', 'a3600000-0000-4000-8000-000000000002', 'a3600000-0000-4000-8000-000000000024', 'review-4@example.test'),
   ('a3600000-0000-4000-8000-000000000015', 'a3600000-0000-4000-8000-000000000002', 'a3600000-0000-4000-8000-000000000025', 'review-5@example.test'),
-  ('a3600000-0000-4000-8000-000000000016', 'a3600000-0000-4000-8000-000000000002', 'a3600000-0000-4000-8000-000000000026', 'review-6@example.test');
+  ('a3600000-0000-4000-8000-000000000016', 'a3600000-0000-4000-8000-000000000002', 'a3600000-0000-4000-8000-000000000026', 'review-6@example.test'),
+  ('a3600000-0000-4000-8000-000000000017', 'a3600000-0000-4000-8000-000000000002', 'a3600000-0000-4000-8000-000000000027', 'review-7@example.test');
 INSERT INTO piggyvest_primary.integrations(id, merchant_id, business_id, environment, executor_login, enabled)
   VALUES ('a3600000-0000-4000-8000-000000000005', 'a3600000-0000-4000-8000-000000000002',
     'review-hold-business', 'staging', session_user, true);
@@ -152,8 +154,7 @@ END $$;
 
 -- Routing rejection stamps immutable status evidence. It remains unreadable
 -- and non-spendable, blocks deletion only while its mapped DVA is open, and
--- is deletable after a valid closure attestation. Unlike the walletless
--- ownership hold, the routing label does not extend the DVA closure hold.
+-- is deletable after a valid closure attestation.
 DO $$
 DECLARE c jsonb; intent_id uuid;
 BEGIN
@@ -188,6 +189,50 @@ BEGIN
   PERFORM piggyvest_primary.attest_provider_dva_closure(intent_id);
   PERFORM pg_temp.check(pg_temp.delete_probe(5) = 'deleted',
     'closed mapped routing rejection remained blocked by its review label');
+END $$;
+
+-- Duplicate-style review keeps only the duplicate wallet's IDs and has no
+-- review_reason that can prove the original provider customer was reconciled.
+-- Closing the mapped duplicate DVA therefore must leave the ownership hold.
+DO $$
+DECLARE c jsonb; intent_id uuid;
+BEGIN
+  c := piggyvest_primary.claim_onboarding(pg_temp.scope(6), repeat('f', 64));
+  intent_id := (c->>'intentId')::uuid;
+  PERFORM pg_temp.check(piggyvest_primary.record_onboarding_review(
+    pg_temp.scope(6), intent_id, (c->>'claimToken')::uuid,
+    'duplicate-provider-customer', 'duplicate-provider-wallet'),
+    'duplicate-style review record failed');
+  PERFORM pg_temp.check((SELECT state = 'rejected' AND review_reason IS NULL
+      AND provider_customer_id = 'duplicate-provider-customer'
+      AND provider_wallet_id = 'duplicate-provider-wallet'
+    FROM piggyvest_primary.onboarding_intents WHERE id = intent_id),
+    'duplicate-style review did not retain only its mapped IDs');
+  PERFORM pg_temp.check(pg_temp.delete_probe(6) = 'unresolved',
+    'duplicate-style review did not block deletion before DVA closure');
+  PERFORM piggyvest_primary.attest_provider_dva_closure(intent_id);
+  PERFORM pg_temp.check(pg_temp.delete_probe(6) = 'unresolved',
+    'closing the duplicate DVA released its original ownership hold');
+END $$;
+
+-- Legacy mapped reviews also have NULL review_reason. Even after their own
+-- DVA closes, absent ownership evidence they remain held for reconciliation.
+DO $$
+DECLARE c jsonb; intent_id uuid;
+BEGIN
+  c := piggyvest_primary.claim_onboarding(pg_temp.scope(7), repeat('7', 64));
+  intent_id := (c->>'intentId')::uuid;
+  PERFORM pg_temp.check(piggyvest_primary.record_onboarding_review(
+    pg_temp.scope(7), intent_id, (c->>'claimToken')::uuid,
+    'legacy-provider-customer', 'legacy-provider-wallet'),
+    'legacy mapped review setup failed');
+  PERFORM pg_temp.check((SELECT state = 'rejected' AND review_reason IS NULL
+      AND provider_wallet_id = 'legacy-provider-wallet'
+    FROM piggyvest_primary.onboarding_intents WHERE id = intent_id),
+    'legacy mapped review fixture was not ambiguous');
+  PERFORM piggyvest_primary.attest_provider_dva_closure(intent_id);
+  PERFORM pg_temp.check(pg_temp.delete_probe(7) = 'unresolved',
+    'a closed legacy mapped review was deletable without ownership reconciliation');
 END $$;
 
 -- Both new RPCs and the trigger helper are absent from public client roles.

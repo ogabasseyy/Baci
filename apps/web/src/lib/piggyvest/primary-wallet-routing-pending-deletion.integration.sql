@@ -4,14 +4,24 @@
 -- its routing, still holds a PiggyVest wallet with an open DVA, so deleting
 -- the customer must wait for the closure attestation, and a recheck after
 -- that closure never promotes the wallet to usable. A usable (accepted)
--- wallet stays protected too, and an intent without provider ids never
--- locks the customer.
+-- wallet stays protected too. Dispatched intents without provider IDs remain
+-- held until reconciliation.
 \ir primary-wallet-storage.integration.sql
 \ir ../../../../../supabase/migrations/20261007180000_piggyvest_primary_wallet_verification.sql
 \ir ../../../../../supabase/migrations/20261007230000_primary_bank_signed_inbox.sql
 \ir ../../../../../supabase/migrations/20261008093700_primary_bank_inbox_unsettled_deletion_block.sql
 \ir ../../../../../supabase/migrations/20261008095500_primary_bank_deletion_requires_dva_closure.sql
 \ir ../../../../../supabase/migrations/20261031230000_piggyvest_primary_onboarding_routing_pending.sql
+\ir ../../../../../supabase/migrations/20261101171000_piggyvest_primary_onboarding_review_hold.sql
+\ir ../../../../../supabase/migrations/20261101174000_piggyvest_primary_legacy_review_deletion_hold.sql
+\ir ../../../../../supabase/migrations/20261101180000_piggyvest_primary_mapped_ownership_review_hold.sql
+-- Match production account deletion's nullable SET NULL relation before any
+-- delete probes, so an allowed delete reaches its real terminal outcome.
+ALTER TABLE piggyvest_primary.onboarding_intents ALTER COLUMN customer_id DROP NOT NULL;
+ALTER TABLE piggyvest_primary.onboarding_intents
+  DROP CONSTRAINT onboarding_intents_customer_id_fkey,
+  ADD CONSTRAINT onboarding_intents_customer_id_account_deletion
+    FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE SET NULL;
 INSERT INTO public.merchants VALUES ('a3400000-0000-4000-8000-000000000002');
 INSERT INTO public.customers VALUES
   ('a3400000-0000-4000-8000-000000000011', 'a3400000-0000-4000-8000-000000000002', 'a3400000-0000-4000-8000-000000000021'),
@@ -33,11 +43,13 @@ BEGIN
   RETURN 'deleted';
 EXCEPTION
   WHEN raise_exception THEN
-    RETURN CASE WHEN SQLERRM = 'cannot delete customer with open provider DVA' THEN 'dva' ELSE 'other:' || SQLERRM END;
+    RETURN CASE SQLERRM WHEN 'cannot delete customer with open provider DVA' THEN 'dva'
+      WHEN 'cannot delete customer with unresolved provider onboarding' THEN 'unresolved'
+      ELSE 'other' END;
   WHEN foreign_key_violation THEN RETURN 'other';
 END $$;
 DO $$
-DECLARE v_claim jsonb; v_intent uuid;
+DECLARE v_claim jsonb; v_intent uuid; v_delete_result text;
 BEGIN
   -- Routing pending: blocked until the DVA closure is attested.
   v_claim := piggyvest_primary.claim_onboarding(pg_temp.scope(1), repeat('a', 64));
@@ -50,7 +62,8 @@ BEGIN
     '{"providerCustomerId":"pv-customer-1","providerWalletId":"pv-wallet-1"}', true) THEN RAISE EXCEPTION 'closed recheck not resolved'; END IF;
   IF (SELECT state FROM piggyvest_primary.onboarding_intents WHERE id = v_intent) <> 'rejected' THEN
     RAISE EXCEPTION 'a closed DVA was promoted to a usable wallet'; END IF;
-  IF pg_temp.delete_customer(1) = 'dva' THEN RAISE EXCEPTION 'an attested closure still blocked deletion'; END IF;
+  v_delete_result := pg_temp.delete_customer(1);
+  IF v_delete_result <> 'deleted' THEN RAISE EXCEPTION 'an attested routing closure did not allow deletion: %', v_delete_result; END IF;
   -- Rejected over its routing: the ids are kept, so the guard still applies.
   v_claim := piggyvest_primary.claim_onboarding(pg_temp.scope(2), repeat('b', 64));
   IF NOT piggyvest_primary.record_onboarding_routing_pending(pg_temp.scope(2), (v_claim->>'intentId')::uuid,
@@ -65,8 +78,8 @@ BEGIN
     'pv-customer-4', 'pv-wallet-4') THEN RAISE EXCEPTION 'accepted wallet not recorded'; END IF;
   IF pg_temp.delete_customer(4) <> 'dva' THEN RAISE EXCEPTION 'an accepted DVA did not block deletion'; END IF;
   PERFORM piggyvest_primary.attest_provider_dva_closure(v_intent);
-  IF pg_temp.delete_customer(4) = 'dva' THEN RAISE EXCEPTION 'an attested accepted closure still blocked deletion'; END IF;
-  -- No provider ids yet (still dispatched): never locked by the DVA guard.
+  IF pg_temp.delete_customer(4) <> 'deleted' THEN RAISE EXCEPTION 'an attested accepted closure did not allow deletion'; END IF;
+  -- No provider IDs yet (still dispatched): ownership reconciliation blocks deletion.
   PERFORM piggyvest_primary.claim_onboarding(pg_temp.scope(3), repeat('c', 64));
-  IF pg_temp.delete_customer(3) = 'dva' THEN RAISE EXCEPTION 'a walletless intent locked deletion'; END IF;
+  IF pg_temp.delete_customer(3) <> 'unresolved' THEN RAISE EXCEPTION 'a dispatched walletless intent did not block deletion'; END IF;
 END $$;

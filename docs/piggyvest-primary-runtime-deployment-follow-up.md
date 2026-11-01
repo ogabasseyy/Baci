@@ -124,8 +124,9 @@ running it is not a substitute for this preparation.
 
 ## Route/deployment verification still required
 
-Apply `20261101171000_piggyvest_primary_onboarding_review_hold.sql` and
-`20261101174000_piggyvest_primary_legacy_review_deletion_hold.sql` before
+Apply `20261101171000_piggyvest_primary_onboarding_review_hold.sql`,
+`20261101174000_piggyvest_primary_legacy_review_deletion_hold.sql`, and
+`20261101180000_piggyvest_primary_mapped_ownership_review_hold.sql` before
 deploying the review-status reader or ambiguous-onboarding recovery. Include
 `record_onboarding_ownership_hold(jsonb,uuid,uuid)` and
 `read_onboarding_review(jsonb)` in the restricted provisioner's verified grants.
@@ -147,6 +148,16 @@ provider wallet ID, including rows whose `review_reason` is NULL and explicit
 foreign rejections. Treat these rows as requiring operator reconciliation;
 do not infer safe deletion from the old response or clear the hold
 automatically. No migration grant or automatic release path is added.
+
+A mapped rejected review with `review_reason` NULL also requires ownership
+reconciliation. This includes duplicate-creation reviews that retain the
+duplicate wallet IDs: attesting closure of that wallet satisfies only its DVA
+closure condition and cannot prove the original provider customer was
+reconciled. Such a customer remains undeletable after closure. A rejected row
+classified as `review_reason='routing'` has proven ownership and keeps the
+existing mapped-DVA rule: deletion remains blocked until closure is attested,
+then becomes allowed. No automatic ownership release, wallet adoption or
+additional runtime RPC is introduced.
 
 The existing staging wallet nginx installer covers the legacy exact wallet
 GET path. It does not establish or probe the new primary paths. Verify actual

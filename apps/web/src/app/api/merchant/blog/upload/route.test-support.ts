@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { vi } from 'vitest';
 import { DEFAULT_BLOG_MEDIA_CDN_ORIGIN } from '@/config/cdn';
+import { createMediaDeletionRpcMock } from '@/lib/media/media-deletion-rpc.test-support';
 
 export const mockCheckCsrfProtection = vi.fn();
 export const mockAuthenticateApiRequest = vi.fn();
@@ -83,6 +84,7 @@ export function createSupabaseMock() {
   const storageBucket = { upload, remove };
   return {
     supabase: {
+      rpc: createMediaDeletionRpcMock(),
       storage: {
         from: vi.fn((bucket: string) => {
           if (bucket !== 'media')

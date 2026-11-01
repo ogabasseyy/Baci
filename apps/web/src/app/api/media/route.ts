@@ -8,6 +8,8 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 
+import { loadMediaDeletionStates } from '@/lib/media/load-media-deletion-states';
+
 const BUCKET_NAME = 'media';
 
 // Security constants for file upload
@@ -103,7 +105,17 @@ export async function GET(_request: Request) {
     };
   });
 
-  return NextResponse.json({ files: filesWithUrls });
+  const qualifiedFiles = await loadMediaDeletionStates(
+    supabase,
+    merchantId,
+    filesWithUrls
+  );
+  if (!qualifiedFiles)
+    return NextResponse.json(
+      { error: 'Unable to load deletion status' },
+      { status: 503 }
+    );
+  return NextResponse.json({ files: qualifiedFiles });
 }
 
 export async function POST(request: NextRequest) {
@@ -243,76 +255,4 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function DELETE(request: NextRequest) {
-  // CSRF Protection
-  const { valid, response } = await checkCsrfProtection(request);
-  if (!valid && response) {
-    return response;
-  }
-
-  const { searchParams } = new URL(request.url);
-  const fileId = searchParams.get('id');
-
-  if (!fileId) {
-    return NextResponse.json({ error: 'File ID required' }, { status: 400 });
-  }
-
-  // Validate file ID to prevent path traversal
-  // Only allow alphanumeric characters, dots, and hyphens
-  // Explicitly reject ".." to prevent directory traversal
-  if (!/^[a-zA-Z0-9.-]+$/.test(fileId) || fileId.includes('..')) {
-    return NextResponse.json({ error: 'Invalid File ID' }, { status: 400 });
-  }
-
-  const cookieStore = await cookies();
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-      },
-    }
-  );
-
-  // Get current user
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-  if (authError || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // Get merchant (supports both owners and staff)
-  const merchantContext = await getMerchantForApiRequest(supabase, user.id);
-  if (!merchantContext) {
-    return NextResponse.json({ error: 'Merchant not found' }, { status: 404 });
-  }
-
-  // Permission check
-  const access = toUserAccess(merchantContext);
-  if (!hasPermission(access, 'products', 'delete')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const merchantId = merchantContext.merchantId;
-
-  // Delete file from Supabase Storage
-  const filePath = `${merchantId}/${fileId}`;
-
-  const { error } = await supabase.storage.from(BUCKET_NAME).remove([filePath]);
-
-  if (error) {
-    console.error('Delete error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-
-  return NextResponse.json({ success: true });
-}
+export { DELETE } from './delete';

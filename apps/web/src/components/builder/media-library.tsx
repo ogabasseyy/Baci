@@ -20,14 +20,13 @@ import { useToast } from '@/hooks/use-toast';
 import { fetchWithCsrf } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 
-export interface MediaFile {
-  id: string;
-  name: string;
-  url: string;
-  size: number;
-  type: string;
-  createdAt: string;
-}
+import {
+  deleteMediaFile,
+  MediaLibraryDeletionError,
+} from './media-library-delete';
+import type { MediaFile } from './media-library-types';
+
+export type { MediaFile } from './media-library-types';
 
 interface MediaLibraryProps {
   onSelect?: (url: string | null) => void;
@@ -89,14 +88,6 @@ async function uploadMediaFile(file: File): Promise<string | null> {
 
   const data = await response.json();
   return data.file?.url ?? null;
-}
-
-// Delete a file by id. Throws on failure so the caller can surface a toast.
-async function deleteMediaFile(fileId: string): Promise<void> {
-  const response = await fetchWithCsrf(`/api/media?id=${fileId}`, {
-    method: 'DELETE',
-  });
-  if (!response.ok) throw new Error('Delete failed');
 }
 
 export function MediaLibrary({ onSelect, maxSizeMB = 5 }: MediaLibraryProps) {
@@ -189,9 +180,16 @@ export function MediaLibrary({ onSelect, maxSizeMB = 5 }: MediaLibraryProps) {
       console.error('Delete error:', error);
       toast({
         title: 'Error',
-        description: 'Failed to delete file',
+        description: error.message,
         variant: 'destructive',
       });
+      if (error instanceof MediaLibraryDeletionError && error.pending) {
+        await loadFiles();
+        if (deletedFile && selectedFile === deletedFile.url) {
+          setSelectedFile(null);
+          onSelect?.(null);
+        }
+      }
       return;
     }
 
@@ -339,12 +337,21 @@ export function MediaLibrary({ onSelect, maxSizeMB = 5 }: MediaLibraryProps) {
                   selectedFile === file.url && 'ring-2 ring-primary'
                 )}
                 onClick={() => {
+                  if (file.deletionState === 'pending') return;
                   setSelectedFile(file.url);
                   if (onSelect) {
                     onSelect(file.url);
                   }
                 }}
               >
+                {file.deletionState === 'pending' && (
+                  <p
+                    role="status"
+                    className="px-2 py-1 text-xs bg-muted text-muted-foreground"
+                  >
+                    Deletion pending — retry to finish
+                  </p>
+                )}
                 {/* Image */}
                 <div className="aspect-square relative bg-muted">
                   <Image

@@ -99,7 +99,7 @@ export function QuizResultsPanel({
       ? leaderboard.currentPlayer.score
       : null;
   const finishTime = formatFinishTime(
-    currentPlayer?.submittedAt ?? submittedAt ?? serverNow
+    submittedAt ?? currentPlayer?.submittedAt ?? serverNow
   );
   if (lifecycle !== 'idle') {
     const canReturnToQuizList = Boolean(
@@ -168,7 +168,7 @@ export function QuizResultsPanel({
                   {finishTime ?? 'Recorded'}
                 </Text>
                 <Text style={styles.finishTimeHint}>
-                  Finish time will be used as a tie breaker
+                  Ties consider the finish time of your best attempt
                 </Text>
               </View>
             ) : null}

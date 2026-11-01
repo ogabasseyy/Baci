@@ -96,11 +96,13 @@ test('CI and deploy gate every direct CWV dependency and aggregate its contract 
 
   const quality = ci.jobs.quality;
   assert.ok(quality.needs.includes('cwv-runner-contracts'));
+  const verifyQuality = quality.steps.find((step) => step.name === 'Verify split quality gate results');
+  assert.ok(verifyQuality, 'quality result verification step must exist');
   assert.equal(
-    quality.steps[0].env.CWV_RUNNER_CONTRACTS_RESULT,
+    verifyQuality.env.CWV_RUNNER_CONTRACTS_RESULT,
     "${{ needs['cwv-runner-contracts'].result }}",
   );
-  assert.match(quality.steps[0].run, /"\$CWV_RUNNER_CONTRACTS_RESULT"/);
+  assert.match(verifyQuality.run, /"\$CWV_RUNNER_CONTRACTS_RESULT"/);
   assert.doesNotMatch(
     deploy.jobs['deploy-production'].if,
     /cwv_runner/,

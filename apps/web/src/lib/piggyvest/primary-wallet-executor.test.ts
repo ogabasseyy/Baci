@@ -113,6 +113,63 @@ describe('primary wallet restricted executor', () => {
       ]
     );
   });
+  it.each([
+    ['routingPending', 6],
+    ['readRouting', 1],
+    ['resolveRouting', 4],
+    ['review', 6],
+    ['ownershipHold', 3],
+    ['readReview', 1],
+  ] as const)('permits the %s RPC only with its %i bound arguments', async (name, arity) => {
+    const statement = PRIMARY_WALLET_STATEMENTS[name];
+    const parameters = Array.from({ length: arity }, (_unused, index) =>
+      String(index)
+    );
+    await createPrimaryWalletExecutor(config)(statement, parameters);
+    expect(mocks.query).toHaveBeenLastCalledWith(statement, parameters);
+    mocks.construct.mockClear();
+    await expect(
+      createPrimaryWalletExecutor(config)(statement, [...parameters, 'extra'])
+    ).rejects.toThrow('Primary wallet database unavailable');
+    expect(mocks.construct).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['resolveRouting', 4],
+    ['review', 6],
+  ] as const)('accepts null only for %s review classification', async (name, arity) => {
+    const parameters: unknown[] = Array.from({ length: arity }, () => 'bound');
+    parameters[arity - 1] = null;
+    await createPrimaryWalletExecutor(config)(
+      PRIMARY_WALLET_STATEMENTS[name],
+      parameters
+    );
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      PRIMARY_WALLET_STATEMENTS[name],
+      parameters
+    );
+    for (let position = 0; position < arity - 1; position++) {
+      mocks.construct.mockClear();
+      const invalid = [...parameters];
+      invalid[position] = null;
+      await expect(
+        createPrimaryWalletExecutor(config)(
+          PRIMARY_WALLET_STATEMENTS[name],
+          invalid
+        )
+      ).rejects.toThrow('Primary wallet database unavailable');
+      expect(mocks.construct).not.toHaveBeenCalled();
+    }
+  });
+
+  it('rejects null on a statement without a review reason', async () => {
+    await expect(
+      createPrimaryWalletExecutor(config)(PRIMARY_WALLET_STATEMENTS.read, [
+        null,
+      ])
+    ).rejects.toThrow('Primary wallet database unavailable');
+    expect(mocks.construct).not.toHaveBeenCalled();
+  });
+
   it('rejects arbitrary SQL before opening a connection', async () => {
     await expect(
       createPrimaryWalletExecutor(config)('SELECT * FROM public.customers', [])

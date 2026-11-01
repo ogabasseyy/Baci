@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareModalContainer } from '@/components/ui/KeyboardAwareModalContainer';
 import { isRuntimePlatform } from '@/config/runtime-platform';
+import { SHIPPING_PROVIDER_LABELS } from '@/constants/shipping-provider-labels';
 import { useTheme } from '@/hooks/useTheme';
 import { CheckoutShippingRecoveryPanel } from './CheckoutShippingRecoveryPanel';
 import { ShipmentFlowFooter } from './ShipmentFlowFooter';
@@ -206,6 +207,7 @@ export function ShipmentFlowSheet({
                         }}
                         onRetryQuote={() => void giglShipping.requestQuote()}
                         onTransferred={giglShipping.startTransferPoll}
+                        providerName={SHIPPING_PROVIDER_LABELS.GIGL}
                         quote={giglShipping.quote}
                         selected={selectedMode === 'provider'}
                         state={giglShipping.state}

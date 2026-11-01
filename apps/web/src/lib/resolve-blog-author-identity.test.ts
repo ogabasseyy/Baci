@@ -43,10 +43,16 @@ describe('resolveBlogAuthorIdentity', () => {
         author_image_url: null,
       },
       {
-        author_title: null,
+        author_title: 'Legacy Role',
         author_bio: 'Writes data-driven gadget buying guides.',
         author_image_url:
           'https://cdn.ogabassey.com/merchants/ogabassey/authors/bassey-john.jpg',
+      },
+      {
+        author_title: 'Older Title',
+        author_bio: 'Older bio text.',
+        author_image_url:
+          'https://cdn.ogabassey.com/merchants/ogabassey/authors/older.jpg',
       },
     ];
 

@@ -129,7 +129,7 @@ describe('hydrateRelatedBlogProductAvailability offer authority', () => {
     expect(result[0]?.offers).toEqual([]);
   });
 
-  it('chunks past the merchant-scoped cap instead of losing every pair', async () => {
+  it('chunks merchant-scoped requests below the response cap', async () => {
     const chunkSizes: number[] = [];
     const rpc = vi.fn(async (...call: unknown[]) => {
       const ids = (call[1] as { p_product_ids: string[] }).p_product_ids;
@@ -147,8 +147,8 @@ describe('hydrateRelatedBlogProductAvailability offer authority', () => {
       { merchantId: '77777777-7777-4777-8777-777777777777' }
     );
 
-    expect(rpc).toHaveBeenCalledTimes(2);
-    expect(chunkSizes).toEqual([1000, 250]);
+    expect(rpc).toHaveBeenCalledTimes(7);
+    expect(chunkSizes).toEqual([200, 200, 200, 200, 200, 200, 50]);
     expect(result).toHaveLength(1250);
   });
 });

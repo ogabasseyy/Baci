@@ -61,6 +61,37 @@ describe('fetchCartOfferPrices', () => {
     ).rejects.toThrow('offer query failed');
   });
 
+  it('fetches merchant groups concurrently with a bounded number in flight', async () => {
+    let active = 0;
+    let peak = 0;
+    const releases: Array<() => void> = [];
+    const callRpc = vi.fn(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise<void>((resolve) => releases.push(resolve));
+      active -= 1;
+      return { data: [], error: null };
+    });
+    const products = Array.from({ length: 7 }, (_, i) => ({
+      id: `11111111-1111-4111-8111-${String(i).padStart(12, '0')}`,
+      merchant_id: `22222222-2222-4222-8222-${String(i).padStart(12, '0')}`,
+    }));
+    const work = fetchCartOfferPrices(
+      callRpc,
+      products.map(({ id }) => ({ id, offerId: OFFER_ID })),
+      products
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(callRpc).toHaveBeenCalledTimes(5);
+    expect(peak).toBe(5);
+    for (const release of releases.splice(0)) release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(callRpc).toHaveBeenCalledTimes(7);
+    for (const release of releases.splice(0)) release();
+    await expect(work).resolves.toEqual(new Map());
+    expect(peak).toBeLessThanOrEqual(5);
+  });
+
   it('batches many products into one authority call', async () => {
     const productIds = Array.from(
       { length: 25 },

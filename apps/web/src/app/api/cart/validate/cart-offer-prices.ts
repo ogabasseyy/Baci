@@ -74,16 +74,29 @@ export async function fetchCartOfferPrices(
     groups.set(merchant, ids);
   }
   const rows = new Map<string, CartOfferRow>();
-  for (const [merchantId, productIds] of groups) {
-    const resolutions = await fetchOfferResolutions(callRpc, {
-      merchantId,
-      productIds,
-    });
-    for (const resolution of resolutions.values())
-      rows.set(
-        makeOfferLineKey(resolution.productId, resolution.offerId),
-        toCartOfferRow(resolution)
-      );
+  // A cart may span merchants. Limit parallel RPCs so latency does not
+  // grow linearly while a 50-item public request cannot launch 50 at once.
+  const entries = [...groups];
+  const maxConcurrentMerchants = 5;
+  for (
+    let offset = 0;
+    offset < entries.length;
+    offset += maxConcurrentMerchants
+  ) {
+    const batch = entries.slice(offset, offset + maxConcurrentMerchants);
+    const results = await Promise.all(
+      batch.map(([merchantId, productIds]) =>
+        fetchOfferResolutions(callRpc, { merchantId, productIds })
+      )
+    );
+    for (const resolutions of results) {
+      for (const resolution of resolutions.values()) {
+        rows.set(
+          makeOfferLineKey(resolution.productId, resolution.offerId),
+          toCartOfferRow(resolution)
+        );
+      }
+    }
   }
   return rows;
 }

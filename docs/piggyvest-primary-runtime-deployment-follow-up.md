@@ -124,7 +124,8 @@ running it is not a substitute for this preparation.
 
 ## Route/deployment verification still required
 
-Apply `20261101171000_piggyvest_primary_onboarding_review_hold.sql` before
+Apply `20261101171000_piggyvest_primary_onboarding_review_hold.sql` and
+`20261101174000_piggyvest_primary_legacy_review_deletion_hold.sql` before
 deploying the review-status reader or ambiguous-onboarding recovery. Include
 `record_onboarding_ownership_hold(jsonb,uuid,uuid)` and
 `read_onboarding_review(jsonb)` in the restricted provisioner's verified grants.
@@ -137,6 +138,15 @@ ownership holds require operator reconciliation of all matching provider
 customers and their DVAs; no automatic hold-clear or wallet-adoption permission
 is introduced. A separately reviewed, evidence-backed operator resolution path
 is required before production activation.
+
+Legacy `record_onboarding_rejection` writes have no durable reason that
+distinguishes a definitive foreign-customer response from an ambiguous
+provider creation handled by an older application instance. The compatibility
+migration therefore blocks deletion for every rejected intent without a
+provider wallet ID, including rows whose `review_reason` is NULL and explicit
+foreign rejections. Treat these rows as requiring operator reconciliation;
+do not infer safe deletion from the old response or clear the hold
+automatically. No migration grant or automatic release path is added.
 
 The existing staging wallet nginx installer covers the legacy exact wallet
 GET path. It does not establish or probe the new primary paths. Verify actual

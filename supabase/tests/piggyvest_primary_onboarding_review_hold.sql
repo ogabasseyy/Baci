@@ -104,8 +104,9 @@ BEGIN
 END $$;
 
 -- A live dispatched request and a recorded unknown result both protect the
--- crash window. An old terminal rejection without a reason reads ownership
--- for review but remains deletable because it never held a provider wallet.
+-- crash window. The old rejection RPC leaves review_reason NULL, so it cannot
+-- distinguish its write from a legacy ambiguous rejection; both must fail
+-- closed for deletion while they have no provider wallet id.
 DO $$
 DECLARE dispatched jsonb; uncertain jsonb; rejected jsonb;
 BEGIN
@@ -145,8 +146,8 @@ BEGIN
     WHERE id = (rejected->>'intentId')::uuid), 'ordinary rejection acquired an ownership hold');
   PERFORM pg_temp.check(piggyvest_primary.read_onboarding_review(pg_temp.scope(4)) = 'ownership',
     'legacy walletless rejection lost its review fallback');
-  PERFORM pg_temp.check(pg_temp.delete_probe(4) = 'deleted',
-    'walletless definitive rejection was held from deletion');
+  PERFORM pg_temp.check(pg_temp.delete_probe(4) = 'unresolved',
+    'walletless legacy rejection did not require operator reconciliation');
 END $$;
 
 -- Routing rejection stamps immutable status evidence. It remains unreadable

@@ -8,6 +8,7 @@ import {
   liveUnknownReferenceNotFound,
 } from './transaction-status-live.test-support';
 import {
+  classifyTransferRecord,
   classifyTransferReferenceFailure,
   classifyTransferReferenceResponse,
 } from './transfer-reference-lookup';
@@ -160,5 +161,33 @@ describe('transfer reference lookup classification', () => {
         binding
       )
     ).toBe('submitted');
+  });
+});
+
+describe('shared transfer record rule', () => {
+  const record = liveTransactionStatus(binding, 'successful').data;
+
+  it('maps a bound record status the way every reader does', () => {
+    expect(classifyTransferRecord(record, binding)).toBe('submitted');
+    expect(
+      classifyTransferRecord({ ...record, status: 'success' }, binding)
+    ).toBe('submitted');
+    expect(
+      classifyTransferRecord({ ...record, status: 'pending' }, binding)
+    ).toBe('pending');
+    expect(
+      classifyTransferRecord({ ...record, status: 'failed' }, binding)
+    ).toBe('failed');
+  });
+
+  it.each([
+    { third_party_reference: 'another-reference' },
+    { amount: binding.amountKobo + 1 },
+    { source_wallet: binding.destinationWalletId },
+    { destination_wallet: 'another-wallet' },
+  ])('keeps an unbound record uncertain: %j', (change) => {
+    expect(classifyTransferRecord({ ...record, ...change }, binding)).toBe(
+      'uncertain'
+    );
   });
 });

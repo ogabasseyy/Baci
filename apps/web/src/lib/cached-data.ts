@@ -78,7 +78,7 @@ const PUBLIC_BLOG_COUNT_OPTIONS = { count: 'estimated' as const };
 
 const RELATED_BLOG_POSTS_LIMIT = 3;
 const RELATED_BLOG_POSTS_FETCH_LIMIT = 36;
-const RELATED_BLOG_CATEGORY_FETCH_LIMIT = 24;
+const RELATED_BLOG_CATEGORY_FETCH_LIMIT = 80;
 
 function getEstimatedPaginationCountFloor({
   count,

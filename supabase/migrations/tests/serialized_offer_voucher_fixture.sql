@@ -1,7 +1,7 @@
 CREATE SCHEMA private;
 CREATE TABLE public.quiz_events (id uuid PRIMARY KEY, merchant_id uuid);
 CREATE TABLE public.customers (id uuid PRIMARY KEY, user_id uuid);
-CREATE TABLE public.quiz_awards (id uuid PRIMARY KEY, event_id uuid, customer_id uuid, amount numeric, reserved_order_id uuid, reserved_order_item_id uuid, status text, claimed_at timestamptz, route_proof_id text, product_id uuid, condition text);
+CREATE TABLE public.quiz_awards (id uuid PRIMARY KEY, event_id uuid, customer_id uuid, amount numeric, reserved_order_id uuid, reserved_order_item_id uuid, status text, claimed_at timestamptz, route_proof_id text, product_id uuid, condition text, variant_id uuid);
 CREATE TABLE public.orders (id uuid PRIMARY KEY, order_number text, tracking_token text, subtotal numeric, shipping_fee numeric, discount_amount numeric, tax_amount numeric, total numeric, customer_id uuid, customer_email text, customer_name text, customer_phone text, payment_status text, shipping_status text, payment_method text, shipping_address jsonb, merchant_id uuid, tax_basis text, gift_wrapping_fee numeric, shipping_provider text, selected_quote_id uuid, tracking_number text, notes text, updated_at timestamptz);
 CREATE TABLE public.order_items (id uuid PRIMARY KEY, order_id uuid, product_id uuid, variant_id uuid, condition text, product_offer_id uuid, offer_id uuid, offer_id_snapshot uuid, offer_line boolean, offer_grade text, offer_condition_notes text, offer_labels_snapshotted boolean, fulfillment_data jsonb);
 CREATE TABLE public.products (id uuid PRIMARY KEY, merchant_id uuid, inventory_anchor_variant_id uuid, inventory_tracking_policy text);

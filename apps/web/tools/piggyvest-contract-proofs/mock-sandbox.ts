@@ -1,3 +1,4 @@
+import { PIGGYVEST_SUBACCOUNT_NAME_MAX_CHARACTERS as NAME_MAX } from '@/lib/piggyvest/provider-wallet-name.constants';
 import { interestSettings } from './mock-readback';
 import { visibleBalance } from './mock-sandbox-lag';
 import { MockLedger } from './mock-sandbox-ledger';
@@ -185,6 +186,9 @@ export class MockSandbox {
   createWallet(body: Body): MockReply {
     const customer = this.customers.find((c) => c.id === body.customer_id);
     if (!customer) return fail('An error occurred creating wallet');
+    // The live sandbox refuses more than 50 characters (2026-10-31).
+    if (String(body.subaccount_name).length > NAME_MAX)
+      return fail('One or more validation errors occurred', 422);
     // The live sandbox lists a new sub-wallet under its name with every `-`
     // removed (staging, 2026-10-31). Whether case or spaces change too is
     // unknown, so only the observed rewrite is modelled.

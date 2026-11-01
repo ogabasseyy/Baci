@@ -45,6 +45,9 @@ function whenReady(destination: 'tiktok' | 'snapchat', send: () => void) {
           entry.send();
     });
   }
+  pending[destination] = pending[destination].filter(
+    (entry) => entry.owner === owner && entry.url === window.location.href
+  );
   if (pending[destination].length < 100)
     pending[destination].push({ url: window.location.href, owner, send });
 }

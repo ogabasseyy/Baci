@@ -54,3 +54,36 @@ export function formatMerchantAmount(
   const locale = MERCHANT_CURRENCY_LOCALES[currency];
   return formatCurrency(amount, options, currency, locale);
 }
+
+/** The currency's minor-unit digits: 2 for NGN, 0 for JPY/XAF/XOF. */
+function currencyFractionDigits(currency: string): number {
+  try {
+    return (
+      new Intl.NumberFormat('en', {
+        currency,
+        style: 'currency',
+      }).resolvedOptions().maximumFractionDigits ?? 2
+    );
+  } catch {
+    return 2;
+  }
+}
+
+/**
+ * Formats a price for display: whole amounts drop the decimals (₦44,850)
+ * and anything with a fractional part shows the currency's full minor unit
+ * (₦48,500.40), so a price never renders with a single trailing decimal
+ * digit. Zero-decimal currencies (JPY, XAF, XOF) never show decimals.
+ */
+export function formatMerchantPrice(
+  amount: number,
+  merchant?: MerchantCurrencyProfile | null
+): string {
+  const digits = currencyFractionDigits(resolveMerchantCurrency(merchant));
+  const scale = 10 ** digits;
+  const hasFraction = Math.round(amount * scale) % scale !== 0;
+  return formatMerchantAmount(amount, merchant, {
+    minimumFractionDigits: hasFraction ? digits : 0,
+    maximumFractionDigits: digits,
+  });
+}

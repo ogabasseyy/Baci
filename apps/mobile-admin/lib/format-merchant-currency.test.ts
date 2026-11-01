@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { formatMerchantAmount } from './format-merchant-currency';
+import {
+  formatMerchantAmount,
+  formatMerchantPrice,
+} from './format-merchant-currency';
 import { formatCurrency } from './utils';
 
 describe('formatMerchantAmount', () => {
@@ -65,6 +68,40 @@ describe('formatMerchantAmount', () => {
   it('falls back to the runtime locale for currencies without a mapped locale', () => {
     expect(formatMerchantAmount(1000, { payout_currency: 'SEK' })).toBe(
       formatCurrency(1000, undefined, 'SEK', undefined)
+    );
+  });
+});
+
+describe('bugfix: prices rendered with a single trailing decimal digit', () => {
+  it('shows two decimals when a price has kobo, e.g. ₦48,500.40', () => {
+    expect(formatMerchantPrice(48500.4, { payout_currency: 'NGN' })).toBe(
+      '₦48,500.40'
+    );
+  });
+
+  it('drops the decimals for whole amounts', () => {
+    expect(formatMerchantPrice(44850, { payout_currency: 'NGN' })).toBe(
+      '₦44,850'
+    );
+  });
+
+  it('keeps two decimals for amounts with two kobo digits', () => {
+    expect(formatMerchantPrice(10552284.41, { payout_currency: 'NGN' })).toBe(
+      '₦10,552,284.41'
+    );
+  });
+
+  it.each([
+    ['JPY', 'ja-JP'],
+    ['XOF', 'fr-SN'],
+    ['XAF', 'fr-CM'],
+  ])('never shows decimals for the zero-decimal currency %s', (currency, locale) => {
+    const noDecimals = { maximumFractionDigits: 0, minimumFractionDigits: 0 };
+    expect(formatMerchantPrice(1500.5, { payout_currency: currency })).toBe(
+      formatCurrency(1500.5, noDecimals, currency, locale)
+    );
+    expect(formatMerchantPrice(1500, { payout_currency: currency })).toBe(
+      formatCurrency(1500, noDecimals, currency, locale)
     );
   });
 });

@@ -15,6 +15,7 @@ vi.mock('@/hooks/useTheme', () => ({
       text: '#111',
       textMuted: '#777',
       textSecondary: '#555',
+      warning: '#CA8A04',
     },
   }),
 }));
@@ -53,12 +54,81 @@ const base = {
 };
 
 describe('ShipmentFlowGiglPanel', () => {
-  it('shows one bundled GIG price and exact wallet shortfall', () => {
+  it('shows one bundled GIG price, the balance and the top-up when the wallet is short', () => {
     render(<ShipmentFlowGiglPanel {...base} />);
-    expect(screen.getByText('Ship with GIG')).toBeTruthy();
+    expect(screen.getByText('GIG')).toBeTruthy();
+    expect(screen.getByRole('radio', { name: /^Ship with GIG/ })).toBeTruthy();
     expect(screen.getByText('₦11,000')).toBeTruthy();
-    expect(screen.getByText(/Shortfall: ₦10,000/)).toBeTruthy();
+    expect(screen.getByText('Wallet balance: ₦1,000')).toBeTruthy();
+    expect(screen.getByText('Top up ₦10,000 to book')).toBeTruthy();
+    expect(screen.queryByText('From your wallet')).toBeNull();
     expect(screen.queryByText(/margin|provider cost/i)).toBeNull();
+  });
+
+  it('bugfix: shows the GIG price with two decimals inside the GIG option', () => {
+    render(
+      <ShipmentFlowGiglPanel
+        {...base}
+        quote={{ ...base.quote, price: 48500.4 }}
+        wallet={{ availableBalance: 10552284.41, canBook: true, shortfall: 0 }}
+      />
+    );
+
+    expect(screen.getByText('₦48,500.40')).toBeTruthy();
+    expect(screen.queryByText('₦48,500.4')).toBeNull();
+    expect(
+      screen.getByRole('radio', { name: /Ship with GIG.*₦48,500\.40/ })
+    ).toBeTruthy();
+  });
+
+  it('shows service, days and destination on one line and the wallet payment instead of the balance', () => {
+    render(
+      <ShipmentFlowGiglPanel
+        {...base}
+        addressDraft={{ city: 'Abakaliki', state: 'Ebonyi' }}
+        quote={{ ...base.quote, serviceTier: 'GoStandard' }}
+        wallet={{ availableBalance: 10552284.41, canBook: true, shortfall: 0 }}
+      />
+    );
+
+    expect(screen.getByText('GoStandard · 2 days · Abakaliki')).toBeTruthy();
+    expect(screen.getByText('From your wallet')).toBeTruthy();
+    expect(screen.queryByText(/Wallet balance/)).toBeNull();
+  });
+
+  it('falls back to the state, then to no place, when the city is missing', () => {
+    const { rerender } = render(
+      <ShipmentFlowGiglPanel
+        {...base}
+        addressDraft={{ city: ' ', state: 'Ebonyi' }}
+        wallet={{ availableBalance: 20000, canBook: true, shortfall: 0 }}
+      />
+    );
+    expect(screen.getByText('Express · 2 days · Ebonyi')).toBeTruthy();
+
+    rerender(
+      <ShipmentFlowGiglPanel
+        {...base}
+        addressDraft={{}}
+        wallet={{ availableBalance: 20000, canBook: true, shortfall: 0 }}
+      />
+    );
+    expect(screen.getByText('Express · 2 days')).toBeTruthy();
+  });
+
+  it('keeps the price and wallet lines while a price loads so the sheet does not jump', () => {
+    render(
+      <ShipmentFlowGiglPanel
+        {...base}
+        quote={null}
+        state="loading"
+        wallet={null}
+      />
+    );
+
+    expect(screen.getByText('Getting a delivery price…')).toBeTruthy();
+    expect(screen.getByText('₦ …')).toBeTruthy();
+    expect(screen.getByText('From your wallet')).toBeTruthy();
   });
 
   it('shows only server-reported accessible address fields', () => {

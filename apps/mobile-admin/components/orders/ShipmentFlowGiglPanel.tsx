@@ -2,21 +2,50 @@ import * as Clipboard from 'expo-clipboard';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { OrderGiglShippingState } from '@/hooks/orders/useOrderGiglShipping';
 import { useTheme } from '@/hooks/useTheme';
-import { formatMerchantAmount } from '@/lib/format-merchant-currency';
+import { formatMerchantPrice } from '@/lib/format-merchant-currency';
 import type {
   MerchantWalletFundingAccount,
   OrderGiglMissingField,
   OrderGiglQuote,
   OrderGiglReceiver,
 } from '@/lib/order-gigl-shipping';
-import { ShipmentOptionCard } from './ShipmentOptionCard';
+import {
+  ShipmentOptionCard,
+  type ShipmentOptionDetail,
+} from './ShipmentOptionCard';
 
 const formatPrice = (amount: number) =>
-  formatMerchantAmount(
-    amount,
-    { payout_currency: 'NGN' },
-    { minimumFractionDigits: 0 }
-  );
+  formatMerchantPrice(amount, { payout_currency: 'NGN' });
+
+// The balance only matters when it cannot cover the delivery.
+function getWalletDetails(wallet: Props['wallet']): ShipmentOptionDetail[] {
+  if (!wallet) return [];
+  if (wallet.canBook) return [{ text: 'From your wallet' }];
+  return [
+    { text: `Wallet balance: ${formatPrice(wallet.availableBalance)}` },
+    {
+      text: `Top up ${formatPrice(wallet.shortfall)} to book`,
+      tone: 'warning',
+    },
+  ];
+}
+
+// One line: "GoStandard · 2 days · Abakaliki" (the state when no city).
+function getQuoteSummary(
+  quote: OrderGiglQuote,
+  address: Partial<OrderGiglReceiver>
+): string {
+  const days = `${quote.estimatedDays} day${quote.estimatedDays === 1 ? '' : 's'}`;
+  const place = address.city?.trim() || address.state?.trim();
+  return [quote.serviceTier || quote.displayName, days, place]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+// While a price loads the card keeps the height of a priced card, so the
+// sheet does not jump when the price arrives.
+const LOADING_PRICE = '₦ …';
+const LOADING_DETAILS: ShipmentOptionDetail[] = [{ text: 'From your wallet' }];
 
 interface Props {
   addressDraft: Partial<OrderGiglReceiver>;
@@ -91,42 +120,35 @@ export function ShipmentFlowGiglPanel({
   const { colors } = useTheme();
   const loading = state === 'loading';
   const description = quote
-    ? `${quote.displayName} · ${quote.estimatedDays} day${quote.estimatedDays === 1 ? '' : 's'}`
+    ? getQuoteSummary(quote, addressDraft)
     : loading
-      ? 'Getting a fresh delivery price…'
-      : 'Get a fresh GIG delivery price for this order.';
+      ? 'Getting a delivery price…'
+      : 'Get a GIG delivery price for this order.';
+  const price = quote
+    ? formatPrice(quote.price)
+    : loading
+      ? LOADING_PRICE
+      : undefined;
+  const details = quote
+    ? getWalletDetails(wallet)
+    : loading
+      ? LOADING_DETAILS
+      : [];
 
   return (
     <View>
       <ShipmentOptionCard
+        badge="GIG"
         colors={colors}
         description={description}
+        details={details}
         disabled={loading}
         icon="paper-plane-outline"
         onPress={onModeChange}
+        price={price}
         selected={selected}
         title="Ship with GIG"
       />
-
-      {quote ? (
-        <View style={panelStyles.summary}>
-          <Text style={[panelStyles.price, { color: colors.text }]}>
-            {formatPrice(quote.price)}
-          </Text>
-          {wallet ? (
-            <>
-              <Text style={{ color: colors.textSecondary }}>
-                Wallet balance: {formatPrice(wallet.availableBalance)}
-              </Text>
-              {!wallet.canBook ? (
-                <Text style={{ color: colors.textSecondary }}>
-                  Shortfall: {formatPrice(wallet.shortfall)}
-                </Text>
-              ) : null}
-            </>
-          ) : null}
-        </View>
-      ) : null}
 
       {missingFields.map((field) => (
         <View key={field} style={panelStyles.field}>
@@ -242,6 +264,4 @@ const panelStyles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 12,
   },
-  price: { fontSize: 20, fontWeight: '700' },
-  summary: { gap: 4, marginBottom: 12, paddingHorizontal: 12 },
 });

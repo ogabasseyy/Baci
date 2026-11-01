@@ -120,4 +120,18 @@ describe('rotating GIGL worker client', () => {
     ).rejects.toBeInstanceOf(RoleError);
     expect(primaryRpc).not.toHaveBeenCalled();
   });
+
+  it('fails closed when both local credentials are unusable', async () => {
+    createClient.mockImplementation(() => {
+      throw new TokenError();
+    });
+    await expect(
+      createRotatingGiglWorkerClient({
+        GIGL_TRACKING_WORKER_TOKEN: 'primary',
+        GIGL_TRACKING_WORKER_TOKEN_SECONDARY: 'secondary',
+      })
+    ).rejects.toBeInstanceOf(TokenError);
+    expect(primaryRpc).not.toHaveBeenCalled();
+    expect(secondaryRpc).not.toHaveBeenCalled();
+  });
 });

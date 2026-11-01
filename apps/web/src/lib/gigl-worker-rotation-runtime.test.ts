@@ -64,6 +64,7 @@ describe('GIGL rotation runtime integration', () => {
 
   it('selects the credential before the VPS poller claims work', async () => {
     const env = {
+      NODE_ENV: 'test' as const,
       GIGL_BASE_URL: 'https://gigl.example',
       GIGL_EMAIL: 'worker@example.com',
       GIGL_PASSWORD: 'fixture',

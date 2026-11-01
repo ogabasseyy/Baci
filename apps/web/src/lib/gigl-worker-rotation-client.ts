@@ -46,12 +46,11 @@ export async function createRotatingGiglWorkerClient(
     }
     return 'indeterminate' as const;
   };
-  if (!primary && !secondary) {
-    throw new GiglWorkerTokenError(
-      'GIGL tracking worker database capability is invalid'
-    );
-  }
-  return await (primary
-    ? selectGiglWorkerCredential(primary, secondary, probe)
-    : selectGiglWorkerCredential(secondary, undefined, probe));
+  if (primary)
+    return await selectGiglWorkerCredential(primary, secondary, probe);
+  if (secondary)
+    return await selectGiglWorkerCredential(secondary, undefined, probe);
+  throw new GiglWorkerTokenError(
+    'GIGL tracking worker database capability is invalid'
+  );
 }

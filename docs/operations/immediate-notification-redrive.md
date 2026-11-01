@@ -25,8 +25,11 @@ Before enabling the flag:
    allowlist change; the earlier redrive canary alone does not prove that later
    guard is loaded. A normal
    successful response means the serving instance has not loaded the hook.
-   Use the existing fleet-aware reload process to verify every serving instance;
-   a single successful probe is not fleet-wide evidence.
+   Run `.github/scripts/probe-immediate-notification-hook-reload.sh` with the
+   target project reference, management token, Supabase URL and anonymous key
+   in the environment. It re-notifies both reload channels and requires a
+   continuous window of observed acknowledgements. A single successful probe
+   is not fleet-wide evidence; sticky routing can conceal stale instances.
 3. Review and deploy a separate role-membership activation only after the fleet
    verification. That activation is not included in the current migrations.
    Confirm the role can invoke only the documented recovery RPCs and cannot

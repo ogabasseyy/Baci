@@ -43,3 +43,27 @@ export const piggyvestPrimaryWalletCreationSchema = z.strictObject({
   wallet_id: piggyvestProviderIdSchema,
   new_customer: z.boolean(),
 });
+
+// PiggyVest wallet ids read back as uppercase Crockford ULIDs (proof p7,
+// 2026-10-31). Checked exactly, untrimmed, so a mistyped or padded value
+// fails closed instead of reaching an immutable provider setting.
+export const piggyvestInterestPayoutWalletIdSchema = z
+  .string()
+  .regex(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+
+// Onboarding alone needs the Ogabassey wallet that receives main-wallet
+// interest; the shared runtime configuration stays unchanged.
+export const piggyvestPrimaryWalletOnboardingConfigurationSchema =
+  piggyvestPrimaryWalletConfigurationSchema.extend({
+    interestPayoutWalletId: piggyvestInterestPayoutWalletIdSchema,
+  });
+
+// GET /wallet/:id after creation. Identity is required; the interest
+// settings may be absent or null while a new wallet settles.
+export const piggyvestPrimaryWalletInterestReadbackSchema = z.object({
+  id: piggyvestProviderIdSchema,
+  api_customer_id: piggyvestProviderIdSchema,
+  business_id: piggyvestProviderIdSchema,
+  interest_enabled: z.boolean().nullable().optional(),
+  interest_payout_wallet: piggyvestProviderIdSchema.nullable().optional(),
+});

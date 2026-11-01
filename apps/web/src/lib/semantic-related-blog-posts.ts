@@ -1,5 +1,29 @@
+import { scoreBlogPostBrandAffinity } from './blog-post-brand-affinity';
+
 const MAX_TOKEN_COUNT = 24;
 const MAX_TEXT_LENGTH = 220;
+const BOILERPLATE_BLOG_METADATA_PHRASES = new Set([
+  'accessories',
+  'audio',
+  'buyer guide',
+  'buying guide',
+  'gaming',
+  'laptop',
+  'laptops',
+  'monitors',
+  'nigeria',
+  'nigeria buyer guide',
+  'phone',
+  'phones',
+  'price in nigeria',
+  'printers',
+  'smart tvs',
+  'smartphone',
+  'smartphones',
+  'tablet',
+  'tablets',
+  'wearables',
+]);
 const STOP_WORDS = new Set([
   'about',
   'after',
@@ -101,7 +125,12 @@ function normalizeStringArray(value: string[] | null | undefined): string[] {
 
   return [
     ...new Set(
-      value.map((item) => normalizeText(item)).filter((item) => item.length > 0)
+      value
+        .map((item) => normalizeText(item))
+        .filter(
+          (item) =>
+            item.length > 0 && !BOILERPLATE_BLOG_METADATA_PHRASES.has(item)
+        )
     ),
   ];
 }
@@ -130,6 +159,15 @@ function extractKeywords(input: SemanticBlogPostInput): string[] {
     ...(Array.isArray(input.keywords) ? input.keywords : []),
   ];
   return normalizeStringArray(combined);
+}
+
+function extractBrandTexts(input: SemanticBlogPostInput): string[] {
+  return [
+    ...(typeof input.title === 'string' ? [input.title] : []),
+    ...(typeof input.focus_keyword === 'string' ? [input.focus_keyword] : []),
+    ...(Array.isArray(input.tags) ? input.tags : []),
+    ...(Array.isArray(input.keywords) ? input.keywords : []),
+  ];
 }
 
 export function scoreSemanticRelatedBlogPost(
@@ -186,12 +224,16 @@ export function scoreSemanticRelatedBlogPost(
   ];
   score +=
     Math.min(intersectionCount(sourceTopicTokens, candidateTopicTokens), 6) * 3;
+  score += scoreBlogPostBrandAffinity(
+    extractBrandTexts(source),
+    extractBrandTexts(candidate)
+  );
 
-  if (candidate.featured_image_url) {
+  if (candidate.featured_image_url && score > 0) {
     score += 1;
   }
 
-  return score;
+  return Math.max(0, score);
 }
 
 export function selectSemanticRelatedBlogPosts<T extends SemanticBlogPostInput>(

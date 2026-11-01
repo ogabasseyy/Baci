@@ -26,6 +26,9 @@ fail=0
 while IFS= read -r file; do
   case "$(basename "$file")" in
     *gigl*) continue ;;
+    # These shared-hook migrations are individually included in the tracking
+    # deploy filter; the companion test verifies that coupling.
+    20261101203220_immediate_notification_redrive_request_guard.sql|20261101203437_immediate_notification_backlog_monitor.sql|20261101204406_immediate_notification_complete_guard_canary.sql) continue ;;
   esac
   # Case-insensitive: PostgreSQL folds unquoted identifiers, so
   # PUBLIC.ENFORCE_GIGL_TRACKING_WORKER_REQUEST_SCOPE is the same

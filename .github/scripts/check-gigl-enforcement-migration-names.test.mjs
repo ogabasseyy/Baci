@@ -41,6 +41,31 @@ describe('check-gigl-enforcement-migration-names', () => {
     assert.equal(result.status, 0, result.stderr);
   });
 
+  it('accepts the three explicitly tracked shared-hook migrations', () => {
+    const names = [
+      '20261101203220_immediate_notification_redrive_request_guard.sql',
+      '20261101203437_immediate_notification_backlog_monitor.sql',
+      '20261101204406_immediate_notification_complete_guard_canary.sql',
+    ];
+    const files = Object.fromEntries(
+      names.map((name) => [
+        name,
+        'ALTER FUNCTION enforce_gigl_tracking_worker_request_scope() SECURITY DEFINER;\n',
+      ])
+    );
+    const result = runCheck(files);
+    assert.equal(result.status, 0, result.stderr);
+    const deployFilter = readFileSync(
+      join(repoRoot, '.github', 'filters', 'deploy.yml'),
+      'utf8'
+    )
+      .split('tracking:\n')[1]
+      .split(/\n(?=\S)/)[0];
+    for (const name of Object.keys(files)) {
+      assert.ok(deployFilter.includes(`  - 'supabase/migrations/${name}'`));
+    }
+  });
+
   it('fails a hook change without gigl in the filename', () => {
     const result = runCheck({
       '20260105000000_alter_auth_hook.sql':

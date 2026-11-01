@@ -71,6 +71,24 @@ describe('getMerchantPickupLocation', () => {
     ).toMatchObject({ city: 'Ikeja', state: 'Lagos' });
   });
 
+  it('handles eight-digit postcodes before and after a state', () => {
+    expect(
+      getMerchantPickupLocation({
+        business_address: '2 Main Street, Ikeja, 10000123, Lagos',
+      })
+    ).toMatchObject({ city: 'Ikeja', state: 'Lagos' });
+    expect(
+      getMerchantPickupLocation({
+        business_address: '2 Main Street, Ikeja, Lagos, 10000123',
+      })
+    ).toMatchObject({ city: 'Ikeja', state: 'Lagos' });
+    expect(
+      getMerchantPickupLocation({
+        business_address: '2 Main Street, 10000123, Lagos',
+      })
+    ).toBeUndefined();
+  });
+
   it('recognizes Abuja as the FCT state in a legacy address', () => {
     expect(
       getMerchantPickupLocation({ business_address: 'Plot 1, Wuse, Abuja' })

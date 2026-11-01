@@ -25,7 +25,7 @@ function canonicalState(value: string): string {
 }
 
 function isPostcode(value: string): boolean {
-  return /^(?:\d{6}|[a-z]{2}\d{3}[a-z]{3}|[a-z]{2}\d{2}[a-z]\d{2}[a-z]{2}\d{2})$/i.test(
+  return /^(?:\d{6}(?:\d{2})?|[a-z]{2}\d{3}[a-z]{3}|[a-z]{2}\d{2}[a-z]\d{2}[a-z]{2}\d{2})$/i.test(
     value.replace(/[ -]/g, '')
   );
 }

@@ -4,6 +4,8 @@ import { onboardPiggyvestPrimaryWallet } from './primary-wallet-onboarding';
 import {
   customerListing,
   onboardingFixture,
+  PAYOUT_WALLET_ID,
+  routedWallet,
   THIRD_PARTY_IDENTIFIER,
 } from './primary-wallet-onboarding.test-fixture';
 
@@ -55,10 +57,17 @@ describe('primary wallet onboarding: intents stored before interest routing', ()
     expect(current).not.toBe(legacy);
     expect(input.findCustomers).toHaveBeenCalledOnce();
     expect(input.createCustomer).toHaveBeenCalledOnce();
+    // Re-dispatched as today's request, never the stored one: routed.
+    expect(input.createCustomer.mock.calls[0][0]).toEqual(
+      expect.objectContaining({
+        enable_interest_accrual: true,
+        interest_payout_wallet: PAYOUT_WALLET_ID,
+      })
+    );
     expect(input.storage.recordAccepted).toHaveBeenCalledOnce();
   });
 
-  it('adopts the customer an earlier intent created when the lookup finds it, with no second create', async () => {
+  it('sends the customer an earlier intent created to routing review, with no second create', async () => {
     const input = onboardingFixture();
     input.storage.claim
       .mockResolvedValueOnce({ status: 'conflict' })
@@ -73,14 +82,26 @@ describe('primary wallet onboarding: intents stored before interest routing', ()
       wallet_id: 'wallet-fixture',
       new_customer: false,
     });
+    // The earlier format always created customers with accrual off, and
+    // interest settings are fixed at creation: it can never be routed.
+    input.retrieveWallet.mockResolvedValue(
+      routedWallet({ interest_enabled: false, interest_payout_wallet: null })
+    );
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
-      status: 'pending',
+      status: 'conflict',
+      code: 'INTEREST_ROUTING_REVIEW_REQUIRED',
     });
     // The single call is the idempotent returnIfExist request: it creates
     // nothing for an existing customer and names its main wallet.
     expect(input.createCustomer).toHaveBeenCalledOnce();
-    expect(input.retrieveWallet).toHaveBeenCalledWith('wallet-fixture');
-    expect(input.storage.recordAccepted).toHaveBeenCalledOnce();
+    expect(input.storage.recordReview).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        providerCustomerId: 'customer-fixture',
+        providerWalletId: 'wallet-fixture',
+      })
+    );
+    expect(input.storage.recordAccepted).not.toHaveBeenCalled();
+    expect(input.storage.recordRoutingPending).not.toHaveBeenCalled();
   });
 
   it('stays in conflict, contacting no provider, when neither commitment matches', async () => {

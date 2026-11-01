@@ -25,7 +25,8 @@ remote database, provider account or nginx configuration were changed.
   A rejected wallet keeps its ids, so deleting that customer still waits for
   its DVA closure; a recheck never promotes a wallet whose closure was
   attested. A wallet sent to review at onboarding is rejected with its ids
-  in one write, so no recheck can ever promote it.
+  in one write, so no recheck can ever promote it; if that write fails,
+  nothing else is written and the retry after the claim lease keeps the ids.
   A retried setup first asks PiggyVest for customers carrying our
   identifier: it creates again only when none exist, and adopts an existing
   customer only when it is exactly the one listed. Several listed customers,
@@ -34,7 +35,9 @@ remote database, provider account or nginx configuration were changed.
   pending, with a `PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW` alert carrying
   the intent id). A setup stored before interest routing is recognised by
   its earlier fingerprint format for the same customer and goes through the
-  same lookup-gated retry.
+  same lookup-gated retry; a customer it created has accrual off, so it goes
+  to routing review. The onboarding role's readiness list includes every
+  function the runtime calls.
 - `/api/storefront/customer/savings/primary-provisioning`: authenticated,
   CSRF-protected POST persists explicit immutable interest choice before the
   single creation dispatch; PATCH recovers via provider reads without another

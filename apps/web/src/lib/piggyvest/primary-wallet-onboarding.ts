@@ -126,6 +126,9 @@ export async function onboardPiggyvestPrimaryWallet(
     if (lookup.kind === 'unknown' || lookup.kind === 'ambiguous') {
       // Several customers under our identifier is final: none is provably
       // ours. Anything else unknown may clear, so the intent stays pending.
+      // Alerts go out before any write, so a storage failure never mutes one.
+      if (lookup.kind === 'ambiguous')
+        alertOwnershipReview('several provider customers', claim.intentId);
       try {
         if (lookup.kind === 'unknown')
           await input.storage.recordUncertain(claimedScope);
@@ -133,9 +136,9 @@ export async function onboardPiggyvestPrimaryWallet(
       } catch {
         return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
       }
-      if (lookup.kind === 'unknown') return { status: 'pending' };
-      alertOwnershipReview('several provider customers', claim.intentId);
-      return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
+      return lookup.kind === 'unknown'
+        ? { status: 'pending' }
+        : { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
     }
   }
 
@@ -157,19 +160,21 @@ export async function onboardPiggyvestPrimaryWallet(
       return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
     }
     if (verdict === 'unproven') {
-      await input.storage.recordUncertain(claimedScope);
       alertOwnershipReview('existing customer not listed', claim.intentId);
+      await input.storage.recordUncertain(claimedScope);
       return { status: 'pending' };
     }
     if (verdict === 'duplicate') {
-      await keepCreatedWalletForReview({
+      alertOwnershipReview('duplicate provider customer', claim.intentId);
+      const kept = await keepCreatedWalletForReview({
         storage: input.storage,
         claimedScope,
         providerCustomerId: result.data.customer_id,
         providerWalletId: result.data.wallet_id,
       });
-      alertOwnershipReview('duplicate provider customer', claim.intentId);
-      return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
+      return kept
+        ? { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' }
+        : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
     }
     // Read the wallet back before recording it: accepted intents are usable,
     // so routing must be proven first, and never assumed on a failed read.
@@ -207,17 +212,19 @@ export async function onboardPiggyvestPrimaryWallet(
     if (routing !== 'routed') {
       // The created wallet holds a real DVA: keep its ids for review and DVA
       // closure before any deletion. Interest settings are immutable.
-      await keepCreatedWalletForReview({
+      emitPiggyvestWebhookAlert('PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW', {
+        reason: 'main wallet interest routing contradicted at onboarding',
+        operationId: claimedScope.intentId,
+      });
+      const kept = await keepCreatedWalletForReview({
         storage: input.storage,
         claimedScope,
         providerCustomerId: result.data.customer_id,
         providerWalletId: result.data.wallet_id,
       });
-      emitPiggyvestWebhookAlert('PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW', {
-        reason: 'main wallet interest routing contradicted at onboarding',
-        operationId: claimedScope.intentId,
-      });
-      return { status: 'conflict', code: 'INTEREST_ROUTING_REVIEW_REQUIRED' };
+      return kept
+        ? { status: 'conflict', code: 'INTEREST_ROUTING_REVIEW_REQUIRED' }
+        : { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
     }
     // A reclaimed intent retries the same fingerprinted request, so when
     // the provider's idempotent creation returns the customer the lookup

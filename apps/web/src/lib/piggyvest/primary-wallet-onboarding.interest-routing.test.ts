@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PiggyvestApiError } from './client';
 import { onboardPiggyvestPrimaryWallet } from './primary-wallet-onboarding';
 import {
@@ -8,7 +8,10 @@ import {
   routedWallet,
 } from './primary-wallet-onboarding.test-fixture';
 
+const mocks = vi.hoisted(() => ({ alert: vi.fn() }));
 vi.mock('server-only', () => ({}));
+vi.mock('./webhook-alerts', () => ({ emitPiggyvestWebhookAlert: mocks.alert }));
+beforeEach(() => vi.clearAllMocks());
 
 function reclaimedExisting() {
   const input = onboardingFixture();
@@ -134,14 +137,21 @@ describe('primary wallet onboarding interest routing', () => {
   it.each([
     ['refused', async () => false],
     ['failing', () => Promise.reject(new Error('storage down'))],
-  ])('still rejects a contradicted wallet when keeping its ids is %s', async (_label, review) => {
+  ])('alerts, and never discards the ids, when keeping a contradicted wallet is %s', async (_label, review) => {
     const input = onboardingFixture();
     input.storage.recordReview.mockImplementation(review);
     input.retrieveWallet.mockResolvedValue(
       routedWallet({ interest_payout_wallet: OTHER_WALLET_ID })
     );
-    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual(REVIEW);
-    expect(input.storage.recordRejected).toHaveBeenCalledOnce();
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'unavailable',
+      code: 'STORAGE_UNAVAILABLE',
+    });
+    expect(mocks.alert).toHaveBeenCalledExactlyOnceWith(
+      'PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW',
+      expect.objectContaining({ operationId: 'intent' })
+    );
+    expect(input.storage.recordRejected).not.toHaveBeenCalled();
     expect(input.storage.recordRoutingPending).not.toHaveBeenCalled();
     expect(input.storage.recordUncertain).not.toHaveBeenCalled();
     expect(input.storage.recordAccepted).not.toHaveBeenCalled();

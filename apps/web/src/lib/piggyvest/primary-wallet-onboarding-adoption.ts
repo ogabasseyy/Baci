@@ -49,8 +49,12 @@ export function judgeCreatedCustomer(input: {
  * claim-fenced write (record_onboarding_review), so review and DVA closure
  * find the wallet before any customer deletion. The intent never passes
  * through routing_pending, so no routing recheck can promote it: routing
- * can be proven, ownership cannot. If the ids cannot be kept, a plain
- * rejection still stops the intent.
+ * can be proven, ownership cannot.
+ *
+ * Returns whether the ids were kept. Nothing else is ever written: an
+ * id-less rejection would leave a real DVA untracked, while an unchanged
+ * dispatched intent is reclaimed once its lease expires, and the
+ * lookup-gated reclaim reaches the same verdict and keeps the ids then.
  */
 export async function keepCreatedWalletForReview(input: {
   storage: PrimaryWalletOnboardingStorage;
@@ -60,18 +64,16 @@ export async function keepCreatedWalletForReview(input: {
   };
   providerCustomerId: string;
   providerWalletId: string;
-}): Promise<void> {
-  let kept = false;
+}): Promise<boolean> {
   try {
-    kept = await input.storage.recordReview({
+    return await input.storage.recordReview({
       ...input.claimedScope,
       providerCustomerId: input.providerCustomerId,
       providerWalletId: input.providerWalletId,
     });
   } catch {
-    kept = false;
+    return false;
   }
-  if (!kept) await input.storage.recordRejected(input.claimedScope);
 }
 
 export function alertOwnershipReview(reason: string, intentId: string): void {

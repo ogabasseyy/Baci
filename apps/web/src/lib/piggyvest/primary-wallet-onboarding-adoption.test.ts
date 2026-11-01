@@ -95,7 +95,7 @@ describe('keepCreatedWalletForReview', () => {
   });
 
   it('rejects the intent with its ids in one step, never through a recheckable state', async () => {
-    await keep();
+    expect(await keep()).toBe(true);
     expect(storage.recordReview).toHaveBeenCalledExactlyOnceWith({
       ...claimedScope,
       ...ids,
@@ -106,14 +106,16 @@ describe('keepCreatedWalletForReview', () => {
   });
 
   it.each([
-    ['refused', async () => false],
+    ['refused (the claim was lost)', async () => false],
     ['failing', () => Promise.reject(new Error('storage down'))],
-  ])('still rejects the intent, without ids, when keeping them is %s', async (_label, review) => {
+  ])('never discards the ids when keeping them is %s: nothing else is written', async (_label, review) => {
+    // The dispatched lease then expires and the lookup-gated reclaim
+    // records the review with the ids; an id-less rejection would leave a
+    // real DVA untracked by the deletion guard.
     storage.recordReview.mockImplementation(review);
-    await keep();
-    expect(storage.recordRejected).toHaveBeenCalledExactlyOnceWith(
-      claimedScope
-    );
+    expect(await keep()).toBe(false);
+    expect(storage.recordRejected).not.toHaveBeenCalled();
+    expect(storage.recordUncertain).not.toHaveBeenCalled();
     expect(storage.recordRoutingPending).not.toHaveBeenCalled();
   });
 });

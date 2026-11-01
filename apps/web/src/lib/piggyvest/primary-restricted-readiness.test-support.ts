@@ -107,6 +107,7 @@ export function primaryReadinessFixture() {
         'piggyvest_primary.attest_provider_dva_closure(uuid)',
         'piggyvest_primary.read_onboarding_routing(jsonb)',
         'piggyvest_primary.resolve_onboarding_routing(jsonb,jsonb,boolean)',
+        'piggyvest_primary.record_onboarding_review(jsonb,uuid,uuid,text,text)',
       ]),
       role(provisioning, 'piggyvest_primary_goal_provisioner', [
         'piggyvest_primary.read_goal_wallet(jsonb,uuid)',

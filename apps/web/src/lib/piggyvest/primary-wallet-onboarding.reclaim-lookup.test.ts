@@ -172,6 +172,55 @@ describe('primary wallet onboarding: reclaims are gated on a provider lookup', (
   });
 
   it.each([
+    [
+      'a duplicate cannot be kept',
+      (input: ReturnType<typeof onboardingFixture>) => {
+        input.createCustomer.mockResolvedValue({
+          customer_id: 'customer-duplicate',
+          wallet_id: 'wallet-duplicate',
+          new_customer: true,
+        });
+        input.storage.recordReview.mockRejectedValue(new Error('down'));
+      },
+    ],
+    [
+      'several customers cannot be rejected',
+      (input: ReturnType<typeof onboardingFixture>) => {
+        input.findCustomers.mockResolvedValue(customerListing(['a', 'b']));
+        input.storage.recordRejected.mockRejectedValue(new Error('down'));
+      },
+    ],
+    [
+      'an unlisted existing customer cannot be recorded',
+      (input: ReturnType<typeof onboardingFixture>) => {
+        input.findCustomers.mockResolvedValue(customerListing([]));
+        input.createCustomer.mockResolvedValue({
+          customer_id: 'customer-other',
+          wallet_id: 'wallet-other',
+          new_customer: false,
+        });
+        input.storage.recordUncertain.mockRejectedValue(new Error('down'));
+      },
+    ],
+  ])('still alerts ownership review when %s, adopting nothing', async (_label, arrange) => {
+    const input = reclaimed();
+    arrange(input);
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'unavailable',
+      code: 'STORAGE_UNAVAILABLE',
+    });
+    expect(mocks.alert).toHaveBeenCalledWith(
+      'PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW',
+      expect.objectContaining({ operationId: 'intent' })
+    );
+    expect(input.storage.recordAccepted).not.toHaveBeenCalled();
+    expect(input.storage.recordRoutingPending).not.toHaveBeenCalled();
+    expect(input.storage.recordRejected).not.toHaveBeenCalledWith(
+      expect.objectContaining({ providerWalletId: expect.anything() })
+    );
+  });
+
+  it.each([
     ['fails', () => Promise.reject(new Error('timeout'))],
     ['has more pages', async () => customerListing([], { hasNextPage: true })],
   ])('stays blocked, with no create, when the lookup %s', async (_label, answer) => {

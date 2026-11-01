@@ -22,6 +22,15 @@ remote database, provider account or nginx configuration were changed.
   is never exposed or credited, setup is never re-dispatched, and each GET
   re-reads it read-only against that stored payout wallet, making it usable
   once the routing is proven or rejecting it (same alert) when contradicted.
+  A rejected wallet keeps its ids, so deleting that customer still waits for
+  its DVA closure; a wallet whose closure was attested is never made usable.
+  A retried setup first asks PiggyVest for customers carrying our
+  identifier: it creates again only when none exist, and adopts an existing
+  customer only when it is exactly the one listed. Several listed customers,
+  a duplicate created despite a listed one, or an existing customer that is
+  not listed are never adopted (`OWNERSHIP_REVIEW_REQUIRED` or still
+  pending, with a `PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW` alert carrying
+  the intent id).
 - `/api/storefront/customer/savings/primary-provisioning`: authenticated,
   CSRF-protected POST persists explicit immutable interest choice before the
   single creation dispatch; PATCH recovers via provider reads without another
@@ -52,7 +61,10 @@ Primary onboarding requires all of these server-only settings:
   account) and no customer is created. Reads, savings and the recheck of
   routing-pending wallets keep working without it, because each pending
   wallet stores the payout wallet it was created with. Each customer's
-  routing is immutable, so set it before any onboarding.
+  routing is immutable, so set it before any onboarding, and change it only
+  while no setup is in flight: a retried setup checks the customer it adopts
+  against the current value, so one created under the previous value goes
+  to routing review.
 - `PIGGYVEST_PRIMARY_DB_HOST`, `PIGGYVEST_PRIMARY_DB_PORT`,
   `PIGGYVEST_PRIMARY_DB_NAME`, `PIGGYVEST_PRIMARY_DB_PASSWORD`,
   `PIGGYVEST_PRIMARY_DB_CA`

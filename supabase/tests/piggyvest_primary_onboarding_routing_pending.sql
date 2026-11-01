@@ -9,9 +9,11 @@
 --     it 'accepted' (usable), a contradiction makes it 'rejected' (terminal,
 --     ids kept for review and DVA closure);
 --   * wallet-bearing protections follow the provider wallet, not the state:
---     DVA closure can be attested for routing-pending and routing-rejected
---     intents, and the deletion guard keys on the provider wallet; every
---     spend, credit or usable predicate still ignores routing_pending;
+--     deleting a customer whose routing-pending or routing-rejected intent
+--     holds an open DVA is refused until its closure is attested, and a
+--     closed DVA is never promoted to a usable wallet by a routing recheck;
+--   * a rejected intent that keeps its ids is never usable or verifiable,
+--     and no spend, credit or usable predicate names routing_pending;
 --   * stale claim tokens and mismatched ids change nothing;
 --   * grants and shape, asserted through the catalog (a denied EXECUTE cannot
 --     be trapped on the replay image, so no denial is probed by calling).
@@ -76,6 +78,17 @@ INSERT INTO piggyvest_primary.integrations(id, merchant_id, business_id, environ
   VALUES ('a3300000-0000-4000-8000-000000000005', 'a3300000-0000-4000-8000-000000000002',
     'routing-pending-business', 'staging', session_user, true);
 CREATE TEMP TABLE claims(n int PRIMARY KEY, intent uuid, token uuid);
+
+-- Deleting customer n, always rolled back: 'dva' when the open-DVA guard
+-- refuses it, 'deleted' when it would succeed, 'other' for anything else.
+CREATE FUNCTION pg_temp.delete_probe(p_n int) RETURNS text LANGUAGE plpgsql AS $$
+BEGIN
+  DELETE FROM public.customers WHERE id = ('a3300000-0000-4000-8000-00000000001' || p_n)::uuid;
+  RAISE EXCEPTION 'delete probe rolled back';
+EXCEPTION WHEN OTHERS THEN
+  RETURN CASE SQLERRM WHEN 'delete probe rolled back' THEN 'deleted'
+    WHEN 'cannot delete customer with open provider DVA' THEN 'dva' ELSE 'other' END;
+END $$;
 
 -- 1. A routing-pending wallet keeps its ids, is not usable, and a repeated
 --    setup request never re-dispatches creation.
@@ -158,12 +171,16 @@ BEGIN
     pg_temp.ids('pv-customer-2', 'pv-wallet-2'), false), 'a contradicted routing did not resolve');
   PERFORM pg_temp.check(pg_temp.state(2) = 'rejected:pv-customer-2:pv-wallet-2', 'not rejected with kept ids: ' || pg_temp.state(2));
   PERFORM pg_temp.check(piggyvest_primary.read_onboarding(pg_temp.scope(2)) IS NULL, 'a rejected wallet must not be usable');
+  PERFORM pg_temp.check(NOT piggyvest_primary.verify_onboarding(pg_temp.scope(2), pg_temp.verify_proof('pv-customer-2', 'pv-wallet-2')),
+    'a rejected wallet that keeps its ids must never be verified as usable');
+  PERFORM pg_temp.check(pg_temp.state(2) = 'rejected:pv-customer-2:pv-wallet-2', 'a refused verification changed the intent');
   PERFORM pg_temp.check(piggyvest_primary.claim_onboarding(pg_temp.scope(2), repeat('d', 64)) = '{"status":"conflict"}'::jsonb,
     'a rejected routing must stay in review');
 END $$;
 
--- 5. DVA closure follows the provider wallet: routing-pending and
---    routing-rejected intents can be attested closed before deletion.
+-- 5. The deletion guard and DVA closure follow the provider wallet: a
+--    routing-pending or routing-rejected customer cannot be deleted until
+--    its DVA closure is attested, and a closed DVA never becomes usable.
 DO $$
 DECLARE v_claim jsonb;
 BEGIN
@@ -171,10 +188,19 @@ BEGIN
   PERFORM pg_temp.check(piggyvest_primary.record_onboarding_routing_pending(pg_temp.scope(3),
     (v_claim->>'intentId')::uuid, (v_claim->>'claimToken')::uuid, 'pv-customer-3', 'pv-wallet-3', '01JBZ8Q5W3X9R2K4M6N8P0T2V4'),
     'third routing-pending ids not recorded');
+  PERFORM pg_temp.check(pg_temp.delete_probe(3) = 'dva', 'a routing-pending DVA did not block deletion');
+  PERFORM pg_temp.check(pg_temp.delete_probe(2) = 'dva', 'a routing-rejected DVA did not block deletion');
   PERFORM piggyvest_primary.attest_provider_dva_closure((v_claim->>'intentId')::uuid);
   PERFORM pg_temp.check(
     (SELECT provider_closed_at IS NOT NULL FROM piggyvest_primary.onboarding_intents WHERE id = (v_claim->>'intentId')::uuid),
     'DVA closure must be attestable for a routing-pending wallet');
+  -- A recheck proving the routing after offboarding closed the DVA ends the
+  -- intent in review, never as a usable wallet.
+  PERFORM pg_temp.check(piggyvest_primary.resolve_onboarding_routing(pg_temp.scope(3),
+    pg_temp.ids('pv-customer-3', 'pv-wallet-3'), true), 'a closed routing-pending wallet was not resolved');
+  PERFORM pg_temp.check(pg_temp.state(3) = 'rejected:pv-customer-3:pv-wallet-3', 'a closed DVA was promoted: ' || pg_temp.state(3));
+  PERFORM pg_temp.check(piggyvest_primary.read_onboarding(pg_temp.scope(3)) IS NULL, 'a closed DVA must not be usable');
+  PERFORM pg_temp.check(pg_temp.delete_probe(3) <> 'dva', 'an attested closure still blocked deletion');
   PERFORM piggyvest_primary.attest_provider_dva_closure(
     (SELECT id FROM piggyvest_primary.onboarding_intents
      WHERE integration_id = 'a3300000-0000-4000-8000-000000000005'
@@ -184,10 +210,12 @@ BEGIN
      WHERE integration_id = 'a3300000-0000-4000-8000-000000000005'
        AND customer_id = 'a3300000-0000-4000-8000-000000000012'),
     'DVA closure must be attestable for a routing-rejected wallet');
+  PERFORM pg_temp.check(pg_temp.delete_probe(2) <> 'dva', 'an attested routing-rejected closure still blocked deletion');
 END $$;
 
--- 6. Wallet-bearing protections key on the provider wallet; every spend,
---    credit or usable predicate still excludes routing_pending.
+-- 6. Wallet-bearing protections key on the provider wallet. Tripwire: no
+--    spend, credit or usable predicate names routing_pending (each keeps
+--    its own accepted/verified allowlist; the behaviour is probed above).
 DO $$
 DECLARE v_name text;
 BEGIN

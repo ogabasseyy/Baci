@@ -1,6 +1,9 @@
 import 'server-only';
 import z from 'zod';
-import { piggyvestCustomerLookupSchema } from '@/schemas/piggyvest-customer-lookup';
+import {
+  piggyvestCustomerLookupSchema,
+  piggyvestThirdPartyIdentifierSchema,
+} from '@/schemas/piggyvest-customer-lookup';
 import { type PiggyvestClientConfig, piggyvestRequest } from './client';
 
 /**
@@ -26,7 +29,7 @@ const createCustomerInputSchema = z.object({
     .enum(['international_passport', 'nin', 'voter_card', 'driver_license'])
     .optional(),
   idNumber: z.string().min(1).max(100).optional(),
-  thirdPartyIdentifier: z.string().min(1).max(200),
+  thirdPartyIdentifier: piggyvestThirdPartyIdentifierSchema,
   returnIfExist: z.boolean().default(true),
   enableInterestAccrual: z.boolean().optional(),
   // Destination for this customer's main-wallet interest. Fixed at creation.
@@ -81,7 +84,8 @@ export function findPiggyvestCustomersByThirdPartyIdentifier(
   config: PiggyvestClientConfig,
   thirdPartyIdentifier: string
 ): Promise<z.infer<typeof piggyvestCustomerLookupSchema>> {
-  const identifier = z.string().min(1).max(200).parse(thirdPartyIdentifier);
+  const identifier =
+    piggyvestThirdPartyIdentifierSchema.parse(thirdPartyIdentifier);
   return piggyvestRequest(
     config,
     piggyvestCustomerLookupSchema,

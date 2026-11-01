@@ -31,10 +31,19 @@ describe('primary wallet customer lookup', () => {
     });
   });
 
-  it('finds exactly one customer carrying our identifier', async () => {
-    expect(await lookup(async () => customerListing(['customer-1']))).toEqual({
+  it.each([
+    ['once', ['customer-1']],
+    ['twice', ['customer-1', 'customer-1']],
+  ])('finds exactly one customer carrying our identifier, listed %s', async (_label, ids) => {
+    expect(await lookup(async () => customerListing(ids))).toEqual({
       kind: 'found',
       customerId: 'customer-1',
+    });
+  });
+
+  it('reports several distinct customers carrying our identifier as ambiguous, never as one', async () => {
+    expect(await lookup(async () => customerListing(['a', 'b']))).toEqual({
+      kind: 'ambiguous',
     });
   });
 
@@ -44,7 +53,6 @@ describe('primary wallet customer lookup', () => {
       'more pages follow',
       async () => customerListing([], { hasNextPage: true }),
     ],
-    ['several customers match', async () => customerListing(['a', 'b'])],
     [
       'a listed customer does not echo our identifier',
       async () => customerListing(['a'], { identifier: 'baci:other:customer' }),

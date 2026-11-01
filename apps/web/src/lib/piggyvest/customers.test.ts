@@ -163,5 +163,42 @@ describe('createPiggyvestCustomer', () => {
     );
     expect(init.method ?? 'GET').toBe('GET');
     expect(init.body).toBeUndefined();
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ['an empty', ''],
+    ['an oversized', 'x'.repeat(201)],
+  ])('refuses %s identifier before any network call', (_label, identifier) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    expect(() =>
+      findPiggyvestCustomersByThirdPartyIdentifier(
+        { token: 'test-only-token' },
+        identifier
+      )
+    ).toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('rejects a listing without its page marker, so it can never read as complete', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          status: true,
+          message: 'Customers fetched',
+          data: { paginatedPayload: { edges: [] } },
+        })
+      )
+    );
+    await expect(
+      findPiggyvestCustomersByThirdPartyIdentifier(
+        { token: 'test-only-token' },
+        'baci:i:c'
+      )
+    ).rejects.toThrow();
+    vi.unstubAllGlobals();
   });
 });

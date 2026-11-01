@@ -17,7 +17,11 @@ export type PiggyvestWebhookAlertCode =
   | 'PIGGYVEST_TRANSFER_NEEDS_REVIEW'
   // A primary main wallet kept routing-pending whose recheck showed its
   // interest routing contradicted: blocked as rejected; an operator reviews.
-  | 'PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW';
+  | 'PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW'
+  // A primary onboarding whose PiggyVest customer could not be proven ours
+  // (several customers, a duplicate, or an unlisted existing one): never
+  // adopted; an operator reviews.
+  | 'PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW';
 
 export interface PiggyvestWebhookAlertDetail {
   keyVersion?: string;

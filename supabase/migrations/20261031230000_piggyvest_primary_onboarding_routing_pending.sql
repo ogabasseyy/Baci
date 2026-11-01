@@ -26,7 +26,9 @@
 --   * resolve_onboarding_routing: after the application re-reads the wallet,
 --     routing_pending -> accepted when the routing is proven, or -> rejected
 --     (terminal review; the ids are kept for review and DVA closure) when
---     the readback contradicts it.
+--     the readback contradicts it. A wallet whose DVA closure was already
+--     attested (offboarding) ends rejected either way: a closed DVA never
+--     becomes a usable wallet.
 -- All three are SECURITY DEFINER with a pinned search_path and are executable
 -- only by the onboarding provisioner.
 BEGIN;
@@ -109,7 +111,7 @@ BEGIN
     RAISE EXCEPTION 'invalid routing proof' USING ERRCODE = '22023';
   END IF;
   UPDATE piggyvest_primary.onboarding_intents SET
-    state = CASE WHEN routed THEN 'accepted' ELSE 'rejected' END,
+    state = CASE WHEN routed AND provider_closed_at IS NULL THEN 'accepted' ELSE 'rejected' END,
     routing_payout_wallet_id = NULL,
     updated_at = pg_catalog.clock_timestamp()
   WHERE integration_id = (scope->>'integrationId')::uuid

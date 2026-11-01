@@ -147,6 +147,14 @@ it('wires durable storage and documented provider adapters with a fixed environm
     customerId: 'customer',
     walletName: provisioningFixture.walletName,
   });
+  // A wallet-bound intent may carry the legacy name: the listing must use
+  // the stored name it is given, never one rebuilt from the ids.
+  const legacyName = `baci-save:${provisioningFixture.scope.integrationId}:${provisioningFixture.goalId}`;
+  await adapter.listWallets('customer', legacyName);
+  expect(mocks.list).toHaveBeenLastCalledWith(provider, {
+    customerId: 'customer',
+    walletName: legacyName,
+  });
   expect(mocks.wallet).toHaveBeenCalledWith(provider, 'wallet');
   expect(mocks.accounts).toHaveBeenCalledWith(provider, 'wallet');
   expect(mocks.create).toHaveBeenCalledWith(

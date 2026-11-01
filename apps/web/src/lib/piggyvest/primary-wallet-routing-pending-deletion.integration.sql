@@ -2,7 +2,8 @@
 -- Wallet-bearing protections follow the provider wallet (20261031230000):
 -- a customer whose onboarding intent is routing_pending, or rejected over
 -- its routing, still holds a PiggyVest wallet with an open DVA, so deleting
--- the customer must wait for the closure attestation. An intent without
+-- the customer must wait for the closure attestation, and a recheck after
+-- that closure never promotes the wallet to usable. An intent without
 -- provider ids never locks the customer.
 \ir primary-wallet-storage.integration.sql
 \ir ../../../../../supabase/migrations/20261007180000_piggyvest_primary_wallet_verification.sql
@@ -43,6 +44,10 @@ BEGIN
     'pv-customer-1', 'pv-wallet-1', '01JBZ8Q5W3X9R2K4M6N8P0T2V4') THEN RAISE EXCEPTION 'routing pending not recorded'; END IF;
   IF pg_temp.delete_customer(1) <> 'dva' THEN RAISE EXCEPTION 'a routing-pending DVA did not block deletion'; END IF;
   PERFORM piggyvest_primary.attest_provider_dva_closure(v_intent);
+  IF NOT piggyvest_primary.resolve_onboarding_routing(pg_temp.scope(1),
+    '{"providerCustomerId":"pv-customer-1","providerWalletId":"pv-wallet-1"}', true) THEN RAISE EXCEPTION 'closed recheck not resolved'; END IF;
+  IF (SELECT state FROM piggyvest_primary.onboarding_intents WHERE id = v_intent) <> 'rejected' THEN
+    RAISE EXCEPTION 'a closed DVA was promoted to a usable wallet'; END IF;
   IF pg_temp.delete_customer(1) = 'dva' THEN RAISE EXCEPTION 'an attested closure still blocked deletion'; END IF;
   -- Rejected over its routing: the ids are kept, so the guard still applies.
   v_claim := piggyvest_primary.claim_onboarding(pg_temp.scope(2), repeat('b', 64));

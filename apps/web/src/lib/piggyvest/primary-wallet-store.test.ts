@@ -184,4 +184,40 @@ describe('primary wallet storage boundary', () => {
       ]
     );
   });
+
+  it.each([
+    ['another user', { userId: intentId }],
+    ['an empty provider wallet', { providerWalletId: '' }],
+    ['a non-boolean verdict', { routed: 'false' }],
+    ['a claim token', { claimToken }],
+  ])('refuses a routing resolution with %s without querying', async (_label, change) => {
+    const execute = vi.fn();
+    await expect(
+      createPrimaryWalletStore({ scope, execute }).resolveRoutingPending({
+        ...scope,
+        providerCustomerId: 'provider-customer',
+        providerWalletId: 'provider-wallet',
+        routed: true,
+        ...change,
+      } as Parameters<
+        ReturnType<typeof createPrimaryWalletStore>['resolveRoutingPending']
+      >[0])
+    ).rejects.toThrow('Primary wallet storage unavailable');
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['the query fails', () => Promise.reject(new Error('private detail'))],
+    ['the result is malformed', async () => ({ rows: [{ result: 'yes' }] })],
+  ])('reports a routing resolution as unavailable, without detail, when %s', async (_label, answer) => {
+    const execute = vi.fn().mockImplementation(answer);
+    await expect(
+      createPrimaryWalletStore({ scope, execute }).resolveRoutingPending({
+        ...scope,
+        providerCustomerId: 'provider-customer',
+        providerWalletId: 'provider-wallet',
+        routed: true,
+      })
+    ).rejects.toThrow(/^Primary wallet storage unavailable$/);
+  });
 });

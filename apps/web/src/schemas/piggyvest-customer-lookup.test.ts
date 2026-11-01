@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { piggyvestCustomerLookupSchema } from './piggyvest-customer-lookup';
+import {
+  piggyvestCustomerLookupSchema,
+  piggyvestThirdPartyIdentifierSchema,
+} from './piggyvest-customer-lookup';
 
 const listing = (edges: unknown[], hasNextPage = false) => ({
   paginatedPayload: { edges, pageInfo: { hasNextPage, endCursor: null } },
@@ -26,5 +29,15 @@ describe('piggyvestCustomerLookupSchema', () => {
     ],
   ])('refuses %s', (_label, value) => {
     expect(piggyvestCustomerLookupSchema.safeParse(value).success).toBe(false);
+  });
+
+  it('bounds our third_party_identifier', () => {
+    expect(piggyvestThirdPartyIdentifierSchema.parse('baci:i:c')).toBe(
+      'baci:i:c'
+    );
+    for (const value of ['', 'x'.repeat(201), 42])
+      expect(piggyvestThirdPartyIdentifierSchema.safeParse(value).success).toBe(
+        false
+      );
   });
 });

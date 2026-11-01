@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PiggyvestApiError } from './client';
 import { onboardPiggyvestPrimaryWallet } from './primary-wallet-onboarding';
 import {
@@ -6,10 +6,11 @@ import {
   OTHER_WALLET_ID,
   onboardingFixture,
   PAYOUT_WALLET_ID,
-  routedWallet,
 } from './primary-wallet-onboarding.test-fixture';
 
+const mocks = vi.hoisted(() => ({ alert: vi.fn() }));
 vi.mock('server-only', () => ({}));
+vi.mock('./webhook-alerts', () => ({ emitPiggyvestWebhookAlert: mocks.alert }));
 
 const RECLAIMED = {
   status: 'claimed',
@@ -17,12 +18,22 @@ const RECLAIMED = {
   claimToken: 'claim',
   reclaimed: true,
 };
+const OWNERSHIP = { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
 
 function reclaimed() {
   const input = onboardingFixture();
   input.storage.claim.mockResolvedValue(RECLAIMED);
   return input;
 }
+
+// Nothing about the answered customer was recorded or made usable.
+function expectNothingAdopted(input: ReturnType<typeof onboardingFixture>) {
+  expect(input.storage.recordAccepted).not.toHaveBeenCalled();
+  expect(input.storage.recordRoutingPending).not.toHaveBeenCalled();
+  expect(input.retrieveWallet).not.toHaveBeenCalled();
+}
+
+beforeEach(() => vi.clearAllMocks());
 
 describe('primary wallet onboarding: reclaims are gated on a provider lookup', () => {
   it('recovers after the payout wallet is corrected: same fingerprint, lookup shows none, created exactly once', async () => {
@@ -63,11 +74,12 @@ describe('primary wallet onboarding: reclaims are gated on a provider lookup', (
     expect(input.storage.recordAccepted).toHaveBeenCalledOnce();
   });
 
-  it('adopts the customer the lookup found, through its routing readback, never as a new one', async () => {
+  it.each([
+    ['once', ['customer-fixture']],
+    ['twice (the same customer)', ['customer-fixture', 'customer-fixture']],
+  ])('adopts the customer the lookup found %s, through its routing readback, never as a new one', async (_label, listed) => {
     const input = reclaimed();
-    input.findCustomers.mockResolvedValue(
-      customerListing(['customer-fixture'])
-    );
+    input.findCustomers.mockResolvedValue(customerListing(listed));
     input.createCustomer.mockResolvedValue({
       customer_id: 'customer-fixture',
       wallet_id: 'wallet-fixture',
@@ -83,33 +95,89 @@ describe('primary wallet onboarding: reclaims are gated on a provider lookup', (
     expect(input.storage.recordAccepted).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    [
-      'reports a new customer',
-      { customer_id: 'customer-fixture', wallet_id: 'w', new_customer: true },
-    ],
-    [
-      'returns another customer',
-      { customer_id: 'customer-other', wallet_id: 'w', new_customer: false },
-    ],
-  ])('never adopts when the lookup found a customer but PiggyVest %s', async (_label, created) => {
+  it('never adopts, and terminally rejects, another customer than the one the lookup found', async () => {
     const input = reclaimed();
-    input.findCustomers.mockResolvedValue(
-      customerListing(['customer-fixture'])
-    );
-    input.createCustomer.mockResolvedValue(created);
-    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
-      status: 'conflict',
-      code: 'OWNERSHIP_REVIEW_REQUIRED',
+    input.createCustomer.mockResolvedValue({
+      customer_id: 'customer-other',
+      wallet_id: 'wallet-other',
+      new_customer: false,
     });
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual(OWNERSHIP);
+    expectNothingAdopted(input);
+    expect(input.storage.recordRejected).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ intentId: 'intent', claimToken: 'claim' })
+    );
+    expect(input.storage.recordUncertain).not.toHaveBeenCalled();
+  });
+
+  it('keeps the ids of a duplicate PiggyVest created under our identifier for review, never usable', async () => {
+    const input = reclaimed();
+    input.createCustomer.mockResolvedValue({
+      customer_id: 'customer-duplicate',
+      wallet_id: 'wallet-duplicate',
+      new_customer: true,
+    });
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual(OWNERSHIP);
+    expect(input.storage.recordRoutingPending).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        intentId: 'intent',
+        claimToken: 'claim',
+        providerCustomerId: 'customer-duplicate',
+        providerWalletId: 'wallet-duplicate',
+      })
+    );
+    expect(input.storage.resolveRoutingPending).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        providerCustomerId: 'customer-duplicate',
+        providerWalletId: 'wallet-duplicate',
+        routed: false,
+      })
+    );
     expect(input.storage.recordAccepted).not.toHaveBeenCalled();
     expect(input.retrieveWallet).not.toHaveBeenCalled();
+    expect(mocks.alert).toHaveBeenCalledExactlyOnceWith(
+      'PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW',
+      expect.objectContaining({ operationId: 'intent' })
+    );
+  });
+
+  it('never adopts an existing customer the lookup did not list under our identifier, and keeps the intent reclaimable', async () => {
+    // returnIfExist can match another identity (or run ahead of the listing).
+    const input = reclaimed();
+    input.findCustomers.mockResolvedValue(customerListing([]));
+    input.createCustomer.mockResolvedValue({
+      customer_id: 'customer-other',
+      wallet_id: 'wallet-other',
+      new_customer: false,
+    });
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'pending',
+    });
+    expectNothingAdopted(input);
+    expect(input.storage.recordUncertain).toHaveBeenCalledOnce();
+    expect(input.storage.recordRejected).not.toHaveBeenCalled();
+    expect(mocks.alert).toHaveBeenCalledExactlyOnceWith(
+      'PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW',
+      expect.objectContaining({ operationId: 'intent' })
+    );
+  });
+
+  it('sends a lookup naming several customers to ownership review, with no create', async () => {
+    const input = reclaimed();
+    input.findCustomers.mockResolvedValue(customerListing(['a', 'b']));
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual(OWNERSHIP);
+    expect(input.createCustomer).not.toHaveBeenCalled();
+    expect(input.storage.recordRejected).toHaveBeenCalledOnce();
+    expect(input.storage.recordUncertain).not.toHaveBeenCalled();
+    expect(mocks.alert).toHaveBeenCalledExactlyOnceWith(
+      'PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW',
+      expect.objectContaining({ operationId: 'intent' })
+    );
   });
 
   it.each([
     ['fails', () => Promise.reject(new Error('timeout'))],
     ['has more pages', async () => customerListing([], { hasNextPage: true })],
-    ['is ambiguous', async () => customerListing(['a', 'b'])],
   ])('stays blocked, with no create, when the lookup %s', async (_label, answer) => {
     const input = reclaimed();
     input.findCustomers.mockImplementation(answer);
@@ -118,6 +186,17 @@ describe('primary wallet onboarding: reclaims are gated on a provider lookup', (
     });
     expect(input.createCustomer).not.toHaveBeenCalled();
     expect(input.storage.recordUncertain).toHaveBeenCalledOnce();
+  });
+
+  it('reports storage unavailable, with no create, when an uncertain lookup cannot be recorded', async () => {
+    const input = reclaimed();
+    input.findCustomers.mockRejectedValue(new Error('timeout'));
+    input.storage.recordUncertain.mockRejectedValue(new Error('storage down'));
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'unavailable',
+      code: 'STORAGE_UNAVAILABLE',
+    });
+    expect(input.createCustomer).not.toHaveBeenCalled();
   });
 
   it('never looks up on a fresh claim', async () => {

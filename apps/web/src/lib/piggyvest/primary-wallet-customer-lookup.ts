@@ -4,6 +4,7 @@ import { piggyvestCustomerLookupSchema } from '@/schemas/piggyvest-customer-look
 export type PrimaryWalletCustomerLookup =
   | { kind: 'none' }
   | { kind: 'found'; customerId: string }
+  | { kind: 'ambiguous' }
   | { kind: 'unknown' };
 
 /**
@@ -11,8 +12,9 @@ export type PrimaryWalletCustomerLookup =
  * whether an earlier ambiguous dispatch already created the customer.
  * Only a complete answer counts: 'none' when the listing is complete and
  * holds no customer with our identifier, 'found' for exactly one, and
- * 'unknown' for anything else (failure, more pages, several matches), which
- * must never lead to a create.
+ * 'ambiguous' for several distinct ones (none can be adopted safely). Any
+ * other answer (failure, more pages, an edge that does not echo our
+ * identifier) is 'unknown'. Neither of the last two may lead to a create.
  */
 export async function lookupPrimaryWalletCustomer(input: {
   thirdPartyIdentifier: string;
@@ -34,8 +36,9 @@ export async function lookupPrimaryWalletCustomer(input: {
   // identifier means the answer cannot be trusted as complete.
   if (matches.length !== parsed.data.paginatedPayload.edges.length)
     return { kind: 'unknown' };
-  if (matches.length === 0) return { kind: 'none' };
-  return matches.length === 1
+  const customerIds = new Set(matches.map((edge) => edge.id));
+  if (customerIds.size === 0) return { kind: 'none' };
+  return customerIds.size === 1
     ? { kind: 'found', customerId: matches[0].id }
-    : { kind: 'unknown' };
+    : { kind: 'ambiguous' };
 }

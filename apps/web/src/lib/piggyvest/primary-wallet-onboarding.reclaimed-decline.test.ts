@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PiggyvestApiError } from './client';
 import { onboardPiggyvestPrimaryWallet } from './primary-wallet-onboarding';
-import { onboardingFixture } from './primary-wallet-onboarding.test-fixture';
+import {
+  customerListing,
+  onboardingFixture,
+} from './primary-wallet-onboarding.test-fixture';
 
 vi.mock('server-only', () => ({}));
 
@@ -17,6 +20,15 @@ function payoutDecline(status: number) {
     'PIGGYVEST_REQUEST_ERROR',
     'Invalid interest payout wallet',
     status,
+    true
+  );
+}
+
+function bvnDecline() {
+  return new PiggyvestApiError(
+    'PIGGYVEST_REQUEST_ERROR',
+    'Invalid BVN',
+    400,
     true
   );
 }
@@ -84,16 +96,29 @@ describe('primary wallet onboarding: payout decline on a reclaimed claim', () =>
     expect(input.storage.recordUncertain).not.toHaveBeenCalled();
   });
 
-  it('still releases a reclaimed claim on a BVN decline, so a corrected BVN can be claimed', async () => {
+  it('still releases a reclaimed claim on a BVN decline when the lookup proved no customer exists, so a corrected BVN can be claimed', async () => {
     const input = onboardingFixture();
     input.storage.claim.mockResolvedValue(RECLAIMED);
-    input.createCustomer.mockRejectedValue(
-      new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'Invalid BVN', 400, true)
-    );
+    input.findCustomers.mockResolvedValue(customerListing([]));
+    input.createCustomer.mockRejectedValue(bvnDecline());
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
       status: 'rejected',
       code: 'INVALID_BVN',
     });
     expect(input.storage.releaseIntent).toHaveBeenCalledOnce();
+  });
+
+  it('never releases a reclaimed claim whose lookup found our customer: a 400 keeps it reclaimable for adoption', async () => {
+    // Releasing would make the next attempt a fresh claim, which treats our
+    // own existing customer as someone else's and loses track of its DVA.
+    const input = onboardingFixture();
+    input.storage.claim.mockResolvedValue(RECLAIMED);
+    input.createCustomer.mockRejectedValue(bvnDecline());
+    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual({
+      status: 'pending',
+    });
+    expect(input.storage.releaseIntent).not.toHaveBeenCalled();
+    expect(input.storage.recordUncertain).toHaveBeenCalledOnce();
+    expect(input.storage.recordRejected).not.toHaveBeenCalled();
   });
 });

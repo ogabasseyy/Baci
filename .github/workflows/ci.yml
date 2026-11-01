@@ -513,6 +513,12 @@ jobs:
           .github/scripts/stage-preview-prebuilt-refs-report.test.mjs
           .github/scripts/materialize-preview-prebuilt-refs.test.mjs
           .github/scripts/preview-deploy-run.test.mjs
+          .github/scripts/preview-dropped-refs.test.mjs
+          .github/scripts/preview-dropped-refs-gate.test.mjs
+          .github/scripts/preview-served-smoke.test.mjs
+          .github/scripts/preview-vercel-request.test.mjs
+          .github/scripts/preview-gate-cli.test.mjs
+          .github/scripts/preview-smoke-workflow.test.mjs
           .github/scripts/coordinate-production-release.test.mjs
           .github/scripts/coordinate-publication.test.mjs
           .github/scripts/release-production.test.mjs

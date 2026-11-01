@@ -378,6 +378,13 @@ jobs:
         env:
           PG_BIN: /usr/lib/postgresql/16/bin
         run: python3 tools/test/offer_release_concurrency.py
+      - name: Verify REDVAULT transfer lock ordering
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/migrations/tests/run-redvault-transfer-lock.sh
       - name: Run disposable search suites
         env:
           PGHOST: localhost

@@ -57,7 +57,7 @@
     "decode-uri-component": "0.5.1",
     "typescript": "~7.0.2",
     "vitest": "4.1.12",
-    "zod": "4.6.6"
+    "zod": "4.6.7"
   },
   "dependencies": {
     "@noble/hashes": "^2.4.0"

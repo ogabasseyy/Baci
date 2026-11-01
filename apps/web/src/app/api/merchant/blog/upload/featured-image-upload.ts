@@ -3,6 +3,7 @@ import {
   BlogFeaturedImageError,
   generateFeaturedImageVariants,
 } from '@/lib/blog-featured-image-variants';
+import type { MediaDeletionClient } from '@/lib/media/delete-merchant-media';
 import {
   cleanupUploadedPaths,
   getCanonicalBlogMediaUrl,
@@ -17,7 +18,7 @@ type FeaturedImageVariant = {
   contentType: string;
 };
 
-type FeaturedImageStorageClient = {
+type FeaturedImageStorageClient = Pick<MediaDeletionClient, 'rpc'> & {
   storage: {
     from(bucket: string): {
       upload(
@@ -108,8 +109,8 @@ export async function uploadFeaturedBlogImage(input: FeaturedImageUploadInput) {
       };
     }
   } catch (error) {
-    await cleanupUploadedPaths(supabase, uploadedPaths);
-    console.error('Featured variant upload failed; cleaned partial uploads', {
+    await cleanupUploadedPaths(supabase, merchantId, uploadedPaths);
+    console.error('Featured variant upload failed; partial cleanup attempted', {
       merchantId,
       error,
       uploadedPaths,

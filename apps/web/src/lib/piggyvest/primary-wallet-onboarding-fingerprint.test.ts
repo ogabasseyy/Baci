@@ -1,10 +1,11 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { primaryWalletOnboardingFingerprints } from './primary-wallet-onboarding-fingerprint';
 
 vi.mock('server-only', () => ({}));
 
-const key = 'test-only-fingerprint-key-not-a-real-secret';
+// Both implementations share one ephemeral key; assertions never depend on its value.
+const key = randomBytes(32).toString('hex');
 const scope = {
   merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
   customerId: 'e648eb14-928a-427b-9719-b105f6d4b8b4',

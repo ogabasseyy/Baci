@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { piggyvestInterestPayoutWalletIdSchema } from './piggyvest-primary-wallet-onboarding';
 import { piggyvestProviderIdSchema } from './piggyvest-provider-id';
 
 const scope = z.strictObject({
@@ -22,6 +23,30 @@ export const piggyvestPrimaryWalletStoreSchemas = {
   }),
   uncertain: recorded,
   rejected: recorded,
+  routingPending: recorded.extend({
+    providerCustomerId: piggyvestProviderIdSchema,
+    providerWalletId: piggyvestProviderIdSchema,
+    interestPayoutWalletId: piggyvestInterestPayoutWalletIdSchema,
+  }),
+  review: recorded.extend({
+    providerCustomerId: piggyvestProviderIdSchema,
+    providerWalletId: piggyvestProviderIdSchema,
+    reviewReason: z.literal('routing').optional(),
+  }),
+  routingRows: z
+    .array(
+      z.strictObject({
+        result: z
+          .strictObject({
+            intentId: z.uuid(),
+            providerCustomerId: piggyvestProviderIdSchema,
+            providerWalletId: piggyvestProviderIdSchema,
+            payoutWalletId: piggyvestInterestPayoutWalletIdSchema,
+          })
+          .nullable(),
+      })
+    )
+    .length(1),
   claimedRows: z
     .array(
       z.strictObject({

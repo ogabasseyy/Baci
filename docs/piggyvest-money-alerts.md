@@ -69,6 +69,8 @@ with `[Filtered]`.
 | `PIGGYVEST_WEBHOOK_REPLAY_UNVERIFIABLE` | A stored delivery could not be re-verified on replay and was parked | Key archive for that key version |
 | `PIGGYVEST_WEBHOOK_NEEDS_REVIEW` | A stored delivery was parked for a person to review | The capture's review reason |
 | `PIGGYVEST_TRANSFER_NEEDS_REVIEW` | A transfer is still unconfirmed past its retry window. It is held, never resent or released. Also used for any stale unconfirmed transfer | Transfer status at PiggyVest for the operation |
+| `PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW` | A new main wallet's interest routing was contradicted, at onboarding or on a later recheck. It is kept rejected and never usable; its settings are fixed at creation | The intent's wallet routing at PiggyVest |
+| `PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW` | A retried onboarding found a PiggyVest customer it could not prove ours: several customers under our identifier, a duplicate, or an existing customer not listed under it. Nothing is adopted | Customers carrying the intent's identifier |
 | `PIGGYVEST_RESTRICTION_BLOCKED` | A spend or transfer was refused because PiggyVest reports a freeze or lien on the wallet | Wallet restriction status |
 | `PIGGYVEST_INTEREST_BACKFILLED` | The daily reconciliation recorded an interest payout the webhook never delivered (once, by PiggyVest transaction id) | Why the webhook was missed |
 | `PIGGYVEST_FEE_UNATTRIBUTED` | A deposit fee could not be matched to the wallet balance change; the credit is held | The deposit's provider record |

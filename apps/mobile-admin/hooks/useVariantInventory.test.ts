@@ -42,6 +42,18 @@ describe('useVariantInventory hooks', () => {
   });
 
   describe('useVariantInventory query', () => {
+    it('renders an empty inventory response as an empty page', async () => {
+      mocks.rpc.mockResolvedValueOnce({
+        data: { rows: [], nextCursor: null, hasMore: false },
+        error: null,
+      });
+      useVariantInventory({ productId: 'product-1' });
+      await expect(mocks.queryPromises[0]).resolves.toEqual({
+        units: [],
+        nextCursor: null,
+        hasMore: false,
+      });
+    });
     it('accepts the database listing response and its camel-case cursor', async () => {
       mocks.rpc.mockResolvedValueOnce({
         data: {

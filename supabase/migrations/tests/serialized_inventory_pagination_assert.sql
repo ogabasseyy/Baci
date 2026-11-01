@@ -37,3 +37,20 @@ BEGIN
     END IF;
   END LOOP;
 END $$;
+
+-- The production function initializes its accumulator to [], including when
+-- no units match. Pin the wire shape consumed by the mobile client.
+DELETE FROM public.variant_inventory;
+DO $$
+DECLARE page jsonb;
+BEGIN
+  page := private.list_variant_inventory_units(
+    '00000000-0000-0000-0000-000000000003',
+    '00000000-0000-0000-0000-000000000001', p_limit => 2
+  );
+  IF page->'rows' IS DISTINCT FROM '[]'::jsonb
+    OR page->'nextCursor' IS DISTINCT FROM 'null'::jsonb
+    OR (page->>'hasMore')::boolean IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'empty inventory must return an empty rows array';
+  END IF;
+END $$;

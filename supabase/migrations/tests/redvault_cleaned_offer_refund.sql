@@ -29,7 +29,7 @@ BEGIN
  ON CONFLICT (id) DO NOTHING;
  phase := 2;
  INSERT INTO public.products(id,merchant_id,name,price,status,stock_quantity,manage_stock,has_condition_offers,has_variants,inventory_tracking_policy)
- VALUES (product_id,merchant_id,'Cleanup refund phone',50000,'active',12,false,true,false,'serialized_strict');
+ VALUES (product_id,merchant_id,'Cleanup refund phone',50000,'active',12,true,true,false,'serialized_strict');
  INSERT INTO public.product_variants(id,product_id,merchant_id,attributes,price_override,inventory_tracking_policy,is_inventory_anchor)
  VALUES (variant_id,product_id,merchant_id,'{"is_anchor":true}',0,'inherit',true);
  UPDATE public.products SET inventory_anchor_variant_id=variant_id WHERE id=product_id;
@@ -78,12 +78,15 @@ BEGIN
  phase := 8;
  SELECT lifecycle.inventory_state INTO state FROM private.uba_redvault_refund_lifecycle lifecycle WHERE lifecycle.refund_id=refund_id;
  IF state IS DISTINCT FROM 'released' THEN RAISE EXCEPTION 'refund inventory state: %', state; END IF;
+ phase := 14;
  IF (SELECT stock_quantity FROM public.product_offers WHERE id=offer_id) IS DISTINCT FROM offer_stock+1 THEN
    RAISE EXCEPTION 'refund must restore offer stock exactly once';
  END IF;
+ phase := 15;
  IF (SELECT stock_quantity FROM public.products WHERE id=product_id) IS DISTINCT FROM parent_stock THEN
    RAISE EXCEPTION 'refund must not restore parent product stock';
  END IF;
+ phase := 16;
  IF (SELECT fulfillment_data->>'fulfillmentQuantity' FROM public.order_items WHERE id=item_id) IS DISTINCT FROM '0' THEN
    RAISE EXCEPTION 'refund must remove refunded quantity from fulfillment';
  END IF;
@@ -103,4 +106,7 @@ DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '10'
 DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '11' THEN RAISE EXCEPTION 'refund fixture phase 11 failed'; END IF; END $$;
 DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '12' THEN RAISE EXCEPTION 'refund fixture phase 12 failed'; END IF; END $$;
 DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '13' THEN RAISE EXCEPTION 'refund fixture phase 13 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '14' THEN RAISE EXCEPTION 'refund fixture phase 14 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '15' THEN RAISE EXCEPTION 'refund fixture phase 15 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.redvault_refund_failure_phase',true) = '16' THEN RAISE EXCEPTION 'refund fixture phase 16 failed'; END IF; END $$;
 ROLLBACK;

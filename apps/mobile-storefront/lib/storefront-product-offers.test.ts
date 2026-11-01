@@ -1,3 +1,10 @@
+jest.mock('@/lib/config', () => ({
+  CONFIG: {
+    MERCHANT_ID: '77777777-7777-4777-8777-777777777777',
+    MERCHANT_SLUG: 'ogabassey',
+  },
+}));
+
 import { jest } from '@jest/globals';
 import { hydrateProductRowsWithConditionOffers } from '@/lib/storefront-product-offers';
 
@@ -73,6 +80,12 @@ describe('storefront-product-offers', () => {
       },
       { id: PRODUCT_2, offers: [] },
     ]);
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_storefront_offer_resolution',
+      expect.objectContaining({
+        p_merchant_id: '77777777-7777-4777-8777-777777777777',
+      })
+    );
   });
 
   it('marks the original rows when the offer lookup fails', async () => {

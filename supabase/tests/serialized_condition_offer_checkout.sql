@@ -121,7 +121,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.variant_inventory WHERE id=used_unit AND reservation_expires_at IS NOT NULL) THEN
     RAISE EXCEPTION 'paid order must confirm its matching reservation';
   END IF;
-EXCEPTION WHEN OTHERS THEN
+EXCEPTION WHEN query_canceled OR assert_failure OR OTHERS THEN
   -- The replay runner deliberately redacts database errors. Preserve only
   -- the synthetic fixture phase so each failure has a distinct SQL line.
   PERFORM set_config('test.serialized_offer_failure_phase', phase::text, true);

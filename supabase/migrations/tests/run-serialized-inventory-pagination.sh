@@ -31,6 +31,9 @@ awk '
 psql -v ON_ERROR_STOP=1 -q -d "$db" \
   -f "$root/supabase/migrations/tests/serialized_inventory_pagination_fixture.sql" \
   -f "$definition" \
+  -f "$root/supabase/migrations/20261101145959_normalize_serialized_listing_line_endings.sql" \
+  -f "$root/supabase/migrations/tests/serialized_inventory_pagination_crlf_fixture.sql" \
+  -f "$root/supabase/migrations/20261101145959_normalize_serialized_listing_line_endings.sql" \
   -f "$root/supabase/migrations/20261101150000_fix_serialized_inventory_page_cursor.sql" \
   -f "$root/supabase/migrations/tests/serialized_inventory_pagination_assert.sql"
 echo 'PASS serialized inventory pagination'

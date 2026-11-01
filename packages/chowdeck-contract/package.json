@@ -1,0 +1,29 @@
+{
+  "name": "@baci/chowdeck-contract",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "capture": "tsx scripts/capture-public-contract.mjs",
+    "capture:public": "tsx scripts/capture-public-contract.mjs",
+    "lint": "biome check src scripts package.json tsconfig.json vitest.config.ts",
+    "observe:core": "tsx scripts/observe-core-contract.mjs",
+    "scan:evidence": "tsx scripts/scan-evidence.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
+    "tsx": "4.22.4",
+    "typescript": "npm:@typescript/typescript6@~6.0.2",
+    "vitest": "^4.1.9"
+  }
+}

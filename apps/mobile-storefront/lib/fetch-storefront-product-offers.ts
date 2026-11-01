@@ -25,9 +25,7 @@ export interface StorefrontProductConditionOfferRow {
 /**
  * Active condition offers through the single offer-resolution
  * authority (anon-executable, active rows only). Reads through the
- * shared chunking client (1000 ids per merchant-scoped call, per the SQL
- * batch cap) instead of one unbounded call — no per-product fan-out
- * and no 201st-id cliff. Prices read the live basis and quantities
+ * shared chunking client (200 product IDs per response-safe call) instead of one unbounded call — no per-product fan-out. Prices read the live basis and quantities
  * the allocatable stock (policy-capped, parent-inherited): exactly
  * what checkout enforces. Unbounded rows keep a null quantity
  * (purchasable with no finite count). Same retry and fail-soft shape

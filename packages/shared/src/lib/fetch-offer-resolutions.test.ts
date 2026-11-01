@@ -48,7 +48,7 @@ describe('fetchOfferResolutions', () => {
     expect(map.get(`${ids[200]}::${OFFER_ID}`)?.priceBasis).toBe(80);
   });
 
-  it('keeps a 1000-id merchant-scoped batch in a single call', async () => {
+  it('chunks a 1000-id merchant-scoped batch safely', async () => {
     const ids = Array.from(
       { length: 1000 },
       (_, index) => `11111111-1111-4111-8111-${String(index).padStart(12, '0')}`
@@ -70,12 +70,12 @@ describe('fetchOfferResolutions', () => {
       merchantId: MERCHANT_ID,
       productIds: ids,
     });
-    expect(callRpc).toHaveBeenCalledTimes(1);
+    expect(callRpc).toHaveBeenCalledTimes(5);
     expect(callRpc.mock.calls[0][0].p_merchant_id).toBe(MERCHANT_ID);
     expect(map.size).toBe(1000);
   });
 
-  it('chunks merchant-scoped batches past the 1000-id cap', async () => {
+  it('chunks merchant-scoped batches past the response-safe limit', async () => {
     const ids = Array.from(
       { length: 1001 },
       (_, index) => `11111111-1111-4111-8111-${String(index).padStart(12, '0')}`
@@ -92,9 +92,9 @@ describe('fetchOfferResolutions', () => {
       merchantId: MERCHANT_ID,
       productIds: ids,
     });
-    expect(callRpc).toHaveBeenCalledTimes(2);
-    expect(callRpc.mock.calls[0][0].p_product_ids).toHaveLength(1000);
-    expect(callRpc.mock.calls[1][0].p_product_ids).toHaveLength(1);
+    expect(callRpc).toHaveBeenCalledTimes(6);
+    expect(callRpc.mock.calls[0][0].p_product_ids).toHaveLength(200);
+    expect(callRpc.mock.calls[5][0].p_product_ids).toHaveLength(1);
     expect(map.size).toBe(1001);
   });
 

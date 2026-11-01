@@ -43,6 +43,7 @@ const STOP_WORDS = new Set([
 export interface SemanticBlogPostInput {
   category?: string | null;
   excerpt?: string | null;
+  focus_keyword?: string | null;
   id: string;
   keywords?: string[] | null;
   featured_image_url?: string | null;
@@ -123,6 +124,14 @@ function dateTime(value: string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function extractKeywords(input: SemanticBlogPostInput): string[] {
+  const combined = [
+    ...(typeof input.focus_keyword === 'string' ? [input.focus_keyword] : []),
+    ...(Array.isArray(input.keywords) ? input.keywords : []),
+  ];
+  return normalizeStringArray(combined);
+}
+
 export function scoreSemanticRelatedBlogPost(
   source: SemanticBlogPostInput,
   candidate: SemanticBlogPostInput
@@ -139,8 +148,8 @@ export function scoreSemanticRelatedBlogPost(
   const candidateTags = normalizeStringArray(candidate.tags);
   score += Math.min(intersectionCount(sourceTags, candidateTags), 4) * 8;
 
-  const sourceKeywords = normalizeStringArray(source.keywords);
-  const candidateKeywords = normalizeStringArray(candidate.keywords);
+  const sourceKeywords = extractKeywords(source);
+  const candidateKeywords = extractKeywords(candidate);
   score +=
     Math.min(intersectionCount(sourceKeywords, candidateKeywords), 4) * 7;
 
@@ -158,14 +167,22 @@ export function scoreSemanticRelatedBlogPost(
     ) * 2;
 
   const sourceTopicTokens = [
-    ...sourceTitleTokens,
-    ...sourceTags,
-    ...sourceKeywords,
+    ...new Set([
+      ...sourceTitleTokens,
+      ...sourceTags,
+      ...sourceKeywords,
+      ...tokenize(sourceTags.join(' ')),
+      ...tokenize(sourceKeywords.join(' ')),
+    ]),
   ];
   const candidateTopicTokens = [
-    ...candidateTitleTokens,
-    ...candidateTags,
-    ...candidateKeywords,
+    ...new Set([
+      ...candidateTitleTokens,
+      ...candidateTags,
+      ...candidateKeywords,
+      ...tokenize(candidateTags.join(' ')),
+      ...tokenize(candidateKeywords.join(' ')),
+    ]),
   ];
   score +=
     Math.min(intersectionCount(sourceTopicTokens, candidateTopicTokens), 6) * 3;

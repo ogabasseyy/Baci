@@ -151,3 +151,33 @@ it('does not create semantic matches from sliced partial words', () => {
 
   expect(scoreSemanticRelatedBlogPost(longSource, partialCandidate)).toBe(0);
 });
+
+it('scores focus_keyword and tokenized multi-word keyword overlap when keywords[] is null', () => {
+  const tecnoSource: SemanticBlogPostInput = {
+    id: 'tecno-camon-slim',
+    title: 'Tecno Camon Slim Price in Nigeria',
+    category: 'Smartphones',
+    focus_keyword: 'tecno camon slim price in nigeria',
+    keywords: null,
+  };
+  const sameBrandCandidate: SemanticBlogPostInput = {
+    id: 'tecno-camon-50-pro',
+    title: 'Charging habits for your phone',
+    category: 'Smartphones',
+    focus_keyword: 'tecno camon 50 pro price in nigeria',
+    keywords: null,
+  };
+  const unrelatedBrandCandidate: SemanticBlogPostInput = {
+    id: 'iphone-17-pro',
+    title: 'Charging habits for your phone',
+    category: 'Smartphones',
+    focus_keyword: 'iphone 17 pro price in nigeria',
+    keywords: null,
+  };
+
+  expect(
+    scoreSemanticRelatedBlogPost(tecnoSource, sameBrandCandidate)
+  ).toBeGreaterThan(
+    scoreSemanticRelatedBlogPost(tecnoSource, unrelatedBrandCandidate)
+  );
+});

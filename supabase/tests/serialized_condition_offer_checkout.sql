@@ -27,6 +27,7 @@ $$;
 
 SET LOCAL ROLE service_role;
 SELECT set_config('request.jwt.claim.role','service_role',true);
+SELECT set_config('test.serialized_offer_failure_phase','0',true);
 DO $$
 DECLARE
   merchant uuid := '37440000-0000-4000-8000-000000000001';
@@ -42,7 +43,6 @@ DECLARE
   n integer;
   shortage boolean := false;
   phase integer := 1;
-  failure_message text;
 BEGIN
   INSERT INTO public.merchants(id,email,business_name,slug,is_published)
   VALUES (merchant,'serialized-offer-fixture@example.com','Serialized offer fixture','serialized-offer-fixture',true);
@@ -122,8 +122,19 @@ BEGIN
     RAISE EXCEPTION 'paid order must confirm its matching reservation';
   END IF;
 EXCEPTION WHEN OTHERS THEN
-  GET STACKED DIAGNOSTICS failure_message = MESSAGE_TEXT;
-  RAISE EXCEPTION USING ERRCODE = 'P37' || lpad(phase::text, 2, '0'),
-    MESSAGE = format('serialized offer checkout phase %s: %s', phase, failure_message);
+  -- The replay runner deliberately redacts database errors. Preserve only
+  -- the synthetic fixture phase so each failure has a distinct SQL line.
+  PERFORM set_config('test.serialized_offer_failure_phase', phase::text, true);
 END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '1' THEN RAISE EXCEPTION 'serialized offer fixture phase 1 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '2' THEN RAISE EXCEPTION 'serialized offer fixture phase 2 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '3' THEN RAISE EXCEPTION 'serialized offer fixture phase 3 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '4' THEN RAISE EXCEPTION 'serialized offer fixture phase 4 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '5' THEN RAISE EXCEPTION 'serialized offer fixture phase 5 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '6' THEN RAISE EXCEPTION 'serialized offer fixture phase 6 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '7' THEN RAISE EXCEPTION 'serialized offer fixture phase 7 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '8' THEN RAISE EXCEPTION 'serialized offer fixture phase 8 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '9' THEN RAISE EXCEPTION 'serialized offer fixture phase 9 failed'; END IF; END $$;
+DO $$ BEGIN IF current_setting('test.serialized_offer_failure_phase',true) = '10' THEN RAISE EXCEPTION 'serialized offer fixture phase 10 failed'; END IF; END $$;
+
 ROLLBACK;

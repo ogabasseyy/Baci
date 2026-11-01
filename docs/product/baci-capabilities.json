@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-31T12:06:59+00:00",
-  "source_revision": "add71b5ae9b1e0a31a9cdf62b408b4dc7e916ac2",
-  "evidence_digest": "14c97ea35e13bd435c76163a03f3cb8ce99b4581f5942887395d25642566524e",
-  "claims_digest": "e12b8accdf684f987dc2480453286a56f4ea3a50b32d9927c363a60f789f9486",
-  "review_scope": "Source evidence only. Re-reviewed shipping after the booking sender change: for domestic order bookings, a blank or implausible store phone now stops booking with 400 MERCHANT_SENDER_PHONE_INVALID before any provider request; origin-missing, merchant-missing and lookup-failure codes are unchanged. The shipping claim and its merchant-configuration limitation remain accurate. Across this main integration all other cited capability and access-map sources are unchanged. Support-chat health, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment, native acceptance and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-01T13:02:59+00:00",
+  "source_revision": "b73fe46a8be9a40435dad72d88ece506adff3da3",
+  "evidence_digest": "8c7d2d65eb0398612dad2c287fba45b8703a9de4c89ae75c6908fa92ae14bc78",
+  "claims_digest": "f3eec404f48561b76985be474652b053e3bc4759577baf387d3137b885700b03",
+  "review_scope": "Source evidence only. Re-reviewed AI-assisted commerce workflows after the native customize preview change: the customize screen still provides AI-assisted editing and now routes draft previews through the session-bound native preview switch. The existing AI claim and its human-approval and scope limitations remain unchanged; the new preview remains unqualified on iOS and Android and is not evidence of production availability. Other cited capability sources are unchanged from the prior review. Shipping, support-chat, OAuth, anonymous compatibility and refresh-receipt evidence retain their prior limits. Deployment, native acceptance and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

@@ -11,6 +11,8 @@ DECLARE
   accepted_lease uuid;
   claimed boolean;
 BEGIN
+  -- Merchant identity audit triggers require an attributed service actor.
+  PERFORM set_config('request.jwt.claim.role', 'service_role', true);
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (merchant_id, 'redrive-attempt@example.com', 'Redrive Attempt', 'redrive-attempt');
   INSERT INTO public.orders (id, merchant_id, order_number, total, customer_email, tracking_token)

@@ -15,6 +15,8 @@ DECLARE
   claimed boolean;
   current_status text;
 BEGIN
+  -- Merchant identity audit triggers require an attributed service actor.
+  PERFORM set_config('request.jwt.claim.role', 'service_role', true);
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (merchant_id, 'redrive-regression@example.com', 'Redrive Regression', 'redrive-regression');
   INSERT INTO public.orders (id, merchant_id, order_number, total, customer_email, tracking_token)
@@ -149,6 +151,8 @@ DECLARE
   claimed boolean;
   current_status text;
 BEGIN
+  -- Attribute fixture creation to the service actor for merchant auditing.
+  PERFORM set_config('request.jwt.claim.role', 'service_role', true);
   INSERT INTO public.merchants (id, email, business_name, slug)
   VALUES (merchant_id, 'redrive-hmac@example.com', 'Redrive HMAC', 'redrive-hmac');
   INSERT INTO public.orders (id, merchant_id, order_number, total, customer_email, tracking_token)

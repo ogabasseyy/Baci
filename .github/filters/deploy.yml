@@ -164,6 +164,9 @@ tracking:
   - 'apps/web/src/scripts/process-gigl-tracking.ts'
   - 'apps/web/src/scripts/verify-gigl-tracking-worker-capability.ts'
   - 'supabase/migrations/*gigl*'
+  - 'supabase/migrations/20261101203220_immediate_notification_redrive_request_guard.sql'
+  - 'supabase/migrations/20261101203437_immediate_notification_backlog_monitor.sql'
+  - 'supabase/migrations/20261101204406_immediate_notification_complete_guard_canary.sql'
   # Shipped to the VPS by prepare-worker-release.sh and sourced on every
   # poll: a reader change is a behavioral worker change and must trigger
   # the install/SHA/smoke gates like any other worker file.

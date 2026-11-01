@@ -15,7 +15,7 @@ const SOURCE_MANIFEST_URL = new URL(
 );
 const CAPTURE_TOOL_DIGEST = digestArtifact({
   captureTool: '@baci/chowdeck-contract',
-  captureToolVersion: 1,
+  captureToolVersion: 2,
 });
 
 /** @param {string[]} argv */

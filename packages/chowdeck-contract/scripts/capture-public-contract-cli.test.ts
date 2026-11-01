@@ -1,6 +1,7 @@
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { digestArtifact } from '../src/canonical-artifact-digest';
 import { runCaptureCli } from './capture-public-contract.mjs';
 
 describe('public capture CLI', () => {
@@ -25,6 +26,10 @@ describe('public capture CLI', () => {
 
     expect(JSON.parse(await readFile(outputPath, 'utf8'))).toMatchObject({
       contractVersion: 1,
+      captureToolDigest: digestArtifact({
+        captureTool: '@baci/chowdeck-contract',
+        captureToolVersion: 2,
+      }),
     });
   });
 

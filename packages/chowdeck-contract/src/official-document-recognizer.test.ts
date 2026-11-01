@@ -25,7 +25,7 @@ function categoryOpenApi(method = 'post', type = 'string'): string {
   return `# Create Menu Category
 
 \`\`\`json
-{"openapi":"3.1.0","paths":{"/merchant/{merchantReference}/menucategory":{"${method}":{"requestBody":{"content":{"application/json":{"schema":{"properties":{"name":{"type":"${type}"},"reference":{"type":"string"}},"required":["name","reference"],"type":"object"}}}}}}}}
+{"openapi":"3.1.0","paths":{"/merchant/{merchantReference}/menucategory":{"${method}":{"requestBody":{"content":{"application/json":{"schema":{"properties":{"name":{"type":"${type}"},"reference":{"type":"string"}},"required":["name","reference"],"type":"object","additionalProperties":false}}}}}}}}
 \`\`\`
 `;
 }
@@ -39,7 +39,7 @@ function operationOpenApi(input: {
   const requestBody =
     input.properties === undefined
       ? ''
-      : `,"requestBody":{"content":{"application/json":{"schema":{"properties":{${input.properties}},"required":[${input.required ?? ''}],"type":"object"}}}}`;
+      : `,"requestBody":{"content":{"application/json":{"schema":{"properties":{${input.properties}},"required":[${input.required ?? ''}],"type":"object","additionalProperties":false}}}}`;
   return `\`\`\`json
 {"openapi":"3.1.0","paths":{"${input.path}":{"${input.method}":{"responses":{}${requestBody}}}}}
 \`\`\``;
@@ -211,6 +211,25 @@ describe('official document recognizer', () => {
     const markdown = categoryOpenApi().replace(
       '"type":"object"',
       '"type":"array"'
+    );
+    expect(
+      parseMarkdown(markdown, 'menu.category.create', CATEGORY_URL).claim
+    ).toBeUndefined();
+  });
+
+  it.each([
+    ['', 'missing additionalProperties'],
+    ['true', 'open additionalProperties'],
+    ['{"type":"string"}', 'schema-valued additionalProperties'],
+    ['false,"patternProperties":{}', 'patternProperties'],
+    ['false,"unevaluatedProperties":true', 'unevaluatedProperties'],
+    ['false,"propertyNames":{}', 'propertyNames'],
+  ])('does not certify an open or uninspectable request schema: %s (%s)', (extra) => {
+    const closed = '"additionalProperties":false';
+    const replacement = extra ? `"additionalProperties":${extra}` : '';
+    const markdown = categoryOpenApi().replace(
+      `,${closed}`,
+      replacement ? `,${replacement}` : ''
     );
     expect(
       parseMarkdown(markdown, 'menu.category.create', CATEGORY_URL).claim

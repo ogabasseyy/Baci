@@ -216,7 +216,7 @@ export async function buildBlogListingMetadata({
     alternates: {
       canonical: canonicalUrl,
       types: {
-        'application/rss+xml': `${baseUrl}/api/blog/feed/${slug}`,
+        'application/rss+xml': `${baseUrl}/api/blog/feed/${data.merchant.slug}`,
       },
     },
     robots: {

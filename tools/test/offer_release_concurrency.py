@@ -24,7 +24,8 @@ CREATE TABLE public.order_items(id uuid PRIMARY KEY,order_id uuid,product_id uui
 CREATE TABLE public.variant_inventory(id uuid PRIMARY KEY,variant_id uuid,merchant_id uuid,identifier_type text,identifier_value text,status text,order_id uuid,order_item_id uuid,reserved_at timestamptz,first_reserved_at timestamptz,reservation_expires_at timestamptz,branch_id uuid,updated_at timestamptz);
 CREATE FUNCTION private.fixture_identity_guard() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN RETURN NEW; END$$;
 CREATE TRIGGER order_items_offer_id_snapshot_guard BEFORE UPDATE ON public.order_items FOR EACH ROW EXECUTE FUNCTION private.fixture_identity_guard();
-CREATE FUNCTION private.record_variant_inventory_event(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,uuid,uuid,jsonb) RETURNS void LANGUAGE sql AS $$SELECT$$;
+CREATE TABLE private.fixture_events(unit_id uuid);
+CREATE FUNCTION private.record_variant_inventory_event(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,uuid,uuid,jsonb) RETURNS void LANGUAGE sql AS $$INSERT INTO private.fixture_events VALUES ($1)$$;
 CREATE FUNCTION public.create_storefront_order(p_merchant_id uuid,p_customer_email text,p_customer_name text,p_items jsonb)
 RETURNS TABLE(id uuid,tracking_token text) LANGUAGE plpgsql AS $$
 DECLARE v_order uuid:=gen_random_uuid(); v_item uuid:=gen_random_uuid(); v_offer uuid:=(p_items->0->>'offer_id')::uuid;
@@ -69,6 +70,22 @@ try:
   assert 'refund' in result, result;print('fixed: concurrent refund metadata survives')
  else:
   assert 'refund' not in result,result;print('baseline: reproduced overwritten concurrent refund metadata')
+
+ # Mismatched tenant references must remain attached and produce no release
+ # event, even when a matching reservation is released in the same call.
+ ok(sql("""
+ INSERT INTO public.variant_inventory(id,merchant_id,order_id,order_item_id,status) VALUES
+ ('00000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','reserved'),
+ ('00000000-0000-4000-8000-000000000006','00000000-0000-4000-8000-000000000099','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','reserved');
+ SELECT private.release_stale_offer_line_serialized_units('00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000004','{}');
+ DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM public.variant_inventory WHERE id='00000000-0000-4000-8000-000000000006' AND status='reserved' AND order_item_id='00000000-0000-4000-8000-000000000002')
+ OR EXISTS(SELECT 1 FROM private.fixture_events WHERE unit_id='00000000-0000-4000-8000-000000000006') THEN
+ RAISE EXCEPTION 'foreign reservation was released'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM private.fixture_events WHERE unit_id='00000000-0000-4000-8000-000000000005') THEN
+ RAISE EXCEPTION 'matching reservation was not released'; END IF;
+ END $$;
+ """));print('tenant-mismatched reservation preserved without a release event')
 
 finally:
  if started:ok(run('pg_ctl',['-D',str(root/'data'),'-m','fast','stop']))

@@ -94,8 +94,14 @@ BEGIN
       ),
     'same exact offer did not merge at that offer price'
   );
+  -- Qualify the product so the two offers' negotiation bands can differ.
+  UPDATE public.products SET brand='Apple', name='iPhone fixture' WHERE id=product;
+  PERFORM pg_temp.check_cart_offer(
+    public.commerce_cart_negotiation_status(merchant, product, NULL, 'open_box', 1970, NULL, offer_a)
+      = 'accepted',
+    'exact-offer negotiation did not accept its own 2-percent band'
+  );
   -- 2940 is inside 2% of the other offer (3000) and above this offer (2000).
-  -- A non-negotiable fixture product stays pending either way.
   PERFORM pg_temp.check_cart_offer(
     public.commerce_cart_negotiation_status(merchant, product, NULL, 'open_box', 2940, NULL, offer_a)
       = 'pending',

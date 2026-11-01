@@ -12,6 +12,9 @@ DECLARE
   identity_case integer;
   order_id uuid;
   item_id uuid;
+  target_order_id uuid;
+  target_item_id uuid;
+  source_item_id uuid;
   tracking_token text;
   snapshot jsonb;
 BEGIN
@@ -95,6 +98,36 @@ BEGIN
   IF (SELECT oi.fulfillment_data->'fulfillmentQuantity' FROM public.order_items oi WHERE oi.id = item_id)
       IS DISTINCT FROM '0'::jsonb THEN
     RAISE EXCEPTION 'REDVAULT serialized line no longer tracks remaining reserved units';
+  END IF;
+  -- Moving an existing reservation directly between serialized order lines
+  -- must refresh both the source and destination shipment quantities.
+  SELECT o.id INTO order_id FROM public.create_storefront_order(
+    p_merchant_id => merchant_id, p_customer_email => 'transfer-source@example.com',
+    p_customer_name => 'Transfer Source',
+    p_items => jsonb_build_array(jsonb_build_object('product_id', product_id, 'quantity', 1))
+  ) o;
+  SELECT oi.id INTO STRICT source_item_id FROM public.order_items oi WHERE oi.order_id = order_id;
+  UPDATE public.orders SET payment_method = 'uba_redvault' WHERE id = order_id;
+  SELECT vi.id INTO STRICT reserved_id FROM public.variant_inventory vi
+  WHERE vi.order_id = order_id AND vi.order_item_id = source_item_id AND vi.status = 'reserved';
+  -- Force known pre-transfer snapshots regardless of when payment was set.
+  UPDATE public.order_items SET fulfillment_data = '{"fulfillmentQuantity":1}'::jsonb WHERE id = source_item_id;
+  SELECT o.id INTO target_order_id FROM public.create_storefront_order(
+    p_merchant_id => merchant_id, p_customer_email => 'transfer-target@example.com',
+    p_customer_name => 'Transfer Target',
+    p_items => jsonb_build_array(jsonb_build_object('product_id', product_id, 'quantity', 1))
+  ) o;
+  SELECT oi.id INTO STRICT target_item_id FROM public.order_items oi WHERE oi.order_id = target_order_id;
+  UPDATE public.orders SET payment_method = 'uba_redvault' WHERE id = target_order_id;
+  UPDATE public.variant_inventory SET order_id = target_order_id, order_item_id = target_item_id
+  WHERE id = reserved_id;
+  IF (SELECT fulfillment_data->'fulfillmentQuantity' FROM public.order_items WHERE id = source_item_id)
+      IS DISTINCT FROM '0'::jsonb THEN
+    RAISE EXCEPTION 'REDVAULT transfer left stale source quantity';
+  END IF;
+  IF (SELECT fulfillment_data->'fulfillmentQuantity' FROM public.order_items WHERE id = target_item_id)
+      IS DISTINCT FROM '2'::jsonb THEN
+    RAISE EXCEPTION 'REDVAULT transfer did not update destination quantity';
   END IF;
 END;
 $$;

@@ -57,7 +57,9 @@ jobs:
   build-and-deploy:
     name: Build AAB & Upload to Play Store
     runs-on: baci-android
-    timeout-minutes: 90
+    # Patched React Native and Hermes compile from source for four ABIs.
+    # Allow the cold build and subsequent upload to finish on the Android runner.
+    timeout-minutes: 600
 
     steps:
       - name: Checkout

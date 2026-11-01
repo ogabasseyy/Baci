@@ -1,0 +1,34 @@
+export function markerNeedles(marker: string): string[] {
+  const separator = marker.indexOf('=');
+  if (separator === -1) return [marker];
+  const name = marker.slice(0, separator);
+  const value = marker.slice(separator + 1).replace(/^["']|["']$/g, '');
+  return [`${name}="${value}"`, `${name}='${value}'`, `${name}=${value}`];
+}
+
+export function hasMarker(value: string, needles: readonly string[]): boolean {
+  return needles.some((needle) => value.includes(needle));
+}
+
+export function firstPostponedBoundaryOffset(html: string): number {
+  const offsets = [html.indexOf('<!--$?-->'), html.indexOf('<!--$!-->')].filter(
+    (offset) => offset >= 0
+  );
+  return offsets.length > 0 ? Math.min(...offsets) : -1;
+}
+
+export function hasHeroPreload(html: string, heroHint: string): boolean {
+  const tags = html.match(/<link\b[^>]*>/gi) ?? [];
+  return tags.some((tag) => {
+    const attrs = new Map(
+      [...tag.matchAll(/([\w-]+)\s*=\s*["']([^"']*)["']/g)].map(
+        ([, key, value]) => [key?.toLowerCase(), value]
+      )
+    );
+    return (
+      attrs.get('rel')?.toLowerCase() === 'preload' &&
+      attrs.get('as')?.toLowerCase() === 'image' &&
+      attrs.get('href') === heroHint
+    );
+  });
+}

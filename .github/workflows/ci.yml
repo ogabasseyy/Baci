@@ -445,6 +445,8 @@ jobs:
           TEST_TARGET_STATUS=sold bash supabase/tests/run-serialized-release-product-lock-order.sh
           TEST_LINE_ENDINGS=lf bash supabase/tests/run-serialized-legacy-offer-cleanup-lock-order.sh
           TEST_LINE_ENDINGS=crlf bash supabase/tests/run-serialized-legacy-offer-cleanup-lock-order.sh
+          TEST_LINE_ENDINGS=lf python3 supabase/tests/run_serialized_expired_reservation_regression.py
+          TEST_LINE_ENDINGS=crlf python3 supabase/tests/run_serialized_expired_reservation_regression.py
           bash supabase/migrations/tests/run-serialized-offer-payment-proof.sh
           bash supabase/migrations/tests/run-serialized-offer-reuse.sh
           bash supabase/migrations/tests/run-serialized-offer-creation.sh

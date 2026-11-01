@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, type TextInput } from 'react-native';
+import { Alert, type TextInputInstance } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 import type { LoginAuthMethod } from '@/components/auth/LoginEmailStep';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -74,7 +74,7 @@ export function useLoginScreenController() {
 
   const { withKeyboardDismiss } = useKeyboard();
 
-  const otpInputRef = useRef<TextInput>(null);
+  const otpInputRef = useRef<TextInputInstance>(null);
   const isMountedRef = useRef(true);
   const isVerifyingRef = useRef(false);
 

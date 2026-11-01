@@ -6,7 +6,7 @@ import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
 import type { WalletData } from '@/hooks/wallet-query';
 import { WalletBalancePreview } from './WalletBalancePreview';
-import { WalletContent, type WalletContentProps } from './WalletContent';
+import type { WalletContentProps } from './WalletContent';
 import { WalletPrimaryAccountContent } from './WalletPrimaryAccountContent';
 import { styles } from './wallet.styles';
 

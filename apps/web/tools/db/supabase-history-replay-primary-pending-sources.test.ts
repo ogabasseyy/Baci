@@ -40,9 +40,9 @@ describe('bugfix: PR 3620 pending migration registry', () => {
     ).toBe(false);
   });
 
-  it('registers all 97 primary additions only as pending sources', async () => {
+  it('registers all 96 primary additions only as pending sources', async () => {
     const manifest = supabaseHistoryReplayManifest;
-    expect(EXPECTED_PRIMARY_PENDING_SOURCES).toHaveLength(97);
+    expect(EXPECTED_PRIMARY_PENDING_SOURCES).toHaveLength(96);
 
     for (const expected of EXPECTED_PRIMARY_PENDING_SOURCES) {
       expect(
@@ -80,9 +80,7 @@ describe('bugfix: PR 3620 pending migration registry', () => {
     );
     for (const source of EXPECTED_PRIMARY_PENDING_SOURCES) {
       expect(canonicalPaths.has(source.repositoryPath)).toBe(false);
-      expect(source.repositoryPath).toMatch(
-        /\/(?:2026100[78]\d{6}|20261025181703)_/
-      );
+      expect(source.repositoryPath).toMatch(/\/2026100[78]\d{6}_/);
     }
     const paths = supabaseHistoryReplayManifest.pendingSources.map(
       (source) => source.repositoryPath

@@ -75,6 +75,9 @@ export async function runPrimarySavingsProvisioning(input: {
       execute: createPrimarySavingsProvisioningExecutor(configuration),
     }),
     createWallet: (request) => createPiggyvestWallet(provider, request),
+    // Lists by the intent's stored name, which provisioning has already
+    // checked belongs to this goal (the current name, or a wallet-bound
+    // legacy one).
     listWallets: (customerId, walletName) =>
       listPrimarySavingsProvisioningWallets(provider, {
         customerId,

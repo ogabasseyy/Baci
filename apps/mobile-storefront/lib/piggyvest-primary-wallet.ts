@@ -25,6 +25,8 @@ async function read(merchantId: string, userId?: string, signal?: AbortSignal) {
     account: snapshot.data.account,
     requiresConsent: snapshot.data.status !== 'ready',
     provisioningStatus: snapshot.data.status,
+    recoverable:
+      snapshot.data.status === 'pending' && snapshot.data.recoverable === true,
   };
 }
 

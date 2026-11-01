@@ -2,6 +2,7 @@ import type { usePiggyvestWalletSetup } from '@/hooks/use-piggyvest-wallet-setup
 
 export function primarySetupMock(): ReturnType<typeof usePiggyvestWalletSetup> {
   return {
+    scopeKey: 'merchant:user',
     account: null,
     state: 'not_started',
     justCreated: false,
@@ -12,5 +13,8 @@ export function primarySetupMock(): ReturnType<typeof usePiggyvestWalletSetup> {
     submitting: false,
     refresh: () => undefined,
     submit: async () => undefined,
+    recover: async () => undefined,
+    recoverable: false,
+    reviewRequired: false,
   };
 }

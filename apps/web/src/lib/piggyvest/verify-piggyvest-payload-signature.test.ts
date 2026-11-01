@@ -13,7 +13,7 @@ describe('verifyPiggyvestPayloadSignature', () => {
     ).toBe(true);
   });
 
-  it('accepts the same signature with uppercase and mixed-case hex', () => {
+  it('accepts uppercase and mixed-case hex signatures', () => {
     for (const header of [
       signature.toUpperCase(),
       signature.replace(/[a-f]/g, (character, index) =>
@@ -24,6 +24,16 @@ describe('verifyPiggyvestPayloadSignature', () => {
         verifyPiggyvestPayloadSignature({ payload, signature: header, secret })
       ).toBe(true);
     }
+  });
+
+  it('normalises surrounding whitespace before comparison', () => {
+    expect(
+      verifyPiggyvestPayloadSignature({
+        payload,
+        signature: `  ${signature.toUpperCase()}\n`,
+        secret,
+      })
+    ).toBe(true);
   });
 
   it.each([

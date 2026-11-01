@@ -7,6 +7,7 @@ import { canonicalJsonValue } from './canonical-json-value';
 import { createSupabaseReplayProjectId } from './create-supabase-replay-project-id';
 import { createSupabaseReplaySqlApplier } from './create-supabase-replay-sql-applier';
 import { generateSupabaseReplayTypes } from './generate-supabase-replay-types';
+import { parseReplayCliArguments } from './parse-replay-cli-arguments';
 import * as ownershipTools from './replay-project-ownership';
 import { replayRepository } from './replay-repository-root';
 import { runSupabaseReplayStage } from './run-supabase-replay-stage';
@@ -24,7 +25,6 @@ import type {
 import {
   assertSupabaseReplayDatabaseUrl,
   createSupabaseReplayDatabaseEnvironment,
-  parseSupabaseReplayArguments,
   readSupabaseReplayDatabaseUrl,
 } from './supabase-replay-contract';
 import type * as resourceTools from './supabase-replay-expected-resources';
@@ -289,7 +289,7 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  runSupabaseHistoryReplay(parseSupabaseReplayArguments(process.argv.slice(2)))
+  runSupabaseHistoryReplay(parseReplayCliArguments(process.argv.slice(2)))
     .then((receipt) => process.stdout.write(canonicalJsonValue(receipt)))
     .catch((error: unknown) => {
       process.stderr.write(

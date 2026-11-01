@@ -1,4 +1,6 @@
 export const PRIMARY_WALLET_STATEMENTS = {
+  recoverable:
+    'SELECT piggyvest_primary.can_recover_onboarding($1::jsonb) AS result',
   presence: 'SELECT piggyvest_primary.has_onboarding($1::jsonb) AS result',
   read: 'SELECT piggyvest_primary.read_onboarding($1::jsonb) AS result',
   claim:
@@ -11,4 +13,21 @@ export const PRIMARY_WALLET_STATEMENTS = {
     'SELECT piggyvest_primary.record_onboarding_rejection($1::jsonb, $2::uuid, $3::uuid) AS result',
   release:
     'SELECT piggyvest_primary.release_onboarding_intent($1::jsonb, $2::uuid, $3::uuid) AS result',
+  // A created wallet whose interest routing is not proven yet: ids kept,
+  // never usable, re-read read-only until resolved (20261031230000).
+  routingPending:
+    'SELECT piggyvest_primary.record_onboarding_routing_pending($1::jsonb, $2::uuid, $3::uuid, $4::text, $5::text, $6::text) AS result',
+  readRouting:
+    'SELECT piggyvest_primary.read_onboarding_routing($1::jsonb) AS result',
+  resolveRouting:
+    'SELECT piggyvest_primary.resolve_onboarding_routing($1::jsonb, $2::jsonb, $3::boolean, $4::text) AS result',
+  // A created wallet kept only for review: rejected with its ids in one
+  // claim-fenced write, never routing pending (20261031230000). Routing-only
+  // contradictions can carry their narrower review reason atomically.
+  review:
+    'SELECT piggyvest_primary.record_onboarding_review($1::jsonb, $2::uuid, $3::uuid, $4::text, $5::text, $6::text) AS result',
+  ownershipHold:
+    'SELECT piggyvest_primary.record_onboarding_ownership_hold($1::jsonb, $2::uuid, $3::uuid) AS result',
+  readReview:
+    'SELECT piggyvest_primary.read_onboarding_review($1::jsonb) AS result',
 } as const;

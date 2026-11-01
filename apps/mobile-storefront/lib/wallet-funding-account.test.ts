@@ -482,6 +482,7 @@ describe('wallet funding account api client', () => {
       account: null,
       requiresConsent: true,
       provisioningStatus: 'pending',
+      recoverable: false,
     });
     expect(mockFetchWithTimeout).toHaveBeenCalledWith(
       'https://usebaci.com/api/storefront/customer/wallet/piggyvest-primary?merchantId=6b5cb8a4-5575-456c-b936-8cdfae30db74',

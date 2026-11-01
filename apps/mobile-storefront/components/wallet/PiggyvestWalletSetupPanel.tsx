@@ -1,4 +1,5 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
+import { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import type { usePiggyvestWalletSetup } from '@/hooks/use-piggyvest-wallet-setup';
@@ -30,6 +31,10 @@ export function PiggyvestWalletSetupPanel({
   setup,
   onClose,
 }: Props) {
+  const [recoveryFormScope, setRecoveryFormScope] = useState<string | null>(
+    null
+  );
+  const showRecoveryForm = recoveryFormScope === setup?.scopeKey;
   const processing = setup?.state === 'processing';
   const checking = !setup || setup.state === 'checking';
   const unavailable = setup?.state === 'unavailable';
@@ -73,6 +78,14 @@ export function PiggyvestWalletSetupPanel({
             Checking account availability…
           </Text>
         </View>
+      ) : setup?.reviewRequired ? (
+        <Text
+          accessibilityRole="alert"
+          style={[styles.body, { color: colors.textSecondary }]}
+        >
+          Your PiggyVest wallet setup needs review. Please contact support
+          before trying again.
+        </Text>
       ) : processing || unavailable ? (
         <View style={styles.pending}>
           <Text style={[styles.body, { color: colors.textSecondary }]}>
@@ -100,6 +113,31 @@ export function PiggyvestWalletSetupPanel({
               {setup?.isChecking ? 'Checking account…' : 'Check again'}
             </Text>
           </Pressable>
+          {processing && setup?.recoverable ? (
+            showRecoveryForm ? (
+              <WalletSetupProfileGate
+                colors={colors}
+                merchantId={merchantId}
+                insideBottomSheet={insideBottomSheet}
+              >
+                <PiggyvestWalletSetupForm
+                  key={setup.scopeKey}
+                  colors={colors}
+                  merchantId={merchantId}
+                  insideBottomSheet={insideBottomSheet}
+                  onSubmit={setup.recover}
+                />
+              </WalletSetupProfileGate>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Re-enter BVN to recover wallet setup"
+                onPress={() => setRecoveryFormScope(setup?.scopeKey ?? null)}
+              >
+                <Text style={{ color: colors.primary }}>Try setup again</Text>
+              </Pressable>
+            )
+          ) : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Done"
@@ -120,6 +158,7 @@ export function PiggyvestWalletSetupPanel({
           insideBottomSheet={insideBottomSheet}
         >
           <PiggyvestWalletSetupForm
+            key={setup.scopeKey}
             colors={colors}
             merchantId={merchantId}
             insideBottomSheet={insideBottomSheet}

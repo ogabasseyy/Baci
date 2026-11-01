@@ -28,6 +28,7 @@ jest.mock('@/lib/piggyvest-primary-wallet', () => ({
 }));
 jest.mock('@/lib/piggyvest-primary-capability', () => ({
   usePiggyvestPrimaryCapability: () => true,
+  isPrimaryWalletReviewRequired: () => false,
 }));
 jest.mock('@/stores/auth-store', () => {
   const { create } = require('zustand');
@@ -54,10 +55,12 @@ const pending = {
   account: null,
   provisioningStatus: 'pending' as const,
   requiresConsent: true,
+  recoverable: false,
 };
 const ready = {
   provisioningStatus: 'ready' as const,
   requiresConsent: false,
+  recoverable: false,
   account: {
     accountNumber: '9000000012',
     accountName: 'Sandbox Customer',
@@ -111,6 +114,7 @@ beforeEach(async () => {
     account: null,
     provisioningStatus: 'not_started',
     requiresConsent: true,
+    recoverable: false,
   });
   jest.mocked(piggyvestPrimaryWalletApi.create).mockResolvedValue(pending);
 });

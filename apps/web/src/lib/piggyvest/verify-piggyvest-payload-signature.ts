@@ -18,10 +18,25 @@ export function verifyPiggyvestPayloadSignature({
   signature: string | null;
   secret: string | undefined;
 }): boolean {
-  if (!secret?.trim() || !signature || !/^[a-f0-9]{128}$/i.test(signature)) {
+  const normalized = normalizePiggyvestSignature(signature);
+  if (!secret?.trim() || !normalized) {
     return false;
   }
 
   const expected = createHmac('sha512', secret).update(payload).digest();
-  return timingSafeEqual(expected, Buffer.from(signature, 'hex'));
+  return timingSafeEqual(expected, Buffer.from(normalized, 'hex'));
+}
+
+/**
+ * Canonical form of the `x-pvb-signature` header: trimmed lowercase hex of
+ * exactly 128 characters, or null. Hex is case-insensitive, so an
+ * uppercase delivery must verify, and downstream stores that require the
+ * lowercase form always receive it.
+ */
+export function normalizePiggyvestSignature(
+  signature: string | null | undefined
+): string | null {
+  if (!signature) return null;
+  const candidate = signature.trim().toLowerCase();
+  return /^[a-f0-9]{128}$/.test(candidate) ? candidate : null;
 }

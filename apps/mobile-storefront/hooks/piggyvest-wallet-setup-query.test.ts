@@ -21,6 +21,7 @@ const ready = {
   },
   provisioningStatus: 'ready' as const,
   requiresConsent: false,
+  recoverable: false,
 };
 it('clears a stale local attempt only when the server confirms setup never started', async () => {
   const client = new QueryClient();
@@ -29,6 +30,7 @@ it('clears a stale local attempt only when the server confirms setup never start
     account: null,
     provisioningStatus: 'not_started',
     requiresConsent: true,
+    recoverable: false,
   });
   const result = await client.fetchQuery(
     piggyvestWalletSetupQuery(client, 'merchant', 'user')
@@ -45,6 +47,7 @@ it('reports a server-confirmed pending setup as attempted without a local marker
     account: null,
     provisioningStatus: 'pending',
     requiresConsent: true,
+    recoverable: false,
   });
 
   const result = await client.fetchQuery(

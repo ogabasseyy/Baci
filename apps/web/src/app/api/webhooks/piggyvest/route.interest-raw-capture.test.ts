@@ -1,21 +1,22 @@
 import { createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
-import { beforeEach, expect, it, vi } from 'vitest';
-import { primaryBankInboxFixture } from '@/lib/piggyvest/primary-wallet-bank-inbox.test-fixture';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 type SecretUnionModule = typeof import('@/lib/piggyvest/webhook-secret-union');
 
 const mocks = vi.hoisted(() => ({
-  capture: vi.fn(),
+  createClient: vi.fn(),
+  intake: vi.fn(),
   processEvent: vi.fn(),
+  quarantine: vi.fn(),
   families: ['interest'] as string[],
-  secret: Array.from(globalThis.crypto.getRandomValues(new Uint8Array(32)))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join(''),
+  secret: globalThis.crypto.randomUUID(),
 }));
 
-vi.mock('@/env', () => ({
-  getPiggyvestApiConfig: () => null,
+vi.mock('server-only', () => ({}));
+vi.mock('@/env', () => ({ getPiggyvestApiConfig: () => null }));
+vi.mock('@/lib/piggyvest/server-intake-client', () => ({
+  createPiggyvestIntakeServiceClient: mocks.createClient,
 }));
 vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
   const actual = await importOriginal<SecretUnionModule>();
@@ -36,159 +37,128 @@ vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
   };
 });
 vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-intake', () => ({
-  dispatchPrimaryWalletPaidInterestInbox: mocks.capture,
+  dispatchPrimaryWalletPaidInterestInbox: mocks.intake,
 }));
 vi.mock('@/lib/piggyvest/webhook-processor', () => ({
   processPiggyvestEvent: mocks.processEvent,
 }));
+vi.mock('@/lib/piggyvest/event-quarantine', () => ({
+  digestRawBody: () => 'f'.repeat(64),
+  recordQuarantineEvent: mocks.quarantine,
+}));
 
 import { POST } from './route';
+import { createFakeCaptureStore } from './route.capture-test-support';
 
-const secret = mocks.secret;
-const rawBody =
-  '{ "eventType":"interest-payout.success", "eventData":null, "x":"opaque" }';
+let store: ReturnType<typeof createFakeCaptureStore>;
+const sign = (body: Uint8Array) =>
+  createHmac('sha512', mocks.secret).update(body).digest('hex');
 
-function signedRequest(body: string, valid = true) {
-  const signature = createHmac('sha512', secret).update(body).digest('hex');
-  return new NextRequest(
-    'https://synthetic.example.test/api/webhooks/piggyvest',
-    {
+function post(body: Buffer, signature = sign(body)) {
+  return POST(
+    new NextRequest('https://synthetic.example.test/api/webhooks/piggyvest', {
       method: 'POST',
-      body,
-      headers: {
-        'x-pvb-signature': valid ? signature : '0'.repeat(128),
-      },
-    }
+      body: Uint8Array.from(body),
+      headers: { 'x-pvb-signature': signature },
+    })
   );
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  store = createFakeCaptureStore();
   mocks.families = ['interest'];
-  mocks.capture.mockResolvedValue('accepted');
-  mocks.processEvent.mockResolvedValue('processed');
+  mocks.createClient.mockImplementation(() => store.client());
+  mocks.quarantine.mockResolvedValue('recorded');
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+  vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
-it('captures signed interest bytes before event schema parsing', async () => {
-  const response = await POST(signedRequest(rawBody));
+afterEach(() => vi.restoreAllMocks());
+
+// These deliveries used to go into the interest-only inbox before parsing.
+// Generic ingress now owns their exact bytes; malformed content must never
+// become a primary interest receipt or be resolved as financially processed.
+it.each([
+  ['empty object', Buffer.from('{}')],
+  ['wrong event type', Buffer.from('{"eventType":"other","eventId":"e1"}')],
+  ['missing event id', Buffer.from('{"eventType":"interest-payout.success"}')],
+  ['not JSON', Buffer.from('not-json')],
+  ['invalid UTF-8', Buffer.from([0xff, 0xfe, 0x00])],
+])('captures signed %s before content quarantine', async (_label, body) => {
+  const signature = sign(body);
+  mocks.quarantine.mockImplementation(async () => {
+    // Prove capture already succeeded when parser rejection is recorded.
+    expect(store.rows).toHaveLength(1);
+    expect(store.rows[0]).toMatchObject({
+      rawHex: body.toString('hex'),
+      signature,
+      processingState: 'pending',
+    });
+    return 'recorded';
+  });
+
+  const response = await post(body);
 
   expect(response.status).toBe(200);
-  expect(mocks.capture).toHaveBeenCalledWith({
-    rawBody: Buffer.from(rawBody),
-    signature: expect.any(String),
-  });
+  expect(await response.json()).toEqual({ received: true, quarantined: true });
+  expect(mocks.quarantine).toHaveBeenCalledTimes(1);
+  expect(mocks.intake).not.toHaveBeenCalled();
   expect(mocks.processEvent).not.toHaveBeenCalled();
-  const responseText = JSON.stringify(await response.json());
-  expect(responseText).not.toContain(secret);
-  expect(responseText).not.toContain(rawBody);
+  expect(store.resolveCalls).toEqual([]);
 });
 
-it('canonicalizes uppercase signature hex before verification and capture', async () => {
-  const canonicalSignature = createHmac('sha512', secret)
-    .update(rawBody)
-    .digest('hex');
-  const response = await POST(
-    new NextRequest('https://synthetic.example.test/api/webhooks/piggyvest', {
-      method: 'POST',
-      body: rawBody,
-      headers: { 'x-pvb-signature': canonicalSignature.toUpperCase() },
-    })
-  );
+it('canonicalizes signature evidence while preserving the original request bytes and header', async () => {
+  const body = Buffer.from(' \n{"unexpected":{"opaque":"雪"}}\t\n');
+  const signature = sign(body);
+
+  const response = await post(body, signature.toUpperCase());
 
   expect(response.status).toBe(200);
-  expect(mocks.capture).toHaveBeenCalledWith({
-    rawBody: Buffer.from(rawBody),
-    signature: canonicalSignature,
+  expect(store.rows[0]).toMatchObject({
+    rawHex: body.toString('hex'),
+    signature,
+    headers: { 'x-pvb-signature': signature.toUpperCase() },
+    processingState: 'pending',
   });
-  expect(mocks.processEvent).not.toHaveBeenCalled();
 });
 
 it.each([
-  '{"eventType":"interest-payout.success","eventData":{"amount":2,"currency":"USD"}}',
-  '{ malformed signed interest payload',
-])('captures exact signed unsupported interest bytes', async (body) => {
-  const response = await POST(signedRequest(body));
+  'legacy',
+  'bank',
+  'custody',
+])('captures unknown signed bytes under %s authority without an interest receipt', async (family) => {
+  mocks.families = [family];
+  const body = Buffer.from('{ malformed');
+
+  const response = await post(body);
 
   expect(response.status).toBe(200);
-  expect(mocks.capture).toHaveBeenCalledWith({
-    rawBody: Buffer.from(body),
-    signature: createHmac('sha512', secret).update(body).digest('hex'),
-  });
+  expect(store.rows[0]?.rawHex).toBe(body.toString('hex'));
+  expect(mocks.intake).not.toHaveBeenCalled();
+  expect(mocks.processEvent).not.toHaveBeenCalled();
 });
 
-it('does not attempt raw capture for an invalid signature', async () => {
-  await POST(signedRequest(rawBody, false));
+it('rejects forged signatures before constructing capture authority', async () => {
+  const response = await post(Buffer.from('{}'), '0'.repeat(128));
 
-  expect(mocks.capture).not.toHaveBeenCalled();
+  expect(response.status).toBe(401);
+  expect(mocks.createClient).not.toHaveBeenCalled();
+  expect(store.rows).toEqual([]);
+  expect(mocks.quarantine).not.toHaveBeenCalled();
 });
 
-it('fails closed when a legacy-only key signs an explicit interest payout', async () => {
-  mocks.families = ['legacy'];
-  const body = JSON.stringify({
-    eventType: 'interest-payout.success',
-    eventId: 'synthetic-interest-event',
-    eventCategory: 'interest-payout',
-    eventData: {},
-  });
+it('requests redelivery if generic durable capture fails, without acknowledging a digest-only quarantine', async () => {
+  store.failCapture = true;
 
-  const response = await POST(signedRequest(body));
+  const response = await post(Buffer.from('{ malformed'));
 
   expect(response.status).toBe(503);
   expect(await response.json()).toMatchObject({
-    code: 'PIGGYVEST_INTEREST_RECONCILIATION_PENDING',
+    code: 'PIGGYVEST_CAPTURE_UNAVAILABLE',
   });
-  expect(mocks.capture).not.toHaveBeenCalled();
-  expect(mocks.processEvent).not.toHaveBeenCalled();
-});
-
-it.each([
-  ['{"eventType":"future-interest-event"}', 'legacy'],
-  ['{ malformed', 'legacy'],
-  ['{"eventType":"future-interest-event"}', 'bank'],
-  ['{ malformed', 'custody'],
-  ['{"eventType":"bank-transfer.inflow.success"}', 'bank'],
-])('requests redelivery of unknown %s signed by %s instead of digest-only acknowledgement', async (body, family) => {
-  mocks.families = [family];
-  const response = await POST(signedRequest(body));
-
-  expect(response.status).toBe(503);
-  expect(await response.json()).toEqual({
-    received: false,
-    code: 'PIGGYVEST_INTEREST_RECONCILIATION_PENDING',
-  });
-  expect(mocks.capture).not.toHaveBeenCalled();
-  expect(mocks.processEvent).not.toHaveBeenCalled();
-});
-
-it('keeps shared-family bank events out of the interest capture path', async () => {
-  mocks.families = ['interest', 'bank'];
-  const bankBody = JSON.stringify(primaryBankInboxFixture.event);
-  await POST(signedRequest(bankBody));
-
-  expect(mocks.capture).not.toHaveBeenCalled();
-});
-
-it('captures ambiguous signed bytes when interest shares legacy authority', async () => {
-  mocks.families = ['interest', 'legacy'];
-  const body = '{"unexpected":{"nested":"shape"}}';
-  const response = await POST(signedRequest(body));
-
-  expect(response.status).toBe(200);
-  expect(mocks.capture).toHaveBeenCalledWith({
-    rawBody: Buffer.from(body),
-    signature: createHmac('sha512', secret).update(body).digest('hex'),
-  });
-  expect(mocks.processEvent).not.toHaveBeenCalled();
-});
-
-it('returns retryable failure when early durable capture fails', async () => {
-  mocks.capture.mockRejectedValue(new Error('synthetic storage detail'));
-  const response = await POST(signedRequest(rawBody));
-  const responseText = JSON.stringify(await response.json());
-
-  expect(response.status).toBe(503);
-  expect(responseText).not.toContain('synthetic storage detail');
-  expect(responseText).not.toContain(rawBody);
-  expect(responseText).not.toContain(secret);
+  expect(store.rows).toEqual([]);
+  expect(mocks.quarantine).not.toHaveBeenCalled();
+  expect(mocks.intake).not.toHaveBeenCalled();
   expect(mocks.processEvent).not.toHaveBeenCalled();
 });

@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { parse } from 'dotenv';
 import {
   findMultilineDotenvAssignments,
   findTrailingNewlineValues,
 } from './preflight-dotenv-assignments.mjs';
+import { isEntrypoint } from '../lib/is-entrypoint.mjs';
 
 const REQUIRED_ENV = [
   'BACI_REPO_DIR',
@@ -277,8 +278,7 @@ function main() {
 }
 
 if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
+  isEntrypoint(import.meta.url)
 ) {
   main();
 }

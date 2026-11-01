@@ -6,9 +6,23 @@ import { OgabasseyImeiChecker } from './imei-checker';
 import { getDisplayTier } from './imei-checker-tiers';
 
 const fetchMock = vi.fn();
-const mocks = vi.hoisted(() => ({ useMerchantSafe: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  useMerchantSafe: vi.fn(),
+  availableTierKeys: null as ImeiServiceTierKey[] | null,
+  availabilityFailed: false,
+  retryAvailability: vi.fn(),
+}));
 
 vi.stubGlobal('fetch', fetchMock);
+
+vi.mock('./use-imei-runtime-availability', () => ({
+  useImeiRuntimeAvailability: () => ({
+    availableTierKeys: mocks.availableTierKeys,
+    failed: mocks.availabilityFailed,
+    loading: false,
+    retry: mocks.retryAvailability,
+  }),
+}));
 
 vi.mock('next/image', () => ({
   default: (props: Record<string, unknown>) => (
@@ -35,6 +49,9 @@ vi.mock('@/hooks/use-merchant-client', () => ({
 
 describe('OgabasseyImeiChecker', () => {
   beforeEach(() => {
+    mocks.availableTierKeys = null;
+    mocks.availabilityFailed = false;
+    mocks.retryAvailability.mockClear();
     document.cookie = 'csrf-token=test-csrf-token; path=/';
     fetchMock.mockReset();
     mocks.useMerchantSafe.mockReturnValue({

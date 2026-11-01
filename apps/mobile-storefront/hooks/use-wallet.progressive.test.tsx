@@ -85,6 +85,7 @@ const ready = {
   },
   provisioningStatus: 'ready' as const,
   requiresConsent: false,
+  recoverable: false,
 };
 const credit = {
   id: 'credit',

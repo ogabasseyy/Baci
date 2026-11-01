@@ -80,6 +80,17 @@ export function getCartCookieEpoch(
     return undefined;
   }
 }
+/** Read the current epoch without installing listeners during render. */
+export function peekCartCookieEpoch(
+  slug?: string | null
+): string | null | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    return window.localStorage.getItem(epochKey(slug));
+  } catch {
+    return undefined;
+  }
+}
 /** Fence old UI intents even before a delayed cross-tab storage event arrives. */
 export function isCartCookieEpochCurrent(
   expected: string | null | undefined,

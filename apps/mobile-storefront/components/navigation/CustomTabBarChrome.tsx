@@ -1,7 +1,6 @@
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
-import { TabActions } from 'expo-router/react-navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
   Platform,
@@ -35,7 +34,8 @@ const SCALE_PULSE_SPRING = { damping: 9, stiffness: 220 };
 export function CustomTabBarChrome({
   state,
   descriptors,
-  navigation,
+  emitter,
+  navigateToTab,
   activeRouteName,
   preloadProtectedTabs,
 }: BottomTabBarProps & {
@@ -91,7 +91,7 @@ export function CustomTabBarChrome({
 
   useWarmTabScreens({
     activeRouteName,
-    navigation,
+    navigateToTab,
     preloadProtectedTabs,
     routes: visibleRoutes,
   });
@@ -208,7 +208,7 @@ export function CustomTabBarChrome({
               moveCapsule(shouldTriggerFeedback);
             }
 
-            const event = navigation.emit({
+            const event = emitter.emit({
               type: 'tabPress',
               target: route.key,
               canPreventDefault: true,
@@ -220,10 +220,7 @@ export function CustomTabBarChrome({
             }
 
             if (!isActiveRoute) {
-              navigation.dispatch({
-                ...TabActions.jumpTo(route.name, route.params),
-                target: state.key,
-              });
+              navigateToTab(route.key);
             }
 
             if (

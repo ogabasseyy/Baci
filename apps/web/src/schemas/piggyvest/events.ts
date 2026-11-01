@@ -170,6 +170,22 @@ export const restrictionLiftedSuccessEventSchema = z.object({
   pvb_wallet: z.string().min(1).optional(),
 });
 
+// Documented at https://www.piggyvestbusiness.com/docs/webhooks/events.
+// Acknowledge-and-record only: no ledger write ever keys off this event
+// (payout money arrives via interest-payout.success). The union entry is
+// deliberately lenient about eventData so a provider-side field addition
+// (for example differential_wallet_id) cannot turn an accrual notification
+// into a quarantine; the strict shape lives in interest-accrued-event.ts
+// for the dedicated accrual observer.
+export const interestAccruedSuccessRecordEventSchema = z.object({
+  eventId: z.string().min(1),
+  eventType: z.literal('interest-accrued.success'),
+  eventCategory: z.string().min(1),
+  customer_id: z.string().min(1),
+  eventData: z.looseObject({}),
+  pvb_wallet: z.string().min(1).optional(),
+});
+
 export const piggyvestWebhookEventSchema = z.discriminatedUnion('eventType', [
   bankTransferInflowSuccessEventSchema,
   interestPayoutSuccessEventSchema,
@@ -180,6 +196,7 @@ export const piggyvestWebhookEventSchema = z.discriminatedUnion('eventType', [
   walletTransferOutflowSuccessEventSchema,
   restrictionCreatedSuccessEventSchema,
   restrictionLiftedSuccessEventSchema,
+  interestAccruedSuccessRecordEventSchema,
 ]);
 
 export type BankTransferInflowSuccessEvent = z.infer<
@@ -208,5 +225,8 @@ export type RestrictionCreatedSuccessEvent = z.infer<
 >;
 export type RestrictionLiftedSuccessEvent = z.infer<
   typeof restrictionLiftedSuccessEventSchema
+>;
+export type InterestAccruedSuccessRecordEvent = z.infer<
+  typeof interestAccruedSuccessRecordEventSchema
 >;
 export type PiggyvestWebhookEvent = z.infer<typeof piggyvestWebhookEventSchema>;

@@ -143,10 +143,9 @@ describe('CustomTabBar', () => {
     expect(
       screen.getByRole('tab', { name: 'Saved' }).props.accessibilityState
     ).toEqual({ selected: true });
-    customTabBarTestUtils.expectSavedTabPress(mockProps.navigation);
-    expect(mockProps.navigation.navigate).not.toHaveBeenCalled();
-    customTabBarTestUtils.expectSavedJumpDispatch(mockProps.navigation);
-    expect(mockProps.navigation.dispatch).toHaveBeenCalledTimes(1);
+    customTabBarTestUtils.expectSavedTabPress(mockProps);
+    customTabBarTestUtils.expectSavedJumpDispatch(mockProps);
+    expect(mockProps.navigateToTab).toHaveBeenCalledTimes(1);
   });
 
   it('renders the cart tab when another route is active', () => {
@@ -161,7 +160,6 @@ describe('CustomTabBar', () => {
           { key: 'cart-key', name: 'cart-tab', params: {} },
           mockProps.state.routes[2],
         ],
-        routeNames: ['index', 'saved', 'cart-tab', 'categories'],
       },
       descriptors: {
         ...mockProps.descriptors,
@@ -186,7 +184,6 @@ describe('CustomTabBar', () => {
           { key: 'cart-key', name: 'cart-tab', params: {} },
           mockProps.state.routes[2],
         ],
-        routeNames: ['index', 'saved', 'cart-tab', 'categories'],
       },
       descriptors: {
         ...mockProps.descriptors,
@@ -219,14 +216,13 @@ describe('CustomTabBar', () => {
 
     fireEvent.press(screen.getByRole('tab', { name: 'Saved' }));
 
-    customTabBarTestUtils.expectSavedTabPress(mockProps.navigation);
-    expect(mockProps.navigation.navigate).not.toHaveBeenCalled();
-    customTabBarTestUtils.expectSavedJumpDispatch(mockProps.navigation);
+    customTabBarTestUtils.expectSavedTabPress(mockProps);
+    customTabBarTestUtils.expectSavedJumpDispatch(mockProps);
   });
 
   it('does not navigate when tab press is prevented', () => {
     jest
-      .mocked(mockProps.navigation.emit)
+      .mocked(mockProps.emitter.emit)
       .mockReturnValue({ defaultPrevented: true } as never);
 
     render(<CustomTabBar {...mockProps} />);
@@ -234,9 +230,8 @@ describe('CustomTabBar', () => {
     fireEvent(screen.getByRole('tab', { name: 'Saved' }), 'pressIn');
     fireEvent.press(screen.getByRole('tab', { name: 'Saved' }));
 
-    customTabBarTestUtils.expectSavedTabPress(mockProps.navigation);
-    expect(mockProps.navigation.navigate).not.toHaveBeenCalled();
-    expect(mockProps.navigation.dispatch).not.toHaveBeenCalled();
+    customTabBarTestUtils.expectSavedTabPress(mockProps);
+    expect(mockProps.navigateToTab).not.toHaveBeenCalled();
   });
 
   it('emits a single tabPress when pressOut fires before press', () => {
@@ -251,14 +246,14 @@ describe('CustomTabBar', () => {
     fireEvent.press(saved);
 
     const tabPressCalls = jest
-      .mocked(mockProps.navigation.emit)
+      .mocked(mockProps.emitter.emit)
       .mock.calls.filter(
         ([event]) =>
           (event as { type?: string }).type === 'tabPress' &&
           (event as { target?: string }).target === 'saved-key'
       );
     expect(tabPressCalls).toHaveLength(1);
-    expect(mockProps.navigation.dispatch).toHaveBeenCalledTimes(1);
+    expect(mockProps.navigateToTab).toHaveBeenCalledTimes(1);
   });
 
   it('triggers haptics on tab press-in when platform is not web', () => {

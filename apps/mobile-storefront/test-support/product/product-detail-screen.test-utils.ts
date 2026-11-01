@@ -203,9 +203,11 @@ export function findNodeWithContentPadding(
     return null;
   }
 
-  const contentStyle = StyleSheet.flatten(node.props?.contentContainerStyle) as
-    | { paddingBottom?: number }
-    | undefined;
+  const contentStyle = StyleSheet.flatten(
+    node.props?.contentContainerStyle as Parameters<
+      typeof StyleSheet.flatten
+    >[0]
+  ) as { paddingBottom?: number } | undefined;
   if (contentStyle?.paddingBottom === paddingBottom) {
     return node;
   }

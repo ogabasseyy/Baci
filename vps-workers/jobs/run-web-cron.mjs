@@ -3,8 +3,9 @@
  * Calls retained CRON_SECRET-gated web cron endpoints from the VPS schedule.
  */
 
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { config } from 'dotenv';
+import { isEntrypoint } from '../lib/is-entrypoint.mjs';
 
 // These paths expose CRON_SECRET-gated wrappers that delegate to the underlying
 // scheduled work. The VPS worker must not call OAuth callbacks.
@@ -212,8 +213,7 @@ async function main() {
 }
 
 if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
+  isEntrypoint(import.meta.url)
 ) {
   await main();
 }

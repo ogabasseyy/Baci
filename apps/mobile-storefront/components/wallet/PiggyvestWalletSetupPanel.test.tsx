@@ -24,8 +24,11 @@ jest.mock('@/stores/auth-store', () => ({
 }));
 
 const setup = (state: ReturnType<typeof usePiggyvestWalletSetup>['state']) => ({
+  scopeKey: 'merchant:user',
   account: null,
   state,
+  recoverable: false,
+  reviewRequired: false,
   justCreated: false,
   acknowledgeReady: jest.fn(),
   hasCheckError: false,
@@ -34,6 +37,7 @@ const setup = (state: ReturnType<typeof usePiggyvestWalletSetup>['state']) => ({
   submitting: false,
   refresh: jest.fn(),
   submit: jest.fn(async () => undefined),
+  recover: jest.fn(async () => undefined),
 });
 const props = {
   colors: Colors.dark,
@@ -109,6 +113,51 @@ it('lets a processing customer leave and retry without creating another account'
   expect(pending.submit).not.toHaveBeenCalled();
   fireEvent.press(screen.getByRole('button', { name: 'Done' }));
   expect(props.onClose).toHaveBeenCalledTimes(1);
+});
+it('shows BVN re-entry only after GET marks the pending setup recoverable', () => {
+  const recoverable = { ...setup('processing'), recoverable: true };
+  render(<PiggyvestWalletSetupPanel {...props} setup={recoverable} />);
+
+  expect(screen.queryByLabelText('BVN')).toBeNull();
+  expect(
+    screen.getByRole('button', {
+      name: 'Re-enter BVN to recover wallet setup',
+    })
+  ).toBeOnTheScreen();
+  expect(recoverable.submit).not.toHaveBeenCalled();
+
+  fireEvent.press(
+    screen.getByRole('button', {
+      name: 'Re-enter BVN to recover wallet setup',
+    })
+  );
+  expect(screen.getByLabelText('BVN')).toBeOnTheScreen();
+  expect(
+    screen.getByRole('button', { name: 'Create account number' })
+  ).toBeOnTheScreen();
+  expect(recoverable.submit).not.toHaveBeenCalled();
+});
+it('never offers BVN re-entry while the setup needs review', () => {
+  render(
+    <PiggyvestWalletSetupPanel
+      {...props}
+      setup={{
+        ...setup('unavailable'),
+        recoverable: true,
+        reviewRequired: true,
+      }}
+    />
+  );
+
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    /Your PiggyVest wallet setup needs review\./
+  );
+  expect(screen.queryByLabelText('BVN')).toBeNull();
+  expect(
+    screen.queryByRole('button', {
+      name: 'Re-enter BVN to recover wallet setup',
+    })
+  ).toBeNull();
 });
 it('keeps unavailable status distinct from a nonexistent account and permits retry', () => {
   const failed = { ...setup('unavailable'), hasCheckError: true };

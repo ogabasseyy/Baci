@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import { requestPrefundedCardProviderJson } from './prefunded-card-provider-request';
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
+import {
+  jsonResponse,
+  liveJustSubmittedNotFound,
+  liveTransactionStatus,
+} from './transaction-status-live.test-support';
 
 const operationId = '11111111-1111-4111-8111-111111111111';
 const reservation = {
@@ -12,35 +18,8 @@ const reservation = {
   providerCustomerId: 'source-customer',
   reference: 'our-reference',
 };
-function productionIdentity(status: 'successful' | 'failed' = 'successful') {
-  return {
-    environment: 'production',
-    wallet: {
-      id: 'source',
-      business_id: 'business',
-      api_customer_id: 'source-customer',
-      currency: 'NGN',
-      status: 'active',
-      is_frozen: false,
-    },
-    transaction: {
-      id: 'transaction',
-      category: 'p2p',
-      status,
-      customer_id: 'business',
-      source_wallet: 'source',
-      destination_wallet: 'destination',
-      amount: 2000,
-      fee: 0,
-      reference: 'provider-reference',
-      third_party_reference: 'our-reference',
-      internal_reference: 'transaction',
-    },
-  };
-}
 function ports() {
   return {
-    environment: 'production' as const,
     loadDispatched: vi.fn().mockResolvedValue(reservation),
     queryProvider: vi.fn().mockResolvedValue({
       status: true,
@@ -52,12 +31,11 @@ function ports() {
         third_party_reference: 'our-reference',
         amount: 2000,
         fee: 0,
-        customer_id: 'business',
+        customer_id: 'source-customer',
         source_wallet: 'source',
         destination_wallet: 'destination',
       },
     }),
-    resolveIdentity: vi.fn().mockResolvedValue(productionIdentity()),
     settle: vi.fn().mockResolvedValue('confirmed'),
     release: vi.fn().mockResolvedValue('released'),
   };
@@ -114,56 +92,6 @@ describe('primary savings reconciliation', () => {
     ).toEqual({ status: 'pending' });
     expect(dependencies.settle).not.toHaveBeenCalled();
   });
-  it.each([
-    'success',
-    'failed',
-  ] as const)('keeps production TSQ-only %s pending without settling or releasing', async (status) => {
-    const dependencies = ports();
-    dependencies.queryProvider.mockResolvedValue({
-      status: true,
-      data: {
-        status,
-        reference: reservation.reference,
-        amount: reservation.amountKobo,
-      },
-    });
-
-    expect(
-      await reconcilePrimaryWalletSavings(operationId, dependencies)
-    ).toEqual({ status: 'pending' });
-    expect(dependencies.resolveIdentity).toHaveBeenCalledTimes(1);
-    expect(dependencies.settle).not.toHaveBeenCalled();
-    expect(dependencies.release).not.toHaveBeenCalled();
-  });
-  it('keeps a rich business-scoped transfer pending when wallet identity corroboration is incomplete', async () => {
-    const dependencies = ports();
-    dependencies.queryProvider.mockResolvedValue({
-      status: true,
-      data: {
-        status: 'successful',
-        id: 'transaction',
-        internal_reference: 'transaction',
-        reference: 'provider-reference',
-        third_party_reference: 'our-reference',
-        amount: 2000,
-        fee: 0,
-        customer_id: 'business',
-        source_wallet: 'source',
-        destination_wallet: 'destination',
-      },
-    });
-    const resolveIdentity = vi.fn().mockResolvedValue(null);
-
-    expect(
-      await reconcilePrimaryWalletSavings(operationId, {
-        ...dependencies,
-        resolveIdentity,
-      })
-    ).toEqual({ status: 'pending' });
-    expect(resolveIdentity).toHaveBeenCalledTimes(1);
-    expect(dependencies.settle).not.toHaveBeenCalled();
-    expect(dependencies.release).not.toHaveBeenCalled();
-  });
   it('does not claim confirmation when the atomic settlement is unconfirmed', async () => {
     const dependencies = ports();
     dependencies.settle.mockRejectedValue(new Error('private database error'));
@@ -187,14 +115,11 @@ describe('primary savings reconciliation', () => {
         third_party_reference: 'our-reference',
         amount: 2000,
         fee: 0,
-        customer_id: 'business',
+        customer_id: 'source-customer',
         source_wallet: 'source',
         destination_wallet: 'destination',
       },
     });
-    dependencies.resolveIdentity.mockResolvedValue(
-      productionIdentity('failed')
-    );
     dependencies.release.mockResolvedValue(outcome);
     expect(
       await reconcilePrimaryWalletSavings(operationId, dependencies)
@@ -220,44 +145,11 @@ describe('primary savings reconciliation', () => {
         third_party_reference: 'another-operation',
         amount: 2000,
         fee: 0,
-        customer_id: 'business',
+        customer_id: 'source-customer',
         source_wallet: 'source',
         destination_wallet: 'destination',
       },
     });
-    dependencies.resolveIdentity.mockResolvedValue(
-      productionIdentity('failed')
-    );
-    expect(
-      await reconcilePrimaryWalletSavings(operationId, dependencies)
-    ).toEqual({ status: 'pending' });
-    expect(dependencies.settle).not.toHaveBeenCalled();
-    expect(dependencies.release).not.toHaveBeenCalled();
-  });
-  it('keeps rich staging failure pending without releasing the hold', async () => {
-    const dependencies = {
-      ...ports(),
-      environment: 'staging' as const,
-    };
-    dependencies.queryProvider.mockResolvedValue({
-      status: true,
-      data: {
-        status: 'failed',
-        id: 'transaction',
-        internal_reference: 'transaction',
-        reference: 'provider-reference',
-        third_party_reference: 'our-reference',
-        amount: 2000,
-        fee: 0,
-        customer_id: 'business',
-        source_wallet: 'source',
-        destination_wallet: 'destination',
-      },
-    });
-    dependencies.resolveIdentity.mockResolvedValue({
-      environment: 'staging',
-    });
-
     expect(
       await reconcilePrimaryWalletSavings(operationId, dependencies)
     ).toEqual({ status: 'pending' });
@@ -277,14 +169,11 @@ describe('primary savings reconciliation', () => {
           third_party_reference: 'our-reference',
           amount: 2000,
           fee: 0,
-          customer_id: 'business',
+          customer_id: 'source-customer',
           source_wallet: 'source',
           destination_wallet: 'destination',
         },
       });
-      dependencies.resolveIdentity.mockResolvedValue(
-        productionIdentity('failed')
-      );
       if (outcome instanceof Error)
         dependencies.release.mockRejectedValue(outcome);
       else dependencies.release.mockResolvedValue(outcome);
@@ -294,5 +183,93 @@ describe('primary savings reconciliation', () => {
       expect(dependencies.settle).not.toHaveBeenCalled();
       expect(dependencies.release).toHaveBeenCalledTimes(1);
     }
+  });
+  describe('money moves only on a fully bound record', () => {
+    const binding = {
+      reference: reservation.reference,
+      amountKobo: reservation.amountKobo,
+      sourceWalletId: reservation.sourceWalletId,
+      destinationWalletId: reservation.destinationWalletId,
+      customerId: reservation.providerCustomerId,
+    };
+    async function providerFailure(status: number, body: unknown) {
+      return await requestPrefundedCardProviderJson({
+        url: 'https://staging.piggyvest.business/api/v1/transaction/verify',
+        token: 'synthetic-token',
+        timeoutMs: 1000,
+        maxResponseBytes: 65536,
+        fetchImplementation: async () => jsonResponse(body, status),
+        init: { method: 'GET' },
+      }).then(
+        () => {
+          throw new Error('Expected the provider request to reject');
+        },
+        (error: unknown) => error
+      );
+    }
+
+    it.each([
+      'success',
+      'failed',
+    ])('neither settles nor releases on a reference, amount and %s match alone', async (status) => {
+      const dependencies = ports();
+      dependencies.queryProvider.mockResolvedValue({
+        status: true,
+        data: { status, reference: 'our-reference', amount: 2000 },
+      });
+      expect(
+        await reconcilePrimaryWalletSavings(operationId, dependencies)
+      ).toEqual({ status: 'pending' });
+      expect(dependencies.settle).not.toHaveBeenCalled();
+      expect(dependencies.release).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a TSQ 404', 404, liveJustSubmittedNotFound],
+      ['an uncertain 500', 500, { status: false }],
+    ])('never releases on %s', async (_label, status, body) => {
+      const dependencies = ports();
+      dependencies.queryProvider.mockRejectedValue(
+        await providerFailure(status, body)
+      );
+      expect(
+        await reconcilePrimaryWalletSavings(operationId, dependencies)
+      ).toEqual({ status: 'pending' });
+      expect(dependencies.settle).not.toHaveBeenCalled();
+      expect(dependencies.release).not.toHaveBeenCalled();
+    });
+
+    it('never settles a matching success whose destination is not the goal wallet', async () => {
+      const dependencies = ports();
+      const live = liveTransactionStatus(binding, 'successful');
+      dependencies.queryProvider.mockResolvedValue({
+        ...live,
+        data: { ...live.data, destination_wallet: 'another-goal' },
+      });
+      expect(
+        await reconcilePrimaryWalletSavings(operationId, dependencies)
+      ).toEqual({ status: 'pending' });
+      expect(dependencies.settle).not.toHaveBeenCalled();
+    });
+
+    it('releases once on a terminal failure of the exact live record', async () => {
+      const dependencies = ports();
+      const live = liveTransactionStatus(binding, 'failed');
+      dependencies.queryProvider.mockResolvedValue(live);
+      expect(
+        await reconcilePrimaryWalletSavings(operationId, dependencies)
+      ).toEqual({ status: 'cancelled' });
+      expect(dependencies.settle).not.toHaveBeenCalled();
+      expect(dependencies.release).toHaveBeenCalledOnce();
+      expect(dependencies.release).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'failed',
+          providerTransactionId: live.data.id,
+          reference: 'our-reference',
+          sourceWalletId: 'source',
+          destinationWalletId: 'destination',
+        })
+      );
+    });
   });
 });

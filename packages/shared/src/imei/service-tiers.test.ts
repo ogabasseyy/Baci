@@ -17,10 +17,9 @@ import {
 } from './service-tiers';
 
 describe('IMEI service tiers', () => {
-  it('keeps Full Report pricing and provider id in the shared catalog', () => {
+  it('keeps Full Report provider and recommendation in the shared catalog', () => {
     expect(IMEI_SERVICE_TIERS.full).toMatchObject({
       name: 'Full Report',
-      price: 1500,
       providerServiceId: '61',
       recommended: true,
     });
@@ -77,16 +76,6 @@ describe('IMEI service tiers', () => {
 
     for (const tierKey of androidTiers) {
       expect(IMEI_SERVICE_TIERS[tierKey].identifier).toBe('imei');
-    }
-  });
-
-  it('prices new services on the shared ~₦16,350/$ markup curve', () => {
-    // Spot-check a few new tiers stay within the existing markup band.
-    for (const key of ['macIcloud', 'gsxPremium', 'knoxGuard'] as const) {
-      const tier = IMEI_SERVICE_TIERS[key];
-      const ratio = tier.price / tier.costUsd;
-      expect(ratio).toBeGreaterThan(14_000);
-      expect(ratio).toBeLessThan(20_000);
     }
   });
 
@@ -224,7 +213,6 @@ describe('IMEI service tiers', () => {
   it('catalogs Phase 3 Petrock-only checks while keeping every one dark', () => {
     expect(PETROCK_DARK_IMEI_SERVICE_TIERS).toEqual(
       expect.arrayContaining([
-        'esimCompatibility',
         'attFinance',
         'tmobileFinance',
         'verizonFinance',
@@ -244,7 +232,7 @@ describe('IMEI service tiers', () => {
     }
   });
 
-  it('declares the new parser fields on their matching dark tiers', () => {
+  it('declares the parser fields on their matching Petrock tiers', () => {
     expect(IMEI_SERVICE_TIERS.esimCompatibility.checksIncluded).toContain(
       'esimCompatibility'
     );

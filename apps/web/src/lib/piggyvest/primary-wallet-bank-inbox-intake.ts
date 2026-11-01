@@ -4,11 +4,18 @@ import { bankTransferInflowSuccessEventSchema } from '@/schemas/piggyvest/events
 import { readPrimaryWalletBankInboxRuntime } from './primary-wallet-bank-inbox-runtime';
 import { createPrimaryWalletBankInboxStore } from './primary-wallet-bank-inbox-store';
 import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
+import {
+  acceptedWebhookSecrets,
+  familyArchivedSecrets,
+  type WebhookKeyScope,
+} from './webhook-key-archive';
 
 export async function dispatchPrimaryWalletBankInboxIntake(input: {
   rawBody: Uint8Array;
   signature: string | null;
   env?: NodeJS.ProcessEnv;
+  /** `replay` also accepts this family's archived keys past their overlap. */
+  keyScope?: WebhookKeyScope;
 }) {
   const headers = { 'Cache-Control': 'no-store' };
   try {
@@ -17,13 +24,20 @@ export async function dispatchPrimaryWalletBankInboxIntake(input: {
     if (!input.rawBody.byteLength || input.rawBody.byteLength > 65536)
       throw new Error('Invalid envelope');
     if (
-      ![config.webhookSecret, ...(config.retainedWebhookSecrets ?? [])].some(
-        (secret) =>
-          verifyPiggyvestPayloadSignature({
-            payload: input.rawBody,
-            signature: input.signature,
-            secret,
-          })
+      !acceptedWebhookSecrets(
+        config,
+        familyArchivedSecrets(
+          'bank',
+          input.env ?? process.env,
+          new Date(),
+          input.keyScope ?? 'ingress'
+        )
+      ).some((secret) =>
+        verifyPiggyvestPayloadSignature({
+          payload: input.rawBody,
+          signature: input.signature,
+          secret,
+        })
       )
     )
       throw new Error('Invalid signature');

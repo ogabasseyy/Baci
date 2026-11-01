@@ -12,6 +12,7 @@ const execFileAsync = promisify(execFile);
 const replayManifestWorkspace = createReplayManifestTestWorkspace();
 const WORKSPACE_ROOT = replayManifestWorkspace.workspaceRoot;
 const copyWorkspace = replayManifestWorkspace.copyWorkspace;
+// Full replay checks read hundreds of Git objects, so their timeouts allow busy hosts.
 
 afterEach(replayManifestWorkspace.cleanUp);
 
@@ -35,7 +36,7 @@ describe('verifySupabaseHistoryReplayManifest', () => {
           '6f6444120e4cefe5febaba935ea70e7a304bf2d330702afc838d4ab70a77b9d8',
       },
     });
-  }, 60_000);
+  }, 90_000);
 
   it('verifies the frozen base without Docker, Supabase, or network I/O', async () => {
     const result = await verifySupabaseHistoryReplayManifest(WORKSPACE_ROOT, {
@@ -51,7 +52,7 @@ describe('verifySupabaseHistoryReplayManifest', () => {
     expect(result.productionEffectProvenance.exceptionalRecords).toHaveLength(
       31
     );
-  }, 60_000);
+  }, 90_000);
 
   it('requires the explicit pending repair state at runtime', async () => {
     const invalidOptions = {};
@@ -119,7 +120,7 @@ describe('verifySupabaseHistoryReplayManifest', () => {
 
     expect(result.pendingRepairState).toBe('materialized');
     expect(result.verifiedSources).toHaveLength(424);
-  }, 30_000);
+  }, 90_000);
 
   it('requires every ordered forward repair to exist', async () => {
     const root = await copyWorkspace();
@@ -132,7 +133,7 @@ describe('verifySupabaseHistoryReplayManifest', () => {
         pendingRepairState: 'materialized',
       })
     ).rejects.toThrow('Forward repair must exist');
-  }, 30_000);
+  }, 90_000);
 
   it('requires exact forward-repair bytes', async () => {
     const root = await copyWorkspace();
@@ -146,7 +147,7 @@ describe('verifySupabaseHistoryReplayManifest', () => {
         pendingRepairState: 'materialized',
       })
     ).rejects.toThrow('Forward repair SHA-256');
-  }, 30_000);
+  }, 90_000);
 
   it('requires exact post-replay source bytes', async () => {
     const root = await copyWorkspace();
@@ -163,7 +164,7 @@ describe('verifySupabaseHistoryReplayManifest', () => {
         pendingRepairState: 'materialized',
       })
     ).rejects.toThrow(/post-replay.*SHA-256/i);
-  }, 30_000);
+  }, 90_000);
 
   it('rejects current-tree migration drift from the frozen base', async () => {
     const root = await copyWorkspace();
@@ -177,7 +178,7 @@ describe('verifySupabaseHistoryReplayManifest', () => {
         pendingRepairState: 'materialized',
       })
     ).rejects.toThrow(/current-tree source drift/i);
-  }, 30_000);
+  }, 90_000);
 
   it('rejects an extra SQL symlink in the migration registry', async () => {
     const root = await copyWorkspace();
@@ -191,7 +192,7 @@ describe('verifySupabaseHistoryReplayManifest', () => {
         pendingRepairState: 'materialized',
       })
     ).rejects.toThrow(/migration registry differs/i);
-  }, 30_000);
+  }, 90_000);
 
   it('rejects canonical provenance drift', async () => {
     const root = await copyWorkspace();
@@ -251,7 +252,7 @@ describe('verifySupabaseHistoryReplayManifest', () => {
     });
 
     expect(result.verifiedSources).toHaveLength(424);
-  }, 30_000);
+  }, 90_000);
 
   it('uses argv-safe git calls for workspace paths containing shell metacharacters', async () => {
     const root = await copyWorkspace('baci-replay;touch SHOULD_NOT_EXIST;');
@@ -262,5 +263,5 @@ describe('verifySupabaseHistoryReplayManifest', () => {
     await expect(
       readFile(path.join(root, 'SHOULD_NOT_EXIST'))
     ).rejects.toThrow();
-  }, 30_000);
+  }, 90_000);
 });

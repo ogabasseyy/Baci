@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { type ComponentProps, createRef } from 'react';
-import type { TextInput } from 'react-native';
+import type { TextInputInstance } from 'react-native';
 import Colors from '@/constants/Colors';
 import { LoginScreenContent } from './LoginScreenContent';
 
@@ -29,7 +29,7 @@ function createProps(): ComponentProps<typeof LoginScreenContent> {
     isVerifyingRef: { current: false },
     otp: '',
     otpError: null,
-    otpInputRef: createRef<TextInput>(),
+    otpInputRef: createRef<TextInputInstance>(),
     password: '',
     passwordError: null,
     setAuthMethod: jest.fn(),

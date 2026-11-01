@@ -3,6 +3,7 @@ import { onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { PIGGYVEST_WALLET_SETUP as policy } from '@/config/piggyvest-wallet-setup';
+import { isPrimaryWalletReviewRequired } from '@/lib/piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi as api } from '@/lib/piggyvest-primary-wallet';
 import { PiggyvestPrimaryWalletSchemas } from '@/schemas/piggyvest-primary-wallet';
 import { useAuthStore } from '@/stores/auth-store';
@@ -28,6 +29,7 @@ export function usePiggyvestWalletSetup(merchantId: string, userId: string) {
   );
   const [delayed, setDelayed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [reviewHold, setReviewHold] = useState(false);
   const submittingRef = useRef(false);
   const binding = useRef({ scope, active: true });
   if (binding.current.scope !== scope)
@@ -48,10 +50,16 @@ export function usePiggyvestWalletSetup(merchantId: string, userId: string) {
     retry: 1,
     retryDelay: 1000,
   });
+  const reviewRequired =
+    reviewHold || isPrimaryWalletReviewRequired(query.error);
+  const successfulStatus = query.isSuccess && query.error === null;
+  const recoverable =
+    successfulStatus && !reviewRequired && query.data?.recoverable === true;
 
   useEffect(() => {
     const ticket = binding.current;
     ticket.active = true;
+    setReviewHold(false);
     setSubmitting(false);
     submittingRef.current = false;
     const resume = () => {
@@ -92,8 +100,16 @@ export function usePiggyvestWalletSetup(merchantId: string, userId: string) {
     if (!submittingRef.current) void query.refetch();
   }
 
-  async function submit(input: Input) {
-    if (submittingRef.current || query.data?.attempted || query.data?.account)
+  async function submit(input: Input, recoveryRetry = false) {
+    const attempted = query.data?.attempted === true;
+    if (
+      submittingRef.current ||
+      !successfulStatus ||
+      reviewRequired ||
+      query.data?.account ||
+      (attempted && (!recoveryRetry || !recoverable)) ||
+      (!attempted && query.data?.provisioningStatus !== 'not_started')
+    )
       return;
     const parsed = PiggyvestPrimaryWalletSchemas.create.parse(input);
     if (
@@ -122,6 +138,12 @@ export function usePiggyvestWalletSetup(merchantId: string, userId: string) {
           completedSetup: !!result.account,
         };
       } catch (error) {
+        if (current() && isPrimaryWalletReviewRequired(error)) {
+          setReviewHold(true);
+          client.setQueryData<Snapshot>(queryKey, (current) =>
+            current ? { ...current, recoverable: false } : current
+          );
+        }
         const code =
           error && typeof error === 'object' && 'code' in error
             ? error.code
@@ -134,6 +156,7 @@ export function usePiggyvestWalletSetup(merchantId: string, userId: string) {
           account: null,
           attempted: true,
           completedSetup: false,
+          recoverable: false,
           provisioningStatus: 'pending',
           requiresConsent: false,
         };
@@ -154,6 +177,7 @@ export function usePiggyvestWalletSetup(merchantId: string, userId: string) {
   }
 
   return {
+    scopeKey: scope,
     account: query.data?.account ?? null,
     justCreated: query.data?.completedSetup === true,
     acknowledgeReady: () =>
@@ -169,11 +193,14 @@ export function usePiggyvestWalletSetup(merchantId: string, userId: string) {
           : query.isError
             ? ('unavailable' as const)
             : ('checking' as const),
+    recoverable,
+    reviewRequired,
     hasCheckError: query.isError,
     isChecking: query.isFetching,
     delayed,
     submitting,
     refresh,
-    submit,
+    submit: (input: Input) => submit(input),
+    recover: (input: Input) => submit(input, true),
   };
 }

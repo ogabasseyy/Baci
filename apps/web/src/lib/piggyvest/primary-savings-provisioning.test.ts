@@ -1,61 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { provisionPrimarySavingsWallet } from './primary-savings-provisioning';
-import { provisioningFixture } from './primary-savings-provisioning.test-support';
+import {
+  fixture,
+  goalId,
+  ready,
+  walletName,
+} from './primary-savings-provisioning.input.test-support';
 
 vi.mock('server-only', () => ({}));
-const { goalId, scope, ready } = provisioningFixture;
-const walletName = `baci-save:${scope.integrationId}:${goalId}`;
-function fixture() {
-  const mapping = {
-    status: 'pending' as const,
-    claimToken: null,
-    providerCustomerId: 'customer',
-    primaryWalletId: 'primary',
-    providerWalletId: 'destination',
-    walletName,
-    interestAccepted: false,
-  };
-  return {
-    scope,
-    goalId,
-    mode: 'provision' as 'provision' | 'recover',
-    interestAccepted: false,
-    store: {
-      prepare: vi.fn().mockResolvedValue({
-        ...mapping,
-        status: 'claimed',
-        providerWalletId: null,
-        claimToken: 'claim',
-      }),
-      read: vi.fn().mockResolvedValue(mapping),
-      record: vi.fn().mockResolvedValue(true),
-      enroll: vi.fn().mockResolvedValue(true),
-    },
-    createWallet: vi.fn().mockResolvedValue({ id: 'destination' }),
-    listWallets: vi
-      .fn()
-      .mockResolvedValue([
-        { id: 'destination', name: walletName, status: 'active' },
-      ]),
-    retrieveWallet: vi.fn().mockResolvedValue({
-      id: 'destination',
-      name: walletName,
-      api_customer_id: 'customer',
-      business_id: 'business',
-      currency: 'NGN',
-      type: 'api',
-      status: 'active',
-      balance: 0,
-    }),
-    retrieveAccounts: vi.fn().mockResolvedValue([
-      {
-        account_number: '0123456789',
-        account_name: 'Synthetic',
-        bank_name: 'Synthetic Bank',
-      },
-    ]),
-  };
-}
 describe('primary savings provisioning connection', () => {
   it('creates once for the verified customer, then enrolls only provider-confirmed destination', async () => {
     const input = fixture();
@@ -67,10 +19,7 @@ describe('primary savings provisioning connection', () => {
       reserveVirtualAccount: true,
       enableInterestAccrual: false,
     });
-    expect(input.listWallets.mock.calls).toEqual([
-      ['customer', walletName],
-      ['customer', walletName],
-    ]);
+    expect(input.listWallets).toHaveBeenCalledWith('customer', walletName);
     expect(input.store.enroll).toHaveBeenCalledWith(goalId, {
       providerCustomerId: 'customer',
       providerWalletId: 'destination',

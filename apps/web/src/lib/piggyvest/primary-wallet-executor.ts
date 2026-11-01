@@ -16,31 +16,42 @@ const VERIFY_SESSION = `SELECT current_database() AS database_name,
   EXISTS(SELECT 1 FROM pg_stat_ssl WHERE pid = pg_backend_pid() AND ssl) AS tls
   FROM pg_roles role WHERE role.rolname = SESSION_USER`;
 
+// Every statement this executor may run, with its exact bound-argument count.
+const STATEMENT_ARITY = new Map<string, number>([
+  [PRIMARY_WALLET_STATEMENTS.read, 1],
+  [PRIMARY_WALLET_STATEMENTS.presence, 1],
+  [PRIMARY_WALLET_STATEMENTS.recoverable, 1],
+  [PRIMARY_WALLET_STATEMENTS.claim, 2],
+  [PRIMARY_WALLET_VERIFICATION_STATEMENT, 2],
+  [PRIMARY_WALLET_STATEMENTS.record, 5],
+  [PRIMARY_WALLET_STATEMENTS.uncertain, 3],
+  [PRIMARY_WALLET_STATEMENTS.reject, 3],
+  [PRIMARY_WALLET_STATEMENTS.release, 3],
+  [PRIMARY_WALLET_STATEMENTS.routingPending, 6],
+  [PRIMARY_WALLET_STATEMENTS.readRouting, 1],
+  [PRIMARY_WALLET_STATEMENTS.resolveRouting, 4],
+  [PRIMARY_WALLET_STATEMENTS.review, 6],
+  [PRIMARY_WALLET_STATEMENTS.ownershipHold, 3],
+  [PRIMARY_WALLET_STATEMENTS.readReview, 1],
+]);
+
 export function createPrimaryWalletExecutor(
   configuration: unknown
 ): PiggyvestProvisioningExecutor {
   const config =
     piggyvestPrimaryWalletRuntimeSchema.parse(configuration).database;
   return async (statement, parameters) => {
-    const expectedCount =
-      statement === PRIMARY_WALLET_STATEMENTS.read ||
-      statement === PRIMARY_WALLET_STATEMENTS.presence
-        ? 1
-        : statement === PRIMARY_WALLET_STATEMENTS.claim ||
-            statement === PRIMARY_WALLET_VERIFICATION_STATEMENT
-          ? 2
-          : statement === PRIMARY_WALLET_STATEMENTS.record
-            ? 5
-            : statement === PRIMARY_WALLET_STATEMENTS.uncertain ||
-                statement === PRIMARY_WALLET_STATEMENTS.reject ||
-                statement === PRIMARY_WALLET_STATEMENTS.release
-              ? 3
-              : null;
+    const expectedCount = STATEMENT_ARITY.get(statement) ?? null;
     if (
       expectedCount === null ||
       parameters.length !== expectedCount ||
       !parameters.every(
-        (value) => typeof value === 'string' && value.length <= 4096
+        (value, index) =>
+          (typeof value === 'string' && value.length <= 4096) ||
+          (value === null &&
+            ((statement === PRIMARY_WALLET_STATEMENTS.resolveRouting &&
+              index === 3) ||
+              (statement === PRIMARY_WALLET_STATEMENTS.review && index === 5)))
       )
     ) {
       throw new Error('Primary wallet database unavailable');

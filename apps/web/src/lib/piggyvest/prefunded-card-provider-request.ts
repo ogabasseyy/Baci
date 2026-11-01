@@ -45,6 +45,7 @@ async function readBoundedJson(
         // Cleanup is best-effort; preserve the read/timeout failure.
       }
     }
+
     reader.releaseLock();
   }
   const bytes = new Uint8Array(length);
@@ -129,6 +130,9 @@ export async function requestPrefundedCardProviderJson({
       controller.abort()
     );
   } catch (error) {
+    // Abort fence: a request that fails here (byte cap, deadline, HTTP
+    // error, transport) never keeps streaming in the background.
+    controller.abort();
     if (error instanceof Error && error.message.startsWith('PROVIDER_'))
       throw error;
     throw new Error('PROVIDER_UNAVAILABLE');

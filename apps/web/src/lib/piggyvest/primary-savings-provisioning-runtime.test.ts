@@ -4,7 +4,6 @@ import {
   readPrimarySavingsProvisioningRuntime,
   runPrimarySavingsProvisioning,
 } from './primary-savings-provisioning-runtime';
-import { getPrimarySavingsWalletName } from './primary-savings-wallet-name';
 
 const mocks = vi.hoisted(() => ({
   primary: vi.fn(),
@@ -131,10 +130,7 @@ it('wires durable storage and documented provider adapters with a fixed environm
     mode: 'recover',
   });
   const adapter = mocks.provision.mock.calls[0][0];
-  await adapter.listWallets(
-    'customer',
-    `baci-save:${provisioningFixture.scope.integrationId}:${provisioningFixture.goalId}`
-  );
+  await adapter.listWallets('customer', provisioningFixture.walletName);
   await adapter.retrieveWallet('wallet');
   await adapter.retrieveAccounts('wallet');
   await adapter.createWallet({
@@ -149,41 +145,20 @@ it('wires durable storage and documented provider adapters with a fixed environm
   };
   expect(mocks.list).toHaveBeenCalledWith(provider, {
     customerId: 'customer',
-    walletName: `baci-save:${provisioningFixture.scope.integrationId}:${provisioningFixture.goalId}`,
+    walletName: provisioningFixture.walletName,
+  });
+  // A wallet-bound intent may carry the legacy name: the listing must use
+  // the stored name it is given, never one rebuilt from the ids.
+  const legacyName = `baci-save:${provisioningFixture.scope.integrationId}:${provisioningFixture.goalId}`;
+  await adapter.listWallets('customer', legacyName);
+  expect(mocks.list).toHaveBeenLastCalledWith(provider, {
+    customerId: 'customer',
+    walletName: legacyName,
   });
   expect(mocks.wallet).toHaveBeenCalledWith(provider, 'wallet');
   expect(mocks.accounts).toHaveBeenCalledWith(provider, 'wallet');
   expect(mocks.create).toHaveBeenCalledWith(
     provider,
     expect.objectContaining({ enableInterestAccrual: false })
-  );
-});
-it.each([
-  [
-    'canonical',
-    getPrimarySavingsWalletName(
-      provisioningFixture.scope.integrationId,
-      provisioningFixture.goalId
-    ),
-  ],
-  [
-    'legacy',
-    `baci-save:${provisioningFixture.scope.integrationId}:${provisioningFixture.goalId}`,
-  ],
-])('passes the supplied %s wallet name through unchanged', async (_label, walletName) => {
-  await runPrimarySavingsProvisioning({
-    configuration: provisioningFixture.configuration,
-    scope: provisioningFixture.scope,
-    goalId: provisioningFixture.goalId,
-    mode: 'recover',
-  });
-  const adapter = mocks.provision.mock.calls[0][0];
-  await adapter.listWallets('customer', walletName);
-  expect(mocks.list).toHaveBeenCalledWith(
-    {
-      token: 'test-only-token',
-      baseUrl: 'https://staging.piggyvest.business',
-    },
-    { customerId: 'customer', walletName }
   );
 });

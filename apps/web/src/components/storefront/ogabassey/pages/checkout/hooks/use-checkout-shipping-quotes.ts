@@ -9,7 +9,7 @@ import {
 } from '../should-fetch-checkout-shipping-quotes';
 import type { ShippingQuote } from '../types';
 import { resetDeliveryQuotesForAddressChange } from '../utils';
-import { buildCheckoutShippingQuoteRequestKey } from './build-checkout-shipping-quote-request-key';
+import { currentCheckoutShippingRequestKey } from './checkout-shipping-current-request-key';
 import {
   invalidatePendingQuoteRequests,
   loadCheckoutShippingQuotes,
@@ -58,7 +58,11 @@ export function useCheckoutShippingQuotes({
       matched?.providerRateId?.trim() || ''
     );
   };
-  const [resolvedQuoteRequestKey, setResolvedQuoteRequestKey] = useState('');
+  const [resolvedQuoteRequest, setResolvedQuoteRequest] = useState<{
+    key: string;
+    deliveryPreference: 'door' | 'pickup_station';
+  } | null>(null);
+  const resolvedQuoteRequestKey = resolvedQuoteRequest?.key ?? '';
   const quoteRequestSequence = useRef(0);
   const quoteAbortController = useRef<AbortController | null>(null);
   const resetQuotesForAddressChange = (options?: {
@@ -66,7 +70,7 @@ export function useCheckoutShippingQuotes({
   }) => {
     invalidatePendingQuoteRequests(quoteRequestSequence, quoteAbortController);
     setIsLoadingQuotes(false);
-    setResolvedQuoteRequestKey('');
+    setResolvedQuoteRequest(null);
     resetDeliveryQuotesForAddressChange({
       setDeliveryMethod,
       setSelectedQuoteId,
@@ -113,7 +117,8 @@ export function useCheckoutShippingQuotes({
             preferredSelectedQuoteId: selectedQuoteId || undefined,
             preferredProviderRateId: selectedProviderRateId || undefined,
             requestSequence: quoteRequestSequence,
-            setResolvedQuoteRequestKey,
+            setResolvedQuoteRequestKey: (key) =>
+              setResolvedQuoteRequest(key ? { key, deliveryPreference } : null),
             setIsLoadingQuotes,
             setSelectedQuoteId,
             setSelectedProviderRateId: (providerRateId: string) =>
@@ -138,29 +143,21 @@ export function useCheckoutShippingQuotes({
           deliveryMethod,
           isStreetReady: !isNewAddressMode || isNewDeliveryAddressReady,
         });
-  const savedAddress = addresses.find(
-    (address) => address.id === selectedAddressId
-  );
-  const savedParts = savedAddress?.address
-    .split(',')
-    .map((part) => part.trim());
-  const currentQuoteRequestKey = buildCheckoutShippingQuoteRequestKey(
-    {
-      address: isNewAddressMode
-        ? newAddressStreet
-        : (savedAddress?.address ?? ''),
-      state: isNewAddressMode ? newAddressState : (savedParts?.at(-1) ?? ''),
-      city: isNewAddressMode ? newAddressCity : (savedParts?.at(-2) ?? ''),
-      deliveryPreference: currentDeliveryPreference,
-      merchantId,
-      latitude: deliveryCoordinates?.latitude,
-      longitude: deliveryCoordinates?.longitude,
-      countryCode: merchantCountry,
-      country: getCountryByCode(merchantCountry)?.name ?? 'Nigeria',
-      cartSubtotal: checkoutCartCatalogSubtotal,
-    },
-    checkoutCart
-  );
+  const currentRequestKey = currentCheckoutShippingRequestKey({
+    isHydrated,
+    merchantId,
+    merchantCountry,
+    checkoutCart,
+    checkoutCartCatalogSubtotal,
+    deliveryCoordinates,
+    isNewAddressMode,
+    newAddressStreet,
+    newAddressCity,
+    newAddressState,
+    addresses,
+    selectedAddressId,
+    deliveryPreference: currentDeliveryPreference,
+  });
 
   // Refresh is keyed by address/cart inputs; callback identities must not trigger new quotes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: preserve input-keyed refresh semantics
@@ -238,7 +235,6 @@ export function useCheckoutShippingQuotes({
       }
     }
   }, [
-    currentQuoteRequestKey,
     deliveryMethod,
     selectedAddressId,
     isNewAddressMode,
@@ -249,6 +245,7 @@ export function useCheckoutShippingQuotes({
     newAddressCity,
     addresses,
     merchantId,
+    currentRequestKey,
     quoteItemsFingerprint,
     resolvedQuoteRequestKey,
     deliveryCoordinates?.latitude,
@@ -269,7 +266,8 @@ export function useCheckoutShippingQuotes({
     isLoadingQuotes,
     hasResolvedQuotes:
       Boolean(resolvedQuoteRequestKey) &&
-      resolvedQuoteRequestKey === currentQuoteRequestKey,
+      resolvedQuoteRequest?.deliveryPreference === currentDeliveryPreference &&
+      resolvedQuoteRequestKey === currentRequestKey,
     selectedQuoteId,
     setSelectedQuoteId,
     resetQuotesForAddressChange,

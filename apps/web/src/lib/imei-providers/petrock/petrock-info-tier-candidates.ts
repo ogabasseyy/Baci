@@ -42,12 +42,10 @@ function unavailableCandidate(reason: string): PetrockInfoTierCandidate {
  * until fixtureVerified is replaced by a reviewed active tier binding.
  */
 export const PETROCK_INFO_TIER_CANDIDATES = {
-  esimCompatibility: candidate('1941'),
   refurbishedStatus: unavailableCandidate(
     'No current refurbished-only product'
   ),
   replacementStatus: candidate('1966'),
-  applePartNumber: candidate('1963'),
   attFinance: candidate('1957'),
   tmobileFinance: candidate('746'),
   verizonFinance: candidate('1959'),

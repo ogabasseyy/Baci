@@ -4,10 +4,7 @@ import { piggyvestPrimarySavingsTransferSchemas as schemas } from '@/schemas/pig
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
-import {
-  createPrimaryWalletSavingsIdentityResolver,
-  createSavingsVerifyQueryProvider,
-} from './primary-wallet-savings-reconciliation-runtime';
+import { createSavingsVerifyQueryProvider } from './primary-wallet-savings-reconciliation-runtime';
 import { createPrimaryWalletSavingsReconciliationStore } from './primary-wallet-savings-reconciliation-store';
 
 // Webhook-driven savings reconciliation: outflow webhooks attribute by
@@ -36,18 +33,10 @@ export async function runPrimaryWalletSavingsOutflowReconciliation(input: {
     execute: createPrimaryWalletEvidenceExecutor(configuration),
   });
   const ports = {
-    environment: configuration.environment,
     ...store,
     queryProvider: createSavingsVerifyQueryProvider({
       environment: configuration.environment,
       token,
-      fetchImplementation: input.fetchImplementation,
-    }),
-    resolveIdentity: createPrimaryWalletSavingsIdentityResolver({
-      environment: configuration.environment,
-      integrationId: configuration.integrationId,
-      token,
-      store,
       fetchImplementation: input.fetchImplementation,
     }),
   };

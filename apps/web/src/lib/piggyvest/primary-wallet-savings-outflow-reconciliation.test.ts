@@ -68,27 +68,9 @@ function mockLookup(result: unknown) {
               ? parameters?.includes(operationId)
                 ? reservation
                 : null
-              : statement.includes('claim_savings_reconciliation_checkpoint')
-                ? {
-                    status: 'acquired',
-                    claimToken: '44444444-4444-4444-8444-444444444444',
-                    state: {
-                      stage: null,
-                      fingerprint: null,
-                      cursor: null,
-                      pageDigest: null,
-                    },
-                  }
-                : statement.includes(
-                      'save_savings_reconciliation_checkpoint'
-                    ) ||
-                    statement.includes(
-                      'finish_savings_reconciliation_checkpoint'
-                    )
-                  ? true
-                  : statement.includes('release_failed_savings')
-                    ? 'released'
-                    : 'confirmed',
+              : statement.includes('release_failed_savings')
+                ? 'released'
+                : 'confirmed',
           database_name: 'postgres',
           login_name: configuration.database.login,
           role_name: configuration.database.login,
@@ -129,40 +111,7 @@ it('confirms a matched dispatched operation through the shared proof', async () 
   mockLookup(reservation);
   const fetchImplementation = vi
     .fn()
-    .mockResolvedValueOnce(verifiedResponse('successful'))
-    .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          status: true,
-          data: {
-            id: 'source',
-            business_id: 'business',
-            api_customer_id: 'source-customer',
-            currency: 'NGN',
-            status: 'active',
-            is_frozen: false,
-          },
-        })
-      )
-    )
-    .mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          status: true,
-          data: {
-            id: 'transaction',
-            customer_id: 'source-customer',
-            source_wallet: 'source',
-            destination_wallet: 'destination',
-            status: 'successful',
-            amount: 2000,
-            fee: 0,
-            reference: 'provider-reference',
-            third_party_reference: reservation.reference,
-          },
-        })
-      )
-    );
+    .mockResolvedValue(verifiedResponse('successful'));
   expect(
     await runPrimaryWalletSavingsOutflowReconciliation({
       configuration,
@@ -171,7 +120,7 @@ it('confirms a matched dispatched operation through the shared proof', async () 
       fetchImplementation,
     })
   ).toBe('confirmed');
-  expect(fetchImplementation).toHaveBeenCalledTimes(3);
+  expect(fetchImplementation).toHaveBeenCalledTimes(1);
   expect(String(fetchImplementation.mock.calls[0]?.[0])).toContain(
     `reference=${encodeURIComponent(reservation.reference)}`
   );
@@ -181,7 +130,7 @@ it('confirms a matched dispatched operation through the shared proof', async () 
     )
   ).toBe(true);
 });
-it('keeps staging failed evidence pending because its units and terminal identity are uncorroborated', async () => {
+it('releases a matched operation the provider reports as failed', async () => {
   mockLookup(reservation);
   const fetchImplementation = vi
     .fn()
@@ -193,12 +142,12 @@ it('keeps staging failed evidence pending because its units and terminal identit
       references: [reservation.reference],
       fetchImplementation,
     })
-  ).toBe('pending');
+  ).toBe('cancelled');
   expect(
     mocks.query.mock.calls.some(([statement]) =>
       String(statement).includes('release_failed_savings')
     )
-  ).toBe(false);
+  ).toBe(true);
 });
 it('stays pending when the provider re-query cannot confirm', async () => {
   mockLookup(reservation);

@@ -147,6 +147,30 @@ describe('GET /api/cron/petrock-reconcile', () => {
     });
   });
 
+  it('returns 503 for diagnostic submissions requiring manual review without exposing identifiers', async () => {
+    mocks.claim.mockResolvedValue([
+      {
+        id: 'lookup-secret',
+        lease_token: 'lease-secret',
+        status: 'submission_unknown',
+        reconcile_attempts: 12,
+        merchant_id: 'merchant-secret',
+        tier: 'simLock',
+        provider_order_id: null,
+      },
+    ]);
+    mocks.resolve.mockResolvedValue({
+      kind: 'pending',
+      pollAfterMs: 60000,
+      needsReview: true,
+    });
+    const response = await GET(request());
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body).toMatchObject({ manualReview: 1, pending: 1, failed: 0 });
+    expect(JSON.stringify(body)).not.toContain('lookup-secret');
+  });
+
   it('resolves leased pending provider orders', async () => {
     mocks.claim.mockResolvedValue([
       {

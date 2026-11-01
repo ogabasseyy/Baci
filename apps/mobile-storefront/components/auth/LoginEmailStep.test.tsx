@@ -20,7 +20,7 @@ describe('LoginEmailStep', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
   });
 
   it('renders code sign-in choices and forwards each action', () => {

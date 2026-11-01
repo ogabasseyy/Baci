@@ -1,3 +1,7 @@
+import type {
+  TextProps as NativeTextProps,
+  ViewProps as NativeViewProps,
+} from 'react-native';
 /**
  * Learn more about Light and Dark modes:
  * https://docs.expo.io/guides/color-schemes/
@@ -24,8 +28,8 @@ type ThemeProps = {
   darkColor?: string;
 };
 
-export type TextProps = ThemeProps & DefaultText['props'];
-export type ViewProps = ThemeProps & DefaultView['props'];
+export type TextProps = ThemeProps & NativeTextProps;
+export type ViewProps = ThemeProps & NativeViewProps;
 
 function useThemeColor(
   props: { light?: string; dark?: string },

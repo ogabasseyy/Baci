@@ -44,7 +44,9 @@ describe('@baci/tiktok-business', () => {
     mockNativeModule.initialize.mockRejectedValueOnce(initializationError);
     const TikTokBusiness = await import('./index');
 
-    await expect(TikTokBusiness.initialize()).rejects.toBe(initializationError);
+    await expect(TikTokBusiness.initialize()).rejects.toBe(
+      initializationError
+    );
   });
 
   it('normalizes event data before passing events to native iOS', async () => {

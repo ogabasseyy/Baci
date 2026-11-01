@@ -100,7 +100,7 @@ it.each([
   ],
   ['not JSON', Buffer.from('not-json')],
   ['invalid UTF-8', Buffer.from([0xff, 0xfe, 0x00])],
-])('persists exact signed %s for durable quarantine', async (_label, body) => {
+])('rejects signed %s without enqueueing a primary interest receipt', async (_label, body) => {
   const signed = createHmac('sha512', fixture.config.webhookSecret)
     .update(body)
     .digest('hex');
@@ -109,11 +109,8 @@ it.each([
       rawBody: body,
       signature: signed,
     })
-  ).toBe('accepted');
-  expect(mocks.enqueue).toHaveBeenCalledWith({
-    rawHex: body.toString('hex'),
-    signature: signed,
-  });
+  ).toBe('invalid_payload');
+  expect(mocks.enqueue).not.toHaveBeenCalled();
 });
 it('persists authenticated shape failures for durable worker quarantine', async () => {
   const body = Buffer.from(

@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
 import { cache } from 'react';
 import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
+import { RELATED_BLOG_POST_LIMITS } from '@/config/related-blog-post-limits';
 import { getBlogCacheTag } from '@/lib/blog-cache-tags';
 import { BLOG_LISTING_PAGE_SIZE } from '@/lib/blog-listing-page-size';
 import type {
@@ -16,6 +17,7 @@ import {
   MAX_CATEGORY_GRAPHICS_VALUE_LENGTH,
   normalizeCategoryGraphicsValue,
 } from '@/lib/category-page-product-id-cache';
+import { getCategoryPageProductSelect } from '@/lib/get-category-page-product-select';
 import { getCategoryPageShellData } from '@/lib/get-category-page-shell-data';
 import { hydrateAndSanitizePublicProducts } from '@/lib/hydrate-public-products';
 import { hydrateRelatedBlogProductAvailability } from '@/lib/hydrate-related-blog-product-availability';
@@ -24,7 +26,6 @@ import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings
 import { normalizeStorefrontCategoryValue } from '@/lib/normalize-storefront-category-value';
 import { getOrderedBlogPostProductLinks } from '@/lib/ordered-blog-post-product-links';
 import { getProductScopedCacheTag } from '@/lib/product-cache-tags';
-import { PRODUCT_KEY_SPECS_RELATION_SELECT } from '@/lib/product-key-specs-select';
 import type { Product } from '@/lib/products';
 import {
   filterPublicBlogCategories,
@@ -38,11 +39,16 @@ import {
   normalizeRelatedBlogProducts,
   RELATED_BLOG_PRODUCTS_SELECT,
 } from '@/lib/related-blog-products';
+import { resolveBlogAuthorIdentity } from '@/lib/resolve-blog-author-identity';
 import { selectBlogCatalogProducts } from '@/lib/select-blog-catalog-products';
 import { selectSemanticRelatedBlogPosts } from '@/lib/semantic-related-blog-posts';
 import { generateSlug } from '@/lib/seo-utils';
 import { normalizeOgabasseyBusinessType } from '@/lib/storefront/ogabassey-entity';
-import { STOREFRONT_BLOG_POST_SELECT } from '@/lib/storefront-blog-post-select';
+import {
+  RELATED_BLOG_POST_SELECT,
+  STOREFRONT_BLOG_LISTING_SELECT,
+  STOREFRONT_BLOG_POST_SELECT,
+} from '@/lib/storefront-blog-post-select';
 import { canonicalizeStorefrontMediaUrl } from '@/lib/storefront-media-cdn-url';
 import { readStorefrontMerchantSnapshot } from '@/lib/storefront-merchant-snapshot';
 import { readStorefrontPdpCoreSnapshot } from '@/lib/storefront-pdp-core-snapshot';
@@ -71,13 +77,6 @@ export { getPublicSupabaseClient };
 // blog catalogs. These pages tolerate planner-estimated pagination for large
 // result sets better than production 500s from exact COUNT pressure.
 const PUBLIC_BLOG_COUNT_OPTIONS = { count: 'estimated' as const };
-
-const RELATED_BLOG_POSTS_LIMIT = 3;
-const RELATED_BLOG_POSTS_FETCH_LIMIT = 36;
-const RELATED_BLOG_CATEGORY_FETCH_LIMIT = 24;
-
-const RELATED_BLOG_POST_SELECT =
-  'id, title, slug, excerpt, featured_image_url, category, tags, keywords, published_at, reading_time_minutes';
 
 function getEstimatedPaginationCountFloor({
   count,
@@ -1491,31 +1490,6 @@ interface CategoryPageProductDetailsResult {
   productsQueryFailed: boolean;
 }
 
-const CATEGORY_PAGE_PRODUCT_BASE_SELECT = `
-          id,
-          name,
-          slug,
-          description,
-          price,
-          compare_at_price,
-          images,
-          category,
-          brand,
-          condition,
-          stock,
-          stock_quantity,
-          manage_stock,
-          ${PRODUCT_KEY_SPECS_RELATION_SELECT}
-        `;
-
-function getCategoryPageProductSelect(isCategoryScoped: boolean) {
-  const productCategoriesSelect = isCategoryScoped
-    ? 'product_categories!inner(categories(name, slug))'
-    : 'product_categories(categories(name, slug))';
-
-  return `${CATEGORY_PAGE_PRODUCT_BASE_SELECT}, ${productCategoriesSelect}`;
-}
-
 /**
  * Ranged-page size for assembling the full ID list past the cached window.
  * Matches the PostgREST max-rows clamp (Supabase managed default 1,000) so
@@ -2587,14 +2561,14 @@ async function getCachedBlogPostEnrichment(core: CachedBlogPostCore) {
   };
 
   const recentRelatedPostsPromise = buildRelatedPostsQuery().limit(
-    RELATED_BLOG_POSTS_FETCH_LIMIT
+    RELATED_BLOG_POST_LIMITS.recentFetch
   );
   const sourceBlogCategory =
     typeof post.category === 'string' ? post.category.trim() : '';
   const categoryRelatedPostsPromise = sourceBlogCategory
     ? buildRelatedPostsQuery()
         .eq('category', sourceBlogCategory)
-        .limit(RELATED_BLOG_CATEGORY_FETCH_LIMIT)
+        .limit(RELATED_BLOG_POST_LIMITS.categoryFetch)
     : Promise.resolve({ data: null, error: null });
 
   const [
@@ -2661,7 +2635,7 @@ async function getCachedBlogPostEnrichment(core: CachedBlogPostCore) {
     relatedPosts: selectSemanticRelatedBlogPosts(
       post,
       filterPublicBlogPosts(relatedPostCandidates),
-      RELATED_BLOG_POSTS_LIMIT
+      RELATED_BLOG_POST_LIMITS.display
     ),
     relatedProducts: normalizedRelatedProducts,
   };
@@ -2726,10 +2700,7 @@ async function getCachedBlogListingCore(
 
   let query = supabase
     .from('blog_posts')
-    .select(
-      'id, title, slug, excerpt, featured_image_url, featured_image_alt, featured_image_variants, category, tags, author_name, published_at, classification_revision, reading_time_minutes, view_count',
-      PUBLIC_BLOG_COUNT_OPTIONS
-    )
+    .select(STOREFRONT_BLOG_LISTING_SELECT, PUBLIC_BLOG_COUNT_OPTIONS)
     .eq('merchant_id', merchant.id)
     .eq('status', 'published')
     .not('published_at', 'is', null)
@@ -2947,10 +2918,9 @@ export async function getCachedBlogAuthor(
   if (totalCount === 0) {
     return null;
   }
-  // `identity` is absent only on an out-of-range page (count > 0 but this
-  // ranged window is empty); the route redirects those stale paginated URLs to
-  // the last valid page rather than 404ing a real author.
-  const identity = publicPosts[0];
+  // If an out-of-range page window is empty (count > 0), the route redirects
+  // those stale paginated URLs to the last valid page rather than 404ing.
+  const author = resolveBlogAuthorIdentity(authorName, publicPosts);
 
   return {
     merchant: {
@@ -2960,12 +2930,7 @@ export async function getCachedBlogAuthor(
       logo_url: merchant.logo_url,
       custom_domain: merchant.custom_domain,
     },
-    author: {
-      name: authorName,
-      title: identity?.author_title ?? null,
-      bio: identity?.author_bio ?? null,
-      imageUrl: identity?.author_image_url ?? null,
-    },
+    author,
     posts: publicPosts,
     totalPosts: totalCount,
     currentPage: page,

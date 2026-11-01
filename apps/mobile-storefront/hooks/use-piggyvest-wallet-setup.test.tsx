@@ -26,6 +26,7 @@ const pending = {
   account: null,
   provisioningStatus: 'pending' as const,
   requiresConsent: true,
+  recoverable: false,
 };
 const notStarted = { ...pending, provisioningStatus: 'not_started' as const };
 const ready = {
@@ -37,6 +38,7 @@ const ready = {
   },
   provisioningStatus: 'ready' as const,
   requiresConsent: false,
+  recoverable: false,
 };
 const clients: QueryClient[] = [];
 const listeners = new Set<(state: AppStateStatus) => void>();

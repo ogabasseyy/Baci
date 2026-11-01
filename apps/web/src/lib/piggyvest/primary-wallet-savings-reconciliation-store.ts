@@ -1,8 +1,6 @@
 import 'server-only';
-import type { z } from 'zod';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
 import { piggyvestPrimarySavingsTransferSchemas as schemas } from '@/schemas/piggyvest-primary-savings-transfer';
-import { primaryWalletSavingsReconciliationCheckpointSchemas as checkpointSchemas } from '@/schemas/primary-wallet-savings-reconciliation-checkpoint';
 import type { verifyPrimaryWalletSavingsProof } from './primary-wallet-savings-proof';
 
 type Proof = Extract<
@@ -100,64 +98,6 @@ export function createPrimaryWalletSavingsReconciliationStore(input: {
       )
         throw new Error('Savings settlement unavailable');
       return result;
-    },
-    async withIdentityCheckpoint<T>(
-      operationId: string,
-      work: (checkpoint: {
-        state: z.infer<typeof checkpointSchemas.state>;
-        save: (
-          state: z.infer<typeof checkpointSchemas.state>
-        ) => Promise<boolean>;
-        reset: () => Promise<boolean>;
-      }) => Promise<T>
-    ): Promise<T | null> {
-      const selection = schemas.request.shape.operationId.parse(operationId);
-      const raw = await execute(
-        'SELECT piggyvest_primary.claim_savings_reconciliation_checkpoint($1::uuid,$2::text,$3::uuid) AS result',
-        selection
-      );
-      const claim = checkpointSchemas.claim.safeParse(raw);
-      if (!claim.success) return null;
-      const acquired = claim.data;
-      if (acquired.status !== 'acquired') return null;
-      let released = false;
-      const finish = async (reset: boolean) => {
-        const result = await execute(
-          'SELECT piggyvest_primary.finish_savings_reconciliation_checkpoint($1::uuid,$2::text,$3::jsonb) AS result',
-          JSON.stringify({
-            operationId: selection,
-            claimToken: acquired.claimToken,
-            reset,
-          })
-        );
-        if (result !== true)
-          throw new Error('Savings checkpoint lease unavailable');
-        released = true;
-        return true;
-      };
-      try {
-        return await work({
-          state: acquired.state,
-          save: async (state) => {
-            const validated = checkpointSchemas.state.safeParse(state);
-            if (!validated.success) throw new Error('Invalid checkpoint state');
-            const result = await execute(
-              'SELECT piggyvest_primary.save_savings_reconciliation_checkpoint($1::uuid,$2::text,$3::jsonb) AS result',
-              JSON.stringify({
-                operationId: selection,
-                claimToken: acquired.claimToken,
-                ...validated.data,
-              })
-            );
-            if (typeof result !== 'boolean')
-              throw new Error('Checkpoint save unavailable');
-            return result;
-          },
-          reset: () => finish(true),
-        });
-      } finally {
-        if (!released) await finish(false).catch(() => undefined);
-      }
     },
   };
 }

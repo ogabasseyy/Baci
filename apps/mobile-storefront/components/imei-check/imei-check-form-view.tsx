@@ -36,7 +36,10 @@ interface ImeiCheckFormViewProps {
   isWalletLoading: boolean;
   selectedBrand: ImeiBrandFilter;
   selectedDevice: ImeiDeviceCategory;
-  selectedTier: ImeiServiceTierKey;
+  selectedTier: ImeiServiceTierKey | null;
+  availabilityFailed?: boolean;
+  availabilityLoading?: boolean;
+  onRetryAvailability?: () => void;
   canToggleServices: boolean;
   showAllServices: boolean;
   walletBalance: number;
@@ -50,6 +53,9 @@ interface ImeiCheckFormViewProps {
 }
 
 export function ImeiCheckFormView({
+  availabilityFailed = false,
+  availabilityLoading = false,
+  onRetryAvailability,
   colors,
   currentTier,
   displayedTierKeys,
@@ -79,7 +85,8 @@ export function ImeiCheckFormView({
   const { isKeyboardVisible } = useKeyboard();
   const isWalletReady = !(isWalletLoading || isWalletError);
   const hasEnoughBalance = isWalletReady && walletBalance >= currentTier.price;
-  const needsTopUp = isWalletReady && !hasEnoughBalance;
+  const needsTopUp =
+    selectedTier !== null && isWalletReady && !hasEnoughBalance;
   const shortfall = Math.max(0, currentTier.price - walletBalance);
   const findHint =
     identifier === 'serial'
@@ -88,7 +95,10 @@ export function ImeiCheckFormView({
         ? 'Dial *#06# or Settings › General › About'
         : 'Dial *#06# to find your IMEI';
   const canVerify =
-    isValidDeviceIdentifier(imei, identifier) && hasEnoughBalance;
+    selectedTier !== null &&
+    displayedTierKeys.includes(selectedTier) &&
+    isValidDeviceIdentifier(imei, identifier) &&
+    hasEnoughBalance;
   const walletStatusText = isWalletLoading
     ? 'Loading wallet balance...'
     : isWalletError
@@ -112,6 +122,29 @@ export function ImeiCheckFormView({
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
         >
+          {displayedTierKeys.length === 0 || availabilityFailed ? (
+            <View accessibilityLiveRegion="polite">
+              <Text style={{ color: colors.text }}>
+                {displayedTierKeys.length === 0
+                  ? availabilityLoading
+                    ? 'Checking available services…'
+                    : 'No checks are available for this selection.'
+                  : 'Some services could not be checked.'}
+              </Text>
+              {!availabilityLoading && onRetryAvailability ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry available checks"
+                  onPress={onRetryAvailability}
+                  style={{ minHeight: 44, justifyContent: 'center' }}
+                >
+                  <Text style={{ color: colors.text }}>
+                    Retry available checks
+                  </Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
           <ImeiCheckServiceSelector
             colors={colors}
             displayedTierKeys={displayedTierKeys}
@@ -204,13 +237,15 @@ export function ImeiCheckFormView({
               ) : (
                 <>
                   <Text style={styles.verifyButtonText}>
-                    {isWalletLoading
-                      ? 'Loading wallet...'
-                      : isWalletError
-                        ? 'Wallet unavailable'
-                        : needsTopUp
-                          ? 'Top up to unlock'
-                          : `Verify Now - ${formatServicePrice(currentTier.price)}`}
+                    {selectedTier === null
+                      ? 'Choose a check'
+                      : isWalletLoading
+                        ? 'Loading wallet...'
+                        : isWalletError
+                          ? 'Wallet unavailable'
+                          : needsTopUp
+                            ? 'Top up to unlock'
+                            : `Verify Now - ${formatServicePrice(currentTier.price)}`}
                   </Text>
                   <Ionicons name="sparkles" size={18} color={BRAND.onPrimary} />
                 </>

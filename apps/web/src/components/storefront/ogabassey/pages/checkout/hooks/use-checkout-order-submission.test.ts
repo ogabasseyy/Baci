@@ -363,6 +363,84 @@ describe('useCheckoutOrderSubmission', () => {
       );
     });
 
+    it('continues a reviewed REDVAULT order without re-preparing its completed cart', async () => {
+      const context = freshContext();
+      context.cart.sharedCartEnabled = true;
+      context.cart.sharedCartRef = SHARED_REF;
+      context.cart.sharedCartSyncStatus = 'synced';
+      context.payment.session.method = 'uba_redvault';
+      context.payment.session.redvault.orderReady = {
+        cartId: SHARED_REF.cartId,
+        orderId: 'redvault-order',
+        checkoutFingerprint: 'fp-1',
+      } as never;
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+      expect(prepareSharedCartCheckout).not.toHaveBeenCalled();
+      expect(submitPreparedCheckout).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ kind: 'ready' }),
+        { redvaultPreparedOnly: true }
+      );
+    });
+
+    it('continues a prepared REDVAULT order after the completed cart is cleared by sync', async () => {
+      const context = freshContext();
+      context.cart.sharedCartEnabled = true;
+      context.cart.sharedCartRef = null;
+      context.cart.checkoutCart = [];
+      context.payment.session.method = 'uba_redvault';
+      const identity = {
+        merchantId: 'merchant-1',
+        customerEmail: 'ada@example.com',
+      };
+      const reviewedFingerprint = `uba_redvault:${JSON.stringify({ ...identity, items: [{ product_id: 'p', quantity: 1, price: 100 }] })}`;
+      context.payment.session.redvault.orderReady = {
+        orderId: 'redvault-order',
+        checkoutFingerprint: reviewedFingerprint,
+      } as never;
+      vi.mocked(prepareCheckoutOrderSubmission).mockReturnValue({
+        kind: 'ready',
+        delivery: {},
+        identity: {
+          checkoutFingerprint: `uba_redvault:${JSON.stringify({ ...identity, items: [] })}`,
+        },
+      } as never);
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+      expect(prepareSharedCartCheckout).not.toHaveBeenCalled();
+      expect(submitPreparedCheckout).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          identity: expect.objectContaining({
+            checkoutFingerprint: reviewedFingerprint,
+          }),
+        }),
+        { redvaultPreparedOnly: true }
+      );
+    });
+
+    it('does not bypass cart review for changed REDVAULT checkout details', async () => {
+      const context = freshContext();
+      context.cart.sharedCartEnabled = true;
+      context.cart.sharedCartRef = SHARED_REF;
+      context.cart.sharedCartSyncStatus = 'synced';
+      context.payment.session.method = 'uba_redvault';
+      context.payment.session.redvault.orderReady = {
+        cartId: SHARED_REF.cartId,
+        orderId: 'redvault-order',
+        checkoutFingerprint: 'changed-fingerprint',
+      } as never;
+      vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
+        ok: false,
+        code: 'refresh_required',
+      } as never);
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+      expect(prepareSharedCartCheckout).toHaveBeenCalledOnce();
+      expect(submitPreparedCheckout).not.toHaveBeenCalled();
+    });
+
     it('binds insured shared carts whose display total includes the assurance fee', async () => {
       const context = freshContext();
       context.cart.sharedCartRef = SHARED_REF;

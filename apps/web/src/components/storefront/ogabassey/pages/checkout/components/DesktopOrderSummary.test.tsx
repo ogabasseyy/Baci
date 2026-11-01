@@ -80,6 +80,7 @@ describe('desktop checkout summary visibility', () => {
       remainingAmount: 114,
       checkoutPayWithWallet: false,
       redvaultSummary: null,
+      redvaultOrderReady: false,
       newsletterOptIn: false,
       setNewsletterOptIn: vi.fn(),
       handlePlaceOrder: vi.fn(),
@@ -137,5 +138,14 @@ describe('desktop checkout summary visibility', () => {
     expect(resumedHtml).toContain('512GB / Physical + eSIM / Silver');
     expect(resumedHtml).not.toContain('Wallet Credit');
     expect(resumedHtml).toContain('₦114');
+
+    const preparedHtml = renderToStaticMarkup(
+      <DesktopOrderSummary
+        {...props}
+        paymentMethod="uba_redvault"
+        redvaultOrderReady
+      />
+    );
+    expect(preparedHtml).toContain('Review and continue to UBA');
   });
 });

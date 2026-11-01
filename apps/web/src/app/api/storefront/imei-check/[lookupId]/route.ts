@@ -7,6 +7,10 @@ import {
   getRootDomain,
 } from '@/env';
 import { authenticateApiRequest } from '@/lib/api-auth';
+import {
+  createImeiAccessClient,
+  type ImeiAccessClient,
+} from '@/lib/imei-access';
 import { resolveImeiCustomer } from '@/lib/imei-lookup-fulfillment';
 import { createPetrockClient } from '@/lib/imei-providers/petrock/petrock-client';
 import { resolveClaimedPetrockLookup } from '@/lib/imei-providers/petrock/petrock-lookup-resolution';
@@ -17,7 +21,6 @@ import {
   createRateLimitResponse,
 } from '@/lib/rate-limit';
 import { resolveStorefrontMerchantFromRequest } from '@/lib/storefront-merchant';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { RouteIdentifierSchema } from '@/schemas/route-identifier';
 import { errorBody, UUID_PATTERN } from '../route-helpers';
 
@@ -110,16 +113,24 @@ export async function GET(
     );
   }
 
-  const supabaseAdmin = createAdminClient();
-  const { data, error } = await supabaseAdmin
-    .from('imei_lookups')
-    .select(
-      'id, customer_id, merchant_id, status, cached_response, cached_status'
-    )
-    .eq('id', lookupId)
-    .eq('customer_id', customer.id)
-    .eq('merchant_id', merchantId)
-    .maybeSingle();
+  let supabaseAdmin: ImeiAccessClient;
+  try {
+    supabaseAdmin = createImeiAccessClient({
+      customerId: customer.id,
+      merchantId,
+      supabase: auth.supabase,
+      userId: auth.user.id,
+    });
+  } catch {
+    return NextResponse.json(
+      errorBody({
+        code: 'IMEI_ACCESS_UNAVAILABLE',
+        error: 'IMEI lookup is temporarily unavailable',
+      }),
+      { status: 503 }
+    );
+  }
+  const { data, error } = await supabaseAdmin.readStatus(lookupId);
   if (error) {
     console.error('[Petrock IMEI Status] Lookup read failed', {
       error,

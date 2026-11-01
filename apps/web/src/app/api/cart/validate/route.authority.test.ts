@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { checkCsrfProtection } from '@/lib/csrf';
+import { withCartProductOwners } from './cart-product-owner.test-support';
 import { POST } from './route';
 
 vi.mock('@/lib/csrf', () => ({
@@ -30,7 +30,10 @@ function buildSupabaseMock() {
     select: vi.fn(() => productsQuery),
     in: vi.fn(() => productsQuery),
     returns: vi.fn(() =>
-      Promise.resolve({ data: mocks.products, error: mocks.productError })
+      Promise.resolve({
+        data: withCartProductOwners(mocks.products),
+        error: mocks.productError,
+      })
     ),
   };
   const supabase = {

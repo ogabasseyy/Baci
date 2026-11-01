@@ -1,3 +1,10 @@
+jest.mock('@/lib/config', () => ({
+  CONFIG: {
+    MERCHANT_ID: '77777777-7777-4777-8777-777777777777',
+    MERCHANT_SLUG: 'ogabassey',
+  },
+}));
+
 import { supabase } from '@/lib/supabase';
 import { useCartStore } from '@/stores/cart-store';
 import { checkStock } from './cart-stock';

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { checkCsrfProtection } from '@/lib/csrf';
+import {
+  CART_TEST_MERCHANT_ID,
+  withCartProductOwners,
+} from './cart-product-owner.test-support';
 import { POST } from './route';
 
 vi.mock('@/lib/csrf', () => ({
@@ -34,7 +38,10 @@ function buildSupabaseMock() {
     select: vi.fn(() => productsQuery),
     in: vi.fn(() => productsQuery),
     returns: vi.fn(() =>
-      Promise.resolve({ data: mocks.products, error: mocks.productError })
+      Promise.resolve({
+        data: withCartProductOwners(mocks.products),
+        error: mocks.productError,
+      })
     ),
   };
   const supabase = {
@@ -440,7 +447,7 @@ describe('POST /api/cart/validate', () => {
     expect(supabase.rpc).toHaveBeenCalledWith(
       'get_storefront_offer_resolution',
       {
-        p_merchant_id: null,
+        p_merchant_id: CART_TEST_MERCHANT_ID,
         p_product_ids: [PRODUCT_ID],
       }
     );
@@ -556,7 +563,7 @@ describe('POST /api/cart/validate', () => {
     expect(supabase.rpc).toHaveBeenCalledWith(
       'get_storefront_offer_resolution',
       {
-        p_merchant_id: null,
+        p_merchant_id: CART_TEST_MERCHANT_ID,
         p_product_ids: [PRODUCT_ID],
       }
     );
@@ -589,7 +596,7 @@ describe('POST /api/cart/validate', () => {
     expect(supabase.rpc).toHaveBeenCalledWith(
       'get_storefront_offer_resolution',
       {
-        p_merchant_id: null,
+        p_merchant_id: CART_TEST_MERCHANT_ID,
         p_product_ids: [PRODUCT_ID],
       }
     );
@@ -638,7 +645,7 @@ describe('POST /api/cart/validate', () => {
     expect(supabase.rpc).toHaveBeenCalledWith(
       'get_storefront_offer_resolution',
       {
-        p_merchant_id: null,
+        p_merchant_id: CART_TEST_MERCHANT_ID,
         p_product_ids: [PRODUCT_ID],
       }
     );

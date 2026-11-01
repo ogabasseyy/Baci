@@ -1,3 +1,10 @@
+vi.mock('@/lib/hydrate-related-blog-product-serialized-inventory', () => ({
+  hydrateRelatedBlogProductSerializedInventory: vi.fn(
+    async (_client: unknown, _merchant: unknown, products: unknown[]) =>
+      products
+  ),
+}));
+
 import { describe, expect, it, vi } from 'vitest';
 import type { RelatedBlogProduct } from '@/lib/related-blog-products';
 import { hydrateRelatedBlogProductAvailability } from './hydrate-related-blog-product-availability';
@@ -45,12 +52,13 @@ describe('hydrateRelatedBlogProductAvailability', () => {
 
     const result = await hydrateRelatedBlogProductAvailability(
       { rpc } as never,
-      [product()]
+      [product()],
+      { merchantId: '77777777-7777-4777-8777-777777777777' }
     );
 
     expect(result[0]?.has_purchasable_condition_offer).toBe(true);
     expect(rpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
-      p_merchant_id: null,
+      p_merchant_id: '77777777-7777-4777-8777-777777777777',
       p_product_ids: [PRODUCT_ID],
     });
   });
@@ -74,7 +82,8 @@ describe('hydrateRelatedBlogProductAvailability', () => {
 
     const result = await hydrateRelatedBlogProductAvailability(
       { rpc } as never,
-      [product({ condition: 'new' })]
+      [product({ condition: 'new' })],
+      { merchantId: '77777777-7777-4777-8777-777777777777' }
     );
 
     // The PDP excludes same-condition rows from selectable offers, so the
@@ -104,7 +113,8 @@ describe('hydrateRelatedBlogProductAvailability', () => {
 
     const result = await hydrateRelatedBlogProductAvailability(
       { rpc } as never,
-      [product({ condition: 'new' })]
+      [product({ condition: 'new' })],
+      { merchantId: '77777777-7777-4777-8777-777777777777' }
     );
 
     expect(result[0]?.has_purchasable_condition_offer).toBe(true);
@@ -129,7 +139,8 @@ describe('hydrateRelatedBlogProductAvailability', () => {
 
     const result = await hydrateRelatedBlogProductAvailability(
       { rpc } as never,
-      [product()]
+      [product()],
+      { merchantId: '77777777-7777-4777-8777-777777777777' }
     );
 
     expect(result[0]?.has_purchasable_condition_offer).toBe(false);
@@ -149,7 +160,8 @@ describe('hydrateRelatedBlogProductAvailability', () => {
 
     const result = await hydrateRelatedBlogProductAvailability(
       { rpc } as never,
-      products
+      products,
+      { merchantId: '77777777-7777-4777-8777-777777777777' }
     );
 
     expect(rpc).not.toHaveBeenCalled();
@@ -168,11 +180,12 @@ describe('hydrateRelatedBlogProductAvailability', () => {
 
     const result = await hydrateRelatedBlogProductAvailability(
       { rpc } as never,
-      [stockedVariantProduct]
+      [stockedVariantProduct],
+      { merchantId: '77777777-7777-4777-8777-777777777777' }
     );
 
     expect(rpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
-      p_merchant_id: null,
+      p_merchant_id: '77777777-7777-4777-8777-777777777777',
       p_product_ids: [VARIANT_PRODUCT_ID],
     });
     expect(result[0]).toMatchObject({
@@ -201,14 +214,15 @@ describe('hydrateRelatedBlogProductAvailability', () => {
 
     const result = await hydrateRelatedBlogProductAvailability(
       { rpc } as never,
-      [stockedProduct]
+      [stockedProduct],
+      { merchantId: '77777777-7777-4777-8777-777777777777' }
     );
 
     expect(result[0]?.offers).toEqual([
       { price: 175000, status: 'active', stock_quantity: 2 },
     ]);
     expect(rpc).toHaveBeenCalledWith('get_storefront_offer_resolution', {
-      p_merchant_id: null,
+      p_merchant_id: '77777777-7777-4777-8777-777777777777',
       p_product_ids: [PRODUCT_ID],
     });
   });
@@ -227,7 +241,8 @@ describe('hydrateRelatedBlogProductAvailability', () => {
 
     const result = await hydrateRelatedBlogProductAvailability(
       { rpc } as never,
-      [product({ price: 150000 })]
+      [product({ price: 150000 })],
+      { merchantId: '77777777-7777-4777-8777-777777777777' }
     );
 
     expect(result[0]?.offers).toEqual([
@@ -247,7 +262,8 @@ describe('hydrateRelatedBlogProductAvailability', () => {
     try {
       const result = await hydrateRelatedBlogProductAvailability(
         { rpc } as never,
-        [product()]
+        [product()],
+        { merchantId: '77777777-7777-4777-8777-777777777777' }
       );
 
       expect(result[0]?.has_purchasable_condition_offer).toBeUndefined();
@@ -266,6 +282,7 @@ describe('hydrateRelatedBlogProductAvailability', () => {
     await expect(
       hydrateRelatedBlogProductAvailability({ rpc } as never, [product()], {
         throwOnError: true,
+        merchantId: '77777777-7777-4777-8777-777777777777',
       })
     ).rejects.toThrow('transient timeout');
   });

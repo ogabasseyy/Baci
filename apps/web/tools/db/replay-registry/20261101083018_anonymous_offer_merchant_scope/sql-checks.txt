@@ -1,0 +1,1 @@
+supabase/tests/anonymous_offer_merchant_scope.sql

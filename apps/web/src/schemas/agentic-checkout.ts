@@ -4,6 +4,7 @@ import {
   AGENTIC_PAYMENT_PROVIDER_PAY_ON_DELIVERY,
   AGENTIC_PAYMENT_PROVIDER_PAYSTACK,
 } from '../config/agentic-payment-methods';
+import { agenticCheckoutCurrencySchema } from './agentic-checkout-currency';
 
 export const agenticCheckoutItemSchema = z.object({
   id: z.string().trim().min(1, 'Item id is required'),
@@ -30,22 +31,12 @@ export const agenticFulfillmentAddressSchema = z.object({
 const checkoutSessionBaseSchema = z.object({
   items: agenticCheckoutItemsSchema,
   shipping_address: agenticFulfillmentAddressSchema.nullable().optional(),
-  currency: z
-    .string()
-    .trim()
-    .length(3, 'Currency must be a 3-letter ISO code')
-    .transform((value) => value.toUpperCase())
-    .default('NGN'),
+  currency: agenticCheckoutCurrencySchema,
 });
 
 const checkoutSessionCartSchema = z.object({
   cart_id: z.string().trim().min(1, 'Cart id is required'),
-  currency: z
-    .string()
-    .trim()
-    .length(3, 'Currency must be a 3-letter ISO code')
-    .transform((value) => value.toUpperCase())
-    .default('NGN'),
+  currency: agenticCheckoutCurrencySchema,
 });
 
 export const checkoutSessionSchema = z.preprocess(

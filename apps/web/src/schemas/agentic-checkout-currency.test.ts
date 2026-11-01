@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { checkoutSessionSchema } from './agentic-checkout';
+import { agenticCheckoutCurrencySchema } from './agentic-checkout-currency';
 
 describe('checkout currency after the Zod security upgrade', () => {
+  it('shares the default and normalization through the currency schema', () => {
+    expect(agenticCheckoutCurrencySchema.parse(undefined)).toBe('NGN');
+    expect(agenticCheckoutCurrencySchema.parse(' usd ')).toBe('USD');
+    expect(agenticCheckoutCurrencySchema.safeParse('invalid').success).toBe(
+      false
+    );
+    expect(agenticCheckoutCurrencySchema.safeParse(null).success).toBe(false);
+  });
   it.each([
     { items: [{ id: 'test-product', quantity: 1 }] },
     { cart_id: 'test-cart' },

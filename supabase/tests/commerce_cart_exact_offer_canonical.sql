@@ -13,4 +13,6 @@ ON CONFLICT(id) DO UPDATE SET status='active',stock_quantity=10,stock=10;
 \ir commerce_cart_line_offer_id.sql
 SELECT set_config('request.jwt.claims','{"role":"service_role"}',true);
 \ir commerce_cart_exact_offer_review.sql
+SELECT set_config('request.jwt.claims','{"role":"service_role"}',true);
+\ir commerce_cart_exact_offer_condition_writer.sql
 ROLLBACK;

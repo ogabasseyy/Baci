@@ -1,8 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  onboardingFixture,
-  PAYOUT_WALLET_ID,
-} from './primary-wallet-onboarding.test-fixture';
+import { onboardingFixture } from './primary-wallet-onboarding.test-fixture';
 import {
   judgeCreatedCustomer,
   keepCreatedWalletForReview,
@@ -88,34 +85,22 @@ describe('keepCreatedWalletForReview', () => {
     environment: 'production' as const,
   };
   const ids = { providerCustomerId: 'c', providerWalletId: 'w' };
+  const claimedScope = { ...scope, intentId: 'intent', claimToken: 'claim' };
   let storage: ReturnType<typeof onboardingFixture>['storage'];
   const keep = () =>
-    keepCreatedWalletForReview({
-      storage,
-      scope,
-      claimedScope: { ...scope, intentId: 'intent', claimToken: 'claim' },
-      ...ids,
-      interestPayoutWalletId: PAYOUT_WALLET_ID,
-    });
+    keepCreatedWalletForReview({ storage, claimedScope, ...ids });
 
   beforeEach(() => {
     storage = onboardingFixture().storage;
   });
 
-  it('keeps the ids as rejected (routing pending, then resolved unrouted), never usable', async () => {
+  it('rejects the intent with its ids in one step, never through a recheckable state', async () => {
     await keep();
-    expect(storage.recordRoutingPending).toHaveBeenCalledExactlyOnceWith({
-      ...scope,
-      intentId: 'intent',
-      claimToken: 'claim',
+    expect(storage.recordReview).toHaveBeenCalledExactlyOnceWith({
+      ...claimedScope,
       ...ids,
-      interestPayoutWalletId: PAYOUT_WALLET_ID,
     });
-    expect(storage.resolveRoutingPending).toHaveBeenCalledExactlyOnceWith({
-      ...scope,
-      ...ids,
-      routed: false,
-    });
+    expect(storage.recordRoutingPending).not.toHaveBeenCalled();
     expect(storage.recordRejected).not.toHaveBeenCalled();
     expect(storage.recordAccepted).not.toHaveBeenCalled();
   });
@@ -123,20 +108,12 @@ describe('keepCreatedWalletForReview', () => {
   it.each([
     ['refused', async () => false],
     ['failing', () => Promise.reject(new Error('storage down'))],
-  ])('still rejects the intent when keeping the ids is %s', async (_label, record) => {
-    storage.recordRoutingPending.mockImplementation(record);
+  ])('still rejects the intent, without ids, when keeping them is %s', async (_label, review) => {
+    storage.recordReview.mockImplementation(review);
     await keep();
-    expect(storage.recordRejected).toHaveBeenCalledExactlyOnceWith({
-      ...scope,
-      intentId: 'intent',
-      claimToken: 'claim',
-    });
-    expect(storage.resolveRoutingPending).not.toHaveBeenCalled();
-  });
-
-  it('leaves kept ids routing pending, for the recheck to reject, when resolving fails', async () => {
-    storage.resolveRoutingPending.mockRejectedValue(new Error('storage down'));
-    await keep();
-    expect(storage.recordRejected).not.toHaveBeenCalled();
+    expect(storage.recordRejected).toHaveBeenCalledExactlyOnceWith(
+      claimedScope
+    );
+    expect(storage.recordRoutingPending).not.toHaveBeenCalled();
   });
 });

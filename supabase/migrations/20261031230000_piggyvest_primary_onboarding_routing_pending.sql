@@ -29,7 +29,12 @@
 --     the readback contradicts it. A wallet whose DVA closure was already
 --     attested (offboarding) ends rejected either way: a closed DVA never
 --     becomes a usable wallet.
--- All three are SECURITY DEFINER with a pinned search_path and are executable
+--   * record_onboarding_review: dispatched -> rejected with the created
+--     wallet's ids kept, in one claim-fenced write, for a wallet that must go
+--     to review whatever its routing (a duplicate customer, a contradicted
+--     readback). It never passes through routing_pending, so no recheck can
+--     promote it: routing can be proven, ownership cannot.
+-- All four are SECURITY DEFINER with a pinned search_path and are executable
 -- only by the onboarding provisioner.
 BEGIN;
 ALTER TABLE piggyvest_primary.onboarding_intents
@@ -122,6 +127,23 @@ BEGIN
   RETURN FOUND;
 END $$;
 
+CREATE FUNCTION piggyvest_primary.record_onboarding_review(scope jsonb, intent_id uuid, token uuid, provider_customer text, provider_wallet text)
+RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
+BEGIN
+  PERFORM piggyvest_primary.assert_onboarding_scope(scope);
+  IF provider_customer IS NULL OR provider_wallet IS NULL THEN
+    RAISE EXCEPTION 'incomplete provider identity' USING ERRCODE = '22023';
+  END IF;
+  UPDATE piggyvest_primary.onboarding_intents SET
+    state = 'rejected', claim_token = NULL,
+    provider_customer_id = provider_customer, provider_wallet_id = provider_wallet,
+    updated_at = pg_catalog.clock_timestamp()
+  WHERE id = intent_id AND integration_id = (scope->>'integrationId')::uuid
+    AND merchant_id = (scope->>'merchantId')::uuid AND customer_id = (scope->>'customerId')::uuid
+    AND user_id = (scope->>'userId')::uuid AND state = 'dispatched' AND claim_token = token;
+  RETURN FOUND;
+END $$;
+
 -- Wallet-bearing protections, redefined from 20261008095500 so they key on
 -- the provider wallet instead of the onboarding state. Bodies are otherwise
 -- unchanged; the unsettled-deposit check is preserved verbatim.
@@ -191,10 +213,12 @@ GRANT EXECUTE ON FUNCTION piggyvest_primary.attest_provider_dva_closure(uuid)
 
 REVOKE ALL ON FUNCTION piggyvest_primary.record_onboarding_routing_pending(jsonb,uuid,uuid,text,text,text),
   piggyvest_primary.read_onboarding_routing(jsonb),
-  piggyvest_primary.resolve_onboarding_routing(jsonb,jsonb,boolean)
+  piggyvest_primary.resolve_onboarding_routing(jsonb,jsonb,boolean),
+  piggyvest_primary.record_onboarding_review(jsonb,uuid,uuid,text,text)
   FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.record_onboarding_routing_pending(jsonb,uuid,uuid,text,text,text),
   piggyvest_primary.read_onboarding_routing(jsonb),
-  piggyvest_primary.resolve_onboarding_routing(jsonb,jsonb,boolean)
+  piggyvest_primary.resolve_onboarding_routing(jsonb,jsonb,boolean),
+  piggyvest_primary.record_onboarding_review(jsonb,uuid,uuid,text,text)
   TO piggyvest_primary_provisioner;
 COMMIT;

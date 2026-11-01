@@ -45,42 +45,31 @@ export function judgeCreatedCustomer(input: {
 }
 
 /**
- * Keeps a created wallet's ids on its now rejected intent (routing pending,
- * then resolved unrouted) so review and DVA closure find it before any
- * customer deletion; it is never usable. If the ids cannot be kept, a plain
- * rejection still stops the intent; ids left routing pending (the resolve
- * failed) are rejected by the next recheck.
+ * Rejects the intent with the created wallet's ids kept, in one atomic,
+ * claim-fenced write (record_onboarding_review), so review and DVA closure
+ * find the wallet before any customer deletion. The intent never passes
+ * through routing_pending, so no routing recheck can promote it: routing
+ * can be proven, ownership cannot. If the ids cannot be kept, a plain
+ * rejection still stops the intent.
  */
 export async function keepCreatedWalletForReview(input: {
   storage: PrimaryWalletOnboardingStorage;
-  scope: PrimaryWalletIntentScope;
   claimedScope: PrimaryWalletIntentScope & {
     intentId: string;
     claimToken: string;
   };
   providerCustomerId: string;
   providerWalletId: string;
-  interestPayoutWalletId: string;
 }): Promise<void> {
-  const ids = {
-    providerCustomerId: input.providerCustomerId,
-    providerWalletId: input.providerWalletId,
-  };
   let kept = false;
   try {
-    kept = await input.storage.recordRoutingPending({
+    kept = await input.storage.recordReview({
       ...input.claimedScope,
-      ...ids,
-      interestPayoutWalletId: input.interestPayoutWalletId,
+      providerCustomerId: input.providerCustomerId,
+      providerWalletId: input.providerWalletId,
     });
-    if (kept)
-      await input.storage.resolveRoutingPending({
-        ...input.scope,
-        ...ids,
-        routed: false,
-      });
   } catch {
-    // Kept as routing pending, or not kept: handled below or on recheck.
+    kept = false;
   }
   if (!kept) await input.storage.recordRejected(input.claimedScope);
 }

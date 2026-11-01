@@ -6,17 +6,16 @@
 --     that state is never exposed as a usable wallet (read_onboarding NULL);
 --   * claim_onboarding reports it pending and never re-dispatches creation;
 --   * only the scoped owner's exact kept ids resolve it: proven routing makes
---     it 'accepted' (usable), a contradiction makes it 'rejected' (terminal,
---     ids kept for review and DVA closure);
---   * wallet-bearing protections follow the provider wallet, not the state:
---     deleting a customer whose routing-pending or routing-rejected intent
---     holds an open DVA is refused until its closure is attested, and a
---     closed DVA is never promoted to a usable wallet by a routing recheck;
+--     it 'accepted' (usable), a contradiction 'rejected' (terminal, ids kept);
+--   * a review-only wallet is rejected with its ids in one unpromotable step;
+--   * deleting a customer whose intent holds an open DVA (routing pending or
+--     rejected) is refused until closure is attested, and a closed DVA is
+--     never promoted by a recheck;
 --   * a rejected intent that keeps its ids is never usable or verifiable,
 --     and no spend, credit or usable predicate names routing_pending;
 --   * stale claim tokens and mismatched ids change nothing;
---   * grants and shape, asserted through the catalog (a denied EXECUTE cannot
---     be trapped on the replay image, so no denial is probed by calling).
+--   * grants and shape, through the catalog only (a denied EXECUTE cannot be
+--     trapped on the replay image).
 -- The calls run as the session role, registered as the integration executor.
 --
 -- Usage:
@@ -31,7 +30,7 @@ BEGIN
   IF p_ok IS DISTINCT FROM true THEN RAISE EXCEPTION '%', p_message; END IF;
 END $$;
 
--- Customer n (1 or 2) of the fixture merchant.
+-- Customer n (1 to 4) of the fixture merchant.
 CREATE FUNCTION pg_temp.scope(p_n int) RETURNS jsonb LANGUAGE sql IMMUTABLE AS $$
   SELECT jsonb_build_object(
     'merchantId', 'a3300000-0000-4000-8000-000000000002',
@@ -59,12 +58,12 @@ CREATE FUNCTION pg_temp.verify_proof(p_customer text, p_wallet text) RETURNS jso
     'currency', 'NGN', 'status', 'active', 'hasFundingAccount', true)
 $$;
 
--- Fixture: one merchant, two customers, one enabled integration. The
+-- Fixture: one merchant, four customers, one enabled integration. The
 -- merchant insert guards need a service_role claim, as in the other suites.
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 INSERT INTO auth.users(id) VALUES
   ('a3300000-0000-4000-8000-000000000021'), ('a3300000-0000-4000-8000-000000000022'),
-  ('a3300000-0000-4000-8000-000000000023');
+  ('a3300000-0000-4000-8000-000000000023'), ('a3300000-0000-4000-8000-000000000024');
 INSERT INTO public.merchants(id, email)
   VALUES ('a3300000-0000-4000-8000-000000000002', 'routing-pending@example.com');
 INSERT INTO public.customers(id, merchant_id, user_id) VALUES
@@ -73,7 +72,9 @@ INSERT INTO public.customers(id, merchant_id, user_id) VALUES
   ('a3300000-0000-4000-8000-000000000012', 'a3300000-0000-4000-8000-000000000002',
    'a3300000-0000-4000-8000-000000000022'),
   ('a3300000-0000-4000-8000-000000000013', 'a3300000-0000-4000-8000-000000000002',
-   'a3300000-0000-4000-8000-000000000023');
+   'a3300000-0000-4000-8000-000000000023'),
+  ('a3300000-0000-4000-8000-000000000014', 'a3300000-0000-4000-8000-000000000002',
+   'a3300000-0000-4000-8000-000000000024');
 INSERT INTO piggyvest_primary.integrations(id, merchant_id, business_id, environment, executor_login, enabled)
   VALUES ('a3300000-0000-4000-8000-000000000005', 'a3300000-0000-4000-8000-000000000002',
     'routing-pending-business', 'staging', session_user, true);
@@ -178,6 +179,24 @@ BEGIN
     'a rejected routing must stay in review');
 END $$;
 
+-- 4b. A review-only wallet (a duplicate, a contradicted readback) is rejected
+--     with its ids in one fenced step, so no recheck can make it usable.
+DO $$
+DECLARE v_claim jsonb;
+BEGIN
+  v_claim := piggyvest_primary.claim_onboarding(pg_temp.scope(4), repeat('f', 64));
+  PERFORM pg_temp.check(NOT piggyvest_primary.record_onboarding_review(pg_temp.scope(4), (v_claim->>'intentId')::uuid,
+    'a3300000-0000-4000-8000-0000000000ff', 'pv-customer-4', 'pv-wallet-4') AND piggyvest_primary.read_onboarding_routing(pg_temp.scope(4)) IS NULL,
+    'a foreign claim token recorded a review, or a dispatched wallet was recheckable');
+  PERFORM pg_temp.check(piggyvest_primary.record_onboarding_review(pg_temp.scope(4), (v_claim->>'intentId')::uuid,
+    (v_claim->>'claimToken')::uuid, 'pv-customer-4', 'pv-wallet-4'), 'review ids not recorded');
+  PERFORM pg_temp.check(pg_temp.state(4) = 'rejected:pv-customer-4:pv-wallet-4', 'not rejected with ids: ' || pg_temp.state(4));
+  PERFORM pg_temp.check(piggyvest_primary.read_onboarding_routing(pg_temp.scope(4)) IS NULL AND piggyvest_primary.read_onboarding(pg_temp.scope(4)) IS NULL, 'a review-only wallet must be neither recheckable nor usable');
+  PERFORM pg_temp.check(NOT piggyvest_primary.resolve_onboarding_routing(pg_temp.scope(4),
+    pg_temp.ids('pv-customer-4', 'pv-wallet-4'), true), 'a review-only wallet was promoted');
+  PERFORM pg_temp.check(pg_temp.delete_probe(4) = 'dva', 'a review-only DVA did not block deletion');
+END $$;
+
 -- 5. The deletion guard and DVA closure follow the provider wallet: a
 --    routing-pending or routing-rejected customer cannot be deleted until
 --    its DVA closure is attested, and a closed DVA never becomes usable.
@@ -261,7 +280,8 @@ BEGIN
   FOREACH v_fn IN ARRAY ARRAY[
     'piggyvest_primary.record_onboarding_routing_pending(jsonb,uuid,uuid,text,text,text)'::regprocedure,
     'piggyvest_primary.read_onboarding_routing(jsonb)'::regprocedure,
-    'piggyvest_primary.resolve_onboarding_routing(jsonb,jsonb,boolean)'::regprocedure
+    'piggyvest_primary.resolve_onboarding_routing(jsonb,jsonb,boolean)'::regprocedure,
+    'piggyvest_primary.record_onboarding_review(jsonb,uuid,uuid,text,text)'::regprocedure
   ] LOOP
     FOREACH v_role IN ARRAY ARRAY['public', 'anon', 'authenticated', 'service_role'] LOOP
       PERFORM pg_temp.check(NOT pg_catalog.has_function_privilege(v_role, v_fn, 'EXECUTE'),

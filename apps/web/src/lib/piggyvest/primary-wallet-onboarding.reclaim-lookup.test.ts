@@ -110,7 +110,7 @@ describe('primary wallet onboarding: reclaims are gated on a provider lookup', (
     expect(input.storage.recordUncertain).not.toHaveBeenCalled();
   });
 
-  it('keeps the ids of a duplicate PiggyVest created under our identifier for review, never usable', async () => {
+  it('keeps the ids of a duplicate PiggyVest created under our identifier for review in one step, never recheckable', async () => {
     const input = reclaimed();
     input.createCustomer.mockResolvedValue({
       customer_id: 'customer-duplicate',
@@ -118,7 +118,9 @@ describe('primary wallet onboarding: reclaims are gated on a provider lookup', (
       new_customer: true,
     });
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual(OWNERSHIP);
-    expect(input.storage.recordRoutingPending).toHaveBeenCalledExactlyOnceWith(
+    // Never routing pending: a recheck could prove its routing, never that
+    // the duplicate is ours.
+    expect(input.storage.recordReview).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         intentId: 'intent',
         claimToken: 'claim',
@@ -126,13 +128,7 @@ describe('primary wallet onboarding: reclaims are gated on a provider lookup', (
         providerWalletId: 'wallet-duplicate',
       })
     );
-    expect(input.storage.resolveRoutingPending).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
-        providerCustomerId: 'customer-duplicate',
-        providerWalletId: 'wallet-duplicate',
-        routed: false,
-      })
-    );
+    expect(input.storage.recordRoutingPending).not.toHaveBeenCalled();
     expect(input.storage.recordAccepted).not.toHaveBeenCalled();
     expect(input.retrieveWallet).not.toHaveBeenCalled();
     expect(mocks.alert).toHaveBeenCalledExactlyOnceWith(

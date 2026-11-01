@@ -47,12 +47,17 @@ export interface PrimaryWalletOnboardingStorage {
       interestPayoutWalletId: string;
     }
   ): Promise<boolean>;
-  /** Routing-pending only: accepted when routed, else rejected (ids kept). */
-  resolveRoutingPending(
+  /**
+   * Dispatched to rejected with the created wallet's ids kept, in one
+   * claim-fenced write: for review and DVA closure, never usable and never
+   * routing pending (so no recheck can promote it).
+   */
+  recordReview(
     input: PrimaryWalletIntentScope & {
+      intentId: string;
+      claimToken: string;
       providerCustomerId: string;
       providerWalletId: string;
-      routed: boolean;
     }
   ): Promise<boolean>;
   recordRejected(

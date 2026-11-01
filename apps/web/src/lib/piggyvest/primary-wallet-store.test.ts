@@ -162,25 +162,25 @@ describe('primary wallet storage boundary', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it('resolves a routing-pending wallet through the fenced RPC with only its kept ids', async () => {
+  it('rejects a review-only wallet with its kept ids through one fenced RPC', async () => {
     const execute = vi.fn().mockResolvedValue({ rows: [{ result: true }] });
     await expect(
-      createPrimaryWalletStore({ scope, execute }).resolveRoutingPending({
+      createPrimaryWalletStore({ scope, execute }).recordReview({
         ...scope,
+        intentId,
+        claimToken,
         providerCustomerId: 'provider-customer',
         providerWalletId: 'provider-wallet',
-        routed: false,
       })
     ).resolves.toBe(true);
-    expect(execute).toHaveBeenCalledWith(
-      expect.stringContaining('piggyvest_primary.resolve_onboarding_routing'),
+    expect(execute).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('piggyvest_primary.record_onboarding_review'),
       [
         JSON.stringify(scope),
-        JSON.stringify({
-          providerCustomerId: 'provider-customer',
-          providerWalletId: 'provider-wallet',
-        }),
-        'false',
+        intentId,
+        claimToken,
+        'provider-customer',
+        'provider-wallet',
       ]
     );
   });
@@ -188,19 +188,20 @@ describe('primary wallet storage boundary', () => {
   it.each([
     ['another user', { userId: intentId }],
     ['an empty provider wallet', { providerWalletId: '' }],
-    ['a non-boolean verdict', { routed: 'false' }],
-    ['a claim token', { claimToken }],
-  ])('refuses a routing resolution with %s without querying', async (_label, change) => {
+    ['a malformed claim token', { claimToken: 'claim' }],
+    ['an extra payout wallet', { interestPayoutWalletId: 'x' }],
+  ])('refuses a review with %s without querying', async (_label, change) => {
     const execute = vi.fn();
     await expect(
-      createPrimaryWalletStore({ scope, execute }).resolveRoutingPending({
+      createPrimaryWalletStore({ scope, execute }).recordReview({
         ...scope,
+        intentId,
+        claimToken,
         providerCustomerId: 'provider-customer',
         providerWalletId: 'provider-wallet',
-        routed: true,
         ...change,
       } as Parameters<
-        ReturnType<typeof createPrimaryWalletStore>['resolveRoutingPending']
+        ReturnType<typeof createPrimaryWalletStore>['recordReview']
       >[0])
     ).rejects.toThrow('Primary wallet storage unavailable');
     expect(execute).not.toHaveBeenCalled();
@@ -209,14 +210,15 @@ describe('primary wallet storage boundary', () => {
   it.each([
     ['the query fails', () => Promise.reject(new Error('private detail'))],
     ['the result is malformed', async () => ({ rows: [{ result: 'yes' }] })],
-  ])('reports a routing resolution as unavailable, without detail, when %s', async (_label, answer) => {
+  ])('reports a review as unavailable, without detail, when %s', async (_label, answer) => {
     const execute = vi.fn().mockImplementation(answer);
     await expect(
-      createPrimaryWalletStore({ scope, execute }).resolveRoutingPending({
+      createPrimaryWalletStore({ scope, execute }).recordReview({
         ...scope,
+        intentId,
+        claimToken,
         providerCustomerId: 'provider-customer',
         providerWalletId: 'provider-wallet',
-        routed: true,
       })
     ).rejects.toThrow(/^Primary wallet storage unavailable$/);
   });

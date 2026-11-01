@@ -117,6 +117,7 @@ describe('primary wallet restricted executor', () => {
     ['routingPending', 6],
     ['readRouting', 1],
     ['resolveRouting', 3],
+    ['review', 5],
   ] as const)('permits the %s RPC only with its %i bound arguments', async (name, arity) => {
     const statement = PRIMARY_WALLET_STATEMENTS[name];
     const parameters = Array.from({ length: arity }, (_unused, index) =>

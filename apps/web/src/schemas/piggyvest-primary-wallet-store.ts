@@ -28,10 +28,9 @@ export const piggyvestPrimaryWalletStoreSchemas = {
     providerWalletId: piggyvestProviderIdSchema,
     interestPayoutWalletId: piggyvestInterestPayoutWalletIdSchema,
   }),
-  routingResolution: scope.extend({
+  review: recorded.extend({
     providerCustomerId: piggyvestProviderIdSchema,
     providerWalletId: piggyvestProviderIdSchema,
-    routed: z.boolean(),
   }),
   routingRows: z
     .array(

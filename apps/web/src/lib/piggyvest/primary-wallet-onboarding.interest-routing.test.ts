@@ -26,8 +26,8 @@ function reclaimedExisting() {
   return input;
 }
 
-// A contradicted wallet holds a real DVA: its ids are kept (routing pending,
-// then rejected) for review and closure, never usable and never accepted.
+// A contradicted wallet holds a real DVA: its ids are kept on the rejected
+// intent in one step for review and closure, never usable or recheckable.
 function expectKeptForReview(input: ReturnType<typeof onboardingFixture>) {
   const scope = {
     merchantId: input.verifiedIdentity.merchantId,
@@ -41,19 +41,13 @@ function expectKeptForReview(input: ReturnType<typeof onboardingFixture>) {
     providerCustomerId: 'customer-fixture',
     providerWalletId: 'wallet-fixture',
   };
-  expect(input.storage.recordRoutingPending).toHaveBeenCalledExactlyOnceWith({
+  expect(input.storage.recordReview).toHaveBeenCalledExactlyOnceWith({
     ...scope,
     intentId: 'intent',
     claimToken: 'claim',
     ...ids,
-    interestPayoutWalletId: PAYOUT_WALLET_ID,
   });
-  // The store refuses any key beyond the scope, the ids and the verdict.
-  expect(input.storage.resolveRoutingPending).toHaveBeenCalledExactlyOnceWith({
-    ...scope,
-    ...ids,
-    routed: false,
-  });
+  expect(input.storage.recordRoutingPending).not.toHaveBeenCalled();
   expect(input.storage.recordRejected).not.toHaveBeenCalled();
   expect(input.storage.recordAccepted).not.toHaveBeenCalled();
 }
@@ -137,30 +131,18 @@ describe('primary wallet onboarding interest routing', () => {
     expectKeptForReview(input);
   });
 
-  it('still rejects a contradicted wallet when its ids cannot be kept', async () => {
+  it.each([
+    ['refused', async () => false],
+    ['failing', () => Promise.reject(new Error('storage down'))],
+  ])('still rejects a contradicted wallet when keeping its ids is %s', async (_label, review) => {
     const input = onboardingFixture();
-    input.storage.recordRoutingPending.mockResolvedValue(false);
+    input.storage.recordReview.mockImplementation(review);
     input.retrieveWallet.mockResolvedValue(
       routedWallet({ interest_payout_wallet: OTHER_WALLET_ID })
     );
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual(REVIEW);
     expect(input.storage.recordRejected).toHaveBeenCalledOnce();
-    expect(input.storage.resolveRoutingPending).not.toHaveBeenCalled();
-    expect(input.storage.recordAccepted).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ['fails', () => Promise.reject(new Error('storage down'))],
-    ['changes nothing', async () => false],
-  ])('still sends a contradicted wallet to review when resolving its kept ids %s: the recheck rejects it later', async (_label, resolve) => {
-    const input = onboardingFixture();
-    input.storage.resolveRoutingPending.mockImplementation(resolve);
-    input.retrieveWallet.mockResolvedValue(
-      routedWallet({ interest_payout_wallet: OTHER_WALLET_ID })
-    );
-    expect(await onboardPiggyvestPrimaryWallet(input)).toEqual(REVIEW);
-    expect(input.storage.recordRoutingPending).toHaveBeenCalledOnce();
-    expect(input.storage.recordRejected).not.toHaveBeenCalled();
+    expect(input.storage.recordRoutingPending).not.toHaveBeenCalled();
     expect(input.storage.recordUncertain).not.toHaveBeenCalled();
     expect(input.storage.recordAccepted).not.toHaveBeenCalled();
   });

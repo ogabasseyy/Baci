@@ -18,4 +18,8 @@ export const PRIMARY_WALLET_STATEMENTS = {
     'SELECT piggyvest_primary.read_onboarding_routing($1::jsonb) AS result',
   resolveRouting:
     'SELECT piggyvest_primary.resolve_onboarding_routing($1::jsonb, $2::jsonb, $3::boolean) AS result',
+  // A created wallet kept only for review: rejected with its ids in one
+  // claim-fenced write, never routing pending (20261031230000).
+  review:
+    'SELECT piggyvest_primary.record_onboarding_review($1::jsonb, $2::uuid, $3::uuid, $4::text, $5::text) AS result',
 } as const;

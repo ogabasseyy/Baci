@@ -23,6 +23,12 @@ describe('PRIMARY_WALLET_STATEMENTS', () => {
     );
   });
 
+  it('pins the one-step review statement', () => {
+    expect(PRIMARY_WALLET_STATEMENTS.review).toBe(
+      'SELECT piggyvest_primary.record_onboarding_review($1::jsonb, $2::uuid, $3::uuid, $4::text, $5::text) AS result'
+    );
+  });
+
   it('keeps every statement fully parameterized', () => {
     for (const statement of Object.values(PRIMARY_WALLET_STATEMENTS)) {
       expect(statement).toMatch(

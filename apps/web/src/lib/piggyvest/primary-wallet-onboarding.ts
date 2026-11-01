@@ -1,5 +1,4 @@
 import 'server-only';
-import { createHmac } from 'node:crypto';
 import {
   piggyvestPrimaryWalletCreationSchema,
   piggyvestPrimaryWalletIdentitySchema,
@@ -22,6 +21,7 @@ import {
   judgeCreatedCustomer,
   keepCreatedWalletForReview,
 } from './primary-wallet-onboarding-adoption';
+import { primaryWalletOnboardingFingerprints } from './primary-wallet-onboarding-fingerprint';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 
 type Input = {
@@ -85,31 +85,26 @@ export async function onboardPiggyvestPrimaryWallet(
     enable_interest_accrual: true,
     interest_payout_wallet: config.data.interestPayoutWalletId,
   };
-  // Idempotency commitment: HMAC-SHA256 keyed by a server secret is
-  // already one-way — hashing the BVN before this step would be
-  // cryptographically equivalent while preserving the same determinism
-  // (identical scope+request must yield an identical fingerprint, or
-  // dedup cannot work). Only the 64-hex digest is persisted or compared
-  // (see the never-raw-BVN test); the raw value travels solely to the
-  // provider request, and nothing on this path logs the HMAC input.
-  // The fingerprint pins the customer's own submitted identity. The interest
-  // routing is server configuration, kept out of it so that correcting the
-  // payout wallet never turns an in-flight intent into a permanent conflict;
-  // every reclaim is gated on a provider lookup below instead.
-  const customerRequest = {
-    bvn: providerRequest.bvn,
-    email: providerRequest.email,
-    name: providerRequest.name,
-    phone: providerRequest.phone,
-    third_party_identifier: providerRequest.third_party_identifier,
-  };
-  const requestFingerprint = createHmac('sha256', config.data.fingerprintKey)
-    .update(JSON.stringify({ scope, request: customerRequest }))
-    .digest('hex');
+  const fingerprints = primaryWalletOnboardingFingerprints({
+    key: config.data.fingerprintKey,
+    scope,
+    identity: providerRequest,
+  });
 
   let claim: Awaited<ReturnType<PrimaryWalletOnboardingStorage['claim']>>;
   try {
-    claim = await input.storage.claim({ ...scope, requestFingerprint });
+    claim = await input.storage.claim({
+      ...scope,
+      requestFingerprint: fingerprints.current,
+    });
+    // An intent stored before main-wallet interest routing carries the
+    // earlier commitment to this same identity: reconcile it through the
+    // lookup-gated reclaim below rather than leave it a permanent conflict.
+    if (claim.status === 'conflict')
+      claim = await input.storage.claim({
+        ...scope,
+        requestFingerprint: fingerprints.legacy,
+      });
   } catch {
     return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
   }
@@ -169,11 +164,9 @@ export async function onboardPiggyvestPrimaryWallet(
     if (verdict === 'duplicate') {
       await keepCreatedWalletForReview({
         storage: input.storage,
-        scope,
         claimedScope,
         providerCustomerId: result.data.customer_id,
         providerWalletId: result.data.wallet_id,
-        interestPayoutWalletId: config.data.interestPayoutWalletId,
       });
       alertOwnershipReview('duplicate provider customer', claim.intentId);
       return { status: 'conflict', code: 'OWNERSHIP_REVIEW_REQUIRED' };
@@ -216,11 +209,9 @@ export async function onboardPiggyvestPrimaryWallet(
       // closure before any deletion. Interest settings are immutable.
       await keepCreatedWalletForReview({
         storage: input.storage,
-        scope,
         claimedScope,
         providerCustomerId: result.data.customer_id,
         providerWalletId: result.data.wallet_id,
-        interestPayoutWalletId: config.data.interestPayoutWalletId,
       });
       emitPiggyvestWebhookAlert('PIGGYVEST_PRIMARY_ROUTING_NEEDS_REVIEW', {
         reason: 'main wallet interest routing contradicted at onboarding',

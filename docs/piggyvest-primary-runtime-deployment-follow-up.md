@@ -23,14 +23,18 @@ remote database, provider account or nginx configuration were changed.
   re-reads it read-only against that stored payout wallet, making it usable
   once the routing is proven or rejecting it (same alert) when contradicted.
   A rejected wallet keeps its ids, so deleting that customer still waits for
-  its DVA closure; a wallet whose closure was attested is never made usable.
+  its DVA closure; a recheck never promotes a wallet whose closure was
+  attested. A wallet sent to review at onboarding is rejected with its ids
+  in one write, so no recheck can ever promote it.
   A retried setup first asks PiggyVest for customers carrying our
   identifier: it creates again only when none exist, and adopts an existing
   customer only when it is exactly the one listed. Several listed customers,
   a duplicate created despite a listed one, or an existing customer that is
   not listed are never adopted (`OWNERSHIP_REVIEW_REQUIRED` or still
   pending, with a `PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW` alert carrying
-  the intent id).
+  the intent id). A setup stored before interest routing is recognised by
+  its earlier fingerprint format for the same customer and goes through the
+  same lookup-gated retry.
 - `/api/storefront/customer/savings/primary-provisioning`: authenticated,
   CSRF-protected POST persists explicit immutable interest choice before the
   single creation dispatch; PATCH recovers via provider reads without another

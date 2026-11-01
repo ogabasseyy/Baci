@@ -1,12 +1,10 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import {
-  getSocialMarketingConsent,
-  getSocialServerConsent,
-  isValidTikTokPixelId,
-  subscribeSocialMarketingConsent,
-} from '@/lib/analytics/social-pixel-policy';
+import { getSocialMarketingConsent } from '@/lib/analytics/get-social-marketing-consent';
+import { getSocialServerConsent } from '@/lib/analytics/get-social-server-consent';
+import { isValidTikTokPixelId } from '@/lib/analytics/is-valid-tiktok-pixel-id';
+import { subscribeSocialMarketingConsent } from '@/lib/analytics/subscribe-social-marketing-consent';
 import { ActiveTikTokPixel } from './active-tiktok-pixel';
 
 interface TikTokPixelProps {

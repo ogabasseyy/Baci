@@ -2,13 +2,11 @@
 
 import dynamic from 'next/dynamic';
 import { useSyncExternalStore } from 'react';
-import {
-  getSocialMarketingConsent,
-  getSocialServerConsent,
-  isValidSnapchatPixelId,
-  isValidTikTokPixelId,
-  subscribeSocialMarketingConsent,
-} from '@/lib/analytics/social-pixel-policy';
+import { getSocialMarketingConsent } from '@/lib/analytics/get-social-marketing-consent';
+import { getSocialServerConsent } from '@/lib/analytics/get-social-server-consent';
+import { isValidSnapchatPixelId } from '@/lib/analytics/is-valid-snapchat-pixel-id';
+import { isValidTikTokPixelId } from '@/lib/analytics/is-valid-tiktok-pixel-id';
+import { subscribeSocialMarketingConsent } from '@/lib/analytics/subscribe-social-marketing-consent';
 import { usePreparedSocialPixel } from './use-prepared-social-pixel';
 
 const TikTokPixel = dynamic(() =>
@@ -38,15 +36,25 @@ export function DeferredSocialPixels({
     snapchatPixelId && isValidSnapchatPixelId(snapchatPixelId)
       ? snapchatPixelId
       : null;
-  usePreparedSocialPixel('tiktok', merchantId, tiktokId);
-  usePreparedSocialPixel('snapchat', merchantId, snapchatId);
+  const tiktokEpoch = usePreparedSocialPixel('tiktok', merchantId, tiktokId);
+  const snapchatEpoch = usePreparedSocialPixel(
+    'snapchat',
+    merchantId,
+    snapchatId
+  );
   return (
     <>
       {allowed && merchantId && tiktokId ? (
-        <TikTokPixel key={`tiktok:${merchantId}`} pixelId={tiktokId} />
+        <TikTokPixel
+          key={`tiktok:${merchantId}:${tiktokEpoch}`}
+          pixelId={tiktokId}
+        />
       ) : null}
       {allowed && merchantId && snapchatId ? (
-        <SnapchatPixel key={`snapchat:${merchantId}`} pixelId={snapchatId} />
+        <SnapchatPixel
+          key={`snapchat:${merchantId}:${snapchatEpoch}`}
+          pixelId={snapchatId}
+        />
       ) : null}
     </>
   );

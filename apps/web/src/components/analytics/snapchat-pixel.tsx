@@ -1,12 +1,10 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import {
-  getSocialMarketingConsent,
-  getSocialServerConsent,
-  isValidSnapchatPixelId,
-  subscribeSocialMarketingConsent,
-} from '@/lib/analytics/social-pixel-policy';
+import { getSocialMarketingConsent } from '@/lib/analytics/get-social-marketing-consent';
+import { getSocialServerConsent } from '@/lib/analytics/get-social-server-consent';
+import { isValidSnapchatPixelId } from '@/lib/analytics/is-valid-snapchat-pixel-id';
+import { subscribeSocialMarketingConsent } from '@/lib/analytics/subscribe-social-marketing-consent';
 import { ActiveSnapchatPixel } from './active-snapchat-pixel';
 
 interface SnapchatPixelProps {

@@ -1,9 +1,7 @@
 import { expect, it, vi } from 'vitest';
-import {
-  isValidSnapchatPixelId,
-  isValidTikTokPixelId,
-  subscribeSocialMarketingConsent,
-} from './social-pixel-policy';
+import { isValidSnapchatPixelId } from './is-valid-snapchat-pixel-id';
+import { isValidTikTokPixelId } from './is-valid-tiktok-pixel-id';
+import { subscribeSocialMarketingConsent } from './subscribe-social-marketing-consent';
 
 it('rejects malformed pixel identifiers', () => {
   expect(isValidTikTokPixelId('TT123')).toBe(true);

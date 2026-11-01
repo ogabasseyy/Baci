@@ -1,18 +1,17 @@
 'use client';
 
-import { useInsertionEffect } from 'react';
+import { useInsertionEffect, useState } from 'react';
+import { getSocialMarketingConsent } from '@/lib/analytics/get-social-marketing-consent';
 import { socialPixelContext } from '@/lib/analytics/social-pixel-context';
-import {
-  getSocialMarketingConsent,
-  subscribeSocialMarketingConsent,
-} from '@/lib/analytics/social-pixel-policy';
+import { subscribeSocialMarketingConsent } from '@/lib/analytics/subscribe-social-marketing-consent';
 
 /** Prepare each destination independently before sibling layout events. */
 export function usePreparedSocialPixel(
   destination: 'tiktok' | 'snapchat',
   merchantId: string,
   pixelId: string | null
-): void {
+): number {
+  const [consentEpoch, setConsentEpoch] = useState(0);
   useInsertionEffect(() => {
     if (!merchantId || !pixelId) return;
     const preparedPixelId = pixelId;
@@ -21,9 +20,10 @@ export function usePreparedSocialPixel(
       if (getSocialMarketingConsent()) {
         if (!release)
           release = socialPixelContext.prepare(destination, preparedPixelId);
-      } else {
-        release?.();
+      } else if (release) {
+        release();
         release = undefined;
+        setConsentEpoch((epoch) => epoch + 1);
       }
     }
     syncOwner();
@@ -33,4 +33,5 @@ export function usePreparedSocialPixel(
       release?.();
     };
   }, [destination, merchantId, pixelId]);
+  return consentEpoch;
 }

@@ -15,7 +15,7 @@ export async function applySupabaseReplaySql(
       stage.kind === 'migration' ? 'migration application' : 'SQL check';
     const failureMatch =
       error instanceof Error
-        ? /^[A-Za-z0-9._-]+ failed: (non-zero-exit|spawn-error|stderr-limit|stdin-limit|stdout-limit|timeout)( \(line=\d+(?:,sqlstate=[0-9A-Z]{5}|,reason=connection-lost)?\))?$/.exec(
+        ? /^[A-Za-z0-9._-]+ failed: (non-zero-exit|spawn-error|stderr-limit|stdin-limit|stdout-limit|timeout)( \(line=\d+(?:,sqlstate=[0-9A-Z]{5}|,reason=connection-lost(?:,phase=(?:10|[1-9]))?)?\))?$/.exec(
             error.message
           )
         : undefined;

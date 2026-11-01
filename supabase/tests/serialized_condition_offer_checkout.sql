@@ -53,6 +53,7 @@ DECLARE
   shortage boolean := false;
   phase integer := 1;
 BEGIN
+  RAISE WARNING 'BACI_SERIALIZED_PHASE_1';
   INSERT INTO public.merchants(id,email,business_name,slug,is_published)
   VALUES (merchant,'serialized-offer-fixture@example.com','Serialized offer fixture','serialized-offer-fixture',true);
   INSERT INTO public.products(id,merchant_id,name,price,status,stock_quantity,manage_stock,has_condition_offers,has_variants,inventory_tracking_policy)
@@ -67,15 +68,18 @@ BEGIN
   PERFORM public.assign_variant_inventory_unit_offer(merchant,new_unit,new_offer);
 
   phase := 2;
+  RAISE WARNING 'BACI_SERIALIZED_PHASE_2';
   SELECT allocatable_stock INTO n FROM public.get_storefront_offer_resolution(merchant,ARRAY[product]) WHERE offer_id=used_offer;
   IF n IS DISTINCT FROM 1 THEN RAISE EXCEPTION 'used offer must expose its one assigned unit'; END IF;
   phase := 3;
+  RAISE WARNING 'BACI_SERIALIZED_PHASE_3';
   SELECT (entry->>'allocatable_stock')::integer INTO n
   FROM private.get_storefront_pdp_core_v2(merchant, product::text, NULL) AS pdp,
     LATERAL jsonb_array_elements(pdp.product_data->'product_offers') AS entry
   WHERE entry->>'id' = used_offer::text;
   IF n IS DISTINCT FROM 1 THEN RAISE EXCEPTION 'PDP must expose assigned offer stock when ordinary pool is empty'; END IF;
   phase := 4;
+  RAISE WARNING 'BACI_SERIALIZED_PHASE_4';
   SELECT count(*) INTO before_orders FROM public.orders WHERE merchant_id=merchant;
   SELECT stock_quantity INTO before_stock FROM public.product_offers WHERE id=used_offer;
   BEGIN
@@ -94,18 +98,21 @@ BEGIN
   END IF;
 
   phase := 5;
+  RAISE WARNING 'BACI_SERIALIZED_PHASE_5';
   SELECT o.id INTO v_order_id FROM public.create_storefront_order(
     p_merchant_id => merchant, p_customer_email => 'serialized-offer-buyer@example.com',
     p_customer_name => 'Serialized offer buyer', p_items => jsonb_build_array(jsonb_build_object(
       'product_id',product,'offer_id',used_offer,'condition','used','quantity',1))
   ) o;
   phase := 6;
+  RAISE WARNING 'BACI_SERIALIZED_PHASE_6';
   IF NOT EXISTS (SELECT 1 FROM public.variant_inventory vi JOIN public.order_items oi ON oi.id=vi.order_item_id
     WHERE vi.id=used_unit AND vi.order_id=v_order_id AND vi.status='reserved' AND oi.product_offer_id=used_offer)
     OR EXISTS (SELECT 1 FROM public.variant_inventory WHERE id=new_unit AND status <> 'available') THEN
     RAISE EXCEPTION 'order must reserve only the matching condition unit';
   END IF;
   phase := 7;
+  RAISE WARNING 'BACI_SERIALIZED_PHASE_7';
   IF NOT pg_temp.has_serialized_offer_marker(
     (SELECT id FROM public.order_items WHERE order_id=v_order_id AND product_offer_id=used_offer),
     merchant, used_offer
@@ -113,18 +120,21 @@ BEGIN
     RAISE EXCEPTION 'trusted order creation did not record the serialized offer marker';
   END IF;
   phase := 8;
+  RAISE WARNING 'BACI_SERIALIZED_PHASE_8';
   IF (SELECT stock_quantity FROM public.product_offers WHERE id=used_offer) <> before_stock - 1 THEN
     RAISE EXCEPTION 'successful order must decrement the matching offer scalar';
   END IF;
   SELECT allocatable_stock INTO n FROM public.get_storefront_offer_resolution(merchant,ARRAY[product]) WHERE offer_id=used_offer;
   IF n IS DISTINCT FROM 0 THEN RAISE EXCEPTION 'reserved unit must disappear from offer availability'; END IF;
   phase := 9;
+  RAISE WARNING 'BACI_SERIALIZED_PHASE_9';
   PERFORM public.claim_variant_inventory_units_for_order_item(merchant,v_order_id,
     (SELECT oi.id FROM public.order_items oi WHERE oi.order_id=v_order_id LIMIT 1));
   IF (SELECT count(*) FROM public.variant_inventory WHERE order_id=v_order_id) <> 1 THEN
     RAISE EXCEPTION 'claim replay duplicated the reservation';
   END IF;
   phase := 10;
+  RAISE WARNING 'BACI_SERIALIZED_PHASE_10';
   UPDATE public.orders SET payment_status='paid' WHERE id=v_order_id;
   PERFORM public.confirm_order_inventory_reservations(merchant,v_order_id);
   IF EXISTS (SELECT 1 FROM public.variant_inventory WHERE id=used_unit AND reservation_expires_at IS NOT NULL) THEN

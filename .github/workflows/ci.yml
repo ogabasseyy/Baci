@@ -440,6 +440,9 @@ jobs:
           bash supabase/migrations/tests/run-serialized-offer-confirmation.sh
           TEST_LINE_ENDINGS=lf bash supabase/tests/run-serialized-unit-delete-lock-order.sh
           TEST_LINE_ENDINGS=crlf bash supabase/tests/run-serialized-unit-delete-lock-order.sh
+          TEST_TARGET_STATUS=available bash supabase/tests/run-serialized-release-product-lock-order.sh
+          TEST_TARGET_STATUS=returned bash supabase/tests/run-serialized-release-product-lock-order.sh
+          TEST_TARGET_STATUS=sold bash supabase/tests/run-serialized-release-product-lock-order.sh
           bash supabase/migrations/tests/run-serialized-offer-payment-proof.sh
           bash supabase/migrations/tests/run-serialized-offer-reuse.sh
           bash supabase/migrations/tests/run-serialized-offer-creation.sh

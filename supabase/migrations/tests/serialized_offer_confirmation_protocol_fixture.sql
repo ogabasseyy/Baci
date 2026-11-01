@@ -1,0 +1,2 @@
+INSERT INTO private.serialized_offer_order_items VALUES ('00000000-0000-0000-0000-000000000006','00000000-0000-0000-0000-000000000010','00000000-0000-0000-0000-000000000003');
+UPDATE public.order_items SET fulfillment_data='{"refundReference":"keep-me"}'::jsonb WHERE id='00000000-0000-0000-0000-000000000006';

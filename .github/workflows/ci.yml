@@ -405,6 +405,8 @@ jobs:
           bash supabase/migrations/tests/run-serialized-offer-quiz.sh
           bash supabase/migrations/tests/run-serialized-offer-claims.sh
           bash supabase/migrations/tests/run-serialized-offer-confirmation.sh
+          bash supabase/migrations/tests/run-serialized-offer-reuse.sh
+          bash supabase/migrations/tests/run-serialized-offer-creation.sh
           bash supabase/migrations/tests/run-serialized-offer-availability.sh
           bash supabase/migrations/tests/run-serialized-offer-cart.sh
           bash supabase/migrations/tests/run-serialized-offer-lifecycle.sh

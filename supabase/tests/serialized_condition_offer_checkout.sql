@@ -2,8 +2,8 @@
 -- rolls back. A condition offer must claim the corresponding serialized unit.
 BEGIN;
 
--- Exercise the proposed order routing inside this transaction only. Production
--- stays gated until the voucher and all order-entry paths are implemented.
+-- Open only the checkout eligibility gate inside this transaction. The order
+-- routing and protocol marker must come from the production migrations.
 CREATE OR REPLACE FUNCTION public.commerce_cart_condition_pool_is_quantity_managed(p_merchant_id uuid,p_product_id uuid)
 RETURNS boolean LANGUAGE sql STABLE SET search_path='' AS $$
  SELECT CASE WHEN public.get_effective_inventory_tracking_policy(
@@ -16,27 +16,13 @@ RETURNS boolean LANGUAGE sql STABLE SET search_path='' AS $$
   AND anchor.product_id=product.id AND anchor.merchant_id=product.merchant_id
  WHERE product.id=p_product_id AND product.merchant_id=p_merchant_id;
 $$;
-DO $$
-DECLARE
-  definition text := pg_catalog.pg_get_functiondef(
-    'private.create_storefront_order_unchecked(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text)'::regprocedure
-  );
-  old text := $old$        AND NOT EXISTS(SELECT 1 FROM pg_temp.tmp_storefront_order_items t WHERE t.condition_offer_id IS NOT NULL AND t.product_id=oi.product_id AND t.variant_id IS NOT DISTINCT FROM oi.variant_id AND t.condition IS NOT DISTINCT FROM oi.condition)$old$;
-  replacement text := $new$        AND (
-          oi.product_offer_id IS NULL OR EXISTS (
-            SELECT 1 FROM public.products p LEFT JOIN public.product_variants anchor
-              ON anchor.id=p.inventory_anchor_variant_id AND anchor.product_id=p.id AND anchor.merchant_id=p.merchant_id
-            WHERE p.id=oi.product_id AND p.merchant_id=p_merchant_id
-              AND public.get_effective_inventory_tracking_policy(p.inventory_tracking_policy,anchor.inventory_tracking_policy)
-                IN ('serialized_strict','serialized_then_unlimited')
-          )
-        )$new$;
-BEGIN
-  IF (length(definition)-length(replace(definition,old,'')))/length(old) <> 1 THEN
-    RAISE EXCEPTION 'serialized offer order source mismatch';
-  END IF;
-  EXECUTE replace(definition,old,replacement);
-END $$;
+-- Only trusted order creation may write this marker. Inspect it through a
+-- test-only privileged helper because production roles have no table access.
+CREATE FUNCTION pg_temp.has_serialized_offer_marker(p_item uuid, p_merchant uuid, p_offer uuid)
+RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$
+  SELECT EXISTS (SELECT 1 FROM private.serialized_offer_order_items
+    WHERE order_item_id=p_item AND merchant_id=p_merchant AND offer_id=p_offer);
+$$;
 
 SET LOCAL ROLE service_role;
 SELECT set_config('request.jwt.claim.role','service_role',true);
@@ -101,6 +87,12 @@ BEGIN
     WHERE vi.id=used_unit AND vi.order_id=v_order_id AND vi.status='reserved' AND oi.product_offer_id=used_offer)
     OR EXISTS (SELECT 1 FROM public.variant_inventory WHERE id=new_unit AND status <> 'available') THEN
     RAISE EXCEPTION 'order must reserve only the matching condition unit';
+  END IF;
+  IF NOT pg_temp.has_serialized_offer_marker(
+    (SELECT id FROM public.order_items WHERE order_id=v_order_id AND product_offer_id=used_offer),
+    merchant, used_offer
+  ) THEN
+    RAISE EXCEPTION 'trusted order creation did not record the serialized offer marker';
   END IF;
   IF (SELECT stock_quantity FROM public.product_offers WHERE id=used_offer) <> before_stock - 1 THEN
     RAISE EXCEPTION 'successful order must decrement the matching offer scalar';

@@ -125,6 +125,31 @@ ALTER FUNCTION private.transfer_quiz_voucher_to_serialized_offer(uuid,uuid,uuid,
 REVOKE ALL ON FUNCTION private.transfer_quiz_voucher_to_serialized_offer(uuid,uuid,uuid,uuid,jsonb)
  FROM PUBLIC, anon, authenticated, service_role;
 
+-- Bind fallback awards to the selected offer even without a route ordinal.
+CREATE FUNCTION private.quiz_voucher_expected_serialized_offer(
+ p_merchant_id uuid,p_product_id uuid,p_item jsonb
+) RETURNS uuid LANGUAGE plpgsql STABLE SET search_path='' AS $$
+DECLARE candidate uuid; condition_value text;
+BEGIN
+ IF NOT EXISTS (
+  SELECT 1 FROM public.products product LEFT JOIN public.product_variants anchor
+   ON anchor.id=product.inventory_anchor_variant_id AND anchor.merchant_id=product.merchant_id
+     AND anchor.product_id=product.id
+  WHERE product.id=p_product_id AND product.merchant_id=p_merchant_id
+   AND public.get_effective_inventory_tracking_policy(product.inventory_tracking_policy,anchor.inventory_tracking_policy)
+     IN ('serialized_strict','serialized_then_unlimited')
+ ) THEN RETURN NULL; END IF;
+ candidate:=coalesce(nullif(btrim(p_item->>'offer_id'),''),nullif(btrim(p_item->>'condition_offer_id'),''))::uuid;
+ IF candidate IS NOT NULL THEN RETURN candidate; END IF;
+ condition_value:=nullif(btrim(p_item->>'condition'),'');
+ IF condition_value IS NULL THEN RETURN NULL; END IF;
+ SELECT offer.id INTO candidate FROM public.product_offers offer
+  WHERE offer.merchant_id=p_merchant_id AND offer.product_id=p_product_id AND offer.condition=condition_value;
+ RETURN candidate;
+END $$;
+REVOKE ALL ON FUNCTION private.quiz_voucher_expected_serialized_offer(uuid,uuid,jsonb)
+ FROM PUBLIC,anon,authenticated,service_role;
+
 DO $$
 DECLARE function_oid oid; definition text;
  old text := $old$    -- Update order with shipping & user fields$old$;
@@ -139,6 +164,15 @@ BEGIN
  definition:=pg_catalog.pg_get_functiondef(function_oid);
  IF (length(definition)-length(replace(definition,old,'')))/length(old) <> 1 THEN
    RAISE EXCEPTION 'quiz voucher transfer source mismatch';
+ END IF;
+ definition:=replace(definition,old,replacement);
+ old:=$old$      AND (v_voucher_line_ordinal IS NULL OR oi.line_id = v_voucher_line_ordinal)$old$;
+ replacement:=$new$      AND (v_voucher_line_ordinal IS NULL OR oi.line_id = v_voucher_line_ordinal)
+      AND (private.quiz_voucher_expected_serialized_offer(p_merchant_id,v_product_id,v_voucher_item) IS NULL
+        OR coalesce(oi.product_offer_id,oi.offer_id,oi.offer_id_snapshot)
+          = private.quiz_voucher_expected_serialized_offer(p_merchant_id,v_product_id,v_voucher_item))$new$;
+ IF (length(definition)-length(replace(definition,old,'')))/length(old) <> 1 THEN
+   RAISE EXCEPTION 'quiz voucher fallback identity source mismatch';
  END IF;
  EXECUTE replace(definition,old,replacement);
 END $$;

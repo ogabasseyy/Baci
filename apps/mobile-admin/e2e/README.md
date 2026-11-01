@@ -43,10 +43,8 @@ selectors a runner may use when the matching screen state is ready:
    `Resend code` starts disabled while its countdown is active, so a runner
    must wait for the enabled semantic state rather than sleep.
 3. Recovery: `Back to login` and `Send Instructions` are stable button labels.
-   The email input currently exposes the `your@email.com` placeholder in
-   tests but no explicit `accessibilityLabel` in app code. Do not promote that
-   placeholder to a semantic contract; full recovery coverage is blocked until
-   the input receives a stable accessibility label in app code.
+   The email input has the accessible name `Email Address`; use that name
+   instead of its placeholder when selecting the field.
 
 For every covered flow, use `runSemanticStep` for before/action/after
 assertions and `runWithStabilityGate` with its default three complete runs.

@@ -84,3 +84,27 @@ BEGIN
    RAISE EXCEPTION 'handoff dropped unrelated exact offer';
  END IF;
 END $$;
+-- Ordinary lines have no offerId and must also persist through handoff.
+DO $$
+DECLARE
+ m uuid:='11111111-1111-4111-8111-111111111111';
+ p uuid:='44444444-4444-4444-8444-444444444444';
+ source uuid:='aaaaaaaa-4333-4000-8000-000000000001'; dest uuid:='aaaaaaaa-4333-4000-8000-000000000002';
+ sg uuid:='bbbbbbbb-4333-4000-8000-000000000001'; dg uuid:='bbbbbbbb-4333-4000-8000-000000000002';
+ h uuid:='cccccccc-4333-4000-8000-000000000001'; line uuid:='dddddddd-4333-4000-8000-000000000001';
+ r jsonb;
+BEGIN
+ INSERT INTO public.commerce_carts(id,merchant_id,expires_at) VALUES (source,m,now()+interval '1 day'),(dest,m,now()+interval '1 day');
+ INSERT INTO public.commerce_cart_grants(id,merchant_id,cart_id,principal_id,expires_at) VALUES
+ (sg,m,source,'plain-source',now()+interval '1 day'),(dg,m,dest,'plain-receiver',now()+interval '1 day');
+ INSERT INTO public.commerce_cart_lines(id,merchant_id,cart_id,product_id,quantity,last_unit_price_minor) VALUES(line,m,source,p,1,1500);
+ PERFORM set_config('request.jwt.claims',jsonb_build_object('role','commerce_cart_shopper','exp',9999999999,'cart_scope','session','cart_merchant_id',m,'cart_principal_id','plain-source','cart_id',source,'cart_grant_id',sg)::text,true);
+ r:=public.commerce_cart_issue_handoff('plain-handoff',h,source,'plain-issue','{"type":"native"}');
+ IF r->>'ok' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'plain handoff issue failed: %',r; END IF;
+ PERFORM set_config('request.jwt.claims',jsonb_build_object('role','commerce_cart_shopper','exp',9999999999,'cart_scope','session','cart_merchant_id',m,'cart_principal_id','plain-receiver','cart_id',dest,'cart_grant_id',dg)::text,true);
+ r:=public.commerce_cart_redeem_handoff('plain-handoff',h,'plain-redeem','merge','native',dest,1,1,
+   jsonb_build_array(jsonb_build_object('item',jsonb_build_object('productId',p),'quantity',1,'sourceLineId',line)), '[]');
+ IF r->>'ok' IS DISTINCT FROM 'true' OR NOT EXISTS(SELECT 1 FROM public.commerce_cart_lines WHERE cart_id=source AND product_id=p AND offer_id IS NULL) THEN
+   RAISE EXCEPTION 'plain handoff failed: %',r;
+ END IF;
+END $$;

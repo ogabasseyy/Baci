@@ -36,10 +36,11 @@ vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
   };
 });
 vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => mocks.createServiceClient(),
+  createServiceClient: () => withCaptureRpc(mocks.createServiceClient()),
 }));
 
 import { POST } from './route';
+import { withCaptureRpc } from './route.capture-test-support';
 
 type WebhookSecretUnionModule =
   typeof import('@/lib/piggyvest/webhook-secret-union');

@@ -1,8 +1,10 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { z } from 'zod';
+import { piggyvestArchivedVerificationSecretsSchema } from '@/schemas/piggyvest/webhook-key-archive';
 import { primaryWalletPaidInterestSchemas as schemas } from '@/schemas/primary-wallet-paid-interest';
 import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
+import { acceptedWebhookSecrets } from './webhook-key-archive';
 
 type Selection = z.infer<typeof schemas.selection>;
 type Proof = z.infer<typeof schemas.proof>;
@@ -11,6 +13,8 @@ export async function applyPrimaryWalletSignedPaidInterest(input: {
   rawBody: Uint8Array;
   signature: string | null;
   configuration: unknown;
+  /** Derived archive-sourced verification keys, validated and bounded. */
+  archivedSecrets?: readonly string[];
   involved: (selection: Selection) => Promise<boolean>;
   resolveCrosswalk: (selection: Selection) => Promise<unknown>;
   retrieveWallet: (walletId: string) => Promise<unknown>;
@@ -18,13 +22,16 @@ export async function applyPrimaryWalletSignedPaidInterest(input: {
   now?: () => Date;
 }): Promise<z.infer<typeof schemas.outcome>> {
   const config = schemas.runtime.parse(input.configuration);
+  const archivedSecrets = piggyvestArchivedVerificationSecretsSchema.parse(
+    input.archivedSecrets
+  );
   // The outer key-union already matched one of these keys; re-accept the
   // same bounded set here so a rotation-retained signature verifies on
   // the direct path instead of 503ing until retries exhaust.
   if (
     input.rawBody.byteLength === 0 ||
     input.rawBody.byteLength > 65536 ||
-    ![config.webhookSecret, ...config.retainedWebhookSecrets].some((secret) =>
+    !acceptedWebhookSecrets(config, archivedSecrets).some((secret) =>
       verifyPiggyvestPayloadSignature({
         payload: input.rawBody,
         signature: input.signature,

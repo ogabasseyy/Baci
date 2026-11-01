@@ -12,6 +12,9 @@ import { validateSavedGiglCheckoutQuote } from './validate-saved-gigl-checkout-q
 vi.mock('@/lib/shipping', () => ({
   shippingService: { getProviderQuotes: vi.fn() },
 }));
+vi.mock('@/lib/logger', () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
 const sender = {
   name: 'Shop',
   phone: '08000000000',
@@ -86,12 +89,11 @@ describe('saved paid GIG quote validation', () => {
     expect(shippingService.getProviderQuotes).toHaveBeenCalledOnce();
   });
   it.each([
-    { price: 1101 },
-    { providerCost: 999 },
     { serviceTier: 'GoFaster', providerRateId: 'GIGL_4_0_1_0_1_4' },
     { providerRateId: 'GIGL_5_0_1_0_0_4' },
     { currency: 'USD' },
-  ])('requires confirmation before changing tariff or service %j', async (change) => {
+    { pricingVersion: 'gigl_platform_margin_v2' },
+  ])('requires confirmation before changing service, currency or pricing version %j', async (change) => {
     vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([
       { ...fresh, ...change },
     ]);
@@ -214,6 +216,21 @@ describe('saved paid GIG quote validation', () => {
     });
     expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
   });
+  it.each([
+    1000,
+    '1100.01',
+    null,
+    undefined,
+    '',
+  ])('requires recovery before fetching when the order shipping fee %j differs from the saved quote price', async (expectedFee) => {
+    await expect(
+      validateSavedGiglCheckoutQuote(quote, sender, expectedFee)
+    ).rejects.toMatchObject({
+      code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+      status: 409,
+    });
+    expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
+  });
   it('reports unavailable pricing without claiming that details changed', async () => {
     vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([]);
     await expect(
@@ -231,15 +248,44 @@ describe('saved paid GIG quote validation', () => {
     expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
   });
   it.each([
+    '+23415781',
+    '',
+    '0800000',
+  ])('bugfix: refuses before any GIG call when the current sender phone %j is unusable', async (phone) => {
+    await expect(
+      validateSavedGiglCheckoutQuote(quote, { ...sender, phone }, 1100)
+    ).rejects.toMatchObject({ code: 'MERCHANT_SENDER_REQUIRED', status: 409 });
+    expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
+  });
+  it.each([
     { name: 'Different Shop' },
     { phone: '08000000001' },
-  ])('requires consent before lookup when only the sender contact changed %j', async (changed) => {
+  ])('bugfix: books at the paid price when only the sender name or phone changed %j', async (changed) => {
+    expect(
+      await validateSavedGiglCheckoutQuote(
+        quote,
+        { ...sender, ...changed },
+        1100
+      )
+    ).toBe(quote);
+    expect(shippingService.getProviderQuotes).toHaveBeenCalledOnce();
+  });
+  it('bugfix: does not require a valid saved sender phone, which GIG does not price on', async () => {
+    const saved = {
+      ...quote,
+      quote_request: { ...request, sender: { ...sender, phone: '+23450642' } },
+    };
+    expect(await validateSavedGiglCheckoutQuote(saved, sender, 1100)).toBe(
+      saved
+    );
+  });
+  it.each([
+    { city: 'Abuja', state: 'FCT' },
+    { postalCode: '100001' },
+  ])('still requires confirmation when the pickup location changed %j', async (changed) => {
     await expect(
       validateSavedGiglCheckoutQuote(quote, { ...sender, ...changed }, 1100)
-    ).rejects.toMatchObject({
-      code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
-      status: 409,
-    });
+    ).rejects.toMatchObject({ code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED' });
     expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
   });
   it('accepts equivalent sender name casing and phone formatting', async () => {
@@ -260,5 +306,30 @@ describe('saved paid GIG quote validation', () => {
       )
     ).rejects.toMatchObject({ code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED' });
     expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
+  });
+  it.each([
+    { providerCost: 900, price: 990, platformMargin: 90 },
+    { providerCost: 1100, price: 1210, platformMargin: 110 },
+    { providerCost: 1050, price: 1155, platformMargin: 105 },
+  ])('bugfix: books the original paid quote when GIG now costs no more than the customer paid %j', async (live) => {
+    vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([
+      { ...fresh, ...live },
+    ]);
+    const result = await validateSavedGiglCheckoutQuote(quote, sender, 1100);
+    expect(result).toBe(quote);
+    expect(result).toMatchObject({ id: 'saved', price: 1100 });
+  });
+  it('refuses with an explicit code and only the paid price when GIG now costs more than the customer paid', async () => {
+    vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([
+      { ...fresh, providerCost: 1250, price: 1375, platformMargin: 125 },
+    ]);
+    await expect(
+      validateSavedGiglCheckoutQuote(quote, sender, 1100)
+    ).rejects.toMatchObject({
+      code: 'GIGL_COST_EXCEEDS_CUSTOMER_PAID',
+      status: 409,
+      message:
+        "GIG's current price for this delivery is higher than the ₦1,100 the customer paid. No booking was made.",
+    });
   });
 });

@@ -10,8 +10,8 @@ INSERT INTO public.merchants(id,user_id,email,business_name,slug)
 VALUES ('efab0000-0000-4000-8000-000000000011','efab0000-0000-4000-8000-000000000003','env-merchant@example.test','Draft RLS fixture','oxygen-environment-fixture');
 INSERT INTO public.customers(id,merchant_id,user_id,first_name,last_name,email)
 VALUES ('efab0000-0000-4000-8000-000000000021','efab0000-0000-4000-8000-000000000011','efab0000-0000-4000-8000-000000000001','Test','Customer','env-owner@example.test');
-INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status)
-VALUES ('efab0000-0000-4000-8000-000000000031','efab0000-0000-4000-8000-000000000011','efab0000-0000-4000-8000-000000000021','OXYGEN-ENV-RLS',400000,'NGN','unpaid');
+INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status,payment_method)
+VALUES ('efab0000-0000-4000-8000-000000000031','efab0000-0000-4000-8000-000000000011','efab0000-0000-4000-8000-000000000021','OXYGEN-ENV-RLS',400000,'NGN','unpaid','oxygen');
 INSERT INTO oxygen_private.partner_workers(partner_reference,worker_user_id)
 VALUES ('environment-fixture','efab0000-0000-4000-8000-000000000003');
 INSERT INTO oxygen_private.runtime_bindings(merchant_id,worker_user_id,partner_reference,environment,enabled)

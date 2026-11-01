@@ -71,11 +71,12 @@ export function useOxygenPaymentRecovery(
       setError('');
     }
     const current = generation.current;
+    let fallbackRead = false;
     try {
       async function request(
         nextAction: OxygenPaymentRecoveryRequest['action'],
         cached = false
-      ) {
+      ): Promise<OxygenPaymentRecoveryState> {
         const response = cached
           ? await fetchWithCsrf(`${endpoint}?workflowId=${workflowId}`, {
               cache: 'no-store',
@@ -91,6 +92,16 @@ export function useOxygenPaymentRecovery(
                 action: nextAction,
               }),
             });
+        if (
+          response.status === 409 &&
+          !cached &&
+          manualCheck &&
+          nextAction === 'check_status' &&
+          state?.pending
+        ) {
+          fallbackRead = true;
+          return await request('check_status', true);
+        }
         if (!response.ok) throw new Error('Unconfirmed');
         const data = oxygenPaymentRecoveryStateSchema.parse(
           await response.json()
@@ -107,7 +118,10 @@ export function useOxygenPaymentRecovery(
           : data.paymentUrl;
       let data = state;
       if (!continuePayment || !data || !linkFor(data) || data.pending) {
-        data = await request(action, cachedOnly || state?.pending);
+        data = await request(
+          action,
+          cachedOnly || Boolean(state?.pending && !manualCheck)
+        );
       }
       if (
         continuePayment &&
@@ -149,21 +163,25 @@ export function useOxygenPaymentRecovery(
         setError(
           'We could not confirm your payment yet. Your plan is saved; no payment has been assumed.'
         );
-        try {
-          const response = await fetchWithCsrf(
-            `${endpoint}?workflowId=${workflowId}`,
-            { cache: 'no-store' }
-          );
-          if (response.ok) {
-            const data = oxygenPaymentRecoveryStateSchema.parse(
-              await response.json()
+        if (!fallbackRead)
+          try {
+            const response = await fetchWithCsrf(
+              `${endpoint}?workflowId=${workflowId}`,
+              { cache: 'no-store' }
             );
-            if (data.reference === reference && generation.current === current)
-              setState(data);
+            if (response.ok) {
+              const data = oxygenPaymentRecoveryStateSchema.parse(
+                await response.json()
+              );
+              if (
+                data.reference === reference &&
+                generation.current === current
+              )
+                setState(data);
+            }
+          } catch {
+            /* Keep the last confirmed state. */
           }
-        } catch {
-          /* Keep the last confirmed state. */
-        }
       }
     } finally {
       lock.current = false;

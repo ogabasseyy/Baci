@@ -175,16 +175,33 @@ it('keeps command-scoped evidence binding and the operation allowlist together',
     error: null,
   });
   const call = vi.fn().mockResolvedValue({});
-  const bind = vi.fn().mockReturnValue({ call });
+  const metadata = vi.fn().mockReturnValue({ operation: 'details' });
+  const bind = vi.fn().mockReturnValue({
+    call,
+    environment: 'production',
+    responseMetadata: metadata,
+  });
   m.perform.mockImplementationOnce(async (...args) => {
+    expect(args[2].environment).toBe('production');
+    expect(args[2].responseMetadata()).toEqual({ operation: 'details' });
     const bound = args[2].forCommand(user, id, ref);
+    expect(bound.environment).toBe('production');
+    expect(bound.responseMetadata()).toEqual({ operation: 'details' });
     await bound.call('details', {});
     expect(() => bound.call('approve', {})).toThrow('blocked');
     return snapshot;
   });
   await quoteOxygenPlan(
     user,
-    { ...connection, provider: { call, forCommand: bind } },
+    {
+      ...connection,
+      provider: {
+        call,
+        environment: 'production',
+        forCommand: bind,
+        responseMetadata: metadata,
+      },
+    },
     input
   );
   expect(bind).toHaveBeenCalledWith(user, id, ref);

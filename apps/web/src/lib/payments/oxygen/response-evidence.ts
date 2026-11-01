@@ -229,7 +229,8 @@ export function decryptOxygenResponse(
   const decipher = createDecipheriv(
     'aes-256-gcm',
     keyBytes(secret),
-    Buffer.from(iv, 'base64url')
+    Buffer.from(iv, 'base64url'),
+    { authTagLength: 16 }
   );
   decipher.setAAD(aad(workflowId, commandId, sequence));
   decipher.setAuthTag(Buffer.from(tag, 'base64url'));

@@ -53,7 +53,9 @@ export function decryptOxygenDraft(
   const tagBytes = Buffer.from(tag, 'base64url');
   if (ivBytes.length !== 12 || tagBytes.length !== 16)
     throw new Error('Draft storage unavailable');
-  const decipher = createDecipheriv('aes-256-gcm', keyBytes(key), ivBytes);
+  const decipher = createDecipheriv('aes-256-gcm', keyBytes(key), ivBytes, {
+    authTagLength: 16,
+  });
   decipher.setAAD(aad(context));
   decipher.setAuthTag(tagBytes);
   const raw = Buffer.concat([

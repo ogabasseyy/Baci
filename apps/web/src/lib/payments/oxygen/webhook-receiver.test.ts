@@ -115,6 +115,15 @@ describe('Oxygen callback receiver', () => {
     );
     expect(response.status).toBe(503);
   });
+  it('rejects incorrect Basic credentials', async () => {
+    const authorization = `Basic ${Buffer.from(`${config.auth.apiKey}:incorrect`).toString('base64')}`;
+    const response = await receiveOxygenWebhook(
+      request(payload, { 'content-type': 'application/json', authorization }),
+      { ...config, auth: { ...config.auth, mode: 'BASIC' } },
+      async () => 'accepted'
+    );
+    expect(response.status).toBe(401);
+  });
   it.each([
     {
       auth: { mode: 'BEARER' as const, apiKey: 'example-key' },
@@ -126,7 +135,7 @@ describe('Oxygen callback receiver', () => {
         apiKey: 'example-key',
         apiSecret: 'example-secret',
       },
-      authorization: 'Basic ZXhhbXBsZS1rZXk6ZXhhbXBsZS1zZWNyZXQ=',
+      authorization: `Basic ${Buffer.from(`${config.auth.apiKey}:${config.auth.apiSecret}`).toString('base64')}`,
     },
   ])('accepts the documented $auth.mode authentication', async ({
     auth,

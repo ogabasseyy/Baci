@@ -20,10 +20,10 @@ vi.mock('@/lib/api-auth', () => ({
   authenticateApiRequest: mocks.authenticateApiRequest,
 }));
 
+type MerchantApiModule = typeof import('@/lib/get-merchant-for-api-request');
+
 vi.mock('@/lib/get-merchant-for-api-request', async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import('@/lib/get-merchant-for-api-request')
-  >()),
+  ...(await importOriginal<MerchantApiModule>()),
   getMerchantForApiRequest: mocks.getMerchantForApiRequest,
 }));
 

@@ -80,6 +80,10 @@ export async function quoteOxygenPlan(
   const restrict = (source: OxygenProvider): OxygenProvider => {
     const bind = source.forCommand;
     return {
+      environment: source.environment,
+      ...(source.responseMetadata
+        ? { responseMetadata: () => source.responseMetadata?.() }
+        : {}),
       call(operation, payload) {
         if (operation !== 'book' && operation !== 'details')
           throw new OxygenPlanQuoteError('blocked');

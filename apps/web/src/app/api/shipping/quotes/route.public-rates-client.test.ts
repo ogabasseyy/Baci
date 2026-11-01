@@ -27,8 +27,10 @@ vi.mock('./merchant-rate-quotes', () => ({
 vi.mock('./resolve-quote-sender', () => ({
   resolveQuoteSender: () => ({ ok: true, sender: {} }),
 }));
+type QuoteSourceModule = typeof import('./quote-source-orchestration');
+
 vi.mock('./quote-source-orchestration', async (original) => ({
-  ...(await original<typeof import('./quote-source-orchestration')>()),
+  ...(await original<QuoteSourceModule>()),
   orchestrateQuoteSources: async () => ({
     quotes: { all: [], featured: [] },
     sessionId: 'test',

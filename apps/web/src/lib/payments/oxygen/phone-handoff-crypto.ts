@@ -57,7 +57,9 @@ export function decryptPhoneTarget(
   const authTag = Buffer.from(tag, 'base64url');
   if (nonce.length !== 12 || authTag.length !== 16)
     throw new Error('Phone verification unavailable');
-  const cipher = createDecipheriv('aes-256-gcm', keyBytes(key), nonce);
+  const cipher = createDecipheriv('aes-256-gcm', keyBytes(key), nonce, {
+    authTagLength: 16,
+  });
   cipher.setAAD(aad(context));
   cipher.setAuthTag(authTag);
   const bytes = Buffer.concat([

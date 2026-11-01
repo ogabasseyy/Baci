@@ -1,3 +1,43 @@
+// Match Unicode simple case folds without interpreting secret text as a pattern.
+function foldCharacter(character: string): string {
+  if (character === 'ı') return character;
+  return character.toLowerCase().toUpperCase();
+}
+function replaceLiteral(message: string, value: string): string {
+  const input = Array.from(message);
+  const needle = Array.from(value, foldCharacter);
+  const folded = input.map(foldCharacter);
+  const short = value.length < 3;
+  const letter = (character: string | undefined) =>
+    character !== undefined && /\p{L}/u.test(character);
+  const prefix = Array<number>(needle.length).fill(0);
+  for (let i = 1, length = 0; i < needle.length; i++) {
+    while (length > 0 && needle[i] !== needle[length])
+      length = prefix[length - 1];
+    if (needle[i] === needle[length]) length++;
+    prefix[i] = length;
+  }
+  const output: string[] = [];
+  let start = 0;
+  let length = 0;
+  for (let i = 0; i < folded.length; i++) {
+    while (length > 0 && folded[i] !== needle[length])
+      length = prefix[length - 1];
+    if (folded[i] === needle[length]) length++;
+    if (length !== needle.length) continue;
+    const match = i + 1 - length;
+    if (!short || (!letter(input[match - 1]) && !letter(input[i + 1]))) {
+      output.push(input.slice(start, match).join(''), '[redacted]');
+      start = i + 1;
+      length = 0;
+    } else {
+      length = prefix[length - 1];
+    }
+  }
+  output.push(input.slice(start).join(''));
+  return output.join('');
+}
+
 /** Retain only sanitized text, never raw provider/request objects. */
 export function redactOxygenDiagnosticText(
   text: string,
@@ -32,10 +72,7 @@ export function redactOxygenDiagnosticText(
   for (const value of values
     .filter(Boolean)
     .sort((a, b) => b.length - a.length)) {
-    const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const pattern =
-      value.length < 3 ? `(?<![\\p{L}])${escaped}(?![\\p{L}])` : escaped;
-    message = message.replace(new RegExp(pattern, 'giu'), '[redacted]');
+    message = replaceLiteral(message, value);
   }
   return message
     .replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')

@@ -8,8 +8,10 @@ const m = vi.hoisted(() => ({
   after: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
+type NextServerModule = typeof import('next/server');
+
 vi.mock('next/server', async (original) => ({
-  ...(await original<typeof import('next/server')>()),
+  ...(await original<NextServerModule>()),
   after: m.after,
 }));
 vi.mock('@/lib/payments/oxygen/runtime-connection', () => ({

@@ -12,6 +12,7 @@ INSERT INTO public.customers(id,merchant_id,user_id,first_name,last_name,email)
 VALUES ('efae0000-0000-4000-8000-000000000021','efae0000-0000-4000-8000-000000000011','efae0000-0000-4000-8000-000000000001','Test','Customer','saved-plan-owner@example.test');
 INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status)
 VALUES ('efae0000-0000-4000-8000-000000000031','efae0000-0000-4000-8000-000000000011','efae0000-0000-4000-8000-000000000021','OXYGEN-ELIGIBILITY-RLS',400000,'NGN','unpaid');
+UPDATE public.orders SET payment_method='oxygen' WHERE id='efae0000-0000-4000-8000-000000000031';
 INSERT INTO public.oxygen_workflows(id,order_id,merchant_id,customer_id)
 VALUES ('efae0000-0000-4000-8000-000000000041','efae0000-0000-4000-8000-000000000031','efae0000-0000-4000-8000-000000000011','efae0000-0000-4000-8000-000000000021');
 

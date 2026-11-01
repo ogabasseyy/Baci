@@ -10,8 +10,8 @@ INSERT INTO public.merchants(id,user_id,email,business_name,slug)
 VALUES ('efae0000-0000-4000-8000-000000000011','efae0000-0000-4000-8000-000000000003','saved-plan-merchant@example.test','Booking block fixture','oxygen-saved-plan-rls-fixture');
 INSERT INTO public.customers(id,merchant_id,user_id,first_name,last_name,email)
 VALUES ('efae0000-0000-4000-8000-000000000021','efae0000-0000-4000-8000-000000000011','efae0000-0000-4000-8000-000000000001','Test','Customer','saved-plan-owner@example.test');
-INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status)
-VALUES ('efae0000-0000-4000-8000-000000000031','efae0000-0000-4000-8000-000000000011','efae0000-0000-4000-8000-000000000021','OXYGEN-ELIGIBILITY-RLS',400000,'NGN','unpaid');
+INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency,payment_status,payment_method)
+VALUES ('efae0000-0000-4000-8000-000000000031','efae0000-0000-4000-8000-000000000011','efae0000-0000-4000-8000-000000000021','OXYGEN-ELIGIBILITY-RLS',400000,'NGN','unpaid','oxygen');
 INSERT INTO public.oxygen_workflows(id,order_id,merchant_id,customer_id)
 VALUES ('efae0000-0000-4000-8000-000000000041','efae0000-0000-4000-8000-000000000031','efae0000-0000-4000-8000-000000000011','efae0000-0000-4000-8000-000000000021');
 
@@ -29,6 +29,7 @@ SELECT set_config('request.jwt.claim.sub','efae0000-0000-4000-8000-000000000003'
 SELECT public.oxygen_callback('accept','response-evidence-fixture','{"kind":"transaction","bookedLoanReference":"efae0000-0000-4000-8000-000000000071","transactionReference":"callback-test","deduplicationKey":"callback-test"}');
 RESET ROLE;
 SELECT set_config('test.callback.id',id::text,true),set_config('test.callback.retry',retry_key::text,true) FROM oxygen_private.callback_inbox WHERE partner_reference='response-evidence-fixture';
+INSERT INTO oxygen_private.payment_recovery(id,workflow_id,booking_reference,expected_version,idempotency_key,action,status,created_at) VALUES ('efae0000-0000-4000-8000-000000000096','efae0000-0000-4000-8000-000000000041','efae0000-0000-4000-8000-000000000071',3,'efae0000-0000-4000-8000-000000000095','check_status','executing',now()-interval '5 minutes');
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efae0000-0000-4000-8000-000000000001',true);
 DO $$ BEGIN
@@ -60,6 +61,7 @@ DO $$ DECLARE r jsonb; BEGIN
  IF r->>'paymentComplete'<>'true' OR r->>'setupComplete'<>'true' THEN RAISE EXCEPTION 'Customer did not see callback status'; END IF;
 END $$;
 RESET ROLE;
+DO $$ BEGIN IF (SELECT status FROM oxygen_private.payment_recovery WHERE id='efae0000-0000-4000-8000-000000000096')<>'failed' THEN RAISE EXCEPTION 'Callback did not reclaim stale read'; END IF; END $$;
 SELECT set_config('request.jwt.claim.sub','efae0000-0000-4000-8000-000000000003',true);
 UPDATE oxygen_private.callback_inbox SET event=jsonb_set(event,'{bookedLoanReference}','"efae0000-0000-4000-8000-000000000072"') WHERE id=current_setting('test.callback.id')::uuid;
 SET LOCAL ROLE authenticated;

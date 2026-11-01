@@ -141,11 +141,11 @@ it('does not display a link returned for another selected reference', async () =
   await screen.findByRole('alert');
   expect(screen.queryByRole('link')).toBeNull();
 });
-it('can refresh a still-running recovery request without creating another provider action', async () => {
+it('checks a still-running recovery without resending a payment link', async () => {
   const fetcher = vi
     .fn()
     .mockResolvedValueOnce(Response.json({ ...state, pending: true }))
-    .mockResolvedValue(Response.json(state));
+    .mockResolvedValue(Response.json({ ...state, pending: true }));
   vi.stubGlobal('fetch', fetcher);
   render(
     <OxygenPaymentRecovery
@@ -161,13 +161,21 @@ it('can refresh a still-running recovery request without creating another provid
   fireEvent.click(screen.getByRole('button', { name: 'Check payment status' }));
   await waitFor(() =>
     expect(
-      screen.getByRole('button', { name: 'Continue to payment' })
+      screen.getByRole('button', { name: 'Check payment status' })
     ).toBeEnabled()
   );
   expect(fetcher).toHaveBeenCalledTimes(2);
-  expect(fetcher.mock.calls.every((call) => call[1]?.method !== 'POST')).toBe(
-    true
-  );
+  expect(
+    screen.getByText(/Oxygen is processing your last request/i)
+  ).toBeVisible();
+  expect(fetcher.mock.calls[0][1]?.method).not.toBe('POST');
+  expect(fetcher.mock.calls[1][1]?.method).toBe('POST');
+  expect(JSON.parse(fetcher.mock.calls[1][1].body)).toMatchObject({
+    action: 'check_status',
+    reference,
+    workflowId: workflow,
+    version: 3,
+  });
 });
 
 it('recovers a missing link behind Continue using status then one exact-reference link request', async () => {

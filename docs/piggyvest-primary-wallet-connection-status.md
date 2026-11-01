@@ -7,7 +7,11 @@ This records local implementation evidence, not a production completion claim.
 - Authenticated onboarding binds merchant, customer, user, integration, business
   and environment before customer creation. BVN is not retained in the intent.
 - Provider wallet/account reads use stored ownership mappings, not client wallet
-  identifiers. Ordinary wallet creation requests interest disabled explicitly.
+  identifiers. Onboarding creates the customer with main-wallet interest
+  accrual on and paid to `PIGGYVEST_PRIMARY_INTEREST_PAYOUT_WALLET_ID` (fixed
+  at creation); the wallet becomes usable only after a readback proves that
+  routing. Goal wallets carry the customer's explicit accrual choice and never
+  a payout wallet of their own.
 - Ready account reads now persist accepted-to-verified onboarding through an
   exact scoped restricted RPC. A refused verification does not return readiness;
   matched existing customers remain quarantined rather than adopted.

@@ -1,4 +1,5 @@
 import { matchesProviderWalletName } from '@/lib/piggyvest/provider-wallet-name';
+import { goalWalletName } from './goal-wallet-names';
 import { pickString } from './loose-schemas';
 import type { PayoutReadback } from './payout-analysis';
 import { readbackPayout } from './proof-7-readback';
@@ -59,10 +60,7 @@ export async function runGoalVariant(
   let walletId: string | null = null;
   if (sent.kind === 'resumed') {
     result.resumedOutcome = sent.priorOutcome;
-    const wanted = `${owner.qa.goalWalletName}${variant.nameSuffix}`.slice(
-      0,
-      120
-    );
+    const wanted = goalWalletName(owner.qa.goalWalletName, variant.nameSuffix);
     const list = usableList(await api.customerWallets(owner.customerId, 'ASC'));
     // The sandbox rewrites names, so match letters and digits only; two
     // matches are ambiguous and pick nothing.

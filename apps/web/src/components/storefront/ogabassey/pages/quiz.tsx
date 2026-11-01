@@ -14,6 +14,7 @@ import { QUIZ_AGE_RESTRICTED_MESSAGE } from '@/schemas/quiz-age-gate-message';
 import { formatQuizDateRange } from './format-quiz-date-range';
 import { getQuizErrorMessage } from './get-quiz-error-message';
 import { QuizAgeGateModal } from './quiz-age-gate-modal';
+import { QuizPlayInAppPanel } from './quiz-play-in-app-panel';
 import { getQuizStartButtonText } from './get-quiz-start-button-text';
 import {
   loadQuizEvents,
@@ -23,6 +24,7 @@ import {
 } from './quiz-page-data';
 import { QuizQuestionPanel } from './quiz-question-panel';
 import { QuizResultPanel } from './quiz-result-panel';
+import { useAppQuizEvents } from './use-app-quiz-events';
 import { useQuizAgeGate } from './use-quiz-age-gate';
 import { useQuizAttemptStart } from './use-quiz-attempt-start';
 import {
@@ -54,6 +56,13 @@ export function OgabasseyV2Quiz({ merchantSlug }: OgabasseyV2QuizProps) {
   const routePrefix = pathname?.startsWith(`/${merchantSlug}`) ? `/${merchantSlug}` : '';
   const quizPath = pathname || `${routePrefix}/quiz`;
   const loginHref = `${routePrefix}/account/login?redirect=${encodeURIComponent(quizPath)}`;
+
+  // Current prize quizzes are app-only: the v2 listing feeds the app panel and
+  // the legacy listing carries only contract-v1 quizzes (filtered server-side).
+  const appQuiz = useAppQuizEvents(
+    merchantSlug,
+    !isLoading && isAuthenticated ? (user?.id ?? customer?.id ?? null) : null
+  );
 
   const loadEvents = () =>
     loadQuizEvents(merchantSlug, { setError, setEvents, setStatus });
@@ -176,6 +185,12 @@ export function OgabasseyV2Quiz({ merchantSlug }: OgabasseyV2QuizProps) {
           </div>
         </section>
 
+        {isLoading ? null : <QuizPlayInAppPanel
+            events={appQuiz.events}
+            onRetry={appQuiz.retry}
+            status={appQuiz.status}
+          />}
+
         {isLoading ? (
           <section aria-live="polite" className={panel}>Checking your quiz access…</section>
         ) : null}
@@ -201,12 +216,6 @@ export function OgabasseyV2Quiz({ merchantSlug }: OgabasseyV2QuizProps) {
 
         {isAuthenticated && status === 'error' ? (
           <button type="button" onClick={() => void loadEvents()} className={`w-fit ${secondaryButton}`}>Try again</button>
-        ) : null}
-
-        {isAuthenticated &&
-        (status === 'ready' || status === 'starting') &&
-        events.length === 0 ? (
-          <section className={panel}>No quiz events available.</section>
         ) : null}
 
         {isAuthenticated &&

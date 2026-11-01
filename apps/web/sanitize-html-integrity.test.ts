@@ -10,7 +10,7 @@ describe('sanitize-html discarded iframe security boundary', () => {
     expect(roots.length).toBeGreaterThan(0);
   });
   for (const root of roots) {
-    const sanitize = loadCjs(root) as typeof sanitizeHtml;
+    const sanitize = loadCjs<typeof sanitizeHtml>(root);
     it(`handles deeply repeated unclosed iframe fallbacks in ${root}`, () => {
       for (const opener of [
         '<iframe>',

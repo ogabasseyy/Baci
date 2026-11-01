@@ -108,6 +108,32 @@ describe('createReplayCommand', () => {
     );
   });
 
+  it('classifies a lost psql connection without exposing stderr', async () => {
+    const root = await temporaryRoot();
+    const psql = path.join(root, 'psql');
+    await writeFile(
+      psql,
+      "#!/bin/sh\nprintf 'psql:/owned/secret.sql:42: FATAL:  57P01: private detail\\npsql:/owned/secret.sql:42: error: connection to server was lost\\n' >&2\nexit 2\n",
+      { mode: 0o700 }
+    );
+    await expect(replayCommandRuntime.create(root)(psql, [])).rejects.toThrow(
+      /^psql failed: non-zero-exit \(line=42,reason=connection-lost\)$/
+    );
+  });
+
+  it('reports only the fixed synthetic phase when a checkout fixture loses its connection', async () => {
+    const root = await temporaryRoot();
+    const psql = path.join(root, 'psql');
+    await writeFile(
+      psql,
+      "#!/bin/sh\nprintf 'psql:/private.sql:141: WARNING:  01000: BACI_SERIALIZED_PHASE_5\\nprivate secret\\npsql:/private.sql:141: error: connection to server was lost\\n' >&2\nexit 2\n",
+      { mode: 0o700 }
+    );
+    await expect(replayCommandRuntime.create(root)(psql, [])).rejects.toThrow(
+      /^psql failed: non-zero-exit \(line=141,reason=connection-lost,phase=5\)$/
+    );
+  });
+
   it.each([
     ['failed to connect to postgres: connection refused', 'connection-refused'],
     ['failed to pull image from private registry', 'image-pull'],

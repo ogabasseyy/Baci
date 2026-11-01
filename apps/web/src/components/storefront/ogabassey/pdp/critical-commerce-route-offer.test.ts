@@ -66,6 +66,11 @@ describe('resolveCriticalActiveOffer', () => {
 });
 
 describe('applyCriticalRouteOfferToCartProduct', () => {
+  it('uses assigned offer stock when the ordinary pool is empty', () => {
+    const base = { inventory_tracking_policy: 'serialized_strict', price: 100, stock: 0, stock_quantity: 0 } as CartProduct;
+    const offer = { id: 'used', condition: 'used' as const, price: 60, stock_quantity: 5, allocatable_stock: 2 };
+    expect(applyCriticalRouteOfferToCartProduct(base, offer, base).stock).toBe(2);
+  });
   it('prices from the offer and enforces its allocation', () => {
     const base = {
       condition: 'new',

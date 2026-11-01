@@ -2,6 +2,7 @@ import {
   resolveOfferAllocatableStock,
   resolveOfferPriceBasis,
 } from '@baci/shared/lib';
+import { parseOfferSnapshotAllocation } from '@/lib/offer-snapshot-allocation';
 import { getEffectiveStock } from '@/lib/product-stock';
 import type { Product } from '@/lib/products';
 import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
@@ -9,6 +10,7 @@ import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 export interface SelectionPricingOffer {
   price: number | string;
   stock_quantity?: number | string | null;
+  allocatable_stock?: number | string | null;
 }
 
 export interface SelectionPricingDisplaySelection {
@@ -77,15 +79,22 @@ export function resolveSelectionPricing({
   const parentStock = getEffectiveStock(product);
   const offerStock =
     !effectiveVariant && selectedOffer
-      ? resolveOfferAllocatableStock(selectedOffer.stock_quantity, {
-          // Anchor-derived policy wins (a product-level `off` with a
-          // serialized_strict anchor still caps by the strict pool):
-          // same precedence as the sibling snapshot callers.
-          effective_policy: product.effective_policy ?? null,
-          inventory_tracking_policy: product.inventory_tracking_policy ?? null,
-          availableUnits: parentStock,
-          parentStock,
-        })
+      ? (parseOfferSnapshotAllocation(selectedOffer.allocatable_stock) ??
+        (selectedOffer.allocatable_stock === null
+          ? (product.effective_policy ?? product.inventory_tracking_policy) ===
+            'serialized_strict'
+            ? 0
+            : null
+          : resolveOfferAllocatableStock(selectedOffer.stock_quantity, {
+              // Anchor-derived policy wins (a product-level `off` with a
+              // serialized_strict anchor still caps by the strict pool):
+              // same precedence as the sibling snapshot callers.
+              effective_policy: product.effective_policy ?? null,
+              inventory_tracking_policy:
+                product.inventory_tracking_policy ?? null,
+              availableUnits: parentStock,
+              parentStock,
+            })))
       : undefined;
   const managedStock =
     !isStockManaged && !selectedOffer && serializedVariantStock === undefined

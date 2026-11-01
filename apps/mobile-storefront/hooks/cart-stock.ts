@@ -58,17 +58,7 @@ export function getExistingCartQuantityForStock(item: AddToCartInput): number {
     );
 }
 
-/**
- * Total units in the store for this product across the base line and
- * every offer line. Under strict serialized tracking all of those
- * lines claim the same hidden-anchor units, so the aggregate — not
- * just the per-identity total — must fit the pool. Variant lines are
- * excluded (variant inventory is separate from the base pool, so
- * counting them would reject valid base/offer adds merely because
- * independently stocked variants share the cart); pre-reserved
- * voucher lines are excluded too (their units left the pool at award
- * time). Mirrors reconcileStrictBasePools, which skips the same lines.
- */
+/** Ordinary non-voucher units already in the cart for this product. */
 export function getExistingProductQuantityForStock(productId: string): number {
   return useCartStore
     .getState()
@@ -76,7 +66,8 @@ export function getExistingProductQuantityForStock(productId: string): number {
       (total, cartItem) =>
         !isReservedVoucherLine(cartItem) &&
         cartItem.product_id === productId &&
-        cartItem.variant_id == null
+        cartItem.variant_id == null &&
+        cartItem.offer_id == null
           ? total + cartItem.quantity
           : total,
       0
@@ -94,17 +85,11 @@ export function getExistingProductQuantityForStock(productId: string): number {
  * @param options.variantId - Selected variant identity. A managed option
  *   validates its own effective stock instead of the parent total, so a
  *   stocked variant on a zero-stock parent stays purchasable.
- * @param options.offerId - Selected condition-offer identity. Validated
- *   against the offer's own effective stock capped by strict serialized
- *   base units; a null offer quantity inherits the base effective stock,
- *   mirroring the PDP predicate.
- * @param options.aggregateQuantity - Post-optimistic store total for the
- *   product across the base line and every sibling offer. Under strict
- *   serialized tracking this aggregate must also fit the shared units;
- *   without it each sibling would independently validate against the
- *   same pool and over-claim. The offline estimate keeps the
- *   per-identity comparison (no live units available) and revalidates
- *   online; order creation enforces the cap regardless.
+ * @param options.offerId - Selected condition-offer identity. Its live
+ *   authority reports the allocation for that offer's assigned units.
+ * @param options.aggregateQuantity - Ordinary, non-voucher units in the
+ *   cart. Only base lines compare this total with the unassigned pool;
+ *   offer lines compare their own identity total with their allocation.
  */
 export async function checkStock(
   productId: string,
@@ -221,10 +206,10 @@ export async function checkStock(
   const resolved = options?.offerId
     ? await resolveOfferStock(productId, options.offerId)
     : await resolveBaseStock(productId, parentStock);
-  // Under strict serialized tracking the per-identity total keeps its
-  // scalar allocation, but the base line and every sibling offer draw
-  // from one shared pool: the aggregate must fit the live units too.
+  // Offer stock is already scoped to the selected assignment pool. Only
+  // ordinary lines compare against the ordinary serialized aggregate.
   const aggregateFits =
+    options?.offerId != null ||
     resolved.strictUnits === null ||
     options?.aggregateQuantity === undefined ||
     resolved.strictUnits >= options.aggregateQuantity;

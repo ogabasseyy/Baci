@@ -398,7 +398,7 @@ describe('StorefrontCartProvider', () => {
     await waitFor(() => expect(result.current.isHydrated).toBe(true));
 
     // One strict base unit, then a group deal over it. The follow-up
-    // sibling offer add rejects through the probe/updater (pool
+    // sibling base-line add rejects through the probe/updater (pool
     // exhausted) — not the early out-of-stock guard — so it exercises
     // the flag reset on the rejection path.
     const strictBase = {
@@ -409,7 +409,7 @@ describe('StorefrontCartProvider', () => {
       inventory_tracking_policy: 'serialized_strict' as const,
     };
     act(() => {
-      result.current.addToCart(strictBase, 1);
+      result.current.addToCart(strictBase, 1, { color: 'red' });
     });
     act(() => {
       result.current.applyCartWideNegotiation?.(90);
@@ -419,7 +419,7 @@ describe('StorefrontCartProvider', () => {
     let outcome: unknown;
     act(() => {
       outcome = result.current.addToCart({ ...strictBase }, 1, {
-        offerId: 'offer-x',
+        color: 'blue',
       });
     });
 
@@ -442,7 +442,7 @@ describe('StorefrontCartProvider', () => {
     const { result } = renderHook(() => useCart(), { wrapper });
     await waitFor(() => expect(result.current.isHydrated).toBe(true));
 
-    // One strict base unit shared by two sibling offer lines: the
+    // One strict base unit shared by two sibling base lines: the
     // second add in the same tick must observe the first through the
     // serialized probe ref, not the stale render snapshot.
     const strictProduct = {
@@ -456,17 +456,17 @@ describe('StorefrontCartProvider', () => {
     let second: unknown;
     act(() => {
       first = result.current.addToCart(strictProduct, 1, {
-        offerId: 'offer-a',
+        color: 'red',
       });
       second = result.current.addToCart(strictProduct, 1, {
-        offerId: 'offer-b',
+        color: 'blue',
       });
     });
 
     expect(first).toBe('applied');
     expect(second).toBe('rejected');
     expect(result.current.cart).toHaveLength(1);
-    expect(result.current.cart[0]?.offerId).toBe('offer-a');
+    expect(result.current.cart[0]?.selectedColor).toBe('red');
   });
 
   it('caps merged offer adds at the carried allocation', async () => {
@@ -523,7 +523,7 @@ describe('StorefrontCartProvider', () => {
     const { result } = renderHook(() => useCart(), { wrapper });
     await waitFor(() => expect(result.current.isHydrated).toBe(true));
 
-    // One base unit, two offers each advertising one: the second line
+    // One base unit, two color selections: the second line
     // must not land or order creation rejects it at checkout.
     const strictProduct = {
       ...mockProduct,
@@ -532,14 +532,14 @@ describe('StorefrontCartProvider', () => {
       inventory_tracking_policy: 'serialized_strict',
     };
     act(() => {
-      result.current.addToCart(strictProduct, 1, { offerId: 'offer-a' });
+      result.current.addToCart(strictProduct, 1, { color: 'red' });
     });
     act(() => {
-      result.current.addToCart(strictProduct, 1, { offerId: 'offer-b' });
+      result.current.addToCart(strictProduct, 1, { color: 'blue' });
     });
 
     expect(result.current.cart).toHaveLength(1);
-    expect(result.current.cart[0]?.offerId).toBe('offer-a');
+    expect(result.current.cart[0]?.selectedColor).toBe('red');
     expect(result.current.cart[0]?.quantity).toBe(1);
   });
 
@@ -559,29 +559,56 @@ describe('StorefrontCartProvider', () => {
       inventory_tracking_policy: 'serialized_strict',
     };
     act(() => {
-      result.current.addToCart(strictProduct, 1, { offerId: 'offer-a' });
-      result.current.addToCart(strictProduct, 1, { offerId: 'offer-b' });
+      result.current.addToCart(strictProduct, 1, { color: 'red' });
+      result.current.addToCart(strictProduct, 1, { color: 'blue' });
     });
     expect(result.current.cart).toHaveLength(2);
 
     // Merging into A cannot exceed the pool minus B's unit.
     act(() => {
-      result.current.addToCart(strictProduct, 1, { offerId: 'offer-a' });
+      result.current.addToCart(strictProduct, 1, { color: 'red' });
     });
     expect(
-      result.current.cart.find((item) => item.offerId === 'offer-a')?.quantity
+      result.current.cart.find((item) => item.selectedColor === 'red')?.quantity
     ).toBe(1);
 
     // Bumping B cannot exceed the pool minus A's unit either.
     const targetB = result.current.cart.find(
-      (item) => item.offerId === 'offer-b'
+      (item) => item.selectedColor === 'blue'
     )?.cartItemId;
     act(() => {
       result.current.updateQuantity(targetB as string, 2);
     });
     expect(
-      result.current.cart.find((item) => item.offerId === 'offer-b')?.quantity
+      result.current.cart.find((item) => item.selectedColor === 'blue')
+        ?.quantity
     ).toBe(1);
+  });
+
+  it('keeps distinct serialized offers in their own inventory pools', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    const product = {
+      ...mockProduct,
+      stock: 1,
+      stock_quantity: 1,
+      inventory_tracking_policy: 'serialized_strict',
+    };
+    act(() => {
+      result.current.addToCart(product, 1, { offerId: 'offer-a' });
+      result.current.addToCart(product, 1, { offerId: 'offer-b' });
+    });
+    expect(
+      result.current.cart.map((item) => [item.offerId, item.quantity])
+    ).toEqual([
+      ['offer-a', 1],
+      ['offer-b', 1],
+    ]);
   });
 
   it('caps unmanaged offer lines at the carried allocation', async () => {

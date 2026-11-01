@@ -1,3 +1,4 @@
+export { useAssignVariantInventoryOffer } from './useAssignVariantInventoryOffer';
 export { useDeleteVariantInventoryUnit } from './useDeleteVariantInventoryUnit';
 export { useRestockVariantInventory } from './useRestockVariantInventory';
 export { useUpdateInventoryTrackingPolicy } from './useUpdateInventoryTrackingPolicy';

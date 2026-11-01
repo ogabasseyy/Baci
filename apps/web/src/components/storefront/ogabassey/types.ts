@@ -20,6 +20,7 @@ export interface ProductConditionOffer {
   compare_at_price?: string;
   stock?: number;
   stock_quantity?: number;
+  allocatable_stock?: number | null;
   images?: string[];
   notes?: string;
   grade?: string;

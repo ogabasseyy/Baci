@@ -1,0 +1,1 @@
+supabase/tests/serialized_condition_offer_checkout.sql

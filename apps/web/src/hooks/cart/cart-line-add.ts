@@ -57,6 +57,7 @@ export function applyStorefrontCartLineAdd({
       caps,
       cart: previousCart,
       productId: productForCart.id,
+      offerId: normalizedOptions?.offerId,
       excludeIndex: existingIndex,
       quantity: existingItem.quantity + quantity,
     });
@@ -77,6 +78,8 @@ export function applyStorefrontCartLineAdd({
       inventory_tracking_policy:
         productForCart.inventory_tracking_policy ??
         existingItem.inventory_tracking_policy,
+      effective_policy:
+        productForCart.effective_policy ?? existingItem.effective_policy,
       quantity: capped.quantity,
       cartItemId: existingItem.cartItemId || cartItemId,
       hasAssurance: resolveAddedLineAssurance(
@@ -92,6 +95,7 @@ export function applyStorefrontCartLineAdd({
     caps,
     cart: previousCart,
     productId: productForCart.id,
+    offerId: normalizedOptions?.offerId,
     quantity,
   });
   if ('keepPrevious' in capped) {

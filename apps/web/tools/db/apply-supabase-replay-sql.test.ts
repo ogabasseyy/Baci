@@ -67,6 +67,40 @@ describe('applySupabaseReplaySql', () => {
     );
   });
 
+  it('preserves the bounded lost-connection diagnostic', async () => {
+    const apply = vi.fn(async () => {
+      throw new Error(
+        'psql failed: non-zero-exit (line=42,reason=connection-lost)'
+      );
+    });
+    await expect(
+      applySupabaseReplaySql(apply, {
+        kind: 'sql-check',
+        ordinal: 1,
+        sqlPath: '/owned/replay/secret.sql',
+      })
+    ).rejects.toThrow(
+      /^Replay SQL check failed at ordinal 1: non-zero-exit \(line=42,reason=connection-lost\)$/
+    );
+  });
+
+  it('preserves only the bounded synthetic checkout phase on disconnect', async () => {
+    const apply = vi.fn(async () => {
+      throw new Error(
+        'psql failed: non-zero-exit (line=141,reason=connection-lost,phase=5)'
+      );
+    });
+    await expect(
+      applySupabaseReplaySql(apply, {
+        kind: 'sql-check',
+        ordinal: 1,
+        sqlPath: '/owned/private.sql',
+      })
+    ).rejects.toThrow(
+      /^Replay SQL check failed at ordinal 1: non-zero-exit \(line=141,reason=connection-lost,phase=5\)$/
+    );
+  });
+
   it.each([
     [
       'migration',

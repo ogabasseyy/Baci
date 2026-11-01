@@ -3,8 +3,8 @@ import type { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { trackEvent } from '@/lib/event-tracking';
 import type { Product, ProductVariant } from '@/lib/products';
+import { resolvePublicProductOption } from '@/lib/resolve-public-product-option';
 import { resolveVariantInventory } from '@/lib/resolve-variant-inventory';
-import { resolveSerializedOfferStock } from '@/lib/serialized-offer-stock';
 import type { ProductCondition } from './product-selection-condition';
 
 export type ProductOfferSelection = NonNullable<Product['offers']>[number];
@@ -52,9 +52,8 @@ export function useProductCartSubmission({
     const selectedOptionStock = inventory
       ? inventory.stock
       : selectedOffer
-        ? (resolveSerializedOfferStock(selectedOffer, product) ??
-          selectedOffer.stock_quantity ??
-          product.stock)
+        ? resolvePublicProductOption(product, { offer: selectedOffer })
+            .stockQuantity
         : product.stock;
     const productToAdd =
       variantForCart || selectedOffer

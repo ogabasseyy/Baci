@@ -60,12 +60,9 @@ export type SimpleProductQuantityTotalInput = {
 };
 
 /**
- * Total validated quantity per product across the base line and every
- * sibling offer line. Under strict serialized tracking all of those
- * lines claim the same hidden-anchor pool, so the pool check compares
- * this aggregate — not each line alone. Variant lines never share the
- * pool and pre-reserved voucher lines redeem units outside it, so both
- * contribute nothing.
+ * Total ordinary serialized quantity per product. Assigned offers use
+ * separate pools, while variants and pre-reserved vouchers also do not
+ * consume this ordinary pool.
  */
 export function buildSimpleProductQuantityTotals(
   items: readonly SimpleProductQuantityTotalInput[]
@@ -74,6 +71,7 @@ export function buildSimpleProductQuantityTotals(
   for (const item of items) {
     if (
       item.variantId ||
+      item.offerId ||
       item.isQuizVoucherLine ||
       typeof item.quantity !== 'number'
     ) {
@@ -115,8 +113,8 @@ export type OfferLineResolutionInput = {
     parent_eligible?: boolean;
   };
   /**
-   * Total quantity across this product's base line and every sibling
-   * offer line (voucher lines excluded). Compared against
+   * Total quantity across this product's ordinary base lines
+   * (voucher lines excluded). Compared against
    * strictPoolUnits for serialized_strict products.
    */
   aggregateSimpleQuantity?: number;
@@ -237,15 +235,12 @@ export function getInvalidOfferLineKey({
     }
   }
 
-  // Sibling simple lines share one strict serialized pool: the base
-  // line plus every offer line draw from the same hidden-anchor
-  // units, and order creation claims that pool. When their combined
-  // cart quantity exceeds the live projection, each simple line is
-  // invalid — the shopper re-adds within the cap. Variant lines never
-  // share the pool and voucher lines redeem pre-reserved units
-  // outside it, so both skip the check.
+  // Ordinary lines use the unassigned pool; each condition offer is
+  // already checked against its own allocation above. Pre-reserved
+  // vouchers and variant lines use other pools.
   if (
     !variantId &&
+    !offerId &&
     !isQuizVoucherLine &&
     typeof aggregateSimpleQuantity === 'number' &&
     typeof strictPoolUnits === 'number' &&
@@ -254,10 +249,7 @@ export function getInvalidOfferLineKey({
     // Base lines need their own key shape: a bare product id means
     // product-wide removal, which would also delete the voucher
     // sibling this check explicitly exempted from the pool.
-    if (!offerId) {
-      return getBaseLineValidationKey(strId);
-    }
-    return getCartValidationKey(strId, undefined, offerId);
+    return getBaseLineValidationKey(strId);
   }
 
   // A line naming both a variant and a condition offer is contradictory:

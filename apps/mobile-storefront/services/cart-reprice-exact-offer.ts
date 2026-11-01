@@ -81,16 +81,7 @@ export function repriceExactOfferLine({
   }
 }
 
-/**
- * Flags lines on serialized_strict products whose shared base pool cannot
- * cover the cart's aggregate take. Offer allocations are per-offer but the
- * strict pool is product-wide: a base line plus an exact-offer line can
- * each fit their own allocation while jointly exceeding the pool, and the
- * order would then die server-side with serialized_inventory_unavailable.
- * Mirrors the PDP's pool gate (offer line must fit its allocation AND the
- * product total must fit the pool). Unknown pools skip the check — the
- * order RPC arbitrates — so a read gap never blocks checkout.
- */
+/** Reconcile only ordinary serialized lines; offers use their own unit pools. */
 export function reconcileStrictBasePools({
   baseInventoryByProductId,
   items,
@@ -109,7 +100,7 @@ export function reconcileStrictBasePools({
   const alreadyFlagged = new Set(result.unavailable.map((line) => line.id));
   const simpleLinesByProductId = new Map<string, CartItem[]>();
   for (const item of items) {
-    if (item.variant_id) {
+    if (item.variant_id || item.offer_id || result.offerIdById[item.id]) {
       continue;
     }
     if (item.voucher_token || item.voucher_award_id) {

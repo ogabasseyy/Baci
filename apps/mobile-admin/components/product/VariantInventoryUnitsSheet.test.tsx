@@ -8,6 +8,12 @@ import { VariantInventoryUnitsSheet } from './VariantInventoryUnitsSheet';
 const mocks = vi.hoisted(() => ({
   updateMutateAsync: vi.fn(),
   deleteMutateAsync: vi.fn(),
+  assignMutateAsync: vi.fn(),
+  conditionOffers: vi.fn(() => ({
+    data: [] as Array<{ id: string; condition: string; status: string }>,
+    error: null as Error | null,
+    isLoading: false,
+  })),
   useBranches: vi.fn(() => ({ data: [] as Record<string, unknown>[] })),
   useVariantInventory: vi.fn(() => ({
     data: {
@@ -18,6 +24,7 @@ const mocks = vi.hoisted(() => ({
               id: 'unit-1',
               product_id: 'product-1',
               variant_id: 'variant-1',
+              is_inventory_anchor: true,
               identifier_value: '123456789012345',
               identifier_type: 'imei',
               status: 'available',
@@ -47,8 +54,16 @@ vi.mock('@/hooks/useBranches', () => ({
   useBranches: mocks.useBranches,
 }));
 
+vi.mock('@/hooks/useInventoryConditionOffers', () => ({
+  useInventoryConditionOffers: mocks.conditionOffers,
+}));
+
 vi.mock('@/hooks/variantInventory', () => ({
   useVariantInventory: mocks.useVariantInventory,
+  useAssignVariantInventoryOffer: () => ({
+    mutateAsync: mocks.assignMutateAsync,
+    isPending: false,
+  }),
   useUpdateVariantInventoryUnit: () => ({
     mutateAsync: mocks.updateMutateAsync,
   }),
@@ -164,6 +179,13 @@ describe('VariantInventoryUnitsSheet', () => {
     mocks.alert.mockReset();
     mocks.deleteMutateAsync.mockReset();
     mocks.updateMutateAsync.mockReset();
+    mocks.assignMutateAsync.mockReset();
+    mocks.conditionOffers.mockReset();
+    mocks.conditionOffers.mockReturnValue({
+      data: [],
+      error: null,
+      isLoading: false,
+    });
     mocks.useBranches.mockReset();
     mocks.useBranches.mockReturnValue({ data: [] });
   });
@@ -180,6 +202,32 @@ describe('VariantInventoryUnitsSheet', () => {
     error: '#ef4444',
     success: '#22c55e',
   } as unknown as ThemeColors;
+
+  it('assigns a listed unit to the selected condition offer', async () => {
+    mocks.conditionOffers.mockReturnValue({
+      data: [{ id: 'offer-1', condition: 'used', status: 'active' }],
+      error: null,
+      isLoading: false,
+    });
+    mocks.assignMutateAsync.mockResolvedValueOnce({});
+    render(
+      <VariantInventoryUnitsSheet
+        colors={colors}
+        productId="product-1"
+        onClose={vi.fn()}
+      />
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Assign used condition' })
+    );
+    await waitFor(() =>
+      expect(mocks.assignMutateAsync).toHaveBeenCalledWith({
+        productId: 'product-1',
+        unitId: 'unit-1',
+        offerId: 'offer-1',
+      })
+    );
+  });
 
   it('renders listed units with status and branch details', () => {
     mocks.useBranches.mockReturnValue({

@@ -1,9 +1,10 @@
 import type { Product } from '@/lib/products';
 import type { CartItem } from './cart-types';
+import { getOfferCartTotal } from './get-offer-cart-total';
 
 type StrictPoolProductLike = Pick<
   Product,
-  'inventory_tracking_policy' | 'stock_quantity'
+  'effective_policy' | 'inventory_tracking_policy' | 'stock_quantity'
 >;
 
 export interface SimpleLineAddCaps {
@@ -13,8 +14,7 @@ export interface SimpleLineAddCaps {
 
 /**
  * Add-path caps for a simple base/offer line: the offer's own allocation
- * plus the shared strict base-unit pool (sibling offer lines aggregate
- * against it, mirroring order creation). The offer identity travels on
+ * while ordinary lines use the separate unassigned strict pool. The offer identity travels on
  * the add options (merging matches it), so the same caps cover fresh and
  * merged adds. Variant adds resolve their own units and voucher lines
  * redeem pre-reserved units, so both skip the pool.
@@ -39,7 +39,7 @@ export function resolveSimpleLineAddCaps({
       stock,
     }),
     strictPool:
-      !isVoucherLine && variantId == null
+      !isVoucherLine && variantId == null && offerId == null
         ? getStrictSerializedPool(product)
         : undefined,
   };
@@ -55,18 +55,26 @@ export function capAddedSimpleLineQuantity({
   caps,
   cart,
   productId,
+  offerId,
   excludeIndex = -1,
   quantity,
 }: {
   caps: SimpleLineAddCaps;
   cart: CartItem[];
   productId: string;
+  offerId?: string | null;
   excludeIndex?: number;
   quantity: number;
 }): { quantity: number } | { keepPrevious: true } {
+  const otherOfferQuantity = offerId
+    ? getOfferCartTotal(cart, productId, offerId, excludeIndex)
+    : 0;
   const offerCapped =
     caps.cappedOfferAllocation !== undefined
-      ? Math.min(quantity, caps.cappedOfferAllocation)
+      ? Math.min(
+          quantity,
+          Math.max(0, caps.cappedOfferAllocation - otherOfferQuantity)
+        )
       : quantity;
   if (caps.cappedOfferAllocation !== undefined && offerCapped <= 0) {
     return { keepPrevious: true };
@@ -110,9 +118,27 @@ export function capUpdatedSimpleLineQuantity({
   if (allocationCap && 'keepPrevious' in allocationCap) {
     return { keepPrevious: true };
   }
-  const desired = allocationCap ? allocationCap.quantity : quantity;
+  let desired = allocationCap ? allocationCap.quantity : quantity;
+  if (
+    item.offerId != null &&
+    item.quizAwardId == null &&
+    item.quizVoucherToken == null &&
+    typeof item.stock === 'number' &&
+    Number.isFinite(item.stock)
+  ) {
+    desired = Math.min(
+      desired,
+      Math.max(
+        0,
+        Math.floor(item.stock) -
+          getOfferCartTotal(cart, item.id, item.offerId, excludeIndex)
+      )
+    );
+    if (desired <= 0) return { keepPrevious: true };
+  }
   if (
     item.variantId == null &&
+    item.offerId == null &&
     item.quizAwardId == null &&
     item.quizVoucherToken == null
   ) {
@@ -136,16 +162,17 @@ export function capUpdatedSimpleLineQuantity({
 
 /**
  * Shared base-unit pool for a strict serialized product. Hydration folds
- * exact units into stock_quantity while each offer add carries its own
- * allocation on stock, so sibling offer lines must aggregate against
- * this pool — not just their own scalar — mirroring the native
- * getExistingProductQuantityForStock check. Non-strict, unmanaged, and
- * non-finite shapes return undefined so callers keep scalar logic.
+ * exact units into stock_quantity. Offers carry their own allocation on
+ * stock and do not consume this unassigned pool. Non-strict and non-finite
+ * shapes return undefined so callers keep scalar logic.
  */
 export function getStrictSerializedPool(
   product: StrictPoolProductLike
 ): number | undefined {
-  if (product.inventory_tracking_policy !== 'serialized_strict') {
+  if (
+    (product.effective_policy ?? product.inventory_tracking_policy) !==
+    'serialized_strict'
+  ) {
     return undefined;
   }
   if (
@@ -160,7 +187,7 @@ export function getStrictSerializedPool(
 
 /**
  * Units already in the cart for a simple (non-variant) product across
- * the base line and every sibling offer line. Voucher lines redeem
+ * ordinary base lines. Offer lines use separate pools; voucher lines redeem
  * pre-reserved award units outside the shared pool, so they are
  * excluded from both the sum and the cap.
  */
@@ -174,6 +201,7 @@ export function getSimpleProductCartTotal(
       index !== excludeIndex &&
       line.id === productId &&
       line.variantId == null &&
+      line.offerId == null &&
       line.quizAwardId == null &&
       line.quizVoucherToken == null
         ? total + line.quantity

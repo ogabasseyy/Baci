@@ -2,6 +2,7 @@ import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import { useState } from 'react';
 import type { AddToCartOptions } from '@/hooks/cart/cart-types';
 import type { Product as CartProduct } from '@/lib/products';
+import { parseOfferSnapshotAllocation } from '@/lib/offer-snapshot-allocation';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { resolveSerializedOfferStock } from '@/lib/serialized-offer-stock';
 import type { ResolvedCriticalVariantSelection } from './critical-commerce-selection';
@@ -12,7 +13,7 @@ import {
 
 export type CriticalRouteOfferLike = Pick<
   NonNullable<CartProduct['offers']>[number],
-  'id' | 'condition' | 'price' | 'stock_quantity'
+  'id' | 'condition' | 'price' | 'stock_quantity' | 'allocatable_stock'
 >;
 
 /**
@@ -69,12 +70,14 @@ export function applyCriticalRouteOfferToCartProduct(
     'effective_policy' | 'inventory_tracking_policy' | 'stock' | 'stock_quantity'
   >
 ): CartProduct {
+  const allocation = parseOfferSnapshotAllocation(offer.allocatable_stock);
+  const unbounded = allocation === null && (stockBase.effective_policy ?? stockBase.inventory_tracking_policy) !== 'serialized_strict';
   return {
     ...baseProduct,
-    manage_stock: true,
+    manage_stock: !unbounded,
     price: offer.price,
     condition: offer.condition,
-    stock:
+    stock: allocation === null ? (unbounded ? Number.POSITIVE_INFINITY : 0) : allocation ??
       resolveSerializedOfferStock(offer, {
         effective_policy: stockBase.effective_policy,
         inventory_tracking_policy: stockBase.inventory_tracking_policy,

@@ -374,6 +374,38 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y postgresql-client postgresql-16
+      - name: Test offer-release item-lock concurrency
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+        run: python3 tools/test/offer_release_concurrency.py
+      - name: Verify REDVAULT transfer lock ordering
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/migrations/tests/run-redvault-transfer-lock.sh
+      - name: Verify legacy offer payment proofs
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/migrations/tests/run-offer-payment-proof.sh
+      - name: Verify mixed offer release snapshots
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/migrations/tests/run-offer-release-mixed.sh
+      - name: Verify REDVAULT legacy offer refund routing
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/migrations/tests/run-redvault-legacy-offer-routing.sh
       - name: Run disposable search suites
         env:
           PGHOST: localhost
@@ -381,6 +413,51 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
         run: bash supabase/migrations/tests/run-disposable-search-suites.sh
+
+      - name: Test serialized inventory pagination
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/migrations/tests/run-serialized-inventory-pagination.sh
+
+      - name: Test serialized condition-offer inventory
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          bash supabase/migrations/tests/run-serialized-offer-assignment.sh
+          bash supabase/migrations/tests/run-serialized-offer-quiz.sh
+          bash supabase/migrations/tests/run-serialized-offer-voucher.sh
+          OFFER_VOUCHER_ASSERTION=serialized_offer_voucher_foreign_offer_assert.sql bash supabase/migrations/tests/run-serialized-offer-voucher.sh
+          OFFER_VOUCHER_ASSERTION=serialized_offer_voucher_reserved_binding_assert.sql bash supabase/migrations/tests/run-serialized-offer-voucher.sh
+          OFFER_VOUCHER_ASSERTION=serialized_offer_voucher_ownership_assert.sql bash supabase/migrations/tests/run-serialized-offer-voucher.sh
+          OFFER_VOUCHER_ASSERTION=serialized_offer_voucher_immutability_assert.sql bash supabase/migrations/tests/run-serialized-offer-voucher.sh
+          bash supabase/migrations/tests/run-serialized-offer-claims.sh
+          bash supabase/migrations/tests/run-serialized-offer-confirmation.sh
+          TEST_LINE_ENDINGS=lf bash supabase/tests/run-serialized-unit-delete-lock-order.sh
+          TEST_LINE_ENDINGS=crlf bash supabase/tests/run-serialized-unit-delete-lock-order.sh
+          TEST_TARGET_STATUS=available bash supabase/tests/run-serialized-release-product-lock-order.sh
+          TEST_TARGET_STATUS=returned bash supabase/tests/run-serialized-release-product-lock-order.sh
+          TEST_TARGET_STATUS=sold bash supabase/tests/run-serialized-release-product-lock-order.sh
+          TEST_LINE_ENDINGS=lf bash supabase/tests/run-serialized-legacy-offer-cleanup-lock-order.sh
+          TEST_LINE_ENDINGS=crlf bash supabase/tests/run-serialized-legacy-offer-cleanup-lock-order.sh
+          TEST_LINE_ENDINGS=lf python3 supabase/tests/run_serialized_expired_reservation_regression.py
+          TEST_LINE_ENDINGS=crlf python3 supabase/tests/run_serialized_expired_reservation_regression.py
+          TEST_LINE_ENDINGS=lf python3 supabase/tests/run_serialized_quiz_release_lock_regression.py
+          TEST_LINE_ENDINGS=crlf python3 supabase/tests/run_serialized_quiz_release_lock_regression.py
+          bash supabase/migrations/tests/run-serialized-offer-payment-proof.sh
+          bash supabase/migrations/tests/run-serialized-offer-reuse.sh
+          bash supabase/migrations/tests/run-serialized-offer-creation.sh
+          OFFER_CREATION_ASSERTION=serialized_offer_creation_gate_assert.sql bash supabase/migrations/tests/run-serialized-offer-creation.sh
+          bash supabase/migrations/tests/run-serialized-offer-availability.sh
+          bash supabase/migrations/tests/run-serialized-offer-cart.sh
+          bash supabase/migrations/tests/run-serialized-offer-lifecycle.sh
+          bash supabase/migrations/tests/run-serialized-offer-lifecycle.sh --release-race
 
       - name: Run X token authentication SQL contract
         env:

@@ -27,6 +27,8 @@ export interface VariantInventoryUnit {
   source: VariantInventorySource;
   notes: string | null;
   branch_id: string | null;
+  condition_offer_id?: string | null;
+  is_inventory_anchor?: boolean;
   created_at: string;
   updated_at: string;
 }

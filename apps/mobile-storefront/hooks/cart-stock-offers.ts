@@ -9,10 +9,8 @@ const log = createLogger('Cart');
  * (anon-executable, active offers only). The allocatable stock arrives
  * policy-capped and parent-inherited from SQL — exactly what checkout
  * enforces — so no per-layer rule restatement remains here.
- * `strictUnits` carries the shared serialized pool when the base
- * policy is strict so the caller can cap the aggregate across the base
- * line and every sibling offer (all claim the same hidden-anchor
- * inventory); it is null otherwise. An offer missing from the
+ * `strictUnits` confirms the offer-specific serialized projection when
+ * the policy is strict; it is null otherwise. An offer missing from the
  * projection (vanished, inactive, or unlisted) reports zero; lookup
  * failures throw so the caller retries instead of overselling.
  */

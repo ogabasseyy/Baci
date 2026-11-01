@@ -9,6 +9,37 @@ describe('public option resolution', () => {
     manage_stock: true,
     stock_quantity: 4,
   };
+  it('uses the selected offer allocation when ordinary serialized stock is empty', () => {
+    const offer = { price: 80, stock_quantity: 5, allocatable_stock: 2 };
+    expect(
+      resolvePublicProductOption(
+        { ...parent, effective_policy: 'serialized_strict', stock_quantity: 0 },
+        { offer }
+      )
+    ).toMatchObject({ stockQuantity: 2, purchasable: true });
+  });
+  it('fails closed on malformed offer allocation and preserves unbounded allocation', () => {
+    const strict = { ...parent, effective_policy: 'serialized_strict' };
+    expect(
+      resolvePublicProductOption(strict, {
+        offer: { price: 80, allocatable_stock: '2oops' },
+      })
+    ).toMatchObject({ stockQuantity: 0, purchasable: false });
+    expect(
+      resolvePublicProductOption(
+        { ...parent, effective_policy: 'serialized_then_unlimited' },
+        { offer: { price: 80, allocatable_stock: null } }
+      ).stockQuantity
+    ).toBe(Number.POSITIVE_INFINITY);
+  });
+  it('treats a null allocation on a strict offer as unavailable', () => {
+    expect(
+      resolvePublicProductOption(
+        { ...parent, effective_policy: 'serialized_strict' },
+        { offer: { price: 80, allocatable_stock: null } }
+      )
+    ).toMatchObject({ stockQuantity: 0, purchasable: false });
+  });
   it('uses paired variant price and inventory instead of offer values', () => {
     expect(
       resolvePublicProductOption(parent, {

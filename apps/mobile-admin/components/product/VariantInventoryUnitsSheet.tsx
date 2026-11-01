@@ -11,13 +11,16 @@ import {
 import { AppPageSheet } from '@/components/ui/AppPageSheet';
 import { SPACING, type ThemeColors } from '@/constants/theme';
 import { useBranches } from '@/hooks/useBranches';
+import { useInventoryConditionOffers } from '@/hooks/useInventoryConditionOffers';
 import {
+  useAssignVariantInventoryOffer,
   useDeleteVariantInventoryUnit,
   useUpdateVariantInventoryUnit,
   useVariantInventory,
   type VariantInventoryStatus,
   type VariantInventoryUnit,
 } from '@/hooks/variantInventory';
+import { InventoryOfferAssignment } from './InventoryOfferAssignment';
 import { CENTRAL_STOCK_BRANCH_ID } from './VariantInventory.constants';
 import { VariantInventoryFiltersBar } from './VariantInventoryFiltersBar';
 import { VariantInventoryUnitCard } from './VariantInventoryUnitCard';
@@ -78,7 +81,23 @@ export function VariantInventoryUnitsSheet({
 
   const updateMutation = useUpdateVariantInventoryUnit();
   const deleteMutation = useDeleteVariantInventoryUnit();
+  const assignMutation = useAssignVariantInventoryOffer();
+  const offersQuery = useInventoryConditionOffers(productId, !variantId);
   const allUnits = data?.pages.flatMap((page) => page.units) || [];
+
+  const handleAssignOffer = async (
+    unit: VariantInventoryUnit,
+    offerId: string | null
+  ) => {
+    try {
+      await assignMutation.mutateAsync({ productId, unitId: unit.id, offerId });
+    } catch (error) {
+      Alert.alert(
+        'Assignment Failed',
+        error instanceof Error ? error.message : 'Could not assign condition.'
+      );
+    }
+  };
 
   const handleEditPress = (unit: VariantInventoryUnit) => {
     setEditingUnitId(unit.id);
@@ -157,6 +176,12 @@ export function VariantInventoryUnitsSheet({
         statusFilter={statusFilter}
       />
 
+      {offersQuery.error ? (
+        <Text style={[styles.emptyText, { color: colors.error }]}>
+          Could not load condition offers.
+        </Text>
+      ) : null}
+
       {isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} size="large" />
@@ -193,6 +218,21 @@ export function VariantInventoryUnitsSheet({
           data={allUnits}
           renderItem={({ item }) => (
             <VariantInventoryUnitCard
+              assignment={
+                offersQuery.data?.length && item.is_inventory_anchor ? (
+                  <InventoryOfferAssignment
+                    colors={colors}
+                    offers={offersQuery.data}
+                    offerId={item.condition_offer_id ?? null}
+                    disabled={
+                      item.status !== 'available' || assignMutation.isPending
+                    }
+                    onAssign={(offerId) =>
+                      void handleAssignOffer(item, offerId)
+                    }
+                  />
+                ) : null
+              }
               branches={branches}
               colors={colors}
               editBranchId={editBranchId}

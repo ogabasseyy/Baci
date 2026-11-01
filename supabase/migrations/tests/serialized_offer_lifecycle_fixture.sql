@@ -1,0 +1,10 @@
+ALTER TABLE public.products ADD COLUMN inventory_tracking_policy text DEFAULT 'serialized_strict';
+ALTER TABLE public.product_variants ADD COLUMN inventory_tracking_policy text DEFAULT 'inherit';
+ALTER TABLE public.branches ADD COLUMN merchant_id uuid, ADD COLUMN active boolean;
+CREATE TABLE public.orders (id uuid PRIMARY KEY, merchant_id uuid, branch_id uuid, payment_status text, payment_method text, fulfillment_details jsonb);
+CREATE TABLE public.order_items (id uuid PRIMARY KEY, order_id uuid, product_id uuid, variant_id uuid, quantity integer, fulfillment_data jsonb, product_offer_id uuid, offer_id uuid, offer_id_snapshot uuid, offer_line boolean);
+CREATE FUNCTION private.ensure_product_inventory_anchor_variant(uuid, uuid) RETURNS uuid LANGUAGE sql AS $$ SELECT inventory_anchor_variant_id FROM public.products WHERE merchant_id=$1 AND id=$2 $$;
+CREATE FUNCTION private.sync_serialized_stock(uuid, uuid) RETURNS void LANGUAGE plpgsql AS $$ BEGIN RETURN; END $$;
+CREATE FUNCTION private.record_variant_inventory_event(uuid,uuid,uuid,uuid,text,text,text,uuid,uuid,uuid,timestamptz,timestamptz,jsonb) RETURNS void LANGUAGE plpgsql AS $$ BEGIN RETURN; END $$;
+INSERT INTO public.orders(id,merchant_id,payment_status,payment_method) VALUES ('00000000-0000-0000-0000-000000000008','00000000-0000-0000-0000-000000000010','pending','card');
+INSERT INTO public.order_items(id,order_id,product_id,quantity,product_offer_id,offer_id,offer_id_snapshot,offer_line) VALUES ('00000000-0000-0000-0000-000000000009','00000000-0000-0000-0000-000000000008','00000000-0000-0000-0000-000000000001',1,'00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000003',true);

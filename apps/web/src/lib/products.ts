@@ -284,6 +284,7 @@ export interface Product {
     condition: ProductCondition;
     price: number;
     stock_quantity: number;
+    allocatable_stock?: number | null;
     images?: string[];
   }[];
 }

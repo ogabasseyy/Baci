@@ -42,9 +42,43 @@ describe('useVariantInventory hooks', () => {
   });
 
   describe('useVariantInventory query', () => {
+    it('renders an empty inventory response as an empty page', async () => {
+      mocks.rpc.mockResolvedValueOnce({
+        data: { rows: [], nextCursor: null, hasMore: false },
+        error: null,
+      });
+      useVariantInventory({ productId: 'product-1' });
+      await expect(mocks.queryPromises[0]).resolves.toEqual({
+        units: [],
+        nextCursor: null,
+        hasMore: false,
+      });
+    });
+    it('accepts the database listing response and its camel-case cursor', async () => {
+      mocks.rpc.mockResolvedValueOnce({
+        data: {
+          rows: [{ id: 'unit-from-database', status: 'available' }],
+          nextCursor: {
+            createdAt: '2026-06-15T00:00:00Z',
+            id: 'unit-from-database',
+          },
+          hasMore: true,
+        },
+        error: null,
+      });
+      useVariantInventory({ productId: 'product-1' });
+      await expect(mocks.queryPromises[0]).resolves.toEqual({
+        units: [{ id: 'unit-from-database', status: 'available' }],
+        nextCursor: {
+          created_at: '2026-06-15T00:00:00Z',
+          id: 'unit-from-database',
+        },
+        hasMore: true,
+      });
+    });
     it('calls list_variant_inventory_units with filters and handles page data', async () => {
       const mockResult = {
-        units: [
+        rows: [
           {
             id: 'unit-1',
             identifier_value: '123456789012345',
@@ -52,7 +86,7 @@ describe('useVariantInventory hooks', () => {
             status: 'available',
           },
         ],
-        nextCursor: { created_at: '2026-06-15T00:00:00Z', id: 'unit-1' },
+        nextCursor: { createdAt: '2026-06-15T00:00:00Z', id: 'unit-1' },
         hasMore: true,
       };
 
@@ -90,19 +124,26 @@ describe('useVariantInventory hooks', () => {
       });
 
       expect(page).toEqual({
-        units: mockResult.units,
-        nextCursor: mockResult.nextCursor,
+        units: mockResult.rows,
+        nextCursor: {
+          created_at: mockResult.nextCursor.createdAt,
+          id: 'unit-1',
+        },
         hasMore: true,
       });
 
       // Test getNextPageParam
       const getNext = mocks.infiniteQueryConfigs[0].getNextPageParam;
-      expect(getNext?.(mockResult)).toEqual(mockResult.nextCursor);
+      const cursor = {
+        created_at: mockResult.nextCursor.createdAt,
+        id: 'unit-1',
+      };
+      expect(getNext?.({ nextCursor: cursor })).toEqual(cursor);
     });
 
     it('throws when supabase rpc returns an invalid response shape', async () => {
       mocks.rpc.mockResolvedValueOnce({
-        data: { hasMore: 'yes', nextCursor: null, units: null },
+        data: { hasMore: 'yes', nextCursor: null, rows: null },
         error: null,
       });
 
@@ -115,7 +156,7 @@ describe('useVariantInventory hooks', () => {
 
     it('rejects pagination responses with missing cursor fields while more data exists', async () => {
       mocks.rpc.mockResolvedValueOnce({
-        data: { hasMore: true, nextCursor: {}, units: [] },
+        data: { hasMore: true, nextCursor: {}, rows: [] },
         error: null,
       });
 
@@ -130,8 +171,8 @@ describe('useVariantInventory hooks', () => {
       mocks.rpc.mockResolvedValueOnce({
         data: {
           hasMore: false,
-          nextCursor: { created_at: '2026-06-15T00:00:00Z', id: 'unit-1' },
-          units: [],
+          nextCursor: { createdAt: '2026-06-15T00:00:00Z', id: 'unit-1' },
+          rows: [],
         },
         error: null,
       });

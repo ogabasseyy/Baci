@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { normalizeProductConditionOffers } from './normalize-product-condition-offers';
 
 describe('normalizeProductConditionOffers', () => {
+  it('preserves the selected offer allocation', () => {
+    const raw = { id: 'used', condition: 'used', price: 100, stock_quantity: 5, allocatable_stock: 2 };
+    expect(normalizeProductConditionOffers([raw], String)?.[0]?.allocatable_stock).toBe(2);
+  });
   it('normalizes prices and preserves condition-offer display metadata', () => {
     const offers = normalizeProductConditionOffers(
       [

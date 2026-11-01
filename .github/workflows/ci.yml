@@ -411,6 +411,8 @@ jobs:
           filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
+      - name: Test hoisted patched dependency installation
+        run: node --test .github/scripts/pnpm-hoisted-patch-install.test.mjs
       - name: Run backfill scripts unit tests
         run: pnpm exec vitest run scripts/lib
       - name: Test Migration Version Guard
@@ -708,6 +710,13 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           persist-credentials: false
+      - name: Reclaim unused hosted-runner SDK space
+        if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+        run: |
+          df -h .
+          # This web-only hosted job does not use .NET, Android, or Haskell.
+          sudo rm -rf -- /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          df -h .
       - if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
         uses: ./.github/actions/pnpm-install-cached
       - id: next-cache

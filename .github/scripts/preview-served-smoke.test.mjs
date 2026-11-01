@@ -8,6 +8,40 @@ const html =
   '<html><head><link rel="preload" as="font" href="/_next/static/media/a.woff2"></head><body><section data-ogabassey-hero><img src="hero.webp"></section></body></html>';
 const ok = (body, type) => ({ status: 200, contentType: type, body });
 
+test('accepts the generated domain-identifier preview route', async () => {
+  const urls = [];
+  await verifyServedPreview({
+    origin,
+    route: '/ogabassey.com',
+    request: async (url) => {
+      urls.push(url);
+      return url.endsWith('.woff2')
+        ? ok('font', 'font/woff2')
+        : ok(html, 'text/html');
+    },
+  });
+  assert.equal(urls[0], `${origin}/ogabassey.com`);
+});
+
+test('rejects traversal and non-route URL syntax before requesting', async () => {
+  for (const route of [
+    '/../private',
+    '//attacker.example',
+    '/ogabassey.com?next=evil',
+  ]) {
+    await assert.rejects(
+      verifyServedPreview({
+        origin,
+        route,
+        request: async () => {
+          throw new Error('unexpected request');
+        },
+      }),
+      /invalid preview route/i
+    );
+  }
+});
+
 test('the checked font path matches the storefront font declaration', () => {
   const css = readFileSync('apps/web/src/app/inter-naira-font.css', 'utf8');
   assert.match(css, /\/fonts\/inter-naira\.61440e0f45d4\.woff2/);

@@ -50,7 +50,7 @@ export async function executePreviewGate({
         throw new Error('A configured automation bypass secret is required');
       return smoke
         ? smoke()
-        : verifyServedPreview({ origin, route: '/ogabassey', request });
+        : verifyServedPreview({ origin, route: '/ogabassey.com', request });
     },
   });
 }

@@ -58,7 +58,7 @@ export async function verifyServedPreview({ origin, route, request }) {
   ) {
     throw new Error('Invalid preview origin');
   }
-  if (!/^\/[a-z0-9][a-z0-9/-]*$/i.test(route))
+  if (!/^\/[a-z0-9-]+(?:\.[a-z0-9-]+)*(?:\/[a-z0-9-]+)*$/i.test(route))
     throw new Error('Invalid preview route');
   const page = await request(new URL(route, base).href);
   if (page.status !== 200)

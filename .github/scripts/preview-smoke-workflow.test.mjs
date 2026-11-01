@@ -18,3 +18,8 @@ test('deploy runs the trusted dropped-reference gate after upload and before cle
   );
   assert.match(deploy, /steps\.deploy\.outputs\.preview_url/);
 });
+
+test('gate targets the generated domain identifier, not the redirecting slug', () => {
+  const cli = readFileSync('.github/scripts/preview-gate-cli.mjs', 'utf8');
+  assert.match(cli, /route:\s*['"]\/ogabassey\.com['"]/);
+});

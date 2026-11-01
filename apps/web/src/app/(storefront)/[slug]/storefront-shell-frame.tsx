@@ -67,6 +67,7 @@ export function StorefrontShellFrame({
           />
         ) : null}
         <DeferredSocialPixels
+          merchantId={merchant.id}
           tiktokPixelId={analyticsSettings?.tiktok_pixel_id}
           snapchatPixelId={analyticsSettings?.snapchat_pixel_id}
         />

@@ -28,9 +28,11 @@ function noServerConsent(): boolean {
 }
 
 export function DeferredSocialPixels({
+  merchantId,
   tiktokPixelId,
   snapchatPixelId,
 }: {
+  merchantId: string;
   tiktokPixelId?: string | null;
   snapchatPixelId?: string | null;
 }) {
@@ -50,23 +52,41 @@ export function DeferredSocialPixels({
     )
       ? snapchatPixelId
       : null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: merchant changes must invalidate the owner even when pixel IDs match.
   useInsertionEffect(() => {
-    if (!allowed) return;
-    const releaseTikTok = tiktokId
-      ? socialPixelContext.prepare('tiktok', tiktokId)
-      : undefined;
-    const releaseSnapchat = snapchatId
-      ? socialPixelContext.prepare('snapchat', snapchatId)
-      : undefined;
+    let releaseTikTok: (() => void) | undefined;
+    let releaseSnapchat: (() => void) | undefined;
+    function syncOwners() {
+      if (marketingConsent()) {
+        if (tiktokId && !releaseTikTok)
+          releaseTikTok = socialPixelContext.prepare('tiktok', tiktokId);
+        if (snapchatId && !releaseSnapchat)
+          releaseSnapchat = socialPixelContext.prepare('snapchat', snapchatId);
+      } else {
+        releaseTikTok?.();
+        releaseSnapchat?.();
+        releaseTikTok = undefined;
+        releaseSnapchat = undefined;
+      }
+    }
+    // A server snapshot is always false. Prepare from stored consent during
+    // hydration before sibling layout effects can emit a funnel event.
+    syncOwners();
+    const unsubscribe = subscribeConsent(syncOwners);
     return () => {
+      unsubscribe();
       releaseTikTok?.();
       releaseSnapchat?.();
     };
-  }, [allowed, tiktokId, snapchatId]);
+  }, [merchantId, tiktokId, snapchatId]);
   return (
     <>
-      {allowed && tiktokId ? <TikTokPixel pixelId={tiktokId} /> : null}
-      {allowed && snapchatId ? <SnapchatPixel pixelId={snapchatId} /> : null}
+      {allowed && tiktokId ? (
+        <TikTokPixel key={merchantId} pixelId={tiktokId} />
+      ) : null}
+      {allowed && snapchatId ? (
+        <SnapchatPixel key={merchantId} pixelId={snapchatId} />
+      ) : null}
     </>
   );
 }

@@ -438,6 +438,8 @@ jobs:
           OFFER_VOUCHER_ASSERTION=serialized_offer_voucher_immutability_assert.sql bash supabase/migrations/tests/run-serialized-offer-voucher.sh
           bash supabase/migrations/tests/run-serialized-offer-claims.sh
           bash supabase/migrations/tests/run-serialized-offer-confirmation.sh
+          TEST_LINE_ENDINGS=lf bash supabase/tests/run-serialized-unit-delete-lock-order.sh
+          TEST_LINE_ENDINGS=crlf bash supabase/tests/run-serialized-unit-delete-lock-order.sh
           bash supabase/migrations/tests/run-serialized-offer-payment-proof.sh
           bash supabase/migrations/tests/run-serialized-offer-reuse.sh
           bash supabase/migrations/tests/run-serialized-offer-creation.sh

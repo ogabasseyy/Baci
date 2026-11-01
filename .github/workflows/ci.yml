@@ -396,7 +396,9 @@ jobs:
           PGPORT: 5432
           PGUSER: postgres
           PGPASSWORD: postgres
-        run: bash supabase/tests/run-serialized-inventory-listing-fields.sh
+        run: |
+          TEST_LINE_ENDINGS=lf bash supabase/tests/run-serialized-inventory-listing-fields.sh
+          TEST_LINE_ENDINGS=crlf bash supabase/tests/run-serialized-inventory-listing-fields.sh
 
       - name: Run X token authentication SQL contract
         env:

@@ -8,6 +8,7 @@ export const legacyOwnerContextSchema = z.object({
         item: z.object({
           productId: z.uuid(),
           variantId: z.uuid().optional(),
+          offerId: z.uuid().optional(),
           condition: z
             .enum(['new', 'used', 'open_box', 'refurbished'])
             .optional(),
@@ -43,6 +44,7 @@ export const legacyOwnerContextSchema = z.object({
 export const legacyMcpBridgeRequestSchema = z
   .object({
     productId: z.uuid().optional(),
+    offerId: z.uuid().optional(),
     quantity: z.number().int().min(0).max(10).optional(),
     expectedVersion: z.number().int().positive().optional(),
     operationId: z.string().trim().min(1).max(128).optional(),
@@ -56,6 +58,7 @@ export const legacyMcpBridgeRequestSchema = z
     (x) =>
       x.probe !== true ||
       (x.productId === undefined &&
+        x.offerId === undefined &&
         x.expectedVersion === undefined &&
         x.operationId === undefined &&
         x.handoff !== true),

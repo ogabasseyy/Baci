@@ -37,6 +37,26 @@ describe('cartLineIdentity', () => {
     expect(cartLineIdentity(baseItem)).not.toBe(cartLineIdentity(other));
   });
 
+  it('keeps the same condition with a different offer distinct', () => {
+    const offerA = {
+      ...baseItem,
+      offerId: '44444444-4444-4444-8444-444444444444',
+    };
+    const offerB = {
+      ...baseItem,
+      offerId: '55555555-5555-4555-8555-555555555555',
+    };
+
+    expect(cartLineIdentity(offerA)).not.toBe(cartLineIdentity(offerB));
+    expect(cartLineIdentity(baseItem)).not.toBe(cartLineIdentity(offerA));
+  });
+
+  it('treats an omitted offer as the same identity', () => {
+    expect(cartLineIdentity(baseItem)).toBe(
+      cartLineIdentity({ ...baseItem, offerId: undefined })
+    );
+  });
+
   it('keeps the same product with different options distinct', () => {
     const other = {
       ...baseItem,
@@ -98,6 +118,13 @@ describe('cart identity compatibility', () => {
   it('matches variant UUIDs regardless of letter case', () => {
     expect(cartLineIdentity({ productId, variantId })).toBe(
       cartLineIdentity({ productId, variantId: variantId.toUpperCase() })
+    );
+  });
+
+  it('matches offer UUIDs regardless of letter case', () => {
+    const offerId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    expect(cartLineIdentity({ productId, offerId })).toBe(
+      cartLineIdentity({ productId, offerId: offerId.toUpperCase() })
     );
   });
 

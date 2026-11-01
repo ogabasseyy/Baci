@@ -30,6 +30,11 @@ export interface CartItemIdentity {
   productId: string;
   variantId?: string;
   condition?: CartCondition;
+  /**
+   * Exact product_offers row. Same canonical condition with a different
+   * offer stays a distinct line; omitted means the condition-only lane.
+   */
+  offerId?: string;
   options?: Record<string, string>;
 }
 

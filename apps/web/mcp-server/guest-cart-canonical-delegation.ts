@@ -30,6 +30,9 @@ export async function updateGuestCartWithCanonical({
 }): Promise<CartResult> {
   if (!token && line.quantity === 0)
     throw new Error('A guest cart is required');
+  // Legacy carts key by product only and cannot distinguish offer siblings.
+  if (line.offer_id && !canonical)
+    throw new Error('Exact offer requires a canonical cart');
   // UUID text is case-insensitive: canonicalize before persisting,
   // comparing, and enforcing per-product uniqueness.
   const normalizedLine = {

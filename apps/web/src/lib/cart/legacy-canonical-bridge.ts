@@ -7,6 +7,7 @@ import {
   getCartSessionSecret,
 } from './cart-runtime-env';
 import { issueCartHandoff } from './handoff';
+import { hasUnsupportedLegacyEditIdentity } from './legacy-cart-edit-identity';
 import {
   hashLegacyToken,
   type LegacyCartProvider,
@@ -36,6 +37,7 @@ export interface LegacyBridgeOwner {
 }
 export interface LegacyBridgeEdit {
   productId: string;
+  offerId?: string;
   quantity: number;
 }
 const defaults = {
@@ -181,18 +183,16 @@ export async function operateLegacyCanonicalCart(
   let command = input.command;
   let operationId = input.operationId;
   if (input.edit) {
-    const candidates = state.lines.filter(
-      (x) => x.productId === input.edit?.productId
-    );
+    const edit = input.edit;
+    const candidates = state.lines.filter((x) => {
+      if (x.productId !== edit.productId) return false;
+      if (!edit.offerId) return true;
+      return x.offerId?.toLowerCase() === edit.offerId.toLowerCase();
+    });
     if (
       candidates.length > 1 ||
-      candidates.some(
-        (x) =>
-          x.variantId ||
-          x.condition ||
-          x.voucherToken ||
-          x.voucherAwardId ||
-          Object.keys(x.options ?? {}).length
+      candidates.some((x) =>
+        hasUnsupportedLegacyEditIdentity(x, Boolean(x.offerId))
       )
     )
       throw new LegacyBridgeError('refresh_required');
@@ -210,7 +210,10 @@ export async function operateLegacyCanonicalCart(
             }
           : {
               type: 'add',
-              item: { productId: input.edit.productId },
+              item: {
+                productId: input.edit.productId,
+                ...(input.edit.offerId ? { offerId: input.edit.offerId } : {}),
+              },
               quantity: input.edit.quantity,
             };
   }

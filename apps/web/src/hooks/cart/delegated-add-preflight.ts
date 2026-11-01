@@ -40,6 +40,7 @@ export function planDelegatedAddQuantity(
     cartItemToIdentity({
       condition: options?.condition,
       id: product.id,
+      offerId: options?.offerId,
       selectedColor: options?.color,
       selectedColorValue: options?.colorValue,
       selectedStorage: options?.storage,

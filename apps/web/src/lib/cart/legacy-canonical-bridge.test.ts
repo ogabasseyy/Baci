@@ -182,6 +182,56 @@ it('refuses product-only changes that could select voucher or condition siblings
   expect(deps.mutate).not.toHaveBeenCalled();
 });
 
+it('targets the sole exact-offer line by id for product-only edits instead of adding a condition-only duplicate', async () => {
+  const { deps } = setup();
+  const offerId = '55555555-5555-4555-8555-555555555555';
+  deps.read.mockResolvedValue({
+    ok: true,
+    state: {
+      ...state,
+      version: 4,
+      lines: [
+        { ...state.lines[0], id: 'offer-line', offerId, condition: 'used' },
+      ],
+    },
+  } as never);
+  const cart = await openLegacyCanonicalCart(
+    { provider: 'mcp', handle: 'a'.repeat(64), merchant },
+    deps as never
+  );
+  await operateLegacyCanonicalCart(cart, {
+    edit: { productId, quantity: 2 },
+    expectedVersion: 4,
+    operationId: 'op-offer-edit',
+  });
+  expect(deps.mutate).toHaveBeenCalledWith(expect.anything(), {
+    cartId,
+    command: { type: 'set_quantity', lineId: 'offer-line', quantity: 2 },
+    expectedVersion: 4,
+    operationId: 'op-offer-edit',
+  });
+});
+
+it('refuses product-only edits when condition-only and exact-offer lanes both exist', async () => {
+  const { deps } = setup();
+  const offerId = '55555555-5555-4555-8555-555555555555';
+  deps.read.mockResolvedValue({
+    ok: true,
+    state: {
+      ...state,
+      lines: [state.lines[0], { ...state.lines[0], id: 'offer-line', offerId }],
+    },
+  } as never);
+  const cart = await openLegacyCanonicalCart(
+    { provider: 'mcp', handle: 'a'.repeat(64), merchant },
+    deps as never
+  );
+  await expect(
+    operateLegacyCanonicalCart(cart, { edit: { productId, quantity: 2 } })
+  ).rejects.toMatchObject({ code: 'refresh_required' });
+  expect(deps.mutate).not.toHaveBeenCalled();
+});
+
 it('reads authoritative revision four after replaying a revision two mutation receipt', async () => {
   const { deps } = setup();
   const current = { ...state, version: 4 };
@@ -204,4 +254,45 @@ it('reads authoritative revision four after replaying a revision two mutation re
   });
   expect(result.state?.version).toBe(4);
   expect(deps.read).toHaveBeenCalledTimes(2);
+});
+
+it.each([
+  0, 3,
+])('matches case-equivalent offer UUIDs for absolute quantity %s', async (quantity) => {
+  const { deps } = setup();
+  const offerId = 'abcdefab-abcd-4abc-8abc-abcdefabcdef';
+  deps.read.mockResolvedValue({
+    ok: true,
+    state: {
+      ...state,
+      version: 4,
+      lines: [
+        { ...state.lines[0], id: 'offer-line', offerId, condition: 'used' },
+        {
+          ...state.lines[0],
+          id: 'other-offer',
+          offerId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          condition: 'new',
+        },
+      ],
+    },
+  } as never);
+  const cart = await openLegacyCanonicalCart(
+    { provider: 'mcp', handle: 'a'.repeat(64), merchant },
+    deps as never
+  );
+  await operateLegacyCanonicalCart(cart, {
+    edit: { productId, offerId: offerId.toUpperCase(), quantity },
+    expectedVersion: 4,
+    operationId: 'offer-case-edit',
+  });
+  expect(deps.mutate).toHaveBeenCalledWith(expect.anything(), {
+    cartId,
+    command:
+      quantity === 0
+        ? { type: 'remove', lineId: 'offer-line' }
+        : { type: 'set_quantity', lineId: 'offer-line', quantity },
+    expectedVersion: 4,
+    operationId: 'offer-case-edit',
+  });
 });

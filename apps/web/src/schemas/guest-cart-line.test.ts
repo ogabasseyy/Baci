@@ -3,6 +3,25 @@ import { guestCartLineSchema } from './guest-cart-line';
 
 const id = '11111111-1111-4111-8111-111111111111';
 describe('guestCartLineSchema', () => {
+  it('keeps an exact offer id and rejects a non-uuid offer', () => {
+    const offerId = '44444444-4444-4444-8444-444444444444';
+    const parsed = guestCartLineSchema.safeParse({
+      offer_id: offerId,
+      product_id: id,
+      quantity: 1,
+    });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.offer_id).toBe(offerId);
+    expect(
+      guestCartLineSchema.safeParse({
+        offer_id: 'offer',
+        product_id: id,
+        quantity: 1,
+      }).success
+    ).toBe(false);
+  });
+
   it('parses a valid line', () => {
     expect(
       guestCartLineSchema.safeParse({ product_id: id, quantity: 2 }).success

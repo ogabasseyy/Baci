@@ -105,3 +105,11 @@ describe('canonical guest-cart delegation', () => {
     ).toBeNull();
   });
 });
+it('refuses exact-offer changes when only the product-keyed legacy cart is available', async () => {
+  await expect(updateGuestCartWithCanonical({
+    ...input,
+    canonical: null,
+    line: { ...line, offer_id: '55555555-5555-4555-8555-555555555555' },
+  })).rejects.toThrow('Exact offer requires a canonical cart');
+  expect(updateLegacy).not.toHaveBeenCalled();
+});

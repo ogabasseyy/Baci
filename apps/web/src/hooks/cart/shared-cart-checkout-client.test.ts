@@ -192,7 +192,7 @@ describe('reviewedCheckoutItems', () => {
     subtotalMinor: 24000,
     unavailableCount: 0,
   };
-  const shell = {
+  const shellFields = {
     cartItemId: 'line-1',
     id: '44444444-4444-4444-8444-444444444444',
     name: 'Phone',
@@ -200,7 +200,8 @@ describe('reviewedCheckoutItems', () => {
     product_id: '44444444-4444-4444-8444-444444444444',
     quantity: 1,
     serverLineId: 'line-1',
-  } as never;
+  };
+  const shell = shellFields as never;
 
   it('uses reviewed quantity and effective prices over display values', () => {
     const items = reviewedCheckoutItems([shell], review);
@@ -214,6 +215,26 @@ describe('reviewedCheckoutItems', () => {
       price: 120,
       value: 240,
     });
+  });
+
+  it('replaces a stale shell offer with the reviewed offer id', () => {
+    const offerId = '66666666-6666-4666-8666-666666666666';
+    const stale = reviewedCheckoutItems(
+      [
+        {
+          ...shellFields,
+          offerId: '55555555-5555-4555-8555-555555555555',
+        } as never,
+      ],
+      review
+    );
+    expect(stale?.[0]?.offerId).toBeUndefined();
+    const exact = reviewedCheckoutItems([shell], {
+      ...review,
+      lines: [{ ...line, offerId }],
+    });
+    expect(exact?.[0]?.offerId).toBe(offerId);
+    expect(buildCheckoutOrderItems(exact ?? [])[0]?.offer_id).toBe(offerId);
   });
 
   it.each([

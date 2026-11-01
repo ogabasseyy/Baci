@@ -41,17 +41,23 @@ export function hashLegacyToken(token: string): string {
  * exactly; pricing always comes from the catalog inside the RPC.
  */
 export function mapMcpLinesToInput(
-  lines: { product_id: string; quantity: number }[]
+  lines: { product_id: string; offer_id?: string; quantity: number }[]
 ): CartInputLine[] {
   return lines.map((line) => {
     if (!UUID_PATTERN.test(line.product_id)) {
       throw new LegacyMigrationParseError('Legacy line is not a product UUID');
     }
+    if (line.offer_id !== undefined && !UUID_PATTERN.test(line.offer_id)) {
+      throw new LegacyMigrationParseError('Legacy line offer is not a UUID');
+    }
     if (!Number.isInteger(line.quantity) || line.quantity < 1) {
       throw new LegacyMigrationParseError('Legacy line quantity is invalid');
     }
     return {
-      item: { productId: line.product_id },
+      item: {
+        productId: line.product_id,
+        ...(line.offer_id ? { offerId: line.offer_id } : {}),
+      },
       quantity: line.quantity,
     };
   });

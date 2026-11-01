@@ -8,6 +8,10 @@ import { createSupabaseReplayProjectId } from './create-supabase-replay-project-
 import { createSupabaseReplaySqlApplier } from './create-supabase-replay-sql-applier';
 import { generateSupabaseReplayTypes } from './generate-supabase-replay-types';
 import { parseReplayCliArguments } from './parse-replay-cli-arguments';
+import {
+  withCleanupDiagnostics,
+  withDatabaseExitDiagnostic,
+} from './replay-failure-diagnostics';
 import * as ownershipTools from './replay-project-ownership';
 import { replayRepository } from './replay-repository-root';
 import { runSupabaseReplayStage } from './run-supabase-replay-stage';
@@ -29,11 +33,6 @@ import {
 } from './supabase-replay-contract';
 import type * as resourceTools from './supabase-replay-expected-resources';
 
-type ReplayFailureWithDiagnostics = Error & {
-  replayDiagnostics: {
-    cleanup: ownershipTools.ReplayProjectCleanupResult;
-  };
-};
 export type SupabaseReplayOptions = {
   comparisonMode: SupabaseHistoryEffectComparisonMode;
   mode: SupabaseHistoryReplayMode;
@@ -50,18 +49,6 @@ const hasResources = (value: resourceTools.ObservedSupabaseReplayResources) =>
   value.containers.length > 0 ||
   value.networks.length > 0 ||
   value.volumes.length > 0;
-function withCleanupDiagnostics(
-  failure: unknown,
-  cleanup: ownershipTools.ReplayProjectCleanupResult | undefined
-): unknown {
-  if (cleanup?.resourceReadiness !== 'anomalous') return failure;
-  const primary =
-    failure instanceof Error ? failure : new Error('Supabase replay failed');
-  return Object.assign(new Error(primary.message, { cause: primary }), {
-    name: primary.name,
-    replayDiagnostics: { cleanup },
-  }) as ReplayFailureWithDiagnostics;
-}
 export async function runSupabaseHistoryReplay(
   options: SupabaseReplayOptions,
   dependencies?: ReplayRuntimeDependencies
@@ -253,6 +240,9 @@ export async function runSupabaseHistoryReplay(
     }
   } catch (error) {
     failure = error;
+  }
+  if (failure && expected) {
+    failure = await withDatabaseExitDiagnostic(failure, expected, run);
   }
   let cleanupFailed = false;
   let cleanupResult: ownershipTools.ReplayProjectCleanupResult | undefined;

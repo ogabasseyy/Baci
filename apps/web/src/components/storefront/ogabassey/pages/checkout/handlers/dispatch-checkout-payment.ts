@@ -48,7 +48,10 @@ export async function dispatchCheckoutPayment(
     payForMeDetails,
   } = context;
   if (paymentMethod === 'oxygen') {
-    if (!orderItems.some((item) => item.cart_line_id))
+    if (
+      context.freshOrder === true &&
+      !orderItems.some((item) => item.cart_line_id)
+    )
       captureOxygenCheckoutSnapshot(order.id, merchant.id, checkoutCart);
     const query = new URLSearchParams({ oxygenOrderId: order.id });
     const attempt = oxygenLocalAttempt(

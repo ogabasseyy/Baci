@@ -10,6 +10,7 @@ import type { CheckoutPaymentOrder } from './submit-checkout-order';
 export interface CheckoutPaymentDispatchContext {
   merchant: { id: string; slug?: string | null };
   order: CheckoutPaymentOrder;
+  freshOrder?: boolean;
   paymentMethod: PaymentMethod;
   total: number;
   paymentAmount: number;

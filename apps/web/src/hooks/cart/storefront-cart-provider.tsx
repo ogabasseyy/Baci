@@ -17,6 +17,7 @@ import type { CartContextType, CartItem } from './cart-types';
 import { getMerchantCartState } from './merchant-cart-storage';
 import { delegatedCartValue } from './storefront-cart-delegated-value';
 import { useDeferredValidationActivation } from './use-deferred-validation-activation';
+import { useLegacyCartInstanceAdoption } from './use-legacy-cart-instance-adoption';
 import { useLegacyCartValidation } from './use-legacy-cart-validation';
 import { useStorefrontCartDelegation } from './use-storefront-cart-delegation';
 import { useStorefrontCartLineHandlers } from './use-storefront-cart-line-handlers';
@@ -152,6 +153,8 @@ export function StorefrontCartProvider({
     validationActivationTimeoutMs,
     onActivate: setIdleValidationActivated,
   });
+
+  useLegacyCartInstanceAdoption(cart, isHydrated && !delegated, setCart);
 
   useLegacyCartValidation({
     cart,

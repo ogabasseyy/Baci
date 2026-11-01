@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SnapchatPixel } from './snapchat-pixel';
@@ -35,6 +35,26 @@ afterEach(() => {
 });
 
 describe('SnapchatPixel', () => {
+  it('updates the mounted provider when consent changes', () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    mocks.getStoredConsent.mockReturnValue({ marketing: false });
+    render(<SnapchatPixel pixelId={id} />);
+    expect(
+      screen.queryByTestId(`snapchat-pixel-${id}`)
+    ).not.toBeInTheDocument();
+    act(() => {
+      mocks.getStoredConsent.mockReturnValue({ marketing: true });
+      window.dispatchEvent(new Event('cookie-consent-updated'));
+    });
+    expect(screen.getByTestId(`snapchat-pixel-${id}`)).toBeInTheDocument();
+    act(() => {
+      mocks.getStoredConsent.mockReturnValue({ marketing: false });
+      window.dispatchEvent(new Event('cookie-consent-updated'));
+    });
+    expect(
+      screen.queryByTestId(`snapchat-pixel-${id}`)
+    ).not.toBeInTheDocument();
+  });
   it('loads the pixel with the afterInteractive strategy when marketing consent is granted', () => {
     render(<SnapchatPixel pixelId="11111111-1111-4111-8111-111111111111" />);
 

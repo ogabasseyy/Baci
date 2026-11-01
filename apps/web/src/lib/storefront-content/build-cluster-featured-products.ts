@@ -80,6 +80,12 @@ const TIER_MODIFIER_TOKENS = new Set([
   'ultra',
 ]);
 
+const CAPACITY_TOKEN_REGEX = /^\d+(?:gb|tb)$/i;
+
+function isSecondaryModifierToken(token: string): boolean {
+  return TIER_MODIFIER_TOKENS.has(token) || CAPACITY_TOKEN_REGEX.test(token);
+}
+
 function buildProductHref(
   storeUrl: string,
   product: ClusterFeaturedInventoryProduct
@@ -103,7 +109,7 @@ function scoreProductModelAffinity(
   }
   const articleTokenSet = new Set(articleTokens);
   const articleHasPrimaryModelToken = articleTokens.some(
-    (token) => !TIER_MODIFIER_TOKENS.has(token)
+    (token) => !isSecondaryModifierToken(token)
   );
   const productTokens = new Set(
     `${product.name} ${product.slug}`
@@ -115,11 +121,14 @@ function scoreProductModelAffinity(
     return 0;
   }
   let primaryMatches = 0;
-  let modifierMatches = 0;
+  let tierMatches = 0;
+  let capacityMatches = 0;
   for (const token of productTokens) {
     if (articleTokenSet.has(token)) {
       if (TIER_MODIFIER_TOKENS.has(token)) {
-        modifierMatches += 1;
+        tierMatches += 1;
+      } else if (CAPACITY_TOKEN_REGEX.test(token)) {
+        capacityMatches += 1;
       } else {
         primaryMatches += 1;
       }
@@ -128,9 +137,12 @@ function scoreProductModelAffinity(
   if (articleHasPrimaryModelToken && primaryMatches === 0) {
     return 0;
   }
-  const totalMatches = primaryMatches + modifierMatches;
+  const totalMatches = primaryMatches + tierMatches + capacityMatches;
   return totalMatches > 0
-    ? primaryMatches * 2 + modifierMatches + totalMatches / productTokens.size
+    ? primaryMatches * 2 +
+        tierMatches +
+        capacityMatches * 0.25 +
+        totalMatches / productTokens.size
     : 0;
 }
 

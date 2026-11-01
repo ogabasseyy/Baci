@@ -215,4 +215,39 @@ describe('buildClusterFeaturedProducts', () => {
       'https://ogabassey.com/smartphones/galaxy-s24-256gb-black'
     );
   });
+
+  it('ranks model and tier matches ahead of a capacity match on a base model', () => {
+    const products: ClusterFeaturedInventoryProduct[] = [
+      {
+        slug: 'iphone-13-256gb',
+        name: 'iPhone 13 256GB',
+        brand: 'Apple',
+        price: 450_000,
+        category_slug: 'smartphones',
+        stock: 3,
+      },
+      {
+        slug: 'iphone-13-pro-max-128gb',
+        name: 'iPhone 13 Pro Max 128GB',
+        brand: 'Apple',
+        price: 680_000,
+        category_slug: 'smartphones',
+        stock: 3,
+      },
+    ];
+
+    const featured = buildClusterFeaturedProducts(
+      'https://ogabassey.com',
+      'smartphones',
+      ['apple'],
+      products,
+      'NG',
+      'iPhone 13 Pro Max 256GB Price in Nigeria'
+    );
+
+    expect(featured.map((item) => item.href)).toEqual([
+      'https://ogabassey.com/smartphones/iphone-13-pro-max-128gb',
+      'https://ogabassey.com/smartphones/iphone-13-256gb',
+    ]);
+  });
 });

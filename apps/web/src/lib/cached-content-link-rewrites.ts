@@ -5,6 +5,7 @@ import { getCachedProductCanonicalPaths } from '@/lib/cached-product-canonical-p
 import { getCachedStorefrontProductSlugResolution } from '@/lib/cached-storefront-product-slug-resolution';
 import { isPublicBlogPost } from '@/lib/public-blog-content-quality';
 import { applyPublicBlogSqlFilters } from '@/lib/public-blog-sql-filters';
+import { resolveCapacityVariantProductPaths } from '@/lib/resolve-capacity-variant-product-paths';
 import { getProductUrl } from '@/lib/seo-utils';
 import type { StorefrontContentLinkRewrites } from '@/lib/storefront-content-link-rewriting';
 import { UUID_SHAPED_PRODUCT_IDENTIFIER_REGEX } from '@/lib/storefront-content-link-targets';
@@ -14,17 +15,6 @@ const EMPTY_REWRITES: StorefrontContentLinkRewrites = {
   blogSlugs: {},
   productPaths: {},
 };
-
-const CAPACITY_VARIANT_SUFFIX_REGEX =
-  /^(.+?)-(?:\d+gb-)?\d+(?:gb|tb)(-(?:5g|4g))?$/i;
-
-function getCapacityBaseSlugs(candidate: string): string[] {
-  const match = CAPACITY_VARIANT_SUFFIX_REGEX.exec(candidate);
-  if (!match?.[1]) return [];
-  return match[2]
-    ? [`${match[1]}${match[2].toLowerCase()}`, match[1]]
-    : [match[1]];
-}
 
 async function resolveBlogSlugRewrites(
   merchantId: string,
@@ -251,38 +241,12 @@ export async function getCachedContentLinkRewrites(
     productPaths[candidate] = path;
   }
 
-  // Variant capacity suffix fallback: resolve authored RAM/storage variant
-  // slugs (e.g. `samsung-galaxy-a17-128gb-5g`) to the network-qualified or
-  // unqualified live parent model path.
-  const baseSlugsByCandidate = new Map<string, string[]>();
-  for (const candidate of slugCandidates) {
-    if (Object.hasOwn(productPaths, candidate)) continue;
-    const baseSlugs = getCapacityBaseSlugs(candidate);
-    if (baseSlugs.length > 0) baseSlugsByCandidate.set(candidate, baseSlugs);
-  }
-  if (baseSlugsByCandidate.size > 0) {
-    const baseSlugsToLookup = Array.from(
-      new Set(Array.from(baseSlugsByCandidate.values()).flat())
-    ).filter((baseSlug) => !Object.hasOwn(productPaths, baseSlug));
-    const basePaths = baseSlugsToLookup.length
-      ? await getCachedProductCanonicalPaths(merchantId, baseSlugsToLookup, {
-          throwOnQueryError: true,
-        })
-      : {};
-    for (const [candidate, baseSlugs] of baseSlugsByCandidate) {
-      for (const baseSlug of baseSlugs) {
-        const basePath = Object.hasOwn(productPaths, baseSlug)
-          ? productPaths[baseSlug]
-          : Object.hasOwn(basePaths, baseSlug)
-            ? basePaths[baseSlug]
-            : undefined;
-        if (basePath) {
-          productPaths[candidate] = basePath;
-          break;
-        }
-      }
-    }
-  }
+  const capacityVariantPaths = await resolveCapacityVariantProductPaths(
+    merchantId,
+    slugCandidates,
+    productPaths
+  );
+  Object.assign(productPaths, capacityVariantPaths);
 
   // Active products linked by UUID: canonical path of their real slug.
   const activeUuidSlugs = Array.from(new Set(activeSlugByUuid.values())).filter(

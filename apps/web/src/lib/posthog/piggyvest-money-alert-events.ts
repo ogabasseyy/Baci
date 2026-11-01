@@ -125,13 +125,18 @@ async function deliver(
 ): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await Promise.race([
-      deps.capture(
+    // The capture keeps its own rejection handler, so a send that fails
+    // after the timeout has won the race still settles quietly.
+    const captured = deps
+      .capture(
         PIGGYVEST_MONEY_ALERT_EVENT,
         properties,
         undefined,
         deterministicEventUuid(`${PIGGYVEST_MONEY_ALERT_EVENT}:${key}`)
-      ),
+      )
+      .catch(() => false);
+    return await Promise.race([
+      captured,
       new Promise<boolean>((resolve) => {
         timer = setTimeout(() => resolve(false), deps.timeoutMs);
       }),

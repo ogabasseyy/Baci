@@ -86,6 +86,10 @@ vi.mock('expo-router', async () => {
   return { Tabs };
 });
 
+vi.mock('@/components/feedback/FeedbackLauncher', () => ({
+  FeedbackLauncher: () => <div data-testid="feedback-launcher" />,
+}));
+
 vi.mock('@/hooks/useFailedOrders', () => ({
   useFailedOrders: () => ({ data: mocks.failedOrders }),
 }));
@@ -117,6 +121,7 @@ describe('TabLayout', () => {
     const { getByTestId } = render(<TabLayout />);
 
     expect(getByTestId('tabs-root')).toBeTruthy();
+    expect(getByTestId('feedback-launcher')).toBeTruthy();
 
     const screenOptions = mocks.tabsProps?.screenOptions as {
       freezeOnBlur: boolean;

@@ -10,22 +10,19 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { buildPreviewUrl } from '@/components/customize/build-preview-url';
 import {
   CustomizeChatPanel,
   type CustomizeMessage,
 } from '@/components/customize/CustomizeChatPanel';
-import { CustomizePreviewPane } from '@/components/customize/CustomizePreviewPane';
+import { CustomizePreviewSwitch } from '@/components/customize/CustomizePreviewSwitch';
 import { CustomizeViewModeToggle } from '@/components/customize/CustomizeViewModeToggle';
 import { customizeStyles } from '@/components/customize/customize.styles';
 import { ScreenSkeleton } from '@/components/ui/ScreenSkeleton';
 import { type BuilderConfig, useBuilderConfig } from '@/hooks/useBuilderConfig';
-import { useMerchant } from '@/hooks/useMerchant';
 import { useTheme } from '@/hooks/useTheme';
 
 export default function CustomizeScreen() {
   const { colors, shadows } = useTheme();
-  const { storeUrl } = useMerchant();
   const router = useRouter();
   const flatListRef = useRef<FlatList<CustomizeMessage> | null>(null);
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -146,8 +143,6 @@ export default function CustomizeScreen() {
       ]
     );
   };
-
-  const previewUrl = buildPreviewUrl(storeUrl, previewKey);
 
   if (isLoadingConfig) {
     return (
@@ -291,10 +286,10 @@ export default function CustomizeScreen() {
           shadowStyle={shadows.md}
         />
       ) : (
-        <CustomizePreviewPane
+        <CustomizePreviewSwitch
           colors={colors}
+          config={config}
           previewKey={previewKey}
-          previewUrl={previewUrl}
         />
       )}
     </SafeAreaView>

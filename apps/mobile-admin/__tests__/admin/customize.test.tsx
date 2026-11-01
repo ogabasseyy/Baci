@@ -73,8 +73,21 @@ vi.mock('@/components/customize/CustomizeChatPanel', async () => {
 });
 
 vi.mock('@/components/customize/CustomizePreviewPane', () => ({
-  CustomizePreviewPane: ({ previewUrl }: { previewUrl: string }) => (
-    <section aria-label="customize-preview-pane">{previewUrl}</section>
+  CustomizePreviewPane: () => <div>legacy-only</div>,
+}));
+
+vi.mock('@/components/customize/CustomizePreviewSwitch', () => ({
+  CustomizePreviewSwitch: ({
+    previewKey,
+    config,
+  }: {
+    previewKey: number;
+    config: { root: { title: string } };
+  }) => (
+    <section aria-label="customize-preview-pane">
+      {`https://store.usebaci.com/?preview=true&t=${previewKey}`}
+      <span>{config.root.title}</span>
+    </section>
   ),
 }));
 
@@ -191,5 +204,6 @@ describe('CustomizeScreen', () => {
     expect(
       screen.getByRole('region', { name: 'customize-preview-pane' })
     ).toHaveTextContent('https://store.usebaci.com/?preview=true&t=');
+    expect(screen.getByText('Store')).toBeInTheDocument();
   });
 });

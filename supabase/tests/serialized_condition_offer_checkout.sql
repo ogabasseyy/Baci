@@ -2,6 +2,9 @@
 -- rolls back. A condition offer must claim the corresponding serialized unit.
 \set VERBOSITY verbose
 BEGIN;
+-- Bound the synthetic checkout statement so a stuck query reports its fixture
+-- phase instead of exhausting the disposable replay database's resources.
+SET LOCAL statement_timeout = '15s';
 
 -- Open only the checkout eligibility gate inside this transaction. The order
 -- routing and protocol marker must come from the production migrations.

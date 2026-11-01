@@ -1,11 +1,12 @@
 # Baci capabilities and agent access
 
-Reviewed 31 October 2026 against source revision
-`add71b5ae9b1e0a31a9cdf62b408b4dc7e916ac2`. The shipment-booking merchant sender
-change was re-reviewed and tested; other cited source evidence remains unchanged
-across the latest main sync. This is a navigation map, not authorization or proof
-of current deployment. Check the current implementation, live tool discovery and
-merchant entitlement before calling or claiming a tool.
+Reviewed 1 November 2026 against source revision
+`b73fe46a8be9a40435dad72d88ece506adff3da3`. The native customize preview change
+was reviewed against the AI capability claim; the other map-cited sources remain
+unchanged. Native device qualification and production deployment are not proven.
+This is a navigation map, not authorization or proof of current deployment. Check
+the current implementation, live tool discovery and merchant entitlement before
+calling or claiming a tool.
 
 Baci's positioning is **agent-native commerce infrastructure for African
 merchants**: merchant-owned stores, structured discovery, controlled transactions

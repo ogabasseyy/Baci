@@ -64,6 +64,8 @@ jobs:
         run: node --test .github/scripts/sentry-storefront-provenance.test.mjs
       - name: Test pilot change-detection contract
         run: node --test .github/scripts/pilot-change-detection-contract.test.mjs
+      - name: Test pre-push behind-base guard
+        run: node --test .github/scripts/lefthook-behind-base.test.mjs
       - name: Test CI change-scope resolver
         run: bash .github/scripts/resolve-ci-change-scope.test.sh
       # paths-filter can't infer a base on merge_group events, so skip it there

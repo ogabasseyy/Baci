@@ -22,7 +22,7 @@ const HTML_ENTITY_MAP: Record<string, string> = {
 };
 
 const FAQ_HEADING_RE =
-  /<h2\b[^>]*>\s*(?:faq|faqs|frequently asked questions)\s*<\/h2>([\s\S]*?)(?=<h2\b|$)/i;
+  /<h2\b[^>]*>\s*(?:faqs?(?:\b[^<]*)?|frequently asked questions(?:\b[^<]*)?|people also ask(?:\b[^<]*)?)\s*<\/h2>([\s\S]*?)(?=<h2\b|$)/gi;
 const FAQ_QUESTION_BLOCK_RE =
   /<h3\b[^>]*>([\s\S]*?)<\/h3>\s*<(?:p|div)\b[^>]*>([\s\S]*?)<\/(?:p|div)>/gi;
 
@@ -61,36 +61,38 @@ function truncateAtWord(text: string, maxLength: number): string {
 }
 
 export function extractBlogFaqItems(contentHtml: string): BlogFaqItem[] {
-  const faqSection = contentHtml.match(FAQ_HEADING_RE)?.[1];
-  if (!faqSection) {
-    return [];
-  }
-
   const items: BlogFaqItem[] = [];
   const seenQuestions = new Set<string>();
 
-  for (const match of faqSection.matchAll(FAQ_QUESTION_BLOCK_RE)) {
-    const question = normalizeText(match[1] || '');
-    const answer = normalizeText(match[2] || '');
-    const questionKey = question.toLowerCase();
-
-    if (
-      !question.endsWith('?') ||
-      question.length < MIN_QUESTION_LENGTH ||
-      answer.length < MIN_ANSWER_LENGTH ||
-      seenQuestions.has(questionKey)
-    ) {
+  for (const sectionMatch of contentHtml.matchAll(FAQ_HEADING_RE)) {
+    const faqSection = sectionMatch[1];
+    if (!faqSection) {
       continue;
     }
 
-    seenQuestions.add(questionKey);
-    items.push({
-      question: truncateAtWord(question, MAX_QUESTION_LENGTH),
-      answer: truncateAtWord(answer, MAX_ANSWER_LENGTH),
-    });
+    for (const match of faqSection.matchAll(FAQ_QUESTION_BLOCK_RE)) {
+      const question = normalizeText(match[1] || '');
+      const answer = normalizeText(match[2] || '');
+      const questionKey = question.toLowerCase();
 
-    if (items.length >= MAX_FAQ_ITEMS) {
-      break;
+      if (
+        !question.endsWith('?') ||
+        question.length < MIN_QUESTION_LENGTH ||
+        answer.length < MIN_ANSWER_LENGTH ||
+        seenQuestions.has(questionKey)
+      ) {
+        continue;
+      }
+
+      seenQuestions.add(questionKey);
+      items.push({
+        question: truncateAtWord(question, MAX_QUESTION_LENGTH),
+        answer: truncateAtWord(answer, MAX_ANSWER_LENGTH),
+      });
+
+      if (items.length >= MAX_FAQ_ITEMS) {
+        return items;
+      }
     }
   }
 

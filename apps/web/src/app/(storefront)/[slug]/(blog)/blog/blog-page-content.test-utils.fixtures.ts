@@ -29,6 +29,8 @@ export const postsPayload = [
     },
     featured_image_alt: 'First Post cover',
     category: 'News',
+    focus_keyword: 'store launch',
+    keywords: ['store launch', 'launch'],
     tags: ['launch'],
     author_name: 'Ogabassey',
     published_at: '2026-03-28T10:00:00.000Z',

@@ -221,4 +221,47 @@ describe('buildInformationalClusterModel', () => {
 
     expect(model).toBeNull();
   });
+
+  it('prioritizes products whose model tokens match the article title and slug', async () => {
+    mockLoadScopedInventory.mockResolvedValue({
+      isCollection: false,
+      categoryName: 'Smartphones',
+      products: [
+        {
+          slug: 'iphone-11',
+          name: 'iPhone 11',
+          brand: 'Apple',
+          price: 210_000,
+          category_slug: 'smartphones',
+          condition: 'used',
+          stock: 5,
+        },
+        {
+          slug: 'iphone-17-pro-max',
+          name: 'iPhone 17 Pro Max',
+          brand: 'Apple',
+          price: 1_950_000,
+          category_slug: 'smartphones',
+          condition: 'new',
+          stock: 4,
+        },
+      ],
+    });
+
+    const model = await buildInformationalClusterModel({
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      storeUrl: 'https://ogabassey.com',
+      post: {
+        ...smartphoneGuidePost,
+        slug: 'iphone-17-pro-max-price-in-nigeria',
+        title: 'iPhone 17 Pro Max Price in Nigeria (2026 Buyer Guide)',
+        tags: ['Apple', 'iPhone 17 Pro Max'],
+      },
+    });
+
+    expect(model?.featuredProducts[0]?.href).toBe(
+      'https://ogabassey.com/smartphones/iphone-17-pro-max'
+    );
+  });
 });

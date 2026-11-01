@@ -13,7 +13,7 @@ import {
 
 const outputs = {
   node: '24.11.1',
-  pnpm: '11.7.0\n',
+  pnpm: '11.22.0\n',
   psql: 'psql (PostgreSQL) 18.3\n',
   supabase: '2.95.4\n',
   tsc: 'Version 7.0.2\n',
@@ -102,7 +102,7 @@ describe('verifySupabaseReplayContract', () => {
 
   it.each([
     ['node', { node: '23.9.0' }],
-    ['pnpm', { pnpm: '11.6.0\n' }],
+    ['pnpm', { pnpm: '11.7.0\n' }],
     ['typescript', { tsc: 'Version 6.0.2\n' }],
     ['tsx', { tsx: 'tsx v4.22.3\nnode v24.11.1\n' }],
     ['tsx-node', { tsx: 'tsx v4.22.4\nnode v23.9.0\n' }],

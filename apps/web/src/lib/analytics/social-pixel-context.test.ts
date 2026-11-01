@@ -28,3 +28,27 @@ it('keeps platform ownership independent', () => {
   tt();
   snap();
 });
+
+it('retains the prepared owner when its deferred provider mounts', () => {
+  const releasePrepared = socialPixelContext.prepare('tiktok', 'tt-deferred');
+  const prepared = socialPixelContext.get('tiktok');
+  const releaseProvider = socialPixelContext.activate('tiktok', 'tt-deferred');
+  expect(socialPixelContext.get('tiktok')).toBe(prepared);
+  socialPixelContext.markReady('tiktok', 'tt-deferred');
+  expect(prepared?.ready).toBe(true);
+  releaseProvider();
+  expect(socialPixelContext.get('tiktok')).toBeUndefined();
+  releasePrepared();
+});
+
+it('invalidates a prepared owner when the merchant changes', () => {
+  const releaseFirst = socialPixelContext.prepare('tiktok', 'tt-first');
+  const first = socialPixelContext.get('tiktok');
+  const releaseSecond = socialPixelContext.prepare('tiktok', 'tt-second');
+  const releaseProvider = socialPixelContext.activate('tiktok', 'tt-second');
+  releaseFirst();
+  expect(socialPixelContext.get('tiktok')).not.toBe(first);
+  expect(socialPixelContext.get('tiktok')?.id).toBe('tt-second');
+  releaseProvider();
+  releaseSecond();
+});

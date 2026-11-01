@@ -167,3 +167,60 @@ it('drops pending events from an unmounted or revoked pixel activation even when
   expect(tt).not.toHaveBeenCalled();
   expect(snap).not.toHaveBeenCalled();
 });
+
+it('delivers a consented event queued before prepared providers mount', () => {
+  localStorage.setItem(
+    'baci-cookie-consent',
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: true,
+      functional: true,
+    })
+  );
+  const releaseTikTok = socialPixelContext.prepare('tiktok', 'tt-unit');
+  const releaseSnapchat = socialPixelContext.prepare('snapchat', 'snap-unit');
+  analytics.viewItem(product, 'NGN', 'before-deferred-mount');
+  const { tt, snap } = pixels();
+  window.dispatchEvent(new Event('baci-tiktok-ready'));
+  window.dispatchEvent(new Event('baci-snapchat-ready'));
+  expect(tt).toHaveBeenCalledWith(
+    'ViewContent',
+    expect.objectContaining({ currency: 'NGN' }),
+    { event_id: 'before-deferred-mount' }
+  );
+  expect(snap).toHaveBeenCalledWith(
+    'track',
+    'snap-unit',
+    'VIEW_CONTENT',
+    expect.objectContaining({ client_dedup_id: 'before-deferred-mount' })
+  );
+  releaseTikTok();
+  releaseSnapchat();
+});
+
+it('does not deliver a prepared merchant event after ownership changes', () => {
+  localStorage.setItem(
+    'baci-cookie-consent',
+    JSON.stringify({
+      necessary: true,
+      analytics: true,
+      marketing: true,
+      functional: true,
+    })
+  );
+  const releaseOldTikTok = socialPixelContext.prepare('tiktok', 'tt-old');
+  const releaseOldSnap = socialPixelContext.prepare('snapchat', 'snap-old');
+  analytics.viewItem(product, 'NGN', 'old-merchant-before-mount');
+  const releaseNewTikTok = socialPixelContext.prepare('tiktok', 'tt-unit');
+  const releaseNewSnap = socialPixelContext.prepare('snapchat', 'snap-unit');
+  const { tt, snap } = pixels();
+  window.dispatchEvent(new Event('baci-tiktok-ready'));
+  window.dispatchEvent(new Event('baci-snapchat-ready'));
+  expect(tt).not.toHaveBeenCalled();
+  expect(snap).not.toHaveBeenCalled();
+  releaseOldTikTok();
+  releaseOldSnap();
+  releaseNewTikTok();
+  releaseNewSnap();
+});

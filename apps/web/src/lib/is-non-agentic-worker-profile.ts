@@ -2,6 +2,8 @@ const NON_AGENTIC_WORKER_PROFILES = new Set([
   'ai-storefront-jobs',
   'event-pipeline',
   'gigl-tracking',
+  'import-jobs',
+  'jumia-order-sync',
   'merchant-onboarding-emails',
   'petrock-reconciliation',
   'quiz-finalization',

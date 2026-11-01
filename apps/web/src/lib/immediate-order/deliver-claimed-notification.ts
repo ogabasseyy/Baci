@@ -7,6 +7,8 @@ import type {
   ImmediateOrderNotificationContext,
   PreResponsePayformeProvisioning,
 } from './notification-context';
+import { ImmediateNotificationDeliveryUnknownError } from './notification-delivery-unknown-error';
+import { createImmediateNotificationDispatch } from './notification-redrive-dispatch';
 import { markImmediateOrderNotificationStartedWithProof } from './notification-start-marker';
 import { provisionPayformeRetryDva } from './payforme-dva';
 
@@ -25,9 +27,9 @@ export interface ClaimedNotificationDelivery {
  * email, and records the terminal outcome through the provisioning
  * retry (completion silently no-ops while the HMAC secret is
  * unprovisioned, so the outcome is re-attempted until observably
- * recorded). Any failure completes failed (releasable) so a replay
- * resumes instead of the shopper receiving a partial message marked
- * delivered. Never rejects: errors are completed + logged. Extracted
+ * recorded). Definite failures release the durable dispatch fence;
+ * unknown or unrecorded accepted outcomes retain it for recovery.
+ * Never rejects: outcomes are completed or logged. Extracted
  * from the orders POST route (Boy Scout rule).
  */
 export async function deliverClaimedImmediateOrderNotification(
@@ -40,6 +42,11 @@ export async function deliverClaimedImmediateOrderNotification(
     claimToken,
     preResponsePayforme,
   } = input;
+  let dispatched = false;
+  let accepted = false;
+  let dispatch:
+    | ReturnType<typeof createImmediateNotificationDispatch>
+    | undefined;
   try {
     // Mark the won claim started (extends it to the full
     // 5-minute crash window): fire-and-forget first step so
@@ -81,10 +88,34 @@ export async function deliverClaimedImmediateOrderNotification(
     // body carries the provisioned DVA as bank-transfer payment
     // instructions — the tracking link shows status only and
     // cannot take payment.
-    await sendImmediateOrderConfirmationEmail(notificationCtx, {
-      attachments,
-      invoiceVirtualAccount,
-    });
+    if (process.env.IMMEDIATE_NOTIFICATION_REDRIVE_ENABLED === 'true') {
+      if (!claimToken)
+        throw new Error('Immediate notification lease is missing');
+      dispatch = createImmediateNotificationDispatch({
+        orderId,
+        claimToken,
+        env: process.env,
+      });
+    }
+    const activeDispatch = dispatch;
+    await sendImmediateOrderConfirmationEmail(
+      notificationCtx,
+      { attachments, invoiceVirtualAccount },
+      activeDispatch
+        ? {
+            beforeTransportDispatch: async () => {
+              await activeDispatch.beforeTransportDispatch();
+              dispatched = true;
+            },
+            resetTransportDispatch: async () => {
+              await activeDispatch.resetTransportDispatch();
+              dispatched = false;
+            },
+          }
+        : undefined
+    );
+    accepted = true;
+    if (dispatch) await dispatch.recordAcceptance();
     // Sent is terminal: replays observe it and skip. Failed
     // releases the claim so the next replay resumes delivery.
     // The lease token (minted by our winning claim) fences
@@ -101,6 +132,28 @@ export async function deliverClaimedImmediateOrderNotification(
       claimToken
     );
   } catch (emailError) {
+    if (
+      accepted ||
+      (dispatch &&
+        emailError instanceof ImmediateNotificationDeliveryUnknownError)
+    ) {
+      logger.error({
+        message: 'Immediate order notification outcome requires reconciliation',
+        orderId,
+      });
+      return;
+    }
+    if (dispatched && dispatch) {
+      try {
+        await dispatch.resetTransportDispatch();
+      } catch {
+        logger.error({
+          message: 'Immediate order notification dispatch release unconfirmed',
+          orderId,
+        });
+        return;
+      }
+    }
     await completeNotificationWithProvisioningRetry(
       notificationCtx.supabase,
       orderId,

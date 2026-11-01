@@ -12,10 +12,15 @@ import type {
   ImmediateEmailSendInput,
   ImmediateOrderNotificationContext,
 } from './notification-context';
+import { ImmediateNotificationDeliveryUnknownError } from './notification-delivery-unknown-error';
 
 export async function sendImmediateOrderConfirmationEmail(
   ctx: ImmediateOrderNotificationContext,
-  artifacts: ImmediateEmailSendInput
+  artifacts: ImmediateEmailSendInput,
+  dispatchHooks?: {
+    beforeTransportDispatch: () => Promise<void>;
+    resetTransportDispatch: () => Promise<void>;
+  }
 ): Promise<void> {
   const creditedPaid = getCreditedAmountPaid(
     ctx.order,
@@ -67,6 +72,7 @@ export async function sendImmediateOrderConfirmationEmail(
     emailType: 'orders',
     fromName: ctx.senderName,
     attachments: artifacts.attachments,
+    ...dispatchHooks,
     auditContext: {
       merchantId: ctx.merchantId,
       orderId: ctx.order.id,
@@ -90,6 +96,9 @@ export async function sendImmediateOrderConfirmationEmail(
     // Reject so the caller completes the claim as failed (retryable):
     // resolving here would mark the notification sent and permanently
     // suppress the confirmation/proforma email on replay.
+    if (emailResult.deliveryOutcome === 'unknown') {
+      throw new ImmediateNotificationDeliveryUnknownError();
+    }
     throw new Error('ORDER_CONFIRMATION_EMAIL_FAILED');
   }
   logger.info({

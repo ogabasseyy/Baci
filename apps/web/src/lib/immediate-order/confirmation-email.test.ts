@@ -86,6 +86,22 @@ describe('sendImmediateOrderConfirmationEmail', () => {
     );
   });
 
+  it('forwards the durable dispatch fence and rejection reset to the transport', async () => {
+    const beforeTransportDispatch = vi.fn(async () => {});
+    const resetTransportDispatch = vi.fn(async () => {});
+    await sendImmediateOrderConfirmationEmail(
+      baseContext(),
+      { attachments: undefined, invoiceVirtualAccount: null as never },
+      { beforeTransportDispatch, resetTransportDispatch }
+    );
+    expect(mockedSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        beforeTransportDispatch,
+        resetTransportDispatch,
+      })
+    );
+  });
+
   it('rejects a failed provider delivery so the claim completes as failed', async () => {
     mockedSendEmail.mockResolvedValue({ success: false } as never);
 
@@ -95,5 +111,20 @@ describe('sendImmediateOrderConfirmationEmail', () => {
         invoiceVirtualAccount: null as never,
       })
     ).rejects.toThrow('ORDER_CONFIRMATION_EMAIL_FAILED');
+  });
+
+  it('distinguishes an unknown provider outcome from a definite rejection', async () => {
+    mockedSendEmail.mockResolvedValue({
+      success: false,
+      deliveryOutcome: 'unknown',
+    } as never);
+    await expect(
+      sendImmediateOrderConfirmationEmail(baseContext(), {
+        attachments: undefined,
+        invoiceVirtualAccount: null as never,
+      })
+    ).rejects.toMatchObject({
+      name: 'ImmediateNotificationDeliveryUnknownError',
+    });
   });
 });

@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { admissionProofResponse } from '@/lib/vtu-admission.test-support';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
 
 const {
@@ -348,22 +349,7 @@ function buildSupabase(
     rpc: vi.fn((fn: string, args: Record<string, string>) => {
       state.rpcCalls?.push({ fn, args });
       if (fn === 'vtu_admission_proof') {
-        const stamp =
-          state.admissionTimestamp === undefined
-            ? ADMISSION_TS
-            : state.admissionTimestamp;
-        return Promise.resolve({
-          data:
-            stamp === null
-              ? null
-              : [
-                  {
-                    admitted_at: stamp,
-                    live_transaction_ids: state.admissionLive ?? [],
-                  },
-                ],
-          error: state.admissionError ?? null,
-        });
+        return admissionProofResponse(state, ADMISSION_TS);
       }
       if (fn === 'lookup_vtu_idempotency_row') {
         // Verdict mirror of lookup_vtu_idempotency_row: fresh for
@@ -835,9 +821,8 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
   it('idempotent replay: existing key replays even when the admission proof RPC is down', async () => {
     // Codex P2: the replay path never uses the stamp or the live
     // set, so a proof-RPC outage must not 500 an already-debited
-    // result — the existing row short-circuits admission. Split
-    // clients (Phase 2): the owned row comes from the user
-    // client; the admin client fails only the proof RPC.
+    // result — the existing row short-circuits admission. Only the
+    // proof RPC fails on the authenticated transport.
     userSupabaseMockRef.current = buildSupabase({
       row: {
         key: VALID_KEY,
@@ -846,10 +831,6 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         merchant_id: 'merchant-1',
         request_fingerprint: VALID_BODY_FINGERPRINT,
       },
-      insertCalls: 0,
-    });
-    supabaseMockRef.current = buildSupabase({
-      row: null,
       insertCalls: 0,
       admissionError: { message: 'proof rpc down' },
     });
@@ -932,16 +913,15 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     });
     // Admission proof fires on the replay path too (concurrent
     // with the key lookup; unused when a mapping exists) — on the
-    // privileged client (narrowed exception).
-    expect(adminState.rpcCalls).toEqual([
-      {
-        fn: 'vtu_admission_proof',
-        args: {
-          p_merchant_slug: 'ogabassey',
-          p_fingerprint: VALID_BODY_FINGERPRINT,
-        },
+    // authenticated client.
+    expect(adminState.rpcCalls).toEqual([]);
+    expect(userState.rpcCalls).toContainEqual({
+      fn: 'vtu_admission_proof',
+      args: {
+        p_merchant_slug: 'ogabassey',
+        p_fingerprint: VALID_BODY_FINGERPRINT,
       },
-    ]);
+    });
     expect(
       (supabaseMockRef.current?.from as ReturnType<typeof vi.fn>).mock.calls
     ).toHaveLength(0);
@@ -1008,16 +988,15 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       });
       // Admission proof fires on the replay path too (concurrent
       // with the key lookup; unused when a mapping exists) — on the
-      // privileged client (narrowed exception).
-      expect(adminState.rpcCalls).toEqual([
-        {
-          fn: 'vtu_admission_proof',
-          args: {
-            p_merchant_slug: 'ogabassey',
-            p_fingerprint: VALID_BODY_FINGERPRINT,
-          },
+      // authenticated client.
+      expect(adminState.rpcCalls).toEqual([]);
+      expect(userState.rpcCalls).toContainEqual({
+        fn: 'vtu_admission_proof',
+        args: {
+          p_merchant_slug: 'ogabassey',
+          p_fingerprint: VALID_BODY_FINGERPRINT,
         },
-      ]);
+      });
       expect(mockFulfill).toHaveBeenCalledWith({
         supabase: expect.anything(),
         transactionId: 'vtu-tx-existing',
@@ -1172,6 +1151,8 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       status: 'successful',
     });
     const rpc = vi.fn((fn: string, args: Record<string, unknown>) => {
+      if (fn === 'vtu_admission_proof')
+        return admissionProofResponse({}, ADMISSION_TS);
       if (fn === 'lookup_vtu_idempotency_row') {
         // Fresh key: the verdict misses; the claim joins.
         return Promise.resolve({
@@ -1311,6 +1292,8 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       status: 'successful',
     });
     const rpc = vi.fn((fn: string) => {
+      if (fn === 'vtu_admission_proof')
+        return admissionProofResponse({}, ADMISSION_TS);
       if (fn === 'lookup_vtu_idempotency_row') {
         // Fresh key: the verdict misses; the claim adopts.
         return Promise.resolve({
@@ -1573,14 +1556,8 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         txnTerminalAt: { 'vtu-tx-old': '2026-10-20T04:00:00.000Z' },
       },
     };
+    state.admissionLive = ['vtu-tx-old'];
     userSupabaseMockRef.current = buildSupabase(state);
-    // The proof fires on the privileged client: stage the live
-    // snapshot on the admin mock.
-    supabaseMockRef.current = buildSupabase({
-      row: null,
-      insertCalls: 0,
-      admissionLive: ['vtu-tx-old'],
-    });
     mockFulfill.mockResolvedValue({
       amount: 1000,
       reference: 'VTU-REF-OLD',
@@ -1684,6 +1661,8 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       .spyOn(console, 'error')
       .mockImplementation(() => {});
     const rpc = vi.fn((fn: string) => {
+      if (fn === 'vtu_admission_proof')
+        return admissionProofResponse({}, ADMISSION_TS);
       if (fn === 'lookup_vtu_idempotency_row') {
         return Promise.resolve({
           data: [
@@ -1783,7 +1762,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       insertCalls: 0,
       admissionError: { message: 'connection reset' },
     };
-    supabaseMockRef.current = buildSupabase(state);
+    userSupabaseMockRef.current = buildSupabase(state);
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {});
@@ -2088,6 +2067,10 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         'lookup_vtu_idempotency_row',
         { p_key: VALID_KEY, p_user_id: AUTH_USER_ID },
       ],
+      [
+        'vtu_admission_proof',
+        { p_merchant_slug: 'ogabassey', p_fingerprint: VALID_BODY_FINGERPRINT },
+      ],
     ]);
     consoleErrorSpy.mockRestore();
   });
@@ -2219,39 +2202,26 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(mockFulfill).not.toHaveBeenCalled();
   });
 
-  it('narrowed boundary: the service-role client reaches only the admission proof and fulfillment', async () => {
-    // Phase 2 (#3694): lookup, ownership, prepare, claim, and
-    // cleanup run on the authenticated client; createAdminClient's
-    // product fires the admission-proof RPC (its merchant-wide
-    // live set spans customers by design — fence input only) and
-    // is passed to fulfillPendingVtuTransaction — never otherwise
-    // touched.
+  it('admission never calls the privileged transport', async () => {
     const state: IdempotencyRowState = { row: null, insertCalls: 0 };
     userSupabaseMockRef.current = buildSupabase(state);
-
     const { status } = await callRoute(
       makeRequest({ idempotencyKey: VALID_KEY })
     );
-
     expect(status).toBe(200);
+    expect(userSupabaseMockRef.current.rpc).toHaveBeenCalledWith(
+      'vtu_admission_proof',
+      {
+        p_merchant_slug: 'ogabassey',
+        p_fingerprint: VALID_BODY_FINGERPRINT,
+      }
+    );
+    expect(supabaseMockRef.current?.rpc).not.toHaveBeenCalled();
+    expect(supabaseMockRef.current?.from).not.toHaveBeenCalled();
     expect(mockFulfill).toHaveBeenCalledWith({
       supabase: supabaseMockRef.current,
       transactionId: 'vtu-tx-new',
     });
-    expect(
-      (supabaseMockRef.current?.from as ReturnType<typeof vi.fn>).mock.calls
-    ).toHaveLength(0);
-    expect(
-      (supabaseMockRef.current?.rpc as ReturnType<typeof vi.fn>).mock.calls
-    ).toEqual([
-      [
-        'vtu_admission_proof',
-        {
-          p_merchant_slug: 'ogabassey',
-          p_fingerprint: VALID_BODY_FINGERPRINT,
-        },
-      ],
-    ]);
   });
 
   it('prepare reads on the user client, inserts on the privileged client', async () => {

@@ -29,10 +29,8 @@ import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
  * for the key lookup, replay binding, customer find/link,
  * settings projection, intent claim, and orphan cleanup (no buyer
  * policies on vtu_transactions by design — Codex P1, PR #3741).
- * The service-role client exists ONLY for the admission-proof RPC
- * (merchant-wide live set spans customers by design — fence input
- * only, never returned), the prepare insert (server-computed
- * settlement money that must never be caller-supplied — Codex P1),
+ * The service-role client exists ONLY for the server-computed prepare insert
+ * (settlement money that must never be caller-supplied — Codex P1),
  * and fulfillPendingVtuTransaction (wallet debit/credit/refund
  * RPCs plus its transaction, ledger, marker, loyalty, and
  * notification writes — criterion 3's documented privilege
@@ -97,8 +95,8 @@ export async function POST(request: NextRequest) {
 
     const requestFingerprint = computeVtuWalletRequestFingerprint(input);
 
-    // Authenticated client for everything except the admission
-    // proof and fulfillment (Phase 2): RLS + JWT-verifying RPCs
+    // Authenticated client for everything except server-computed prepare insertion
+    // and fulfillment (Phase 2): RLS + JWT-verifying RPCs
     // own tenant isolation here.
     const userSupabase = auth.supabase;
     const adminSupabase = createAdminClient();
@@ -112,7 +110,6 @@ export async function POST(request: NextRequest) {
     try {
       ({ existing, foreign, proof } = await admitVtuClaim(
         userSupabase,
-        adminSupabase,
         idempotencyKey,
         auth.user.id,
         input.merchantSlug,

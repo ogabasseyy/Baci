@@ -50,19 +50,13 @@ export interface VtuClaimAdmission {
  * the route 400 without needing the proof. Key-lookup failures
  * propagate unchanged.
  *
- * Split clients (Phase 2, epic #3694): the key lookup runs on the
- * authenticated client through the verdict RPC (ownership is
- * decided inside the RPC — a foreign key surfaces as `foreign`,
- * never as a row), while the admission-proof RPC stays on the
- * service-role client: its merchant-wide live set spans customers
- * by design (the customer row may not exist pre-prepare), so it
- * remains behind the narrowed route exception with the claim
- * mechanics. Its output feeds only the claim fence, never the
- * HTTP response.
+ * Both RPCs use the authenticated client. The admission RPC resolves
+ * the verified caller's customer itself and returns only that customer's
+ * live set; the claim enforces the same merchant/customer scope. No
+ * merchant-wide snapshot or privileged client crosses this boundary.
  */
 export async function admitVtuClaim(
   userSupabase: SupabaseClient,
-  adminSupabase: SupabaseClient,
   idempotencyKey: string,
   userId: string,
   merchantSlug: string,
@@ -70,7 +64,7 @@ export async function admitVtuClaim(
 ): Promise<VtuClaimAdmission> {
   const [lookup, proof] = await Promise.all([
     lookupVtuIdempotencyVerdict(userSupabase, idempotencyKey, userId),
-    adminSupabase.rpc('vtu_admission_proof', {
+    userSupabase.rpc('vtu_admission_proof', {
       p_merchant_slug: merchantSlug,
       p_fingerprint: fingerprint,
     }),

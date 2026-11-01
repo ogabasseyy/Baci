@@ -116,25 +116,31 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
     const entry = join(root, packageMain(root));
     const script = [
       `const parser = require(${JSON.stringify(entry)})`,
-      'const times = []',
-      `for (const n of [${SMALL_FLAT_CLASSES}, ${LARGE_FLAT_CLASSES}]) {`,
-      `  const flat = '.a' + '.b'.repeat(n) + '#c'`,
-      '  let best = Infinity',
-      '  for (let i = 0; i < 3; i++) {',
-      '    const start = performance.now()',
-      '    const out = parser().processSync(flat)',
-      '    if (out !== flat) process.exit(2)',
-      '    best = Math.min(best, performance.now() - start)',
-      '  }',
-      '  times.push(best)',
+      `const small = '.a' + '.b'.repeat(${SMALL_FLAT_CLASSES}) + '#c'`,
+      `const large = '.a' + '.b'.repeat(${LARGE_FLAT_CLASSES}) + '#c'`,
+      'function measure(flat) {',
+      '  const start = performance.now()',
+      '  const out = parser().processSync(flat)',
+      '  if (out !== flat) process.exit(2)',
+      '  return performance.now() - start',
       '}',
-      'console.log(JSON.stringify(times))',
+      '// Warm both sizes before collecting paired samples.',
+      'measure(small); measure(large)',
+      'const ratios = []',
+      'for (let i = 0; i < 5; i++) {',
+      '  let a, b',
+      '  if (i % 2 === 0) { a = measure(small); b = measure(large) }',
+      '  else { b = measure(large); a = measure(small) }',
+      '  ratios.push(b / Math.max(a, 1e-3))',
+      '}',
+      'ratios.sort((a, b) => a - b)',
+      'console.log(JSON.stringify(ratios))',
     ].join('\n');
     // Scaling gate, not an absolute cutoff: doubling the input must
     // roughly double the time (linear), not quadruple it (quadratic).
-    // Best-of-3 per size shrugs off GC pauses; the ratio is
-    // runner-speed independent, so slow CI cannot flake it. Measured:
-    // patched ~2.2x, pristine ~4x at these sizes. The 60s child ceiling
+    // Paired samples with alternating order and the median limit the effect
+    // of JIT, GC, or unrelated runner pauses on either measurement. The
+    // threshold remains 3: patched ~2x, pristine ~4x. The 60s child ceiling
     // is an anti-hang backstop only (patched finishes in ~1s).
     const result = spawnSync(process.execPath, ['-e', script], {
       timeout: 60000,
@@ -144,18 +150,12 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
       signal: result.signal,
       status: result.status,
     }).toEqual({ error: undefined, signal: null, status: 0 });
-    const [small, large] = JSON.parse(result.stdout.toString()) as [
-      number,
-      number,
-    ];
-    // Sub-millisecond monotonic clock (no 1ms Date.now buckets, no
-    // wall-clock adjustments); the 1µs floor is a div-by-zero guard
-    // only — real small runs are ms-scale, so it never binds. Raw
-    // timings ride on the failure message for loaded-runner triage.
-    const ratio = large / Math.max(small, 1e-3);
+    const ratios = JSON.parse(result.stdout.toString()) as number[];
+    expect(ratios).toHaveLength(5);
+    const median = ratios[2];
     expect(
-      ratio,
-      `scaling ratio ${ratio} exceeds 3 (small=${small}ms large=${large}ms)`
+      median,
+      `median scaling ratio ${median} exceeds 3 (samples=${ratios.join(', ')})`
     ).toBeLessThan(3);
   }, 70_000);
 });

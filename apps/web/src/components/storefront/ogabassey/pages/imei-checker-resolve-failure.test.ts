@@ -19,7 +19,7 @@ describe('resolveImeiCheckFailure', () => {
 
     expect(outcome.shouldRedirectToLogin).toBe(true);
     expect(outcome.errorMessage).toBeNull();
-    expect(outcome.shouldClearIdempotencyKey).toBe(true);
+    expect(outcome.shouldClearIdempotencyKey).toBe(false);
   });
 
   it('computes the top-up shortfall on 402 with no error message', () => {
@@ -112,4 +112,32 @@ describe('resolveImeiCheckFailure', () => {
 
     expect(outcome.errorMessage).toBe('Custom upstream error');
   });
+});
+
+it('retains the retry key after an unexpected server error', () => {
+  const outcome = resolveImeiCheckFailure({
+    currentTierPrice: 500,
+    walletBalance: 1000,
+    payload: { code: 'INTERNAL_ERROR' },
+    responseStatus: 500,
+  });
+  expect(outcome.shouldPreserveIdempotencyKey).toBe(true);
+  expect(outcome.shouldClearIdempotencyKey).toBe(false);
+});
+
+it('keeps an earlier uncertain key when authentication expires', () => {
+  const outcome = resolveImeiCheckFailure({ currentTierPrice: 500, walletBalance: 0, payload: { code: 'AUTH_REQUIRED' }, responseStatus: 401 });
+  expect(outcome.shouldPreserveIdempotencyKey).toBe(true);
+  expect(outcome.shouldClearIdempotencyKey).toBe(false);
+});
+
+it.each([[404, 'PETROCK_REJECTED'], [502, 'PETROCK_REJECTED'], [502, 'PETROCK_UNAVAILABLE']])('retires keys after confirmed Petrock refund %s %s', (responseStatus, code) => {
+  const outcome = resolveImeiCheckFailure({ ...baseInput, responseStatus, payload: { code } });
+  expect(outcome.shouldClearIdempotencyKey).toBe(true);
+  expect(outcome.shouldPreserveIdempotencyKey).toBe(false);
+});
+
+it('retires the key only for an explicitly confirmed no-debit failure', () => {
+  expect(resolveImeiCheckFailure({ responseStatus: 500, payload: { code: 'IMEI_NO_DEBIT', error: 'No debit' }, currentTierPrice: 700, walletBalance: 1000 }).shouldClearIdempotencyKey).toBe(true);
+  expect(resolveImeiCheckFailure({ responseStatus: 500, payload: { code: 'INTERNAL_ERROR', error: 'Unknown' }, currentTierPrice: 700, walletBalance: 1000 }).shouldClearIdempotencyKey).toBe(false);
 });

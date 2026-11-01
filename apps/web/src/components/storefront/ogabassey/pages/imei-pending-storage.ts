@@ -30,6 +30,7 @@ export interface PendingImeiLookup {
   lookupId: string;
   tier: ImeiServiceTierKey;
   device?: ImeiDeviceCategory;
+  recovery?: { storageKey: string; idempotencyKey: string };
 }
 
 export function pendingImeiStorageKey(
@@ -98,7 +99,17 @@ export function loadPendingImeiLookup(
       IMEI_SERVICE_TIERS[value.tier].deviceCategories;
     const supportedDevice =
       device && categories.includes(device) ? device : undefined;
+    const recovery = value.recovery;
+    const validRecovery =
+      recovery && typeof recovery === 'object' &&
+      'storageKey' in recovery && typeof recovery.storageKey === 'string' &&
+      /^baci:imei-attempt:v1:[0-9a-f]{64}$/.test(recovery.storageKey) &&
+      'idempotencyKey' in recovery && typeof recovery.idempotencyKey === 'string' &&
+      UUID_PATTERN.test(recovery.idempotencyKey)
+        ? { storageKey: recovery.storageKey, idempotencyKey: recovery.idempotencyKey }
+        : undefined;
     return {
+      ...(validRecovery ? { recovery: validRecovery } : {}),
       createdAt: value.createdAt,
       lookupId: value.lookupId,
       tier: value.tier,

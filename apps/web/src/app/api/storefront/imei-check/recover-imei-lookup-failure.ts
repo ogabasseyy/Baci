@@ -67,8 +67,8 @@ export async function recoverImeiLookupFailure({
 
   if (!debitSucceeded && activeLookup) {
     const body = errorBody({
-      code: 'INTERNAL_ERROR',
-      error: 'Internal server error',
+      code: 'IMEI_NO_DEBIT',
+      error: 'No wallet payment was taken. Please try again.',
     });
 
     try {

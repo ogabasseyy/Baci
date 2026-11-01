@@ -14,6 +14,7 @@
     "./contracts": "./src/contracts/index.ts",
     "./cart": "./src/cart/index.ts",
     "./imei": "./src/imei/index.ts",
+    "./imei/report-history": "./src/imei/report-history.ts",
     "./insurance": "./src/insurance/index.ts",
     "./lib": "./src/lib/index.ts",
     "./lib/commerce-variant-axis": "./src/lib/commerce-variant-axis.ts",

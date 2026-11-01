@@ -3,13 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pendingImeiStorageKey } from './imei-pending-storage';
 import { useImeiCheckRequest } from './use-imei-check-request';
 
-const mocks = vi.hoisted(() => ({ check: vi.fn(), poll: vi.fn() }));
+Object.defineProperty(navigator, 'locks', { configurable: true, value: { request: async (_name: string, fn: () => unknown) => fn() } });
+
+const mocks = vi.hoisted(() => ({ check: vi.fn(), poll: vi.fn(), signedIn: true }));
 vi.mock('./imei-checker-request', () => ({
   performImeiCheck: mocks.check,
   pollImeiCheck: mocks.poll,
 }));
 vi.mock('@/contexts/customer-auth-context', () => ({
-  useOptionalCustomerAuth: () => ({ customer: { id: 'hook-customer' } }),
+  useOptionalCustomerAuth: () => mocks.signedIn ? ({ customer: { id: 'hook-customer' }, user: { id: 'hook-user' }, isLoading: false }) : ({ customer: null, user: null, isLoading: false }),
 }));
 
 const lookupId = '11111111-1111-4111-8111-111111111111';
@@ -36,6 +38,7 @@ describe('useImeiCheckRequest', () => {
   });
   beforeEach(() => {
     localStorage.clear();
+    mocks.signedIn = true;
     mocks.check.mockReset();
     mocks.poll
       .mockReset()
@@ -62,8 +65,10 @@ describe('useImeiCheckRequest', () => {
       keepRequestIdentity: true,
     });
     const { result } = renderHook(() => useImeiCheckRequest('ogabassey'));
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new DOMException('quota', 'QuotaExceededError');
+    const originalSetItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+      if (key.startsWith('baci:imei-pending:')) throw new DOMException('quota', 'QuotaExceededError');
+      return originalSetItem.call(this, key, value);
     });
     await act(async () => {
       await expect(
@@ -184,4 +189,112 @@ describe('useImeiCheckRequest', () => {
     expect(result.current.needsWalletFunding).toBe(true);
     expect(result.current.isLoading).toBe(false);
   });
+});
+
+it('retains an uncertain retry key when a different check completes', async () => {
+  localStorage.clear();
+  mocks.check.mockReset();
+  mocks.check
+    .mockResolvedValueOnce({ ...outcome, error: 'Network error', keepRequestIdentity: true })
+    .mockResolvedValueOnce({ ...outcome, result: report, lookupId })
+    .mockResolvedValueOnce({ ...outcome, error: 'Network error', keepRequestIdentity: true });
+  const { result } = renderHook(() => useImeiCheckRequest('ogabassey'));
+  await act(async () => result.current.runCheck('blacklist', report.imei, 'smartphone'));
+  await act(async () => result.current.runCheck('simLock', report.imei, 'smartphone'));
+  await act(async () => result.current.runCheck('blacklist', report.imei, 'smartphone'));
+  expect(mocks.check.mock.calls[0]?.[3]).toBe(mocks.check.mock.calls[2]?.[3]);
+  expect(mocks.check.mock.calls[0]?.[3]).not.toBe(mocks.check.mock.calls[1]?.[3]);
+});
+
+it('reuses an uncertain request key after the screen is remounted', async () => {
+  localStorage.clear();
+  mocks.check.mockReset().mockResolvedValue({ ...outcome, error: 'Network error', keepRequestIdentity: true });
+  const first = renderHook(() => useImeiCheckRequest('ogabassey'));
+  await act(async () => first.result.current.runCheck('blacklist', report.imei, 'smartphone'));
+  first.unmount();
+  const restored = renderHook(() => useImeiCheckRequest('ogabassey'));
+  await act(async () => restored.result.current.runCheck('blacklist', report.imei, 'smartphone'));
+  expect(mocks.check.mock.calls[0]?.[3]).toBe(mocks.check.mock.calls[1]?.[3]);
+});
+
+it('does not submit a paid check when its recovery key cannot be saved', async () => {
+  localStorage.clear();
+  mocks.check.mockReset();
+  vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('storage unavailable'); });
+  const { result } = renderHook(() => useImeiCheckRequest('ogabassey'));
+  await act(async () => result.current.runCheck('blacklist', report.imei, 'smartphone'));
+  expect(mocks.check).not.toHaveBeenCalled();
+  expect(result.current.error).toBeTruthy();
+  vi.restoreAllMocks();
+});
+
+it('clears the saved retry key when a restored pending check completes', async () => {
+  localStorage.clear();
+  mocks.check.mockReset().mockResolvedValue({ ...outcome, pending: { lookupId, pollAfterMs: 60000 }, keepRequestIdentity: true });
+  const first = renderHook(() => useImeiCheckRequest('ogabassey'));
+  await act(async () => first.result.current.runCheck('blacklist', report.imei, 'smartphone'));
+  const recovery = JSON.parse(localStorage.getItem(key()) ?? '{}').recovery;
+  expect(localStorage.getItem(recovery.storageKey)).toBe(recovery.idempotencyKey);
+  first.unmount();
+  mocks.poll.mockResolvedValue({ kind: 'complete', lookupId, result: report });
+  renderHook(() => useImeiCheckRequest('ogabassey'));
+  await waitFor(() => expect(localStorage.getItem(recovery.storageKey)).toBeNull());
+});
+
+
+it('does not submit before a stable customer identity is available', async () => {
+  mocks.signedIn = false;
+  mocks.check.mockReset();
+  const { result } = renderHook(() => useImeiCheckRequest('ogabassey'));
+  await act(async () => result.current.runCheck('blacklist', report.imei, 'smartphone'));
+  expect(mocks.check).not.toHaveBeenCalled();
+  expect(result.current.needsSignIn).toBe(true);
+  mocks.signedIn = true;
+});
+
+
+it('reuses the retry key for differently cased serial numbers', async () => {
+  localStorage.clear();
+  mocks.check.mockReset().mockResolvedValue({ ...outcome, error: 'Network error', keepRequestIdentity: true });
+  const { result } = renderHook(() => useImeiCheckRequest('ogabassey'));
+  await act(async () => result.current.runCheck('serialInfo', 'c02xl0abjgh5', 'laptop'));
+  await act(async () => result.current.runCheck('serialInfo', 'C02XL0ABJGH5', 'laptop'));
+  expect(mocks.check).toHaveBeenCalledTimes(2);
+  expect(mocks.check.mock.calls[0]?.[3]).toBe(mocks.check.mock.calls[1]?.[3]);
+});
+
+it('requires an explicit second check after discovering an earlier report', async () => {
+  localStorage.clear();
+  mocks.check.mockReset()
+    .mockResolvedValueOnce({ ...outcome, error: 'Previous report available', lookupId, keepRequestIdentity: true, previousReportAvailable: true })
+    .mockResolvedValueOnce({ ...outcome, result: report, lookupId });
+  const { result } = renderHook(() => useImeiCheckRequest('ogabassey'));
+  await act(async () => result.current.runCheck('blacklist', report.imei, 'smartphone'));
+  expect(mocks.check.mock.calls[0]?.[7]).toBeUndefined();
+  await act(async () => result.current.runCheck('blacklist', report.imei, 'smartphone'));
+  expect(mocks.check.mock.calls[1]?.[7]).toBe(lookupId);
+  expect(mocks.check.mock.calls[0]?.[3]).toBe(mocks.check.mock.calls[1]?.[3]);
+});
+
+it('does not authorize a fresh order from an unconfirmed error lookup', async () => {
+  localStorage.clear();
+  mocks.check.mockReset().mockResolvedValue({ ...outcome, error: 'Still processing', lookupId, keepRequestIdentity: true });
+  const { result } = renderHook(() => useImeiCheckRequest('ogabassey'));
+  await act(async () => result.current.runCheck('blacklist', report.imei, 'smartphone'));
+  await act(async () => result.current.runCheck('blacklist', report.imei, 'smartphone'));
+  expect(mocks.check.mock.calls[1]?.[7]).toBeUndefined();
+});
+
+it.each([true, false])('only clears a polled failed attempt when refund confirmation is %s', async (confirmedRefund) => {
+  localStorage.clear();
+  mocks.signedIn = true;
+  mocks.check.mockReset().mockResolvedValue({ ...outcome, pending: { lookupId, pollAfterMs: 0 }, keepRequestIdentity: true });
+  mocks.poll.mockReset().mockResolvedValue({ kind: 'error', error: 'Check failed', confirmedRefund });
+  const { result, unmount } = renderHook(() => useImeiCheckRequest('ogabassey'));
+  await act(async () => { await result.current.runCheck('simLock', report.imei, 'smartphone'); });
+  await waitFor(() => expect(result.current.error).toBe('Check failed'));
+  const attempts = () => Object.keys(localStorage).filter((item) => item.startsWith('baci:imei-attempt:v1:'));
+  if (confirmedRefund) await waitFor(() => expect(attempts()).toHaveLength(0));
+  else expect(attempts()).toHaveLength(1);
+  unmount();
 });

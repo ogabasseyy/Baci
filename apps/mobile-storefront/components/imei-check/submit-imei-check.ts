@@ -7,6 +7,7 @@ export async function submitImeiCheck({
   fetchImpl = fetch,
   idempotencyKey,
   identifier,
+  previousLookupId,
   signal,
   tier,
 }: {
@@ -16,14 +17,16 @@ export async function submitImeiCheck({
   fetchImpl?: typeof fetch;
   idempotencyKey: string;
   identifier: string;
+  previousLookupId?: string;
   signal: AbortSignal;
   tier: ImeiServiceTierKey;
 }) {
   const response = await fetchImpl(`${apiBaseUrl}/api/storefront/imei-check`, {
     body: JSON.stringify({
-      clientCapabilities: ['imei-async-v1'],
+      clientCapabilities: ['imei-async-v1', 'imei-attempt-coordination-v1'],
       device,
       imei: identifier,
+      ...(previousLookupId ? { previousLookupId } : {}),
       tier,
     }),
     headers: {

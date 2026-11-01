@@ -145,6 +145,9 @@ export async function generateMetadata({
     },
     alternates: {
       canonical: url,
+      types: {
+        'application/rss+xml': `${baseUrl}/api/blog/feed/${merchant.slug}`,
+      },
     },
     robots: {
       index: true,

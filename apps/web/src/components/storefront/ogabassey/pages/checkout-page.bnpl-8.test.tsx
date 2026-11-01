@@ -1,7 +1,7 @@
 import {
   act,
-  CheckoutPage,
   cleanup,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
@@ -9,7 +9,7 @@ import {
   mockCaptureClientEvent,
   openCreditDirectCheckout,
   openCredPalCheckout,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useCart,
   useMerchantSafe,
@@ -123,12 +123,10 @@ it('tracks payment failures from Credit Direct and CredPal callbacks', async () 
         } as Response;
       });
 
-    render(<CheckoutPage />);
+    renderCheckoutWithStoreRates();
     fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-    fireEvent.click(
-      screen.getByRole('button', { name: /continue to payment/i })
-    );
+    await continueToPaymentAfterPickupCheck();
     if (tab === 'installments')
       fireEvent.click(
         screen.getByRole('button', { name: /pay in installments/i })

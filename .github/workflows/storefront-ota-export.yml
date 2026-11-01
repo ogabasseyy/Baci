@@ -1,0 +1,176 @@
+name: Prepare storefront iOS OTA export
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Reviewed main-branch commit to export
+        required: true
+        type: string
+      ios_runtime:
+        description: Runtime version embedded in the target iOS build
+        required: true
+        type: string
+      ios_build:
+        description: Native build number for the target iOS build
+        required: true
+        type: string
+      ios_tiktok_configured:
+        description: Verified existing TikTok capability for this runtime
+        required: true
+        type: choice
+        options: ['false', 'true']
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out main history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate and select reviewed source
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          IOS_RUNTIME: ${{ inputs.ios_runtime }}
+          IOS_BUILD: ${{ inputs.ios_build }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$IOS_BUILD" =~ ^[1-9][0-9]*$ ]]
+          IOS_APP_VERSION="$(node --input-type=module -e "
+            import { parseIosRuntime } from './.github/scripts/storefront-ota-constants.mjs';
+            const { appVersion, buildNumber } = parseIosRuntime(process.env.IOS_RUNTIME);
+            if (buildNumber !== process.env.IOS_BUILD) throw new Error('iOS build does not match the runtime.');
+            process.stdout.write(appVersion);
+          ")"
+          echo "IOS_APP_VERSION=$IOS_APP_VERSION" >> "$GITHUB_ENV"
+          git merge-base --is-ancestor "$SOURCE_SHA" "$GITHUB_SHA"
+          if ! git grep -q -F 'process.env.EXPO_PUBLIC_BUILD_SHA' "$SOURCE_SHA" -- apps/mobile-storefront; then
+            echo 'Selected source does not embed the build SHA. Create a reviewed forward revert instead of exporting this older revision.' >&2
+            exit 1
+          fi
+          node --test .github/scripts/prepare-storefront-ota-public-config.test.mjs .github/scripts/prepare-storefront-ota-test-plist.test.mjs .github/scripts/storefront-ota-config-validation.test.mjs .github/scripts/storefront-ota-constants.test.mjs .github/scripts/storefront-ota-digest-collection.test.mjs .github/scripts/storefront-ota-digest-validation.test.mjs .github/scripts/storefront-ota-metadata-validation.test.mjs .github/scripts/storefront-ota-secret-scan.test.mjs .github/scripts/storefront-ota-sha256.test.mjs .github/scripts/storefront-ota-public-config.test.mjs .github/scripts/verify-storefront-ota-export.test.mjs
+          cp .github/scripts/storefront-ota-config-validation.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-constants.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-digest-collection.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-digest-validation.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-metadata-validation.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-secret-scan.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-sha256.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/verify-storefront-ota-export.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-public-config.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/prepare-storefront-ota-public-config.mjs "$RUNNER_TEMP/"
+          cp .github/scripts/storefront-ota-workflow-contract.test.mjs "$RUNNER_TEMP/"
+          cp .github/workflows/storefront-ota-export.yml "$RUNNER_TEMP/"
+          cp .github/workflows/ios-storefront-release.yml "$RUNNER_TEMP/"
+          git checkout --detach "$SOURCE_SHA"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+          PUPPETEER_CHROME_SKIP_DOWNLOAD: 'true'
+          PUPPETEER_CHROME_HEADLESS_SHELL_SKIP_DOWNLOAD: 'true'
+          PUPPETEER_SKIP_CHROME_HEADLESS_SHELL_DOWNLOAD: 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify public environment parity with the current native release workflow
+        env:
+          BACI_OTA_WORKFLOW_PATH: ${{ runner.temp }}/storefront-ota-export.yml
+          BACI_NATIVE_RELEASE_WORKFLOW_PATH: ${{ runner.temp }}/ios-storefront-release.yml
+        run: node --test "$RUNNER_TEMP/storefront-ota-workflow-contract.test.mjs"
+
+      # Keep public variables aligned with the Fastlane release step. The
+      # TikTok build secret is intentionally absent: Expo's public config
+      # includes plugin options, so passing it here would expose the secret.
+      - name: Export with native release settings
+        working-directory: apps/mobile-storefront
+        env:
+          CI: '1'
+          NODE_OPTIONS: --no-experimental-strip-types
+          BACI_MOBILE_BUILD_PLATFORM: ios
+          EXPO_NO_DOTENV: '1'
+          IOS_APP_VERSION: ${{ env.IOS_APP_VERSION }}
+          IOS_BUILD_NUMBER: ${{ inputs.ios_build }}
+          IOS_TIKTOK_CONFIGURED: ${{ inputs.ios_tiktok_configured }}
+          EXPO_PUBLIC_BUILD_SHA: ${{ inputs.source_sha }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_WEB_API_URL: https://usebaci.com
+          EXPO_PUBLIC_API_URL: https://usebaci.com
+          EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: ${{ secrets.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY }}
+          EXPO_PUBLIC_POSTHOG_API_KEY: ${{ secrets.EXPO_PUBLIC_POSTHOG_API_KEY }}
+          EXPO_PUBLIC_POSTHOG_HOST: ${{ secrets.EXPO_PUBLIC_POSTHOG_HOST }}
+          EXPO_PUBLIC_SENTRY_DSN: ${{ secrets.EXPO_PUBLIC_SENTRY_DSN }}
+          EXPO_PUBLIC_SENTRY_ENVIRONMENT: production
+          EXPO_PUBLIC_ENV: production
+          EXPO_PUBLIC_QUIZ_ADS_ENABLED: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID != '' && 'true' || 'false' }}
+          EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID }}
+          EXPO_PUBLIC_MOBILE_ADS_ENABLED: ${{ secrets.EXPO_PUBLIC_MOBILE_ADS_ENABLED }}
+          EXPO_PUBLIC_ADMOB_ANDROID_QUIZ_START_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_QUIZ_START_INTERSTITIAL_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_QUIZ_START_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_QUIZ_START_INTERSTITIAL_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_HOME_STRIP_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_HOME_STRIP_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_HOME_STRIP_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_HOME_STRIP_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_IN_FEED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_IN_FEED_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_IN_FEED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_IN_FEED_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_CART_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_CART_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_CART_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_CART_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_ORDER_SUCCESS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_ORDER_SUCCESS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_ORDER_SUCCESS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_ORDER_SUCCESS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_FOOTER_ANCHOR_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_FOOTER_ANCHOR_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_FOOTER_ANCHOR_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_FOOTER_ANCHOR_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_POST_ORDER_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_POST_ORDER_INTERSTITIAL_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_POST_ORDER_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_POST_ORDER_INTERSTITIAL_UNIT_ID }}
+          STOREFRONT_ADMOB_ANDROID_APP_ID: ${{ secrets.STOREFRONT_ADMOB_ANDROID_APP_ID }}
+          STOREFRONT_ADMOB_IOS_APP_ID: ${{ secrets.STOREFRONT_ADMOB_IOS_APP_ID }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+          SENTRY_URL: ${{ secrets.SENTRY_URL }}
+          STOREFRONT_FACEBOOK_APP_ID: ${{ secrets.STOREFRONT_FACEBOOK_APP_ID }}
+          STOREFRONT_FACEBOOK_CLIENT_TOKEN: ${{ secrets.STOREFRONT_FACEBOOK_CLIENT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test ! -f .env
+          mkdir -p "$RUNNER_TEMP/storefront-ota"
+          pnpm exec expo config --type public --json > "$RUNNER_TEMP/storefront-ota/expo-config.json"
+          node "$RUNNER_TEMP/prepare-storefront-ota-public-config.mjs" "$RUNNER_TEMP/storefront-ota/expo-config.json" "$IOS_TIKTOK_CONFIGURED"
+          pnpm exec expo export --platform ios --dump-assetmap --source-maps external --max-workers 2 --output-dir "$RUNNER_TEMP/storefront-ota/dist"
+
+      - name: Verify export and reject private values
+        env:
+          IOS_RUNTIME: ${{ inputs.ios_runtime }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          STOREFRONT_TIKTOK_APP_SECRET: ${{ secrets.STOREFRONT_TIKTOK_APP_SECRET }}
+        run: node "$RUNNER_TEMP/verify-storefront-ota-export.mjs" "$RUNNER_TEMP/storefront-ota" "$IOS_RUNTIME" "$SOURCE_SHA"
+
+      - name: Upload verified export
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: storefront-ios-ota-${{ inputs.source_sha }}-${{ inputs.ios_build }}
+          path: ${{ runner.temp }}/storefront-ota/
+          retention-days: 1
+          if-no-files-found: error

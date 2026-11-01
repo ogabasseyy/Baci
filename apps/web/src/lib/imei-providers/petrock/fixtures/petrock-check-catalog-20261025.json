@@ -1,0 +1,1611 @@
+{
+  "retrievedAt": "2026-10-25T16:20:36.274Z",
+  "currency": "USD",
+  "products": {
+    "1940": {
+      "name": "Device Model | Brand | Manufacturer Check [By IMEI]",
+      "price": "0.04",
+      "fields": [
+        {
+          "type": "imei",
+          "display_label": "IMEI",
+          "name": "IMEI",
+          "base": true,
+          "description": "Enter the device's 15-digit IMEI. This service does not accept a serial number as input.",
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1942": {
+      "name": "Apple IMEI | Serial Number Validator Check",
+      "price": "0.04",
+      "fields": [
+        {
+          "type": "text",
+          "display_label": "IMEI/SN",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "690": {
+      "name": "iPhone | Generic Model Check By IMEI",
+      "price": "0.05",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1953": {
+      "name": "Apple Model | Product Description Check",
+      "price": "0.05",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1954": {
+      "name": "Apple Model | Color | Storage | FMI Check By IMEI | SN",
+      "price": "0.05",
+      "fields": [
+        {
+          "type": "text",
+          "display_label": "IMEI/SN",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "674": {
+      "name": "Apple Model | Color | Capacity Check By IMEI [Instant]",
+      "price": "0.06",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "675": {
+      "name": "Apple Model | Color | Capacity Check By SN [Instant]",
+      "price": "0.06",
+      "fields": [
+        {
+          "type": "text",
+          "name": "Serial Number",
+          "base": true,
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1956": {
+      "name": "Apple | Samsung | Google Pixel EID Number Check",
+      "price": "0.05",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1963": {
+      "name": "Apple Part Number | MPN Check",
+      "price": "0.12",
+      "fields": [
+        {
+          "type": "text",
+          "display_label": "IMEI/SN",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "724": {
+      "name": "HP PC Model Check",
+      "price": "0.04",
+      "fields": [
+        {
+          "type": "text",
+          "display_label": "SN",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1 Minutes"
+    },
+    "735": {
+      "name": "Lenovo PC Model Check",
+      "price": "0.07",
+      "fields": [
+        {
+          "type": "text",
+          "name": "Serial Number",
+          "base": true,
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1 Minutes"
+    },
+    "2014": {
+      "name": "Dell Laptop Model Check",
+      "price": "0.04",
+      "fields": [
+        {
+          "type": "text",
+          "display_label": "IMEI | SN",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "665": {
+      "name": "Apple Convert MEID To IMEI [Instant]",
+      "price": "0.07",
+      "fields": [
+        {
+          "type": "text",
+          "name": "MEID",
+          "base": true,
+          "description": "Enter Device MEID",
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1 Minutes"
+    },
+    "686": {
+      "name": "Convert iPhone IMEI1 or IMEI1 to SN | SN to IMEI1 or IMEI2",
+      "price": "0.04",
+      "fields": [
+        {
+          "type": "text",
+          "name": "IMEI or Serial Number",
+          "base": true,
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1968": {
+      "name": "Convert IMEI to IMEI2 | Serial Number [No Model]",
+      "price": "0.04",
+      "fields": [
+        {
+          "type": "imei",
+          "display_label": "IMEI",
+          "name": "IMEI",
+          "base": true,
+          "description": "Enter the device's 15-digit IMEI. This service does not accept a serial number as input.",
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "666": {
+      "name": "Apple Identification Pro Report Check [Warranty | Carrier | GSMA | iCloud Status | MDM] With Photo",
+      "price": 0.74,
+      "fields": [
+        {
+          "type": "text",
+          "name": "IMEI OR SN",
+          "base": true,
+          "min": "1",
+          "max": "20",
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "667": {
+      "name": "Apple Identification Report Check Carrier [Blacklist | Replacement | Refurbish Check]",
+      "price": 0.22,
+      "fields": [
+        {
+          "type": "text",
+          "name": "IMEI OR SN",
+          "base": true,
+          "min": "1",
+          "max": "20",
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "687": {
+      "name": "iPhone & iPad Carrier | Full Warranty | FMI | US Blacklist Check By IMEI | SN [Source 1]",
+      "price": "0.08",
+      "fields": [
+        {
+          "type": "text",
+          "display_label": "IMEI/SN",
+          "name": "IMEI/SN:",
+          "base": true,
+          "description": "Enter the device IMEI or serial number exactly as shown on the device.",
+          "required": true,
+          "mapping": ["IMEI", "IMEI/Serial No"]
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1 Minutes"
+    },
+    "695": {
+      "name": "iPhone | iPad Info | Warranty | Coverage | Carrier | Country | SIM Lock Status Check [Source 3]",
+      "price": "0.12",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1 Minutes"
+    },
+    "696": {
+      "name": "iPhone Full Carrier Check | Warranty | FMI Check By IMEI",
+      "price": "0.09",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "3457": {
+      "name": "Apple MDM | ICloud | SimLock Check By IMEI/SN",
+      "price": 0.3,
+      "fields": [
+        {
+          "type": "text_bulk",
+          "name": "IMEI/SERIAL",
+          "base": true,
+          "description": "IMEI/SERIAL",
+          "min": "10",
+          "max": "15",
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "662": {
+      "name": "Apple & Generic GSMA Status Check By IMEI",
+      "price": "0.05",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "684": {
+      "name": "Apple Worldwide Block & Blacklist Checker [Instant]",
+      "price": "0.05",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "701": {
+      "name": "T-Mobile USA Apple | Generic Pro [Blacklist Status & History] Check",
+      "price": "0.07",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1 Minutes"
+    },
+    "750": {
+      "name": "WorldWide GSMA Blacklisted Check By IMEI [Instant]",
+      "price": "0.05",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1955": {
+      "name": "Apple & Generic GSMA Blacklist Status Check [By IMEI]",
+      "price": "0.04",
+      "fields": [
+        {
+          "type": "imei",
+          "display_label": "IMEI",
+          "name": "IMEI",
+          "base": true,
+          "description": "Enter the device's 15-digit IMEI. This service does not accept a serial number as input.",
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "691": {
+      "name": "iPhone | iPad Activation Check By SN [Instant]",
+      "price": "0.05",
+      "fields": [
+        {
+          "type": "text",
+          "name": "Serial Number",
+          "base": true,
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "692": {
+      "name": "iPhone | iPad Activation Check IMEI [Instant]",
+      "price": "0.070",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "702": {
+      "name": "Apple Find My iPhone | Activation Lock Check By IMEI [Instant]",
+      "price": 0.05,
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1 Minutes"
+    },
+    "703": {
+      "name": "Apple Find My iPhone | Activation Lock Status Check By SN [12 Characters]",
+      "price": "0.07",
+      "fields": [
+        {
+          "type": "text",
+          "name": "Serial Number",
+          "base": true,
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "712": {
+      "name": "iPhone | iPad iCloud Status Check By SN [10 Digits SN Supported]",
+      "price": "0.05",
+      "fields": [
+        {
+          "type": "text",
+          "name": "Serial Number",
+          "base": true,
+          "description": "ENTER THE SN OF THE DEVICE",
+          "min": "1",
+          "max": "20",
+          "required": true,
+          "mapping": ["IMEI", "SN"]
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "706": {
+      "name": "Apple iCloud Lost | Clean Checker By IMEI|SN [Instant]",
+      "price": "0.07",
+      "fields": [
+        {
+          "type": "text",
+          "name": "IMEI/Serial No",
+          "base": true,
+          "description": "Enter the device IMEI or serial number exactly as shown on the device.",
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "670": {
+      "name": "Apple iOS & MacOS MDM Lock Check By SN",
+      "price": 0.3,
+      "fields": [
+        {
+          "type": "text",
+          "name": "Serial Number",
+          "base": true,
+          "description": "SN",
+          "required": true,
+          "mapping": ["IMEI", "IMEI/Serial No"]
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "671": {
+      "name": "Apple iOS MDM Lock Check By IMEI",
+      "price": "0.3",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "707": {
+      "name": "Apple iPhones | iPads | MacBook MDM Status Check By IMEI | SN",
+      "price": 0.3,
+      "fields": [
+        {
+          "type": "text",
+          "name": "IMEI or Serial Number",
+          "base": true,
+          "description": "IMEI/SERIAL",
+          "min": "1",
+          "max": "15",
+          "required": true,
+          "mapping": ["IMEI", "IMEI or SERIAL", "IMEI/SERIAL", "IMEI/Serial No"]
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1994": {
+      "name": "Apple MDM Status Check [By IMEI]",
+      "price": 0.3,
+      "fields": [
+        {
+          "type": "imei",
+          "display_label": "IMEI",
+          "name": "IMEI",
+          "base": true,
+          "description": "Enter the device's 15-digit IMEI. A serial number is not required for this listing.",
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "697": {
+      "name": "MacBook Specifications | FMI | MDM Check [By Serial Number]",
+      "price": 0.83,
+      "fields": [
+        {
+          "type": "text",
+          "display_label": "Serial Number",
+          "name": "IMEI",
+          "base": true,
+          "description": "Enter the Mac serial number exactly as shown in About This Mac. Do not enter an iPhone IMEI.",
+          "required": true,
+          "mapping": ["IMEI", "IMEI/Serial No"]
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": null
+    },
+    "698": {
+      "name": "MacBook Specifications Check [No CTO | By Serial Number]",
+      "price": 0.25,
+      "fields": [
+        {
+          "type": "text",
+          "display_label": "Serial Number",
+          "name": "IMEI",
+          "base": true,
+          "description": "Enter the Mac serial number exactly as shown in About This Mac. Custom-to-order (CTO) configurations are not supported by this listing.",
+          "required": true,
+          "mapping": ["IMEI", "IMEI/Serial No"]
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": null
+    },
+    "713": {
+      "name": "MacBook | iMac iCloud Find My Mac ON & OFF & Status Check",
+      "price": 0.12,
+      "fields": [
+        {
+          "type": "text",
+          "name": "Sn",
+          "base": true,
+          "min": "1",
+          "max": "20",
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "714": {
+      "name": "MacBook | MacOS | iMac FMI ON/OFF & iCloud Clean/Lost Status Checker",
+      "price": 0.27,
+      "fields": [
+        {
+          "type": "text",
+          "name": "Serial Number",
+          "base": true,
+          "min": "1",
+          "max": "20",
+          "required": true,
+          "mapping": ["IMEI", "SN"]
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "715": {
+      "name": "MacBook, iMac FMI Status Check | Old, T2 & M1 Models [FMI ON|OFF]",
+      "price": "0.13",
+      "fields": [
+        {
+          "type": "text",
+          "name": "Serial Number",
+          "base": true,
+          "description": "Serial/IMEI",
+          "min": "1",
+          "max": "12",
+          "required": true,
+          "mapping": ["IMEI", "Serial"]
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "705": {
+      "name": "Apple GSX Sold By | Case History | Replacement Check By IMEI | SN",
+      "price": 0.67,
+      "fields": [
+        {
+          "type": "text",
+          "display_label": "IMEI or Serial Number",
+          "name": "IMEI/SN",
+          "base": true,
+          "description": "Enter the correct 15-digit IMEI or the Apple serial number exactly as shown. Serial numbers may be shorter than 15 characters.",
+          "min": "15",
+          "max": "20",
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "708": {
+      "name": "Apple Sold by | Case | Repair | Replacement | Extra Info Check",
+      "price": 3,
+      "fields": [
+        {
+          "type": "text_bulk",
+          "name": "IMEI / SERIAL NO",
+          "base": true,
+          "min": "1",
+          "max": "20",
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1-10 Minutes"
+    },
+    "709": {
+      "name": "Apple Full GSX | Case | Replacement | +Extra Info Check By IMEI / SN",
+      "price": 2.9,
+      "fields": [
+        {
+          "type": "text_bulk",
+          "name": "IMEI/SN",
+          "base": true,
+          "description": "IMEI/SERIAL",
+          "min": "10",
+          "max": "15",
+          "required": true,
+          "mapping": ["IMEI/SERIAL"]
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1-10 Minutes"
+    },
+    "710": {
+      "name": "Apple Sold By | Coverage Check By IMEI | SN [Instant] | Case History | Replacement History",
+      "price": 1.21,
+      "fields": [
+        {
+          "type": "text",
+          "name": "IMEI or SN",
+          "base": true,
+          "description": "IMEI/SERIAL",
+          "min": "1",
+          "max": "15",
+          "required": true,
+          "mapping": ["IMEI", "IMEI/SERIAL"]
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1943": {
+      "name": "Full GSX Report [Sold By Info | Case | Replacement History | GSX Activation | WiFi MAC Address]",
+      "price": 1.4,
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "2776": {
+      "name": "Apple Full GSX Report [Sold By Info | Case | Replacement History | Activation Policy]",
+      "price": 0.69,
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1-10 Minutes"
+    },
+    "679": {
+      "name": "Apple Purchase Date Check",
+      "price": "0.05",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1 Minutes"
+    },
+    "1967": {
+      "name": "Apple Warranty Check",
+      "price": "0.04",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1992": {
+      "name": "Apple iPhone | iPad Warranty Check By IMEI",
+      "price": "0.04",
+      "fields": [
+        {
+          "type": "imei",
+          "display_label": "IMEI",
+          "name": "IMEI",
+          "base": true,
+          "description": "Enter the device's 15-digit IMEI. A serial number is not required for this listing.",
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1993": {
+      "name": "Apple iPhone | iPad Warranty Check [Instant]",
+      "price": "0.04",
+      "fields": [
+        {
+          "type": "text",
+          "name": "IMEI/Serial Number",
+          "base": true,
+          "min": "1",
+          "max": "20",
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1965": {
+      "name": "Apple Replaced Device Status Check",
+      "price": "0.04",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": null
+    },
+    "1966": {
+      "name": "Apple Replacement Status [Active Device] Check",
+      "price": "0.04",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1941": {
+      "name": "Apple & Generic Model eSIM | Physical SIM [pSIM] Compatibility Check",
+      "price": "0.04",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "689": {
+      "name": "iPhone & iPad Carrier | SIMLock By [IMEI | SN]",
+      "price": "0.07",
+      "fields": [
+        {
+          "type": "text",
+          "display_label": "IMEI/SN",
+          "name": "IMEI/SN:",
+          "base": true,
+          "description": "Enter the device IMEI or serial number exactly as shown on the device.",
+          "required": true,
+          "mapping": ["IMEI", "IMEI/Serial No"]
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1 Minutes"
+    },
+    "716": {
+      "name": "iPhone Check Simlock Status [Instant]",
+      "price": "0.06",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C164",
+      "type": "imei",
+      "time": "1 Minutes"
+    },
+    "741": {
+      "name": "Samsung Full Info | Carrier | Warranty Checker [Instant]",
+      "price": "0.08",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1 Minutes"
+    },
+    "1990": {
+      "name": "Samsung Full Info | Model | Sold By Country | Sold Date | Warranty & Carrier Check",
+      "price": "0.17",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "699": {
+      "name": "Samsung IMEI Knox Guard Locked | Unlocked Check",
+      "price": "0.09",
+      "fields": [
+        {
+          "type": "text",
+          "name": "IMEI/Serial No",
+          "base": true,
+          "description": "IMEI or Serial Number",
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "700": {
+      "name": "Samsung Knox Guard [KG] Enrollment Status Check",
+      "price": "0.14",
+      "fields": [
+        {
+          "type": "text",
+          "name": "IMEI or Serial Number",
+          "base": true,
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C163",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "721": {
+      "name": "Google Pixel Info Check By IMEI",
+      "price": "0.09",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "722": {
+      "name": "Honor Carrier | Warranty Check By IMEI | SN",
+      "price": "0.56",
+      "fields": [
+        {
+          "type": "text",
+          "name": "IMEI or Serial Number",
+          "base": true,
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "723": {
+      "name": "HONOR Info Check [By IMEI]",
+      "price": "0.08",
+      "fields": [
+        {
+          "type": "imei",
+          "display_label": "IMEI",
+          "name": "IMEI",
+          "base": true,
+          "description": "Enter the device's 15-digit IMEI. This service does not accept a serial number as input.",
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "725": {
+      "name": "Huawei Basic Info [Convert SN to IMEI]",
+      "price": "0.05",
+      "fields": [
+        {
+          "type": "text",
+          "display_label": "SN",
+          "name": "IMEI or Serial Number",
+          "base": true,
+          "min": "1",
+          "max": "20",
+          "required": true,
+          "mapping": ["IMEI", "IMEI OR SERIAL"]
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "726": {
+      "name": "Huawei Full Info | Carrier | Warranty Checker [Instant]",
+      "price": "0.12",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "727": {
+      "name": "Huawei Full Info | Warranty Checker [Source B]",
+      "price": "0.08",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "728": {
+      "name": "Infinix | Tecno | Itel Activation Date | Warranty Status Check By IMEI",
+      "price": "0.07",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "729": {
+      "name": "Japan AU KDDI Status Check By IMEI",
+      "price": "0.04",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "730": {
+      "name": "Japan KDDI Finance Check",
+      "price": "0.07",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "731": {
+      "name": "Japan KDDI IMEI Status Check",
+      "price": "0.08",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "732": {
+      "name": "Japan NTT Docomo Finance Check",
+      "price": "0.09",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "733": {
+      "name": "Japan Softbank Finance Check",
+      "price": "0.07",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "734": {
+      "name": "Lenovo Warranty | Full Info Check By IMEI [Instant]",
+      "price": "0.07",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "736": {
+      "name": "LG Full Info Checker [By IMEI|SN]",
+      "price": "0.05",
+      "fields": [
+        {
+          "type": "text_bulk",
+          "name": "IMEI/SERIAL",
+          "base": true,
+          "description": "IMEI/SERIAL",
+          "min": "10",
+          "max": "15",
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "738": {
+      "name": "OnePlus Info Check [By IMEI]",
+      "price": "0.08",
+      "fields": [
+        {
+          "type": "imei",
+          "display_label": "IMEI",
+          "name": "IMEI",
+          "base": true,
+          "description": "Enter the device's 15-digit IMEI. This service does not accept a serial number as input.",
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "739": {
+      "name": "OPPO Model | Warranty Checker [Instant]",
+      "price": 0.19,
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "740": {
+      "name": "OPPO | One Plus | Realme Full Info Check",
+      "price": "0.20",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "743": {
+      "name": "USA TracFone | StraightTalk Status Check",
+      "price": "0.09",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1 Minutes"
+    },
+    "746": {
+      "name": "USA T-Mobile Pro Status Check [Clean | Lost | Stolen | Blocked | Unpaid]",
+      "price": "0.07",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "749": {
+      "name": "Verizon USA [Clean | Blocked | Unpaid] Status Check",
+      "price": "0.08",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1 Minutes"
+    },
+    "1957": {
+      "name": "USA AT&T Status Check",
+      "price": "0.08",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1958": {
+      "name": "USA T-Mobile Pro ESN Status Check [Clean | Lost | Stolen | Blocked | Unpaid]",
+      "price": "0.06",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1959": {
+      "name": "USA Verizon Finance Check",
+      "price": "0.05",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1960": {
+      "name": "Verizon USA Clean | Lost Status Check [By IMEI]",
+      "price": "0.06",
+      "fields": [
+        {
+          "type": "imei",
+          "display_label": "IMEI",
+          "name": "IMEI",
+          "base": true,
+          "description": "Enter the device's 15-digit IMEI. This service does not accept a serial number as input.",
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "2015": {
+      "name": "Xfinity USA Unlock Eligibilty Check",
+      "price": 0.13,
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": null
+    },
+    "751": {
+      "name": "ZTE Full Info | Carrier | Warranty | Activation | Production Check By IMEI",
+      "price": "0.08",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1969": {
+      "name": "ZTE Full Info | Carrier | Warranty | Activation | Production Check By IMEI | SN",
+      "price": "0.07",
+      "fields": [
+        {
+          "type": "text",
+          "display_label": "IMEI/SN",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "719": {
+      "name": "Convert Xiaomi Lock Code to IMEI [With Xiaomi Clean|Lost Checker]",
+      "price": 0.56,
+      "fields": [
+        {
+          "type": "text",
+          "display_label": "Lock Code",
+          "name": "Keylock",
+          "base": true,
+          "min": "1",
+          "max": "20",
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1418": {
+      "name": "Xiaomi Device Full Info Checker By IMEI Only",
+      "price": "0.08",
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C243",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1419": {
+      "name": "Xiaomi Find Device | Country | Lost/Clean Check [IMEI | SN | New Key]",
+      "price": 0.61,
+      "fields": [
+        {
+          "type": "text_bulk",
+          "name": "IMEI/CODE",
+          "display_label": "IMEI | Serial Number | Lock Key",
+          "description": "Enter the correct IMEI, serial number or lock key/code; one identifier per line.",
+          "required": true,
+          "base": true,
+          "mapping": ["IMEI", "keylock"]
+        }
+      ],
+      "cid": "C243",
+      "type": "imei",
+      "time": "1-6 Hours"
+    },
+    "1420": {
+      "name": "Xiaomi Device Info Checker [On & Off Check Only]",
+      "price": "0.12",
+      "fields": [
+        {
+          "type": "text",
+          "name": "LOCK CODE",
+          "base": true,
+          "min": "1",
+          "max": "20",
+          "required": true,
+          "mapping": ["IMEI"]
+        }
+      ],
+      "cid": "C243",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1991": {
+      "name": "Motorola Full Info Check By IMEI [Instant]",
+      "price": "0.08",
+      "fields": [
+        {
+          "type": "text",
+          "display_label": "IMEI / SN",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "4041": {
+      "name": "Orange Romania Contract Status Check [IMEI]",
+      "price": 0.56,
+      "fields": [
+        {
+          "type": "imei",
+          "display_label": "IMEI",
+          "name": "IMEI",
+          "base": true,
+          "description": "Orange Romania device IMEI \u2014 15 digits.",
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1 Minutes"
+    },
+    "4042": {
+      "name": "ASUS ROG Phones & Graphics Cards Warranty Check [IMEI / Serial Number]",
+      "price": 0.56,
+      "fields": [
+        {
+          "type": "text",
+          "display_label": "IMEI / Serial Number",
+          "name": "IMEI",
+          "base": true,
+          "description": "ASUS ROG phone IMEI or serial number; graphics card serial number.",
+          "required": true
+        }
+      ],
+      "cid": "C165",
+      "type": "imei",
+      "time": "1 Minutes"
+    },
+    "640": {
+      "name": "T-Mobile USA iPhone & Generic Models Fully Paid Eligibility Check",
+      "price": 0.07,
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C159",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1317": {
+      "name": "Cricket iPhone | Generic Unlock Eligibility Check",
+      "price": 0.49,
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C212",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    },
+    "1335": {
+      "name": "USA Spectrum iPhone Eligibility Checker",
+      "price": 0.13,
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C216",
+      "type": "imei",
+      "time": "1-30 Minutes"
+    },
+    "1355": {
+      "name": "MetroPCS USA iPhone & Generic Status Check [IMEI]",
+      "price": 0.61,
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "base": true,
+          "required": true
+        }
+      ],
+      "cid": "C218",
+      "type": "imei",
+      "time": null
+    },
+    "1510": {
+      "name": "Verizon USA Unlock Eligibility Check \u2014 iPhone, Samsung & Other Brands",
+      "price": 0.13,
+      "fields": [
+        {
+          "type": "imei",
+          "name": "IMEI",
+          "description": "Enter the correct 15-digit IMEI for a Verizon USA iPhone, Samsung or other-brand device. This is an eligibility check only, not an unlock or eligibility conversion.",
+          "required": true,
+          "base": true
+        }
+      ],
+      "cid": "C257",
+      "type": "imei",
+      "time": "1-5 Minutes"
+    }
+  }
+}

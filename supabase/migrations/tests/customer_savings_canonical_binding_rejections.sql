@@ -7,6 +7,7 @@ BEGIN
   END;
   RAISE EXCEPTION 'Expected binding review rejection';
 END $$;
+GRANT EXECUTE ON FUNCTION pg_temp.reject_binding(text) TO PUBLIC; -- called after SET ROLE
 SELECT count(*) AS before_bindings FROM savings_draft_private.canonical_bindings \gset
 SET SESSION AUTHORIZATION piggyvest_staging_policy_writer;
 SELECT pg_temp.reject_binding(format('SELECT savings_draft_private.bind_canonical(%L,%L,%L,%L,%L,%L,%L,%L,%L)',

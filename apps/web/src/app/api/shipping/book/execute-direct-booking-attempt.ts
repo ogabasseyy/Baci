@@ -148,7 +148,7 @@ export async function executeDirectBookingAttempt(params: {
       throw new OrderShipmentBookingError(
         merchantSenderResult.error,
         merchantSenderResult.status,
-        'MERCHANT_SENDER_REQUIRED'
+        merchantSenderResult.code ?? 'MERCHANT_SENDER_REQUIRED'
       );
     }
     merchantSender = merchantSenderResult.sender;

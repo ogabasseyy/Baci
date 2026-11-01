@@ -115,8 +115,13 @@ export function QuizEventsList({
                 accessibilityRole="button"
                 accessibilityLabel="Sign in to play"
                 onPress={onSignIn}
+                style={[
+                  styles.primaryButtonBox,
+                  styles.primaryButton,
+                  styles.emptyStateAction,
+                ]}
               >
-                <Text style={styles.emptyStateText}>Sign in to play</Text>
+                <Text style={styles.primaryButtonText}>Sign in to play</Text>
               </Pressable>
             ) : null}
           </View>

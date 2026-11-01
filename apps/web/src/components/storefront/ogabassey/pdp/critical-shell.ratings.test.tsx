@@ -9,14 +9,13 @@ import {
 } from './critical-shell.test-fixtures';
 
 describe('OgabasseyPdpCriticalShell ratings and order', () => {
-  it('renders brand, title, rating row, price, and visible summary in the expected summary DOM order', () => {
+  it('renders brand, title, rating row, and price in the expected summary DOM order without a duplicate visible summary box', () => {
     const { container } = renderCriticalShell({
       brand: 'Samsung',
       name: 'Samsung Galaxy Z TriFold',
       price: 5_800_000,
       rating: 4.5,
       reviewCount: 10,
-      visibleSummary: 'Samsung Galaxy Z TriFold summary overview.',
     });
 
     const summary = container.querySelector('[data-ogabassey-pdp-summary]');
@@ -34,22 +33,18 @@ describe('OgabasseyPdpCriticalShell ratings and order', () => {
     expect(title).toBeInTheDocument();
     expect(ratingRow).toBeInTheDocument();
     expect(price).toBeInTheDocument();
-    expect(visibleSummary).toBeInTheDocument();
+    expect(visibleSummary).toBeNull();
 
     expect(isBefore(brand, title)).toBe(true);
     expect(isBefore(title, ratingRow)).toBe(true);
     expect(isBefore(ratingRow, price)).toBe(true);
-    expect(isBefore(price, visibleSummary)).toBe(true);
   });
 
-  it('renders summaryCommerce ahead of visible summary when provided', () => {
+  it('renders summaryCommerce without a redundant visible summary paragraph', () => {
     const { container } = render(
       <OgabasseyPdpCriticalShell
         basePath=""
-        product={{
-          ...defaultProduct,
-          visibleSummary: 'Samsung Galaxy Z TriFold summary overview.',
-        }}
+        product={defaultProduct}
         summaryCommerce={
           <div data-testid="summary-commerce">Commerce Options</div>
         }
@@ -63,8 +58,7 @@ describe('OgabasseyPdpCriticalShell ratings and order', () => {
     );
 
     expect(commerce).toBeInTheDocument();
-    expect(visibleSummary).toBeInTheDocument();
-    expect(isBefore(commerce, visibleSummary)).toBe(true);
+    expect(visibleSummary).toBeNull();
   });
 
   it('shows review count without a rating signal when rating is zero', () => {

@@ -1,0 +1,3 @@
+// Pending PiggyVest webhook capture migrations; never registered as applied production migrations.
+export const PIGGYVEST_CAPTURE_PENDING_REPLAY_SOURCE_ROWS = `872403cb970311afaff801b4d2acee6c5a372c95d49c5679826a5250dbd83897 20261030231000_piggyvest_webhook_durable_capture.sql
+4c50df132fec581479ae4f31ad5f096a73acab6676e241582720c26321aa8b51 20261030231100_piggyvest_webhook_durable_capture_functions.sql`;

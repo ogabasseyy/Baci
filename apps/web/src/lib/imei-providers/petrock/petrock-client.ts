@@ -130,7 +130,11 @@ export function createPetrockClient({
       if (!result.ok) return result;
 
       const parsed = petrockOrderResponseSchema.safeParse(result.data);
-      if (!parsed.success) {
+      if (
+        !parsed.success ||
+        (parsed.data.data.order_uuid !== undefined &&
+          parsed.data.data.order_uuid !== orderUuid)
+      ) {
         return {
           kind: 'invalid_response',
           message: 'Petrock order response did not match the expected schema',
@@ -140,7 +144,7 @@ export function createPetrockClient({
 
       return {
         data: {
-          orderUuid: parsed.data.data.order_uuid,
+          orderUuid: parsed.data.data.order_uuid ?? orderUuid,
           referenceId: parsed.data.data.reference_id,
           replay: parsed.data.data.replay,
           status: parsed.data.data.status,
@@ -183,7 +187,9 @@ export function createPetrockClient({
                 Quantity: 1,
               },
             ],
-            product_uuid: submission.productId,
+            ...(/^\d+$/.test(submission.productId)
+              ? { product_id: Number(submission.productId) }
+              : { product_uuid: submission.productId }),
           },
         ]),
         method: 'POST',
@@ -192,7 +198,11 @@ export function createPetrockClient({
 
       const parsed = petrockSubmitOrderResponseSchema.safeParse(result.data);
       const order = parsed.success ? parsed.data.data[0]?.[0] : undefined;
-      if (!order) {
+      if (
+        !order ||
+        (order.reference_id !== undefined &&
+          order.reference_id !== submission.referenceId)
+      ) {
         return {
           kind: 'invalid_response',
           message: 'Petrock submit response did not include an order UUID',

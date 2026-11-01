@@ -26,7 +26,9 @@ beforeEach(() => addToCart.mockClear());
 it('keeps add to cart disabled until all required variant axes are selected', () => {
   render(<OgabasseyPdpCriticalCommerceClient cartHref="/cart" cartProduct={product} productName={product.name} variantAxes={['storage', 'ram']} variantCount={2} />);
   fireEvent.click(screen.getByRole('button', { name: /select 256gb storage/i }));
-  expect(screen.getByRole('button', { name: /add to cart/i })).toBeDisabled();
+  expect(screen.getByRole('button', { name: /select 8gb ram/i }))
+    .toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: /add to cart/i })).toBeEnabled();
   expect(addToCart).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: /select 8gb ram/i }));
   expect(screen.getByRole('button', { name: /add to cart/i })).toBeEnabled();

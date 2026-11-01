@@ -12,7 +12,6 @@ import {
 } from './critical-commerce.client';
 import { DEFAULT_CRITICAL_PRICE_CURRENCY } from './critical-commerce-selection';
 import type { OgabasseyPdpCriticalProduct } from './critical-product';
-import { OgabasseyPdpProductVisibleSummary } from './product-visible-summary';
 
 interface OgabasseyPdpCriticalShellProps {
   basePath?: string;
@@ -184,9 +183,6 @@ export function OgabasseyPdpCriticalShell({
                 </span>
               </div>
             )}
-            <OgabasseyPdpProductVisibleSummary
-              summary={product.visibleSummary || null}
-            />
           </div>
           <div data-ogabassey-pdp-commerce-slot>
             {children}

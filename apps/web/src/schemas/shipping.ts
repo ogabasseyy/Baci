@@ -175,6 +175,8 @@ export const QuoteRequestSchema = z
      * implement that same order contract.
      */
     supports_merchant_rates: z.boolean().optional().default(false),
+    /** Narrow this request to configured store rates; never call carriers. */
+    merchant_rates_only: z.boolean().optional().default(false),
   })
   .superRefine((data, ctx) => {
     requireCoordinatePair(data.receiver, ctx, ['receiver']);

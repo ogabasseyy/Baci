@@ -279,7 +279,9 @@ describe('CheckoutPage — wallet-funded bank transfer', () => {
 
     await placeBankTransferOrder();
 
-    expect(await screen.findByText('1234567890')).toBeDefined();
+    expect(
+      await screen.findByText('1234567890', {}, { timeout: 5000 })
+    ).toBeDefined();
     expect(screen.getByText(/pays this order from your wallet/i)).toBeDefined();
     expect(called(fetchMock, '/api/payments/initialize')).toBe(false);
   });

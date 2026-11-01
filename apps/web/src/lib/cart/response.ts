@@ -1,5 +1,7 @@
 import type { CartErrorCode } from '@baci/shared/cart';
 import { NextResponse } from 'next/server';
+import { checkoutReconciliationCookieName } from './checkout-reconciliation-proof';
+import { checkoutRecoveryCookieName } from './checkout-recovery-proof';
 import { safeCartErrorMessage } from './mutation-errors';
 import { cartSessionCookieName } from './principal';
 
@@ -62,7 +64,8 @@ const ROUTE_MESSAGES: Record<
   merchant_mismatch: 'This cart session belongs to a different store.',
   merchant_unresolved: 'We could not find this store.',
   missing_proof: 'Connect to the cart before making changes.',
-  quota_exceeded: 'Too many cart requests. Wait a moment and try again.',
+  quota_exceeded:
+    'We could not complete this cart request. Please try again later.',
 };
 
 function routeErrorMessage(code: CartRouteErrorCode): string {
@@ -113,6 +116,38 @@ export function setCartSessionCookie(
   maxAgeSeconds: number
 ): void {
   response.cookies.set(cartSessionCookieName(merchantId), proof, {
+    httpOnly: true,
+    maxAge: maxAgeSeconds,
+    path: '/',
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  });
+}
+
+/** A checkout-only proof is host-only and cannot be read by browser scripts. */
+export function setCheckoutRecoveryCookie(
+  response: NextResponse,
+  merchantId: string,
+  proof: string,
+  maxAgeSeconds: number
+): void {
+  response.cookies.set(checkoutRecoveryCookieName(merchantId), proof, {
+    httpOnly: true,
+    maxAge: maxAgeSeconds,
+    path: '/',
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+  });
+}
+
+/** Kept beyond checkout expiry only for the narrow reconciliation endpoint. */
+export function setCheckoutReconciliationCookie(
+  response: NextResponse,
+  merchantId: string,
+  proof: string,
+  maxAgeSeconds: number
+): void {
+  response.cookies.set(checkoutReconciliationCookieName(merchantId), proof, {
     httpOnly: true,
     maxAge: maxAgeSeconds,
     path: '/',

@@ -1,7 +1,7 @@
 /** Multi-tenant hero carousel with parallax, carousel, and standard variants. */
 import type { Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { useWindowDimensions, View, type ViewToken } from 'react-native';
+import { type FlatListProps, useWindowDimensions, View } from 'react-native';
 import Animated, {
   runOnJS,
   useAnimatedScrollHandler,
@@ -72,7 +72,9 @@ export function Hero({
   const handleViewableItemsChanged = ({
     viewableItems,
   }: {
-    viewableItems: ViewToken[];
+    viewableItems: Parameters<
+      NonNullable<FlatListProps<unknown>['onViewableItemsChanged']>
+    >[0]['viewableItems'];
   }) => {
     setIsAdVisible(
       viewableItems.some(

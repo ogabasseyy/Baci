@@ -59,7 +59,8 @@ export const OGABASSEY_HOME_FOOTER_CHROME_CRITICAL_CSS = `@layer components{
 .ogabassey-navbar-secondary__category{position:relative}
 .ogabassey-navbar-secondary__button,.ogabassey-navbar-secondary__link{align-items:center;background:transparent;border:0;color:color-mix(in srgb,var(--ogabassey-surface-text) 78%,transparent);cursor:pointer;display:flex;font-size:0.875rem;font-weight:600;gap:0.5rem;padding:0.25rem;text-decoration:none;white-space:nowrap}
 .ogabassey-navbar-secondary__divider{background:var(--ogabassey-border);height:1rem;width:1px}
-.ogabassey-mobile-footer{background:color-mix(in srgb,var(--ogabassey-shell-background) 96%,transparent);border-top:1px solid color-mix(in srgb,var(--ogabassey-shell-text) 12%,transparent);bottom:0;display:block;left:0;padding-bottom:max(env(safe-area-inset-bottom,0px),4px);position:fixed;right:0;transform:translateY(0);z-index:70}
+.ogabassey-mobile-footer{background:color-mix(in srgb,var(--ogabassey-shell-background) 96%,transparent);border-top:1px solid color-mix(in srgb,var(--ogabassey-shell-text) 12%,transparent);bottom:0;display:block;left:0;padding-bottom:max(env(safe-area-inset-bottom,0px),4px);position:fixed;right:0;z-index:70}
+.ogabassey-mobile-footer--hidden{transform:translateY(110%)}
 .ogabassey-mobile-footer__items{align-items:center;display:flex;justify-content:space-around;padding:0.4375rem 0.5rem 0.375rem;position:relative;z-index:1}
 .ogabassey-mobile-footer__item{align-items:center;color:color-mix(in srgb,var(--ogabassey-shell-text) 64%,transparent);display:flex;flex:1 1 0;flex-direction:column;justify-content:center;min-width:0;min-height:3rem;padding:0;text-decoration:none}
 .ogabassey-mobile-footer__item[data-active="true"]{color:var(--ogabassey-shell-text)}

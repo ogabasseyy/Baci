@@ -1,4 +1,5 @@
-import { Text, View } from 'react-native';
+import { Fragment } from 'react';
+import { Linking, Text, View } from 'react-native';
 import { BRAND } from '@/constants/Colors';
 import { styles } from './styles';
 import type { ChatMessage } from './types';
@@ -14,6 +15,64 @@ interface ChatMessageRowProps {
   item: ChatMessage;
   santaMode: boolean;
   colors: ChatMessageTheme;
+}
+
+function trustedStorefrontLink(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === 'https:' &&
+      url.hostname === 'ogabassey.com' &&
+      !url.port &&
+      !url.username &&
+      !url.password
+    );
+  } catch {
+    return false;
+  }
+}
+
+function assistantMessageText(text: string) {
+  const parts = text.split(/(https?:\/\/[^\s<>"']+)/gi);
+  return parts.map((part, index) => {
+    let parentheses = 0;
+    let brackets = 0;
+    for (const character of part) {
+      if (character === '(') parentheses++;
+      if (character === ')') parentheses--;
+      if (character === '[') brackets++;
+      if (character === ']') brackets--;
+    }
+    let end = part.length;
+    while (end > 0) {
+      const last = part[end - 1];
+      if (/[.,!?;:]/.test(last)) end--;
+      else if (last === ')' && parentheses < 0) {
+        parentheses++;
+        end--;
+      } else if (last === ']' && brackets < 0) {
+        brackets++;
+        end--;
+      } else break;
+    }
+    const url = part.slice(0, end);
+    if (!trustedStorefrontLink(url)) return part;
+    return (
+      // biome-ignore lint/suspicious/noArrayIndexKey: Message text is immutable.
+      <Fragment key={`${index}:${part}`}>
+        <Text
+          accessibilityRole="link"
+          onPress={() => {
+            void Linking.openURL(url).catch(() => undefined);
+          }}
+          style={{ textDecorationLine: 'underline' }}
+        >
+          {url}
+        </Text>
+        {part.slice(end)}
+      </Fragment>
+    );
+  });
 }
 
 export function ChatMessageRow({
@@ -63,7 +122,7 @@ export function ChatMessageRow({
             { color: isUser ? '#FFFFFF' : colors.text },
           ]}
         >
-          {item.text}
+          {isUser ? item.text : assistantMessageText(item.text)}
         </Text>
       </View>
     </View>

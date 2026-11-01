@@ -1,12 +1,12 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
+import type { TextInputInstance } from 'react-native';
 import {
   ActivityIndicator,
   Pressable,
   StatusBar,
   Text,
-  type TextInput,
   View,
 } from 'react-native';
 import { AuthInput } from '@/components/auth/AuthInput';
@@ -38,7 +38,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const passwordRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
 
   const handleGoogleSignIn = async () => {
     setError(null);

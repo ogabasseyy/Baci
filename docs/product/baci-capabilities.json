@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-26T05:47:06.000000+00:00",
-  "source_revision": "f8fa3bb0797e6297d049e550b906de3202829f23",
-  "evidence_digest": "f8546b1bc70506e8601032769875de38ae45621c8ed1c4622a498e3113c15511",
-  "claims_digest": "8e0349a127d17699dcfb6f2c5d3f3e0a2617a5599673af61c4141d69b3f13ba9",
-  "review_scope": "Source evidence only. OAuth connected discovery excludes legacy link tools; anonymous compatibility preserved. PKCE/encrypted grants, resource-specific transport and refresh receipts unchanged. Other capability claims retain the newly merged main audit, including merchant onboarding email suppression, preferences, event permissions and worker isolation. No new production capability promotion. New endpoint conversational acceptance and native acceptance remain pending; original MCP unchanged.",
+  "reviewed_at": "2026-10-31T12:06:59+00:00",
+  "source_revision": "add71b5ae9b1e0a31a9cdf62b408b4dc7e916ac2",
+  "evidence_digest": "14c97ea35e13bd435c76163a03f3cb8ce99b4581f5942887395d25642566524e",
+  "claims_digest": "e12b8accdf684f987dc2480453286a56f4ea3a50b32d9927c363a60f789f9486",
+  "review_scope": "Source evidence only. Re-reviewed shipping after the booking sender change: for domestic order bookings, a blank or implausible store phone now stops booking with 400 MERCHANT_SENDER_PHONE_INVALID before any provider request; origin-missing, merchant-missing and lookup-failure codes are unchanged. The shipping claim and its merchant-configuration limitation remain accurate. Across this main integration all other cited capability and access-map sources are unchanged. Support-chat health, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment, native acceptance and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

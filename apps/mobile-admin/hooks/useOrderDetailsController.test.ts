@@ -33,10 +33,15 @@ const shipmentParameters = vi.hoisted(() => ({
 
 const giglShippingState = vi.hoisted(() => ({
   calls: [] as unknown[],
+  prefetchCalls: [] as unknown[],
 }));
 
 const shipmentUiState = vi.hoisted(() => ({
-  current: { shipmentFlowStep: 'details', showShipmentFlow: false },
+  current: { shipmentFlowStep: 'details', showShipmentFlow: false } as {
+    shipmentFlowStep: string;
+    showShipmentFlow: boolean;
+    showStatusModal?: boolean;
+  },
 }));
 
 vi.mock('expo-router', () => ({
@@ -86,6 +91,13 @@ vi.mock('@/hooks/useOrders', () => ({
 
 vi.mock('@/hooks/orders/useOrderAuditEvents', () => ({
   useOrderAuditEvents: () => auditEventsState.current,
+}));
+
+vi.mock('@/hooks/orders/useOrderGiglPreviewPrefetch', () => ({
+  useOrderGiglPreviewPrefetch: (params: unknown) => {
+    giglShippingState.prefetchCalls.push(params);
+    return 'preview-scope';
+  },
 }));
 
 vi.mock('@/hooks/orders/useOrderGiglShipping', () => ({
@@ -217,7 +229,7 @@ vi.mock('@/hooks/useOrderDetailsUiState', () => ({
     showReceiptPreview: false,
     showRecordPaymentModal: false,
     showShipmentFlow: shipmentUiState.current.showShipmentFlow,
-    showStatusModal: false,
+    showStatusModal: shipmentUiState.current.showStatusModal ?? false,
     successModal: {
       actionLabel: '',
       actionVariant: 'default',
@@ -239,9 +251,11 @@ describe('useOrderDetailsController', () => {
     merchantState.current = null;
     authState.user = null;
     giglShippingState.calls = [];
+    giglShippingState.prefetchCalls = [];
     shipmentUiState.current = {
       shipmentFlowStep: 'details',
       showShipmentFlow: false,
+      showStatusModal: false,
     };
     routeParamsState.current = { id: '123e4567-e89b-42d3-a456-426614174000' };
   });
@@ -467,6 +481,32 @@ describe('useOrderDetailsController', () => {
     expect(giglShippingState.calls.at(-1)).toMatchObject({ enabled: true });
     expect(result.current.providerBookingAvailable).toBe(true);
     expect(result.current.giglShipping).toEqual({ quote: null, wallet: null });
+  });
+
+  it('starts the GIG price prefetch only once the owner opens the status sheet', () => {
+    merchantState.current = {
+      id: 'merchant-1',
+      user_id: 'user-1',
+      country: 'NG',
+      payout_currency: 'NGN',
+    };
+    authState.user = { id: 'user-1' };
+
+    const { rerender } = renderHook(() => useOrderDetailsController());
+    expect(giglShippingState.prefetchCalls.at(-1)).toMatchObject({
+      enabled: false,
+    });
+
+    shipmentUiState.current = {
+      shipmentFlowStep: 'details',
+      showShipmentFlow: false,
+      showStatusModal: true,
+    };
+    rerender();
+
+    expect(giglShippingState.prefetchCalls.at(-1)).toMatchObject({
+      enabled: true,
+    });
   });
 });
 

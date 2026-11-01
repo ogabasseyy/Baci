@@ -24,6 +24,8 @@ export async function recoverPaidPetrockRemediationOrder({
   origin: string;
   supabaseAdmin: ReturnType<typeof createAdminClient>;
 }) {
+  if (order.provider_order_id || order.provider_attempt_started_at)
+    return { kind: 'already_started' as const };
   const fxRate = getImeiFxNgnUsd();
   const state = createPetrockRemediationOrderState({
     customerId: order.customer_id,
@@ -31,27 +33,26 @@ export async function recoverPaidPetrockRemediationOrder({
     merchantId: order.merchant_id,
     supabaseAdmin,
   });
-  if (typeof fxRate !== 'number' || !Number.isFinite(fxRate) || fxRate <= 0) {
-    await state.failBeforeAcceptance({
+  async function failRecovery(reason: string) {
+    const refunded = await state.failBeforeAcceptance({
       customerMessage:
         'This unlock could not be submitted, so your wallet was refunded.',
       orderId: order.id,
-      reason: 'paid_recovery_fx_unavailable',
+      reason,
     });
-    return { kind: 'failed' as const };
+    return {
+      kind: refunded ? ('failed' as const) : ('already_started' as const),
+    };
+  }
+  if (typeof fxRate !== 'number' || !Number.isFinite(fxRate) || fxRate <= 0) {
+    return failRecovery('paid_recovery_fx_unavailable');
   }
   if (
     !order.identifier_ciphertext ||
     !order.payment_currency ||
     !order.remediation_product_id
   ) {
-    await state.failBeforeAcceptance({
-      customerMessage:
-        'This unlock could not be submitted, so your wallet was refunded.',
-      orderId: order.id,
-      reason: 'paid_recovery_context_missing',
-    });
-    return { kind: 'failed' as const };
+    return failRecovery('paid_recovery_context_missing');
   }
 
   const context = await loadPetrockRemediationOrderContext({
@@ -62,14 +63,15 @@ export async function recoverPaidPetrockRemediationOrder({
     supabaseAdmin,
   });
   if (!context) {
-    await state.failBeforeAcceptance({
-      customerMessage:
-        'This unlock could not be submitted, so your wallet was refunded.',
-      orderId: order.id,
-      reason: 'paid_recovery_context_missing',
-    });
-    return { kind: 'failed' as const };
+    return failRecovery('paid_recovery_context_missing');
   }
+
+  if (
+    context.order.status !== 'paid' ||
+    context.order.providerOrderId ||
+    context.order.providerAttemptStartedAt
+  )
+    return { kind: 'already_started' as const };
 
   let identifier: string;
   try {
@@ -78,16 +80,10 @@ export async function recoverPaidPetrockRemediationOrder({
       encryptionKey
     );
   } catch {
-    await state.failBeforeAcceptance({
-      customerMessage:
-        'This unlock could not be submitted, so your wallet was refunded.',
-      orderId: order.id,
-      reason: 'paid_recovery_identifier_unavailable',
-    });
-    return { kind: 'failed' as const };
+    return failRecovery('paid_recovery_identifier_unavailable');
   }
 
-  return placePetrockRemediationOrder({
+  const result = await placePetrockRemediationOrder({
     client,
     fxRate,
     identifier,
@@ -97,4 +93,7 @@ export async function recoverPaidPetrockRemediationOrder({
     product: context.product,
     state,
   });
+  if (result.kind === 'eligibility_failed')
+    return failRecovery('eligibility_evidence_invalid');
+  return result;
 }

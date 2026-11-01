@@ -1,69 +1,9 @@
 // Raw frozen replay-source data; update migration hashes in lockstep.
-import { ADMIN_PLATFORM_PENDING_SOURCES } from './supabase-history-replay-admin-sources';
-import { ADS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-ads-pending-sources';
-import { BLOG_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-blog-pending-sources';
-import { BUILDER_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-builder-pending-sources';
-import { CART_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-cart-pending-sources';
-import { CHECKOUT_RECOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-checkout-recovery-pending-sources';
-import { CONNECTOR_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-connector-pending-sources';
-import { DISCOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-discovery-pending-sources';
-import { EXPENSE_QUIZ_PAYSTACK_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-expense-pending-sources';
-import { FEED_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-feed-pending-sources';
-import { FOLLOW_UP_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-follow-up-pending-sources';
-import { GIGL_TRACKING_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-gigl-tracking-pending-sources';
-import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-gigl-wallet-sources';
-import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
-import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumia-pending-sources';
-import { LOYALTY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-loyalty-pending-sources';
-import { MANUAL_DOCUMENT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-manual-document-pending-sources';
-import { MERCHANT_CLASSIFICATION_PENDING_SOURCES } from './supabase-history-replay-merchant-classification-sources';
-import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
-import { ONBOARDING_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-onboarding-pending-sources';
-import { PENDING_SOURCES_HEAD } from './supabase-history-replay-pending-sources-head';
-import { PRIMARY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-primary-pending-sources';
+// Pending rows are discovered, not hand-listed: the frozen pre-registry blocks
+// plus every `replay-registry/*/pending-sources.txt` (see its README.md).
+import { buildPendingReplaySourceRows } from './build-pending-replay-source-rows';
 import { PRODUCTION_MAPPINGS } from './supabase-history-replay-production-mappings';
-import { REDVAULT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-redvault-pending-sources';
-import { REFUND_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-refund-pending-sources';
-import { REPAIR_PICKUP_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-repair-pickup-pending-sources';
-import {
-  SAVINGS_ENGAGEMENT_PENDING_REPLAY_SOURCE_ROWS,
-  SAVINGS_PENDING_REPLAY_SOURCE_ROWS,
-} from './supabase-history-replay-savings-pending-sources';
-import { SAVINGS_RUNTIME_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-savings-runtime-pending-sources';
-import { SEARCH_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-search-pending-sources';
-import { STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES } from './supabase-history-replay-storefront-cluster-guide-pending-sources';
-import { STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW } from './supabase-history-replay-storefront-comparison-pending-sources';
-import { STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-storefront-order-pending-sources';
-import { STOREFRONT_ORDER_TAIL_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-storefront-order-tail-pending-sources';
-import { VTU_CHECKOUT_RLS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-checkout-rls-pending-sources';
-import { VTU_EMAIL_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-email-pending-sources';
-import { VTU_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-pending-sources';
 
-const STOREFRONT_PDP_SEMANTIC_PENDING_SOURCES = `a402b932c082f876b44feb1cd98ef4d879641a0a5e075b52a05fb0a9b7df43dc 20260831153000_optimize_storefront_pdp_semantic_reads.sql`;
-const STOREFRONT_SEMANTIC_INDEX_REPAIR_PENDING_SOURCES = `2999879d1a4127e4b703c8cb18a88f276ced6b2512331c1383402fdf36fff76d 20260901123000_repair_storefront_semantic_inventory_indexes.sql`;
-const STOREFRONT_CACHE_CAUSAL_IDENTITY_PENDING_SOURCES = `e87f8b3e8fecf098cc148d4efc75c75f62a96e0b4bdc98cdb904a91157a33c42 20260905183000_share_storefront_cache_invalidation_causal_identity.sql`;
-const TRACKING_ORDER_AMOUNT_PAID_PENDING_SOURCES = `2dfc3e7d95e55cd202ee973cbf149f0e0447cf1d6248c7c6132348f3cc78c0df 20260921130000_include_tracking_order_amount_paid.sql`;
-const TRACKING_ORDER_PAYMENT_ACCOUNTS_PENDING_SOURCES = `e4cc677df89fc76136e7ad3d6439d07893df34d6e064f0941951ec1d0c2723c9 20260921180100_include_tracking_order_payment_accounts.sql`;
-const TRACKING_ORDER_METHOD_IMPORT_SOURCE_PENDING_SOURCES = `8f48eadc61f6a052ba2d7ae7ff5c0386bb75fae35eca5625b52aedd00432260c 20260923150000_include_tracking_order_method_and_import_source.sql`;
-const INVOICE_ARTIFACT_PROOF_RPCS_PENDING_SOURCES = `ce700c747390cbaddac5282dd933b7c83273ad747dec77a70fb2b7b4b3b12425 20260923150100_invoice_artifact_proof_bound_rpcs.sql`;
-const TRACKING_ORDER_NOTIFICATION_DELIVERED_PENDING_SOURCES = `9850261e1093a2d791503e94ae109d371f79a5d0a8bd7863b27b9fc5880b6cf2 20260923150200_include_tracking_order_notification_delivered.sql`;
-const IMMEDIATE_ORDER_NOTIFICATION_CLAIMS_PENDING_SOURCES = `10419b71140b08a494ec6a223c96f8424815dbc477d4593fd7e5248270a61bde 20260923130000_immediate_order_notification_claims.sql`;
-const REVOKE_IMMEDIATE_ORDER_NOTIFICATION_PUBLIC_EXECUTE_PENDING_SOURCES = `b025e24686a6bdaf77c1fabfb7beba99f545b400f0bdd91515a8b0c0338a32cb 20260923150300_revoke_immediate_order_notification_public_execute.sql`;
-const ORDERS_PAID_AT_COLUMN_PENDING_SOURCES = `bd5cccf3ac9ed07e28b34c8fe043d1014455e0226d988947adade5744921cbbf 20260923150400_add_orders_paid_at_column.sql`;
-const IMMEDIATE_ORDER_NOTIFICATION_PROOF_CLAIMS_PENDING_SOURCES = `a55ec9470c3cd0a9c3d645d2dd3a5d09ab1dd37dd89cddb8123119e8d469df32 20260923150500_immediate_order_notification_proof_claims.sql`;
-const ORDER_NOTIFICATION_DELIVERED_LOOKUP_PENDING_SOURCES = `dd11de26ac256e7665a34756f2a50ffea229706732671a98cd3fdfa7a1ac6ddc 20260923150700_order_notification_delivered_lookup.sql`;
-const SESSIONLESS_PAYMENT_REFERENCE_SNAPSHOT_PENDING_SOURCES = `e10d138131ec25153b611169724299051b64795e0048a16e76a5a2a3aa966401 20260923151000_sessionless_payment_reference_snapshot.sql`;
-const LEASE_IMMEDIATE_ORDER_NOTIFICATION_COMPLETION_PENDING_SOURCES = `c6f81e3a5a81c76f74f6dd912374b7c4332d130b5dbd2023577266fb017ada6a 20260923150800_lease_immediate_order_notification_completion.sql`;
-const REVOKE_LOOKUP_RPC_ANON_EXECUTE_PENDING_SOURCES = `8543cae12a05a48853de05cb3292998b4140f1a1e22dc5cdeb7363a9cd598e19 20260923150900_revoke_lookup_rpc_anon_execute.sql`;
-const IMMEDIATE_NOTIFICATION_COMPLETION_PROOF_PENDING_SOURCES = `6cdaa43c45289a44f4fc2ddefaf78af154d42fe895e5f6315f3f9e6d86fef9d6 20260923151100_immediate_notification_completion_proof.sql`;
-const SANTA_CATALOG_PENDING_SOURCES = `ccb69b3c76fc8fccdd2832177f66e2fb508afef422f554adf0ba9d792a58b19a 20260921180000_get_santa_catalog.sql`;
-const VERIFY_PAYMENT_REFERENCE_TOKEN_PENDING_SOURCES = `16fee07c93035f58783ea0dcde7688b7c8155adedeb522b5dee446a3e932ba1d 20260922120100_verify_payment_reference_token_rpc.sql`;
-const GUEST_PAYMENT_REFERENCE_SNAPSHOT_PENDING_SOURCES = `1c8a5b5eaa76aa70b3f14f8d4772f013e53d3275bd6aec4b9608ab2a5f3c77d3 20260922210000_guest_payment_reference_snapshot.sql`;
-const GUEST_PAYMENT_REFERENCE_SNAPSHOT_MINIMAL_PENDING_SOURCES = `02eeeffc747952e75c15025baa6556ae1013da364c698cd8e3261df43a706d38 20260922220000_guest_payment_reference_snapshot_minimal.sql`;
-const GUEST_SNAPSHOT_INVENTORY_PROOF_PENDING_SOURCES = `3864292ba62afad64de22549f334e2080fc558602bc31a94c6cdc9d233974614 20260923120000_guest_snapshot_inventory_proof.sql`;
-const TRANSACTION_REVIEW_SEARCH_PENDING_SOURCES = `e9245edba2df825604e770b769f0ec7e4949df83bc6aa4ec84740e33bb53c9a4 20261008174300_search_mobile_admin_transaction_review_orders.sql`;
-const STOREFRONT_PAYMENT_SETTINGS_INSURANCE_PENDING_SOURCES = `5d563615e5bc1d14623f18f69f6c714bf818da85d1e89a9d485fc774f3cce8f3 20261015090001_storefront_payment_settings_shipping_insurance.sql`;
-const SEARCH_CONDITION_MATCH_HYPHEN_PENDING_SOURCES = `82e8ab798c5444cfcc1037f21bfb376940d15ae7801f0462efa12f32bde0b274 20261016090000_search_condition_match_hyphen.sql`;
 const PIPELINE_SOURCES = `4f31649ba4c9c3d6b5eb4110dbb0d144237502642d61c0606e15a9b1ba39556b 20260712150001_domain_event_pipeline_tables.sql
 3a3018fcd2e0daea0dec918d953e1dadf314ea1f88698e336a72a97da8ddcd1c 20260712150050_eventing_internal_schema.sql
 dcb23009b30f1970359737ccfc1e34f3b63b952a59e6854d1352a98b4fbdc21b 20260712150075_domain_event_idempotency_guard.sql
@@ -103,84 +43,7 @@ e8aab2aed87c3ae93090db6343ac125210d1fd90f80de1cff51772ef33b29750 20260718070005_
 2dbcca4189d7a656fa8504383a54d8ea55024cb76720572931818d4df878be9e 20260718070010_preserve_credit_direct_provider_reference.sql
 395cfdef9ec80858ce34b031df0b642e51b3ba4d5d81922a9687a58962e35c5e 20260718070011_require_credit_direct_guest_tracking_token.sql`;
 // PayPal/Korapay BYOK migrations land in PENDING before the 20260721 cancellation batch (version-earlier, unattested).
-const PENDING_SOURCES = [
-  REFUND_PENDING_REPLAY_SOURCE_ROWS,
-  CART_PENDING_REPLAY_SOURCE_ROWS,
-  BUILDER_PENDING_REPLAY_SOURCE_ROWS,
-  CONNECTOR_PENDING_REPLAY_SOURCE_ROWS,
-  '2676132ef759384de03f6ad7eeed2f7e1e38abac02013aaca634bfb957106482 20260907111036_repair_sales_exclusion_wallet_version_collision.sql',
-  '27140ce538838e4a31f6fbc2f9871eaa3697d02888aed5d3b360c5f68ccd2245 20260922120000_normalize_product_key_specs_gpu.sql',
-  'ad1b4afac28db2099449ef0f63208ef0401ea9bad9e9f0dfbee1041effd83bd2 20260924090000_quiz_start_guard_context_v2.sql',
-  'e92fdbcad279fb7cbf8bc1553404b5e54026c124e2b0c5c29d334b9cd2b1bad7 20260925090000_pr3468_followup_payment_hardening.sql',
-  'd48421f956f86ef4c18a4fcf84eb74f0f4ea9a486393fc957e5ac659d1691eea 20260925100000_credit_direct_inventory_proof.sql',
-  'a234118a7dcf99f1eb9a7b9a56e7e45e887241c104e78ba0d4bb7cb2c3ef66db 20260926120000_public_storefront_domain_resolution.sql',
-  'ef7469eab56a7b2273023e2b924308e816222a1cce18af2a9b7d0e8ecd470b18 20261008230000_mcp_guest_carts.sql',
-  'c26c071f926457cfc07a951f9c5860e5d3b16136162fd70b5b6d85165c27a4c8 20261008230100_mcp_guest_cart_write_rpcs.sql',
-  '3d8b0d48d5583ef67d075de6b3322af72b2b85001cc2f16f655d9b1274ad2c5a 20261010090000_mcp_guest_cart_gigl_worker_request_scope.sql',
-  '32e0cf82c8f4427203e12a731c2fe7e7bd8303933d6bf9662012aa2941c700bd 20261010100000_mcp_guest_cart_worker_postgrest_isolate.sql',
-  VTU_PENDING_REPLAY_SOURCE_ROWS,
-  '58736f2055f1d497d2b273d290658e34b2006cbd0d81015cf7749e668aa29b11 20261013172724_fix_shipment_booking_refund_probe_permissions.sql',
-  '8c6107207fadff4fe89a53b3f5c1b3a24230284cbeaa45599d3b348ea7f10dad 20261013194440_fix_shipping_quote_proof_canonicalization.sql',
-  VTU_EMAIL_PENDING_REPLAY_SOURCE_ROWS,
-  CHECKOUT_RECOVERY_PENDING_REPLAY_SOURCE_ROWS,
-  DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
-  MANUAL_DOCUMENT_PENDING_REPLAY_SOURCE_ROWS,
-  PENDING_SOURCES_HEAD,
-  PRIMARY_PENDING_REPLAY_SOURCE_ROWS,
-  STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,
-  STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES,
-  STOREFRONT_PDP_SEMANTIC_PENDING_SOURCES,
-  STOREFRONT_SEMANTIC_INDEX_REPAIR_PENDING_SOURCES,
-  STOREFRONT_CACHE_CAUSAL_IDENTITY_PENDING_SOURCES,
-  STOREFRONT_PAYMENT_SETTINGS_INSURANCE_PENDING_SOURCES,
-  SEARCH_CONDITION_MATCH_HYPHEN_PENDING_SOURCES,
-  STOREFRONT_ORDER_TAIL_PENDING_REPLAY_SOURCE_ROWS,
-  TRACKING_ORDER_AMOUNT_PAID_PENDING_SOURCES,
-  TRACKING_ORDER_PAYMENT_ACCOUNTS_PENDING_SOURCES,
-  TRACKING_ORDER_METHOD_IMPORT_SOURCE_PENDING_SOURCES,
-  INVOICE_ARTIFACT_PROOF_RPCS_PENDING_SOURCES,
-  TRACKING_ORDER_NOTIFICATION_DELIVERED_PENDING_SOURCES,
-  IMMEDIATE_ORDER_NOTIFICATION_CLAIMS_PENDING_SOURCES,
-  REVOKE_IMMEDIATE_ORDER_NOTIFICATION_PUBLIC_EXECUTE_PENDING_SOURCES,
-  ORDERS_PAID_AT_COLUMN_PENDING_SOURCES,
-  IMMEDIATE_ORDER_NOTIFICATION_PROOF_CLAIMS_PENDING_SOURCES,
-  ORDER_NOTIFICATION_DELIVERED_LOOKUP_PENDING_SOURCES,
-  LEASE_IMMEDIATE_ORDER_NOTIFICATION_COMPLETION_PENDING_SOURCES,
-  REVOKE_LOOKUP_RPC_ANON_EXECUTE_PENDING_SOURCES,
-  IMMEDIATE_NOTIFICATION_COMPLETION_PROOF_PENDING_SOURCES,
-  SESSIONLESS_PAYMENT_REFERENCE_SNAPSHOT_PENDING_SOURCES,
-  ADS_PENDING_REPLAY_SOURCE_ROWS,
-  ADMIN_PLATFORM_PENDING_SOURCES,
-  EXPENSE_QUIZ_PAYSTACK_PENDING_REPLAY_SOURCE_ROWS,
-  FEED_PENDING_REPLAY_SOURCE_ROWS,
-  FOLLOW_UP_PENDING_REPLAY_SOURCE_ROWS,
-  ONBOARDING_PENDING_REPLAY_SOURCE_ROWS,
-  GIGL_TRACKING_PENDING_REPLAY_SOURCE_ROWS,
-  GIGL_WALLET_SHIPPING_PENDING_SOURCES,
-  INVENTORY_PENDING_REPLAY_SOURCE_ROWS,
-  JUMIA_PENDING_REPLAY_SOURCE_ROWS,
-  LOYALTY_PENDING_REPLAY_SOURCE_ROWS,
-  NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS,
-  REPAIR_PICKUP_PENDING_REPLAY_SOURCE_ROWS,
-  REDVAULT_PENDING_REPLAY_SOURCE_ROWS,
-  SANTA_CATALOG_PENDING_SOURCES,
-  VERIFY_PAYMENT_REFERENCE_TOKEN_PENDING_SOURCES,
-  GUEST_PAYMENT_REFERENCE_SNAPSHOT_PENDING_SOURCES,
-  GUEST_PAYMENT_REFERENCE_SNAPSHOT_MINIMAL_PENDING_SOURCES,
-  GUEST_SNAPSHOT_INVENTORY_PROOF_PENDING_SOURCES,
-  TRANSACTION_REVIEW_SEARCH_PENDING_SOURCES,
-  SEARCH_PENDING_REPLAY_SOURCE_ROWS,
-  STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW,
-  BLOG_PENDING_REPLAY_SOURCE_ROWS,
-  MERCHANT_CLASSIFICATION_PENDING_SOURCES,
-  SAVINGS_PENDING_REPLAY_SOURCE_ROWS,
-  SAVINGS_ENGAGEMENT_PENDING_REPLAY_SOURCE_ROWS,
-  SAVINGS_RUNTIME_PENDING_REPLAY_SOURCE_ROWS,
-  VTU_CHECKOUT_RLS_PENDING_REPLAY_SOURCE_ROWS,
-]
-  .flatMap((sourceBlock) => sourceBlock.trim().split('\n'))
-  .sort((left, right) => { const l = left.split(' ')[1] ?? ''; const r = right.split(' ')[1] ?? ''; if (l < r) return -1; if (l > r) return 1; return 0; })
-  .join('\n'); // biome-ignore format: keep the manifest at the 300-line modularity limit
+const PENDING_SOURCES = buildPendingReplaySourceRows();
 // One primary export (repo one-export-per-file rule): manifest module/tests destructure the collection.
 // biome-ignore format: keep the manifest at the 300-line modularity limit
 export const REPLAY_SOURCE_DATA = { PIPELINE_SOURCES, POST_REPLAY_SOURCES, PENDING_SOURCES, PRODUCTION_MAPPINGS } as const;

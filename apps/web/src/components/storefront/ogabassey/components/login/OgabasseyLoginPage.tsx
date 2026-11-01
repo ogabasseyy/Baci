@@ -72,13 +72,14 @@ function OgabasseyLoginPageContent() {
     setEmail,
     handleSendCode,
     handleCodeChange,
-    handleKeyDown,
-    handlePaste,
+    handleCompleteCode,
     handleResendCode,
     handleChangeEmail,
     handleGoogleSignIn,
     handleAppleSignIn,
-    codeInputRefs,
+    verified,
+    codeSentAt,
+    resendSentAt,
   } = useOgabasseyLogin({ initialEmail, redirectTo });
 
   // The claim login hint is masked guidance (never the full address):
@@ -90,10 +91,10 @@ function OgabasseyLoginPageContent() {
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
+    if (!authLoading && isAuthenticated && !isVerifying && !verified) {
       router.push(asRoute(redirectTo));
     }
-  }, [authLoading, isAuthenticated, router, redirectTo]);
+  }, [authLoading, isAuthenticated, isVerifying, verified, router, redirectTo]);
 
   // Show loading screen while checking auth/merchant
   if (merchantLoading || authLoading) {
@@ -124,10 +125,12 @@ function OgabasseyLoginPageContent() {
           <div className="text-center mb-8">
             <OgabasseyLogo className="h-10 mx-auto mb-6 text-primary" />
             <h1 className="text-2xl font-bold text-gray-900 mb-2">
-              {isCodeSent ? 'Enter verification code' : 'Sign in or Create account'}
+              {verified ? 'You’re signed in' : isCodeSent ? 'Enter verification code' : 'Sign in or Create account'}
             </h1>
             <p className="text-gray-500 text-sm">
-              {isCodeSent
+              {verified
+                ? 'Returning to your previous page…'
+                : isCodeSent
                 ? `We sent a 6-digit code to ${sentToEmail}`
                 : emailHint
                   ? `This receipt was sent to ${emailHint} — sign in with that address.`
@@ -149,17 +152,18 @@ function OgabasseyLoginPageContent() {
             />
           ) : (
             <OtpVerificationForm
-              email={sentToEmail || email}
+              continueHref={redirectTo}
               code={code}
               onCodeChange={handleCodeChange}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
+              onComplete={handleCompleteCode}
               onResend={handleResendCode}
               onChangeEmail={handleChangeEmail}
               error={error}
               isVerifying={isVerifying}
               isSending={isSending}
-              inputRefs={codeInputRefs}
+              verified={verified}
+              sentAt={codeSentAt}
+              resendSentAt={resendSentAt}
             />
           )}
         </div>

@@ -3,8 +3,17 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { ogabasseyFallbackImageLoader } from '@/lib/ogabassey-image-fallback-loader';
 import { buildOgabasseyAvifSrcSet } from '@/lib/ogabassey-image-format-sources';
+import { toOgabasseySameOriginTransformUrl } from '@/lib/ogabassey-same-origin-hero-url';
+import { toOgabasseySameOriginSrcSet } from '@/lib/ogabassey-same-origin-srcset';
 import { asRoute } from '@/lib/routes';
-import { TRANSPARENT_PIXEL_SRC } from './hero-mobile-image-config';
+import {
+  capSrcSetWidthRungs,
+  DESKTOP_HERO_BIG_MAX_SRCSET_WIDTH,
+  DESKTOP_HERO_BIG_MIN_SRCSET_WIDTH,
+  DESKTOP_HERO_SIDE_MAX_SRCSET_WIDTH,
+  MOBILE_HERO_SOURCE_MEDIA,
+  TRANSPARENT_PIXEL_SRC,
+} from './hero-mobile-image-config';
 import type { LaunchProductSlide } from './LaunchCarousel';
 
 interface HeroDesktopGridProps {
@@ -31,9 +40,9 @@ const SIDE_IMAGE_SOURCE_MEDIA = '(min-width: 768px)';
 const SIDE_IMAGE_SIZES = '(min-width: 1024px) 160px, (min-width: 768px) 25vw, 1px';
 const HERO_IMAGE_QUALITY = 70;
 
-/** Media-scoped desktop hero image. On mobile no `<source>` matches, so the
- *  `<img>` falls back to a transparent pixel (zero network). Desktop keeps
- *  eager/high so this above-the-fold grid can still be the desktop LCP. */
+/** Media-scoped desktop hero image. On mobile the `<source media="(max-width: 767px)">`
+ *  matches a transparent pixel (zero network), while `<img src>` holds the real
+ *  fallback URL so no `fetchpriority="high"` hero `<img>` uses a `data:image/gif` `src`. */
 function HeroBigImage({ alt, src }: { alt: string; src: string }) {
   const {
     props: { sizes, src: imgSrc, srcSet, ...imgProps },
@@ -50,33 +59,48 @@ function HeroBigImage({ alt, src }: { alt: string; src: string }) {
     width: BIG_IMAGE_WIDTH,
   });
 
-  const fallbackSrcSet = srcSet ?? imgSrc;
+  const rawFallbackSrcSet =
+    capSrcSetWidthRungs(
+      srcSet,
+      DESKTOP_HERO_BIG_MAX_SRCSET_WIDTH,
+      DESKTOP_HERO_BIG_MIN_SRCSET_WIDTH
+    ) ?? imgSrc;
   // AVIF twin (per-format URL) so AVIF-capable browsers keep AVIF: CF Free
   // ignores `Vary: Accept`, so one `format=auto` body can't serve both tiers.
   // `null` for external images — the plain `<source>` then serves everyone.
-  const avifSrcSet = buildOgabasseyAvifSrcSet(fallbackSrcSet);
+  const avifSrcSet =
+    toOgabasseySameOriginSrcSet(buildOgabasseyAvifSrcSet(rawFallbackSrcSet)) ??
+    null;
+  const sameOriginImgSrc = toOgabasseySameOriginTransformUrl(imgSrc);
+  const fallbackSrcSet =
+    toOgabasseySameOriginSrcSet(rawFallbackSrcSet) ?? sameOriginImgSrc;
 
   return (
     <picture className="absolute inset-0 block h-full w-full">
-      <Suspense fallback={null}>
-        {avifSrcSet ? (
+      {avifSrcSet ? (
+        <Suspense fallback={null}>
           <source
             media={BIG_IMAGE_SOURCE_MEDIA}
             sizes={sizes ?? BIG_IMAGE_SIZES}
             srcSet={avifSrcSet}
             type="image/avif"
           />
-        ) : null}
+        </Suspense>
+      ) : null}
+      <Suspense fallback={null}>
         <source
           media={BIG_IMAGE_SOURCE_MEDIA}
           sizes={sizes ?? BIG_IMAGE_SIZES}
           srcSet={fallbackSrcSet}
         />
       </Suspense>
+      <Suspense fallback={null}>
+        <source media={MOBILE_HERO_SOURCE_MEDIA} srcSet={TRANSPARENT_PIXEL_SRC} />
+      </Suspense>
       <img
         {...imgProps}
         alt={alt}
-        src={TRANSPARENT_PIXEL_SRC}
+        src={sameOriginImgSrc}
         className="h-full w-full object-contain p-4 transition-transform duration-700 group-hover:scale-105"
       />
     </picture>
@@ -132,8 +156,8 @@ function HeroBigCard({
 }
 
 
-/** Desktop-only side-card image. The fallback `<img>` is a transparent pixel so
- * hidden desktop cards do not add mobile hero image requests. */
+/** Desktop-only side-card image. On mobile the `<source media="(max-width: 767px)">`
+ *  matches a transparent pixel so hidden desktop cards do not add mobile hero image requests. */
 function HeroSideImage({ alt, src }: { alt: string; src: string }) {
   const {
     props: { sizes, src: imgSrc, srcSet, ...imgProps },
@@ -148,28 +172,36 @@ function HeroSideImage({ alt, src }: { alt: string; src: string }) {
     width: SIDE_IMAGE_WIDTH,
   });
 
-  const fallbackSrcSet = srcSet ?? imgSrc;
+  const fallbackSrcSet =
+    capSrcSetWidthRungs(srcSet, DESKTOP_HERO_SIDE_MAX_SRCSET_WIDTH) ?? imgSrc;
   const avifSrcSet = buildOgabasseyAvifSrcSet(fallbackSrcSet);
 
   return (
     <picture className="absolute inset-0 block h-full w-full">
       {avifSrcSet ? (
+        <Suspense fallback={null}>
+          <source
+            media={SIDE_IMAGE_SOURCE_MEDIA}
+            sizes={sizes ?? SIDE_IMAGE_SIZES}
+            srcSet={avifSrcSet}
+            type="image/avif"
+          />
+        </Suspense>
+      ) : null}
+      <Suspense fallback={null}>
         <source
           media={SIDE_IMAGE_SOURCE_MEDIA}
           sizes={sizes ?? SIDE_IMAGE_SIZES}
-          srcSet={avifSrcSet}
-          type="image/avif"
+          srcSet={fallbackSrcSet}
         />
-      ) : null}
-      <source
-        media={SIDE_IMAGE_SOURCE_MEDIA}
-        sizes={sizes ?? SIDE_IMAGE_SIZES}
-        srcSet={fallbackSrcSet}
-      />
+      </Suspense>
+      <Suspense fallback={null}>
+        <source media={MOBILE_HERO_SOURCE_MEDIA} srcSet={TRANSPARENT_PIXEL_SRC} />
+      </Suspense>
       <img
         {...imgProps}
         alt={alt}
-        src={TRANSPARENT_PIXEL_SRC}
+        src={imgSrc}
         className="h-full w-full object-contain p-2 transition-transform duration-700 group-hover:scale-105"
       />
     </picture>

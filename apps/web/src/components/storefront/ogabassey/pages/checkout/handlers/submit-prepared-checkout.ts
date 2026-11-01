@@ -16,7 +16,8 @@ type ReadySubmission = Extract<PrepareCheckoutOrderSubmissionResult, { kind: 're
 /** Bind the prepared order snapshot to the existing fresh-order/payment lifecycle. */
 export async function submitPreparedCheckout(
   context: CheckoutOrderSubmissionContext & { merchant: MerchantData },
-  prepared: ReadySubmission
+  prepared: ReadySubmission,
+  options?: { redvaultPreparedOnly: boolean }
 ): Promise<void> {
   const { account, cart, contact, delivery, merchant, navigation, order, payment, processing } = context;
   const { session: paymentSession } = payment;
@@ -28,6 +29,7 @@ export async function submitPreparedCheckout(
 
   processing.setIsProcessing(true);
   await submitFreshCheckout({
+    redvaultPreparedOnly: options?.redvaultPreparedOnly,
     redvaultPrepared: {
       paymentMethod,
       redvaultOrderReady: redvault.orderReady,

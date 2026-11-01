@@ -411,6 +411,8 @@ jobs:
           filter: blob:none
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
+      - name: Test hoisted patched dependency installation
+        run: node --test .github/scripts/pnpm-hoisted-patch-install.test.mjs
       - name: Run backfill scripts unit tests
         run: pnpm exec vitest run scripts/lib
       - name: Test Migration Version Guard

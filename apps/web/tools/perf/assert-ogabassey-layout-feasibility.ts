@@ -1,4 +1,3 @@
-import { pathToFileURL } from 'node:url';
 import { extractDependencyUrls } from './ogabassey-layout-dependencies';
 import {
   firstPostponedBoundaryOffset,
@@ -141,6 +140,15 @@ export async function assertOgabasseyLayoutFeasibility(
     options.prebuiltDir,
     manifest
   );
+  if (
+    ![...assetBodies.entries()].some(
+      ([url, body]) =>
+        new URL(url, 'http://localhost').pathname.endsWith('.css') &&
+        body.includes(options.cssSentinel)
+    )
+  ) {
+    throw new Error('Critical stylesheet sentinel was not captured');
+  }
   const criticalDependencyFiles = [...assetBodies.entries()]
     .filter(
       ([, body]) =>
@@ -272,7 +280,7 @@ function readFlag(name: string): string {
   return value;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+async function main() {
   const report = await assertOgabasseyLayoutFeasibility({
     captureDir: readFlag('--capture-dir'),
     cssSentinel: readFlag('--css-sentinel'),
@@ -284,4 +292,14 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     prebuiltDir: readFlag('--prebuilt-dir'),
   });
   console.log(JSON.stringify(report, null, 2));
+}
+if (
+  /(?:^|[/\\])assert-ogabassey-layout-feasibility\.ts$/.test(
+    process.argv[1] ?? ''
+  )
+) {
+  main().catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
 }

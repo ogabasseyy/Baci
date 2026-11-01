@@ -1,3 +1,5 @@
+import { writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { assertOgabasseyLayoutFeasibility } from './assert-ogabassey-layout-feasibility';
 import {
@@ -7,6 +9,27 @@ import {
 } from './assert-ogabassey-layout-feasibility.test-support';
 
 describe('assertOgabasseyLayoutFeasibility', () => {
+  it('rejects missing CSS sentinel even if a script contains the marker', async () => {
+    const fixture = await writeFixture();
+    await writeFile(
+      path.join(fixture.captureDir, 'assets/oga-critical.css'),
+      ''
+    );
+    await writeFile(
+      path.join(fixture.prebuiltDir, '_next/static/css/oga-critical.css'),
+      ''
+    );
+    await expect(
+      assertOgabasseyLayoutFeasibility({
+        ...fixture,
+        cssSentinel: SENTINEL,
+        genericIdentifier: 'cwv-layout-generic-fixture',
+        identifiers: ['ogabassey.com', 'ogabassey'],
+        marker: 'data-ogabassey-critical-spike=v1',
+        heroHint: HERO_HINT,
+      })
+    ).rejects.toThrow(/critical stylesheet.*sentinel/i);
+  });
   it('proves both generated homes own a static marker and isolated critical CSS', async () => {
     const fixture = await writeFixture();
 

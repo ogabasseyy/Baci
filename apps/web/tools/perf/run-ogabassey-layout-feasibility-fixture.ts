@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { extractDependencyUrls } from './ogabassey-layout-dependencies';
 import {
   validRoutePath,
@@ -227,7 +226,7 @@ function readFlag(name: string): string {
   return value;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+async function main() {
   const identifiers = process.argv.flatMap((value, index) => {
     const next = process.argv[index + 1];
     return value === '--identifier' && next ? [next] : [];
@@ -242,4 +241,14 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     pdpPath: readFlag('--pdp-path'),
   });
   console.log(JSON.stringify(result, null, 2));
+}
+if (
+  /(?:^|[/\\])run-ogabassey-layout-feasibility-fixture\.ts$/.test(
+    process.argv[1] ?? ''
+  )
+) {
+  main().catch((error: unknown) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
 }

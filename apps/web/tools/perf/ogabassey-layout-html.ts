@@ -22,13 +22,19 @@ export function hasHeroPreload(html: string, heroHint: string): boolean {
   return tags.some((tag) => {
     const attrs = new Map(
       [...tag.matchAll(/([\w-]+)\s*=\s*["']([^"']*)["']/g)].map(
-        ([, key, value]) => [key?.toLowerCase(), value]
+        ([, key, value]) => [
+          key?.toLowerCase(),
+          value?.replaceAll('&amp;', '&'),
+        ]
       )
     );
     return (
       attrs.get('rel')?.toLowerCase() === 'preload' &&
       attrs.get('as')?.toLowerCase() === 'image' &&
-      attrs.get('href') === heroHint
+      (attrs.get('href') === heroHint ||
+        (attrs.get('imagesrcset') ?? '')
+          .split(',')
+          .some((candidate) => candidate.trim().split(/\s+/)[0] === heroHint))
     );
   });
 }

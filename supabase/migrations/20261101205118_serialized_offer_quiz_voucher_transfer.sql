@@ -1,5 +1,5 @@
--- Isolated prototype: not a deployable migration. The context row gives only
--- this trusted transaction a narrowly scoped one-time identity transition.
+-- The context row gives only this trusted transaction a narrowly scoped
+-- one-time transition from an ordinary prize to its chosen offer unit.
 CREATE TABLE private.quiz_offer_transition_context (
  transaction_id bigint NOT NULL, order_item_id uuid NOT NULL, offer_id uuid NOT NULL,
  PRIMARY KEY (transaction_id, order_item_id)

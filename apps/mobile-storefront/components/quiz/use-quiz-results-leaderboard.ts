@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { fetchQuizLeaderboard } from '@/services/quiz-leaderboard';
 import { fetchQuizLiveLeaderboard } from '@/services/quiz-live-leaderboard';
-import type { QuizLeaderboard } from '@/services/quiz-types';
+import { type QuizLeaderboard, QuizServiceError } from '@/services/quiz-types';
 import type { QuizV2LifecycleStatus } from '@/stores/quiz-recovery-envelope';
 
 const LIVE_REFRESH_INTERVAL_MS = 5_000;
@@ -14,6 +14,8 @@ interface UseQuizResultsLeaderboardInput {
   eventId: string | null;
   expectedUserId: string | null;
   lifecycle: QuizV2LifecycleStatus;
+  getCurrentUserId?: () => string | null;
+  deferFinalUntilPublished?: boolean;
 }
 
 export function useQuizResultsLeaderboard({
@@ -22,13 +24,20 @@ export function useQuizResultsLeaderboard({
   eventId,
   expectedUserId,
   lifecycle,
+  getCurrentUserId,
+  deferFinalUntilPublished = false,
 }: UseQuizResultsLeaderboardInput) {
   const [leaderboard, setLeaderboard] = useState<QuizLeaderboard | null>(null);
   const [leaderboardError, setLeaderboardError] = useState(false);
   const [participantCount, setParticipantCount] = useState<number | null>(null);
+  const currentUserIdRef = useRef(getCurrentUserId);
+  currentUserIdRef.current = getCurrentUserId;
   const hasLeaderboard = useRef(false);
+  const boardStatus = useRef<QuizLeaderboard['status'] | null>(null);
   const previousEventKey = useRef<string | null>(null);
-  const isLive = lifecycle === 'pending_results' && !eventHasEnded;
+  const isLive =
+    lifecycle === 'pending_results' &&
+    (!eventHasEnded || deferFinalUntilPublished);
 
   useEffect(() => {
     const eventKey = `${eventId ?? ''}:${expectedUserId ?? ''}`;
@@ -38,15 +47,29 @@ export function useQuizResultsLeaderboard({
       setLeaderboard(null);
       setParticipantCount(null);
       hasLeaderboard.current = false;
+      boardStatus.current = null;
+    }
+    if (lifecycle === 'final' && boardStatus.current === 'live') {
+      setLeaderboard(null);
+      setParticipantCount(null);
+      hasLeaderboard.current = false;
+      boardStatus.current = null;
     }
     setLeaderboardError(false);
-    if (!enabled || !eventId || !expectedUserId) return;
+    if (!enabled || !eventId || !expectedUserId) {
+      setLeaderboard(null);
+      setParticipantCount(null);
+      hasLeaderboard.current = false;
+      boardStatus.current = null;
+      return;
+    }
 
     let active = true;
     let appIsActive =
       AppState.currentState !== 'background' &&
       AppState.currentState !== 'inactive';
     let loadInFlight = false;
+    let authFailures = 0;
     let retryId: ReturnType<typeof setTimeout> | undefined;
     const schedule = (delayMs: number) => {
       if (!active || !appIsActive) return;
@@ -69,12 +92,28 @@ export function useQuizResultsLeaderboard({
         const result = isLive
           ? await fetchQuizLiveLeaderboard({ eventId, expectedUserId })
           : await fetchQuizLeaderboard({ eventId, expectedUserId });
-        if (!active) return;
+        if (
+          !active ||
+          (currentUserIdRef.current &&
+            currentUserIdRef.current() !== expectedUserId)
+        )
+          return;
+        authFailures = 0;
         if (result.participantCount !== null) {
           setParticipantCount(result.participantCount);
         }
+        if (
+          isLive &&
+          (result.status === 'unavailable' || result.status === 'live_hidden')
+        ) {
+          setLeaderboard(null);
+          setParticipantCount(null);
+          hasLeaderboard.current = false;
+          boardStatus.current = null;
+        }
         if (result.status === 'published' || result.status === 'live') {
           setLeaderboard(result);
+          boardStatus.current = result.status;
           hasLeaderboard.current = true;
           setLeaderboardError(false);
           if (result.status === 'live') {
@@ -84,8 +123,33 @@ export function useQuizResultsLeaderboard({
           }
           return;
         }
-      } catch {
+      } catch (error) {
         if (!active) return;
+        if (
+          error instanceof QuizServiceError &&
+          (error.status === 401 ||
+            error.status === 403 ||
+            error.code === 'quiz_session_changed')
+        ) {
+          setLeaderboard(null);
+          setParticipantCount(null);
+          hasLeaderboard.current = false;
+          boardStatus.current = null;
+          if (
+            error.status === 401 &&
+            error.code !== 'quiz_session_changed' &&
+            (!currentUserIdRef.current ||
+              currentUserIdRef.current() === expectedUserId)
+          ) {
+            authFailures += 1;
+            retryDelayMs = Math.min(
+              LIVE_REFRESH_INTERVAL_MS * 2 ** Math.min(authFailures - 1, 3),
+              30_000
+            );
+          } else {
+            retryDelayMs = null;
+          }
+        }
         if (!hasLeaderboard.current) setLeaderboardError(true);
       } finally {
         loadInFlight = false;
@@ -105,7 +169,19 @@ export function useQuizResultsLeaderboard({
       if (retryId) clearTimeout(retryId);
       subscription.remove();
     };
-  }, [enabled, eventId, expectedUserId, isLive]);
+  }, [enabled, eventId, expectedUserId, isLive, lifecycle]);
 
-  return { leaderboard, leaderboardError, participantCount };
+  const currentKey = `${eventId ?? ''}:${expectedUserId ?? ''}`;
+  const visible =
+    enabled &&
+    previousEventKey.current === currentKey &&
+    (!currentUserIdRef.current ||
+      currentUserIdRef.current() === expectedUserId);
+  const showBoard =
+    visible && !(lifecycle === 'final' && leaderboard?.status === 'live');
+  return {
+    leaderboard: showBoard ? leaderboard : null,
+    leaderboardError: visible && leaderboardError,
+    participantCount: showBoard ? participantCount : null,
+  };
 }

@@ -37,6 +37,7 @@ interface QuizResultsPanelProps {
   eventId?: string | null;
   eventEndsAt?: string | null;
   expectedUserId?: string | null;
+  getCurrentUserId?: () => string | null;
   legacyResult: QuizResult | null;
   lifecycle: QuizV2LifecycleStatus;
   allowPendingResultsExit?: boolean;
@@ -52,6 +53,7 @@ export function QuizResultsPanel({
   eventId = null,
   eventEndsAt = null,
   expectedUserId = null,
+  getCurrentUserId,
   legacyResult,
   lifecycle,
   allowPendingResultsExit = false,
@@ -71,7 +73,9 @@ export function QuizResultsPanel({
     serverClockOffsetMs: offsetMs,
   });
   const shouldLoadLeaderboard =
-    lifecycle === 'final' &&
+    (lifecycle === 'final' ||
+      (lifecycle === 'pending_results' &&
+        v2Result?.availability === 'pending')) &&
     v2Result?.availability !== 'unavailable' &&
     Boolean(eventId && expectedUserId);
   const { leaderboard, leaderboardError, participantCount } =
@@ -81,10 +85,19 @@ export function QuizResultsPanel({
       eventId,
       expectedUserId,
       lifecycle,
+      getCurrentUserId,
+      deferFinalUntilPublished: true,
     });
   const currentPlayer =
     leaderboard?.currentPlayer ??
     leaderboard?.entries.find((entry) => entry.isCurrentCustomer);
+  const personalScore =
+    leaderboard?.status === 'live' &&
+    leaderboard.currentPlayer?.isCurrentCustomer &&
+    ['submitted', 'scored'].includes(leaderboard.currentPlayer.status) &&
+    Number.isFinite(leaderboard.currentPlayer.score)
+      ? leaderboard.currentPlayer.score
+      : null;
   const finishTime = formatFinishTime(
     currentPlayer?.submittedAt ?? submittedAt ?? serverNow
   );
@@ -131,6 +144,15 @@ export function QuizResultsPanel({
                 <Text style={styles.scoreLabel}>
                   points · {v2Result.totalQuestions} questions
                 </Text>
+              </View>
+            ) : null}
+            {lifecycle === 'pending_results' &&
+            v2Result?.availability === 'pending' &&
+            shouldLoadLeaderboard &&
+            personalScore !== null ? (
+              <View style={styles.scoreSummary}>
+                <Text style={styles.scoreValue}>{personalScore}</Text>
+                <Text style={styles.scoreLabel}>Provisional best score</Text>
               </View>
             ) : null}
             {v2Result?.availability === 'unavailable' ? (

@@ -277,7 +277,8 @@ export function QuizScreen({
           backHandlerRef={backHandlerRef}
           dismissRecovery={dismissRecovery}
           events={events}
-          expectedUserId={useAuthStore.getState().user?.id ?? null}
+          expectedUserId={authUserId}
+          getCurrentUserId={() => useAuthStore.getState().user?.id ?? null}
           lifecycle={v2LifecycleStatus}
           onReset={reset}
           onRetryRecovery={retryRecovery}

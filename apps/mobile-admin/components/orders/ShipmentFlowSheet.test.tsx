@@ -148,6 +148,7 @@ vi.mock('react-native', () => {
 });
 
 const defaultProps = {
+  canBookGigl: true,
   canUseProvider: true,
   fulfillmentDetails: { imei: '', items: [], serialNumber: '' },
   fulfillmentItemIndex: 0,

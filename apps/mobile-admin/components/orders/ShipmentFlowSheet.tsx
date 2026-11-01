@@ -22,6 +22,7 @@ const IOS_SHIPMENT_KEYBOARD_VERTICAL_OFFSET = 0;
 const DEFAULT_SHIPMENT_KEYBOARD_VERTICAL_OFFSET = 24;
 export function ShipmentFlowSheet({
   recoveryOrder,
+  canBookGigl,
   canUseProvider,
   checkoutPaidShippingLabel,
   fulfillmentDetails,
@@ -193,6 +194,7 @@ export function ShipmentFlowSheet({
                     !giglShipping ? undefined : (
                       <ShipmentFlowGiglPanel
                         addressDraft={giglShipping.addressDraft}
+                        bookingAllowed={canBookGigl}
                         error={giglShipping.error}
                         fundingAccount={giglShipping.fundingAccount}
                         missingFields={giglShipping.missingFields}
@@ -226,6 +228,7 @@ export function ShipmentFlowSheet({
               (!recoveryRequired || selectedMode === 'provider') ? (
                 <CheckoutShippingRecoveryPanel
                   key={`${recoveryOrder.id}:${recoveryAttempt}`}
+                  canRecover={canBookGigl}
                   order={recoveryOrder}
                   required={recoveryRequired}
                   onConfirmed={() => setRecoveryRequiredOrderId(null)}
@@ -250,7 +253,8 @@ export function ShipmentFlowSheet({
                 (step === 'method' &&
                   selectedMode === 'provider' &&
                   (giglShipping
-                    ? !giglShipping.wallet?.canBook ||
+                    ? !canBookGigl ||
+                      !giglShipping.wallet?.canBook ||
                       giglShipping.state === 'loading' ||
                       giglShipping.state === 'funding' ||
                       giglShipping.state === 'funding_pending' ||

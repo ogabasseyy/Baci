@@ -30,6 +30,7 @@ const actions = {
 
 const base = {
   ...actions,
+  bookingAllowed: true,
   addressDraft: {},
   error: null,
   fundingAccount: null,
@@ -167,6 +168,43 @@ describe('ShipmentFlowGiglPanel', () => {
     expect(screen.queryByText('1234567890')).toBeNull();
     expect(
       screen.queryByRole('button', { name: "I've transferred" })
+    ).toBeNull();
+  });
+
+  it('shows staff who cannot book the GIG price and a note instead of a dead option', () => {
+    render(
+      <ShipmentFlowGiglPanel
+        {...base}
+        bookingAllowed={false}
+        selected
+        fundingAccount={{
+          accountName: 'BACI / Store',
+          accountNumber: '1234567890',
+          bankName: 'Wema Bank',
+          currency: 'NGN',
+          status: 'active',
+        }}
+      />
+    );
+
+    expect(screen.getByText('GIG delivery')).toBeTruthy();
+    expect(screen.getByText('₦11,000')).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Ask the store owner or an admin to book GIG for this order.'
+      )
+    ).toBeTruthy();
+    expect(screen.queryByRole('radio', { name: /Ship with GIG/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Fund wallet' })).toBeNull();
+    expect(screen.queryByText('1234567890')).toBeNull();
+  });
+
+  it('does not show the booking note to users who can book GIG', () => {
+    render(<ShipmentFlowGiglPanel {...base} />);
+    expect(
+      screen.queryByText(
+        'Ask the store owner or an admin to book GIG for this order.'
+      )
     ).toBeNull();
   });
 });

@@ -1,8 +1,9 @@
 import { canUseSelectedShippingProvider } from './order-shipment';
 
 interface OrderGiglShippingVisibilityInput {
+  /** Owner, or staff with orders.fulfill and orders.edit. */
+  canBookGigl?: boolean;
   hasRecoverableWalletCharge?: boolean;
-  merchantOwnerId?: string | null;
   order?: {
     selected_quote_id?: string | null;
     shipment_id?: string | null;
@@ -10,18 +11,13 @@ interface OrderGiglShippingVisibilityInput {
     shipping_provider?: string | null;
     tracking_number?: string | null;
   } | null;
-  userId?: string | null;
 }
 
 export function getOrderGiglShippingVisibility({
+  canBookGigl = false,
   hasRecoverableWalletCharge = false,
-  merchantOwnerId,
   order,
-  userId,
 }: OrderGiglShippingVisibilityInput) {
-  const isMerchantOwner = Boolean(
-    userId && merchantOwnerId && userId === merchantOwnerId
-  );
   const isSavedMerchantWalletGiglOrder = Boolean(
     order?.shipping_provider?.trim().toUpperCase() === 'GIGL' &&
       order.shipping_funding_source === 'merchant_wallet' &&
@@ -29,16 +25,16 @@ export function getOrderGiglShippingVisibility({
   );
   // Keep merchant-wallet GIGL bookings on the bound quote so recovery can
   // reach the existing reservation instead of forcing a replacement quote.
-  // Staff cannot create the first wallet debit (owner-only), so only advertise
-  // booking when a recoverable charge already exists.
+  // Only the owner and staff with orders.fulfill and orders.edit can create
+  // the first wallet debit, so anyone else is only offered booking when a
+  // recoverable charge already exists.
   const canUseProvider = order ? canUseSelectedShippingProvider(order) : false;
   const providerBookingAvailable =
-    isSavedMerchantWalletGiglOrder && !isMerchantOwner
+    isSavedMerchantWalletGiglOrder && !canBookGigl
       ? canUseProvider && hasRecoverableWalletCharge
       : canUseProvider;
 
   return {
-    isMerchantOwner,
     isSavedMerchantWalletGiglOrder,
     providerBookingAvailable,
   };

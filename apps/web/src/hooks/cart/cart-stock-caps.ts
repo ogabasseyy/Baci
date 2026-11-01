@@ -1,5 +1,6 @@
 import type { Product } from '@/lib/products';
 import type { CartItem } from './cart-types';
+import { getOfferCartTotal } from './get-offer-cart-total';
 
 type StrictPoolProductLike = Pick<
   Product,
@@ -201,27 +202,6 @@ export function getSimpleProductCartTotal(
       line.id === productId &&
       line.variantId == null &&
       line.offerId == null &&
-      line.quizAwardId == null &&
-      line.quizVoucherToken == null
-        ? total + line.quantity
-        : total,
-    0
-  );
-}
-
-/** Quantities on other lines drawing from the same offer, excluding vouchers. */
-function getOfferCartTotal(
-  cart: CartItem[],
-  productId: string,
-  offerId: string,
-  excludeIndex: number
-): number {
-  return cart.reduce(
-    (total, line, index) =>
-      index !== excludeIndex &&
-      line.id === productId &&
-      line.offerId === offerId &&
-      line.variantId == null &&
       line.quizAwardId == null &&
       line.quizVoucherToken == null
         ? total + line.quantity

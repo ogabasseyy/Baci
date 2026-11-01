@@ -39,6 +39,7 @@ import {
   normalizeRelatedBlogProducts,
   RELATED_BLOG_PRODUCTS_SELECT,
 } from '@/lib/related-blog-products';
+import { resolveBlogAuthorIdentity } from '@/lib/resolve-blog-author-identity';
 import { selectBlogCatalogProducts } from '@/lib/select-blog-catalog-products';
 import { selectSemanticRelatedBlogPosts } from '@/lib/semantic-related-blog-posts';
 import { generateSlug } from '@/lib/seo-utils';
@@ -2918,10 +2919,9 @@ export async function getCachedBlogAuthor(
   if (totalCount === 0) {
     return null;
   }
-  // `identity` is absent only on an out-of-range page (count > 0 but this
-  // ranged window is empty); the route redirects those stale paginated URLs to
-  // the last valid page rather than 404ing a real author.
-  const identity = publicPosts[0];
+  // If an out-of-range page window is empty (count > 0), the route redirects
+  // those stale paginated URLs to the last valid page rather than 404ing.
+  const author = resolveBlogAuthorIdentity(authorName, publicPosts);
 
   return {
     merchant: {
@@ -2931,12 +2931,7 @@ export async function getCachedBlogAuthor(
       logo_url: merchant.logo_url,
       custom_domain: merchant.custom_domain,
     },
-    author: {
-      name: authorName,
-      title: identity?.author_title ?? null,
-      bio: identity?.author_bio ?? null,
-      imageUrl: identity?.author_image_url ?? null,
-    },
+    author,
     posts: publicPosts,
     totalPosts: totalCount,
     currentPage: page,

@@ -171,6 +171,42 @@ describe('official document recognizer', () => {
     ).toBeUndefined();
   });
 
+  it.each([
+    'allOf',
+    'anyOf',
+    'oneOf',
+    '$ref',
+  ])('leaves request schemas with unresolved %s unproven', (keyword) => {
+    const schema = {
+      type: 'object',
+      properties: { name: { type: 'string' }, reference: { type: 'string' } },
+      required: ['name', 'reference'],
+      [keyword]:
+        keyword === '$ref'
+          ? '#/components/schemas/Extra'
+          : [
+              {
+                properties: { email: { type: 'string' } },
+                required: ['email'],
+              },
+            ],
+    };
+    const doc = {
+      openapi: '3.1.0',
+      paths: {
+        '/merchant/{merchantReference}/menucategory': {
+          post: {
+            requestBody: { content: { 'application/json': { schema } } },
+          },
+        },
+      },
+    };
+    const markdown = `\`\`\`json\n${JSON.stringify(doc)}\n\`\`\``;
+    expect(
+      parseMarkdown(markdown, 'menu.category.create', CATEGORY_URL).claim
+    ).toBeUndefined();
+  });
+
   it('documents bearer only from an explicit authorization scheme declaration', () => {
     const parsed = parseMarkdown(
       '# Authentication\n\nAuthorization scheme: Bearer.',

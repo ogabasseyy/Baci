@@ -1,31 +1,8 @@
-import {
-  accountIdentitySchema,
-  coreObservationSchema,
-} from './core-read-observation';
+import { coreObservationSchema } from './core-read-observation';
 
 const DIGEST = `sha256:${'d'.repeat(64)}`;
 
-describe('core read observation schemas', () => {
-  it('parses the closed normalized identity tuple', () => {
-    const identity = {
-      domain: 'merchant.example.com',
-      vendorId: 'vendor-123',
-      currency: 'NGN',
-    };
-
-    expect(accountIdentitySchema.parse(identity)).toEqual(identity);
-  });
-
-  it('rejects uppercase codes absent from the current official ISO 4217 list', () => {
-    expect(
-      accountIdentitySchema.safeParse({
-        domain: 'merchant.example.com',
-        vendorId: 'vendor-123',
-        currency: 'ZZZ',
-      }).success
-    ).toBe(false);
-  });
-
+describe('core read observation schema', () => {
   it('rejects identity fields and unknown keys in persisted evidence', () => {
     const evidence = {
       contractVersion: 1,

@@ -84,6 +84,24 @@ function requestShapeMatches(
   const content = own(requestBody, 'content');
   const media = own(content, 'application/json');
   const schema = own(media, 'schema');
+  // We only certify shapes we can inspect in full. Composed or referenced
+  // schemas may impose additional fields that this recognizer cannot resolve.
+  if (
+    [
+      '$ref',
+      'allOf',
+      'anyOf',
+      'oneOf',
+      'not',
+      'if',
+      'then',
+      'else',
+      'dependentRequired',
+      'dependentSchemas',
+    ].some((key) => own(schema, key) !== undefined)
+  ) {
+    return false;
+  }
   const properties = record(own(schema, 'properties'));
   const requiredValue = own(schema, 'required');
   if (properties === undefined || !Array.isArray(requiredValue)) return false;

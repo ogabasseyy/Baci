@@ -1,4 +1,4 @@
-import { runHiddenInputSession } from './observe-core-contract.mjs';
+import { runHiddenInputSession } from './hidden-input-session.mjs';
 
 describe('hidden TTY input lifecycle', () => {
   it.each(['success', 'error'] as const)(

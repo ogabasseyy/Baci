@@ -11,7 +11,9 @@ export const scope = {
   businessId: 'business',
   environment: 'staging' as const,
 };
-export const walletName = `baci-save:${scope.integrationId}:${goalId}`;
+// buildPrimaryGoalWalletName(scope.integrationId, goalId), pinned literally
+// (also by primary-goal-wallet-name.test.ts and the database suite).
+export const walletName = 'baci-save-d80a9fbb7f8c666ce4462294b4e53d25';
 export function fixture() {
   const mapping = {
     status: 'pending' as const,

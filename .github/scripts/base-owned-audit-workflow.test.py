@@ -10,6 +10,9 @@ class WorkflowTests(unittest.TestCase):
         source = WORKFLOW.read_text()
         for expected in ('pull_request_target:', 'contents: read', 'persist-credentials: false',
                          'github.event.pull_request.base.sha', 'github.event.pull_request.head.sha',
+                         'ref: ${{ github.sha }}',
+                         '[[ "$PR_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]',
+                         '[[ "$(git rev-parse HEAD)" == "$PR_BASE_SHA" ]]',
                          'base-owned-audit-snapshot.py', 'semgrep-sarif-filter.py',
                          'TRUSTED_CHANGED=', 'python3 -I',
                          'refs/pull/${PR_NUMBER}/head', 'git rev-parse FETCH_HEAD',

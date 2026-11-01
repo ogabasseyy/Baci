@@ -65,6 +65,7 @@ export function onboardingFixture() {
       recordRoutingPending: vi.fn().mockResolvedValue(true),
       recordReview: vi.fn().mockResolvedValue(true),
       recordRejected: vi.fn().mockResolvedValue(undefined),
+      recordOwnershipHold: vi.fn().mockResolvedValue(true),
       releaseIntent: vi.fn().mockResolvedValue(true),
     },
     createCustomer: vi.fn().mockResolvedValue({

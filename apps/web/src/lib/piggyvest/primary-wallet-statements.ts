@@ -22,4 +22,8 @@ export const PRIMARY_WALLET_STATEMENTS = {
   // claim-fenced write, never routing pending (20261031230000).
   review:
     'SELECT piggyvest_primary.record_onboarding_review($1::jsonb, $2::uuid, $3::uuid, $4::text, $5::text) AS result',
+  ownershipHold:
+    'SELECT piggyvest_primary.record_onboarding_ownership_hold($1::jsonb, $2::uuid, $3::uuid) AS result',
+  readReview:
+    'SELECT piggyvest_primary.read_onboarding_review($1::jsonb) AS result',
 } as const;

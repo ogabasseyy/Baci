@@ -107,6 +107,7 @@ describe('primary wallet onboarding: reclaims are gated on a provider lookup', (
     expect(input.storage.recordRejected).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ intentId: 'intent', claimToken: 'claim' })
     );
+    expect(input.storage.recordOwnershipHold).not.toHaveBeenCalled();
     expect(input.storage.recordUncertain).not.toHaveBeenCalled();
   });
 
@@ -163,7 +164,10 @@ describe('primary wallet onboarding: reclaims are gated on a provider lookup', (
     input.findCustomers.mockResolvedValue(customerListing(['a', 'b']));
     expect(await onboardPiggyvestPrimaryWallet(input)).toEqual(OWNERSHIP);
     expect(input.createCustomer).not.toHaveBeenCalled();
-    expect(input.storage.recordRejected).toHaveBeenCalledOnce();
+    expect(input.storage.recordOwnershipHold).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ intentId: 'intent', claimToken: 'claim' })
+    );
+    expect(input.storage.recordRejected).not.toHaveBeenCalled();
     expect(input.storage.recordUncertain).not.toHaveBeenCalled();
     expect(mocks.alert).toHaveBeenCalledExactlyOnceWith(
       'PIGGYVEST_PRIMARY_OWNERSHIP_NEEDS_REVIEW',
@@ -184,10 +188,10 @@ describe('primary wallet onboarding: reclaims are gated on a provider lookup', (
       },
     ],
     [
-      'several customers cannot be rejected',
+      'several customers cannot be held',
       (input: ReturnType<typeof onboardingFixture>) => {
         input.findCustomers.mockResolvedValue(customerListing(['a', 'b']));
-        input.storage.recordRejected.mockRejectedValue(new Error('down'));
+        input.storage.recordOwnershipHold.mockRejectedValue(new Error('down'));
       },
     ],
     [
@@ -215,9 +219,12 @@ describe('primary wallet onboarding: reclaims are gated on a provider lookup', (
     );
     expect(input.storage.recordAccepted).not.toHaveBeenCalled();
     expect(input.storage.recordRoutingPending).not.toHaveBeenCalled();
-    expect(input.storage.recordRejected).not.toHaveBeenCalledWith(
-      expect.objectContaining({ providerWalletId: expect.anything() })
-    );
+    expect(input.storage.recordRejected).not.toHaveBeenCalled();
+    if (_label === 'several customers cannot be held') {
+      expect(input.storage.recordOwnershipHold).toHaveBeenCalledOnce();
+    } else {
+      expect(input.storage.recordOwnershipHold).not.toHaveBeenCalled();
+    }
   });
 
   it.each([

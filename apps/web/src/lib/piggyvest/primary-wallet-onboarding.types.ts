@@ -66,6 +66,13 @@ export interface PrimaryWalletOnboardingStorage {
       claimToken: string;
     }
   ): Promise<void>;
+  /** Reject an ambiguous provider lookup while retaining a deletion hold. */
+  recordOwnershipHold(
+    input: PrimaryWalletIntentScope & {
+      intentId: string;
+      claimToken: string;
+    }
+  ): Promise<boolean>;
   releaseIntent(
     input: PrimaryWalletIntentScope & {
       intentId: string;

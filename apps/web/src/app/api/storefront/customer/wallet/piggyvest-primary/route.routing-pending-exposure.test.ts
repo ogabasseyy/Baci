@@ -65,6 +65,9 @@ vi.mock('@/lib/piggyvest/primary-wallet-executor', () => ({
     return { rows: [{ result: true }] };
   },
 }));
+vi.mock('@/lib/piggyvest/primary-wallet-review', () => ({
+  readPrimaryWalletReview: async () => null,
+}));
 
 const PAYOUT = '01JBZ8Q5W3X9R2K4M6N8P0T2V4';
 const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';

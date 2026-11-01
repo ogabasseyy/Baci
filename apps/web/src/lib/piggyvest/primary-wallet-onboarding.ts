@@ -124,15 +124,17 @@ export async function onboardPiggyvestPrimaryWallet(
       findCustomers: input.findCustomers,
     });
     if (lookup.kind === 'unknown' || lookup.kind === 'ambiguous') {
-      // Several customers under our identifier is final: none is provably
-      // ours. Anything else unknown may clear, so the intent stays pending.
+      // Several customers require terminal review and a deletion hold: a
+      // failed prior custody write may have lost the created wallet's ids.
+      // Anything else unknown may clear, so the intent stays pending.
       // Alerts go out before any write, so a storage failure never mutes one.
       if (lookup.kind === 'ambiguous')
         alertOwnershipReview('several provider customers', claim.intentId);
       try {
         if (lookup.kind === 'unknown')
           await input.storage.recordUncertain(claimedScope);
-        else await input.storage.recordRejected(claimedScope);
+        else if (!(await input.storage.recordOwnershipHold(claimedScope)))
+          return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
       } catch {
         return { status: 'unavailable', code: 'STORAGE_UNAVAILABLE' };
       }

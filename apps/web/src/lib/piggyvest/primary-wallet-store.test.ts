@@ -91,6 +91,23 @@ describe('primary wallet storage boundary', () => {
     );
   });
 
+  it('records ambiguous ownership as a claim-fenced durable review hold', async () => {
+    const execute = vi.fn().mockResolvedValue({ rows: [{ result: true }] });
+    await expect(
+      createPrimaryWalletStore({ scope, execute }).recordOwnershipHold({
+        ...scope,
+        intentId,
+        claimToken,
+      })
+    ).resolves.toBe(true);
+    expect(execute).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining(
+        'piggyvest_primary.record_onboarding_ownership_hold'
+      ),
+      [JSON.stringify(scope), intentId, claimToken]
+    );
+  });
+
   it('releases definitively rejected intents through the release statement', async () => {
     const execute = vi.fn().mockResolvedValue({ rows: [{ result: true }] });
     const released = await createPrimaryWalletStore({

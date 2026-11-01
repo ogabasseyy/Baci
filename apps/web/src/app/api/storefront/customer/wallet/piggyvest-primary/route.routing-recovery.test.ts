@@ -26,6 +26,9 @@ vi.mock('@/lib/piggyvest/primary-wallet-identity', () => ({
 vi.mock('@/lib/piggyvest/primary-wallet-executor', () => ({
   createPrimaryWalletExecutor: mocks.executor,
 }));
+vi.mock('@/lib/piggyvest/primary-wallet-statements', () => ({
+  PRIMARY_WALLET_STATEMENTS: { readReview: 'READ_REVIEW' },
+}));
 vi.mock('@/lib/piggyvest/primary-wallet-snapshot', () => ({
   readPrimaryWalletSnapshot: mocks.snapshot,
 }));
@@ -40,10 +43,13 @@ vi.mock('@/lib/piggyvest/wallets', () => ({
 }));
 
 const merchantId = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
+const userId = 'f4f01e61-691f-494a-a895-872f17f8e55e';
+const customerId = 'e648eb14-928a-427b-9719-b105f6d4b8b4';
+const integrationId = 'd91d9e87-8e0d-44de-9b84-1e1d709633d2';
 const runtime = {
   onboarding: {
     merchantId,
-    integrationId: 'test-integration',
+    integrationId,
     businessId: 'test-business',
     environment: 'staging',
   },
@@ -56,7 +62,7 @@ beforeEach(() => {
   mocks.order.length = 0;
   mocks.executor.mockReturnValue(mocks.execute);
   mocks.auth.mockResolvedValue({
-    user: { id: 'test-user' },
+    user: { id: userId },
     supabase: {},
     error: null,
   });
@@ -67,13 +73,14 @@ beforeEach(() => {
   });
   mocks.identity.mockResolvedValue({
     merchantId,
-    customerId: 'test-customer',
-    userId: 'test-user',
+    customerId,
+    userId,
   });
   mocks.recover.mockImplementation(async () => {
     mocks.order.push('recover');
     return 'promoted';
   });
+  mocks.execute.mockResolvedValue({ rows: [{ result: null }] });
   mocks.snapshot.mockImplementation(async () => {
     mocks.order.push('snapshot');
     return { status: 'pending', account: null };
@@ -95,6 +102,7 @@ describe('primary wallet GET: routing-pending recovery', () => {
     expect((await GET(new NextRequest(url))).status).toBe(200);
     expect(mocks.recover).not.toHaveBeenCalled();
     expect(mocks.snapshot).toHaveBeenCalledOnce();
+    expect(mocks.execute).not.toHaveBeenCalled();
   });
 
   it('re-reads the snapshot only after recovery has finished promoting', async () => {
@@ -128,8 +136,8 @@ describe('primary wallet GET: routing-pending recovery', () => {
       expect.objectContaining({
         scope: expect.objectContaining({
           merchantId,
-          customerId: 'test-customer',
-          userId: 'test-user',
+          customerId,
+          userId,
           businessId: 'test-business',
         }),
         execute: mocks.execute,
@@ -157,5 +165,77 @@ describe('primary wallet GET: routing-pending recovery', () => {
     expect(JSON.stringify(await response.json())).not.toContain(
       'private database detail'
     );
+  });
+
+  it('returns the routing review immediately after a rejected recovery and on later refreshes', async () => {
+    mocks.recover.mockResolvedValue('rejected');
+    mocks.execute
+      .mockResolvedValueOnce({ rows: [{ result: null }] })
+      .mockResolvedValueOnce({ rows: [{ result: 'routing' }] });
+
+    const first = await GET(new NextRequest(url));
+    expect(first.status).toBe(409);
+    expect(first.headers.get('cache-control')).toBe('no-store');
+    const firstBody = await first.json();
+    expect(firstBody).toEqual({
+      error:
+        'Your wallet interest routing needs review. Please contact support.',
+      code: 'INTEREST_ROUTING_REVIEW_REQUIRED',
+    });
+    expect(mocks.snapshot).toHaveBeenCalledOnce();
+
+    const refresh = await GET(new NextRequest(url));
+    expect(refresh.status).toBe(409);
+    expect(refresh.headers.get('cache-control')).toBe('no-store');
+    const refreshBody = await refresh.json();
+    expect(refreshBody).toEqual(firstBody);
+    expect(mocks.recover).toHaveBeenCalledOnce();
+    expect(mocks.execute).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(mocks.execute.mock.calls[0][1][0])).toEqual({
+      merchantId,
+      customerId,
+      userId,
+      integrationId,
+      businessId: 'test-business',
+      environment: 'staging',
+    });
+    expect(JSON.stringify(refreshBody)).not.toMatch(
+      /provider(Customer|Wallet)Id|customer-fixture|wallet-fixture|test-token/
+    );
+    expect(mocks.provider).not.toHaveBeenCalled();
+  });
+
+  it('maps durable ownership review without exposing provider identifiers', async () => {
+    mocks.execute.mockResolvedValue({ rows: [{ result: 'ownership' }] });
+    const response = await GET(new NextRequest(url));
+    expect(response.status).toBe(409);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toEqual({
+      error:
+        'Your wallet identity needs verification. Please contact support; no duplicate wallet will be created.',
+      code: 'OWNERSHIP_REVIEW_REQUIRED',
+    });
+    expect(mocks.recover).not.toHaveBeenCalled();
+    expect(mocks.provider).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the durable review read is unavailable', async () => {
+    mocks.execute.mockRejectedValue(new Error('private database detail'));
+    const response = await GET(new NextRequest(url));
+    expect(response.status).toBe(503);
+    expect(JSON.stringify(await response.json())).not.toContain(
+      'private database detail'
+    );
+    expect(mocks.recover).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the durable review row is malformed', async () => {
+    mocks.execute.mockResolvedValue({
+      rows: [{ result: { reason: 'routing' } }],
+    });
+    const response = await GET(new NextRequest(url));
+    expect(response.status).toBe(503);
+    expect(mocks.recover).not.toHaveBeenCalled();
+    expect(JSON.stringify(await response.json())).not.toContain('reason');
   });
 });

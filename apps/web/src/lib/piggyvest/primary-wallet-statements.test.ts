@@ -29,6 +29,15 @@ describe('PRIMARY_WALLET_STATEMENTS', () => {
     );
   });
 
+  it('pins the durable ownership-review statements', () => {
+    expect(PRIMARY_WALLET_STATEMENTS.ownershipHold).toBe(
+      'SELECT piggyvest_primary.record_onboarding_ownership_hold($1::jsonb, $2::uuid, $3::uuid) AS result'
+    );
+    expect(PRIMARY_WALLET_STATEMENTS.readReview).toBe(
+      'SELECT piggyvest_primary.read_onboarding_review($1::jsonb) AS result'
+    );
+  });
+
   it('keeps every statement fully parameterized', () => {
     for (const statement of Object.values(PRIMARY_WALLET_STATEMENTS)) {
       expect(statement).toMatch(

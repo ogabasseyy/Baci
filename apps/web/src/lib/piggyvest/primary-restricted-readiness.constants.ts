@@ -36,6 +36,8 @@ export const primaryRestrictedReadinessRequirements = {
         'piggyvest_primary.read_onboarding_routing(jsonb)',
         'piggyvest_primary.resolve_onboarding_routing(jsonb,jsonb,boolean)',
         'piggyvest_primary.record_onboarding_review(jsonb,uuid,uuid,text,text)',
+        'piggyvest_primary.record_onboarding_ownership_hold(jsonb,uuid,uuid)',
+        'piggyvest_primary.read_onboarding_review(jsonb)',
       ],
     },
     {

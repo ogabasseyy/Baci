@@ -124,6 +124,20 @@ running it is not a substitute for this preparation.
 
 ## Route/deployment verification still required
 
+Apply `20261101171000_piggyvest_primary_onboarding_review_hold.sql` before
+deploying the review-status reader or ambiguous-onboarding recovery. Include
+`record_onboarding_ownership_hold(jsonb,uuid,uuid)` and
+`read_onboarding_review(jsonb)` in the restricted provisioner's verified grants.
+The former retains an immutable review hold without choosing or exposing a
+provider wallet; the latter returns only the scoped terminal-review reason.
+An unresolved dispatched/unknown intent also blocks customer deletion, including
+the window where provider creation succeeded but its custody write failed.
+Mapped wallets still require their existing DVA closure attestation. Unmapped
+ownership holds require operator reconciliation of all matching provider
+customers and their DVAs; no automatic hold-clear or wallet-adoption permission
+is introduced. A separately reviewed, evidence-backed operator resolution path
+is required before production activation.
+
 The existing staging wallet nginx installer covers the legacy exact wallet
 GET path. It does not establish or probe the new primary paths. Verify actual
 deployment routing, authentication, CSRF and no-store responses for primary

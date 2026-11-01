@@ -29,6 +29,8 @@ const STATEMENT_ARITY = new Map<string, number>([
   [PRIMARY_WALLET_STATEMENTS.readRouting, 1],
   [PRIMARY_WALLET_STATEMENTS.resolveRouting, 3],
   [PRIMARY_WALLET_STATEMENTS.review, 5],
+  [PRIMARY_WALLET_STATEMENTS.ownershipHold, 3],
+  [PRIMARY_WALLET_STATEMENTS.readReview, 1],
 ]);
 
 export function createPrimaryWalletExecutor(

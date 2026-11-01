@@ -264,7 +264,15 @@ it.each([
     state: {
       ...state,
       version: 4,
-      lines: [{ ...state.lines[0], id: 'offer-line', offerId }],
+      lines: [
+        { ...state.lines[0], id: 'offer-line', offerId, condition: 'used' },
+        {
+          ...state.lines[0],
+          id: 'other-offer',
+          offerId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          condition: 'new',
+        },
+      ],
     },
   } as never);
   const cart = await openLegacyCanonicalCart(

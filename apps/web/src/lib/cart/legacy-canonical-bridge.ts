@@ -7,6 +7,7 @@ import {
   getCartSessionSecret,
 } from './cart-runtime-env';
 import { issueCartHandoff } from './handoff';
+import { hasUnsupportedLegacyEditIdentity } from './legacy-cart-edit-identity';
 import {
   hashLegacyToken,
   type LegacyCartProvider,
@@ -190,13 +191,8 @@ export async function operateLegacyCanonicalCart(
     });
     if (
       candidates.length > 1 ||
-      candidates.some(
-        (x) =>
-          x.variantId ||
-          x.condition ||
-          x.voucherToken ||
-          x.voucherAwardId ||
-          Object.keys(x.options ?? {}).length
+      candidates.some((x) =>
+        hasUnsupportedLegacyEditIdentity(x, Boolean(edit.offerId))
       )
     )
       throw new LegacyBridgeError('refresh_required');

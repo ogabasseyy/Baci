@@ -1,9 +1,15 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useInsertionEffect, useSyncExternalStore } from 'react';
-import { socialPixelContext } from '@/lib/analytics/social-pixel-context';
-import { getStoredConsent } from '@/lib/consent-mode';
+import { useSyncExternalStore } from 'react';
+import {
+  getSocialMarketingConsent,
+  getSocialServerConsent,
+  isValidSnapchatPixelId,
+  isValidTikTokPixelId,
+  subscribeSocialMarketingConsent,
+} from '@/lib/analytics/social-pixel-policy';
+import { usePreparedSocialPixel } from './use-prepared-social-pixel';
 
 const TikTokPixel = dynamic(() =>
   import('./tiktok-pixel').then((module) => module.TikTokPixel)
@@ -11,21 +17,6 @@ const TikTokPixel = dynamic(() =>
 const SnapchatPixel = dynamic(() =>
   import('./snapchat-pixel').then((module) => module.SnapchatPixel)
 );
-
-function subscribeConsent(onChange: () => void): () => void {
-  window.addEventListener('storage', onChange);
-  window.addEventListener('cookie-consent-updated', onChange);
-  return () => {
-    window.removeEventListener('storage', onChange);
-    window.removeEventListener('cookie-consent-updated', onChange);
-  };
-}
-function marketingConsent(): boolean {
-  return getStoredConsent()?.marketing === true;
-}
-function noServerConsent(): boolean {
-  return false;
-}
 
 export function DeferredSocialPixels({
   merchantId,
@@ -37,55 +28,25 @@ export function DeferredSocialPixels({
   snapchatPixelId?: string | null;
 }) {
   const allowed = useSyncExternalStore(
-    subscribeConsent,
-    marketingConsent,
-    noServerConsent
+    subscribeSocialMarketingConsent,
+    getSocialMarketingConsent,
+    getSocialServerConsent
   );
   const tiktokId =
-    tiktokPixelId && /^[A-Za-z0-9]{1,64}$/.test(tiktokPixelId)
-      ? tiktokPixelId
-      : null;
+    tiktokPixelId && isValidTikTokPixelId(tiktokPixelId) ? tiktokPixelId : null;
   const snapchatId =
-    snapchatPixelId &&
-    /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(
-      snapchatPixelId
-    )
+    snapchatPixelId && isValidSnapchatPixelId(snapchatPixelId)
       ? snapchatPixelId
       : null;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: merchant changes must invalidate the owner even when pixel IDs match.
-  useInsertionEffect(() => {
-    let releaseTikTok: (() => void) | undefined;
-    let releaseSnapchat: (() => void) | undefined;
-    function syncOwners() {
-      if (marketingConsent()) {
-        if (tiktokId && !releaseTikTok)
-          releaseTikTok = socialPixelContext.prepare('tiktok', tiktokId);
-        if (snapchatId && !releaseSnapchat)
-          releaseSnapchat = socialPixelContext.prepare('snapchat', snapchatId);
-      } else {
-        releaseTikTok?.();
-        releaseSnapchat?.();
-        releaseTikTok = undefined;
-        releaseSnapchat = undefined;
-      }
-    }
-    // A server snapshot is always false. Prepare from stored consent during
-    // hydration before sibling layout effects can emit a funnel event.
-    syncOwners();
-    const unsubscribe = subscribeConsent(syncOwners);
-    return () => {
-      unsubscribe();
-      releaseTikTok?.();
-      releaseSnapchat?.();
-    };
-  }, [merchantId, tiktokId, snapchatId]);
+  usePreparedSocialPixel('tiktok', merchantId, tiktokId);
+  usePreparedSocialPixel('snapchat', merchantId, snapchatId);
   return (
     <>
-      {allowed && tiktokId ? (
-        <TikTokPixel key={merchantId} pixelId={tiktokId} />
+      {allowed && merchantId && tiktokId ? (
+        <TikTokPixel key={`tiktok:${merchantId}`} pixelId={tiktokId} />
       ) : null}
-      {allowed && snapchatId ? (
-        <SnapchatPixel key={merchantId} pixelId={snapchatId} />
+      {allowed && merchantId && snapchatId ? (
+        <SnapchatPixel key={`snapchat:${merchantId}`} pixelId={snapchatId} />
       ) : null}
     </>
   );

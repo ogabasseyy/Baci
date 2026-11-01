@@ -1,33 +1,16 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { getStoredConsent } from '@/lib/consent-mode';
+import {
+  getSocialMarketingConsent,
+  getSocialServerConsent,
+  isValidTikTokPixelId,
+  subscribeSocialMarketingConsent,
+} from '@/lib/analytics/social-pixel-policy';
 import { ActiveTikTokPixel } from './active-tiktok-pixel';
 
 interface TikTokPixelProps {
   pixelId: string;
-}
-
-/**
- * Subscribe to marketing-consent changes from the external consent store
- * (localStorage + custom events) so the pixel can sync without a
- * setState-in-effect, keeping React Compiler memoization enabled.
- */
-function subscribeToConsent(onChange: () => void): () => void {
-  window.addEventListener('storage', onChange);
-  window.addEventListener('cookie-consent-updated', onChange);
-  return () => {
-    window.removeEventListener('storage', onChange);
-    window.removeEventListener('cookie-consent-updated', onChange);
-  };
-}
-
-function getMarketingConsentSnapshot(): boolean {
-  return getStoredConsent()?.marketing === true;
-}
-
-function getMarketingConsentServerSnapshot(): boolean {
-  return false;
 }
 
 /**
@@ -36,11 +19,11 @@ function getMarketingConsentServerSnapshot(): boolean {
  * @see https://business-api.tiktok.com/portal/docs?id=1739585696931842
  */
 export function TikTokPixel({ pixelId }: TikTokPixelProps) {
-  const validPixelId = /^[A-Za-z0-9]{1,64}$/.test(pixelId);
+  const validPixelId = isValidTikTokPixelId(pixelId);
   const isAllowed = useSyncExternalStore(
-    subscribeToConsent,
-    getMarketingConsentSnapshot,
-    getMarketingConsentServerSnapshot
+    subscribeSocialMarketingConsent,
+    getSocialMarketingConsent,
+    getSocialServerConsent
   );
 
   return validPixelId && isAllowed ? (

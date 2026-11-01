@@ -231,3 +231,50 @@ it('does not deliver an event queued before consent was revoked and restored', (
   expect(track).not.toHaveBeenCalled();
   view.unmount();
 });
+
+it.each([
+  [
+    'tiktok',
+    'TT123',
+    '11111111-1111-4111-8111-111111111111',
+    'TT123',
+    '22222222-2222-4222-8222-222222222222',
+  ],
+  [
+    'snapchat',
+    'TT123',
+    '11111111-1111-4111-8111-111111111111',
+    'TT456',
+    '11111111-1111-4111-8111-111111111111',
+  ],
+] as const)('keeps the %s owner ready when only the other provider ID changes', (destination, initialTikTok, initialSnapchat, nextTikTok, nextSnapchat) => {
+  localStorage.setItem(
+    'baci-cookie-consent',
+    JSON.stringify({
+      necessary: true,
+      functional: true,
+      analytics: true,
+      marketing: true,
+    })
+  );
+  const view = render(
+    <DeferredSocialPixels
+      merchantId="merchant-a"
+      tiktokPixelId={initialTikTok}
+      snapchatPixelId={initialSnapchat}
+    />
+  );
+  const id = destination === 'tiktok' ? initialTikTok : initialSnapchat;
+  const original = socialPixelContext.get(destination);
+  socialPixelContext.markReady(destination, id);
+  view.rerender(
+    <DeferredSocialPixels
+      merchantId="merchant-a"
+      tiktokPixelId={nextTikTok}
+      snapchatPixelId={nextSnapchat}
+    />
+  );
+  expect(socialPixelContext.get(destination)).toBe(original);
+  expect(socialPixelContext.get(destination)?.ready).toBe(true);
+  view.unmount();
+});

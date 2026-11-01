@@ -1,5 +1,3 @@
-'use client';
-
 import { socialPixelContext } from '@/lib/analytics/social-pixel-context';
 import { isMarketingAllowed } from '@/lib/marketing-consent';
 

@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { writeEvidenceAtomically } from './atomic-evidence-write';
 import { canonicalizeArtifact } from './canonical-artifact-digest';
 import { parseCapturedDocument } from './capture-document';
@@ -8,6 +7,7 @@ import {
   type ChowdeckEvidenceManifestV1,
   computeEvidenceDigests,
 } from './evidence-schema';
+import { sourceManifestSchema } from './schemas/public-document-sources';
 
 export const CAPTURE_LIMITS = {
   aggregateBytes: 5_242_880,
@@ -68,26 +68,6 @@ const OFFICIAL_SOURCES = [
 >;
 const POSTMAN_URL =
   'https://documenter.getpostman.com/view/19177886/2s8Ysrytto';
-
-const sourceSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      url: z.string(),
-      kind: z.literal('official_markdown'),
-      fetch: z.literal(true),
-    })
-    .strict(),
-  z
-    .object({
-      url: z.string(),
-      kind: z.literal('quarantined_reference_only'),
-      fetch: z.literal(false),
-    })
-    .strict(),
-]);
-const sourceManifestSchema = z
-  .object({ version: z.literal(1), sources: z.array(sourceSchema) })
-  .strict();
 
 export function validatePublicDocumentSources(input: unknown): {
   version: 1;

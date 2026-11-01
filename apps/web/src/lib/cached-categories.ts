@@ -1,5 +1,6 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
+import { unstable_rethrow } from 'next/navigation';
 import { cache } from 'react';
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 import { createPriorityStorefrontReadFetch } from './storefront-priority-read-fetch';
@@ -119,7 +120,8 @@ async function fetchNavigationCategoriesUncached(
     // A fetch issued after its prerender tore down is expected build-time
     // contention, never a data failure: rethrow quietly (the boundary below
     // recognizes it) so one aborted page doesn't cost a log line.
-    if (!isPrerenderOverRejection(error)) {
+    if (!isPrerenderOverRejection(error) && !isPrerenderEndedRejection(error)) {
+      unstable_rethrow(error);
       console.error('Failed to fetch navigation categories:', error);
     }
     throw error;
@@ -241,10 +243,15 @@ export const getStorefrontNavigationCategories = cache(
           ) {
             return [];
           }
+          unstable_rethrow(innerError);
           // Direct read failed too — fall through to the empty nav below,
           // logging the retry failure as the cause.
           retryError = innerError;
         }
+      } else {
+        // Preserve Next's rendering and navigation control flow. The teardown
+        // exceptions above are handled first because Next rethrows those too.
+        unstable_rethrow(error);
       }
 
       console.error('Navigation categories query failed outside cache:', {

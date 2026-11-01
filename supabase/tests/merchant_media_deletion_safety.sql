@@ -14,11 +14,19 @@ INSERT INTO public.products(id,merchant_id,name,slug,price,images,status) VALUES
  '["https://example.test/storage/v1/object/public/media/36690000-0000-4000-8000-000000000001/%75sed.webp"]','active');
 -- Invalid numeric entities in unrelated stored content must remain readable
 -- and must not prevent subsequent edits or safe deletion checks.
-UPDATE public.products SET name='Literal &#0; and &#xD800; example'
+UPDATE public.products SET name='Literal &#0; &#xD800; %00 and %2500 example'
+ WHERE id='36690000-0000-4000-8000-000000000020';
+UPDATE public.products SET name='Revised %00 and %2500 literal'
  WHERE id='36690000-0000-4000-8000-000000000020';
 SELECT set_config('request.jwt.claims','{"sub":"36690000-0000-4000-8000-000000000010","role":"authenticated"}',true);
 SELECT set_config('request.jwt.claim.sub','36690000-0000-4000-8000-000000000010',true);
 SELECT set_config('request.jwt.claim.role','authenticated',true);
+DO $decode$ BEGIN
+ IF public.blog_media_percent_decode('%2500 %2575sed') <> '%00 used'
+ OR public.blog_media_percent_decode('%FF/%2575sed') <> '%FF/used' THEN
+  RAISE EXCEPTION 'encoded null prevented other safe escapes from decoding';
+ END IF;
+END $decode$;
 DO $cases$
 DECLARE result record; denied boolean:=false;
 BEGIN

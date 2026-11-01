@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { mediaDeletionAdmissionSchema } from '@/schemas/media-deletion-rpc';
 export type MediaDeletionClient = {
   rpc(
     name: string,
@@ -10,16 +10,6 @@ export type MediaDeletionClient = {
     };
   };
 };
-const admissionSchema = z
-  .array(
-    z.object({
-      path: z.string().min(1).max(1024),
-      state: z.enum(['pending', 'deleted']),
-      object_id: z.string().uuid(),
-    })
-  )
-  .min(1)
-  .max(100);
 type Failure = {
   status: 400 | 403 | 404 | 409 | 503;
   body: { code: string; error: string };
@@ -76,7 +66,7 @@ export async function deleteMerchantMedia(input: {
       { p_merchant_id: input.merchantId, p_identities: input.identities }
     );
     if (admissionError) return denied(admissionError);
-    const parsed = admissionSchema.safeParse(data);
+    const parsed = mediaDeletionAdmissionSchema.safeParse(data);
     if (!parsed.success || parsed.data.length !== input.identities.length)
       return denied(null);
     for (const row of parsed.data) {

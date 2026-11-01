@@ -51,19 +51,36 @@ test('merchant media deletion admission and reference guards', async () => {
         'utf8'
       )
     );
-    const decode = readFileSync(
-      join(
-        repository,
-        'supabase/migrations/20261009140000_blog_media_percent_decode_scan.sql'
-      ),
-      'utf8'
-    );
-    await client.query(
-      decode.slice(
-        decode.indexOf('CREATE OR REPLACE FUNCTION'),
-        decode.indexOf('ALTER FUNCTION')
-      )
-    );
+    // Exercise the final decoder definitions in migration order, including
+    // the JSON/HTML stages and encoded-NUL guard already present on main.
+    for (const [file, functionName] of [
+      [
+        '20261009200000_blog_media_json_unicode_unescape.sql',
+        'blog_media_json_unescape_string',
+      ],
+      [
+        '20261009210000_blog_media_html_entity_decode.sql',
+        'blog_media_decode_html_entities',
+      ],
+      [
+        '20261009210000_blog_media_html_entity_decode.sql',
+        'blog_media_percent_decode',
+      ],
+    ]) {
+      const source = readFileSync(
+        join(repository, 'supabase/migrations', file),
+        'utf8'
+      );
+      const start = source.indexOf(
+        `CREATE OR REPLACE FUNCTION public.${functionName}(`
+      );
+      const end = source.indexOf('$function$;', start);
+      assert.ok(
+        start >= 0 && end > start,
+        `missing ${functionName} definition`
+      );
+      await client.query(source.slice(start, end + '$function$;'.length));
+    }
     for (const name of [
       '20261101080356_merchant_media_deletion_foundation.sql',
       '20261101080419_merchant_media_reference_guards.sql',

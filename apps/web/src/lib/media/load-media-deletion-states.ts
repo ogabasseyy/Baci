@@ -1,9 +1,6 @@
-import { z } from 'zod';
+import { mediaDeletionStatesSchema } from '@/schemas/media-deletion-rpc';
 import type { MediaDeletionClient } from './delete-merchant-media';
 
-const statesSchema = z
-  .array(z.object({ path: z.string(), state: z.enum(['pending', 'deleted']) }))
-  .max(100);
 export async function loadMediaDeletionStates<T extends { name: string }>(
   client: Pick<MediaDeletionClient, 'rpc'>,
   merchantId: string,
@@ -15,7 +12,7 @@ export async function loadMediaDeletionStates<T extends { name: string }>(
       p_merchant_id: merchantId,
       p_paths: files.map((file) => `${merchantId}/${file.name}`),
     });
-    const parsed = statesSchema.safeParse(result.data);
+    const parsed = mediaDeletionStatesSchema.safeParse(result.data);
     if (result.error || !parsed.success) return null;
     const pending = new Set(parsed.data.map((row) => row.path));
     return files.map((file) => ({

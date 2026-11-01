@@ -14,7 +14,11 @@ import type {
 import { BaseShippingProvider } from './base';
 import { GiglApiClient } from './gigl.auth';
 import { bookGiglShipment } from './gigl.booking';
-import { GIGL_QUOTE_TIMEOUT_MS, type GiglFetchOptions } from './gigl.constants';
+import {
+  GIGL_QUOTE_TIMEOUT_MS,
+  type GiglFetchOptions,
+  type GiglToken,
+} from './gigl.constants';
 import { findNearestGiglServiceCentres } from './gigl.directory';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
@@ -28,15 +32,28 @@ export class GiglProvider extends BaseShippingProvider {
   readonly supportsInternational = true;
   readonly supportsDomestic = true;
 
-  private readonly apiClient = new GiglApiClient({
-    safeFetch: (url: string, options?: GiglFetchOptions) =>
-      this.safeFetch(url, options),
-    log: (level, message, data) => this.log(level, message, data),
-  });
-  private readonly stationsService = new GiglStationsService(
-    this.apiClient,
-    findNearestGiglServiceCentres
-  );
+  private readonly apiClient: GiglApiClient;
+  private readonly stationsService: GiglStationsService;
+
+  constructor(initialToken: GiglToken | null = null) {
+    super();
+    this.apiClient = new GiglApiClient(
+      {
+        safeFetch: (url: string, options?: GiglFetchOptions) =>
+          this.safeFetch(url, options),
+        log: (level, message, data) => this.log(level, message, data),
+      },
+      initialToken
+    );
+    this.stationsService = new GiglStationsService(
+      this.apiClient,
+      findNearestGiglServiceCentres
+    );
+  }
+
+  get currentToken(): GiglToken | null {
+    return this.apiClient.currentToken;
+  }
 
   getLocations(countryCode = 'NG'): Promise<UnifiedLocation[]> {
     return this.stationsService.getLocations(countryCode);

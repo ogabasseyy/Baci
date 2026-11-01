@@ -252,4 +252,52 @@ describe('getCachedBlogAuthor', () => {
     expect(result?.currentPage).toBe(3);
     expect(result?.totalPages).toBeGreaterThanOrEqual(3);
   });
+
+  it('resolves author profile metadata from the first post in the window with non-empty E-E-A-T fields', async () => {
+    setupBlogAuthorFetch({
+      posts: [
+        {
+          id: 'post-newest-missing-eeat',
+          title: 'Bassey Newest Guide',
+          slug: 'bassey-newest-guide',
+          excerpt: 'Newest picks.',
+          featured_image_url: null,
+          featured_image_alt: null,
+          category: 'Laptops',
+          author_name: 'Bassey John',
+          author_title: null,
+          author_bio: null,
+          author_image_url: null,
+          published_at: '2026-03-18T10:00:00.000Z',
+          reading_time_minutes: 4,
+        },
+        {
+          id: 'post-older-with-eeat',
+          title: 'Bassey Older Guide',
+          slug: 'bassey-older-guide',
+          excerpt: 'Older picks.',
+          featured_image_url: null,
+          featured_image_alt: null,
+          category: 'Smartphones',
+          author_name: 'Bassey John',
+          author_title: 'Performance Marketing Specialist',
+          author_bio: 'Bassey writes buying guides.',
+          author_image_url: 'https://cdn.example.com/bassey.jpg',
+          published_at: '2026-03-17T10:00:00.000Z',
+          reading_time_minutes: 5,
+        },
+      ],
+    });
+
+    const result = await getCachedBlogAuthor('ogabassey', 'Bassey John', {
+      page: 1,
+    });
+
+    expect(result?.author).toEqual({
+      name: 'Bassey John',
+      title: 'Performance Marketing Specialist',
+      bio: 'Bassey writes buying guides.',
+      imageUrl: 'https://cdn.example.com/bassey.jpg',
+    });
+  });
 });

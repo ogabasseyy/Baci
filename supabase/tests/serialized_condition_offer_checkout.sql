@@ -46,6 +46,7 @@ DECLARE
   used_unit uuid;
   new_unit uuid;
   v_order_id uuid;
+  v_order_item_id uuid;
   restocked jsonb;
   before_orders bigint;
   before_stock integer;
@@ -112,15 +113,21 @@ BEGIN
     RAISE EXCEPTION 'order must reserve only the matching condition unit';
   END IF;
   phase := 7;
+  -- Keep the lookup and privileged marker check in distinct phases so a
+  -- disconnect identifies which operation lost the backend.
   RAISE WARNING 'BACI_SERIALIZED_PHASE_7';
+  SELECT id INTO STRICT v_order_item_id FROM public.order_items
+    WHERE order_id=v_order_id AND product_offer_id=used_offer;
+  phase := 8;
+  RAISE WARNING 'BACI_SERIALIZED_PHASE_8';
   IF NOT pg_temp.has_serialized_offer_marker(
-    (SELECT id FROM public.order_items WHERE order_id=v_order_id AND product_offer_id=used_offer),
+    v_order_item_id,
     merchant, used_offer
   ) THEN
     RAISE EXCEPTION 'trusted order creation did not record the serialized offer marker';
   END IF;
-  phase := 8;
-  RAISE WARNING 'BACI_SERIALIZED_PHASE_8';
+  phase := 9;
+  RAISE WARNING 'BACI_SERIALIZED_PHASE_9';
   IF (SELECT stock_quantity FROM public.product_offers WHERE id=used_offer) <> before_stock - 1 THEN
     RAISE EXCEPTION 'successful order must decrement the matching offer scalar';
   END IF;

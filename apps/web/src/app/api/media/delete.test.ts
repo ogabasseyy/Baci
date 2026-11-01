@@ -25,7 +25,7 @@ vi.mock('@/lib/get-merchant-for-api-request', () => ({
   toUserAccess: () => ({}),
 }));
 
-import { DELETE } from './route';
+import { DELETE } from './delete';
 
 const merchant = '36690000-0000-4000-8000-000000000001';
 const identity = '36690000-0000-4000-8000-000000000002';

@@ -4,19 +4,12 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, realpath, rename, rm } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join } from 'node:path';
-import { z } from 'zod';
+import {
+  giglTrackingTokenCacheRecordSchema,
+  giglTrackingTokenSchema,
+} from '@/schemas/gigl-tracking-token-cache';
 import type { GiglToken } from './gigl.constants';
 
-const tokenSchema = z.strictObject({
-  token: z.string().min(1).max(8192),
-  userChannelCode: z.string().min(1).max(256),
-  customerType: z.number().finite(),
-  expiresAt: z.number().int().positive(),
-});
-const recordSchema = z.strictObject({
-  fingerprint: z.string().length(64),
-  token: tokenSchema,
-});
 const maxLifetime = 20 * 24 * 60 * 60 * 1000;
 
 type Credentials = { baseUrl: string; email: string; password: string };
@@ -117,7 +110,7 @@ export function createGiglTrackingTokenCache({
         const buffer = Buffer.alloc(16_385);
         const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
         if (bytesRead > 16_384) return null;
-        const parsed = recordSchema.safeParse(
+        const parsed = giglTrackingTokenCacheRecordSchema.safeParse(
           JSON.parse(buffer.subarray(0, bytesRead).toString('utf8'))
         );
         if (
@@ -136,7 +129,7 @@ export function createGiglTrackingTokenCache({
   }
 
   async function save(token: GiglToken): Promise<void> {
-    const parsed = tokenSchema.parse(token);
+    const parsed = giglTrackingTokenSchema.parse(token);
     if (!usable(parsed)) throw new Error('Invalid cached token expiry');
     const resolvedDirectory = await validateDirectory(true);
     const file = join(resolvedDirectory, 'token.json');

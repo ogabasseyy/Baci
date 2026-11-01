@@ -47,6 +47,20 @@ BEGIN
     'ID-only review did not resolve the exact offer condition');
   PERFORM pg_temp.check_offer_review((snapshot->'lines'->0->>'available')::boolean,
     'live exact offer was unavailable');
+  UPDATE public.product_offers SET condition='refurbished' WHERE id=offer;
+  snapshot := public.commerce_cart_build_checkout_snapshot(merchant,cart);
+  PERFORM pg_temp.check_offer_review(snapshot->'lines'->0->>'condition'='refurbished',
+    'ID-only review canonicalized the offer condition used for purchase');
+  PERFORM pg_temp.check_offer_review((snapshot->'lines'->0->>'available')::boolean,
+    'refurbished exact offer became unavailable');
+  UPDATE public.commerce_cart_lines SET condition='refurbished' WHERE cart_id=cart AND offer_id=offer;
+  snapshot := public.commerce_cart_build_checkout_snapshot(merchant,cart);
+  PERFORM pg_temp.check_offer_review((snapshot->'lines'->0->>'available')::boolean,
+    'equivalent stored refurbished condition incorrectly rejected exact offer');
+  PERFORM pg_temp.check_offer_review(snapshot->'lines'->0->>'condition'='refurbished',
+    'stored refurbished condition was not preserved for purchase');
+  UPDATE public.commerce_cart_lines SET condition=NULL WHERE cart_id=cart AND offer_id=offer;
+  UPDATE public.product_offers SET condition='used' WHERE id=offer;
   UPDATE public.product_offers SET status='inactive' WHERE id=offer;
   snapshot := public.commerce_cart_build_checkout_snapshot(merchant,cart);
   PERFORM pg_temp.check_offer_review(NOT (snapshot->'lines'->0->>'available')::boolean,

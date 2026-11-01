@@ -39,7 +39,8 @@ BEGIN
   INSERT INTO public.product_offers(id,product_id,merchant_id,condition,price,stock_quantity,status)
   VALUES(offer_a,product,merchant,'used',40,4,'active'),
     (offer_b,product,merchant,'open_box',40,4,'active');
-  FOR mode IN 0..4 LOOP
+  FOR mode IN 0..6 LOOP
+    IF mode=5 THEN UPDATE public.product_offers SET condition='refurbished' WHERE id=offer_a; END IF;
     cart := ('eeeeeeee-2514-4000-8000-'||lpad(mode::text,12,'0'))::uuid;
     line_id := ('ffffffff-2514-4000-8000-'||lpad(mode::text,12,'0'))::uuid;
     grant_id := ('bbbbbbbb-2514-4000-8000-'||lpad(mode::text,12,'0'))::uuid;
@@ -58,7 +59,7 @@ BEGIN
     PERFORM pg_temp.check_offer_binding(prep->>'ok'='true','preparation failed for mode '||mode);
     item := jsonb_build_object('cart_line_id',line_id,'product_id',product,
       'offer_id',CASE WHEN mode=2 THEN offer_b ELSE offer_a END,
-      'condition','used','quantity',1,'price',40);
+      'condition',CASE WHEN mode>=5 THEN 'refurbished' ELSE 'used' END,'quantity',1,'price',40);
     args := jsonb_build_object('p_merchant_id',merchant,'p_customer_email','fixture@example.com',
       'p_customer_name','Offer fixture','p_items',jsonb_build_array(item),
       'p_expected_total',40,'p_cart_principal_id','offer-binding',
@@ -70,7 +71,7 @@ BEGIN
           'payment_method','uba_redvault','checkout_idempotency_key','offer-binding-'||mode::text,
           'items',jsonb_build_array(item)), 'p_redvault_quote','{}'::jsonb,'p_redvault_route_proof','{}'::jsonb);
     END IF;
-    IF mode=1 THEN
+    IF mode IN (1,6) THEN
       PERFORM set_config('request.jwt.claims',jsonb_build_object('role','authenticated',
         'agentic_context','checkout','agentic_merchant_id',merchant)::text,true);
     ELSE
@@ -97,7 +98,8 @@ BEGIN
         'valid ID-only checkout rejected, mode '||mode);
       PERFORM pg_temp.check_offer_binding(calls_after=calls_before+1 AND EXISTS(
         SELECT 1 FROM public.order_stub_calls WHERE seq=(SELECT max(seq) FROM public.order_stub_calls)
-          AND items->0->>'offer_id'=offer_a::text AND items->0->>'condition'='used'),
+          AND items->0->>'offer_id'=offer_a::text
+          AND items->0->>'condition'=CASE WHEN mode>=5 THEN 'refurbished' ELSE 'used' END),
         'checkout lost the reviewed exact offer identity, mode '||mode);
     END IF;
     UPDATE public.product_offers SET status='active' WHERE id=offer_a;

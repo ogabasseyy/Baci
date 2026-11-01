@@ -86,6 +86,14 @@ try:
  if '--before-offer-review-fix' not in sys.argv:
   for f in sorted((root/'supabase/migrations').glob('*_commerce_cart_exact_offer_review_guards.sql')):
    sql+='\n\\i '+str(f)
+ if '--before-offer-identity-followups' not in sys.argv:
+  sql+=('\n\\i '+str(root/'supabase/migrations/20261101101142_commerce_cart_offer_identity_followups.sql'))*2
+ if '--before-handoff-offer-case-fix' not in sys.argv:
+  sql+=('\n\\i '+str(root/'supabase/migrations/20261101101339_commerce_cart_handoff_offer_uuid_case.sql'))*2
+ if '--before-handoff-offer-lane-fix' not in sys.argv:
+  sql+=('\n\\i '+str(root/'supabase/migrations/20261101101438_commerce_cart_handoff_offer_lanes.sql'))*2
+ if '--before-offer-condition-equivalence' not in sys.argv:
+  sql+=('\n\\i '+str(root/'supabase/migrations/20261101101758_commerce_cart_offer_condition_equivalence.sql'))*2
  suites=[sys.argv[sys.argv.index('--suite')+1]] if '--suite' in sys.argv else ['commerce_cart_line_offer_id.sql', 'commerce_cart_exact_offer_review.sql', 'commerce_cart_exact_offer_binding.sql']
  for suite in suites:
   sql+='\n'+(root/'supabase/tests'/suite).read_text()

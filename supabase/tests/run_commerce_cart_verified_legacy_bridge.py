@@ -45,9 +45,13 @@ try:
    sql+='\n\\i '+str(f)
   sql+='\n\\i '+str(root/'supabase/migrations/20261019172000_commerce_cart_offer_variant_columns.sql')
   sql+='\n\\i '+str(root/'supabase/migrations/20261019183000_commerce_cart_default_variant_predicate.sql')
+ if '--offer-owner-only' in sys.argv and '--before-offer-owner-fix' not in sys.argv:
+  sql+=('\n\\i '+str(root/'supabase/migrations/20261101101249_commerce_cart_legacy_offer_owner.sql'))*2
  tests=(root/'supabase/tests/commerce_cart_verified_legacy_bridge.sql').read_text()
  if '--baseline' in sys.argv:
   tests=tests.split('-- Negotiation accepted')[0]+tests[tests.index('DO $$ DECLARE failures text;'):]
+ if '--offer-owner-only' in sys.argv:
+  tests=(root/'supabase/tests/commerce_cart_legacy_offer_owner.sql').read_text()
  sql+='\n'+(root/'supabase/tests/commerce_cart_variant_predicates.sql').read_text()+'\n'+tests+'\n'+(root/'supabase/tests/commerce_cart_final_legacy_composition.sql').read_text()+'\n'+(root/'supabase/tests/commerce_cart_replay_privileges_feature_shapes.sql').read_text()+'\n'+(root/'supabase/tests/commerce_cart_shared_clear_guard.sql').read_text()+'\n'+(root/'supabase/tests/agentic_merchant_context_rpc.sql').read_text()+'\n'+(root/'supabase/tests/agentic_checkout_hardening.sql').read_text()+'\nROLLBACK;'
  r=subprocess.run(['psql','-X','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55491','-U','postgres','-d','postgres'],input=sql,text=True,stdout=open('/tmp/cart-bridge-sql.log','w'),stderr=subprocess.STDOUT,cwd=root)
  print('PASS' if r.returncode==0 else 'FAIL')

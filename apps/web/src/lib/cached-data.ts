@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { cacheLife, cacheTag } from 'next/cache';
 import { cache } from 'react';
 import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
+import { RELATED_BLOG_POST_LIMITS } from '@/config/related-blog-post-limits';
 import { getBlogCacheTag } from '@/lib/blog-cache-tags';
 import { BLOG_LISTING_PAGE_SIZE } from '@/lib/blog-listing-page-size';
 import type {
@@ -75,10 +76,6 @@ export { getPublicSupabaseClient };
 // blog catalogs. These pages tolerate planner-estimated pagination for large
 // result sets better than production 500s from exact COUNT pressure.
 const PUBLIC_BLOG_COUNT_OPTIONS = { count: 'estimated' as const };
-
-const RELATED_BLOG_POSTS_LIMIT = 3;
-const RELATED_BLOG_POSTS_FETCH_LIMIT = 36;
-const RELATED_BLOG_CATEGORY_FETCH_LIMIT = 24;
 
 function getEstimatedPaginationCountFloor({
   count,
@@ -2564,14 +2561,14 @@ async function getCachedBlogPostEnrichment(core: CachedBlogPostCore) {
   };
 
   const recentRelatedPostsPromise = buildRelatedPostsQuery().limit(
-    RELATED_BLOG_POSTS_FETCH_LIMIT
+    RELATED_BLOG_POST_LIMITS.recentFetch
   );
   const sourceBlogCategory =
     typeof post.category === 'string' ? post.category.trim() : '';
   const categoryRelatedPostsPromise = sourceBlogCategory
     ? buildRelatedPostsQuery()
         .eq('category', sourceBlogCategory)
-        .limit(RELATED_BLOG_CATEGORY_FETCH_LIMIT)
+        .limit(RELATED_BLOG_POST_LIMITS.categoryFetch)
     : Promise.resolve({ data: null, error: null });
 
   const [
@@ -2638,7 +2635,7 @@ async function getCachedBlogPostEnrichment(core: CachedBlogPostCore) {
     relatedPosts: selectSemanticRelatedBlogPosts(
       post,
       filterPublicBlogPosts(relatedPostCandidates),
-      RELATED_BLOG_POSTS_LIMIT
+      RELATED_BLOG_POST_LIMITS.display
     ),
     relatedProducts: normalizedRelatedProducts,
   };

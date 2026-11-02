@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-02T19:17:26+00:00",
-  "source_revision": "3f603efabb56737b8c773c3e4714e9ad6b3861b2",
-  "evidence_digest": "d5de6e91582c4d7f880e4422d5e67228557a5ce39fc0bac64c6e6d7d668f203a",
-  "claims_digest": "f438f3ad5714acbab1383ca1ebefe60ed6c3ff22334c7404335f1cd6afe2b271",
-  "review_scope": "Source review: Oxygen remains local staging QA only. Cited capability sources remain unchanged across the main integration. Deployment and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-02T20:04:57+00:00",
+  "source_revision": "7e2217c44a8390764fa38cbc37cc37998a05b59d",
+  "evidence_digest": "b692cf5be560da15c4e4170b18bc9d45d8f583dcf4ba4eb9705ad5867f8a9c79",
+  "claims_digest": "3d5321991d5d94b68a3e9cd1dd658d01237b2d53704335ae57cffaf38ae1b4c7",
+  "review_scope": "Source review: Oxygen remains local staging QA only. Cited capability and access-map sources were checked and remain unchanged across the main integration. Deployment and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

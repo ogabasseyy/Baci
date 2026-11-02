@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 2 November 2026 against source revision
-`3f603efabb56737b8c773c3e4714e9ad6b3861b2`. Oxygen remains local-staging QA only. Mobile shipment
+`7e2217c44a8390764fa38cbc37cc37998a05b59d`. Oxygen remains local-staging QA only. Mobile shipment
 confirmation and error presentation were re-reviewed. This is a navigation map,
 not authorization or proof of current deployment. Check the current implementation,
 live tool discovery and merchant entitlement before calling or claiming a tool.

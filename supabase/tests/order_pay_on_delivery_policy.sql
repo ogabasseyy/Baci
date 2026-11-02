@@ -134,6 +134,11 @@ BEGIN
 END $$;
 RESET ROLE;
 SET LOCAL ROLE anon;
+-- Separate preconditions make a replay failure distinguishable from a
+-- failed invocation inside the following anonymous block.
+SELECT 1 / CASE WHEN current_user = 'anon' THEN 1 ELSE 0 END;
+SELECT 1 / CASE WHEN has_language_privilege(current_user, 'plpgsql', 'USAGE') THEN 1 ELSE 0 END;
+SELECT 1 / CASE WHEN NOT has_function_privilege(current_user, 'public.is_storefront_pod_order_idempotency_hash(uuid,text,text)', 'EXECUTE') THEN 1 ELSE 0 END;
 DO $$
 BEGIN
   BEGIN

@@ -62,10 +62,22 @@ function firstNonEmptyTrimmed(
     .find((value): value is string => Boolean(value));
 }
 
+const DEFAULT_OGABASSEY_SOCIAL_LINKS: Record<string, string> = {
+  instagram: 'https://instagram.com/ogabasseyy',
+  facebook: 'https://www.facebook.com/ogabasseyyy',
+  tiktok: 'https://www.tiktok.com/@ogabasseyy',
+  twitter: 'https://x.com/ogabasseyy',
+  youtube: 'https://www.youtube.com/@ogabassey',
+  linkedin: 'https://www.linkedin.com/company/ogabasseyy/',
+};
+
 export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
   const basePath = normalizeStoreSlug(storeSlug);
   const businessName = merchant?.business_name || 'Ogabassey';
-  const socialLinks = merchant?.social_media || {};
+  const socialLinks =
+    merchant?.social_media && Object.keys(merchant.social_media).length > 0
+      ? merchant.social_media
+      : DEFAULT_OGABASSEY_SOCIAL_LINKS;
   // Prefer the public support email (what merchants edit in store settings) over the
   // private account email, so admin edits surface and the account email isn't exposed.
   const contactEmail =

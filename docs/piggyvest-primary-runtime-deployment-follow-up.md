@@ -217,3 +217,9 @@ PostgreSQL password validity does not terminate existing sessions. The legacy
 installer or its route/role receipts cannot satisfy missing primary evidence.
 
 Apply the review-classification migration before deploying the new six-argument review and four-argument routing-resolution statements. Verify both overloads in the restricted provisioner readiness check. The old signatures remain conservative wrappers: they do not infer routing-only review from an unclassified contradiction. Identity-matched interest-setting contradictions retain a routing reason atomically; identity mismatches remain ownership-held after the recorded DVA closes.
+
+## Onboarding presence
+
+Apply `20261102045351_piggyvest_onboarding_presence.sql` before deploying the GET presence check, and include `has_onboarding(jsonb)` in the restricted provisioner's verified grants. Execution stays denied to `PUBLIC`, client roles and `service_role`. No grants or settings are applied by this change.
+
+GET now answers `{ "status": "not_started", "account": null }` when the scoped customer has no onboarding intent at all, before any provider, mapping or review read. A failed or malformed presence read fails closed with 503. Installed mobile builds whose strict snapshot schema has no `not_started` status treat that reply as an error, so do not configure the primary-wallet runtime for those builds until the mobile schema or the build-aware capability gate has shipped.

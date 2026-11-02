@@ -3,6 +3,7 @@ import { authenticateApiRequest } from '@/lib/api-auth';
 import { createPrimaryWalletExecutor } from '@/lib/piggyvest/primary-wallet-executor';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import { readPrimaryWalletMapping } from '@/lib/piggyvest/primary-wallet-mapping';
+import { hasPrimaryWalletOnboarding } from '@/lib/piggyvest/primary-wallet-presence';
 import { getPrimaryWalletProviderOrigin } from '@/lib/piggyvest/primary-wallet-provider-origin';
 import { readPrimaryWalletReview } from '@/lib/piggyvest/primary-wallet-review';
 import { recoverPrimaryWalletRouting } from '@/lib/piggyvest/primary-wallet-routing-recovery';
@@ -66,6 +67,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       environment: runtime.onboarding.environment,
     };
     const execute = createPrimaryWalletExecutor(runtime);
+    // A customer with no durable onboarding intent has nothing to read at
+    // the provider or in review storage: answer before either is touched.
+    // A failed or malformed presence read throws and fails closed below.
+    if (!(await hasPrimaryWalletOnboarding(scope, execute))) {
+      return NextResponse.json(
+        { status: 'not_started', account: null },
+        { headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
     const providerConfig = {
       token: runtime.providerToken,
       baseUrl: getPrimaryWalletProviderOrigin(runtime.onboarding.environment),

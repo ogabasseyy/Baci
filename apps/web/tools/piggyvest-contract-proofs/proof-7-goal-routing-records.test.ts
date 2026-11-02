@@ -7,6 +7,8 @@ import {
 } from './goal-interest-routing';
 import type { GoalRoutingRun } from './proof-7-goal-routing';
 import {
+  NO_ACCRUAL_DETAIL,
+  OWNER_QUESTION_NAMED_NOTE,
   OWNER_QUESTION_NOTE,
   PSEUDONYM_LEGEND,
   recordRoutingValues,
@@ -183,6 +185,43 @@ describe('recordStaysInGoal: only a readback naming the goal itself is a yes', (
   });
 });
 
+describe('recordStaysInGoal: an opted-out goal proves nothing about where interest goes', () => {
+  it.each([
+    ['reads accrual off', false],
+    ['shows no accrual flag', null],
+  ] as const)('goal (b), which was created opted out and %s, never proves it even when the readback names the goal', (_label, flagShown) => {
+    const { finding, values, built } = record(
+      run('b', result(), reading('self', flagShown), reading('self', flagShown))
+    );
+    expect(finding?.answer).toBe('unknown');
+    expect(finding?.detail).toBe(NO_ACCRUAL_DETAIL);
+    expect(values.goal_b_verdict).toBe('not_proven');
+    // Nothing failed: the question simply does not apply, so the proof is not inconclusive.
+    expect(built.status).toBe('observed');
+  });
+
+  it('an opted-in goal that reads accrual off is not proven either; one that reads it on still is', () => {
+    const off = record(
+      run('a', result(), reading('self', true), reading('self', false))
+    );
+    expect(off.finding?.answer).toBe('unknown');
+    expect(off.values.goal_a_verdict).toBe('not_proven');
+    const on = record(
+      run('a', result(), reading('self', false), reading('self', true))
+    );
+    expect(on.finding?.answer).toBe('yes');
+    expect(on.values.goal_a_verdict).toBe('proven');
+  });
+
+  it('a payout that names another wallet stays a no for goal (b): accrual does not turn it into proof', () => {
+    const { finding, values } = record(
+      run('b', result(), reading('main', false), reading('main', false))
+    );
+    expect(finding?.answer).toBe('no');
+    expect(values.goal_b_verdict).toBe('not_proven');
+  });
+});
+
 describe('routingNotes: the verdict table and what the owner does next', () => {
   const others = [
     run('b', result(), reading('null', false), reading('null', false)),
@@ -205,9 +244,31 @@ describe('routingNotes: the verdict table and what the owner does next', () => {
     expect(routingNotes([...a, ...others])).toContain(OWNER_QUESTION_NOTE);
   });
 
-  it('drops the owner question only when goal (a) names itself', () => {
+  it('drops the owner question only when goal (a) names itself while interest accrues', () => {
     const a = run('a', result(), reading('null'), reading('self'));
-    expect(routingNotes([a, ...others])).not.toContain(OWNER_QUESTION_NOTE);
+    const notes = routingNotes([a, ...others]);
+    expect(notes).not.toContain(OWNER_QUESTION_NOTE);
+    expect(notes).not.toContain(OWNER_QUESTION_NAMED_NOTE);
+    // Naming itself with accrual off proves nothing, so the question stays.
+    const off = run(
+      'a',
+      result(),
+      reading('self', false),
+      reading('self', false)
+    );
+    expect(routingNotes([off, ...others])).toContain(OWNER_QUESTION_NOTE);
+  });
+
+  it.each([
+    'business',
+    'main',
+    'other',
+  ] as const)('asks only whether the goal can pay itself when goal (a) already names %s', (payout) => {
+    const a = run('a', result(), reading(payout), reading(payout));
+    const notes = routingNotes([a, ...others]);
+    expect(notes).toContain(OWNER_QUESTION_NAMED_NOTE);
+    expect(notes).not.toContain(OWNER_QUESTION_NOTE);
+    expect(OWNER_QUESTION_NAMED_NOTE).not.toMatch(/where is its interest paid/);
   });
 
   it('one table line per run, with "unread" for an unread accrual flag', () => {

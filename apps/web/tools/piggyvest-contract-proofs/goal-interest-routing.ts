@@ -147,17 +147,38 @@ export function finalReading(
 
 export type RoutingVerdict = 'proven' | 'not_proven';
 
-/** Only a readback naming the goal itself proves interest stays in the goal. */
-export function goalRoutingVerdict(payout: PayoutPseudonym): RoutingVerdict {
-  return payout === 'self' ? 'proven' : 'not_proven';
+/**
+ * Is interest accruing in the goal? The final readback's flag decides; the
+ * setting the goal was created with stands when the readback showed none.
+ */
+export function accrualOn(
+  reading: GoalRoutingReading,
+  requested: boolean
+): boolean {
+  return reading.interestEnabled ?? requested;
 }
 
 /**
- * "Does interest stay in this goal?": yes only for self; no when the
- * readback names another wallet; unknown for null, absent or unread.
+ * Only a readback naming the goal itself proves interest stays in the goal,
+ * and only while interest accrues: an opted-out goal has none to route.
  */
-export function staysInGoalAnswer(payout: PayoutPseudonym): Answer {
-  if (payout === 'self') return 'yes';
+export function goalRoutingVerdict(
+  payout: PayoutPseudonym,
+  accruing = true
+): RoutingVerdict {
+  return payout === 'self' && accruing ? 'proven' : 'not_proven';
+}
+
+/**
+ * "Does interest stay in this goal?": yes only for self while interest
+ * accrues; no when the readback names another wallet; unknown for null,
+ * absent or unread, and for self on a goal with accrual off.
+ */
+export function staysInGoalAnswer(
+  payout: PayoutPseudonym,
+  accruing = true
+): Answer {
+  if (payout === 'self') return accruing ? 'yes' : 'unknown';
   if (payout === 'main' || payout === 'business' || payout === 'other')
     return 'no';
   return 'unknown';

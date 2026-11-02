@@ -114,6 +114,11 @@ describe('recordGoalWallets', () => {
     expect(result.values.goal_a_verdict).toBe('proven');
     expect(result.values.goal_a_payout_at_5m).toBe('self');
     expect(result.notes.join(' ')).not.toMatch(/written question/);
+    // Goal (b) is opted out: its readback naming itself proves nothing.
+    expect(result.values.goal_b_payout_at_5m).toBe('self');
+    expect(result.values.goal_b_verdict).toBe('not_proven');
+    expect(answer('goal_b_interest_stays_in_goal')).toBe('unknown');
+    expect(result.status).toBe('observed');
   });
 
   it('leaves stays-in-goal unknown, and the proof inconclusive, when the payout field never shows', async () => {

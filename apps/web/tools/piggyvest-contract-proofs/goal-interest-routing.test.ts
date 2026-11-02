@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  accrualOn,
   explicitDestinationAnswer,
   finalReading,
   GOAL_RECHECK_DELAY_MS,
@@ -205,5 +206,42 @@ describe('explicitDestinationAnswer: goal (d) from its final reading', () => {
     'unread',
   ])('unknown when the payout is %s: an unread field is never a no', (payout) => {
     expect(explicitDestinationAnswer(payout)).toBe('unknown');
+  });
+});
+
+describe('accrual gates the proof: an opted-out goal has no interest to route', () => {
+  it('accrualOn: the readback flag decides; the requested setting stands when it showed none', () => {
+    expect(accrualOn({ interestEnabled: false, payout: 'self' }, true)).toBe(
+      false
+    );
+    expect(accrualOn({ interestEnabled: true, payout: 'self' }, false)).toBe(
+      true
+    );
+    expect(accrualOn({ interestEnabled: null, payout: 'self' }, false)).toBe(
+      false
+    );
+    expect(accrualOn({ interestEnabled: null, payout: 'self' }, true)).toBe(
+      true
+    );
+  });
+
+  it('self proves interest stays in the goal only while interest accrues', () => {
+    expect(goalRoutingVerdict('self', true)).toBe('proven');
+    expect(goalRoutingVerdict('self')).toBe('proven');
+    expect(goalRoutingVerdict('self', false)).toBe('not_proven');
+    expect(staysInGoalAnswer('self', true)).toBe('yes');
+    expect(staysInGoalAnswer('self', false)).toBe('unknown');
+  });
+
+  it.each<PayoutPseudonym>([
+    'main',
+    'business',
+    'other',
+    'null',
+    'absent',
+    'unread',
+  ])('accrual changes nothing for %s', (payout) => {
+    expect(staysInGoalAnswer(payout, false)).toBe(staysInGoalAnswer(payout));
+    expect(goalRoutingVerdict(payout, false)).toBe(goalRoutingVerdict(payout));
   });
 });

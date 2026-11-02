@@ -132,7 +132,9 @@ export const FINDING_TRUTH: Record<string, (c: TruthContext) => Truth> = {
     c.o.payoutReadback === 'none' ? 'unobservable' : 'yes',
   goal_payout_main_accepted: (c) => bool(c.o.subAccountAcceptsPayout),
   goal_a_interest_stays_in_goal: unsetGoalPaysItself,
-  goal_b_interest_stays_in_goal: unsetGoalPaysItself,
+  // Goal (b) is opted out: no interest accrues, so naming itself proves nothing.
+  goal_b_interest_stays_in_goal: (c) =>
+    c.o.subWalletPaysItselfWhenUnset ? 'unobservable' : unsetGoalPaysItself(c),
   goal_c_interest_stays_in_goal: NO,
   goal_d_interest_stays_in_goal: NO,
   goal_payout_update_after_creation_documented: NO,

@@ -1,4 +1,5 @@
 import {
+  accrualOn,
   finalReading,
   type GoalRoutingReading,
   goalRoutingVerdict,
@@ -24,8 +25,20 @@ export const PSEUDONYM_LEGEND =
 export const SANDBOX_RATE_NOTE =
   'Sandbox interest rates are 0%, so no interest payout can be observed here: where goal interest is really paid stays a release check (the first monthly payout).';
 
+export const NO_ACCRUAL_DETAIL =
+  'accrual is off for this goal, so no interest accrues to route: a readback naming the goal itself proves nothing about where interest is paid';
+
+export const OWNER_QUESTION_NAMED_NOTE =
+  'Written question for the owner to send PiggyVest: a goal sub-wallet created with enable_interest_accrual=true and no interest_payout_wallet reads back paying another wallet, not the goal itself. Can a goal sub-wallet pay its interest into the goal itself, given its id is not known before it is created and no documented endpoint changes the payout afterwards? Until PiggyVest answers in writing, goal interest staying in the goal counts as not proven.';
+
 export const OWNER_QUESTION_NOTE =
   'Written question for the owner to send PiggyVest: when a goal sub-wallet is created with enable_interest_accrual=true and no interest_payout_wallet, where is its interest paid, and can it be paid into the goal itself? Until PiggyVest answers in writing, goal interest staying in the goal counts as not proven.';
+
+/** The run's final reading and whether interest accrues in that goal. */
+function judged(run: GoalRoutingRun) {
+  const final = finalReading(run.atOnce, run.afterRecheck);
+  return { final, accruing: accrualOn(final, run.variant.accrual) };
+}
 
 function outcomeOf(run: GoalRoutingRun): string {
   const result = run.result;
@@ -50,12 +63,19 @@ export function recordStaysInGoal(
     );
     return;
   }
-  const { payout } = finalReading(run.atOnce, run.afterRecheck);
+  const {
+    final: { payout },
+    accruing,
+  } = judged(run);
   if (payout === 'null') {
     b.unobservable(id, question, NULL_DETAIL);
     return;
   }
-  const answer = staysInGoalAnswer(payout);
+  if (payout === 'self' && !accruing) {
+    b.unobservable(id, question, NO_ACCRUAL_DETAIL);
+    return;
+  }
+  const answer = staysInGoalAnswer(payout, accruing);
   b.finding(
     id,
     question,
@@ -87,10 +107,8 @@ export function recordRoutingValues(
   b.value(`${prefix}payout_at_0m`, run.atOnce.payout);
   b.value(`${prefix}interest_enabled_at_5m`, run.afterRecheck.interestEnabled);
   b.value(`${prefix}payout_at_5m`, run.afterRecheck.payout);
-  b.value(
-    `${prefix}verdict`,
-    goalRoutingVerdict(finalReading(run.atOnce, run.afterRecheck).payout)
-  );
+  const { final, accruing } = judged(run);
+  b.value(`${prefix}verdict`, goalRoutingVerdict(final.payout, accruing));
 }
 
 const flag = (reading: GoalRoutingReading): string =>
@@ -99,19 +117,29 @@ const flag = (reading: GoalRoutingReading): string =>
 /** The verdict table (one line per variant) and what the owner does next. */
 export function routingNotes(runs: readonly GoalRoutingRun[]): string[] {
   const table = runs.map((run) => {
-    const verdict = goalRoutingVerdict(
-      finalReading(run.atOnce, run.afterRecheck).payout
-    );
+    const { final, accruing } = judged(run);
+    const verdict = goalRoutingVerdict(final.payout, accruing);
     return `Goal (${run.variant.id}) ${run.variant.label}: ${outcomeOf(run)}; payout at 0 min ${run.atOnce.payout}, at 5 min ${run.afterRecheck.payout}; interest_enabled ${flag(run.atOnce)} then ${flag(run.afterRecheck)}; verdict ${verdict === 'proven' ? 'proven' : 'not proven'}.`;
   });
-  const unset = runs.find((run) => run.variant.id === 'a');
-  const unsetPayout = unset
-    ? finalReading(unset.atOnce, unset.afterRecheck).payout
-    : 'unread';
   return [
     ...table,
     PSEUDONYM_LEGEND,
     SANDBOX_RATE_NOTE,
-    ...(unsetPayout === 'self' ? [] : [OWNER_QUESTION_NOTE]),
+    ...ownerQuestion(runs),
   ];
+}
+
+/**
+ * The written question for PiggyVest, from goal (a)'s final reading: none
+ * once it names itself while interest accrues; a narrower one when it already
+ * names another wallet (where interest goes is answered, whether it can go to
+ * the goal is not); the full one otherwise.
+ */
+function ownerQuestion(runs: readonly GoalRoutingRun[]): string[] {
+  const unset = runs.find((run) => run.variant.id === 'a');
+  if (!unset) return [OWNER_QUESTION_NOTE];
+  const { final, accruing } = judged(unset);
+  if (final.payout === 'self' && accruing) return [];
+  const named = ['main', 'business', 'other'].includes(final.payout);
+  return [named ? OWNER_QUESTION_NAMED_NOTE : OWNER_QUESTION_NOTE];
 }

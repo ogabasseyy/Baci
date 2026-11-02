@@ -95,6 +95,15 @@ BEGIN
   RETURN v_attempt;
 END $$;
 
+-- The worker passes run as the transfer worker role. A suite login that
+-- only administers that role (on the replay image it created the role but is
+-- not a superuser) is given SET on it inside this transaction.
+SELECT NOT pg_catalog.pg_has_role(current_user, 'piggyvest_primary_transfer_worker', 'SET')
+  AS engine_suite_grant_worker \gset
+\if :engine_suite_grant_worker
+GRANT piggyvest_primary_transfer_worker TO CURRENT_USER WITH INHERIT FALSE, SET TRUE;
+\endif
+
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 INSERT INTO auth.users(id) VALUES (pg_temp.id(1));
 INSERT INTO public.merchants(id, email) VALUES

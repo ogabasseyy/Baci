@@ -14,7 +14,9 @@ import {
  * registry is ready only when all three are, and any response that breaks
  * the registry's own rules (two rows for a role, one wallet id for two
  * roles, two businesses) or any query failure is reported as unavailable.
- * The caller supplies the query function of a dedicated engine login.
+ * The caller supplies the query function of a dedicated engine login; the
+ * database answers only a login registered for that integration, so any
+ * other login reads as unavailable.
  */
 export const HOUSE_WALLET_ROLES = [
   'collection',

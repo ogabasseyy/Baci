@@ -112,18 +112,38 @@ BEGIN
 END $$;
 ROLLBACK TO SAVEPOINT engine_house_kill_switch;
 
--- The read helper returns every registered wallet with its readiness.
+-- The read helper answers only a login with an enabled authority for the
+-- integration, and returns every registered wallet with its readiness.
 DO $$
 BEGIN
+  PERFORM pg_temp.check(pg_temp.sqlstate_of(format('SELECT * FROM piggyvest_primary.read_house_wallets(%L)',
+    pg_temp.id(5))) = '42501', 'a login without an authority must not read house wallets');
+  INSERT INTO piggyvest_primary.transfer_authorities(integration_id, capability, executor_login, enabled)
+    VALUES (pg_temp.id(5), 'ops', session_user, false);
+  PERFORM pg_temp.check(pg_temp.sqlstate_of(format('SELECT * FROM piggyvest_primary.read_house_wallets(%L)',
+    pg_temp.id(5))) = '42501', 'a disabled authority must not read house wallets');
+  UPDATE piggyvest_primary.transfer_authorities SET enabled = true WHERE executor_login = session_user;
   PERFORM pg_temp.check((SELECT count(*) FROM piggyvest_primary.read_house_wallets(pg_temp.id(5))) = 3,
     'read_house_wallets must return the three registered wallets');
   PERFORM pg_temp.check((SELECT bool_and(enabled AND verified)
     FROM piggyvest_primary.read_house_wallets(pg_temp.id(5))), 'the fixture wallets must read as ready');
   PERFORM pg_temp.check((SELECT provider_wallet_id || ':' || currency FROM piggyvest_primary.read_house_wallets(pg_temp.id(5))
     WHERE role = 'collection') = 'pv-house-collection:NGN', 'the collection wallet id and currency must read back');
-  PERFORM pg_temp.check(NOT EXISTS (SELECT 1 FROM piggyvest_primary.read_house_wallets(pg_temp.id(12))),
-    'an unknown integration must read no house wallets');
+  PERFORM pg_temp.check(pg_temp.sqlstate_of(format('SELECT * FROM piggyvest_primary.read_house_wallets(%L)',
+    pg_temp.id(12))) = '42501', 'an integration the login has no authority for must not be read');
+  DELETE FROM piggyvest_primary.transfer_authorities WHERE executor_login = session_user;
 END $$;
+
+-- A wallet registered for the integration's previous business is listed but
+-- does not read as verified, so a registry built from it is never ready.
+SAVEPOINT engine_house_reader_business;
+INSERT INTO piggyvest_primary.transfer_authorities(integration_id, capability, executor_login, enabled)
+  VALUES (pg_temp.id(5), 'ops', session_user, true);
+UPDATE piggyvest_primary.integrations SET business_id = 'engine-business-renamed' WHERE id = pg_temp.id(5);
+SELECT pg_temp.check((SELECT count(*) FROM piggyvest_primary.read_house_wallets(pg_temp.id(5))) = 3
+  AND NOT EXISTS (SELECT 1 FROM piggyvest_primary.read_house_wallets(pg_temp.id(5)) WHERE verified),
+  'a house wallet of the integration''s previous business must not read as verified');
+ROLLBACK TO SAVEPOINT engine_house_reader_business;
 
 -- Bank destinations: a treasury account has no customer, a support payout
 -- account belongs to one, and a verified account is immutable.

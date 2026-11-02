@@ -207,3 +207,23 @@ SELECT pg_temp.check(pg_temp.sqlstate_of(
   'SELECT pg_temp.wt(''collect'', ''vtu'', ''deliver_before_collect'', ''m-unclaimed-house'')') = 'ok',
   'an unclaimed house wallet still takes money');
 ROLLBACK TO SAVEPOINT engine_matrix_switches;
+
+-- A house wallet is registered for one business. When the integration's
+-- business changes, a wallet that is still enabled moves no money until it is
+-- registered again: every house leg checks the business at creation.
+SAVEPOINT engine_matrix_business;
+UPDATE piggyvest_primary.integrations SET business_id = 'engine-business-renamed' WHERE id = pg_temp.id(5);
+SELECT pg_temp.check(pg_temp.error_of(
+  'SELECT pg_temp.wt(''collect'', ''vtu'', ''deliver_before_collect'', ''m-stale-business-in'')')
+    LIKE '%collection wallet unavailable%'
+  AND pg_temp.error_of(
+  'SELECT pg_temp.wt(''disbursement'', ''obligation'', ''credit_main'', ''m-stale-business-out'', ''awaiting_float'')')
+    LIKE '%collection wallet unavailable%'
+  AND pg_temp.error_of(
+  'SELECT pg_temp.wt(''goal_forfeit'', ''cancel_interest'', ''credit_house'', ''m-stale-business-interest'')')
+    LIKE '%interest wallet unavailable%',
+  'a house wallet of the integration''s previous business must take no money');
+ROLLBACK TO SAVEPOINT engine_matrix_business;
+SELECT pg_temp.check(pg_temp.sqlstate_of(
+  'SELECT pg_temp.wt(''collect'', ''vtu'', ''deliver_before_collect'', ''m-same-business'')') = 'ok',
+  'a house wallet of the integration''s own business still takes money');

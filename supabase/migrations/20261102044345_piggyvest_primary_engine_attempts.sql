@@ -4,7 +4,8 @@
 --
 -- R2: every submission to PiggyVest is an attempt with the reference
 -- pvb-wt-<transfer>-<attempt>, unique forever. Attempts are never deleted,
--- their reference, amount and recorded provider evidence never change, a
+-- their reference, amount and recorded provider evidence and times never
+-- change, a confirmed, failed or aborted attempt is frozen whole, a
 -- new attempt is allowed only once every earlier attempt is proven failed or
 -- aborted (one open attempt per transfer), and a confirmed attempt ends the
 -- transfer's attempts. amount_kobo is the amount a settlement proof must
@@ -63,11 +64,19 @@ BEGIN
         IS DISTINCT FROM (OLD.id, OLD.transfer_id, OLD.attempt, OLD.reference, OLD.amount_kobo, OLD.created_at)
       OR (OLD.provider_transaction_id IS NOT NULL AND NEW.provider_transaction_id IS DISTINCT FROM OLD.provider_transaction_id)
       OR (OLD.fee_kobo IS NOT NULL AND NEW.fee_kobo IS DISTINCT FROM OLD.fee_kobo)
-      OR (OLD.proof IS NOT NULL AND NEW.proof IS DISTINCT FROM OLD.proof) THEN
+      OR (OLD.proof IS NOT NULL AND NEW.proof IS DISTINCT FROM OLD.proof)
+      OR (OLD.dispatched_at IS NOT NULL AND NEW.dispatched_at IS DISTINCT FROM OLD.dispatched_at)
+      OR (OLD.resolved_at IS NOT NULL AND NEW.resolved_at IS DISTINCT FROM OLD.resolved_at) THEN
       RAISE EXCEPTION 'attempt identity and recorded evidence are immutable' USING ERRCODE = '42501';
     END IF;
-    IF NEW.state <> OLD.state AND OLD.state IN ('confirmed', 'failed', 'aborted') THEN
-      RAISE EXCEPTION 'attempt % is final', OLD.state USING ERRCODE = '55000';
+    -- A final attempt is frozen whole: nothing is added to it (a provider
+    -- transaction id or fee it never recorded, a lease, a time), and nothing
+    -- moves its state. An update that changes nothing writes nothing.
+    IF OLD.state IN ('confirmed', 'failed', 'aborted') THEN
+      IF (pg_catalog.to_jsonb(NEW) - 'updated_at') IS DISTINCT FROM (pg_catalog.to_jsonb(OLD) - 'updated_at') THEN
+        RAISE EXCEPTION 'attempt % is final', OLD.state USING ERRCODE = '55000';
+      END IF;
+      RETURN OLD;
     END IF;
     IF NEW.state <> OLD.state AND NOT (NEW.state = ANY (CASE OLD.state
         WHEN 'prepared' THEN ARRAY['dispatching', 'aborted']

@@ -6,7 +6,8 @@
 -- triple must be a row of transfer_kinds, and the database pins the actual
 -- PiggyVest wallets from the registries when the row is created: the
 -- customer's verified main wallet, the goal's enabled wallet, the enabled
--- house wallet, or an enabled bank destination. Identity is frozen after
+-- house wallet (verified, and registered for the integration's current
+-- business), or an enabled bank destination. Identity is frozen after
 -- insert, settled states are final, and row_version is bumped by its own
 -- trigger on every update so approvals can bind to an exact version.
 --
@@ -213,8 +214,12 @@ BEGIN
         WHERE destination.integration_id = NEW.integration_id AND destination.goal_id = NEW.goal_id
           AND destination.enabled AND intent.customer_id = NEW.customer_id AND intent.state = 'verified';
     ELSE
+      -- A house wallet is registered for one business: it moves money only
+      -- while it is verified and that business is still the integration's.
       SELECT house.provider_wallet_id INTO v_wallet FROM piggyvest_primary.house_wallets house
-        WHERE house.integration_id = NEW.integration_id AND house.role = v_role AND house.enabled;
+        JOIN piggyvest_primary.integrations integration ON integration.id = house.integration_id
+        WHERE house.integration_id = NEW.integration_id AND house.role = v_role AND house.enabled
+          AND house.verified_at IS NOT NULL AND house.business_id = integration.business_id;
     END IF;
     IF v_wallet IS NULL THEN
       RAISE EXCEPTION '% wallet unavailable for this transfer', v_role USING ERRCODE = '23514';

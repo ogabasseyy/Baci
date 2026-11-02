@@ -47,6 +47,8 @@ BEGIN;
 
 \ir piggyvest_primary_engine_lifecycle.inc.sql
 
+\ir piggyvest_primary_engine_attempts.inc.sql
+
 \ir piggyvest_primary_engine_hooks.inc.sql
 
 \ir piggyvest_primary_engine_b_effects.inc.sql

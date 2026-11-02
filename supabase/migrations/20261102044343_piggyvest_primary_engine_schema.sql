@@ -12,7 +12,8 @@
 -- Access: every table has RLS with a restrictive deny-all policy and no
 -- grant to PUBLIC, anon, authenticated, service_role or the engine roles.
 -- The only door is SECURITY DEFINER functions with a pinned search_path;
--- here that is read_house_wallets, granted to the three engine roles.
+-- here that is read_house_wallets, granted to the three engine roles and
+-- answered only for a login registered for the integration.
 BEGIN;
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'piggyvest_primary_transfer_enqueuer') THEN
@@ -238,16 +239,27 @@ REVOKE ALL ON piggyvest_primary.house_wallets, piggyvest_primary.bank_destinatio
     piggyvest_primary_transfer_worker, piggyvest_primary_transfer_ops;
 
 -- The one read helper: every registered house wallet of an integration with
--- its readiness. Callers treat anything but enabled and verified as absent.
+-- its readiness, answered only for a login with an enabled authority for
+-- that integration. A wallet reads as verified only while it is verified and
+-- registered for the integration's current business. Callers treat anything
+-- but enabled and verified as absent.
 CREATE FUNCTION piggyvest_primary.read_house_wallets(p_integration_id uuid)
 RETURNS TABLE (role text, provider_wallet_id text, business_id text, currency text, enabled boolean, verified boolean)
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$
-  SELECT wallet.role, wallet.provider_wallet_id, wallet.business_id, wallet.currency, wallet.enabled,
-    wallet.verified_at IS NOT NULL
-  FROM piggyvest_primary.house_wallets wallet
-  WHERE wallet.integration_id = p_integration_id
-  ORDER BY wallet.role
-$$;
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$
+#variable_conflict use_column
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM piggyvest_primary.transfer_authorities authority
+    WHERE authority.integration_id = p_integration_id AND authority.executor_login = SESSION_USER
+      AND authority.enabled) THEN
+    RAISE EXCEPTION 'house wallet reader authority unavailable' USING ERRCODE = '42501';
+  END IF;
+  RETURN QUERY SELECT wallet.role, wallet.provider_wallet_id, wallet.business_id, wallet.currency, wallet.enabled,
+      wallet.verified_at IS NOT NULL AND wallet.business_id = integration.business_id
+    FROM piggyvest_primary.house_wallets wallet
+    JOIN piggyvest_primary.integrations integration ON integration.id = wallet.integration_id
+    WHERE wallet.integration_id = p_integration_id
+    ORDER BY wallet.role;
+END $$;
 
 REVOKE ALL ON FUNCTION piggyvest_primary.house_wallets_guard(), piggyvest_primary.bank_destinations_guard(),
   piggyvest_primary.transfer_kinds_guard(),

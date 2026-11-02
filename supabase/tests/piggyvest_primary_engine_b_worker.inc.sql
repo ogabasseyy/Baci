@@ -30,6 +30,12 @@ INSERT INTO piggyvest_primary.transfer_authorities(integration_id, capability, e
   (pg_temp.id(5), 'worker', session_user, true),
   (pg_temp.id(80), 'worker', 'engine_other_worker', true);
 
+-- The worker login of one integration cannot read another's house wallets.
+SELECT pg_temp.check(pg_temp.sqlstate_of(format('SELECT * FROM piggyvest_primary.read_house_wallets(%L)',
+  pg_temp.id(80))) = '42501'
+  AND (SELECT count(*) FROM piggyvest_primary.read_house_wallets(pg_temp.id(5))) = 3,
+  'house wallets are read only for the login''s own integration');
+
 -- A disabled authority, or a switched-off integration, applies nothing.
 SAVEPOINT engine_worker_switches;
 UPDATE piggyvest_primary.transfer_authorities SET enabled = false WHERE executor_login = session_user;

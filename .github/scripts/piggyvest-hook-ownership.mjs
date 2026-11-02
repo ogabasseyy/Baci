@@ -13,13 +13,14 @@
 //   * gives any function other than a b_writer a body that touches
 //     customer_wallets, customer_wallet_transactions, transfer_b_effects or
 //     apply_b_effect (B changes only through request_b_effect), including a
-//     new helper function created in a hook owner's migration;
+//     new helper function in any schema created in a hook owner's migration;
 //   * builds DDL for piggyvest_primary functions dynamically;
 //   * adds a hook-shaped function (on_settled_, on_failed_, on_collect_,
 //     on_refund_) the manifest does not list.
 // It also fails when a declared (non define_once) function is never created.
 // Unquoted identifiers are matched case-insensitively, as PostgreSQL folds
-// them to lower case; a double-quoted name keeps its exact spelling.
+// them to lower case; a double-quoted name keeps its exact spelling. SQL
+// comments count as whitespace, as they do for PostgreSQL.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,9 +60,59 @@ export function parseOwnershipManifest(text) {
   return rows;
 }
 
-// Line comments only: a marker is read before they are removed.
-function stripComments(sql) {
-  return sql.replace(/--[^\n]*/g, '');
+// Comments become whitespace, as PostgreSQL reads them (block comments
+// nest). String literals, quoted identifiers and dollar-quoted text are kept
+// as written, so a comment marker inside them is not a comment. Markers are
+// read from the raw text before this runs.
+function maskComments(sql) {
+  let out = '';
+  let i = 0;
+  while (i < sql.length) {
+    if (sql.startsWith('--', i)) {
+      const end = sql.indexOf('\n', i);
+      i = end === -1 ? sql.length : end;
+      out += ' ';
+    } else if (sql.startsWith('/*', i)) {
+      let depth = 0;
+      do {
+        if (sql.startsWith('/*', i)) {
+          depth += 1;
+          i += 2;
+        } else if (sql.startsWith('*/', i)) {
+          depth -= 1;
+          i += 2;
+        } else i += 1;
+      } while (depth > 0 && i < sql.length);
+      out += ' ';
+    } else {
+      const end = quotedEnd(sql, i);
+      out += sql.slice(i, end);
+      i = end;
+    }
+  }
+  return out;
+}
+
+// The end of the literal, quoted identifier or dollar-quoted text that starts
+// at i, or i + 1 when none starts there.
+function quotedEnd(sql, i) {
+  const quote = sql[i];
+  const previous = sql[i - 1] ?? '';
+  if (quote === "'" || quote === '"') {
+    const escapes = quote === "'" && /[eE]/.test(previous) && !/[A-Za-z0-9_$]/.test(sql[i - 2] ?? '');
+    let j = i + 1;
+    while (j < sql.length) {
+      if (escapes && sql[j] === '\\') j += 2;
+      else if (sql[j] === quote && sql[j + 1] === quote) j += 2;
+      else if (sql[j] === quote) return j + 1;
+      else j += 1;
+    }
+    return sql.length;
+  }
+  const tag = quote === '$' && !/[A-Za-z0-9_$]/.test(previous) ? /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/.exec(sql.slice(i)) : null;
+  if (!tag) return i + 1;
+  const close = sql.indexOf(tag[0], i + tag[0].length);
+  return close === -1 ? sql.length : close + tag[0].length;
 }
 
 // The dollar-quoted body, or null when the body is written another way (the
@@ -106,7 +157,8 @@ function collectTouched(sql, manifest) {
     if (!ref) continue;
     const name = engineName(ref[1], ref[2], manifest);
     const verb = match[1].toLowerCase().split(/\s+/)[0];
-    if (name) touched.push({ verb, name, at: ref.index + ref[0].length });
+    // Functions outside the engine are kept as helpers for the body check.
+    touched.push({ verb, name, helper: identifier(ref[2]), at: ref.index + ref[0].length });
   }
   for (const match of sql.matchAll(DROP)) {
     const from = match.index + match[0].length;
@@ -120,8 +172,9 @@ function collectTouched(sql, manifest) {
 }
 
 function forbiddenTouch(sql, at) {
-  const body = functionBody(sql, at);
-  if (body === null) return 'an unparsable (not dollar-quoted) body';
+  const raw = functionBody(sql, at);
+  if (raw === null) return 'an unparsable (not dollar-quoted) body';
+  const body = maskComments(raw);
   if (/\bexecute\b/i.test(body)) return 'dynamic SQL (EXECUTE)';
   const hit = FORBIDDEN.find((pattern) => pattern.test(body));
   return hit ? hit.source.replaceAll('\\b', '') : null;
@@ -137,7 +190,7 @@ export function checkEngineOwnership({ migrationsDir, manifestPath }) {
   for (const file of files) {
     const raw = readFileSync(join(migrationsDir, file), 'utf8');
     const owners = new Set([...raw.matchAll(MARKER)].map((match) => match[1]));
-    const sql = stripComments(raw);
+    const sql = maskComments(raw);
     for (const [, span] of sql.matchAll(EXECUTE)) {
       if (!DYNAMIC_DDL.test(span)) continue;
       const named = [...manifest.keys()].some((name) => new RegExp(`\\b${name}\\b`, 'i').test(span));
@@ -147,15 +200,15 @@ export function checkEngineOwnership({ migrationsDir, manifestPath }) {
     }
     // A hook owner's migration may not hide a wallet write in a helper.
     const ownerMigration = owners.size > 0 && !owners.has(DECLARING_TASK);
-    for (const { verb, name, at } of collectTouched(sql, manifest)) {
-      const entry = manifest.get(name);
+    for (const { verb, name, helper, at } of collectTouched(sql, manifest)) {
+      const entry = name ? manifest.get(name) : undefined;
       if (!entry) {
-        if (verb === 'create' && HOOK_NAME.test(name)) {
+        if (name && verb === 'create' && HOOK_NAME.test(name)) {
           errors.push(`${file}: ${name} is a hook that is not in the ownership manifest`);
         }
         const hit = verb === 'create' && ownerMigration ? forbiddenTouch(sql, at) : null;
         if (hit) {
-          errors.push(`${file}: ${name} touches ${hit} in an engine owner migration; request B changes instead`);
+          errors.push(`${file}: ${name ?? helper} touches ${hit} in an engine owner migration; request B changes instead`);
         }
         continue;
       }

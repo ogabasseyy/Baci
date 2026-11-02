@@ -32,7 +32,16 @@ SELECT dblink_connect('engine_race_b', format(
   'host=%s port=%s dbname=%s user=%s password=%s',
   inet_server_addr(), inet_server_port(), current_database(), current_user, :'dblink_password'));
 
+-- Both backends run the pass as the transfer worker role. A suite login that
+-- only administers that role (the replay image's non-superuser login created
+-- it) is given SET on it for the race and loses it again at the end.
+SELECT NOT pg_catalog.pg_has_role(current_user, 'piggyvest_primary_transfer_worker', 'SET')
+  AS engine_race_grant_worker \gset
+
 BEGIN;
+\if :engine_race_grant_worker
+GRANT piggyvest_primary_transfer_worker TO CURRENT_USER WITH INHERIT FALSE, SET TRUE;
+\endif
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 INSERT INTO auth.users(id) VALUES ('e5e10000-0000-4000-8000-000000000001');
 INSERT INTO public.merchants(id, email) VALUES ('e5e10000-0000-4000-8000-000000000002', 'engine-race@example.com');
@@ -141,6 +150,9 @@ DELETE FROM piggyvest_primary.integrations WHERE id = 'e5e10000-0000-4000-8000-0
 DELETE FROM public.customers WHERE id = 'e5e10000-0000-4000-8000-000000000003';
 DELETE FROM public.merchants WHERE id = 'e5e10000-0000-4000-8000-000000000002';
 DELETE FROM auth.users WHERE id = 'e5e10000-0000-4000-8000-000000000001';
+\if :engine_race_grant_worker
+REVOKE piggyvest_primary_transfer_worker FROM CURRENT_USER;
+\endif
 COMMIT;
 
 \if :engine_had_dblink

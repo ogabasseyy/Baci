@@ -20,7 +20,6 @@ import { useMobileMenuDialog } from './use-mobile-menu-dialog';
 export interface MobileMenuProps {
   isOpen: boolean;
   onClose: (reason?: 'dismiss' | 'navigate') => void;
-  logo?: string;
   storeSlug?: string;
 }
 
@@ -69,9 +68,9 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 
   const renderSection = (title: string, items: MobileMenuItem[]) => (
     <div className="mb-5 px-4 last:mb-0">
-      <h3 className="mb-2 px-1 font-bold text-store-background-text/60 text-xs uppercase tracking-widest">
+      <h2 className="mb-2 px-1 font-bold text-store-background-text/60 text-xs uppercase tracking-widest">
         {title}
-      </h3>
+      </h2>
       <ul className="space-y-1">
         {items.map((item) => {
           const isActive = item.path === activePath;
@@ -153,9 +152,9 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 
           {categories.length > 0 && (
             <div className="mb-5 px-4">
-              <h3 className="mb-2 px-1 font-bold text-store-background-text/60 text-xs uppercase tracking-widest">
+              <h2 className="mb-2 px-1 font-bold text-store-background-text/60 text-xs uppercase tracking-widest">
                 Categories
-              </h3>
+              </h2>
               <ul className="flex flex-wrap gap-1.5 px-1">
                 {categories.map((category) => (
                   <li key={category.slug}>

@@ -80,6 +80,13 @@ describe('MobileMenu', () => {
       screen.getByRole('dialog', { name: /mobile menu/i })
     ).toHaveAttribute('aria-modal', 'true');
 
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Shop & Services' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Categories' })
+    ).toBeInTheDocument();
+
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
       'href',
       '/ogabassey'

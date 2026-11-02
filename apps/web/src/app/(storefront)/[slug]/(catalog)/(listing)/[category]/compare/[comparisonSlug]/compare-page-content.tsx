@@ -136,7 +136,7 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
           <header className="space-y-4">
             <h1
-              className="text-3xl font-bold tracking-tight sm:text-4xl"
+              className="text-3xl font-bold tracking-tight md:text-4xl"
               data-cwv-lcp-copy="compare"
             >
               {page.heading}

@@ -22,7 +22,7 @@ export function CompareIndexPageContent({
     <main className="mx-auto max-w-6xl bg-store-background px-4 py-10 text-store-background-text sm:px-6 lg:px-8">
       <header className="max-w-3xl space-y-3">
         <h1
-          className="text-3xl font-bold tracking-tight sm:text-4xl"
+          className="text-3xl font-bold tracking-tight md:text-4xl"
           data-cwv-lcp-copy="compare"
         >
           {categoryName} comparisons

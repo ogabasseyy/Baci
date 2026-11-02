@@ -114,6 +114,9 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(defaultRenderer).toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp\.css['"];?/
     );
+    expect(defaultRenderer).toMatch(
+      /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp-semantic\.css['"];?/
+    );
     expect(defaultDetailClient).not.toMatch(/storefront-pdp\.css/);
 
     const pdpCss = readStorefrontFile('storefront-pdp.css');

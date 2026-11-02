@@ -24,7 +24,10 @@ registered, verified and enabled (`apps/web/src/lib/piggyvest/house-wallets.ts`)
 
 1. Create the three wallets in the PiggyVest business dashboard and note each
    wallet id. Confirm in the dashboard that each one belongs to Ogabassey's
-   business, is an NGN wallet, and is not a customer wallet.
+   business, is an NGN wallet, and is not a customer wallet. The Interest
+   wallet must be the wallet onboarding routes main-wallet interest to (the
+   `PIGGYVEST_PRIMARY_INTEREST_PAYOUT_WALLET_ID` setting), so interest that
+   PiggyVest pays lands in the registered Interest wallet.
 2. Register them unverified (a mistake can still be corrected or deleted):
 
    ```sql

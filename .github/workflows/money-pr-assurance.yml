@@ -98,6 +98,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
+      # actions: read ties each required check to the CI workflow run.
+      actions: read
       contents: read
       pull-requests: read
       issues: read

@@ -45,8 +45,12 @@
   },
   "moneyPaths": [
     "apps/web/src/app/api/payments/webhook/**",
-    "apps/web/src/app/api/vtu/checkout/**",
-    "apps/web/src/lib/vtu-checkout*",
+    "apps/web/src/app/api/payments/juicyway/**",
+    "apps/web/src/lib/payments/**",
+    "apps/web/src/app/api/vtu/**",
+    "apps/web/src/app/api/cron/*vtu*/**",
+    "apps/web/src/lib/vtu-*",
+    "apps/web/src/app/api/storefront/imei-check/**",
     "apps/web/src/lib/imei-lookup-fulfillment*"
   ],
   "governancePaths": [
@@ -97,12 +101,18 @@
     "label": "owner-signoff",
     "phrase": "summary-approved"
   },
+  "signoffPaths": {
+    "$comment": "A money-path PR that also changes one of these files needs the owner's sign-off: they define the CI checks the assurance relies on.",
+    "paths": [".github/workflows/ci.yml", ".github/filters/ci.yml"]
+  },
   "requiredChecks": [
     {
-      "name": "Quality Gate"
+      "name": "Quality Gate",
+      "workflow": ".github/workflows/ci.yml"
     },
     {
       "name": "Quality Gate - DB Replay",
+      "workflow": ".github/workflows/ci.yml",
       "skipAllowedUnlessChanged": [
         "supabase/migrations/**",
         "supabase/tests/**",
@@ -113,6 +123,7 @@
     },
     {
       "name": "Quality Gate - Disposable SQL Suites",
+      "workflow": ".github/workflows/ci.yml",
       "skipAllowedUnlessChanged": [
         "supabase/migrations/**",
         "supabase/tests/**",

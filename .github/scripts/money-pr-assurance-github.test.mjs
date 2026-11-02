@@ -193,6 +193,9 @@ test('a money PR snapshot normalises every source', async () => {
               },
             },
           },
+    [`GET /repos/o/r/actions/runs?head_sha=${HEAD}&per_page=100`]: {
+      json: { workflow_runs: [] },
+    },
     [`GET /repos/o/r/commits/${HEAD}/check-runs?per_page=100`]: {
       json: {
         check_runs: [

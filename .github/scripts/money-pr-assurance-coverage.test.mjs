@@ -58,10 +58,21 @@ test('money code whose file name lacks those words is still a money path', () =>
     // Paystack deliveries for PiggyVest primary-card custody.
     'apps/web/src/app/api/payments/webhook/paystack-key-family-dispatch.ts',
     'apps/web/src/app/api/payments/webhook/route.ts',
-    // Airtime and IMEI paths governed by the "delivered means owed" rule.
+    // Airtime and IMEI paths governed by the "delivered means owed" rule:
+    // wallet debits, refunds and their recovery.
     'apps/web/src/app/api/vtu/checkout/confirm/route.ts',
+    'apps/web/src/app/api/vtu/purchase/route.ts',
+    'apps/web/src/app/api/cron/reconcile-vtu-processing/route.ts',
     'apps/web/src/lib/vtu-checkout-customer-rpcs.ts',
+    'apps/web/src/lib/vtu-fulfillment-refund.ts',
+    'apps/web/src/lib/vtu-debit-ledger-lookup.ts',
     'apps/web/src/lib/imei-lookup-fulfillment.ts',
+    'apps/web/src/app/api/storefront/imei-check/execute-imei-lookup.ts',
+    'apps/web/src/app/api/storefront/imei-check/route-cache-helpers.ts',
+    'apps/web/src/app/api/storefront/imei-check/refund-unsubmitted-petrock-lookup.ts',
+    // Payment confirmation that funds wallets.
+    'apps/web/src/lib/payments/confirm-paystack-dva-by-order-account.ts',
+    'apps/web/src/app/api/payments/juicyway/webhook/route.ts',
     // Prefunded-card and primary-wallet runtime, schemas and workers.
     'apps/web/src/scripts/run-prefunded-card-background.ts',
     'apps/web/src/schemas/prefunded-card-provider.ts',
@@ -98,6 +109,7 @@ test('interface code, documentation and look-alike names are not money paths', (
     'apps/web/src/app/page.tsx',
     'supabase/migrations/20260730000109_reject_merchant_identity_primary_key_reassignment.sql',
     'apps/web/src/lib/email-templates/order-receipt.ts',
+    'apps/web/src/lib/email-templates/vtu-token-receipt.ts',
   ]) {
     assert.ok(!isMoney(path), `${path} must not be a money path`);
   }

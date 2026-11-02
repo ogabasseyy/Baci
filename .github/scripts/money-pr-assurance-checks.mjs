@@ -1,6 +1,7 @@
 // Confirms the CI checks a money-path PR relies on (database replay, SQL
 // suites with their catalog and grant assertions, and the aggregate quality
-// gate) finished green on the head commit.
+// gate) finished green on the head commit, produced by their configured
+// workflow: a same-named job from any other workflow is ignored.
 import { matchesAny } from './money-pr-assurance-config.mjs';
 
 function newestRun(runs) {
@@ -16,7 +17,10 @@ export function evaluateRequiredChecks({
   const pending = [];
   for (const required of requiredChecks) {
     const run = newestRun(
-      checkRuns.filter(({ name }) => name === required.name)
+      checkRuns.filter(
+        ({ name, workflowPath }) =>
+          name === required.name && workflowPath === required.workflow
+      )
     );
     if (run?.status !== 'completed') {
       pending.push(`${required.name} has not finished on the head commit.`);

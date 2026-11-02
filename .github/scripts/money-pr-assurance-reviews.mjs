@@ -45,8 +45,10 @@ export function parseVerdictBlock(body) {
       field(text, 'REVIEWED-HEAD').map((value) => value.toLowerCase())
     ),
   ];
-  if (heads.length !== 1 || !/^[0-9a-f]{7,40}$/.test(heads[0])) {
-    return { error: 'REVIEWED-HEAD must name exactly one commit SHA' };
+  if (heads.length !== 1 || !/^[0-9a-f]{40}$/.test(heads[0])) {
+    return {
+      error: 'REVIEWED-HEAD must name exactly one full 40-character commit SHA',
+    };
   }
   const prompts = [...new Set(field(text, 'PROMPT-VERSION'))];
   if (prompts.length !== 1)
@@ -67,11 +69,14 @@ function evaluateVerdictFamily(
       time: item.updatedAt || item.createdAt,
       created: item.createdAt,
     })),
-    ...reviews.map((item) => ({
-      ...item,
-      time: item.submittedAt,
-      created: item.submittedAt,
-    })),
+    // A dismissed review has been withdrawn and never counts as a verdict.
+    ...reviews
+      .filter(({ state }) => state !== 'DISMISSED')
+      .map((item) => ({
+        ...item,
+        time: item.submittedAt,
+        created: item.submittedAt,
+      })),
   ].filter(
     (item) =>
       postedAs(item, family) &&
@@ -163,7 +168,10 @@ export function evaluateOwnerSignoff({
 }) {
   const escaped = ownerSignoff.phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = new RegExp(`^\\s*${escaped}\\s+([0-9a-f]{7,40})\\s*$`, 'gim');
-  const approvals = [...comments, ...reviews]
+  const approvals = [
+    ...comments,
+    ...reviews.filter(({ state }) => state !== 'DISMISSED'),
+  ]
     .filter(
       (item) => writtenBy(item, ownerSignoff.logins) && item.userType === 'User'
     )

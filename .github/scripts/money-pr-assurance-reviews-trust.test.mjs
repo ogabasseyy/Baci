@@ -222,3 +222,39 @@ test('a marker family counts only when its body starts with the marker', () => {
   assert.equal(run(base, [leading], withMarker).satisfied, true);
   assert.equal(run(base, [buried], withMarker).satisfied, false);
 });
+
+test('dismissed reviews never count as a verdict or as the owner sign-off', () => {
+  const dismissedVerdict = {
+    ...review(CLAUDE, verdictBlock(), HEAD, 3),
+    state: 'DISMISSED',
+  };
+  assert.equal(
+    run([codexRequest(), codexClean()], [dismissedVerdict]).families.claude
+      .state,
+    'missing'
+  );
+  const dismissedApproval = {
+    ...review(OWNER, `summary-approved ${HEAD.slice(0, 7)}`, HEAD, 4),
+    state: 'DISMISSED',
+  };
+  assert.equal(
+    evaluateOwnerSignoff({
+      comments: [],
+      reviews: [dismissedApproval],
+      head: HEAD,
+      ownerSignoff,
+    }).approved,
+    false
+  );
+});
+
+test('a verdict must name the full 40-character commit it reviewed', () => {
+  const abbreviated = comment(
+    CLAUDE,
+    verdictBlock({ sha: HEAD.slice(0, 7) }),
+    3
+  );
+  const result = run([codexRequest(), codexClean(), abbreviated]);
+  assert.equal(result.families.claude.state, 'fail');
+  assert.match(result.families.claude.detail, /40-character/);
+});

@@ -53,18 +53,21 @@ commit.
      The verdict counts when it comes from the Claude app, names the full
      commit Claude reviewed and that commit is the head, uses the current
      prompt version and says PASS.
-   - A reviewer comment that someone else edited no longer counts. If a
-     newer comment from that reviewer was edited by another login, the
-     reviewer fails until it posts a fresh review.
+   - A reviewer comment that someone else edited, or a dismissed review, no
+     longer counts. If a newer comment from that reviewer was edited by
+     another login, the reviewer fails until it posts a fresh review. A
+     Codex review or review summary reporting findings on the head after its
+     clean comment also withdraws the clean verdict.
    - Gemini does not count for now: its workflow posts under the shared
      GitHub Actions identity, which any pull-request workflow can use.
 2. **Every review thread resolved.** Fix or answer each finding, then resolve
    its thread.
 3. **CI green on the head commit:** `Quality Gate`, `Quality Gate - DB Replay`
-   and `Quality Gate - Disposable SQL Suites`. The database replay runs the
-   catalog and grant assertions. A skipped database suite only counts when no
-   file that would make CI run it changed (the database entries of the CI
-   change filter).
+   and `Quality Gate - Disposable SQL Suites`, each produced by the CI Quality
+   Gate workflow (a same-named job from any other workflow is ignored). The
+   database replay runs the catalog and grant assertions. A skipped database
+   suite only counts when no file that would make CI run it changed (the
+   database entries of the CI change filter).
 4. **Sandbox evidence or a dark-until statement in the PR description:**
    either a link to a file under `docs/piggyvest-contract-evidence/` that
    this pull request adds or updates, or a line such as
@@ -75,9 +78,10 @@ commit.
    must keep the five headings in order, stay at or under 450 words, and
    contain no code or SQL.
 6. **Owner sign-off, when required.** If the summary says
-   `Owner sign-off: required`, the PR has the `owner-signoff` label, or the
-   PR changes any assurance file (the rules, prompt, configuration or
-   workflows), the owner must comment
+   `Owner sign-off: required`, the PR has the `owner-signoff` label, the PR
+   changes any assurance file (the rules, prompt, configuration or
+   workflows), or it changes the CI workflow or change filter listed in
+   `signoffPaths`, the owner must comment
    `summary-approved <first 7 characters of the head commit>` on its own line,
    in a PR comment or a review. The sign-off covers the summary only; it
    never waives another requirement.

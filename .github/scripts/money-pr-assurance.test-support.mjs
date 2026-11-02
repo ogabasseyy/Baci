@@ -136,13 +136,21 @@ export function ownerApproval(sha = HEAD, login = OWNER, minute = 4) {
   return comment(login, `summary-approved ${sha.slice(0, 7)}`, minute);
 }
 
-export function checkRun(name, conclusion = 'success', id = 1) {
+export const CI_WORKFLOW = '.github/workflows/ci.yml';
+
+export function checkRun(
+  name,
+  conclusion = 'success',
+  id = 1,
+  workflowPath = CI_WORKFLOW
+) {
   return {
     id,
     name,
     status: conclusion === null ? 'in_progress' : 'completed',
     conclusion,
     startedAt: at(id),
+    workflowPath,
   };
 }
 

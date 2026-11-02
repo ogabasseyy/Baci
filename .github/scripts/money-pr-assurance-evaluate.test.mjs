@@ -207,6 +207,7 @@ test('failing checks fail and running checks keep the status pending', () => {
         status: 'completed',
         conclusion: 'success',
         startedAt: '',
+        workflowPath: '.github/workflows/ci.yml',
       },
       {
         id: 2,
@@ -214,6 +215,7 @@ test('failing checks fail and running checks keep the status pending', () => {
         status: 'completed',
         conclusion: 'failure',
         startedAt: '',
+        workflowPath: '.github/workflows/ci.yml',
       },
       {
         id: 3,
@@ -221,6 +223,7 @@ test('failing checks fail and running checks keep the status pending', () => {
         status: 'completed',
         conclusion: 'success',
         startedAt: '',
+        workflowPath: '.github/workflows/ci.yml',
       },
     ],
   });
@@ -233,6 +236,7 @@ test('failing checks fail and running checks keep the status pending', () => {
         status: 'in_progress',
         conclusion: null,
         startedAt: '',
+        workflowPath: '.github/workflows/ci.yml',
       },
     ],
   });

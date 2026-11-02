@@ -144,6 +144,9 @@ test('a money PR without assurance gets a failure status listing the reasons', a
     [`GET /repos/o/r/commits/${HEAD}/check-runs?per_page=100`]: {
       json: { check_runs: [] },
     },
+    [`GET /repos/o/r/actions/runs?head_sha=${HEAD}&per_page=100`]: {
+      json: { workflow_runs: [] },
+    },
   };
   const { fake, result, summaries } = await run({ PR_NUMBER: '6' }, routes);
   const [status] = statusBodies(fake);

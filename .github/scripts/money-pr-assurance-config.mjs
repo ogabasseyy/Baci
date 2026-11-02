@@ -134,8 +134,11 @@ function parseRequiredChecks(checks) {
   return checks.map((check) => {
     if (!check || !isNonEmptyString(check.name))
       fail('requiredChecks entries need a name');
+    if (!isNonEmptyString(check.workflow))
+      fail(`requiredChecks.${check.name}.workflow is required`);
     return {
       name: check.name,
+      workflow: check.workflow,
       skipAllowedUnlessChanged:
         check.skipAllowedUnlessChanged === undefined
           ? null
@@ -175,6 +178,11 @@ export function parseAssuranceConfig(raw) {
       phrase: signoff.phrase,
     },
     requiredChecks: parseRequiredChecks(raw.requiredChecks),
+    signoffPaths: requireStringList(
+      raw.signoffPaths?.paths ?? [],
+      'signoffPaths.paths',
+      { allowEmpty: true }
+    ),
   };
 }
 

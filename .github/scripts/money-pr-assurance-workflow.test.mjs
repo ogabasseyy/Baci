@@ -46,6 +46,8 @@ test('the evaluator never checks out pull-request code and posts only statuses',
   );
   assert.match(evaluate, /persist-credentials: false/);
   assert.match(evaluate, /statuses: write/);
+  // Reading workflow runs ties each required check to the CI workflow.
+  assert.match(evaluate, /actions: read/);
   assert.match(
     evaluate,
     /run: node \.github\/scripts\/money-pr-assurance\.mjs/
@@ -108,12 +110,11 @@ test('workflow_run names and required check names exist in their workflows', () 
     );
   for (const name of runs)
     assert.ok(names.includes(name), `workflow "${name}" must exist`);
-  const ci = readRepoFile('.github/workflows/ci.yml');
-  for (const { name } of config.requiredChecks) {
+  for (const { name, workflow: path } of config.requiredChecks) {
     assert.match(
-      ci,
+      readRepoFile(path),
       new RegExp(`^ {4}name: ${name.replace(/[-]/g, '\\-')}$`, 'm'),
-      `CI job "${name}" must exist`
+      `job "${name}" must exist in ${path}`
     );
   }
 });

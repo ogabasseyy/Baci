@@ -1,6 +1,7 @@
 // Thin GitHub REST/GraphQL client plus the reads that build an assurance
 // snapshot. It never checks out or executes pull-request code: the summary
 // and evidence files are read as data through the contents API.
+import { readCheckRuns } from './money-pr-assurance-check-runs.mjs';
 import { classifyChangedFiles } from './money-pr-assurance-config.mjs';
 import { attachEditors, trustedLogins } from './money-pr-assurance-editors.mjs';
 import {
@@ -238,18 +239,7 @@ export async function collectSnapshot(
       logins
     ),
     threads: await readThreads(client, { owner, repo, number }),
-    checkRuns: (
-      await client.getAll(
-        `${prefix}/commits/${pr.headSha}/check-runs?per_page=100`,
-        'check_runs'
-      )
-    ).map((run) => ({
-      id: run.id,
-      name: run.name,
-      status: run.status,
-      conclusion: run.conclusion ?? null,
-      startedAt: run.started_at ?? '',
-    })),
+    checkRuns: await readCheckRuns(client, { owner, repo, sha: pr.headSha }),
   };
 }
 

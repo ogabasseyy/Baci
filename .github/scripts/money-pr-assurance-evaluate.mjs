@@ -5,6 +5,7 @@ import { evaluateRequiredChecks } from './money-pr-assurance-checks.mjs';
 import {
   changedPaths,
   classifyChangedFiles,
+  matchesAny,
 } from './money-pr-assurance-config.mjs';
 import {
   countUnresolvedThreads,
@@ -140,12 +141,18 @@ export function evaluateAssurance(snapshot, config) {
     );
   }
   // A change to the assurance rules is reviewed under the rules it changes,
-  // so the owner must always approve it.
-  const rulesChanged = classification.governanceFiles.length > 0;
+  // and a change to the CI behind its required checks can fake them, so
+  // the owner must always approve either.
+  const rulesChanged = [
+    ...classification.governanceFiles,
+    ...changedPaths(snapshot.files).filter((path) =>
+      matchesAny(path, config.signoffPaths)
+    ),
+  ];
   const signoffNeeded =
     checkSummaries(snapshot, config, reasons) ||
     snapshot.pr.labels.includes(config.ownerSignoff.label) ||
-    rulesChanged;
+    rulesChanged.length > 0;
   checkEvidence(snapshot, config, reasons);
   const reviewers = evaluateReviewers({
     comments: snapshot.comments ?? [],
@@ -168,9 +175,10 @@ export function evaluateAssurance(snapshot, config) {
       ownerSignoff: config.ownerSignoff,
     });
     if (!signoff.approved) {
-      const why = rulesChanged
-        ? ` (this pull request changes the assurance rules: ${classification.governanceFiles[0]})`
-        : '';
+      const why =
+        rulesChanged.length > 0
+          ? ` (this pull request changes the assurance rules or its CI: ${rulesChanged[0]})`
+          : '';
       reasons.push(`${signoff.detail}${why}.`);
     }
   }

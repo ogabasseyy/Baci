@@ -1,3 +1,5 @@
+import { normalizeHref } from './crawl-depth-module-hrefs';
+export { collectModuleHrefs } from './crawl-depth-module-hrefs';
 import {
   getCanonicalBlogCategorySlug,
   getOgabasseyBlogCategoryAliasSlug,
@@ -161,58 +163,15 @@ export function classifyCrawlDepthUrl(url: string): ClassifiedCrawlDepthUrl {
   return { kind: 'product', path: pathWithSearch(parsedUrl) };
 }
 
-function normalizeHref(href: string) {
-  const parsedUrl = new URL(href, 'https://ogabassey.com');
-  return `${parsedUrl.pathname}${parsedUrl.search}`;
-}
 
 export function isCoveredByMaintainedModules(
   classifiedUrl: ClassifiedCrawlDepthUrl,
   moduleHrefs: Set<string>
 ) {
-  if (CLEANUP_KINDS.has(classifiedUrl.kind)) {
-    return true;
-  }
-
-  return moduleHrefs.has(normalizeHref(classifiedUrl.path));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
-}
-
-function collectHrefs(value: unknown, hrefs: Set<string>) {
-  if (typeof value === 'string') {
-    if (value.startsWith('/') || value.startsWith('https://ogabassey.com')) {
-      hrefs.add(normalizeHref(value));
-    }
-    return;
-  }
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      collectHrefs(item, hrefs);
-    }
-    return;
-  }
-
-  if (!isRecord(value)) {
-    return;
-  }
-
-  if (typeof value.href === 'string') {
-    hrefs.add(normalizeHref(value.href));
-  }
-
-  for (const nestedValue of Object.values(value)) {
-    collectHrefs(nestedValue, hrefs);
-  }
-}
-
-export function collectModuleHrefs(value: unknown) {
-  const hrefs = new Set<string>();
-  collectHrefs(value, hrefs);
-  return hrefs;
+  if (CLEANUP_KINDS.has(classifiedUrl.kind)) return true;
+  if (classifiedUrl.kind === 'unparseable') return false;
+  const normalized = normalizeHref(classifiedUrl.path);
+  return normalized !== null && moduleHrefs.has(normalized);
 }
 
 function emptyClusterSummary(): ClusterSummary {
@@ -275,6 +234,7 @@ export function formatCrawlDepthCoverageReport(
   report: CrawlDepthCoverageReport
 ) {
   const lines = [
+    'module_inventory_coverage (not live crawl or reachability evidence)',
     `total_rows ${report.totalRows}`,
     `covered_maintained_rows ${report.coveredMaintainedRows}`,
     `missing_maintained_rows ${report.missingMaintainedRows}`,

@@ -4,6 +4,7 @@ import {
   fixture,
   goalId,
   ready,
+  scope,
   walletName,
 } from './primary-savings-provisioning.input.test-support';
 
@@ -11,8 +12,8 @@ vi.mock('server-only', () => ({}));
 
 /**
  * PiggyVest rewrites sub-wallet names (sandbox, 2026-10-31: every `-` was
- * gone when the wallet was listed back). `baci-save:<integration>:<goal>`
- * can therefore list as letters and digits only.
+ * gone when the wallet was listed back). `baci-save-<hash>` can therefore
+ * list as letters and digits only.
  */
 const sanitisedName = walletName.replace(/[^A-Za-z0-9]/g, '');
 
@@ -86,5 +87,53 @@ describe('bugfix: savings-goal provisioning reconciles provider-sanitised names'
       'conflict'
     );
     expect(input.store.enroll).not.toHaveBeenCalled();
+  });
+
+  describe('legacy pre-short-name goal wallet names', () => {
+    // 'baci-save:<integration>:<goal>' (83 characters): the migration keeps
+    // it only on intents that already hold a provider wallet.
+    const legacyName = `baci-save:${scope.integrationId}:${goalId}`;
+
+    it('keeps serving a wallet-bound goal under its legacy name, and lists by that name', async () => {
+      const input = fixture();
+      input.mode = 'recover';
+      input.store.read.mockResolvedValue({
+        ...(await input.store.read()),
+        walletName: legacyName,
+        providerWalletId: 'destination',
+      });
+      input.listWallets.mockResolvedValue([
+        { id: 'destination', name: legacyName, status: 'active' },
+      ]);
+      input.retrieveWallet.mockResolvedValue({
+        ...(await input.retrieveWallet()),
+        name: legacyName,
+      });
+      expect(await provisionPrimarySavingsWallet(input)).toEqual(ready);
+      expect(input.listWallets).toHaveBeenCalledWith('customer', legacyName);
+      expect(input.createWallet).not.toHaveBeenCalled();
+    });
+
+    it('refuses the legacy name on an intent that has no provider wallet yet', async () => {
+      const input = fixture();
+      input.mode = 'recover';
+      input.store.read.mockResolvedValue({
+        ...(await input.store.read()),
+        walletName: legacyName,
+        providerWalletId: null,
+      });
+      expect((await provisionPrimarySavingsWallet(input)).status).toBe(
+        'conflict'
+      );
+      expect(input.listWallets).not.toHaveBeenCalled();
+      expect(input.createWallet).not.toHaveBeenCalled();
+    });
+
+    it('lists by the current name for a current-name intent', async () => {
+      const input = fixture();
+      input.mode = 'recover';
+      await provisionPrimarySavingsWallet(input);
+      expect(input.listWallets).toHaveBeenCalledWith('customer', walletName);
+    });
   });
 });

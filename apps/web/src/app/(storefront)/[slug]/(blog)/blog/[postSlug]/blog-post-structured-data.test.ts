@@ -157,4 +157,35 @@ describe('buildBlogPostStructuredData', () => {
     expect(data.blogSchema.description).toContain('₦250,000.00');
     expect(data.blogSchema.description).not.toContain('amp;');
   });
+
+  it('populates BlogPosting keywords from focus_keyword when keywords array is empty', () => {
+    const data = buildBlogPostStructuredData({
+      author: {
+        name: 'Adaeze',
+        url: 'https://ogabassey.com/blog/author/adaeze',
+      },
+      baseUrl: 'https://ogabassey.com',
+      blogIndexUrl: 'https://ogabassey.com/blog',
+      content:
+        '<h2>Frequently Asked Questions About iPhone 17</h2><h3>How much is iPhone 17?</h3><p>Check live pricing on Ogabassey.</p>',
+      merchant: {
+        business_name: 'Ogabassey',
+        logo_url: null,
+        slug: 'ogabassey',
+        social_media: null,
+      },
+      post: {
+        focus_keyword: 'iPhone 17 price in Nigeria',
+        keywords: null,
+        published_at: '2026-06-25T08:00:00.000Z',
+        title: 'iPhone 17 Price in Nigeria',
+      },
+      postUrl: 'https://ogabassey.com/blog/iphone-17-price-in-nigeria',
+    });
+
+    expect(data.blogSchema.keywords).toBe('iPhone 17 price in Nigeria');
+    expect(data.faqSchema).toMatchObject({
+      '@type': 'FAQPage',
+    });
+  });
 });

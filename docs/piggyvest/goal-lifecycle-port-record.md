@@ -32,7 +32,7 @@ current conventions. It never means copying the file.
   record.
 - **Hash:** SHA-256 of each file's bytes as stored in that commit. Where main's old subsystem reports under
   `apps/web/src/lib/piggyvest/*.report.md` quote a frozen hash for one of these files, it is the same value.
-- **Compared with:** `origin/main` at `7a4ff22ce726f0b63e7598ad183e38a408d556c3` (2026-10-31). 36 of the 39 paths
+- **Compared with:** `origin/main` at `93a3735dc2e8023ec2efe1f1a6ad945ee528051f` (2026-11-02). 36 of the 39 paths
   do not exist on main. 3 paths exist on main with different content (see "Versions already on main").
 - **Re-check one file** in any clone that has the ref:
   `git show "refs/backups/2026-10-31/cursor-savings-phase1:supabase/migrations/<file>" | shasum -a 256`.

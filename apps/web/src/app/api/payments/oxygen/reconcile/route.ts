@@ -23,6 +23,11 @@ export async function POST(request: NextRequest) {
   const auth = await authenticateApiRequest(request);
   if (auth.error || !auth.supabase || !auth.user)
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (process.env.OXYGEN_CALLBACK_DRAIN_ENABLED !== 'true')
+    return NextResponse.json(
+      { error: 'Reconciliation unavailable' },
+      { status: 503, headers: { 'Cache-Control': 'no-store' } }
+    );
   const connection = connectOxygenRuntime();
   if (!connection)
     return NextResponse.json(

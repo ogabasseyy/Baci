@@ -33,6 +33,7 @@ const hosts = new Set(['example.test']);
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv('OXYGEN_CALLBACK_DRAIN_ENABLED', 'true');
   mocks.limit.mockResolvedValue(true);
   mocks.csrf.mockResolvedValue({ valid: true });
   mocks.auth.mockResolvedValue({ user: { id: 'worker' }, supabase: worker });
@@ -43,6 +44,13 @@ beforeEach(() => {
     reconcilePaymentCallback: mocks.payment,
   });
   mocks.reconcile.mockResolvedValue(undefined);
+});
+
+it('does not drain callbacks when the drain is disabled', async () => {
+  vi.stubEnv('OXYGEN_CALLBACK_DRAIN_ENABLED', 'false');
+  expect((await POST(request())).status).toBe(503);
+  expect(mocks.connect).not.toHaveBeenCalled();
+  expect(mocks.reconcile).not.toHaveBeenCalled();
 });
 
 it('fails closed before constructing runtime when rate limited, CSRF-invalid or unauthenticated', async () => {

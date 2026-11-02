@@ -1,17 +1,16 @@
 import 'server-only';
 import { createDecipheriv, pbkdf2 } from 'node:crypto';
 import { promisify } from 'node:util';
+import {
+  GIGL_WEBHOOK_BLOCK_BYTES as BLOCK_BYTES,
+  GIGL_WEBHOOK_HEADER_BYTES as HEADER_BYTES,
+  GIGL_WEBHOOK_KEY_BYTES as KEY_BYTES,
+  GIGL_WEBHOOK_PBKDF2_ITERATIONS as PBKDF2_ITERATIONS,
+  GIGL_WEBHOOK_SALT_BYTES as SALT_BYTES,
+} from './gigl-webhook-crypto-constants';
 
 const pbkdf2Async = promisify(pbkdf2);
 
-// GIG's documented scheme: base64(salt[16] | iv[16] | AES-256-CBC ciphertext),
-// key = PBKDF2-HMAC-SHA1(secret, salt, 10000 iterations, 32 bytes), PKCS7.
-const SALT_BYTES = 16;
-const IV_BYTES = 16;
-const BLOCK_BYTES = 16;
-const KEY_BYTES = 32;
-const PBKDF2_ITERATIONS = 10_000;
-const HEADER_BYTES = SALT_BYTES + IV_BYTES;
 const utf8 = new TextDecoder('utf-8', { fatal: true });
 
 /**

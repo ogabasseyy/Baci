@@ -39,7 +39,8 @@ FROM generate_series(1, 7) AS n;
 RESET ROLE;
 -- 1: due later, polled long ago. 2: polled 10 seconds ago. 3: terminal.
 -- 4: paused after unchanged polls. 5: in failure backoff. 6: parked
--- (paused with no schedule). 7: the poller already recorded scan MSHC.
+-- (paused with no schedule). 7: polled 10 minutes ago on the normal
+-- 15-minute cadence; the poller already recorded scan MSHC.
 UPDATE public.shipment_tracking_monitors
 SET state = 'active', next_poll_at = now() + interval '15 minutes',
   last_polled_at = now() - interval '10 minutes'
@@ -64,7 +65,7 @@ SET state = 'paused', next_poll_at = NULL,
   last_polled_at = now() - interval '2 hours'
 WHERE tracking_number = '7700000006';
 UPDATE public.shipment_tracking_monitors
-SET state = 'active', next_poll_at = now() + interval '15 minutes',
+SET state = 'active', next_poll_at = now() + interval '5 minutes',
   last_polled_at = now() - interval '10 minutes'
 WHERE tracking_number = '7700000007';
 INSERT INTO public.shipment_tracking_events (
@@ -160,7 +161,7 @@ SELECT is(
 SELECT is(
   public.gigl_worker_expedite_tracking_monitor('7700000007', ' mshc '),
   '{"matched": 1, "expedited": 0}'::jsonb,
-  'a replayed status the poller already recorded is a no-op'
+  'a recorded status (replay or repeat scan) never beats the poll cadence'
 );
 SELECT is(
   public.gigl_worker_expedite_tracking_monitor('7700000007', 'MDLV'),

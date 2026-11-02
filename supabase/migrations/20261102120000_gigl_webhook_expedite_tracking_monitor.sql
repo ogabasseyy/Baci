@@ -50,26 +50,33 @@ BEGIN
   -- no schedule (parked) or in failure backoff keep their schedule, so a
   -- burst of webhooks cannot hammer GIG during a tracking outage.
   --
-  -- GIG deliveries carry no nonce, so a captured one can be replayed. A
-  -- delivery whose status code the poller has already recorded for the
-  -- monitor's current epoch therefore changes nothing: replays (and GIG's
-  -- own retries) become permanent no-ops once that scan is ingested, while
-  -- a genuinely new scan still expedites. Deliveries without a status code
-  -- fall back to the debounce: a monitor polled within the last minute
-  -- becomes due one minute after that poll.
+  -- GIG deliveries carry no nonce, so a captured one can be replayed, and
+  -- GIG also reuses a code for genuine repeat scans (successive in-transit
+  -- scans), so the two cannot be told apart. A code the poller has already
+  -- recorded for the monitor's current epoch therefore only earns the
+  -- normal 15-minute cadence after the last poll: replays and retries can
+  -- never poll faster than the poller already does, a repeat scan still
+  -- wakes a paused monitor, and a code not yet recorded (a new scan) is due
+  -- one minute after the last poll at most. Deliveries without a code get
+  -- the one-minute debounce.
   WITH candidates AS (
     SELECT monitor.shipment_id,
       greatest(
         now(),
-        coalesce(monitor.last_polled_at + interval '1 minute', now())
-      ) AS due_at,
-      status_code IS NOT NULL AND EXISTS (
-        SELECT 1
-        FROM public.shipment_tracking_events AS event
-        WHERE event.shipment_id = monitor.shipment_id
-          AND event.tracking_epoch_id = monitor.tracking_epoch_id
-          AND upper(btrim(event.raw_status)) = status_code
-      ) AS already_recorded
+        coalesce(
+          monitor.last_polled_at + CASE
+            WHEN status_code IS NOT NULL AND EXISTS (
+              SELECT 1
+              FROM public.shipment_tracking_events AS event
+              WHERE event.shipment_id = monitor.shipment_id
+                AND event.tracking_epoch_id = monitor.tracking_epoch_id
+                AND upper(btrim(event.raw_status)) = status_code
+            ) THEN interval '15 minutes'
+            ELSE interval '1 minute'
+          END,
+          now()
+        )
+      ) AS due_at
     FROM public.shipment_tracking_monitors AS monitor
     JOIN public.shipments AS shipment ON shipment.id = monitor.shipment_id
     WHERE monitor.provider = 'GIGL'
@@ -85,7 +92,6 @@ BEGIN
     SET next_poll_at = candidates.due_at, updated_at = now()
     FROM candidates
     WHERE monitor.shipment_id = candidates.shipment_id
-      AND NOT candidates.already_recorded
       AND monitor.consecutive_failures = 0
       AND monitor.next_poll_at > candidates.due_at
     RETURNING monitor.shipment_id

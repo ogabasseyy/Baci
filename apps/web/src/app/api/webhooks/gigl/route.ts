@@ -18,8 +18,8 @@ import { giglWebhookExpediteResultSchema } from '@/schemas/gigl-webhook-event';
  * - A delivery is a hint, never truth: it only makes the waybill's GIGL
  *   monitor due, and the VPS poller reads the authoritative status from
  *   GIG's tracking API, so order updates and customer notifications keep
- *   their single existing writer. A retry or replay of a scan the poller has
- *   already recorded changes nothing (GIG sends no nonce to dedupe on).
+ *   their single existing writer. A retry, replay or repeat of a status the
+ *   poller already recorded never polls faster than the normal cadence.
  *
  * Status mapping:
  * - Settings missing -> 503 before the body is read (GIG retries).

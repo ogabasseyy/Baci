@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { GOAL_RECHECK_DELAY_MS } from './goal-interest-routing';
+import { p7RoutingGoalName } from './goal-wallet-names';
 import { recordGoalWallets } from './proof-7-goals';
 import { ProofBuilder } from './proof-builder';
 import { setupScenario } from './scenario';
@@ -37,10 +39,19 @@ async function run(
 }
 
 describe('recordGoalWallets', () => {
-  it('records created, not-inherited, accepted and named-destination findings on the happy path', async () => {
+  it('records created, accepted and named-destination findings on the happy path; a null payout leaves inheritance unproven', async () => {
     const { answer, result } = await run();
     expect(answer('goal_without_payout_created')).toBe('yes');
-    expect(answer('goal_without_payout_inherits_business_payout')).toBe('no');
+    // Goal (a) reads back payout null: that proves nothing either way.
+    expect(answer('goal_without_payout_inherits_business_payout')).toBe(
+      'unknown'
+    );
+    expect(
+      result.findings.find(
+        (f) => f.id === 'goal_without_payout_inherits_business_payout'
+      )?.detail
+    ).toMatch(/in writing/);
+    expect(result.notes.join(' ')).not.toMatch(/INHERITS/);
     expect(answer('goal_explicit_payout_accepted')).toBe('yes');
     expect(answer('goal_explicit_readback_names_payout_destination')).toBe(
       'yes'
@@ -153,6 +164,36 @@ describe('recordGoalWallets', () => {
     );
     expect(answer('goal_without_payout_inherits_business_payout')).toBe('yes');
     expect(result.notes.join(' ')).toMatch(/INHERITS/);
+  });
+
+  it('judges inheritance by the 5-minute reading: null at once, business later, is a yes with the warning', async () => {
+    const { answer, result } = await run(
+      {},
+      ['interest_payout_wallet'],
+      (h) => {
+        const name = p7RoutingGoalName(h.ctx.qa.qaKey, 'a', 1).replaceAll(
+          '-',
+          ''
+        );
+        h.ctx.sleep = async (ms) => {
+          if (ms !== GOAL_RECHECK_DELAY_MS) return;
+          const goal = h.mock.sandbox.wallets.find((w) => w.name === name);
+          if (goal) goal.payoutWalletId = h.mock.sandbox.businessWalletId;
+        };
+      }
+    );
+    expect(result.values.goal_a_payout_at_0m).toBe('null');
+    expect(result.values.goal_a_payout_at_5m).toBe('business');
+    expect(answer('goal_without_payout_inherits_business_payout')).toBe('yes');
+    expect(answer('goal_a_interest_stays_in_goal')).toBe('no');
+    expect(result.notes.join(' ')).toMatch(/INHERITS/);
+  });
+
+  it('says no once goal (a) names itself and the main wallet showed the same field', async () => {
+    const { answer } = await run({
+      mock: { subWalletPaysItselfWhenUnset: true },
+    });
+    expect(answer('goal_without_payout_inherits_business_payout')).toBe('no');
   });
 
   it('records the rejection message of an explicit payout, redacted', async () => {

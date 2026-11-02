@@ -45,7 +45,7 @@ describe('proof 7: main-wallet interest routing at creation', () => {
     expect(answer(result, 'main_wallet_accrual_flag_readable')).toBe('yes');
     expect(answer(result, 'goal_without_payout_created')).toBe('yes');
     expect(answer(result, 'goal_without_payout_inherits_business_payout')).toBe(
-      'no'
+      'unknown'
     );
     expect(answer(result, 'goal_explicit_payout_accepted')).toBe('yes');
     expect(
@@ -248,11 +248,13 @@ describe('proof 7: a new attempt re-tests with fresh names', () => {
 });
 
 describe('proof 7: inheritance needs a readable destination', () => {
-  it('says no when the goal readback shows an empty payout field next to the main wallet naming the business wallet', async () => {
+  it('an empty goal payout field proves nothing, even next to a main wallet naming the business wallet', async () => {
     const { result } = await run();
-    expect(answer(result, 'goal_without_payout_inherits_business_payout')).toBe(
-      'no'
-    );
+    const id = 'goal_without_payout_inherits_business_payout';
+    expect(result.status).toBe('observed');
+    const finding = result.findings.find((f) => f.id === id);
+    expect(finding).toMatchObject({ answer: 'unknown' });
+    expect(finding?.detail).toMatch(/in writing/);
   });
 
   it('says unknown when the goal readback omits its payout destination (only the accrual flag is there)', async () => {

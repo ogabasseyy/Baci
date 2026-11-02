@@ -7,7 +7,7 @@
 
 | Proof | Status | Findings yes / no / unknown |
 | --- | --- | --- |
-| p7 | observed | 11 / 4 / 2 |
+| p7 | observed | 11 / 3 / 3 |
 
 ## P7: Main-wallet interest routing at creation
 
@@ -22,7 +22,7 @@ Status: **observed**
 | main_wallet_accrual_flag_readable | Is the accrual on/off setting readable? | yes |  |
 | goal_payout_update_after_creation_documented | Does a documented endpoint set a goal's interest payout (to itself) after creation? | no | PiggyVest public API docs read 2026-11-02: no endpoint changes a wallet's interest payout or accrual after creation; nothing undocumented was tried |
 | goal_without_payout_created | Is a goal sub-wallet with its own payout left unset created? | yes |  |
-| goal_without_payout_inherits_business_payout | Does a goal wallet with no payout of its own inherit the customer's business payout wallet? | no |  |
+| goal_without_payout_inherits_business_payout | Does a goal wallet with no payout of its own inherit the customer's business payout wallet? | unknown | the readback names no payout wallet (null): that proves nothing unless PiggyVest confirms in writing where it pays; sandbox rates are 0%, so no payout can be observed |
 | goal_explicit_payout_accepted | Does POST /wallet/sub-account accept interest_payout_wallet? | yes |  |
 | goal_explicit_readback_names_payout_destination | Does the explicit goal wallet readback name that payout wallet? | yes |  |
 | goal_opted_out_created | Is an opted-out goal sub-wallet (accrual off, payout unset) created? | yes |  |
@@ -124,6 +124,7 @@ Response shapes (field names and types only):
 > Sandbox interest rates are 0%, so no interest payout can be observed here: where goal interest is really paid stays a release check (the first monthly payout).
 > Written question for the owner to send PiggyVest: when a goal sub-wallet is created with enable_interest_accrual=true and no interest_payout_wallet, where is its interest paid, and can it be paid into the goal itself? Until PiggyVest answers in writing, goal interest staying in the goal counts as not proven.
 > verdict: verified = accepted and readable, so route at creation; rejected or unverifiable = sweep the interest after it lands with a main to Ogabassey wallet-to-wallet transfer (proofs 2 and 4 cover that transfer); unconfirmed = the readback never showed a payout destination field within the polling budget, so re-run before deciding.
+> Correction recorded 2026-11-02 after a harness fix (no request was re-sent): goal_without_payout_inherits_business_payout now follows goal (a)'s final reading, the same one its verdict uses, so a null payout reads unknown (it proves nothing unless PiggyVest confirms in writing), not no.
 
 ## Assumptions the live run must confirm
 

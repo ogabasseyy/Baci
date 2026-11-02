@@ -15,7 +15,7 @@ import type { ProofContext } from './proof-context';
  * id or a name: payouts are pseudonyms and provider messages are redacted.
  */
 
-const NULL_DETAIL =
+export const NULL_DETAIL =
   'the readback names no payout wallet (null): that proves nothing unless PiggyVest confirms in writing where it pays; sandbox rates are 0%, so no payout can be observed';
 
 export const PSEUDONYM_LEGEND =

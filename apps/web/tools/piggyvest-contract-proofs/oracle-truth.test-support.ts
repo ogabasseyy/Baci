@@ -114,8 +114,14 @@ export const FINDING_TRUTH: Record<string, (c: TruthContext) => Truth> = {
   main_wallet_accrual_flag_readable: (c) =>
     ifP7Created(c, bool(c.o.payoutReadback !== 'none')),
   goal_without_payout_created: YES,
+  // Judged from goal (a)'s readback: a goal that pays itself is a no, one that
+  // names the P7 customer's business payout is a yes, and null proves nothing.
   goal_without_payout_inherits_business_payout: (c) =>
-    ifP7Created(c, bool(c.o.subWalletInheritsPayout)),
+    c.o.subWalletPaysItselfWhenUnset
+      ? 'no'
+      : c.o.subWalletInheritsPayout
+        ? ifP7Created(c, 'yes')
+        : 'unobservable',
   goal_explicit_payout_accepted: (c) => bool(c.o.subAccountAcceptsPayout),
   goal_explicit_readback_names_payout_destination: (c) =>
     c.o.subAccountAcceptsPayout

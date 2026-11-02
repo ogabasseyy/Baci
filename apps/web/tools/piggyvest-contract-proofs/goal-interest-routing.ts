@@ -144,3 +144,21 @@ export function staysInGoalAnswer(payout: PayoutPseudonym): Answer {
     return 'no';
   return 'unknown';
 }
+
+/**
+ * "Does goal (a), opted in with no payout of its own, inherit the customer's
+ * business payout wallet?", from its final reading. Naming the business wallet
+ * is a yes. A no needs the goal to name another wallet in the same field the
+ * main wallet's readback used for its destination. null proves nothing either
+ * way ('unobservable': only PiggyVest's written answer can settle it); absent,
+ * unread, or a main wallet that never showed the field leave it unknown.
+ */
+export function inheritsBusinessPayoutAnswer(
+  payout: PayoutPseudonym,
+  mainDestinationPaths: readonly string[]
+): Answer | 'unobservable' {
+  if (payout === 'business') return 'yes';
+  if (!mainDestinationPaths.includes(PAYOUT_FIELD)) return 'unknown';
+  if (payout === 'self' || payout === 'main' || payout === 'other') return 'no';
+  return payout === 'null' ? 'unobservable' : 'unknown';
+}

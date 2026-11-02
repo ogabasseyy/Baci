@@ -4,6 +4,7 @@ import {
   GOAL_RECHECK_DELAY_MS,
   GOAL_ROUTING_VARIANTS,
   goalRoutingVerdict,
+  inheritsBusinessPayoutAnswer,
   type PayoutPseudonym,
   readGoalRouting,
   staysInGoalAnswer,
@@ -110,5 +111,35 @@ describe('GOAL_ROUTING_VARIANTS', () => {
 
   it('rechecks after five minutes', () => {
     expect(GOAL_RECHECK_DELAY_MS).toBe(300_000);
+  });
+});
+
+describe('inheritsBusinessPayoutAnswer: goal (a) from its final reading', () => {
+  const SHOWN = ['interest_payout_wallet'];
+
+  it('yes when the goal names the business wallet, whatever the main wallet showed', () => {
+    expect(inheritsBusinessPayoutAnswer('business', SHOWN)).toBe('yes');
+    expect(inheritsBusinessPayoutAnswer('business', [])).toBe('yes');
+  });
+
+  it.each<PayoutPseudonym>([
+    'self',
+    'main',
+    'other',
+  ])('no when it names %s and the main wallet showed the same field; unknown otherwise', (payout) => {
+    expect(inheritsBusinessPayoutAnswer(payout, SHOWN)).toBe('no');
+    expect(inheritsBusinessPayoutAnswer(payout, [])).toBe('unknown');
+  });
+
+  it('a null payout proves nothing: unobservable, never no', () => {
+    expect(inheritsBusinessPayoutAnswer('null', SHOWN)).toBe('unobservable');
+    expect(inheritsBusinessPayoutAnswer('null', [])).toBe('unknown');
+  });
+
+  it.each<PayoutPseudonym>([
+    'absent',
+    'unread',
+  ])('unknown when the payout is %s', (payout) => {
+    expect(inheritsBusinessPayoutAnswer(payout, SHOWN)).toBe('unknown');
   });
 });

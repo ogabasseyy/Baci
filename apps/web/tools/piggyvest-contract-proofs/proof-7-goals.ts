@@ -1,11 +1,13 @@
 import {
   finalReading,
+  inheritsBusinessPayoutAnswer,
   POST_CREATION_PAYOUT_DOCS_CHECKED,
   POST_CREATION_PAYOUT_UPDATE_DOCUMENTED,
 } from './goal-interest-routing';
-import { destinationAnswer, inheritanceAnswer } from './payout-analysis';
+import { destinationAnswer } from './payout-analysis';
 import { type GoalRoutingRun, runGoalRouting } from './proof-7-goal-routing';
 import {
+  NULL_DETAIL,
   recordRoutingValues,
   recordStaysInGoal,
   routingNotes,
@@ -81,6 +83,25 @@ function accrualOffAnswer(run: GoalRoutingRun | undefined): Answer {
   return flag === null ? 'unknown' : flag === false ? 'yes' : 'no';
 }
 
+/** Goal (a)'s inheritance, judged by the same final reading as its verdict. */
+function inheritance(
+  run: GoalRoutingRun | undefined,
+  mainDestinationPaths: readonly string[]
+): [Answer | 'unobservable', string?] {
+  const payout = run?.result
+    ? finalReading(run.atOnce, run.afterRecheck).payout
+    : 'unread';
+  const answer = inheritsBusinessPayoutAnswer(payout, mainDestinationPaths);
+  if (answer === 'unobservable') return [answer, NULL_DETAIL];
+  if (answer !== 'unknown') return [answer];
+  return [
+    answer,
+    payout === 'unread'
+      ? 'the goal could not be read back'
+      : 'the readback omits a payout destination to compare, so inheritance cannot be determined',
+  ];
+}
+
 export async function recordGoalWallets(
   ctx: ProofContext,
   b: ProofBuilder,
@@ -100,18 +121,10 @@ export async function recordGoalWallets(
   const optedOut = run('b')?.result ?? null;
   const main = run('c')?.result ?? null;
   const explicit = run('d')?.result ?? null;
-  const unsetInherits = inheritanceAnswer(
-    unset?.readback ?? null,
-    mainDestinationPaths
-  );
-  const answers: Record<string, [Answer, string?]> = {
+  const unsetInherits = inheritance(run('a'), mainDestinationPaths);
+  const answers: Record<string, [Answer | 'unobservable', string?]> = {
     goal_without_payout_created: [answerOf(unset?.exists ?? null)],
-    goal_without_payout_inherits_business_payout: [
-      unsetInherits,
-      unsetInherits === 'unknown'
-        ? 'the readback omits a payout destination to compare, so inheritance cannot be determined'
-        : undefined,
-    ],
+    goal_without_payout_inherits_business_payout: unsetInherits,
     goal_explicit_payout_accepted: [answerOf(explicit?.accepted ?? null)],
     goal_explicit_readback_names_payout_destination: [
       destinationAnswer(explicit?.readback ?? null),
@@ -122,8 +135,11 @@ export async function recordGoalWallets(
       ? [answerOf(main.accepted)]
       : ['unknown', "the owner's main wallet is unknown, so it was not sent"],
   };
-  for (const [id, [answer, detail]] of Object.entries(answers))
-    b.finding(id, question(id), answer, detail);
+  for (const [id, [answer, detail]] of Object.entries(answers)) {
+    if (answer === 'unobservable')
+      b.unobservable(id, question(id), detail ?? NULL_DETAIL);
+    else b.finding(id, question(id), answer, detail);
+  }
   for (const routed of runs) {
     recordStaysInGoal(
       b,
@@ -140,7 +156,7 @@ export async function recordGoalWallets(
       );
     }
   }
-  if (unsetInherits === 'yes') {
+  if (unsetInherits[0] === 'yes') {
     b.note(
       'A goal wallet with no payout of its own INHERITS the customer payout wallet: goal interest would reach Ogabassey. Goal wallets must set their payout explicitly.'
     );

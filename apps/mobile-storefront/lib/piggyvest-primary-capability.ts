@@ -14,10 +14,16 @@ import { piggyvestPrimaryWalletApi } from './piggyvest-primary-wallet';
  * treat it as authoritative permission to use the working legacy flows
  * for that call. Only the base code is cacheable (see below): the
  * feature codes describe independently configured runtimes.
+ *
+ * PRIMARY_CARD_FUNDING_RETIRED is the card feature's permanent form: the
+ * server answers every card initialize with it before reserving anything,
+ * so a saved placeholder with no operation ID is released and the regular
+ * top-up runs, exactly as for PRIMARY_CARD_NOT_READY.
  */
 const PRIMARY_NOT_READY_CODES = new Set([
   'PIGGYVEST_NOT_READY',
   'PRIMARY_CARD_NOT_READY',
+  'PRIMARY_CARD_FUNDING_RETIRED',
   'SAVINGS_NOT_READY',
 ]);
 const PRIMARY_WALLET_REVIEW_CODES = new Set([

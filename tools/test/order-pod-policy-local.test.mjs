@@ -111,42 +111,25 @@ test('POD persistence policy and concurrent flag revocation', async () => {
           'utf8'
         )
       );
-      await admin.query(
-        readFileSync(
-          join(
-            repository,
-            'supabase/migrations/20261102060000_probe_pod_order_idempotency_hash.sql'
-          ),
-          'utf8'
-        )
+      const group = [
+        '20261102060000_probe_pod_order_idempotency_hash.sql',
+        '20261102061500_align_pod_whitespace_classification.sql',
+        '20261102063000_harden_pod_replay_bounds.sql',
+        '20261102064500_scope_pod_replay_probe.sql',
+      ].map((name) =>
+        readFileSync(join(repository, 'supabase/migrations', name), 'utf8')
       );
-      await admin.query(
-        readFileSync(
-          join(
-            repository,
-            'supabase/migrations/20261102061500_align_pod_whitespace_classification.sql'
-          ),
-          'utf8'
-        )
-      );
-      await admin.query(
-        readFileSync(
-          join(
-            repository,
-            'supabase/migrations/20261102063000_harden_pod_replay_bounds.sql'
-          ),
-          'utf8'
-        )
-      );
-      await admin.query(
-        readFileSync(
-          join(
-            repository,
-            'supabase/migrations/20261102064500_scope_pod_replay_probe.sql'
-          ),
-          'utf8'
-        )
-      );
+      await admin.query('BEGIN');
+      const probe =
+        "SELECT to_regprocedure('public.is_storefront_pod_order_idempotency_hash(uuid,text,text)') IS NULL AS absent";
+      for (const sql of group) {
+        await admin.query(sql);
+        assert.equal((await admission.query(probe)).rows[0].absent, true);
+      }
+      await assert.rejects(admin.query('SELECT 1 / 0'));
+      await admin.query('ROLLBACK');
+      assert.equal((await admission.query(probe)).rows[0].absent, true);
+      for (const sql of group) await admin.query(sql);
     }
     await admin.query(
       readFileSync(
@@ -213,8 +196,8 @@ test('POD persistence policy and concurrent flag revocation', async () => {
     );
     assert.equal(rows[0].count, 1);
   } finally {
-    if (connected) await admission.query('ROLLBACK');
-    await Promise.all([admin.end(), admission.end(), revocation.end()]);
+    if (connected) await admission.query('ROLLBACK').catch(() => undefined);
+    await Promise.allSettled([admin.end(), admission.end(), revocation.end()]);
     if (started) run('pg_ctl', ['-D', data, '-m', 'fast', 'stop']);
     rmSync(directory, { recursive: true });
   }

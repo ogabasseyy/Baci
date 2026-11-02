@@ -449,7 +449,7 @@ jobs:
       - name: Test pay-on-delivery persistence and concurrency
         if: needs.changes.outputs.quiz_db == 'true'
         run: |
-          node --test .github/scripts/pod-ci-filter.test.mjs
+          node --test .github/scripts/pod-ci-filter.test.mjs .github/scripts/pod-replay-atomic-release.test.mjs
           sudo apt-get update
           sudo apt-get install -y postgresql-16
           node tools/test/order-pod-policy-local.test.mjs --postgres-bin=/usr/lib/postgresql/16/bin

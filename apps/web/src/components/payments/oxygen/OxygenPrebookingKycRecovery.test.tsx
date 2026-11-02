@@ -51,7 +51,22 @@ it.each([
   const pending = {
     ...base,
     stage,
-    state: { ...base.state, ...(hasBooking ? { bookingReference: key } : {}) },
+    state: {
+      ...base.state,
+      ...(hasBooking ? { bookingReference: key } : {}),
+      ...(stage === 'approval_required'
+        ? {
+            kyc: {
+              address_status: 'PROCESSING',
+              bvn_status: 'DONE',
+              nin_status: 'DONE',
+              bank_status: 'DONE',
+              phone_status: 'DONE',
+              selfie_status: 'DONE',
+            },
+          }
+        : {}),
+    },
     pending: { action: 'refresh_kyc', status, idempotencyKey: key },
   };
   const commands: {

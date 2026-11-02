@@ -11,6 +11,7 @@ import {
   fetchStrictPoolUnits,
   resolveCartValidationCatalog,
 } from './cart-validation-catalog';
+import { fetchCartCatalogConcurrently } from './fetch-cart-catalog-concurrently';
 import { prepareCartValidationItems } from './prepare-cart-validation-items';
 import {
   buildOfferQuantityTotals,
@@ -100,32 +101,34 @@ export async function POST(request: NextRequest) {
     // Owner identity comes from public product rows, never a caller-selected
     // lookup fallback. Anonymous offer reads are scoped separately per owner.
     const needsVariantList = validVariantIds.length > 0;
-    const [productsResult, variantsResult] = await Promise.all([
-      validFormatIds.length > 0
-        ? supabase
-            .from('products')
-            .select(
-              'id, merchant_id, name, price, stock, stock_quantity, status, manage_stock, has_condition_offers, has_variants, variant_model, inventory_tracking_policy'
-            )
-            .in('id', validFormatIds)
-            .returns<CartProductRow[]>()
-        : Promise.resolve({ data: null, error: null }),
-      needsVariantList && validFormatIds.length > 0
-        ? fetchAllStorefrontProductVariants<CartVariantRow>({
-            supabase,
-            productIds: Array.from(new Set(validFormatIds)),
-          })
-        : Promise.resolve({ data: null, error: null }),
-    ]);
-    const offerMap = productsResult.error
-      ? new Error('Product query failed')
-      : await fetchCartOfferPrices(
-          createOfferAuthorityRpcCall(supabase),
-          validationItems,
-          productsResult.data ?? []
-        ).catch((error: unknown) =>
-          error instanceof Error ? error : new Error('Offer query failed')
-        );
+    const { productsResult, variantsResult, offerMap } =
+      await fetchCartCatalogConcurrently(
+        validFormatIds.length > 0
+          ? supabase
+              .from('products')
+              .select(
+                'id, merchant_id, name, price, stock, stock_quantity, status, manage_stock, has_condition_offers, has_variants, variant_model, inventory_tracking_policy'
+              )
+              .in('id', validFormatIds)
+              .returns<CartProductRow[]>()
+          : Promise.resolve({ data: null, error: null }),
+        needsVariantList && validFormatIds.length > 0
+          ? fetchAllStorefrontProductVariants<CartVariantRow>({
+              supabase,
+              productIds: Array.from(new Set(validFormatIds)),
+            })
+          : Promise.resolve({ data: null, error: null }),
+        async (productsResult) =>
+          productsResult.error
+            ? new Error('Product query failed')
+            : fetchCartOfferPrices(
+                createOfferAuthorityRpcCall(supabase),
+                validationItems,
+                productsResult.data ?? []
+              ).catch((error: unknown) =>
+                error instanceof Error ? error : new Error('Offer query failed')
+              )
+      );
 
     const catalog = resolveCartValidationCatalog({
       productsResult,

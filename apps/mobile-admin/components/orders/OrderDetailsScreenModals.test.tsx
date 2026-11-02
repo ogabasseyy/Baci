@@ -84,40 +84,10 @@ vi.mock('@/components/ui/ReceiptPreviewModal', () => ({
   ReceiptPreviewModal: () => null,
 }));
 
-vi.mock('@/components/ui/SuccessModal', async () => {
-  const React = await import('react');
-  return {
-    SuccessModal: ({
-      actionLabel,
-      onActionPress,
-      onClose,
-      visible,
-    }: {
-      actionLabel?: string;
-      onActionPress?: () => void;
-      onClose: () => void;
-      visible: boolean;
-    }) =>
-      visible
-        ? React.createElement(
-            'div',
-            null,
-            actionLabel && onActionPress
-              ? React.createElement(
-                  'button',
-                  { onClick: onActionPress, type: 'button' },
-                  actionLabel
-                )
-              : null,
-            React.createElement(
-              'button',
-              { onClick: onClose, type: 'button' },
-              'Done'
-            )
-          )
-        : null,
-  };
-});
+vi.mock('@/components/ui/SuccessModal', async () => ({
+  SuccessModal: (await import('./OrderDetailsScreenModals.test-support'))
+    .SuccessModalMock,
+}));
 
 type ModalProps = ComponentProps<typeof OrderDetailsScreenModals>;
 

@@ -79,6 +79,23 @@ const header = {
 };
 
 describe('BlogPostShell', () => {
+  it('uses theme-aware surfaces instead of white panels around dark-mode text', () => {
+    render(
+      <BlogPostShell blogHref="/blog" header={header} hero={null}>
+        <p>Article content</p>
+      </BlogPostShell>
+    );
+
+    expect(screen.getByRole('article')).toHaveClass(
+      'bg-card',
+      'text-card-foreground',
+      'border-border'
+    );
+    expect(
+      screen.getByText('Back to Blog').parentElement?.parentElement
+    ).toHaveClass('bg-background', 'border-border');
+  });
+
   it('renders the hero as an LCP preload image without loading/fetchPriority', () => {
     render(
       <BlogPostShell

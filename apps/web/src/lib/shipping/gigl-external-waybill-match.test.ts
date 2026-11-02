@@ -23,14 +23,24 @@ describe('matchExternalWaybillToOrder', () => {
     });
   });
 
-  it('accepts reordered names and a different contact phone', () => {
+  it('accepts reordered names when GIG has no phone', () => {
+    const result = matchExternalWaybillToOrder(order, {
+      ...receiver,
+      ReceiverName: 'Emmanuel Audu',
+      ReceiverPhoneNumber: undefined,
+    });
+    expect(result).toMatchObject({ name: 'match', phone: 'unknown' });
+    expect(result.linkable).toBe(true);
+  });
+
+  it('refuses a name match when the phone clearly differs', () => {
     const result = matchExternalWaybillToOrder(order, {
       ...receiver,
       ReceiverName: 'Emmanuel Audu',
       ReceiverPhoneNumber: '+2348000000000',
     });
     expect(result).toMatchObject({ name: 'match', phone: 'mismatch' });
-    expect(result.linkable).toBe(true);
+    expect(result.linkable).toBe(false);
   });
 
   it('accepts a renamed receiver when the phone matches', () => {

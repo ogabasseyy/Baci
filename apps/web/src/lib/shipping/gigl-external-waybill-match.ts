@@ -118,7 +118,10 @@ export function matchExternalWaybillToOrder(
     order.shipping_address?.state,
     preShipment.ReceiverState
   );
-  const receiverMatches = name === 'match' || phone === 'match';
+  // A clearly different phone is evidence against the receiver, so a name
+  // match only counts when the phone does not contradict it.
+  const receiverMatches =
+    phone === 'match' || (name === 'match' && phone !== 'mismatch');
   // In-store orders often carry no delivery state; a matching phone number
   // is then the evidence that the parcel is this customer's. A GIG response
   // without a destination never skips the check for an order that has one.

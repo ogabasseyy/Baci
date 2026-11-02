@@ -2,6 +2,9 @@
 -- Do NOT run this file as a whole. Copy one block at a time, in the order the runbook gives,
 -- into the production Supabase SQL editor. Fill in every value marked PASTE: a block whose
 -- PASTE values are left in place fails before it reads or changes anything.
+-- Drift safety: V3 runs as one transaction and fails closed. If the refund function's
+-- signature, result or behaviour ever changes, the call errors or V3's exact result checks
+-- raise STOP, and everything rolls back. The dry run always comes first, against the live schema.
 
 -- [O1] READ-ONLY: Ogabassey orders holding wallet money that are neither paid nor cancelled
 WITH m AS (SELECT id FROM public.merchants WHERE slug = 'ogabassey'),
@@ -53,10 +56,12 @@ SELECT o.shipping_status, o.cancelled_by, o.cancelled_at IS NOT NULL AS has_canc
          WHERE s.order_id = o.id AND s.step = 'refund') AS card_refund_queued,
        w.available_balance = (SELECT t.balance_after FROM public.customer_wallet_transactions t
                                WHERE t.wallet_id = w.id
-                               ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS balance_matches_ledger
+                               ORDER BY t.created_at DESC, t.id DESC LIMIT 1)
+         AS balance_matches_ledger
   FROM public.orders o
   JOIN public.merchants m ON m.id = o.merchant_id AND m.slug = 'ogabassey'
-  LEFT JOIN public.customer_wallets w ON w.customer_id = o.customer_id AND w.merchant_id = o.merchant_id
+  LEFT JOIN public.customer_wallets w
+    ON w.customer_id = o.customer_id AND w.merchant_id = o.merchant_id
  WHERE o.id = 'PASTE-ORDER-ID';
 
 -- [V1] READ-ONLY: Ogabassey airtime, data and bill purchases without a final result
@@ -71,8 +76,10 @@ SELECT v.id AS vtu_id, v.status, v.source, v.type, v.amount,
  CROSS JOIN LATERAL (
    SELECT coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_wallet_payment'
                                            AND t.type = 'redemption'), 0) AS debited,
-          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_wallet_reversal'), 0) AS reversed,
-          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_transaction_refund'), 0) AS refunded
+          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_wallet_reversal'), 0)
+            AS reversed,
+          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_transaction_refund'), 0)
+            AS refunded
      FROM public.customer_wallet_transactions t
     WHERE t.source_id = v.id) l
  WHERE v.status IN ('pending', 'processing')
@@ -163,7 +170,8 @@ BEGIN
      WHERE id = v_row.id;
   ELSIF v_debit = 0 THEN
     -- Nothing was taken from the wallet, so there is nothing to give back.
-    UPDATE public.vtu_transactions SET metadata = metadata || '{"refundSkipped": "no_charge"}'::jsonb
+    UPDATE public.vtu_transactions
+       SET metadata = metadata || '{"refundSkipped": "no_charge"}'::jsonb
      WHERE id = v_row.id;
   ELSE
     SELECT w.available_balance INTO v_before FROM public.customer_wallets w
@@ -176,9 +184,10 @@ BEGIN
        OR v_rev.new_balance IS DISTINCT FROM v_before + v_amount THEN
       RAISE EXCEPTION 'STOP: the reversal did not return exactly %', v_amount;
     END IF;
-    -- The same refund markers the app writes after a vendor failure.
+    -- The same refund markers the app writes after a vendor failure. Like the app, issuing
+    -- the refund drops any skip marker left by an earlier pass.
     UPDATE public.vtu_transactions
-       SET metadata = metadata || jsonb_build_object(
+       SET metadata = (metadata - 'refundSkipped') || jsonb_build_object(
              'walletDebited', true, 'refundIssued', true, 'refundAmount', 0,
              'refundContext', 'hybrid_vend_failure',
              'refundedAt', to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
@@ -198,7 +207,8 @@ SELECT v.status, v.metadata->'opsResolution'->>'outcome' AS outcome,
        l.debited, l.returned, l.refunded,
        w.available_balance = (SELECT t.balance_after FROM public.customer_wallet_transactions t
                                WHERE t.wallet_id = w.id
-                               ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS balance_matches_ledger,
+                               ORDER BY t.created_at DESC, t.id DESC LIMIT 1)
+         AS balance_matches_ledger,
        v.status = 'successful'
          AND ((coalesce(v.merchant_commission, 0) > 0
                AND v.metadata->>'merchantWalletCredited' IS DISTINCT FROM 'true')
@@ -208,12 +218,15 @@ SELECT v.status, v.metadata->'opsResolution'->>'outcome' AS outcome,
                AND v.metadata->>'loyaltyPointsAwarded' IS DISTINCT FROM 'true')) AS credits_pending
   FROM public.vtu_transactions v
   JOIN public.merchants m ON m.id = v.merchant_id AND m.slug = 'ogabassey'
-  LEFT JOIN public.customer_wallets w ON w.customer_id = v.customer_id AND w.merchant_id = v.merchant_id
+  LEFT JOIN public.customer_wallets w
+    ON w.customer_id = v.customer_id AND w.merchant_id = v.merchant_id
  CROSS JOIN LATERAL (
    SELECT coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_wallet_payment'
                                            AND t.type = 'redemption'), 0) AS debited,
-          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_wallet_reversal'), 0) AS returned,
-          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_transaction_refund'), 0) AS refunded
+          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_wallet_reversal'), 0)
+            AS returned,
+          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_transaction_refund'), 0)
+            AS refunded
      FROM public.customer_wallet_transactions t
     WHERE t.source_id = v.id) l
  WHERE v.id = 'PASTE-VTU-ID';

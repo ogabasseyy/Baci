@@ -37,7 +37,7 @@ Returning the ₦103 before the vendor answers could repay airtime the customer 
 ## How it is tested
 
 Every database check and the airtime step ran against a test database built from the app's
-real tables and refund function, with made-up customers. Over ninety checks cover finding
+real tables and refund function, with made-up customers. Over a hundred checks cover finding
 only the right order and purchase, the practice run changing nothing, exactly ₦103 returned
 once, "delivered" moving no money, and refusing every wrong case: wrong amount or type, card payment,
 other merchant, re-routed purchase, already refunded, missing evidence and repeats.

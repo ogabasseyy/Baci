@@ -89,8 +89,8 @@ order already cancelled and changes nothing.
 Fill in the `order_id` from A1. Expected:
 `cancelled | merchant | true | 10000.00 | 10000.00 | 0 | 0 | true`, and O1 now returns no
 rows. If `balance_matches_ledger` reads `false` or is empty, the wallet does not match its
-history: escalate. The payment status keeps its old value (usually `unpaid`). That is normal: a merchant
-cancel is recorded in the shipping status and the cancelled time.
+history: escalate. The payment status keeps its old value (usually `unpaid`). That is normal:
+a merchant cancel is recorded in the shipping status and the cancelled time.
 
 ## Part B: the ₦103 airtime purchase
 

@@ -48,25 +48,6 @@ export const KNOWN_TOP_LEVEL_ROUTES = new Set([
   'wishlist',
 ]);
 
-export function resolveMobileMenuBasePath(
-  propStoreSlug: string | undefined,
-  merchantBasePath: string | undefined,
-  pathname: string | null
-): string {
-  const candidate = propStoreSlug ?? merchantBasePath;
-  if (candidate !== undefined) {
-    const trimmed = candidate.trim().replace(/^\/+|\/+$/g, '');
-    return trimmed ? `/${trimmed}` : '';
-  }
-
-  const firstSegment = pathname?.split('/').filter(Boolean)[0] || '';
-  if (!firstSegment || KNOWN_TOP_LEVEL_ROUTES.has(firstSegment)) {
-    return '';
-  }
-
-  return `/${firstSegment}`;
-}
-
 export const MOBILE_MENU_SHOP_ITEMS: MobileMenuItem[] = [
   { label: 'Home', icon: Home, path: '/' },
   { label: 'All Products', icon: LayoutGrid, path: '/products' },
@@ -92,28 +73,3 @@ export const MOBILE_MENU_SUPPORT_ITEMS: MobileMenuItem[] = [
   { label: 'Help & Support', icon: HelpCircle, path: '/faq' },
   { label: 'Contact Us', icon: MessageSquare, path: '/contact' },
 ];
-
-export function resolveActiveMobileMenuPath({
-  items,
-  pathname,
-  buildHref,
-}: {
-  items: MobileMenuItem[];
-  pathname: string | null;
-  buildHref: (path: string) => string;
-}): string | undefined {
-  const matchesPath = (path: string) => {
-    const fullPath = buildHref(path);
-    if (path === '/') {
-      return pathname === fullPath || pathname === `${fullPath}/`;
-    }
-    return (
-      pathname === fullPath || Boolean(pathname?.startsWith(`${fullPath}/`))
-    );
-  };
-
-  return items
-    .map((item) => item.path)
-    .filter(matchesPath)
-    .sort((a, b) => b.length - a.length)[0];
-}

@@ -12,9 +12,9 @@ import {
   MOBILE_MENU_SHOP_ITEMS,
   MOBILE_MENU_SUPPORT_ITEMS,
   type MobileMenuItem,
-  resolveActiveMobileMenuPath,
-  resolveMobileMenuBasePath,
-} from './mobile-menu-routes';
+} from './mobile-menu-constants';
+import { resolveActiveMobileMenuPath } from './resolve-active-mobile-menu-path';
+import { resolveMobileMenuBasePath } from './resolve-mobile-menu-base-path';
 import { useMobileMenuDialog } from './use-mobile-menu-dialog';
 
 export interface MobileMenuProps {

@@ -2,6 +2,7 @@ import 'server-only';
 import { oxygenKycSchema } from '@/schemas/oxygen-runtime';
 import { oxygenRuntimeSnapshotSchema } from '@/schemas/oxygen-runtime-view';
 import type { OxygenProvider } from './provider';
+import { assertOxygenProviderEnvironment } from './provider-environment';
 import {
   type OxygenRuntimeRpc,
   oxygenRuntimeRpc,
@@ -37,6 +38,7 @@ export async function readOxygenSelfieStatus(
     scoped.state.bookingReference
   )
     throw new Error('Selfie unavailable');
+  assertOxygenProviderEnvironment(provider, scoped.environment);
   const kyc = oxygenKycSchema.parse(
     await provider.call('kyc', {
       loan_request_reference: scoped.state.applicationReference,

@@ -87,6 +87,18 @@ it('rejects worker/application binding mismatches before a provider read', async
   ).rejects.toThrow();
   expect(call).not.toHaveBeenCalled();
 });
+it('rejects a provider environment mismatch before reading KYC', async () => {
+  await expect(
+    readOxygenSelfieStatus(
+      user,
+      makeWorker,
+      { call, environment: 'production' },
+      'partner',
+      id
+    )
+  ).rejects.toThrow('Provider environment mismatch');
+  expect(call).not.toHaveBeenCalled();
+});
 it('does not treat NOT_DONE or a malformed response as confirmation', async () => {
   call.mockResolvedValueOnce({
     phone_status: 'DONE',

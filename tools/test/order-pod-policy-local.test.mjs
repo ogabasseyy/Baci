@@ -162,6 +162,31 @@ test('POD persistence policy and concurrent flag revocation', async () => {
         'utf8'
       )
     );
+    // Match the replay runner's psql execution: it sends statements separately
+    // rather than the single multi-statement query used by the pg client.
+    const replay = spawnSync(
+      join(bin, 'psql'),
+      [
+        '-X',
+        '-w',
+        '-v',
+        'ON_ERROR_STOP=1',
+        '-v',
+        'VERBOSITY=sqlstate',
+        '-h',
+        socket,
+        '-p',
+        '55483',
+        '-U',
+        'postgres',
+        '-d',
+        'postgres',
+        '-f',
+        join(repository, 'supabase/tests/order_pay_on_delivery_policy.sql'),
+      ],
+      { encoding: 'utf8', timeout: 30000 }
+    );
+    assert.equal(replay.status, 0, replay.stderr);
     const merchant = '36700000-0000-4000-8000-000000000004';
     await admin.query(
       "SELECT set_config('request.jwt.claim.role','service_role',false)"

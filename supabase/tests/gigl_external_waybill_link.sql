@@ -1,4 +1,4 @@
--- Regression test for 20261102060000_link_external_gigl_waybill.sql.
+-- Regression test for 20261102130000_link_external_gigl_waybill.sql.
 --
 -- Staff can attach a GIG waybill booked in GIG's own app to an order. Only the
 -- proof-gated SECURITY DEFINER RPC may create such an "external_manual"

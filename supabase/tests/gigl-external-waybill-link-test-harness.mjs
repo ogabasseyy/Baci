@@ -44,7 +44,7 @@ export function createGiglExternalWaybillLinkTestDatabase() {
       );
       database.query(productionEconomicsTrigger());
       database.query(
-        readMigration('20261102060000_link_external_gigl_waybill.sql')
+        readMigration('20261102130000_link_external_gigl_waybill.sql')
       );
     },
   };

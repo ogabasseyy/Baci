@@ -32,11 +32,14 @@ vi.mock('react-native-reanimated', () => {
     default: { View: MockAnimatedView },
     FadeIn: transition('FadeIn'),
     FadeOut: transition('FadeOut'),
-    runOnJS: (callback: () => void) => callback,
     SlideInDown: transition('SlideInDown'),
     SlideOutDown: transition('SlideOutDown'),
   };
 });
+
+vi.mock('react-native-worklets', () => ({
+  scheduleOnRN: (callback: () => void) => callback(),
+}));
 
 vi.mock('react-native', () => ({
   Modal: ({

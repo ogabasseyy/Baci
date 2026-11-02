@@ -3,10 +3,10 @@ import { Modal, View } from 'react-native';
 import Animated, {
   FadeIn,
   FadeOut,
-  runOnJS,
   SlideInDown,
   SlideOutDown,
 } from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { useSheetExitPresence } from '@/hooks/useSheetExitPresence';
 import { styles } from './ShipmentFlowSheet.styles';
 
@@ -96,7 +96,7 @@ export function ShipmentFlowSheetPresence({
             ).withCallback((finished) => {
               // An interrupted slide is not a finished close; the presence
               // fallback still releases the modal if nothing completes.
-              if (finished) runOnJS(finishExit)();
+              if (finished) scheduleOnRN(finishExit);
             })}
             style={styles.sheetLayer}
           >

@@ -40,6 +40,7 @@ export const primaryRestrictedReadinessRequirements = {
         'piggyvest_primary.record_onboarding_review(jsonb,uuid,uuid,text,text,text)',
         'piggyvest_primary.record_onboarding_ownership_hold(jsonb,uuid,uuid)',
         'piggyvest_primary.read_onboarding_review(jsonb)',
+        'piggyvest_primary.is_backed(uuid,uuid)',
       ],
     },
     {

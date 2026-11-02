@@ -35,6 +35,12 @@ BEGIN
     ' audited_amount, migrating_at) VALUES (%L, %L, %L, %L, 100000000.00, now())',
     pg_temp.m(14), pg_temp.c(14), 'migrating', pg_temp.i(14)), '23514',
     'new row for relation "wallet_backing" violates check constraint "wallet_backing_audited_amount_range"');
+  -- Backed always names its mechanism: a NULL backed_via is not a way past
+  -- the guard or the row check.
+  PERFORM pg_temp.expect_error(format(
+    'UPDATE piggyvest_primary.wallet_backing SET state = %L, onboarding_intent_id = %L,'
+    ' audited_amount = 0, backed_at = now() WHERE customer_id = %L', 'backed', pg_temp.i(8), pg_temp.c(8)),
+    '23514', 'wallet_backing_transition_refused');
   -- A row must name a customer of its merchant.
   PERFORM pg_temp.expect_error(format(
     'INSERT INTO piggyvest_primary.wallet_backing(merchant_id, customer_id, state) VALUES (%L, %L, %L)',

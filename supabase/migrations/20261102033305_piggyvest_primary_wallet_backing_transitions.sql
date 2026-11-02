@@ -1,21 +1,14 @@
--- Wallet backing transitions (state store: 20261102033304). Every transition
--- takes the per-customer lock exclusively (assert_wallet_legacy takes it
--- shared), then the backing row, then the wallet row, in that order.
---
---   begin_migration      legacy -> migrating for an audited, settled,
---                        non-zero balance; legacy -> backed for an audited
---                        zero (or no wallet row). Writes no wallet or ledger row.
---   flip_to_backed       migrating -> backed after the move transfer is
---                        confirmed. Owner-only: the transfer engine calls it
---                        from its own SECURITY DEFINER settle, so no session can
---                        flip a wallet without a confirmed move.
---   flag_migration_review records a review reason without changing the state.
---
--- Refusals of bad input raise with a stable message: a missing or malformed
--- argument, or a merchant that is not the one the backing row was recorded
--- under (the caller must pass the recorded merchant). Outcomes a caller must
--- record (a refused or reviewed flip) are returned, never raised, so a
--- confirmed transfer is never rolled back by the flip.
+-- Wallet backing transitions (state store: 20261102033304). Each takes the
+-- per-customer lock exclusively (assert_wallet_legacy takes it shared) first.
+--   begin_migration: legacy -> migrating for an audited, settled, non-zero
+--     balance, or -> backed for an audited zero / no wallet row. No ledger write.
+--   flip_to_backed: migrating -> backed after a confirmed move. Owner-only, for
+--     the transfer engine's SECURITY DEFINER settle.
+--   flag_migration_review: records a review reason, state unchanged.
+-- Bad input raises with a stable message (a missing or malformed argument, or
+-- a merchant other than the one the backing row was recorded under). Flip
+-- outcomes (refused, review) are returned, never raised, so a confirmed
+-- transfer is never rolled back by the flip.
 BEGIN;
 
 CREATE FUNCTION piggyvest_primary.flag_migration_review(p_customer_id uuid, p_merchant_id uuid, p_reason text)
@@ -114,17 +107,16 @@ BEGIN
   IF v_found AND v_backing.merchant_id <> p_merchant_id THEN
     RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
   END IF;
-  IF v_found AND v_backing.state = 'backed' THEN
-    RETURN pg_catalog.jsonb_build_object('status', 'backed', 'changed', false, 'backingId', v_backing.id);
-  END IF;
-  IF v_found AND v_backing.state = 'migrating' THEN
+  -- A repeat (migrating or backed) replays only with the recorded intent and
+  -- audited amount; anything else is refused, never a success-shaped no-op.
+  IF v_found AND v_backing.state IN ('migrating', 'backed') THEN
     IF v_backing.onboarding_intent_id <> p_intent_id THEN
       RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
     END IF;
     IF v_backing.audited_amount <> p_audited_amount THEN
       RAISE EXCEPTION 'wallet_backing_amount_mismatch' USING ERRCODE = '22023';
     END IF;
-    RETURN pg_catalog.jsonb_build_object('status', 'migrating', 'changed', false, 'backingId', v_backing.id);
+    RETURN pg_catalog.jsonb_build_object('status', v_backing.state, 'changed', false, 'backingId', v_backing.id);
   END IF;
 
   -- The audited amount must equal the balance right now, under the wallet
@@ -222,6 +214,15 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object('status', 'refused', 'reason', 'not_migrating');
   END IF;
 
+  -- The customer must still be this merchant's, locked so it cannot move
+  -- mid-flip; a moved row is data, not input, so it goes to review.
+  PERFORM 1 FROM public.customers c
+  WHERE c.id = p_customer_id AND c.merchant_id = p_merchant_id FOR SHARE;
+  IF NOT FOUND THEN
+    PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_customer_scope_mismatch');
+    RETURN pg_catalog.jsonb_build_object('status', 'review', 'reason', 'customer_scope_mismatch',
+      'backingId', v_backing.id);
+  END IF;
   -- The balance must still be the audited amount and fully settled; anything
   -- else stays migrating for review. No wallet row is a zero balance.
   SELECT w.id, w.merchant_id, w.available_balance INTO v_wallet_id, v_wallet_merchant, v_balance

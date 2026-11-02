@@ -56,7 +56,7 @@ CREATE TABLE piggyvest_primary.wallet_backing (
     OR (state = 'migrating' AND onboarding_intent_id IS NOT NULL AND audited_amount IS NOT NULL
       AND migrating_at IS NOT NULL AND backed_via IS NULL AND move_reference IS NULL AND backed_at IS NULL)
     OR (state = 'backed' AND onboarding_intent_id IS NOT NULL AND audited_amount IS NOT NULL
-      AND backed_at IS NOT NULL AND (
+      AND backed_at IS NOT NULL AND backed_via IS NOT NULL AND (
         (backed_via = 'audited_zero' AND audited_amount = 0 AND migrating_at IS NULL AND move_reference IS NULL)
         OR (backed_via = 'confirmed_move' AND migrating_at IS NOT NULL AND move_reference IS NOT NULL))))
 );
@@ -112,10 +112,11 @@ BEGIN
     END IF;
     RETURN NEW;
   END IF;
-  IF NOT (NEW.state = OLD.state
+  -- COALESCE: a NULL backed_via must refuse, not slip through as unknown.
+  IF NOT COALESCE(NEW.state = OLD.state
       OR (OLD.state = 'legacy' AND NEW.state = 'migrating')
       OR (OLD.state = 'legacy' AND NEW.state = 'backed' AND NEW.backed_via = 'audited_zero')
-      OR (OLD.state = 'migrating' AND NEW.state = 'backed' AND NEW.backed_via = 'confirmed_move')) THEN
+      OR (OLD.state = 'migrating' AND NEW.state = 'backed' AND NEW.backed_via = 'confirmed_move'), false) THEN
     RAISE EXCEPTION 'wallet_backing_transition_refused' USING ERRCODE = '23514';
   END IF;
   IF NEW.id IS DISTINCT FROM OLD.id OR NEW.merchant_id IS DISTINCT FROM OLD.merchant_id

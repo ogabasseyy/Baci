@@ -142,6 +142,24 @@ BEGIN
   PERFORM pg_temp.check(pg_temp.relabel_rows(1) = 2 AND pg_temp.events(1) = 2,
     'begin on a backed wallet writes nothing');
 
+  -- Begin on a backed wallet replays only with the recorded amount and intent.
+  PERFORM pg_temp.expect_error('SELECT pg_temp.begin_move(1, 1400.00)',
+    '22023', 'wallet_backing_amount_mismatch');
+  PERFORM pg_temp.expect_error('SELECT pg_temp.begin_move(2, 10.00)',
+    '22023', 'wallet_backing_amount_mismatch');
+  BEGIN
+    INSERT INTO piggyvest_primary.integrations(id, merchant_id, business_id, environment, executor_login, enabled)
+    VALUES (pg_temp.id(13), pg_temp.id(1), 'wallet-backing-business-3', 'staging', 'wallet_backing_fixture_m1b', true);
+    INSERT INTO piggyvest_primary.onboarding_intents(id, integration_id, merchant_id, customer_id, user_id,
+      request_fingerprint, state, provider_customer_id, provider_wallet_id)
+    VALUES (pg_temp.id(399), pg_temp.id(13), pg_temp.id(1), pg_temp.c(1), pg_temp.id(101),
+      repeat('ab', 32), 'verified', 'pv-backing-customer-1b', 'pv-backing-wallet-1b');
+    PERFORM pg_temp.expect_error(format('SELECT piggyvest_primary.begin_migration(%L, %L, %L, 1500.00)',
+      pg_temp.c(1), pg_temp.id(1), pg_temp.id(399)), '42501', 'wallet_backing_scope_unavailable');
+    RAISE EXCEPTION USING ERRCODE = 'ZBGN1';
+  EXCEPTION WHEN SQLSTATE 'ZBGN1' THEN NULL;
+  END;
+
   -- A different confirmed move for an already-backed wallet is not the same
   -- flip replayed: it goes to review and the recorded move stands.
   v_result := piggyvest_primary.flip_to_backed(pg_temp.c(1), pg_temp.m(1),
@@ -217,24 +235,28 @@ BEGIN
     'a missing customer is refused, not raised: ' || v_result::text);
   PERFORM pg_temp.check(NOT EXISTS (SELECT 1 FROM piggyvest_primary.wallet_backing
     WHERE customer_id = pg_temp.id(299)), 'a missing customer records nothing');
+  -- Customer 9 is migrating with its audited balance intact, so only the
+  -- moved row can stop these flips.
   BEGIN
-    UPDATE public.customers SET merchant_id = pg_temp.id(2) WHERE id = pg_temp.c(7);
-    v_result := pg_temp.flip(7);
-    PERFORM pg_temp.check(v_result->>'status' = 'review' AND pg_temp.relabel_rows(7) = 0,
-      'a moved customer row still reviews, not raises: ' || v_result::text);
+    UPDATE public.customers SET merchant_id = pg_temp.id(2) WHERE id = pg_temp.c(9);
+    v_result := pg_temp.flip(9);
+    PERFORM pg_temp.check(v_result->>'status' = 'review' AND v_result->>'reason' = 'customer_scope_mismatch'
+      AND pg_temp.relabel_rows(9) = 0 AND EXISTS (SELECT 1 FROM piggyvest_primary.wallet_backing
+        WHERE customer_id = pg_temp.c(9) AND state = 'migrating' AND review_reason = 'flip_customer_scope_mismatch'),
+      'a moved customer row reviews, never flips or raises: ' || v_result::text);
     RAISE EXCEPTION USING ERRCODE = 'ZFLP1';
   EXCEPTION WHEN SQLSTATE 'ZFLP1' THEN NULL;
   END;
   -- A wallet row moved to another merchant after the move began reviews too.
   BEGIN
-    UPDATE public.customer_wallets SET merchant_id = pg_temp.id(2) WHERE customer_id = pg_temp.c(7);
-    v_result := pg_temp.flip(7);
+    UPDATE public.customer_wallets SET merchant_id = pg_temp.id(2) WHERE customer_id = pg_temp.c(9);
+    v_result := pg_temp.flip(9);
     PERFORM pg_temp.check(v_result->>'status' = 'review' AND v_result->>'reason' = 'wallet_scope_mismatch'
-      AND pg_temp.state(7) = 'migrating' AND pg_temp.relabel_rows(7) = 0,
-      'a moved wallet row reviews, not raises: ' || v_result::text);
+      AND pg_temp.relabel_rows(9) = 0, 'a moved wallet row reviews, never flips or raises: ' || v_result::text);
     RAISE EXCEPTION USING ERRCODE = 'ZFLP2';
   EXCEPTION WHEN SQLSTATE 'ZFLP2' THEN NULL;
   END;
+  PERFORM pg_temp.check(pg_temp.state(9) = 'migrating', 'the moved-row cases roll back');
 END $$;
 
 -- A zero flip (no wallet row, audited zero) moves to backed and writes no

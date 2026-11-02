@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { makeScheduledNotificationClaim } from './scheduled-notification-delivery.test-support.ts';
 import {
   isWithinQuietHours,
   parseExpoTicketResults,
@@ -57,18 +58,11 @@ describe('isWithinQuietHours', () => {
 describe('processScheduledNotificationClaims', () => {
   it('defers a quiet-hour push without marking the broadcast sent or consuming a retry', async () => {
     vi.stubGlobal('Deno', { env: { get: () => undefined } });
-    const claim = {
-      action_url: null,
+    const claim = makeScheduledNotificationClaim('008', {
       channels: ['push'],
-      delivery_claim_token: '123e4567-e89b-42d3-a456-426614174008',
-      expires_at: null,
-      id: 'd8543bf1-5f03-4fd1-8a2a-2f7f1658c3f8',
       message: 'Quiet notification',
-      target_merchant_ids: [],
-      target_segment: null,
-      target_type: 'all',
       title: 'Quiet',
-    };
+    });
     const calls: Array<{ args?: Record<string, unknown>; name: string }> = [];
     const client = {
       rpc: async (name: string, args?: Record<string, unknown>) => {
@@ -116,18 +110,11 @@ describe('processScheduledNotificationClaims', () => {
 
   it('defers mixed-channel broadcasts so quiet-hour pushes stay claimable', async () => {
     vi.stubGlobal('Deno', { env: { get: () => undefined } });
-    const claim = {
-      action_url: null,
+    const claim = makeScheduledNotificationClaim('009', {
       channels: ['in_app', 'push'],
-      delivery_claim_token: '123e4567-e89b-42d3-a456-426614174009',
-      expires_at: null,
-      id: 'd8543bf1-5f03-4fd1-8a2a-2f7f1658c3f9',
       message: 'Mixed visible and quiet push notification',
-      target_merchant_ids: [],
-      target_segment: null,
-      target_type: 'all',
       title: 'Mixed visible',
-    };
+    });
     const calls: Array<{ args?: Record<string, unknown>; name: string }> = [];
     const client = {
       rpc: async (name: string, args?: Record<string, unknown>) => {
@@ -205,18 +192,11 @@ describe('processScheduledNotificationClaims', () => {
           )
       )
     );
-    const claim = {
-      action_url: null,
+    const claim = makeScheduledNotificationClaim('010', {
       channels: ['push'],
-      delivery_claim_token: '123e4567-e89b-42d3-a456-426614174010',
-      expires_at: null,
-      id: 'd8543bf1-5f03-4fd1-8a2a-2f7f1658c3fa',
       message: 'Mixed quiet notification',
-      target_merchant_ids: [],
-      target_segment: null,
-      target_type: 'all',
       title: 'Mixed',
-    };
+    });
     const calls: Array<{ args?: Record<string, unknown>; name: string }> = [];
     const client = {
       rpc: async (name: string, args?: Record<string, unknown>) => {
@@ -278,18 +258,12 @@ describe('processScheduledNotificationClaims', () => {
   });
 
   it('finalizes as expired when expiry is reached after claim processing begins', async () => {
-    const claim = {
-      action_url: null,
-      channels: ['in_app'],
-      delivery_claim_token: '123e4567-e89b-42d3-a456-426614174099',
-      expires_at: '2020-01-01T00:00:00.000Z',
+    const claim = makeScheduledNotificationClaim('099', {
+      expiresAt: '2020-01-01T00:00:00.000Z',
       id: 'd8543bf1-5f03-4fd1-8a2a-2f7f1658c3f9',
       message: 'Expired notification',
-      target_merchant_ids: [],
-      target_segment: null,
-      target_type: 'all',
       title: 'Expired',
-    };
+    });
     const calls: Array<{ args?: Record<string, unknown>; name: string }> = [];
     const client = {
       rpc: async (name: string, args?: Record<string, unknown>) => {
@@ -372,18 +346,11 @@ describe('processScheduledNotificationClaims', () => {
 
   it('does not defer a broadcast when only already-delivered tokens are quiet', async () => {
     vi.stubGlobal('Deno', { env: { get: () => undefined } });
-    const claim = {
-      action_url: null,
+    const claim = makeScheduledNotificationClaim('011', {
       channels: ['push'],
-      delivery_claim_token: '123e4567-e89b-42d3-a456-426614174011',
-      expires_at: null,
-      id: 'd8543bf1-5f03-4fd1-8a2a-2f7f1658c3fb',
       message: 'Follow-up quiet notification',
-      target_merchant_ids: [],
-      target_segment: null,
-      target_type: 'all',
       title: 'Follow-up',
-    };
+    });
     const calls: Array<{ args?: Record<string, unknown>; name: string }> = [];
     const client = {
       rpc: async (name: string, args?: Record<string, unknown>) => {
@@ -441,18 +408,11 @@ describe('processScheduledNotificationClaims', () => {
 
   it('finalizes push-only broadcasts without in-app recipients as sent', async () => {
     vi.stubGlobal('Deno', { env: { get: () => undefined } });
-    const claim = {
-      action_url: null,
+    const claim = makeScheduledNotificationClaim('012', {
       channels: ['push'],
-      delivery_claim_token: '123e4567-e89b-42d3-a456-426614174012',
-      expires_at: null,
-      id: 'd8543bf1-5f03-4fd1-8a2a-2f7f1658c3fc',
       message: 'Push-only notification',
-      target_merchant_ids: [],
-      target_segment: null,
-      target_type: 'all',
       title: 'Push-only',
-    };
+    });
     const calls: Array<{ args?: Record<string, unknown>; name: string }> = [];
     const client = {
       rpc: async (name: string, args?: Record<string, unknown>) => {
@@ -497,18 +457,11 @@ describe('processScheduledNotificationClaims', () => {
           )
       )
     );
-    const claim = {
-      action_url: null,
+    const claim = makeScheduledNotificationClaim('013', {
       channels: ['push'],
-      delivery_claim_token: '123e4567-e89b-42d3-a456-426614174013',
-      expires_at: null,
-      id: 'd8543bf1-5f03-4fd1-8a2a-2f7f1658c3fd',
       message: 'Paged quiet notification',
-      target_merchant_ids: [],
-      target_segment: null,
-      target_type: 'all',
       title: 'Paged',
-    };
+    });
     const firstPageMerchant = '456e4567-e89b-42d3-a456-426614174001';
     const secondPageMerchant = '456e4567-e89b-42d3-a456-426614174002';
     const firstPageMerchants = Array.from({ length: 500 }, (_, index) =>

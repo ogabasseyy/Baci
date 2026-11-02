@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import * as Haptics from 'expo-haptics';
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
-import { Platform } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { CustomTabBar } from './CustomTabBar';
 import { customTabBarTestUtils } from './CustomTabBar.test-utils';
 
@@ -103,7 +103,9 @@ describe('CustomTabBar', () => {
     expect(screen.getByRole('tab', { name: 'Saved' })).toBeOnTheScreen();
     expect(screen.queryByRole('tab', { name: 'Explore' })).toBeNull();
     expect(
-      screen.getByTestId('custom-tab-bar-wrapper').props.pointerEvents
+      StyleSheet.flatten(
+        screen.getByTestId('custom-tab-bar-wrapper').props.style
+      ).pointerEvents
     ).toBe('box-none');
   });
 

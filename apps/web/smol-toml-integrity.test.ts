@@ -50,15 +50,17 @@ describe('smol-toml integrity (GHSA-r4xh-jqrq-34v2)', () => {
       '  documents.set(n, doc)',
       '}',
       `parse(documents.get(${SMALL_LINES}))`,
+      `parse(documents.get(${LARGE_LINES}))`,
       'for (let round = 0; round < 5; round++) {',
       `  const sizes = round % 2 === 0 ? [${SMALL_LINES}, ${LARGE_LINES}] : [${LARGE_LINES}, ${SMALL_LINES}]`,
       '  const times = new Map()',
       '  for (const n of sizes) {',
       '    const start = process.cpuUsage()',
-      '    const out = parse(documents.get(n))',
+      '    let out',
+      '    for (let repetition = 0; repetition < 3; repetition++) out = parse(documents.get(n))',
       '    if (out.k0 !== 1) process.exit(2)',
       '    const cpu = process.cpuUsage(start)',
-      '    times.set(n, cpu.user + cpu.system)',
+      '    times.set(n, (cpu.user + cpu.system) / 3)',
       '  }',
       `  ratios.push(times.get(${LARGE_LINES}) / Math.max(times.get(${SMALL_LINES}), 1e-3))`,
       '}',
@@ -67,8 +69,9 @@ describe('smol-toml integrity (GHSA-r4xh-jqrq-34v2)', () => {
     ].join('\n');
     // Scaling gate, not an absolute cutoff: doubling the input must
     // roughly double the time (linear), not quadruple it (quadratic).
-    // CPU time excludes pauses while other jobs run. Measurements alternate
-    // size order, and the median of five paired ratios keeps
+    // CPU time excludes pauses while other jobs run. Both sizes are warmed,
+    // each sample averages three parses to reduce timer quantization and
+    // short-lived runtime noise, sizes alternate order, and the median keeps
     // the strict bound while reducing sensitivity to GC and scheduling.
     // The 60s wall-clock child ceiling remains an anti-hang backstop.
     const result = spawnSync(process.execPath, ['-e', script], {

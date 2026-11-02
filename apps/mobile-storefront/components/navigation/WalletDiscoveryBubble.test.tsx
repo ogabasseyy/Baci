@@ -126,3 +126,13 @@ it('stays hidden when the eligibility hook reports a dismissed tip', () => {
     screen.queryByRole('button', { name: 'Save towards your next device' })
   ).toBeNull();
 });
+
+it.each([
+  0, 16,
+])('hides the bubble until available width exceeds its 16-point inset (%i points)', (availableWidth) => {
+  render(<WalletDiscoveryBubble {...props} availableWidth={availableWidth} />);
+  expect(
+    screen.queryByRole('button', { name: 'Save towards your next device' })
+  ).toBeNull();
+  expect(mockVisibilityChange).toHaveBeenLastCalledWith(false);
+});

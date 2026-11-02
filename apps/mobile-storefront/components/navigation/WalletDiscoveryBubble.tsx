@@ -47,7 +47,7 @@ export function WalletDiscoveryBubble({
     !!userId &&
     (!customerUserId || customerUserId === userId);
   const hint = useWalletDiscoveryHint({ enabled, userId, merchantId });
-  const visible = enabled && hint.visible;
+  const visible = enabled && hint.visible && availableWidth > 16;
   const lastReportedVisibility = useRef<boolean | null>(null);
   useLayoutEffect(() => {
     if (lastReportedVisibility.current === visible) return;
@@ -57,6 +57,8 @@ export function WalletDiscoveryBubble({
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   if (!visible) return null;
+  // Layout can briefly report a zero or very narrow width before the tab bar
+  // receives its measured bounds. Keep the card geometry non-negative then.
   const width = Math.min(280, availableWidth - 16);
   const left = Math.max(
     8,

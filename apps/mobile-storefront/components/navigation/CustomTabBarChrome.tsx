@@ -135,10 +135,10 @@ export function CustomTabBarChrome({
 
   return (
     <View
-      pointerEvents="box-none"
       style={[
         styles.outerContainer,
         reserveTouchSpace ? styles.outerContainerWithBubble : null,
+        { pointerEvents: 'box-none' },
       ]}
       testID="custom-tab-bar-wrapper"
     >

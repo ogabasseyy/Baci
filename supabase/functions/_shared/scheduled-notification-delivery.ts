@@ -2,10 +2,6 @@ import type { ScheduledNotification } from './scheduled-notification.ts';
 import { sendPushTokens } from './scheduled-notification-push-dispatch.ts';
 import { requiresPushOutcomeReview } from './scheduled-notification-push-outcome-review.ts';
 import {
-  isWithinQuietHours,
-  parseExpoTicketResults,
-} from './scheduled-notification-push-utils.ts';
-import {
   NotificationClaimLostError,
   parseRecipientPageIds,
   renewScheduledNotificationClaim,
@@ -13,6 +9,7 @@ import {
   type ScheduledNotificationWorkerClient,
 } from './scheduled-notification-rpc.ts';
 import { scheduledNotificationWorker } from './scheduled-notification-worker.ts';
+import type { ScheduledNotificationResultStatus } from './scheduled-notification-worker-outcome.ts';
 
 const {
   isExpired,
@@ -22,7 +19,12 @@ const {
 } = scheduledNotificationWorker;
 const RECIPIENT_PAGE_SIZE = 500;
 
-type Outcome = 'sent' | 'retry' | 'expired' | 'deferred';
+type Outcome = Exclude<ScheduledNotificationResultStatus, 'failed'>;
+type ResultStatus = ScheduledNotificationResultStatus;
+type FailureCode =
+  | 'expired_finalization_failed'
+  | 'malformed_claim_retry_finalization_failed'
+  | 'retry_finalization_failed';
 
 class NotificationExpiredError extends Error {
   constructor() {
@@ -99,16 +101,39 @@ async function finalize(
     p_notification_id: notification.id,
     p_outcome: outcome,
   });
-  if (data !== true)
-    throw new Error('Notification finalization lost its claim');
+  if (data !== true) throw new NotificationClaimLostError();
+}
+
+async function finalizeRetryOrReportFailure(
+  client: ScheduledNotificationWorkerClient,
+  notification: Pick<ScheduledNotification, 'id' | 'delivery_claim_token'>,
+  error: unknown
+) {
+  try {
+    await finalize(
+      client,
+      notification,
+      'retry',
+      error instanceof Error ? error.message : 'Notification delivery failed'
+    );
+    return 'retry' as const;
+  } catch (finalizeError) {
+    if (finalizeError instanceof NotificationClaimLostError)
+      return 'claim_lost' as const;
+    return 'failed' as const;
+  }
 }
 
 export async function processScheduledNotificationClaims(
   client: ScheduledNotificationWorkerClient,
   claimed: unknown[]
 ) {
-  const results: Array<{ id: string; recipients?: number; status: Outcome }> =
-    [];
+  const results: Array<{
+    failure?: FailureCode;
+    id: string;
+    recipients?: number;
+    status: ResultStatus;
+  }> = [];
   for (const value of claimed) {
     let notification: ScheduledNotification;
     try {
@@ -128,7 +153,11 @@ export async function processScheduledNotificationClaims(
         results.push({ id: identity.id, status: 'retry' });
       } catch (error) {
         if (error instanceof NotificationClaimLostError) continue;
-        throw error;
+        results.push({
+          failure: 'malformed_claim_retry_finalization_failed',
+          id: identity.id,
+          status: 'failed',
+        });
       }
       continue;
     }
@@ -172,17 +201,32 @@ export async function processScheduledNotificationClaims(
     } catch (error) {
       if (error instanceof NotificationClaimLostError) continue;
       if (error instanceof NotificationExpiredError) {
-        await finalize(client, notification, 'expired');
-        results.push({ id: notification.id, status: 'expired' });
+        try {
+          await finalize(client, notification, 'expired');
+          results.push({ id: notification.id, status: 'expired' });
+        } catch (finalizeError) {
+          if (finalizeError instanceof NotificationClaimLostError) continue;
+          results.push({
+            failure: 'expired_finalization_failed',
+            id: notification.id,
+            status: 'failed',
+          });
+        }
         continue;
       }
-      await finalize(
+      const status = await finalizeRetryOrReportFailure(
         client,
         notification,
-        'retry',
-        error instanceof Error ? error.message : 'Notification delivery failed'
+        error
       );
-      results.push({ id: notification.id, status: 'retry' });
+      if (status !== 'claim_lost')
+        results.push({
+          ...(status === 'failed'
+            ? { failure: 'retry_finalization_failed' as const }
+            : {}),
+          id: notification.id,
+          status,
+        });
     }
   }
   return results;

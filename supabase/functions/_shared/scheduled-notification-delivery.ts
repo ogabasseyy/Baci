@@ -1,10 +1,6 @@
 import type { ScheduledNotification } from './scheduled-notification.ts';
-import { requiresPushOutcomeReview } from './scheduled-notification-push-outcome-review.ts';
 import { sendPushTokens } from './scheduled-notification-push-dispatch.ts';
-import {
-  isWithinQuietHours,
-  parseExpoTicketResults,
-} from './scheduled-notification-push-utils.ts';
+import { requiresPushOutcomeReview } from './scheduled-notification-push-outcome-review.ts';
 import {
   NotificationClaimLostError,
   parseRecipientPageIds,
@@ -13,6 +9,7 @@ import {
   type ScheduledNotificationWorkerClient,
 } from './scheduled-notification-rpc.ts';
 import { scheduledNotificationWorker } from './scheduled-notification-worker.ts';
+import type { ScheduledNotificationResultStatus } from './scheduled-notification-worker-outcome.ts';
 
 const {
   isExpired,
@@ -22,7 +19,17 @@ const {
 } = scheduledNotificationWorker;
 const RECIPIENT_PAGE_SIZE = 500;
 
-type Outcome = 'sent' | 'retry' | 'expired' | 'deferred';
+type Outcome = Exclude<ScheduledNotificationResultStatus, 'failed'>;
+type FailureCode =
+  | 'expired_finalization_failed'
+  | 'malformed_claim_retry_finalization_failed'
+  | 'retry_finalization_failed';
+type ClaimResult = {
+  failure?: FailureCode;
+  id: string;
+  recipients?: number;
+  status: ScheduledNotificationResultStatus;
+};
 
 class NotificationExpiredError extends Error {
   constructor() {
@@ -99,16 +106,35 @@ async function finalize(
     p_notification_id: notification.id,
     p_outcome: outcome,
   });
-  if (data !== true)
-    throw new Error('Notification finalization lost its claim');
+  if (data !== true) throw new NotificationClaimLostError();
+}
+
+/**
+ * Finalizes inside a claim's error path without letting a finalization
+ * failure abort the rest of the batch. A lost claim is fenced (no result, no
+ * second finalization); any other failure becomes an explicit failed result.
+ */
+async function finalizeOrReportFailure(
+  client: ScheduledNotificationWorkerClient,
+  notification: Pick<ScheduledNotification, 'id' | 'delivery_claim_token'>,
+  outcome: 'expired' | 'retry',
+  failure: FailureCode,
+  error?: string
+): Promise<ClaimResult | null> {
+  try {
+    await finalize(client, notification, outcome, error);
+    return { id: notification.id, status: outcome };
+  } catch (finalizeError) {
+    if (finalizeError instanceof NotificationClaimLostError) return null;
+    return { failure, id: notification.id, status: 'failed' };
+  }
 }
 
 export async function processScheduledNotificationClaims(
   client: ScheduledNotificationWorkerClient,
   claimed: unknown[]
 ) {
-  const results: Array<{ id: string; recipients?: number; status: Outcome }> =
-    [];
+  const results: ClaimResult[] = [];
   for (const value of claimed) {
     let notification: ScheduledNotification;
     try {
@@ -128,7 +154,11 @@ export async function processScheduledNotificationClaims(
         results.push({ id: identity.id, status: 'retry' });
       } catch (error) {
         if (error instanceof NotificationClaimLostError) continue;
-        throw error;
+        results.push({
+          failure: 'malformed_claim_retry_finalization_failed',
+          id: identity.id,
+          status: 'failed',
+        });
       }
       continue;
     }
@@ -171,18 +201,24 @@ export async function processScheduledNotificationClaims(
       results.push({ id: notification.id, recipients, status: 'sent' });
     } catch (error) {
       if (error instanceof NotificationClaimLostError) continue;
-      if (error instanceof NotificationExpiredError) {
-        await finalize(client, notification, 'expired');
-        results.push({ id: notification.id, status: 'expired' });
-        continue;
-      }
-      await finalize(
-        client,
-        notification,
-        'retry',
-        error instanceof Error ? error.message : 'Notification delivery failed'
-      );
-      results.push({ id: notification.id, status: 'retry' });
+      const failureResult =
+        error instanceof NotificationExpiredError
+          ? await finalizeOrReportFailure(
+              client,
+              notification,
+              'expired',
+              'expired_finalization_failed'
+            )
+          : await finalizeOrReportFailure(
+              client,
+              notification,
+              'retry',
+              'retry_finalization_failed',
+              error instanceof Error
+                ? error.message
+                : 'Notification delivery failed'
+            );
+      if (failureResult) results.push(failureResult);
     }
   }
   return results;

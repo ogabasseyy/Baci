@@ -21,6 +21,7 @@ it('keeps the listener stable and uses the latest retry only for trusted frame m
   const props = {
     url: `${origin}/verify`,
     selfieOrigins: [origin],
+    workflowId: 'same-workflow',
     onClose: vi.fn(),
   };
   const { rerender } = render(<OxygenHostedSelfie {...props} />);

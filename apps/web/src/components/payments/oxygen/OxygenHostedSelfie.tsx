@@ -54,6 +54,7 @@ export function OxygenHostedSelfie({
     const onMessage = (event: MessageEvent) => {
       if (
         !trustedOrigin ||
+        !workflowId ||
         event.origin !== trustedOrigin ||
         event.source !== frame.current?.contentWindow ||
         event.data !== 'FACE_RECOGNITION_SUCCESS' ||
@@ -66,7 +67,8 @@ export function OxygenHostedSelfie({
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [trustedOrigin]);
+  }, [trustedOrigin, workflowId]);
+  const showConfirming = confirming && !status.paused;
   return (
     <section
       className="flex h-full min-h-0 flex-col bg-white"
@@ -91,8 +93,8 @@ export function OxygenHostedSelfie({
         />
       ) : trustedOrigin ? (
         <div className="relative min-h-0 flex-1 bg-white">
-          {(!loaded || confirming) && (
-            <OxygenSelfieLoading confirming={confirming} />
+          {(!loaded || showConfirming) && (
+            <OxygenSelfieLoading confirming={showConfirming} />
           )}
           <iframe
             ref={frame}
@@ -102,7 +104,7 @@ export function OxygenHostedSelfie({
             allow="camera"
             referrerPolicy="no-referrer"
             onLoad={() => setLoaded(true)}
-            className={`h-full w-full border-0 bg-white ${!loaded || confirming ? 'invisible' : ''}`}
+            className={`h-full w-full border-0 bg-white ${!loaded || showConfirming ? 'invisible' : ''}`}
           />
         </div>
       ) : (
@@ -116,6 +118,7 @@ export function OxygenHostedSelfie({
             type="button"
             onClick={() => {
               setPhone(true);
+              setConfirming(false);
               status.retry();
             }}
             className="flex min-h-14 w-full items-center justify-center gap-3 rounded-xl bg-store-primary px-4 py-3 text-sm font-semibold text-store-primary-text"
@@ -131,7 +134,14 @@ export function OxygenHostedSelfie({
       {status.paused && (
         <div role="status" className="p-3 text-sm text-gray-600">
           Oxygen hasn’t confirmed your selfie yet.{' '}
-          <button type="button" className="underline" onClick={status.retry}>
+          <button
+            type="button"
+            className="underline"
+            onClick={() => {
+              setConfirming(false);
+              status.retry();
+            }}
+          >
             Check again
           </button>
         </div>

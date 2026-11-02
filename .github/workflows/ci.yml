@@ -374,6 +374,13 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y postgresql-client postgresql-16
+      - name: Test storefront order explicit delegation
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+        run: |
+          TEST_LINE_ENDINGS=lf python3 supabase/tests/run_storefront_order_explicit_columns.py
+          TEST_LINE_ENDINGS=crlf python3 supabase/tests/run_storefront_order_explicit_columns.py
+
       - name: Run disposable search suites
         env:
           PGHOST: localhost

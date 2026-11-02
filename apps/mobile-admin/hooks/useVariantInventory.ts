@@ -31,7 +31,7 @@ function parseVariantInventoryRpcResult(
   const nextCursor = parseVariantInventoryCursor(result.nextCursor);
 
   if (
-    !(Array.isArray(result.units) || result.units === null) ||
+    !Array.isArray(result.rows) ||
     typeof result.hasMore !== 'boolean' ||
     (result.hasMore && nextCursor === null) ||
     (!result.hasMore && nextCursor !== null)
@@ -42,7 +42,7 @@ function parseVariantInventoryRpcResult(
   return {
     hasMore: result.hasMore,
     nextCursor,
-    units: result.units as VariantInventoryUnit[] | null,
+    units: result.rows as VariantInventoryUnit[],
   };
 }
 
@@ -61,12 +61,12 @@ function parseVariantInventoryCursor(
   }
 
   const cursor = nextCursor as Record<string, unknown>;
-  if (typeof cursor.created_at !== 'string' || typeof cursor.id !== 'string') {
+  if (typeof cursor.createdAt !== 'string' || typeof cursor.id !== 'string') {
     return null;
   }
 
   return {
-    created_at: cursor.created_at,
+    created_at: cursor.createdAt,
     id: cursor.id,
   };
 }

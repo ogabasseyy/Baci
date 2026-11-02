@@ -95,17 +95,20 @@ vi.mock('react-native', async () => {
     Text: ({ children }: { children?: React.ReactNode }) =>
       React.createElement('span', null, children),
     TextInput: ({
+      accessibilityLabel,
       onChangeText,
       onSubmitEditing,
       placeholder,
       value,
     }: {
+      accessibilityLabel?: string;
       onChangeText?: (text: string) => void;
       onSubmitEditing?: () => void;
       placeholder?: string;
       value?: string;
     }) =>
       React.createElement('input', {
+        'aria-label': accessibilityLabel,
         onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
           onChangeText?.(event.target.value),
         onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -174,10 +177,10 @@ describe('ForgotPasswordScreen', () => {
   it('submits password reset from the keyboard done action', async () => {
     render(<ForgotPasswordScreen />);
 
-    fireEvent.change(screen.getByPlaceholderText('your@email.com'), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Email Address' }), {
       target: { value: 'merchant@example.com' },
     });
-    fireEvent.keyDown(screen.getByPlaceholderText('your@email.com'), {
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Email Address' }), {
       key: 'Enter',
     });
 
@@ -206,7 +209,7 @@ describe('ForgotPasswordScreen', () => {
 
     render(<ForgotPasswordScreen />);
 
-    fireEvent.change(screen.getByPlaceholderText('your@email.com'), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Email Address' }), {
       target: { value: 'invalid-email' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send Instructions' }));
@@ -229,7 +232,7 @@ describe('ForgotPasswordScreen', () => {
 
     render(<ForgotPasswordScreen />);
 
-    fireEvent.change(screen.getByPlaceholderText('your@email.com'), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Email Address' }), {
       target: { value: 'merchant@example.com' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send Instructions' }));
@@ -253,7 +256,7 @@ describe('ForgotPasswordScreen', () => {
     fireEvent.click(screen.getByLabelText('Back to login'));
     expect(mocks.back).toHaveBeenCalledTimes(1);
 
-    fireEvent.change(screen.getByPlaceholderText('your@email.com'), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Email Address' }), {
       target: { value: 'merchant@example.com' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Send Instructions' }));

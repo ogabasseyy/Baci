@@ -72,6 +72,56 @@ export function createPrimaryWalletStore(input: {
         throw new Error('Primary wallet storage unavailable');
       }
     },
+    async recordRoutingPending(command) {
+      try {
+        const parsed = schemas.routingPending.parse(command);
+        assertScope(parsed);
+        const response = await input.execute(
+          PRIMARY_WALLET_STATEMENTS.routingPending,
+          [
+            scopeJson,
+            parsed.intentId,
+            parsed.claimToken,
+            parsed.providerCustomerId,
+            parsed.providerWalletId,
+            parsed.interestPayoutWalletId,
+          ]
+        );
+        return schemas.recordedRows.parse(response.rows)[0].result;
+      } catch {
+        throw new Error('Primary wallet storage unavailable');
+      }
+    },
+    async recordReview(command) {
+      try {
+        const parsed = schemas.review.parse(command);
+        assertScope(parsed);
+        const response = await input.execute(PRIMARY_WALLET_STATEMENTS.review, [
+          scopeJson,
+          parsed.intentId,
+          parsed.claimToken,
+          parsed.providerCustomerId,
+          parsed.providerWalletId,
+          parsed.reviewReason ?? null,
+        ]);
+        return schemas.recordedRows.parse(response.rows)[0].result;
+      } catch {
+        throw new Error('Primary wallet storage unavailable');
+      }
+    },
+    async recordOwnershipHold(command) {
+      try {
+        const parsed = schemas.rejected.parse(command);
+        assertScope(parsed);
+        const response = await input.execute(
+          PRIMARY_WALLET_STATEMENTS.ownershipHold,
+          [scopeJson, parsed.intentId, parsed.claimToken]
+        );
+        return schemas.recordedRows.parse(response.rows)[0].result;
+      } catch {
+        throw new Error('Primary wallet storage unavailable');
+      }
+    },
     async recordRejected(command) {
       try {
         const parsed = schemas.rejected.parse(command);

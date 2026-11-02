@@ -50,3 +50,69 @@ index ce92458..e295700 100644
                      output[key] = mergeDeep([output[key], source[key]], respectPrototype, respectArrays, respectArrayLength, respectNonEnumerableSymbols);
                  }
                  else {
+diff --git a/cjs/mergeIncrementalResult.js b/cjs/mergeIncrementalResult.js
+--- a/cjs/mergeIncrementalResult.js
++++ b/cjs/mergeIncrementalResult.js
+@@ -31,6 +31,12 @@
+     }
+ }
+ function setObjectKeyPath(obj, keyPath, value) {
++    // Reject the entire malformed path before creating any containers.
++    if (!keyPath.every(key =>
++        (typeof key === 'string' || typeof key === 'number') &&
++        key !== '__proto__' && key !== 'constructor' && key !== 'prototype')) {
++        return;
++    }
+     let current = obj;
+     let i;
+     for (i = 0; i < keyPath.length - 1; i++) {
+@@ -38,7 +44,7 @@
+         if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+             return;
+         }
+-        if (current[key] == null) {
++        if (!Object.prototype.hasOwnProperty.call(current, key) || current[key] == null) {
+             // Determine if the next key is a number to create an array, otherwise create an object
+             current[key] = typeof keyPath[i + 1] === 'number' ? [] : {};
+         }
+@@ -48,6 +54,6 @@
+     if (finalKey === '__proto__' || finalKey === 'constructor' || finalKey === 'prototype') {
+         return;
+     }
+-    const existingValue = current[finalKey];
++    const existingValue = Object.prototype.hasOwnProperty.call(current, finalKey) ? current[finalKey] : undefined;
+     current[finalKey] = existingValue != null ? (0, mergeDeep_js_1.mergeDeep)([existingValue, value]) : value;
+ }
+diff --git a/esm/mergeIncrementalResult.js b/esm/mergeIncrementalResult.js
+--- a/esm/mergeIncrementalResult.js
++++ b/esm/mergeIncrementalResult.js
+@@ -28,6 +28,12 @@
+     }
+ }
+ function setObjectKeyPath(obj, keyPath, value) {
++    // Reject the entire malformed path before creating any containers.
++    if (!keyPath.every(key =>
++        (typeof key === 'string' || typeof key === 'number') &&
++        key !== '__proto__' && key !== 'constructor' && key !== 'prototype')) {
++        return;
++    }
+     let current = obj;
+     let i;
+     for (i = 0; i < keyPath.length - 1; i++) {
+@@ -35,7 +41,7 @@
+         if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+             return;
+         }
+-        if (current[key] == null) {
++        if (!Object.prototype.hasOwnProperty.call(current, key) || current[key] == null) {
+             // Determine if the next key is a number to create an array, otherwise create an object
+             current[key] = typeof keyPath[i + 1] === 'number' ? [] : {};
+         }
+@@ -45,6 +51,6 @@
+     if (finalKey === '__proto__' || finalKey === 'constructor' || finalKey === 'prototype') {
+         return;
+     }
+-    const existingValue = current[finalKey];
++    const existingValue = Object.prototype.hasOwnProperty.call(current, finalKey) ? current[finalKey] : undefined;
+     current[finalKey] = existingValue != null ? mergeDeep([existingValue, value]) : value;
+ }

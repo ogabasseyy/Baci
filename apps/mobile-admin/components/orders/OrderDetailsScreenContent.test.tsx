@@ -34,57 +34,9 @@ vi.mock('@/hooks/useMerchant', () => ({
   useMerchant: () => ({ merchant: null }),
 }));
 
-vi.mock('react-native', async () => {
-  const React = await import('react');
-
-  return {
-    StatusBar: () => null,
-    Pressable: ({
-      accessibilityLabel,
-      accessibilityRole,
-      children,
-      onPress,
-    }: {
-      accessibilityLabel?: string;
-      accessibilityRole?: string;
-      children?: React.ReactNode;
-      onPress?: () => void;
-    }) =>
-      React.createElement(
-        'div',
-        {
-          'aria-label': accessibilityLabel,
-          onClick: () => onPress?.(),
-          role: accessibilityRole,
-        },
-        children
-      ),
-    ScrollView: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement('div', null, children),
-    View: ({
-      accessibilityElementsHidden,
-      children,
-      importantForAccessibility,
-      testID,
-    }: {
-      accessibilityElementsHidden?: boolean;
-      children?: React.ReactNode;
-      importantForAccessibility?: string;
-      testID?: string;
-    }) =>
-      React.createElement(
-        'div',
-        {
-          'data-accessibility-elements-hidden': String(
-            Boolean(accessibilityElementsHidden)
-          ),
-          'data-important-for-accessibility': importantForAccessibility,
-          'data-testid': testID,
-        },
-        children
-      ),
-  };
-});
+vi.mock('react-native', async () =>
+  (await import('./OrderDetailsScreenContent.test-support')).reactNativeMock()
+);
 
 vi.mock('@/components/orders/OrderItemDetailModal', () => ({
   OrderItemDetailModal: () => null,
@@ -100,6 +52,9 @@ vi.mock('@/components/orders/RecordPaymentSheet', () => ({
 }));
 vi.mock('@/components/orders/ShipmentFlowSheet', () => ({
   ShipmentFlowSheet: () => null,
+}));
+vi.mock('@/hooks/useOrderDetailsGiglExternalWaybill', () => ({
+  useOrderDetailsGiglExternalWaybill: () => undefined,
 }));
 vi.mock('@/components/orders/ShipOnCreditDialog', () => ({
   ShipOnCreditDialog: () => null,

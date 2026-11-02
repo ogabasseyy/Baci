@@ -17,7 +17,16 @@ vi.mock('@/lib/piggyvest/webhook-secret-union', () => ({
   }),
 }));
 vi.mock('@/lib/piggyvest/server-intake-client', () => ({
-  createPiggyvestIntakeServiceClient: () => ({}),
+  createPiggyvestIntakeServiceClient: () => ({
+    rpc: async () => ({
+      data: {
+        outcome: 'captured',
+        id: '4204dc18-efb3-44d0-b9a2-1362448d4f21',
+        processingState: 'pending',
+      },
+      error: null,
+    }),
+  }),
 }));
 vi.mock('@/lib/piggyvest/webhook-inbox', () => ({
   recordPiggyvestEvent: mocks.record,
@@ -47,9 +56,11 @@ it('requests redelivery when a conflicting known event cannot be quarantined', a
   );
 
   expect(response.status).toBe(503);
-  expect(await response.json()).toEqual({
-    error: 'Event intake unavailable',
-    code: 'PIGGYVEST_INBOX_ERROR',
+  expect(await response.json()).toMatchObject({
+    received: true,
+    captured: true,
+    processing: 'retry',
+    code: 'PIGGYVEST_PROCESSING_RETRY',
   });
   expect(mocks.quarantine).toHaveBeenCalledOnce();
   expect(mocks.process).not.toHaveBeenCalled();

@@ -102,6 +102,9 @@ describe('CustomTabBar', () => {
     expect(screen.getByRole('tab', { name: 'Home' })).toBeOnTheScreen();
     expect(screen.getByRole('tab', { name: 'Saved' })).toBeOnTheScreen();
     expect(screen.queryByRole('tab', { name: 'Explore' })).toBeNull();
+    expect(
+      screen.getByTestId('custom-tab-bar-wrapper').props.pointerEvents
+    ).toBe('box-none');
   });
 
   it('reserves touch space only while the discovery bubble is visible', () => {

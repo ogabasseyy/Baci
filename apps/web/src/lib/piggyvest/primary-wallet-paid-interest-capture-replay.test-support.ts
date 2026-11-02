@@ -1,12 +1,17 @@
 import { createHash } from 'node:crypto';
 import { vi } from 'vitest';
 
+type StoredReceipt = {
+  rawHex: string;
+  signature: string;
+  digest: string;
+  state: string;
+};
+
 type CaptureHarness = {
   secret: string;
-  records: Map<
-    string,
-    { rawHex: string; signature: string; digest: string; state: string }
-  >;
+  captures: Map<string, StoredReceipt>;
+  records: Map<string, StoredReceipt>;
   dispatch: ReturnType<typeof vi.fn>;
   finishFailure: boolean;
   enqueueFailure: boolean;
@@ -20,6 +25,7 @@ type CaptureHarness = {
 const harness = vi.hoisted(() => {
   const state: CaptureHarness = {
     secret: globalThis.crypto.randomUUID(),
+    captures: new Map(),
     records: new Map(),
     dispatch: vi.fn(),
     finishFailure: false,
@@ -173,7 +179,39 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-runtime', () => ({
   }),
 }));
 vi.mock('@/lib/piggyvest/server-intake-client', () => ({
-  createPiggyvestIntakeServiceClient: vi.fn(),
+  createPiggyvestIntakeServiceClient: () => ({
+    rpc: (
+      name: string,
+      { p_command }: { p_command: Record<string, unknown> }
+    ) => {
+      if (name !== 'capture_piggyvest_webhook_delivery')
+        return Promise.resolve({ data: true, error: null });
+      const rawHex = String(p_command.rawHex);
+      const signature = String(p_command.signature);
+      const eventId = String(p_command.eventId);
+      const old = harness.captures.get(eventId);
+      if (!old) {
+        harness.captures.set(eventId, {
+          rawHex,
+          signature,
+          digest: String(p_command.bodyDigest),
+          state: 'pending',
+        });
+      }
+      return Promise.resolve({
+        data: {
+          outcome: old ? 'duplicate' : 'captured',
+          id: '4204dc18-efb3-44d0-b9a2-1362448d4f21',
+          processingState: 'pending',
+        },
+        error: null,
+      });
+    },
+  }),
+}));
+vi.mock('@/lib/piggyvest/event-quarantine', () => ({
+  digestRawBody: () => 'synthetic-replay-digest',
+  recordQuarantineEvent: vi.fn().mockResolvedValue('recorded'),
 }));
 vi.mock('@/lib/piggyvest/webhook-inbox', () => ({
   recordPiggyvestEvent: vi.fn(),

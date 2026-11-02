@@ -86,7 +86,10 @@ describe('captured primary paid-interest webhook replay', () => {
   });
 
   beforeEach(() => {
+    vi.stubEnv('PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_ENABLED', 'true');
+    vi.stubEnv('PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_DRAIN_SCHEDULED', 'true');
     harness.logger.mockClear();
+    harness.captures.clear();
     harness.records.clear();
     harness.dispatch.mockReset();
     harness.finishFailure = false;
@@ -105,6 +108,9 @@ describe('captured primary paid-interest webhook replay', () => {
         rawBody: Uint8Array;
         signature: string | null;
       }) => {
+        expect(harness.records.get('captured-interest-π-0001')?.state).toBe(
+          'processing'
+        );
         harness.handedOff.push({ bytes: Buffer.from(rawBody), signature });
         return await applyPrimaryWalletSignedPaidInterest({
           rawBody,
@@ -135,6 +141,7 @@ describe('captured primary paid-interest webhook replay', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it('credits once through the fake atomic ledger, retries provider I/O, and replays after simulated lease expiry', async () => {
@@ -142,6 +149,10 @@ describe('captured primary paid-interest webhook replay', () => {
     const signature = signed(bytes);
     const first = await postWebhook(request(bytes, signature));
     expect(first.status).toBe(200);
+    expect(await first.clone().json()).toMatchObject({
+      interestQueued: true,
+      duplicate: false,
+    });
     expect(await first.clone().text()).not.toContain(secret);
     expect(await first.clone().text()).not.toContain('provider-test-token');
     const receipt = harness.records.get('captured-interest-π-0001');
@@ -151,10 +162,14 @@ describe('captured primary paid-interest webhook replay', () => {
       state: 'pending',
     });
     expect(receipt).toBeDefined();
+    expect(harness.captures.size).toBe(1);
+    expect(harness.records.size).toBe(1);
+    expect(receipt).not.toBe(harness.captures.get('captured-interest-π-0001'));
     if (!receipt) throw new Error('Expected a durable captured receipt');
     expect(Buffer.from(receipt.rawHex, 'hex')).toEqual(bytes);
 
     await expect(drainInbox({ env })).rejects.toThrow('worker unavailable');
+    expect(harness.claims).toBe(1);
     expect(harness.records.get('captured-interest-π-0001')).toMatchObject({
       rawHex: bytes.toString('hex'),
       signature,
@@ -186,18 +201,45 @@ describe('captured primary paid-interest webhook replay', () => {
     );
   });
 
+  it('cannot claim a capture receipt without a successful interest inbox enqueue', async () => {
+    const bytes = capturedWireBytes();
+    harness.enqueueFailure = true;
+    expect((await postWebhook(request(bytes))).status).toBe(503);
+    harness.dispatch.mockResolvedValue('credited');
+
+    expect(harness.captures.size).toBe(1);
+    expect(await drainInbox({ env })).toMatchObject({
+      claimed: 0,
+      processed: 0,
+    });
+    expect(harness.records.size).toBe(0);
+    expect(harness.claims).toBe(0);
+    expect(harness.dispatch).not.toHaveBeenCalled();
+  });
+
   it('rejects forged signatures and returns 503 without exposing persistence failures', async () => {
     const bytes = capturedWireBytes();
     const invalid = await postWebhook(request(bytes, 'bad-signature'));
-    expect(invalid.status).toBe(200);
+    expect(invalid.status).toBe(401);
+    expect(await invalid.json()).toEqual({
+      received: false,
+      code: 'PIGGYVEST_INVALID_SIGNATURE',
+    });
     expect(harness.records.size).toBe(0);
+    expect(harness.captures.size).toBe(0);
     expect(harness.creditCount).toBe(0);
 
     harness.enqueueFailure = true;
     const failed = await postWebhook(request(bytes));
     expect(failed.status).toBe(503);
     expect(await failed.text()).not.toContain('private database detail');
+    expect(harness.captures.size).toBe(1);
     expect(harness.records.size).toBe(0);
+    expect(harness.captures.get('captured-interest-π-0001')).toMatchObject({
+      rawHex: bytes.toString('hex'),
+      signature: signed(bytes),
+      state: 'pending',
+    });
     const capturedLogs = JSON.stringify(harness.logger.mock.calls);
     expect(capturedLogs).not.toContain(secret);
     expect(capturedLogs).not.toContain(bytes.toString('utf8'));
@@ -213,11 +255,18 @@ describe('captured primary paid-interest webhook replay', () => {
     const bytes = Buffer.from(`\n${JSON.stringify(event)} \n`, 'utf8');
     const response = await postWebhook(request(bytes));
     expect(response.status).toBe(200);
-    expect(harness.records.get(String(event.eventId))).toMatchObject({
+    expect(harness.captures.size).toBe(1);
+    expect(harness.captures.get(String(event.eventId))).toMatchObject({
       rawHex: bytes.toString('hex'),
       signature: signed(bytes),
     });
-    expect((await drainInbox({ env })).quarantined).toBe(1);
+    expect(harness.records.size).toBe(0);
+    expect(await drainInbox({ env })).toEqual({
+      claimed: 0,
+      processed: 0,
+      deferred: 0,
+      quarantined: 0,
+    });
     expect(harness.dispatch).not.toHaveBeenCalled();
     expect(harness.creditCount).toBe(0);
   });

@@ -91,13 +91,16 @@ it('durably key-family quarantines a known non-interest event signed only by the
     received: true,
     quarantined: true,
   });
-  expect(mocks.recordQuarantineEvent).toHaveBeenCalledWith(undefined, {
-    bodyDigest: 'a'.repeat(64),
-    reason: 'key-family',
-    eventId: restrictionEvent.eventId,
-    eventType: restrictionEvent.eventType,
-    detail: expect.any(Object),
-  });
+  expect(mocks.recordQuarantineEvent).toHaveBeenCalledWith(
+    expect.objectContaining({ rpc: expect.any(Function) }),
+    {
+      bodyDigest: 'a'.repeat(64),
+      reason: 'key-family',
+      eventId: restrictionEvent.eventId,
+      eventType: restrictionEvent.eventType,
+      detail: expect.any(Object),
+    }
+  );
   expect(mocks.interestInbox).not.toHaveBeenCalled();
   expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
   expect(mocks.createServiceClient).toHaveBeenCalled();

@@ -63,14 +63,16 @@ describe('webhook raw request regression', () => {
     );
     const response = await POST(request);
 
-    // A verified but unparseable body must retry until replayable capture
-    // is available, rather than acknowledging a digest-only quarantine.
+    // Capture happens before parsing. A failed quarantine write leaves the
+    // captured delivery retryable for the provider.
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({
-      received: false,
-      code: 'PIGGYVEST_INTEREST_RECONCILIATION_PENDING',
+    expect(await response.json()).toMatchObject({
+      received: true,
+      captured: true,
+      processing: 'retry',
+      code: 'PIGGYVEST_PROCESSING_RETRY',
     });
-    expect(mocks.createServiceClient).not.toHaveBeenCalled();
+    expect(mocks.createServiceClient).toHaveBeenCalledOnce();
 
     // Replacing the invalid byte before verification changes the HMAC.
     const replaced = await POST(
@@ -80,7 +82,7 @@ describe('webhook raw request regression', () => {
         headers: { 'x-pvb-signature': signature },
       })
     );
-    expect(replaced.status).toBe(200);
+    expect(replaced.status).toBe(401);
     expect(await replaced.json()).toMatchObject({
       received: false,
       code: 'PIGGYVEST_INVALID_SIGNATURE',

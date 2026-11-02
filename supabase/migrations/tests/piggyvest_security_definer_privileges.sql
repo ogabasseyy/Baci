@@ -1,5 +1,6 @@
 -- Catalog-only contracts for privileged PiggyVest routines. These assertions
 -- prevent PUBLIC/default EXECUTE grants from silently widening call graphs.
+-- Assert final replay state: retired checkpoint RPCs retain no worker grants.
 DO $test$
 DECLARE
   contract record;
@@ -9,10 +10,11 @@ BEGIN
     SELECT * FROM (VALUES
       ('piggyvest_primary.read_pending_savings(jsonb,uuid)', 'piggyvest_primary_authorizer', true),
       ('piggyvest_primary.has_onboarding(jsonb)', 'piggyvest_primary_provisioner', true),
+      ('piggyvest_primary.can_recover_onboarding(jsonb)', 'piggyvest_primary_provisioner', true),
       ('piggyvest_primary.enqueue_paid_interest_inbox(uuid,text,jsonb)', 'piggyvest_primary_evidence', true),
-      ('piggyvest_primary.claim_savings_reconciliation_checkpoint(uuid,text,uuid)', 'piggyvest_primary_evidence', true),
-      ('piggyvest_primary.save_savings_reconciliation_checkpoint(uuid,text,jsonb)', 'piggyvest_primary_evidence', true),
-      ('piggyvest_primary.finish_savings_reconciliation_checkpoint(uuid,text,jsonb)', 'piggyvest_primary_evidence', true),
+      ('piggyvest_primary.claim_savings_reconciliation_checkpoint(uuid,text,uuid)', NULL, true),
+      ('piggyvest_primary.save_savings_reconciliation_checkpoint(uuid,text,jsonb)', NULL, true),
+      ('piggyvest_primary.finish_savings_reconciliation_checkpoint(uuid,text,jsonb)', NULL, true),
       ('piggyvest_primary.clear_terminal_savings_reconciliation_checkpoint()', NULL, true),
       ('savings_interest_private.require_environment()', NULL, true),
       ('savings_interest_private.get_customer_savings_interest_history(uuid)', 'authenticated', true),

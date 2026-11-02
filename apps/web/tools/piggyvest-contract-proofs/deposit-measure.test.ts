@@ -19,16 +19,22 @@ function harness(...args: Parameters<typeof makeHarness>) {
 
 describe('measureDeposit', () => {
   it("measures the credit and finds THIS deposit's row, never an older one of the same amount", async () => {
-    const h = harness();
+    // The list lags: the first read after the deposit shows only the older row.
+    const h = harness({ mock: { listLagReads: 2 } });
     await setupScenario(h.ctx);
     const main = h.state.mainWalletId ?? '';
     // An older credit of the same gross already sits on the wallet.
     h.mock.sandbox.ledger.fund({ wallet_id: main, amount: 250_000 });
-    const older = dataOf<MockPage>(
-      h.mock.sandbox.ledger.listTransactions(
-        new URLSearchParams({ wallet_id: main })
-      )
-    ).edges.map((row) => row.id);
+    const readIds = () =>
+      dataOf<MockPage>(
+        h.mock.sandbox.ledger.listTransactions(
+          new URLSearchParams({ wallet_id: main })
+        )
+      ).edges.map((row) => row.id);
+    let older: string[] = [];
+    for (let read = 0; read < 3 && older.length === 0; read += 1)
+      older = readIds();
+    expect(older).not.toHaveLength(0);
     const m = await measureDeposit(h.ctx, main, 250_000, 'p9/fund_main');
     expect(m.kind).toBe('measured');
     if (m.kind !== 'measured') return;

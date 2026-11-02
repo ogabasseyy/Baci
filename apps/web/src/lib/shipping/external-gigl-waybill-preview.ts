@@ -110,44 +110,33 @@ async function assertMerchantCanLink(
     );
   }
 
-  const [settings, liveShipment, waybillShipment, waybillOrder] =
-    await Promise.all([
-      supabase
-        .from('merchant_feature_settings')
-        .select('shipping_providers')
-        .eq('merchant_id', merchantId)
-        .maybeSingle(),
-      supabase
-        .from('shipments')
-        .select('id')
-        .eq('order_id', order.id)
-        .eq('merchant_id', merchantId)
-        .not('status', 'in', RELEASED_SHIPMENT_STATUSES)
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from('shipments')
-        .select('id')
-        .eq('provider', 'GIGL')
-        .eq('tracking_number', waybill)
-        .neq('status', 'cancelled')
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from('orders')
-        .select('id')
-        .eq('merchant_id', merchantId)
-        .eq('tracking_number', waybill)
-        .neq('id', order.id)
-        .limit(1)
-        .maybeSingle(),
-    ]);
-  if (
-    settings.error ||
-    liveShipment.error ||
-    waybillShipment.error ||
-    waybillOrder.error
-  ) {
+  // Typed tracking numbers on other orders (including cancelled links that
+  // release the waybill) are judged by the link RPC, which sees every
+  // merchant; a row-level-security read here could only disagree with it.
+  const [settings, liveShipment, waybillShipment] = await Promise.all([
+    supabase
+      .from('merchant_feature_settings')
+      .select('shipping_providers')
+      .eq('merchant_id', merchantId)
+      .maybeSingle(),
+    supabase
+      .from('shipments')
+      .select('id')
+      .eq('order_id', order.id)
+      .eq('merchant_id', merchantId)
+      .not('status', 'in', RELEASED_SHIPMENT_STATUSES)
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('shipments')
+      .select('id')
+      .eq('provider', 'GIGL')
+      .eq('tracking_number', waybill)
+      .neq('status', 'cancelled')
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  if (settings.error || liveShipment.error || waybillShipment.error) {
     throw new ExternalWaybillError(
       'Failed to check this order',
       500,
@@ -176,7 +165,7 @@ async function assertMerchantCanLink(
       'ORDER_SHIPMENT_EXISTS'
     );
   }
-  if (waybillShipment.data || waybillOrder.data) {
+  if (waybillShipment.data) {
     throw new ExternalWaybillError(
       'This waybill is already attached to another order.',
       409,

@@ -98,9 +98,8 @@ function compareDestinations(
 
 /**
  * Compares the receiver on a GIG waybill with the Baci order it is about to
- * be attached to. A waybill is linkable only when the receiver is the
- * order's customer (by name or phone) and the destination state agrees, or
- * the order has no state and the phone number matches.
+ * be attached to. A waybill is linkable only when the receiver's phone is
+ * the order's and the destination state agrees (or the order has no state).
  */
 export function matchExternalWaybillToOrder(
   order: ExternalWaybillOrderReceiver,
@@ -118,10 +117,10 @@ export function matchExternalWaybillToOrder(
     order.shipping_address?.state,
     preShipment.ReceiverState
   );
-  // A clearly different phone is evidence against the receiver, so a name
-  // match only counts when the phone does not contradict it.
-  const receiverMatches =
-    phone === 'match' || (name === 'match' && phone !== 'mismatch');
+  // Every merchant books through one shared GIG account, so a matching
+  // phone is required: a name and state alone could fit another merchant's
+  // customer. The name is reported for staff but never decides on its own.
+  const receiverMatches = phone === 'match';
   // In-store orders often carry no delivery state; a matching phone number
   // is then the evidence that the parcel is this customer's. A GIG response
   // without a destination never skips the check for an order that has one.

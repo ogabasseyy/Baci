@@ -23,14 +23,14 @@ describe('matchExternalWaybillToOrder', () => {
     });
   });
 
-  it('accepts reordered names when GIG has no phone', () => {
+  it('needs the phone even when the names match', () => {
     const result = matchExternalWaybillToOrder(order, {
       ...receiver,
       ReceiverName: 'Emmanuel Audu',
       ReceiverPhoneNumber: undefined,
     });
     expect(result).toMatchObject({ name: 'match', phone: 'unknown' });
-    expect(result.linkable).toBe(true);
+    expect(result.linkable).toBe(false);
   });
 
   it('refuses a name match when the phone clearly differs', () => {

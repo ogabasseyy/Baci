@@ -344,7 +344,9 @@ describe('ShipmentFlowSheet prepaid recovery reachability', () => {
     expect(
       screen.getByRole('button', { name: 'Continue to Rider' })
     ).toBeEnabled();
-    expect(screen.queryByText('Ship with GIG')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('radio', { name: /^Ship with GIG/ })
+    ).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: recoveryLabel }));
     expect(
       screen.getByRole('button', { name: 'Preview new shipping quote' })

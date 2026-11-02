@@ -189,6 +189,33 @@ describe('recordGoalWallets', () => {
     expect(result.notes.join(' ')).toMatch(/INHERITS/);
   });
 
+  it('keeps the opted-out flag read at once when the 5-minute recheck omits it', async () => {
+    const { answer, result } = await run(
+      {},
+      ['interest_payout_wallet'],
+      (h) => {
+        h.ctx.sleep = async (ms) => {
+          if (ms !== GOAL_RECHECK_DELAY_MS) return;
+          // From now on readbacks show the payout but no accrual flag.
+          const read = h.api.wallet.bind(h.api);
+          h.api.wallet = async (id) => {
+            const call = await read(id);
+            if (call.data === null || typeof call.data !== 'object')
+              return call;
+            const data = { ...(call.data as Record<string, unknown>) };
+            delete data.interest_enabled;
+            delete data.enable_interest_accrual;
+            return { ...call, data };
+          };
+        };
+      }
+    );
+    expect(result.values.goal_b_interest_enabled_at_0m).toBe(false);
+    expect(result.values.goal_b_interest_enabled_at_5m).toBeNull();
+    expect(result.values.goal_b_payout_at_5m).toBe('null');
+    expect(answer('goal_opted_out_reads_accrual_off')).toBe('yes');
+  });
+
   it('says no once goal (a) names itself and the main wallet showed the same field', async () => {
     const { answer } = await run({
       mock: { subWalletPaysItselfWhenUnset: true },

@@ -90,6 +90,22 @@ describe('finalReading', () => {
   it('falls back to the first reading when the recheck could not be read', () => {
     expect(finalReading(at('main'), at('unread')).payout).toBe('main');
   });
+
+  it('keeps a known accrual flag when the recheck shows the payout but not the flag', () => {
+    expect(
+      finalReading(
+        { interestEnabled: false, payout: 'null' },
+        { interestEnabled: null, payout: 'self' }
+      )
+    ).toEqual({ interestEnabled: false, payout: 'self' });
+    // A flag the recheck does show still wins.
+    expect(
+      finalReading(
+        { interestEnabled: true, payout: 'null' },
+        { interestEnabled: false, payout: 'null' }
+      ).interestEnabled
+    ).toBe(false);
+  });
 });
 
 describe('GOAL_ROUTING_VARIANTS', () => {

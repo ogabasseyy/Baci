@@ -119,12 +119,20 @@ export function readGoalRouting(
   };
 }
 
-/** The later reading decides; the first stands only if the recheck was unread. */
+/**
+ * The later reading decides, field by field: the first reading stands when
+ * the recheck was unread, and its accrual flag stands when the recheck showed
+ * the payout but not the flag.
+ */
 export function finalReading(
   atOnce: GoalRoutingReading,
   afterRecheck: GoalRoutingReading
 ): GoalRoutingReading {
-  return afterRecheck.payout === 'unread' ? atOnce : afterRecheck;
+  if (afterRecheck.payout === 'unread') return atOnce;
+  return {
+    interestEnabled: afterRecheck.interestEnabled ?? atOnce.interestEnabled,
+    payout: afterRecheck.payout,
+  };
 }
 
 export type RoutingVerdict = 'proven' | 'not_proven';

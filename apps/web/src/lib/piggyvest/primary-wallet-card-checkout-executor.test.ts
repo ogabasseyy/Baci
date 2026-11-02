@@ -94,4 +94,22 @@ describe('restricted primary card database executor', () => {
     ).rejects.toThrow();
     expect(mocks.connect).not.toHaveBeenCalled();
   });
+  // Card top-up initialization is retired: the executor carries no SQL
+  // for reserve, claim_initialization or record_initialization, so even a
+  // valid authorizer login cannot be driven into them from app code.
+  it.each([
+    ['reserve', ['{}', '{}']],
+    ['claim', ['{}', fixture.intent.operationId]],
+    ['initialize', ['{}', fixture.intent.operationId, null, null]],
+  ] as const)('refuses the retired %s action before any database connection', async (action, parameters) => {
+    const execute = createPrimaryWalletCardCheckoutExecutor(config) as (
+      action: string,
+      parameters: readonly (string | null)[]
+    ) => Promise<unknown>;
+    await expect(execute(action, parameters)).rejects.toThrow(
+      'Primary card storage unavailable'
+    );
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.connect).not.toHaveBeenCalled();
+  });
 });

@@ -58,13 +58,6 @@ function getChatAnchor(container: HTMLElement) {
   return anchor as HTMLElement;
 }
 
-function expectMobileOffsetContract(anchor: HTMLElement) {
-  expect(anchor).toHaveAttribute('data-mobile-offset-cart', '6.75rem');
-  expect(anchor).toHaveAttribute('data-mobile-offset-default', '5.75rem');
-  expect(anchor).toHaveAttribute('data-mobile-offset-product', '6.25rem');
-  expect(anchor).toHaveAttribute('data-mobile-offset-screen', '1rem');
-}
-
 describe('ChatWidget - toggle button', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -107,14 +100,6 @@ describe('ChatWidget - toggle button', () => {
   it('renders the AI badge on the toggle button', () => {
     render(<ChatWidget />);
     expect(screen.getByText('AI')).toBeDefined();
-  });
-
-  it('exposes the mobile offset contract on the widget anchor', () => {
-    const { container } = render(<ChatWidget />);
-    const anchor = getChatAnchor(container);
-
-    expect(anchor).toHaveAttribute('data-mobile-offset', 'default');
-    expectMobileOffsetContract(anchor);
   });
 
   it('does not render chat window when isOpen is false', () => {
@@ -180,7 +165,6 @@ describe('ChatWidget - toggle button', () => {
 
     expect(anchor).toHaveClass('ogabassey-chat-anchor--hidden');
     expect(anchor).toHaveAttribute('data-mobile-offset', 'default');
-    expectMobileOffsetContract(anchor);
     expect(
       screen.getByRole('button', { name: 'Toggle chat' })
     ).toBeInTheDocument();

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { primaryWalletCardCheckoutSchemas as schemas } from '@/schemas/primary-wallet-card-checkout';
 import { primaryWalletCardCheckoutFixture as fixture } from './primary-wallet-card-checkout.test-fixture';
 import { runPrimaryCardCheckoutAbandonment } from './primary-wallet-card-checkout-abandonment';
 
@@ -94,6 +95,31 @@ describe('stale ready checkout abandonment', () => {
           action !== 'selectStaleReady' && params[1] === third.operationId
       )
     ).toHaveLength(0);
+  });
+  it('verifies each candidate as a strict provider intent, without the scope-only deadline fields', async () => {
+    // Regression: the selection row carries expiresAt/callbackUrl for the
+    // storage scope, but the real provider parses its input with the
+    // strict intent schema, so forwarding the raw row failed every scan.
+    const { execute, provider } = setup([staleIntent()], () => ({
+      outcome: 'abandoned' as const,
+    }));
+    await runPrimaryCardCheckoutAbandonment({
+      settings: fixture.settings,
+      execute: execute as never,
+      provider: provider as never,
+      now: () => Date.parse('2026-10-09T00:00:00Z'),
+    });
+    const verified = provider.verify.mock.calls[0]?.[0];
+    expect(verified).not.toHaveProperty('expiresAt');
+    expect(verified).not.toHaveProperty('callbackUrl');
+    expect(schemas.intent.parse(verified)).toMatchObject({
+      operationId: fixture.intent.operationId,
+      status: 'ready',
+    });
+    expect(JSON.parse(String(execute.mock.calls[1]?.[1][0]))).toMatchObject({
+      expiresAt: fixture.settings.expiresAt,
+      callbackUrl: fixture.settings.callbackUrl,
+    });
   });
   it('leaves reconciliation_required outcomes for the client/webhook paths', async () => {
     const { execute } = setup([staleIntent()], () => ({

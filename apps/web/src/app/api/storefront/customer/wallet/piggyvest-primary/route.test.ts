@@ -18,6 +18,11 @@ const mocks = vi.hoisted(() => ({
   accounts: vi.fn(),
   verify: vi.fn(),
 }));
+// A durable intent exists unless a test says otherwise; the not-started
+// path is covered in get-route.presence.test.ts.
+vi.mock('@/lib/piggyvest/primary-wallet-presence', () => ({
+  hasPrimaryWalletOnboarding: vi.fn().mockResolvedValue(true),
+}));
 vi.mock('@/lib/piggyvest/primary-wallet-verification', () => ({
   verifyPrimaryWalletMapping: mocks.verify,
 }));

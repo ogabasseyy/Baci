@@ -1,4 +1,5 @@
 import type { Order } from '@baci/shared';
+import type { OrderGiglExternalWaybill } from '@/hooks/orders/useOrderGiglExternalWaybill';
 import type { useOrderGiglShipping } from '@/hooks/orders/useOrderGiglShipping';
 import type {
   ShipmentCompletionMode,
@@ -16,6 +17,8 @@ export interface ShipmentFlowSheetProps {
   canBookGigl: boolean;
   canUseProvider: boolean;
   checkoutPaidShippingLabel?: string | null;
+  /** Attach a waybill booked in GIG's own app; omitted when GIG is off. */
+  externalWaybill?: OrderGiglExternalWaybill;
   fulfillmentDetails: ShipmentFulfillmentDetails;
   fulfillmentItemIndex: number;
   giglShipping?: ReturnType<typeof useOrderGiglShipping>;

@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
+import type { OrderGiglExternalWaybill } from '@/hooks/orders/useOrderGiglExternalWaybill';
 import { useTheme } from '@/hooks/useTheme';
 import type { ShipmentCompletionMode } from '@/lib/order-shipment';
+import { ShipmentFlowGiglWaybillPanel } from './ShipmentFlowGiglWaybillPanel';
 import { ShipmentOptionCard } from './ShipmentOptionCard';
 
 interface ShipmentFlowMethodStepProps {
@@ -10,6 +12,8 @@ interface ShipmentFlowMethodStepProps {
   canUseProvider: boolean;
   /** Formatted shipping price the customer paid with a saved checkout quote. */
   checkoutPaidShippingLabel?: string | null;
+  /** "Already booked on GIG?" — omitted when the store cannot use GIG. */
+  externalWaybill?: OrderGiglExternalWaybill;
   giglPanel?: ReactNode;
   onModeChange: (mode: ShipmentCompletionMode) => void;
   providerLabel: string | null;
@@ -20,6 +24,7 @@ export function ShipmentFlowMethodStep({
   bookingDenied = false,
   canUseProvider,
   checkoutPaidShippingLabel,
+  externalWaybill,
   giglPanel,
   onModeChange,
   providerLabel,
@@ -57,6 +62,14 @@ export function ShipmentFlowMethodStep({
           }
         />
       )}
+
+      {externalWaybill ? (
+        <ShipmentFlowGiglWaybillPanel
+          externalWaybill={externalWaybill}
+          onSelect={() => onModeChange('external_waybill')}
+          selected={selectedMode === 'external_waybill'}
+        />
+      ) : null}
 
       <ShipmentOptionCard
         colors={colors}

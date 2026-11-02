@@ -5,6 +5,8 @@ VALUES
  ('efaf0000-0000-4000-8000-000000000001','00000000-0000-0000-0000-000000000000','authenticated','authenticated','handoff-owner@example.test','test',now(),now(),now(),'{}','{}'),
  ('efaf0000-0000-4000-8000-000000000002','00000000-0000-0000-0000-000000000000','authenticated','authenticated','handoff-worker@example.test','test',now(),now(),now(),'{}','{}'),
  ('efaf0000-0000-4000-8000-000000000003','00000000-0000-0000-0000-000000000000','authenticated','authenticated','handoff-other@example.test','test',now(),now(),now(),'{}','{}');
+-- Seed the merchant under its authenticated actor for audit and order context.
+SELECT set_config('request.jwt.claim.sub','efaf0000-0000-4000-8000-000000000003',true);
 INSERT INTO public.merchants(id,user_id,email,business_name,slug)
 VALUES ('efaf0000-0000-4000-8000-000000000011','efaf0000-0000-4000-8000-000000000003','handoff-other@example.test','Handoff fixture','oxygen-handoff-validated-fixture');
 INSERT INTO public.customers(id,merchant_id,user_id,first_name,last_name,email)

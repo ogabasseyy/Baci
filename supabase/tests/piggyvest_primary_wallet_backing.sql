@@ -3,17 +3,21 @@
 --
 -- Proves, against live PostgreSQL:
 --   * every existing wallet is legacy and wallet_backing ships empty;
---   * begin_migration refuses unverified, cross-merchant, mismatched and
---     pending wallets, and an audited zero (or no wallet row) goes straight
---     to backed with no wallet or ledger write, idempotently;
+--   * begin_migration refuses unverified, switched-off, relinked,
+--     cross-merchant, mismatched, out-of-ledger-range and pending wallets,
+--     and an audited zero (or no wallet row) goes straight to backed with no
+--     wallet or ledger write, idempotently, also from a review-flagged row;
 --   * flip_to_backed only moves a migrating wallet, sets backed before it
 --     writes the single relabel pair, keeps available_balance at the audited
 --     amount, writes one pair however often it runs, and refuses or reviews
---     anything else;
---   * no write path leads back to legacy (guard triggers, no table grants);
+--     anything else (pending rows included) without raising;
+--   * no write path leads back to legacy (guard triggers, no table grants),
+--     account deletion detaches the customer, and a migrating wallet blocks
+--     it;
 --   * the hooks are no-ops, onboarding_verified_hook_ready() is false, and a
 --     raising hook never undoes a flip;
---   * get_my_wallet_backing_state returns only the caller's own state;
+--   * get_my_wallet_backing_state returns only the caller's own state and
+--     fails closed when the row sits under another merchant;
 --   * privileges are asserted through the catalog: a denied EXECUTE cannot be
 --     trapped on the replay image, so no denial is probed by calling.
 -- Transitions run as the session role (the function owner); dedicated

@@ -20,6 +20,7 @@ CREATE FUNCTION piggyvest_primary.flag_migration_review(p_customer_id uuid, p_me
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_backing piggyvest_primary.wallet_backing%ROWTYPE;
+  v_found boolean;
 BEGIN
   IF p_customer_id IS NULL OR p_merchant_id IS NULL THEN
     RAISE EXCEPTION 'wallet_backing_scope_required' USING ERRCODE = '22023';
@@ -29,24 +30,28 @@ BEGIN
   END IF;
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended('piggyvest-wallet-backing:' || p_customer_id::text, 0));
-  PERFORM 1 FROM public.customers c
-  WHERE c.id = p_customer_id AND c.merchant_id = p_merchant_id FOR KEY SHARE;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
-  END IF;
+  -- An existing row is flagged where it stands (its merchant is the scope), so
+  -- the flip's review paths never raise; only a new row needs the customer to
+  -- still belong to the merchant.
   SELECT * INTO v_backing FROM piggyvest_primary.wallet_backing b
   WHERE b.customer_id = p_customer_id FOR UPDATE;
-  IF NOT FOUND THEN
-    INSERT INTO piggyvest_primary.wallet_backing(merchant_id, customer_id, state, review_reason, review_flagged_at)
-    VALUES (p_merchant_id, p_customer_id, 'legacy', p_reason, pg_catalog.clock_timestamp())
-    RETURNING * INTO v_backing;
-  ELSIF v_backing.merchant_id <> p_merchant_id THEN
+  v_found := FOUND;
+  IF v_found AND v_backing.merchant_id <> p_merchant_id THEN
     RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
-  ELSE
+  ELSIF v_found THEN
     UPDATE piggyvest_primary.wallet_backing
     SET review_reason = p_reason, review_flagged_at = pg_catalog.clock_timestamp(),
       updated_at = pg_catalog.clock_timestamp()
     WHERE id = v_backing.id RETURNING * INTO v_backing;
+  ELSE
+    PERFORM 1 FROM public.customers c
+    WHERE c.id = p_customer_id AND c.merchant_id = p_merchant_id FOR KEY SHARE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
+    END IF;
+    INSERT INTO piggyvest_primary.wallet_backing(merchant_id, customer_id, state, review_reason, review_flagged_at)
+    VALUES (p_merchant_id, p_customer_id, 'legacy', p_reason, pg_catalog.clock_timestamp())
+    RETURNING * INTO v_backing;
   END IF;
   INSERT INTO piggyvest_primary.wallet_backing_events(backing_id, event, from_state, to_state, reason)
   VALUES (v_backing.id, 'review_flagged', v_backing.state, v_backing.state, p_reason);
@@ -60,6 +65,7 @@ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_intent piggyvest_primary.onboarding_intents%ROWTYPE;
   v_backing piggyvest_primary.wallet_backing%ROWTYPE;
+  v_customer_user uuid;
   v_wallet_id uuid;
   v_wallet_merchant uuid;
   v_balance numeric;
@@ -69,24 +75,35 @@ BEGIN
   IF p_customer_id IS NULL OR p_merchant_id IS NULL OR p_intent_id IS NULL THEN
     RAISE EXCEPTION 'wallet_backing_scope_required' USING ERRCODE = '22023';
   END IF;
+  -- The flip writes this amount to customer_wallet_transactions.amount
+  -- (numeric(10,2)), so a balance that column cannot hold never begins.
   IF p_audited_amount IS NULL OR p_audited_amount < 0 OR p_audited_amount <> pg_catalog.round(p_audited_amount, 2)
-    OR p_audited_amount > 9999999999.99 THEN
+    OR p_audited_amount >= 100000000 THEN
     RAISE EXCEPTION 'wallet_backing_invalid_amount' USING ERRCODE = '22023';
   END IF;
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended('piggyvest-wallet-backing:' || p_customer_id::text, 0));
-  PERFORM 1 FROM public.customers c
-  WHERE c.id = p_customer_id AND c.merchant_id = p_merchant_id FOR KEY SHARE;
+  -- FOR SHARE (not KEY SHARE) so a concurrent relink of user_id waits.
+  SELECT c.user_id INTO v_customer_user FROM public.customers c
+  WHERE c.id = p_customer_id AND c.merchant_id = p_merchant_id FOR SHARE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
   END IF;
+  -- The intent must still belong to the user the customer row names now.
   SELECT * INTO v_intent FROM piggyvest_primary.onboarding_intents i WHERE i.id = p_intent_id FOR SHARE;
-  IF NOT FOUND OR v_intent.customer_id IS DISTINCT FROM p_customer_id OR v_intent.merchant_id <> p_merchant_id THEN
+  IF NOT FOUND OR v_intent.customer_id IS DISTINCT FROM p_customer_id OR v_intent.merchant_id <> p_merchant_id
+    OR v_intent.user_id IS DISTINCT FROM v_customer_user THEN
     RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
   END IF;
   -- Verified and still open: a closed provider account cannot receive the move.
   IF v_intent.state <> 'verified' OR v_intent.provider_closed_at IS NOT NULL THEN
     RAISE EXCEPTION 'wallet_backing_unverified' USING ERRCODE = '55000';
+  END IF;
+  -- Nor can one behind a switched-off integration (the operator kill switch).
+  PERFORM 1 FROM piggyvest_primary.integrations g
+  WHERE g.id = v_intent.integration_id AND g.merchant_id = p_merchant_id AND g.enabled FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'wallet_backing_integration_disabled' USING ERRCODE = '55000';
   END IF;
 
   SELECT * INTO v_backing FROM piggyvest_primary.wallet_backing b
@@ -157,6 +174,7 @@ CREATE FUNCTION piggyvest_primary.flip_to_backed(p_customer_id uuid, p_merchant_
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_backing piggyvest_primary.wallet_backing%ROWTYPE;
+  v_found boolean;
   v_wallet_id uuid;
   v_wallet_merchant uuid;
   v_balance numeric;
@@ -174,14 +192,24 @@ BEGIN
     pg_catalog.hashtextextended('piggyvest-wallet-backing:' || p_customer_id::text, 0));
   SELECT * INTO v_backing FROM piggyvest_primary.wallet_backing b
   WHERE b.customer_id = p_customer_id FOR UPDATE;
-  IF FOUND AND v_backing.merchant_id <> p_merchant_id THEN
+  v_found := FOUND;
+  IF v_found AND v_backing.merchant_id <> p_merchant_id THEN
     RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
   END IF;
-  IF FOUND AND v_backing.state = 'backed' THEN
+  IF v_found AND v_backing.state = 'backed' THEN
     RETURN pg_catalog.jsonb_build_object('status', 'backed', 'changed', false, 'backingId', v_backing.id);
   END IF;
-  IF NOT FOUND OR v_backing.state <> 'migrating' THEN
-    PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_not_migrating');
+  IF NOT v_found OR v_backing.state <> 'migrating' THEN
+    -- Flag a recorded row, or a customer still at this merchant; a customer
+    -- that is gone is refused without a flag, so the refusal never raises.
+    IF NOT v_found THEN
+      PERFORM 1 FROM public.customers c
+      WHERE c.id = p_customer_id AND c.merchant_id = p_merchant_id FOR KEY SHARE;
+      v_found := FOUND;
+    END IF;
+    IF v_found THEN
+      PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_not_migrating');
+    END IF;
     RETURN pg_catalog.jsonb_build_object('status', 'refused', 'reason', 'not_migrating');
   END IF;
 
@@ -194,12 +222,16 @@ BEGIN
   ELSIF v_wallet_merchant <> p_merchant_id THEN
     RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
   END IF;
-  IF v_balance IS DISTINCT FROM v_backing.audited_amount OR (v_wallet_id IS NOT NULL AND EXISTS (
-    SELECT 1 FROM public.customer_wallet_transactions t
-    WHERE t.wallet_id = v_wallet_id AND t.status = 'pending'
-  )) THEN
+  IF v_balance IS DISTINCT FROM v_backing.audited_amount THEN
     PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_balance_mismatch');
     RETURN pg_catalog.jsonb_build_object('status', 'review', 'reason', 'balance_mismatch', 'backingId', v_backing.id);
+  END IF;
+  IF v_wallet_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.customer_wallet_transactions t
+    WHERE t.wallet_id = v_wallet_id AND t.status = 'pending'
+  ) THEN
+    PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_pending_ledger');
+    RETURN pg_catalog.jsonb_build_object('status', 'review', 'reason', 'pending_ledger', 'backingId', v_backing.id);
   END IF;
   v_amount := v_backing.audited_amount;
 

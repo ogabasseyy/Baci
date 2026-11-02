@@ -44,6 +44,44 @@ BEGIN
     '42501', 'wallet_backing_scope_unavailable');
 END $$;
 
+-- A review-flagged legacy row (customer 8, above) can still begin, in place:
+-- the update path keeps the row and its flag. Rolled back so customer 8 stays
+-- legacy for the later parts.
+SAVEPOINT wallet_backing_flagged_begin;
+DO $$
+DECLARE
+  v_flagged piggyvest_primary.wallet_backing%ROWTYPE;
+  v_after piggyvest_primary.wallet_backing%ROWTYPE;
+  v_result jsonb;
+BEGIN
+  SELECT * INTO v_flagged FROM piggyvest_primary.wallet_backing WHERE customer_id = pg_temp.c(8);
+  v_result := pg_temp.begin_move(8, 250.00);
+  SELECT * INTO v_after FROM piggyvest_primary.wallet_backing WHERE customer_id = pg_temp.c(8);
+  PERFORM pg_temp.check(v_result->>'status' = 'migrating' AND (v_result->>'changed')::boolean
+    AND (v_result->>'backingId')::uuid = v_flagged.id, 'a flagged legacy row begins in place: ' || v_result::text);
+  PERFORM pg_temp.check(v_after.onboarding_intent_id = pg_temp.i(8) AND v_after.audited_amount = 250.00
+    AND v_after.migrating_at IS NOT NULL AND v_after.review_reason = 'flip_not_migrating'
+    AND v_after.review_flagged_at = v_flagged.review_flagged_at, 'begin records the move and keeps the flag');
+  PERFORM pg_temp.check(pg_temp.events(8) = 2 AND pg_temp.ledger_rows(8) = 0,
+    'one migration_begun event, no ledger write');
+END $$;
+ROLLBACK TO SAVEPOINT wallet_backing_flagged_begin;
+
+SAVEPOINT wallet_backing_flagged_zero;
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  UPDATE public.customer_wallets SET available_balance = 0 WHERE customer_id = pg_temp.c(8);
+  v_result := pg_temp.begin_move(8, 0);
+  PERFORM pg_temp.check(v_result->>'status' = 'backed' AND (v_result->>'changed')::boolean,
+    'a flagged zero wallet goes to backed: ' || v_result::text);
+  PERFORM pg_temp.check(EXISTS (SELECT 1 FROM piggyvest_primary.wallet_backing WHERE customer_id = pg_temp.c(8)
+    AND backed_via = 'audited_zero' AND migrating_at IS NULL AND review_reason = 'flip_not_migrating'),
+    'an audited zero through the update path');
+END $$;
+ROLLBACK TO SAVEPOINT wallet_backing_flagged_zero;
+
 -- The clean move: backed first, then exactly one relabel pair with the
 -- balance unchanged at the audited amount.
 DO $$
@@ -98,6 +136,40 @@ BEGIN
     'begin on a backed wallet writes nothing');
 END $$;
 
+-- The largest amount the ledger row holds flips cleanly: the pair fits.
+DO $$
+DECLARE
+  v_result jsonb := pg_temp.flip(13);
+BEGIN
+  PERFORM pg_temp.check(v_result->>'status' = 'backed'
+    AND (v_result->>'relabelledAmount')::numeric = 99999999.99, 'the boundary amount must flip: ' || v_result::text);
+  PERFORM pg_temp.check((SELECT count(*) FROM public.customer_wallet_transactions t
+    WHERE t.customer_id = pg_temp.c(13) AND t.source_type = 'piggyvest_legacy_migration'
+      AND abs(t.amount) = 99999999.99) = 2, 'the boundary pair is written in full');
+END $$;
+
+-- A pending legacy row written while migrating (balance unchanged) never
+-- flips either; rolled back so the mismatch case below sees no pending row.
+SAVEPOINT wallet_backing_flip_pending;
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  INSERT INTO public.customer_wallet_transactions(wallet_id, customer_id, merchant_id, type, amount,
+    balance_after, source_type, source_id, status, description)
+  SELECT w.id, w.customer_id, w.merchant_id, 'redemption', 50.00, 900.00,
+    'piggyvest_primary_savings', pg_temp.id(700), 'pending', 'Savings redemption pending'
+  FROM public.customer_wallets w WHERE w.customer_id = pg_temp.c(7);
+  v_result := pg_temp.flip(7);
+  PERFORM pg_temp.check(v_result->>'status' = 'review' AND v_result->>'reason' = 'pending_ledger',
+    'a pending row must not flip: ' || v_result::text);
+  PERFORM pg_temp.check(pg_temp.state(7) = 'migrating' AND pg_temp.relabel_rows(7) = 0,
+    'a pending flip stays migrating and writes no relabel rows');
+  PERFORM pg_temp.check(EXISTS (SELECT 1 FROM piggyvest_primary.wallet_backing
+    WHERE customer_id = pg_temp.c(7) AND review_reason = 'flip_pending_ledger'), 'the pending row is flagged');
+END $$;
+ROLLBACK TO SAVEPOINT wallet_backing_flip_pending;
+
 -- A balance that changed while migrating (an unfenced legacy write) never
 -- flips: the wallet stays migrating and goes to review, ledger untouched.
 DO $$
@@ -113,6 +185,29 @@ BEGIN
   PERFORM pg_temp.check(EXISTS (SELECT 1 FROM piggyvest_primary.wallet_backing
     WHERE customer_id = pg_temp.c(7) AND review_reason = 'flip_balance_mismatch'
       AND review_flagged_at IS NOT NULL), 'the mismatch is flagged for review');
+END $$;
+
+-- Review and refusal outcomes are returned, never raised, even when the
+-- customer row no longer matches: a customer that does not exist (an account
+-- deleted before any migration) is refused without a flag, and a migrating
+-- wallet whose customer row moved merchant still goes to review.
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  v_result := piggyvest_primary.flip_to_backed(pg_temp.id(299), pg_temp.id(1), 'pvb-wt-gone-1');
+  PERFORM pg_temp.check(v_result->>'status' = 'refused' AND v_result->>'reason' = 'not_migrating',
+    'a missing customer is refused, not raised: ' || v_result::text);
+  PERFORM pg_temp.check(NOT EXISTS (SELECT 1 FROM piggyvest_primary.wallet_backing
+    WHERE customer_id = pg_temp.id(299)), 'a missing customer records nothing');
+  BEGIN
+    UPDATE public.customers SET merchant_id = pg_temp.id(2) WHERE id = pg_temp.c(7);
+    v_result := pg_temp.flip(7);
+    PERFORM pg_temp.check(v_result->>'status' = 'review' AND pg_temp.relabel_rows(7) = 0,
+      'a moved customer row still reviews, not raises: ' || v_result::text);
+    RAISE EXCEPTION USING ERRCODE = 'ZFLP1';
+  EXCEPTION WHEN SQLSTATE 'ZFLP1' THEN NULL;
+  END;
 END $$;
 
 -- A zero flip (no wallet row, audited zero) moves to backed and writes no

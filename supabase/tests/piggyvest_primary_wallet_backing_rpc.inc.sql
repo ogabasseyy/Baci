@@ -41,6 +41,31 @@ BEGIN
   END IF;
 END $$;
 
+-- A customer row moved to another merchant after its wallet was recorded
+-- fails closed (the web helper reads the error as 'unknown'), never legacy.
+SAVEPOINT wallet_backing_rpc_reassigned;
+RESET ROLE;
+UPDATE public.customers SET merchant_id = 'b5c00000-0000-4000-8000-000000000002'
+WHERE id = 'b5c00000-0000-4000-8000-000000000201';
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_state text;
+BEGIN
+  PERFORM pg_catalog.set_config('request.jwt.claim.sub', 'b5c00000-0000-4000-8000-000000000101', true);
+  BEGIN
+    v_state := public.get_my_wallet_backing_state('b5c00000-0000-4000-8000-000000000002');
+    RAISE EXCEPTION 'a reassigned customer must fail closed, got %', v_state USING ERRCODE = 'ZRPC1';
+  EXCEPTION
+    WHEN SQLSTATE 'ZRPC1' THEN RAISE;
+    WHEN OTHERS THEN
+      IF SQLSTATE <> '42501' OR SQLERRM <> 'wallet_backing_scope_unavailable' THEN
+        RAISE EXCEPTION 'expected wallet_backing_scope_unavailable, got % (%)', SQLERRM, SQLSTATE;
+      END IF;
+  END;
+END $$;
+ROLLBACK TO SAVEPOINT wallet_backing_rpc_reassigned;
+
 RESET ROLE;
 SELECT pg_catalog.set_config('request.jwt.claim.sub', '', true);
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);

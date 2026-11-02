@@ -39,6 +39,40 @@ BEGIN
     WHERE customer_id IN (pg_temp.c(1), pg_temp.c(6))), 'a scope refusal must not record a row');
 END $$;
 
+-- The onboarding binding must still hold: the integration is switched on and
+-- the customer row still belongs to the user who onboarded. Each case rolls
+-- back, so later parts see the fixtures unchanged.
+DO $$
+BEGIN
+  BEGIN
+    UPDATE piggyvest_primary.integrations SET enabled = false WHERE id = pg_temp.id(11);
+    PERFORM pg_temp.expect_error('SELECT pg_temp.begin_move(1, 1500.00)',
+      '55000', 'wallet_backing_integration_disabled');
+    PERFORM pg_temp.expect_error('SELECT pg_temp.begin_move(2, 0)',
+      '55000', 'wallet_backing_integration_disabled');
+    PERFORM pg_temp.check(NOT EXISTS (SELECT 1 FROM piggyvest_primary.wallet_backing
+      WHERE customer_id IN (pg_temp.c(1), pg_temp.c(2))), 'a switched-off integration must not record a row');
+    RAISE EXCEPTION USING ERRCODE = 'ZBND1';
+  EXCEPTION WHEN SQLSTATE 'ZBND1' THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO auth.users(id) VALUES (pg_temp.id(150));
+    UPDATE public.customers SET user_id = pg_temp.id(150) WHERE id = pg_temp.c(1);
+    PERFORM pg_temp.expect_error('SELECT pg_temp.begin_move(1, 1500.00)',
+      '42501', 'wallet_backing_scope_unavailable');
+    UPDATE public.customers SET user_id = NULL WHERE id = pg_temp.c(2);
+    PERFORM pg_temp.expect_error('SELECT pg_temp.begin_move(2, 0)',
+      '42501', 'wallet_backing_scope_unavailable');
+    PERFORM pg_temp.check(NOT EXISTS (SELECT 1 FROM piggyvest_primary.wallet_backing
+      WHERE customer_id IN (pg_temp.c(1), pg_temp.c(2))), 'a relinked customer must not record a row');
+    RAISE EXCEPTION USING ERRCODE = 'ZBND2';
+  EXCEPTION WHEN SQLSTATE 'ZBND2' THEN NULL;
+  END;
+  PERFORM pg_temp.check((SELECT enabled FROM piggyvest_primary.integrations WHERE id = pg_temp.id(11))
+    AND (SELECT user_id FROM public.customers WHERE id = pg_temp.c(1)) = pg_temp.id(101),
+    'the binding cases roll back');
+END $$;
+
 -- Mismatched or malformed audited amounts, and a pending legacy ledger row.
 DO $$
 DECLARE
@@ -54,11 +88,18 @@ BEGIN
     '22023', 'wallet_backing_invalid_amount');
   PERFORM pg_temp.expect_error('SELECT pg_temp.begin_move(1, NULL)',
     '22023', 'wallet_backing_invalid_amount');
+  -- The relabel pair lands in customer_wallet_transactions.amount
+  -- (numeric(10,2)): a balance that column cannot hold never begins, so the
+  -- flip after a confirmed move can always write it.
+  PERFORM pg_temp.expect_error('SELECT pg_temp.begin_move(14, 100000000.00)',
+    '22023', 'wallet_backing_invalid_amount');
   PERFORM pg_temp.expect_error('SELECT pg_temp.begin_move(5, 700.00)',
     '55000', 'wallet_backing_pending_ledger');
   PERFORM pg_temp.check(pg_temp.wallet(5) = v_wallet, 'a pending refusal must not write the wallet');
   PERFORM pg_temp.check(NOT EXISTS (SELECT 1 FROM piggyvest_primary.wallet_backing
-    WHERE customer_id IN (pg_temp.c(3), pg_temp.c(5), pg_temp.c(7))), 'a refusal must not record a row');
+    WHERE customer_id IN (pg_temp.c(3), pg_temp.c(5), pg_temp.c(7), pg_temp.c(14))), 'a refusal must not record a row');
+  PERFORM pg_temp.check(pg_temp.events(14) = 0 AND pg_temp.ledger_rows(14) = 0,
+    'an out-of-range refusal writes no event or ledger row');
 END $$;
 
 -- Audited zero, and no wallet row at all: straight to backed with no wallet or
@@ -132,4 +173,6 @@ BEGIN
   PERFORM pg_temp.check(pg_temp.begin_move(7, 900.00)->>'status' = 'migrating', 'customer 7 locks');
   PERFORM pg_temp.check(pg_temp.begin_move(9, 400.00)->>'status' = 'migrating', 'customer 9 locks');
   PERFORM pg_temp.check(pg_temp.begin_move(12, 600.00)->>'status' = 'migrating', 'customer 12 locks');
+  PERFORM pg_temp.check(pg_temp.begin_move(13, 99999999.99)->>'status' = 'migrating',
+    'the largest ledger amount locks');
 END $$;

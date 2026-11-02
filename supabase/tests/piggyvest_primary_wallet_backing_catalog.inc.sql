@@ -76,10 +76,18 @@ DECLARE
   v_table text;
   v_role text;
 BEGIN
-  PERFORM pg_temp.check(NOT pg_catalog.has_function_privilege('authenticated',
-    'piggyvest_primary.guard_wallet_backing()', 'EXECUTE')
-    AND NOT pg_catalog.has_function_privilege('service_role',
-    'piggyvest_primary.guard_wallet_backing()', 'EXECUTE'), 'the guard trigger is not an RPC');
+  FOREACH v_table IN ARRAY ARRAY['piggyvest_primary.guard_wallet_backing()',
+    'piggyvest_primary.guard_wallet_backing_events()',
+    'piggyvest_primary.block_migrating_wallet_customer_deletion()'] LOOP
+    FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated', 'service_role'] LOOP
+      PERFORM pg_temp.check(NOT pg_catalog.has_function_privilege(v_role, v_table, 'EXECUTE'),
+        format('%s must not execute trigger function %s', v_role, v_table));
+    END LOOP;
+  END LOOP;
+  PERFORM pg_temp.check(EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t
+    WHERE t.tgrelid = 'public.customers'::regclass AND t.tgenabled = 'O'
+      AND t.tgfoid = 'piggyvest_primary.block_migrating_wallet_customer_deletion()'::regprocedure),
+    'the migrating-wallet deletion block must be installed on customers');
   FOREACH v_table IN ARRAY ARRAY['piggyvest_primary.wallet_backing', 'piggyvest_primary.wallet_backing_events'] LOOP
     PERFORM pg_temp.check(EXISTS (SELECT 1 FROM pg_catalog.pg_class
       WHERE oid = v_table::regclass AND relrowsecurity), v_table || ' must enable RLS');

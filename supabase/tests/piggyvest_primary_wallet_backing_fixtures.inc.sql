@@ -8,6 +8,8 @@
 --   4 accepted only (unverified), wallet 500    10 verified but DVA closed, wallet 100
 --   5 verified, wallet 700 + a pending row      11 verified, no wallet (zero flip)
 --   6 merchant 2, verified, wallet 300          12 verified, wallet 600.00 (raising hook)
+--   13 verified, wallet 99999999.99 (the largest amount the ledger row holds)
+--   14 verified, wallet 100000000.00 (one kobo past it: never begins)
 
 -- Ships dark: nothing is migrating or backed, so every existing wallet is
 -- legacy before any fixture exists.
@@ -29,7 +31,7 @@ END $$;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 
 INSERT INTO auth.users(id)
-SELECT pg_temp.id(100 + k) FROM generate_series(1, 12) AS k;
+SELECT pg_temp.id(100 + k) FROM generate_series(1, 14) AS k;
 
 INSERT INTO public.merchants(id, email) VALUES
   (pg_temp.id(1), 'wallet-backing-m1@example.com'),
@@ -37,7 +39,7 @@ INSERT INTO public.merchants(id, email) VALUES
 
 INSERT INTO public.customers(id, merchant_id, user_id)
 SELECT pg_temp.c(k), pg_temp.m(k), pg_temp.id(100 + k)
-FROM generate_series(1, 12) AS k;
+FROM generate_series(1, 14) AS k;
 
 INSERT INTO piggyvest_primary.integrations(id, merchant_id, business_id, environment, executor_login, enabled)
 VALUES
@@ -50,7 +52,7 @@ SELECT pg_temp.i(k), pg_temp.id(CASE WHEN k = 6 THEN 12 ELSE 11 END), pg_temp.m(
   pg_temp.id(100 + k), repeat(lpad(to_hex(k), 2, '0'), 32),
   CASE WHEN k = 4 THEN 'accepted' ELSE 'verified' END,
   'pv-backing-customer-' || k, 'pv-backing-wallet-' || k
-FROM generate_series(1, 12) AS k;
+FROM generate_series(1, 14) AS k;
 
 -- Customer 10's provider account was attested closed after verification.
 UPDATE piggyvest_primary.onboarding_intents
@@ -60,7 +62,8 @@ WHERE id = pg_temp.i(10);
 INSERT INTO public.customer_wallets(customer_id, merchant_id, available_balance, total_earned, total_redeemed)
 SELECT pg_temp.c(v.k), pg_temp.m(v.k), v.balance, v.balance, 0
 FROM (VALUES (1, 1500.00), (2, 0.00), (4, 500.00), (5, 700.00), (6, 300.00),
-  (7, 900.00), (8, 250.00), (9, 400.00), (10, 100.00), (12, 600.00)) AS v(k, balance);
+  (7, 900.00), (8, 250.00), (9, 400.00), (10, 100.00), (12, 600.00),
+  (13, 99999999.99), (14, 100000000.00)) AS v(k, balance);
 
 -- Customer 5 has a legacy savings transfer still pending.
 INSERT INTO public.customer_wallet_transactions(wallet_id, customer_id, merchant_id, type, amount,
@@ -72,7 +75,7 @@ FROM public.customer_wallets w WHERE w.customer_id = pg_temp.c(5);
 DO $$
 BEGIN
   PERFORM pg_temp.check(NOT EXISTS (
-    SELECT 1 FROM generate_series(1, 12) AS k WHERE pg_temp.state(k) <> 'legacy'),
+    SELECT 1 FROM generate_series(1, 14) AS k WHERE pg_temp.state(k) <> 'legacy'),
     'fixture wallets must start legacy');
   PERFORM pg_temp.check(piggyvest_primary.is_backed(pg_temp.c(1), pg_temp.m(1)) = false,
     'a legacy wallet is not backed');

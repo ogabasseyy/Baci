@@ -2,30 +2,32 @@
 
 ## What changes
 
-Each Ogabassey customer wallet gets a recorded "backing state" with three steps:
+Each Ogabassey customer wallet gets a recorded "backing state":
 
 - **Legacy**: old-style Ogabassey wallet money. Every wallet starts here.
-- **Migrating**: the wallet is locked while its checked old balance moves into the customer's PiggyVest wallet.
+- **Migrating**: the wallet is locked while its checked old balance moves to the customer's PiggyVest wallet.
 - **Backed**: the wallet holds only PiggyVest money.
 
-The database gets these states, a history log, and three steps: start a move, finish a move, and mark a wallet for review. The app gets one safe way to ask "what state is my wallet in?".
+The database gets these states, a history log, and three steps: start a move, finish it, and mark a wallet for review. The app gets one safe way to ask "what state is my wallet in?".
 
 ## Why
 
-The plan keeps each wallet to one kind of money, so old money and PiggyVest money can never be mixed or spent twice. Later changes use these states to route payments and block old payment paths.
+Each wallet holds one kind of money, so old and PiggyVest money can never be mixed or spent twice. Later changes use these states to route payments.
 
 ## What could go wrong and how it is prevented
 
-- **A wallet going backwards**: the database always refuses, even for its most privileged ordinary account. History can't be edited or deleted.
-- **Marking a wallet backed when the money never arrived**: a wallet becomes backed only when its checked balance was zero, or when PiggyVest confirmed the move transfer. No person or app account can run "finish a move"; only the future transfer engine can, after confirming the transfer.
-- **Moving the wrong amount**: a move starts only if the customer finished PiggyVest setup, belongs to this store, has no old payment pending, and the checked amount equals the balance at that moment. The balance is checked again when the move finishes; if it changed, the wallet stays locked and goes to review.
-- **Money counted twice**: finishing a move writes one "moved out" line and one "moved in" line for the same amount, and the balance doesn't change. Running it again writes nothing.
-- **A later follow-up step failing**: the move still stands and the wallet is marked for review.
-- **Customers seeing each other's state**: the app check answers only for the signed-in customer. If it fails, the app gets "unknown", which must be treated as "stop".
+- **A wallet going backwards**: always refused, even for the most privileged ordinary account. History can't be edited or deleted.
+- **Backed without the money arriving**: only a zero balance or a PiggyVest-confirmed move makes a wallet backed. Only the future transfer engine can finish a move.
+- **Money sent to the wrong place**: a move starts only if the customer finished PiggyVest setup, the store's PiggyVest connection is on, and the customer record still belongs to this store and to the person who set up PiggyVest.
+- **The wrong amount**: the checked amount must equal the balance with no old payment pending, and is checked again at the finish; anything different stays locked for review. Balances too large for one history line (about 100 million naira) never start.
+- **Money counted twice**: finishing writes one "moved out" and one "moved in" line for the same amount, balance unchanged. A repeat writes nothing.
+- **A finished transfer undone**: finishing reports a refusal or review instead of failing, even if the customer record changed. A failing follow-up step leaves the move standing, marked for review.
+- **A customer deleted mid-move**: blocked while migrating, so the move can finish. Trade-off: a wallet stuck in review blocks deletion until a later change can resolve it.
+- **Customers seeing each other's state**: the app check answers only for the signed-in customer. Any error, including a record under another store, answers "unknown", meaning "stop".
 
 ## How it is tested
 
-Database tests cover every refusal, zero balances, a full move, running each step twice, a balance changing mid-move, a failing follow-up step, every attempt to go backwards, and exactly which accounts may run each step. App tests check every reply, errors, and that no privileged database connection is used.
+Database tests cover every refusal, the largest allowed amount, zero balances, a full move, repeats, changes mid-move, a failing follow-up step, deletion mid-move, every attempt to go backwards, and which accounts may run each step. App tests check every reply, errors, and that no privileged connection is used.
 
 ## How it stays switched off
 

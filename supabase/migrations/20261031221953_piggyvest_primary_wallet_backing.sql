@@ -23,15 +23,17 @@ GRANT USAGE ON SCHEMA piggyvest_primary TO piggyvest_primary_ledger_ops;
 
 -- One row per customer once anything is recorded for it; no row is legacy.
 -- customer_id detaches on account deletion (money evidence is kept, as for
--- onboarding_intents); deleting an onboarded customer already needs the
--- provider account closed first.
+-- onboarding_intents). A migrating wallet blocks deletion (trigger below).
 CREATE TABLE piggyvest_primary.wallet_backing (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
   merchant_id uuid NOT NULL REFERENCES public.merchants(id),
   customer_id uuid UNIQUE REFERENCES public.customers(id) ON DELETE SET NULL,
   state text NOT NULL CHECK (state IN ('legacy', 'migrating', 'backed')),
   onboarding_intent_id uuid REFERENCES piggyvest_primary.onboarding_intents(id),
-  audited_amount numeric(12,2) CHECK (audited_amount >= 0),
+  -- Below 10^8: the relabel pair is written to
+  -- customer_wallet_transactions.amount, numeric(10,2).
+  audited_amount numeric(12,2) CONSTRAINT wallet_backing_audited_amount_range
+    CHECK (audited_amount >= 0 AND audited_amount < 100000000),
   backed_via text CHECK (backed_via IN ('audited_zero', 'confirmed_move')),
   move_reference text CHECK (move_reference ~ '^[A-Za-z0-9][A-Za-z0-9:_.-]{0,199}$'),
   review_reason text CHECK (review_reason ~ '^[a-z][a-z0-9_]{2,63}$'),
@@ -140,8 +142,26 @@ CREATE TRIGGER wallet_backing_events_append_only
 CREATE TRIGGER wallet_backing_events_truncate_guard
   BEFORE TRUNCATE ON piggyvest_primary.wallet_backing_events
   FOR EACH STATEMENT EXECUTE FUNCTION piggyvest_primary.guard_wallet_backing_events();
+
+-- A wallet mid-move keeps its customer: the confirmed move must find it to
+-- flip, so deletion waits until the wallet is backed. The provider account
+-- closure that unblocks the open-DVA check does not lift this one.
+CREATE FUNCTION piggyvest_primary.block_migrating_wallet_customer_deletion()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM piggyvest_primary.wallet_backing b
+    WHERE b.customer_id = OLD.id AND b.state = 'migrating') THEN
+    RAISE EXCEPTION 'cannot delete customer with wallet migration in progress' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN OLD;
+END $$;
+CREATE TRIGGER piggyvest_wallet_backing_block_migrating_customer_deletion
+  BEFORE DELETE ON public.customers
+  FOR EACH ROW EXECUTE FUNCTION piggyvest_primary.block_migrating_wallet_customer_deletion();
 REVOKE ALL ON FUNCTION piggyvest_primary.guard_wallet_backing() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION piggyvest_primary.guard_wallet_backing_events() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION piggyvest_primary.block_migrating_wallet_customer_deletion()
+  FROM PUBLIC, anon, authenticated, service_role;
 
 -- At most one legacy-out (-X) and one PiggyVest-in (+X) relabel row per
 -- backing row, whatever writes them. The index is empty until a wallet flips.
@@ -224,20 +244,19 @@ $$;
 
 -- Customer-scoped read for web and app routes, called with the request's own
 -- session. 'none' when the caller has no customer record at this merchant.
+-- The state comes from backing_state, so a row recorded under another
+-- merchant raises (the web helper reads it as 'unknown') instead of legacy.
 CREATE FUNCTION public.get_my_wallet_backing_state(p_merchant_id uuid)
 RETURNS text LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   v_user uuid := auth.uid();
   v_customer uuid;
-  v_state text;
 BEGIN
   IF v_user IS NULL OR p_merchant_id IS NULL THEN RETURN 'none'; END IF;
   SELECT c.id INTO v_customer FROM public.customers c
   WHERE c.merchant_id = p_merchant_id AND c.user_id = v_user;
   IF NOT FOUND THEN RETURN 'none'; END IF;
-  SELECT b.state INTO v_state FROM piggyvest_primary.wallet_backing b
-  WHERE b.customer_id = v_customer AND b.merchant_id = p_merchant_id;
-  RETURN COALESCE(v_state, 'legacy');
+  RETURN piggyvest_primary.backing_state(v_customer, p_merchant_id);
 END $$;
 
 REVOKE ALL ON FUNCTION piggyvest_primary.backing_state(uuid, uuid) FROM PUBLIC, anon, authenticated, service_role;

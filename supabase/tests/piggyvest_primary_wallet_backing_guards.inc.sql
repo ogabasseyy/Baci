@@ -29,6 +29,12 @@ BEGIN
     ' audited_amount = 250, backed_via = %L, move_reference = %L, migrating_at = now(), backed_at = now()'
     ' WHERE customer_id = %L', 'backed', pg_temp.i(8), 'confirmed_move', 'pvb-wt-forged-2', pg_temp.c(8)),
     '23514', 'wallet_backing_transition_refused');
+  -- No row can record an amount the relabel ledger row cannot hold.
+  PERFORM pg_temp.expect_error(format(
+    'INSERT INTO piggyvest_primary.wallet_backing(merchant_id, customer_id, state, onboarding_intent_id,'
+    ' audited_amount, migrating_at) VALUES (%L, %L, %L, %L, 100000000.00, now())',
+    pg_temp.m(14), pg_temp.c(14), 'migrating', pg_temp.i(14)), '23514',
+    'new row for relation "wallet_backing" violates check constraint "wallet_backing_audited_amount_range"');
   -- A row must name a customer of its merchant.
   PERFORM pg_temp.expect_error(format(
     'INSERT INTO piggyvest_primary.wallet_backing(merchant_id, customer_id, state) VALUES (%L, %L, %L)',
@@ -46,6 +52,32 @@ BEGIN
   PERFORM pg_temp.expect_error(format(
     'UPDATE piggyvest_primary.wallet_backing SET merchant_id = %L WHERE customer_id = %L',
     pg_temp.id(2), pg_temp.c(1)), '23514', 'wallet_backing_facts_immutable');
+  -- Account deletion detaches the customer (the FK's SET NULL runs this same
+  -- update through the guard): the facts stay and the link never re-attaches.
+  -- Rolled back so later parts still find customer 1's row.
+  BEGIN
+    UPDATE piggyvest_primary.wallet_backing SET customer_id = NULL WHERE customer_id = pg_temp.c(1);
+    PERFORM pg_temp.check((SELECT count(*) FROM piggyvest_primary.wallet_backing b
+      WHERE b.customer_id IS NULL AND b.state = 'backed' AND b.audited_amount = 1500.00
+        AND b.move_reference = 'pvb-wt-' || pg_temp.c(1)::text || '-1') = 1,
+      'detaching the customer keeps the backed facts');
+    PERFORM pg_temp.expect_error(format(
+      'UPDATE piggyvest_primary.wallet_backing SET customer_id = %L WHERE customer_id IS NULL',
+      pg_temp.c(1)), '23514', 'wallet_backing_facts_immutable');
+    RAISE EXCEPTION USING ERRCODE = 'ZDET1';
+  EXCEPTION WHEN SQLSTATE 'ZDET1' THEN NULL;
+  END;
+  -- A migrating wallet blocks account deletion, even once the provider
+  -- account is closed: the confirmed move must find its customer to flip.
+  BEGIN
+    UPDATE piggyvest_primary.onboarding_intents SET provider_closed_at = clock_timestamp()
+    WHERE id = pg_temp.i(7);
+    PERFORM pg_temp.expect_error(format('DELETE FROM public.customers WHERE id = %L', pg_temp.c(7)),
+      'P0001', 'cannot delete customer with wallet migration in progress');
+    PERFORM pg_temp.check(pg_temp.state(7) = 'migrating', 'a refused deletion keeps the migrating row');
+    RAISE EXCEPTION USING ERRCODE = 'ZDEL1';
+  EXCEPTION WHEN SQLSTATE 'ZDEL1' THEN NULL;
+  END;
   -- Rows and events are never removed.
   PERFORM pg_temp.expect_error(format(
     'DELETE FROM piggyvest_primary.wallet_backing WHERE customer_id = %L', pg_temp.c(1)),

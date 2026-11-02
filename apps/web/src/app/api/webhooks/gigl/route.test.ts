@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  encryptLikeGig,
-  giglWebhookEventJson,
-} from '@/lib/shipping/gigl-webhook-crypto.test-support';
+import { encryptLikeGig } from '@/lib/shipping/gigl-webhook-crypto.test-support';
+import { giglWebhookEventJson } from '@/lib/shipping/gigl-webhook-event.test-support';
 import { GET, POST } from './route';
 
 vi.mock('server-only', () => ({}));

@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   encryptLikeGig,
   GIG_DOC_SAMPLE_BODY,
-  giglWebhookEventJson,
 } from './gigl-webhook-crypto.test-support';
 
 function decryptWithNodeReference(encrypted: string, secret: string): string {
@@ -40,23 +39,5 @@ describe('encryptLikeGig', () => {
     expect((Buffer.from(GIG_DOC_SAMPLE_BODY, 'base64').length - 32) % 16).toBe(
       0
     );
-  });
-});
-
-describe('giglWebhookEventJson', () => {
-  it('builds a GIG-shaped event and applies overrides', () => {
-    const event = JSON.parse(giglWebhookEventJson({ Waybill: '42' }));
-
-    expect(event).toMatchObject({ Waybill: '42', StatusCode: 'MCRT' });
-    expect(Object.keys(event)).toEqual([
-      'Waybill',
-      'SenderAddress',
-      'ReceiverAddress',
-      'Location',
-      'Status',
-      'UserId',
-      'ChannelCode',
-      'StatusCode',
-    ]);
   });
 });

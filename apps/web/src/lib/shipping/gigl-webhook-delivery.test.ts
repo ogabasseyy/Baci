@@ -5,9 +5,9 @@ import {
   GIG_DOC_SAMPLE_CHANNEL_CODE,
   GIG_DOC_SAMPLE_SECRET,
   GIG_DOC_SAMPLE_USER_ID,
-  giglWebhookEventJson,
 } from './gigl-webhook-crypto.test-support';
 import { openGiglWebhookDelivery } from './gigl-webhook-delivery';
+import { giglWebhookEventJson } from './gigl-webhook-event.test-support';
 
 vi.mock('server-only', () => ({}));
 

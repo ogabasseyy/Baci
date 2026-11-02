@@ -13,7 +13,8 @@ test('CI runs the PiggyVest stuck-funds runbook fixture suite on PostgreSQL 15+'
   const step = text.split('- name: Test PiggyVest stuck-funds runbook SQL')[1]?.split('\n      - name:')[0] ?? '';
   assert.ok(step.length > 0, 'the runbook step must exist');
   assert.doesNotMatch(step, /^\s+if:/m);
-  assert.match(step, /node --test \.github\/scripts\/piggyvest-stuck-funds-runbook-ci\.test\.mjs/);
+  const gate = read('../workflows/ci.yml').split('  changes:')[1]?.split('\n  [a-z-]+:\n')[0] ?? '';
+  assert.match(gate, /node --test \.github\/scripts\/piggyvest-stuck-funds-runbook-ci\.test\.mjs/);
   assert.match(text, /postgresql-16/);
   assert.match(step, /PG_BIN: \/usr\/lib\/postgresql\/16\/bin/);
   assert.match(step, /python3 -I supabase\/tests\/run_piggyvest_stuck_funds_runbook\.py/);

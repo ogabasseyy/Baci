@@ -70,8 +70,9 @@ Stop instead of continuing if:
 - **`completed_payments` above 0.** Cancelling would also start a card refund. That is a
   separate owner decision.
 - **`payments_in_flight` above 0** (`payment_status` usually reads `pending`): the customer
-  started a card payment for the rest of the order. The cancel will refuse with "A payment
-  attempt needs to be checked". No automatic checker clears an abandoned attempt on an unpaid
+  started a card payment for the rest of the order. The cancel may refuse with "A payment
+  attempt needs to be checked", or may convert a verified attempt into a completed payment
+  that needs a card-refund decision. Either way, stop here. No automatic checker clears an abandoned attempt on an unpaid
   order, so do not wait for one. Look the attempt up in the Paystack dashboard and record the
   result in the ops log. If it succeeded, this is a completed payment and a separate owner
   decision. If it was abandoned or failed, stop and escalate to the owner, who either approves

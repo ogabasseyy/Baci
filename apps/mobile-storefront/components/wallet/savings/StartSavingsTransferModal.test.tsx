@@ -200,7 +200,6 @@ describe('StartSavingsTransferModal', () => {
         fetchExistingPlanFunding: jest.fn(async () => undefined),
         fetchPlanFunding: jest.fn(async () => undefined),
         fundingAccount: null,
-        planFundingAccounts: [],
         planFundingError: null,
         planFundingPhase: 'idle',
         planFundingStatusCode: null,
@@ -322,13 +321,6 @@ describe('StartSavingsTransferModal', () => {
 
     it('never shows the ready plan bank account and offers only the wallet path', async () => {
       const controller = createPlanController({
-        planFundingAccounts: [
-          {
-            accountNumber: '0001234567',
-            accountName: 'Synthetic account',
-            bankName: 'Synthetic bank',
-          },
-        ],
         planFundingPhase: 'ready',
       });
       render(

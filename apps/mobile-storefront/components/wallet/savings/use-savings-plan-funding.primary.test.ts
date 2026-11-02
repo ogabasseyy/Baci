@@ -58,12 +58,11 @@ it('clears displayed accounts when verification stops reporting readiness', asyn
   await act(async () => {
     await result.current.fetchPlanFunding('00000000000');
   });
-  expect(result.current.planFundingAccounts).toHaveLength(1);
+  expect(JSON.stringify(result.current)).not.toContain('1234567890');
   await act(async () => {
     await result.current.fetchExistingPlanFunding();
   });
   expect(result.current.planFundingPhase).toBe('pending');
-  expect(result.current.planFundingAccounts).toEqual([]);
 });
 it('uses the verified primary identity without requiring BVN again', async () => {
   mockUseCapability.mockReturnValue(true);

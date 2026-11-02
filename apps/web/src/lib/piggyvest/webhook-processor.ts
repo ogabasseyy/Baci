@@ -20,6 +20,7 @@ import {
   applyOutflowTerminal,
   outflowReferenceCandidates,
 } from './transfer-outbox';
+import { alertOncePerEvent } from './unmapped-alert-once';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 import { claimPiggyvestEvent, resolvePiggyvestEvent } from './webhook-inbox';
 
@@ -282,14 +283,16 @@ export async function processPiggyvestEvent(
       error instanceof InflowLedgerError &&
       error.code === 'INFLOW_LEDGER_UNMAPPED'
     ) {
-      // Page an operator, but keep the delivery retryable: the mapping may
-      // still be committing. The alert is best effort and can never change
-      // the retry outcome.
+      // Page an operator once per event, but keep the delivery retryable: the
+      // mapping may still be committing. The alert is best effort and can
+      // never change the retry outcome.
       try {
-        emitPiggyvestWebhookAlert('PIGGYVEST_INFLOW_UNMAPPED', {
-          eventType: event.eventType,
-          operationId: event.eventId,
-        });
+        alertOncePerEvent(event.eventId, () =>
+          emitPiggyvestWebhookAlert('PIGGYVEST_INFLOW_UNMAPPED', {
+            eventType: event.eventType,
+            operationId: event.eventId,
+          })
+        );
       } catch {
         // Alerting must not affect the money path.
       }

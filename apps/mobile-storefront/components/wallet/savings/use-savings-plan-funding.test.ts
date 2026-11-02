@@ -122,13 +122,8 @@ describe('useSavingsPlanFunding', () => {
       merchantSlug: 'ogabassey',
     });
     expect(result.current.planFundingPhase).toBe('ready');
-    expect(result.current.planFundingAccounts).toEqual([
-      {
-        accountNumber: '0001234567',
-        accountName: 'Synthetic account',
-        bankName: 'Synthetic bank',
-      },
-    ]);
+    expect(result.current).not.toHaveProperty('planFundingAccounts');
+    expect(JSON.stringify(result.current)).not.toContain('0001234567');
   });
 
   it('forwards the interest opt-in to the funding endpoint', async () => {
@@ -221,13 +216,8 @@ describe('useSavingsPlanFunding', () => {
       merchantSlug: 'new-store',
     });
     expect(result.current.planFundingPhase).toBe('ready');
-    expect(result.current.planFundingAccounts).toEqual([
-      {
-        accountName: 'New customer account',
-        accountNumber: '0009876543',
-        bankName: 'New bank',
-      },
-    ]);
+    expect(result.current).not.toHaveProperty('planFundingAccounts');
+    expect(JSON.stringify(result.current)).not.toContain('0009876543');
   });
 
   it('ignores an old mapping lookup after the merchant slug changes', async () => {
@@ -280,9 +270,7 @@ describe('useSavingsPlanFunding', () => {
       merchantSlug: 'new-store',
     });
     expect(result.current.planFundingPhase).toBe('ready');
-    expect(result.current.planFundingAccounts[0]?.accountNumber).toBe(
-      '0009876543'
-    );
+    expect(JSON.stringify(result.current)).not.toContain('0009876543');
   });
 
   it('invalidates a pending lookup when the funding screen unmounts', async () => {

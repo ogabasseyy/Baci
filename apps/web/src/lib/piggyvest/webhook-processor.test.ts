@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
+import { resetUnmappedAlertMemoryForTests } from './unmapped-alert-once';
 import {
   deferredEvent,
   inflowEvent,
@@ -98,6 +99,7 @@ const claimToken = '4204dc18-efb3-44d0-b9a2-1362448d4f21';
 describe('processPiggyvestEvent', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    resetUnmappedAlertMemoryForTests();
     mockClaim.mockResolvedValue({ outcome: 'claimed', claimToken });
     mockResolve.mockResolvedValue(undefined);
     mockRecordPayout.mockResolvedValue('credited');
@@ -333,6 +335,21 @@ describe('processPiggyvestEvent', () => {
       supabase,
       expect.objectContaining({ claimToken, status: 'failed' })
     );
+  });
+
+  it('raises the unmapped alert only once when the same deposit is redelivered', async () => {
+    const unmapped = new InflowLedgerError(
+      'INFLOW_LEDGER_UNMAPPED',
+      'no mapping'
+    );
+    mockRecordInflow.mockRejectedValue(unmapped);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(
+        processPiggyvestEvent(supabase, inflowEvent as never)
+      ).rejects.toBe(unmapped);
+    }
+    expect(mockAlert).toHaveBeenCalledTimes(1);
+    expect(mockResolve).toHaveBeenCalledTimes(3);
   });
 
   it('does not raise the unmapped alert for other inflow failures', async () => {

@@ -5,7 +5,6 @@ import {
 } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
-import type { SavingsPlanFundingAccount } from '@/schemas/customer-savings';
 import { getErrorMessage } from './start-savings-controller.utils';
 
 export type SavingsPlanFundingPhase =
@@ -36,7 +35,6 @@ export function useSavingsPlanFunding({
   loadExisting = false,
 }: UseSavingsPlanFundingInput) {
   const [phase, setPhase] = useState<SavingsPlanFundingPhase>('idle');
-  const [accounts, setAccounts] = useState<SavingsPlanFundingAccount[]>([]);
   const [statusCode, setStatusCode] = useState<string | null>(null);
   const [fundingError, setFundingError] = useState<string | null>(null);
   const primaryCapability = usePiggyvestPrimaryCapability(activeMerchantId);
@@ -60,7 +58,6 @@ export function useSavingsPlanFunding({
     scopeKeyRef.current = scopeKey;
     requestGenerationRef.current += 1;
     setPhase('idle');
-    setAccounts([]);
     setStatusCode(null);
     setFundingError(null);
   }
@@ -73,8 +70,9 @@ export function useSavingsPlanFunding({
     response: Awaited<ReturnType<typeof fetchSavingsPlanFunding>>
   ) => {
     setStatusCode(response.code ?? null);
+    // Goal bank account numbers are deliberately never retained: only the
+    // readiness status is kept, so no UI can reveal one.
     if (response.status === 'ready') {
-      setAccounts(response.accounts ?? []);
       setPhase('ready');
     } else if (response.status === 'pending') {
       setPhase('pending');
@@ -88,7 +86,6 @@ export function useSavingsPlanFunding({
     const requestScopeKey = scopeKey;
     const generation = ++requestGenerationRef.current;
     setPhase('loading');
-    setAccounts([]);
     setFundingError(null);
     try {
       const response = await fetchExistingSavingsPlanFunding({
@@ -127,7 +124,6 @@ export function useSavingsPlanFunding({
     const requestScopeKey = scopeKey;
     const generation = ++requestGenerationRef.current;
     setPhase('loading');
-    setAccounts([]);
     setFundingError(null);
     try {
       const response = await fetchSavingsPlanFunding({
@@ -168,7 +164,6 @@ export function useSavingsPlanFunding({
     fetchExistingPlanFunding,
     fetchPlanFunding,
     fundingError,
-    planFundingAccounts: accounts,
     planFundingPhase: phase,
     planFundingStatusCode: statusCode,
     planFundingRequiresBvn,

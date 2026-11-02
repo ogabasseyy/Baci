@@ -1,4 +1,6 @@
 import 'server-only';
+import { resolveOxygenEnvironment } from './environment';
+import { readOxygenHostedOrigins } from './oxygen-hosted-origins';
 import type { OxygenEnvironment } from './runtime-configuration';
 
 export interface OxygenPhoneConfiguration {
@@ -15,14 +17,12 @@ export function oxygenPhoneConfiguration(
   const prefix =
     environment === 'production' ? 'OXYGEN_PRODUCTION' : 'OXYGEN_STAGING';
   const origin = process.env[`${prefix}_HANDOFF_ORIGIN`];
-  const names = process.env[`${prefix}_SELFIE_HOSTS`]
-    ?.split(',')
-    .map((x) => x.trim())
-    .filter(Boolean);
+  const selfieOrigins = readOxygenHostedOrigins().selfie;
   if (
     process.env[`${prefix}_DURABLE_HANDOFF_ENABLED`] !== 'true' ||
     !origin ||
-    !names?.length ||
+    resolveOxygenEnvironment() !== environment ||
+    !selfieOrigins.length ||
     !/^[a-f0-9]{64}$/i.test(key)
   )
     return null;
@@ -36,17 +36,12 @@ export function oxygenPhoneConfiguration(
       url.port
     )
       return null;
-    if (
-      names.some(
-        (name) =>
-          !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(name) ||
-          !name.includes('.') ||
-          name.includes('..') ||
-          new URL(`https://${name}`).hostname !== name
-      )
-    )
-      return null;
-    return { environment, origin, key, hosts: new Set(names) };
+    return {
+      environment,
+      origin,
+      key,
+      hosts: new Set(selfieOrigins.map((value) => new URL(value).hostname)),
+    };
   } catch {
     return null;
   }

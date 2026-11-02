@@ -76,3 +76,10 @@ it('fails closed on disabled configuration and consumed/expired capability', asy
     'private provider data'
   );
 });
+
+it('rejects unavailable handoff configuration before consuming a capability', async () => {
+  m.connect.mockReturnValue({ worker: m.worker, phoneConfiguration: null });
+  expect((await POST(request())).status).toBe(503);
+  expect(m.worker).not.toHaveBeenCalled();
+  expect(m.redeem).not.toHaveBeenCalled();
+});

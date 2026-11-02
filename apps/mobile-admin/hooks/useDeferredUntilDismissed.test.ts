@@ -36,4 +36,14 @@ describe('useDeferredUntilDismissed', () => {
 
     expect(task).toHaveBeenCalledOnce();
   });
+
+  it('runs what is still waiting when the screen unmounts mid-close', () => {
+    const { result, unmount } = renderHook(() => useDeferredUntilDismissed());
+    const alert = vi.fn();
+
+    result.current.defer(alert);
+    unmount();
+
+    expect(alert).toHaveBeenCalledOnce();
+  });
 });

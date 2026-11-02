@@ -66,7 +66,10 @@ export function useSheetExitPresence(
     if (isPresented) {
       // Reopened before the last release was reported: report it now, so
       // what waited on the previous close runs instead of being held until
-      // (or bundled with) the next one.
+      // (or bundled with) the next one. This is safe: the previous sheet is
+      // already gone, and React Native presents alerts and modals from the
+      // top-most screen, so they show above the new sheet. Holding them
+      // instead could lose an unconfirmed-booking warning.
       if (releasedRef.current) {
         reportRelease(dismissPendingRef, releasedRef, onDismissedRef);
       }

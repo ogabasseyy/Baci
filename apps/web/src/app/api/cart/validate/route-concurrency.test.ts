@@ -58,17 +58,10 @@ it('starts merchant-scoped offer lookup while the independent variant query wait
       }),
     })
   );
-  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const started = await Promise.race([
-      offerStarted,
-      new Promise<string>((resolve) => {
-        timer = setTimeout(() => resolve('timeout'), 1000);
-      }),
-    ]);
+    const started = await offerStarted;
     expect(started).toBe(merchant);
   } finally {
-    clearTimeout(timer);
     releaseVariants();
     await response;
   }

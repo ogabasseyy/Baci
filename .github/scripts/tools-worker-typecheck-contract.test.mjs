@@ -72,6 +72,7 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
     'tools/events/**/*.ts',
     'tools/db/**/*.ts',
     'tools/cost/**/*.ts',
+    'tools/piggyvest-ops/**/*.ts',
     'src/scripts/process-domain-events.ts',
     'src/scripts/process-merchant-onboarding-emails.ts',
     'src/scripts/process-merchant-onboarding-emails.test.ts',

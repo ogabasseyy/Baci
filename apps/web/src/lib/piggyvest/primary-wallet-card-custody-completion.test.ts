@@ -21,7 +21,6 @@ describe('durable custody completion to existing status API', () => {
       scope,
       execute,
       provider,
-      now: () => Date.parse('2026-10-07T20:00:00Z'),
     });
     expect(await service.status(fixture.intent.operationId)).toEqual({
       operationId: fixture.intent.operationId,

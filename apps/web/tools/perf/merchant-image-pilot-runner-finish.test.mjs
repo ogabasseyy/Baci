@@ -119,7 +119,7 @@ describe('merchant-image-pilot-runner finish binding', () => {
       tool: 'browsertime',
       viewport: '375x667',
     });
-    const writeHar = (name) =>
+    const writeHar = (name, startedAt) =>
       writeFile(
         name,
         JSON.stringify({
@@ -128,19 +128,22 @@ describe('merchant-image-pilot-runner finish binding', () => {
             pages: [
               {
                 _url: ROUTE,
-                startedDateTime: new Date().toISOString(),
+                startedDateTime: startedAt,
                 title: 'u run 1',
               },
             ],
           },
         })
       );
-    // HAR first, screenshot second: the capture must not predate the
-    // navigation it binds.
+    // Derive synthetic navigation times from the filesystem clock so CI
+    // clock skew cannot make a freshly written capture appear stale.
     const firstHar = join(dir, 'first.har');
-    await writeHar(firstHar);
     const shotPath = join(dir, 'shot.png');
     await writeFile(shotPath, await pngBuffer(750, 1334));
+    await writeHar(
+      firstHar,
+      new Date(Math.floor((await stat(shotPath)).mtimeMs) - 1000).toISOString()
+    );
     const outDir = join(dir, 'bound');
     const base = {
       browserLog: await browserLog(dir, 'browser.log', join(dir, 'profile')),
@@ -153,9 +156,12 @@ describe('merchant-image-pilot-runner finish binding', () => {
     const shotBefore = await readFile(join(outDir, 'screenshot.png'));
     // New navigation, valid HAR — but a wrong-geometry screenshot.
     const secondHar = join(dir, 'second.har');
-    await writeHar(secondHar);
     const badShot = join(dir, 'bad.png');
     await writeFile(badShot, await pngBuffer(100, 100));
+    await writeHar(
+      secondHar,
+      new Date(Math.floor((await stat(badShot)).mtimeMs) - 1000).toISOString()
+    );
     await expect(
       finishRun({ ...base, har: secondHar, screenshot: badShot })
     ).rejects.toThrow(/requires 750x1334/);

@@ -87,6 +87,32 @@ Goal provisioning additionally requires
 base-runtime requirements, including the onboarding database password. A
 provisioning flag is not the separate savings-transfer activation flag.
 
+### Client build floors and onboarding rollout cohort (gate not wired yet)
+
+`apps/web/src/lib/piggyvest/primary-wallet-capability.ts` holds the
+build-aware capability gate; no route calls it yet. When wired, it reads:
+
+- `PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_IOS` and
+  `PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_ANDROID`: the lowest storefront native
+  build (iOS `CFBundleVersion`, Android `versionCode`) allowed to use the
+  primary wallet, as a positive whole number with no spaces. While either is
+  unset or malformed every build is refused, whatever the cohort. The owner
+  sets them only after the release that sends the build headers passes App
+  Review. Clients send `X-Baci-Client-Platform` (`ios` or `android`) and
+  `X-Baci-Client-Build`; a missing or malformed pair counts as an old build.
+  A refusal uses `PIGGYVEST_NOT_READY`, `PRIMARY_CARD_NOT_READY` or
+  `SAVINGS_NOT_READY`, which released builds already treat as "use the
+  legacy flow"; a failed read answers `PIGGYVEST_UNAVAILABLE` instead.
+- `piggyvest_primary.rollout_cohort` (migration 20261102045635), keyed by
+  merchant and customer. It ships empty and only a privileged operator adds
+  rows. A customer without a verified primary wallet may start onboarding
+  only while listed and while every readiness reader in
+  `primary-readiness-registry.ts` reports ready; none is registered yet, so
+  onboarding stays closed. A customer whose wallet is already verified needs
+  only the build floor. Include
+  `read_rollout_cohort_membership(jsonb)` in the restricted provisioner's
+  verified grants; it returns only a boolean for the scoped customer.
+
 ## Restricted database preparation
 
 1. Review the pending primary migration chain and its public-table dependencies.

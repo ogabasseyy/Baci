@@ -31,6 +31,7 @@ const STATEMENT_ARITY = new Map<string, number>([
   [PRIMARY_WALLET_STATEMENTS.review, 6],
   [PRIMARY_WALLET_STATEMENTS.ownershipHold, 3],
   [PRIMARY_WALLET_STATEMENTS.readReview, 1],
+  [PRIMARY_WALLET_STATEMENTS.readRolloutCohort, 1],
 ]);
 
 export function createPrimaryWalletExecutor(

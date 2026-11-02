@@ -1,6 +1,6 @@
 # Wallet transaction PIN: enablement and emergency stop
 
-The PIN store (migrations `20261031224306` to `20261031224309`, server helper
+The PIN store (migrations `20261102041826` to `20261102041829`, server helper
 `apps/web/src/lib/wallet-pin/wallet-pin-kdf.ts`) ships dark. Turning it on
 takes two separate owner-approved steps. Do not run any step against
 production without the owner's explicit approval for that step.

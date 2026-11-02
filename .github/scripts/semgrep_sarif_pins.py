@@ -19,13 +19,13 @@ AUDITED_PATH = ".github/workflows/muse-code-review.yml"
 PINNED_CHECKOUT_USES = (
     "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0"
 )
-MUSE_PINNED_VERSION = "1.4.13-R6996.1"
+MUSE_PINNED_VERSION = "1.4.14-R7309.1"
 MUSE_PINNED_HOST = "https://lookaside.facebook.com/"
 MUSE_PINNED_SHA_X86 = (
-    "51e97f8de0aa175080e6576cbc055510a95dfe0ededf175c7f6b34fc8e3bf524"
+    "0809aac7cb58d18f5022b6d05e02aa1974683c0ec430e5f04d25b60ed17de2da"
 )
 MUSE_PINNED_SHA_AARCH64 = (
-    "c7f278b5f12862f5721c73433976256aa2a8abd433a12da0e484d30b08c024ff"
+    "3dc39b8fa26f9963cc2038f2966c0932ed5a39f0f9efb39cc0266a261cbbcf76"
 )
 
 

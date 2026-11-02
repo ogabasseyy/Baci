@@ -5,6 +5,7 @@ import { resolvePiggyvestStagingSyntheticIdentity } from '@/lib/piggyvest/stagin
 import { transferToBank, transferToWallet } from '@/lib/piggyvest/transfers';
 import { fundPiggyvestWalletTestMode } from '@/lib/piggyvest/wallet-funding';
 import { createPiggyvestWallet } from '@/lib/piggyvest/wallets';
+import { goalWalletBaseName, goalWalletName } from './goal-wallet-names';
 import type { MutationIntent } from './mutation-gate';
 import type { JournalOutcome } from './mutation-journal';
 import { type CallResult, ProviderReads } from './provider-reads';
@@ -36,7 +37,7 @@ export function qaIdentityFor(qaKey: string): QaIdentity {
   return {
     qaKey,
     thirdPartyIdentifier: `pvbproof:${qaKey}`,
-    goalWalletName: `pvbproof-goal-${qaKey}`.slice(0, 120),
+    goalWalletName: goalWalletBaseName(qaKey),
   };
 }
 
@@ -158,8 +159,10 @@ export class ProviderApi extends ProviderReads {
     slot: string,
     options: { nameSuffix?: string; payoutWalletId?: string } = {}
   ) {
-    const subaccountName =
-      `${qa.goalWalletName}${options.nameSuffix ?? ''}`.slice(0, 120);
+    const subaccountName = goalWalletName(
+      qa.goalWalletName,
+      options.nameSuffix
+    );
     return this.mutate(
       {
         slot,

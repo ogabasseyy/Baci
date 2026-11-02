@@ -130,6 +130,16 @@ async function handle(
         },
         { status: 409 }
       );
+    if (result.status === 'rejected')
+      return NextResponse.json(
+        {
+          error:
+            'PiggyVest declined this savings wallet setup. No money was moved. You can try again in a few minutes, or contact support if it keeps failing.',
+          code: 'SAVINGS_WALLET_PROVIDER_REJECTED',
+          ...result,
+        },
+        { status: 422 }
+      );
     if (result.status === 'not_found')
       return NextResponse.json(
         {

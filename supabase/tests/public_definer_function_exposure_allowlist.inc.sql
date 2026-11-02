@@ -201,8 +201,6 @@ SELECT * FROM (VALUES
   ('public.unsubscribe_merchant_onboarding_emails(uuid)',
    'guest or bearer flow; token/secret verified in the body'),
   ('public.unsubscribe_newsletter(text,uuid)',
-   'FOLLOW-UP: anon can unsubscribe any email (no token) and probe membership'),
-  ('public.refund_customer_wallet_for_vtu(uuid,uuid,numeric,uuid,text,text)',
-   'PENDING: PR 3853 (20261030165610) revokes anon; prod already fixed; delete row once merged')
+   'FOLLOW-UP: anon can unsubscribe any email (no token) and probe membership')
 ) AS allowlist(signature, reason);
 ALTER TABLE definer_exposure_allowlist ADD PRIMARY KEY (signature);

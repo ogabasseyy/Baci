@@ -93,7 +93,10 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(deferredDetailIsland).toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp-description-critical\.css['"];?/
     );
-    expect(deferredDetailIsland).toMatch(
+    const productSemanticSections = readStorefrontFile(
+      '../../components/storefront/ogabassey/seo/product-semantic-sections.tsx'
+    );
+    expect(productSemanticSections).toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp-semantic\.css['"];?/
     );
     expect(categoryPdpLoading).toMatch(
@@ -113,9 +116,6 @@ describe('storefront CSS partitioning (route sheets)', () => {
     ).toBe(false);
     expect(defaultRenderer).toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp\.css['"];?/
-    );
-    expect(defaultRenderer).toMatch(
-      /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp-semantic\.css['"];?/
     );
     expect(defaultDetailClient).not.toMatch(/storefront-pdp\.css/);
 

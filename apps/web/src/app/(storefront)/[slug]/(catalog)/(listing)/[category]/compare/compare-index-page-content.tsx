@@ -28,7 +28,7 @@ export function CompareIndexPageContent({
           {categoryName} comparisons
         </h1>
         <p
-          className="text-base text-store-background-text/65 sm:text-lg"
+          className="text-base leading-7 text-store-background-text/65 sm:text-lg"
           data-cwv-lcp-copy="authority-hub"
         >
           Compare prices, specs, condition, warranty, and buying fit across{' '}

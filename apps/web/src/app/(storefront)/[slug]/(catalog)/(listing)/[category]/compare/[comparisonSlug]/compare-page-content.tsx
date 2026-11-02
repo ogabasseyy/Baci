@@ -142,7 +142,7 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
               {page.heading}
             </h1>
             <p
-              className="max-w-3xl text-base text-store-background-text/70 sm:text-lg"
+              className="max-w-3xl text-base leading-7 text-store-background-text/70 sm:text-lg"
               data-cwv-lcp-copy="authority-hub"
             >
               {page.summaryVerdict}

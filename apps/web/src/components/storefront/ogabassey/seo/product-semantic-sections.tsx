@@ -1,3 +1,4 @@
+import '@/app/(storefront)/storefront-pdp-semantic.css';
 import type { ProductSemanticModel } from '@/lib/storefront-product/product-semantic-types';
 import type { CompareLinkGraphEntry } from '@/lib/storefront-link-modules/compare-link-graph';
 import { CategoryHubCardGrid } from './category-hub-card-grid';

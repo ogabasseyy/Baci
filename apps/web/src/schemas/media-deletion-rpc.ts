@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MEDIA_DELETION_BATCH_SIZE } from '@/config/media-deletion';
 
 export const mediaDeletionAdmissionSchema = z
   .array(
@@ -9,8 +10,8 @@ export const mediaDeletionAdmissionSchema = z
     })
   )
   .min(1)
-  .max(100);
+  .max(MEDIA_DELETION_BATCH_SIZE);
 
 export const mediaDeletionStatesSchema = z
   .array(z.object({ path: z.string(), state: z.enum(['pending', 'deleted']) }))
-  .max(100);
+  .max(MEDIA_DELETION_BATCH_SIZE);

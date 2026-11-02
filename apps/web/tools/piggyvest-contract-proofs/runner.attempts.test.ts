@@ -24,15 +24,14 @@ describe('currentAttempt: scoped to the selected QA customer', () => {
     amountKobo: null,
   });
   it('resumes the latest attempt, and --new-attempt opens the next one', () => {
-    expect(currentAttempt(createMemoryJournal(), 'qa-customer-1', false)).toBe(
-      1
-    );
-    expect(currentAttempt(createMemoryJournal(), 'qa-customer-1', true)).toBe(
-      1
-    );
-    const journal = createMemoryJournal([entry(1), entry(2)]);
-    expect(currentAttempt(journal, 'qa-customer-1', false)).toBe(2);
-    expect(currentAttempt(journal, 'qa-customer-1', true)).toBe(3);
+    for (const scenario of [true, false]) {
+      const empty = createMemoryJournal();
+      expect(currentAttempt(empty, 'qa-customer-1', false, scenario)).toBe(1);
+      expect(currentAttempt(empty, 'qa-customer-1', true, scenario)).toBe(1);
+      const journal = createMemoryJournal([entry(1), entry(2)]);
+      expect(currentAttempt(journal, 'qa-customer-1', false, scenario)).toBe(2);
+      expect(currentAttempt(journal, 'qa-customer-1', true, scenario)).toBe(3);
+    }
   });
 
   it("ignores other QA customers' attempts", () => {
@@ -41,10 +40,10 @@ describe('currentAttempt: scoped to the selected QA customer', () => {
       entry(1, 'qa-customer-2'),
       entry(2, 'qa-customer-2'),
     ]);
-    expect(currentAttempt(journal, 'qa-customer-1', false)).toBe(1);
-    expect(currentAttempt(journal, 'qa-customer-1', true)).toBe(2);
-    expect(currentAttempt(journal, 'qa-customer-2', false)).toBe(2);
-    expect(currentAttempt(journal, 'qa-customer-3', false)).toBe(1);
+    expect(currentAttempt(journal, 'qa-customer-1', false, true)).toBe(1);
+    expect(currentAttempt(journal, 'qa-customer-1', true, true)).toBe(2);
+    expect(currentAttempt(journal, 'qa-customer-2', false, true)).toBe(2);
+    expect(currentAttempt(journal, 'qa-customer-3', false, true)).toBe(1);
   });
 
   it("counts a customer's own derived proof-7 keys, and only those", () => {
@@ -54,7 +53,22 @@ describe('currentAttempt: scoped to the selected QA customer', () => {
       entry(3, derived),
       entry(9, 'qa-customer-1-other'),
     ]);
-    expect(currentAttempt(journal, 'qa-customer-1', false)).toBe(3);
+    // A proof-7-only run resumes proof 7's newest attempt ...
+    expect(currentAttempt(journal, 'qa-customer-1', false, false)).toBe(3);
+    // ... a run with the shared scenario resumes the scenario's own attempt ...
+    expect(currentAttempt(journal, 'qa-customer-1', false, true)).toBe(1);
+    // ... and --new-attempt always opens one above both.
+    expect(currentAttempt(journal, 'qa-customer-1', true, true)).toBe(4);
+    expect(currentAttempt(journal, 'qa-customer-1', true, false)).toBe(4);
+  });
+
+  it('a customer with only proof-7 entries starts its scenario on the newest of them', () => {
+    const journal = createMemoryJournal([
+      entry(1, proof7Key('qa-customer-1', 1)),
+      entry(2, proof7Key('qa-customer-1', 2)),
+    ]);
+    expect(currentAttempt(journal, 'qa-customer-1', false, true)).toBe(2);
+    expect(currentAttempt(journal, 'qa-customer-1', true, true)).toBe(3);
   });
 });
 
@@ -130,9 +144,11 @@ describe('currentAttempt: QA keys sharing a long prefix stay separate', () => {
       entry(1, B),
       entry(2, proof7Key(B, 2)),
     ]);
-    expect(currentAttempt(journal, A, false)).toBe(4);
-    expect(currentAttempt(journal, B, false)).toBe(2);
-    expect(currentAttempt(journal, B, true)).toBe(3);
+    expect(currentAttempt(journal, A, false, false)).toBe(4);
+    expect(currentAttempt(journal, B, false, false)).toBe(2);
+    expect(currentAttempt(journal, B, true, false)).toBe(3);
+    expect(currentAttempt(journal, A, false, true)).toBe(1);
+    expect(currentAttempt(journal, B, false, true)).toBe(1);
   });
 
   it('a key whose only entries belong to the other key still starts at attempt 1', () => {
@@ -140,6 +156,7 @@ describe('currentAttempt: QA keys sharing a long prefix stay separate', () => {
       entry(3, proof7Key(A, 3)),
       entry(3, A),
     ]);
-    expect(currentAttempt(journal, B, false)).toBe(1);
+    expect(currentAttempt(journal, B, false, true)).toBe(1);
+    expect(currentAttempt(journal, B, false, false)).toBe(1);
   });
 });

@@ -5,10 +5,12 @@ import {
   ENV_BANK_CODE,
   ENV_BASE_URL,
   ENV_BUSINESS_WALLET,
+  FULL_RUN_ONLY_PROOFS,
   PROOF_IDS,
   RUN_MODES,
   type RunMode,
   SANDBOX_ORIGIN,
+  STANDALONE_PROOFS,
 } from './constants';
 import {
   assertNoRecordingAccount,
@@ -97,6 +99,30 @@ function resolveProof(value: string | undefined): ProofId | null {
   return known ?? usage(`--proof must be one of ${PROOF_IDS.join(', ')}`);
 }
 
+/**
+ * What a --proof run may do. A proof that only measures other proofs' work
+ * needs a full run. --new-attempt with a proof that runs the shared scenario
+ * would open an attempt holding only that proof's slots, which the next plain
+ * full run would then complete by sending every other proof's mutations; only
+ * a standalone proof (its slots live under its own keys) may open one alone.
+ */
+export function assertProofScope(
+  proof: ProofId | null,
+  newAttempt: boolean
+): void {
+  if (!proof) return;
+  if (FULL_RUN_ONLY_PROOFS.includes(proof)) {
+    usage(
+      `--proof ${proof} measures what other proofs do in the same run; run it in a full run`
+    );
+  }
+  if (newAttempt && !STANDALONE_PROOFS.includes(proof)) {
+    usage(
+      `--new-attempt with --proof is allowed only for ${STANDALONE_PROOFS.join(', ')}; open a new attempt with a full run`
+    );
+  }
+}
+
 export function parseRunConfig(argv: readonly string[], env: Env): RunConfig {
   assertNoRecordingAccount('command line', argv);
   const modes = new Set<RunMode>();
@@ -145,6 +171,8 @@ export function parseRunConfig(argv: readonly string[], env: Env): RunConfig {
     mode === 'live-sandbox-mutations'
       ? resolveBankDestination(env)
       : { bankCode: null, bankAccount: null };
+  const proof = resolveProof(values.get('--proof'));
+  assertProofScope(proof, flags.has('--new-attempt'));
 
   return {
     mode,
@@ -155,7 +183,7 @@ export function parseRunConfig(argv: readonly string[], env: Env): RunConfig {
     evidenceDir: values.get('--evidence-dir') ?? null,
     qaCustomerId: values.get('--qa-customer') ?? null,
     newAttempt: flags.has('--new-attempt'),
-    proof: resolveProof(values.get('--proof')),
+    proof,
     help: flags.has('--help'),
     businessWalletId:
       mode === 'live-sandbox-mutations' ? resolveBusinessWallet(env) : null,

@@ -27,7 +27,6 @@ export type GiglWaybillOwnership = 'owned' | 'not_owned' | 'unavailable';
 const preshipmentRecord = z
   .object({
     Waybill: z.union([z.string(), z.number()]),
-    CustomerCode: z.string().nullish(),
   })
   .loose();
 
@@ -52,14 +51,18 @@ function classifyRecords(
   records: readonly unknown[],
   waybill: string,
   accountCode: string
-): 'owned' | 'not_owned' | 'none' {
+): 'owned' | 'not_owned' | 'none' | 'unreadable' {
   let owned = 0;
   for (const entry of records) {
     const parsed = preshipmentRecord.safeParse(entry);
-    if (!parsed.success || String(parsed.data.Waybill).trim() !== waybill) {
-      continue;
+    // Fail closed: an entry whose waybill cannot be read might be this
+    // waybill's record, so it must never be skipped on the way to 'owned'.
+    if (!parsed.success) return 'unreadable';
+    if (String(parsed.data.Waybill).trim() !== waybill) continue;
+    const owner = (parsed.data as { CustomerCode?: unknown }).CustomerCode;
+    if (typeof owner !== 'string' || owner.trim() !== accountCode) {
+      return 'not_owned';
     }
-    if (parsed.data.CustomerCode?.trim() !== accountCode) return 'not_owned';
     owned += 1;
   }
   return owned > 0 ? 'owned' : 'none';
@@ -136,9 +139,12 @@ export async function attestGiglWaybillOwnership(
         ? 'none'
         : classifyRecords(records, normalizedWaybill, accountCode);
     if (verdict === 'owned') return 'owned';
-    if (verdict === 'none') {
+    if (verdict === 'none' || verdict === 'unreadable') {
       io.log('warn', 'GIGL preshipment ownership check failed', {
-        code: 'gigl_preshipment_no_record',
+        code:
+          verdict === 'none'
+            ? 'gigl_preshipment_no_record'
+            : 'gigl_preshipment_unreadable_record',
       });
       return 'unavailable';
     }

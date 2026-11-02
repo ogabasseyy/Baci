@@ -95,79 +95,102 @@ CREATE TRIGGER stamp_booked_gigl_charge_waybill
 BEFORE UPDATE OF status ON public.merchant_shipping_charges
 FOR EACH ROW EXECUTE FUNCTION private.stamp_booked_gigl_charge_waybill();
 
--- 2. One waybill backs at most one booked or refunded charge (production has
---    one charge row, so the build lock is brief).
-CREATE UNIQUE INDEX merchant_shipping_charges_gigl_waybill_once_idx
-  ON public.merchant_shipping_charges (provider_reference)
-  WHERE provider_reference IS NOT NULL
-    AND status IN ('booked', 'refunded');
-
--- 3. Guarded backfill of existing booked charges (production: exactly one,
+-- 2. Guarded backfill of existing booked charges (production: exactly one,
 --    6d195a34, waybill 1349639673, whose MCRT the worker recorded 3.5 s after
 --    the submission began; complete() ran 0.1 s after the server inserted
 --    the shipment). Stamp only a charge completed within a minute of its
 --    shipment row's insert during the submission (the server's own
 --    insert-then-complete, not a later recover), on a waybill GIG created
 --    during the submission, with no earlier GIG history, that no other
---    charge holds. No status change, so neither trigger fires. The stamp
---    alone refunds nothing: the refund also needs the worker's account
---    attestation.
-WITH candidate AS (
-  SELECT charge.id, btrim(shipment.tracking_number) AS waybill
-  FROM public.merchant_shipping_charges AS charge
-  JOIN public.shipments AS shipment
-    ON shipment.id = charge.shipment_id
-   AND shipment.merchant_id = charge.merchant_id
-   AND shipment.order_id = charge.order_id
-   AND shipment.provider = 'GIGL'
-  WHERE charge.status = 'booked'
-    AND charge.provider_reference IS NULL
-    AND charge.provider_submitting_at IS NOT NULL
-    AND nullif(btrim(shipment.tracking_number), '') IS NOT NULL
-    AND shipment.tracking_number = shipment.provider_shipment_id
-    AND shipment.created_at >= charge.provider_submitting_at
-    AND shipment.created_at
-      <= charge.provider_submitting_at + interval '15 minutes'
-    AND charge.completed_at >= shipment.created_at
-    AND charge.completed_at <= shipment.created_at + interval '1 minute'
-    AND EXISTS (
-      SELECT 1
-      FROM public.shipment_tracking_events AS created
-      WHERE created.shipment_id = shipment.id
-        AND created.provider = 'GIGL'
-        AND created.tracking_number = btrim(shipment.tracking_number)
-        AND created.normalized_status = 'booked'
-        AND created.occurred_at
-          >= charge.provider_submitting_at - interval '5 minutes'
-        AND created.occurred_at
+--    charge holds. Each candidate waybill is stamped under the same
+--    advisory lock the stamp trigger takes, with the charge row locked and
+--    its holders re-checked under the lock, so a live booking during the
+--    deploy cannot race it; the unique index below is built only afterwards.
+--    No status change, so neither trigger fires. The stamp alone refunds
+--    nothing: the refund also needs the worker's account attestation.
+DO $backfill$
+DECLARE
+  v_row record;
+BEGIN
+  FOR v_row IN
+    WITH candidate AS (
+      SELECT charge.id, btrim(shipment.tracking_number) AS waybill
+      FROM public.merchant_shipping_charges AS charge
+      JOIN public.shipments AS shipment
+        ON shipment.id = charge.shipment_id
+       AND shipment.merchant_id = charge.merchant_id
+       AND shipment.order_id = charge.order_id
+       AND shipment.provider = 'GIGL'
+      WHERE charge.status = 'booked'
+        AND charge.provider_reference IS NULL
+        AND charge.provider_submitting_at IS NOT NULL
+        AND nullif(btrim(shipment.tracking_number), '') IS NOT NULL
+        AND shipment.tracking_number = shipment.provider_shipment_id
+        AND shipment.created_at >= charge.provider_submitting_at
+        AND shipment.created_at
           <= charge.provider_submitting_at + interval '15 minutes'
+        AND charge.completed_at >= shipment.created_at
+        AND charge.completed_at <= shipment.created_at + interval '1 minute'
+        AND EXISTS (
+          SELECT 1
+          FROM public.shipment_tracking_events AS created
+          WHERE created.shipment_id = shipment.id
+            AND created.provider = 'GIGL'
+            AND created.tracking_number = btrim(shipment.tracking_number)
+            AND created.normalized_status = 'booked'
+            AND created.occurred_at
+              >= charge.provider_submitting_at - interval '5 minutes'
+            AND created.occurred_at
+              <= charge.provider_submitting_at + interval '15 minutes'
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.shipment_tracking_events AS earlier
+          WHERE earlier.shipment_id = shipment.id
+            AND earlier.tracking_number = btrim(shipment.tracking_number)
+            AND earlier.occurred_at
+              < charge.provider_submitting_at - interval '5 minutes'
+        )
     )
-    AND NOT EXISTS (
+    SELECT candidate.id, candidate.waybill
+    FROM candidate
+    WHERE (
+      SELECT count(*) FROM candidate AS twin
+      WHERE twin.waybill = candidate.waybill
+    ) = 1
+    ORDER BY candidate.waybill, candidate.id
+  LOOP
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended('gigl-charge-waybill:' || v_row.waybill, 0)
+    );
+    PERFORM 1
+    FROM public.merchant_shipping_charges AS charge
+    WHERE charge.id = v_row.id
+      AND charge.status = 'booked'
+      AND charge.provider_reference IS NULL
+    FOR UPDATE;
+    CONTINUE WHEN NOT FOUND;
+    CONTINUE WHEN EXISTS (
       SELECT 1
-      FROM public.shipment_tracking_events AS earlier
-      WHERE earlier.shipment_id = shipment.id
-        AND earlier.tracking_number = btrim(shipment.tracking_number)
-        AND earlier.occurred_at
-          < charge.provider_submitting_at - interval '5 minutes'
-    )
-)
-UPDATE public.merchant_shipping_charges AS charge
-SET provider_reference = candidate.waybill,
-    updated_at = now()
-FROM candidate
-WHERE charge.id = candidate.id
-  AND NOT EXISTS (
-    SELECT 1
-    FROM candidate AS twin
-    WHERE twin.waybill = candidate.waybill
-      AND twin.id <> candidate.id
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM public.merchant_shipping_charges AS other
-    WHERE other.provider_reference = candidate.waybill
-      AND other.status IN ('booked', 'refunded')
-  );
+      FROM public.merchant_shipping_charges AS other
+      WHERE other.provider_reference = v_row.waybill
+        AND other.status IN ('booked', 'refunded')
+        AND other.id <> v_row.id
+    );
+    UPDATE public.merchant_shipping_charges AS charge
+    SET provider_reference = v_row.waybill,
+        updated_at = now()
+    WHERE charge.id = v_row.id;
+  END LOOP;
+END;
+$backfill$;
+
+-- 3. One waybill backs at most one booked or refunded charge (production has
+--    one charge row, so the build lock is brief).
+CREATE UNIQUE INDEX merchant_shipping_charges_gigl_waybill_once_idx
+  ON public.merchant_shipping_charges (provider_reference)
+  WHERE provider_reference IS NOT NULL
+    AND status IN ('booked', 'refunded');
 
 -- 4. Exactly-once backstop: at most one provider-cancellation refund per
 --    charge (wallet_transactions has 155 rows; the build lock is brief).

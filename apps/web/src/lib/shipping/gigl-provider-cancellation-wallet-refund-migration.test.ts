@@ -273,10 +273,23 @@ describe('bugfix: GIG cancellation of a wallet-funded GIGL booking', () => {
     );
     expect(backfill).toContain('FROM candidate AS twin');
     expect(backfill).toContain("AND other.status IN ('booked', 'refunded')");
-    expect(
+    // bugfix: the backfill runs before the unique index, serialized per
+    // waybill with the stamp trigger's advisory lock and row locks.
+    const loop = sliceBetween(stampCode, 'DO $backfill$', '$backfill$;');
+    expect(loop).toContain(
+      "hashtextextended('gigl-charge-waybill:' || v_row.waybill, 0)"
+    );
+    expect(loop).toContain('FOR UPDATE;');
+    expect(loop.indexOf('pg_advisory_xact_lock')).toBeLessThan(
+      loop.indexOf('FOR UPDATE;')
+    );
+    expect(loop.indexOf('FOR UPDATE;')).toBeLessThan(
+      loop.indexOf('SET provider_reference = v_row.waybill')
+    );
+    expect(stampCode.indexOf('DO $backfill$')).toBeLessThan(
       stampCode.indexOf(
         'CREATE UNIQUE INDEX merchant_shipping_charges_gigl_waybill_once_idx'
       )
-    ).toBeLessThan(stampCode.indexOf('WITH candidate AS ('));
+    );
   });
 });

@@ -101,6 +101,13 @@ describe('attestGiglWaybillOwnership', () => {
     ['a missing owner', record('WB-PRIVATE-1', null)],
     ['a blank owner', record('WB-PRIVATE-1', '  ')],
     [
+      'bugfix: a Baci-owned record plus a same-waybill record with a numeric owner',
+      [
+        record('WB-PRIVATE-1', BACI_ACCOUNT),
+        { Waybill: 'WB-PRIVATE-1', CustomerCode: 12345 },
+      ],
+    ],
+    [
       'a second record owned by another account',
       [
         record('WB-PRIVATE-1', BACI_ACCOUNT),
@@ -119,6 +126,10 @@ describe('attestGiglWaybillOwnership', () => {
   it.each([
     ['no record for the waybill', [record('WB-OTHER', BACI_ACCOUNT)]],
     ['an empty list', []],
+    [
+      'a Baci-owned record plus an entry with an unreadable waybill',
+      [record('WB-PRIVATE-1', BACI_ACCOUNT), { CustomerCode: BACI_ACCOUNT }],
+    ],
     ['a missing record', null],
     ['a scalar payload', 'WB-PRIVATE-1'],
     [

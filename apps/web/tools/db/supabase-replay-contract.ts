@@ -217,7 +217,7 @@ export async function verifySupabaseReplayContract(options: {
   const nodeMajor = Number.parseInt(nodeVersion.split('.')[0] ?? '', 10);
   if (nodeMajor !== 24) mismatch('node');
 
-  if ((await stdout(options.runCommand, 'pnpm', ['--version'])) !== '11.7.0') {
+  if ((await stdout(options.runCommand, 'pnpm', ['--version'])) !== '11.22.0') {
     mismatch('pnpm');
   }
   if (

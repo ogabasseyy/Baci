@@ -63,7 +63,8 @@ it('stores encrypted response evidence before projection and binds the response 
   const decipher = createDecipheriv(
     'aes-256-gcm',
     Buffer.from('a'.repeat(64), 'hex'),
-    Buffer.from(iv, 'base64url')
+    Buffer.from(iv, 'base64url'),
+    { authTagLength: 16 }
   );
   decipher.setAAD(Buffer.from(`${workflow}:${claim.attemptId}:${reference}`));
   decipher.setAuthTag(Buffer.from(tag, 'base64url'));

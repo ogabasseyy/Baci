@@ -10,6 +10,18 @@ INSERT INTO public.orders(id,merchant_id,customer_id,order_number,total,currency
 VALUES ('ab120000-0000-4000-8000-000000000004','ab120000-0000-4000-8000-000000000002','ab120000-0000-4000-8000-000000000003','OXYGEN-FENCE',100000,'NGN','unpaid','oxygen');
 INSERT INTO public.oxygen_workflows(order_id,merchant_id,customer_id)
 VALUES ('ab120000-0000-4000-8000-000000000004','ab120000-0000-4000-8000-000000000002','ab120000-0000-4000-8000-000000000003');
+UPDATE public.orders SET shipping_status='pending' WHERE id='ab120000-0000-4000-8000-000000000004';
+DO $$ BEGIN
+ IF private.order_customer_cancellable('ab120000-0000-4000-8000-000000000004') IS DISTINCT FROM false THEN
+  RAISE EXCEPTION 'Customer cancellation advertised for an Oxygen order';
+ END IF;
+ BEGIN
+  UPDATE public.orders SET shipping_status='cancelled',cancelled_by='customer' WHERE id='ab120000-0000-4000-8000-000000000004';
+  RAISE EXCEPTION 'Oxygen order was cancelled';
+ EXCEPTION WHEN raise_exception THEN
+  IF SQLERRM <> 'order_not_cancellable' THEN RAISE; END IF;
+ END;
+END $$;
 -- Opening an application alone must not trap a customer in Oxygen.
 UPDATE public.orders SET payment_method='card' WHERE id='ab120000-0000-4000-8000-000000000004';
 UPDATE public.orders SET payment_method='oxygen' WHERE id='ab120000-0000-4000-8000-000000000004';

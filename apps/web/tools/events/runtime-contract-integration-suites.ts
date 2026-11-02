@@ -1,5 +1,7 @@
 /** Reviewed behavioral suites for split modules; each association must resolve through real imports. */
 export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
+  'apps/web/src/components/payments/oxygen/oxygen-read-recovery.ts':
+    'apps/web/src/components/payments/oxygen/OxygenKycRecovery.test.tsx',
   'apps/web/src/lib/payments/oxygen/runtime-provider-token-cache.ts':
     'apps/web/src/lib/payments/oxygen/runtime-connection-token-cache.test.ts',
   'apps/web/src/components/payments/oxygen/oxygen-checkout-ownership.ts':

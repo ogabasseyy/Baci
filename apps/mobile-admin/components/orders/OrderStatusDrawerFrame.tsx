@@ -16,12 +16,14 @@ import {
 import { useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { useSheetExitPresence } from '@/hooks/useSheetExitPresence';
 import { logOrderStatusDebug } from './order-status-debug';
+import { getStatusDrawerSnapPoints } from './order-status-drawer-snap-points';
 
-const STATUS_DRAWER_HEIGHT = 420;
-const STATUS_DRAWER_HEADER_HEIGHT = 96;
-const STATUS_DRAWER_ROW_HEIGHT = 64;
-const STATUS_DRAWER_TOP_MARGIN = 24;
+// Safety net only: the drawer is released by its own close callback. Gorhom's
+// close spring from the tallest snap point outlasts the default sheet bound,
+// so this one waits longer before forcing the release.
+export const ORDER_STATUS_DRAWER_EXIT_FALLBACK_MS = 1500;
 
 interface OrderStatusDrawerFrameProps {
   children: ReactNode;
@@ -37,30 +39,6 @@ interface OrderStatusDrawerFrameProps {
   onClose: () => void;
   title: string;
   visible: boolean;
-}
-
-function getStatusDrawerSnapPoints(
-  windowHeight: number,
-  topInset: number,
-  contentRowCount: number
-) {
-  const maxHeight = Math.max(
-    0,
-    windowHeight - topInset - STATUS_DRAWER_TOP_MARGIN
-  );
-  const contentHeight =
-    STATUS_DRAWER_HEADER_HEIGHT +
-    SPACING.lg * 2 +
-    Math.max(contentRowCount, 0) * STATUS_DRAWER_ROW_HEIGHT +
-    Math.max(contentRowCount - 1, 0) * SPACING.sm;
-  const initialHeight = Math.min(
-    Math.max(Math.min(STATUS_DRAWER_HEIGHT, maxHeight), contentHeight),
-    maxHeight
-  );
-
-  return maxHeight - initialHeight > STATUS_DRAWER_ROW_HEIGHT
-    ? [initialHeight, maxHeight]
-    : [initialHeight];
 }
 
 export function OrderStatusDrawerFrame({
@@ -86,9 +64,22 @@ export function OrderStatusDrawerFrame({
     offset: { top: 0, right: 0, bottom: 0, left: 0 },
   });
   const visibleRef = useRef(visible);
+  const sheetRef = useRef<BottomSheet>(null);
+  const { finishExit, isPresented, markClosedBySheet } = useSheetExitPresence(
+    visible,
+    undefined,
+    ORDER_STATUS_DRAWER_EXIT_FALLBACK_MS
+  );
 
   useEffect(() => {
     visibleRef.current = visible;
+    // Animate the drawer down instead of unmounting it, so anything opened
+    // from it can cross-fade in rather than flashing the bare screen.
+    if (visible) {
+      sheetRef.current?.snapToIndex(0);
+    } else {
+      sheetRef.current?.close();
+    }
   }, [visible]);
 
   useEffect(() => {
@@ -125,10 +116,21 @@ export function OrderStatusDrawerFrame({
     });
 
     if (!visibleRef.current) {
+      finishExit();
       return;
     }
 
     onClose();
+  };
+
+  // Gorhom reports onClose only once the sheet is already down (a pan-down,
+  // or the close animation finishing). If that happens while still visible,
+  // no second close event is guaranteed, so release as soon as the parent
+  // hides it. Header and backdrop presses go through handleClose and keep
+  // the slide-down.
+  const handleSheetClosed = () => {
+    if (visibleRef.current) markClosedBySheet();
+    handleClose();
   };
 
   const handleIndexChange = (index: number) => {
@@ -150,7 +152,7 @@ export function OrderStatusDrawerFrame({
     />
   );
 
-  if (!visible) {
+  if (!isPresented) {
     return null;
   }
 
@@ -163,6 +165,7 @@ export function OrderStatusDrawerFrame({
       testID="order-status-drawer-host"
     >
       <BottomSheet
+        ref={sheetRef}
         android_keyboardInputMode="adjustResize"
         backdropComponent={backdropComponent}
         backgroundStyle={[
@@ -183,7 +186,7 @@ export function OrderStatusDrawerFrame({
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         onChange={handleIndexChange}
-        onClose={handleClose}
+        onClose={handleSheetClosed}
         snapPoints={snapPoints}
       >
         <BottomSheetView

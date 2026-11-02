@@ -87,6 +87,19 @@ DO $$ BEGIN
  IF NOT FOUND THEN RAISE EXCEPTION 'Owner cannot discard draft'; END IF;
 END $$;
 RESET ROLE;
+-- Keep address context during review; remove the whole encrypted identity
+-- draft as soon as the provider confirms the address.
+INSERT INTO public.oxygen_form_drafts(workflow_id,user_id,ciphertext,mutation_id)
+VALUES ('efaa0000-0000-4000-8000-000000000041','efaa0000-0000-4000-8000-000000000001',repeat('encrypted-fixture',4),'efaa0000-0000-4000-8000-000000000054');
+INSERT INTO oxygen_private.provider_states(workflow_id,state)
+VALUES ('efaa0000-0000-4000-8000-000000000041','{"kyc":{"address_status":"PROCESSING"}}');
+DO $$ BEGIN
+ IF NOT EXISTS (SELECT 1 FROM public.oxygen_form_drafts WHERE workflow_id='efaa0000-0000-4000-8000-000000000041') THEN RAISE EXCEPTION 'Draft removed before address confirmation'; END IF;
+END $$;
+UPDATE oxygen_private.provider_states SET state='{"kyc":{"address_status":"DONE"}}' WHERE workflow_id='efaa0000-0000-4000-8000-000000000041';
+DO $$ BEGIN
+ IF EXISTS (SELECT 1 FROM public.oxygen_form_drafts WHERE workflow_id='efaa0000-0000-4000-8000-000000000041') THEN RAISE EXCEPTION 'Confirmed address retained identity draft'; END IF;
+END $$;
 SET LOCAL ROLE anon;
 DO $$ BEGIN
  BEGIN

@@ -45,7 +45,7 @@ function userClient({
   } as unknown as SupabaseClient;
 }
 
-function adminClient({
+function proofClient({
   proof = { admitted_at: STAMP, live_transaction_ids: [] as string[] },
   proofError = null,
   onProof,
@@ -65,16 +65,31 @@ function adminClient({
   } as unknown as SupabaseClient;
 }
 
+// One authenticated transport, with independent verdict/proof responses.
+function scopedClient(
+  lookup: SupabaseClient,
+  proof: SupabaseClient
+): SupabaseClient {
+  return {
+    rpc: (name: string, args: Record<string, unknown>) =>
+      name === 'vtu_admission_proof'
+        ? proof.rpc(name, args)
+        : lookup.rpc(name, args),
+  } as unknown as SupabaseClient;
+}
+
 describe('admitVtuClaim', () => {
   it('returns the owned row with the admission stamp and live set', async () => {
     const seen: Array<{ fn: string; args: unknown }> = [];
 
     const admission = await admitVtuClaim(
-      userClient(),
-      adminClient({
-        proof: { admitted_at: STAMP, live_transaction_ids: ['txn-9'] },
-        onProof: (fn, args) => seen.push({ fn, args }),
-      }),
+      scopedClient(
+        userClient(),
+        proofClient({
+          proof: { admitted_at: STAMP, live_transaction_ids: ['txn-9'] },
+          onProof: (fn, args) => seen.push({ fn, args }),
+        })
+      ),
       'key-1',
       USER_ID,
       'store-1',
@@ -96,8 +111,7 @@ describe('admitVtuClaim', () => {
 
   it('admits a fresh key with a null existing row and empty live set', async () => {
     const admission = await admitVtuClaim(
-      userClient({ verdict: 'fresh', row: null }),
-      adminClient(),
+      scopedClient(userClient({ verdict: 'fresh', row: null }), proofClient()),
       'key-fresh',
       USER_ID,
       'store-1',
@@ -111,8 +125,10 @@ describe('admitVtuClaim', () => {
 
   it('flags a foreign key instead of returning its row', async () => {
     const admission = await admitVtuClaim(
-      userClient({ verdict: 'foreign', row: null }),
-      adminClient(),
+      scopedClient(
+        userClient({ verdict: 'foreign', row: null }),
+        proofClient()
+      ),
       'key-1',
       USER_ID,
       'store-1',
@@ -156,8 +172,7 @@ describe('admitVtuClaim', () => {
     } as unknown as SupabaseClient;
 
     const admission = await admitVtuClaim(
-      user,
-      admin,
+      scopedClient(user, admin),
       'key-1',
       USER_ID,
       'store-1',
@@ -171,8 +186,10 @@ describe('admitVtuClaim', () => {
   it('fails closed with VtuAdmissionError when the proof errors', async () => {
     await expect(
       admitVtuClaim(
-        userClient({ verdict: 'fresh', row: null }),
-        adminClient({ proofError: { message: 'db down' } }),
+        scopedClient(
+          userClient({ verdict: 'fresh', row: null }),
+          proofClient({ proofError: { message: 'db down' } })
+        ),
         'key-fresh',
         USER_ID,
         'store-1',
@@ -184,8 +201,10 @@ describe('admitVtuClaim', () => {
   it('fails closed with VtuAdmissionError when no proof is returned', async () => {
     await expect(
       admitVtuClaim(
-        userClient({ verdict: 'fresh', row: null }),
-        adminClient({ proof: null }),
+        scopedClient(
+          userClient({ verdict: 'fresh', row: null }),
+          proofClient({ proof: null })
+        ),
         'key-fresh',
         USER_ID,
         'store-1',
@@ -198,8 +217,10 @@ describe('admitVtuClaim', () => {
     // A foreign key 400s at the route before claiming, so it never
     // needs the proof — no 500 during a proof-RPC outage.
     const admission = await admitVtuClaim(
-      userClient({ verdict: 'foreign', row: null }),
-      adminClient({ proofError: { message: 'db down' } }),
+      scopedClient(
+        userClient({ verdict: 'foreign', row: null }),
+        proofClient({ proofError: { message: 'db down' } })
+      ),
       'key-1',
       USER_ID,
       'store-1',
@@ -217,8 +238,10 @@ describe('admitVtuClaim', () => {
     // uses the stamp or the live set, so an existing row short-
     // circuits with null proof fields.
     const admission = await admitVtuClaim(
-      userClient(),
-      adminClient({ proofError: { message: 'db down' } }),
+      scopedClient(
+        userClient(),
+        proofClient({ proofError: { message: 'db down' } })
+      ),
       'key-1',
       USER_ID,
       'store-1',
@@ -233,8 +256,10 @@ describe('admitVtuClaim', () => {
   it('propagates key-lookup failures unchanged', async () => {
     await expect(
       admitVtuClaim(
-        userClient({ error: { message: 'lookup boom' } }),
-        adminClient(),
+        scopedClient(
+          userClient({ error: { message: 'lookup boom' } }),
+          proofClient()
+        ),
         'key-1',
         USER_ID,
         'store-1',

@@ -1,0 +1,1 @@
+supabase/tests/vtu_admission_customer_scope.sql

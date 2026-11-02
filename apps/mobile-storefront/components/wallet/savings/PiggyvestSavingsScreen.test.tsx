@@ -287,14 +287,15 @@ describe('isolated native PiggyVest savings', () => {
     expect(screen.queryByText('Synthetic phone')).toBeNull();
     expect(screen.queryByRole('checkbox')).toBeNull();
   });
-  it('shows funding only for accepted server policy and matched eligible server context', () => {
+  it('shows purchasing power only for accepted server policy and matched eligible server context, and never a goal bank account', () => {
     const input = fixture();
     input.source = {
       ...input.source,
       policy: { ...policy, consent: 'accepted' },
     };
     const view = render(<PiggyvestSavingsScreen staging={input} />);
-    expect(screen.getByText('0000000000')).toBeOnTheScreen();
+    expect(screen.queryByText('0000000000')).toBeNull();
+    expect(screen.queryByText('Funding details')).toBeNull();
     expect(screen.getByText('NGN 123.45')).toBeOnTheScreen();
     expect(
       screen.getByText('Pending interest (not spendable): NGN 5.00')

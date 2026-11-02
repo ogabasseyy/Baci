@@ -320,7 +320,7 @@ describe('StartSavingsTransferModal', () => {
       expect(controller.fetchPlanFunding).not.toHaveBeenCalled();
     });
 
-    it('shows the plan account and confirms the transfer', async () => {
+    it('never shows the ready plan bank account and offers only the wallet path', async () => {
       const controller = createPlanController({
         planFundingAccounts: [
           {
@@ -338,15 +338,28 @@ describe('StartSavingsTransferModal', () => {
         />
       );
 
-      expect(screen.getByText('0001234567')).toBeOnTheScreen();
-      expect(screen.getByText('Synthetic bank')).toBeOnTheScreen();
+      expect(screen.queryByText('0001234567')).toBeNull();
+      expect(screen.queryByText('Synthetic bank')).toBeNull();
+      expect(screen.queryByText('Synthetic account')).toBeNull();
+      expect(
+        screen.queryByRole('button', { name: 'Copy plan account number' })
+      ).toBeNull();
+      expect(
+        screen.queryByRole('button', { name: 'Confirm plan transfer' })
+      ).toBeNull();
+      expect(
+        screen.getByText(/Plans do not take bank transfers/)
+      ).toBeOnTheScreen();
       fireEvent.press(
-        screen.getByRole('button', { name: 'Confirm plan transfer' })
+        screen.getByRole('button', { name: 'Record wallet contribution' })
       );
 
       await waitFor(() =>
-        expect(controller.confirmPlanTransfer).toHaveBeenCalledTimes(1)
+        expect(controller.submitBankTransferContribution).toHaveBeenCalledTimes(
+          1
+        )
       );
+      expect(controller.confirmPlanTransfer).not.toHaveBeenCalled();
     });
 
     it('falls back to the wallet contribution when the plan account is unavailable', async () => {

@@ -78,6 +78,7 @@ with `[Filtered]`.
 | `PIGGYVEST_GOAL_INTEREST_MISROUTED` | Goal interest landed outside its goal, or the goal opted out. It is the customer's money; support resolves it | Goal routing; support procedure |
 | `PIGGYVEST_ENGINE_CREDIT_NOT_BACKED` | A confirmed transfer credited a wallet that is not yet PiggyVest-backed; the backed balance waits for the wallet to switch | Wallet switch status |
 | `PIGGYVEST_INFLOW_REVIEW_OPEN` | A wallet is above its expected balance by exactly its open inflow reviews; nothing is re-queued | Open inflow reviews for the wallet |
+| `PIGGYVEST_INFLOW_UNMAPPED` | A bank deposit arrived for a PiggyVest wallet that maps to none of our goals or wallets. It is not credited and stays retryable. Goal account numbers are hidden in the app, so this is unexpected | The event's wallet and customer at PiggyVest; whose money it is |
 | `PIGGYVEST_NEGATIVE_DRIFT` | Reserved for drift monitoring: the PiggyVest balance is below what our records expect and new spends are held. Not emitted yet | Drift report for the wallet |
 
 ## Setting up paging in PostHog (owner step, later)

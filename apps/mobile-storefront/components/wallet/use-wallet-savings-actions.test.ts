@@ -121,17 +121,14 @@ describe('createWalletSavingsActions', () => {
     expect(input.idempotencyKeyRef.current).toBe('pending-operation');
   });
 
-  it('opens selected plan bank funding only in pinned hosted staging', () => {
+  it('never opens a plan bank account screen, even in hosted staging', () => {
     const input = createInput();
     mockIsHostedStagingTestPaymentsEnabled.mockReturnValue(true);
 
     createWalletSavingsActions(input).handleFundSavingsWallet();
 
-    expect(router.push).toHaveBeenCalledWith({
-      pathname: '/savings/funding',
-      params: { amount: '2500', goalId: 'goal-1' },
-    });
-    expect(input.startWalletTopUp).not.toHaveBeenCalled();
+    expect(router.push).not.toHaveBeenCalled();
+    expect(input.startWalletTopUp).toHaveBeenCalledTimes(1);
   });
 
   it('does not open plan transfer when the wallet already covers the amount', () => {

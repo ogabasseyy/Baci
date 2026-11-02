@@ -2,7 +2,6 @@ import * as Crypto from 'expo-crypto';
 import { router } from 'expo-router';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { addSavingsContribution } from '@/lib/customer-savings';
-import { isHostedStagingTestPaymentsEnabled } from '@/lib/is-hosted-staging-wallet-top-up-blocked';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { addPiggyvestPrimarySavingsContribution } from '@/lib/piggyvest-primary-savings';
 import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
@@ -67,13 +66,6 @@ export function createWalletSavingsActions({
       return;
     }
     if (requestedAmount <= spendableBalance) {
-      return;
-    }
-    if (isHostedStagingTestPaymentsEnabled()) {
-      router.push({
-        pathname: '/savings/funding',
-        params: { amount: String(requestedAmount), goalId: goal.id },
-      });
       return;
     }
     if (startWalletTopUp) startWalletTopUp();

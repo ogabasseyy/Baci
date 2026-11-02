@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import {
@@ -76,64 +76,32 @@ beforeEach(() => {
   jest.mocked(fetchExistingSavingsPlanFunding).mockResolvedValue(ready);
 });
 
-it('retrieves the existing plan account, never creating or funding one on open', async () => {
+it('never fetches or shows the goal bank account, only wallet guidance', async () => {
   render(panel());
   await act(async () => {});
-  expect(screen.getByText('0000008907')).toBeOnTheScreen();
-  expect(fetchExistingSavingsPlanFunding).toHaveBeenCalledWith({
-    goalId: goal.id,
-    merchantId: 'merchant-1',
-    merchantSlug: 'savings-synthetic',
-  });
+  expect(screen.getByText('Add from your wallet')).toBeOnTheScreen();
+  expect(screen.queryByText('0000008907')).toBeNull();
+  expect(screen.queryByText('FAAS (SANDBOX)')).toBeNull();
+  expect(
+    screen.queryByRole('button', { name: 'Copy savings account number' })
+  ).toBeNull();
+  expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
   expect(fetchSavingsPlanFunding).not.toHaveBeenCalled();
 });
 
-it('retries the read after a network failure', async () => {
-  jest
-    .mocked(fetchExistingSavingsPlanFunding)
-    .mockRejectedValueOnce(new Error('Network unavailable'));
-  render(panel());
+it('shows no account note for auto-debit goals', async () => {
+  render(panel({ ...goal, source_mode: 'auto_debit' }));
   await act(async () => {});
-  expect(screen.getByText('Network unavailable')).toBeOnTheScreen();
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Refresh savings account' })
-  );
-  await act(async () => {});
-  expect(screen.getByText('0000008907')).toBeOnTheScreen();
+  expect(screen.queryByText('Add from your wallet')).toBeNull();
+  expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
 });
 
-it.each([
-  'user',
-  'merchant',
-  'goal',
-] as const)('discards a late account response when the %s changes', async (scope) => {
-  let complete: (response: SavingsPlanFundingResponse) => void = () =>
-    undefined;
-  jest.mocked(fetchExistingSavingsPlanFunding).mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        complete = resolve;
-      })
-  );
-  jest
-    .mocked(fetchExistingSavingsPlanFunding)
-    .mockResolvedValue({ status: 'pending' });
-  const view = render(panel());
-  if (scope === 'user') mockUserId = 'user-2';
-  if (scope === 'merchant') mockMerchantId = 'merchant-2';
-  view.rerender(panel(scope === 'goal' ? { ...goal, id: 'goal-2' } : goal));
-  await act(async () => {
-    complete(ready);
-  });
-  expect(screen.queryByText('0000008907')).toBeNull();
-});
-
-it('hides the account immediately when the user signs out', async () => {
+it('hides the guidance immediately when the user signs out', async () => {
   const view = render(panel());
   await act(async () => {});
   mockUserId = undefined;
   view.rerender(panel());
-  expect(screen.queryByText('0000008907')).toBeNull();
+  expect(screen.queryByText('Add from your wallet')).toBeNull();
   expect(
     screen.getByText('Sign in to add to this savings plan.')
   ).toBeOnTheScreen();

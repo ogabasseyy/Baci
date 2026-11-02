@@ -87,43 +87,34 @@ beforeEach(async () => {
   });
 });
 
-it('shows the plan account with no amount and an empty ordinary wallet', async () => {
+it('shows wallet guidance, never the plan account, with no amount and an empty ordinary wallet', async () => {
   render(modal());
   await act(async () => {});
-  expect(screen.getByText('0000008907')).toBeOnTheScreen();
-  expect(screen.getByText('FAAS (SANDBOX)')).toBeOnTheScreen();
+  expect(screen.getByText('Add from your wallet')).toBeOnTheScreen();
+  expect(screen.queryByText('0000008907')).toBeNull();
+  expect(screen.queryByText('FAAS (SANDBOX)')).toBeNull();
   expect(screen.queryByLabelText('Savings top-up amount')).toBeNull();
   expect(screen.queryByText(/Available in wallet/)).toBeNull();
+  expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
   expect(onFundWallet).not.toHaveBeenCalled();
   expect(onAddSavings).not.toHaveBeenCalled();
 });
 
-it('does not turn the bank-transfer action into an old-wallet top-up', async () => {
-  render(modal());
-  await act(async () => {});
-  fireEvent.press(
-    screen.getByRole('button', { name: 'Refresh savings account' })
-  );
-  await act(async () => {});
-  expect(fetchExistingSavingsPlanFunding).toHaveBeenCalledTimes(2);
-  expect(onFundWallet).not.toHaveBeenCalled();
-  expect(onAddSavings).not.toHaveBeenCalled();
-});
-
-it('refreshes wallet goal progress when the transfer account is refreshed', async () => {
+it('refreshes wallet goal progress from the guidance panel', async () => {
   const refreshWallet = jest.fn(async () => ({ isError: false }));
   render(modal(goal, true, refreshWallet));
   await act(async () => {});
 
   await act(async () => {
     fireEvent.press(
-      screen.getByRole('button', { name: 'Refresh savings account' })
+      screen.getByRole('button', { name: 'Refresh savings progress' })
     );
     await Promise.resolve();
   });
 
-  expect(fetchExistingSavingsPlanFunding).toHaveBeenCalledTimes(2);
   expect(refreshWallet).toHaveBeenCalledTimes(1);
+  expect(onFundWallet).not.toHaveBeenCalled();
+  expect(onAddSavings).not.toHaveBeenCalled();
 });
 
 it('shows a failed wallet refresh without claiming the transfer was received', async () => {
@@ -136,7 +127,7 @@ it('shows a failed wallet refresh without claiming the transfer was received', a
 
   await act(async () => {
     fireEvent.press(
-      screen.getByRole('button', { name: 'Refresh savings account' })
+      screen.getByRole('button', { name: 'Refresh savings progress' })
     );
     await Promise.resolve();
   });
@@ -154,7 +145,7 @@ it('shows an error when the parent wallet refresh rejects', async () => {
 
   await act(async () => {
     fireEvent.press(
-      screen.getByRole('button', { name: 'Refresh savings account' })
+      screen.getByRole('button', { name: 'Refresh savings progress' })
     );
     await Promise.resolve();
   });

@@ -291,7 +291,7 @@ describe('StartSavingsScreen', () => {
     expect(mockRandomUUID).toHaveBeenCalledTimes(2);
   });
 
-  it('creates the plan then shows its dedicated account for bank transfer funding', async () => {
+  it('creates the plan then asks for wallet funding without showing the plan account', async () => {
     mockFetchSavingsPlanFunding.mockResolvedValue({
       status: 'ready',
       accounts: [
@@ -334,8 +334,12 @@ describe('StartSavingsScreen', () => {
       )
     );
     await waitFor(() =>
-      expect(screen.getByText('0001234567')).toBeOnTheScreen()
+      expect(
+        screen.getByText(/Plans do not take bank transfers/)
+      ).toBeOnTheScreen()
     );
+    expect(screen.queryByText('0001234567')).toBeNull();
+    expect(screen.queryByText('Synthetic bank')).toBeNull();
   });
 
   it('creates an auto-debit savings goal with a selected saved card', async () => {

@@ -5,8 +5,7 @@ import { CONFIG } from '@/lib/config';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { useAuthStore } from '@/stores/auth-store';
 import { SavingsPlanCardContribution } from './savings/SavingsPlanCardContribution';
-import { SavingsPlanTransferPanel } from './savings/SavingsPlanTransferPanel';
-import { useSavingsPlanFunding } from './savings/use-savings-plan-funding';
+import { SavingsPlanWalletNote } from './savings/SavingsPlanWalletNote';
 
 type Props = {
   addAmount: string;
@@ -29,16 +28,7 @@ export function WalletSavingsPlanFunding({
     pickMerchantId(merchantId, CONFIG.MERCHANT_ID) ?? undefined;
   const enabled = Boolean(userId && activeMerchantId);
   const manual = goal.source_mode === 'manual';
-  const funding = useSavingsPlanFunding({
-    activeMerchantId,
-    activeMerchantSlug: CONFIG.MERCHANT_SLUG?.trim() || undefined,
-    goalId: enabled && manual ? goal.id : null,
-    identityKey: userId,
-    loadExisting: enabled && manual,
-  });
-
-  const refreshFundingAndProgress = async () => {
-    await funding.fetchExistingPlanFunding();
+  const refreshProgress = async () => {
     const walletRefreshResult = await onRefreshWallet?.();
     if (
       walletRefreshResult &&
@@ -63,13 +53,10 @@ export function WalletSavingsPlanFunding({
   return (
     <View style={{ gap: 20 }}>
       {manual ? (
-        <SavingsPlanTransferPanel
+        <SavingsPlanWalletNote
           key={JSON.stringify([userId, activeMerchantId, goal.id])}
-          account={funding.planFundingAccounts[0]}
           colors={colors}
-          error={funding.fundingError}
-          onRefresh={refreshFundingAndProgress}
-          phase={funding.planFundingPhase}
+          onRefresh={refreshProgress}
         />
       ) : null}
       <SavingsPlanCardContribution

@@ -1,7 +1,6 @@
 'use client';
 import { useState } from 'react';
 import { CustomerSavingsStatus } from './customer-savings-status';
-import { FundingPanel } from './funding-panel';
 import { PolicyPanel } from './policy-panel';
 import type {
   SavingsScreenProps,
@@ -22,7 +21,6 @@ export function PurchaseScreenJourney({
 }) {
   const [readers] = useState(() => ({
     policy: async () => source.policy,
-    funding: async () => source.funding,
   }));
   const eligibility = source.eligibility;
   const allowed =
@@ -50,33 +48,23 @@ export function PurchaseScreenJourney({
         />
       </fieldset>
       {allowed ? (
-        <>
-          <FundingPanel
-            requestKey={JSON.stringify([
-              source.sessionKey,
-              source.goalId,
-              source.policy.revisionId,
-            ])}
-            load={readers.funding}
+        source.progress.status === 'ready' ? (
+          <CustomerSavingsStatus
+            {...source.progress}
+            device={source.policy.device}
+            decision={{
+              ...source.progress.decision,
+              purchaseAction: 'blocked',
+            }}
+            actionPending={false}
+            onReviewPurchase={() => undefined}
           />
-          {source.progress.status === 'ready' ? (
-            <CustomerSavingsStatus
-              {...source.progress}
-              device={source.policy.device}
-              decision={{
-                ...source.progress.decision,
-                purchaseAction: 'blocked',
-              }}
-              actionPending={false}
-              onReviewPurchase={() => undefined}
-            />
-          ) : (
-            <CustomerSavingsStatus
-              {...source.progress}
-              device={source.policy.device}
-            />
-          )}
-        </>
+        ) : (
+          <CustomerSavingsStatus
+            {...source.progress}
+            device={source.policy.device}
+          />
+        )
       ) : (
         <p role="status">
           {eligibility.status === 'pending'

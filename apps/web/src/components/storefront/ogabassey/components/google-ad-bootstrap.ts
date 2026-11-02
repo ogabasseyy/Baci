@@ -146,7 +146,7 @@ export function ensureGoogleAdManagerBoot() {
         { once: true }
       );
       document.head.appendChild(script);
-    });
+    }).catch(reject);
   }).catch((error) => {
     googleAdManagerBootPromise = null;
     throw error;

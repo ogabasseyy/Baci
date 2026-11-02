@@ -86,17 +86,19 @@ export function CookieConsent() {
               <div className="flex-1 space-y-1">
                 <h3 className="font-semibold text-sm">We value your privacy</h3>
                 <p className="text-sm text-muted-foreground leading-snug">
-                  We use cookies to improve your experience.
-                </p>
-                <p className="text-sm text-muted-foreground leading-snug">
-                  By using our store, you agree to our{' '}
-                  <Link
-                    href={asRoute(`${basePath}/privacy`)}
-                    prefetch={false}
-                    className="underline underline-offset-4 hover:text-white"
-                  >
-                    Read our policy
-                  </Link>
+                  <span className="block">
+                    We use cookies to improve your experience.
+                  </span>
+                  <span className="block">
+                    By using our store, you agree to our{' '}
+                    <Link
+                      href={asRoute(`${basePath}/privacy`)}
+                      prefetch={false}
+                      className="underline underline-offset-4 hover:text-white"
+                    >
+                      Read our policy
+                    </Link>
+                  </span>
                 </p>
               </div>
             </div>

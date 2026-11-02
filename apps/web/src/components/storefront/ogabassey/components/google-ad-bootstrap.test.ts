@@ -157,4 +157,27 @@ describe('google-ad-bootstrap', () => {
       document.head.querySelector(`script[src="${GPT_SCRIPT_SRC}"]`)
     ).not.toBeNull();
   });
+
+  it('rejects and resets the boot promise when waitForLcpWindowEnd rejects', async () => {
+    mockWaitForLcpWindowEnd.mockRejectedValueOnce(
+      new Error('LCP observer failed')
+    );
+
+    const { ensureGoogleAdManagerBoot } = await loadBootstrap();
+
+    await expect(ensureGoogleAdManagerBoot()).rejects.toThrow(
+      'LCP observer failed'
+    );
+    expect(
+      document.head.querySelector(`script[src="${GPT_SCRIPT_SRC}"]`)
+    ).toBeNull();
+
+    void ensureGoogleAdManagerBoot();
+    await Promise.resolve();
+
+    expect(mockWaitForLcpWindowEnd).toHaveBeenCalledTimes(2);
+    expect(
+      document.head.querySelector(`script[src="${GPT_SCRIPT_SRC}"]`)
+    ).not.toBeNull();
+  });
 });

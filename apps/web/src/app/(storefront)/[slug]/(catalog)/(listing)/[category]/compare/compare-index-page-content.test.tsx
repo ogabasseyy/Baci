@@ -35,17 +35,18 @@ describe('CompareIndexPageContent', () => {
       />
     );
 
-    expect(
-      screen.getByRole('heading', { name: 'Smartphones comparisons' })
-    ).toHaveAttribute('data-cwv-lcp-copy', 'compare');
+    const heading = screen.getByRole('heading', {
+      name: 'Smartphones comparisons',
+    });
+    const intro = screen.getByText(/available from Demo Store/i);
+    expect(heading).toBeInTheDocument();
+    expect(heading).toHaveAttribute('data-cwv-lcp-copy', 'compare');
     expect(screen.getByRole('main')).toHaveClass(
       'bg-store-background',
       'text-store-background-text'
     );
-    expect(screen.getByText(/available from Demo Store/i)).toHaveAttribute(
-      'data-cwv-lcp-copy',
-      'authority-hub'
-    );
+    expect(intro).toBeInTheDocument();
+    expect(intro).toHaveAttribute('data-cwv-lcp-copy', 'authority-hub');
     expect(
       screen.getByRole('link', {
         name: 'Compare Google Pixel 8 with Xiaomi 13T',

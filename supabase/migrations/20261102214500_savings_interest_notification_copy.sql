@@ -11,10 +11,12 @@
 -- live balance and never claims completion, which only the reversal-aware
 -- goal-completed notice announces.
 --
--- Only the copy changes. Each notifier still fires only for recorded paid
--- interest with a positive amount, keeps its event key, and still never
--- fires for accruals (pending interest) or reversals; reversals keep voiding
--- the original notice.
+-- Besides the copy, one firing condition changes: the primary-wallet notifier
+-- now announces only receipts of a production integration owned by the
+-- receipt's merchant, the same interest the app's savings display counts. Each
+-- notifier otherwise still fires only for recorded paid interest with a
+-- positive amount, keeps its event key, and still never fires for accruals
+-- (pending interest) or reversals; reversals keep voiding the original notice.
 --
 -- The two helpers are SECURITY INVOKER and called only from the SECURITY
 -- DEFINER notifier triggers (which run as their owner), so no API role is

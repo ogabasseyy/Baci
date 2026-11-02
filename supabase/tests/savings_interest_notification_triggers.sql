@@ -223,4 +223,32 @@ SELECT pg_temp.check(
   savings_notifications.interest_progress(pg_temp.id(34)) = 'Open your savings to see your latest balance.',
   'a cancelled goal must read the neutral prompt, never a progress percentage');
 
+-- 13. A payout on a completed goal, through the real primary-wallet trigger,
+-- carries the exact title and the neutral at-target line (never a completion
+-- claim).
+INSERT INTO public.customer_savings_goals(id, merchant_id, customer_id, product_id, title, status,
+  source_mode, target_amount, current_amount, contribution_amount, contribution_frequency,
+  start_date, maturity_date, terms_accepted_at, non_withdrawable_accepted_at)
+  VALUES (pg_temp.id(35), pg_temp.id(10), pg_temp.id(20), pg_temp.id(11), 'Interest copy goal',
+    'completed', 'manual', 1000, 1000, 100, 'daily', current_date, current_date + 30, now(), now());
+SET LOCAL session_replication_role = replica;
+INSERT INTO piggyvest_primary.paid_interest_crosswalks(id, integration_id, goal_id, api_wallet_id,
+  api_customer_id, onboarding_customer_id, webhook_customer_id, source_wallet_id, accrued_wallet_id,
+  destination_wallet_id, envelope_destination_wallet_id, provider_evidence_sha256,
+  policy_evidence_sha256, policy_reference, allocation_policy, enabled)
+VALUES (pg_temp.id(46), pg_temp.id(40), pg_temp.id(35), 'copy-api-wallet-c', 'copy-api-customer-c',
+  'copy-onboarding-customer-c', 'copy-webhook-customer-c', 'copy-source-c', 'copy-accrued-c',
+  'copy-destination-c', NULL, repeat('a', 64), repeat('b', 64), 'synthetic-interest-copy-fixture-c',
+  'provider_net_is_customer_plan_interest', true);
+SET LOCAL session_replication_role = origin;
+INSERT INTO piggyvest_primary.paid_interest_receipts(integration_id, payout_id, crosswalk_id,
+  goal_id, merchant_id, customer_id, net_kobo, financial_identity, body_digest)
+  VALUES (pg_temp.id(40), 'copy-payout-completed', pg_temp.id(46), pg_temp.id(35), pg_temp.id(10),
+    pg_temp.id(20), 3000, jsonb_build_object('payoutId', 'copy-payout-completed'), repeat('a', 64));
+SELECT pg_temp.check(
+  (SELECT count(*) = 1 AND bool_and(notice.title = 'Your savings just grew 🎉'
+     AND notice.body = '₦30.00 interest added to your savings. Open your savings to see your latest balance.')
+   FROM pg_temp.notices(pg_temp.id(35)) notice),
+  'a ₦30 payout on a completed goal must enqueue one notice with the neutral at-target line');
+
 ROLLBACK;

@@ -87,12 +87,23 @@ INSERT INTO piggyvest_primary.integrations(id,merchant_id,business_id,environmen
   VALUES ('00000000-0000-4000-8000-0000000000b4','00000000-0000-4000-8000-000000000001','fixture-business','production','recovery_cutover_fixture',true);
 INSERT INTO piggyvest_primary.savings_authorities(integration_id,executor_login,enabled)
   VALUES ('00000000-0000-4000-8000-0000000000b4','recovery_cutover_fixture',true);
+-- Mixed set: the second integration also holds its own attributable transfer
+-- for the same goal. The older one under integration 04 is still unattributed
+-- to this scope, so the read must still refuse instead of returning only the
+-- attributable one. The extra rows are removed again before the snapshot check.
+INSERT INTO piggyvest_primary.onboarding_intents(id,integration_id,merchant_id,customer_id,user_id,request_fingerprint,state,provider_customer_id,provider_wallet_id)
+  VALUES ('00000000-0000-4000-8000-0000000000b5','00000000-0000-4000-8000-0000000000b4','00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000003',repeat('c',64),'unknown',NULL,NULL);
+INSERT INTO piggyvest_primary.savings_operations(id,integration_id,intent_id,goal_id,amount_kobo,source_wallet_id,destination_wallet_id,reference,state,wallet_transaction_id,created_at)
+  SELECT '00000000-0000-4000-8000-0000000000b6','00000000-0000-4000-8000-0000000000b4','00000000-0000-4000-8000-0000000000b5',goal_id,1100,'wallet','destination','pvb-save-mixed-own-fixture','dispatched',wallet_transaction_id,created_at+interval '1 hour'
+  FROM piggyvest_primary.savings_operations WHERE id='00000000-0000-4000-8000-000000000008';
 SET SESSION AUTHORIZATION recovery_cutover_fixture;
 DO $$ BEGIN
   PERFORM piggyvest_primary.read_pending_savings('{"merchantId":"00000000-0000-4000-8000-000000000001","customerId":"00000000-0000-4000-8000-000000000002","userId":"00000000-0000-4000-8000-000000000003","integrationId":"00000000-0000-4000-8000-0000000000b4","businessId":"fixture-business","environment":"production"}','00000000-0000-4000-8000-000000000006');
   RAISE EXCEPTION 'in-flight transfer under another integration read as nothing pending';
 EXCEPTION WHEN insufficient_privilege THEN NULL; END $$;
 RESET SESSION AUTHORIZATION;
+DELETE FROM piggyvest_primary.savings_operations WHERE id='00000000-0000-4000-8000-0000000000b6';
+DELETE FROM piggyvest_primary.onboarding_intents WHERE id='00000000-0000-4000-8000-0000000000b5';
 -- Reads changed nothing: same operations, same states, same balances.
 DO $$ BEGIN
   IF EXISTS (SELECT id,state,amount_kobo,reference FROM piggyvest_primary.savings_operations

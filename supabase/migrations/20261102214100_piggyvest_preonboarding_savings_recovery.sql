@@ -32,6 +32,26 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'savings recovery ownership unavailable' USING ERRCODE='42501';
   END IF;
+  -- The answer must be definite. Any reserved or dispatched transfer on this
+  -- goal that the scoped read cannot attribute (for example one made under
+  -- another integration of the same merchant before a cutover, or one with no
+  -- intent) leaves the in-flight set unknown, even when an attributable one
+  -- also exists, so refuse instead of letting the client act on a partial view.
+  IF EXISTS (
+    SELECT 1 FROM piggyvest_primary.savings_operations operation
+    WHERE operation.goal_id=read_pending_savings.goal_id
+      AND operation.state IN ('reserved','dispatched')
+      AND NOT EXISTS (
+        SELECT 1 FROM piggyvest_primary.onboarding_intents intent
+        WHERE intent.id=operation.intent_id
+          AND intent.integration_id=operation.integration_id
+          AND operation.integration_id=(scope->>'integrationId')::uuid
+          AND intent.merchant_id=(scope->>'merchantId')::uuid
+          AND intent.customer_id=(scope->>'customerId')::uuid
+          AND intent.user_id=(scope->>'userId')::uuid)
+  ) THEN
+    RAISE EXCEPTION 'savings recovery ownership unavailable' USING ERRCODE='42501';
+  END IF;
   SELECT jsonb_build_object('operationId',operation.id,'goalId',operation.goal_id,
     'amountKobo',operation.amount_kobo,'state',operation.state) INTO recovered
   FROM piggyvest_primary.savings_operations operation
@@ -45,17 +65,6 @@ BEGIN
     AND goal.customer_id=intent.customer_id AND goal.merchant_id=intent.merchant_id
     AND operation.state IN ('reserved','dispatched')
   ORDER BY operation.created_at,operation.id LIMIT 1;
-  -- "Nothing pending" must be definite. A reserved or dispatched transfer on
-  -- this goal that the scoped read could not attribute (for example one made
-  -- under another integration of the same merchant before a cutover) leaves
-  -- the answer unknown, so refuse instead of letting the client release it.
-  IF recovered IS NULL AND EXISTS (
-    SELECT 1 FROM piggyvest_primary.savings_operations operation
-    WHERE operation.goal_id=read_pending_savings.goal_id
-      AND operation.state IN ('reserved','dispatched')
-  ) THEN
-    RAISE EXCEPTION 'savings recovery ownership unavailable' USING ERRCODE='42501';
-  END IF;
   RETURN recovered;
 END $$;
 REVOKE ALL ON FUNCTION piggyvest_primary.read_pending_savings(jsonb,uuid) FROM PUBLIC,anon,authenticated,service_role;

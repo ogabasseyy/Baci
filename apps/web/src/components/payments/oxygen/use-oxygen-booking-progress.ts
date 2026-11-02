@@ -116,6 +116,7 @@ export function useOxygenBookingProgress(
         !enabled ||
         busy ||
         ![
+          'refresh_kyc',
           'refresh_details',
           'refresh_eligibility',
           'refresh_payment_setup',
@@ -124,6 +125,7 @@ export function useOxygenBookingProgress(
         return;
       const action = pendingReadRecovery(snapshot);
       if (
+        action === 'refresh_kyc' ||
         action === 'refresh_details' ||
         action === 'refresh_eligibility' ||
         action === 'refresh_payment_setup'

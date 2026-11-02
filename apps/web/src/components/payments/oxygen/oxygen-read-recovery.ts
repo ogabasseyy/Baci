@@ -26,18 +26,19 @@ export function pendingReadRecovery(
     oxygenEligibilityPrerequisites(snapshot.state)
   )
     return 'refresh_eligibility';
+  if (
+    pending.action === 'refresh_kyc' &&
+    snapshot.state.applicationReference &&
+    snapshot.stage !== 'activated' &&
+    snapshot.stage !== 'reconciliation_required'
+  )
+    return 'refresh_kyc';
   if (!snapshot.state.bookingReference) return null;
   if (
     pending.action === 'refresh_payment_setup' &&
     ['payment_required', 'ready_for_activation'].includes(snapshot.stage)
   )
     return 'refresh_payment_setup';
-  if (
-    pending.action === 'refresh_kyc' &&
-    snapshot.stage === 'booked' &&
-    snapshot.state.kyc?.address_status === 'PROCESSING'
-  )
-    return 'refresh_kyc';
   if (
     pending.action === 'refresh_details' &&
     (snapshot.stage === 'booked' || snapshot.stage === 'approval_required')

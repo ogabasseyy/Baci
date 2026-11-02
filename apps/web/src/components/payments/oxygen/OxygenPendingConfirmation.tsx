@@ -62,8 +62,10 @@ export function OxygenPendingConfirmation({
           statusUnavailable={Boolean(error)}
           busy={busy}
           onCheck={
-            pendingReadRecovery(snapshot) === 'refresh_kyc' && checkAddress
-              ? checkAddress
+            pendingReadRecovery(snapshot) === 'refresh_kyc'
+              ? snapshot.stage === 'booked' && checkAddress
+                ? checkAddress
+                : (checkPending ?? refresh)
               : refresh
           }
         />
@@ -110,6 +112,7 @@ export function OxygenPendingConfirmation({
           busy={busy}
           refresh={
             [
+              'refresh_kyc',
               'refresh_details',
               'refresh_eligibility',
               'refresh_payment_setup',

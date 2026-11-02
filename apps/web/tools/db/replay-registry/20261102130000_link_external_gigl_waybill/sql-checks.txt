@@ -1,0 +1,1 @@
+supabase/tests/gigl_external_waybill_link.sql

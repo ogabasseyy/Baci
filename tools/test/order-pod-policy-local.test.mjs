@@ -111,6 +111,28 @@ test('POD persistence policy and concurrent flag revocation', async () => {
           'utf8'
         )
       );
+      const initialHardening = readFileSync(
+        join(
+          repository,
+          'supabase/migrations/20261101071734_harden_initial_pod_trigger.sql'
+        ),
+        'utf8'
+      );
+      await admin.query(initialHardening);
+      await admin.query(
+        "SELECT set_config('request.jwt.claim.role','service_role',false)"
+      );
+      const initialMerchant = '36700000-0000-4000-8000-000000000005';
+      await admin.query('INSERT INTO public.merchants(id) VALUES($1)', [
+        initialMerchant,
+      ]);
+      await assert.rejects(
+        admin.query(
+          "INSERT INTO public.orders(merchant_id,order_number,total,payment_method) VALUES($1,'early-pod',1,$2)",
+          [initialMerchant, '\tPOD\n']
+        ),
+        { message: 'pay_on_delivery_disabled' }
+      );
       const group = [
         '20261102060000_probe_pod_order_idempotency_hash.sql',
         '20261102061500_align_pod_whitespace_classification.sql',
@@ -130,6 +152,9 @@ test('POD persistence policy and concurrent flag revocation', async () => {
       await admin.query('ROLLBACK');
       assert.equal((await admission.query(probe)).rows[0].absent, true);
       for (const sql of group) await admin.query(sql);
+      // An older pending version can be applied after the final group when
+      // earlier migration history is incomplete; it must not weaken it.
+      await admin.query(initialHardening);
     }
     await admin.query(
       readFileSync(

@@ -14,6 +14,7 @@ const group = [
   '20261102064500_scope_pod_replay_probe',
 ];
 const predecessor = { version: '20261101071733', name: 'enforce_merchant_pay_on_delivery_policy' };
+const correction = { version: '20261101071734', name: 'harden_initial_pod_trigger' };
 
 function run(script, history = '') {
   return spawnSync('bash', ['-e', '-c', script], {
@@ -73,7 +74,7 @@ test('the production group helper encloses the broad grant and revocation in one
   assert.ok(grant >= 0 && revoke > grant);
 });
 
-function runApplier({ history = [], cap = '', phase = 'all', omit = '', extra = false, failMutation = false, missingPredecessor = false, includePredecessor = false } = {}) {
+function runApplier({ history = [], cap = '', phase = 'all', omit = '', extra = false, middle = false, failMutation = false, missingPredecessor = false, includePredecessor = false, includeCorrection = includePredecessor } = {}) {
   const temp = mkdtempSync(join(tmpdir(), 'pod-atomic-applier-'));
   try {
     const bin = join(temp, 'bin');
@@ -85,10 +86,15 @@ function runApplier({ history = [], cap = '', phase = 'all', omit = '', extra = 
       const name = `${predecessor.version}_${predecessor.name}.sql`;
       copyFileSync(join(root, 'supabase/migrations', name), join(migrations, name));
     }
+    if (includeCorrection) {
+      const name = `${correction.version}_${correction.name}.sql`;
+      copyFileSync(join(root, 'supabase/migrations', name), join(migrations, name));
+    }
     for (const name of group) {
       if (name !== omit) copyFileSync(join(root, 'supabase/migrations', `${name}.sql`), join(migrations, `${name}.sql`));
     }
     if (extra) writeFileSync(join(migrations, '20261102062000_unrelated.sql'), 'SELECT 42;');
+    if (middle) writeFileSync(join(migrations, '20261101073101_bind_loyalty_checkout_replay_redemption.sql'), 'SELECT 42;');
     writeFileSync(join(bin, 'curl'), `#!/usr/bin/env bash
 set -euo pipefail
 payload="$(cat)"
@@ -105,7 +111,7 @@ fi
       cwd: root, encoding: 'utf8', env: {
         ...process.env, PATH: `${bin}:${process.env.PATH}`, MIGRATIONS_DIR: migrations,
         SUPABASE_ACCESS_TOKEN: 'synthetic', SUPABASE_PROJECT_REF: 'synthetic',
-        POD_TEST_LOG: log, POD_TEST_RESPONSE: JSON.stringify(missingPredecessor ? history : [predecessor, ...history]), POD_TEST_FAIL: failMutation ? '1' : '0',
+        POD_TEST_LOG: log, POD_TEST_RESPONSE: JSON.stringify(missingPredecessor ? history : [predecessor, correction, ...history]), POD_TEST_FAIL: failMutation ? '1' : '0',
         MIGRATION_MAX_VERSION: cap, MIGRATION_PHASE: phase,
       },
     });
@@ -135,6 +141,9 @@ test('production applier never commits a partial POD group under caps or invalid
     [{ missingPredecessor: true }, /POD enforcement predecessor is missing/],
     [{ missingPredecessor: true, history: [{ version: predecessor.version, name: 'wrong' }] }, /POD enforcement migration identity mismatch/],
     [{ missingPredecessor: true, includePredecessor: true, history: group.map((name) => ({ version: name.slice(0,14), name: name.slice(15) })) }, /POD enforcement predecessor is missing/],
+    [{ missingPredecessor: true, includePredecessor: true, history: [correction] }, /initial POD hardening is recorded without its predecessor/],
+    [{ missingPredecessor: true, history: [predecessor] }, /initial POD hardening migration is missing/],
+    [{ missingPredecessor: true, includePredecessor: true, includeCorrection: false }, /initial POD hardening migration is missing/],
   ]) {
     const result = runApplier(options);
     assert.notEqual(result.status, 0);
@@ -160,5 +169,43 @@ test('production applier installs an unrecorded predecessor before the atomic PO
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.requests.length, 3);
   assert.match(result.requests[1].query, /CREATE TRIGGER orders_enforce_pay_on_delivery_policy/);
+  assert.match(result.requests[1].query, /harden_initial_pod_trigger/);
   assert.match(result.requests[2].query, /is_storefront_pod_order_idempotency_hash/);
+});
+
+test('the initial POD trigger and whitespace hardening are never split by a version cap', () => {
+  const below = runApplier({ missingPredecessor: true, includePredecessor: true, cap: predecessor.version });
+  assert.equal(below.status, 0, below.stderr);
+  assert.equal(below.requests.length, 1);
+  const atPair = runApplier({ missingPredecessor: true, includePredecessor: true, cap: correction.version });
+  assert.equal(atPair.status, 0, atPair.stderr);
+  assert.equal(atPair.requests.length, 2);
+  assert.match(atPair.requests[1].query, /CREATE TRIGGER orders_enforce_pay_on_delivery_policy/);
+  assert.match(atPair.requests[1].query, /harden_initial_pod_trigger/);
+});
+
+test('a previously recorded predecessor receives the adjacent hardening without reapplying it', () => {
+  const result = runApplier({ missingPredecessor: true, includeCorrection: true, history: [predecessor] });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.requests.length, 3);
+  assert.doesNotMatch(result.requests[1].query, /CREATE TRIGGER orders_enforce_pay_on_delivery_policy/);
+  assert.match(result.requests[1].query, /harden_initial_pod_trigger/);
+});
+
+test('retroactive initial hardening remains applicable after later POD migrations', () => {
+  const history = [predecessor, { version: '20261101073101', name: 'bind_loyalty_checkout_replay_redemption' }, ...group.map((name) => ({ version: name.slice(0,14), name: name.slice(15) }))];
+  const result = runApplier({ missingPredecessor: true, includeCorrection: true, history });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.requests.length, 2);
+  assert.match(result.requests[1].query, /harden_initial_pod_trigger/);
+  assert.doesNotMatch(result.requests[1].query, /CREATE TRIGGER orders_enforce_pay_on_delivery_policy/);
+});
+
+test('unrelated intervening migrations retain their chronological order', () => {
+  const result = runApplier({ missingPredecessor: true, includePredecessor: true, middle: true });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.requests.length, 4);
+  assert.match(result.requests[1].query, /harden_initial_pod_trigger/);
+  assert.match(result.requests[2].query, /SELECT 42;/);
+  assert.match(result.requests[3].query, /is_storefront_pod_order_idempotency_hash/);
 });

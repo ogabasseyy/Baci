@@ -53,12 +53,18 @@ export async function validatePayOnDeliveryPolicy(input: {
   getReplayClient: () => PolicyClient;
 }): Promise<PolicyResult> {
   if (!isPayOnDelivery(input.paymentMethod)) return { ok: true };
-  const { data, error } = await input.client.rpc(
-    'get_storefront_payment_settings',
-    {
-      p_merchant_id: input.merchantId,
-    }
-  );
+  let data: unknown;
+  let error: unknown;
+  try {
+    ({ data, error } = await input.client.rpc(
+      'get_storefront_payment_settings',
+      {
+        p_merchant_id: input.merchantId,
+      }
+    ));
+  } catch {
+    return unavailable();
+  }
   if (error || !Array.isArray(data) || data.length > 1) return unavailable();
   const settings: unknown = data[0];
   if (

@@ -157,4 +157,18 @@ describe('merchant POD admission', () => {
     expect(result).toMatchObject({ ok: false, status: 503 });
     expect(JSON.stringify(result)).not.toContain('private signing detail');
   });
+  it('maps a rejected settings request to a safe unavailable response', async () => {
+    const result = await validatePayOnDeliveryPolicy({
+      ...input,
+      client: {
+        rpc: vi.fn().mockRejectedValue(new Error('private transport detail')),
+      },
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      status: 503,
+      body: { code: 'POD_POLICY_UNAVAILABLE' },
+    });
+    expect(JSON.stringify(result)).not.toContain('private transport detail');
+  });
 });

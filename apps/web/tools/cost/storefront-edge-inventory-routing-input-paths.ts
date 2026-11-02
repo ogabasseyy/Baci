@@ -31,6 +31,7 @@ export const STOREFRONT_EDGE_INVENTORY_ROUTING_INPUT_PATHS = [
   'apps/web/src/lib/proxy/legacy-routing.ts',
   'apps/web/src/lib/proxy/machine-responses.ts',
   'apps/web/src/lib/proxy/merchant-tracing.ts',
+  'apps/web/src/lib/proxy/oxygen-payment-surface.ts',
   'apps/web/src/lib/proxy/path-normalization.ts',
   'apps/web/src/lib/proxy/pdp-preflight.ts',
   'apps/web/src/lib/proxy/platform-routing.ts',

@@ -1,5 +1,7 @@
 /** Reviewed behavioral suites for split modules; each association must resolve through real imports. */
 export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
+  'apps/web/src/lib/payments/oxygen/runtime-provider-token-cache.ts':
+    'apps/web/src/lib/payments/oxygen/runtime-connection-token-cache.test.ts',
   'apps/web/src/components/payments/oxygen/oxygen-checkout-ownership.ts':
     'apps/web/src/components/payments/oxygen/OxygenStorefrontCheckout.test.tsx',
   'apps/web/src/lib/proxy/oxygen-payment-surface.ts':
@@ -17,15 +19,15 @@ export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
   'apps/web/src/app/(storefront)/[slug]/(customer)/account/orders/[orderId]/customer-order-details-client.tsx':
     'apps/web/src/app/(storefront)/[slug]/(customer)/account/orders/[orderId]/page.test.tsx',
   'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order-shipping.ts':
-    'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.test.ts',
+    'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.delivery-and-pay-for-me.test.ts',
   'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order-create.ts':
-    'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.test.ts',
+    'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.creation.test.ts',
   'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order-payment.ts':
-    'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.test.ts',
+    'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.standard-payment.test.ts',
   'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order-financing.ts':
-    'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.test.ts',
+    'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.credit-direct.test.ts',
   'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order-card-payment.ts':
-    'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.test.ts',
+    'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.creation.test.ts',
   'apps/web/src/lib/payments/oxygen/interaction-payload.ts':
     'apps/web/src/lib/payments/oxygen/interaction.toanalyticsevent.test.ts',
   'apps/web/src/lib/payments/oxygen/interaction-presentation.ts':

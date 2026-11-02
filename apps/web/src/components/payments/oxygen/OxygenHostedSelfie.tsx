@@ -1,6 +1,6 @@
 'use client';
 import { ArrowLeft, Smartphone } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { OxygenPhoneHandoff } from './OxygenPhoneHandoff';
 import { OxygenSelfieLoading } from './OxygenSelfieLoading';
 import { useOxygenSelfieStatus } from './use-oxygen-selfie-status';
@@ -49,6 +49,7 @@ export function OxygenHostedSelfie({
     trustedOrigin ? workflowId : undefined,
     onConfirmed
   );
+  const retryFromHint = useEffectEvent(() => status.retry());
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (
@@ -61,11 +62,11 @@ export function OxygenHostedSelfie({
         return;
       lastHint.current = Date.now();
       setConfirming(true);
-      status.retry(); // Hint only; KYC must confirm DONE.
+      retryFromHint(); // Hint only; KYC must confirm DONE.
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [status.retry, trustedOrigin]);
+  }, [trustedOrigin]);
   return (
     <section
       className="flex h-full min-h-0 flex-col bg-white"

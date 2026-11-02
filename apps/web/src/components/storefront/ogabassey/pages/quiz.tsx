@@ -185,7 +185,10 @@ export function OgabasseyV2Quiz({ merchantSlug }: OgabasseyV2QuizProps) {
           </div>
         </section>
 
-        {isLoading || status === 'question' || status === 'submitting' ? null : (
+        {isLoading ||
+        status === 'question' ||
+        status === 'submitting' ||
+        status === 'result' ? null : (
           <QuizPlayInAppPanel
             events={appQuiz.events}
             onRetry={appQuiz.retry}

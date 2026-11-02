@@ -103,6 +103,37 @@ describe('listCurrentQuizEventsV2', () => {
     });
   });
 
+  it('fails closed when the pagination cursor does not advance', async () => {
+    const { rpc, supabase } = client((offset) => ({
+      data: appQuizEventsResponse([appQuizEvent({ id: id(1) })], {
+        hasMore: true,
+        nextOffset: offset,
+        offset,
+      }),
+      error: null,
+    }));
+
+    const result = await listCurrentQuizEventsV2(supabase, MERCHANT_ID);
+
+    expect(result.ok).toBe(false);
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when more pages exist but no next offset is given', async () => {
+    const { supabase } = client((offset) => ({
+      data: appQuizEventsResponse([], {
+        hasMore: true,
+        nextOffset: null,
+        offset,
+      }),
+      error: null,
+    }));
+
+    const result = await listCurrentQuizEventsV2(supabase, MERCHANT_ID);
+
+    expect(result.ok).toBe(false);
+  });
+
   it('returns the RPC error without partial events', async () => {
     const error = { code: 'QZ031', message: 'not_authorized' };
     const { supabase } = client(() => ({ data: null, error }));

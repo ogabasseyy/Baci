@@ -48,7 +48,20 @@ export async function listCurrentQuizEventsV2(
     serverNow ||= parsed.data.serverNow;
     events.push(...parsed.data.events);
     const { pagination } = parsed.data;
-    offset = pagination?.hasMore ? pagination.nextOffset : null;
+    if (!pagination?.hasMore) {
+      offset = null;
+    } else if (
+      pagination.nextOffset === null ||
+      pagination.nextOffset <= offset
+    ) {
+      // A cursor that does not advance would repeat a page or drop the rest.
+      return {
+        error: new Error('Quiz listing cursor did not advance'),
+        ok: false,
+      };
+    } else {
+      offset = pagination.nextOffset;
+    }
   }
   if (offset !== null) {
     logger.warn({

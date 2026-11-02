@@ -1,19 +1,9 @@
 'use client';
 
-import {
-  AlertCircle,
-  Check,
-  FolderOpen,
-  Loader2,
-  Search,
-  Trash2,
-  Upload,
-} from 'lucide-react';
-import Image from 'next/image';
+import { AlertCircle, FolderOpen, Loader2, Search, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { CopyButton } from '@/components/ui/copy-button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
@@ -24,6 +14,7 @@ import {
   deleteMediaFile,
   MediaLibraryDeletionError,
 } from './media-library-delete';
+import { MediaLibraryFileCard } from './media-library-file-card';
 import type { MediaFile } from './media-library-types';
 
 export type { MediaFile } from './media-library-types';
@@ -330,78 +321,16 @@ export function MediaLibrary({ onSelect, maxSizeMB = 5 }: MediaLibraryProps) {
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {filteredFiles.map((file) => (
-              <Card
+              <MediaLibraryFileCard
                 key={file.id}
-                className={cn(
-                  'relative group overflow-hidden cursor-pointer transition-all',
-                  selectedFile === file.url && 'ring-2 ring-primary'
-                )}
-                onClick={() => {
-                  if (file.deletionState === 'pending') return;
+                file={file}
+                selected={selectedFile === file.url}
+                onSelect={() => {
                   setSelectedFile(file.url);
-                  if (onSelect) {
-                    onSelect(file.url);
-                  }
+                  onSelect?.(file.url);
                 }}
-              >
-                {file.deletionState === 'pending' && (
-                  <p
-                    role="status"
-                    className="px-2 py-1 text-xs bg-muted text-muted-foreground"
-                  >
-                    Deletion pending — retry to finish
-                  </p>
-                )}
-                {/* Image */}
-                <div className="aspect-square relative bg-muted">
-                  <Image
-                    src={file.url}
-                    alt={file.name}
-                    fill
-                    sizes="(max-width: 768px) 50vw, 384px"
-                    className="object-cover"
-                  />
-
-                  {/* Selection indicator */}
-                  {selectedFile === file.url && (
-                    <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full p-1">
-                      <Check className="size-4" />
-                    </div>
-                  )}
-
-                  {/* Hover overlay */}
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <CopyButton
-                      value={file.url}
-                      className="size-8 bg-secondary text-secondary-foreground hover:bg-secondary/80 border-0"
-                      label="Copy URL"
-                      successLabel="Copied!"
-                    />
-                    <Button
-                      size="icon"
-                      variant="destructive"
-                      className="size-8"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(file.id, file.name);
-                      }}
-                      aria-label={`Delete ${file.name}`}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                {/* File info */}
-                <div className="p-2">
-                  <p className="text-xs font-medium truncate" title={file.name}>
-                    {file.name}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {(file.size / 1024).toFixed(0)} KB
-                  </p>
-                </div>
-              </Card>
+                onDelete={() => handleDelete(file.id, file.name)}
+              />
             ))}
           </div>
         )}

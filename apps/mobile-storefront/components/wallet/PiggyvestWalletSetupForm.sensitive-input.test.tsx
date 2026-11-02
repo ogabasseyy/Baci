@@ -59,6 +59,9 @@ it('clears the BVN after a generic submit failure and shows a safe inline error'
     screen.getByRole('button', { name: 'Create account number' })
   );
   await waitFor(() => expect(screen.getByRole('alert')).toBeOnTheScreen());
+  expect(
+    screen.getByText(/Your BVN was cleared for security/)
+  ).toBeOnTheScreen();
   expect(screen.getByLabelText('BVN').props.value).toBe('');
   expect(screen.getByRole('button', { name: 'Show BVN' })).toBeOnTheScreen();
   expect(screen.queryByText('private provider error')).toBeNull();

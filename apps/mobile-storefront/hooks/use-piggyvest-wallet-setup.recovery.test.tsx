@@ -84,6 +84,118 @@ it('allows BVN resubmission only after GET confirms the pending intent is recove
   expect(api.create).toHaveBeenCalledWith(input, 'user-a');
 });
 
+it('blocks recovery when a fresh status read finds an ownership review hold', async () => {
+  jest
+    .mocked(api.read)
+    .mockResolvedValueOnce({ ...pending, recoverable: true })
+    .mockRejectedValueOnce(
+      Object.assign(new Error('review'), { code: 'OWNERSHIP_REVIEW_REQUIRED' })
+    );
+  const { result } = mount();
+  await waitFor(() => expect(result.current.recoverable).toBe(true));
+
+  await act(async () => {
+    await expect(result.current.recover(input)).rejects.toMatchObject({
+      code: 'OWNERSHIP_REVIEW_REQUIRED',
+    });
+  });
+
+  expect(api.read).toHaveBeenCalledTimes(2);
+  expect(api.create).not.toHaveBeenCalled();
+  expect(result.current.reviewRequired).toBe(true);
+});
+
+it('does not create when the recovery preflight fails transiently', async () => {
+  jest
+    .mocked(api.read)
+    .mockResolvedValueOnce({ ...pending, recoverable: true })
+    .mockRejectedValueOnce(new Error('network unavailable'));
+  const { result } = mount();
+  await waitFor(() => expect(result.current.recoverable).toBe(true));
+
+  await act(async () => {
+    await expect(result.current.recover(input)).rejects.toThrow(
+      'network unavailable'
+    );
+  });
+
+  expect(api.create).not.toHaveBeenCalled();
+  expect(result.current.recoverable).toBe(false);
+});
+
+it('revokes cached recovery when the fresh intent is no longer recoverable', async () => {
+  jest
+    .mocked(api.read)
+    .mockResolvedValueOnce({ ...pending, recoverable: true })
+    .mockResolvedValueOnce(pending);
+  const { result } = mount();
+  await waitFor(() => expect(result.current.recoverable).toBe(true));
+  await act(async () => {
+    await expect(result.current.recover(input)).rejects.toMatchObject({
+      code: 'RECOVERY_NOT_AVAILABLE',
+    });
+  });
+  expect(result.current.recoverable).toBe(false);
+  expect(result.current.state).toBe('processing');
+  expect(api.create).not.toHaveBeenCalled();
+});
+
+it('shows an account found by preflight without submitting BVN again', async () => {
+  const account = {
+    provider: 'piggyvest' as const,
+    accountName: 'Synthetic wallet',
+    accountNumber: '1234567890',
+    bankName: 'Synthetic bank',
+  };
+  jest
+    .mocked(api.read)
+    .mockResolvedValueOnce({ ...pending, recoverable: true })
+    .mockResolvedValueOnce({
+      ...pending,
+      account,
+      provisioningStatus: 'ready',
+    });
+  const { result } = mount();
+  await waitFor(() => expect(result.current.recoverable).toBe(true));
+  await act(async () => {
+    await expect(result.current.recover(input)).rejects.toMatchObject({
+      code: 'RECOVERY_NOT_AVAILABLE',
+    });
+  });
+  expect(result.current.account).toEqual(account);
+  expect(result.current.state).toBe('ready');
+  expect(api.create).not.toHaveBeenCalled();
+});
+
+it('returns to setup when preflight finds no onboarding intent', async () => {
+  jest
+    .mocked(api.read)
+    .mockResolvedValueOnce({ ...pending, recoverable: true })
+    .mockResolvedValueOnce({ ...pending, provisioningStatus: 'not_started' });
+  const { result } = mount();
+  await waitFor(() => expect(result.current.recoverable).toBe(true));
+  await act(async () => {
+    await expect(result.current.recover(input)).rejects.toMatchObject({
+      code: 'RECOVERY_NOT_AVAILABLE',
+    });
+  });
+  expect(result.current.state).toBe('not_started');
+  expect(result.current.recoverable).toBe(false);
+  expect(api.create).not.toHaveBeenCalled();
+});
+
+it('creates once after the fresh recovery preflight confirms eligibility', async () => {
+  jest.mocked(api.read).mockResolvedValue({ ...pending, recoverable: true });
+  const { result } = mount();
+  await waitFor(() => expect(result.current.recoverable).toBe(true));
+
+  await act(async () => result.current.recover(input));
+
+  expect(api.read).toHaveBeenCalledTimes(2);
+  expect(api.create).toHaveBeenCalledTimes(1);
+  expect(api.create).toHaveBeenCalledWith(input, 'user-a');
+});
+
 it('does not submit BVN for pending intents without server recovery approval', async () => {
   const { result } = mount();
   await waitFor(() => expect(result.current.state).toBe('processing'));

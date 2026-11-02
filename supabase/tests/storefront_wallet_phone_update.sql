@@ -12,7 +12,7 @@ INSERT INTO public.customers (id, merchant_id, user_id, email, phone) VALUES
   ('f3820000-0000-4000-8000-000000000003', 'f3820000-0000-4000-8000-000000000002',
    'f3820000-0000-4000-8000-000000000001', 'wallet-phone-owner@example.test', '08000007890'),
   ('f3820000-0000-4000-8000-000000000012', 'f3820000-0000-4000-8000-000000000002',
-   'f3820000-0000-4000-8000-000000000011', 'wallet-phone-other@example.test', '08000007890');
+   'f3820000-0000-4000-8000-000000000011', 'wallet-phone-other@example.test', '08000007893');
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','f3820000-0000-4000-8000-000000000001',true);
 DO $test$
@@ -43,7 +43,7 @@ $test$;
 RESET ROLE;
 DO $test$ BEGIN
   IF (SELECT phone FROM public.customers
-      WHERE id='f3820000-0000-4000-8000-000000000012') IS DISTINCT FROM '08000007890' THEN
+      WHERE id='f3820000-0000-4000-8000-000000000012') IS DISTINCT FROM '08000007893' THEN
     RAISE EXCEPTION 'Another customer phone changed';
   END IF;
 END; $test$;

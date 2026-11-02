@@ -127,6 +127,54 @@ export function usePiggyvestWalletSetup(merchantId: string, userId: string) {
     setSubmitting(true);
     try {
       await client.cancelQueries({ queryKey, exact: true });
+      if (!current()) return;
+      if (recoveryRetry) {
+        // Cached GET eligibility can age between rendering the form and submit.
+        // Recheck the scoped server state immediately before the guarded POST.
+        let fresh: Awaited<ReturnType<typeof api.read>>;
+        try {
+          fresh = await api.read(merchantId, userId);
+        } catch (error) {
+          if (current()) {
+            if (isPrimaryWalletReviewRequired(error)) setReviewHold(true);
+            client.setQueryData<Snapshot>(queryKey, (snapshot) =>
+              snapshot ? { ...snapshot, recoverable: false } : snapshot
+            );
+          }
+          throw error;
+        }
+        if (!current()) return;
+        if (
+          fresh.account ||
+          fresh.provisioningStatus !== 'pending' ||
+          fresh.recoverable !== true
+        ) {
+          if (fresh.provisioningStatus === 'pending') {
+            client.setQueryData<Snapshot>(queryKey, (snapshot) =>
+              snapshot
+                ? {
+                    ...snapshot,
+                    ...fresh,
+                    attempted: true,
+                    completedSetup: false,
+                  }
+                : snapshot
+            );
+          } else {
+            client.setQueryData<Snapshot>(queryKey, {
+              ...fresh,
+              attempted: false,
+              completedSetup: false,
+            });
+          }
+          throw Object.assign(
+            new Error('Wallet recovery is no longer available.'),
+            {
+              code: 'RECOVERY_NOT_AVAILABLE',
+            }
+          );
+        }
+      }
       await AsyncStorage.setItem(storageKey, 'pending');
       if (!current()) return;
       let snapshot: Snapshot;

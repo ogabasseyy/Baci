@@ -70,7 +70,7 @@ export function PiggyvestWalletSetupForm({
         );
       } else {
         setError(
-          'Wallet setup could not be confirmed. Refresh your account before trying again.'
+          'Wallet setup could not be confirmed. Your BVN was cleared for security. Refresh your account before re-entering it.'
         );
       }
     } finally {

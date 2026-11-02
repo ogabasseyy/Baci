@@ -19,6 +19,10 @@ CREATE TABLE public.customers (
   last_name text, phone text, deleted_at timestamptz, loyalty_points integer DEFAULT 0,
   username text, username_changed_at timestamptz, date_of_birth date
 );
+-- Retain production customer uniqueness fences in the isolated fixture.
+CREATE UNIQUE INDEX "customers_merchant_phone_unique" ON "public"."customers" USING "btree" ("merchant_id", "phone") WHERE (("phone" IS NOT NULL) AND ("phone" <> ''::"text"));
+CREATE UNIQUE INDEX "customers_merchant_email_unique" ON "public"."customers" USING "btree" ("merchant_id", "lower"("email")) WHERE (("email" IS NOT NULL) AND ("email" <> ''::"text"));
+CREATE UNIQUE INDEX "idx_customers_merchant_user" ON "public"."customers" USING "btree" ("merchant_id", "user_id") WHERE ("user_id" IS NOT NULL);
 ALTER TABLE public.merchants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
 CREATE POLICY own_customer ON public.customers TO authenticated

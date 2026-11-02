@@ -93,7 +93,9 @@ and that no secret reaches a client, log, alert or response.
 2. Say which rules the change does not touch.
 3. Give PASS only when no rule can be broken and you have no critical or high
    finding. Otherwise give FAIL.
-4. End your review with exactly these three lines, filling in the verdict and
+4. End your review, in a pull request comment or the review's main body
+   and never in an inline comment, with exactly these three lines, filling
+   in the verdict and
    the full 40-character SHA of the commit you checked out and reviewed (run
    `git rev-parse HEAD` in your review checkout). Never copy the pull
    request's current head from GitHub: if commits were pushed while you

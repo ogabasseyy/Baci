@@ -3,8 +3,16 @@
   "version": 1,
   "statusContext": "money-pr-assurance",
   "moneyKeywords": {
-    "$comment": "A changed file is a money path when it sits under one of these server roots and its path (after the root) contains one of these words, ignoring case. Interface code and documentation are outside the roots on purpose.",
+    "$comment": "A changed file is a money path when it sits under one of these roots and its path (after the root) contains one of these words, ignoring case. The roots are server, database and tooling code plus the mobile apps' data, service and hook folders; interface components, screens and documentation are outside them on purpose.",
     "roots": [
+      "apps/mobile-admin/hooks/",
+      "apps/mobile-admin/lib/",
+      "apps/mobile-admin/schemas/",
+      "apps/mobile-admin/services/",
+      "apps/mobile-storefront/hooks/",
+      "apps/mobile-storefront/lib/",
+      "apps/mobile-storefront/schemas/",
+      "apps/mobile-storefront/services/",
       "apps/web/src/app/",
       "apps/web/src/config/",
       "apps/web/src/lib/",

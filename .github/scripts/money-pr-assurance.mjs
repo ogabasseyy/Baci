@@ -18,6 +18,7 @@ import {
   createGitHubClient,
   findOpenPullRequestsForSha,
   postStatus,
+  readHeadSha,
   readPullRequest,
 } from './money-pr-assurance-github.mjs';
 
@@ -197,8 +198,16 @@ export async function runAssurance({
         `::error::money-pr-assurance could not evaluate #${number}: ${error.message}`
       );
       results.push({ number, sha, state: 'error', description: error.message });
-      // Fall back to the event's head commit when the PR itself was unread.
-      const statusSha = sha ?? target.headSha;
+      // Fall back to the event's head commit when the PR itself was unread,
+      // and failing that to a GraphQL lookup of the head.
+      const statusSha =
+        sha ??
+        target.headSha ??
+        (await readHeadSha(client, {
+          owner: target.owner,
+          repo: target.repo,
+          number,
+        }).catch(() => null));
       if (statusSha && !dryRun) await postError(statusSha);
     }
   }

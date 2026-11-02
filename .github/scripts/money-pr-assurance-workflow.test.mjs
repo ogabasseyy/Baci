@@ -174,8 +174,10 @@ test('the prompt names its version, the verdict block and every rule', () => {
     'PROMPT-VERSION:',
   ])
     assert.ok(prompt.includes(key), key);
-  // The verdict names the commit actually reviewed, not the live PR head.
+  // The verdict names the commit actually reviewed, not the live PR head,
+  // and sits where the evaluator reads it.
   assert.ok(prompt.includes('git rev-parse HEAD'));
+  assert.match(prompt, /never in an inline comment/);
   assert.doesNotMatch(prompt, /headRefOid/);
   for (const rule of [
     'R1.',

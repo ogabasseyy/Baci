@@ -26,8 +26,9 @@ name of a renamed file:
   those words (the Paystack webhook, airtime checkout, IMEI fulfilment); or
 - matches `governancePaths`: the assurance check's own files.
 
-Interface code (web components, mobile screens) and documentation are outside
-those folders on purpose. Every other pull request gets an immediate success
+The mobile apps' data, service, schema and hook folders are covered the same
+way. Interface code (web components, mobile screens) and documentation are
+outside those folders on purpose. Every other pull request gets an immediate success
 status saying it is not a money-path PR.
 
 If GitHub cannot list every changed file, the PR is treated as a money-path PR.
@@ -50,9 +51,10 @@ commit.
      Codex has reviewed an earlier commit.
    - **Claude:** comment
      `@claude Run the review in the main branch's .github/prompts/money-rules-adversarial-review.md (not this pull request's copy) and post its verdict block.`
-     The verdict counts when it comes from the Claude app, names the full
-     commit Claude reviewed and that commit is the head, uses the current
-     prompt version and says PASS.
+     The verdict counts when it comes from the Claude app in a pull request
+     comment or review body (never an inline comment), names the full commit
+     Claude reviewed and that commit is the head, uses the current prompt
+     version and says PASS.
    - A reviewer comment that someone else edited, or a dismissed review, no
      longer counts. If a newer comment from that reviewer was edited by
      another login, the reviewer fails until it posts a fresh review. A
@@ -104,8 +106,10 @@ The status description shows the first unmet requirement. Open the workflow
 run linked from the status for the full list. `pending` means only CI is still
 running; `failure` means something needs action; `error` means the check could
 not read GitHub and should be re-run. If the pull request itself cannot be
-read after three attempts, the check posts `error` on the event's commit so an
-earlier success never stays in place.
+read after three attempts, the check posts `error` on the head commit (taken
+from the event, or looked up a second way) so an earlier success does not
+stay in place. If even that lookup fails, the run fails red and must be
+re-run before the status can be trusted.
 
 The status refreshes on pushes, PR edits and labels, reviewer and owner
 comments, submitted, edited or dismissed reviews (through the

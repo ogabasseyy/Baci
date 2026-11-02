@@ -252,3 +252,23 @@ test('if the PR list for a commit cannot be read, the commit gets an error', asy
   assert.equal(result.exitCode, 1);
   assert.equal(statusBodies(fake)[0].state, 'error');
 });
+
+test('a comment-triggered run that cannot read the PR still marks its head', async () => {
+  // Issue comments carry no head SHA; the head is looked up over GraphQL.
+  const routes = {
+    ...flakyPullRoute(5, 99, []),
+    'POST /graphql': {
+      json: {
+        data: { repository: { pullRequest: { headRefOid: OLD_HEAD } } },
+      },
+    },
+  };
+  const { fake, result } = await run({ PR_NUMBER: '5' }, routes);
+  assert.equal(result.exitCode, 1);
+  const posts = fake.calls.filter(({ key }) => key.includes('/statuses/'));
+  assert.deepEqual(
+    posts.map(({ key }) => key),
+    [`POST /repos/o/r/statuses/${OLD_HEAD}`]
+  );
+  assert.equal(JSON.parse(posts[0].body).state, 'error');
+});

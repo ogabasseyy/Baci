@@ -172,6 +172,19 @@ export async function readPullRequest(client, { owner, repo, number }) {
   };
 }
 
+const HEAD_QUERY = `query($owner: String!, $repo: String!, $number: Int!) {
+  repository(owner: $owner, name: $repo) { pullRequest(number: $number) { headRefOid } }
+}`;
+
+// A second route to the head commit, used only when the REST read failed, so
+// an error status can still replace an earlier success on that commit.
+export async function readHeadSha(client, { owner, repo, number }) {
+  const data = await client.graphql(HEAD_QUERY, { owner, repo, number });
+  const sha = String(data?.repository?.pullRequest?.headRefOid ?? '');
+  if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('No head commit returned');
+  return sha;
+}
+
 // Pass an already-read PR so callers know the head SHA even if a later read
 // fails; otherwise the PR is read first.
 export async function collectSnapshot(

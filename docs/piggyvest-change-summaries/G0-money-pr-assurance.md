@@ -20,7 +20,7 @@ plain-English summary like this one.
 ## What could go wrong and how it is prevented
 
 A money change could slip past unnoticed. The check looks for money words
-anywhere in the server, database and tooling folders, plus known money files
+anywhere in the server, database, tooling and mobile data folders, plus known money files
 with other names, and tests prove it recognises today's money code.
 
 A review or approval given on an older version could be reused. Every review

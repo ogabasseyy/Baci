@@ -13,19 +13,14 @@ import {
 const config = parseAssuranceConfig(loadRawConfig());
 const repoRoot = new URL('../../', import.meta.url).pathname;
 
-// Server-side and tooling roots, where code can move or record money.
-// Interface code (components, mobile screens) and documentation are not.
-const SERVER_ROOTS = [
-  'apps/web/src/app/',
-  'apps/web/src/config/',
-  'apps/web/src/lib/',
-  'apps/web/src/schemas/',
-  'apps/web/src/scripts/',
-  'apps/web/tools/',
-  'packages/shared/src/',
-  'supabase/',
-  'tools/',
-  'vps-workers/',
+// Interface code (web components, mobile screens) and documentation are
+// the only places a money-named file may sit outside the money paths. This
+// list is independent of the configuration's roots on purpose.
+const INTERFACE_OR_DOCS = [
+  /^docs\//,
+  /^\.superpowers\//,
+  /\/components\//,
+  /^apps\/mobile-[a-z]+\/(?:app|__tests__|qa|test-support|constants)\//,
 ];
 const MONEY_WORDS =
   /piggyvest|wallet|savings|prefunded|primary[-_](?:card|bank|inflow|interest)|store[-_]credit|plan[-_]transfer/i;
@@ -35,7 +30,7 @@ function isMoney(path) {
     .isMoneyPath;
 }
 
-test('every tracked server file named for wallet, savings or PiggyVest money is a money path', () => {
+test('every tracked non-interface file named for wallet, savings or PiggyVest money is a money path', () => {
   const tracked = execFileSync('git', ['ls-files', '-z'], {
     cwd: repoRoot,
     encoding: 'utf8',
@@ -45,8 +40,8 @@ test('every tracked server file named for wallet, savings or PiggyVest money is 
     .filter(Boolean);
   const candidates = tracked.filter(
     (path) =>
-      SERVER_ROOTS.some((root) => path.startsWith(root)) &&
-      MONEY_WORDS.test(path)
+      MONEY_WORDS.test(path) &&
+      !INTERFACE_OR_DOCS.some((pattern) => pattern.test(path))
   );
   assert.ok(candidates.length > 0, 'the sweep must see money files');
   const missed = candidates.filter((path) => !isMoney(path));
@@ -91,6 +86,11 @@ test('money code whose file name lacks those words is still a money path', () =>
     // Shared contracts and libraries, at any depth.
     'packages/shared/src/lib/piggyvest-purchase-money.ts',
     'packages/shared/src/contracts/piggyvest-payment-leg-recovery.ts',
+    // Mobile clients' money calls, hooks and schemas.
+    'apps/mobile-storefront/lib/piggyvest/plan-wallet-live-service.ts',
+    'apps/mobile-storefront/lib/customer-savings-plan-funding.ts',
+    'apps/mobile-storefront/hooks/use-wallet-funding.ts',
+    'apps/mobile-storefront/services/wallet-api.ts',
     // Files later PiggyVest tasks plan to add.
     'apps/web/src/lib/wallet-pin/verify.ts',
     'vps-workers/bin/piggyvest-webhook-capture-drain',
@@ -105,6 +105,7 @@ test('interface code, documentation and look-alike names are not money paths', (
   for (const path of [
     'apps/web/src/components/wallet/wallet-card.tsx',
     'apps/mobile-storefront/components/wallet/balance.tsx',
+    'apps/mobile-storefront/app/wallet/index.tsx',
     'docs/piggyvest-staging-readiness.md',
     'apps/web/src/app/page.tsx',
     'supabase/migrations/20260730000109_reject_merchant_identity_primary_key_reassignment.sql',

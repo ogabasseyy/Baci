@@ -33,13 +33,9 @@ current conventions. It never means copying the file.
 - **Hash:** SHA-256 of each file's bytes as stored in that commit. Where main's old subsystem reports under
   `apps/web/src/lib/piggyvest/*.report.md` quote a frozen hash for one of these files, it is the same value.
 - **Compared with:** `origin/main` at `7a4ff22ce726f0b63e7598ad183e38a408d556c3` (2026-10-31). 36 of the 39 paths
-  do not exist on main. 3 paths exist on main with different content (see "Three versions already on main").
+  do not exist on main. 3 paths exist on main with different content (see "Versions already on main").
 - **Re-check one file** in any clone that has the ref:
-
-  ```sh
-  ref=refs/backups/2026-10-31/cursor-savings-phase1
-  git show "${ref}:supabase/migrations/20260912140000_goal_policy_tables.sql" | shasum -a 256
-  ```
+  `git show "refs/backups/2026-10-31/cursor-savings-phase1:supabase/migrations/<file>" | shasum -a 256`.
 
 ## Why none of them can be ported as written
 
@@ -51,9 +47,18 @@ Each file is tied to the staging integration in one of two ways (the "Tie" colum
   scope lock, or schemas built on them), and those require the staging integration registry.
 
 The launch design is different: money-moving work runs under the dedicated PiggyVest primary logins, each wallet
-holds one kind of money (the backing state), and a goal has a single exit claim (R3). Main's goal-policy schema at
-`20260912140000` is a different, consumer-derived replay backfill (no bindings or consents tables, different function
-signatures), so the backed-up chain would not even apply on top of it.
+holds one kind of money (the backing state), and a goal has a single exit claim (R3).
+
+The backed-up chain would not even apply on top of main. Main's `20260912140000` is a different, consumer-derived
+replay backfill: it has no bindings or consents tables, but it already creates `terms`, `snapshots`,
+`lifecycle_terms` and `lifecycle_activations`, and it already defines eight of the backed-up `piggyvest_goal_policy`
+functions with the same argument types (see "Goal-policy functions already on main"). The backup's CREATE statements
+would therefore fail because those tables and function signatures already exist.
+
+This record supersedes [piggyvest-local-draft-contract-2026-09-19.md](../piggyvest-local-draft-contract-2026-09-19.md)
+where it calls the unported purchase and cancel command functions, device change, draft closure and collection
+reconciliation "a separate deployment prerequisite". They are dropped or deferred as recorded here, none of them is a
+deployment prerequisite, and the reserve-principal purchase is never revived (R3).
 
 ## Per-file verdicts
 
@@ -117,7 +122,8 @@ Carry these rules:
   extended, and dates use Africa/Lagos (file 6).
 
 Do not carry: the staging bindings and scope lock, the price-guarantee field and the minimum-deposit activation
-threshold (price-follow replaces the guarantee), or the "collection paused" activation receipt.
+threshold (price-follow replaces the guarantee), or the "collection paused" activation receipt. Main's
+`activate_lifecycle` still holds the guarantee and that receipt; the new code does not call it (rule 7).
 
 ### P7-goal-refund-request (files 8, 9, 10, 11)
 
@@ -126,11 +132,18 @@ the legacy-money check it calls, so read all three together. Carry these rules:
 
 - When the cancel claim is won, store a snapshot of what the customer is shown: terms version and hash, principal,
   paid interest and pending interest. Store it keyed by the exit claim, without updating the goal row.
-- The snapshot's amounts come only from the confirmed balance. While anything is reserved or in flight, or a deposit
-  has been reversed, there is no final amount yet: report pending and never guess (R3 fixes the exit amount only
-  after in-flight contributions settle).
-- A cancel never touches a goal that holds legacy (old Paystack) money (file 9). The planned legacy-path fences and
-  backing state enforce this, not a copy of the old check.
+- The snapshot's amounts come only from the confirmed balance. A contribution that is reserved or still in flight
+  will settle, so while one exists the final amount is reported as pending and never guessed (R3 fixes the exit
+  amount only after in-flight contributions settle).
+- A reversed deposit never settles: main's ledger snapshot keeps its reversal flag set and has no review clearance.
+  So a goal with a reversed deposit is refused before the exit claim is taken, and goes to reconciliation. File 10
+  did the same: it refused before writing anything. Because a won cancel claim never returns (R3), a cancel claim is
+  never taken for a goal that cannot reach a final amount.
+- A cancel refuses, before the exit claim is taken, any goal that holds legacy (old Paystack) money: a contribution
+  that did not come through PiggyVest, an initial contribution, or a saved amount that PiggyVest-confirmed credits do
+  not explain (file 9's rule). The re-port carries this check itself. Nothing else enforces it: the planned legacy
+  fences stop old paths from touching PiggyVest goals, which is the other direction, and goal-wallet enrolment on main
+  does not look for legacy money. Legacy money reaches PiggyVest only through `P8-legacy-goal-move`.
 - The recovery read (file 11) is for the goal's owner only, returns the original snapshot, and reports "needs
   reconciliation" on any mismatch. "Not found" never means "safe to retry".
 
@@ -141,7 +154,10 @@ consent version. The exit claim from `P7-goal-exit-claim` is the only way a goal
 
 Carry: read the live price from the merchant's own active product; require the exact variant when the product has
 variants (inventory anchors excluded) and take the variant's price override, falling back to the product price; stop
-unless the merchant's currency is NGN and its VAT status is known.
+unless the merchant's currency is NGN and its VAT status is known. Also stop, leaving the goal's target and status
+unchanged, unless that live price in kobo is a whole number from 1 to 9007199254740991. The shared variant model
+accepts a ₦0 override, and a ₦0 price must never mark a goal ready to buy. This restates file 15's price check, so
+price-follow needs neither file 15 nor `applicablePriceKobo`.
 
 Do not carry: the pickup shipping rate, the per-goal fee and tax capability table, the protected seven-day price
 lookup or the publications table. The job only moves the goal target; it never writes a quote or reserves money.
@@ -162,7 +178,7 @@ as post-exit interest comes from the exit claim's state and watch window, once p
 | 12, 13, 16, 20 | Purchase preparation | The reserve-principal purchase. R3: never revived. Goal purchases use the purchase claim in `P7-goal-tender-hold` |
 | 15 | Pricing publish | Publishes quotes for that purchase. Price-follow only moves the target |
 | 17, 18 | Schedule | Recurring-debit proposals with no transport. Not in v1: goals are funded by transfer or bank deposit |
-| 19 | Funding capability | Built on staging provisioning records. Primary-wallet provisioning and the backing state decide funding |
+| 19 | Funding capability | Built on staging provisioning records. Primary-wallet provisioning and the backing state decide funding. Main's copy of the read is listed under "Goal-policy functions already on main" |
 | 21, 39 | Collection reconciliation and its case list | Metadata over staging mappings. The plan uses the R1 balance check and deposit reconciliation |
 | 29, 30 | Draft closure | A separate terminal path through staging tables. Every terminal path for a goal goes through the exit claim |
 | 31 to 36 | Protected offer | A seven-day price promise. Replaced by price-follow consent |
@@ -175,11 +191,16 @@ source and publish in file 26, the cancel preparation and schedule in file 27, a
 file 28), so they cannot be taken on their own. Any later device-change design is written fresh against the exit
 claim and price-follow; these files are reference only.
 
-## Three versions already on main
+## Versions already on main
 
-Three of the 39 version numbers already exist on main, with different content. Main's files are replay backfills
-added in #3620 so the migration history replays on a clean database. They stay exactly as they are (migrations are
-append-only), and no re-port may edit them.
+Four of the 39 version numbers already exist on main.
+
+- Three are the same paths with different content (table below). Main's files are replay backfills added in #3620
+  so the migration history replays on a clean database. They stay exactly as they are (migrations are append-only),
+  and no re-port may edit them.
+- The fourth, `20260912150000` (file 5), belongs on main to `20260912150000_backfill_manual_order_document_dates.sql`,
+  which is byte-identical to the backup's copy. The two files already shared that version inside the backup. No port
+  may reuse file 5's version: CI's migration version check refuses a duplicate.
 
 | Version | Backup SHA-256 | Main SHA-256 | Main's version |
 | --- | --- | --- | --- |
@@ -187,25 +208,53 @@ append-only), and no re-port may edit them.
 | `20260912160000_cancel_plan_preparation.sql` | `b1b702dc20b46cb2e4f5e9ad18debc42a4dc6d773f9587918f0664497d6a64ad` | `79a25e5b22dfa635d45aad0fe143d92bcd08f4010a7da734ac3814fba22219b6` | Cancel intents table only |
 | `20260912162000_purchase_preparation_tables.sql` | `d7a8a3671ff3233da097c0deba8b56ca5ae908a9fed54ded510c9505cde3c0b7` | `bf6d2204e53364b862c19dfc45d05b99078161b408ade9086528286abe81fc77` | Purchase intents and quotes tables only |
 
+## Goal-policy functions already on main
+
+Main's `20260912140000` backfill defines these functions with the same argument types as the backup. They are not
+ports of the backup, but they carry staging-era logic: every one except the `lock_scope` helper refuses any login
+but the staging policy writer, `stage` and `accept` check the staging integration registry, and two hold logic this
+record drops.
+
+| Function on main | Same arguments as backup file | Differences and staging ties | Called on main by |
+| --- | --- | --- | --- |
+| `lock_scope` | 2 | An advisory lock that returns nothing (the backup locks through the staging registry and returns the goal row) | Main's own goal-policy functions; `bind_canonical` (`20260913130000`) |
+| `stage` | 3, 4 | Staging registry check | `goal-policy-store-statements.ts` |
+| `accept` | 3, 7 | Staging registry check | `goal-policy-store-statements.ts` |
+| `read` | 3, 4, 7, 25 | Staging login only | `goal-policy-store-statements.ts`; `bind_canonical` |
+| `prepare_lifecycle_terms` | 6 | Parameter named `p_duration_months` (backup: `p_months`) | `goal-lifecycle-statements.ts` |
+| `accept_lifecycle_terms` | 6, 7 | Parameter named `p_duration_months` (backup: `p_months`) | `goal-lifecycle-statements.ts` |
+| `activate_lifecycle` | 5, 6, 28 | Stores the price guarantee and returns it with a "collection paused" receipt | `goal-lifecycle-statements.ts` |
+| `read_funding_capability` | 19, 28 | Reads the staging wallet and goal mappings | `customer-funding-capability-statements.ts` |
+
+These functions stay defined, because migrations are append-only. No launch-path code may call them, and no re-port
+may replace or extend them (rule 7 below): re-ported logic goes under new names. Their handlers (`goal-policy-store`,
+`goal-lifecycle`, `customer-funding-capability`) are reached only through `runtime-composition`, like the modules in
+the last table, and are input for `P7-retire-unported-goal-handlers`, which retires them or records why one stays.
+
 ## Rules for every re-port task (R3)
 
 1. Read the old files from the local private ref only. Never push the ref and never copy a file wholesale.
-2. Write a new migration with a new timestamp. Never edit an existing migration, including the three above.
+2. Write a new migration with a new timestamp. Never edit an existing migration, including the three
+   backfills above.
 3. No re-ported code may reserve, move or release goal money, or mark a goal cancelled, spent or closed, outside the
    exit claim. A PiggyVest goal has exactly one exit path: the claim from `P7-goal-exit-claim`.
 4. The reserve-principal purchase (file 13, with its reads in files 20 and 37) is never revived, under any name.
 5. No reference to the staging registry, staging mappings, the staging policy writer login or a local-database-only
    check. Function privileges follow [function-privileges.md](../agent-guidance/function-privileges.md).
 6. The price guarantee and the protected offer are not revived. Price-follow replaces both.
+7. Never CREATE OR REPLACE, alter or extend an existing `piggyvest_goal_policy.*` function. A same-signature
+   replacement would silently change the body that main's draft chain uses. One with a renamed parameter or a new
+   return type fails to apply, and one failing migration blocks every deploy. New logic uses new function names.
 
 ## Code on main that calls functions that were never ported
 
-Statement modules under `apps/web/src/lib/piggyvest/` (merged in #3620) call 25 functions in 10 schemas that are not
-defined by any migration on main. Their SQL text sits in the shared statement catalog (`postgres-statements.ts`),
-restricted to staging logins, and the staging funding route loads that catalog through its wallet-mapping reader.
-No app route reaches the handlers that would run these statements: those are wired only in `runtime-composition`,
-which only tests, fixtures and a package smoke script import. The re-port tasks add new functions under new names and
-do not bring these 25 back. This table is the input for the optional clean-up task `P7-retire-unported-goal-handlers`.
+Statement modules under `apps/web/src/lib/piggyvest/` (merged in #3620), one database function and several local
+test tools call 25 functions in 10 schemas that are not defined by any migration on main. The statements' SQL text
+sits in the shared statement catalog (`postgres-statements.ts`), restricted to staging logins, and the staging
+funding route loads that catalog through its wallet-mapping reader. No app route reaches the handlers that would run
+these statements: they are wired only in `runtime-composition`, which only tests, fixtures and a package smoke script
+import. Re-port tasks add new functions under new names and do not bring these 25 back. This table, and the two notes
+under it, are the input for the optional clean-up task `P7-retire-unported-goal-handlers`.
 
 | Schema | Functions with no definition on main | Calling module | Verdict |
 | --- | --- | --- | --- |
@@ -221,6 +270,28 @@ do not bring these 25 back. This table is the input for the optional clean-up ta
 | `piggyvest_draft_closure` | `close`, `read` | `draft-closure-statements.ts` | Drop |
 | `piggyvest_protected_offer` | `publish`, `read` | `protected-offer-statements.ts` | Drop |
 | `piggyvest_device_change` | `confirm`, `publish`, `read` | `device-change-statements.ts` | Defer |
+
+**Database caller.** `savings_draft_private.bind_canonical` (migration `20260913130000`, line 62) also calls
+`piggyvest_draft_closure.read`. Main reaches it through `draft-canonical-binding-statements.ts` (loaded only by
+`draft-canonical-binding-store.ts`, which only tests import) and the SQL suites
+`supabase/migrations/tests/customer_savings_canonical_binding*.sql`. A database function is only checked when it runs,
+so `bind_canonical` replays cleanly but fails every call with "function does not exist". It is limited to local test
+settings, so it is not a production money path. The retire task retires or rewires the binding statement together
+with the draft-closure module; the migration itself stays.
+
+**Local test tools** that need the dropped subsystems, to retire or rewrite together with the statement modules:
+
+- `tools/test/piggyvest-full-schema-check.sql` requires `piggyvest_purchase_preparation.read_current_recovery`
+  (file 20) and `piggyvest_collection_reconciliation.read` (file 21). It is the mandatory SQL check of
+  `tools/test/hosted-savings-bootstrap.ts`, so that bootstrap fails until both assertions are removed.
+- `tools/test/piggyvest-public-compat-cases.sql` (run by `piggyvest-public-compat-local.sh`, planned by
+  `piggyvest-public-compat-plan.mjs`) and `tools/test/savings-exit-execution-fixture.sql` (run by
+  `savings-exit-execution-local.sh`) write `piggyvest_cancel_plan.reviewed_policies`, a table no migration on main
+  creates, and call `piggyvest_cancel_plan.prepare` (the compat cases also call `quote`).
+- `tools/test/piggyvest-full-local-plan.mjs` selects registry rows for every dropped subsystem by file name.
+
+The retire task's check for references to dropped functions must cover `tools/test/` and `supabase/migrations/tests/`
+as well as `apps/web`.
 
 ## Out of scope
 

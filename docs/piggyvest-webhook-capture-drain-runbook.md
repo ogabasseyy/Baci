@@ -40,7 +40,7 @@ to the queue five minutes later and the next run finishes it.
 
 ## Before you start
 
-- The migration `20261102032434_piggyvest_webhook_capture_worker_role` is
+- The migration `20261102202552_piggyvest_webhook_capture_worker_role` is
   applied by the normal deploy (it only creates the non-login role, one
   claim-bound settle function, and three grants).
 - The worker env file already holds the PiggyVest primary configuration the

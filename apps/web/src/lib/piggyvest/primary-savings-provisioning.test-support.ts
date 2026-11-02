@@ -8,6 +8,8 @@ export const provisioningFixture = {
     environment: 'staging' as const,
   },
   goalId: '00000000-0000-4000-8000-000000000006',
+  // buildPrimaryGoalWalletName(integrationId, goalId) for the ids above.
+  walletName: 'baci-save-d80a9fbb7f8c666ce4462294b4e53d25',
   configuration: {
     onboarding: {
       merchantId: '00000000-0000-4000-8000-000000000001',

@@ -66,7 +66,7 @@ export function CookieConsent() {
         }}
         className={cn(
           'bg-background/95 backdrop-blur-xl border border-border/50 shadow-2xl rounded-2xl p-4',
-          'transition-all duration-300 ease-in-out'
+          'transition-[opacity,transform] duration-300 ease-in-out'
         )}
       >
         {hasStorageError && (
@@ -85,17 +85,19 @@ export function CookieConsent() {
 
               <div className="flex-1 space-y-1">
                 <h3 className="font-semibold text-sm">We value your privacy</h3>
-                <p className="text-sm text-muted-foreground leading-snug">
-                  We use cookies to improve your experience. By using our store,
-                  you agree to our{' '}
-                  <Link
-                    href={asRoute(`${basePath}/privacy`)}
-                    prefetch={false}
-                    className="underline underline-offset-4 hover:text-white"
-                  >
-                    Read our policy
-                  </Link>
-                </p>
+                <div className="space-y-1 text-sm text-muted-foreground leading-snug">
+                  <p>We use cookies to improve your experience.</p>
+                  <p>
+                    By using our store, you agree to our{' '}
+                    <Link
+                      href={asRoute(`${basePath}/privacy`)}
+                      prefetch={false}
+                      className="underline underline-offset-4 hover:text-white"
+                    >
+                      Read our policy
+                    </Link>
+                  </p>
+                </div>
               </div>
             </div>
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  readPrimaryWalletOnboardingRuntime,
   readPrimaryWalletRuntime,
   readPrimaryWalletRuntimeDrain,
 } from './primary-wallet-runtime';
@@ -22,6 +23,7 @@ const env: NodeJS.ProcessEnv = {
   PIGGYVEST_PRIMARY_DB_NAME: 'postgres',
   PIGGYVEST_PRIMARY_DB_PASSWORD: 'test-only-password',
   PIGGYVEST_PRIMARY_DB_CA: 'test-only-ca',
+  PIGGYVEST_PRIMARY_INTEREST_PAYOUT_WALLET_ID: '01JBZ8Q5W3X9R2K4M6N8P0T2V4',
 };
 describe('primary wallet runtime environment', () => {
   it('loads an explicitly enabled complete production runtime', () => {
@@ -64,6 +66,42 @@ describe('primary wallet runtime environment', () => {
         ...env,
         PIGGYVEST_PRIMARY_ENABLED: 'false',
         PIGGYVEST_PRIMARY_DB_PASSWORD: '',
+      })
+    ).toBeNull();
+  });
+  it('adds the interest payout wallet only to the onboarding reader', () => {
+    expect(readPrimaryWalletOnboardingRuntime(env)).toEqual({
+      runtime: readPrimaryWalletRuntime(env),
+      interestPayoutWalletId: '01JBZ8Q5W3X9R2K4M6N8P0T2V4',
+    });
+    // The shared runtime stays strict: no onboarding-only field leaks in.
+    expect(readPrimaryWalletRuntime(env)?.onboarding).not.toHaveProperty(
+      'interestPayoutWalletId'
+    );
+  });
+  it.each([
+    undefined,
+    '',
+    ' 01JBZ8Q5W3X9R2K4M6N8P0T2V4',
+    '01JBZ8Q5W3X9R2K4M6N8P0T2V4\n',
+    '01jbz8q5w3x9r2k4m6n8p0t2v4',
+    '01JBZ8Q5W3X9R2K4M6N8P0T2VI',
+    '01JBZ8Q5W3X9R2K4M6N8P0T2V',
+  ])('makes onboarding not ready for payout wallet %j', (value) => {
+    const configured = {
+      ...env,
+      PIGGYVEST_PRIMARY_INTEREST_PAYOUT_WALLET_ID: value,
+    };
+    expect(readPrimaryWalletOnboardingRuntime(configured)).toBeNull();
+    // Reads, savings and drain never depend on the onboarding-only setting.
+    expect(readPrimaryWalletRuntime(configured)).not.toBeNull();
+    expect(readPrimaryWalletRuntimeDrain(configured)).not.toBeNull();
+  });
+  it('keeps onboarding off when the base runtime is off', () => {
+    expect(
+      readPrimaryWalletOnboardingRuntime({
+        ...env,
+        PIGGYVEST_PRIMARY_ENABLED: 'false',
       })
     ).toBeNull();
   });

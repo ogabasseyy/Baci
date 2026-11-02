@@ -1,5 +1,5 @@
 -- REGRESSION TEST: wallet transaction PIN store and single-use, debit-bound
--- PIN proofs (migrations 20261102041826..20261102041829).
+-- PIN proofs (migrations 20261102202600..20261102202603).
 --
 -- USAGE (CI DB Replay runs it through the replay registry):
 --   pnpm --filter @baci/web db:replay:chronological \

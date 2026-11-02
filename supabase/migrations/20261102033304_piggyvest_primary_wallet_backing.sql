@@ -7,18 +7,18 @@
 --
 -- This file adds the state store, its event log, the read helpers and the
 -- pre-declared hooks. The transitions are in
--- 20261102033305_piggyvest_primary_wallet_backing_transitions.sql.
+-- 20261102033305_piggyvest_primary_wallet_backing_transitions.sql, and the
+-- one-pair ledger index is built concurrently in
+-- 20261102033306_piggyvest_primary_wallet_backing_relabel_index.sql.
 --
 -- Ships dark: the tables start empty (no row means legacy), no login is a
 -- member of the new role, and no existing write path calls these functions
 -- yet. Later changes wire assert_wallet_legacy into the legacy writers.
 BEGIN;
 
--- The relabel index below scans customer_wallet_transactions under a SHARE
--- lock (as its earlier non-concurrent indexes did), and the deletion trigger
--- briefly locks customers. Bound the wait so a busy table fails this
--- transaction-wrapped migration fast (it retries next deploy) instead of
--- queueing wallet writes behind it.
+-- The deletion trigger briefly locks customers. Bound the wait so a busy
+-- table fails this transaction-wrapped migration fast (it retries next
+-- deploy) instead of queueing customer writes behind it.
 SET LOCAL lock_timeout = '5s';
 
 DO $$ BEGIN
@@ -170,12 +170,6 @@ REVOKE ALL ON FUNCTION piggyvest_primary.guard_wallet_backing() FROM PUBLIC, ano
 REVOKE ALL ON FUNCTION piggyvest_primary.guard_wallet_backing_events() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION piggyvest_primary.block_migrating_wallet_customer_deletion()
   FROM PUBLIC, anon, authenticated, service_role;
-
--- At most one legacy-out (-X) and one PiggyVest-in (+X) relabel row per
--- backing row, whatever writes them. The index is empty until a wallet flips.
-CREATE UNIQUE INDEX customer_wallet_transactions_legacy_migration_once
-  ON public.customer_wallet_transactions (source_id, (amount > 0))
-  WHERE source_type = 'piggyvest_legacy_migration';
 
 -- Internal read: 'legacy' when nothing is recorded. A row recorded under a
 -- different merchant fails closed instead of reading as legacy.

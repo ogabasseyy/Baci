@@ -84,6 +84,10 @@ BEGIN
         format('%s must not execute trigger function %s', v_role, v_table));
     END LOOP;
   END LOOP;
+  PERFORM pg_temp.check(EXISTS (SELECT 1 FROM pg_catalog.pg_index i
+    WHERE i.indexrelid = 'public.customer_wallet_transactions_legacy_migration_once'::regclass
+      AND i.indisunique AND i.indisvalid AND i.indisready),
+    'the one-pair relabel index must be unique and valid (built concurrently)');
   PERFORM pg_temp.check(EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t
     WHERE t.tgrelid = 'public.customers'::regclass AND t.tgenabled = 'O'
       AND t.tgfoid = 'piggyvest_primary.block_migrating_wallet_customer_deletion()'::regprocedure),

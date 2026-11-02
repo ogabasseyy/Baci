@@ -17,3 +17,7 @@ supabase/tests/oxygen_runtime_recovery_interlock.sql
 supabase/tests/oxygen_accept_cached_plan.sql
 supabase/tests/oxygen_runtime_read_reclamation.sql
 supabase/tests/oxygen_activated_recovery_status.sql
+supabase/tests/oxygen_draft_explicit_ownership.sql
+supabase/tests/oxygen_queued_recovery_reclaim.sql
+supabase/tests/oxygen_callback_backlog_aggregate.sql
+supabase/tests/oxygen_address_callback_redelivery.sql

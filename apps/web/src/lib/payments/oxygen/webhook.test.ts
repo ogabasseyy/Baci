@@ -89,6 +89,8 @@ describe('Oxygen webhook contract', () => {
     ).toEqual({
       kind: 'address',
       phoneNumber: '08000000000',
+      addressValidated: true,
+      deduplicationKey: expect.stringMatching(/^address:[a-f0-9]{64}$/),
       action: 'reconcile_kyc',
     });
   });
@@ -104,11 +106,6 @@ describe('Oxygen webhook contract', () => {
     { ...settlement, activated_loan_count: 1 },
     { ...settlement, occurred_at: 'not-a-date' },
     { ...transaction, webhook_type: 'new_unknown_event' },
-    {
-      webhook_type: 'address_status_update',
-      phone_number: '08000000000',
-      address_validated: false,
-    },
   ])('rejects malformed or undocumented financial payload %#', (input) => {
     expect(parseOxygenWebhook(input)).toBeNull();
   });
@@ -126,6 +123,38 @@ it('preserves the application reference supplied by a real address callback', ()
     kind: 'address',
     phoneNumber: '08000000000',
     applicationReference: '60000000-0000-4000-8000-000000000001',
+    addressValidated: true,
+    deduplicationKey: expect.stringMatching(/^address:[a-f0-9]{64}$/),
     action: 'reconcile_kyc',
   });
+});
+
+it('deduplicates identical address hints without collapsing changed status or application', () => {
+  const base = {
+    webhook_type: 'address_status_update',
+    phone_number: '08000000000',
+    loan_request_reference: '60000000-0000-4000-8000-000000000001',
+    address_validated: true,
+  };
+  const first = parseOxygenWebhook(base);
+  const duplicate = parseOxygenWebhook({ ...base });
+  const changedStatus = parseOxygenWebhook({
+    ...base,
+    address_validated: false,
+  });
+  const changedApplication = parseOxygenWebhook({
+    ...base,
+    loan_request_reference: '60000000-0000-4000-8000-000000000002',
+  });
+  expect(first?.deduplicationKey).toBe(duplicate?.deduplicationKey);
+  expect(first?.deduplicationKey).not.toBe(changedStatus?.deduplicationKey);
+  expect(first?.deduplicationKey).not.toBe(
+    changedApplication?.deduplicationKey
+  );
+  expect(changedStatus).toMatchObject({
+    kind: 'address',
+    addressValidated: false,
+    action: 'reconcile_kyc',
+  });
+  expect(first?.deduplicationKey).not.toContain(base.phone_number);
 });

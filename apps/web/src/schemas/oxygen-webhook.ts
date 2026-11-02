@@ -64,7 +64,7 @@ const address = z.object({
   webhook_type: z.literal('address_status_update'),
   phone_number: reference,
   loan_request_reference: reference.optional(),
-  address_validated: z.literal(true),
+  address_validated: z.boolean(),
 });
 
 // Unknown fields are stripped; unknown event types/statuses fail closed.

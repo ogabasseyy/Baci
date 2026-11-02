@@ -179,6 +179,7 @@ export async function reconcileOxygenCallbacks(
     }
     await callbackRpc(worker, partner, complete ? 'complete' : 'defer', {
       id: job.id,
+      ...(job.retryKey ? { retryKey: job.retryKey } : {}),
     });
   }
 }

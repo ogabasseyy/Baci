@@ -1,4 +1,5 @@
 import 'server-only';
+import { createHash } from 'node:crypto';
 
 import { oxygenWebhookSchema } from '@/schemas/oxygen-webhook';
 import { toOxygenMinorUnits } from './money';
@@ -12,6 +13,16 @@ export function parseOxygenWebhook(input: unknown) {
     return {
       kind: 'address' as const,
       phoneNumber: event.phone_number,
+      addressValidated: event.address_validated,
+      deduplicationKey: `address:${createHash('sha256')
+        .update(
+          JSON.stringify([
+            event.phone_number,
+            event.loan_request_reference ?? null,
+            event.address_validated,
+          ])
+        )
+        .digest('hex')}`,
       ...(event.loan_request_reference
         ? { applicationReference: event.loan_request_reference }
         : {}),

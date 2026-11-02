@@ -15,6 +15,8 @@ it('acknowledges only durable storage and never treats settlement as received fu
     acceptOxygenCallback({ rpc }, 'partner', {
       kind: 'address',
       phoneNumber: '2348012345678',
+      addressValidated: true,
+      deduplicationKey: 'address:synthetic',
       action: 'reconcile_kyc',
     })
   ).resolves.toBe('accepted');
@@ -23,6 +25,8 @@ it('acknowledges only durable storage and never treats settlement as received fu
     acceptOxygenCallback({ rpc }, 'partner', {
       kind: 'address',
       phoneNumber: '2348012345678',
+      addressValidated: true,
+      deduplicationKey: 'address:synthetic',
       action: 'reconcile_kyc',
     })
   ).rejects.toThrow();
@@ -231,6 +235,32 @@ it.each([
     'oxygen_callback',
     expect.objectContaining({
       p_operation: mode === 'success' ? 'complete' : 'defer',
+    })
+  );
+});
+
+it('binds callback completion to the claimed retry key to avoid retiring a later delivery', async () => {
+  const id = '60000000-0000-4000-8000-000000000001';
+  const retry = '60000000-0000-4000-8000-000000000002';
+  const rpc = vi.fn(async (_name: string, args: Record<string, unknown>) => ({
+    error: null,
+    data:
+      args.p_operation === 'pending'
+        ? [{ id, retryKey: retry, kind: 'transaction', workflowIds: [id] }]
+        : { recorded: true },
+  }));
+  await reconcileOxygenCallbacks(
+    { rpc },
+    { call: vi.fn() },
+    'partner',
+    new Set(),
+    async () => undefined
+  );
+  expect(rpc).toHaveBeenCalledWith(
+    'oxygen_callback',
+    expect.objectContaining({
+      p_operation: 'complete',
+      p_payload: { id, retryKey: retry },
     })
   );
 });

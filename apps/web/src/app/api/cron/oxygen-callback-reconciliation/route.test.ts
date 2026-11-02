@@ -57,7 +57,12 @@ describe('Oxygen callback reconciliation cron', () => {
   });
 
   it('drains once with the restricted worker and gated payment recovery', async () => {
-    const worker = { rpc: vi.fn() };
+    const worker = {
+      rpc: vi.fn().mockResolvedValue({
+        error: null,
+        data: { pendingCount: 2, capped: false, oldestAgeSeconds: 120 },
+      }),
+    };
     const provider = { call: vi.fn() };
     const hosts = new Set(['example.test']);
     const payment = vi.fn().mockResolvedValue(undefined);
@@ -68,7 +73,18 @@ describe('Oxygen callback reconciliation cron', () => {
       partnerReference: 'partner',
       reconcilePaymentCallback: payment,
     });
-    expect((await GET(request('Bearer secret'))).status).toBe(200);
+    const response = await GET(request('Bearer secret'));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toEqual({
+      enabled: true,
+      backlog: { pendingCount: 2, capped: false, oldestAgeSeconds: 120 },
+    });
+    expect(worker.rpc).toHaveBeenCalledExactlyOnceWith('oxygen_callback', {
+      p_operation: 'backlog',
+      p_partner: 'partner',
+      p_payload: {},
+    });
     expect(mocks.reconcile).toHaveBeenCalledTimes(1);
     const [actualWorker, actualProvider, partner, actualHosts, check, filter] =
       mocks.reconcile.mock.calls[0];

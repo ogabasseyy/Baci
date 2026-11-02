@@ -67,6 +67,8 @@ it('acknowledges only a durable event and schedules reconciliation afterwards', 
     p_payload: {
       kind: 'address',
       phoneNumber: '2348012345678',
+      addressValidated: true,
+      deduplicationKey: expect.stringMatching(/^address:[a-f0-9]{64}$/),
       action: 'reconcile_kyc',
     },
   });

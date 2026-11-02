@@ -4,6 +4,9 @@
 -- Proves, against live PostgreSQL:
 --   * an owned scope with no intent reads false, and another customer's
 --     intent never makes it true;
+--   * the same customer's intent under another integration of the same
+--     merchant, or under another merchant's integration, never makes the
+--     session integration read true;
 --   * any durable intent for the customer under the integration (dispatched,
 --     unknown, or one written under an earlier user binding) reads true, so
 --     "not started" is never reported where a new claim would collide;
@@ -82,6 +85,33 @@ BEGIN
     'a dispatched intent did not read true');
   PERFORM pg_temp.check(pg_temp.presence(pg_temp.scope(1)) = 'false',
     'another customer''s intent made this customer read true');
+END $$;
+
+-- The same customer's intent under any other integration never counts: a
+-- second integration of the same merchant (its own executor login) and a
+-- foreign merchant's integration each hold an intent for customer 1, and
+-- the session integration still reads false.
+INSERT INTO public.merchants(id, email)
+  VALUES ('b2c00000-0000-4000-8000-000000000003', 'presence-foreign@example.test');
+INSERT INTO piggyvest_primary.integrations(id, merchant_id, business_id, environment, executor_login, enabled)
+  VALUES
+    ('b2c00000-0000-4000-8000-000000000006', 'b2c00000-0000-4000-8000-000000000002',
+     'presence-pilot-business', 'staging', SESSION_USER || '-pilot', true),
+    ('b2c00000-0000-4000-8000-000000000007', 'b2c00000-0000-4000-8000-000000000003',
+     'presence-foreign-business', 'staging', SESSION_USER || '-foreign', true);
+INSERT INTO piggyvest_primary.onboarding_intents(integration_id, merchant_id, customer_id,
+    user_id, request_fingerprint, state)
+  VALUES
+    ('b2c00000-0000-4000-8000-000000000006', 'b2c00000-0000-4000-8000-000000000002',
+     'b2c00000-0000-4000-8000-000000000011', 'b2c00000-0000-4000-8000-000000000021',
+     repeat('6', 64), 'unknown'),
+    ('b2c00000-0000-4000-8000-000000000007', 'b2c00000-0000-4000-8000-000000000003',
+     'b2c00000-0000-4000-8000-000000000011', 'b2c00000-0000-4000-8000-000000000021',
+     repeat('7', 64), 'unknown');
+DO $$
+BEGIN
+  PERFORM pg_temp.check(pg_temp.presence(pg_temp.scope(1)) = 'false',
+    'another integration''s intent made the session integration read true');
 END $$;
 
 -- A scope the session cannot own raises 42501 rather than reading false.

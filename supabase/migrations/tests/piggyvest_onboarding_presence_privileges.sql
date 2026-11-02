@@ -1,6 +1,14 @@
 -- Catalog-only ACL and shape contract for piggyvest_primary.has_onboarding(jsonb)
 -- (20261102045351_piggyvest_onboarding_presence.sql). A denied EXECUTE cannot
 -- be trapped on the replay image, so every denial is read from the catalog.
+--
+-- On the replay image this is a regression guard: no default privilege there
+-- gives service_role, client roles or PUBLIC EXECUTE on a new function in this
+-- schema, so it catches a later explicit grant but cannot by itself prove the
+-- migration's REVOKE. The isolated harness
+-- (apps/web/src/lib/piggyvest/primary-wallet-presence.integration.sql) seeds
+-- default EXECUTE for each of those grantees before applying the migration,
+-- so there these assertions fail unless the REVOKE names every one of them.
 DO $test$
 DECLARE
   routine regprocedure := pg_catalog.to_regprocedure(

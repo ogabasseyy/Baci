@@ -31,6 +31,8 @@ VALUES
   ('a4270300-0000-4000-8000-000000000014',
    'a4270300-0000-4000-8000-000000000001', 'RPC-42703-SHIP', 1000, 'pending');
 
+-- TOPSHIP, not GIGL: GIGL inserts require stored quote economics, which the
+-- cancel path does not read.
 INSERT INTO public.shipments (
   id, order_id, merchant_id, provider, tracking_number,
   sender_address, receiver_address, items
@@ -38,7 +40,7 @@ INSERT INTO public.shipments (
   'a4270300-0000-4000-8000-000000000021',
   'a4270300-0000-4000-8000-000000000012',
   'a4270300-0000-4000-8000-000000000001',
-  'GIGL', 'RPC-42703-PROVIDER', '{}'::jsonb, '{}'::jsonb, '[]'::jsonb
+  'TOPSHIP', 'RPC-42703-PROVIDER', '{}'::jsonb, '{}'::jsonb, '[]'::jsonb
 );
 
 -- Merchant cancellation with a corrected address.

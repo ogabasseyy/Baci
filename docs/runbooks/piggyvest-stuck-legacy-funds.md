@@ -111,7 +111,7 @@ actually delivered.
 
 ### B1. Find and classify (block V1, READ-ONLY)
 
-Expected: one row with `processing | checkout | airtime | 103.00`, vendor `kuda` or `monnify`,
+Expected: the approved purchase among the rows, shaped `processing | checkout | airtime | 103.00`, vendor `kuda` or `monnify`,
 `provider_fallback` empty, `split_wallet` 103, `split_card` 0, `debited` 103.00, `reversed` 0
 and `refunded` 0. Copy `vtu_id` into the ops log.
 
@@ -122,7 +122,11 @@ and `refunded` 0. Copy `vtu_id` into the ops log.
   the purchase without moving money. V1 and V4 count completed ledger rows only. A debit
   row that is pending, failed, expired or has no status is a different case, and so is a
   return row in any status: B3 refuses both, so escalate.
-- **Other rows:** they are not part of this approval. Record them and tell the owner.
+- **Other rows:** V1 is an inventory of every unfinished Ogabassey purchase, so unrelated
+  in-flight purchases are normal. They are not part of this approval: leave them alone. Pick the
+  target by its shape above, and when the ops log already holds a `vtu_id`, by that id. Escalate
+  only when more than one row has the approved shape, or when the id in the ops log is missing
+  from the list.
 - **Any other shape** (a card part, a debit other than 0 or 103.00, money already returned):
   stop and escalate. The B3 block refuses these shapes anyway.
 - **`provider_fallback` is filled in:** the app re-routed the purchase from Monnify to Kuda, so

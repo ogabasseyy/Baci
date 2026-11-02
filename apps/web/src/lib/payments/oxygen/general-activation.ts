@@ -1,5 +1,5 @@
 import 'server-only';
-import { createCipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import type { OxygenRuntimeRpc } from './runtime-service';
 
@@ -67,13 +67,34 @@ export async function runGeneralOxygenActivation(
       }
     }
     const body = Buffer.concat(parts).toString('utf8');
+    let status = 'indeterminate';
+    let referenceMatched = false;
+    try {
+      const parsed = z
+        .object({
+          loan_reference: z.literal(claim.reference),
+          status: z.literal('ACTIVATED'),
+        })
+        .safeParse(JSON.parse(body));
+      referenceMatched = parsed.success;
+      if (response.ok && parsed.success) status = 'activated';
+    } catch {
+      /* Malformed responses remain indeterminate. */
+    }
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', Buffer.from(key, 'hex'), iv);
     cipher.setAAD(
       Buffer.from(`${workflowId}:${claim.attemptId}:${claim.reference}`)
     );
     const encrypted = Buffer.concat([
-      cipher.update(JSON.stringify({ status: response.status, body }), 'utf8'),
+      cipher.update(
+        JSON.stringify({
+          status: response.status,
+          referenceMatched,
+          bodySha256: createHash('sha256').update(body).digest('hex'),
+        }),
+        'utf8'
+      ),
       cipher.final(),
     ]);
     const ciphertext = [
@@ -82,18 +103,6 @@ export async function runGeneralOxygenActivation(
       cipher.getAuthTag().toString('base64url'),
       encrypted.toString('base64url'),
     ].join('.');
-    let status = 'indeterminate';
-    try {
-      const parsed = z
-        .object({
-          loan_reference: z.literal(claim.reference),
-          status: z.literal('ACTIVATED'),
-        })
-        .safeParse(JSON.parse(body));
-      if (response.ok && parsed.success) status = 'activated';
-    } catch {
-      /* Retain malformed responses as indeterminate evidence. */
-    }
     await call('finish', {
       attemptId: claim.attemptId,
       reference: claim.reference,

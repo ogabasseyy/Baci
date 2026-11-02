@@ -15,9 +15,10 @@ reference, activation status and finite numeric terms instead of arbitrary raw
 provider bodies. The existing trial encryption envelope and key are unchanged;
 the decrypted evidence payload has changed, and any external/manual reader
 that expects a `body` field must be updated. Existing stored trial evidence is
-not rewritten or removed. General activation currently still encrypts the full
-provider body; its separate minimization and evidence-recovery requirements
-remain open.
+not rewritten or removed. New general activation evidence stores the HTTP
+status, whether the activation response matched, and a SHA-256 body digest;
+it no longer stores the raw provider body. Existing records are not rewritten,
+and external readers expecting the old `body` field must be updated.
 
 Do not change key material in place. Drafts and phone handoffs already stored
 with the current `v1` format require the original secret to remain readable.

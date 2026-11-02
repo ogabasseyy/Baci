@@ -1,3 +1,4 @@
+import { createDecipheriv } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
@@ -58,6 +59,23 @@ it('stores encrypted response evidence before projection and binds the response 
   expect(finish.status).toBe('activated');
   expect(JSON.stringify(finish)).not.toContain('secret');
   expect(finish.ciphertext).toMatch(/^v1\./);
+  const [, iv, tag, encrypted] = finish.ciphertext.split('.');
+  const decipher = createDecipheriv(
+    'aes-256-gcm',
+    Buffer.from('a'.repeat(64), 'hex'),
+    Buffer.from(iv, 'base64url')
+  );
+  decipher.setAAD(Buffer.from(`${workflow}:${claim.attemptId}:${reference}`));
+  decipher.setAuthTag(Buffer.from(tag, 'base64url'));
+  const plaintext = Buffer.concat([
+    decipher.update(Buffer.from(encrypted, 'base64url')),
+    decipher.final(),
+  ]).toString();
+  expect(plaintext).not.toContain('secret');
+  expect(JSON.parse(plaintext)).toMatchObject({
+    status: 200,
+    referenceMatched: true,
+  });
 });
 it.each([
   'timeout',

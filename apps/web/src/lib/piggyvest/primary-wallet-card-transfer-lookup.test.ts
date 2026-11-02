@@ -64,14 +64,21 @@ describe('authoritative transfer reference lookup', () => {
       expect(await lookup(fixture.command, fixture.context)).toBe('uncertain');
     }
   });
-  it('reports absent for bound terminal-failure evidence so the worker retries', async () => {
-    // Definitive provider failure with all reservation fields bound:
-    // no money moved, so the identical reference is safe to resubmit.
+  it('reports bound terminal-failure evidence as failed, never as absent', async () => {
+    // No money moved under this reference, but resubmitting the same
+    // reference is never safe: the worker holds it for review instead.
     const { lookup } = lookupWith({
       ...success,
       data: { ...success.data, status: 'failed' },
     });
-    expect(await lookup(fixture.command, fixture.context)).toBe('absent');
+    expect(await lookup(fixture.command, fixture.context)).toBe('failed');
+  });
+  it('reports bound pending evidence as pending', async () => {
+    const { lookup } = lookupWith({
+      ...success,
+      data: { ...success.data, status: 'pending' },
+    });
+    expect(await lookup(fixture.command, fixture.context)).toBe('pending');
   });
   it.each([
     { third_party_reference: 'another-reference' },
@@ -85,9 +92,12 @@ describe('authoritative transfer reference lookup', () => {
     });
     expect(await lookup(fixture.command, fixture.context)).toBe('uncertain');
   });
-  it('reports absent only on an authoritative 404', async () => {
-    const { lookup } = lookupWith({ status: false, message: 'not found' }, 404);
-    expect(await lookup(fixture.command, fixture.context)).toBe('absent');
+  it('reports a 404 as not found, never as proof the transfer is absent', async () => {
+    const { lookup } = lookupWith(
+      { status: false, message: 'Transaction Not Found', data: {} },
+      404
+    );
+    expect(await lookup(fixture.command, fixture.context)).toBe('not_found');
   });
   it.each([
     400, 429, 500,

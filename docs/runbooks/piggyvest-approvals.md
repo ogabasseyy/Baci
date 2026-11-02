@@ -28,7 +28,7 @@ approvers.
 
 Status: dark. No feature opens requests yet and no approver login exists.
 The SQL is in `supabase/migrations/*_piggyvest_primary_ops_approvals*.sql`
-(four parts, versions 20261102041457 to 20261102041500) and is tested by
+(four parts, versions 20261102120614 to 20261102120617) and is tested by
 [`supabase/tests/piggyvest_primary_ops_approvals.sql`](../../supabase/tests/piggyvest_primary_ops_approvals.sql).
 
 ## Roles

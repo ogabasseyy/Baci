@@ -1,4 +1,6 @@
 export const PRIMARY_WALLET_STATEMENTS = {
+  // Read-only: whether any durable onboarding intent exists for the scope.
+  presence: 'SELECT piggyvest_primary.has_onboarding($1::jsonb) AS result',
   read: 'SELECT piggyvest_primary.read_onboarding($1::jsonb) AS result',
   claim:
     'SELECT piggyvest_primary.claim_onboarding($1::jsonb, $2::text) AS result',

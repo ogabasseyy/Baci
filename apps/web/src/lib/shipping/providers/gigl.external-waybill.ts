@@ -147,15 +147,17 @@ export async function lookupGiglExternalWaybill(
       return { status: 'not_found' };
     }
 
-    const trackingResult = await fetchGiglLookup(
-      apiClient,
-      preShipmentResult.tokenData,
-      `${apiClient.baseUrl}/track/mobileShipment?Waybill=${encodedWaybill}&fetchOption=1`,
-      signal
-    );
+    // Tracking only describes the parcel; the tracking monitor polls it
+    // again after linking, so a failed or unreadable snapshot is not fatal.
     let tracking: TrackingResult | null = null;
-    if (trackingResult.status === 'found') {
-      try {
+    try {
+      const trackingResult = await fetchGiglLookup(
+        apiClient,
+        preShipmentResult.tokenData,
+        `${apiClient.baseUrl}/track/mobileShipment?Waybill=${encodedWaybill}&fetchOption=1`,
+        signal
+      );
+      if (trackingResult.status === 'found') {
         const [shipment] = apiClient.parseEnvelopeData(
           trackingResult.envelope,
           giglSchemas.trackingData,
@@ -164,14 +166,12 @@ export async function lookupGiglExternalWaybill(
         tracking = shipment
           ? normalizeGiglTrackingShipment(shipment, waybill, new Date())
           : null;
-      } catch (error) {
-        // Tracking only describes the parcel; the tracking monitor polls it
-        // again after linking, so an unreadable snapshot is not fatal.
-        io.log('warn', 'GIGL external waybill tracking snapshot unreadable', {
-          code: 'gigl_external_waybill_tracking_unreadable',
-          message: error instanceof Error ? error.message : 'unknown',
-        });
       }
+    } catch (error) {
+      io.log('warn', 'GIGL external waybill tracking snapshot unavailable', {
+        code: 'gigl_external_waybill_tracking_unavailable',
+        message: error instanceof Error ? error.message : 'unknown',
+      });
     }
 
     return {

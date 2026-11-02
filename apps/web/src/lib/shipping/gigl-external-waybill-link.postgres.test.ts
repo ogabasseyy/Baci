@@ -184,6 +184,14 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
       ).toThrow(/waybill_already_linked/);
     });
 
+    it('lets a cancelled link release its waybill to another order', () => {
+      expect(
+        last(`${actor(ownerId)} ${link(order('a'))} ${asPostgres}
+          UPDATE public.shipments SET status = 'cancelled' WHERE order_id = '${order('a')}';
+          ${actor(ownerId)} ${link(order('b'), proof(order('b')))}`)
+      ).toBe('t');
+    });
+
     it('enforces the waybill uniqueness index for direct writers too', () => {
       const insert = (status: string) => `INSERT INTO public.shipments
         (merchant_id, provider, tracking_number, status, sender_address, receiver_address, items)

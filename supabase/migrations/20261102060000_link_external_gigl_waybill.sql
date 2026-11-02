@@ -215,6 +215,15 @@ BEGIN
     WHERE other_order.id <> p_order_id
       AND pg_catalog.upper(pg_catalog.btrim(other_order.tracking_number))
         = pg_catalog.upper(v_waybill)
+      -- A cancelled link releases the waybill, as the index does.
+      AND NOT EXISTS (
+        SELECT 1 FROM public.shipments AS released
+        WHERE released.order_id = other_order.id
+          AND released.provider = 'GIGL'
+          AND released.status = 'cancelled'
+          AND pg_catalog.upper(pg_catalog.btrim(released.tracking_number))
+            = pg_catalog.upper(v_waybill)
+      )
   ) THEN
     RAISE EXCEPTION 'waybill_already_linked' USING ERRCODE = '23505';
   END IF;

@@ -153,6 +153,20 @@ describe('GIGL external waybill lookup', () => {
     expect(retryHeaders.get('access-token')).toBe('fresh');
   });
 
+  it('still finds the waybill when the tracking endpoint fails', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(loginEnvelope('token-1')))
+      .mockResolvedValueOnce(jsonResponse(preShipmentEnvelope))
+      .mockResolvedValueOnce(statusResponse(502, { message: 'Bad gateway' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { GiglProvider } = await import('./gigl');
+    await expect(
+      new GiglProvider().lookupExternalWaybill('1349639588')
+    ).resolves.toMatchObject({ status: 'found', tracking: null });
+  });
+
   it('treats a response for a different waybill as not found', async () => {
     const fetchMock = vi
       .fn()

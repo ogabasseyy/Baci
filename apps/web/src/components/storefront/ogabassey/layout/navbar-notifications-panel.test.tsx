@@ -38,6 +38,12 @@ describe('NavbarNotificationsPanel', () => {
       screen.getByRole('heading', { name: 'Notifications' })
     ).toBeInTheDocument();
     expect(screen.getByText('No Notifications')).toBeInTheDocument();
+    expect(
+      screen.getByRole('region', { name: /notifications/i })
+    ).toHaveClass('w-[min(20rem,calc(100vw-2rem))]');
+    expect(
+      screen.getByRole('region', { name: /notifications/i })
+    ).toHaveClass('md:w-80');
   });
 
   it('links to the account page and closes after selection', async () => {

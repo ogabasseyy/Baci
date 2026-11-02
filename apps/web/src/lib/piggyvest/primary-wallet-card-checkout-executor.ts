@@ -2,26 +2,15 @@ import 'server-only';
 import { Client } from 'pg';
 import { primaryWalletCardCheckoutRuntimeSchema } from '@/schemas/primary-wallet-card-checkout-runtime';
 
+// Card top-up initialization is retired, so there is deliberately no
+// statement for reserve, claim_initialization or record_initialization:
+// the authorizer login only reads existing operations. Their EXECUTE
+// grants are also revoked in the database.
 const statements = {
-  reserve: {
-    role: 'authorizer',
-    sql: 'SELECT piggyvest_primary_card.reserve($1::jsonb,$2::jsonb) AS result',
-    count: 2,
-  },
   read: {
     role: 'authorizer',
     sql: 'SELECT piggyvest_primary_card.read_operation($1::jsonb,$2::uuid) AS result',
     count: 2,
-  },
-  claim: {
-    role: 'authorizer',
-    sql: 'SELECT piggyvest_primary_card.claim_initialization($1::jsonb,$2::uuid) AS result',
-    count: 2,
-  },
-  initialize: {
-    role: 'authorizer',
-    sql: 'SELECT piggyvest_primary_card.record_initialization($1::jsonb,$2::uuid,$3::uuid,$4::jsonb) AS result',
-    count: 4,
   },
   collection: {
     role: 'evidence',

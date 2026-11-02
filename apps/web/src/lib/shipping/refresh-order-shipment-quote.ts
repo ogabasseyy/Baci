@@ -8,6 +8,7 @@ import {
   selectPreferredQuote,
 } from '@/lib/shipping/order-shipment-booking-utils';
 import { persistRefreshedShippingQuote } from '@/lib/shipping/persist-refreshed-shipping-quote';
+import { repriceGiglQuoteForPaidFee } from '@/lib/shipping/reprice-gigl-quote-for-paid-fee';
 import type {
   ShippingAddress,
   ShippingProviderCode,
@@ -119,7 +120,7 @@ export async function refreshOrderShipmentQuote(
     provider,
     refreshRequest
   );
-  const replacement = selectPreferredQuote(
+  const preferred = selectPreferredQuote(
     Array.isArray(freshQuotes) ? freshQuotes : [],
     {
       serviceTier: quote.service_tier,
@@ -128,13 +129,20 @@ export async function refreshOrderShipmentQuote(
     }
   );
 
-  if (!replacement) {
+  if (!preferred) {
     throw new OrderShipmentBookingError(
       'No active shipping quote is available for this provider right now.',
       400,
       'QUOTE_REFRESH_FAILED'
     );
   }
+
+  // An order paid at an unrounded v1 GIGL fee (before NGN 100 rounding) keeps
+  // that fee when the fresh provider cost reproduces it.
+  const replacement =
+    'expectedShippingFee' in options
+      ? repriceGiglQuoteForPaidFee(preferred, options.expectedShippingFee)
+      : preferred;
 
   // Fail closed before the order-binding persist RPC when the refreshed tariff
   // no longer matches the paid shipping fee.

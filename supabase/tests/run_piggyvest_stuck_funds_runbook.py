@@ -23,6 +23,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(HERE))
 import piggyvest_stuck_funds_runbook_ledger_checks as ledger_checks  # noqa: E402
 import piggyvest_stuck_funds_runbook_vtu_checks as vtu_checks  # noqa: E402
+from piggyvest_stuck_funds_runbook_sources import real_function, real_trigger  # noqa: E402
 
 RUNBOOK_SQL = ROOT / 'docs/runbooks/piggyvest-stuck-legacy-funds.sql'
 FIXTURE = HERE / 'piggyvest_stuck_funds_runbook_fixture.sql'
@@ -36,20 +37,6 @@ ORDER = '00000000-0000-4000-8000-0000000000b1'
 ORDER_OTHER = '00000000-0000-4000-8000-0000000000b9'
 VTU = '00000000-0000-4000-8000-000000000101'
 VTU_OTHER = '00000000-0000-4000-8000-000000000109'
-
-
-def real_function(name):
-    """The latest CREATE OR REPLACE FUNCTION public.<name> in supabase/migrations, verbatim."""
-    head = re.compile(r'CREATE OR REPLACE FUNCTION "?public"?\."?' + name + r'"?\(')
-    sources = sorted(path for path in (ROOT / 'supabase/migrations').glob('*.sql')
-                     if head.search(path.read_text(encoding='utf-8')))
-    if not sources:
-        raise RuntimeError(f'no migration defines public.{name}')
-    text = sources[-1].read_text(encoding='utf-8')
-    body = text[list(head.finditer(text))[-1].start():]
-    tag = re.search(r'\bAS\s+(\$[a-z_]*\$)', body, re.I)
-    end = body.index(tag.group(1) + ';', tag.end())
-    return body[:end + len(tag.group(1)) + 1]
 
 
 def blocks(text):
@@ -125,6 +112,7 @@ class Cluster:
 
     def build_template(self):
         setup = '\n'.join([FIXTURE.read_text(encoding='utf-8'),
+                           real_trigger('update_vtu_transactions_terminal_at', 'update_vtu_terminal_at'),
                            *(real_function(name) for name in REAL_FUNCTIONS),
                            SEED.read_text(encoding='utf-8')])
         self.must('postgres', 'CREATE DATABASE runbook_template')
@@ -282,6 +270,11 @@ def main():
             missing = [label for label in ['O1', 'O2', 'V1', 'V2', 'V3', 'V4']
                        if label not in rb.blocks]
             check(not missing, f'all runbook blocks present (missing: {missing})')
+            check('update_vtu_terminal_at' not in FIXTURE.read_text(encoding='utf-8'),
+                  'the terminal_at trigger is loaded from supabase/migrations, not copied into the fixture')
+            check(cluster.must('runbook_template', "SELECT count(*) FROM pg_trigger WHERE tgname = "
+                               "'update_vtu_transactions_terminal_at' AND NOT tgisinternal").strip() == '1',
+                  'the real terminal_at trigger is installed in the fixture database')
             if not missing:
                 read_block_checks(rb)
                 order_cancel_checks(rb)

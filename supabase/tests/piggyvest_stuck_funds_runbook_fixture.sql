@@ -119,28 +119,7 @@ CREATE OR REPLACE TRIGGER "update_vtu_transactions_updated_at" BEFORE UPDATE ON 
 ALTER TABLE public.vtu_transactions
   ADD COLUMN IF NOT EXISTS terminal_at timestamptz;
 
-CREATE OR REPLACE FUNCTION public.update_vtu_terminal_at()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = ''
-AS $$
-BEGIN
-  NEW.terminal_at := NOW();
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS update_vtu_transactions_terminal_at
-  ON public.vtu_transactions;
-
-CREATE TRIGGER update_vtu_transactions_terminal_at
-  BEFORE UPDATE ON public.vtu_transactions
-  FOR EACH ROW
-  WHEN (
-    OLD.status IS DISTINCT FROM NEW.status
-    AND NEW.status IN ('successful', 'failed')
-  )
-  EXECUTE FUNCTION public.update_vtu_terminal_at();
+-- The terminal-time trigger function and its trigger are loaded verbatim from supabase/migrations by the runner.
 -- Stubs for dependencies of the real cancel_order_as_merchant that the checks do not exercise.
 CREATE SCHEMA IF NOT EXISTS auth;
 CREATE SCHEMA IF NOT EXISTS private;

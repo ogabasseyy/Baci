@@ -85,7 +85,7 @@ export function CookieConsent() {
 
               <div className="flex-1 space-y-1">
                 <h3 className="font-semibold text-sm">We value your privacy</h3>
-                <div className="text-sm text-muted-foreground leading-snug">
+                <div className="space-y-1 text-sm text-muted-foreground leading-snug">
                   <p>We use cookies to improve your experience.</p>
                   <p>
                     By using our store, you agree to our{' '}

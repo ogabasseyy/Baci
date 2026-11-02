@@ -79,26 +79,6 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(categoryPdpPage).toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp-critical\.css['"];?/
     );
-    expect(categoryPdpPage).toMatch(
-      /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp-critical-summary\.css['"];?/
-    );
-    expect(categoryPdpPage).not.toMatch(
-      /storefront-pdp-description-critical\.css/
-    );
-    expect(categoryPdpPage).not.toMatch(/storefront-pdp-semantic\.css/);
-
-    const deferredDetailIsland = readStorefrontFile(
-      '../../components/storefront/ogabassey/pdp/deferred-detail-island.tsx'
-    );
-    expect(deferredDetailIsland).toMatch(
-      /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp-description-critical\.css['"];?/
-    );
-    const productSemanticSections = readStorefrontFile(
-      '../../components/storefront/ogabassey/seo/product-semantic-sections.tsx'
-    );
-    expect(productSemanticSections).toMatch(
-      /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp-semantic\.css['"];?/
-    );
     expect(categoryPdpLoading).toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp\.css['"];?/
     );

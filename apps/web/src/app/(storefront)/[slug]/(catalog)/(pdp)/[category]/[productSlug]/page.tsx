@@ -1,5 +1,7 @@
 import '@/app/(storefront)/storefront-pdp-critical.css';
 import '@/app/(storefront)/storefront-pdp-critical-summary.css';
+import '@/app/(storefront)/storefront-pdp-description-critical.css';
+import '@/app/(storefront)/storefront-pdp-semantic.css';
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { type ReactNode, Suspense } from 'react';

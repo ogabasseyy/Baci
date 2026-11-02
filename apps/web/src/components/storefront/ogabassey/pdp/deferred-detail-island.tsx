@@ -1,4 +1,3 @@
-import '@/app/(storefront)/storefront-pdp-description-critical.css';
 import type { ReactNode } from 'react';
 import { sanitizeForSafeHtml } from '@/components/ui/sanitized-html';
 import { SafeHtml } from '@/components/ui/safe-html';

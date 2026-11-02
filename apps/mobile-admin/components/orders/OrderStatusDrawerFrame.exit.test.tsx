@@ -28,10 +28,12 @@ vi.mock('react-native-reanimated', () => ({
 vi.mock('@gorhom/bottom-sheet', () => ({
   __esModule: true,
   default: ({
+    backdropComponent: BackdropComponent,
     children,
     onClose,
     ref,
   }: {
+    backdropComponent?: (props: Record<string, unknown>) => ReactNode;
     children?: ReactNode;
     onClose?: () => void;
     ref?: { current: unknown };
@@ -39,6 +41,7 @@ vi.mock('@gorhom/bottom-sheet', () => ({
     if (ref) ref.current = { close: vi.fn(), snapToIndex: vi.fn() };
     return (
       <section aria-label="gorhom-status-drawer">
+        {BackdropComponent?.({})}
         {children}
         <button
           aria-label="Pan status drawer down"
@@ -48,7 +51,13 @@ vi.mock('@gorhom/bottom-sheet', () => ({
       </section>
     );
   },
-  BottomSheetBackdrop: () => null,
+  BottomSheetBackdrop: ({ onPress }: { onPress?: () => void }) => (
+    <button
+      aria-label="Status drawer backdrop"
+      onClick={onPress}
+      type="button"
+    />
+  ),
   BottomSheetScrollView: passThrough,
   BottomSheetView: passThrough,
 }));
@@ -142,5 +151,26 @@ describe('OrderStatusDrawerFrame exit', () => {
     expect(
       screen.queryByLabelText('gorhom-status-drawer')
     ).not.toBeInTheDocument();
+  });
+
+  it('keeps the slide-down when the backdrop asks the drawer to close', () => {
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <OrderStatusDrawerFrame {...props} onClose={onClose} visible={true}>
+        <span>Status rows</span>
+      </OrderStatusDrawerFrame>
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Status drawer backdrop' })
+    );
+    expect(onClose).toHaveBeenCalledOnce();
+    rerender(
+      <OrderStatusDrawerFrame {...props} onClose={onClose} visible={false}>
+        <span>Status rows</span>
+      </OrderStatusDrawerFrame>
+    );
+
+    expect(screen.getByLabelText('gorhom-status-drawer')).toBeInTheDocument();
   });
 });

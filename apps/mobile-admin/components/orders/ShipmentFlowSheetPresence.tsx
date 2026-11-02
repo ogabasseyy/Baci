@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode, type RefObject, useEffect, useRef } from 'react';
 import { Modal, View } from 'react-native';
 import Animated, {
   FadeIn,
@@ -12,6 +12,15 @@ import { styles } from './ShipmentFlowSheet.styles';
 
 const SHEET_OPEN_DURATION_MS = 280;
 const SHEET_CLOSE_DURATION_MS = 220;
+
+function reportShown(
+  shownRef: RefObject<boolean>,
+  onShowRef: RefObject<(() => void) | undefined>
+) {
+  if (shownRef.current) return;
+  shownRef.current = true;
+  onShowRef.current?.();
+}
 
 interface ShipmentFlowSheetPresenceProps {
   // Rendered above the sheet without its slide (e.g. the identifier scanner).
@@ -41,17 +50,20 @@ export function ShipmentFlowSheetPresence({
     onDismissed
   );
   const onShowRef = useRef(onShow);
+  // Whether this presentation has reported itself shown yet.
+  const shownRef = useRef(false);
 
   useEffect(() => {
     onShowRef.current = onShow;
   }, [onShow]);
 
-  // Backstop for platforms where the modal's own onShow event is not
-  // delivered; firing it twice is harmless for callers.
+  // Report each presentation once: from the modal's onShow, or from this
+  // backstop on platforms where that event is not delivered.
   useEffect(() => {
     if (!visible) return;
+    shownRef.current = false;
     const timer = setTimeout(
-      () => onShowRef.current?.(),
+      () => reportShown(shownRef, onShowRef),
       SHEET_OPEN_DURATION_MS
     );
     return () => clearTimeout(timer);
@@ -64,7 +76,7 @@ export function ShipmentFlowSheetPresence({
       animationType="none"
       onDismiss={reportDismissed}
       onRequestClose={onRequestClose}
-      onShow={() => onShowRef.current?.()}
+      onShow={() => reportShown(shownRef, onShowRef)}
       transparent
       visible={isPresented}
     >

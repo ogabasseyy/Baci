@@ -129,6 +129,27 @@ describe('ShipmentFlowSheetPresence', () => {
     expect(onShow).toHaveBeenCalled();
   });
 
+  it('reports a presentation as shown only once when both the modal event and the backstop fire', () => {
+    vi.useFakeTimers();
+    const onShow = vi.fn();
+    render(
+      <ShipmentFlowSheetPresence
+        onRequestClose={vi.fn()}
+        onShow={onShow}
+        visible
+      >
+        <p>Fulfillment Details</p>
+      </ShipmentFlowSheetPresence>
+    );
+
+    act(() => mocks.onShow?.());
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+
+    expect(onShow).toHaveBeenCalledOnce();
+  });
+
   it('fades the backdrop in instead of sliding it up with the sheet', () => {
     renderSheet(true);
 

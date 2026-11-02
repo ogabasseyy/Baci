@@ -120,10 +120,17 @@ export function OrderStatusDrawerFrame({
       return;
     }
 
-    // A pan-down or backdrop tap already closed the sheet; no second close
-    // event is guaranteed, so release it as soon as the parent hides it.
-    markClosedBySheet();
     onClose();
+  };
+
+  // Gorhom reports onClose only once the sheet is already down (a pan-down,
+  // or the close animation finishing). If that happens while still visible,
+  // no second close event is guaranteed, so release as soon as the parent
+  // hides it. Header and backdrop presses go through handleClose and keep
+  // the slide-down.
+  const handleSheetClosed = () => {
+    if (visibleRef.current) markClosedBySheet();
+    handleClose();
   };
 
   const handleIndexChange = (index: number) => {
@@ -179,7 +186,7 @@ export function OrderStatusDrawerFrame({
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         onChange={handleIndexChange}
-        onClose={handleClose}
+        onClose={handleSheetClosed}
         snapPoints={snapPoints}
       >
         <BottomSheetView

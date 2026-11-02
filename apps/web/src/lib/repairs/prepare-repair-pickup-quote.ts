@@ -37,7 +37,7 @@ export async function prepareRepairPickupQuote(input: {
     return { ok: false, reason: 'gigl_unavailable' };
   }
   const quote = repriceRepairPickupQuoteForPaidFee(result.quote, paidPickupFee);
-  if (isRepairPickupQuoteAbovePaidFee(quote.price, paidPickupFee)) {
+  if (isRepairPickupQuoteAbovePaidFee(quote.price, paidPickupFee ?? null)) {
     return { ok: false, reason: 'quote_increased' };
   }
   return { ok: true, quote, request: result.request };

@@ -147,6 +147,6 @@ confirmed global 9% customer rate and 3% split with an inferred setting.
 pre-copy body hash of `savings_notifications.interest_recorded()` and its
 routine inventory. They describe the October staging snapshot and are frozen
 to that pre-copy schema. The interest-copy migration
-(`20261102043709_savings_interest_notification_copy`) changes that body and
+(`20261102124300_savings_interest_notification_copy`) changes that body and
 adds two helper routines, so re-pin both files before reusing this tooling
 against a database that has the migration.

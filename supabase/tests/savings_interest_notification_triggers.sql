@@ -1,5 +1,5 @@
 -- Behaviour test: paid-interest notifications after migration
--- 20261102043709_savings_interest_notification_copy. Proves, against live
+-- 20261102124300_savings_interest_notification_copy. Proves, against live
 -- PostgreSQL, for both paid-interest sources:
 --   * every recorded paid-interest insert with a positive amount enqueues
 --     exactly one notification, keyed to that payout or ledger operation, with

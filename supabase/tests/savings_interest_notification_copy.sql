@@ -1,5 +1,5 @@
 -- Contract test: the paid-interest notification copy helpers and their
--- privileges (migration 20261102043709_savings_interest_notification_copy).
+-- privileges (migration 20261102124300_savings_interest_notification_copy).
 -- Proves, against live PostgreSQL:
 --   * progress_message(saved_kobo, target_kobo) returns a safe fallback for a
 --     zero, negative, missing or non-finite target or saved amount, the same

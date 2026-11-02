@@ -91,6 +91,33 @@ describe('listCurrentQuizEventsV2', () => {
       ]);
     });
 
+    it('keeps scanning past a page of test-mode events to find a live quiz', async () => {
+      const { supabase } = client((offset) =>
+        offset === 0
+          ? {
+              data: appQuizEventsResponse(
+                [appQuizEvent({ id: id(6), mode: 'test', status: 'active' })],
+                { hasMore: true, nextOffset: 50, offset }
+              ),
+              error: null,
+            }
+          : {
+              data: appQuizEventsResponse([appQuizEvent({ id: id(7) })], {
+                hasMore: false,
+                nextOffset: null,
+                offset,
+              }),
+              error: null,
+            }
+      );
+
+      const result = await listCurrentQuizEventsV2(supabase, MERCHANT_ID);
+
+      expect(result.ok && result.events.map((event) => event.id)).toEqual([
+        id(7),
+      ]);
+    });
+
     it('stops at the first page of completed history instead of scanning it all', async () => {
       const { rpc, supabase } = client((offset) => ({
         data: appQuizEventsResponse(

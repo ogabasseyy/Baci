@@ -35,6 +35,6 @@ it('fails closed for an offer whose product owner cannot be resolved', async () 
       [{ id: p, offerId: offer }],
       [{ id: p, merchant_id: '' }]
     )
-  ).rejects.toThrow('merchant');
+  ).resolves.toEqual(new Map());
   expect(rpc).not.toHaveBeenCalled();
 });

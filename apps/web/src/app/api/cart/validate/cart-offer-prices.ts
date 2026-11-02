@@ -67,8 +67,9 @@ export async function fetchCartOfferPrices(
   for (const id of offerProductIds) {
     if (!owners.has(id.toLowerCase())) continue; // A missing product remains invalid to the route.
     const merchant = owners.get(id.toLowerCase());
-    if (!merchant || !uuidRegex.test(merchant))
-      throw new Error('Cannot verify offer merchant');
+    // A malformed owner cannot authorize an offer read; leave the offer
+    // absent so the route invalidates that line without blocking others.
+    if (!merchant || !uuidRegex.test(merchant)) continue;
     const ids = groups.get(merchant) ?? [];
     ids.push(id);
     groups.set(merchant, ids);

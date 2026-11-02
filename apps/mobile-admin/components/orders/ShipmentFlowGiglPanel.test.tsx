@@ -278,6 +278,8 @@ describe('ShipmentFlowGiglPanel', () => {
 
     expect(screen.getByText('GIG delivery')).toBeTruthy();
     expect(screen.getByText('₦11,000')).toBeTruthy();
+    expect(screen.getByText('Wallet balance: ₦1,000')).toBeTruthy();
+    expect(screen.getByText('Top up ₦10,000 to book')).toBeTruthy();
     expect(
       screen.getByText(
         'Ask the store owner or an admin to book GIG for this order.'

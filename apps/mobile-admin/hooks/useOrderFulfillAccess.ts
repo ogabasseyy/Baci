@@ -20,6 +20,8 @@ async function fetchOrderFulfillAccess(
   if (!rows.success)
     throw new Error('Received an invalid order access response');
 
+  // Limitation (as with expense access): get_user_access returns a single
+  // row, so multi-merchant staff can be denied here; this fails closed.
   // get_user_access returns one merchant; when it is not the merchant this
   // screen shows, the server would refuse too, so deny instead of throwing.
   const row = rows.data.find((access) => access.merchant_id === merchantId);

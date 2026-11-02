@@ -9,7 +9,7 @@ import type {
   OrderGiglQuote,
   OrderGiglReceiver,
 } from '@/lib/order-gigl-shipping';
-import { styles as sheetStyles } from './ShipmentFlowSheet.styles';
+import { ShipmentGiglPreviewCard } from './ShipmentGiglPreviewCard';
 import {
   ShipmentOptionCard,
   type ShipmentOptionDetail,
@@ -160,31 +160,12 @@ export function ShipmentFlowGiglPanel({
           title="Ship with GIG"
         />
       ) : (
-        <View
-          style={[
-            sheetStyles.optionCard,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <View style={sheetStyles.optionCopy}>
-            <Text style={[sheetStyles.optionTitle, { color: colors.text }]}>
-              GIG delivery
-            </Text>
-            <Text
-              style={[
-                sheetStyles.optionDescription,
-                { color: colors.textSecondary },
-              ]}
-            >
-              {description}
-            </Text>
-          </View>
-          {price ? (
-            <Text style={[panelStyles.price, { color: colors.text }]}>
-              {price}
-            </Text>
-          ) : null}
-        </View>
+        <ShipmentGiglPreviewCard
+          colors={colors}
+          description={description}
+          details={details}
+          price={price}
+        />
       )}
 
       {bookingAllowed ? null : (
@@ -302,7 +283,6 @@ const panelStyles = StyleSheet.create({
   copyRow: { flexDirection: 'row', gap: 8 },
   field: { gap: 6, marginBottom: 10 },
   note: { marginBottom: 12, paddingHorizontal: 12 },
-  price: { fontSize: 16, fontWeight: '700' },
   input: {
     borderRadius: 10,
     borderWidth: 1,

@@ -1,10 +1,30 @@
 'use client';
 import { ArrowLeft } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
+import { isTrustedOxygenHostedUrl } from '@/lib/payments/oxygen/trusted-hosted-url';
+import { OxygenHostedOriginsContext } from './OxygenPaymentSurfaceContext';
 
-type PaymentProps = { url: string; onClose: () => void };
+type PaymentProps = {
+  url: string;
+  onClose: () => void;
+  hostedOrigins?: readonly string[];
+};
 
 export function OxygenHostedPayment(props: PaymentProps) {
+  const contextOrigins = useContext(OxygenHostedOriginsContext);
+  const origins = props.hostedOrigins ?? contextOrigins;
+  if (!isTrustedOxygenHostedUrl(props.url, origins)) {
+    return (
+      <section aria-label="Secure payment">
+        <p role="alert">
+          This payment link is unavailable. Return to your payment plan.
+        </p>
+        <button type="button" onClick={props.onClose}>
+          Back to payment plan
+        </button>
+      </section>
+    );
+  }
   return <HostedPaymentDocument key={props.url} {...props} />;
 }
 

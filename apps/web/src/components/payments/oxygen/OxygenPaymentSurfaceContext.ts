@@ -8,6 +8,8 @@ export const OxygenSelfieSurfaceContext = createContext<
   ((url: string, workflowId?: string) => void) | null
 >(null);
 
+export const OxygenHostedOriginsContext = createContext<readonly string[]>([]);
+
 export const OxygenPaymentOpenContext = createContext(false);
 
 export const OxygenCheckoutCloseContext = createContext<

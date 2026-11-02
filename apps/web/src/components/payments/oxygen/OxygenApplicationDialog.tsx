@@ -12,6 +12,7 @@ import { OxygenHostedPayment } from './OxygenHostedPayment';
 import { isOxygenSelfieUrl, OxygenHostedSelfie } from './OxygenHostedSelfie';
 import {
   OxygenCheckoutCloseContext,
+  OxygenHostedOriginsContext,
   OxygenPaymentOpenContext,
   OxygenPaymentSurfaceContext,
   OxygenSelfieConfirmedContext,
@@ -29,6 +30,7 @@ export function OxygenApplicationDialog({
   products,
   currency,
   selfieOrigins = [],
+  hostedOrigins = [],
 }: {
   orderId: string;
   merchantSlug?: string;
@@ -37,6 +39,7 @@ export function OxygenApplicationDialog({
   currency?: string;
   prefill?: OxygenCustomerPrefill;
   selfieOrigins?: readonly string[];
+  hostedOrigins?: readonly string[];
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const stage = useRef<OxygenJourneyStage>('loading');
@@ -144,22 +147,24 @@ export function OxygenApplicationDialog({
           <OxygenSelfieConfirmedContext.Provider value={selfieConfirmed}>
             <OxygenCheckoutCloseContext.Provider value={close}>
               <OxygenPaymentSurfaceContext.Provider value={setPaymentUrl}>
-                <OxygenPaymentOpenContext.Provider value={!!paymentUrl}>
-                  <div className={styles.body} hidden={hostedOpen}>
-                    <OxygenProviderFlow
-                      active={open && !selfieUrl}
-                      orderId={orderId}
-                      merchantSlug={merchantSlug}
-                      prefill={prefill}
-                      productAmount={productAmount}
-                      products={products}
-                      currency={currency}
-                      onProgress={(value) => {
-                        stage.current = value;
-                      }}
-                    />
-                  </div>
-                </OxygenPaymentOpenContext.Provider>
+                <OxygenHostedOriginsContext.Provider value={hostedOrigins}>
+                  <OxygenPaymentOpenContext.Provider value={!!paymentUrl}>
+                    <div className={styles.body} hidden={hostedOpen}>
+                      <OxygenProviderFlow
+                        active={open && !selfieUrl}
+                        orderId={orderId}
+                        merchantSlug={merchantSlug}
+                        prefill={prefill}
+                        productAmount={productAmount}
+                        products={products}
+                        currency={currency}
+                        onProgress={(value) => {
+                          stage.current = value;
+                        }}
+                      />
+                    </div>
+                  </OxygenPaymentOpenContext.Provider>
+                </OxygenHostedOriginsContext.Provider>
               </OxygenPaymentSurfaceContext.Provider>
             </OxygenCheckoutCloseContext.Provider>
           </OxygenSelfieConfirmedContext.Provider>
@@ -183,6 +188,7 @@ export function OxygenApplicationDialog({
         {paymentUrl && (
           <OxygenHostedPayment
             url={paymentUrl}
+            hostedOrigins={hostedOrigins}
             onClose={() => setPaymentUrl(null)}
           />
         )}

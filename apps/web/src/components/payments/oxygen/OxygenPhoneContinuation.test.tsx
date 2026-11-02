@@ -48,3 +48,19 @@ it('keeps a request failure recoverable and ignores unsafe returned URLs', async
   );
   expect(window.location.pathname).toBe('/auth/oxygen-selfie');
 });
+
+it('rejects an HTTPS phone redirect outside the configured selfie origins', async () => {
+  window.history.replaceState(
+    null,
+    '',
+    `/auth/oxygen-selfie#${'t'.repeat(43)}`
+  );
+  m.fetch.mockResolvedValue(
+    Response.json({ url: 'https://evil.example.test/selfie' })
+  );
+  render(<OxygenPhoneContinuation />);
+  expect(
+    await screen.findByRole('heading', { name: 'Scan a new QR code' })
+  ).toBeVisible();
+  expect(window.location.pathname).toBe('/auth/oxygen-selfie');
+});

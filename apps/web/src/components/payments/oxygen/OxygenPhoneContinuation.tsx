@@ -2,9 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { fetchWithCsrf } from '@/lib/api-client';
+import { isTrustedOxygenHostedUrl } from '@/lib/payments/oxygen/trusted-hosted-url';
 
 /** The fragment never reaches HTTP access logs. Exchange once; never log or persist it. */
-export function OxygenPhoneContinuation() {
+export function OxygenPhoneContinuation({
+  selfieOrigins = [],
+}: {
+  selfieOrigins?: readonly string[];
+}) {
   const started = useRef(false);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -33,22 +38,15 @@ export function OxygenPhoneContinuation() {
           typeof body.url !== 'string'
         )
           throw new Error('Unavailable');
-        const url = new URL(body.url);
-        if (
-          url.protocol !== 'https:' ||
-          url.username ||
-          url.password ||
-          url.port
-        )
+        if (!isTrustedOxygenHostedUrl(body.url, selfieOrigins))
           throw new Error('Unavailable');
-        // Server enforces the exact provider host; no arbitrary client-selected destination.
-        window.location.replace(url.href);
+        window.location.replace(new URL(body.url).href);
       } catch {
         setFailed(true);
       }
     }
     void open();
-  }, []);
+  }, [selfieOrigins]);
   return (
     <main className="grid min-h-dvh place-items-center bg-background p-6 text-foreground">
       <div className="max-w-sm space-y-3 text-center" role="status">

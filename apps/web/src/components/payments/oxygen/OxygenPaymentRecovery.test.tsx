@@ -2,11 +2,13 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
+  render as rtlRender,
   screen,
   waitFor,
 } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { OxygenHostedOriginsContext } from './OxygenPaymentSurfaceContext';
 
 vi.mock('@/lib/api-client', () => ({
   fetchWithCsrf: (...args: unknown[]) =>
@@ -14,6 +16,16 @@ vi.mock('@/lib/api-client', () => ({
 }));
 
 import { OxygenPaymentRecovery } from './OxygenPaymentRecovery';
+
+function render(element: ReactElement) {
+  return rtlRender(
+    <OxygenHostedOriginsContext.Provider
+      value={['https://payment.hydrogenpay.com']}
+    >
+      {element}
+    </OxygenHostedOriginsContext.Provider>
+  );
+}
 
 const workflow = '60000000-0000-4000-8000-000000000001';
 const reference = '70000000-0000-4000-8000-000000000001';

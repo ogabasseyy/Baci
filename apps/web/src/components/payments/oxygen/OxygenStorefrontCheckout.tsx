@@ -24,7 +24,8 @@ export async function OxygenStorefrontCheckout({
     data: { user },
     error: authError,
   } = await client.auth.getUser();
-  const selfieOrigins = readOxygenHostedOrigins().selfie;
+  const { selfie: selfieOrigins, hosted: hostedOrigins } =
+    readOxygenHostedOrigins();
   if (authError || !user) {
     return (
       <CheckoutPage
@@ -33,6 +34,7 @@ export async function OxygenStorefrontCheckout({
             orderId={orderId}
             merchantSlug={merchantSlug}
             selfieOrigins={selfieOrigins}
+            hostedOrigins={hostedOrigins}
           />
         }
       />
@@ -127,6 +129,7 @@ export async function OxygenStorefrontCheckout({
               orderId={orderId}
               merchantSlug={merchantSlug}
               selfieOrigins={selfieOrigins}
+              hostedOrigins={hostedOrigins}
               prefill={contact}
               productAmount={order.total}
               products={order.order_items.map((item) => {

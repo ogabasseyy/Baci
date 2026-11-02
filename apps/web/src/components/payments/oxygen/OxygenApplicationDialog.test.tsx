@@ -73,6 +73,7 @@ it('keeps the close icon actionable above the content while loading', () => {
   loading.active = true;
   render(
     <OxygenApplicationDialog
+      hostedOrigins={['https://payment.hydrogenpay.com']}
       orderId="order-1"
       selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
     />
@@ -91,6 +92,7 @@ it('keeps the close icon actionable above the content while loading', () => {
 it('opens over checkout, preserves fields on close/reopen, and reports interruption without identity data', () => {
   render(
     <OxygenApplicationDialog
+      hostedOrigins={['https://payment.hydrogenpay.com']}
       orderId="order-1"
       selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
     />
@@ -119,6 +121,7 @@ it('opens over checkout, preserves fields on close/reopen, and reports interrupt
 it('handles Escape as a resumable close', () => {
   render(
     <OxygenApplicationDialog
+      hostedOrigins={['https://payment.hydrogenpay.com']}
       orderId="order-1"
       selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
     />
@@ -136,6 +139,7 @@ it('handles Escape as a resumable close', () => {
 it('records page exits only while the application is open', () => {
   render(
     <OxygenApplicationDialog
+      hostedOrigins={['https://payment.hydrogenpay.com']}
       orderId="order-1"
       selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
     />
@@ -156,6 +160,7 @@ it('records page exits only while the application is open', () => {
 it('records the current customer step on close and pauses background checks until reopening', () => {
   render(
     <OxygenApplicationDialog
+      hostedOrigins={['https://payment.hydrogenpay.com']}
       orderId="order-1"
       selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
     />
@@ -175,6 +180,7 @@ it('records the current customer step on close and pauses background checks unti
 it('keeps the generic application heading accessible without repeating a visible banner', () => {
   render(
     <OxygenApplicationDialog
+      hostedOrigins={['https://payment.hydrogenpay.com']}
       orderId="order-1"
       selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
     />
@@ -190,6 +196,7 @@ it('keeps the generic application heading accessible without repeating a visible
 it('reuses one dialog for payment, fits the hosted panel and restores the saved application on back', async () => {
   render(
     <OxygenApplicationDialog
+      hostedOrigins={['https://payment.hydrogenpay.com']}
       orderId="order-1"
       selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
     />
@@ -217,6 +224,7 @@ it('reuses one dialog for payment, fits the hosted panel and restores the saved 
 it('uses the same modal for selfie, pauses background checks, and preserves application fields on return', () => {
   render(
     <OxygenApplicationDialog
+      hostedOrigins={['https://payment.hydrogenpay.com']}
       orderId="order-1"
       selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
     />
@@ -242,6 +250,7 @@ it('uses the same modal for selfie, pauses background checks, and preserves appl
 it('auto-resumes without rendering the closed application launcher', () => {
   render(
     <OxygenApplicationDialog
+      hostedOrigins={['https://payment.hydrogenpay.com']}
       orderId="order-1"
       selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
     />

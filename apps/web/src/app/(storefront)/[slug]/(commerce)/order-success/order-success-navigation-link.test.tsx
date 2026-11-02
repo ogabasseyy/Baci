@@ -22,7 +22,7 @@ it('uses merchant primary and contrasting text tokens for primary actions', () =
 });
 it('uses merchant surface and border tokens for secondary actions', () => {
   render(
-    <OrderSuccessNavigationLink href="/shop">
+    <OrderSuccessNavigationLink href="/shop" primary={false}>
       Continue shopping
     </OrderSuccessNavigationLink>
   );

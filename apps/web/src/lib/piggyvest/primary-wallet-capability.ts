@@ -72,7 +72,13 @@ export function readPrimaryClientBuild(
     : null;
 }
 
-/** Both per-platform floors, or null while either is unset or malformed. */
+/**
+ * Both per-platform floors, or null while either is unset or malformed.
+ * Read from the injected environment (process.env by default) on purpose:
+ * `src/env.ts` is byte-frozen by the event-pipeline boundary manifest, and
+ * the floors are a deploy-time switch that must fail closed per request,
+ * so a malformed or missing value closes the gate rather than failing boot.
+ */
 export function readPrimaryClientBuildFloors(
   env: NodeJS.ProcessEnv = process.env
 ): PrimaryClientBuildFloors | null {

@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-02T10:36:08+00:00",
-  "source_revision": "3b6174a92c890c30c7651c0b49952d1f0b3e175d",
-  "evidence_digest": "15c183411fd39fa847a9d6611790c12ea734c552d1bb2b02ecc6935922ce198c",
-  "claims_digest": "20e9d6bde4a7c3503f16f11667fd582b8d560328832542decd7e13de99d0e278",
-  "review_scope": "Source evidence only. Re-reviewed checkout payment availability: Oxygen remains limited to local staging QA with explicit opt-in, loopback Supabase, NGN and full-order-amount checks; it is not enabled for production shoppers. Rechecked cited capability and access-map source bytes across the 2 November main integration; they are unchanged from the previous reviewed tree. Provider, deployment, native acceptance and transaction-readiness limitations remain; no production promotion.",
+  "reviewed_at": "2026-11-02T13:47:45+00:00",
+  "source_revision": "74dd46ca1db110a0b447a5f9bec75645e76d5cc1",
+  "evidence_digest": "fe25c4690c1595eb89f2ac292d8cccaa2aa9cfc352c2ad16f8d47f27a74200cc",
+  "claims_digest": "216bcc84a2fb8d5dbfef5656d677168f2f96612bd208c998d454861d47f3dc15",
+  "review_scope": "Source evidence only. Re-reviewed checkout payment availability: Oxygen remains limited to local staging QA with explicit opt-in, loopback Supabase, NGN and full-order-amount checks; it is not enabled for production shoppers. Rechecked cited capability and access-map source bytes across the current main integration; they are unchanged from the previous reviewed tree. Provider, deployment, native acceptance and transaction-readiness limitations remain; no production promotion.",
   "capabilities": [
     {
       "id": "payments",

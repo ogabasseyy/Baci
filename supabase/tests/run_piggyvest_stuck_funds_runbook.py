@@ -21,6 +21,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(HERE))
+import piggyvest_stuck_funds_runbook_ledger_checks as ledger_checks  # noqa: E402
 import piggyvest_stuck_funds_runbook_vtu_checks as vtu_checks  # noqa: E402
 
 RUNBOOK_SQL = ROOT / 'docs/runbooks/piggyvest-stuck-legacy-funds.sql'
@@ -165,14 +166,17 @@ class Runbook:
           (SELECT count(*) FROM public.customer_wallet_transactions t WHERE t.source_id = v.id)
           FROM public.vtu_transactions v WHERE v.id = '{vtu}'""")[1]
 
-    def v3(self, apply, outcome, amount='103.00', vtu=VTU, evidence='OPS-TEST-1'):
+    def v3_sql(self, apply, outcome, amount='103.00', vtu=VTU, evidence='OPS-TEST-1'):
         sql = self.block('V3', **{'PASTE-VTU-ID': vtu, 'PASTE-OUTCOME': outcome})
         if evidence is not None:
             sql = swap(sql, 'PASTE-OPS-LOG-REF', evidence)
         sql = swap(sql, 'v_amount   numeric := 103.00', f'v_amount   numeric := {amount}')
         if apply:
             sql = swap(sql, 'v_apply    boolean := false', 'v_apply    boolean := true')
-        return self.sql(sql)
+        return sql
+
+    def v3(self, *args, **kwargs):
+        return self.sql(self.v3_sql(*args, **kwargs))
 
     def v4(self, vtu=VTU):
         return self.sql(self.block('V4', **{'PASTE-VTU-ID': vtu}))
@@ -260,14 +264,6 @@ def order_cancel_checks(rb):
     check(rc == 0 and out.split('|')[8] == '1',
           f'O1 shows a completed card payment (stop rule): {out}')
 
-    rb.fresh()
-    rb.cluster.must(rb.db, """UPDATE public.customer_wallets
-      SET merchant_id = '00000000-0000-4000-8000-0000000000a2'
-      WHERE id = '00000000-0000-4000-8000-0000000000e1'""")
-    rc, out, err = rb.sql(o2)
-    check(rc == 0 and len(out.splitlines()) == 1 and out.split('|')[-1] == '',
-          f'O2 shows a missing wallet as a mismatch: {out or err}')
-
 
 def main():
     pg_bin = pathlib.Path(os.environ.get('PG_BIN') or subprocess.check_output(
@@ -290,6 +286,7 @@ def main():
                 read_block_checks(rb)
                 order_cancel_checks(rb)
                 vtu_checks.run(rb)
+                ledger_checks.run(rb)
         finally:
             cluster.stop()
     print(f'\n{check.passed} passed, {len(check.failed)} failed')

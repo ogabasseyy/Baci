@@ -92,8 +92,11 @@ order already cancelled and changes nothing.
 Fill in the `order_id` from A1. Expected:
 `cancelled | merchant | true | 10000.00 | 10000.00 | 0 | 0 | true`, and O1 now returns no
 rows. If `balance_matches_ledger` reads `false` or is empty, the wallet does not match its
-history: escalate. The payment status keeps its old value (usually `unpaid`). That is normal:
-a merchant cancel is recorded in the shipping status and the cancelled time.
+history: escalate. The check compares the balance with the newest ledger row. If several
+rows share the newest timestamp and show different balances, it cannot tell which came last
+and reads `false`: escalate, and the owner checks the ledger by hand. The payment status
+keeps its old value (usually `unpaid`). That is normal: a merchant cancel is recorded in the
+shipping status and the cancelled time.
 
 ## Part B: the ₦103 airtime purchase
 
@@ -112,7 +115,9 @@ and `refunded` 0. Copy `vtu_id` into the ops log.
 
 - **The row is gone:** the checker settled it. Run B4 to see how, then go to "After both parts".
 - **`debited` is 0:** nothing was taken from the wallet. Still ask the vendor; B3 then closes
-  the purchase without moving money.
+  the purchase without moving money. V1 and V4 count completed ledger rows only. A debit
+  row that is pending, failed, expired or has no status is a different case, and so is a
+  return row in any status: B3 refuses both, so escalate.
 - **Other rows:** they are not part of this approval. Record them and tell the owner.
 - **Any other shape** (a card part, a debit other than 0 or 103.00, money already returned):
   stop and escalate. The B3 block refuses these shapes anyway.
@@ -158,7 +163,7 @@ Before changing anything, the block checks that the purchase:
 
 - is an Ogabassey airtime purchase that is still processing;
 - is a wallet-only purchase of exactly the approved amount;
-- has exactly the wallet debit expected, and no money returned yet;
+- has exactly the wallet debit expected, completed, and no return row of any status yet;
 - when the answer is "delivered", was not re-routed from Monnify to Kuda (see B1).
 
 What it then does:
@@ -170,8 +175,7 @@ What it then does:
 - **Failed, wallet never charged:** closes it as failed with no credit.
 - **Delivered:** marks it successful and moves no money. Within a few minutes the checker
   credits any commission, cashback and loyalty points the purchase earned, as for any
-  successful purchase.
-  It may not send the customer the usual success email, so tell the customer if needed.
+  successful purchase. It does not reliably notify the customer: do the customer step in B4.
 
 The block runs as one transaction under the same locks as the checker's own refund, so the
 checker cannot act on the purchase halfway through.
@@ -181,10 +185,20 @@ checker cannot act on the purchase halfway through.
 Fill in the `vtu_id`. Expected after "failed":
 `failed | vendor_confirmed_failed | 103.00 | 103.00 | 0 | true | false`. After "delivered":
 `successful | vendor_confirmed_delivered | 103.00 | 0 | 0 | true`, then `credits_pending`.
-That last column may read `true` at first. Run V4 again after about ten minutes: it must read
-`false`, which means the checker has credited the commission, cashback and loyalty points. If
-it stays `true`, escalate. If `balance_matches_ledger` reads `false` or is empty, the wallet
-does not match its history: escalate. V1 must no longer list the purchase.
+That last column may read `true` at first. The checker takes its list a page at a time (25
+purchases every five minutes, rotating), so with a backlog a credit can wait several runs.
+Run V4 again every 15 minutes or so: it must read `false`, which means the checker has
+credited the commission, cashback and loyalty points. If it still reads `true` after an hour,
+escalate. If `balance_matches_ledger` reads `false` or is empty, the wallet does not match its
+history: escalate (A3 explains the comparison). V1 must no longer list the purchase.
+
+**After "delivered", tell the customer (required step).** The checker revisits a successful
+purchase only while commission, cashback or loyalty points are still to be credited, or after
+a success email was recorded as failed. A purchase that earned none of those is never
+revisited and no success notification is ever sent for it, so a settled V4 row does not show
+that the customer was told. Contact the customer to confirm that the airtime arrived, and
+record in the ops log who did this and when. If the customer says it did not arrive, stop and
+escalate to the owner with the vendor's evidence. Do not move any money.
 
 ## After both parts
 
@@ -205,6 +219,8 @@ does not match its history: escalate. V1 must no longer list the purchase.
 | Wrong cashback on a re-routed purchase | V3 refuses "delivered" for a purchase re-routed from Monnify to Kuda |
 | A step runs twice, or two people run it | A second cancel changes nothing; V3 refuses a purchase that is no longer processing |
 | The checker acts at the same moment | V3 takes the same locks as the checker's refund; whichever runs second sees a closed purchase |
+| A wallet debit that is not completed is treated as money taken | V3 refuses any purchase with a pending, failed, expired or status-less debit row |
+| A delivered purchase earns nothing, so no success notification is sent | B4 makes contacting the customer a required step, recorded in the ops log |
 | A typo in an id, amount or answer | V3 stops before changing anything, and a dry run always comes first |
 | Someone runs the whole SQL file | Every block with a `PASTE` value fails, the write block included, so nothing changes |
 

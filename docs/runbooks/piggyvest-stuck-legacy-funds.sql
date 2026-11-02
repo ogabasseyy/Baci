@@ -5,6 +5,8 @@
 -- Drift safety: V3 runs as one transaction and fails closed. If the refund function's
 -- signature, result or behaviour ever changes, the call errors or V3's exact result checks
 -- raise STOP, and everything rolls back. The dry run always comes first, against the live schema.
+-- Ledger rule: every money column in the read-only blocks counts completed rows only. V3 is
+-- stricter: it stops on a debit that is not completed and on any return row, whatever its status.
 
 -- [O1] READ-ONLY: Ogabassey orders holding wallet money that are neither paid nor cancelled
 WITH m AS (SELECT id FROM public.merchants WHERE slug = 'ogabassey'),
@@ -12,7 +14,8 @@ held AS (
   SELECT t.source_id AS order_id,
          sum(CASE WHEN t.source_type = 'order_redemption' AND t.type = 'redemption'
                    AND t.status = 'completed' THEN t.amount ELSE 0 END)
-       - sum(CASE WHEN t.source_type = 'order_reversal' THEN t.amount ELSE 0 END) AS wallet_held
+       - sum(CASE WHEN t.source_type = 'order_reversal' AND t.status = 'completed'
+                  THEN t.amount ELSE 0 END) AS wallet_held
     FROM public.customer_wallet_transactions t
     JOIN m ON m.id = t.merchant_id
    WHERE t.source_type IN ('order_redemption', 'order_reversal')
@@ -48,16 +51,18 @@ SELECT o.shipping_status, o.cancelled_by, o.cancelled_at IS NOT NULL AS has_canc
          WHERE t.source_id = o.id AND t.source_type = 'order_redemption'
            AND t.type = 'redemption' AND t.status = 'completed') AS taken,
        (SELECT coalesce(sum(t.amount), 0) FROM public.customer_wallet_transactions t
-         WHERE t.source_id = o.id AND t.source_type = 'order_reversal') AS returned,
+         WHERE t.source_id = o.id AND t.source_type = 'order_reversal'
+           AND t.status = 'completed') AS returned,
        (SELECT count(*) FROM public.order_wallet_funding_intents i
          WHERE i.order_id = o.id
            AND i.status NOT IN ('completed', 'cancelled', 'expired', 'failed')) AS open_intents,
        (SELECT count(*) FROM public.order_cancellation_side_effects s
          WHERE s.order_id = o.id AND s.step = 'refund') AS card_refund_queued,
-       w.available_balance = (SELECT t.balance_after FROM public.customer_wallet_transactions t
-                               WHERE t.wallet_id = w.id
-                               ORDER BY t.created_at DESC, t.id DESC LIMIT 1)
-         AS balance_matches_ledger
+       (SELECT array_agg(DISTINCT n.balance_after) FROM public.customer_wallet_transactions n
+         WHERE n.wallet_id = w.id
+           AND n.created_at = (SELECT max(m.created_at) FROM public.customer_wallet_transactions m
+                                WHERE m.wallet_id = w.id)) = ARRAY[w.available_balance]
+       AND w.available_balance IS NOT NULL AS balance_matches_ledger
   FROM public.orders o
   JOIN public.merchants m ON m.id = o.merchant_id AND m.slug = 'ogabassey'
   LEFT JOIN public.customer_wallets w
@@ -75,11 +80,12 @@ SELECT v.id AS vtu_id, v.status, v.source, v.type, v.amount,
   JOIN public.merchants m ON m.id = v.merchant_id AND m.slug = 'ogabassey'
  CROSS JOIN LATERAL (
    SELECT coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_wallet_payment'
-                                           AND t.type = 'redemption'), 0) AS debited,
-          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_wallet_reversal'), 0)
-            AS reversed,
-          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_transaction_refund'), 0)
-            AS refunded
+                                           AND t.type = 'redemption'
+                                           AND t.status = 'completed'), 0) AS debited,
+          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_wallet_reversal'
+                                           AND t.status = 'completed'), 0) AS reversed,
+          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_transaction_refund'
+                                           AND t.status = 'completed'), 0) AS refunded
      FROM public.customer_wallet_transactions t
     WHERE t.source_id = v.id) l
  WHERE v.status IN ('pending', 'processing')
@@ -104,10 +110,14 @@ DECLARE
   v_evidence text    := 'PASTE-OPS-LOG-REF'; -- ops log entry holding the vendor's answer
   v_apply    boolean := false;               -- false = dry run
   v_row record; v_rev record;
-  v_debit numeric; v_debits int; v_foreign int; v_back int; v_before numeric;
+  v_debit numeric; v_debits int; v_foreign int; v_open int; v_back int; v_before numeric;
 BEGIN
-  IF v_outcome NOT IN ('failed', 'delivered') THEN
+  -- A NULL typed in place of a value must never pass a check, so each input is tested for NULL.
+  IF v_outcome IS NULL OR v_outcome NOT IN ('failed', 'delivered') THEN
     RAISE EXCEPTION 'STOP: v_outcome must be failed or delivered';
+  END IF;
+  IF v_amount IS NULL OR v_amount <= 0 THEN
+    RAISE EXCEPTION 'STOP: v_amount must be the approved positive amount';
   END IF;
   IF coalesce(btrim(v_evidence), '') = '' OR v_evidence LIKE 'PASTE%' THEN
     RAISE EXCEPTION 'STOP: fill in v_evidence';
@@ -145,11 +155,18 @@ BEGIN
          count(*) FILTER (WHERE t.source_type = 'vtu_wallet_payment'
                             AND (t.customer_id <> v_row.customer_id
                                  OR t.merchant_id <> v_row.merchant_id)),
+         count(*) FILTER (WHERE t.source_type = 'vtu_wallet_payment'
+                            AND t.status IS DISTINCT FROM 'completed'),
          count(*) FILTER (WHERE t.source_type IN ('vtu_wallet_reversal', 'vtu_transaction_refund'))
-    INTO v_debit, v_debits, v_foreign, v_back
+    INTO v_debit, v_debits, v_foreign, v_open, v_back
     FROM public.customer_wallet_transactions t
    WHERE t.source_id = v_row.id;
   IF v_back > 0 THEN RAISE EXCEPTION 'STOP: money was already returned for this purchase'; END IF;
+  -- The ledger status is nullable and the refund function credits any debit row, so a debit
+  -- that is pending, failed, expired or has no status must stop here, never count as paid.
+  IF v_open > 0 THEN
+    RAISE EXCEPTION 'STOP: a wallet debit for this purchase is not completed; escalate';
+  END IF;
   IF v_outcome = 'delivered' AND (v_debits <> 1 OR v_debit <> v_amount) THEN
     RAISE EXCEPTION 'STOP: the wallet has not paid for this purchase; escalate';
   END IF;
@@ -163,13 +180,14 @@ BEGIN
     RAISE EXCEPTION 'STOP: purchase was re-routed (provider fallback); escalate';
   END IF;
 
+  -- clock_timestamp(), not now(): now() is when this block was sent, before any lock wait.
   UPDATE public.vtu_transactions
      SET status = CASE v_outcome WHEN 'failed' THEN 'failed' ELSE 'successful' END,
          error_message = CASE v_outcome WHEN 'failed'
                            THEN 'Vendor confirmed the purchase failed (manual requery)' END,
          metadata = metadata || jsonb_build_object('opsResolution', jsonb_build_object(
            'outcome', 'vendor_confirmed_' || v_outcome, 'evidenceRef', v_evidence,
-           'recordedAt', now(), 'runbook', 'piggyvest-stuck-legacy-funds'))
+           'recordedAt', clock_timestamp(), 'runbook', 'piggyvest-stuck-legacy-funds'))
    WHERE id = v_row.id AND status = 'processing';
   IF v_outcome = 'delivered' THEN
     UPDATE public.vtu_transactions SET metadata = metadata || '{"walletDebited": true}'::jsonb
@@ -196,10 +214,11 @@ BEGIN
        SET metadata = (metadata - 'refundSkipped') || jsonb_build_object(
              'walletDebited', true, 'refundIssued', true, 'refundAmount', 0,
              'refundContext', 'hybrid_vend_failure',
-             'refundedAt', to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+             'refundedAt', to_char(clock_timestamp() AT TIME ZONE 'UTC',
+                                   'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
      WHERE id = v_row.id;
   END IF;
-  IF NOT v_apply THEN
+  IF v_apply IS NOT TRUE THEN
     RAISE EXCEPTION 'DRY RUN OK: would record % and return % (nothing changed)',
       v_outcome, CASE v_outcome WHEN 'failed' THEN v_debit ELSE 0 END;
   END IF;
@@ -211,10 +230,11 @@ END $$;
 -- checker has not credited yet.
 SELECT v.status, v.metadata->'opsResolution'->>'outcome' AS outcome,
        l.debited, l.returned, l.refunded,
-       w.available_balance = (SELECT t.balance_after FROM public.customer_wallet_transactions t
-                               WHERE t.wallet_id = w.id
-                               ORDER BY t.created_at DESC, t.id DESC LIMIT 1)
-         AS balance_matches_ledger,
+       (SELECT array_agg(DISTINCT n.balance_after) FROM public.customer_wallet_transactions n
+         WHERE n.wallet_id = w.id
+           AND n.created_at = (SELECT max(m.created_at) FROM public.customer_wallet_transactions m
+                                WHERE m.wallet_id = w.id)) = ARRAY[w.available_balance]
+       AND w.available_balance IS NOT NULL AS balance_matches_ledger,
        v.status = 'successful'
          AND ((coalesce(v.merchant_commission, 0) > 0
                AND v.metadata->>'merchantWalletCredited' IS DISTINCT FROM 'true')
@@ -228,11 +248,12 @@ SELECT v.status, v.metadata->'opsResolution'->>'outcome' AS outcome,
     ON w.customer_id = v.customer_id AND w.merchant_id = v.merchant_id
  CROSS JOIN LATERAL (
    SELECT coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_wallet_payment'
-                                           AND t.type = 'redemption'), 0) AS debited,
-          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_wallet_reversal'), 0)
-            AS returned,
-          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_transaction_refund'), 0)
-            AS refunded
+                                           AND t.type = 'redemption'
+                                           AND t.status = 'completed'), 0) AS debited,
+          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_wallet_reversal'
+                                           AND t.status = 'completed'), 0) AS returned,
+          coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_transaction_refund'
+                                           AND t.status = 'completed'), 0) AS refunded
      FROM public.customer_wallet_transactions t
     WHERE t.source_id = v.id) l
  WHERE v.id = 'PASTE-VTU-ID';

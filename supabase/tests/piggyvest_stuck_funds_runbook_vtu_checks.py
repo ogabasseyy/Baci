@@ -88,6 +88,9 @@ def refusal_checks(rb):
     nodebit = f"DELETE FROM public.customer_wallet_transactions WHERE source_id = '{VTU}'"
     vtu_row = f"UPDATE public.vtu_transactions SET {{}} WHERE id = '{VTU}'"
     wallet_only = dict.fromkeys(['failed', 'delivered'], 'not a wallet-only purchase')
+    not_completed = dict.fromkeys(['failed', 'delivered'], 'is not completed')
+    debit_status = ('UPDATE public.customer_wallet_transactions SET status = {} '
+                    f"WHERE source_id = '{VTU}' AND source_type = 'vtu_wallet_payment'")
     cases = [
         ('wrong amount', '', '100.00', VTU, 'OPS-TEST-1',
          {'failed': 'does not match', 'delivered': 'does not match'}),
@@ -107,6 +110,8 @@ def refusal_checks(rb):
         ('pending, not processing', vtu_row.format("status = 'pending'"), '103.00', VTU,
          'OPS-TEST-1', {'failed': 'not processing', 'delivered': 'not processing'}),
         ('unknown outcome', '', '103.00', VTU, 'OPS-TEST-1', {'refunded': 'failed or delivered'}),
+        ('missing amount', '', 'NULL', VTU, 'OPS-TEST-1',
+         dict.fromkeys(['failed', 'delivered'], 'v_amount')),
         # A malformed paymentSplit must raise the documented STOP, never a cast error. The app
         # only reads a split whose card and wallet are both JSON numbers.
         ('non-numeric card', vtu_row.format(split('"abc"', '103')), '103.00', VTU, 'OPS-TEST-1',
@@ -120,6 +125,11 @@ def refusal_checks(rb):
         ('split as a list', vtu_row.format(
             """metadata = jsonb_set(metadata, '{paymentSplit}', '[103, 0]')"""), '103.00', VTU,
          'OPS-TEST-1', wallet_only),
+        # The ledger status column is nullable: a debit that is not completed, a missing status
+        # included, is not money taken, and the refund function would still credit it.
+        *[(f'a {name} wallet debit', debit_status.format(status), '103.00', VTU, 'OPS-TEST-1',
+           not_completed) for name, status in [('pending', "'pending'"), ('failed', "'failed'"),
+                                               ('expired', "'expired'"), ('status-less', 'NULL')]],
     ]
     for name, setup, amount, vtu, evidence, outcomes in cases:
         for outcome, expect in outcomes.items():
@@ -216,11 +226,43 @@ def delivered_checks(rb):
     rb.cluster.must(rb.db, f"""UPDATE public.customer_wallets
       SET merchant_id = '00000000-0000-4000-8000-0000000000a2' WHERE id = '{WALLET}'""")
     rc, out, err = rb.v4()
-    check(rc == 0 and len(out.splitlines()) == 1 and out.split('|')[5] == '',
+    check(rc == 0 and len(out.splitlines()) == 1 and out.split('|')[5] == 'f',
           f'V4 shows a missing wallet as a mismatch: {out or err}')
 
 
+def null_input_checks(rb):
+    """A NULL typed in place of the answer or the apply flag must never pass a check: the
+    answer stops V3, and the flag leaves it a dry run."""
+    base = rb.v3_sql(True, 'failed')
+    for old, new, expect in [
+            ("v_outcome  text    := 'failed'", 'v_outcome  text    := NULL', 'failed or delivered'),
+            ('v_apply    boolean := true', 'v_apply    boolean := NULL', 'DRY RUN OK')]:
+        rb.fresh()
+        before = rb.state()
+        assert old in base, old
+        rc, _, err = rb.sql(base.replace(old, new))
+        rb.check(rc != 0 and expect in err and rb.state() == before,
+                 f'V3 changes nothing when {new.split(":=")[0].strip()} is NULL: {err[:140]}')
+
+
+def clock_checks(rb):
+    """V3 stamps its markers with the clock once it holds its locks, not with the transaction
+    start. pg_sleep stands in for a lock wait: it holds the transaction open before V3 runs."""
+    rb.fresh()
+    sql = ("BEGIN;\nSELECT now() AS t0 \\gset\nSELECT pg_sleep(0.1) AS slept \\gset\n"
+           + rb.v3_sql(True, 'failed') + "\nCOMMIT;\n"
+           "SELECT (metadata->'opsResolution'->>'recordedAt')::timestamptz - :'t0'::timestamptz"
+           " >= interval '90 milliseconds', (metadata->>'refundedAt')::timestamptz"
+           f" - :'t0'::timestamptz >= interval '90 milliseconds' FROM public.vtu_transactions"
+           f" WHERE id = '{VTU}'")
+    rc, out, err = rb.sql(sql)
+    rb.check(rc == 0 and out == 't|t', f'V3 stamps recordedAt and refundedAt after its locks: '
+                                       f'{out or err[:140]}')
+
+
 def run(rb):
+    null_input_checks(rb)
+    clock_checks(rb)
     failed_answer_checks(rb)
     refusal_checks(rb)
     fallback_checks(rb)

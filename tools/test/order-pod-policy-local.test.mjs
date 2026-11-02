@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { Client } from 'pg';
@@ -9,10 +10,15 @@ const repository = resolve(import.meta.dirname, '../..');
 const bin =
   process.argv
     .find((arg) => arg.startsWith('--postgres-bin='))
-    ?.slice('--postgres-bin='.length) ?? '/opt/homebrew/opt/postgresql@17/bin';
+    ?.slice('--postgres-bin='.length) ||
+  spawnSync('pg_config', ['--bindir'], { encoding: 'utf8' }).stdout?.trim();
 
 test('POD persistence policy and concurrent flag revocation', async () => {
-  const directory = mkdtempSync('/tmp/baci-pod-policy-');
+  assert.ok(
+    bin,
+    'PostgreSQL binaries not found; use --postgres-bin or install pg_config'
+  );
+  const directory = mkdtempSync(join(tmpdir(), 'baci-pod-policy-'));
   const socket = join(directory, 'socket');
   const data = join(directory, 'data');
   mkdirSync(socket, { mode: 0o700 });

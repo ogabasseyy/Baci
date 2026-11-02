@@ -14,6 +14,8 @@ describe('POST order POD policy', () => {
     { method: 'pay_on_delivery', guest: false },
     { method: 'pod', guest: true },
     { method: 'pay_on_delivery', guest: true },
+    { method: 'POD', guest: false },
+    { method: 'Pay_On_Delivery', guest: true },
   ])('denies disabled $method for guest=$guest before order or money effects', async ({
     method,
     guest,
@@ -42,6 +44,19 @@ describe('POST order POD policy', () => {
     expect(calls).not.toContain('redeem_savings_for_order');
     expect(calls).not.toContain(
       'claim_immediate_order_notification_with_proof'
+    );
+  });
+  it('sends a canonical POD method to the order RPC', async () => {
+    const client = await setupLoyaltyBridge({
+      get_storefront_payment_settings: {
+        data: [{ pay_on_delivery_enabled: true }],
+        error: null,
+      },
+    });
+    await POST(loyaltyRequest({ payment_method: 'POD' }));
+    expect(client.rpc).toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.objectContaining({ p_payment_method: 'pod' })
     );
   });
   it('maps a concurrent database policy rejection to a safe client error', async () => {

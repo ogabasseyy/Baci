@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { validatePayOnDeliveryPolicy } from './pay-on-delivery-policy';
+import {
+  normalizePayOnDeliveryMethod,
+  validatePayOnDeliveryPolicy,
+} from './pay-on-delivery-policy';
 
 const input = {
   merchantId: 'merchant-fixture',
@@ -12,6 +15,8 @@ describe('merchant POD admission', () => {
   it.each([
     'pod',
     'pay_on_delivery',
+    'POD',
+    ' Pay_On_Delivery ',
   ])('rejects disabled %s', async (paymentMethod) => {
     const rpc = vi.fn().mockResolvedValue(disabled);
     expect(
@@ -28,6 +33,13 @@ describe('merchant POD admission', () => {
     expect(rpc).toHaveBeenCalledWith('get_storefront_payment_settings', {
       p_merchant_id: input.merchantId,
     });
+  });
+  it('canonicalizes POD aliases without changing other payment methods', () => {
+    expect(normalizePayOnDeliveryMethod(' POD ')).toBe('pod');
+    expect(normalizePayOnDeliveryMethod('Pay_On_Delivery')).toBe(
+      'pay_on_delivery'
+    );
+    expect(normalizePayOnDeliveryMethod(' Card ')).toBe(' Card ');
   });
   it('allows enabled POD without probing replay', async () => {
     const rpc = vi.fn().mockResolvedValue({

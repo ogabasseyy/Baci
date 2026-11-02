@@ -20,8 +20,16 @@ type PolicyResult =
       body: { code: string; error: string };
     };
 
+export function normalizePayOnDeliveryMethod(paymentMethod: string): string {
+  const normalized = paymentMethod.trim().toLowerCase();
+  return normalized === 'pod' || normalized === 'pay_on_delivery'
+    ? normalized
+    : paymentMethod;
+}
+
 export function isPayOnDelivery(paymentMethod: string): boolean {
-  return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
+  const normalized = normalizePayOnDeliveryMethod(paymentMethod);
+  return normalized === 'pod' || normalized === 'pay_on_delivery';
 }
 
 function unavailable(): PolicyResult {

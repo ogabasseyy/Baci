@@ -37,6 +37,7 @@ import type { OrderIdempotencyPayloadInput } from '@/lib/checkout/order-idempote
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import {
   isPayOnDelivery,
+  normalizePayOnDeliveryMethod,
   PAY_ON_DELIVERY_DISABLED_BODY,
   validatePayOnDeliveryPolicy,
 } from '@/lib/checkout/pay-on-delivery-policy';
@@ -1554,7 +1555,7 @@ export async function POST(request: NextRequest) {
       voucherOrderAmountDueBeforeGateway !== null &&
       voucherOrderAmountDueBeforeGateway <= 0;
 
-    let effectivePaymentMethod = payment_method;
+    let effectivePaymentMethod = normalizePayOnDeliveryMethod(payment_method);
     let effectivePaymentStatus = payment_status;
     if (voucherOrderFullyCovered) {
       effectivePaymentMethod = 'quiz_voucher';

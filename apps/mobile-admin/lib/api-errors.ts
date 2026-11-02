@@ -100,6 +100,3 @@ export function getResponseErrorMessage(data: unknown, status: number): string {
 
   return `Request failed with status ${status}`;
 }
-
-// TEMP CI lint probe, removed before merge
-export const ciLintProbe   =   {a:1,  b:2}

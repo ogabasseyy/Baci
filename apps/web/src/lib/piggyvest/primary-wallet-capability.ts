@@ -34,8 +34,18 @@ export type PrimaryClientBuildFloors = Record<PiggyvestClientPlatform, number>;
  * never falls back on a guess. The reason and readiness id are for server
  * logs only and are never sent to a client.
  */
-export type PrimaryWalletCapabilityVerdict =
+export type PrimaryClientCapabilityVerdict =
   | { enabled: true }
+  | Exclude<PrimaryWalletCapabilityVerdict, { enabled: true }>;
+
+/**
+ * An onboarding admission carries its basis: `resume` is a customer with an
+ * existing (verified or in-flight) onboarding, who may only continue it;
+ * `fresh` passed the cohort and every readiness reader, and may claim a new
+ * onboarding. Routes must not start a new claim on a `resume` pass.
+ */
+export type PrimaryWalletCapabilityVerdict =
+  | { enabled: true; basis: 'fresh' | 'resume' }
   | {
       enabled: false;
       status: 'not_ready';
@@ -102,7 +112,7 @@ export function resolvePrimaryClientCapability(input: {
   headers: HeaderReader;
   refusalCode: PiggyvestPrimaryNotReadyCode;
   env?: NodeJS.ProcessEnv;
-}): PrimaryWalletCapabilityVerdict {
+}): PrimaryClientCapabilityVerdict {
   const refuse = (reason: 'build_floor_unset' | 'client_build') =>
     ({
       enabled: false,
@@ -154,7 +164,7 @@ export async function resolvePrimaryOnboardingCapability(input: {
     const existing = piggyvestPrimaryExistingOnboardingSchema.parse(
       await input.readExistingOnboarding()
     );
-    if (existing !== 'none') return { enabled: true };
+    if (existing !== 'none') return { enabled: true, basis: 'resume' };
     member = await input.readCohortMembership();
   } catch {
     return UNAVAILABLE;
@@ -169,7 +179,7 @@ export async function resolvePrimaryOnboardingCapability(input: {
   const readiness = await readPrimaryOnboardingReadiness(
     input.registry ?? primaryReadinessRegistry
   );
-  if (readiness.status === 'ready') return { enabled: true };
+  if (readiness.status === 'ready') return { enabled: true, basis: 'fresh' };
   if (readiness.status === 'unavailable') return UNAVAILABLE;
   return {
     enabled: false,

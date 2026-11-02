@@ -51,7 +51,7 @@ function onboarding(overrides: OnboardingOverrides) {
 describe('resolvePrimaryOnboardingCapability', () => {
   it('enables onboarding for an at-floor cohort member when every reader is ready', async () => {
     const { verdict, readers } = onboarding({});
-    await expect(verdict).resolves.toEqual({ enabled: true });
+    await expect(verdict).resolves.toEqual({ enabled: true, basis: 'fresh' });
     for (const id of PRIMARY_READINESS_IDS)
       expect(readers[id]).toHaveBeenCalledOnce();
   });
@@ -79,7 +79,7 @@ describe('resolvePrimaryOnboardingCapability', () => {
       member: async () => false,
       readers: registry('interest_marker'),
     });
-    await expect(verdict).resolves.toEqual({ enabled: true });
+    await expect(verdict).resolves.toEqual({ enabled: true, basis: 'resume' });
     expect(readCohortMembership).not.toHaveBeenCalled();
     expect(readers.interest_marker).not.toHaveBeenCalled();
   });
@@ -91,7 +91,7 @@ describe('resolvePrimaryOnboardingCapability', () => {
       existing: async () => 'in_flight',
       readers: registry(blocked),
     });
-    await expect(verdict).resolves.toEqual({ enabled: true });
+    await expect(verdict).resolves.toEqual({ enabled: true, basis: 'resume' });
     expect(readers[blocked]).not.toHaveBeenCalled();
   });
 

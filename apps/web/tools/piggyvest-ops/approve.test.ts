@@ -245,7 +245,9 @@ describe('approve CLI', () => {
       h.deps
     );
     expect(code).toBe(1);
-    expect(h.err.join('\n')).toContain('You opened this request');
+    expect(h.err.join('\n')).toContain(
+      'or another of your logins, opened this request'
+    );
     expect(h.close).toHaveBeenCalled();
   });
 

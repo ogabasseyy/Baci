@@ -4,6 +4,9 @@
 import { readFileSync } from 'node:fs';
 
 const REVIEWER_KINDS = new Set(['codex-clean-comment', 'verdict-block']);
+// Every workflow's GITHUB_TOKEN, including one a pull request controls,
+// comments as this login, so nothing it posts can prove who reviewed.
+const SHARED_ACTIONS_LOGIN = 'github-actions[bot]';
 
 function fail(message) {
   throw new Error(`money-path-paths.json: ${message}`);
@@ -24,6 +27,13 @@ function requireStringList(value, name, { allowEmpty = false } = {}) {
   return [...value];
 }
 
+function requireTrustedLogins(value, name) {
+  const logins = requireStringList(value, name);
+  if (logins.some((login) => login.toLowerCase() === SHARED_ACTIONS_LOGIN))
+    fail(`${name} must not include ${SHARED_ACTIONS_LOGIN}`);
+  return logins;
+}
+
 function parseFamilies(families) {
   if (!families || typeof families !== 'object')
     fail('reviewers.families must be an object');
@@ -31,20 +41,23 @@ function parseFamilies(families) {
   for (const [name, family] of Object.entries(families)) {
     if (!family || !REVIEWER_KINDS.has(family.kind))
       fail(`reviewers.families.${name}.kind is not supported`);
+    const codex = family.kind === 'codex-clean-comment';
+    const prefix = `reviewers.families.${name}`;
+    if (codex && !isNonEmptyString(family.requestPhrase))
+      fail(`${prefix}.requestPhrase is required`);
     parsed[name] = {
       name,
       kind: family.kind,
-      logins: requireStringList(
-        family.logins,
-        `reviewers.families.${name}.logins`
-      ),
-      cleanPhrases:
-        family.kind === 'codex-clean-comment'
-          ? requireStringList(
-              family.cleanPhrases,
-              `reviewers.families.${name}.cleanPhrases`
-            )
-          : [],
+      logins: requireTrustedLogins(family.logins, `${prefix}.logins`),
+      cleanPhrases: codex
+        ? requireStringList(family.cleanPhrases, `${prefix}.cleanPhrases`)
+        : [],
+      // Codex reviews automatically; only a review someone asked to use the
+      // money-rules prompt counts, and only these logins may ask.
+      requestPhrase: codex ? family.requestPhrase : null,
+      requestedBy: codex
+        ? requireTrustedLogins(family.requestedBy, `${prefix}.requestedBy`)
+        : [],
       requiredMarker:
         family.requiredMarker === undefined
           ? null
@@ -105,6 +118,16 @@ function parseSummary(summary) {
   };
 }
 
+function parseMoneyKeywords(value) {
+  if (!value || typeof value !== 'object')
+    fail('moneyKeywords must be an object');
+  const roots = requireStringList(value.roots, 'moneyKeywords.roots');
+  if (!roots.every((root) => root.endsWith('/')))
+    fail('moneyKeywords.roots entries must end with "/"');
+  const keywords = requireStringList(value.keywords, 'moneyKeywords.keywords');
+  return { roots, keywords: keywords.map((word) => word.toLowerCase()) };
+}
+
 function parseRequiredChecks(checks) {
   if (!Array.isArray(checks) || checks.length === 0)
     fail('requiredChecks must be a non-empty list');
@@ -136,6 +159,7 @@ export function parseAssuranceConfig(raw) {
     fail('ownerSignoff needs phrase and label');
   return {
     statusContext: raw.statusContext,
+    moneyKeywords: parseMoneyKeywords(raw.moneyKeywords),
     moneyPaths: requireStringList(raw.moneyPaths, 'moneyPaths'),
     governancePaths: requireStringList(raw.governancePaths, 'governancePaths'),
     summary: parseSummary(raw.summary),
@@ -146,7 +170,7 @@ export function parseAssuranceConfig(raw) {
     },
     reviewers: parseReviewers(raw.reviewers),
     ownerSignoff: {
-      logins: requireStringList(signoff.logins, 'ownerSignoff.logins'),
+      logins: requireTrustedLogins(signoff.logins, 'ownerSignoff.logins'),
       label: signoff.label,
       phrase: signoff.phrase,
     },
@@ -187,6 +211,17 @@ export function matchesAny(path, globs) {
   return globs.some((glob) => globToRegExp(glob).test(path));
 }
 
+// Matches the keyword anywhere below the root, at any depth, ignoring case.
+export function matchesMoneyKeyword(path, { roots, keywords }) {
+  const lower = path.toLowerCase();
+  const root = roots.find((candidate) =>
+    lower.startsWith(candidate.toLowerCase())
+  );
+  if (!root) return false;
+  const rest = lower.slice(root.length);
+  return keywords.some((word) => rest.includes(word));
+}
+
 // Both sides of a rename count, so moving a file out of a money path is
 // still reviewed as a money-path change.
 export function changedPaths(files) {
@@ -206,7 +241,9 @@ export function classifyChangedFiles(files, config) {
   );
   const moneyFiles = paths.filter(
     (path) =>
-      governanceFiles.includes(path) || matchesAny(path, config.moneyPaths)
+      governanceFiles.includes(path) ||
+      matchesAny(path, config.moneyPaths) ||
+      matchesMoneyKeyword(path, config.moneyKeywords)
   );
   return { isMoneyPath: moneyFiles.length > 0, moneyFiles, governanceFiles };
 }

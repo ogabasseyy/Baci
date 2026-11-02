@@ -1,22 +1,22 @@
 // Reads the adversarial reviewer verdicts, the owner's summary sign-off and
 // review-thread state. Every verdict is bound to the current head SHA and to
-// a trusted reviewer login; anything else is ignored.
+// a trusted reviewer login; anything else is ignored. A comment or review
+// last edited by anyone other than its author no longer counts as the
+// author's: GitHub lets any writer edit other people's comments.
 
-const MIN_SHA_PREFIX = 7;
+import {
+  authoredBy,
+  byNewest,
+  postedAs,
+  shaMatchesHead,
+  short,
+  writtenBy,
+} from './money-pr-assurance-authorship.mjs';
+import { evaluateCodex } from './money-pr-assurance-codex.mjs';
+
+export { shaMatchesHead, writtenBy };
+
 const DECORATION = '[\\s>*_`-]*';
-
-export function shaMatchesHead(candidate, head) {
-  const value = String(candidate ?? '').toLowerCase();
-  return (
-    /^[0-9a-f]+$/.test(value) &&
-    value.length >= MIN_SHA_PREFIX &&
-    head.toLowerCase().startsWith(value)
-  );
-}
-
-function short(sha) {
-  return String(sha).slice(0, 7);
-}
 
 function field(body, key) {
   const pattern = new RegExp(
@@ -54,70 +54,31 @@ export function parseVerdictBlock(body) {
   return { verdict: distinct[0], head: heads[0], prompt: prompts[0] };
 }
 
-function byNewest(left, right) {
-  return right.time.localeCompare(left.time) || right.id - left.id;
-}
-
-function authoredBy(item, family) {
-  return family.logins.includes(item.login);
-}
-
-function evaluateCodex(family, { comments, reviews, head }) {
-  const cleans = comments
-    .filter((item) => authoredBy(item, family))
-    .filter((item) =>
-      family.cleanPhrases.some((phrase) => item.body.includes(phrase))
-    )
-    .map((item) => ({
-      id: item.id,
-      time: item.updatedAt || item.createdAt,
-      sha:
-        /Reviewed commit:\**\s*`?([0-9a-f]{7,40})`?/i.exec(item.body)?.[1] ??
-        '',
-    }))
-    .sort(byNewest);
-  const current = cleans.find(({ sha }) => shaMatchesHead(sha, head));
-  if (!current) {
-    const latest = cleans[0]?.sha;
-    return {
-      state: 'missing',
-      detail: latest
-        ? `Codex has no clean verdict on ${short(head)} (latest clean verdict was for ${short(latest)})`
-        : `Codex has no clean verdict on ${short(head)}`,
-    };
-  }
-  const laterFindings = reviews.filter(
-    (item) =>
-      authoredBy(item, family) &&
-      shaMatchesHead(item.commitId, head) &&
-      item.submittedAt > current.time
-  );
-  if (laterFindings.length > 0) {
-    return {
-      state: 'fail',
-      detail: `Codex raised findings on ${short(head)} after its clean verdict`,
-    };
-  }
-  return { state: 'pass', detail: `Codex clean verdict on ${short(head)}` };
-}
-
 function evaluateVerdictFamily(
   family,
   { comments, reviews, head, promptVersion }
 ) {
+  // A marker proves nothing unless it opens the body: quoted or generated
+  // text further down could carry it.
   const marker = family.requiredMarker?.replaceAll('{head}', head) ?? null;
-  const candidates = [
+  const posted = [
     ...comments.map((item) => ({
       ...item,
       time: item.updatedAt || item.createdAt,
+      created: item.createdAt,
     })),
-    ...reviews.map((item) => ({ ...item, time: item.submittedAt })),
-  ]
-    .filter(
-      (item) =>
-        authoredBy(item, family) &&
-        (marker === null || item.body.includes(marker))
-    )
+    ...reviews.map((item) => ({
+      ...item,
+      time: item.submittedAt,
+      created: item.submittedAt,
+    })),
+  ].filter(
+    (item) =>
+      postedAs(item, family) &&
+      (marker === null || item.body.trimStart().startsWith(marker))
+  );
+  const candidates = posted
+    .filter((item) => authoredBy(item, family))
     .map((item) => ({ ...item, parsed: parseVerdictBlock(item.body) }))
     .filter(({ parsed }) => parsed !== null)
     .sort(byNewest);
@@ -126,6 +87,17 @@ function evaluateVerdictFamily(
       parsed.error ||
       (shaMatchesHead(parsed.head, head) && parsed.prompt === promptVersion)
   );
+  // Rewriting or blanking a newer verdict must not let an older one win.
+  const tampered = posted.find(
+    (item) =>
+      !authoredBy(item, family) && item.created > (current?.created ?? '')
+  );
+  if (tampered) {
+    return {
+      state: 'fail',
+      detail: `${family.name} has a comment last edited by ${tampered.editor ?? 'an unknown login'}; ask ${family.name} for a fresh review`,
+    };
+  }
   if (!current) {
     const stale = candidates[0]?.parsed;
     const why = stale
@@ -162,6 +134,7 @@ export function evaluateReviewers({ comments, reviews, head, reviewers }) {
       comments,
       reviews,
       head,
+      promptPath: reviewers.promptPath,
       promptVersion: reviewers.promptVersion,
     };
     families[family.name] =
@@ -192,8 +165,7 @@ export function evaluateOwnerSignoff({
   const pattern = new RegExp(`^\\s*${escaped}\\s+([0-9a-f]{7,40})\\s*$`, 'gim');
   const approvals = [...comments, ...reviews]
     .filter(
-      (item) =>
-        ownerSignoff.logins.includes(item.login) && item.userType === 'User'
+      (item) => writtenBy(item, ownerSignoff.logins) && item.userType === 'User'
     )
     .flatMap((item) =>
       [...item.body.matchAll(pattern)].map((match) => match[1])

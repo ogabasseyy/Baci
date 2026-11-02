@@ -140,6 +140,7 @@ test('a money PR snapshot normalises every source', async () => {
       json: [
         {
           id: 1,
+          node_id: 'IC_1',
           user: { login: 'claude[bot]', type: 'Bot' },
           body: 'hi',
           created_at: 'c',
@@ -151,6 +152,7 @@ test('a money PR snapshot normalises every source', async () => {
       json: [
         {
           id: 2,
+          node_id: 'PRR_2',
           user: { login: 'x', type: 'User' },
           body: null,
           commit_id: HEAD,
@@ -159,20 +161,38 @@ test('a money PR snapshot normalises every source', async () => {
         },
       ],
     },
-    'POST /graphql': {
-      json: {
-        data: {
-          repository: {
-            pullRequest: {
-              reviewThreads: {
-                pageInfo: { hasNextPage: false, endCursor: null },
-                nodes: [{ isResolved: false, isOutdated: true, path: 'a.ts' }],
+    // Thread state and comment editors are both read over GraphQL.
+    'POST /graphql': ({ body }) =>
+      JSON.parse(body).query.includes('nodes(ids')
+        ? {
+            json: {
+              data: {
+                nodes: [
+                  {
+                    id: 'IC_1',
+                    lastEditedAt: 'e',
+                    editor: { __typename: 'Bot', login: 'claude' },
+                  },
+                ],
+              },
+            },
+          }
+        : {
+            json: {
+              data: {
+                repository: {
+                  pullRequest: {
+                    reviewThreads: {
+                      pageInfo: { hasNextPage: false, endCursor: null },
+                      nodes: [
+                        { isResolved: false, isOutdated: true, path: 'a.ts' },
+                      ],
+                    },
+                  },
+                },
               },
             },
           },
-        },
-      },
-    },
     [`GET /repos/o/r/commits/${HEAD}/check-runs?per_page=100`]: {
       json: {
         check_runs: [
@@ -201,14 +221,17 @@ test('a money PR snapshot normalises every source', async () => {
   assert.deepEqual(snapshot.pr.labels, ['owner-signoff']);
   assert.deepEqual(snapshot.comments[0], {
     id: 1,
+    nodeId: 'IC_1',
     login: 'claude[bot]',
     userType: 'Bot',
     body: 'hi',
     createdAt: 'c',
     updatedAt: 'u',
+    editor: 'claude[bot]',
   });
   assert.equal(snapshot.reviews[0].body, '');
   assert.equal(snapshot.reviews[0].commitId, HEAD);
+  assert.equal(snapshot.reviews[0].nodeId, 'PRR_2');
   assert.deepEqual(snapshot.threads, [
     { isResolved: false, isOutdated: true, path: 'a.ts' },
   ]);

@@ -85,6 +85,18 @@ function checkEvidence(snapshot, config, reasons) {
     reasons.push(
       `Linked sandbox evidence was not found at the head commit: ${evidencePaths.join(', ')}.`
     );
+    return;
+  }
+  // Evidence already on the default branch says nothing about this change.
+  const changed = new Set(
+    snapshot.files
+      .filter(({ status }) => status !== 'removed')
+      .map(({ filename }) => filename)
+  );
+  if (!evidencePaths.some((path) => changed.has(path))) {
+    reasons.push(
+      `Linked sandbox evidence must be added or updated by this pull request: ${evidencePaths.join(', ')}.`
+    );
   }
 }
 
@@ -127,9 +139,13 @@ export function evaluateAssurance(snapshot, config) {
       `The changed-file list is incomplete (${snapshot.files.length} of ${snapshot.pr.changedFiles}); treating it as a money-path PR.`
     );
   }
+  // A change to the assurance rules is reviewed under the rules it changes,
+  // so the owner must always approve it.
+  const rulesChanged = classification.governanceFiles.length > 0;
   const signoffNeeded =
     checkSummaries(snapshot, config, reasons) ||
-    snapshot.pr.labels.includes(config.ownerSignoff.label);
+    snapshot.pr.labels.includes(config.ownerSignoff.label) ||
+    rulesChanged;
   checkEvidence(snapshot, config, reasons);
   const reviewers = evaluateReviewers({
     comments: snapshot.comments ?? [],
@@ -151,7 +167,12 @@ export function evaluateAssurance(snapshot, config) {
       head,
       ownerSignoff: config.ownerSignoff,
     });
-    if (!signoff.approved) reasons.push(`${signoff.detail}.`);
+    if (!signoff.approved) {
+      const why = rulesChanged
+        ? ` (this pull request changes the assurance rules: ${classification.governanceFiles[0]})`
+        : '';
+      reasons.push(`${signoff.detail}${why}.`);
+    }
   }
   const checks = evaluateRequiredChecks({
     checkRuns: snapshot.checkRuns ?? [],

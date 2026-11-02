@@ -9,6 +9,7 @@ export const CODEX = 'chatgpt-codex-connector[bot]';
 export const CLAUDE = 'claude[bot]';
 export const ACTIONS_BOT = 'github-actions[bot]';
 export const PROMPT_VERSION = 'money-rules-adversarial-review/v1';
+export const PROMPT_PATH = '.github/prompts/money-rules-adversarial-review.md';
 export const TASK_ID = 'P5-engine-schema';
 export const SUMMARY_PATH = `docs/piggyvest-change-summaries/${TASK_ID}.md`;
 export const EVIDENCE_PATH = 'docs/piggyvest-contract-evidence/2026-10-31.md';
@@ -64,14 +65,17 @@ export function validSummary({
   ].join('\n');
 }
 
+// `editor` is the login that last edited the item, or null if never edited.
 export function comment(login, body, minute = 1, extra = {}) {
   return {
     id: 1000 + minute,
+    nodeId: `IC_${1000 + minute}`,
     login,
     userType: login.endsWith('[bot]') ? 'Bot' : 'User',
     body,
     createdAt: at(minute),
     updatedAt: at(minute),
+    editor: null,
     ...extra,
   };
 }
@@ -79,12 +83,25 @@ export function comment(login, body, minute = 1, extra = {}) {
 export function review(login, body, commitId, minute = 1) {
   return {
     id: 2000 + minute,
+    nodeId: `PRR_${2000 + minute}`,
     login,
+    userType: login.endsWith('[bot]') ? 'Bot' : 'User',
     body,
     commitId,
     state: 'COMMENTED',
     submittedAt: at(minute),
+    editor: null,
   };
+}
+
+// The owner's (or an agent's) request for the money-rules Codex review.
+export function codexRequest(minute = 1, login = OWNER) {
+  return comment(
+    login,
+    `@codex review Follow the main branch's ${PROMPT_PATH}, not this pull request's copy.`,
+    minute,
+    { id: 3000 + minute, nodeId: `IC_${3000 + minute}` }
+  );
 }
 
 export function codexClean(sha = HEAD, minute = 2) {
@@ -150,6 +167,7 @@ export function moneySnapshot(overrides = {}) {
       status: 'added',
     },
     { filename: SUMMARY_PATH, status: 'added' },
+    { filename: EVIDENCE_PATH, status: 'added' },
   ];
   return {
     pr: {
@@ -164,6 +182,7 @@ export function moneySnapshot(overrides = {}) {
     summaries: overrides.summaries ?? { [SUMMARY_PATH]: validSummary() },
     evidenceExists: overrides.evidenceExists ?? { [EVIDENCE_PATH]: true },
     comments: overrides.comments ?? [
+      codexRequest(),
       codexClean(),
       claudeVerdict(),
       ownerApproval(),

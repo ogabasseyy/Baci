@@ -5,6 +5,7 @@ import {
   createFakeGitHub,
   HEAD,
   loadRawConfig,
+  OLD_HEAD,
 } from './money-pr-assurance.test-support.mjs';
 import { parseAssuranceConfig } from './money-pr-assurance-config.mjs';
 
@@ -39,20 +40,41 @@ function statusBodies(fake) {
     .map(({ body }) => JSON.parse(body));
 }
 
+// Retries wait through an injected sleep that only records the delay, so
+// no test waits on a real timer.
 async function run(env, routes) {
   const fake = createFakeGitHub({
     [`POST /repos/o/r/statuses/${HEAD}`]: { status: 201, json: {} },
+    [`POST /repos/o/r/statuses/${OLD_HEAD}`]: { status: 201, json: {} },
     ...routes,
   });
   const summaries = [];
+  const sleeps = [];
   const result = await runAssurance({
     env: { ...baseEnv, ...env },
     fetchImpl: fake.fetch,
     config,
     appendSummary: (text) => summaries.push(text),
     log: () => undefined,
+    sleep: async (ms) => {
+      sleeps.push(ms);
+    },
   });
-  return { fake, result, summaries };
+  return { fake, result, summaries, sleeps };
+}
+
+function flakyPullRoute(number, failures, files) {
+  const ok = prRoute(number, files);
+  let calls = 0;
+  return {
+    ...ok,
+    [`GET /repos/o/r/pulls/${number}`]: () => {
+      calls += 1;
+      return calls <= failures
+        ? { status: 502, json: { message: 'bad gateway' } }
+        : ok[`GET /repos/o/r/pulls/${number}`];
+    },
+  };
 }
 
 test('targets come from the PR number or the commit SHA, validated', () => {
@@ -65,6 +87,11 @@ test('targets come from the PR number or the commit SHA, validated', () => {
   assert.deepEqual(
     resolveTarget({ ...baseEnv, PR_NUMBER: '', HEAD_SHA: HEAD }),
     { owner: 'o', repo: 'r', prNumber: null, headSha: HEAD }
+  );
+  // The event's head SHA is kept next to the PR number as a fallback.
+  assert.deepEqual(
+    resolveTarget({ ...baseEnv, PR_NUMBER: '12', HEAD_SHA: HEAD }),
+    { owner: 'o', repo: 'r', prNumber: 12, headSha: HEAD }
   );
   for (const env of [
     { ...baseEnv, PR_NUMBER: '12; rm' },
@@ -177,4 +204,48 @@ test('an API failure posts an error status and fails the job', async () => {
   assert.equal(status.state, 'error');
   assert.match(status.description, /could not be evaluated/);
   assert.equal(result.exitCode, 1);
+});
+
+test('a transient failure reading the PR is retried with growing waits', async () => {
+  const { fake, result, sleeps } = await run(
+    { PR_NUMBER: '5' },
+    flakyPullRoute(5, 2, [
+      { filename: 'apps/web/src/app/page.tsx', status: 'modified' },
+    ])
+  );
+  assert.equal(result.exitCode, 0);
+  assert.equal(statusBodies(fake)[0].state, 'success');
+  assert.deepEqual(sleeps, [2000, 4000]);
+});
+
+test('if the PR cannot be read, an error replaces any status on the event head', async () => {
+  const { fake, result } = await run(
+    { PR_NUMBER: '5', HEAD_SHA: OLD_HEAD },
+    flakyPullRoute(5, 99, [])
+  );
+  assert.equal(result.exitCode, 1);
+  const posts = fake.calls.filter(({ key }) => key.includes('/statuses/'));
+  assert.deepEqual(
+    posts.map(({ key }) => key),
+    [`POST /repos/o/r/statuses/${OLD_HEAD}`]
+  );
+  assert.equal(JSON.parse(posts[0].body).state, 'error');
+  // Without an event head SHA there is nothing safe to post to.
+  const blind = await run({ PR_NUMBER: '5' }, flakyPullRoute(5, 99, []));
+  assert.equal(blind.result.exitCode, 1);
+  assert.equal(statusBodies(blind.fake).length, 0);
+});
+
+test('if the PR list for a commit cannot be read, the commit gets an error', async () => {
+  const { fake, result } = await run(
+    { HEAD_SHA: HEAD },
+    {
+      [`GET /repos/o/r/commits/${HEAD}/pulls?per_page=100`]: {
+        status: 502,
+        json: {},
+      },
+    }
+  );
+  assert.equal(result.exitCode, 1);
+  assert.equal(statusBodies(fake)[0].state, 'error');
 });

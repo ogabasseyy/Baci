@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  ACTIONS_BOT,
   at,
   CLAUDE,
   CODEX,
   claudeVerdict,
   codexClean,
+  codexRequest,
   comment,
   HEAD,
   loadRawConfig,
@@ -27,13 +27,19 @@ import {
 
 const { reviewers, ownerSignoff } = parseAssuranceConfig(loadRawConfig());
 
-function run(comments, reviewList = []) {
+// Codex counts only after a money-rules request, so `run` adds one before
+// every other comment; `runWithoutRequest` leaves it out.
+function runWithoutRequest(comments, reviewList = []) {
   return evaluateReviewers({
     comments,
     reviews: reviewList,
     head: HEAD,
     reviewers,
   });
+}
+
+function run(comments, reviewList = []) {
+  return runWithoutRequest([codexRequest(0), ...comments], reviewList);
 }
 
 test('a SHA prefix matches only with at least seven characters', () => {
@@ -82,7 +88,7 @@ test('Codex plus Claude on the current head satisfies both families', () => {
 test('only one reviewer family fails', () => {
   const codexOnly = run([codexClean()]);
   assert.equal(codexOnly.satisfied, false);
-  assert.match(codexOnly.failures.join('\n'), /claude or gemini/i);
+  assert.match(codexOnly.failures.join('\n'), /from claude:/i);
   const claudeOnly = run([claudeVerdict()]);
   assert.equal(claudeOnly.satisfied, false);
   assert.match(claudeOnly.failures.join('\n'), /codex/i);
@@ -118,16 +124,18 @@ test('a FAIL verdict, an old prompt version or an untrusted author does not coun
   );
 });
 
-test('the latest verdict from a family wins, using edit time', () => {
+test('the latest verdict from a family wins, using its own edit time', () => {
   const failThenPass = [
     codexClean(),
     claudeVerdict({ verdict: 'FAIL' }, 3),
     claudeVerdict({}, 5),
   ];
   assert.equal(run(failThenPass).families.claude.state, 'pass');
+  // claude-code-action edits its own tracking comment as it works.
   const edited = {
     ...claudeVerdict({}, 3),
     updatedAt: at(9),
+    editor: CLAUDE,
     body: verdictBlock({ verdict: 'FAIL' }),
   };
   assert.equal(
@@ -169,26 +177,6 @@ test('Codex quota or other non-clean comments are not verdicts', () => {
     2
   );
   assert.equal(run([quota, claudeVerdict()]).families.codex.state, 'missing');
-});
-
-test('a Gemini verdict counts only with its head marker from the Actions bot', () => {
-  const marker = `<!-- gemini-code-review sha:${HEAD} -->`;
-  const gemini = review(
-    ACTIONS_BOT,
-    `${marker}\n## Gemini code review\n\n${verdictBlock()}`,
-    HEAD,
-    3
-  );
-  assert.equal(run([codexClean()], [gemini]).satisfied, true);
-  const noMarker = review(ACTIONS_BOT, verdictBlock(), HEAD, 3);
-  assert.equal(run([codexClean()], [noMarker]).satisfied, false);
-  const wrongMarker = review(
-    ACTIONS_BOT,
-    `<!-- gemini-code-review sha:${OLD_HEAD} -->\n${verdictBlock()}`,
-    HEAD,
-    3
-  );
-  assert.equal(run([codexClean()], [wrongMarker]).satisfied, false);
 });
 
 test('Claude verdicts posted as review bodies also count', () => {

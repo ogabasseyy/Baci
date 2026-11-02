@@ -2,6 +2,7 @@
 // snapshot. It never checks out or executes pull-request code: the summary
 // and evidence files are read as data through the contents API.
 import { classifyChangedFiles } from './money-pr-assurance-config.mjs';
+import { attachEditors, trustedLogins } from './money-pr-assurance-editors.mjs';
 import {
   evidencePathsToCheck,
   summaryPathsToFetch,
@@ -133,6 +134,7 @@ async function readThreads(client, { owner, repo, number }) {
 function normaliseComment(item) {
   return {
     id: item.id,
+    nodeId: item.node_id ?? '',
     login: item.user?.login ?? '',
     userType: item.user?.type ?? '',
     body: item.body ?? '',
@@ -144,6 +146,7 @@ function normaliseComment(item) {
 function normaliseReview(item) {
   return {
     id: item.id,
+    nodeId: item.node_id ?? '',
     login: item.user?.login ?? '',
     userType: item.user?.type ?? '',
     body: item.body ?? '',
@@ -214,17 +217,26 @@ export async function collectSnapshot(
     );
     evidenceExists[path] = found !== null;
   }
+  const logins = trustedLogins(config);
   return {
     pr,
     files,
     summaries,
     evidenceExists,
-    comments: (
-      await client.getAll(`${prefix}/issues/${number}/comments?per_page=100`)
-    ).map(normaliseComment),
-    reviews: (
-      await client.getAll(`${prefix}/pulls/${number}/reviews?per_page=100`)
-    ).map(normaliseReview),
+    comments: await attachEditors(
+      client,
+      (
+        await client.getAll(`${prefix}/issues/${number}/comments?per_page=100`)
+      ).map(normaliseComment),
+      logins
+    ),
+    reviews: await attachEditors(
+      client,
+      (
+        await client.getAll(`${prefix}/pulls/${number}/reviews?per_page=100`)
+      ).map(normaliseReview),
+      logins
+    ),
     threads: await readThreads(client, { owner, repo, number }),
     checkRuns: (
       await client.getAll(

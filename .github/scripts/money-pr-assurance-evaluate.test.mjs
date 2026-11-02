@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   claudeVerdict,
   codexClean,
+  codexRequest,
   comment,
   EVIDENCE_PATH,
   HEAD,
@@ -74,8 +75,8 @@ test('a money PR fails without a summary', () => {
 
 test('a money PR fails with only one reviewer family', () => {
   assertFails(
-    evaluate({ comments: [codexClean(), ownerApproval()] }),
-    /claude or gemini/i
+    evaluate({ comments: [codexRequest(), codexClean(), ownerApproval()] }),
+    /from claude:/i
   );
 });
 
@@ -108,6 +109,17 @@ test('a money PR fails without sandbox evidence or a dark-until statement', () =
     evaluate({ evidenceExists: { [EVIDENCE_PATH]: false } }),
     /not found at the head commit/
   );
+  // Evidence already on main proves nothing about this change: the linked
+  // file must be added or updated by the pull request itself.
+  const files = moneySnapshot().files.filter(
+    ({ filename }) => filename !== EVIDENCE_PATH
+  );
+  assertFails(evaluate({ files }), /added or updated by this pull request/);
+  const removed = [...files, { filename: EVIDENCE_PATH, status: 'removed' }];
+  assertFails(
+    evaluate({ files: removed }),
+    /added or updated by this pull request/
+  );
   const dark = evaluate({
     pr: { body: 'Dark until: the transfer engine flag is on' },
   });
@@ -115,7 +127,7 @@ test('a money PR fails without sandbox evidence or a dark-until statement', () =
 });
 
 test('owner sign-off is required, bound to the owner and the current head', () => {
-  const without = [codexClean(), claudeVerdict()];
+  const without = [codexRequest(), codexClean(), claudeVerdict()];
   assertFails(evaluate({ comments: without }), /summary-approved 0123456/);
   assertFails(
     evaluate({ comments: [...without, ownerApproval(HEAD, 'someone-else')] }),
@@ -139,6 +151,29 @@ test('owner sign-off is required, bound to the owner and the current head', () =
     }),
     /summary-approved/
   );
+});
+
+test('changing the assurance rules always needs owner sign-off', () => {
+  const files = [
+    ...moneySnapshot().files,
+    {
+      filename: '.github/prompts/money-rules-adversarial-review.md',
+      status: 'modified',
+    },
+  ];
+  const summaries = {
+    [SUMMARY_PATH]: validSummary({ signoff: 'not required' }),
+  };
+  const without = [codexRequest(), codexClean(), claudeVerdict()];
+  const result = evaluate({ files, summaries, comments: without });
+  assertFails(result, /summary-approved 0123456/);
+  assert.match(result.reasons.join('\n'), /assurance rules/);
+  const approved = evaluate({
+    files,
+    summaries,
+    comments: [...without, ownerApproval()],
+  });
+  assert.equal(approved.state, 'success', approved.reasons.join('\n'));
 });
 
 test('a summary with code, too many words or a missing heading fails', () => {

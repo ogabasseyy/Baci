@@ -3,9 +3,11 @@
 // money-path assurance requirements for one PR (or every open PR at a head
 // commit) and posts the result as the "money-pr-assurance" commit status.
 //
-// Environment: GITHUB_TOKEN, GITHUB_REPOSITORY, PR_NUMBER or HEAD_SHA,
+// Environment: GITHUB_TOKEN, GITHUB_REPOSITORY, PR_NUMBER and/or HEAD_SHA,
 // optional GITHUB_API_URL, RUN_URL, GITHUB_STEP_SUMMARY, DRY_RUN=1 and
-// ASSURANCE_CONFIG (defaults to .github/money-path-paths.json).
+// ASSURANCE_CONFIG (defaults to .github/money-path-paths.json). With both,
+// HEAD_SHA is the event's head commit: if the PR cannot be read, an error
+// status goes there so an earlier success never outlives a failed check.
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
@@ -19,6 +21,24 @@ import {
   readPullRequest,
 } from './money-pr-assurance-github.mjs';
 
+const READ_ATTEMPTS = 3;
+const FIRST_RETRY_MS = 2000;
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withRetries(read, sleep) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await read();
+    } catch (error) {
+      if (attempt >= READ_ATTEMPTS) throw error;
+      await sleep(FIRST_RETRY_MS * 2 ** (attempt - 1));
+    }
+  }
+}
+
 export function resolveTarget(env) {
   const [owner, repo, extra] = String(env.GITHUB_REPOSITORY ?? '').split('/');
   if (!owner || !repo || extra !== undefined)
@@ -27,16 +47,15 @@ export function resolveTarget(env) {
   const shaText = String(env.HEAD_SHA ?? '')
     .trim()
     .toLowerCase();
+  if (shaText && !/^[0-9a-f]{40}$/.test(shaText))
+    throw new Error('HEAD_SHA must be a full commit SHA');
+  const headSha = shaText || null;
   if (prText) {
     if (!/^[1-9][0-9]{0,9}$/.test(prText))
       throw new Error('PR_NUMBER must be a positive integer');
-    return { owner, repo, prNumber: Number(prText), headSha: null };
+    return { owner, repo, prNumber: Number(prText), headSha };
   }
-  if (shaText) {
-    if (!/^[0-9a-f]{40}$/.test(shaText))
-      throw new Error('HEAD_SHA must be a full commit SHA');
-    return { owner, repo, prNumber: null, headSha: shaText };
-  }
+  if (headSha) return { owner, repo, prNumber: null, headSha };
   throw new Error(
     'Set PR_NUMBER or HEAD_SHA to choose the pull request to evaluate'
   );
@@ -83,6 +102,7 @@ export async function runAssurance({
   config,
   appendSummary,
   log,
+  sleep = wait,
 }) {
   const target = resolveTarget(env);
   const client = createGitHubClient({
@@ -91,13 +111,36 @@ export async function runAssurance({
     apiUrl: env.GITHUB_API_URL || 'https://api.github.com',
   });
   const dryRun = env.DRY_RUN === '1';
-  const numbers = target.prNumber
-    ? [target.prNumber]
-    : await findOpenPullRequestsForSha(client, {
-        owner: target.owner,
-        repo: target.repo,
-        sha: target.headSha,
-      });
+  const postError = (sha) =>
+    postStatus(client, {
+      owner: target.owner,
+      repo: target.repo,
+      sha,
+      state: 'error',
+      description: 'Assurance could not be evaluated; see the workflow run',
+      context: config.statusContext,
+      targetUrl: env.RUN_URL,
+    }).catch((failure) =>
+      log(`::warning::Could not post the error status: ${failure.message}`)
+    );
+  let numbers;
+  try {
+    numbers = target.prNumber
+      ? [target.prNumber]
+      : await withRetries(
+          () =>
+            findOpenPullRequestsForSha(client, {
+              owner: target.owner,
+              repo: target.repo,
+              sha: target.headSha,
+            }),
+          sleep
+        );
+  } catch (error) {
+    log(`::error::money-pr-assurance could not list PRs: ${error.message}`);
+    if (!dryRun) await postError(target.headSha);
+    return { results: [], exitCode: 1 };
+  }
   if (numbers.length === 0)
     log(
       'No open pull request is associated with this commit; nothing to evaluate.'
@@ -108,11 +151,15 @@ export async function runAssurance({
   for (const number of numbers) {
     let sha = null;
     try {
-      const pr = await readPullRequest(client, {
-        owner: target.owner,
-        repo: target.repo,
-        number,
-      });
+      const pr = await withRetries(
+        () =>
+          readPullRequest(client, {
+            owner: target.owner,
+            repo: target.repo,
+            number,
+          }),
+        sleep
+      );
       sha = pr.headSha;
       if (pr.state !== 'open') {
         log(`#${number} is ${pr.state}; skipping.`);
@@ -150,21 +197,9 @@ export async function runAssurance({
         `::error::money-pr-assurance could not evaluate #${number}: ${error.message}`
       );
       results.push({ number, sha, state: 'error', description: error.message });
-      if (sha && !dryRun) {
-        await postStatus(client, {
-          owner: target.owner,
-          repo: target.repo,
-          sha,
-          state: 'error',
-          description: 'Assurance could not be evaluated; see the workflow run',
-          context: config.statusContext,
-          targetUrl: env.RUN_URL,
-        }).catch((postError) =>
-          log(
-            `::warning::Could not post the error status: ${postError.message}`
-          )
-        );
-      }
+      // Fall back to the event's head commit when the PR itself was unread.
+      const statusSha = sha ?? target.headSha;
+      if (statusSha && !dryRun) await postError(statusSha);
     }
   }
   return { results, exitCode };

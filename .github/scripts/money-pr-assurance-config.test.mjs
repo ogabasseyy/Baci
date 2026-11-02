@@ -133,7 +133,7 @@ test('moving a money file out of a money path still counts as a money-path chang
 
 test('the committed configuration parses and names every required part', () => {
   assert.equal(config.statusContext, 'money-pr-assurance');
-  assert.deepEqual(config.reviewers.groups, [['codex'], ['claude', 'gemini']]);
+  assert.deepEqual(config.reviewers.groups, [['codex'], ['claude']]);
   assert.equal(config.summary.maxWords, 450);
   assert.equal(config.summary.headings.length, 5);
   assert.deepEqual(config.ownerSignoff.logins, ['ogabasseyy']);
@@ -141,6 +141,41 @@ test('the committed configuration parses and names every required part', () => {
     config.requiredChecks.some(
       ({ name }) => name === 'Quality Gate - DB Replay'
     )
+  );
+});
+
+function withFamily(name, changes) {
+  const raw = loadRawConfig();
+  const family = { ...raw.reviewers.families[name], ...changes };
+  return {
+    ...raw,
+    reviewers: {
+      ...raw.reviewers,
+      families: { ...raw.reviewers.families, [name]: family },
+    },
+  };
+}
+
+test('no reviewer family may trust the shared GitHub Actions identity', () => {
+  // Every workflow token, including one a pull request controls, posts as
+  // github-actions[bot], so a verdict from it proves nothing.
+  const raw = loadRawConfig();
+  for (const name of ['codex', 'claude']) {
+    assert.throws(
+      () =>
+        parseAssuranceConfig(
+          withFamily(name, { logins: ['github-actions[bot]'] })
+        ),
+      /github-actions\[bot\]/
+    );
+  }
+  assert.throws(
+    () =>
+      parseAssuranceConfig({
+        ...raw,
+        ownerSignoff: { ...raw.ownerSignoff, logins: ['github-actions[bot]'] },
+      }),
+    /github-actions\[bot\]/
   );
 });
 
@@ -189,6 +224,20 @@ test('a malformed configuration is rejected instead of silently passing PRs', ()
       /ownerSignoff/,
     ],
     [{ ...raw, requiredChecks: [{ name: '' }] }, /requiredChecks/],
+    [{ ...raw, moneyKeywords: undefined }, /moneyKeywords/],
+    [
+      { ...raw, moneyKeywords: { ...raw.moneyKeywords, keywords: [] } },
+      /moneyKeywords\.keywords/,
+    ],
+    [
+      {
+        ...raw,
+        moneyKeywords: { ...raw.moneyKeywords, roots: ['apps/web/src'] },
+      },
+      /end with "\/"/,
+    ],
+    [withFamily('codex', { requestPhrase: undefined }), /requestPhrase/],
+    [withFamily('codex', { requestedBy: [] }), /requestedBy/],
     [null, /object/],
   ];
   for (const [candidate, pattern] of cases) {

@@ -1,20 +1,28 @@
 # Money PR Assurance: posts the `money-pr-assurance` commit status on every
 # pull request's head commit.
 #
-# A PR that touches a path in .github/money-path-paths.json passes only when,
-# on its CURRENT head SHA: Codex and a second model family (Claude or Gemini)
-# gave adversarial money-rules verdicts, every review thread is resolved, the
-# database replay and SQL suites are green, the PR links sandbox evidence or
-# says what keeps it dark, and its owner-readable summary follows the template.
-# PRs that need owner sign-off also need the owner's "summary-approved <sha7>".
+# A PR that touches a money path in .github/money-path-paths.json passes only
+# when, on its CURRENT head SHA: Codex (asked to use the money-rules prompt)
+# and Claude, two model families, gave adversarial money-rules verdicts, every
+# review thread is resolved, the database replay and SQL suites are green, the
+# PR adds sandbox evidence or says what keeps it dark, and its owner-readable
+# summary follows the template. PRs that need owner sign-off, including every
+# change to the assurance rules, also need the owner's "summary-approved
+# <sha7>".
 # Every other PR gets an immediate success status.
 #
 # The check is ADVISORY until the owner explicitly adds `money-pr-assurance`
 # to main's required status checks (see docs/runbooks/money-pr-assurance.md).
 #
 # Trust model: the evaluator never checks out or runs pull-request code. It
-# checks out the default branch's script and configuration and reads the PR
-# through the API only, so a PR cannot weaken the gate that judges it.
+# runs only on events GitHub takes from the default branch, checks out the
+# default branch's script and configuration, and reads the PR through the
+# API only, so a PR cannot change the evaluator that judges it. Review
+# events, which GitHub would run from the PR's own copy, arrive through the
+# permission-less relay workflow instead. The status itself is posted with
+# the shared Actions token, which any same-repository pull-request workflow
+# also holds, so it must stay advisory until it is posted under an identity
+# pull-request workflows cannot use (see the runbook).
 name: Money PR Assurance
 
 on:
@@ -24,13 +32,12 @@ on:
   # issue_comment workflows from the default branch.
   issue_comment:
     types: [created, edited, deleted]
-  pull_request_review:
-    types: [submitted, edited, dismissed]
   # GitHub Actions has no trigger for resolving a review thread. After the
   # last thread is resolved, re-run with workflow_dispatch (see the runbook).
-  # Re-evaluate when CI or the Gemini reviewer finishes on a PR head.
+  # Re-evaluate when CI finishes on a PR head, or when a review is submitted,
+  # edited or dismissed (relayed by money-pr-assurance-review-relay.yml).
   workflow_run:
-    workflows: [CI Quality Gate, Gemini Code Review]
+    workflows: [CI Quality Gate, Money PR Assurance Review Relay]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -45,9 +52,12 @@ on:
       - '.github/money-path-paths.json'
       - '.github/prompts/money-rules-adversarial-review.md'
       - '.github/scripts/money-pr-assurance*.mjs'
-      - '.github/workflows/money-pr-assurance.yml'
+      - '.github/workflows/money-pr-assurance*.yml'
       - 'docs/piggyvest-change-summaries/**'
       - 'docs/runbooks/money-pr-assurance.md'
+      # Read by the contract tests: CI job names and the CI change filter.
+      - '.github/workflows/ci.yml'
+      - '.github/filters/ci.yml'
 
 permissions: {}
 
@@ -56,18 +66,17 @@ jobs:
     name: Evaluate money-path assurance
     # Comments only matter from the reviewer bots and the owner (logins must
     # match .github/money-path-paths.json; a contract test enforces this).
-    # Review events run from the PR merge ref, and workflow_run carries no PR
-    # number for forks, so those two only evaluate same-repo PRs; fork PRs are
-    # evaluated on the other events or a manual re-run.
+    # workflow_run carries no PR number for forks, so CI and review relays
+    # only evaluate same-repo PRs; fork PRs are evaluated on the other events
+    # or a manual re-run.
     if: >-
       github.event_name == 'pull_request_target' ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' &&
+      (github.event_name == 'workflow_run' &&
+      (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'pull_request_review') &&
       github.event.workflow_run.pull_requests[0].number) ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
-      contains(fromJSON('["chatgpt-codex-connector[bot]","claude[bot]","ogabasseyy"]'), github.event.comment.user.login)) ||
-      (github.event_name == 'pull_request_review' &&
-      github.event.pull_request.head.repo.full_name == github.repository)
+      contains(fromJSON('["chatgpt-codex-connector[bot]","claude[bot]","ogabasseyy"]'), github.event.comment.user.login))
     # Only an event that passes the `if` above joins the per-PR group (the
     # condition is repeated verbatim; a contract test keeps them equal). Any
     # other event gets a group of its own, so a comment from another bot can
@@ -79,12 +88,11 @@ jobs:
         ${{ (
           github.event_name == 'pull_request_target' ||
           (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-          (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' &&
+          (github.event_name == 'workflow_run' &&
+          (github.event.workflow_run.event == 'pull_request' || github.event.workflow_run.event == 'pull_request_review') &&
           github.event.workflow_run.pull_requests[0].number) ||
           (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
-          contains(fromJSON('["chatgpt-codex-connector[bot]","claude[bot]","ogabasseyy"]'), github.event.comment.user.login)) ||
-          (github.event_name == 'pull_request_review' &&
-          github.event.pull_request.head.repo.full_name == github.repository)
+          contains(fromJSON('["chatgpt-codex-connector[bot]","claude[bot]","ogabasseyy"]'), github.event.comment.user.login))
         ) && (github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || inputs.pr_number) && format('money-pr-assurance-{0}', (github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || inputs.pr_number)) || format('money-pr-assurance-run-{0}', github.run_id) }}
       cancel-in-progress: false
     runs-on: ubuntu-24.04
@@ -110,7 +118,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || inputs.pr_number || '' }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha || '' }}
+          # Only a status target if the PR cannot be read; never checked out.
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || '' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node .github/scripts/money-pr-assurance.mjs
 

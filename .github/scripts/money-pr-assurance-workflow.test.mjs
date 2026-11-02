@@ -29,8 +29,16 @@ function jobBlock(name) {
 
 test('the evaluator never checks out pull-request code and posts only statuses', () => {
   assert.match(workflow, /^permissions: \{\}$/m);
-  assert.doesNotMatch(workflow, /github\.event\.pull_request\.head\.(sha|ref)/);
+  assert.doesNotMatch(workflow, /github\.event\.pull_request\.head\.ref/);
   assert.doesNotMatch(workflow, /refs\/pull\//);
+  // The PR head SHA is only ever a status target, never a checkout ref.
+  for (const line of workflow.match(/^.*pull_request\.head\.sha.*$/gm) ?? [])
+    assert.match(line, /^ +HEAD_SHA: /);
+  for (const line of workflow.match(/^ +ref: .*$/gm) ?? [])
+    assert.equal(
+      line.trim(),
+      'ref: ${{ github.event.repository.default_branch }}'
+    );
   const evaluate = jobBlock('evaluate');
   assert.match(
     evaluate,
@@ -66,9 +74,8 @@ test('comment triggers listen to exactly the reviewer and owner logins', () => {
   assert.equal(lists.length, 2, 'the job condition and its concurrency group');
   const expected = new Set(config.ownerSignoff.logins);
   for (const family of Object.values(config.reviewers.families)) {
-    // github-actions[bot] comments never trigger workflows, so it is omitted.
-    for (const login of family.logins)
-      if (login !== 'github-actions[bot]') expected.add(login);
+    for (const login of [...family.logins, ...family.requestedBy])
+      expected.add(login);
   }
   for (const list of lists) assert.deepEqual(list, expected);
 });
@@ -128,6 +135,7 @@ test('the self-test runs whenever any governance file changes', () => {
     '.github/money-path-paths.json',
     '.github/prompts/money-rules-adversarial-review.md',
     '.github/workflows/money-pr-assurance.yml',
+    '.github/workflows/money-pr-assurance-review-relay.yml',
     ...readdirSync(join(repoRoot, '.github/scripts'))
       .filter((file) => file.startsWith('money-pr-assurance'))
       .map((file) => `.github/scripts/${file}`),
@@ -137,6 +145,18 @@ test('the self-test runs whenever any governance file changes', () => {
       config.governancePaths.some((glob) => globToRegExp(glob).test(path)),
       `${path} must be governed`
     );
+    assert.ok(
+      triggers.some((pattern) => pattern.test(path)),
+      `${path} must trigger the self-test`
+    );
+  }
+  // Other files the contract tests read: renaming a CI job or changing the
+  // CI change filter must re-run them before it can strand money PRs.
+  for (const path of [
+    '.github/workflows/ci.yml',
+    '.github/filters/ci.yml',
+    'docs/runbooks/money-pr-assurance.md',
+  ]) {
     assert.ok(
       triggers.some((pattern) => pattern.test(path)),
       `${path} must trigger the self-test`
@@ -153,6 +173,9 @@ test('the prompt names its version, the verdict block and every rule', () => {
     'PROMPT-VERSION:',
   ])
     assert.ok(prompt.includes(key), key);
+  // The verdict names the commit actually reviewed, not the live PR head.
+  assert.ok(prompt.includes('git rev-parse HEAD'));
+  assert.doesNotMatch(prompt, /headRefOid/);
   for (const rule of [
     'R1.',
     'R2.',

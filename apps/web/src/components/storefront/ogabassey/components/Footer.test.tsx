@@ -278,4 +278,28 @@ describe('Ogabassey Footer', () => {
     expect(screen.getByText('2 Olaide Tomori St, Ikeja, Lagos')).toBeVisible();
   });
 
+  it('includes core catalog and utility internal links in the Menu section and a screen-reader h2 landmark heading', () => {
+    mockBuildMerchantTrustProfile.mockReturnValue({
+      socialLinks: {},
+      derivedLinks: {},
+    });
+
+    render(<Footer storeSlug="ogabassey" merchant={merchantFixture} />);
+
+    expect(
+      screen.getByRole('heading', { level: 2, name: /ogabassey footer/i })
+    ).toHaveClass('sr-only');
+    expect(screen.getByRole('link', { name: 'All Products' })).toHaveAttribute(
+      'href',
+      '/ogabassey/products'
+    );
+    expect(
+      screen.getByRole('link', { name: 'Swap / Trade-in' })
+    ).toHaveAttribute('href', '/ogabassey/swap');
+    expect(screen.getByRole('link', { name: 'IMEI Checker' })).toHaveAttribute(
+      'href',
+      '/ogabassey/imei-check'
+    );
+  });
+
 });

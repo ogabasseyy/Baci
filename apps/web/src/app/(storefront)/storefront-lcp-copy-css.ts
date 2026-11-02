@@ -282,19 +282,4 @@ body:has([data-compare-hub-intro-resolved]) [data-compare-hub-intro-pending] {
     display: none;
   }
 }
-
-.ogabassey-mobile-footer {
-  bottom: 0;
-  left: 0;
-  overflow: hidden;
-  position: fixed;
-  right: 0;
-  z-index: 70;
-}
-
-@media (min-width: 768px) {
-  .ogabassey-mobile-footer {
-    display: none;
-  }
-}
 `;

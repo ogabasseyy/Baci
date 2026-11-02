@@ -49,7 +49,7 @@ export function FooterAppPayments() {
       </div>
 
       <div className="flex items-center gap-3 mt-1">
-        <span className="text-[10px] text-current/50 font-medium">
+        <span className="text-xs text-current/65 font-medium">
           Secured by:
         </span>
         <div className="flex items-center gap-1 bg-store-background px-2 py-1 rounded border border-store-border shadow-sm opacity-90 hover:opacity-100 transition-opacity">

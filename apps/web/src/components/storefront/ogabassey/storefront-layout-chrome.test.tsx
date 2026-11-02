@@ -63,12 +63,6 @@ vi.mock('./components/Footer', () => {
   throw new Error('Full Footer must stay out of storefront-layout-chrome');
 });
 
-vi.mock('./components/MobileFooter', () => ({
-  MobileFooter: ({ storeSlug }: { storeSlug: string }) => (
-    <nav aria-label="Mobile footer">{storeSlug}</nav>
-  ),
-}));
-
 vi.mock('./components/chat/DeferredChatWidget', () => ({
   DeferredChatWidget: () => <aside aria-label="chat widget" />,
 }));
@@ -150,7 +144,7 @@ describe('OgabasseyLayoutChrome', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('renders mobile and lightweight semantic footer links immediately while deferring full footer commerce widgets', () => {
+  it('renders lightweight semantic footer links immediately without a fixed mobile bottom nav while deferring full footer commerce widgets', () => {
     render(
       <OgabasseyLayoutChrome
         basePath="/ogabassey"
@@ -160,8 +154,8 @@ describe('OgabasseyLayoutChrome', () => {
     );
 
     expect(
-      screen.getByRole('navigation', { name: /mobile footer/i })
-    ).toHaveTextContent('/ogabassey');
+      screen.queryByRole('navigation', { name: /mobile footer/i })
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole('contentinfo', {
         name: /semantic storefront footer/i,
@@ -170,6 +164,17 @@ describe('OgabasseyLayoutChrome', () => {
     expect(screen.getByRole('link', { name: /all products/i })).toHaveAttribute(
       'href',
       '/ogabassey/products'
+    );
+    expect(
+      screen.getByRole('link', { name: /swap \/ trade-in/i })
+    ).toHaveAttribute('href', '/ogabassey/swap');
+    expect(screen.getByRole('link', { name: /imei checker/i })).toHaveAttribute(
+      'href',
+      '/ogabassey/imei-check'
+    );
+    expect(screen.getByRole('link', { name: /repairs/i })).toHaveAttribute(
+      'href',
+      '/ogabassey/repairs'
     );
     expect(screen.getByRole('link', { name: /returns/i })).toHaveAttribute(
       'href',

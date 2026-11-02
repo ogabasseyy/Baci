@@ -76,8 +76,8 @@ BEGIN
   PERFORM pg_temp.check(NOT pg_temp.blocked('wr-a') AND pg_temp.rows('wr-a') = 1,
     'a creation redelivered after its lift re-blocked the wallet');
   PERFORM pg_temp.check(
-    pg_temp.rec('wr-a', 'evt-a-create-again', 'rst-a', 'Lien') = 'duplicate',
-    'the same restriction under a new event id with the same facts is not a duplicate');
+    pg_temp.rec('wr-a', 'evt-a-create-again', 'rst-a', 'Lien') = 'conflict',
+    'a new creation event for a lifted restriction with no later provider time is not sent to review');
   PERFORM pg_temp.check(
     pg_temp.rec('wr-a', 'evt-a-create-other', 'rst-a', 'Freeze') = 'conflict',
     'the same restriction under a new event id with other facts is not a conflict');
@@ -132,6 +132,44 @@ BEGIN
   SELECT * INTO v FROM piggyvest_primary.wallet_restrictions WHERE provider_wallet_id = 'wr-d';
   PERFORM pg_temp.check(v.lift_event_id = 'evt-d-lift-2' AND v.lifted_at = '2026-10-01T14:00:00Z'
     AND pg_temp.rows('wr-d') = 1, 'the latest lift by provider time is not the one kept');
+END $$;
+
+-- Re-placement: a creation dated after the kept lift places a lifted
+-- restriction again, so it blocks until a later lift. Without such a time a
+-- new creation event cannot be told apart from a redelivery, so it is a
+-- conflict for review, never a silent duplicate.
+DO $$
+DECLARE v piggyvest_primary.wallet_restrictions%ROWTYPE;
+BEGIN
+  PERFORM pg_temp.rec('wr-r', 'evt-r-create-1', 'rst-r', 'Freeze');
+  PERFORM pg_temp.lift('wr-r', 'evt-r-lift-1', 'rst-r', 'Freeze', '2026-10-01T12:00:00Z');
+  PERFORM pg_temp.check(
+    pg_temp.rec('wr-r', 'evt-r-create-2', 'rst-r', 'Freeze', '2026-10-01T11:00:00Z') = 'conflict',
+    'a new creation dated before the kept lift is not a conflict');
+  PERFORM pg_temp.check(NOT pg_temp.blocked('wr-r'), 'a creation dated before the lift re-blocked');
+  PERFORM pg_temp.check(
+    pg_temp.rec('wr-r', 'evt-r-create-3', 'rst-r', 'Freeze', '2026-10-01T13:00:00Z') = 'recorded',
+    'a creation dated after the kept lift is not recorded as a new placement');
+  PERFORM pg_temp.check(pg_temp.blocked('wr-r') AND pg_temp.rows('wr-r') = 1,
+    'a re-placement after a lift does not block');
+  SELECT * INTO v FROM piggyvest_primary.wallet_restrictions WHERE provider_wallet_id = 'wr-r';
+  PERFORM pg_temp.check(v.provider_event_id = 'evt-r-create-3' AND v.occurred_at = '2026-10-01T13:00:00Z'
+    AND v.lift_event_id = 'evt-r-lift-1', 'the re-placement is not the placement kept');
+  PERFORM pg_temp.check(
+    pg_temp.rec('wr-r', 'evt-r-create-3', 'rst-r', 'Freeze', '2026-10-01T13:00:00Z') = 'duplicate'
+    AND pg_temp.rec('wr-r', 'evt-r-create-1', 'rst-r', 'Freeze') = 'duplicate'
+    AND pg_temp.lift('wr-r', 'evt-r-lift-1', 'rst-r', 'Freeze', '2026-10-01T12:00:00Z') = 'duplicate',
+    'a redelivery after a re-placement is not a duplicate');
+  PERFORM pg_temp.check(
+    pg_temp.lift('wr-r', 'evt-r-lift-2', 'rst-r', 'Freeze', '2026-10-01T12:30:00Z') = 'stale',
+    'a lift dated before the re-placement is not stale');
+  PERFORM pg_temp.check(pg_temp.blocked('wr-r'), 'a redelivery or older lift ended the re-placement');
+  PERFORM pg_temp.check(
+    pg_temp.lift('wr-r', 'evt-r-lift-3', 'rst-r', 'Freeze', '2026-10-01T14:00:00Z') = 'lifted'
+    AND NOT pg_temp.blocked('wr-r'), 'a lift dated after the re-placement did not lift it');
+  PERFORM pg_temp.check(
+    pg_temp.rec('wr-r', 'evt-r-create-4', 'rst-r', 'Lien', '2026-10-01T15:00:00Z') = 'recorded'
+    AND pg_temp.kinds('wr-r') = '{lien}'::text[], 'a later re-placement of another kind does not block');
 END $$;
 
 -- An unknown kind is recorded and blocks; kinds are matched case-insensitively.

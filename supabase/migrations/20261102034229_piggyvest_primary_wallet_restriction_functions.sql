@@ -1,30 +1,26 @@
--- PiggyVest primary-wallet restrictions (Freeze and Lien): the writers and
--- the spend-gate read, over the tables of
--- 20261102034228_piggyvest_primary_wallet_restrictions.sql. Nothing calls
--- them yet.
+-- PiggyVest primary-wallet restrictions (Freeze and Lien): the writers and the
+-- spend-gate read over the tables of the preceding *_piggyvest_primary_wallet_
+-- restrictions migration. Nothing calls them yet.
 --
 -- * Bound to one integration. Both writers take the integration and its
---   environment first. Unless the integration is enabled in that
---   environment and its enabled evidence authority (inflow_authorities) is
---   this session's login, they raise 42501 and store nothing: the check every
---   other evidence writer makes, so disabling either stops every write. A row
---   belongs to the integration that wrote it; another integration naming it,
---   or reusing one of its event ids, gets 'conflict'.
--- * Idempotent by event id, for good. Every accepted event is kept in
---   wallet_restriction_events. A redelivery in the same role with the same
---   facts returns 'duplicate'; the same id with other facts, or in the other
---   role, returns 'conflict'. Neither changes anything; the caller sends a
---   conflict to review.
--- * Out of order. A lift delivered before its creation is stored on its own
---   row, so the creation arrives already lifted. Provider time decides, never
---   arrival order; the latest lift by provider time is the one kept.
--- * Fail closed. Any property other than Freeze or Lien, including none, is
---   recorded as kind 'unknown' and blocks like the others. A creation without
---   a provider restriction id is recorded under its event id and blocks until
---   ops resolve it, because no lift can name it. The snapshot amounts are
---   stored exactly as sent and never decide whether a wallet is blocked.
---   wallet_restriction_state counts every active restriction of the wallet,
---   whichever integration recorded it.
+--   environment first and raise 42501, storing nothing, unless the
+--   integration is enabled in that environment and its enabled evidence
+--   authority (inflow_authorities) is this session's login, like every other
+--   evidence writer. A row belongs to the integration that wrote it; another
+--   integration naming it, or reusing one of its event ids, gets 'conflict'.
+-- * Idempotent by event id, for good (wallet_restriction_events). The same
+--   role with the same facts is 'duplicate'; other facts or the other role is
+--   'conflict'. Neither changes anything; the caller sends a conflict to review.
+-- * Provider time decides, never arrival order. A lift delivered before its
+--   creation is kept, so the creation arrives already lifted; the latest lift
+--   by provider time is kept; a creation dated after the kept lift places the
+--   restriction again. A lifted restriction's new creation event without
+--   such a time cannot be told from a redelivery, so it is a conflict.
+-- * Fail closed. Any property other than Freeze or Lien, or none, is kind
+--   'unknown' and blocks. A creation without a provider restriction id is
+--   recorded under its event id and blocks until ops resolve it. Snapshot
+--   amounts are stored as sent and never decide blocking. The state read
+--   counts every active restriction of the wallet, from any integration.
 --
 -- Only piggyvest_primary_evidence may record/lift; wallet_restriction_state
 -- is also open to piggyvest_primary_authorizer (the spend gate).
@@ -120,10 +116,15 @@ BEGIN
   ELSIF v_row.integration_id <> p_integration_id THEN
     -- Another integration's restriction is never matched or completed here.
     RETURN 'conflict';
-  ELSIF v_row.provider_event_id IS NOT NULL THEN
-    -- Another creation event for the same restriction: the same facts are a
-    -- duplicate (its id is kept, so it stays taken), anything else a conflict.
-    IF v_row.provider_kind IS DISTINCT FROM v_provider_kind
+  ELSIF v_row.provider_event_id IS NOT NULL
+    AND (v_row.is_active OR p_occurred_at IS NULL OR p_occurred_at <= v_row.lifted_at)
+  THEN
+    -- Another creation event for a placed restriction. While it is active the
+    -- same facts are a duplicate (the id is kept, so it stays taken). Once
+    -- lifted, a creation not dated after the kept lift could be a redelivery
+    -- or a re-placement, so it is a conflict for review.
+    IF NOT v_row.is_active
+      OR v_row.provider_kind IS DISTINCT FROM v_provider_kind
       OR v_row.amount_kobo IS DISTINCT FROM p_amount_kobo
       OR v_row.available_balance_kobo IS DISTINCT FROM p_available_balance_kobo
       OR v_row.ledger_balance_kobo IS DISTINCT FROM p_ledger_balance_kobo
@@ -133,8 +134,9 @@ BEGIN
     END IF;
     v_result := 'duplicate';
   ELSE
-    -- Only the lift had arrived: complete the row. Provider time decides
-    -- whether the earlier-delivered lift ends this placement.
+    -- Only the lift had arrived, or this creation is dated after the kept
+    -- lift (a re-placement): it becomes the placement, and provider time
+    -- decides whether the kept lift ends it.
     UPDATE piggyvest_primary.wallet_restrictions AS r
       SET provider_event_id = p_provider_event_id,
           kind = v_kind,

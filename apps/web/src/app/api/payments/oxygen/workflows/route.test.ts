@@ -94,3 +94,19 @@ describe('Oxygen workflow draft route', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 });
+
+it('rejects an unauthenticated request before rate limit, CSRF, or JSON parsing', async () => {
+  mocks.auth.mockResolvedValue({
+    user: null,
+    error: 'Unauthorized',
+    supabase: null,
+  });
+  const malformed = new NextRequest(
+    'http://localhost/api/payments/oxygen/workflows',
+    { method: 'POST', body: '{' }
+  );
+  expect((await POST(malformed)).status).toBe(401);
+  expect(mocks.rate).not.toHaveBeenCalled();
+  expect(mocks.csrf).not.toHaveBeenCalled();
+  expect(mocks.rpc).not.toHaveBeenCalled();
+});

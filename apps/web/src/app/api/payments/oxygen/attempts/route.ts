@@ -8,13 +8,21 @@ import { mapInitiationDecision } from '@/lib/payments/oxygen/initiation';
 import { oxygenAttemptRequestSchema } from '@/schemas/oxygen-requests';
 
 // POST /api/payments/oxygen/attempts — Phase A initiation probe. Pinned
-// pipeline: auth, rate limit, CSRF, body validation, order proof, then the
+// pipeline: auth, CSRF, rate limit, body validation, order proof, then the
 // shared S-03 verdict. Creates nothing and calls no provider: deny paths map
 // to 403, and even a policy allow maps to 503 until Phase B exists.
 export async function POST(request: NextRequest) {
   const auth = await authenticateApiRequest(request);
   if (auth.error || !auth.user || !auth.supabase) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { valid, response } = await checkCsrfProtection(request);
+  if (!valid) {
+    return (
+      response ??
+      NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+    );
   }
 
   const allowed = await ensureActionRateLimit('oxygen-initiation', {
@@ -25,14 +33,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: 'Too many Oxygen requests. Please try again shortly.' },
       { status: 429 }
-    );
-  }
-
-  const { valid, response } = await checkCsrfProtection(request);
-  if (!valid) {
-    return (
-      response ??
-      NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
     );
   }
 

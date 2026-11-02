@@ -10,6 +10,10 @@ import {
 
 // Creates/resumes a durable staging draft only. No provider call or financial action.
 export async function POST(request: NextRequest) {
+  const auth = await authenticateApiRequest(request);
+  if (auth.error || !auth.user || !auth.supabase) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   if (
     !(await ensureActionRateLimit('oxygen-workflow', {
       requests: 10,
@@ -24,10 +28,6 @@ export async function POST(request: NextRequest) {
       csrf.response ??
       NextResponse.json({ error: 'Invalid request' }, { status: 403 })
     );
-  const auth = await authenticateApiRequest(request);
-  if (auth.error || !auth.user || !auth.supabase) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
   let body: unknown;
   try {
     body = await request.json();

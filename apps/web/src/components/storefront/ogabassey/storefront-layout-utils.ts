@@ -62,26 +62,6 @@ export function shouldHideOgabasseyNavigation(
   );
 }
 
-export function shouldHideOgabasseyMobileFooter(
-  pathname?: string | null,
-  initialHideNavigation = false
-) {
-  if (shouldHideOgabasseyNavigation(pathname, initialHideNavigation)) {
-    return true;
-  }
-
-  if (!pathname) {
-    return false;
-  }
-
-  const routeSegments = pathname
-    .split(/[?#]/, 1)[0]
-    .split('/')
-    .filter(Boolean);
-
-  return routeSegments.includes('cart');
-}
-
 export function getOgabasseyLayoutStyle(
   merchant?: MerchantData
 ): CSSProperties {

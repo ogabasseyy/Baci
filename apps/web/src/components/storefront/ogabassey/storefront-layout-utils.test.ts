@@ -4,7 +4,6 @@ import {
   getOgabasseyBasePath,
   getOgabasseyLayoutStyle,
   shouldEnableOgabasseyGoogleStoreWidget,
-  shouldHideOgabasseyMobileFooter,
   shouldHideOgabasseyNavigation,
 } from './storefront-layout-utils';
 
@@ -52,16 +51,6 @@ describe('storefront-layout-utils', () => {
     expect(shouldHideOgabasseyNavigation('/ogabassey/products', true)).toBe(
       true
     );
-  });
-
-  it('hides only the mobile footer on cart routes', () => {
-    expect(shouldHideOgabasseyNavigation('/ogabassey/cart')).toBe(false);
-    expect(shouldHideOgabasseyMobileFooter('/ogabassey/cart')).toBe(true);
-    expect(shouldHideOgabasseyMobileFooter('/cart')).toBe(true);
-    expect(shouldHideOgabasseyMobileFooter('/ogabassey/products/cart-case')).toBe(
-      false
-    );
-    expect(shouldHideOgabasseyMobileFooter('/ogabassey/products')).toBe(false);
   });
 
   it('builds the storefront style variables from merchant brand colors', () => {

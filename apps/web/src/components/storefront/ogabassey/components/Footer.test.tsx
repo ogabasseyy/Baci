@@ -277,5 +277,4 @@ describe('Ogabassey Footer', () => {
     ).toHaveAttribute('href', 'mailto:account-private@gmail.com');
     expect(screen.getByText('2 Olaide Tomori St, Ikeja, Lagos')).toBeVisible();
   });
-
 });

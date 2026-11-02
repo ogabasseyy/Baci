@@ -35,6 +35,7 @@ Options:
   --journal <file>           mutation journal (default: ~/.baci/piggyvest-contract-proofs/journal.jsonl)
   --evidence-dir <dir>       default: docs/piggyvest-contract-evidence (live modes only)
   --new-attempt              open fresh mutation slots; a plain re-run never resends
+  --proof <id>               run one proof only (p1-p7); p7 alone skips the shared scenario
   --help
 
 Environment:

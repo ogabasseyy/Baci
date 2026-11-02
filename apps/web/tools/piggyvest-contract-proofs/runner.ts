@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { RUN_MODES, SANDBOX_ORIGIN } from './constants';
+import { RUN_MODES, SANDBOX_ORIGIN, STANDALONE_PROOFS } from './constants';
 import { buildEvidence, renderMarkdown } from './evidence';
 import { type WrittenEvidence, writeEvidence } from './evidence-writer';
 import { createGuardedFetch } from './guarded-fetch';
@@ -198,8 +198,13 @@ export async function runHarness(
     const previousFetch = globalThis.fetch;
     globalThis.fetch = guarded; // the typed client calls the global; nothing bypasses the guard
     try {
-      await setupScenario(ctx);
-      for (const [id, defaultRunner, title] of PROOF_ORDER) {
+      const only = config.proof;
+      // A standalone proof run alone needs no shared customer, goal or funding.
+      if (!only || !STANDALONE_PROOFS.includes(only)) await setupScenario(ctx);
+      const order = only
+        ? PROOF_ORDER.filter(([id]) => id === only)
+        : PROOF_ORDER;
+      for (const [id, defaultRunner, title] of order) {
         const runner = deps.proofRunners?.[id] ?? defaultRunner;
         try {
           proofs.push(await runner(ctx));

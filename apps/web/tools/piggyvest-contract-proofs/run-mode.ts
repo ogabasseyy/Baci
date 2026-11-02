@@ -5,6 +5,7 @@ import {
   ENV_BANK_CODE,
   ENV_BASE_URL,
   ENV_BUSINESS_WALLET,
+  PROOF_IDS,
   RUN_MODES,
   type RunMode,
   SANDBOX_ORIGIN,
@@ -15,6 +16,7 @@ import {
   assertTestKey,
   HarnessRefusal,
 } from './safety-guards';
+import type { ProofId } from './types';
 
 export interface RunConfig {
   mode: RunMode;
@@ -30,6 +32,8 @@ export interface RunConfig {
   bankAccount: string | null;
   /** Ogabassey business sandbox wallet (proof 7); mutation mode only. */
   businessWalletId: string | null;
+  /** Run this proof only (--proof); null runs every proof. */
+  proof: ProofId | null;
   help: boolean;
 }
 
@@ -45,6 +49,7 @@ const VALUE_FLAGS = [
   '--journal',
   '--evidence-dir',
   '--qa-customer',
+  '--proof',
 ] as const;
 const BOOLEAN_FLAGS = ['--new-attempt', '--help'] as const;
 
@@ -84,6 +89,12 @@ function resolveBusinessWallet(env: Env): string | null {
     );
   }
   return id;
+}
+
+function resolveProof(value: string | undefined): ProofId | null {
+  if (value === undefined) return null;
+  const known = PROOF_IDS.find((id) => id === value);
+  return known ?? usage(`--proof must be one of ${PROOF_IDS.join(', ')}`);
 }
 
 export function parseRunConfig(argv: readonly string[], env: Env): RunConfig {
@@ -144,6 +155,7 @@ export function parseRunConfig(argv: readonly string[], env: Env): RunConfig {
     evidenceDir: values.get('--evidence-dir') ?? null,
     qaCustomerId: values.get('--qa-customer') ?? null,
     newAttempt: flags.has('--new-attempt'),
+    proof: resolveProof(values.get('--proof')),
     help: flags.has('--help'),
     businessWalletId:
       mode === 'live-sandbox-mutations' ? resolveBusinessWallet(env) : null,

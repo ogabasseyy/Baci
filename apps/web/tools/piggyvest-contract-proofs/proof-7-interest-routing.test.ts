@@ -27,13 +27,12 @@ async function run(options: Parameters<typeof makeHarness>[0] = {}) {
 }
 
 describe('proof 7: main-wallet interest routing at creation', () => {
-  it('creates a new QA customer with a payout wallet, reads it back, and tests both goal variants', async () => {
+  it('creates a new QA customer with a payout wallet, reads it back, and tests the four goal variants', async () => {
     const { h, result, newPosts } = await run();
     expect(result.status).toBe('observed');
     expect(newPosts).toEqual([
       '/api/v1/customers',
-      '/api/v1/wallet/sub-account',
-      '/api/v1/wallet/sub-account',
+      ...Array(4).fill('/api/v1/wallet/sub-account'),
     ]);
     expect(answer(result, 'customer_create_with_payout_accepted')).toBe('yes');
     expect(answer(result, 'customer_created_fresh')).toBe('yes');
@@ -113,7 +112,7 @@ describe('proof 7: main-wallet interest routing at creation', () => {
   it('records a sub-account endpoint that rejects interest_payout_wallet', async () => {
     const { result } = await run({ mock: { subAccountAcceptsPayout: false } });
     expect(answer(result, 'goal_explicit_payout_accepted')).toBe('no');
-    expect(result.values.goal_explicit_error_message).toBe(
+    expect(result.values.goal_d_error_message).toBe(
       'Invalid interest payout wallet'
     );
     expect(answer(result, 'goal_without_payout_created')).toBe('yes');

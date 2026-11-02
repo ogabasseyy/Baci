@@ -18,7 +18,11 @@ async function run(
   await setupScenario(h.ctx);
   afterSetup(h);
   const b = new ProofBuilder('p7', 'T');
-  const owner = { qa: h.ctx.qa, customerId: h.state.customerId ?? '' };
+  const owner = {
+    qa: h.ctx.qa,
+    customerId: h.state.customerId ?? '',
+    mainWalletId: h.state.mainWalletId,
+  };
   await recordGoalWallets(
     h.ctx,
     b,
@@ -42,7 +46,99 @@ describe('recordGoalWallets', () => {
       'yes'
     );
     // Sub-wallet creation answers 202 "processing", as the live sandbox did.
-    expect(result.values.goal_explicit_http_status).toBe(202);
+    expect(result.values.goal_d_http_status).toBe(202);
+    expect(answer('goal_opted_out_created')).toBe('yes');
+    expect(answer('goal_opted_out_reads_accrual_off')).toBe('yes');
+    expect(answer('goal_payout_main_accepted')).toBe('yes');
+    expect(answer('goal_payout_update_after_creation_documented')).toBe('no');
+    expect(result.status).toBe('observed');
+  });
+
+  it('records each variant at 0 and 5 minutes as pseudonyms with its verdict', async () => {
+    const { result } = await run();
+    const row = (id: string) =>
+      [
+        'http_status',
+        'outcome',
+        'interest_enabled_at_0m',
+        'payout_at_0m',
+        'interest_enabled_at_5m',
+        'payout_at_5m',
+        'verdict',
+      ].map((field) => result.values[`goal_${id}_${field}`]);
+    expect(row('a')).toEqual([
+      202,
+      'accepted',
+      true,
+      'null',
+      true,
+      'null',
+      'not_proven',
+    ]);
+    expect(row('b')).toEqual([
+      202,
+      'accepted',
+      false,
+      'null',
+      false,
+      'null',
+      'not_proven',
+    ]);
+    expect(row('c')).toEqual([
+      202,
+      'accepted',
+      true,
+      'main',
+      true,
+      'main',
+      'not_proven',
+    ]);
+    expect(row('d')).toEqual([
+      202,
+      'accepted',
+      true,
+      'business',
+      true,
+      'business',
+      'not_proven',
+    ]);
+  });
+
+  it('a null payout proves nothing: the stays-in-goal answer is unknown and the owner gets a written question', async () => {
+    const { answer, result } = await run();
+    for (const id of ['a', 'b']) {
+      expect(answer(`goal_${id}_interest_stays_in_goal`)).toBe('unknown');
+      expect(
+        result.findings.find(
+          (f) => f.id === `goal_${id}_interest_stays_in_goal`
+        )?.detail
+      ).toMatch(/in writing/);
+    }
+    expect(answer('goal_c_interest_stays_in_goal')).toBe('no');
+    expect(answer('goal_d_interest_stays_in_goal')).toBe('no');
+    const notes = result.notes.join(' ');
+    expect(notes).toMatch(/PiggyVest/);
+    expect(notes).toMatch(/0%/);
+    expect(notes).toMatch(/\(a\) opted in, payout unset: .*not proven/);
+  });
+
+  it('only a readback naming the goal itself proves interest stays in it', async () => {
+    const { answer, result } = await run({
+      mock: { subWalletPaysItselfWhenUnset: true },
+    });
+    expect(answer('goal_a_interest_stays_in_goal')).toBe('yes');
+    expect(result.values.goal_a_verdict).toBe('proven');
+    expect(result.values.goal_a_payout_at_5m).toBe('self');
+    expect(result.notes.join(' ')).not.toMatch(/written question/);
+  });
+
+  it('leaves stays-in-goal unknown, and the proof inconclusive, when the payout field never shows', async () => {
+    const { answer, result } = await run({
+      mock: { goalReadbackOmitsPayout: true },
+    });
+    expect(answer('goal_a_interest_stays_in_goal')).toBe('unknown');
+    expect(result.values.goal_a_payout_at_5m).toBe('absent');
+    expect(result.status).toBe('inconclusive');
   });
 
   it('warns loudly when a goal wallet inherits the business payout wallet', async () => {
@@ -64,7 +160,7 @@ describe('recordGoalWallets', () => {
       mock: { subAccountAcceptsPayout: false },
     });
     expect(answer('goal_explicit_payout_accepted')).toBe('no');
-    expect(result.values.goal_explicit_error_message).toBe(
+    expect(result.values.goal_d_error_message).toBe(
       'Invalid interest payout wallet'
     );
     expect(answer('goal_without_payout_created')).toBe('yes');
@@ -89,15 +185,15 @@ describe('recordGoalWallets', () => {
       []
     );
     const result = b.build(h.ctx);
-    expect(result.findings.map((f) => f.answer)).toEqual([
-      'unknown',
-      'unknown',
-      'unknown',
-      'unknown',
-    ]);
-    expect(
-      result.findings.every((f) => f.detail === 'no QA customer available')
-    ).toBe(true);
+    const measured = result.findings.filter(
+      (f) => f.id !== 'goal_payout_update_after_creation_documented'
+    );
+    expect(measured).toHaveLength(11);
+    expect(measured.every((f) => f.answer === 'unknown')).toBe(true);
+    expect(measured.every((f) => f.detail === 'no QA customer available')).toBe(
+      true
+    );
+    expect(h.mock.calls.some((c) => c.method === 'POST')).toBe(false);
   });
 
   it('marks the proof inconclusive and explains it when a sub-wallet slot was already executed', async () => {
@@ -114,7 +210,11 @@ describe('recordGoalWallets', () => {
     await recordGoalWallets(
       h.ctx,
       b,
-      { qa: h.ctx.qa, customerId: h.state.customerId ?? '' },
+      {
+        qa: h.ctx.qa,
+        customerId: h.state.customerId ?? '',
+        mainWalletId: h.state.mainWalletId,
+      },
       h.mock.sandbox.businessWalletId,
       ['interest_payout_wallet']
     );

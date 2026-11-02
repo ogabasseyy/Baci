@@ -35,6 +35,17 @@ const ifFunded = (c: TruthContext): Truth =>
 /** Findings about the P7 customer exist only if its creation was accepted. */
 const ifP7Created = (c: TruthContext, truth: Truth): Truth =>
   c.o.customerPayoutWallet === 'accepted' ? truth : 'unobservable';
+/**
+ * A goal created with no payout of its own pays itself only when the mock is
+ * told to; inheriting names the P7 customer's business payout; otherwise the
+ * readback is null, which proves nothing either way.
+ */
+const unsetGoalPaysItself = (c: TruthContext): Truth =>
+  c.o.subWalletPaysItselfWhenUnset
+    ? 'yes'
+    : c.o.subWalletInheritsPayout
+      ? ifP7Created(c, 'no')
+      : 'unobservable';
 
 export const FINDING_TRUTH: Record<string, (c: TruthContext) => Truth> = {
   // proof 1
@@ -110,6 +121,15 @@ export const FINDING_TRUTH: Record<string, (c: TruthContext) => Truth> = {
     c.o.subAccountAcceptsPayout
       ? bool(c.o.payoutReadback === 'fields' && !c.o.goalReadbackOmitsPayout)
       : 'unobservable',
+  goal_opted_out_created: YES,
+  goal_opted_out_reads_accrual_off: (c) =>
+    c.o.payoutReadback === 'none' ? 'unobservable' : 'yes',
+  goal_payout_main_accepted: (c) => bool(c.o.subAccountAcceptsPayout),
+  goal_a_interest_stays_in_goal: unsetGoalPaysItself,
+  goal_b_interest_stays_in_goal: unsetGoalPaysItself,
+  goal_c_interest_stays_in_goal: NO,
+  goal_d_interest_stays_in_goal: NO,
+  goal_payout_update_after_creation_documented: NO,
 };
 
 /** Published values that are measurements: when non-null they must equal the truth. */

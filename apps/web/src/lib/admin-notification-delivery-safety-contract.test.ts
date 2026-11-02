@@ -105,6 +105,9 @@ describe('scheduled notification delivery safety contract', () => {
       'supabase/functions/process-scheduled-notifications/**',
     ])
       expect(webPaths).toContain(`  - '${path}'\n`);
+    // The CI workflow tests parse this group as one unbroken run of list
+    // items, so an interior comment silently truncates what they can see.
+    expect(webPaths).not.toMatch(/\n\s*#/);
     for (const suite of [
       'admin-notification-batch-isolation.test.ts',
       'admin-notification-batch-unidentifiable-claim.test.ts',

@@ -7,25 +7,30 @@ import { OxygenConfirmationNotice } from './OxygenConfirmationNotice';
 import { OxygenLoanSummary } from './OxygenLoanSummary';
 import { OxygenSavedPlans } from './OxygenSavedPlans';
 import { OxygenSelfieButton } from './OxygenSelfieButton';
+import { pendingReadRecovery } from './oxygen-read-recovery';
 import type { useOxygenProvider } from './use-oxygen-provider';
 
 type Props = {
   snapshot: OxygenRuntimeSnapshot | null;
-  awaitingConfirmation: boolean;
+  awaitingConfirmation?: boolean;
   needsSignIn: boolean;
   busy: boolean;
   error: string;
   refresh: ReturnType<typeof useOxygenProvider>['refresh'];
+  checkAddress?: () => Promise<void>;
+  checkDetails?: () => Promise<void>;
   selfieConfirmed: boolean;
   setComparingPlans: Dispatch<SetStateAction<boolean>>;
 };
 export function OxygenPendingConfirmation({
   snapshot,
-  awaitingConfirmation,
+  awaitingConfirmation = true,
   needsSignIn,
   busy,
   error,
   refresh,
+  checkAddress,
+  checkDetails,
   selfieConfirmed,
   setComparingPlans,
 }: Props) {
@@ -56,7 +61,11 @@ export function OxygenPendingConfirmation({
           delayed
           statusUnavailable={Boolean(error)}
           busy={busy}
-          onCheck={refresh}
+          onCheck={
+            pendingReadRecovery(snapshot) === 'refresh_kyc' && checkAddress
+              ? checkAddress
+              : refresh
+          }
         />
       </section>
     );
@@ -99,7 +108,11 @@ export function OxygenPendingConfirmation({
           booking={snapshot?.pending?.action === 'book'}
           identityCheck={snapshot?.pending?.action === 'validate_nin'}
           busy={busy}
-          refresh={refresh}
+          refresh={
+            pendingReadRecovery(snapshot) === 'refresh_details' && checkDetails
+              ? checkDetails
+              : refresh
+          }
         />
       </section>
     );

@@ -248,3 +248,27 @@ it('does not interpret an unavailable status request as confirmed manual review'
   expect(result.current.manualReviewNeeded).toBe(false);
   expect(submit).not.toHaveBeenCalled();
 });
+
+it.each([
+  { action: 'refresh_kyc', status: 'indeterminate' as const },
+  { action: 'submit_address', status: 'executing' as const },
+  { action: 'approve_booking', status: 'executing' as const },
+])('never sends an address check while $action is $status', async (pending) => {
+  const submit = vi.fn();
+  const { result } = renderHook(() =>
+    useOxygenBookingProgress(
+      {
+        ...snapshot,
+        stage: 'booked',
+        pending: { ...pending, idempotencyKey: snapshot.workflowId },
+      },
+      false,
+      '',
+      true,
+      true,
+      submit
+    )
+  );
+  await act(async () => result.current.checkAddress());
+  expect(submit).not.toHaveBeenCalled();
+});

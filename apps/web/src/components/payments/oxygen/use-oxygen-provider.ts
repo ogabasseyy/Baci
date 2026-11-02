@@ -155,7 +155,12 @@ export function useOxygenProvider(orderId: string) {
     const key =
       pending?.status === 'queued' && pending.action === command.action
         ? pending.idempotencyKey
-        : lastKey.current?.action === command.action &&
+        : !(
+              pending?.status === 'executing' &&
+              pending.action === command.action &&
+              ['refresh_kyc', 'refresh_details'].includes(command.action)
+            ) &&
+            lastKey.current?.action === command.action &&
             lastKey.current.version === snapshot.version
           ? lastKey.current.key
           : crypto.randomUUID();
@@ -254,7 +259,6 @@ export function useOxygenProvider(orderId: string) {
       if (alive.current) setBusy(false);
     }
   }
-
   async function readSaved() {
     if (locked.current || !workflow.current) return;
     locked.current = true;

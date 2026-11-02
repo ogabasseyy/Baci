@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 import type { SubmitOxygenForm } from './OxygenVerificationForms';
+import { pendingReadRecovery } from './oxygen-read-recovery';
 
 /** Read-only provider lookups; never approves, cancels, pays, activates or settles. */
 export function useOxygenBookingProgress(
@@ -78,7 +79,7 @@ export function useOxygenBookingProgress(
     if (
       !enabled ||
       busy ||
-      snapshot?.pending ||
+      (snapshot?.pending && pendingReadRecovery(snapshot) !== 'refresh_kyc') ||
       !snapshot?.executionEnabled ||
       !addressReview
     )
@@ -110,5 +111,14 @@ export function useOxygenBookingProgress(
       setPausedAddress(null);
     },
     checkAddress,
+    checkDetails: async () => {
+      if (
+        !enabled ||
+        busy ||
+        pendingReadRecovery(snapshot) !== 'refresh_details'
+      )
+        return;
+      await submit({ action: 'refresh_details' });
+    },
   };
 }

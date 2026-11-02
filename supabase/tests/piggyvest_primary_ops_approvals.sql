@@ -6,16 +6,21 @@
 --     granted to nobody; anon, authenticated and service_role reach nothing;
 --     an extra role membership disqualifies an approver login;
 --   * runtime, through real logins (one dblink connection per login, so
---     SESSION_USER really differs): the same login twice, the requester as
---     approver (by login or by person) and a single approval are refused;
---     one person's two logins count once; two distinct approvals
+--     SESSION_USER really differs): the same login twice and a single
+--     approval are refused; the rule compares humans, not logins, through
+--     ops_login_humans (owner-written): the requester's own approver login,
+--     one human's two approver logins, a consumer whose human approved, an
+--     unregistered login, a renamed login and a stored decision under the
+--     requester's human_id never count; two distinct humans' approvals
 --     consume exactly once; a changed row version, amount or destination
 --     invalidates; an expired request is refused and can be asked again;
 --     any reject closes, and the same values cannot be asked again; a jsonb
 --     'approver' key is ignored; a later engine-role grant voids an approval;
---     only a dedicated login can open a request; a caller's temporary
---     objects never run inside the functions; expiry is judged once the
---     locks are held, even when a call waited for them.
+--     only a dedicated registered login can open a request; a caller's
+--     temporary objects never run inside the functions; time is read once
+--     the locks are held (the request's row lock and the subject's advisory
+--     lock), so a call that waited past expiry is refused and what it writes
+--     is stamped after the wait.
 --
 -- The runtime part needs committed rows and logins, so it runs outside a
 -- transaction and removes everything it created at the end (and at the
@@ -48,7 +53,9 @@ CREATE EXTENSION IF NOT EXISTS dblink;
 \ir piggyvest_primary_ops_approvals_binding.inc.sql
 \ir piggyvest_primary_ops_approvals_hardening.inc.sql
 \ir piggyvest_primary_ops_approvals_expiry_race.inc.sql
+\ir piggyvest_primary_ops_approvals_wait_stamps.inc.sql
 \ir piggyvest_primary_ops_approvals_humans.inc.sql
+\ir piggyvest_primary_ops_approvals_rename.inc.sql
 \ir piggyvest_primary_ops_approvals_cleanup.inc.sql
 
 \if :pvops_had_dblink

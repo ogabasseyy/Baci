@@ -41,7 +41,8 @@ Environment:
   ${ENV_API_KEY}   sandbox test key (test_key_...); fallback ${ENV_API_KEY_FALLBACK}
   ${ENV_BASE_URL}  optional; must be exactly https://staging.piggyvest.business
   ${ENV_BANK_CODE}, ${ENV_BANK_ACCOUNT}  sandbox bank destination for the bank-outflow step
-  ${ENV_BUSINESS_WALLET}  Ogabassey business SANDBOX wallet id for proof 7 (interest payout target)
+  ${ENV_BUSINESS_WALLET}  Ogabassey business SANDBOX wallet id: proof 7's interest payout target and,
+                 once it reads back bound to no API customer, the house wallet of proofs 3 and 8
 `;
 
 export interface CliIo {

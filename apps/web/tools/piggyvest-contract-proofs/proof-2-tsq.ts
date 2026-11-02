@@ -275,6 +275,7 @@ export async function runProof2(ctx: ProofContext): Promise<ProofResult> {
   ];
   state.walletTransfer = {
     kind: 'wallet',
+    reference: sent.reference,
     amountKobo: amount,
     terminal: watch.terminal,
     sourceDeltaKobo: after

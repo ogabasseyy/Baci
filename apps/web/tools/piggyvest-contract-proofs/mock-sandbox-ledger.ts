@@ -76,7 +76,10 @@ export class MockLedger {
     ) {
       return fail(`An error occurred processing ${kind} transfer`);
     }
-    if (this.txns.some((t) => t.reference === reference))
+    if (
+      this.host.options.duplicateReference === 'reject' &&
+      this.txns.some((t) => t.reference === reference)
+    )
       return fail('Duplicate reference');
     if (source.balance < amount + (kind === 'bank' ? fee : 0))
       return fail('Insufficient funds');
@@ -153,9 +156,14 @@ export class MockLedger {
   }
 
   verify(query: URLSearchParams): MockReply {
-    const txn = this.txns.find((t) => t.reference === query.get('reference'));
+    const [txn, ...repeats] = this.txns.filter(
+      (t) => t.reference === query.get('reference')
+    );
     const notFound = fail('Transaction not found', 404);
     if (!txn) return notFound;
+    // A repeat booked under an accepted duplicate reference settles too.
+    for (const repeat of repeats)
+      if (repeat.status === 'pending') this.settle(repeat);
     txn.polls += 1;
     if (txn.polls <= this.host.options.tsqNotFoundPolls) return notFound;
     const pendingPolls =
@@ -181,6 +189,7 @@ export class MockLedger {
     return this.host.options.tsqShape === 'docs'
       ? { ...base, recipient: '0123456789', bank: 'Sandbox Bank' }
       : {
+          id: txn.id,
           ...base,
           currency: 'NGN',
           fee: txn.fee,

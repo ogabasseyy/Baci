@@ -6,6 +6,7 @@ import {
   type RunMode,
 } from './constants';
 import {
+  acceptedReference,
   type Journal,
   type JournalOutcome,
   newReference,
@@ -36,6 +37,12 @@ export interface MutationIntent {
   amountKobo: number | null;
   /** Body field that carries the generated unique reference, if the API has one. */
   referenceField?: string;
+  /**
+   * Proof 2's duplicate-reference check only: send THIS reference again
+   * instead of minting one. Allowed only for a reference this QA key already
+   * sent, and had accepted, for the same operation (see acceptedReference).
+   */
+  reuseReference?: string;
 }
 
 export interface Permit {
@@ -141,12 +148,19 @@ export class MutationGate {
       };
     }
 
-    const reference = newReference(
-      journal,
-      intent.op,
-      runId,
-      this.options.random
-    );
+    const reuse = intent.reuseReference;
+    if (
+      reuse !== undefined &&
+      (!intent.referenceField ||
+        !acceptedReference(journal, reuse, intent.qaKey, intent.op))
+    ) {
+      throw new HarnessRefusal(
+        'REFERENCE_REUSE',
+        'only a reference this QA key already sent and had accepted may be sent again'
+      );
+    }
+    const reference =
+      reuse ?? newReference(journal, intent.op, runId, this.options.random);
     journal.append({
       v: 1,
       ts: (this.options.now?.() ?? new Date()).toISOString(),

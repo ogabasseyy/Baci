@@ -104,7 +104,7 @@ describe('runHarness: a new attempt for one QA customer never re-opens another',
       );
     expect([...attemptsOf('qa-customer-A1')]).toEqual([1]);
     expect([...attemptsOf('qa-customer-B1')].sort()).toEqual([1, 2]);
-  });
+  }, 30_000); // three full nine-proof runs
 });
 
 describe('currentAttempt: QA keys sharing a long prefix stay separate', () => {

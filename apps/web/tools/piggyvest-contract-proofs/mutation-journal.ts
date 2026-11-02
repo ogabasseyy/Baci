@@ -219,9 +219,12 @@ export function slotState(
       entry.qaKey === qaKey
   );
   for (const intent of [...intents].reverse()) {
+    // Matched on the slot too: a deliberate re-send shares its reference.
     const outcome = all.find(
       (entry) =>
-        entry.phase === 'outcome' && entry.reference === intent.reference
+        entry.phase === 'outcome' &&
+        entry.reference === intent.reference &&
+        entry.slot === intent.slot
     );
     if (!outcome?.outcome) {
       return {
@@ -238,6 +241,33 @@ export function slotState(
     };
   }
   return { kind: 'fresh' };
+}
+
+/**
+ * Did this QA key send this reference for this operation, with an accepted
+ * outcome? Only such a reference may be re-sent on purpose (proof 2).
+ */
+export function acceptedReference(
+  journal: Journal,
+  reference: string,
+  qaKey: string,
+  op: string
+): boolean {
+  const all = journal.entries();
+  return all.some(
+    (intent) =>
+      intent.phase === 'intent' &&
+      intent.reference === reference &&
+      intent.qaKey === qaKey &&
+      intent.op === op &&
+      all.some(
+        (entry) =>
+          entry.phase === 'outcome' &&
+          entry.reference === reference &&
+          entry.slot === intent.slot &&
+          entry.outcome === 'accepted'
+      )
+  );
 }
 
 export function referenceInUse(journal: Journal, reference: string): boolean {

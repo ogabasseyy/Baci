@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { TrackingResult } from '../types';
 import type { GiglApiClient } from './gigl.auth';
 import type { GiglTokenRejectionCheck } from './gigl.auth-request';
@@ -138,6 +139,35 @@ async function fetchGiglLookup(
  * GIG's own app) from GIG's read-only pre-shipment and tracking endpoints.
  * Nothing is booked or charged.
  */
+// GIG answers with one record or a list; accept both, as the pre-shipment
+// ownership attestor does.
+const giglPreShipmentRecords = z
+  .union([giglSchemas.preShipmentData, giglSchemas.preShipmentData.element])
+  .transform((data) => (Array.isArray(data) ? data : [data]));
+
+/**
+ * The record for the requested waybill. If GIG returns several records for it
+ * that name different accounts, the account identifiers are dropped so the
+ * ownership check fails closed instead of trusting whichever came first.
+ */
+export function pickPreShipment(
+  records: GiglPreShipment[],
+  waybill: string
+): GiglPreShipment | undefined {
+  const wanted = waybill.trim().toUpperCase();
+  const matching = records.filter(
+    (entry) => entry.Waybill.trim().toUpperCase() === wanted
+  );
+  const [first] = matching;
+  if (!first) return undefined;
+  const owner = (entry: GiglPreShipment) =>
+    `${entry.CustomerCode?.trim().toUpperCase() ?? ''}|${entry.UserId?.trim().toLowerCase() ?? ''}`;
+  if (matching.some((entry) => owner(entry) !== owner(first))) {
+    return { ...first, CustomerCode: undefined, UserId: undefined };
+  }
+  return first;
+}
+
 export async function lookupGiglExternalWaybill(
   apiClient: GiglApiClient,
   io: GiglProviderIo,
@@ -161,15 +191,14 @@ export async function lookupGiglExternalWaybill(
       return { status: 'not_found' };
     }
 
-    const preShipment = apiClient
-      .parseEnvelopeData(
+    const preShipment = pickPreShipment(
+      apiClient.parseEnvelopeData(
         preShipmentResult.envelope,
-        giglSchemas.preShipmentData,
+        giglPreShipmentRecords,
         'pre-shipment'
-      )
-      .find(
-        (entry) => entry.Waybill.trim().toUpperCase() === waybill.toUpperCase()
-      );
+      ),
+      waybill
+    );
     if (!preShipment) {
       return { status: 'not_found' };
     }

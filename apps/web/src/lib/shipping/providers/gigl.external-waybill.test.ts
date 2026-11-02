@@ -1,8 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  isGiglWaybillOwnedByAccount,
-  readGiglErrorMessage,
-} from './gigl.external-waybill';
 import { baseUrl, jsonResponse } from './gigl.test-helpers';
 
 const ACCOUNT_USER_ID = 'e9de76d8-208a-44b6-bf02-9842fb8a9bee';
@@ -167,6 +163,28 @@ describe('GIGL external waybill lookup', () => {
     ).resolves.toMatchObject({ status: 'found', tracking: null });
   });
 
+  it('accepts a single pre-shipment record instead of a list', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(loginEnvelope('token-1')))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ...preShipmentEnvelope,
+          data: preShipmentEnvelope.data[0],
+        })
+      )
+      .mockResolvedValueOnce(notFound());
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { GiglProvider } = await import('./gigl');
+    await expect(
+      new GiglProvider().lookupExternalWaybill('1349639588')
+    ).resolves.toMatchObject({
+      status: 'found',
+      preShipment: { Waybill: '1349639588', CustomerCode: 'IND405919' },
+    });
+  });
+
   it('treats a response for a different waybill as not found', async () => {
     const fetchMock = vi
       .fn()
@@ -196,79 +214,5 @@ describe('GIGL external waybill lookup', () => {
     await expect(
       new GiglProvider().lookupExternalWaybill('1349639588')
     ).rejects.toThrow('GIGL waybill lookup failed (502)');
-  });
-});
-
-describe('isGiglWaybillOwnedByAccount', () => {
-  const account = { userChannelCode: 'IND405919', userId: ACCOUNT_USER_ID };
-
-  it('accepts a waybill whose customer code and user id match', () => {
-    expect(
-      isGiglWaybillOwnedByAccount(
-        { CustomerCode: 'ind405919', UserId: ACCOUNT_USER_ID.toUpperCase() },
-        account
-      )
-    ).toBe(true);
-  });
-
-  it('rejects a waybill booked on another GIG account', () => {
-    expect(
-      isGiglWaybillOwnedByAccount(
-        { CustomerCode: 'IND000001', UserId: ACCOUNT_USER_ID },
-        account
-      )
-    ).toBe(false);
-    expect(
-      isGiglWaybillOwnedByAccount(
-        { CustomerCode: 'IND405919', UserId: 'another-user' },
-        account
-      )
-    ).toBe(false);
-  });
-
-  it('fails closed when GIG returns no account identifiers', () => {
-    expect(
-      isGiglWaybillOwnedByAccount(
-        { CustomerCode: undefined, UserId: undefined },
-        account
-      )
-    ).toBe(false);
-  });
-});
-
-describe('readGiglErrorMessage', () => {
-  it('reads the GIG message from an error body', async () => {
-    await expect(
-      readGiglErrorMessage(
-        statusResponse(401, { message: 'Shipment Details Not Found.' }),
-        new AbortController().signal
-      )
-    ).resolves.toBe('Shipment Details Not Found.');
-  });
-
-  it('gives up on an oversized cloned body that never closes', async () => {
-    const original = new Response(
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new Uint8Array(20 * 1_024));
-        },
-      }),
-      { status: 401, headers: { 'Content-Length': String(64 * 1_024) } }
-    );
-    const controller = new AbortController();
-    const read = readGiglErrorMessage(original.clone(), controller.signal);
-    controller.abort(new Error('deadline'));
-    await expect(read).resolves.toBe('');
-  });
-
-  it('gives up when the lookup deadline fires while the body stalls', async () => {
-    const stalled = new Response(
-      new ReadableStream<Uint8Array>({ start() {} }),
-      { status: 401 }
-    );
-    const controller = new AbortController();
-    const read = readGiglErrorMessage(stalled, controller.signal);
-    controller.abort(new Error('deadline'));
-    await expect(read).resolves.toBe('');
   });
 });

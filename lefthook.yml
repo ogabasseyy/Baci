@@ -8,9 +8,10 @@ pre-commit:
         PUPPETEER_CHROME_SKIP_DOWNLOAD: "true"
         PUPPETEER_CHROME_HEADLESS_SHELL_SKIP_DOWNLOAD: "true"
         PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
-      run: bash ci_scripts/run-lefthook-pnpm.sh turbo lint
-    knip:
-      run: bash ci_scripts/run-lefthook-pnpm.sh knip || true
+      # Every package's lint script is `biome check`, so checking only the
+      # staged files gives the same result for this commit in seconds.
+      # The whole-repo `turbo lint` and knip run in CI.
+      run: bash ci_scripts/run-lefthook-pnpm.sh exec biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
     check-podfile-lock:
       run: sh ci_scripts/check-podfile-lock.sh
 

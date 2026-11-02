@@ -1,7 +1,47 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { primaryRestrictedReadinessRequirements } from './primary-restricted-readiness.constants';
 import { PRIMARY_WALLET_STATEMENTS } from './primary-wallet-statements';
 import { PRIMARY_WALLET_VERIFICATION_STATEMENT } from './primary-wallet-verification';
+
+const MIGRATIONS_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../../../supabase/migrations'
+);
+
+// Every piggyvest_primary function the migrations grant to a group, with
+// whitespace removed so signatures compare exactly.
+function migrationGrantsTo(group: string): string[] {
+  const grants = new Set<string>();
+  const statement =
+    /GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+([\s\S]*?)\s+TO\s+([^;]+);/gi;
+  for (const file of readdirSync(MIGRATIONS_DIR).filter((name) =>
+    name.endsWith('.sql')
+  )) {
+    const sql = readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8').replace(
+      /--[^\n]*/g,
+      ''
+    );
+    for (const [, functions, grantees] of sql.matchAll(statement)) {
+      if (!grantees.split(',').some((grantee) => grantee.trim() === group))
+        continue;
+      let depth = 0;
+      let current = '';
+      for (const char of `${functions},`) {
+        if (char === '(') depth += 1;
+        if (char === ')') depth -= 1;
+        if (char === ',' && depth === 0) {
+          const signature = current.replace(/\s+/g, '');
+          if (signature.startsWith('piggyvest_primary.')) grants.add(signature);
+          current = '';
+        } else current += char;
+      }
+    }
+  }
+  return [...grants].sort();
+}
 
 describe('primaryRestrictedReadinessRequirements', () => {
   it('pins the reviewed evidence and approval windows', () => {
@@ -45,6 +85,20 @@ describe('primaryRestrictedReadinessRequirements', () => {
           signature.startsWith(`piggyvest_primary.${name}(`)
         )
       ).toBe(true);
+  });
+
+  it('matches the onboarding role gate to exactly what the migrations grant its group', () => {
+    // Arrange
+    const onboarding = primaryRestrictedReadinessRequirements.capabilities.find(
+      (capability) => capability.gate === 'onboarding_role'
+    );
+
+    // Act
+    const granted = migrationGrantsTo(onboarding?.group ?? '');
+
+    // Assert: readiness requires an exact match, so a new grant must be listed.
+    expect(granted).toContain('piggyvest_primary.is_backed(uuid,uuid)');
+    expect([...(onboarding?.functions ?? [])].sort()).toEqual(granted);
   });
 
   it('binds readiness routes to reviewed handlers', () => {

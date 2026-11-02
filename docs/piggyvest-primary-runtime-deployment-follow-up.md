@@ -133,6 +133,9 @@ deploying the review-status reader or ambiguous-onboarding recovery. Include
 `read_onboarding_review(jsonb)` in the restricted provisioner's verified grants.
 The former retains an immutable review hold without choosing or exposing a
 provider wallet; the latter returns only the scoped terminal-review reason.
+`20261102202151_piggyvest_primary_wallet_backing.sql` also grants
+`is_backed(uuid,uuid)` to that provisioner group; the readiness checker expects
+the exact list, so include it too.
 An unresolved dispatched/unknown intent also blocks customer deletion, including
 the window where provider creation succeeded but its custody write failed.
 Mapped wallets still require their existing DVA closure attestation. Unmapped

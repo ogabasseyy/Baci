@@ -1,4 +1,9 @@
-import { buildOfferResolutionMap, makeOfferLineKey } from '@baci/shared/lib';
+import {
+  buildOfferResolutionMap,
+  isOfferAuthorityId,
+  makeOfferLineKey,
+} from '@baci/shared/lib';
+import { CONFIG } from '@/lib/config';
 import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 
@@ -20,10 +25,12 @@ export async function resolveOfferStock(
   productId: string,
   offerId: string
 ): Promise<{ stock: number; strictUnits: number | null }> {
+  if (!isOfferAuthorityId(CONFIG.MERCHANT_ID))
+    throw new Error('Store configuration is unavailable. Please try again.');
   const { data, error } = await supabase.rpc(
     'get_storefront_offer_resolution',
     {
-      p_merchant_id: null,
+      p_merchant_id: CONFIG.MERCHANT_ID,
       p_product_ids: [productId],
     }
   );

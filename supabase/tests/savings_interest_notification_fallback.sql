@@ -1,5 +1,5 @@
 -- Behaviour test: notification wording can never block recording paid
--- interest (migration 20261102124300_savings_interest_notification_copy).
+-- interest (migration 20261102214500_savings_interest_notification_copy).
 -- Both notifiers run inside the same transaction as the money write they
 -- announce: the primary-wallet payout receipt and the legacy ledger credit.
 -- Proves, against live PostgreSQL, that when the progress text cannot be

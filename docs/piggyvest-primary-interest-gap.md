@@ -259,7 +259,7 @@ titled “Your savings just grew 🎉”: “₦X interest added to your savings
 by the goal's progress after the credit (principal plus net paid interest, the
 same per-goal interest the savings display adds, so interest reserved for a
 purchase is left out until it is released), for example “You’re now 35% of the
-way there.” (migration 20261102124300). At or past the target the notice says
+way there.” (migration 20261102214500). At or past the target the notice says
 “Open your savings to see your latest balance.” and never claims the goal is
 reached: only the parent completion notice announces that, and it is voided if
 a reversal undoes completion. Any reversal voids that original amount notice;

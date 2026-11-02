@@ -10,8 +10,10 @@
 --   03 a soft-deleted customer at m1
 --   04 a company customer at m1
 --   05-09 one onboarding intent each at m1: dispatched, unknown, accepted,
---         verified, rejected
+--         verified, rejected (no review reason, no provider ids)
 --   10 a live row at m1 whose only intent was detached (customer_id NULL)
+--   12-14 one onboarding intent each at m1: routing_pending, rejected for an
+--         ownership review, rejected for a routing review (ids kept)
 -- The caller also holds a verified intent at m2 (row 11), which must not lock
 -- their m1 row. m3 has no customer row for anybody.
 
@@ -23,6 +25,11 @@ DECLARE
   v_i1 uuid := 'e1f03000-0000-4000-8000-000000000001';
   v_i2 uuid := 'e1f03000-0000-4000-8000-000000000002';
 BEGIN
+  -- Merchant inserts are audited, and the audit writer refuses a write with
+  -- no attributable actor (28000 audit_actor_required). Seed as the service
+  -- role, as the other suites do, and clear the claim before returning.
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
   INSERT INTO auth.users (
     id, instance_id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
@@ -34,7 +41,7 @@ BEGIN
     'swp-u' || u.n || '@example.test', 'test', pg_catalog.now(),
     pg_catalog.now(), pg_catalog.now(), '{}'::jsonb, '{}'::jsonb
   FROM pg_catalog.unnest(ARRAY[
-    '01', '02', '03', '04', '05', '06', '07', '08', '09', '10'
+    '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '12', '13', '14'
   ]) AS u(n);
 
   INSERT INTO public.merchants (id, email, business_name, slug)
@@ -55,7 +62,7 @@ BEGIN
     'swp-u' || CASE c.n WHEN '11' THEN '01' ELSE c.n END || '@example.test',
     'First' || c.n, 'Last' || c.n, '080000001' || c.n, 7
   FROM pg_catalog.unnest(ARRAY[
-    '01', '02', '03', '05', '06', '07', '08', '09', '10', '11'
+    '01', '02', '03', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14'
   ]) AS c(n);
 
   INSERT INTO public.customers (
@@ -80,7 +87,8 @@ BEGIN
   INSERT INTO piggyvest_primary.onboarding_intents (
     id, integration_id, merchant_id, customer_id, user_id,
     request_fingerprint, state, claim_token,
-    provider_customer_id, provider_wallet_id
+    provider_customer_id, provider_wallet_id, routing_payout_wallet_id,
+    review_reason
   )
   SELECT
     ('e1f04000-0000-4000-8000-0000000000' || i.n)::uuid,
@@ -94,12 +102,18 @@ BEGIN
     i.state,
     CASE i.state WHEN 'dispatched'
       THEN 'e1f05000-0000-4000-8000-000000000005'::uuid END,
-    CASE WHEN i.state IN ('accepted', 'verified') THEN 'swp-pc-' || i.n END,
-    CASE WHEN i.state IN ('accepted', 'verified') THEN 'swp-pw-' || i.n END
+    CASE WHEN i.mapped THEN 'swp-pc-' || i.n END,
+    CASE WHEN i.mapped THEN 'swp-pw-' || i.n END,
+    CASE i.state WHEN 'routing_pending' THEN 'swp-payout-' || i.n END,
+    i.review_reason
   FROM (VALUES
-    ('05', 'dispatched'), ('06', 'unknown'), ('07', 'accepted'),
-    ('08', 'verified'), ('09', 'rejected'), ('10', 'unknown'),
-    ('11', 'verified')
-  ) AS i(n, state);
+    ('05', 'dispatched', false, NULL), ('06', 'unknown', false, NULL),
+    ('07', 'accepted', true, NULL), ('08', 'verified', true, NULL),
+    ('09', 'rejected', false, NULL), ('10', 'unknown', false, NULL),
+    ('11', 'verified', true, NULL), ('12', 'routing_pending', true, NULL),
+    ('13', 'rejected', true, 'ownership'), ('14', 'rejected', true, 'routing')
+  ) AS i(n, state, mapped, review_reason);
+
+  PERFORM pg_catalog.set_config('request.jwt.claim.role', '', true);
 END;
 $fixtures$;

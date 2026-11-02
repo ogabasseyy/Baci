@@ -136,6 +136,9 @@ BEGIN
       ('verified intent', '08', v_m1, '08', '08000009911', '55000:wallet_profile_locked'),
       ('rejected intent', '09', v_m1, '09', '08000009911', '55000:wallet_profile_locked'),
       ('detached intent', '10', v_m1, '10', '08000009911', '55000:wallet_profile_locked'),
+      ('routing pending intent', '12', v_m1, '12', '08000009911', '55000:wallet_profile_locked'),
+      ('ownership review intent', '13', v_m1, '13', '08000009911', '55000:wallet_profile_locked'),
+      ('routing review intent', '14', v_m1, '14', '08000009911', '55000:wallet_profile_locked'),
       ('intent at that merchant', '01', v_m2, '01', '08000009911', '55000:wallet_profile_locked')
     ) AS t(label, sub, merchant_id, expected_user, phone, expected)
   LOOP
@@ -170,7 +173,8 @@ BEGIN
     ('01', '08000009901'), ('02', '+2348000009902'), ('03', '08000000103'),
     ('04', '08000009904'), ('05', '08000000105'), ('06', '08000000106'),
     ('07', '08000000107'), ('08', '08000000108'), ('09', '08000000109'),
-    ('10', '08000000110'), ('11', '08000000111')
+    ('10', '08000000110'), ('11', '08000000111'), ('12', '08000000112'),
+    ('13', '08000000113'), ('14', '08000000114')
   ) AS e(n, phone)
     ON c.id = ('e1f02000-0000-4000-8000-0000000000' || e.n)::uuid
   WHERE c.phone IS DISTINCT FROM e.phone
@@ -180,7 +184,7 @@ BEGIN
     RAISE EXCEPTION 'unexpected customer state after phone calls: %', v_changed;
   END IF;
   IF (SELECT pg_catalog.count(*) FROM public.customers c
-      WHERE c.id::text LIKE 'e1f02000-%') <> 11 THEN
+      WHERE c.id::text LIKE 'e1f02000-%') <> 14 THEN
     RAISE EXCEPTION 'phone suite fixtures changed size';
   END IF;
 END;

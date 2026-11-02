@@ -5,18 +5,20 @@
 --   set_customer_wallet_phone(merchant, expected user, phone)
 --   set_customer_wallet_profile(merchant, expected user, first name, last name)
 --
--- Both are first proposed in #3808 (20261017084453 and 20261022090000) and are
--- re-timestamped here. Changes from those drafts:
+-- Both were first proposed in #3808 (20261017084453 and 20261022090000) and
+-- are re-authored here with a new timestamp. Changes from those drafts:
 --
 -- * SECURITY DEFINER with an empty search_path (every name is qualified), so
 --   the RPC can check onboarding intents, which shoppers cannot read.
 -- * Once the caller has any onboarding intent for that merchant the details
 --   are locked (55000 wallet_profile_locked). "Not started" means no intent
---   row exists; every stored state (dispatched, unknown, accepted, verified,
---   rejected) is past it, and an intent detached from a deleted customer row
---   still counts for the same user. The provider returns an existing
---   customer by phone and keeps the details it was first given, so the local
---   copy must stop changing once onboarding has begun.
+--   row exists; every stored state (dispatched, unknown, routing_pending,
+--   accepted, verified, and rejected with or without a review reason) is
+--   past it, and an intent detached from a deleted customer row still
+--   counts for the same user. Onboarding fingerprints the name and phone it
+--   sends, and the provider returns an existing customer by phone and keeps
+--   the details it was first given, so the local copy must stop changing
+--   once onboarding has begun.
 -- * The customer row is locked before the intent check. Onboarding locks the
 --   same row when it claims an intent, so a save and a claim cannot overlap.
 -- * Names are saved only on individual customers: the full-name trigger

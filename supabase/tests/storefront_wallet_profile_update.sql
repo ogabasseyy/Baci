@@ -140,6 +140,9 @@ BEGIN
       ('verified intent', '08', v_m1, '08', 'Ada', 'Okafor', '55000:wallet_profile_locked'),
       ('rejected intent', '09', v_m1, '09', 'Ada', 'Okafor', '55000:wallet_profile_locked'),
       ('detached intent', '10', v_m1, '10', 'Ada', 'Okafor', '55000:wallet_profile_locked'),
+      ('routing pending intent', '12', v_m1, '12', 'Ada', 'Okafor', '55000:wallet_profile_locked'),
+      ('ownership review intent', '13', v_m1, '13', 'Ada', 'Okafor', '55000:wallet_profile_locked'),
+      ('routing review intent', '14', v_m1, '14', 'Ada', 'Okafor', '55000:wallet_profile_locked'),
       ('intent at that merchant', '01', v_m2, '01', 'Ada', 'Okafor', '55000:wallet_profile_locked')
     ) AS t(label, sub, merchant_id, expected_user, first_name, last_name, expected)
   LOOP
@@ -182,7 +185,10 @@ BEGIN
     ('08', 'First08', 'Last08', 'First08 Last08'),
     ('09', 'First09', 'Last09', 'First09 Last09'),
     ('10', 'First10', 'Last10', 'First10 Last10'),
-    ('11', 'First11', 'Last11', 'First11 Last11')
+    ('11', 'First11', 'Last11', 'First11 Last11'),
+    ('12', 'First12', 'Last12', 'First12 Last12'),
+    ('13', 'First13', 'Last13', 'First13 Last13'),
+    ('14', 'First14', 'Last14', 'First14 Last14')
   ) AS e(n, first_name, last_name, full_name)
     ON c.id = ('e1f02000-0000-4000-8000-0000000000' || e.n)::uuid
   WHERE c.first_name IS DISTINCT FROM e.first_name
@@ -193,7 +199,7 @@ BEGIN
     RAISE EXCEPTION 'unexpected customer state after profile calls: %', v_changed;
   END IF;
   IF (SELECT pg_catalog.count(*) FROM public.customers c
-      WHERE c.id::text LIKE 'e1f02000-%') <> 11 THEN
+      WHERE c.id::text LIKE 'e1f02000-%') <> 14 THEN
     RAISE EXCEPTION 'profile suite fixtures changed size';
   END IF;
 END;

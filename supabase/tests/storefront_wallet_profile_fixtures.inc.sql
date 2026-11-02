@@ -14,6 +14,7 @@
 --   10 a live row at m1 whose only intent was detached (customer_id NULL)
 --   12-14 one onboarding intent each at m1: routing_pending, rejected for an
 --         ownership review, rejected for a routing review (ids kept)
+-- Phones are 080000001NN, except 13 (+2348000000113) and 14 (2348000000114).
 -- The caller also holds a verified intent at m2 (row 11), which must not lock
 -- their m1 row. m3 has no customer row for anybody.
 
@@ -76,6 +77,13 @@ BEGIN
 
   UPDATE public.customers SET deleted_at = pg_catalog.now()
   WHERE id = 'e1f02000-0000-4000-8000-000000000003';
+
+  -- Stored phones come in mixed formats; 13 and 14 hold the same kind of
+  -- Nigerian number as the others in the +234 and 234 forms.
+  UPDATE public.customers SET phone = '+2348000000113'
+  WHERE id = 'e1f02000-0000-4000-8000-000000000013';
+  UPDATE public.customers SET phone = '2348000000114'
+  WHERE id = 'e1f02000-0000-4000-8000-000000000014';
 
   INSERT INTO piggyvest_primary.integrations (
     id, merchant_id, business_id, environment, executor_login, enabled

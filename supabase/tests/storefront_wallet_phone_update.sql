@@ -59,6 +59,15 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'phone RPC must read and return explicit columns only';
   END IF;
+  -- The customer row lock, taken before the intent check, serialises a save
+  -- with an onboarding claim. One session cannot observe it, so pin it here.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_proc p
+    WHERE p.oid = v_fn::oid
+      AND p.prosrc ~* 'FOR\s+NO\s+KEY\s+UPDATE\s*;.*piggyvest_primary\.onboarding_intents'
+  ) THEN
+    RAISE EXCEPTION 'phone RPC must lock the customer row before the intent check';
+  END IF;
 END;
 $catalog$;
 
@@ -69,14 +78,12 @@ SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
 DO $calls$
 DECLARE
   v_m1 uuid := 'e1f01000-0000-4000-8000-000000000001';
-  v_m2 uuid := 'e1f01000-0000-4000-8000-000000000002';
-  v_m3 uuid := 'e1f01000-0000-4000-8000-000000000003';
   v_u text := 'e1f00000-0000-4000-8000-0000000000';
   v_result jsonb;
-  v_got text;
   r record;
 BEGIN
-  -- Own phone, trimmed; the caller's verified intent at m2 does not lock m1.
+  -- Own phone, trimmed and stored as 234 digits (the PiggyVest form); the
+  -- caller's verified intent at m2 does not lock m1.
   PERFORM pg_catalog.set_config('request.jwt.claims',
     pg_catalog.jsonb_build_object('sub', v_u || '01', 'role', 'authenticated')::text, true);
   v_result := public.set_customer_wallet_phone(v_m1, (v_u || '01')::uuid, '  08000009901 ');
@@ -87,31 +94,47 @@ BEGIN
   END IF;
   IF v_result->>'id' <> 'e1f02000-0000-4000-8000-000000000001'
     OR v_result->>'user_id' <> v_u || '01'
-    OR v_result->>'phone' <> '08000009901'
+    OR v_result->>'phone' <> '2348000009901'
     OR v_result->>'first_name' <> 'First01'
     OR (v_result->>'loyalty_points')::integer <> 7 THEN
     RAISE EXCEPTION 'own phone save returned %', v_result;
   END IF;
-  -- Saving the same number again is not a conflict with oneself.
-  v_result := public.set_customer_wallet_phone(v_m1, (v_u || '01')::uuid, '08000009901');
-  IF v_result->>'phone' <> '08000009901' THEN
-    RAISE EXCEPTION 'repeat own phone save returned %', v_result;
-  END IF;
 
-  -- International form; a company customer may save a phone too.
-  PERFORM pg_catalog.set_config('request.jwt.claims',
-    pg_catalog.jsonb_build_object('sub', v_u || '02', 'role', 'authenticated')::text, true);
-  v_result := public.set_customer_wallet_phone(v_m1, (v_u || '02')::uuid, '+2348000009902');
-  IF v_result->>'phone' <> '+2348000009902' THEN
-    RAISE EXCEPTION 'international phone save returned %', v_result;
-  END IF;
-  PERFORM pg_catalog.set_config('request.jwt.claims',
-    pg_catalog.jsonb_build_object('sub', v_u || '04', 'role', 'authenticated')::text, true);
-  v_result := public.set_customer_wallet_phone(v_m1, (v_u || '04')::uuid, '08000009904');
-  IF v_result->>'phone' <> '08000009904' OR v_result->>'first_name' IS NOT NULL THEN
+  -- Every format of a number stores the same digits, and saving one's own
+  -- number again in any format is not a conflict with oneself.
+  FOR r IN
+    SELECT * FROM (VALUES
+      ('01', '2348000009901', '2348000009901'),
+      ('01', '+2348000009901', '2348000009901'),
+      ('01', '8000009901', '2348000009901'),
+      ('02', '+2348000009902', '2348000009902'),
+      ('04', '8000009904', '2348000009904')
+    ) AS t(sub, phone, stored)
+  LOOP
+    PERFORM pg_catalog.set_config('request.jwt.claims',
+      pg_catalog.jsonb_build_object('sub', v_u || r.sub, 'role', 'authenticated')::text, true);
+    v_result := public.set_customer_wallet_phone(v_m1, (v_u || r.sub)::uuid, r.phone);
+    IF v_result->>'phone' IS DISTINCT FROM r.stored THEN
+      RAISE EXCEPTION 'phone save % for % returned %', r.phone, r.sub, v_result;
+    END IF;
+  END LOOP;
+  -- A company customer may save a phone too.
+  IF v_result->>'first_name' IS NOT NULL THEN
     RAISE EXCEPTION 'company customer phone save returned %', v_result;
   END IF;
+END;
+$calls$;
 
+-- --- Refusals ------------------------------------------------------------
+DO $refusals$
+DECLARE
+  v_m1 uuid := 'e1f01000-0000-4000-8000-000000000001';
+  v_m2 uuid := 'e1f01000-0000-4000-8000-000000000002';
+  v_m3 uuid := 'e1f01000-0000-4000-8000-000000000003';
+  v_u text := 'e1f00000-0000-4000-8000-0000000000';
+  v_got text;
+  r record;
+BEGIN
   FOR r IN
     SELECT * FROM (VALUES
       ('no session', NULL, v_m1, '01', '08000009911', '42501:customer_identity_unavailable'),
@@ -126,10 +149,16 @@ BEGIN
       ('null', '01', v_m1, '01', NULL, '22023:invalid_wallet_phone'),
       ('too short', '01', v_m1, '01', '080000099', '22023:invalid_wallet_phone'),
       ('too long', '01', v_m1, '01', '0800000991100000', '22023:invalid_wallet_phone'),
+      ('too long once canonical', '01', v_m1, '01', '080000099110000', '22023:invalid_wallet_phone'),
       ('inner spaces', '01', v_m1, '01', '+234 800 000 9911', '22023:invalid_wallet_phone'),
       ('double plus', '01', v_m1, '01', '++2348000009911', '22023:invalid_wallet_phone'),
       ('control character', '01', v_m1, '01', E'0800000\n9911', '22023:invalid_wallet_phone'),
       ('held by another customer', '01', v_m1, '01', '08000000105', '23505:wallet_phone_unavailable'),
+      ('held as 0, saved as +234', '01', v_m1, '01', '+2348000000105', '23505:wallet_phone_unavailable'),
+      ('held as 0, saved as 234', '01', v_m1, '01', '2348000000105', '23505:wallet_phone_unavailable'),
+      ('held as +234, saved as 0', '01', v_m1, '01', '08000000113', '23505:wallet_phone_unavailable'),
+      ('held as 234, saved bare', '01', v_m1, '01', '8000000114', '23505:wallet_phone_unavailable'),
+      ('held by a deleted customer', '01', v_m1, '01', '+2348000000103', '23505:wallet_phone_unavailable'),
       ('dispatched intent', '05', v_m1, '05', '08000009911', '55000:wallet_profile_locked'),
       ('unknown intent', '06', v_m1, '06', '08000009911', '55000:wallet_profile_locked'),
       ('accepted intent', '07', v_m1, '07', '08000009911', '55000:wallet_profile_locked'),
@@ -158,7 +187,42 @@ BEGIN
     END IF;
   END LOOP;
 END;
-$calls$;
+$refusals$;
+
+-- --- Locked: the number already stored, in any format, is accepted -------
+-- and written nowhere (the row version, ctid, stays the same).
+DO $locked_same$
+DECLARE
+  v_m1 uuid := 'e1f01000-0000-4000-8000-000000000001';
+  v_u text := 'e1f00000-0000-4000-8000-0000000000';
+  v_before tid;
+  v_result jsonb;
+  r record;
+BEGIN
+  FOR r IN
+    SELECT * FROM (VALUES
+      ('06', '08000000106', '08000000106'), ('06', '+2348000000106', '08000000106'),
+      ('08', ' 2348000000108 ', '08000000108'), ('13', '+2348000000113', '+2348000000113'),
+      ('13', '08000000113', '+2348000000113'), ('14', '8000000114', '2348000000114')
+    ) AS t(sub, phone, stored)
+  LOOP
+    PERFORM pg_catalog.set_config('request.jwt.claims',
+      pg_catalog.jsonb_build_object('sub', v_u || r.sub, 'role', 'authenticated')::text, true);
+    SELECT c.ctid INTO v_before FROM public.customers c
+    WHERE c.id = ('e1f02000-0000-4000-8000-0000000000' || r.sub)::uuid;
+    v_result := public.set_customer_wallet_phone(v_m1, (v_u || r.sub)::uuid, r.phone);
+    IF v_result->>'phone' IS DISTINCT FROM r.stored
+      OR v_result->>'id' <> 'e1f02000-0000-4000-8000-0000000000' || r.sub THEN
+      RAISE EXCEPTION 'locked same phone % for % returned %', r.phone, r.sub, v_result;
+    END IF;
+    IF (SELECT c.ctid FROM public.customers c
+        WHERE c.id = ('e1f02000-0000-4000-8000-0000000000' || r.sub)::uuid)
+      IS DISTINCT FROM v_before THEN
+      RAISE EXCEPTION 'locked same phone % for % rewrote the row', r.phone, r.sub;
+    END IF;
+  END LOOP;
+END;
+$locked_same$;
 
 -- --- Only the callers' own rows changed, and only their phone ------------
 RESET ROLE;
@@ -170,11 +234,11 @@ BEGIN
   SELECT pg_catalog.string_agg(c.id::text, ', ' ORDER BY c.id) INTO v_changed
   FROM public.customers c
   JOIN (VALUES
-    ('01', '08000009901'), ('02', '+2348000009902'), ('03', '08000000103'),
-    ('04', '08000009904'), ('05', '08000000105'), ('06', '08000000106'),
+    ('01', '2348000009901'), ('02', '2348000009902'), ('03', '08000000103'),
+    ('04', '2348000009904'), ('05', '08000000105'), ('06', '08000000106'),
     ('07', '08000000107'), ('08', '08000000108'), ('09', '08000000109'),
     ('10', '08000000110'), ('11', '08000000111'), ('12', '08000000112'),
-    ('13', '08000000113'), ('14', '08000000114')
+    ('13', '+2348000000113'), ('14', '2348000000114')
   ) AS e(n, phone)
     ON c.id = ('e1f02000-0000-4000-8000-0000000000' || e.n)::uuid
   WHERE c.phone IS DISTINCT FROM e.phone

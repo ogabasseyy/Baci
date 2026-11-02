@@ -61,6 +61,15 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'profile RPC must read and return explicit columns only';
   END IF;
+  -- The customer row lock, taken before the intent check, serialises a save
+  -- with an onboarding claim. One session cannot observe it, so pin it here.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_proc p
+    WHERE p.oid = v_fn::oid
+      AND p.prosrc ~* 'FOR\s+NO\s+KEY\s+UPDATE\s*;.*piggyvest_primary\.onboarding_intents'
+  ) THEN
+    RAISE EXCEPTION 'profile RPC must lock the customer row before the intent check';
+  END IF;
   -- The lock reads onboarding intents inside the definer; shoppers cannot.
   FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated'] LOOP
     IF pg_catalog.has_schema_privilege(v_role, 'piggyvest_primary', 'USAGE')
@@ -143,7 +152,9 @@ BEGIN
       ('routing pending intent', '12', v_m1, '12', 'Ada', 'Okafor', '55000:wallet_profile_locked'),
       ('ownership review intent', '13', v_m1, '13', 'Ada', 'Okafor', '55000:wallet_profile_locked'),
       ('routing review intent', '14', v_m1, '14', 'Ada', 'Okafor', '55000:wallet_profile_locked'),
-      ('intent at that merchant', '01', v_m2, '01', 'Ada', 'Okafor', '55000:wallet_profile_locked')
+      ('intent at that merchant', '01', v_m2, '01', 'Ada', 'Okafor', '55000:wallet_profile_locked'),
+      ('locked, last name changed', '06', v_m1, '06', 'First06', 'Okafor', '55000:wallet_profile_locked'),
+      ('locked, case changed', '08', v_m1, '08', 'first08', 'Last08', '55000:wallet_profile_locked')
     ) AS t(label, sub, merchant_id, expected_user, first_name, last_name, expected)
   LOOP
     PERFORM pg_catalog.set_config('request.jwt.claims',
@@ -163,6 +174,42 @@ BEGIN
   END LOOP;
 END;
 $calls$;
+
+-- --- Locked: the names already stored are accepted and written nowhere --
+-- (the row version, ctid, stays the same).
+DO $locked_same$
+DECLARE
+  v_m1 uuid := 'e1f01000-0000-4000-8000-000000000001';
+  v_u text := 'e1f00000-0000-4000-8000-0000000000';
+  v_before tid;
+  v_result jsonb;
+  r record;
+BEGIN
+  FOR r IN
+    SELECT * FROM (VALUES
+      ('06', 'First06', 'Last06'), ('06', '  First06', 'Last06  '),
+      ('08', 'First08', 'Last08'), ('13', 'First13', 'Last13')
+    ) AS t(sub, first_name, last_name)
+  LOOP
+    PERFORM pg_catalog.set_config('request.jwt.claims',
+      pg_catalog.jsonb_build_object('sub', v_u || r.sub, 'role', 'authenticated')::text, true);
+    SELECT c.ctid INTO v_before FROM public.customers c
+    WHERE c.id = ('e1f02000-0000-4000-8000-0000000000' || r.sub)::uuid;
+    v_result := public.set_customer_wallet_profile(
+      v_m1, (v_u || r.sub)::uuid, r.first_name, r.last_name);
+    IF v_result->>'first_name' IS DISTINCT FROM 'First' || r.sub
+      OR v_result->>'last_name' IS DISTINCT FROM 'Last' || r.sub
+      OR v_result->>'id' <> 'e1f02000-0000-4000-8000-0000000000' || r.sub THEN
+      RAISE EXCEPTION 'locked same names for % returned %', r.sub, v_result;
+    END IF;
+    IF (SELECT c.ctid FROM public.customers c
+        WHERE c.id = ('e1f02000-0000-4000-8000-0000000000' || r.sub)::uuid)
+      IS DISTINCT FROM v_before THEN
+      RAISE EXCEPTION 'locked same names for % rewrote the row', r.sub;
+    END IF;
+  END LOOP;
+END;
+$locked_same$;
 
 -- --- Only the callers' own rows changed, and only their names ------------
 RESET ROLE;
@@ -194,7 +241,8 @@ BEGIN
   WHERE c.first_name IS DISTINCT FROM e.first_name
     OR c.last_name IS DISTINCT FROM e.last_name
     OR c.full_name IS DISTINCT FROM e.full_name
-    OR c.phone IS DISTINCT FROM '080000001' || e.n;
+    OR c.phone IS DISTINCT FROM CASE e.n WHEN '13' THEN '+2348000000113'
+      WHEN '14' THEN '2348000000114' ELSE '080000001' || e.n END;
   IF v_changed IS NOT NULL THEN
     RAISE EXCEPTION 'unexpected customer state after profile calls: %', v_changed;
   END IF;

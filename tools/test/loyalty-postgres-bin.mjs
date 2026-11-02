@@ -18,3 +18,13 @@ export function resolvePostgresBin({
     ? result.stdout.trim()
     : '';
 }
+
+export function requirePostgresBin(options) {
+  const bin = resolvePostgresBin(options);
+  if (!bin) {
+    throw new Error(
+      'PostgreSQL binaries not found; set PG_BINDIR or install pg_config.'
+    );
+  }
+  return bin;
+}

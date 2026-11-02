@@ -36,6 +36,7 @@ RETURNS TABLE (
 LANGUAGE sql AS $fixture$
  SELECT o.id, o.order_number, o.tracking_token, o.subtotal, o.shipping_fee, o.discount_amount, o.tax_amount, o.total, o.customer_id, o.customer_email, o.customer_name, o.customer_phone, o.payment_status, o.shipping_status, o.payment_method, o.shipping_address, o.merchant_id, o.tax_basis, o.gift_wrapping_fee, o.idempotency_replayed
  FROM pg_temp.loyalty_fixture_orders o WHERE o.merchant_id=p_merchant_id
+  AND o.checkout_idempotency_key=p_checkout_idempotency_key
 $fixture$;
 DO $install$
 DECLARE definition text;
@@ -55,10 +56,17 @@ INSERT INTO pg_temp.loyalty_fixture_orders VALUES(
  '36890000-0000-4000-8000-000000000001','fixture','token',100,0,10,0,90,NULL,
  'loyalty@example.test','Fixture',NULL,'unpaid','pending','card',NULL,
  '36890000-0000-4000-8000-000000000002','exclusive',0,false,'fixture-key','NGN');
+INSERT INTO pg_temp.loyalty_fixture_orders
+ SELECT '36890000-0000-4000-8000-000000000005', order_number,tracking_token,subtotal,
+ shipping_fee,discount_amount,tax_amount,total,customer_id,customer_email,customer_name,
+ customer_phone,'cancelled','cancelled',payment_method,shipping_address,merchant_id,
+ tax_basis,gift_wrapping_fee,false,'other-key',currency
+ FROM pg_temp.loyalty_fixture_orders WHERE checkout_idempotency_key='fixture-key';
 INSERT INTO pg_temp.loyalty_fixture_redemptions(id,reward_type,reward_value,discount_code,used,minimum_order_amount,merchant_id)
 SELECT id,'discount_fixed',10,code,false,0,'36890000-0000-4000-8000-000000000002'
 FROM (VALUES ('36890000-0000-4000-8000-000000000003'::uuid,'RDM-A'),
- ('36890000-0000-4000-8000-000000000004'::uuid,'RDM-B')) x(id,code);
+ ('36890000-0000-4000-8000-000000000004'::uuid,'RDM-B'),
+ ('36890000-0000-4000-8000-000000000006'::uuid,'RDM-C')) x(id,code);
 CREATE FUNCTION pg_temp.call_loyalty_fixture(redemption uuid) RETURNS boolean LANGUAGE sql AS $$
  SELECT idempotency_replayed FROM pg_temp.loyalty_order_under_test(
  p_merchant_id=>'36890000-0000-4000-8000-000000000002',p_customer_email=>'loyalty@example.test',
@@ -67,7 +75,8 @@ CREATE FUNCTION pg_temp.call_loyalty_fixture(redemption uuid) RETURNS boolean LA
 $$;
 DO $cases$
 DECLARE a uuid:='36890000-0000-4000-8000-000000000003';
- b uuid:='36890000-0000-4000-8000-000000000004'; result boolean;
+ b uuid:='36890000-0000-4000-8000-000000000004';
+ c uuid:='36890000-0000-4000-8000-000000000006'; result boolean;
 BEGIN
  result:=pg_temp.call_loyalty_fixture(a);
  IF result IS DISTINCT FROM false OR NOT EXISTS(SELECT 1 FROM pg_temp.loyalty_fixture_redemptions
@@ -77,6 +86,18 @@ BEGIN
  -- Legitimate retries retain issued-code semantics even after expiry.
  UPDATE pg_temp.loyalty_fixture_redemptions SET expires_at=now()-interval '1 day' WHERE id=a;
  IF pg_temp.call_loyalty_fixture(a) IS DISTINCT FROM true THEN RAISE EXCEPTION 'same-code retry failed'; END IF;
+ -- A code claimed by a different cancelled order cannot be stolen by a replay.
+ UPDATE pg_temp.loyalty_fixture_redemptions SET used=true,
+  used_on_order_id='36890000-0000-4000-8000-000000000005' WHERE id=c;
+ BEGIN
+  PERFORM pg_temp.call_loyalty_fixture(c);
+  RAISE EXCEPTION 'replay stole a redemption from another cancelled order';
+ EXCEPTION WHEN SQLSTATE 'P0001' THEN
+  IF SQLERRM <> 'checkout_idempotency_conflict' THEN RAISE; END IF;
+ END;
+ IF NOT EXISTS(SELECT 1 FROM pg_temp.loyalty_fixture_redemptions WHERE id=c AND used
+  AND used_on_order_id='36890000-0000-4000-8000-000000000005') THEN
+  RAISE EXCEPTION 'code C changed after rejected replay'; END IF;
  BEGIN
   PERFORM pg_temp.call_loyalty_fixture(b);
   RAISE EXCEPTION 'replay consumed a different unused redemption';

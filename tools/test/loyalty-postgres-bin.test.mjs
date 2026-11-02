@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { resolvePostgresBin } from './loyalty-postgres-bin.mjs';
+import {
+  requirePostgresBin,
+  resolvePostgresBin,
+} from './loyalty-postgres-bin.mjs';
 
 test('resolves PostgreSQL binaries without a platform-specific default', () => {
   const run = () => ({ status: 0, stdout: '/usr/lib/postgresql/17/bin\n' });
@@ -23,5 +26,12 @@ test('resolves PostgreSQL binaries without a platform-specific default', () => {
   assert.equal(
     resolvePostgresBin({ args: [], env: {}, run: () => ({ status: 1 }) }),
     ''
+  );
+});
+
+test('explains how to configure missing PostgreSQL server binaries', () => {
+  assert.throws(
+    () => requirePostgresBin({ args: [], env: {}, run: () => ({ status: 1 }) }),
+    /PostgreSQL binaries not found.*PG_BINDIR/
   );
 });

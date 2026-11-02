@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { Client } from 'pg';
-import { resolvePostgresBin } from './loyalty-postgres-bin.mjs';
+import { requirePostgresBin } from './loyalty-postgres-bin.mjs';
 
 const repository = resolve(import.meta.dirname, '../..');
-const bin = resolvePostgresBin();
+const bin = requirePostgresBin();
 
 test('loyalty checkout replay remains bound to its original redemption', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'baci-loyalty-replay-'));

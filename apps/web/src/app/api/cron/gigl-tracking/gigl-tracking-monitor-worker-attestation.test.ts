@@ -112,7 +112,7 @@ describe('bugfix: GIG cancellation refunds need Baci-account attestation', () =>
         throw new Error('GIG preshipment lookup failed for GIGL-1');
       },
     ],
-  ])('bugfix: retries the poll instead of applying an unattested cancellation when the ownership check %s', async (_label, attest) => {
+  ])('bugfix: applies the cancellation unattested, without throwing, when the ownership check %s', async (_label, attest) => {
     const supabase = createSupabase();
 
     const summary = await processClaimedGiglTrackingMonitors(
@@ -123,20 +123,14 @@ describe('bugfix: GIG cancellation refunds need Baci-account attestation', () =>
       attest
     );
 
-    expect(summary).toMatchObject({ applied: 0, failed: 1 });
+    expect(summary).toMatchObject({ applied: 1, failed: 0 });
     expect(supabase.rpc).not.toHaveBeenCalledWith(
-      'apply_gigl_tracking_result',
+      'record_gigl_tracking_failure',
       expect.anything()
     );
-    expect(supabase.rpc).toHaveBeenCalledWith('record_gigl_tracking_failure', {
-      p_error: 'GIGL preshipment ownership check unavailable',
-      p_shipment_id: monitor.shipment_id,
-      p_tracking_epoch_id: monitor.tracking_epoch_id,
-      p_worker_id: 'worker-1',
-    });
-    expect(JSON.stringify(supabase.rpc.mock.calls)).not.toContain(
-      'lookup failed'
-    );
+    for (const event of appliedEvents(supabase.rpc)) {
+      expect(event).not.toHaveProperty('account_attested');
+    }
   });
 
   it('never looks up ownership for results that are not cancellations', async () => {

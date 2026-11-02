@@ -136,35 +136,43 @@ $t20$;
 
 -- T21: the merchant's wallet row is missing. The refund declines instead of
 -- raising P0001 and the guard raises 55P03. The wallet is removed inside a
--- subtransaction that is rolled back afterwards.
+-- savepoint that is rolled back afterwards. Each step is its own top-level
+-- statement (like T20) so a replay failure names the exact line.
+SELECT pg_catalog.set_config(
+  't21.balance', pg_temp.wallet_balance()::text, true
+);
+SAVEPOINT t21_missing_wallet;
+SET LOCAL session_replication_role = replica;
+DELETE FROM public.merchant_wallets AS wallet
+WHERE wallet.merchant_id = 'c4ce1100-0000-4000-8000-000000000001';
+SET LOCAL session_replication_role = origin;
+
 DO $t21$
-DECLARE
-  v_balance constant numeric := pg_temp.wallet_balance();
 BEGIN
-  BEGIN
-    PERFORM pg_catalog.set_config('session_replication_role', 'replica', true);
-    DELETE FROM public.merchant_wallets AS wallet
-    WHERE wallet.merchant_id = 'c4ce1100-0000-4000-8000-000000000001';
-    PERFORM pg_catalog.set_config('session_replication_role', 'origin', true);
-    IF pg_temp.wallet_balance() IS NOT NULL THEN
-      RAISE EXCEPTION 'T21: the wallet must be missing for this case';
-    END IF;
-    PERFORM pg_temp.assert_cancel_blocked(
-      'T21', 21, pg_temp.fixture_id(4, 21),
-      pg_temp.fresh_cancel_history(21, 'MSCC')
-    );
-    RAISE EXCEPTION 'T21 restores the wallet' USING ERRCODE = 'XT021';
-  EXCEPTION WHEN SQLSTATE 'XT021' THEN
-    NULL;
-  END;
-  IF pg_temp.wallet_balance() IS DISTINCT FROM v_balance
+  IF pg_temp.wallet_balance() IS NOT NULL THEN
+    RAISE EXCEPTION 'T21: the wallet must be missing for this case';
+  END IF;
+  PERFORM pg_temp.assert_cancel_blocked(
+    'T21', 21, pg_temp.fixture_id(4, 21),
+    pg_temp.fresh_cancel_history(21, 'MSCC')
+  );
+END;
+$t21$;
+
+ROLLBACK TO SAVEPOINT t21_missing_wallet;
+RELEASE SAVEPOINT t21_missing_wallet;
+
+DO $t21_after$
+BEGIN
+  IF pg_temp.wallet_balance() IS DISTINCT FROM
+       pg_catalog.current_setting('t21.balance')::numeric
      OR pg_temp.refund_count(21) <> 0
      OR (SELECT status FROM public.merchant_shipping_charges
          WHERE id = pg_temp.fixture_id(5, 21)) IS DISTINCT FROM 'booked' THEN
     RAISE EXCEPTION 'T21: a missing wallet must refund nothing';
   END IF;
 END;
-$t21$;
+$t21_after$;
 
 -- T22 (race): the owner rewrites the server's freshly inserted shipment row
 -- to another fresh Baci-account waybill before complete() runs. The row is

@@ -37,8 +37,6 @@ type AttestWaybillOwnership = (
 
 const UNRECOGNIZED_LIFECYCLE_ERROR =
   'GIGL tracking result has no recognized lifecycle event';
-const OWNERSHIP_UNAVAILABLE_ERROR =
-  'GIGL preshipment ownership check unavailable';
 
 // The database refunds a merchant-wallet GIGL charge on GIG's cancellation
 // only when this worker marks the cancellation events "account_attested":
@@ -63,10 +61,13 @@ function serializeEvents(
 }
 
 // Only cancellations need the extra GIG lookup (rare); one lookup per
-// waybill per batch. A definite 'not_owned' applies the cancellation
-// unattested (the database then refunds nothing). When GIG cannot answer,
-// or the lookup throws, the poll is recorded as a failure and retried with
-// backoff, so a transient GIG error never decides whether a refund happens.
+// waybill per batch. Only a definite 'owned' attests. 'not_owned', an
+// 'unavailable' answer and a thrown lookup all apply the cancellation
+// unattested, so cancellations with no merchant-wallet charge (customer
+// checkout, prepaid, orderless repair pickups) are never blocked by GIG.
+// A booked wallet charge that is not refunded makes the database guard
+// raise 55P03, the apply rolls back and the normal failure/backoff path
+// retries; a later poll re-runs this lookup and self-heals once GIG answers.
 function createCancellationAttestor(attest: AttestWaybillOwnership) {
   const lookups = new Map<string, Promise<GiglWaybillOwnership>>();
   return async (
@@ -88,9 +89,6 @@ function createCancellationAttestor(attest: AttestWaybillOwnership) {
       lookups.set(trackingNumber, lookup);
     }
     const ownership = await lookup;
-    if (ownership === 'unavailable') {
-      throw new Error(OWNERSHIP_UNAVAILABLE_ERROR);
-    }
     return ownership === 'owned';
   };
 }

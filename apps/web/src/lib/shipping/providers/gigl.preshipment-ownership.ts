@@ -16,10 +16,12 @@ import {
 // waybills there. The tracking worker uses this to attest a GIG
 // cancellation before the database refunds a merchant-wallet charge.
 //
-// 'owned' and 'not_owned' are GIG's definite answers. 'unavailable' means
-// GIG could not answer (timeout, HTTP or envelope failure, login problem):
-// the worker then retries the poll instead of applying the cancellation
-// unattested, so a transient GIG error never decides a refund.
+// 'owned' and 'not_owned' are GIG's definite answers: 'not_owned' needs a
+// record for the waybill that names a different account. 'unavailable'
+// means GIG gave no usable answer (timeout, HTTP or envelope failure, login
+// problem, or no record for the waybill). The worker then applies the
+// cancellation unattested, so the database refunds nothing until a later
+// poll attests it.
 export type GiglWaybillOwnership = 'owned' | 'not_owned' | 'unavailable';
 
 const preshipmentRecord = z
@@ -44,21 +46,23 @@ function toPreshipmentRecords(data: unknown): unknown[] | null {
 
 // Every record GIG returns for this exact waybill must name the account,
 // and at least one must: a missing, blank or foreign owner never attests.
-function isOwnedByAccount(
+// 'none' means GIG returned no record for the waybill at all, which is not
+// an answer about ownership.
+function classifyRecords(
   records: readonly unknown[],
   waybill: string,
   accountCode: string
-): boolean {
+): 'owned' | 'not_owned' | 'none' {
   let owned = 0;
   for (const entry of records) {
     const parsed = preshipmentRecord.safeParse(entry);
     if (!parsed.success || String(parsed.data.Waybill).trim() !== waybill) {
       continue;
     }
-    if (parsed.data.CustomerCode?.trim() !== accountCode) return false;
+    if (parsed.data.CustomerCode?.trim() !== accountCode) return 'not_owned';
     owned += 1;
   }
-  return owned > 0;
+  return owned > 0 ? 'owned' : 'none';
 }
 
 function isUsableEnvelope(envelope: PreshipmentEnvelope): boolean {
@@ -72,9 +76,9 @@ function isUsableEnvelope(envelope: PreshipmentEnvelope): boolean {
 
 /**
  * Resolves 'owned' only when GIG's preshipment record for `waybill` belongs
- * to the GIG account Baci is logged in as, 'not_owned' when GIG answers with
- * anything else, and 'unavailable' when GIG cannot answer (failure, timeout,
- * oversized or failure response). Logs carry codes and HTTP status only,
+ * to the GIG account Baci is logged in as, 'not_owned' when a record for it
+ * names another account, and 'unavailable' when GIG cannot answer (failure,
+ * timeout, oversized or failure response, or no record for the waybill). Logs carry codes and HTTP status only,
  * never the waybill or the provider record.
  */
 export async function attestGiglWaybillOwnership(
@@ -127,11 +131,16 @@ export async function attestGiglWaybillOwnership(
       return 'unavailable';
     }
     const records = toPreshipmentRecords(result.envelope?.data);
-    if (
-      records !== null &&
-      isOwnedByAccount(records, normalizedWaybill, accountCode)
-    ) {
-      return 'owned';
+    const verdict =
+      records === null
+        ? 'none'
+        : classifyRecords(records, normalizedWaybill, accountCode);
+    if (verdict === 'owned') return 'owned';
+    if (verdict === 'none') {
+      io.log('warn', 'GIGL preshipment ownership check failed', {
+        code: 'gigl_preshipment_no_record',
+      });
+      return 'unavailable';
     }
     io.log('warn', 'GIGL preshipment ownership not attested', {
       code: 'gigl_preshipment_not_account_owned',

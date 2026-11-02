@@ -98,7 +98,6 @@ describe('attestGiglWaybillOwnership', () => {
   });
 
   it.each([
-    ['no record for the waybill', [record('WB-OTHER', BACI_ACCOUNT)]],
     ['a missing owner', record('WB-PRIVATE-1', null)],
     ['a blank owner', record('WB-PRIVATE-1', '  ')],
     [
@@ -108,18 +107,30 @@ describe('attestGiglWaybillOwnership', () => {
         record('WB-PRIVATE-1', 'ECO-MERCHANT-9'),
       ],
     ],
-    ['an empty list', []],
-    ['a scalar payload', 'WB-PRIVATE-1'],
-    [
-      'more records than one booking can have',
-      Array.from({ length: 21 }, () => record('WB-PRIVATE-1', BACI_ACCOUNT)),
-    ],
   ])('refuses %s', async (_label, data) => {
     const { apiClient, io, log } = setupApi({ status: 200, data });
 
     await expect(
       attestGiglWaybillOwnership(apiClient, io, 'WB-PRIVATE-1')
     ).resolves.toBe('not_owned');
+    expectNoPrivateDataLogged(log);
+  });
+
+  it.each([
+    ['no record for the waybill', [record('WB-OTHER', BACI_ACCOUNT)]],
+    ['an empty list', []],
+    ['a missing record', null],
+    ['a scalar payload', 'WB-PRIVATE-1'],
+    [
+      'more records than one booking can have',
+      Array.from({ length: 21 }, () => record('WB-PRIVATE-1', BACI_ACCOUNT)),
+    ],
+  ])('bugfix: reports GIG as unavailable for %s instead of not_owned', async (_label, data) => {
+    const { apiClient, io, log } = setupApi({ status: 200, data });
+
+    await expect(
+      attestGiglWaybillOwnership(apiClient, io, 'WB-PRIVATE-1')
+    ).resolves.toBe('unavailable');
     expectNoPrivateDataLogged(log);
   });
 

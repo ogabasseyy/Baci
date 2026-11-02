@@ -9,10 +9,15 @@ import { oxygenAvailabilityQuerySchema } from '@/schemas/oxygen-requests';
 
 // GET /api/payments/oxygen/availability — authoritative display decision for
 // one proven order. Same pinned pipeline as the attempts route with its own
-// rate-limit bucket: limit, CSRF (auto-pass on safe methods, called for
-// uniformity), query validation, auth, order proof, then the shared S-03
+// rate-limit bucket: auth, limit, CSRF (auto-pass on safe methods, called for
+// uniformity), query validation, order proof, then the shared S-03
 // verdict as a 200. Echoes no order details.
 export async function GET(request: NextRequest) {
+  const auth = await authenticateApiRequest(request);
+  if (auth.error || !auth.user || !auth.supabase) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const allowed = await ensureActionRateLimit('oxygen-availability', {
     requests: 10,
     windowMs: 60_000,
@@ -43,11 +48,6 @@ export async function GET(request: NextRequest) {
       },
       { status: 400 }
     );
-  }
-
-  const auth = await authenticateApiRequest(request);
-  if (auth.error || !auth.user || !auth.supabase) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   let context: Awaited<ReturnType<typeof resolveOxygenOrderContext>>;

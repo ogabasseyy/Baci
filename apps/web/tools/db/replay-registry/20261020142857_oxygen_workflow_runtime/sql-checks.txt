@@ -15,3 +15,4 @@ supabase/tests/oxygen_payment_method_guard.sql
 supabase/tests/oxygen_recovery_reclaim.sql
 supabase/tests/oxygen_runtime_recovery_interlock.sql
 supabase/tests/oxygen_accept_cached_plan.sql
+supabase/tests/oxygen_runtime_read_reclamation.sql

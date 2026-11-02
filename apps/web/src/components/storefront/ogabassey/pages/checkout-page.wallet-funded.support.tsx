@@ -128,7 +128,9 @@ export function called(
 export async function placeOxygenOrder() {
   render(<CheckoutPage />);
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  const continueButton = screen.getByRole('button', { name: /continue to payment/i });
+  await waitFor(() => expect(continueButton).toBeEnabled());
+  fireEvent.click(continueButton);
   fireEvent.click(screen.getByRole('button', { name: 'Pay in Installments' }));
   fireEvent.click(await screen.findByRole('radio', { name: /Oxygen/ }));
   fireEvent.click(screen.getAllByRole('button', { name: /begin process/i }).find(button => !button.hasAttribute('disabled')) as HTMLButtonElement);

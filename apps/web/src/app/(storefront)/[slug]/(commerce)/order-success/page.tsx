@@ -5,7 +5,9 @@ import { OrderSuccessRequestMarker } from './order-success-request-marker';
 export default function OrderSuccessPage() {
   return (
     <>
-      <OrderSuccessContent />
+      <Suspense fallback={null}>
+        <OrderSuccessContent />
+      </Suspense>
       <Suspense fallback={null}>
         <OrderSuccessRequestMarker />
       </Suspense>

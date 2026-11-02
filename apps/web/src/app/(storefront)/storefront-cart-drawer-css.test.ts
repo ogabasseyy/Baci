@@ -34,6 +34,7 @@ it('keeps cart styles in the persistent storefront route layout', async () => {
   expect(result.css).toContain('--theme-radius-xl: calc(var(--radius) + 4px)');
   for (const selector of [
     '.bg-red-600',
+    '.bg-store-primary',
     '.rounded-xl',
     '.py-3\\.5',
     '.shadow-lg',

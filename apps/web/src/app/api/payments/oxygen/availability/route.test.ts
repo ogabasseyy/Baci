@@ -179,13 +179,27 @@ function mockProvenCustomer() {
 const csrfSpy = vi.spyOn(csrfModule, 'checkCsrfProtection');
 
 describe('GET /api/payments/oxygen/availability', () => {
+  it('rejects unauthenticated requests before rate limiting, CSRF or input parsing', async () => {
+    mocks.authenticateApiRequest.mockResolvedValueOnce({
+      error: 'unauthorized',
+      user: null,
+      supabase: null,
+    });
+    expect((await GET(buildGetRequest('?orderId=invalid', false))).status).toBe(
+      401
+    );
+    expect(mocks.ensureActionRateLimit).not.toHaveBeenCalled();
+    expect(csrfSpy).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.ensureActionRateLimit.mockResolvedValue(true);
     mocks.getMerchantForApiRequest.mockResolvedValue(null);
+    mockProvenCustomer();
   });
 
-  it('rate-limits FIRST with the oxygen-availability bucket', async () => {
+  it('rate-limits authenticated callers with the oxygen-availability bucket', async () => {
     mocks.ensureActionRateLimit.mockResolvedValueOnce(false);
     const supabase = mockProvenCustomer();
 
@@ -201,7 +215,7 @@ describe('GET /api/payments/oxygen/availability', () => {
       { requests: 10, windowMs: 60_000 }
     );
     expect(csrfSpy).not.toHaveBeenCalled();
-    expect(mocks.authenticateApiRequest).not.toHaveBeenCalled();
+    expect(mocks.authenticateApiRequest).toHaveBeenCalledOnce();
     expect(supabase.client.from).not.toHaveBeenCalled();
     expectNoWrites(supabase.writeSpies);
   });
@@ -248,7 +262,7 @@ describe('GET /api/payments/oxygen/availability', () => {
     ['missing orderId', ''],
     ['empty orderId', '?orderId='],
     ['non-uuid orderId', '?orderId=not-a-uuid'],
-  ])('returns 400 for %s before auth', async (_label, query) => {
+  ])('returns 400 for %s after auth', async (_label, query) => {
     const supabase = mockProvenCustomer();
 
     const response = await GET(buildGetRequest(query));
@@ -258,7 +272,7 @@ describe('GET /api/payments/oxygen/availability', () => {
     expect(body.error).toBe('Invalid request');
     expect(body.details.orderId).toBeDefined();
     expect(Object.keys(body).sort()).toEqual(['details', 'error']);
-    expect(mocks.authenticateApiRequest).not.toHaveBeenCalled();
+    expect(mocks.authenticateApiRequest).toHaveBeenCalledOnce();
     expect(supabase.client.from).not.toHaveBeenCalled();
     expectNoWrites(supabase.writeSpies);
   });

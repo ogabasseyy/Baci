@@ -7,15 +7,17 @@ import {
 it('allows only the expressly authorized reference and known trial states', () => {
   expect(
     oxygenActivationTrialBodySchema.safeParse({
-      reference: '438f96ee-37c4-49bb-a56c-51451f9cb624',
+      reference: 'b75cd437-28af-4008-a1af-7e6810282833',
     }).success
   ).toBe(true);
   expect(
-    oxygenActivationTrialBodySchema.safeParse({ reference: 'other' }).success
+    oxygenActivationTrialBodySchema.safeParse({
+      reference: '438f96ee-37c4-49bb-a56c-51451f9cb624',
+    }).success
   ).toBe(false);
   expect(
     oxygenActivationTrialBodySchema.safeParse({
-      reference: '438f96ee-37c4-49bb-a56c-51451f9cb624',
+      reference: 'b75cd437-28af-4008-a1af-7e6810282833',
       settle: true,
     }).success
   ).toBe(false);

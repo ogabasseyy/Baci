@@ -13,6 +13,7 @@ import {
   fixtureId,
 } from './__fixtures__/provider-journey';
 import { OxygenProviderFlow } from './OxygenProviderFlow';
+import { rememberPhoneOtpSend } from './phone-otp-window';
 
 beforeAll(() =>
   vi.stubGlobal(
@@ -51,7 +52,7 @@ async function open(fixture: ReturnType<typeof createProviderJourney>) {
   );
 }
 
-it('guides OTP to selfie and leaves NIN paused after selfie confirmation', async () => {
+it('guides OTP to selfie and runs the nonfinancial eligibility and NIN checks once', async () => {
   const fixture = createProviderJourney();
   await open(fixture);
   fireEvent.change(screen.getByLabelText('Verification code'), {
@@ -76,11 +77,21 @@ it('guides OTP to selfie and leaves NIN paused after selfie confirmation', async
   await act(async () => {
     await vi.advanceTimersByTimeAsync(20_000);
   });
+  await waitForUI(() => expect(fixture.actions).toContain('validate_nin'));
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(20_000);
+  });
   await waitForUI(() =>
-    expect(screen.getByText('Selfie verified')).toBeVisible()
+    expect(
+      screen.getByRole('form', { name: 'Choose payment plan' })
+    ).toBeVisible()
   );
-  expect(fixture.actions).not.toContain('validate_nin');
-  expect(fixture.actions).not.toContain('refresh_eligibility');
+  expect(
+    fixture.actions.filter((action) => action === 'validate_nin')
+  ).toHaveLength(1);
+  expect(
+    fixture.actions.filter((action) => action === 'refresh_eligibility')
+  ).toHaveLength(1);
   expect(screen.queryByRole('button', { name: /activate|settle/i })).toBeNull();
   expect(fixture.snapshot().activationEnabled).toBe(false);
   expect(fixture.snapshot().settlementEnabled).toBe(false);
@@ -187,6 +198,7 @@ it('bounds pending eligibility checks and saves the application for a later retu
 
 it('explains a rate limit without claiming the OTP failed or resending it', async () => {
   const fixture = createProviderJourney();
+  rememberPhoneOtpSend(fixtureId, Date.now() - 301_000);
   await open(fixture);
   fixture.rateLimitNext();
   fireEvent.click(screen.getByRole('button', { name: 'Resend code' }));

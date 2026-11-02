@@ -78,7 +78,7 @@ async function setup() {
   return { ...view, approve, ref };
 }
 
-it('saves the accepted drawing on Continue, blocks duplicate saves and approves only after OTP', async () => {
+it('saves the drawing on acceptance, blocks duplicate saves and approves only after OTP', async () => {
   let finish: BlobCallback = () => {};
   const exportImage = vi
     .spyOn(HTMLCanvasElement.prototype, 'toBlob')
@@ -91,8 +91,7 @@ it('saves the accepted drawing on Continue, blocks duplicate saves and approves 
   expect(screen.queryByRole('textbox')).toBeNull();
   const accept = screen.getByRole('checkbox');
   fireEvent.click(accept);
-  expect(exportImage).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: /^Continue$/ }));
+  expect(exportImage).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole('button', { name: 'Saving signature…' }));
   expect(exportImage).toHaveBeenCalledTimes(1);
   expect(approve).not.toHaveBeenCalled();
@@ -101,6 +100,10 @@ it('saves the accepted drawing on Continue, blocks duplicate saves and approves 
   ).toBeDisabled();
   await act(async () => finish(new Blob(['drawing'], { type: 'image/png' })));
   expect(approve).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: /^Continue$/ })).toBeEnabled()
+  );
+  fireEvent.click(screen.getByRole('button', { name: /^Continue$/ }));
   await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
   fireEvent.change(screen.getByRole('textbox'), {
     target: { value: '123456' },
@@ -119,8 +122,7 @@ it('does not approve when signature export fails and lets the customer correct t
   );
   const { approve } = await setup();
   fireEvent.click(screen.getByRole('checkbox'));
-  fireEvent.click(screen.getByRole('button', { name: /^Continue$/ }));
-  await screen.findByText('Add your signature before continuing.');
+  await screen.findByText('Add your signature before accepting this plan.');
   expect(approve).not.toHaveBeenCalled();
   expect(screen.queryByRole('textbox')).toBeNull();
 });
@@ -133,7 +135,6 @@ it('discards an asynchronous signature save after leaving the approval screen', 
   );
   const { approve, unmount } = await setup();
   fireEvent.click(screen.getByRole('checkbox'));
-  fireEvent.click(screen.getByRole('button', { name: /^Continue$/ }));
   unmount();
   await act(async () => finish(new Blob(['drawing'], { type: 'image/png' })));
   expect(approve).not.toHaveBeenCalled();

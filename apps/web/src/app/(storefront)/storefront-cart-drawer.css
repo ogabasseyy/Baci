@@ -6,5 +6,6 @@
 @config "../../../tailwind.storefront.scoped.config.mjs";
 
 @source "../../components/storefront/ogabassey/components/CartSidebar.tsx";
+@source "../../components/storefront/ogabassey/components/cart-sidebar-*.tsx";
 @source "../../components/storefront/ogabassey/components/empty-state.tsx";
 @source "../../components/storefront/ogabassey/components/NegotiationModal.tsx";

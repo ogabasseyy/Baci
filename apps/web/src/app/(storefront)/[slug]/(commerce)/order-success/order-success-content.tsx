@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, CheckCircle, Loader2, Star } from 'lucide-react';
+import { Loader2, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -15,6 +15,7 @@ import {
   type StorefrontOrderData as OrderData,
 } from './fetch-storefront-order';
 import { OrderSuccessInvoiceCta } from './order-success-invoice-cta';
+import { OrderSuccessNavigationLink } from './order-success-navigation-link';
 import { OrderSuccessOrderSummary } from './order-success-order-summary';
 import { buildPayerHandoff } from './order-success-payer-handoff';
 import { OrderSuccessPayerHandoff } from './order-success-payer-handoff-view';
@@ -23,6 +24,7 @@ import {
   buildOrderSuccessCopy,
   resolveInvoicePresentation,
 } from './order-success-presentation';
+import { OrderSuccessStatusIcon } from './order-success-status-icon';
 import { useBnplSettlement } from './use-bnpl-settlement';
 import { useInvoiceGeneratedCapture } from './use-invoice-generated-capture';
 import { usePayformeHandoffRefresh } from './use-payforme-handoff-refresh';
@@ -184,27 +186,10 @@ export function OrderSuccessContent() {
 
       <div className="max-w-xl mx-auto px-4">
         <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-8 text-center">
-          <div
-            className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${
-              hasValidatedOrder
-                ? 'bg-green-100'
-                : hasRecoveryState
-                  ? 'bg-amber-100'
-                  : 'bg-gray-100'
-            }`}
-          >
-            {hasValidatedOrder ? (
-              <CheckCircle className="size-10 text-green-600" />
-            ) : (
-              <Loader2
-                className={`size-10 ${
-                  hasRecoveryState
-                    ? 'text-amber-600'
-                    : 'animate-spin text-gray-500'
-                }`}
-              />
-            )}
-          </div>
+          <OrderSuccessStatusIcon
+            hasValidatedOrder={hasValidatedOrder}
+            hasRecoveryState={hasRecoveryState}
+          />
 
           <h1 className="text-3xl font-bold text-gray-900 mb-2">{heading}</h1>
           <p className="text-gray-500 mb-8">{description}</p>
@@ -236,13 +221,9 @@ export function OrderSuccessContent() {
 
           <div className="flex flex-col gap-3">
             {hasRecoveryState && (
-              <Link
-                href={asRoute(getHref('/checkout'))}
-                className="inline-flex items-center justify-center gap-2 px-6 py-4 bg-black text-white font-bold rounded-xl hover:bg-gray-800 transition-colors w-full"
-              >
+              <OrderSuccessNavigationLink href={getHref('/checkout')} primary>
                 Return to Checkout
-                <ArrowRight size={18} />
-              </Link>
+              </OrderSuccessNavigationLink>
             )}
 
             {/* Cancelled orders are terminal and non-payable: no invoice
@@ -260,17 +241,12 @@ export function OrderSuccessContent() {
                 />
               )}
 
-            <Link
-              href={asRoute(getHref('/'))}
-              className={`inline-flex items-center justify-center gap-2 px-6 py-4 font-bold rounded-xl transition-colors w-full ${
-                hasRecoveryState
-                  ? 'bg-white text-gray-900 border border-gray-200 hover:bg-gray-50'
-                  : 'bg-black text-white hover:bg-gray-800'
-              }`}
+            <OrderSuccessNavigationLink
+              href={getHref('/')}
+              primary={!hasRecoveryState}
             >
               Continue Shopping
-              <ArrowRight size={18} />
-            </Link>
+            </OrderSuccessNavigationLink>
 
             {hasValidatedOrder && customerSession.isAuthenticated ? (
               <Link

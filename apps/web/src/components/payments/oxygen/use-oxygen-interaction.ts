@@ -13,8 +13,6 @@ import {
   generateOxygenNonce,
   getOxygenInteractionActions,
   idleInteractionSnapshot,
-  mapOxygenLookupNetworkFailure,
-  mapOxygenLookupResult,
   mapOxygenSubmitNetworkFailure,
   mapOxygenSubmitResult,
   type OxygenFailedRecovery,
@@ -25,14 +23,11 @@ import {
   type OxygenInteractionSnapshot,
   type OxygenInteractionState,
   type OxygenInteractionSubmit,
-  type OxygenLookupResult,
   type OxygenMarkerStorage,
   type OxygenSubmitResult,
-  oxygenHandoffMarkerKey,
-  readOxygenHandoffMarker,
-  snapshotForRevalidate,
   writeOxygenHandoffMarker,
 } from '@/lib/payments/oxygen/interaction';
+import { startOxygenInteractionLookup } from './oxygen-interaction-lookup';
 
 export interface UseOxygenInteractionOptions {
   orderId: string | null;
@@ -60,7 +55,6 @@ export interface UseOxygenInteractionValue {
 const MALFORMED_REQUEST_MESSAGE =
   '[oxygen] interaction request rejected as malformed (400); verify the orderId prop';
 // Fixed strings only: rejection reasons never surface, and must carry no ids.
-const SYNC_LOOKUP_MESSAGE = '[oxygen] interaction lookup threw synchronously';
 const SYNC_SUBMIT_MESSAGE = '[oxygen] interaction submit threw synchronously';
 
 // Hosts own sign-in navigation. This no-op has no reactive inputs.
@@ -125,75 +119,14 @@ export function useOxygenInteraction({
   const snapshotRef = useRef(snapshot);
   snapshotRef.current = snapshot;
 
-  const startLookup = () => {
-    const live = liveRef.current;
-    const currentOrderId = live.orderId;
-    if (live.sessionStatus === 'loading') return;
-    if (currentOrderId === null) {
-      generationRef.current += 1;
-      submitInflightRef.current = false;
-      setSnapshot(idleInteractionSnapshot());
-      return;
-    }
-    // Probe before validating: the core read discards invalid markers, so
-    // presence must be observed first to tell "none" (check) from "invalid"
-    // (idle + discard, zero fetch).
-    let rawPresent = false;
-    if (live.storage !== null && currentOrderId !== '') {
-      try {
-        rawPresent =
-          live.storage.getItem(oxygenHandoffMarkerKey(currentOrderId)) !== null;
-      } catch {
-        rawPresent = false;
-      }
-    }
-    const marker = readOxygenHandoffMarker(
-      live.storage,
-      currentOrderId,
-      live.now()
-    );
-    const generation = generationRef.current + 1;
-    generationRef.current = generation;
-    submitInflightRef.current = false;
-    if (rawPresent && marker === null) {
-      setSnapshot(idleInteractionSnapshot());
-      return;
-    }
-    setSnapshot(snapshotForRevalidate(marker !== null));
-    let pending: Promise<OxygenLookupResult>;
-    try {
-      pending = live.lookup(currentOrderId);
-    } catch {
-      // A synchronously throwing host lookup normalizes into the rejection
-      // path, so the existing handler fails closed instead of wedging.
-      pending = Promise.reject(new Error(SYNC_LOOKUP_MESSAGE));
-    }
-    void pending.then(
-      (result) => {
-        if (generation !== generationRef.current) return;
-        const current = snapshotRef.current;
-        if (current.state !== 'checking' && current.state !== 'resuming') {
-          return;
-        }
-        const transition = mapOxygenLookupResult(result, current.state);
-        if (transition.clearOrderMarker) {
-          clearOxygenHandoffMarker(live.storage, currentOrderId);
-        }
-        if (transition.logHostError) {
-          console.error(MALFORMED_REQUEST_MESSAGE);
-        }
-        setSnapshot(transition.snapshot);
-      },
-      () => {
-        if (generation !== generationRef.current) return;
-        const current = snapshotRef.current;
-        if (current.state !== 'checking' && current.state !== 'resuming') {
-          return;
-        }
-        setSnapshot(mapOxygenLookupNetworkFailure(current.state).snapshot);
-      }
-    );
-  };
+  const startLookup = () =>
+    startOxygenInteractionLookup({
+      liveRef,
+      generationRef,
+      submitInflightRef,
+      snapshotRef,
+      setSnapshot,
+    });
 
   const onSubmit = () => {
     const live = liveRef.current;

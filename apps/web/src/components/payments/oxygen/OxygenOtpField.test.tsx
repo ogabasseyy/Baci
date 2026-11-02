@@ -13,7 +13,7 @@ beforeAll(() =>
   )
 );
 afterAll(() => vi.unstubAllGlobals());
-it('removes displayed digits immediately during checking and keeps them hidden through success', () => {
+it('keeps digits visible while checking and hides them after confirmation', () => {
   const props = {
     value: '123456',
     onChange: vi.fn(),
@@ -25,7 +25,8 @@ it('removes displayed digits immediately during checking and keeps them hidden t
   const view = render(<OxygenOtpField {...props} />);
   expect(screen.getByText('1')).toBeVisible();
   view.rerender(<OxygenOtpField {...props} pending />);
-  for (const digit of '123456') expect(screen.queryByText(digit)).toBeNull();
+  for (const digit of '123456') expect(screen.getByText(digit)).toBeVisible();
+  expect(screen.getByRole('textbox')).toBeDisabled();
   view.rerender(<OxygenOtpField {...props} verified />);
   for (const digit of '123456') expect(screen.queryByText(digit)).toBeNull();
   expect(screen.getByText('Code verified.')).toBeVisible();

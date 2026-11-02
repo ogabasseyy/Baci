@@ -1,4 +1,3 @@
-import { classifyOxygenEligibility } from '../../src/lib/payments/oxygen/eligibility';
 import { oxygenLoginResponseSchema } from '../../src/schemas/oxygen-login';
 import {
   oxygenProbeCheckpointSchema,
@@ -8,40 +7,13 @@ import {
   oxygenProbeResumeSchema,
 } from '../../src/schemas/oxygen-probe';
 import type { ProbeCheckpoint } from './checkpoint';
-import {
-  parseBanks,
-  record,
-  safeProviderDiagnostic,
-  shape,
-} from './diagnostics';
-import {
-  type EligibilityReport,
-  readEligibilityReport,
-} from './eligibility-report';
-import { classifyProbeRecovery, type ProbeRecovery } from './recovery';
-export interface ProbeConfig {
-  baseUrl: string;
-  environment: 'dev' | 'staging' | 'production';
-  resumeRejectedCreate?: boolean;
-  resumeState?: unknown;
-  checkpoint?: unknown;
-  persistCheckpoint?: (state: ProbeCheckpoint) => Promise<void>;
-  reference: string;
-  secret: string;
-}
-export interface ProbeResult {
-  code: string;
-  diagnostic?: string;
-  kyc?: ProbeRecovery['kyc'];
-  accountName?: string;
-  banks?: { name: string; code: string }[];
-  customerPath?: 'existing' | 'new' | 'unknown';
-  shape?: unknown;
-  decision?: unknown;
-  eligibilityReport?: EligibilityReport;
-  status?: number;
-  url?: string;
-}
+import { record, safeProviderDiagnostic, shape } from './diagnostics';
+import { classifyProbeRecovery } from './recovery';
+import type { ProbeConfig, ProbeResult } from './session-types';
+
+export type { ProbeConfig, ProbeResult } from './session-types';
+
+import { applyProbeReadResults } from './session-read-results';
 export class OxygenProbe {
   private token = '';
   private expiresAt = 0;
@@ -270,26 +242,6 @@ export class OxygenProbe {
           result.code = 'authenticated';
         }
       }
-      if (action === 'banks' && response.ok) {
-        const banks = parseBanks(data);
-        if (!banks)
-          return { code: 'invalid_bank_response', status: response.status };
-        result.banks = banks;
-        result.code = 'banks_loaded';
-      }
-      if (action === 'name-enquiry' && response.ok) {
-        const fields = record(data);
-        if (
-          fields.success === true &&
-          fields.errorCode === 0 &&
-          typeof fields.accountName === 'string' &&
-          fields.accountName.trim().length > 0 &&
-          fields.accountName.length <= 150
-        ) {
-          result.accountName = fields.accountName;
-          result.code = 'account_name_resolved';
-        } else result.code = 'account_name_unresolved';
-      }
       if (action === 'create' && response.ok) {
         const fields = record(data);
         if (
@@ -315,38 +267,15 @@ export class OxygenProbe {
           record(data).message === 'OTP retriggered for validation'
             ? 'otp_resend_accepted'
             : 'unknown_resend_response';
-      if (action === 'eligibility') {
-        result.decision =
-          response.status === 200 || response.status === 400
-            ? classifyOxygenEligibility(data)
-            : { kind: 'unknown' };
-        result.eligibilityReport = readEligibilityReport(
-          data,
-          response.status,
-          this.reference,
-          this.config.reference
-        );
-        if (result.eligibilityReport)
-          result.code = 'eligibility_report_received';
-      }
-      if (action === 'selfie' && response.ok) {
-        const url = record(data).url;
-        if (typeof url === 'string') {
-          try {
-            const target = new URL(url);
-            if (
-              target.protocol === 'https:' &&
-              !target.username &&
-              !target.password
-            ) {
-              result.url = target.href;
-              result.code = 'selfie_link_ready';
-            }
-          } catch {
-            /* No untrusted URL is opened. */
-          }
-        }
-      }
+      const readFailure = applyProbeReadResults(
+        action,
+        response,
+        data,
+        this.reference,
+        this.config.reference,
+        result
+      );
+      if (readFailure) return readFailure;
       Object.assign(result, classifyProbeRecovery(action, response.ok, data));
       if (action === 'create') await this.persist();
       return result;

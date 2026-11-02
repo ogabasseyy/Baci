@@ -80,3 +80,51 @@ describe('isStorefrontRequiredApiSourcePath', () => {
     ).toBe(false);
   });
 });
+
+it('keeps every Oxygen endpoint on the dynamic origin without admitting unknown siblings', async () => {
+  const { createStorefrontEdgeApiRows } = await import(
+    './create-storefront-edge-api-rows'
+  );
+  const endpoints = [
+    'activation-trial',
+    'approval-code',
+    'attempts',
+    'availability',
+    'bank-details',
+    'chat',
+    'draft',
+    'order-plan',
+    'phone-handoff/redeem',
+    'plans',
+    'plans/accept',
+    'plans/quote',
+    'reconcile',
+    'recovery',
+    'residential-context',
+    'session',
+    'webhook',
+    'workflows',
+    'workflows/actions',
+    'workflows/phone-handoff',
+    'workflows/selfie-status',
+  ];
+  const paths = endpoints.map(
+    (endpoint) => `apps/web/src/app/api/payments/oxygen/${endpoint}/route.ts`
+  );
+  for (const sourcePath of paths)
+    expect(isStorefrontRequiredApiSourcePath(sourcePath)).toBe(true);
+  const rows = createStorefrontEdgeApiRows(
+    'apps/web/src/app/api',
+    paths.map((sourcePath) => ({
+      sourcePath,
+      bytes: Buffer.from('export async function POST() {}'),
+    }))
+  );
+  expect(rows).toHaveLength(endpoints.length);
+  for (const row of rows) expect(row.decision).toBe('origin_dynamic');
+  expect(
+    isStorefrontRequiredApiSourcePath(
+      'apps/web/src/app/api/payments/oxygen/unreviewed/route.ts'
+    )
+  ).toBe(false);
+});

@@ -188,7 +188,7 @@ describe('CartSidebar', () => {
 
   it('shows cart totals without the shipping placeholder', () => {
     render(<CartSidebar />);
-    expect(screen.getByText('Subtotal')).toBeInTheDocument();
+    expect(screen.queryByText('Subtotal')).not.toBeInTheDocument();
     expect(screen.getByText('Total', { exact: true })).toBeInTheDocument();
     expect(screen.queryByText('Shipping', { exact: true })).not.toBeInTheDocument();
     expect(screen.queryByText('Calculated at checkout')).not.toBeInTheDocument();

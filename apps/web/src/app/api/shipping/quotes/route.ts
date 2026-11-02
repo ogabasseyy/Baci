@@ -7,13 +7,9 @@ import {
   type QuoteRequest,
 } from '@/lib/shipping/types';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createPublicClient } from '@/lib/supabase/public';
 import { QuoteRequestSchema } from '@/schemas/shipping';
 import { postAdminOrderGiglQuote } from './admin-order-gigl-quote';
-import {
-  getMerchantRateQuotes,
-  type MerchantRateQuoteResult,
-} from './merchant-rate-quotes';
+import { loadPublicMerchantRates } from './load-public-merchant-rates';
 import { toPublicQuoteResponse } from './public-quote-response';
 import { resolveQuoteMerchantContext } from './quote-merchant-context';
 import {
@@ -92,18 +88,15 @@ export async function POST(request: NextRequest) {
       merchantContext.merchantPayoutCurrency != null;
 
     const includeMerchantRateQuotes = data.supports_merchant_rates === true;
-    const merchantQuotesPromise = merchantContext.merchantId
-      ? getMerchantRateQuotes(
-          createPublicClient({ clientInfo: 'baci-public-shipping-rates' }),
-          {
-            merchantId: merchantContext.merchantId,
-            receiverCountryCode: data.receiver.countryCode,
-            receiverState: data.receiver.state,
-            merchantCurrency,
-            cartSubtotal: data.cart_subtotal,
-          }
-        )
-      : Promise.resolve<MerchantRateQuoteResult>({ quotes: [] });
+    const merchantQuotesPromise = loadPublicMerchantRates(
+      merchantContext.merchantId,
+      {
+        receiverCountryCode: data.receiver.countryCode,
+        receiverState: data.receiver.state,
+        merchantCurrency,
+        cartSubtotal: data.cart_subtotal,
+      }
+    );
 
     if (data.merchant_rates_only) {
       const result = await merchantQuotesPromise;

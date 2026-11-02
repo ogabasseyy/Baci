@@ -43,7 +43,13 @@ async function waitForUI(assertion: () => void) {
 }
 
 async function open(fixture: ReturnType<typeof createProviderJourney>) {
-  api.fetch.mockImplementation(fixture.fetch);
+  api.fetch.mockImplementation((url: string, init?: RequestInit) => {
+    if (url === '/api/payments/oxygen/plans/accept')
+      return Promise.resolve(Response.json({ accepted: true }));
+    if (url.includes('/residential-context?'))
+      return Promise.resolve(Response.json({ address: {} }));
+    return fixture.fetch(url, init);
+  });
   vi.useFakeTimers();
   render(<OxygenProviderFlow orderId={fixtureId} />);
   await waitForUI(() =>
@@ -74,6 +80,12 @@ it('books the chosen plan, loads its schedule, and resumes after address review 
   );
   fireEvent.click(screen.getByRole('button', { name: '35%' }));
   fireEvent.submit(screen.getByRole('form', { name: 'Choose payment plan' }));
+  await waitForUI(() =>
+    expect(
+      screen.getByRole('button', { name: 'Accept payment plan' })
+    ).toBeEnabled()
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Accept payment plan' }));
   await waitForUI(() =>
     expect(screen.getByRole('form', { name: 'Verify address' })).toBeVisible()
   );
@@ -106,23 +118,12 @@ it('books the chosen plan, loads its schedule, and resumes after address review 
   });
   expect(fixture.actions).toContain('submit_address');
   await waitForUI(() =>
-    expect(screen.getByText('Checking your home address')).toBeVisible()
+    expect(screen.getByText('Oxygen is reviewing your address')).toBeVisible()
   );
   expect(screen.queryByLabelText('Proof of address')).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'Upload another proof' }));
-  await waitForUI(() =>
-    expect(screen.getByRole('form', { name: 'Verify address' })).toBeVisible()
-  );
-  expect(screen.getByLabelText('Proof of address')).toHaveValue('');
   expect(
-    fixture.actions.filter((action) => action === 'submit_address')
-  ).toHaveLength(1);
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Wait for manual review' })
-  );
-  await waitForUI(() =>
-    expect(screen.getByText('Checking your home address')).toBeVisible()
-  );
+    screen.queryByRole('button', { name: 'Upload another proof' })
+  ).toBeNull();
   expect(
     fixture.actions.filter((action) => action === 'submit_address')
   ).toHaveLength(1);
@@ -131,9 +132,11 @@ it('books the chosen plan, loads its schedule, and resumes after address review 
     await vi.advanceTimersByTimeAsync(20_000);
   });
   await waitForUI(() =>
-    expect(screen.queryByText('Checking your home address')).toBeNull()
+    expect(screen.queryByText('Oxygen is reviewing your address')).toBeNull()
   );
-  expect(screen.getByRole('region', { name: 'Loan breakdown' })).toBeVisible();
+  expect(
+    screen.getByRole('heading', { name: 'Sign and accept your payment plan' })
+  ).toBeVisible();
   // Approval requests now belong to the exact-reference saved-plan control.
   expect(
     screen.queryByRole('button', { name: 'Send approval OTP' })

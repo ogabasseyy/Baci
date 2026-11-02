@@ -170,13 +170,25 @@ function mockProvenCustomer() {
 const csrfSpy = vi.spyOn(csrfModule, 'checkCsrfProtection');
 
 describe('POST /api/payments/oxygen/attempts', () => {
+  it('rejects unauthenticated requests before rate limiting, CSRF or input parsing', async () => {
+    mocks.authenticateApiRequest.mockResolvedValueOnce({
+      error: 'unauthorized',
+      user: null,
+      supabase: null,
+    });
+    expect((await POST(buildPostRequest('{oops', false))).status).toBe(401);
+    expect(mocks.ensureActionRateLimit).not.toHaveBeenCalled();
+    expect(csrfSpy).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.ensureActionRateLimit.mockResolvedValue(true);
     mocks.getMerchantForApiRequest.mockResolvedValue(null);
+    mockProvenCustomer();
   });
 
-  it('rate-limits FIRST with the oxygen-initiation bucket', async () => {
+  it('rate-limits authenticated callers with the oxygen-initiation bucket', async () => {
     mocks.ensureActionRateLimit.mockResolvedValueOnce(false);
     const supabase = mockProvenCustomer();
 
@@ -191,7 +203,7 @@ describe('POST /api/payments/oxygen/attempts', () => {
       'oxygen-initiation',
       { requests: 10, windowMs: 60_000 }
     );
-    expect(mocks.authenticateApiRequest).not.toHaveBeenCalled();
+    expect(mocks.authenticateApiRequest).toHaveBeenCalledOnce();
     expect(csrfSpy).not.toHaveBeenCalled();
     expect(supabase.client.from).not.toHaveBeenCalled();
     expectNoWrites(supabase.writeSpies);
@@ -211,7 +223,7 @@ describe('POST /api/payments/oxygen/attempts', () => {
     }
   });
 
-  it('rejects a cookie POST without a CSRF token before auth', async () => {
+  it('rejects a cookie POST without a CSRF token after auth', async () => {
     const supabase = mockProvenCustomer();
 
     const response = await POST(buildPostRequest({ orderId: ORDER_ID }, false));
@@ -223,7 +235,7 @@ describe('POST /api/payments/oxygen/attempts', () => {
       message:
         'CSRF token validation failed. Please refresh the page and try again.',
     });
-    expect(mocks.authenticateApiRequest).not.toHaveBeenCalled();
+    expect(mocks.authenticateApiRequest).toHaveBeenCalledOnce();
     expect(supabase.client.from).not.toHaveBeenCalled();
     expectNoWrites(supabase.writeSpies);
   });
@@ -250,7 +262,7 @@ describe('POST /api/payments/oxygen/attempts', () => {
     expect(response.status).toBe(403);
   });
 
-  it('returns 400 for an invalid JSON body before auth', async () => {
+  it('returns 400 for an invalid JSON body after auth', async () => {
     const supabase = mockProvenCustomer();
 
     const response = await POST(buildPostRequest('{oops'));
@@ -258,7 +270,7 @@ describe('POST /api/payments/oxygen/attempts', () => {
 
     expect(response.status).toBe(400);
     expect(body).toEqual({ error: 'Invalid JSON body' });
-    expect(mocks.authenticateApiRequest).not.toHaveBeenCalled();
+    expect(mocks.authenticateApiRequest).toHaveBeenCalledOnce();
     expect(supabase.client.from).not.toHaveBeenCalled();
     expectNoWrites(supabase.writeSpies);
   });
@@ -266,7 +278,7 @@ describe('POST /api/payments/oxygen/attempts', () => {
   it.each([
     ['missing orderId', {}],
     ['non-uuid orderId', { orderId: 'not-a-uuid' }],
-  ])('returns 400 for %s before auth', async (_label, body) => {
+  ])('returns 400 for %s after auth', async (_label, body) => {
     const supabase = mockProvenCustomer();
 
     const response = await POST(buildPostRequest(body));
@@ -276,7 +288,7 @@ describe('POST /api/payments/oxygen/attempts', () => {
     expect(parsed.error).toBe('Invalid request');
     expect(parsed.details.orderId).toBeDefined();
     expect(Object.keys(parsed).sort()).toEqual(['details', 'error']);
-    expect(mocks.authenticateApiRequest).not.toHaveBeenCalled();
+    expect(mocks.authenticateApiRequest).toHaveBeenCalledOnce();
     expect(supabase.client.from).not.toHaveBeenCalled();
     expectNoWrites(supabase.writeSpies);
   });

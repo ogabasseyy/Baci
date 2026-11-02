@@ -28,6 +28,7 @@ export function OxygenApplicationDialog({
   productAmount,
   products,
   currency,
+  selfieOrigins = [],
 }: {
   orderId: string;
   merchantSlug?: string;
@@ -35,6 +36,7 @@ export function OxygenApplicationDialog({
   products?: OxygenCheckoutProduct[];
   currency?: string;
   prefill?: OxygenCustomerPrefill;
+  selfieOrigins?: readonly string[];
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const stage = useRef<OxygenJourneyStage>('loading');
@@ -133,7 +135,7 @@ export function OxygenApplicationDialog({
         </header>
         <OxygenSelfieSurfaceContext.Provider
           value={(url, workflowId) => {
-            if (isOxygenSelfieUrl(url)) {
+            if (isOxygenSelfieUrl(url, selfieOrigins)) {
               setSelfieWorkflowId(workflowId);
               setSelfieUrl(url);
             }
@@ -166,6 +168,7 @@ export function OxygenApplicationDialog({
           <OxygenHostedSelfie
             key={selfieUrl}
             url={selfieUrl}
+            selfieOrigins={selfieOrigins}
             workflowId={selfieWorkflowId}
             onConfirmed={() => {
               if (selfieWorkflowId) {

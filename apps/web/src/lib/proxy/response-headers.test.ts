@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { applySecurityHeaders } from './response-headers';
 
 describe('proxy response headers', () => {
@@ -161,34 +161,38 @@ describe('proxy response headers', () => {
   });
 });
 
-it('only delegates the Oxygen staging camera on local checkout, never microphone or production', () => {
+it('delegates only explicitly configured staging selfie camera origins on checkout', () => {
   const host = 'https://staging.d1l1k5yxed9cvn.amplifyapp.com';
-  const local = applySecurityHeaders(
-    NextResponse.next(),
-    '/savings-synthetic/checkout',
-    'Mozilla',
-    'storefront',
-    true
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  vi.stubEnv(
+    'OXYGEN_STAGING_HOSTED_HOSTS',
+    'staging.d1l1k5yxed9cvn.amplifyapp.com'
   );
-  const live = applySecurityHeaders(
-    NextResponse.next(),
-    '/checkout',
-    'Mozilla',
-    'storefront',
-    false
+  vi.stubEnv(
+    'OXYGEN_STAGING_SELFIE_HOSTS',
+    'staging.d1l1k5yxed9cvn.amplifyapp.com'
   );
-  const product = applySecurityHeaders(
-    NextResponse.next(),
-    '/products/phone',
-    'Mozilla',
-    'storefront',
-    true
-  );
-  expect(local.headers.get('Content-Security-Policy')).toContain(host);
-  expect(live.headers.get('Content-Security-Policy')).not.toContain(host);
-  const policy = local.headers.get('Permissions-Policy') ?? '';
-  expect(policy.split(', microphone=')[0]).toContain(host);
-  expect(policy.split(', microphone=')[1]).not.toContain(host);
-  expect(live.headers.get('Permissions-Policy')).not.toContain(host);
-  expect(product.headers.get('Permissions-Policy')).toContain('camera=()');
+  try {
+    const checkout = applySecurityHeaders(
+      NextResponse.next(),
+      '/checkout',
+      'Mozilla',
+      'storefront',
+      false
+    );
+    const product = applySecurityHeaders(
+      NextResponse.next(),
+      '/products/phone',
+      'Mozilla',
+      'storefront',
+      false
+    );
+    expect(checkout.headers.get('Content-Security-Policy')).toContain(host);
+    const policy = checkout.headers.get('Permissions-Policy') ?? '';
+    expect(policy.split(', microphone=')[0]).toContain(host);
+    expect(policy.split(', microphone=')[1]).not.toContain(host);
+    expect(product.headers.get('Permissions-Policy')).toContain('camera=()');
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });

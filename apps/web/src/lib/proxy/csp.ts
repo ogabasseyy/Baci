@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
 import { buildProxyRequestHeaders } from './request-headers';
 
 export function generateCSP(
@@ -6,6 +7,8 @@ export function generateCSP(
   isLocal: boolean,
   nonce?: string
 ): string {
+  const hostedOrigins =
+    routeType === 'storefront' ? readOxygenHostedOrigins().hosted : [];
   const storefrontUnsafeEval = isLocal ? " 'unsafe-eval'" : '';
   const strictScriptSource = nonce
     ? `'self' 'nonce-${nonce}'`
@@ -48,7 +51,7 @@ export function generateCSP(
             'script-src': `'self' 'unsafe-inline'${storefrontUnsafeEval} ${socialScripts} https://bzrcdn.openai.com https://vercel.live https://va.vercel-scripts.com https://static.cloudflareinsights.com https://*.myhuaweicloud.com https://js.useklump.com https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.credpal.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://securepubads.g.doubleclick.net https://www.googletagservices.com https://pagead2.googlesyndication.com https://www.google.com https://www.gstatic.com https://googleads.g.doubleclick.net https://td.doubleclick.net https://ad.doubleclick.net https://pubads.g.doubleclick.net https://tpc.googlesyndication.com https://cdn.ampproject.org https://*.adtrafficquality.google https://cm.g.doubleclick.net`,
             'style-src': "'self' 'unsafe-inline' https://fonts.googleapis.com",
             'connect-src': `'self' ${socialCollectors} https://*.supabase.co https://vitals.vercel-insights.com https://cloudflareinsights.com https://bzr.openai.com https://bzrcdn.openai.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.credpal.com https://api.credpal.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://securepubads.g.doubleclick.net https://pagead2.googlesyndication.com https://*.adtrafficquality.google https://www.google.com https://googleads.g.doubleclick.net https://pubads.g.doubleclick.net https://cdn.ampproject.org https://cm.g.doubleclick.net`,
-            'frame-src': `'self'${isLocal ? ' https://staging.d1l1k5yxed9cvn.amplifyapp.com' : ''} https://payment.hydrogenpay.com https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.credpal.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://googleads.g.doubleclick.net https://*.safeframe.googlesyndication.com https://tpc.googlesyndication.com https://td.doubleclick.net https://www.google.com https://cdn.ampproject.org https://*.adtrafficquality.google https://ep2.adtrafficquality.google https://cm.g.doubleclick.net https://securepubads.g.doubleclick.net`,
+            'frame-src': `'self'${hostedOrigins.map((origin) => ` ${origin}`).join('')} https://payment.hydrogenpay.com https://asset.useklump.com https://checkout.useklump.com https://checkout-v2.useklump.com https://directdebit.useklump.com https://checkout.credpal.com https://checkout.creditdirect.ng https://app.creditdirect.ng https://cdl.test.lendastack.io https://googleads.g.doubleclick.net https://*.safeframe.googlesyndication.com https://tpc.googlesyndication.com https://td.doubleclick.net https://www.google.com https://cdn.ampproject.org https://*.adtrafficquality.google https://ep2.adtrafficquality.google https://cm.g.doubleclick.net https://securepubads.g.doubleclick.net`,
           }
         : {
             'default-src': "'self'",

@@ -5,12 +5,18 @@ import { OxygenPhoneHandoff } from './OxygenPhoneHandoff';
 import { OxygenSelfieLoading } from './OxygenSelfieLoading';
 import { useOxygenSelfieStatus } from './use-oxygen-selfie-status';
 
-const selfieOrigin = 'https://staging.d1l1k5yxed9cvn.amplifyapp.com';
-export function isOxygenSelfieUrl(url: string): boolean {
+export function isOxygenSelfieUrl(
+  url: string,
+  origins: readonly string[] = []
+): boolean {
   try {
     const parsed = new URL(url);
     return (
-      parsed.origin === selfieOrigin && !parsed.username && !parsed.password
+      parsed.protocol === 'https:' &&
+      !parsed.port &&
+      origins.includes(parsed.origin) &&
+      !parsed.username &&
+      !parsed.password
     );
   } catch {
     return false;
@@ -18,6 +24,7 @@ export function isOxygenSelfieUrl(url: string): boolean {
 }
 export function OxygenHostedSelfie({
   url,
+  selfieOrigins = [],
   onClose,
   workflowId,
   onConfirmed = () => {
@@ -25,6 +32,7 @@ export function OxygenHostedSelfie({
   },
 }: {
   url: string;
+  selfieOrigins?: readonly string[];
   onClose(): void;
   workflowId?: string;
   onConfirmed?(): void;
@@ -34,14 +42,18 @@ export function OxygenHostedSelfie({
   const [phone, setPhone] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const trustedOrigin = isOxygenSelfieUrl(url, selfieOrigins)
+    ? new URL(url).origin
+    : null;
   const status = useOxygenSelfieStatus(
-    isOxygenSelfieUrl(url) ? workflowId : undefined,
+    trustedOrigin ? workflowId : undefined,
     onConfirmed
   );
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (
-        event.origin !== selfieOrigin ||
+        !trustedOrigin ||
+        event.origin !== trustedOrigin ||
         event.source !== frame.current?.contentWindow ||
         event.data !== 'FACE_RECOGNITION_SUCCESS' ||
         Date.now() - lastHint.current < 10_000
@@ -53,7 +65,7 @@ export function OxygenHostedSelfie({
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [status.retry]);
+  }, [status.retry, trustedOrigin]);
   return (
     <section
       className="flex h-full min-h-0 flex-col bg-white"
@@ -76,7 +88,7 @@ export function OxygenHostedSelfie({
           onPrepared={status.retry}
           onBack={() => setPhone(false)}
         />
-      ) : isOxygenSelfieUrl(url) ? (
+      ) : trustedOrigin ? (
         <div className="relative min-h-0 flex-1 bg-white">
           {(!loaded || confirming) && (
             <OxygenSelfieLoading confirming={confirming} />

@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { CheckoutStepCard } from '@/components/storefront/ogabassey/pages/checkout/components/CheckoutStepCard';
 import { CheckoutPage } from '@/components/storefront/ogabassey/pages/checkout-page';
 import { readOxygenCustomerPrefill } from '@/lib/payments/oxygen/customer-prefill';
+import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
 import { createClient } from '@/lib/supabase/server';
 import { oxygenCheckoutOrderSchema } from '@/schemas/oxygen-checkout-order';
 import { oxygenCustomerPrefillSchema } from '@/schemas/oxygen-customer-prefill';
@@ -23,6 +24,7 @@ export async function OxygenStorefrontCheckout({
     data: { user },
     error: authError,
   } = await client.auth.getUser();
+  const selfieOrigins = readOxygenHostedOrigins().selfie;
   if (authError || !user) {
     return (
       <CheckoutPage
@@ -30,6 +32,7 @@ export async function OxygenStorefrontCheckout({
           <OxygenApplicationDialog
             orderId={orderId}
             merchantSlug={merchantSlug}
+            selfieOrigins={selfieOrigins}
           />
         }
       />
@@ -123,6 +126,7 @@ export async function OxygenStorefrontCheckout({
             <OxygenApplicationDialog
               orderId={orderId}
               merchantSlug={merchantSlug}
+              selfieOrigins={selfieOrigins}
               prefill={contact}
               productAmount={order.total}
               products={order.order_items.map((item) => {

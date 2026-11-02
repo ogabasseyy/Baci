@@ -71,7 +71,12 @@ beforeEach(() => {
 
 it('keeps the close icon actionable above the content while loading', () => {
   loading.active = true;
-  render(<OxygenApplicationDialog orderId="order-1" />);
+  render(
+    <OxygenApplicationDialog
+      orderId="order-1"
+      selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
+    />
+  );
   const close = screen.getByRole('button', { name: 'Close application' });
   expect(close).toBeEnabled();
   expect(close.className).toContain('close');
@@ -84,7 +89,12 @@ it('keeps the close icon actionable above the content while loading', () => {
 });
 
 it('opens over checkout, preserves fields on close/reopen, and reports interruption without identity data', () => {
-  render(<OxygenApplicationDialog orderId="order-1" />);
+  render(
+    <OxygenApplicationDialog
+      orderId="order-1"
+      selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
+    />
+  );
   expect(
     screen.getByRole('dialog', { name: 'Your Oxygen application' })
   ).toBeVisible();
@@ -107,7 +117,12 @@ it('opens over checkout, preserves fields on close/reopen, and reports interrupt
 });
 
 it('handles Escape as a resumable close', () => {
-  render(<OxygenApplicationDialog orderId="order-1" />);
+  render(
+    <OxygenApplicationDialog
+      orderId="order-1"
+      selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
+    />
+  );
   fireEvent(
     screen.getByRole('dialog'),
     new Event('cancel', { cancelable: true })
@@ -119,7 +134,12 @@ it('handles Escape as a resumable close', () => {
 });
 
 it('records page exits only while the application is open', () => {
-  render(<OxygenApplicationDialog orderId="order-1" />);
+  render(
+    <OxygenApplicationDialog
+      orderId="order-1"
+      selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
+    />
+  );
   fireEvent(window, new Event('pagehide'));
   expect(capture).toHaveBeenCalledWith('oxygen_application_page_left', {
     order_id: 'order-1',
@@ -134,7 +154,12 @@ it('records page exits only while the application is open', () => {
 });
 
 it('records the current customer step on close and pauses background checks until reopening', () => {
-  render(<OxygenApplicationDialog orderId="order-1" />);
+  render(
+    <OxygenApplicationDialog
+      orderId="order-1"
+      selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
+    />
+  );
   fireEvent.click(screen.getByRole('button', { name: 'Simulate income step' }));
   fireEvent.click(screen.getByRole('button', { name: 'Close application' }));
   expect(capture).toHaveBeenCalledWith('oxygen_application_closed', {
@@ -148,7 +173,12 @@ it('records the current customer step on close and pauses background checks unti
 });
 
 it('keeps the generic application heading accessible without repeating a visible banner', () => {
-  render(<OxygenApplicationDialog orderId="order-1" />);
+  render(
+    <OxygenApplicationDialog
+      orderId="order-1"
+      selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
+    />
+  );
   expect(
     screen.getByRole('heading', { name: 'Your Oxygen application' })
   ).toHaveClass('sr-only');
@@ -158,7 +188,12 @@ it('keeps the generic application heading accessible without repeating a visible
 });
 
 it('reuses one dialog for payment, fits the hosted panel and restores the saved application on back', async () => {
-  render(<OxygenApplicationDialog orderId="order-1" />);
+  render(
+    <OxygenApplicationDialog
+      orderId="order-1"
+      selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
+    />
+  );
   fireEvent.change(screen.getByLabelText('Private identity value'), {
     target: { value: 'preserved' },
   });
@@ -180,7 +215,12 @@ it('reuses one dialog for payment, fits the hosted panel and restores the saved 
 });
 
 it('uses the same modal for selfie, pauses background checks, and preserves application fields on return', () => {
-  render(<OxygenApplicationDialog orderId="order-1" />);
+  render(
+    <OxygenApplicationDialog
+      orderId="order-1"
+      selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
+    />
+  );
   const dialog = screen.getByRole('dialog');
   fireEvent.change(screen.getByLabelText('Private identity value'), {
     target: { value: 'preserved' },
@@ -200,7 +240,12 @@ it('uses the same modal for selfie, pauses background checks, and preserves appl
 
 // The closed-state launcher must not flash before showModal() runs.
 it('auto-resumes without rendering the closed application launcher', () => {
-  render(<OxygenApplicationDialog orderId="order-1" />);
+  render(
+    <OxygenApplicationDialog
+      orderId="order-1"
+      selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
+    />
+  );
   expect(screen.getByRole('dialog')).toBeVisible();
   expect(screen.queryByText(/Oxygen selected/)).not.toBeInTheDocument();
   expect(

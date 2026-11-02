@@ -76,7 +76,12 @@ it('automatically opens the existing selfie and returns to the same application 
         JSON.stringify({ confirmed: true, checkedAt: '2026-10-25T21:01:00Z' })
       )
     );
-  render(<OxygenApplicationDialog orderId="same-order" />);
+  render(
+    <OxygenApplicationDialog
+      orderId="same-order"
+      selfieOrigins={['https://staging.d1l1k5yxed9cvn.amplifyapp.com']}
+    />
+  );
   const dialog = screen.getByRole('dialog');
   const frame = screen.getByTitle('Oxygen selfie verification');
   expect(screen.getAllByRole('dialog')).toHaveLength(1);

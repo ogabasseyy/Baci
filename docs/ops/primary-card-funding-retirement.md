@@ -3,7 +3,7 @@
 Card top-up into the PiggyVest primary wallet is permanently retired. The web
 `initialize` route answers `410 PRIMARY_CARD_FUNDING_RETIRED` before it reads
 any configuration, and migration
-`20261031225854_retire_primary_card_initialization` removes every role's
+`20261102035525_retire_primary_card_initialization` removes every role's
 `EXECUTE` on the three initialization functions (`reserve`,
 `claim_initialization`, `record_initialization`), including grants that exist
 only in production, and aborts if any non-superuser role could still run one.

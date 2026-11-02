@@ -44,7 +44,7 @@ BEGIN
 END
 $$;
 
-\ir ../migrations/20261031225854_retire_primary_card_initialization.sql
+\ir ../migrations/20261102035525_retire_primary_card_initialization.sql
 
 DO $$
 DECLARE

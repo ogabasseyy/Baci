@@ -8,7 +8,8 @@
 -- (account binding, soft delete). U6 has no customer row. Each user has
 -- one live session S<n>; S7 is U4's expired session. Setting a PIN needs a recent sign-in, so set
 -- calls pass pg_temp.wp_fresh_amr().
--- Hex constants are the KDF test vectors from wallet-pin-kdf.test.ts.
+-- Hex constants are the KDF test vectors from wallet-pin-kdf.test.ts. The
+-- attestation helpers and RPC builders are in wallet_pin_store_calls.inc.sql.
 
 CREATE FUNCTION pg_temp.wp_id(p_name text)
 RETURNS uuid
@@ -40,6 +41,8 @@ BEGIN
   RETURN CASE p_name
     WHEN 'pepper' THEN 'd0bc8ce070c22d11'
     WHEN 'other_pepper' THEN 'fa2b4b51bb36dd21'
+    WHEN 'unkeyed_pepper' THEN '0123456789abcdef'
+    WHEN 'attest_dummy' THEN '1700000000000.' || pg_catalog.repeat('0', 64)
     WHEN 'salt' THEN '000102030405060708090a0b0c0d0e0f'
     WHEN 'salt2' THEN 'ffffffffffffffffffffffffffffffff'
     WHEN 'pin_2580' THEN
@@ -157,55 +160,6 @@ EXCEPTION
   WHEN OTHERS THEN
     RETURN SQLSTATE || ' ' || SQLERRM;
 END;
-$$;
-
-CREATE FUNCTION pg_temp.wp_state_sql(p_merchant text, p_pepper text DEFAULT 'pepper')
-RETURNS text
-LANGUAGE sql
-STABLE
-AS $$
-  SELECT pg_catalog.format(
-    'SELECT public.get_wallet_pin_state(%L::uuid, %L)',
-    pg_temp.wp_id(p_merchant), pg_temp.wp_hex(p_pepper)
-  );
-$$;
-
-CREATE FUNCTION pg_temp.wp_set_sql(
-  p_merchant text,
-  p_pin text,
-  p_salt text DEFAULT 'salt',
-  p_pepper text DEFAULT 'pepper',
-  p_kdf integer DEFAULT 1
-)
-RETURNS text
-LANGUAGE sql
-STABLE
-AS $$
-  SELECT pg_catalog.format(
-    'SELECT public.set_wallet_pin(%L::uuid, %L, %s, %L, %L)',
-    pg_temp.wp_id(p_merchant), pg_temp.wp_hex(p_pepper), p_kdf,
-    pg_temp.wp_hex(p_salt), pg_temp.wp_hex(p_pin)
-  );
-$$;
-
-CREATE FUNCTION pg_temp.wp_verify_sql(
-  p_merchant text,
-  p_pin text,
-  p_purpose text,
-  p_amount bigint,
-  p_idem text,
-  p_pepper text DEFAULT 'pepper'
-)
-RETURNS text
-LANGUAGE sql
-STABLE
-AS $$
-  SELECT pg_catalog.format(
-    'SELECT public.verify_wallet_pin(%L::uuid, %L, %L, %L, %s, %L)',
-    pg_temp.wp_id(p_merchant), pg_temp.wp_hex(p_pepper),
-    pg_temp.wp_hex(p_pin), p_purpose, p_amount,
-    CASE WHEN p_idem ~ '^[0-9a-f]{64}$' THEN p_idem ELSE pg_temp.wp_hex(p_idem) END
-  );
 $$;
 
 CREATE FUNCTION pg_temp.wp_pin(p_customer text)

@@ -31,6 +31,7 @@ const SCRYPT_V1 = {
 } as const;
 const PIN_DOMAIN = 'baci.wallet-pin.v1\u0000';
 const PEPPER_ID_LABEL = 'baci.wallet-pin.pepper-id.v1';
+const ATTESTATION_KEY_LABEL = 'baci.wallet-pin.attestation-key.v1';
 const SALT_PATTERN = /^[0-9a-f]{32}$/;
 // Visible ASCII only, so the client and the server hash the same bytes.
 const IDEMPOTENCY_KEY_PATTERN = /^[\x21-\x7e]{1,255}$/;
@@ -80,6 +81,19 @@ export function readWalletPinPepperState(raw: unknown): WalletPinPepperState {
 // boot on it.
 export function getWalletPinPepperState(): WalletPinPepperState {
   return readWalletPinPepperState(process.env.WALLET_PIN_PEPPER);
+}
+
+// The key that signs the server's attestation of a derived hash (see
+// wallet-pin-attestation.ts). It is a one-way derivative of the pepper, so
+// the copy the database holds (wallet_pin_private.attestation_keys, written
+// by owner SQL from the enablement runbook) cannot be turned back into the
+// pepper or used to derive a PIN hash.
+export function deriveWalletPinAttestationKey(pepper: WalletPinPepper): Buffer {
+  const key = pepperKeys.get(pepper);
+  if (!key) throw new Error('Wallet PIN pepper unavailable');
+  return createHmac('sha256', key)
+    .update(ATTESTATION_KEY_LABEL, 'utf8')
+    .digest();
 }
 
 export function createWalletPinSalt(

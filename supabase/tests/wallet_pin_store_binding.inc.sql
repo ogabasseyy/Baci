@@ -26,9 +26,7 @@ BEGIN
   FOREACH v_sql IN ARRAY ARRAY[
     pg_temp.wp_state_sql('M4'),
     pg_temp.wp_verify_sql('M4', 'pin_2580', 'vtu', 900, 'idem2'),
-    pg_catalog.format('SELECT public.change_wallet_pin(%L::uuid, %L, %L, 1, %L, %L)',
-      pg_temp.wp_id('M4'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('pin_2580'),
-      pg_temp.wp_hex('salt2'), pg_temp.wp_hex('pin_0000')),
+    pg_temp.wp_change_sql('M4', 'pin_2580', 'salt2', 'pin_0000'),
     pg_temp.wp_reset_sql('M4', 'pin_0000')
   ] LOOP
     v_result := pg_temp.wp_rpc('U6', v_sql, pg_temp.wp_fresh_amr());
@@ -67,9 +65,7 @@ BEGIN
   FOREACH v_sql IN ARRAY ARRAY[
     pg_temp.wp_state_sql('M4'),
     pg_temp.wp_verify_sql('M4', 'pin_2580', 'vtu', 951, 'idem3'),
-    pg_catalog.format('SELECT public.change_wallet_pin(%L::uuid, %L, %L, 1, %L, %L)',
-      pg_temp.wp_id('M4'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('pin_2580'),
-      pg_temp.wp_hex('salt2'), pg_temp.wp_hex('pin_0000')),
+    pg_temp.wp_change_sql('M4', 'pin_2580', 'salt2', 'pin_0000'),
     pg_temp.wp_reset_sql('M4', 'pin_0000')
   ] LOOP
     v_result := pg_temp.wp_rpc('U5', v_sql, pg_temp.wp_fresh_amr());

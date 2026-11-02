@@ -11,14 +11,14 @@ DECLARE
   v_table record;
   v_function record;
   v_expected_tables text[] := ARRAY[
-    'customer_pins', 'merchant_authorities', 'proof_purposes', 'proofs'
+    'attestation_keys', 'customer_pins', 'merchant_authorities', 'proof_purposes', 'proofs'
   ];
   v_public_rpcs text[] := ARRAY[
     'public.get_wallet_pin_state(uuid,text)',
-    'public.set_wallet_pin(uuid,text,integer,text,text)',
-    'public.change_wallet_pin(uuid,text,text,integer,text,text)',
-    'public.reset_wallet_pin(uuid,text,integer,text,text)',
-    'public.verify_wallet_pin(uuid,text,text,text,bigint,text)'
+    'public.set_wallet_pin(uuid,text,integer,text,text,text)',
+    'public.change_wallet_pin(uuid,text,text,integer,text,text,text)',
+    'public.reset_wallet_pin(uuid,text,integer,text,text,text)',
+    'public.verify_wallet_pin(uuid,text,text,text,bigint,text,text)'
   ];
   v_signature text;
   v_oid regprocedure;
@@ -30,7 +30,7 @@ BEGIN
        JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
       WHERE n.nspname = 'wallet_pin_private' AND c.relkind IN ('r', 'p'))
       = v_expected_tables,
-    'wallet_pin_private holds exactly the four PIN tables'
+    'wallet_pin_private holds exactly the five PIN tables'
   );
 
   FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated', 'service_role'] LOOP

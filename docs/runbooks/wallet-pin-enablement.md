@@ -1,9 +1,18 @@
 # Wallet transaction PIN: enablement and emergency stop
 
-The PIN store (migrations `20261102041826` to `20261102041829`, server helper
-`apps/web/src/lib/wallet-pin/wallet-pin-kdf.ts`) ships dark. Turning it on
-takes two separate owner-approved steps. Do not run any step against
-production without the owner's explicit approval for that step.
+The PIN store (migrations `20261102041826` to `20261102041829`, server helpers
+`apps/web/src/lib/wallet-pin/wallet-pin-kdf.ts` and `wallet-pin-attestation.ts`)
+ships dark. Turning it on takes three separate owner-approved steps. Do not
+run any step against production without the owner's explicit approval for that
+step.
+
+The customer PIN functions can be called by any signed-in customer straight
+through the Supabase API, so the database never trusts a hash it was handed.
+Every set, change, reset and verify must carry an attestation: an HMAC the
+server makes after it derives the hash, which the database checks with a key
+only the migration owner can read (`wallet_pin_private.attestation_keys`). A
+caller who picks their own hash cannot make one, and under a pepper with no
+key row nothing works at all.
 
 Prerequisites, in order: the PIN routes and the spend hold that consumes
 proofs are merged and deployed with their own switches still off.
@@ -19,20 +28,51 @@ proofs are merged and deployed with their own switches still off.
   prebuilt build never sees its value.
 - Store it as the Vercel **Production** server variable `WALLET_PIN_PEPPER`,
   marked Sensitive, through the REST API upsert (piping into `vercel env add`
-  can store an empty value). It must never get a `NEXT_PUBLIC_` prefix. Then
-  deploy through the approved VPS prebuilt flow.
+  can store an empty value). It must never get a `NEXT_PUBLIC_` prefix, and it
+  is deliberately not listed in `turbo.json`: it is read when a request
+  arrives, never at build time. Then deploy through the approved VPS prebuilt
+  flow.
 - A missing, short or otherwise unusable value never breaks the site: it only
   keeps the PIN routes answering "unavailable" (503). If they still do after
   the deploy, the value is wrong; store a correct one and redeploy.
 - **Do not rotate it.** Every PIN records which pepper made it. After a change,
   every customer gets "reset required" and must sign in again to set a new
   PIN. Rotate only as a planned event (for example after a suspected leak),
-  with customer messaging ready.
+  with customer messaging ready, and provision the new pepper's attestation
+  key (step 2) first.
 
-## 2. Switch a merchant on (owner SQL)
+## 2. Provision the attestation key (owner SQL)
+
+The key is a one-way derivative of the pepper, so the database never holds
+the pepper itself and its copy cannot be used to guess PINs. Derive it on the
+machine that generated the pepper, in a shell with history off, from the same
+value stored in step 1. The command prints one `INSERT`; it does not print
+the pepper. Treat its output like a secret: do not paste it into chat,
+tickets or logs, and run it as the migration owner straight away.
+
+```sh
+WALLET_PIN_PEPPER='<the value stored in step 1>' node -e '
+const { createHmac } = require("node:crypto");
+const pepper = process.env.WALLET_PIN_PEPPER.trim();
+const mac = (label) => createHmac("sha256", pepper).update(label, "utf8").digest("hex");
+console.log(`INSERT INTO wallet_pin_private.attestation_keys (pepper_id, attestation_key) VALUES (decode(\x27${mac("baci.wallet-pin.pepper-id.v1").slice(0, 16)}\x27, \x27hex\x27), decode(\x27${mac("baci.wallet-pin.attestation-key.v1")}\x27, \x27hex\x27));`);
+'
+```
+
+The two derivations are the ones in `wallet-pin-kdf.ts` (`createPepper` and
+`deriveWalletPinAttestationKey`); their unit tests pin the same values.
+
+- Without this row every PIN action answers "unavailable", whatever the
+  merchant switch says. Deleting the row is a second emergency stop for set,
+  change, reset and verify; it does not touch proofs already issued.
+- When the pepper changes (see step 1), insert the new pepper's row before the
+  new pepper is deployed and delete the old row once no customer needs the old
+  pepper's PIN. Until then the old row keeps old-pepper requests working.
+
+## 3. Switch a merchant on (owner SQL)
 
 PINs work only for merchants with an enabled authority row. Run as the
-migration owner, after step 1 is live:
+migration owner, after steps 1 and 2 are live:
 
 ```sql
 INSERT INTO wallet_pin_private.merchant_authorities (merchant_id, enabled)
@@ -57,11 +97,13 @@ Stored PINs are kept; switching back on restores them.
 
 ## Read-only checks
 
-Counts only. Never select salts, hashes or proof digests.
+Counts only. Never select salts, hashes, proof digests or attestation keys.
 
 ```sql
 SELECT merchant_id, enabled, updated_at
   FROM wallet_pin_private.merchant_authorities;
+SELECT pg_catalog.encode(pepper_id, 'hex') AS pepper_id, created_at
+  FROM wallet_pin_private.attestation_keys;
 SELECT merchant_id, pg_catalog.count(*) AS pins,
        pg_catalog.count(*) FILTER (WHERE locked_until > pg_catalog.now()) AS locked
   FROM wallet_pin_private.customer_pins GROUP BY merchant_id;
@@ -94,3 +136,16 @@ any cleanup as owner SQL or a scheduled job at that point.
   purpose, amount in kobo and the SHA-256 of the debit's Idempotency-Key, and
   spent only inside the hold transaction. A customer holds at most 10 live
   proofs.
+- Every set, change, reset and verify carries the server's attestation for
+  that exact caller, merchant, operation and request, at most two minutes
+  old. A missing or malformed one is a bad request (22023); a wrong, stale or
+  foreign one is refused (42501) before anything is stored, counted or issued.
+- Clocks are read after locks: a lockout starts when the PIN row was actually
+  obtained, a proof is judged expired by the time its row is held, a new
+  proof is stamped after its purge finishes, and a reset judges the sign-in's
+  age once it holds the PIN row.
+- When a spend presents a proof, the reason is decided in this order:
+  `missing`, `invalid`, `mismatch`, `used`, `expired`, `unavailable`. The
+  binding comes before the proof's state, so `used` and `expired` describe
+  only the debit the proof was issued for; a spent or expired proof shown for
+  anything else is a `mismatch`. A refusal never spends a valid proof.

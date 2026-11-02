@@ -82,31 +82,44 @@ BEGIN
   PERFORM pg_temp.wp_assert((pg_temp.wp_pin('C1')).failed_attempts = 0,
     'pepper mismatch is not a failed attempt');
 
-  -- Malformed input raises 22023 before any state change.
+  -- Malformed input raises 22023 before any state change. Raw calls carry
+  -- a well-formed dummy attestation, so only the malformed field fails.
   FOREACH v_error IN ARRAY ARRAY[
-    pg_catalog.format('SELECT public.verify_wallet_pin(%L::uuid, %L, %L, %L, 5000, %L)',
+    pg_catalog.format('SELECT public.verify_wallet_pin(%L::uuid, %L, %L, %L, 5000, %L, %L)',
       pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_catalog.upper(pg_temp.wp_hex('pin_0000')),
-      'vtu', pg_temp.wp_hex('idem1')),
+      'vtu', pg_temp.wp_hex('idem1'), pg_temp.wp_hex('attest_dummy')),
     pg_temp.wp_verify_sql('M1', 'pin_0000', 'transfer', 5000, 'idem1'),
     pg_temp.wp_verify_sql('M1', 'pin_0000', 'vtu', 0, 'idem1'),
     pg_temp.wp_verify_sql('M1', 'pin_0000', 'vtu', 10000000000, 'idem1'),
-    pg_catalog.format('SELECT public.verify_wallet_pin(%L::uuid, %L, %L, %L, 5000, %L)',
-      pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('pin_0000'), 'vtu', 'abcd'),
-    pg_catalog.format('SELECT public.verify_wallet_pin(%L::uuid, %L, %L, %L, 5000, %L)',
-      pg_temp.wp_id('M1'), 'd0bc8ce0', pg_temp.wp_hex('pin_0000'), 'vtu', pg_temp.wp_hex('idem1')),
+    pg_catalog.format('SELECT public.verify_wallet_pin(%L::uuid, %L, %L, %L, 5000, %L, %L)',
+      pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('pin_0000'), 'vtu', 'abcd',
+      pg_temp.wp_hex('attest_dummy')),
+    pg_catalog.format('SELECT public.verify_wallet_pin(%L::uuid, %L, %L, %L, 5000, %L, %L)',
+      pg_temp.wp_id('M1'), 'd0bc8ce0', pg_temp.wp_hex('pin_0000'), 'vtu', pg_temp.wp_hex('idem1'),
+      pg_temp.wp_hex('attest_dummy')),
     pg_temp.wp_set_sql('M1', 'pin_0000', 'salt', 'pepper', 2),
-    pg_catalog.format('SELECT public.set_wallet_pin(%L::uuid, %L, 1, %L, NULL)',
-      pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('salt')),
+    pg_catalog.format('SELECT public.set_wallet_pin(%L::uuid, %L, 1, %L, NULL, %L)',
+      pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('salt'),
+      pg_temp.wp_hex('attest_dummy')),
+    -- A missing or malformed attestation is malformed input too.
+    pg_catalog.format('SELECT public.verify_wallet_pin(%L::uuid, %L, %L, %L, 5000, %L, NULL)',
+      pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('pin_0000'), 'vtu',
+      pg_temp.wp_hex('idem1')),
+    pg_catalog.format('SELECT public.set_wallet_pin(%L::uuid, %L, 1, %L, %L, %L)',
+      pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('salt'),
+      pg_temp.wp_hex('pin_0000'), '1700000000000.' || pg_catalog.repeat('A', 64)),
     -- A wrong current PIN with a malformed new PIN is refused before the
     -- attempt is checked, so it does not use up one of the five tries.
-    pg_catalog.format('SELECT public.change_wallet_pin(%L::uuid, %L, %L, 1, %L, %L)',
+    pg_catalog.format('SELECT public.change_wallet_pin(%L::uuid, %L, %L, 1, %L, %L, %L)',
       pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('pin_0000'),
-      pg_catalog.upper(pg_temp.wp_hex('salt2')), pg_temp.wp_hex('pin_135790')),
-    pg_catalog.format('SELECT public.change_wallet_pin(%L::uuid, %L, %L, 1, %L, %L)',
+      pg_catalog.upper(pg_temp.wp_hex('salt2')), pg_temp.wp_hex('pin_135790'),
+      pg_temp.wp_hex('attest_dummy')),
+    pg_catalog.format('SELECT public.change_wallet_pin(%L::uuid, %L, %L, 1, %L, %L, %L)',
       pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('pin_0000'),
-      pg_temp.wp_hex('salt2'), 'abcd'),
-    pg_catalog.format('SELECT public.reset_wallet_pin(%L::uuid, %L, 1, %L, %L)',
-      pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), 'abcd', pg_temp.wp_hex('pin_135790'))
+      pg_temp.wp_hex('salt2'), 'abcd', pg_temp.wp_hex('attest_dummy')),
+    pg_catalog.format('SELECT public.reset_wallet_pin(%L::uuid, %L, 1, %L, %L, %L)',
+      pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), 'abcd', pg_temp.wp_hex('pin_135790'),
+      pg_temp.wp_hex('attest_dummy'))
   ] LOOP
     PERFORM pg_temp.wp_assert(
       pg_temp.wp_rpc_error('U1', v_error) LIKE '22023 %',
@@ -116,10 +129,8 @@ BEGIN
     'malformed input is not a failed attempt');
 
   -- The stored value is not a PIN: sending it back is a wrong attempt.
-  v_result := pg_temp.wp_rpc('U1', pg_catalog.format(
-    'SELECT public.verify_wallet_pin(%L::uuid, %L, %L, %L, 5000, %L)',
-    pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_catalog.encode(v_pin.pin_hash, 'hex'),
-    'vtu', pg_temp.wp_hex('idem1')));
+  v_result := pg_temp.wp_rpc('U1', pg_temp.wp_verify_sql('M1', NULL, 'vtu', 5000, 'idem1',
+    'pepper', pg_catalog.encode(v_pin.pin_hash, 'hex')));
   PERFORM pg_temp.wp_assert(v_result = '{"status":"incorrect","attemptsRemaining":4}',
     'the stored hash does not verify: ' || v_result::text);
 

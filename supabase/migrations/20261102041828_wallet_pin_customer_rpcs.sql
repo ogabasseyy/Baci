@@ -7,6 +7,12 @@
 -- are hex text (lower case). Arguments are checked before any state
 -- changes, so a malformed request never counts as an attempt.
 --
+-- Set, change, reset and verify also take p_attestation, the server's HMAC
+-- over the caller and every argument
+-- (wallet_pin_private.require_attestation). A client calling the API
+-- directly cannot produce it, so the database never accepts a hash the
+-- client computed itself, and nothing works under a pepper with no key.
+--
 -- A first set and a reset both need a recent sign-in
 -- (wallet_pin_private.has_recent_authentication). A PIN belongs to the
 -- sign-in account and the merchant it was set for: if the caller's customer
@@ -72,7 +78,8 @@ CREATE FUNCTION public.set_wallet_pin(
   p_pepper_id text,
   p_kdf_version integer,
   p_salt text,
-  p_pin_hash text
+  p_pin_hash text,
+  p_attestation text
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -87,11 +94,15 @@ DECLARE
   v_inserted integer;
 BEGIN
   IF p_merchant_id IS NULL OR v_pepper_id IS NULL OR v_salt IS NULL OR v_hash IS NULL
-    OR p_kdf_version IS DISTINCT FROM 1 THEN
+    OR p_kdf_version IS DISTINCT FROM 1 OR p_attestation IS NULL OR p_attestation !~ '^[0-9]{13}\.[0-9a-f]{64}$' THEN
     RAISE EXCEPTION 'invalid wallet pin request' USING ERRCODE = '22023';
   END IF;
   v_customer_id := wallet_pin_private.caller_customer_id(p_merchant_id);
   IF NOT wallet_pin_private.merchant_enabled(p_merchant_id) THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'unavailable');
+  END IF;
+  IF NOT wallet_pin_private.require_attestation('set', p_merchant_id, v_pepper_id,
+    p_attestation, ARRAY['1', p_salt, p_pin_hash]) THEN
     RETURN pg_catalog.jsonb_build_object('status', 'unavailable');
   END IF;
   -- Creating the spending credential needs a recent sign-in, like a reset,
@@ -121,7 +132,8 @@ CREATE FUNCTION public.change_wallet_pin(
   p_current_pin_hash text,
   p_kdf_version integer,
   p_salt text,
-  p_pin_hash text
+  p_pin_hash text,
+  p_attestation text
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -137,11 +149,16 @@ DECLARE
   v_attempt jsonb;
 BEGIN
   IF p_merchant_id IS NULL OR v_pepper_id IS NULL OR v_current IS NULL
-    OR v_salt IS NULL OR v_hash IS NULL OR p_kdf_version IS DISTINCT FROM 1 THEN
+    OR v_salt IS NULL OR v_hash IS NULL OR p_kdf_version IS DISTINCT FROM 1
+    OR p_attestation IS NULL OR p_attestation !~ '^[0-9]{13}\.[0-9a-f]{64}$' THEN
     RAISE EXCEPTION 'invalid wallet pin request' USING ERRCODE = '22023';
   END IF;
   v_customer_id := wallet_pin_private.caller_customer_id(p_merchant_id);
   IF NOT wallet_pin_private.merchant_enabled(p_merchant_id) THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'unavailable');
+  END IF;
+  IF NOT wallet_pin_private.require_attestation('change', p_merchant_id, v_pepper_id,
+    p_attestation, ARRAY[p_current_pin_hash, '1', p_salt, p_pin_hash]) THEN
     RETURN pg_catalog.jsonb_build_object('status', 'unavailable');
   END IF;
 
@@ -159,7 +176,8 @@ CREATE FUNCTION public.reset_wallet_pin(
   p_pepper_id text,
   p_kdf_version integer,
   p_salt text,
-  p_pin_hash text
+  p_pin_hash text,
+  p_attestation text
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -172,24 +190,32 @@ DECLARE
   v_hash bytea := wallet_pin_private.hex_bytes(p_pin_hash, 32);
   v_customer_id uuid;
   v_bound_user_id uuid;
+  v_has_pin boolean;
 BEGIN
   IF p_merchant_id IS NULL OR v_pepper_id IS NULL OR v_salt IS NULL OR v_hash IS NULL
-    OR p_kdf_version IS DISTINCT FROM 1 THEN
+    OR p_kdf_version IS DISTINCT FROM 1 OR p_attestation IS NULL OR p_attestation !~ '^[0-9]{13}\.[0-9a-f]{64}$' THEN
     RAISE EXCEPTION 'invalid wallet pin request' USING ERRCODE = '22023';
   END IF;
   v_customer_id := wallet_pin_private.caller_customer_id(p_merchant_id);
   IF NOT wallet_pin_private.merchant_enabled(p_merchant_id) THEN
     RETURN pg_catalog.jsonb_build_object('status', 'unavailable');
   END IF;
-  IF NOT wallet_pin_private.has_recent_authentication() THEN
-    RETURN pg_catalog.jsonb_build_object('status', 'reauthentication_required');
+  IF NOT wallet_pin_private.require_attestation('reset', p_merchant_id, v_pepper_id,
+    p_attestation, ARRAY['1', p_salt, p_pin_hash]) THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'unavailable');
   END IF;
 
+  -- The PIN row is locked first and the sign-in age is judged after the lock
+  -- is held, so a wait behind another attempt never lets a stale sign-in pass.
   SELECT pin.user_id INTO v_bound_user_id
     FROM wallet_pin_private.customer_pins AS pin
    WHERE pin.customer_id = v_customer_id
      FOR UPDATE;
-  IF NOT FOUND THEN
+  v_has_pin := FOUND;
+  IF NOT wallet_pin_private.has_recent_authentication() THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'reauthentication_required');
+  END IF;
+  IF NOT v_has_pin THEN
     RETURN pg_catalog.jsonb_build_object('status', 'not_set');
   END IF;
   -- A reset never moves a PIN to another account or merchant.
@@ -206,15 +232,15 @@ $$;
 
 REVOKE ALL ON FUNCTION
   public.get_wallet_pin_state(uuid, text),
-  public.set_wallet_pin(uuid, text, integer, text, text),
-  public.change_wallet_pin(uuid, text, text, integer, text, text),
-  public.reset_wallet_pin(uuid, text, integer, text, text)
+  public.set_wallet_pin(uuid, text, integer, text, text, text),
+  public.change_wallet_pin(uuid, text, text, integer, text, text, text),
+  public.reset_wallet_pin(uuid, text, integer, text, text, text)
 FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION
   public.get_wallet_pin_state(uuid, text),
-  public.set_wallet_pin(uuid, text, integer, text, text),
-  public.change_wallet_pin(uuid, text, text, integer, text, text),
-  public.reset_wallet_pin(uuid, text, integer, text, text)
+  public.set_wallet_pin(uuid, text, integer, text, text, text),
+  public.change_wallet_pin(uuid, text, text, integer, text, text, text),
+  public.reset_wallet_pin(uuid, text, integer, text, text, text)
 TO authenticated;
 
 COMMIT;

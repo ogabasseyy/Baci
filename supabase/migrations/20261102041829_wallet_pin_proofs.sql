@@ -1,10 +1,10 @@
 -- Wallet transaction PIN store (dark): single-use, debit-bound proofs.
 --
--- verify_wallet_pin (customer RPC, authenticated only) checks one PIN
--- attempt and, on a correct PIN, issues a proof valid for 120 seconds and
--- bound to (customer, merchant, purpose, amount_kobo, SHA-256 of the debit
--- request's Idempotency-Key). Only the SHA-256 of the proof token is
--- stored. Verifying again for the same purpose and key replaces the live
+-- verify_wallet_pin (customer RPC, authenticated only, server-attested)
+-- checks one PIN attempt and, on a correct PIN, issues a proof valid for 120
+-- seconds and bound to (customer, merchant, purpose, amount_kobo, SHA-256 of
+-- the debit request's Idempotency-Key). Only the SHA-256 of the proof token
+-- is stored. Verifying again for the same purpose and key replaces the live
 -- proof; a customer holds at most 10 live proofs.
 --
 -- consume_wallet_pin_proof is ungranted: the spend hold calls it definer to
@@ -16,6 +16,14 @@
 -- account and merchant the PIN was set for). The proof row is locked, so
 -- two concurrent spends of one proof cannot both succeed, and expiry is
 -- judged by the clock after the lock is held.
+--
+-- Reason precedence: missing, invalid, mismatch, used, expired, unavailable.
+-- The binding is judged before the proof's state, so used and expired only
+-- ever describe a proof presented for exactly the debit it was issued for
+-- (a replay of that debit, or a late retry of it). A spent or expired proof
+-- presented for anything else is a mismatch. A spend hold can therefore
+-- read used as "this debit already spent its proof" and mismatch as a caller
+-- error, without a differing field turning one into the other.
 
 BEGIN;
 
@@ -25,7 +33,8 @@ CREATE FUNCTION public.verify_wallet_pin(
   p_pin_hash text,
   p_purpose text,
   p_amount_kobo bigint,
-  p_idempotency_key_sha256 text
+  p_idempotency_key_sha256 text,
+  p_attestation text
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -44,6 +53,7 @@ BEGIN
   IF p_merchant_id IS NULL OR v_pepper_id IS NULL OR v_candidate IS NULL
     OR v_idempotency IS NULL OR p_amount_kobo IS NULL
     OR p_amount_kobo NOT BETWEEN 1 AND 9999999999
+    OR p_attestation IS NULL OR p_attestation !~ '^[0-9]{13}\.[0-9a-f]{64}$'
     OR NOT EXISTS (
       SELECT 1 FROM wallet_pin_private.proof_purposes AS purpose
        WHERE purpose.purpose = p_purpose
@@ -52,6 +62,10 @@ BEGIN
   END IF;
   v_customer_id := wallet_pin_private.caller_customer_id(p_merchant_id);
   IF NOT wallet_pin_private.merchant_enabled(p_merchant_id) THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'unavailable');
+  END IF;
+  IF NOT wallet_pin_private.require_attestation('verify', p_merchant_id, v_pepper_id,
+    p_attestation, ARRAY[p_pin_hash, p_purpose, p_amount_kobo::text, p_idempotency_key_sha256]) THEN
     RETURN pg_catalog.jsonb_build_object('status', 'unavailable');
   END IF;
 
@@ -66,6 +80,9 @@ BEGIN
      AND proof.consumed_at IS NULL
      AND (proof.expires_at <= v_now
        OR (proof.purpose = p_purpose AND proof.idempotency_key_sha256 = v_idempotency));
+  -- The purge can wait for a spend that holds one of these proofs, so the
+  -- issue time is read again once it is done.
+  v_now := pg_catalog.clock_timestamp();
   IF (SELECT pg_catalog.count(*) FROM wallet_pin_private.proofs AS proof
        WHERE proof.customer_id = v_customer_id AND proof.consumed_at IS NULL) >= 10 THEN
     RETURN pg_catalog.jsonb_build_object('status', 'too_many_proofs');
@@ -146,9 +163,9 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.verify_wallet_pin(uuid, text, text, text, bigint, text)
+REVOKE ALL ON FUNCTION public.verify_wallet_pin(uuid, text, text, text, bigint, text, text)
   FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.verify_wallet_pin(uuid, text, text, text, bigint, text)
+GRANT EXECUTE ON FUNCTION public.verify_wallet_pin(uuid, text, text, text, bigint, text, text)
   TO authenticated;
 REVOKE ALL ON FUNCTION
   wallet_pin_private.consume_wallet_pin_proof(uuid, uuid, text, bigint, text, text)

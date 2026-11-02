@@ -1,5 +1,7 @@
 // @vitest-environment node
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 function stubBaseEnv() {
@@ -74,5 +76,19 @@ describe('WALLET_PIN_PEPPER environment declaration', () => {
     vi.stubEnv('WALLET_PIN_PEPPER', 'p'.repeat(40));
     const { env } = await loadEnvModule();
     expect(env.WALLET_PIN_PEPPER).toBeUndefined();
+  });
+});
+
+// The pepper is read at request time on the server. Naming it in turbo.json
+// would put the secret in the build task's environment and cache key (the
+// prebuilt build never sees its value), and every rotation would bust the
+// build cache.
+describe('WALLET_PIN_PEPPER and the Turborepo environment', () => {
+  it('is named in no task, global or pass-through env list', () => {
+    const turbo = readFileSync(
+      fileURLToPath(new URL('../../../turbo.json', import.meta.url)),
+      'utf8'
+    );
+    expect(turbo).not.toContain('WALLET_PIN_PEPPER');
   });
 });

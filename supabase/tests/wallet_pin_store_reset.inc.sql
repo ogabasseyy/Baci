@@ -19,7 +19,8 @@ LANGUAGE sql
 STABLE
 AS $$
   SELECT pg_catalog.format(
-    'SELECT public.reset_wallet_pin(%L::uuid, %L, 1, %L, %L)',
+    'SELECT public.reset_wallet_pin(%1$L::uuid, %2$L, 1, %3$L, %4$L, '
+      'pg_temp.wp_attest(''reset'', %1$L::uuid, %2$L, ARRAY[''1'', %3$L, %4$L]))',
     pg_temp.wp_id(p_merchant), pg_temp.wp_hex(p_pepper),
     pg_temp.wp_hex(p_salt), pg_temp.wp_hex(p_pin)
   );
@@ -107,10 +108,7 @@ BEGIN
   PERFORM pg_temp.wp_assert(v_old_proof ~ '^[0-9a-f]{64}$', 'new PIN verifies after reset');
 
   -- Change with the current PIN: new salt and hash, proofs revoked.
-  v_result := pg_temp.wp_rpc('U4', pg_catalog.format(
-    'SELECT public.change_wallet_pin(%L::uuid, %L, %L, 1, %L, %L)',
-    pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('pin_135790'),
-    pg_temp.wp_hex('salt'), pg_temp.wp_hex('pin_0000')));
+  v_result := pg_temp.wp_rpc('U4', pg_temp.wp_change_sql('M1', 'pin_135790', 'salt', 'pin_0000'));
   v_pin := pg_temp.wp_pin('C6');
   PERFORM pg_temp.wp_assert(
     v_result = '{"status":"changed"}'

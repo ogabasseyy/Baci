@@ -56,6 +56,15 @@ BEGIN
   PERFORM pg_temp.wp_assert(pg_temp.wp_consume(v_proof, 'vtu', 5000, 'idem1') = 'consumed', 'first consume');
   PERFORM pg_temp.wp_assert(pg_temp.wp_consume(v_proof, 'vtu', 5000, 'idem1') = 'used', 'second consume');
 
+  -- Reason precedence: the binding is judged before the proof's state, so
+  -- used only describes the debit the proof was issued for. A spent proof
+  -- presented for anything else is a mismatch.
+  PERFORM pg_temp.wp_assert(pg_temp.wp_consume(v_proof, 'vtu', 5001, 'idem1') = 'mismatch', 'spent proof, other amount');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_consume(v_proof, 'imei', 5000, 'idem1') = 'mismatch', 'spent proof, other purpose');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_consume(v_proof, 'vtu', 5000, 'idem2') = 'mismatch', 'spent proof, other key');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_consume(v_proof, 'vtu', 5000, 'idem1', 'C1') = 'mismatch', 'spent proof, other customer');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_consume(v_proof, 'vtu', 5000, 'idem1') = 'used', 'spent proof, same debit');
+
   -- Any other binding is refused and leaves the proof usable.
   v_proof := pg_temp.wp_issue('checkout', 250000, 'idem2');
   PERFORM pg_temp.wp_assert(pg_temp.wp_consume(v_proof, 'checkout', 250001, 'idem2') = 'mismatch', 'other amount');
@@ -77,6 +86,9 @@ BEGIN
              WHERE token_sha256 = pg_catalog.sha256(pg_catalog.decode(v_proof, 'hex'))
                AND consumed_at IS NULL),
     'an expired proof is not marked consumed');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_consume(v_proof, 'imei', 1501, 'idem3') = 'mismatch', 'expired proof, other amount');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_consume(v_proof, 'vtu', 1500, 'idem3') = 'mismatch', 'expired proof, other purpose');
+  PERFORM pg_temp.wp_assert(pg_temp.wp_consume(v_proof, 'imei', 1500, 'idem3') = 'expired', 'expired proof, same debit');
 
   -- Missing, malformed and unknown tokens.
   PERFORM pg_temp.wp_assert(pg_temp.wp_consume(NULL, 'vtu', 5000, 'idem1') = 'missing', 'NULL token');
@@ -151,10 +163,7 @@ BEGIN
   PERFORM pg_temp.wp_assert(v_result = '{"status":"unavailable"}', 'verify while disabled: ' || v_result::text);
   v_result := pg_temp.wp_rpc('U5', pg_temp.wp_state_sql('M1'));
   PERFORM pg_temp.wp_assert(v_result = '{"status":"unavailable"}', 'state while disabled: ' || v_result::text);
-  v_result := pg_temp.wp_rpc('U5', pg_catalog.format(
-    'SELECT public.change_wallet_pin(%L::uuid, %L, %L, 1, %L, %L)',
-    pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('pin_2580'),
-    pg_temp.wp_hex('salt2'), pg_temp.wp_hex('pin_0000')));
+  v_result := pg_temp.wp_rpc('U5', pg_temp.wp_change_sql('M1', 'pin_2580', 'salt2', 'pin_0000'));
   PERFORM pg_temp.wp_assert(v_result = '{"status":"unavailable"}', 'change while disabled: ' || v_result::text);
   v_result := pg_temp.wp_rpc('U5', pg_temp.wp_reset_sql('M1', 'pin_0000'), pg_temp.wp_fresh_amr());
   PERFORM pg_temp.wp_assert(v_result = '{"status":"unavailable"}', 'reset while disabled: ' || v_result::text);

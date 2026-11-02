@@ -72,10 +72,7 @@ BEGIN
   PERFORM pg_temp.wp_assert(
     v_result = pg_catalog.jsonb_build_object('status', 'locked', 'lockedUntil', v_pin.locked_until),
     'state while locked: ' || v_result::text);
-  v_result := pg_temp.wp_rpc('U2', pg_catalog.format(
-    'SELECT public.change_wallet_pin(%L::uuid, %L, %L, 1, %L, %L)',
-    pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('pin_2580'),
-    pg_temp.wp_hex('salt2'), pg_temp.wp_hex('pin_135790')));
+  v_result := pg_temp.wp_rpc('U2', pg_temp.wp_change_sql('M1', 'pin_2580', 'salt2', 'pin_135790'));
   PERFORM pg_temp.wp_assert(v_result->>'status' = 'locked', 'change while locked: ' || v_result::text);
 
   -- After the lock ends there is a fresh window of five attempts, and the
@@ -126,10 +123,7 @@ BEGIN
     'correct PIN resets the counters: ' || v_result::text);
 
   -- Change: a wrong current PIN counts like a wrong verify.
-  v_result := pg_temp.wp_rpc('U2', pg_catalog.format(
-    'SELECT public.change_wallet_pin(%L::uuid, %L, %L, 1, %L, %L)',
-    pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('pin_0000'),
-    pg_temp.wp_hex('salt2'), pg_temp.wp_hex('pin_135790')));
+  v_result := pg_temp.wp_rpc('U2', pg_temp.wp_change_sql('M1', 'pin_0000', 'salt2', 'pin_135790'));
   PERFORM pg_temp.wp_assert(
     v_result = '{"status":"incorrect","attemptsRemaining":4}', 'change with a wrong PIN: ' || v_result::text);
   PERFORM pg_temp.wp_assert((pg_temp.wp_pin('C2')).failed_attempts = 1, 'change failure counted');

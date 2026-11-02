@@ -12,9 +12,15 @@
 -- of the request's Idempotency-Key). The spend hold consumes it inside its
 -- own transaction (wallet_pin_private.consume_wallet_pin_proof).
 --
--- Dark: nothing consumes a proof yet, the server cannot hash a PIN while
--- WALLET_PIN_PEPPER is unset, and no merchant has an enabled authority row
--- (rows are written only by owner SQL from the enablement runbook).
+-- The database never trusts a hash a client computed on its own: every set,
+-- change, reset and verify must carry a fresh server attestation, an HMAC
+-- under a key derived from WALLET_PIN_PEPPER (attestation_keys), checked by
+-- wallet_pin_private.require_attestation at the end of this file.
+--
+-- Dark: nothing consumes a proof yet, the server cannot hash or attest
+-- while WALLET_PIN_PEPPER is unset, and no attestation key or enabled
+-- merchant authority row exists (both are written only by owner SQL from
+-- the enablement runbook).
 
 BEGIN;
 
@@ -27,6 +33,16 @@ CREATE TABLE wallet_pin_private.merchant_authorities (
   merchant_id uuid PRIMARY KEY REFERENCES public.merchants(id) ON DELETE CASCADE,
   enabled boolean NOT NULL DEFAULT false,
   updated_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp()
+);
+
+-- One attestation key per pepper: HMAC-SHA256(WALLET_PIN_PEPPER,
+-- 'baci.wallet-pin.attestation-key.v1'), keyed by the pepper's public id.
+-- Owner SQL only. With no row for a pepper, nothing can be set, changed,
+-- reset or verified under it.
+CREATE TABLE wallet_pin_private.attestation_keys (
+  pepper_id bytea PRIMARY KEY CHECK (pg_catalog.octet_length(pepper_id) = 8),
+  attestation_key bytea NOT NULL CHECK (pg_catalog.octet_length(attestation_key) = 32),
+  created_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp()
 );
 
 -- One PIN per customer row (a customer row is already per merchant).
@@ -94,10 +110,13 @@ CREATE INDEX proofs_purpose_idx ON wallet_pin_private.proofs (purpose);
 
 -- Second wall: RLS with a restrictive deny-all policy. The owner (postgres,
 -- the definer of the functions below) is not subject to RLS.
+ALTER TABLE wallet_pin_private.attestation_keys ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wallet_pin_private.merchant_authorities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wallet_pin_private.customer_pins ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wallet_pin_private.proof_purposes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wallet_pin_private.proofs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY attestation_keys_deny ON wallet_pin_private.attestation_keys
+  AS RESTRICTIVE FOR ALL TO PUBLIC USING (false) WITH CHECK (false);
 CREATE POLICY merchant_authorities_deny ON wallet_pin_private.merchant_authorities
   AS RESTRICTIVE FOR ALL TO PUBLIC USING (false) WITH CHECK (false);
 CREATE POLICY customer_pins_deny ON wallet_pin_private.customer_pins
@@ -109,5 +128,67 @@ CREATE POLICY proofs_deny ON wallet_pin_private.proofs
 
 REVOKE ALL ON ALL TABLES IN SCHEMA wallet_pin_private
   FROM PUBLIC, anon, authenticated, service_role;
+
+-- Checks the server attestation on a set, change, reset or verify. It is
+-- '<attested_at_ms>.<hex HMAC-SHA256>' over these lines joined by '\n':
+-- 'baci.wallet-pin.attestation.v1', operation, caller user id, merchant id,
+-- pepper id (hex), attested_at_ms, then the operation's fields, all lower
+-- case. Returns true when valid, false when no key exists for the pepper
+-- (the feature is not provisioned: callers answer "unavailable"), and
+-- raises 42501 when the attestation is wrong, for another caller or
+-- request, or older than 2 minutes. A NULL operation, merchant, pepper,
+-- attestation or field raises 22023 (array_to_string would silently skip a
+-- NULL field and sign a shorter message). Nothing is counted or changed first.
+-- The two MACs are compared through a second HMAC under a random key, so the
+-- time the comparison takes says nothing about how much of a guess was right.
+CREATE FUNCTION wallet_pin_private.require_attestation(
+  p_operation text,
+  p_merchant_id uuid,
+  p_pepper_id bytea,
+  p_attestation text,
+  p_fields text[]
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+DECLARE
+  v_key bytea;
+  v_at_ms bigint := pg_catalog.split_part(p_attestation, '.', 1)::bigint;
+  v_mac bytea := pg_catalog.decode(pg_catalog.split_part(p_attestation, '.', 2), 'hex');
+  v_now_ms bigint := (pg_catalog.date_part('epoch', pg_catalog.clock_timestamp()) * 1000)::bigint;
+  v_blind bytea := extensions.gen_random_bytes(32);
+  v_expected bytea;
+BEGIN
+  IF p_operation IS NULL OR p_merchant_id IS NULL OR p_pepper_id IS NULL
+    OR p_attestation IS NULL OR p_fields IS NULL
+    OR pg_catalog.array_position(p_fields, NULL) IS NOT NULL THEN
+    RAISE EXCEPTION 'invalid wallet pin request' USING ERRCODE = '22023';
+  END IF;
+  SELECT attestation.attestation_key INTO v_key
+    FROM wallet_pin_private.attestation_keys AS attestation
+   WHERE attestation.pepper_id = p_pepper_id;
+  IF v_key IS NULL THEN
+    RETURN false;
+  END IF;
+  v_expected := extensions.hmac(
+    pg_catalog.convert_to(pg_catalog.array_to_string(
+      ARRAY['baci.wallet-pin.attestation.v1', p_operation,
+            COALESCE(auth.uid()::text, ''), p_merchant_id::text,
+            pg_catalog.encode(p_pepper_id, 'hex'), v_at_ms::text] || p_fields,
+      E'\n'), 'UTF8'),
+    v_key, 'sha256');
+  IF v_at_ms < v_now_ms - 120000 OR v_at_ms > v_now_ms + 30000
+    OR extensions.hmac(v_expected, v_blind, 'sha256')
+      IS DISTINCT FROM extensions.hmac(v_mac, v_blind, 'sha256') THEN
+    RAISE EXCEPTION 'wallet_pin_attestation_invalid' USING ERRCODE = '42501';
+  END IF;
+  RETURN true;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION
+  wallet_pin_private.require_attestation(text, uuid, bytea, text, text[])
+FROM PUBLIC, anon, authenticated, service_role;
 
 COMMIT;

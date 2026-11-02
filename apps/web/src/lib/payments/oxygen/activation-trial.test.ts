@@ -164,3 +164,77 @@ it('does not send any provider request when the claim belongs to the previous bo
   );
   expect(request).not.toHaveBeenCalled();
 });
+
+it('retains bounded payment and activation evidence without storing arbitrary provider bodies', async () => {
+  const { createDecipheriv } = await import('node:crypto');
+  const key = 'a'.repeat(64);
+  const rpc = vi.fn().mockImplementation(async (_name, args) => ({
+    error: null,
+    data: args.p_operation === 'claim' ? { reference: trialReference } : {},
+  }));
+  const request = vi.fn(async (operation: string) =>
+    Response.json(
+      operation === 'payment'
+        ? {
+            split_payment: { completed: true, secret: 'sensitive-token' },
+            repayment_setup: { completed: true },
+            customer_email: 'buyer@example.com',
+          }
+        : {
+            loan_reference: trialReference,
+            status: 'ACTIVATED',
+            loan_amount: 297000,
+            identity: { bvn: 'sensitive-token' },
+          }
+    )
+  );
+  await runOxygenActivationTrial(
+    { rpc },
+    { rpc },
+    request,
+    key,
+    trialReference
+  );
+  const captures = rpc.mock.calls
+    .filter(([, args]) => args.p_operation === 'evidence')
+    .map(([, args]) => {
+      const c = args.p_payload.capture;
+      const decipher = createDecipheriv(
+        'aes-256-gcm',
+        Buffer.from(key, 'hex'),
+        Buffer.from(c.iv, 'base64')
+      );
+      decipher.setAAD(Buffer.from(c.aad, 'base64'));
+      decipher.setAuthTag(Buffer.from(c.tag, 'base64'));
+      return JSON.parse(
+        Buffer.concat([
+          decipher.update(Buffer.from(c.ciphertext, 'base64')),
+          decipher.final(),
+        ]).toString('utf8')
+      );
+    });
+  expect(captures).toHaveLength(2);
+  expect(JSON.stringify(captures)).not.toContain('sensitive-token');
+  expect(JSON.stringify(captures)).not.toContain('buyer@example.com');
+  expect(captures[0]).toMatchObject({
+    operation: 'payment',
+    httpStatus: 200,
+    payment: { splitPaymentCompleted: true, repaymentSetupCompleted: true },
+  });
+  expect(captures[1]).toMatchObject({
+    operation: 'activate',
+    httpStatus: 200,
+    activation: {
+      loanReference: trialReference,
+      status: 'ACTIVATED',
+      terms: { loan_amount: 297000 },
+    },
+  });
+  expect(rpc).toHaveBeenCalledWith(
+    'oxygen_activation_trial',
+    expect.objectContaining({
+      p_operation: 'finish',
+      p_payload: expect.objectContaining({ status: 'activated' }),
+    })
+  );
+});

@@ -6,6 +6,7 @@ import {
   oxygenActivationBinding,
   oxygenActivationReferenceSchema,
 } from './activation-binding';
+import { projectOxygenTrialEvidence } from './activation-trial-evidence';
 import type { OxygenRuntimeRpc } from './runtime-service';
 export type OxygenActivationTrialOperation = 'payment' | 'activate';
 async function rpc(
@@ -80,18 +81,29 @@ export async function runOxygenActivationTrial(
       }
     }
     const body = Buffer.concat(parts).toString('utf8');
+    let parsed: unknown;
+    let isJson = false;
+    try {
+      parsed = JSON.parse(body) as unknown;
+      isJson = true;
+    } catch {
+      // Retain metadata only for malformed provider responses.
+    }
     const iv = randomBytes(12);
     const cipher = createCipheriv('aes-256-gcm', Buffer.from(key, 'hex'), iv);
     const aad = Buffer.from(`${workflowId}:${++sequence}:${operation}`);
     cipher.setAAD(aad);
     const encrypted = Buffer.concat([
       cipher.update(
-        JSON.stringify({
-          operation,
-          httpStatus: response.status,
-          body,
-          receivedAt: new Date().toISOString(),
-        }),
+        JSON.stringify(
+          projectOxygenTrialEvidence(
+            operation,
+            response.status,
+            parsed,
+            isJson,
+            reference
+          )
+        ),
         'utf8'
       ),
       cipher.final(),
@@ -105,12 +117,7 @@ export async function runOxygenActivationTrial(
         ciphertext: encrypted.toString('base64'),
       },
     });
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(body);
-    } catch {
-      throw new Error('Invalid response');
-    }
+    if (!isJson) throw new Error('Invalid response');
     if (!response.ok) {
       if (
         operation === 'activate' &&

@@ -5,6 +5,8 @@ import type { ShipmentCompletionMode } from '@/lib/order-shipment';
 import { ShipmentOptionCard } from './ShipmentOptionCard';
 
 interface ShipmentFlowMethodStepProps {
+  /** Viewer cannot book GIG: show the checkout price read-only. */
+  bookingDenied?: boolean;
   canUseProvider: boolean;
   /** Formatted shipping price the customer paid with a saved checkout quote. */
   checkoutPaidShippingLabel?: string | null;
@@ -15,6 +17,7 @@ interface ShipmentFlowMethodStepProps {
 }
 
 export function ShipmentFlowMethodStep({
+  bookingDenied = false,
   canUseProvider,
   checkoutPaidShippingLabel,
   giglPanel,
@@ -37,11 +40,13 @@ export function ShipmentFlowMethodStep({
         <ShipmentOptionCard
           colors={colors}
           description={
-            !canUseProvider
-              ? providerLabel
-                ? `${providerLabel} was selected for checkout, but this order does not have a saved quote to book against anymore.`
-                : 'No provider-backed shipping quote is currently saved on this order.'
-              : `${providerDescription}${paidNote}`
+            bookingDenied && checkoutPaidShippingLabel
+              ? `Customer paid ${checkoutPaidShippingLabel} for GIG delivery at checkout. Ask the store owner or an admin to book GIG for this order.`
+              : !canUseProvider
+                ? providerLabel
+                  ? `${providerLabel} was selected for checkout, but this order does not have a saved quote to book against anymore.`
+                  : 'No provider-backed shipping quote is currently saved on this order.'
+                : `${providerDescription}${paidNote}`
           }
           disabled={!canUseProvider}
           icon="paper-plane-outline"

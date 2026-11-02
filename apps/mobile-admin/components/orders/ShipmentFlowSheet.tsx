@@ -202,6 +202,7 @@ export function ShipmentFlowSheet({
             ) : null}
             {step === 'method' ? (
               <ShipmentFlowMethodStep
+                bookingDenied={!canBookGigl}
                 canUseProvider={canUseProvider}
                 checkoutPaidShippingLabel={checkoutPaidShippingLabel}
                 giglPanel={

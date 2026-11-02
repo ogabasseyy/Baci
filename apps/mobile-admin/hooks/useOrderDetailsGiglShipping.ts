@@ -35,12 +35,15 @@ export function useOrderDetailsGiglShipping({
   // booking it also need orders.edit (see canBookOrderGigl).
   const fulfillAccess = useOrderFulfillAccess();
   const canBookGigl = canBookOrderGigl(fulfillAccess);
-  const { isSavedMerchantWalletGiglOrder, providerBookingAvailable } =
-    getOrderGiglShippingVisibility({ canBookGigl, order });
+  const {
+    hasSavedProviderQuote,
+    isSavedMerchantWalletGiglOrder,
+    providerBookingAvailable,
+  } = getOrderGiglShippingVisibility({ canBookGigl, order });
   const walletFlowApplicable =
     fulfillAccess.canFulfill &&
     giglEligible &&
-    (!providerBookingAvailable || isSavedMerchantWalletGiglOrder);
+    (!hasSavedProviderQuote || isSavedMerchantWalletGiglOrder);
   // Price GIG once the merchant heads for Ship Order (status sheet or the
   // sheet's details step) so the Shipping step shows it at once. Merely viewing
   // an order never asks: every /api/orders request shares one small rate limit.

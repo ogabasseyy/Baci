@@ -33,6 +33,9 @@ export function getOrderGiglShippingVisibility({
     needsBookingRights && !canBookGigl ? false : canUseProvider;
 
   return {
+    // A saved quote exists whoever may book it; it, not booking rights,
+    // decides whether the wallet quote flow applies.
+    hasSavedProviderQuote: canUseProvider,
     isSavedMerchantWalletGiglOrder,
     providerBookingAvailable,
   };

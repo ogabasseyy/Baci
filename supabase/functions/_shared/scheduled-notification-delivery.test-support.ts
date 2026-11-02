@@ -13,7 +13,7 @@ type ClaimOptions = {
 };
 
 /** Builds a valid claimed broadcast with deterministic, suffix-derived UUIDs. */
-export function makeScheduledNotificationClaim(
+function makeScheduledNotificationClaim(
   suffix: string,
   options: ClaimOptions = {}
 ) {
@@ -33,7 +33,7 @@ export function makeScheduledNotificationClaim(
 }
 
 /** A claim the worker cannot parse but can still identify and finalize. */
-export function makeMalformedScheduledNotificationClaim(suffix: string) {
+function makeMalformedScheduledNotificationClaim(suffix: string) {
   return {
     ...makeScheduledNotificationClaim(suffix),
     target_merchant_ids: null,
@@ -60,7 +60,7 @@ type ScheduledNotificationDeliveryModule = {
  * web TypeScript program cannot compile it (`.ts` specifiers, Deno globals),
  * so the specifier stays non-literal and the module is typed by its contract.
  */
-export async function loadScheduledNotificationDelivery() {
+async function loadScheduledNotificationDelivery() {
   const modulePath: string = fileURLToPath(
     new URL('./scheduled-notification-delivery.ts', import.meta.url)
   );
@@ -75,7 +75,7 @@ export type RpcCall = {
 };
 
 /** Records every RPC call while delegating responses to the scenario handler. */
-export function makeScheduledNotificationTestClient(
+function makeScheduledNotificationTestClient(
   handleRpc: (
     name: string,
     args: Record<string, unknown> | undefined
@@ -91,10 +91,19 @@ export function makeScheduledNotificationTestClient(
   return { calls, client };
 }
 
-export function finalizeCallsFor(calls: RpcCall[], notificationId: string) {
+function finalizeCallsFor(calls: RpcCall[], notificationId: string) {
   return calls.filter(
     (call) =>
       call.name === 'finalize_scheduled_admin_notification_v1' &&
       call.args?.p_notification_id === notificationId
   );
 }
+
+/** The single primary export: every helper the worker behaviour tests share. */
+export const scheduledNotificationTestSupport = {
+  finalizeCallsFor,
+  loadScheduledNotificationDelivery,
+  makeMalformedScheduledNotificationClaim,
+  makeScheduledNotificationClaim,
+  makeScheduledNotificationTestClient,
+};

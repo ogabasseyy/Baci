@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -111,10 +111,21 @@ describe('scheduled notification delivery safety contract', () => {
     for (const suite of [
       'admin-notification-batch-isolation.test.ts',
       'admin-notification-batch-unidentifiable-claim.test.ts',
+      'admin-notification-test-support.test.ts',
       'admin-notification-worker-outcome.test.ts',
     ])
       expect(read(`apps/web/src/lib/${suite}`)).toContain(
         'supabase/functions/_shared/scheduled-notification'
       );
+    // Every new worker module keeps a colocated test next to it.
+    for (const module of [
+      'scheduled-notification-delivery.test-support',
+      'scheduled-notification-worker-outcome',
+    ])
+      expect(
+        existsSync(
+          resolve(root, `supabase/functions/_shared/${module}.test.ts`)
+        )
+      ).toBe(true);
   });
 });

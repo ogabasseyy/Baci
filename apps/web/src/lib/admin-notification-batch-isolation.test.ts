@@ -1,14 +1,16 @@
 // @vitest-environment node
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
+import { scheduledNotificationTestSupport } from '../../../../supabase/functions/_shared/scheduled-notification-delivery.test-support';
+import type { ScheduledNotificationWorkerClient } from '../../../../supabase/functions/_shared/scheduled-notification-rpc';
+
+const {
   finalizeCallsFor,
   loadScheduledNotificationDelivery,
-  makeMalformedScheduledNotificationClaim as makeMalformedClaim,
+  makeMalformedScheduledNotificationClaim: makeMalformedClaim,
   makeScheduledNotificationClaim,
   makeScheduledNotificationTestClient,
-} from '../../../../supabase/functions/_shared/scheduled-notification-delivery.test-support';
-import type { ScheduledNotificationWorkerClient } from '../../../../supabase/functions/_shared/scheduled-notification-rpc';
+} = scheduledNotificationTestSupport;
 
 // Lives in the web project so the CI web suite runs it: the Edge worker's
 // own folder has no CI test job.

@@ -55,6 +55,7 @@ SELECT o.shipping_status, o.cancelled_by, o.cancelled_at IS NOT NULL AS has_canc
                                WHERE t.wallet_id = w.id
                                ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS balance_matches_ledger
   FROM public.orders o
+  JOIN public.merchants m ON m.id = o.merchant_id AND m.slug = 'ogabassey'
   JOIN public.customer_wallets w ON w.customer_id = o.customer_id AND w.merchant_id = o.merchant_id
  WHERE o.id = 'PASTE-ORDER-ID';
 
@@ -82,6 +83,7 @@ SELECT coalesce(v.metadata->>'provider', 'kuda') AS vendor, v.request_reference,
        v.transaction_id AS vendor_transaction_id,
        v.metadata->>'monnifyVendReference' AS monnify_vend_reference, v.created_at
   FROM public.vtu_transactions v
+  JOIN public.merchants m ON m.id = v.merchant_id AND m.slug = 'ogabassey'
  WHERE v.id = 'PASTE-VTU-ID';
 
 -- [V3] WRITE, owner-approved: record the vendor's final answer for the stuck purchase.
@@ -105,7 +107,7 @@ BEGIN
   END IF;
   -- Same lock order as reverse_vtu_wallet_payment: purchase lock, purchase row, wallet row.
   PERFORM pg_advisory_xact_lock(('x' || substr(md5(v_vtu_id::text), 1, 16))::bit(64)::bigint);
-  SELECT v.id, v.merchant_id, v.customer_id, v.status, v.source, v.amount, v.metadata
+  SELECT v.id, v.merchant_id, v.customer_id, v.status, v.source, v.type, v.amount, v.metadata
     INTO v_row
     FROM public.vtu_transactions v
     JOIN public.merchants m ON m.id = v.merchant_id AND m.slug = 'ogabassey'
@@ -115,8 +117,9 @@ BEGIN
   IF v_row.status <> 'processing' THEN
     RAISE EXCEPTION 'STOP: purchase is %, not processing', v_row.status;
   END IF;
-  IF v_row.source <> 'checkout' OR v_row.customer_id IS NULL OR v_row.amount <> v_amount THEN
-    RAISE EXCEPTION 'STOP: purchase does not match the approved amount';
+  IF v_row.source <> 'checkout' OR v_row.type <> 'airtime' OR v_row.customer_id IS NULL
+     OR v_row.amount <> v_amount THEN
+    RAISE EXCEPTION 'STOP: purchase does not match the approved airtime purchase';
   END IF;
   IF jsonb_typeof(v_row.metadata->'paymentSplit') IS DISTINCT FROM 'object'
      OR (v_row.metadata->'paymentSplit'->>'card')::numeric IS DISTINCT FROM 0
@@ -188,13 +191,21 @@ BEGIN
   RAISE NOTICE 'APPLIED: recorded %', v_outcome;
 END $$;
 
--- [V4] READ-ONLY: confirm the purchase is closed and the wallet matches its ledger
+-- [V4] READ-ONLY: confirm the purchase is closed and the wallet matches its ledger.
+-- credits_pending: a successful purchase whose commission or cashback the checker has not
+-- credited yet.
 SELECT v.status, v.metadata->'opsResolution'->>'outcome' AS outcome,
        l.debited, l.returned, l.refunded,
        w.available_balance = (SELECT t.balance_after FROM public.customer_wallet_transactions t
                                WHERE t.wallet_id = w.id
-                               ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS balance_matches_ledger
+                               ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS balance_matches_ledger,
+       v.status = 'successful'
+         AND ((coalesce(v.merchant_commission, 0) > 0
+               AND v.metadata->>'merchantWalletCredited' IS DISTINCT FROM 'true')
+           OR (coalesce(v.customer_cashback, 0) > 0
+               AND v.metadata->>'customerWalletCredited' IS DISTINCT FROM 'true')) AS credits_pending
   FROM public.vtu_transactions v
+  JOIN public.merchants m ON m.id = v.merchant_id AND m.slug = 'ogabassey'
   JOIN public.customer_wallets w ON w.customer_id = v.customer_id AND w.merchant_id = v.merchant_id
  CROSS JOIN LATERAL (
    SELECT coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_wallet_payment'

@@ -24,6 +24,8 @@ named below (O1, O2, V1 to V4) are in
 4. Run SQL in the production project's Supabase SQL editor, one block at a time. Never run
    the SQL file as a whole. Paste each block unchanged except for the values marked `PASTE`.
    The write block checks everything itself and changes nothing unless every check passes.
+   The blocks that take a pasted id only answer for Ogabassey rows: no rows means the id is
+   wrong, so stop and check it.
 5. Do not run any wallet function by hand outside these blocks.
 
 ## Part A: the ₦10,000 order
@@ -149,7 +151,7 @@ designed to keep this wallet out.
 
 Before changing anything, the block checks that the purchase:
 
-- is an Ogabassey purchase that is still processing;
+- is an Ogabassey airtime purchase that is still processing;
 - is a wallet-only purchase of exactly the approved amount;
 - has exactly the wallet debit expected, and no money returned yet;
 - when the answer is "delivered", was not re-routed from Monnify to Kuda (see B1).
@@ -161,8 +163,9 @@ What it then does:
   function refuses to return the same purchase twice. The block then writes the refund markers
   the app writes, so the customer's history shows the refund and the checker leaves it alone.
 - **Failed, wallet never charged:** closes it as failed with no credit.
-- **Delivered:** marks it successful and moves no money. The checker then finishes the normal
-  follow-ups of a successful purchase, such as cashback.
+- **Delivered:** marks it successful and moves no money. Within a few minutes the checker
+  credits any commission and cashback the purchase earned, as for any successful purchase.
+  It may not send the customer the usual success email, so tell the customer if needed.
 
 The block runs as one transaction under the same locks as the checker's own refund, so the
 checker cannot act on the purchase halfway through.
@@ -170,9 +173,11 @@ checker cannot act on the purchase halfway through.
 ### B4. Confirm (block V4, READ-ONLY)
 
 Fill in the `vtu_id`. Expected after "failed":
-`failed | vendor_confirmed_failed | 103.00 | 103.00 | 0 | true`. After "delivered":
-`successful | vendor_confirmed_delivered | 103.00 | 0 | 0 | true`. V1 must no longer list the
-purchase.
+`failed | vendor_confirmed_failed | 103.00 | 103.00 | 0 | true | false`. After "delivered":
+`successful | vendor_confirmed_delivered | 103.00 | 0 | 0 | true`, then `credits_pending`.
+That last column may read `true` at first. Run V4 again after about ten minutes: it must read
+`false`, which means the checker has credited the commission and cashback. If it stays `true`,
+escalate. V1 must no longer list the purchase.
 
 ## After both parts
 

@@ -1,10 +1,14 @@
 -- Behaviour test: paid-interest notifications after migration
--- 20261031222257_savings_interest_notification_copy. Proves, against live
+-- 20261102043709_savings_interest_notification_copy. Proves, against live
 -- PostgreSQL, for both paid-interest sources:
 --   * every recorded paid-interest insert with a positive amount enqueues
 --     exactly one notification, keyed to that payout or ledger operation, with
 --     the "Your savings just grew" title, the exact naira amount and the
---     goal's progress after the credit (principal plus net paid interest);
+--     goal's progress after the credit (principal plus net paid interest:
+--     interest reserved for a purchase still counts, and every partial
+--     reversal of a payout is subtracted once, matched on its integration);
+--   * no interest notice ever claims the goal is reached, so a reversal that
+--     takes the goal back below target leaves no live completion claim;
 --   * a zero-net payout, an accrual (pending interest), a non-interest
 --     posting and moving existing interest for a purchase enqueue nothing;
 --   * a reversal enqueues nothing new and voids the original notice.
@@ -49,8 +53,9 @@ CREATE FUNCTION pg_temp.receipt(p_payout text, p_net bigint) RETURNS void LANGUA
     pg_temp.id(20), p_net, jsonb_build_object('payoutId', p_payout), repeat('a', 64))
 $$;
 
--- Fixture: one customer with a primary-wallet goal (30) and a legacy ledger
--- goal (31), each targeting ₦1,000 with ₦200 of principal saved.
+-- Fixture: one customer with a primary-wallet goal (30), a legacy ledger
+-- goal (31) and a second-integration primary goal (32), each targeting ₦1,000
+-- with ₦200 of principal saved.
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 INSERT INTO auth.users(id) VALUES (pg_temp.id(1));
 INSERT INTO public.merchants(id, email) VALUES (pg_temp.id(10), 'interest-copy@example.com');
@@ -62,11 +67,13 @@ INSERT INTO public.customer_savings_goals(id, merchant_id, customer_id, product_
   start_date, maturity_date, terms_accepted_at, non_withdrawable_accepted_at)
 SELECT pg_temp.id(n), pg_temp.id(10), pg_temp.id(20), pg_temp.id(11), 'Interest copy goal', 'active',
   'manual', 1000, 200, 100, 'daily', current_date, current_date + 30, now(), now()
-FROM (VALUES (30), (31)) AS goal(n);
+FROM (VALUES (30), (31), (32)) AS goal(n);
 
 INSERT INTO piggyvest_primary.integrations(id, merchant_id, business_id, environment, executor_login, enabled)
   VALUES (pg_temp.id(40), pg_temp.id(10), 'interest-copy-business', 'production',
-    'interest_copy_fixture_executor', true);
+    'interest_copy_fixture_executor', true),
+  (pg_temp.id(42), pg_temp.id(10), 'interest-copy-business-b', 'production',
+    'interest_copy_fixture_executor_b', true);
 SET LOCAL session_replication_role = replica;
 INSERT INTO piggyvest_primary.paid_interest_crosswalks(id, integration_id, goal_id, api_wallet_id,
   api_customer_id, onboarding_customer_id, webhook_customer_id, source_wallet_id, accrued_wallet_id,
@@ -75,6 +82,10 @@ INSERT INTO piggyvest_primary.paid_interest_crosswalks(id, integration_id, goal_
 VALUES (pg_temp.id(41), pg_temp.id(40), pg_temp.id(30), 'copy-api-wallet', 'copy-api-customer',
   'copy-onboarding-customer', 'copy-webhook-customer', 'copy-source', 'copy-accrued',
   'copy-destination', NULL, repeat('a', 64), repeat('b', 64), 'synthetic-interest-copy-fixture',
+  'provider_net_is_customer_plan_interest', true),
+  (pg_temp.id(43), pg_temp.id(42), pg_temp.id(32), 'copy-api-wallet-b', 'copy-api-customer-b',
+  'copy-onboarding-customer-b', 'copy-webhook-customer-b', 'copy-source-b', 'copy-accrued-b',
+  'copy-destination-b', NULL, repeat('a', 64), repeat('b', 64), 'synthetic-interest-copy-fixture-b',
   'provider_net_is_customer_plan_interest', true);
 SET LOCAL session_replication_role = origin;
 
@@ -99,8 +110,9 @@ SELECT pg_temp.receipt('copy-payout-0', 0);
 SELECT pg_temp.check((SELECT count(*) = 1 FROM pg_temp.notices(pg_temp.id(30))),
   'a zero-net payout must not enqueue a notice');
 
--- 3. Two payouts in one statement are two notices; passing the target reads
--- as reached (₦200 + ₦150 + ₦500 + ₦200 = ₦1,050 of ₦1,000).
+-- 3. Two payouts in one statement are two notices. Passing the target
+-- (₦200 + ₦150 + ₦500 + ₦200 = ₦1,050 of ₦1,000) points to the live balance
+-- and never claims completion, because a later reversal can undo it.
 INSERT INTO piggyvest_primary.paid_interest_receipts(integration_id, payout_id, crosswalk_id,
   goal_id, merchant_id, customer_id, net_kobo, financial_identity, body_digest)
 SELECT pg_temp.id(40), payout.id, pg_temp.id(41), pg_temp.id(30), pg_temp.id(10), pg_temp.id(20),
@@ -110,11 +122,11 @@ SELECT pg_temp.check(
   (SELECT count(*) = 3 FROM pg_temp.notices(pg_temp.id(30))),
   'each paid-interest insert must enqueue exactly one notice');
 SELECT pg_temp.check(
-  (SELECT body = '₦500.00 interest added to your savings. Goal reached! 🎉'
+  (SELECT body = '₦500.00 interest added to your savings. Open your savings to see your latest balance.'
    FROM pg_temp.notices(pg_temp.id(30)) WHERE event_key = pg_temp.payout_key('copy-payout-2'))
-  AND (SELECT body = '₦200.00 interest added to your savings. Goal reached! 🎉'
+  AND (SELECT body = '₦200.00 interest added to your savings. Open your savings to see your latest balance.'
    FROM pg_temp.notices(pg_temp.id(30)) WHERE event_key = pg_temp.payout_key('copy-payout-3')),
-  'savings above the target must read as goal reached');
+  'savings above the target must point to the balance, never claim the goal is reached');
 
 -- 4. A reversal voids its payout notice and enqueues nothing new.
 INSERT INTO piggyvest_primary.paid_interest_reversals(integration_id, provider_reversal_id, payout_id,
@@ -126,6 +138,10 @@ SELECT pg_temp.check(
      AND bool_and(notice.voided = (notice.event_key = pg_temp.payout_key('copy-payout-1')))
    FROM pg_temp.notices(pg_temp.id(30)) notice),
   'a reversal must void only its own payout notice and enqueue nothing');
+SELECT pg_temp.check(
+  NOT EXISTS (SELECT 1 FROM pg_temp.notices(pg_temp.id(30)) notice
+    WHERE NOT notice.voided AND notice.body ~* '(reached|complete)'),
+  'once a reversal takes the goal below target (₦900 of ₦1,000) no live interest notice may claim completion');
 
 -- 5. Legacy ledger: an accrual and a non-interest posting are silent.
 INSERT INTO piggyvest_savings_ledger.operations(id, integration_id, merchant_id, customer_id,
@@ -157,13 +173,29 @@ SELECT pg_temp.check(
   'another goal''s ledger credit must never count toward this goal (₦900 of ₦1,000)');
 
 -- 7. Legacy ledger: reserving paid interest for a purchase and releasing it
--- back moves existing interest, so neither enqueues a notice.
+-- back moves existing interest, so neither enqueues a notice. Reserved
+-- interest is still the customer's, so it keeps counting toward progress, as
+-- it does toward completion, and a credit while the reservation is open is
+-- announced with that progress (₦200 + ₦50 + ₦10 = ₦260 of ₦1,000).
 INSERT INTO piggyvest_savings_ledger.operations(id, integration_id, merchant_id, customer_id,
   goal_id, command, evidence_id, reference_id)
   VALUES (pg_temp.id(63), pg_temp.id(50), pg_temp.id(10), pg_temp.id(20), pg_temp.id(31),
     '{"kind":"reserve_purchase","principalKobo":0,"interestKobo":2000}', 'copy-reserve', NULL);
 INSERT INTO piggyvest_savings_ledger.postings(operation_id, account, amount_kobo)
   VALUES (pg_temp.id(63), 'paid_interest', -2000), (pg_temp.id(63), 'purchase_interest', 2000);
+SELECT pg_temp.check(
+  savings_notifications.interest_progress(pg_temp.id(31)) = 'You’re now 25% of the way there.',
+  'interest reserved for a purchase must still count toward progress (₦250 of ₦1,000)');
+INSERT INTO piggyvest_savings_ledger.operations(id, integration_id, merchant_id, customer_id,
+  goal_id, command, evidence_id, reference_id)
+  VALUES (pg_temp.id(65), pg_temp.id(50), pg_temp.id(10), pg_temp.id(20), pg_temp.id(31),
+    '{"kind":"credit_eligible_paid_interest","interestKobo":1000}', 'copy-credit-reserved', NULL);
+INSERT INTO piggyvest_savings_ledger.postings(operation_id, account, amount_kobo)
+  VALUES (pg_temp.id(65), 'paid_interest', 1000), (pg_temp.id(65), 'internal_clearing', -1000);
+SELECT pg_temp.check(
+  (SELECT body = '₦10.00 interest added to your savings. You’re now 26% of the way there.'
+   FROM pg_temp.notices(pg_temp.id(31)) WHERE event_key = 'interest:' || pg_temp.id(65)::text),
+  'a credit while a purchase reservation is open must count the reserved interest (26%)');
 INSERT INTO piggyvest_savings_ledger.operations(id, integration_id, merchant_id, customer_id,
   goal_id, command, evidence_id, reference_id)
   VALUES (pg_temp.id(64), pg_temp.id(50), pg_temp.id(10), pg_temp.id(20), pg_temp.id(31),
@@ -171,7 +203,7 @@ INSERT INTO piggyvest_savings_ledger.operations(id, integration_id, merchant_id,
 INSERT INTO piggyvest_savings_ledger.postings(operation_id, account, amount_kobo)
   VALUES (pg_temp.id(64), 'purchase_interest', -2000), (pg_temp.id(64), 'paid_interest', 2000);
 SELECT pg_temp.check(
-  (SELECT count(*) = 1 AND bool_and(NOT notice.voided) FROM pg_temp.notices(pg_temp.id(31)) notice),
+  (SELECT count(*) = 2 AND bool_and(NOT notice.voided) FROM pg_temp.notices(pg_temp.id(31)) notice),
   'moving existing paid interest must neither enqueue nor void a notice');
 
 -- 8. Legacy ledger: the reversal voids the notice and enqueues nothing new.
@@ -182,15 +214,53 @@ INSERT INTO piggyvest_savings_ledger.operations(id, integration_id, merchant_id,
 INSERT INTO piggyvest_savings_ledger.postings(operation_id, account, amount_kobo)
   VALUES (pg_temp.id(62), 'paid_interest', -5000), (pg_temp.id(62), 'internal_clearing', 5000);
 SELECT pg_temp.check(
-  (SELECT count(*) = 1 AND bool_and(notice.voided) FROM pg_temp.notices(pg_temp.id(31)) notice),
-  'a ledger reversal must void the credited notice and enqueue nothing');
+  (SELECT count(*) = 2
+     AND bool_and(notice.voided = (notice.event_key = 'interest:' || pg_temp.id(61)::text))
+   FROM pg_temp.notices(pg_temp.id(31)) notice),
+  'a ledger reversal must void only the notice it reverses and enqueue nothing');
 
 -- 9. Progress after the reversals counts net paid interest only.
 SELECT pg_temp.check(
-  savings_notifications.interest_progress(pg_temp.id(31)) = 'You’re now 20% of the way there.',
-  'reversed ledger interest must leave only principal in the progress');
+  savings_notifications.interest_progress(pg_temp.id(31)) = 'You’re now 21% of the way there.',
+  'reversed ledger interest must leave principal plus the unreversed ₦10 credit (₦210 of ₦1,000)');
 SELECT pg_temp.check(
   savings_notifications.interest_progress(pg_temp.id(30)) = 'You’re now 90% of the way there.',
   'primary progress must subtract the reversed payout (₦900 of ₦1,000)');
+
+-- 10. Primary wallet: several partial reversals of one payout are summed once
+-- for that payout, never once per reversal row, and the payout's remainder
+-- still counts (₦900 + ₦50 - ₦10 - ₦20 = ₦920 of ₦1,000). A reversal of the
+-- same payout id under another integration never touches this goal.
+SELECT pg_temp.receipt('copy-payout-4', 5000);
+SELECT pg_temp.check(
+  (SELECT body = '₦50.00 interest added to your savings. You’re now 95% of the way there.'
+   FROM pg_temp.notices(pg_temp.id(30)) WHERE event_key = pg_temp.payout_key('copy-payout-4')),
+  'a ₦50 payout on a ₦900/₦1,000 goal must read 95%');
+INSERT INTO piggyvest_primary.paid_interest_reversals(integration_id, provider_reversal_id, payout_id,
+  amount_kobo, provider_evidence_sha256, evidence_reference)
+  VALUES (pg_temp.id(40), 'copy-reversal-4a', 'copy-payout-4', 1000, repeat('d', 64),
+    'synthetic-interest-copy-partial-reversal-a'),
+  (pg_temp.id(40), 'copy-reversal-4b', 'copy-payout-4', 2000, repeat('e', 64),
+    'synthetic-interest-copy-partial-reversal-b');
+SELECT pg_temp.check(
+  (SELECT voided FROM pg_temp.notices(pg_temp.id(30)) WHERE event_key = pg_temp.payout_key('copy-payout-4')),
+  'a partial reversal must void its payout notice');
+SELECT pg_temp.check(
+  savings_notifications.interest_progress(pg_temp.id(30)) = 'You’re now 92% of the way there.',
+  'primary progress must subtract every partial reversal of a payout exactly once (₦920 of ₦1,000)');
+INSERT INTO piggyvest_primary.paid_interest_receipts(integration_id, payout_id, crosswalk_id,
+  goal_id, merchant_id, customer_id, net_kobo, financial_identity, body_digest)
+  VALUES (pg_temp.id(42), 'copy-payout-4', pg_temp.id(43), pg_temp.id(32), pg_temp.id(10),
+    pg_temp.id(20), 4000, jsonb_build_object('payoutId', 'copy-payout-4'), repeat('a', 64));
+INSERT INTO piggyvest_primary.paid_interest_reversals(integration_id, provider_reversal_id, payout_id,
+  amount_kobo, provider_evidence_sha256, evidence_reference)
+  VALUES (pg_temp.id(42), 'copy-reversal-4c', 'copy-payout-4', 4000, repeat('f', 64),
+    'synthetic-interest-copy-other-integration-reversal');
+SELECT pg_temp.check(
+  savings_notifications.interest_progress(pg_temp.id(30)) = 'You’re now 92% of the way there.',
+  'another integration''s reversal of the same payout id must not change this goal (₦920 of ₦1,000)');
+SELECT pg_temp.check(
+  savings_notifications.interest_progress(pg_temp.id(32)) = 'You’re now 20% of the way there.',
+  'the other integration''s goal must net its own reversed payout (₦200 of ₦1,000)');
 
 ROLLBACK;

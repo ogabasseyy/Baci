@@ -1,10 +1,12 @@
 -- Contract test: the paid-interest notification copy helpers and their
--- privileges (migration 20261031222257_savings_interest_notification_copy).
+-- privileges (migration 20261102043709_savings_interest_notification_copy).
 -- Proves, against live PostgreSQL:
 --   * progress_message(saved_kobo, target_kobo) returns a safe fallback for a
---     zero, negative, missing or non-finite target or saved amount, "Goal
---     reached" once saved meets or passes the target, a floored percentage
---     below it, and the naira amount left while progress is under 1%;
+--     zero, negative, missing or non-finite target or saved amount, the same
+--     neutral balance prompt (never a completion claim) once saved meets or
+--     passes the target, a floored percentage below it, and the naira amount
+--     left while progress is under 1%. Only the goal-completed notice, which
+--     is voided when completion is reversed, may say the goal is reached;
 --   * interest_progress(goal) returns the fallback for an unknown goal;
 --   * the two notifiers stay SECURITY DEFINER, the two helpers stay
 --     SECURITY INVOKER, and all four pin search_path;
@@ -114,11 +116,15 @@ FROM (VALUES
   ('-Infinity', 100000)
 ) AS v_case(saved, target);
 
--- 4. Meeting or passing the target is "Goal reached".
-SELECT pg_temp.check(pg_temp.progress(100000, 100000) = 'Goal reached! 🎉',
-  'saved equal to target must read as goal reached');
-SELECT pg_temp.check(pg_temp.progress(150000, 100000) = 'Goal reached! 🎉',
-  'saved above target must read as goal reached, never above 100%');
+-- 4. Meeting or passing the target never claims completion: a later reversal
+-- can take the goal back below target, and nothing withdraws an interest
+-- notice's text, so the copy points to the live balance instead.
+SELECT pg_temp.check(
+  pg_temp.progress(100000, 100000) = 'Open your savings to see your latest balance.',
+  'saved equal to target must not claim the goal is reached');
+SELECT pg_temp.check(
+  pg_temp.progress(150000, 100000) = 'Open your savings to see your latest balance.',
+  'saved above target must not claim the goal is reached or read above 100%');
 
 -- 5. Below the target the percentage is floored, so 99.999% is not reached.
 SELECT pg_temp.check(pg_temp.progress(35000, 100000) = 'You’re now 35% of the way there.',

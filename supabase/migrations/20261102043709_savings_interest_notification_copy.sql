@@ -4,7 +4,11 @@
 -- legacy savings ledger) now read "Your savings just grew 🎉" and
 -- "₦X interest added to your savings. <progress>", where <progress> is the
 -- goal's position after the credit: principal plus net paid interest (paid
--- interest less reversals), against the goal target.
+-- interest, including interest reserved for a purchase, less reversals),
+-- against the goal target. Below the target it is a floored percentage or,
+-- under 1%, the naira amount left. At or past the target it points to the
+-- live balance and never claims completion, which only the reversal-aware
+-- goal-completed notice announces.
 --
 -- Only the copy changes. Each notifier still fires only for recorded paid
 -- interest with a positive amount, keeps its event key, and still never
@@ -28,8 +32,12 @@ BEGIN
     OR p_target_kobo::text IN ('NaN', 'Infinity', '-Infinity') THEN
     RETURN 'Open your savings to see your latest balance.';
   END IF;
+  -- At or past the target the text never claims completion: a later reversal
+  -- can take the goal back below target, and nothing withdraws an interest
+  -- notice's wording. The goal-completed notice, which is voided when
+  -- completion is reversed, stays the only completion announcement.
   IF p_saved_kobo >= p_target_kobo THEN
-    RETURN 'Goal reached! 🎉';
+    RETURN 'Open your savings to see your latest balance.';
   END IF;
   v_progress := floor(p_saved_kobo * 100 / p_target_kobo)::integer;
   IF v_progress > 0 THEN
@@ -57,11 +65,15 @@ BEGIN
   IF NOT FOUND THEN
     RETURN savings_notifications.progress_message(NULL, NULL);
   END IF;
+  -- Interest reserved for a purchase is still the customer's: count it, as
+  -- completion and the ledger snapshot do, so a reserve or release nets to
+  -- zero and only spent or reversed interest lowers progress.
   SELECT coalesce(sum(posting.amount_kobo), 0) INTO v_ledger_interest
     FROM piggyvest_savings_ledger.postings posting
     JOIN piggyvest_savings_ledger.operations operation ON operation.id = posting.operation_id
     WHERE operation.goal_id = p_goal AND operation.merchant_id = v_merchant
-      AND operation.customer_id = v_customer AND posting.account = 'paid_interest';
+      AND operation.customer_id = v_customer
+      AND posting.account IN ('paid_interest', 'purchase_interest');
   SELECT coalesce(sum(receipt.net_kobo - coalesce(reversal.amount_kobo, 0)), 0) INTO v_primary_interest
     FROM piggyvest_primary.paid_interest_receipts receipt
     LEFT JOIN LATERAL (

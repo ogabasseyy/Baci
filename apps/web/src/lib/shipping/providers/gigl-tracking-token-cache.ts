@@ -2,7 +2,15 @@ import 'server-only';
 
 import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, realpath, rename, rm } from 'node:fs/promises';
+import {
+  lstat,
+  mkdir,
+  open,
+  opendir,
+  realpath,
+  rename,
+  rm,
+} from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import {
   giglTrackingTokenCacheRecordSchema,
@@ -106,6 +114,39 @@ export function createGiglTrackingTokenCache({
     }
   }
 
+  async function removeOrphanedTemporaryFiles(path: string): Promise<void> {
+    const entries = await opendir(path);
+    let examined = 0;
+    let removed = false;
+    for await (const entry of entries) {
+      if (++examined > 1024) break;
+      if (
+        !/^\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.tmp$/.test(
+          entry.name
+        )
+      )
+        continue;
+      const file = join(path, entry.name);
+      const info = await lstat(file).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return null;
+        throw error;
+      });
+      if (!info) continue;
+      if (
+        !info.isFile() ||
+        info.isSymbolicLink() ||
+        info.nlink !== 1 ||
+        info.uid !== process.getuid?.() ||
+        (info.mode & 0o777) !== 0o600
+      )
+        continue;
+      if (!isLocked()) throw new Error('Cache lock unavailable');
+      await rm(file, { force: true });
+      removed = true;
+    }
+    if (removed) await syncDirectory(path);
+  }
+
   async function load(): Promise<GiglToken | null> {
     if (!isLocked()) {
       onUnavailable();
@@ -154,9 +195,14 @@ export function createGiglTrackingTokenCache({
           onUnavailable();
           return null;
         }
-        const parsed = giglTrackingTokenCacheRecordSchema.safeParse(
-          JSON.parse(buffer.subarray(0, bytesRead).toString('utf8'))
-        );
+        let record: unknown;
+        try {
+          record = JSON.parse(buffer.subarray(0, bytesRead).toString('utf8'));
+        } catch {
+          // A corrupt private record is a cache miss and should be evicted.
+          record = null;
+        }
+        const parsed = giglTrackingTokenCacheRecordSchema.safeParse(record);
         let token: GiglToken | null = null;
         if (parsed.success) {
           try {
@@ -209,6 +255,7 @@ export function createGiglTrackingTokenCache({
     const resolvedDirectory = await validateDirectory(true);
     const file = join(resolvedDirectory, 'token.json');
     await validateExistingFile(file);
+    await removeOrphanedTemporaryFiles(resolvedDirectory);
     const temporary = join(resolvedDirectory, `.${randomUUID()}.tmp`);
     const handle = await open(temporary, 'wx', 0o600);
     try {

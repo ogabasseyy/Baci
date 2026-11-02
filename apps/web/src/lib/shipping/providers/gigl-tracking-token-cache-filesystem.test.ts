@@ -42,6 +42,49 @@ afterEach(async () => {
 });
 
 describe('GIGL tracking token cache filesystem safety', () => {
+  it('removes only owned private orphaned temporary files under the lock', async () => {
+    const { directory, root } = await fixture();
+    await mkdir(directory, { mode: 0o700 });
+    const orphan = join(directory, '.11111111-1111-4111-8111-111111111111.tmp');
+    const unsafe = join(directory, '.22222222-2222-4222-8222-222222222222.tmp');
+    const linkPath = join(
+      directory,
+      '.33333333-3333-4333-8333-333333333333.tmp'
+    );
+    const target = join(root, 'target');
+    await writeFile(orphan, 'ciphertext', { mode: 0o600 });
+    await writeFile(unsafe, 'preserve', { mode: 0o644 });
+    await chmod(unsafe, 0o644);
+    await writeFile(target, 'untouched');
+    await symlink(target, linkPath);
+    const cache = createGiglTrackingTokenCache({
+      directory,
+      credentials,
+      now: () => now,
+      isLocked: () => true,
+    });
+    await cache.save(token);
+    await expect(lstat(orphan)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(await readFile(unsafe, 'utf8')).toBe('preserve');
+    expect((await lstat(linkPath)).isSymbolicLink()).toBe(true);
+    expect(await readFile(target, 'utf8')).toBe('untouched');
+  });
+
+  it('does not remove an orphan if the worker lock is lost', async () => {
+    const { directory } = await fixture();
+    await mkdir(directory, { mode: 0o700 });
+    const orphan = join(directory, '.11111111-1111-4111-8111-111111111111.tmp');
+    await writeFile(orphan, 'ciphertext', { mode: 0o600 });
+    let checks = 0;
+    const cache = createGiglTrackingTokenCache({
+      directory,
+      credentials,
+      now: () => now,
+      isLocked: () => ++checks === 1,
+    });
+    await expect(cache.save(token)).rejects.toThrow('Cache lock unavailable');
+    expect(await readFile(orphan, 'utf8')).toBe('ciphertext');
+  });
   it('does not report a normal first-run cache miss as a failure', async () => {
     const { directory } = await fixture();
     const onUnavailable = vi.fn();
@@ -152,6 +195,9 @@ describe('GIGL tracking token cache filesystem safety', () => {
     expect(await cache.load()).toBeNull();
     expect(onUnavailable).toHaveBeenCalledOnce();
     expect(onUnavailable).toHaveBeenCalledWith();
+    expect(await readFile(join(directory, 'token.json'), 'utf8')).toBe(
+      'unsafe'
+    );
   });
 
   it('refuses a token file with an additional hard link', async () => {

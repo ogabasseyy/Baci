@@ -39,6 +39,20 @@ afterEach(async () => {
 });
 
 describe('GIGL tracking token cache', () => {
+  it('evicts a private cache record that is not valid JSON', async () => {
+    const { directory } = await fixture();
+    const cache = createGiglTrackingTokenCache({
+      directory,
+      credentials,
+      now: () => now,
+      isLocked: () => true,
+    });
+    await cache.save(token);
+    const path = join(directory, 'token.json');
+    await writeFile(path, '{not-json');
+    expect(await cache.load()).toBeNull();
+    await expect(stat(path)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
   it('loads a complete record when file reads return short chunks', async () => {
     const { directory } = await fixture();
     const cache = createGiglTrackingTokenCache({

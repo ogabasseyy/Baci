@@ -2,8 +2,10 @@
 -- (\ir part). shipments rows, statuses and tracking numbers are
 -- merchant-writable, so each case below gives the helper a cancellation that
 -- the stored status or the stamp would accept, and GIG's recorded timeline
--- must still refuse it: 55P03, nothing refunded. T1 is the positive control
--- (fresh MCRT + MSCC refunds once).
+-- must still refuse it: 55P03, nothing refunded. Each cancellation here
+-- carries the worker's account attestation, so only the timeline check under
+-- test refuses it. T1 is the positive control (fresh MCRT + attested MSCC
+-- refunds once).
 
 -- Applies GIG's cancellation for fixture order p_n through the worker entry
 -- point and asserts the guard blocked it and the whole apply rolled back.
@@ -55,7 +57,9 @@ BEGIN
     jsonb_build_array(
       pg_temp.gig_event('MCRT:11', 'MCRT', 'booked', now()),
       pg_temp.gig_event('MPIK:11', 'MPIK', 'picked_up', now() + interval '1 minute'),
-      pg_temp.gig_event('MSCC:11', 'MSCC', 'cancelled', now() + interval '2 minutes')
+      pg_temp.attested(pg_temp.gig_event(
+        'MSCC:11', 'MSCC', 'cancelled', now() + interval '2 minutes'
+      ))
     )
   );
 END;
@@ -100,18 +104,21 @@ BEGIN
     jsonb_build_array(
       pg_temp.gig_event('MCRT:12', 'MCRT', 'booked', now()),
       pg_temp.gig_event('MPIK:12', 'MPIK', 'picked_up', now() + interval '1 minute'),
-      pg_temp.gig_event('MSCC:12', 'MSCC', 'cancelled', now() + interval '2 minutes')
+      pg_temp.attested(pg_temp.gig_event(
+        'MSCC:12', 'MSCC', 'cancelled', now() + interval '2 minutes'
+      ))
     )
   );
 END;
 $t12$;
 
--- T13 (decoy waybill): while the real booking is in flight, the owner inserts
--- a second GIGL shipment for the same order and quote that carries an old
--- waybill GIG cancelled weeks ago, then binds the charge to it with the
--- recover RPC (no attempt token needed). The stamp names the decoy, but GIG's
--- history for it predates this submission, so its cancellation refunds
--- nothing.
+-- T13 (decoy: another order's Baci-booked waybill): while the real booking
+-- is in flight, the owner inserts a second GIGL shipment for the same order
+-- and quote carrying a waybill Baci's own GIG account created for one of
+-- their other (customer-checkout) orders in the same window, then binds the
+-- charge to it with the recover RPC (no attempt token needed). GIG's
+-- timeline is fresh and the worker would attest the account, but recover
+-- rotates the attempt token, so nothing is stamped and nothing refunds.
 SELECT pg_catalog.set_config(
   'request.jwt.claim.sub', 'c4ce1000-0000-4000-8000-000000000001', true
 );
@@ -144,36 +151,50 @@ SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 
 DO $t13$
 BEGIN
-  IF (SELECT provider_reference FROM public.merchant_shipping_charges
-      WHERE id = pg_temp.fixture_id(5, 13)) IS DISTINCT FROM 'WB-DECOY-13' THEN
-    RAISE EXCEPTION 'T13: the worst case stamps the decoy waybill';
+  IF (SELECT status FROM public.merchant_shipping_charges
+      WHERE id = pg_temp.fixture_id(5, 13)) IS DISTINCT FROM 'booked'
+     OR (SELECT provider_reference FROM public.merchant_shipping_charges
+         WHERE id = pg_temp.fixture_id(5, 13)) IS NOT NULL THEN
+    RAISE EXCEPTION 'T13: a charge bound by recover must stay unstamped';
   END IF;
   PERFORM pg_temp.assert_cancel_blocked(
     'T13', 13, 'c4ce1400-0000-4000-8000-000000000131',
     jsonb_build_array(
-      pg_temp.gig_event('MCRT:131', 'MCRT', 'booked', now() - interval '30 days'),
-      pg_temp.gig_event('MSCC:131', 'MSCC', 'cancelled', now() - interval '29 days')
+      pg_temp.gig_event('MCRT:131', 'MCRT', 'booked', now() + interval '1 minute'),
+      pg_temp.attested(pg_temp.gig_event(
+        'MSCC:131', 'MSCC', 'cancelled', now() + interval '3 minutes'
+      ))
     )
   );
 END;
 $t13$;
 
--- T14 (one waybill, one charge): before completing the booking, the owner
--- points order 14's shipment at WB-CANCEL-1, which order 1's refunded charge
--- already holds. The charge books unstamped, the index rejects a second
--- holder, and a fresh GIG cancellation of that waybill refunds nothing.
+-- T14 (one waybill, one charge): the booking completes, with the attempt
+-- token, on a fresh shipment row for order 14 that carries WB-CANCEL-1, which
+-- order 1's refunded charge already holds. The charge books unstamped, the
+-- index rejects a second holder, and a fresh GIG cancellation of that
+-- waybill refunds nothing.
 SELECT pg_catalog.set_config(
   'request.jwt.claim.sub', 'c4ce1000-0000-4000-8000-000000000001', true
 );
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
 SET LOCAL ROLE authenticated;
-UPDATE public.shipments SET tracking_number = 'WB-CANCEL-1'
-WHERE id = 'c4ce1400-0000-4000-8000-000000000014';
+INSERT INTO public.shipments (
+  id, order_id, merchant_id, provider, status, tracking_number,
+  provider_shipment_id, shipping_quote_id, sender_address,
+  receiver_address, items
+) VALUES (
+  'c4ce1400-0000-4000-8000-000000000141',
+  'c4ce1200-0000-4000-8000-000000000014',
+  'c4ce1100-0000-4000-8000-000000000001', 'GIGL', 'booked', 'WB-CANCEL-1',
+  'WB-CANCEL-1', 'c4ce1300-0000-4000-8000-000000000014', '{}'::jsonb,
+  '{}'::jsonb, '[]'::jsonb
+);
 DO $t14_complete$
 BEGIN
   IF public.complete_merchant_shipping_charge(
        'c4ce1500-0000-4000-8000-000000000014', 'attempt-14',
-       'c4ce1400-0000-4000-8000-000000000014'
+       'c4ce1400-0000-4000-8000-000000000141'
      ) IS DISTINCT FROM 'booked' THEN
     RAISE EXCEPTION 'T14: the owner must complete the booking';
   END IF;
@@ -202,7 +223,8 @@ BEGIN
     NULL;
   END;
   PERFORM pg_temp.assert_cancel_blocked(
-    'T14', 14, pg_temp.fixture_id(4, 14), pg_temp.fresh_cancel_history(14, 'MSCC')
+    'T14', 14, 'c4ce1400-0000-4000-8000-000000000141',
+    pg_temp.fresh_cancel_history(14, 'MSCC')
   );
 END;
 $t14$;
@@ -215,7 +237,9 @@ BEGIN
   PERFORM pg_temp.assert_cancel_blocked(
     'T15', 15, pg_temp.fixture_id(4, 15),
     jsonb_build_array(
-      pg_temp.gig_event('MSCC:15', 'MSCC', 'cancelled', now() + interval '2 minutes')
+      pg_temp.attested(pg_temp.gig_event(
+        'MSCC:15', 'MSCC', 'cancelled', now() + interval '2 minutes'
+      ))
     )
   );
 END;

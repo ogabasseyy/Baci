@@ -2,13 +2,21 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const migrationFile =
-  '20261102053300_refund_gigl_wallet_charge_on_provider_cancellation.sql';
-const sql = readFileSync(
-  resolve(process.cwd(), '../../supabase/migrations', migrationFile),
-  'utf8'
+const migrationFiles = [
+  '20261102053300_stamp_gigl_wallet_charge_waybill.sql',
+  '20261102053310_add_gigl_provider_cancellation_refund_helper.sql',
+  '20261102053320_refund_gigl_wallet_charge_on_provider_cancellation.sql',
+] as const;
+const sources = migrationFiles.map((file) =>
+  readFileSync(
+    resolve(process.cwd(), '../../supabase/migrations', file),
+    'utf8'
+  )
 );
-const code = sql.replace(/--.*$/gm, '');
+const [stampCode, helperCode, patchCode] = sources.map((sql) =>
+  sql.replace(/--.*$/gm, '')
+) as [string, string, string];
+const allCode = `${stampCode}\n${helperCode}\n${patchCode}`;
 
 function sliceBetween(source: string, start: string, end: string): string {
   const from = source.indexOf(start);
@@ -20,34 +28,41 @@ function sliceBetween(source: string, start: string, end: string): string {
 }
 
 const helper = sliceBetween(
-  code,
+  helperCode,
   'CREATE FUNCTION private.refund_gigl_wallet_charge_on_provider_cancellation(',
   '$$;'
 );
 const stamp = sliceBetween(
-  code,
+  stampCode,
   'CREATE FUNCTION private.stamp_booked_gigl_charge_waybill()',
   '$$;'
 );
-const patch = sliceBetween(code, 'DO $migration$', '$migration$;');
+const patch = sliceBetween(patchCode, 'DO $migration$', '$migration$;');
+const asserts = sliceBetween(patchCode, 'DO $assert$', '$assert$;');
 const replacement = sliceBetween(
   patch,
   'v_replacement constant text :=',
   '  v_original text;'
 );
 const backfill = sliceBetween(
-  code,
+  stampCode,
   'WITH candidate AS (',
   'CREATE UNIQUE INDEX wallet_transactions_gigl_charge_refund_once_idx'
 );
 
 describe('bugfix: GIG cancellation of a wallet-funded GIGL booking', () => {
-  it('carries gigl in the filename so the deploy tracking gate re-proves the worker', () => {
-    expect(migrationFile).toContain('gigl');
+  it('splits into ordered gigl migrations of at most 300 lines each', () => {
+    const versions = migrationFiles.map((file) => file.slice(0, 14));
+    expect([...versions].sort()).toEqual(versions);
+    expect(new Set(versions).size).toBe(versions.length);
+    migrationFiles.forEach((file, index) => {
+      expect(file).toContain('gigl');
+      expect(sources[index]?.split('\n').length).toBeLessThanOrEqual(300);
+    });
   });
 
   it('patches the live apply function in place before its shipments update', () => {
-    expect(code).not.toContain(
+    expect(allCode).not.toContain(
       'CREATE OR REPLACE FUNCTION public.apply_gigl_tracking_result'
     );
     expect(patch).toContain('pg_catalog.pg_get_functiondef(v_fn)');
@@ -57,10 +72,10 @@ describe('bugfix: GIG cancellation of a wallet-funded GIGL booking', () => {
     expect(patch).toContain('anchor must occur exactly once');
     expect(patch).toContain('already refunds provider cancellations');
     expect(patch).toContain('must precede the shipments update');
-
     expect(replacement).toContain(
-      'p_shipment_id, p_tracking_epoch_id, v_order_id, v_current_status'
+      "'      p_shipment_id, p_tracking_epoch_id, v_order_id, v_current_status,\\n'\n    || E'      p_events\\n'"
     );
+    expect(asserts).toContain('must pass p_events to the refund helper');
   });
 
   it('orders the replacement text: guarded refund call, then the shipments update', () => {
@@ -79,7 +94,9 @@ describe('bugfix: GIG cancellation of a wallet-funded GIGL booking', () => {
   });
 
   it('leaves the merchant cancellation guard untouched', () => {
-    expect(code).not.toContain('prevent_active_gigl_shipping_cancellation');
+    expect(allCode).not.toContain(
+      'FUNCTION private.prevent_active_gigl_shipping_cancellation'
+    );
   });
 
   it('keeps the refund helper and the stamp trigger private to the database', () => {
@@ -87,17 +104,20 @@ describe('bugfix: GIG cancellation of a wallet-funded GIGL booking', () => {
       expect(body).toContain('SECURITY DEFINER');
       expect(body).toContain("SET search_path TO ''");
     }
-    expect(code).toContain(
-      'REVOKE ALL ON FUNCTION private.refund_gigl_wallet_charge_on_provider_cancellation(uuid, uuid, uuid, text)\n  FROM PUBLIC, anon, authenticated, service_role;'
+    expect(helperCode).toContain(
+      'REVOKE ALL ON FUNCTION private.refund_gigl_wallet_charge_on_provider_cancellation(uuid, uuid, uuid, text, jsonb)\n  FROM PUBLIC, anon, authenticated, service_role;'
     );
-    expect(code).toContain(
+    expect(stampCode).toContain(
       'REVOKE ALL ON FUNCTION private.stamp_booked_gigl_charge_waybill()\n  FROM PUBLIC, anon, authenticated, service_role;'
     );
-    expect(code).not.toMatch(/GRANT\s+EXECUTE/i);
+    expect(allCode).not.toMatch(/GRANT\s+EXECUTE/i);
     expect(helper).toContain(
       "IF auth.role() IS DISTINCT FROM 'service_role' THEN"
     );
     expect(helper).toContain('AND monitor.locked_by IS NOT NULL');
+    expect(asserts).toContain(
+      'the unattested provider-cancellation helper must not exist'
+    );
   });
 
   it('refunds only cancellations GIG reports before pickup', () => {
@@ -127,6 +147,12 @@ describe('bugfix: GIG cancellation of a wallet-funded GIGL booking', () => {
     ).toBeGreaterThan(pickup);
   });
 
+  it("bugfix: treats an unmapped GIG scan stored as 'pending' as post-pickup", () => {
+    expect(helper).toContain(
+      "history.normalized_status = 'pending'\n            AND upper(btrim(coalesce(history.raw_status, ''))) <> 'PENDING'"
+    );
+  });
+
   it("requires GIG's timeline to show the waybill was created by this charge's submission", () => {
     expect(helper).toContain(
       "v_clock_skew constant interval := interval '5 minutes';"
@@ -137,26 +163,49 @@ describe('bugfix: GIG cancellation of a wallet-funded GIGL booking', () => {
     const submitted = helper.indexOf(
       'CONTINUE WHEN v_charge.provider_submitting_at IS NULL;'
     );
-    const created = helper.indexOf("AND created.normalized_status = 'booked'");
+    const created = helper.indexOf('SELECT max(created.occurred_at)');
     const earlier = helper.indexOf(
       'history.occurred_at < v_charge.provider_submitting_at - v_clock_skew'
     );
-    const freshCancel = helper.indexOf(
-      'AND event.occurred_at >= v_charge.provider_submitting_at - v_clock_skew'
+    const afterCreation = helper.indexOf(
+      'AND event.occurred_at >= v_created_at'
     );
     const credit = helper.indexOf('INSERT INTO public.wallet_transactions');
     expect(submitted).toBeGreaterThan(0);
     expect(created).toBeGreaterThan(submitted);
-    expect(helper).toContain(
-      '>= v_charge.provider_submitting_at - v_clock_skew'
-    );
+    expect(helper).toContain('CONTINUE WHEN v_created_at IS NULL;');
     expect(helper).toContain(
       '<= v_charge.provider_submitting_at + v_submission_window'
     );
     expect(earlier).toBeGreaterThan(created);
-    expect(freshCancel).toBeGreaterThan(earlier);
-    expect(credit).toBeGreaterThan(freshCancel);
+    expect(afterCreation).toBeGreaterThan(earlier);
+    expect(credit).toBeGreaterThan(afterCreation);
     expect(helper).not.toContain('completed_at');
+  });
+
+  it("bugfix: requires the worker's account attestation on the chosen cancellation in this apply call", () => {
+    expect(helper).toContain(
+      "IF jsonb_typeof(p_events) IS DISTINCT FROM 'array' THEN"
+    );
+    expect(helper).toContain(
+      "WHERE attested.entry ->> 'provider_event_key' = event.provider_event_key"
+    );
+    expect(helper).toContain(
+      "AND attested.entry -> 'account_attested' = 'true'::jsonb"
+    );
+    expect(helper).toContain("'provider_account_attested', true");
+  });
+
+  it('bugfix: declines a mismatched debit or a missing wallet instead of raising P0001', () => {
+    expect(helper).not.toContain(
+      "RAISE EXCEPTION 'gigl_wallet_charge_debit_mismatch'"
+    );
+    expect(helper).not.toContain("RAISE EXCEPTION 'merchant_wallet_missing'");
+    expect(helper).toContain('AND debit.amount = v_charge.charged_amount');
+    const wallet = helper.indexOf('UPDATE public.merchant_wallets AS wallet');
+    expect(helper.indexOf('CONTINUE WHEN NOT FOUND;', wallet)).toBeGreaterThan(
+      wallet
+    );
   });
 
   it('refunds a booked charge once, only on cancellation evidence for its own waybill', () => {
@@ -169,8 +218,6 @@ describe('bugfix: GIG cancellation of a wallet-funded GIGL booking', () => {
     expect(helper).toContain(
       'AND event.tracking_number = v_charge.provider_reference'
     );
-    expect(helper).toContain('AND debit.amount = v_charge.charged_amount');
-
     const refundUpdate = helper.indexOf("SET status = 'refunded'");
     const rowCount = helper.indexOf('GET DIAGNOSTICS v_rows = ROW_COUNT;');
     expect(refundUpdate).toBeGreaterThan(0);
@@ -181,21 +228,25 @@ describe('bugfix: GIG cancellation of a wallet-funded GIGL booking', () => {
     expect(helper).toContain("'merchant_shipping_charge_id', v_charge.id");
   });
 
-  it('stamps the booked waybill and backstops exactly-once in the database', () => {
-    expect(code).toContain(
+  it("bugfix: stamps only the server's own complete() on its untouched shipment row", () => {
+    expect(stampCode).toContain(
       'CREATE TRIGGER stamp_booked_gigl_charge_waybill\nBEFORE UPDATE OF status ON public.merchant_shipping_charges'
     );
     expect(stamp).toContain("IF NEW.status = 'booked'");
-    expect(stamp).toContain("AND OLD.status IS DISTINCT FROM 'booked'");
+    expect(stamp).toContain("AND OLD.status = 'provider_submitting'");
+    expect(stamp).toContain(
+      'AND NEW.attempt_token_digest IS NOT DISTINCT FROM OLD.attempt_token_digest'
+    );
+    expect(stamp).toContain('AND shipment.tracking_snapshot_version = 1;');
     expect(stamp).toContain('AND NEW.provider_reference IS NULL');
-    expect(code).toContain(
+    expect(stampCode).toContain(
       'CREATE UNIQUE INDEX wallet_transactions_gigl_charge_refund_once_idx'
     );
-    expect(code).toContain("AND source_type = 'gigl_shipping'");
+    expect(stampCode).toContain("AND source_type = 'gigl_shipping'");
   });
 
   it('lets one waybill back at most one booked or refunded charge', () => {
-    expect(code).toContain(
+    expect(stampCode).toContain(
       "CREATE UNIQUE INDEX merchant_shipping_charges_gigl_waybill_once_idx\n  ON public.merchant_shipping_charges (provider_reference)\n  WHERE provider_reference IS NOT NULL\n    AND status IN ('booked', 'refunded');"
     );
     const lock = stamp.indexOf(
@@ -209,23 +260,23 @@ describe('bugfix: GIG cancellation of a wallet-funded GIGL booking', () => {
     expect(stamp).not.toContain('RAISE');
   });
 
-  it('backfills only a waybill GIG created during the submission that no other charge holds', () => {
+  it('backfills only a charge the server completed right after inserting its shipment', () => {
     expect(backfill).toContain("AND created.normalized_status = 'booked'");
-    expect(backfill).toContain(
-      ">= charge.provider_submitting_at - interval '5 minutes'"
-    );
     expect(backfill).toContain(
       "<= charge.provider_submitting_at + interval '15 minutes'"
     );
     expect(backfill).toContain(
       "< charge.provider_submitting_at - interval '5 minutes'"
     );
+    expect(backfill).toContain(
+      "AND charge.completed_at <= shipment.created_at + interval '1 minute'"
+    );
     expect(backfill).toContain('FROM candidate AS twin');
     expect(backfill).toContain("AND other.status IN ('booked', 'refunded')");
     expect(
-      code.indexOf(
+      stampCode.indexOf(
         'CREATE UNIQUE INDEX merchant_shipping_charges_gigl_waybill_once_idx'
       )
-    ).toBeLessThan(code.indexOf('WITH candidate AS ('));
+    ).toBeLessThan(stampCode.indexOf('WITH candidate AS ('));
   });
 });

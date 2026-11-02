@@ -2,7 +2,8 @@
 
 -- T1 (regression): GIG's MSCC for a booked wallet charge refunds it once and
 -- the cancellation persists. Before the fix this apply raised 55P03. Like the
--- real case, GIG's history is the MCRT this submission created plus MSCC.
+-- real case, GIG's history is the MCRT this submission created plus MSCC,
+-- which the worker attested as a waybill of Baci's own GIG account.
 DO $t1$
 DECLARE
   v_order constant uuid := pg_temp.fixture_id(2, 1);
@@ -39,6 +40,8 @@ BEGIN
      OR v_refund.metadata ->> 'waybill' IS DISTINCT FROM 'WB-CANCEL-1'
      OR v_refund.metadata ->> 'provider_raw_status' IS DISTINCT FROM 'MSCC'
      OR v_refund.metadata ->> 'prior_shipment_status' IS DISTINCT FROM 'booked'
+     OR v_refund.metadata -> 'provider_account_attested' IS DISTINCT FROM 'true'::jsonb
+     OR (v_refund.metadata ->> 'provider_created_at')::timestamptz IS DISTINCT FROM now()
      OR (v_refund.metadata ->> 'provider_cost')::numeric IS DISTINCT FROM 44091.27
      OR (v_refund.metadata ->> 'platform_margin')::numeric IS DISTINCT FROM 4409.13 THEN
     RAISE EXCEPTION 'T1: refund row is wrong: %', row_to_json(v_refund);
@@ -105,7 +108,8 @@ BEGIN
   SET locked_by = 'worker-test', locked_at = now()
   WHERE shipment_id = v_shipment;
   IF private.refund_gigl_wallet_charge_on_provider_cancellation(
-       v_shipment, v_epoch, pg_temp.fixture_id(2, 1), 'booked'
+       v_shipment, v_epoch, pg_temp.fixture_id(2, 1), 'booked',
+       pg_temp.fresh_cancel_history(1, 'MSCC')
      ) <> 0 THEN
     RAISE EXCEPTION 'T2: a refunded charge must not be refunded again';
   END IF;

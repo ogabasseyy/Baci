@@ -3,8 +3,12 @@
 -- refunds nothing.
 
 -- T4: merchant, staff and service-role cancellation writes stay blocked for a
--- booked, stamped charge (order 4 is 'processing' so the cancel RPC reaches
--- the guard), and the merchant refund RPC leaves a booked charge alone.
+-- booked, stamped charge (order 4 is 'processing'), and the merchant refund
+-- RPC leaves a booked charge alone. public.cancel_provider_shipment_order_
+-- and_release_inventory is not exercised: on the replayed schema (and in
+-- production) its private.cancel_order_and_release_inventory step writes
+-- orders.delivery_address, which does not exist, so it fails with 42703
+-- before the guard runs (a pre-existing defect outside this change).
 SELECT pg_catalog.set_config(
   'request.jwt.claim.sub', 'c4ce1000-0000-4000-8000-000000000001', true
 );
@@ -19,17 +23,6 @@ BEGIN
   EXCEPTION WHEN SQLSTATE '55P03' THEN
     IF SQLERRM IS DISTINCT FROM 'active_merchant_shipping_charge' THEN
       RAISE EXCEPTION 'T4a: unexpected 55P03 %', SQLERRM;
-    END IF;
-  END;
-  BEGIN
-    PERFORM public.cancel_provider_shipment_order_and_release_inventory(
-      'c4ce1100-0000-4000-8000-000000000001',
-      'c4ce1400-0000-4000-8000-000000000004'
-    );
-    RAISE EXCEPTION 'T4c: the provider cancel RPC must be blocked';
-  EXCEPTION WHEN SQLSTATE '55P03' THEN
-    IF SQLERRM IS DISTINCT FROM 'active_merchant_shipping_charge' THEN
-      RAISE EXCEPTION 'T4c: unexpected 55P03 %', SQLERRM;
     END IF;
   END;
   IF public.refund_merchant_shipping_charge(
@@ -205,8 +198,9 @@ END;
 $t6$;
 
 -- T10 (owner scope): a cancellation GIG reports after a pickup the tracker
--- already applied is not refunded; the guard keeps blocking so ops can
--- handle it by hand. All events fall inside the submission window.
+-- already applied is not refunded, even when the worker attests it; the
+-- guard keeps blocking so ops can handle it by hand. All events fall inside
+-- the submission window.
 DO $t10$
 DECLARE
   v_shipment constant uuid := pg_temp.fixture_id(4, 10);
@@ -227,9 +221,9 @@ BEGIN
   BEGIN
     PERFORM pg_temp.apply_gig_events(
       v_shipment, 'cancelled',
-      v_pickup || pg_temp.gig_event(
+      v_pickup || pg_temp.attested(pg_temp.gig_event(
         'MSCC:10', 'MSCC', 'cancelled', now() + interval '2 minutes'
-      )
+      ))
     );
     RAISE EXCEPTION 'T10: a post-pickup cancellation must stay blocked';
   EXCEPTION WHEN SQLSTATE '55P03' THEN

@@ -17,9 +17,10 @@ DECLARE
   v_guard text := pg_catalog.pg_get_functiondef(
     'private.prevent_active_gigl_shipping_cancellation()'::regprocedure
   );
+  v_helper text;
 BEGIN
   FOREACH v_fn IN ARRAY ARRAY[
-    'private.refund_gigl_wallet_charge_on_provider_cancellation(uuid, uuid, uuid, text)'::regprocedure,
+    'private.refund_gigl_wallet_charge_on_provider_cancellation(uuid, uuid, uuid, text, jsonb)'::regprocedure,
     'private.stamp_booked_gigl_charge_waybill()'::regprocedure
   ] LOOP
     FOREACH v_role IN ARRAY ARRAY[
@@ -65,7 +66,9 @@ BEGIN
 
   IF strpos(v_apply, E'  IF v_effective_status = ''cancelled'' AND p_status = ''cancelled'' THEN\n'
        || E'    PERFORM private.refund_gigl_wallet_charge_on_provider_cancellation(\n'
-       || E'      p_shipment_id, p_tracking_epoch_id, v_order_id, v_current_status\n') = 0
+       || E'      p_shipment_id, p_tracking_epoch_id, v_order_id, v_current_status,\n'
+       || E'      p_events\n'
+       || E'    );\n') = 0
      OR strpos(v_apply, 'PERFORM private.refund_gigl_wallet_charge_on_provider_cancellation(')
        >= strpos(v_apply, E'  UPDATE public.shipments AS shipment\n')
      OR strpos(v_apply, 'ON CONFLICT DO NOTHING') = 0
@@ -116,13 +119,26 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'T9: one waybill must back at most one booked or refunded charge';
   END IF;
-  IF strpos(
-       pg_catalog.pg_get_functiondef(
-         'private.refund_gigl_wallet_charge_on_provider_cancellation(uuid, uuid, uuid, text)'::regprocedure
-       ),
-       'FROM public.shipment_tracking_events AS history'
-     ) = 0 THEN
-    RAISE EXCEPTION 'T9: the refund helper must read GIG''s recorded history';
+  v_helper := pg_catalog.pg_get_functiondef(
+    'private.refund_gigl_wallet_charge_on_provider_cancellation(uuid, uuid, uuid, text, jsonb)'::regprocedure
+  );
+  IF strpos(v_helper, 'FROM public.shipment_tracking_events AS history') = 0
+     OR strpos(v_helper, 'AND event.occurred_at >= v_created_at') = 0
+     OR strpos(v_helper, 'attested.entry -> ''account_attested'' = ''true''::jsonb') = 0
+     OR strpos(v_helper, '<> ''PENDING''') = 0 THEN
+    RAISE EXCEPTION 'T9: the refund helper must read GIG''s history and the attestation';
+  END IF;
+  v_helper := pg_catalog.pg_get_functiondef(
+    'private.stamp_booked_gigl_charge_waybill()'::regprocedure
+  );
+  IF strpos(v_helper, 'NEW.attempt_token_digest IS NOT DISTINCT FROM OLD.attempt_token_digest') = 0
+     OR strpos(v_helper, 'shipment.tracking_snapshot_version = 1') = 0 THEN
+    RAISE EXCEPTION 'T9: only the server''s own complete() may stamp a waybill';
+  END IF;
+  IF pg_catalog.to_regprocedure(
+       'private.refund_gigl_wallet_charge_on_provider_cancellation(uuid, uuid, uuid, text)'
+     ) IS NOT NULL THEN
+    RAISE EXCEPTION 'T9: no unattested helper overload may exist';
   END IF;
 END;
 $t9$;

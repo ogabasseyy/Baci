@@ -161,8 +161,6 @@ $$;
 -- JWT claims, and releasing an expired prize cancels its reserved order
 -- through the nested SECURITY DEFINER chain, with no client-role grants.
 RESET ROLE;
-SELECT set_config('request.jwt.claim.role', '', true);
-SELECT set_config('request.jwt.claims', '', true);
 INSERT INTO public.customers (id, merchant_id, email, full_name)
 VALUES (
   'a4270300-0000-4000-8000-000000000033',
@@ -212,6 +210,9 @@ INSERT INTO public.quiz_prize_reservations (
 );
 ALTER TABLE public.quiz_awards ENABLE TRIGGER USER;
 ALTER TABLE public.quiz_prize_reservations ENABLE TRIGGER USER;
+-- Run the release itself with no JWT claims, as pg_cron does.
+SELECT set_config('request.jwt.claim.role', '', true);
+SELECT set_config('request.jwt.claims', '', true);
 
 DO $$
 BEGIN

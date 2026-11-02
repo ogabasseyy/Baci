@@ -45,25 +45,36 @@ export interface CaptureDrainEvidence {
   alerts: { configured: boolean };
 }
 
-const CRON_WRAPPER = '/bin/process-piggyvest-webhook-capture-drain.sh --once';
-const CRON_LOCK = 'flock -n ';
-const CRON_LOCK_FILE = '/locks/piggyvest-webhook-capture-drain.lock';
+/**
+ * The deployed entry shape (vps-workers/deploy.sh): every minute, flock on
+ * the drain lock, the production profile exports, a 50s bound, and the
+ * wrapper under the same worker root run once. The root is captured once and
+ * must match everywhere it appears, so an entry that merely mentions these
+ * strings, or runs a different root or profile, does not count.
+ */
+const CRON_ENTRY = new RegExp(
+  [
+    String.raw`^\*\s+\*\s+\*\s+\*\s+\*\s+`,
+    String.raw`flock -n (\S+)/locks/piggyvest-webhook-capture-drain\.lock `,
+    "bash -lc '",
+    'export NODE_ENV=production && ',
+    'export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && ',
+    String.raw`cd \1 && `,
+    String.raw`timeout --signal=TERM --kill-after=\d+s \d+s `,
+    String.raw`\1/bin/process-piggyvest-webhook-capture-drain\.sh --once' `,
+    String.raw`>> \1/logs/piggyvest-webhook-capture-drain\.log 2>&1$`,
+  ].join('')
+);
 
 /** Exactly one active, every-minute, flock-guarded drain entry. */
 export function captureDrainCronState(
   crontab: string | null
 ): CaptureDrainCronState {
   if (crontab === null) return 'unreadable';
-  const entries = crontab.split('\n').filter((line) => {
-    const trimmed = line.trim();
-    return (
-      !trimmed.startsWith('#') &&
-      /^\*\s+\*\s+\*\s+\*\s+\*\s/.test(trimmed) &&
-      trimmed.includes(CRON_LOCK) &&
-      trimmed.includes(CRON_LOCK_FILE) &&
-      trimmed.includes(CRON_WRAPPER)
-    );
-  });
+  const entries = crontab
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => CRON_ENTRY.test(line));
   if (entries.length === 0) return 'missing';
   return entries.length === 1 ? 'installed' : 'duplicated';
 }

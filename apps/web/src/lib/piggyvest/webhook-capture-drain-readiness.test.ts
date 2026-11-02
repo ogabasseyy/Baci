@@ -16,7 +16,7 @@ import { collectPrimaryIntakeEvidence } from './webhook-capture-primary-intake-r
 
 const NOW = new Date('2026-10-30T12:00:00.000Z');
 const WORKERS = '/srv/baci-worker/baci-workers';
-const CRON_LINE = `* * * * * flock -n ${WORKERS}/locks/piggyvest-webhook-capture-drain.lock bash -lc 'export NODE_ENV=production && cd ${WORKERS} && timeout --signal=TERM --kill-after=10s 50s ${WORKERS}/bin/process-piggyvest-webhook-capture-drain.sh --once' >> ${WORKERS}/logs/piggyvest-webhook-capture-drain.log 2>&1`;
+const CRON_LINE = `* * * * * flock -n ${WORKERS}/locks/piggyvest-webhook-capture-drain.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && cd ${WORKERS} && timeout --signal=TERM --kill-after=10s 50s ${WORKERS}/bin/process-piggyvest-webhook-capture-drain.sh --once' >> ${WORKERS}/logs/piggyvest-webhook-capture-drain.log 2>&1`;
 const status = {
   pending: 0,
   claimed: 0,
@@ -45,6 +45,37 @@ describe('captureDrainCronState', () => {
     [
       'an entry on another schedule',
       CRON_LINE.replace('* * * * *', '*/5 * * * *'),
+      'missing',
+    ],
+    [
+      'an entry that only echoes the strings',
+      `* * * * * echo flock -n ${WORKERS}/locks/piggyvest-webhook-capture-drain.lock ${WORKERS}/bin/process-piggyvest-webhook-capture-drain.sh --once`,
+      'missing',
+    ],
+    [
+      'an entry without the time bound',
+      CRON_LINE.replace('timeout --signal=TERM --kill-after=10s 50s ', ''),
+      'missing',
+    ],
+    [
+      'an entry without the worker profile',
+      CRON_LINE.replace(
+        'export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && ',
+        ''
+      ),
+      'missing',
+    ],
+    [
+      'an entry that runs the wrapper under another root',
+      CRON_LINE.replace(
+        `timeout --signal=TERM --kill-after=10s 50s ${WORKERS}/bin`,
+        'timeout --signal=TERM --kill-after=10s 50s /tmp/other/bin'
+      ),
+      'missing',
+    ],
+    [
+      'an entry that does not run the wrapper once',
+      CRON_LINE.replace('--once', '--loop'),
       'missing',
     ],
     ['a duplicated entry', `${CRON_LINE}\n${CRON_LINE}`, 'duplicated'],

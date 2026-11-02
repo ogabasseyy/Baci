@@ -71,7 +71,7 @@ const PRIMARY_KEYS = {
   custody: deterministicTestKey('capture-drain-cli:custody'),
   interest: deterministicTestKey('capture-drain-cli:interest'),
 };
-const CRON = `* * * * * flock -n /w/locks/piggyvest-webhook-capture-drain.lock bash -lc 'cd /w && timeout 50s /w/bin/process-piggyvest-webhook-capture-drain.sh --once' >> /w/logs/x.log 2>&1`;
+const CRON = `* * * * * flock -n /w/locks/piggyvest-webhook-capture-drain.lock bash -lc 'export NODE_ENV=production && export BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain && cd /w && timeout --signal=TERM --kill-after=10s 50s /w/bin/process-piggyvest-webhook-capture-drain.sh --once' >> /w/logs/piggyvest-webhook-capture-drain.log 2>&1`;
 
 let output: string[];
 let createExecutor: ReturnType<typeof vi.fn<(runtime: unknown) => CaptureDrainExecutor>>;

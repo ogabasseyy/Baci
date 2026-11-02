@@ -321,6 +321,10 @@ jobs:
         env:
           PG_BINDIR: /usr/lib/postgresql/18/bin
         run: node --test tools/test/loyalty-checkout-replay-local.test.mjs
+      - name: Test VTU admission concurrency against PostgreSQL
+        env:
+          PG_BINDIR: /usr/lib/postgresql/18/bin
+        run: node --test tools/test/vtu-admission-customer-scope-local.test.mjs
       - name: Test merchant blog classification permissions and lifecycle
         run: bash supabase/tests/run-merchant-blog-classification.sh
       # Every replay SQL suite is registered in

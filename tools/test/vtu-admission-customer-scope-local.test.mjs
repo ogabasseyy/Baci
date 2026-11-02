@@ -4,12 +4,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { Client } from 'pg';
+import { requirePostgresBin } from './loyalty-postgres-bin.mjs';
 
 const repository = resolve(import.meta.dirname, '../..');
-const bin =
-  process.argv
-    .find((arg) => arg.startsWith('--postgres-bin='))
-    ?.slice('--postgres-bin='.length) ?? '/opt/homebrew/opt/postgresql@17/bin';
+const bin = requirePostgresBin();
 
 test('authenticated VTU admission scope', async () => {
   const directory = mkdtempSync('/tmp/baci-vtu-admission-');

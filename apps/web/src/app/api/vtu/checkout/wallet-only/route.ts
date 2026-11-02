@@ -27,7 +27,8 @@ import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
  * CHECKOUT EXCEPTION). Reads run on the authenticated client:
  * public merchant rows plus JWT-verifying SECURITY DEFINER RPCs
  * for the key lookup, replay binding, customer find/link,
- * settings projection, intent claim, and orphan cleanup (no buyer
+ * settings projection, customer-scoped admission proof, intent claim,
+ * and orphan cleanup (no buyer
  * policies on vtu_transactions by design — Codex P1, PR #3741).
  * The service-role client exists ONLY for the server-computed prepare insert
  * (settlement money that must never be caller-supplied — Codex P1),

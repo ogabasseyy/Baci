@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-02T18:21:48+00:00",
-  "source_revision": "373b0daf57f03f09997be3d311a113e625fd5434",
-  "evidence_digest": "8ac9dba6d6d421d51516596389204db4791b91e8355c704c4728d7cd3b896f0f",
-  "claims_digest": "2a9c9c15309c627c65164ce0d9e84bdaff69701a7fb012a864964272cc95a59d",
-  "review_scope": "Source review: Oxygen checkout remains local staging QA only. Re-reviewed mobile shipment flow: success and unconfirmed-booking alerts wait for the sheet to close; existing shipping limitations remain. Deployment and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-02T19:17:26+00:00",
+  "source_revision": "3f603efabb56737b8c773c3e4714e9ad6b3861b2",
+  "evidence_digest": "d5de6e91582c4d7f880e4422d5e67228557a5ce39fc0bac64c6e6d7d668f203a",
+  "claims_digest": "f438f3ad5714acbab1383ca1ebefe60ed6c3ff22334c7404335f1cd6afe2b271",
+  "review_scope": "Source review: Oxygen remains local staging QA only. Cited capability sources remain unchanged across the main integration. Deployment and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

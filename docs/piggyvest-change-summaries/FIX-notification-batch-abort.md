@@ -16,6 +16,13 @@ the rest of the group. A notification that expired before sending is marked
 "expired" exactly once, like one that expires while sending. When another
 run has taken a notification over, the worker leaves it alone.
 
+A notification that arrives so damaged that nothing identifies it (not an
+object, or an id or claim code that is not valid) cannot be marked at all.
+It used to stop the whole group the same way. It is now reported as "failed"
+with the reason `unidentifiable_claim_skipped` and no id, logged once with
+fixed fields only, and the worker carries on. Its claim expires on its own
+and a later run picks it up again.
+
 The worker's health record and reply say "failed" (reply code 503) whenever
 any notification could not be marked. A group with only "try again later"
 results behaves as before.
@@ -43,8 +50,8 @@ reason code.
 ## How it is tested
 
 New tests run two notifications where the first cannot be marked: a failed
-send, an expiry before and during sending, a malformed notification and a
-lost claim, plus the log line. Each failed on the current main branch and
+send, an expiry before and during sending, a malformed notification, one that
+cannot be identified at all, and a lost claim, plus the log line. Each failed on the current main branch and
 passes with this change, showing the second notification is still sent.
 Further tests cover the health and reply code rules. The tests sit in the
 web test suite that the automated checks run, and a safety check keeps that

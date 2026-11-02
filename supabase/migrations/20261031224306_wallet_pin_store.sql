@@ -2,9 +2,10 @@
 --
 -- A customer's PIN is hashed on the server (scrypt over an HMAC with the
 -- server-only WALLET_PIN_PEPPER; apps/web/src/lib/wallet-pin/wallet-pin-kdf.ts).
--- This schema keeps only the salt and the derived hash. No client or API
--- role can use the schema or read its tables: the SECURITY DEFINER functions
--- in the following migrations are the only way in.
+-- This schema keeps only the salt and the SHA-256 of the derived hash, so
+-- a copy of a stored value cannot be sent back as if it were the PIN. No
+-- client or API role can use the schema or read its tables: the SECURITY
+-- DEFINER functions in the following migrations are the only way in.
 --
 -- A correct PIN yields a single-use proof, valid for 120 seconds and bound
 -- to one debit (customer, merchant, purpose, amount in kobo and the SHA-256
@@ -29,11 +30,15 @@ CREATE TABLE wallet_pin_private.merchant_authorities (
 );
 
 -- One PIN per customer row (a customer row is already per merchant).
--- pepper_id identifies the pepper that made the hash, so a hash made with a
--- different pepper is refused as "reset required" instead of counting as a
--- wrong PIN. The lock window is at most 24 hours.
+-- user_id is the sign-in account that set the PIN: if the customer row is
+-- later pointed at another account, the PIN and its proofs stop working
+-- for everyone instead of passing to that account. pepper_id identifies
+-- the pepper that made the hash, so a hash made with a different pepper is
+-- refused as "reset required" instead of counting as a wrong PIN. pin_hash
+-- is SHA-256 of the derived hash. The lock window is at most 24 hours.
 CREATE TABLE wallet_pin_private.customer_pins (
   customer_id uuid PRIMARY KEY REFERENCES public.customers(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   merchant_id uuid NOT NULL REFERENCES public.merchants(id) ON DELETE CASCADE,
   kdf_version smallint NOT NULL CHECK (kdf_version = 1),
   pepper_id bytea NOT NULL CHECK (pg_catalog.octet_length(pepper_id) = 8),
@@ -53,6 +58,7 @@ CREATE TABLE wallet_pin_private.customer_pins (
   )
 );
 CREATE INDEX customer_pins_merchant_idx ON wallet_pin_private.customer_pins (merchant_id);
+CREATE INDEX customer_pins_user_idx ON wallet_pin_private.customer_pins (user_id);
 
 -- The debit purposes a proof can be issued for. Later work adds rows; the
 -- proofs table references this one, so the domain lives in one place.

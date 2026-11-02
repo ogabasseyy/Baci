@@ -15,6 +15,10 @@
 --   _lockout.inc.sql     5 failures lock 30 min, escalating, 24h cap
 --   _reset.inc.sql       re-authenticated reset, change
 --   _proofs.inc.sql      single use, expiry, binding, cap, kill switch
+--   _binding.inc.sql     PIN bound to its account; soft-deleted customer
+--
+-- Row-lock behaviour under two live backends is covered separately by
+-- wallet_pin_store_concurrency.sql (it needs committed fixtures).
 --
 -- Privileges are asserted through the catalog, never by calling a function
 -- the role cannot execute (a denied EXECUTE cannot be trapped on the replay
@@ -30,5 +34,6 @@ SET LOCAL search_path = pg_catalog, public, extensions;
 \ir wallet_pin_store_lockout.inc.sql
 \ir wallet_pin_store_reset.inc.sql
 \ir wallet_pin_store_proofs.inc.sql
+\ir wallet_pin_store_binding.inc.sql
 
 ROLLBACK;

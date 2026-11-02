@@ -2,7 +2,8 @@
 --
 -- First set, state, verify, input validation and tenant isolation, for
 -- C1 (U1@M1). C3 (U1@M2, no authority) and C4 (U1@M3, disabled) prove the
--- per-merchant switch.
+-- per-merchant switch. The database keeps SHA-256 of the derived hash, so
+-- the stored value itself is not a usable PIN.
 
 DO $set_verify$
 DECLARE
@@ -30,24 +31,35 @@ BEGIN
                  WHERE customer_id IN (pg_temp.wp_id('C3'), pg_temp.wp_id('C4'))),
     'no PIN row for disabled merchants');
 
-  -- First set stores the salt, hash and pepper id as bytes.
+  -- A first set needs a recent sign-in, like a reset: an old session alone
+  -- cannot create the spending credential.
   v_result := pg_temp.wp_rpc('U1', pg_temp.wp_set_sql('M1', 'pin_2580'));
+  PERFORM pg_temp.wp_assert(v_result = '{"status":"reauthentication_required"}',
+    'set on an old sign-in: ' || v_result::text);
+  PERFORM pg_temp.wp_assert(
+    NOT EXISTS (SELECT 1 FROM wallet_pin_private.customer_pins WHERE customer_id = pg_temp.wp_id('C1')),
+    'a refused set stores nothing');
+
+  -- First set stores the salt, the hash's SHA-256, the pepper id and the
+  -- account that set it.
+  v_result := pg_temp.wp_rpc('U1', pg_temp.wp_set_sql('M1', 'pin_2580'), pg_temp.wp_fresh_amr());
   PERFORM pg_temp.wp_assert(v_result = '{"status":"set"}', 'first set: ' || v_result::text);
   v_pin := pg_temp.wp_pin('C1');
   PERFORM pg_temp.wp_assert(
     v_pin.merchant_id = pg_temp.wp_id('M1') AND v_pin.kdf_version = 1
+      AND v_pin.user_id = pg_temp.wp_id('U1')
       AND v_pin.salt = pg_catalog.decode(pg_temp.wp_hex('salt'), 'hex')
-      AND v_pin.pin_hash = pg_catalog.decode(pg_temp.wp_hex('pin_2580'), 'hex')
+      AND v_pin.pin_hash = pg_catalog.sha256(pg_catalog.decode(pg_temp.wp_hex('pin_2580'), 'hex'))
       AND v_pin.pepper_id = pg_catalog.decode(pg_temp.wp_hex('pepper'), 'hex')
       AND v_pin.failed_attempts = 0 AND v_pin.lockout_count = 0
       AND v_pin.locked_until IS NULL AND v_pin.last_reset_at IS NULL,
     'stored PIN row');
 
   -- Set is first-time only; it never overwrites.
-  v_result := pg_temp.wp_rpc('U1', pg_temp.wp_set_sql('M1', 'pin_0000', 'salt2'));
+  v_result := pg_temp.wp_rpc('U1', pg_temp.wp_set_sql('M1', 'pin_0000', 'salt2'), pg_temp.wp_fresh_amr());
   PERFORM pg_temp.wp_assert(v_result = '{"status":"already_set"}', 'second set: ' || v_result::text);
   PERFORM pg_temp.wp_assert(
-    (pg_temp.wp_pin('C1')).pin_hash = pg_catalog.decode(pg_temp.wp_hex('pin_2580'), 'hex'),
+    (pg_temp.wp_pin('C1')).pin_hash = pg_catalog.sha256(pg_catalog.decode(pg_temp.wp_hex('pin_2580'), 'hex')),
     'second set left the hash alone');
 
   -- State returns the salt for hashing, never the hash.
@@ -57,7 +69,8 @@ BEGIN
       'salt', pg_temp.wp_hex('salt'), 'attemptsRemaining', 5),
     'state after set: ' || v_result::text);
   PERFORM pg_temp.wp_assert(
-    pg_catalog.strpos(v_result::text, pg_temp.wp_hex('pin_2580')) = 0,
+    pg_catalog.strpos(v_result::text, pg_temp.wp_hex('pin_2580')) = 0
+      AND pg_catalog.strpos(v_result::text, pg_catalog.encode(v_pin.pin_hash, 'hex')) = 0,
     'state never exposes the hash');
 
   -- A hash made with another pepper is refused without counting a failure.
@@ -83,7 +96,17 @@ BEGIN
       pg_temp.wp_id('M1'), 'd0bc8ce0', pg_temp.wp_hex('pin_0000'), 'vtu', pg_temp.wp_hex('idem1')),
     pg_temp.wp_set_sql('M1', 'pin_0000', 'salt', 'pepper', 2),
     pg_catalog.format('SELECT public.set_wallet_pin(%L::uuid, %L, 1, %L, NULL)',
-      pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('salt'))
+      pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('salt')),
+    -- A wrong current PIN with a malformed new PIN is refused before the
+    -- attempt is checked, so it does not use up one of the five tries.
+    pg_catalog.format('SELECT public.change_wallet_pin(%L::uuid, %L, %L, 1, %L, %L)',
+      pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('pin_0000'),
+      pg_catalog.upper(pg_temp.wp_hex('salt2')), pg_temp.wp_hex('pin_135790')),
+    pg_catalog.format('SELECT public.change_wallet_pin(%L::uuid, %L, %L, 1, %L, %L)',
+      pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('pin_0000'),
+      pg_temp.wp_hex('salt2'), 'abcd'),
+    pg_catalog.format('SELECT public.reset_wallet_pin(%L::uuid, %L, 1, %L, %L)',
+      pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), 'abcd', pg_temp.wp_hex('pin_135790'))
   ] LOOP
     PERFORM pg_temp.wp_assert(
       pg_temp.wp_rpc_error('U1', v_error) LIKE '22023 %',
@@ -91,6 +114,14 @@ BEGIN
   END LOOP;
   PERFORM pg_temp.wp_assert((pg_temp.wp_pin('C1')).failed_attempts = 0,
     'malformed input is not a failed attempt');
+
+  -- The stored value is not a PIN: sending it back is a wrong attempt.
+  v_result := pg_temp.wp_rpc('U1', pg_catalog.format(
+    'SELECT public.verify_wallet_pin(%L::uuid, %L, %L, %L, 5000, %L)',
+    pg_temp.wp_id('M1'), pg_temp.wp_hex('pepper'), pg_catalog.encode(v_pin.pin_hash, 'hex'),
+    'vtu', pg_temp.wp_hex('idem1')));
+  PERFORM pg_temp.wp_assert(v_result = '{"status":"incorrect","attemptsRemaining":4}',
+    'the stored hash does not verify: ' || v_result::text);
 
   -- Correct PIN: a proof bound to this debit, valid for 120 seconds.
   v_result := pg_temp.wp_rpc('U1', pg_temp.wp_verify_sql('M1', 'pin_2580', 'checkout', 123456, 'idem1'));

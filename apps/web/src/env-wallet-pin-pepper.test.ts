@@ -48,7 +48,10 @@ describe('WALLET_PIN_PEPPER environment declaration', () => {
     expect(env.WALLET_PIN_PEPPER).toBe('p'.repeat(40));
   });
 
-  it('fails a production boot when the pepper is set but too short', async () => {
+  // The PIN feature is optional and dark: a mistyped pepper must switch only
+  // the PIN routes off (they read it through getWalletPinPepperState and
+  // answer 503), never take every page that imports @/env down at runtime.
+  it('never fails a production boot when the pepper is unusable', async () => {
     const consoleError = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
@@ -56,7 +59,11 @@ describe('WALLET_PIN_PEPPER environment declaration', () => {
     vi.stubEnv('SUPABASE_JWT_SECRET', 'valid-test-signing-secret');
     vi.stubEnv('WALLET_PIN_PEPPER', 'short-secret-value');
 
-    await expect(loadEnvModule()).rejects.toThrow('WALLET_PIN_PEPPER');
+    const { env } = await loadEnvModule();
+    expect(env.WALLET_PIN_PEPPER).toBeUndefined();
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain(
+      'WALLET_PIN_PEPPER'
+    );
     expect(JSON.stringify(consoleError.mock.calls)).not.toContain(
       'short-secret-value'
     );

@@ -66,9 +66,14 @@ AS $$
   ), false);
 $$;
 
--- A reset needs a sign-in within the last 15 minutes on a session that
--- still exists, and AAL2 when the user has a verified MFA factor. Token
--- refreshes and anonymous sign-ins do not count.
+-- A first set and a reset need a sign-in within the last 15 minutes on a
+-- session that still exists, and AAL2 when the user has a verified MFA
+-- factor. Only primary sign-in methods count: a password, a code or link
+-- sent to the customer (otp, magiclink, recovery, invite, email/signup) or
+-- an identity provider (oauth, sso/saml). An MFA entry (totp, mfa/*) never
+-- counts on its own, because a factor can be enrolled and verified from an
+-- old session. Token refreshes, anonymous sign-ins, email changes and any
+-- method not listed do not count either.
 CREATE FUNCTION wallet_pin_private.has_recent_authentication()
 RETURNS boolean
 LANGUAGE plpgsql
@@ -116,7 +121,10 @@ BEGIN
     FROM pg_catalog.jsonb_array_elements(v_jwt -> 'amr') AS entry(value)
    WHERE pg_catalog.jsonb_typeof(entry.value) = 'object'
      AND (entry.value ->> 'timestamp') ~ '^[0-9]{1,12}$'
-     AND COALESCE(entry.value ->> 'method', '') NOT IN ('', 'anonymous', 'token_refresh');
+     AND entry.value ->> 'method' IN (
+       'password', 'otp', 'magiclink', 'recovery', 'invite', 'email/signup',
+       'oauth', 'sso/saml'
+     );
 
   RETURN v_latest_auth_at IS NOT NULL
     AND v_latest_auth_at >= v_now - interval '15 minutes'
@@ -126,12 +134,15 @@ $$;
 
 -- Locks the customer's PIN row and checks one attempt. Returns
 -- {"status":"match"} (and clears every counter) or the refusal to return
--- to the caller: not_set, reset_required (hash made with another pepper;
--- not a failed attempt), locked {lockedUntil} or incorrect
--- {attemptsRemaining}. Five consecutive wrong PINs lock the PIN for
--- 30 minutes; each later lockout doubles, capped at 24 hours. An expired
--- lock gives a fresh window of five attempts; the lockout count only resets
--- on a correct PIN or a reset.
+-- to the caller: not_set, unavailable (the PIN was set by another sign-in
+-- account than the caller; not a failed attempt), reset_required (hash
+-- made with another pepper; not a failed attempt), locked {lockedUntil} or
+-- incorrect {attemptsRemaining}. The candidate is compared through
+-- SHA-256, the form the PIN is stored in. Five consecutive wrong PINs lock
+-- the PIN for 30 minutes; each later lockout doubles, capped at 24 hours.
+-- An expired lock gives a fresh window of five attempts; the lockout count
+-- only resets on a correct PIN or a reset. The row lock makes concurrent
+-- attempts count one after another.
 CREATE FUNCTION wallet_pin_private.check_pin_attempt(
   p_customer_id uuid,
   p_pepper_id bytea,
@@ -155,6 +166,9 @@ BEGIN
   IF NOT FOUND THEN
     RETURN pg_catalog.jsonb_build_object('status', 'not_set');
   END IF;
+  IF v_pin.user_id IS DISTINCT FROM auth.uid() THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'unavailable');
+  END IF;
   IF v_pin.pepper_id <> p_pepper_id THEN
     RETURN pg_catalog.jsonb_build_object('status', 'reset_required');
   END IF;
@@ -162,7 +176,7 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object('status', 'locked', 'lockedUntil', v_pin.locked_until);
   END IF;
 
-  IF v_pin.pin_hash = p_candidate THEN
+  IF v_pin.pin_hash = pg_catalog.sha256(p_candidate) THEN
     UPDATE wallet_pin_private.customer_pins
        SET failed_attempts = 0, lockout_count = 0, locked_at = NULL,
            locked_until = NULL, updated_at = v_now
@@ -192,8 +206,29 @@ BEGIN
 END;
 $$;
 
+-- True when the customer's PIN row is still bound to the account the
+-- customer row points at and the customer is not soft-deleted. The proof
+-- consumer checks it, since it is called with a customer id rather than
+-- the caller's own session.
+CREATE FUNCTION wallet_pin_private.pin_account_bound(p_customer_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SET search_path = ''
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+      FROM wallet_pin_private.customer_pins AS pin
+      JOIN public.customers AS customer ON customer.id = pin.customer_id
+     WHERE pin.customer_id = p_customer_id
+       AND customer.user_id = pin.user_id
+       AND customer.deleted_at IS NULL
+  );
+$$;
+
 -- Replaces the PIN after a correct change or a re-authenticated reset:
--- clears every counter and revokes the customer's unconsumed proofs.
+-- stores SHA-256 of the new hash, clears every counter and revokes the
+-- customer's unconsumed proofs. It never changes the bound account.
 CREATE FUNCTION wallet_pin_private.replace_pin(
   p_customer_id uuid,
   p_pepper_id bytea,
@@ -210,7 +245,8 @@ DECLARE
 BEGIN
   UPDATE wallet_pin_private.customer_pins
      SET kdf_version = 1, pepper_id = p_pepper_id, salt = p_salt,
-         pin_hash = p_pin_hash, failed_attempts = 0, lockout_count = 0,
+         pin_hash = pg_catalog.sha256(p_pin_hash), failed_attempts = 0,
+         lockout_count = 0,
          locked_at = NULL, locked_until = NULL, updated_at = v_now,
          last_reset_at = CASE WHEN p_is_reset THEN v_now ELSE last_reset_at END
    WHERE customer_id = p_customer_id;
@@ -225,6 +261,7 @@ REVOKE ALL ON FUNCTION
   wallet_pin_private.merchant_enabled(uuid),
   wallet_pin_private.has_recent_authentication(),
   wallet_pin_private.check_pin_attempt(uuid, bytea, bytea),
+  wallet_pin_private.pin_account_bound(uuid),
   wallet_pin_private.replace_pin(uuid, bytea, bytea, bytea, boolean)
 FROM PUBLIC, anon, authenticated, service_role;
 

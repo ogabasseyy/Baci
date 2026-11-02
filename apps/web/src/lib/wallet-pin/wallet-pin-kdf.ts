@@ -7,8 +7,9 @@ import { walletPinPepperSchema } from '@/schemas/wallet-pin-pepper';
 // The stored value is scrypt(HMAC-SHA256(pepper, domain || pin), salt). The
 // pepper (WALLET_PIN_PEPPER) never leaves the server, so a copy of the
 // database alone cannot be used to guess PINs offline. The database keeps
-// only the salt and the derived hash in a schema no client role can read,
-// and it enforces the attempt lockout itself.
+// only the salt and the SHA-256 of the derived hash (so a stored value
+// cannot be sent back as if it were the PIN) in a schema no client role
+// can read, and it enforces the attempt lockout itself.
 //
 // Nothing here logs, returns or embeds the PIN or the pepper in an error.
 
@@ -74,7 +75,9 @@ export function readWalletPinPepperState(raw: unknown): WalletPinPepperState {
   return { status: 'ready', pepper: createPepper(parsed.data) };
 }
 
-// Request-time reader. env.ts validates the same variable at boot.
+// Request-time reader and the only validator that matters: 'invalid' means
+// the PIN routes answer 503. env.ts declares the variable but never fails
+// boot on it.
 export function getWalletPinPepperState(): WalletPinPepperState {
   return readWalletPinPepperState(process.env.WALLET_PIN_PEPPER);
 }

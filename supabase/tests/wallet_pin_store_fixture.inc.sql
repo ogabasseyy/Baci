@@ -3,9 +3,11 @@
 --
 -- Merchants: M1 and M4 have PIN enabled, M2 has no authority row, M3 is
 -- disabled. Customers (user@merchant): C1=U1@M1 (set/verify), C2=U2@M1
--- (lockout), C3=U1@M2, C4=U1@M3, C5=U3@M1 (has MFA), C6=U4@M1 (reset),
--- C7=U5@M1 (proofs), C8=U1@M4. U6 has no customer row. Each user has one
--- live session S<n>.
+-- (lockout), C3=U1@M2, C4=U1@M3, C5=U3@M1 (verified MFA), C6=U4@M1
+-- (reset; unverified MFA enrollment), C7=U5@M1 (proofs), C8=U1@M4
+-- (account binding, soft delete). U6 has no customer row. Each user has
+-- one live session S<n>. Setting a PIN needs a recent sign-in, so set
+-- calls pass pg_temp.wp_fresh_amr().
 -- Hex constants are the KDF test vectors from wallet-pin-kdf.test.ts.
 
 CREATE FUNCTION pg_temp.wp_id(p_name text)
@@ -89,18 +91,26 @@ AS $$
   ) || p_extra;
 $$;
 
--- A password sign-in one minute ago.
+-- One amr entry: p_method used p_age_seconds ago (negative = in the future).
+CREATE FUNCTION pg_temp.wp_amr_entry(p_method text, p_age_seconds integer)
+RETURNS jsonb
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT pg_catalog.jsonb_build_object(
+    'method', p_method,
+    'timestamp', (pg_catalog.date_part('epoch', pg_catalog.now()) - p_age_seconds)::bigint
+  );
+$$;
+
+-- A sign-in (password by default) one minute ago.
 CREATE FUNCTION pg_temp.wp_fresh_amr(p_method text DEFAULT 'password')
 RETURNS jsonb
 LANGUAGE sql
 STABLE
 AS $$
-  SELECT pg_catalog.jsonb_build_object('amr', pg_catalog.jsonb_build_array(
-    pg_catalog.jsonb_build_object(
-      'method', p_method,
-      'timestamp', (pg_catalog.date_part('epoch', pg_catalog.now()) - 60)::bigint
-    )
-  ));
+  SELECT pg_catalog.jsonb_build_object('amr',
+    pg_catalog.jsonb_build_array(pg_temp.wp_amr_entry(p_method, 60)));
 $$;
 
 -- Runs p_sql as the authenticated role with p_user's claims. A plain
@@ -250,11 +260,17 @@ BEGIN
     ('C7', 'M1', 'U5'), ('C8', 'M4', 'U1')
   ) AS row_value(customer, merchant, app_user);
 
+  -- U3 has a verified factor (AAL2 needed). U4 only started an enrollment
+  -- and never verified it, which must not demand AAL2.
   INSERT INTO auth.mfa_factors (
     id, user_id, friendly_name, factor_type, status, created_at, updated_at, secret
   ) VALUES (
     'f1a00004-0000-4000-8000-000000000003', pg_temp.wp_id('U3'),
     'Wallet PIN regression authenticator', 'totp', 'verified',
+    pg_catalog.now(), pg_catalog.now(), 'TESTSECRET'
+  ), (
+    'f1a00004-0000-4000-8000-000000000004', pg_temp.wp_id('U4'),
+    'Wallet PIN abandoned enrollment', 'totp', 'unverified',
     pg_catalog.now(), pg_catalog.now(), 'TESTSECRET'
   );
 

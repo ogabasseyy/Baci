@@ -13,11 +13,17 @@ proofs are merged and deployed with their own switches still off.
 - Generate one random value of at least 32 characters, for example the output
   of `openssl rand -base64 48`. Never paste it into chat, tickets, logs or
   files in the repository.
+- Before saving it, check its length on the machine that generated it (for
+  example `printf %s "$value" | wc -c` must print 32 or more). Nothing later
+  can check it for you: a Sensitive variable reads back blank, and the
+  prebuilt build never sees its value.
 - Store it as the Vercel **Production** server variable `WALLET_PIN_PEPPER`,
-  marked Sensitive. It must never get a `NEXT_PUBLIC_` prefix.
-- Confirm it is set and non-empty (some CLI piping stores an empty value), then
-  deploy through the approved VPS prebuilt flow. A set value shorter than 32
-  characters fails the production build on purpose.
+  marked Sensitive, through the REST API upsert (piping into `vercel env add`
+  can store an empty value). It must never get a `NEXT_PUBLIC_` prefix. Then
+  deploy through the approved VPS prebuilt flow.
+- A missing, short or otherwise unusable value never breaks the site: it only
+  keeps the PIN routes answering "unavailable" (503). If they still do after
+  the deploy, the value is wrong; store a correct one and redeploy.
 - **Do not rotate it.** Every PIN records which pepper made it. After a change,
   every customer gets "reset required" and must sign in again to set a new
   PIN. Rotate only as a planned event (for example after a suspected leak),
@@ -74,8 +80,15 @@ any cleanup as owner SQL or a scheduled job at that point.
 
 - Five consecutive wrong PINs lock for 30 minutes; each later lockout doubles,
   capped at 24 hours. A correct PIN or a reset clears the counters.
-- Reset needs a sign-in within 15 minutes on a live session, and AAL2 when the
-  customer has a verified MFA factor.
+- Setting the first PIN and resetting it both need a sign-in within 15 minutes
+  on a live session (password, an emailed or texted code or link, or an
+  identity provider; an MFA step-up on an old sign-in does not count), and
+  AAL2 when the customer has a verified MFA factor.
+- A PIN belongs to the sign-in account that set it. If a customer row is ever
+  pointed at a different account, that PIN and its unspent proofs stop working
+  ("unavailable") and nobody can reset it through the app. Recovery is owner
+  SQL after checking who the customer really is: delete that customer's row in
+  `wallet_pin_private.customer_pins`, and the customer sets a new PIN.
 - A proof is single use, valid 120 seconds, bound to customer, merchant,
   purpose, amount in kobo and the SHA-256 of the debit's Idempotency-Key, and
   spent only inside the hold transaction. A customer holds at most 10 live

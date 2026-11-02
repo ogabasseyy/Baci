@@ -1,1 +1,3 @@
 supabase/tests/wallet_pin_store.sql
+# Two live dblink backends; it commits its own fixtures and removes them.
+supabase/tests/wallet_pin_store_concurrency.sql

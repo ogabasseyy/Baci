@@ -11,7 +11,10 @@
 -- definer inside its own transaction, so the proof is spent if and only if
 -- the hold commits. It returns consumed, or a refusal that never spends a
 -- valid proof: missing, invalid (unknown or revoked), mismatch (any part of
--- the binding differs), used, expired or unavailable (merchant switched off).
+-- the binding differs), used, expired or unavailable (merchant switched
+-- off, customer soft-deleted, or the customer row no longer points at the
+-- account that set the PIN). The proof row is locked, so two concurrent
+-- spends of one proof cannot both succeed.
 
 BEGIN;
 
@@ -131,7 +134,8 @@ BEGIN
   IF v_proof.expires_at <= v_now THEN
     RETURN 'expired';
   END IF;
-  IF NOT wallet_pin_private.merchant_enabled(p_merchant_id) THEN
+  IF NOT wallet_pin_private.merchant_enabled(p_merchant_id)
+    OR NOT wallet_pin_private.pin_account_bound(p_customer_id) THEN
     RETURN 'unavailable';
   END IF;
 

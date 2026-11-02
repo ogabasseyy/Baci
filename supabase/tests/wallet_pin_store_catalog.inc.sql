@@ -171,6 +171,34 @@ BEGIN
     'proof purposes are checkout, imei and vtu'
   );
 
+  -- A PIN row records the account that set it, as a foreign key with an
+  -- index; there is no column for the raw derived hash.
+  PERFORM pg_temp.wp_assert(
+    (SELECT pg_catalog.array_agg(attname::text ORDER BY attnum)
+       FROM pg_catalog.pg_attribute
+      WHERE attrelid = 'wallet_pin_private.customer_pins'::regclass
+        AND attnum > 0 AND NOT attisdropped)
+      = ARRAY['customer_id', 'user_id', 'merchant_id', 'kdf_version', 'pepper_id',
+              'salt', 'pin_hash', 'failed_attempts', 'lockout_count', 'locked_at',
+              'locked_until', 'created_at', 'updated_at', 'last_reset_at'],
+    'customer_pins columns'
+  );
+  PERFORM pg_temp.wp_assert(
+    EXISTS (
+      SELECT 1 FROM pg_catalog.pg_constraint AS con
+       WHERE con.conrelid = 'wallet_pin_private.customer_pins'::regclass
+         AND con.contype = 'f' AND con.confrelid = 'auth.users'::regclass
+         AND con.confdeltype = 'c'
+    ) AND EXISTS (
+      SELECT 1 FROM pg_catalog.pg_index AS idx
+       WHERE idx.indrelid = 'wallet_pin_private.customer_pins'::regclass
+         AND idx.indkey[0] = (SELECT attnum FROM pg_catalog.pg_attribute
+                               WHERE attrelid = 'wallet_pin_private.customer_pins'::regclass
+                                 AND attname = 'user_id')
+    ),
+    'customer_pins.user_id references auth.users and is indexed'
+  );
+
   -- The raw proof token is never stored; only its SHA-256.
   PERFORM pg_temp.wp_assert(
     (SELECT pg_catalog.array_agg(attname::text ORDER BY attnum)

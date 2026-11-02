@@ -37,7 +37,7 @@ DECLARE
   v_pin wallet_pin_private.customer_pins;
   v_attempt integer;
 BEGIN
-  v_result := pg_temp.wp_rpc('U2', pg_temp.wp_set_sql('M1', 'pin_2580'));
+  v_result := pg_temp.wp_rpc('U2', pg_temp.wp_set_sql('M1', 'pin_2580'), pg_temp.wp_fresh_amr());
   PERFORM pg_temp.wp_assert(v_result = '{"status":"set"}', 'C2 set: ' || v_result::text);
 
   -- Attempts 1-4 report what is left; nothing is locked yet.

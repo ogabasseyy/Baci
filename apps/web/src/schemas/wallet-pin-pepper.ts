@@ -16,9 +16,13 @@ export const walletPinPepperSchema = z
     message: 'WALLET_PIN_PEPPER must be at most 512 characters',
   });
 
-// env.ts entry: blank is the same as unset; a set value must be usable.
+// env.ts entry. The PIN feature is optional and ships dark, so this never
+// fails boot: blank and unusable values both read as unset, and a bad value
+// switches off only the PIN routes, which read the variable through
+// getWalletPinPepperState() (lib/wallet-pin/wallet-pin-kdf.ts) and answer
+// 503. A failing env.ts entry would instead take down every page that
+// imports @/env.
 export const walletPinPepperEnvSchema = z.preprocess((value) => {
-  if (typeof value !== 'string') return value;
-  const trimmed = value.trim();
-  return trimmed || undefined;
+  const parsed = walletPinPepperSchema.safeParse(value);
+  return parsed.success ? parsed.data : undefined;
 }, walletPinPepperSchema.optional());

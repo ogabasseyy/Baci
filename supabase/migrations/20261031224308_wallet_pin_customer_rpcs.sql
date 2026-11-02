@@ -7,10 +7,15 @@
 -- are hex text (lower case). Arguments are checked before any state
 -- changes, so a malformed request never counts as an attempt.
 --
+-- A first set and a reset both need a recent sign-in
+-- (wallet_pin_private.has_recent_authentication). A PIN belongs to the
+-- sign-in account that set it: if the caller's customer row now points at
+-- another account than that one, every call answers "unavailable".
+--
 -- Results are {"status": ...}:
 --   get_wallet_pin_state  unavailable | not_set | reset_required
 --                         | locked {lockedUntil} | set {kdfVersion, salt, attemptsRemaining}
---   set_wallet_pin        unavailable | already_set | set
+--   set_wallet_pin        unavailable | reauthentication_required | already_set | set
 --   change_wallet_pin     unavailable | not_set | reset_required | locked
 --                         | incorrect {attemptsRemaining} | changed
 --   reset_wallet_pin      unavailable | reauthentication_required | not_set | reset
@@ -43,6 +48,8 @@ BEGIN
    WHERE pin.customer_id = v_customer_id;
   IF NOT FOUND THEN
     RETURN pg_catalog.jsonb_build_object('status', 'not_set');
+  ELSIF v_pin.user_id IS DISTINCT FROM auth.uid() THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'unavailable');
   ELSIF v_pin.pepper_id <> v_pepper_id THEN
     RETURN pg_catalog.jsonb_build_object('status', 'reset_required');
   ELSIF v_pin.locked_until > pg_catalog.clock_timestamp() THEN
@@ -85,11 +92,19 @@ BEGIN
   IF NOT wallet_pin_private.merchant_enabled(p_merchant_id) THEN
     RETURN pg_catalog.jsonb_build_object('status', 'unavailable');
   END IF;
+  -- Creating the spending credential needs a recent sign-in, like a reset,
+  -- so an old session alone cannot claim a wallet that has no PIN yet.
+  IF NOT wallet_pin_private.has_recent_authentication() THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'reauthentication_required');
+  END IF;
 
   -- First-time only: an existing PIN changes through change or reset.
   INSERT INTO wallet_pin_private.customer_pins (
-    customer_id, merchant_id, kdf_version, pepper_id, salt, pin_hash
-  ) VALUES (v_customer_id, p_merchant_id, 1, v_pepper_id, v_salt, v_hash)
+    customer_id, user_id, merchant_id, kdf_version, pepper_id, salt, pin_hash
+  ) VALUES (
+    v_customer_id, auth.uid(), p_merchant_id, 1, v_pepper_id, v_salt,
+    pg_catalog.sha256(v_hash)
+  )
   ON CONFLICT (customer_id) DO NOTHING;
   GET DIAGNOSTICS v_inserted = ROW_COUNT;
   RETURN pg_catalog.jsonb_build_object(
@@ -154,6 +169,7 @@ DECLARE
   v_salt bytea := wallet_pin_private.hex_bytes(p_salt, 16);
   v_hash bytea := wallet_pin_private.hex_bytes(p_pin_hash, 32);
   v_customer_id uuid;
+  v_bound_user_id uuid;
 BEGIN
   IF p_merchant_id IS NULL OR v_pepper_id IS NULL OR v_salt IS NULL OR v_hash IS NULL
     OR p_kdf_version IS DISTINCT FROM 1 THEN
@@ -167,11 +183,16 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object('status', 'reauthentication_required');
   END IF;
 
-  PERFORM 1 FROM wallet_pin_private.customer_pins AS pin
+  SELECT pin.user_id INTO v_bound_user_id
+    FROM wallet_pin_private.customer_pins AS pin
    WHERE pin.customer_id = v_customer_id
      FOR UPDATE;
   IF NOT FOUND THEN
     RETURN pg_catalog.jsonb_build_object('status', 'not_set');
+  END IF;
+  -- A reset never moves a PIN to another account.
+  IF v_bound_user_id IS DISTINCT FROM auth.uid() THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'unavailable');
   END IF;
   -- A reset also re-establishes the PIN under the server's current pepper
   -- and clears any lockout.

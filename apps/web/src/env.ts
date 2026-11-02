@@ -182,7 +182,8 @@ const serverSchema = z
       .string()
       .min(1, 'SUPABASE_SERVICE_ROLE_KEY is required'),
     RECOVERY_CODE_PEPPER: recoveryCodePepperSchema,
-    // Wallet PIN hashing key; unset means no PIN can be set or verified.
+    // Wallet PIN hashing key; unset means no PIN can be set or verified. An
+    // unusable value reads as unset and never fails boot (dark feature).
     WALLET_PIN_PEPPER: walletPinPepperEnvSchema,
     SUPABASE_JWT_SECRET: optionalTrimmedStringSchema,
     SUPABASE_LEGACY_ANON_JWT: optionalTrimmedStringSchema,

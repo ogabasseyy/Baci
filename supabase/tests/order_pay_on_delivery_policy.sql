@@ -142,6 +142,8 @@ SELECT 1 / CASE WHEN has_language_privilege(current_user, 'plpgsql', 'USAGE') TH
 SELECT 1 / CASE WHEN NOT has_function_privilege(current_user, 'public.is_storefront_pod_order_idempotency_hash(uuid,text,text)', 'EXECUTE') THEN 1 ELSE 0 END;
 -- Capture only the SQLSTATE, never a database error message or row data.
 SELECT set_config('baci.pod_probe_result', 'not_run', true);
+-- Verify the replay role can execute an empty PL/pgSQL block first.
+DO $$ BEGIN NULL; END $$;
 DO $$
 BEGIN
   BEGIN
@@ -150,6 +152,8 @@ BEGIN
   EXCEPTION WHEN OTHERS THEN
     PERFORM set_config('baci.pod_probe_result', SQLSTATE, true);
   END;
+EXCEPTION WHEN OTHERS OR query_canceled OR assert_failure THEN
+  PERFORM set_config('baci.pod_probe_result', SQLSTATE, true);
 END $$;
 RESET ROLE;
 -- Distinct fixed lines distinguish an unexpected success, an application

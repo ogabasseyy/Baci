@@ -2,9 +2,10 @@ const STOREFRONT_ORIGIN = 'https://ogabassey.com';
 
 export function normalizeHref(href: string): string | null {
   try {
+    const trimmed = href.trim();
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('?')) return null;
     const url = new URL(href, STOREFRONT_ORIGIN);
     if (
-      !href.trim() ||
       url.origin !== STOREFRONT_ORIGIN ||
       url.username ||
       url.password

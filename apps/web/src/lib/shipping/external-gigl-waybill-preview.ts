@@ -22,6 +22,11 @@ const LINKABLE_SHIPPING_STATUSES = new Set([
   'processing',
   'shipped',
 ]);
+const UNCONFIRMED_MATCH = {
+  name: 'unknown',
+  phone: 'unknown',
+  destination: 'unknown',
+} as const;
 const RELEASED_SHIPMENT_STATUSES = '("cancelled","failed","returned")';
 
 export class ExternalWaybillError extends Error {
@@ -260,7 +265,9 @@ export async function previewExternalGiglWaybill({
     preview: {
       waybill,
       linkable,
-      match,
+      // Per-field results would let staff probe another merchant's parcel
+      // in the shared GIG account, so they are only shared once confirmed.
+      match: receiverConfirmed ? match : UNCONFIRMED_MATCH,
       order: {
         customerName: order.customer_name,
         orderNumber: order.order_number,

@@ -138,7 +138,7 @@ describe('POST /api/orders/[id]/shipping/gigl-waybill', () => {
     const { preview } = await response.json();
     expect(preview).toMatchObject({
       linkable: false,
-      match: { name: 'match', phone: 'mismatch', destination: 'mismatch' },
+      match: { name: 'unknown', phone: 'unknown', destination: 'unknown' },
       gig: null,
     });
   });

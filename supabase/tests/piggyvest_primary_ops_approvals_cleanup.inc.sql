@@ -25,6 +25,9 @@ USING piggyvest_primary.ops_approval_requests r
 WHERE a.request_id = r.id AND r.subject_table = 'pvops_test.subjects';
 DELETE FROM piggyvest_primary.ops_approval_requests
 WHERE subject_table = 'pvops_test.subjects';
+DELETE FROM piggyvest_primary.ops_login_humans
+WHERE login IN ('pvops_test_requester_r', 'pvops_test_approver_a', 'pvops_test_approver_b',
+                'pvops_test_approver_c', 'pvops_test_engine_e');
 ALTER TABLE piggyvest_primary.ops_approval_requests ENABLE TRIGGER USER;
 ALTER TABLE piggyvest_primary.ops_approvals ENABLE TRIGGER USER;
 COMMIT;

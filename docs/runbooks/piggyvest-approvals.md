@@ -7,7 +7,7 @@ the same two-person approval (owner default 8):
 
 - a request records the action, the record it is about and that record's
   version, the amount in kobo and the destination;
-- two **different** approvers, neither of them the person who opened the
+- two **different humans**, neither of them the human who opened the
   request, must approve that exact request within **24 hours**;
 - any single rejection closes the request, and the same request (same
   values) can never be asked again;
@@ -15,8 +15,16 @@ the same two-person approval (owner default 8):
   or the record's version changes, the approvals no longer count and a new
   request is needed.
 
-Who approved is always the database login that is signed in (`SESSION_USER`).
+Who approved is always the database login that is signed in (`SESSION_USER`),
+and the **human** the owner recorded that login under (`human_id`, below).
 Nothing in a request or a decision can name an approver.
+
+A database login is not a human: one person has an ops login that opens
+requests and an approver login that approves them, and the two names never
+match. So the rules compare `human_id`s, not logins. The requester's own
+approver login cannot approve their request, one human's two approver logins
+count once, and whoever carries out the action is never one of its
+approvers.
 
 Status: dark. No feature opens requests yet and no approver login exists.
 The SQL is in `supabase/migrations/*_piggyvest_primary_ops_approvals*.sql`
@@ -29,7 +37,7 @@ The SQL is in `supabase/migrations/*_piggyvest_primary_ops_approvals*.sql`
 |---|---|---|
 | Each human approver | their own LOGIN, granted only `piggyvest_primary_approver` | list open requests; approve or reject one |
 | Ops / support commands and workers (later PRs) | their own dedicated LOGIN and role | open a request; carry out an action after two approvals |
-| Owner (`postgres`) | migration owner | create and remove approver logins |
+| Owner (`postgres`) | migration owner | create and remove logins; record which human each login belongs to (the only writer of `ops_login_humans`) |
 
 An approver login counts only while it:
 
@@ -41,6 +49,10 @@ An approver login counts only while it:
 
 This is checked when the decision is made **and again** when the action is
 carried out, so giving an approver login any other role voids its approvals.
+
+Every login that opens, decides or carries out a request must also be
+**registered to a human** (next section). An unregistered login is refused
+with `ops_approval_unregistered_login`, whatever its role.
 
 ## One-time setup: add an approver (owner only)
 
@@ -73,9 +85,36 @@ one into SQL or the Supabase SQL editor, which keeps query history.
    SELECT piggyvest_primary.ops_login_is_approver('pv_approver_amaka'::regrole);
    ```
 
+4. Record which human the login belongs to (next section).
+
 Repeat for the second approver. Two approvers are the minimum; a third
-covers holidays. The person who opens a request can never approve it, so an
-ops person who also approves needs someone else to open their requests.
+covers holidays. The human who opens a request can never approve it, through
+any of their logins, so an ops person who also approves needs someone else to
+open their requests.
+
+## Record which human each login belongs to (owner only)
+
+`piggyvest_primary.ops_login_humans` has one row per login. Only the owner
+writes it: the app, the service role and the approver role have no access to
+it. Do this by hand, never in a migration. Use a stable, lowercase id for the
+person (letters, digits, `_`, `.`, `-`; for example `amaka`), and give a
+worker login an id of its own (for example `worker_payouts`).
+
+```sql
+INSERT INTO piggyvest_primary.ops_login_humans (login_oid, login, human_id)
+SELECT oid, rolname, 'amaka' FROM pg_catalog.pg_roles
+WHERE rolname IN ('pv_ops_amaka', 'pv_approver_amaka');
+```
+
+- All of one person's logins share one `human_id`. Two different people never
+  share one.
+- A registration belongs to the login's **name** as well as its oid. If a
+  login is renamed it has no registration until you record it again, and
+  decisions it made earlier stop counting.
+- Changing a login's `human_id` after it has decided voids that decision
+  until the id is put back. Do not do it while requests are open.
+- Check a login: `SELECT piggyvest_primary.ops_human_of('pv_approver_amaka'::regrole);`
+  returns the `human_id`, or nothing if it is not registered.
 
 ## First sign-in: change your password (approver)
 
@@ -132,7 +171,8 @@ unexpected, reject it.
 | Message | Meaning |
 |---|---|
 | not an approver login | the login is missing the approver role or holds another role; ask the owner |
-| you opened this request | someone else must approve it |
+| you, or another of your logins, opened this request | someone else must approve it |
+| not registered to a person | the login has no row in `ops_login_humans`; ask the owner |
 | already decided | you have already approved or rejected it |
 | closed | it was rejected, used or replaced by a newer request |
 | expired | older than 24 hours; ask for a new request |
@@ -143,7 +183,8 @@ unexpected, reject it.
 
 - Remove: `REVOKE piggyvest_primary_approver FROM pv_approver_amaka;` then
   `ALTER ROLE pv_approver_amaka NOLOGIN;`. Their decisions stay on record but
-  no longer count for requests that have not been carried out.
+  no longer count for requests that have not been carried out. Leave the
+  `ops_login_humans` row in place as a record.
 - Rotate a password: the approver runs `\password` (above), or the owner runs
   `\password pv_approver_amaka` and hands the new one over in person.
 
@@ -151,8 +192,10 @@ unexpected, reject it.
 
 - Give an approver login any other role, or ADMIN OPTION on the approver
   role.
-- Share a login between people, or use `postgres`, the service role or an
-  app login to approve.
+- Share a login between people, register one login under two people, or use
+  `postgres`, the service role or an app login to approve.
+- Give two different people the same `human_id`, or one person two different
+  `human_id`s: the rule is only as good as this table.
 - Put an approver password in a migration, `.env`, a command line, a script,
   a ticket, a chat or an AI agent's hands.
 - Approve a request you cannot match to a real, expected operation.
@@ -171,16 +214,19 @@ command's dedicated role). Neither function is granted to any role.
   never be asked again: only a changed row version, amount or destination
   can.
 - Open requests only from a session signed in as a dedicated login: one
-  person's ops or support login, or one worker's login. The owner
-  (`postgres`), a superuser, a login with an elevated attribute, and a shared
-  API login (any member of `anon`, `authenticated` or `service_role`, such as
-  PostgREST's `authenticator`) are refused with
-  `ops_approval_invalid_requester`, because the requester they record would
-  not be one person.
+  person's ops or support login, or one worker's login, registered in
+  `ops_login_humans`. The owner (`postgres`), a superuser, a login with an
+  elevated attribute, and a shared API login (any member of `anon`,
+  `authenticated` or `service_role`, such as PostgREST's `authenticator`) are
+  refused with `ops_approval_invalid_requester`, because the requester they
+  record would not be one person. An unregistered login is refused with
+  `ops_approval_unregistered_login`.
 - `piggyvest_primary.consume_two_approvals(action, subject_table, subject_id,
   row_version, amount_kobo, destination)` returns the request id, or raises.
   Call it in the same transaction as the money movement and pass the
-  subject's **current** values, so a raise rolls the movement back.
+  subject's **current** values, so a raise rolls the movement back. The
+  session that calls it must be a registered login too, and none of the
+  humans who approved may be that login's human.
 - `action` is one of the rows of `piggyvest_primary.ops_approval_actions`.
 - `destination` is `{"kind":"none"}`,
   `{"kind":"bank_account","bank_code":"<3-6 digits>","ref":"<10-digit NUBAN>"}`

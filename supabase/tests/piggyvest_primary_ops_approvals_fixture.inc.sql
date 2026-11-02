@@ -4,6 +4,7 @@
 --   r        the requester: a dedicated login that opens every request;
 --   a, b, c  approver logins holding only piggyvest_primary_approver;
 --   e        an approver login that also holds an engine role (refused).
+-- Each is registered to its own human_id in ops_login_humans.
 -- Approver a also opens a few requests itself (pvops_test.open_as_session),
 -- so the requester-as-approver rule is exercised.
 --
@@ -39,15 +40,20 @@ EXCEPTION WHEN OTHERS THEN
 END
 $$;
 
--- Consumes from this session; returns 'consumed', or 'error: <message>'.
+-- Consumes as the requester login r (a registered login on its own
+-- connection, as a real money command's session would be); returns
+-- 'consumed', or 'error: <message>'.
 CREATE FUNCTION pg_temp.pvops_consume(
-  p_action text, p_subject uuid, p_version bigint, p_amount bigint, p_destination jsonb
+  p_action text, p_subject uuid, p_version bigint, p_amount bigint, p_destination jsonb,
+  p_conn text DEFAULT 'pvops_r'
 ) RETURNS text
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  PERFORM piggyvest_primary.consume_two_approvals(
-    p_action, 'pvops_test.subjects', p_subject, p_version, p_amount, p_destination);
+  PERFORM t.id FROM dblink(p_conn, pg_catalog.format(
+    'SELECT pvops_test.consume_request(%L, %L::uuid, %s::bigint, %s::bigint, %L::jsonb)::text',
+    p_action, p_subject, COALESCE(p_version::text, 'NULL'), COALESCE(p_amount::text, 'NULL'),
+    p_destination)) AS t(id text);
   RETURN 'consumed';
 EXCEPTION WHEN OTHERS THEN
   RETURN 'error: ' || SQLERRM;
@@ -64,6 +70,17 @@ BEGIN
     RAISE EXCEPTION '%: expected success, got %', p_label, p_actual;
   ELSIF p_expected <> 'ok' AND p_actual IS DISTINCT FROM 'error: ' || p_expected THEN
     RAISE EXCEPTION '%: expected %, got %', p_label, p_expected, p_actual;
+  END IF;
+END
+$$;
+
+-- Raises with the label unless the condition is true (NULL counts as false).
+CREATE FUNCTION pg_temp.pvops_assert(p_ok boolean, p_label text) RETURNS void
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF p_ok IS NOT TRUE THEN
+    RAISE EXCEPTION '%', p_label;
   END IF;
 END
 $$;
@@ -128,6 +145,14 @@ $$;
 GRANT piggyvest_primary_approver TO pvops_test_approver_a, pvops_test_approver_b,
   pvops_test_approver_c, pvops_test_engine_e;
 GRANT piggyvest_primary_evidence TO pvops_test_engine_e;
+
+-- Each test login belongs to its own human (pvops_human_r, _a, _b, _c,
+-- _e), as the owner would record by hand for real logins.
+INSERT INTO piggyvest_primary.ops_login_humans (login_oid, login, human_id)
+SELECT r.oid, r.rolname, 'pvops_human_' || pg_catalog.right(r.rolname::text, 1)
+FROM pg_catalog.pg_roles r
+WHERE r.rolname IN ('pvops_test_requester_r', 'pvops_test_approver_a', 'pvops_test_approver_b',
+                    'pvops_test_approver_c', 'pvops_test_engine_e');
 
 CREATE SCHEMA pvops_test;
 REVOKE ALL ON SCHEMA pvops_test FROM PUBLIC;

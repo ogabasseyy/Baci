@@ -5,29 +5,30 @@ Owner sign-off: required
 
 ## What changes
 
-One shared approval process for PiggyVest operations staff run by hand, such as moving Collection money to the Ogabassey bank account. A request records the action, the record and its version, the amount and where the money goes. It is carried out only after two different people approve it, neither of them the person who asked. Each approver uses their own database login and a small command-line tool.
+One shared approval process for PiggyVest operations staff run by hand, such as moving Collection money to the Ogabassey bank account. A request records the action, the record and its version, the amount and where the money goes. It is carried out only after two different humans approve it, neither of them the human who asked. Each approver uses their own database login and a small command-line tool.
 
-## Why
+## What changed after review
 
-Your default 8 asks for two-person approval before money leaves Collection. Later steps (support payouts, stuck transfers, misrouted interest) need the same, so one tested mechanism serves them all.
+- Logins are not humans. A person has an ops login to ask and an approver login to approve, and the names never match, so a name check would let one person do both. A small table, written only by you, now says which human each login belongs to, and every rule compares humans. Your own approver login cannot approve your request, and one human's two approver logins count once.
+- A login missing from that table is refused everywhere, including when carrying out an action.
+- A request that expires while a call waits in line is refused, and later records carry the time after the wait.
+- A destination missing its account or bank code is refused instead of stored.
+- The password prompt cancels cleanly if the terminal closes.
 
 ## What could go wrong and how it is prevented
 
-- Approving twice, or your own request: the database records who is really signed in, never a typed-in name, and refuses both.
-- "Who asked" meaning nothing: only a person's or a worker's own login can open a request. The admin account, the website's shared account and logins with extra powers are refused.
+- Approving twice, or your own request: refused by human, not by typed name.
+- "Who asked" meaning nothing: only a registered person's or worker's own login can open a request. The admin account, shared accounts and logins with extra powers are refused.
 - An approval reused for something else: it is tied to the exact action, record version, amount and destination. Any change voids it.
-- A rejection worked around: the same details cannot be asked for again. Only a real change can.
-- Old approvals lingering: requests expire after 24 hours and work only once.
-- A system account posing as an approver: approver logins hold the approver permission only, re-checked when money moves.
-- A misleading destination: approvers see the bank code and last four digits first. Any name the requester adds comes after, in quotes, with no numbers.
-- Session tampering: the approval functions use only the database's built-in definitions, so nothing an approver sets up changes them.
-- Approving the wrong amount: the approver must retype the naira amount first.
-- Passwords leaking: hidden prompt only. You create approver logins by hand, never code or an AI.
+- A rejection worked around: the same details cannot be asked again.
+- Old approvals lingering: requests expire after 24 hours and work once.
+- A system account posing as an approver: approver logins hold that permission only, re-checked when money moves.
+- Passwords leaking: hidden prompt only; you create logins by hand.
 
 ## How it is tested
 
-Database tests sign in as five separate test logins and prove every rule above: refusals for one approval, the same person twice, the requester, changed details, expiry, rejection and asking again; exactly one use of two real approvals; shared and admin logins refused; session tampering harmless. Permission checks confirm the app, customers and the service account cannot reach it. Tool tests prove a dry run by default, a stop on a mistyped amount, and no password from the environment or command line.
+Database tests sign in as separate test logins and prove each rule, including one human with two logins, an unregistered login, a renamed login and calls waiting in line while a request expires. They also fail against deliberately broken versions. Tool tests prove a dry run by default.
 
 ## How it stays switched off
 
-Nothing uses these approvals yet and no approver logins exist. It stays inactive until later features call it and you create two approver logins yourself (see the approvals runbook).
+Nothing uses these approvals yet and no logins are registered. It stays inactive until later features call it and you create and register two approver logins yourself (see the approvals runbook).

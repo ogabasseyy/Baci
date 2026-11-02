@@ -52,7 +52,9 @@ const REFUSALS: Record<string, string> = {
   ops_approval_not_an_approver:
     'This login is not an approver login. Use your own approver login, which must hold the approver role and no other role.',
   ops_approval_requester_cannot_approve:
-    'You opened this request, so you cannot decide it. Two other approvers must.',
+    'You, or another of your logins, opened this request, so you cannot decide it. Two other people must.',
+  ops_approval_unregistered_login:
+    'This login has not been registered to a person. Ask the owner to record it before you decide requests.',
   ops_approval_already_decided: 'You have already decided this request.',
   ops_approval_closed:
     'This request is already closed (rejected, used or replaced).',

@@ -1,4 +1,5 @@
--- Two-person approvals, part 2: the tables, their guards and the action list.
+-- Two-person approvals, part 2: the tables, their guards, the action list and
+-- the record of which human each login belongs to.
 --
 -- Deny-all for every API role and for the approver role: rows are reached
 -- only through the request functions (part 3) and the approver entry points
@@ -24,6 +25,26 @@ INSERT INTO piggyvest_primary.ops_approval_actions (action, label) VALUES
   ('goal_residual_review', 'Resolve money left in a savings goal'),
   ('misrouted_interest_resolve', 'Move misrouted main-wallet interest to Ogabassey');
 
+-- Which human each login belongs to. Two database logins are never two
+-- humans by themselves: one person has an ops login and an approver login.
+-- So the owner records, by hand and never in a migration, the human_id of
+-- every login that opens, decides or completes a request (ops, support,
+-- worker and approver logins), one row per login. Only the table owner can
+-- write it: every API role and the approver role is denied. The two-person
+-- rule then compares human_ids: a requester's own approver login cannot
+-- approve, one human's two approver logins count once, and whoever completes
+-- the action is never one of its approvers. A worker login gets a human_id
+-- of its own.
+CREATE TABLE piggyvest_primary.ops_login_humans (
+  login_oid oid PRIMARY KEY,
+  login text NOT NULL
+    CONSTRAINT ops_login_humans_login_key UNIQUE
+    CONSTRAINT ops_login_humans_login_check CHECK (login ~ '^[^[:cntrl:]]{1,63}$'),
+  human_id text NOT NULL
+    CONSTRAINT ops_login_humans_human_id_check CHECK (human_id ~ '^[a-z][a-z0-9_.-]{1,62}$'),
+  recorded_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp()
+);
+
 CREATE TABLE piggyvest_primary.ops_approval_requests (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
   action text NOT NULL
@@ -47,6 +68,9 @@ CREATE TABLE piggyvest_primary.ops_approval_requests (
   requested_by text NOT NULL
     CONSTRAINT ops_approval_requests_requested_by_check
     CHECK (requested_by ~ '^[^[:cntrl:]]{1,63}$'),
+  requester_human_id text NOT NULL
+    CONSTRAINT ops_approval_requests_requester_human_id_check
+    CHECK (requester_human_id ~ '^[a-z][a-z0-9_.-]{1,62}$'),
   state text NOT NULL DEFAULT 'open'
     CONSTRAINT ops_approval_requests_state_check
     CHECK (state IN ('open', 'rejected', 'consumed', 'expired', 'superseded')),
@@ -77,8 +101,8 @@ CREATE INDEX ops_approval_requests_open_expiry_idx
   ON piggyvest_primary.ops_approval_requests (expires_at)
   WHERE state = 'open';
 
--- One decision per approver login per request. The role oid is unique too,
--- so a renamed login cannot decide twice.
+-- One decision per approver login, role oid and human per request, so a
+-- renamed login or a human's second login cannot decide twice.
 CREATE TABLE piggyvest_primary.ops_approvals (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
   request_id uuid NOT NULL
@@ -86,13 +110,17 @@ CREATE TABLE piggyvest_primary.ops_approvals (
   approver_login text NOT NULL
     CONSTRAINT ops_approvals_approver_login_check CHECK (approver_login ~ '^[^[:cntrl:]]{1,63}$'),
   approver_role_oid oid NOT NULL,
+  approver_human_id text NOT NULL
+    CONSTRAINT ops_approvals_approver_human_id_check
+    CHECK (approver_human_id ~ '^[a-z][a-z0-9_.-]{1,62}$'),
   decision text NOT NULL
     CONSTRAINT ops_approvals_decision_check CHECK (decision IN ('approve', 'reject')),
   digest text NOT NULL
     CONSTRAINT ops_approvals_digest_check CHECK (digest ~ '^[0-9a-f]{64}$'),
   decided_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
   CONSTRAINT ops_approvals_request_approver_key UNIQUE (request_id, approver_login),
-  CONSTRAINT ops_approvals_request_role_key UNIQUE (request_id, approver_role_oid)
+  CONSTRAINT ops_approvals_request_role_key UNIQUE (request_id, approver_role_oid),
+  CONSTRAINT ops_approvals_request_human_key UNIQUE (request_id, approver_human_id)
 );
 
 -- Requests only move from open to one closed state; their bound fields never
@@ -117,11 +145,11 @@ BEGIN
   IF NEW.state NOT IN ('rejected', 'consumed', 'expired', 'superseded')
      OR (NEW.id, NEW.action, NEW.subject_table, NEW.subject_id, NEW.subject_row_version,
          NEW.amount_kobo, NEW.destination, NEW.digest, NEW.context, NEW.requested_by,
-         NEW.opened_at, NEW.expires_at)
+         NEW.requester_human_id, NEW.opened_at, NEW.expires_at)
         IS DISTINCT FROM
         (OLD.id, OLD.action, OLD.subject_table, OLD.subject_id, OLD.subject_row_version,
          OLD.amount_kobo, OLD.destination, OLD.digest, OLD.context, OLD.requested_by,
-         OLD.opened_at, OLD.expires_at) THEN
+         OLD.requester_human_id, OLD.opened_at, OLD.expires_at) THEN
     RAISE EXCEPTION 'ops_approval_request_only_closes' USING ERRCODE = '42501';
   END IF;
   RETURN NEW;
@@ -149,6 +177,7 @@ CREATE TRIGGER ops_approvals_guard
 ALTER TABLE piggyvest_primary.ops_approval_actions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE piggyvest_primary.ops_approval_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE piggyvest_primary.ops_approvals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE piggyvest_primary.ops_login_humans ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY ops_approval_actions_deny_all ON piggyvest_primary.ops_approval_actions
   AS RESTRICTIVE FOR ALL TO PUBLIC USING (false) WITH CHECK (false);
@@ -156,17 +185,35 @@ CREATE POLICY ops_approval_requests_deny_all ON piggyvest_primary.ops_approval_r
   AS RESTRICTIVE FOR ALL TO PUBLIC USING (false) WITH CHECK (false);
 CREATE POLICY ops_approvals_deny_all ON piggyvest_primary.ops_approvals
   AS RESTRICTIVE FOR ALL TO PUBLIC USING (false) WITH CHECK (false);
+CREATE POLICY ops_login_humans_deny_all ON piggyvest_primary.ops_login_humans
+  AS RESTRICTIVE FOR ALL TO PUBLIC USING (false) WITH CHECK (false);
 
 REVOKE ALL ON TABLE piggyvest_primary.ops_approval_actions, piggyvest_primary.ops_approval_requests,
-  piggyvest_primary.ops_approvals
+  piggyvest_primary.ops_approvals, piggyvest_primary.ops_login_humans
   FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_approver;
+
+-- The human_id a login belongs to, or NULL when it is not recorded (or the
+-- login was renamed since). Granted to nobody.
+CREATE FUNCTION piggyvest_primary.ops_human_of(p_login oid)
+RETURNS text
+LANGUAGE sql STABLE
+SET search_path = pg_catalog, pg_temp
+AS $$
+  SELECT p.human_id
+  FROM piggyvest_primary.ops_login_humans p
+  JOIN pg_catalog.pg_roles r ON r.oid = p.login_oid AND r.rolname::text = p.login
+  WHERE p.login_oid = p_login
+$$;
 
 REVOKE ALL ON FUNCTION
   piggyvest_primary.ops_approval_requests_guard(),
-  piggyvest_primary.ops_approvals_guard()
+  piggyvest_primary.ops_approvals_guard(),
+  piggyvest_primary.ops_human_of(oid)
   FROM PUBLIC, anon, authenticated, service_role;
 
 COMMENT ON TABLE piggyvest_primary.ops_approval_requests IS
   'Two-person approval requests bound by digest to (action, subject, row version, amount, destination). Reachable only through the ops approval functions.';
 COMMENT ON TABLE piggyvest_primary.ops_approvals IS
-  'Append-only approve/reject decisions; approver_login is the deciding SESSION_USER.';
+  'Append-only approve/reject decisions; approver_login is the deciding SESSION_USER, approver_human_id the human it is recorded under.';
+COMMENT ON TABLE piggyvest_primary.ops_login_humans IS
+  'Owner-written only: the human_id each ops, support, worker or approver login belongs to. The two-person rule compares human_ids, never logins.';

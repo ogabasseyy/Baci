@@ -229,8 +229,10 @@ SELECT t.id AS req19 FROM dblink('pvops_a',
 SELECT pg_temp.pvops_digest(:'req19') AS dig19 \gset
 SELECT pg_temp.pvops_expect(
   pg_temp.pvops_decide('pvops_b', :'req19', 'approve', 250000, :'dig19'), 'ok', 'b approves');
-INSERT INTO piggyvest_primary.ops_approvals (request_id, approver_login, approver_role_oid, decision, digest)
-SELECT :'req19', r.rolname, r.oid, 'approve', :'dig19'
+INSERT INTO piggyvest_primary.ops_approvals
+  (request_id, approver_login, approver_role_oid, approver_human_id, decision, digest)
+SELECT :'req19', r.rolname, r.oid, 'pvops_human_' || pg_catalog.right(r.rolname::text, 1),
+  'approve', :'dig19'
 FROM pg_catalog.pg_roles r WHERE r.rolname IN ('pvops_test_approver_a', 'pvops_test_engine_e');
 SELECT pg_temp.pvops_expect(pg_temp.pvops_consume('support_payout',
   '0a0e0000-0000-4000-8000-000000000019', 1, 250000,

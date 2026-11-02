@@ -34,7 +34,7 @@ DECLARE
   v_privilege text;
 BEGIN
   FOREACH v_table IN ARRAY ARRAY[
-    'ops_approval_actions', 'ops_approval_requests', 'ops_approvals'
+    'ops_approval_actions', 'ops_approval_requests', 'ops_approvals', 'ops_login_humans'
   ] LOOP
     IF NOT EXISTS (
       SELECT 1 FROM pg_catalog.pg_class c
@@ -129,7 +129,8 @@ BEGIN
     -- at consume time, and the requester's own login); they are granted to
     -- nobody. Every request and decision function takes no identity at all.
     IF v_fn.signature NOT IN ('piggyvest_primary.ops_login_is_approver(oid)',
-                              'piggyvest_primary.ops_login_is_requester(oid)') AND (
+                              'piggyvest_primary.ops_login_is_requester(oid)',
+                              'piggyvest_primary.ops_human_of(oid)') AND (
        EXISTS (SELECT 1 FROM pg_catalog.unnest(COALESCE(v_fn.proargnames, ARRAY[]::text[])) a
                WHERE a ~* '(approver|login|user|role)')
        OR 'oid'::regtype::oid = ANY (v_fn.proargtypes::oid[])
@@ -185,6 +186,8 @@ BEGIN
                  WHERE conname = 'ops_approvals_request_approver_key' AND contype = 'u')
      OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint
                     WHERE conname = 'ops_approvals_request_role_key' AND contype = 'u')
+     OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint
+                    WHERE conname = 'ops_approvals_request_human_key' AND contype = 'u')
      OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint
                     WHERE conname = 'ops_approval_requests_digest_check' AND contype = 'c') THEN
     RAISE EXCEPTION 'ops approval uniqueness and digest constraints are missing';

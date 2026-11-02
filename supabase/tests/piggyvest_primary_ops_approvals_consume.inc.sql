@@ -31,8 +31,9 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM piggyvest_primary.ops_approval_requests r
     WHERE r.subject_id = '0a0e0000-0000-4000-8000-000000000001'
-      AND r.state = 'consumed' AND r.consumed_by = session_user::text
+      AND r.state = 'consumed' AND r.consumed_by = 'pvops_test_requester_r'
       AND r.requested_by = 'pvops_test_requester_r' AND r.closed_at IS NOT NULL
+      AND r.requester_human_id = 'pvops_human_r'
   ) OR (SELECT pg_catalog.array_agg(a.approver_login ORDER BY a.approver_login)
         FROM piggyvest_primary.ops_approvals a
         JOIN piggyvest_primary.ops_approval_requests r ON r.id = a.request_id

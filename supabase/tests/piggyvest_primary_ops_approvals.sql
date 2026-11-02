@@ -7,7 +7,8 @@
 --     an extra role membership disqualifies an approver login;
 --   * runtime, through real logins (one dblink connection per login, so
 --     SESSION_USER really differs): the same login twice, the requester as
---     approver and a single approval are refused; two distinct approvals
+--     approver (by login or by person) and a single approval are refused;
+--     one person's two logins count once; two distinct approvals
 --     consume exactly once; a changed row version, amount or destination
 --     invalidates; an expired request is refused and can be asked again;
 --     any reject closes, and the same values cannot be asked again; a jsonb
@@ -47,6 +48,7 @@ CREATE EXTENSION IF NOT EXISTS dblink;
 \ir piggyvest_primary_ops_approvals_binding.inc.sql
 \ir piggyvest_primary_ops_approvals_hardening.inc.sql
 \ir piggyvest_primary_ops_approvals_expiry_race.inc.sql
+\ir piggyvest_primary_ops_approvals_humans.inc.sql
 \ir piggyvest_primary_ops_approvals_cleanup.inc.sql
 
 \if :pvops_had_dblink

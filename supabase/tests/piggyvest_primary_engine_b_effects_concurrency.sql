@@ -55,7 +55,7 @@ DO $d$ BEGIN
   EXCEPTION WHEN OTHERS THEN INSERT INTO diag_err VALUES (SQLSTATE || ' ' || SQLERRM);
   END;
 END $d$;
-SELECT 'DIAG2' AS tag, msg, (SELECT string_agg(rolname || ':' || rolsuper || rolcreaterole, ',') FROM pg_catalog.pg_roles WHERE rolname IN ('postgres','supabase_admin')) AS roles FROM diag_err;
+SELECT 'DIAG2' AS tag, msg, (SELECT string_agg(rolname || ':' || rolsuper::text || rolcreaterole::text, ',') FROM pg_catalog.pg_roles WHERE rolname IN ('postgres','supabase_admin')) AS roles FROM diag_err;
 \q
 SELECT NOT pg_catalog.pg_has_role(current_user, 'piggyvest_primary_transfer_worker', 'SET')
   AS engine_race_grant_worker \gset

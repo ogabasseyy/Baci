@@ -15,7 +15,9 @@
 --     trapped on the replay image, so no denial is probed by calling);
 --   * each notifier is bound exactly once, as an AFTER INSERT row trigger on
 --     the paid-interest table it watches, so accruals and reversals (other
---     tables) can never fire it.
+--     tables) can never fire it;
+--   * each notifier's owner, whom the helpers run as, can execute both
+--     helpers and read every row of the tables the progress text reads.
 -- Behaviour of the triggers is covered by
 -- savings_interest_notification_triggers.sql.
 --
@@ -145,5 +147,42 @@ SELECT pg_temp.check(
   savings_notifications.interest_progress('a7c00000-0000-4000-8000-0000000000ff')
     = 'Open your savings to see your latest balance.',
   'an unknown goal must fall back to the safe progress text');
+
+-- 8. The SECURITY INVOKER helpers run as each SECURITY DEFINER notifier's
+-- owner, and EXECUTE is revoked from PUBLIC, so that owner must be able to
+-- execute both helpers and read, unfiltered by row security, every table
+-- interest_progress reads. The notifiers also fall back to neutral text if
+-- the progress text fails (savings_interest_notification_fallback.sql).
+DO $$
+DECLARE
+  v_notifier text;
+  v_owner oid;
+  v_helper text;
+  v_table text;
+BEGIN
+  FOREACH v_notifier IN ARRAY ARRAY['piggyvest_primary.notify_paid_interest()',
+    'savings_notifications.interest_recorded()'] LOOP
+    SELECT p.proowner INTO v_owner FROM pg_catalog.pg_proc p
+      WHERE p.oid = pg_catalog.to_regprocedure(v_notifier);
+    FOREACH v_helper IN ARRAY ARRAY['savings_notifications.interest_progress(uuid)',
+      'savings_notifications.progress_message(numeric,numeric)'] LOOP
+      PERFORM pg_temp.check(
+        pg_catalog.has_function_privilege(v_owner, pg_catalog.to_regprocedure(v_helper), 'EXECUTE'),
+        'the owner of ' || v_notifier || ' must be able to execute ' || v_helper);
+    END LOOP;
+    FOREACH v_table IN ARRAY ARRAY['public.customer_savings_goals',
+      'piggyvest_savings_ledger.operations', 'piggyvest_savings_ledger.postings',
+      'piggyvest_primary.paid_interest_receipts', 'piggyvest_primary.paid_interest_reversals'] LOOP
+      PERFORM pg_temp.check(
+        pg_catalog.has_table_privilege(v_owner, pg_catalog.to_regclass(v_table), 'SELECT')
+          AND (SELECT role.rolsuper OR role.rolbypassrls OR NOT relation.relrowsecurity
+                 OR (relation.relowner = v_owner AND NOT relation.relforcerowsecurity)
+               FROM pg_catalog.pg_class relation
+               JOIN pg_catalog.pg_roles role ON role.oid = v_owner
+               WHERE relation.oid = pg_catalog.to_regclass(v_table)),
+        'the owner of ' || v_notifier || ' must read every row of ' || v_table);
+    END LOOP;
+  END LOOP;
+END $$;
 
 ROLLBACK;

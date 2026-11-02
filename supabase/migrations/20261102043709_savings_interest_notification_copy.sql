@@ -18,7 +18,9 @@
 --
 -- The two helpers are SECURITY INVOKER and called only from the SECURITY
 -- DEFINER notifier triggers (which run as their owner), so no API role is
--- granted EXECUTE on any of the four functions.
+-- granted EXECUTE on any of the four functions. If the progress text cannot
+-- be computed, the notice falls back to the neutral balance prompt; the
+-- payout or ledger credit is always recorded.
 --
 -- Consolidates the PR #3808 drafts 20261013123000, 20261013191500
 -- and 20261013194000 into their final state. Append-only.
@@ -88,15 +90,27 @@ BEGIN
     v_principal * 100 + v_ledger_interest + v_primary_interest, v_target * 100);
 END $$;
 
+-- Both notifiers run in the same transaction as the money write they
+-- announce, so the progress text is computed in its own block: any error
+-- there falls back to the neutral balance prompt instead of rolling back the
+-- payout receipt or ledger credit. Recording the money never depends on
+-- notification wording.
 CREATE OR REPLACE FUNCTION piggyvest_primary.notify_paid_interest()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
+DECLARE v_progress text;
 BEGIN
   IF NEW.net_kobo > 0 THEN
+    BEGIN
+      v_progress := savings_notifications.interest_progress(NEW.goal_id);
+    EXCEPTION WHEN OTHERS THEN
+      v_progress := NULL;
+    END;
     PERFORM savings_notifications.emit(NEW.goal_id,
       'primary-interest:' || NEW.integration_id::text || ':' || NEW.payout_id,
       'interest_credited', 'Your savings just grew 🎉',
       '₦' || to_char(NEW.net_kobo::numeric / 100, 'FM999,999,999,999,990.00')
-        || ' interest added to your savings. ' || savings_notifications.interest_progress(NEW.goal_id));
+        || ' interest added to your savings. '
+        || coalesce(v_progress, 'Open your savings to see your latest balance.'));
   END IF;
   RETURN NEW;
 END $$;
@@ -109,6 +123,7 @@ DECLARE
   v_customer uuid;
   v_kind text;
   v_reference uuid;
+  v_progress text;
 BEGIN
   IF NEW.account <> 'paid_interest' THEN RETURN NEW; END IF;
   SELECT operation.goal_id, operation.merchant_id, operation.customer_id,
@@ -116,9 +131,15 @@ BEGIN
     INTO STRICT v_goal, v_merchant, v_customer, v_kind, v_reference
     FROM piggyvest_savings_ledger.operations operation WHERE operation.id = NEW.operation_id;
   IF v_kind = 'credit_eligible_paid_interest' AND NEW.amount_kobo > 0 THEN
+    BEGIN
+      v_progress := savings_notifications.interest_progress(v_goal);
+    EXCEPTION WHEN OTHERS THEN
+      v_progress := NULL;
+    END;
     PERFORM savings_notifications.emit(v_goal, 'interest:' || NEW.operation_id, 'interest_credited',
       'Your savings just grew 🎉', '₦' || to_char(NEW.amount_kobo::numeric / 100, 'FM999,999,999,999,990.00')
-        || ' interest added to your savings. ' || savings_notifications.interest_progress(v_goal));
+        || ' interest added to your savings. '
+        || coalesce(v_progress, 'Open your savings to see your latest balance.'));
   ELSIF v_kind = 'reverse_credit' AND NEW.amount_kobo < 0 THEN
     UPDATE savings_notifications.events SET voided_at = now()
       WHERE merchant_id = v_merchant AND customer_id = v_customer

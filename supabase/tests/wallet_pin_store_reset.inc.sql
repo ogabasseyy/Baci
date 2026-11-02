@@ -53,12 +53,14 @@ BEGIN
   END LOOP;
   PERFORM pg_temp.wp_assert(v_result->>'status' = 'locked', 'C6 locked before reset');
 
-  -- Refused: sign-in too old, unknown session, a method that is not a
-  -- sign-in, a sign-in dated in the future, a malformed amr claim, no amr.
+  -- Refused: sign-in too old, unknown, another user's or an expired session,
+  -- a method that is not a sign-in, a sign-in dated in the future, a
+  -- malformed amr claim, no amr.
   FOREACH v_claims IN ARRAY ARRAY[
     '{}'::jsonb,
     pg_temp.wp_fresh_amr() || pg_catalog.jsonb_build_object('session_id', pg_temp.wp_id('S9')),
     pg_temp.wp_fresh_amr() || pg_catalog.jsonb_build_object('session_id', pg_temp.wp_id('S1')),
+    pg_temp.wp_fresh_amr() || pg_catalog.jsonb_build_object('session_id', pg_temp.wp_id('S7')),
     pg_temp.wp_fresh_amr() || '{"session_id": "not-a-uuid"}'::jsonb,
     pg_temp.wp_fresh_amr('anonymous'),
     pg_temp.wp_fresh_amr('token_refresh'),

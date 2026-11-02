@@ -16,14 +16,14 @@ Plan default 2: every PiggyVest wallet payment needs the PIN, so an unlocked pho
 - Guessing: five wrong tries lock the PIN for 30 minutes; each later lock doubles, up to 24 hours. Simultaneous tries all count.
 - A stolen database copy cannot be used to guess PINs without the server's key, and a copied value is not accepted as the PIN.
 - An old or stolen session cannot set the first PIN or reset one; adding a sign-in step from that session does not count.
-- If a customer record is moved to another account, the PIN stops working instead of passing over.
+- If a customer record is moved to another account or shop, the PIN stops working instead of passing over.
 - A proof is spent once, even by two requests at the same moment, expires after 120 seconds, and is refused for any other customer, shop, purpose, amount or request. A refusal never uses up a good proof.
 - A changed key asks for a reset, not a lockout; a mistyped key keeps PINs off but never takes the website down.
 - Emergency stop: switching a shop off at once stops every PIN action and proof spend, so protected payments are refused.
 
 ## How it is tested
 
-Database tests cover lock times, sign-in rules, single use, expiry, every mismatch, the 10-proof limit, the shop switch, moved and deleted customers, and racing requests. Permission checks confirm no app or API role can read the PIN tables or spend a proof. Each rule was broken on purpose, one at a time (59 variations), and the tests caught every one. Server tests check the hashing against independent values, and that the key never appears in errors or stops the site starting.
+Database tests cover lock times, sign-in rules, single use, expiry, every mismatch, the 10-proof limit, the shop switch, moved and deleted customers, and racing requests. Permission checks confirm no app or API role can read the PIN tables or spend a proof. Each rule was broken on purpose, one at a time (63 variations), and the tests caught every one. Server tests check the hashing against independent values, and that the key never appears in errors or stops the site starting.
 
 ## How it stays switched off
 

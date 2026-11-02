@@ -81,11 +81,12 @@ any cleanup as owner SQL or a scheduled job at that point.
 - Five consecutive wrong PINs lock for 30 minutes; each later lockout doubles,
   capped at 24 hours. A correct PIN or a reset clears the counters.
 - Setting the first PIN and resetting it both need a sign-in within 15 minutes
-  on a live session (password, an emailed or texted code or link, or an
+  on a live, unexpired session (password, an emailed or texted code or link, or an
   identity provider; an MFA step-up on an old sign-in does not count), and
   AAL2 when the customer has a verified MFA factor.
-- A PIN belongs to the sign-in account that set it. If a customer row is ever
-  pointed at a different account, that PIN and its unspent proofs stop working
+- A PIN belongs to the sign-in account and the merchant it was set for. If a
+  customer row is ever pointed at a different account or merchant, that PIN
+  and its unspent proofs stop working
   ("unavailable") and nobody can reset it through the app. Recovery is owner
   SQL after checking who the customer really is: delete that customer's row in
   `wallet_pin_private.customer_pins`, and the customer sets a new PIN.

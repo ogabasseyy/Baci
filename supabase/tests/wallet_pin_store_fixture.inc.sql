@@ -6,7 +6,7 @@
 -- (lockout), C3=U1@M2, C4=U1@M3, C5=U3@M1 (verified MFA), C6=U4@M1
 -- (reset; unverified MFA enrollment), C7=U5@M1 (proofs), C8=U1@M4
 -- (account binding, soft delete). U6 has no customer row. Each user has
--- one live session S<n>. Setting a PIN needs a recent sign-in, so set
+-- one live session S<n>; S7 is U4's expired session. Setting a PIN needs a recent sign-in, so set
 -- calls pass pg_temp.wp_fresh_amr().
 -- Hex constants are the KDF test vectors from wallet-pin-kdf.test.ts.
 
@@ -239,7 +239,17 @@ BEGIN
       pg_catalog.now(), pg_catalog.now(), 'aal1'
     );
   END LOOP;
+  -- S7: a second session for U4 that ran past its time box (not_after) and
+  -- has not been swept yet.
+  INSERT INTO auth.sessions (id, user_id, created_at, updated_at, aal, not_after)
+  VALUES (
+    pg_temp.wp_id('S7'), pg_temp.wp_id('U4'), pg_catalog.now() - interval '2 hours',
+    pg_catalog.now() - interval '2 hours', 'aal1', pg_catalog.now() - interval '1 minute'
+  );
 
+  -- The merchants audit trigger refuses a write without an actor (28000);
+  -- the fixture writes as the service actor, then clears the claims.
+  PERFORM pg_catalog.set_config('request.jwt.claims', '{"role":"service_role"}', true);
   FOR v_index IN 1..4 LOOP
     INSERT INTO public.merchants (id, email, business_name, slug)
     VALUES (
@@ -249,6 +259,7 @@ BEGIN
       pg_catalog.format('wallet-pin-m%s', v_index)
     );
   END LOOP;
+  PERFORM pg_catalog.set_config('request.jwt.claims', '', true);
 
   INSERT INTO public.customers (id, merchant_id, email, user_id)
   SELECT pg_temp.wp_id(row_value.customer), pg_temp.wp_id(row_value.merchant),

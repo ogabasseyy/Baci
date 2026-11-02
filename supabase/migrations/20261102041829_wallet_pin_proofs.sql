@@ -13,8 +13,9 @@
 -- valid proof: missing, invalid (unknown or revoked), mismatch (any part of
 -- the binding differs), used, expired or unavailable (merchant switched
 -- off, customer soft-deleted, or the customer row no longer points at the
--- account that set the PIN). The proof row is locked, so two concurrent
--- spends of one proof cannot both succeed.
+-- account and merchant the PIN was set for). The proof row is locked, so
+-- two concurrent spends of one proof cannot both succeed, and expiry is
+-- judged by the clock after the lock is held.
 
 BEGIN;
 
@@ -103,7 +104,7 @@ DECLARE
   v_idempotency bytea := wallet_pin_private.hex_bytes(p_idempotency_key_sha256, 32);
   v_token bytea;
   v_proof wallet_pin_private.proofs%ROWTYPE;
-  v_now timestamptz := pg_catalog.clock_timestamp();
+  v_now timestamptz;
 BEGIN
   IF p_customer_id IS NULL OR p_merchant_id IS NULL OR p_purpose IS NULL
     OR p_amount_kobo IS NULL OR v_idempotency IS NULL THEN
@@ -123,6 +124,7 @@ BEGIN
   IF NOT FOUND THEN
     RETURN 'invalid';
   END IF;
+  v_now := pg_catalog.clock_timestamp();
   IF v_proof.customer_id <> p_customer_id OR v_proof.merchant_id <> p_merchant_id
     OR v_proof.purpose <> p_purpose OR v_proof.amount_kobo <> p_amount_kobo
     OR v_proof.idempotency_key_sha256 <> v_idempotency THEN
@@ -135,7 +137,7 @@ BEGIN
     RETURN 'expired';
   END IF;
   IF NOT wallet_pin_private.merchant_enabled(p_merchant_id)
-    OR NOT wallet_pin_private.pin_account_bound(p_customer_id) THEN
+    OR NOT wallet_pin_private.pin_binding_intact(p_customer_id) THEN
     RETURN 'unavailable';
   END IF;
 

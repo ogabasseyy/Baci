@@ -9,8 +9,9 @@
 --
 -- A first set and a reset both need a recent sign-in
 -- (wallet_pin_private.has_recent_authentication). A PIN belongs to the
--- sign-in account that set it: if the caller's customer row now points at
--- another account than that one, every call answers "unavailable".
+-- sign-in account and the merchant it was set for: if the caller's customer
+-- row now points at another account or merchant, every call answers
+-- "unavailable".
 --
 -- Results are {"status": ...}:
 --   get_wallet_pin_state  unavailable | not_set | reset_required
@@ -48,7 +49,8 @@ BEGIN
    WHERE pin.customer_id = v_customer_id;
   IF NOT FOUND THEN
     RETURN pg_catalog.jsonb_build_object('status', 'not_set');
-  ELSIF v_pin.user_id IS DISTINCT FROM auth.uid() THEN
+  ELSIF v_pin.user_id IS DISTINCT FROM auth.uid()
+    OR NOT wallet_pin_private.pin_binding_intact(v_customer_id) THEN
     RETURN pg_catalog.jsonb_build_object('status', 'unavailable');
   ELSIF v_pin.pepper_id <> v_pepper_id THEN
     RETURN pg_catalog.jsonb_build_object('status', 'reset_required');
@@ -190,8 +192,9 @@ BEGIN
   IF NOT FOUND THEN
     RETURN pg_catalog.jsonb_build_object('status', 'not_set');
   END IF;
-  -- A reset never moves a PIN to another account.
-  IF v_bound_user_id IS DISTINCT FROM auth.uid() THEN
+  -- A reset never moves a PIN to another account or merchant.
+  IF v_bound_user_id IS DISTINCT FROM auth.uid()
+    OR NOT wallet_pin_private.pin_binding_intact(v_customer_id) THEN
     RETURN pg_catalog.jsonb_build_object('status', 'unavailable');
   END IF;
   -- A reset also re-establishes the PIN under the server's current pepper

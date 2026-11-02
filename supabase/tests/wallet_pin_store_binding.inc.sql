@@ -4,8 +4,9 @@
 -- customer row is pointed at another account (a direct write to
 -- public.customers), that account gets "unavailable" from every PIN call,
 -- cannot replace the PIN, and the PIN's unspent proofs cannot be spent.
--- Pointing the row back restores both. A soft-deleted customer cannot use
--- the PIN at all.
+-- Pointing the row back restores both. The same holds when the row is
+-- moved to another merchant (C7, U5@M1, moved to M4). A soft-deleted
+-- customer cannot use the PIN at all.
 
 DO $binding$
 DECLARE
@@ -58,6 +59,33 @@ BEGIN
     wallet_pin_private.consume_wallet_pin_proof(pg_temp.wp_id('C8'), pg_temp.wp_id('M4'),
       'vtu', 900, pg_temp.wp_hex('idem1'), v_proof) = 'consumed',
     'the refused consume did not burn the proof');
+
+  -- C7 moved to M4 (where U5 has no row): the PIN stays with M1.
+  v_proof := pg_temp.wp_rpc('U5', pg_temp.wp_verify_sql('M1', 'pin_2580', 'imei', 950, 'idem3'))->>'proof';
+  PERFORM pg_temp.wp_assert(v_proof ~ '^[0-9a-f]{64}$', 'C7 proof before the move');
+  UPDATE public.customers SET merchant_id = pg_temp.wp_id('M4') WHERE id = pg_temp.wp_id('C7');
+  FOREACH v_sql IN ARRAY ARRAY[
+    pg_temp.wp_state_sql('M4'),
+    pg_temp.wp_verify_sql('M4', 'pin_2580', 'vtu', 951, 'idem3'),
+    pg_catalog.format('SELECT public.change_wallet_pin(%L::uuid, %L, %L, 1, %L, %L)',
+      pg_temp.wp_id('M4'), pg_temp.wp_hex('pepper'), pg_temp.wp_hex('pin_2580'),
+      pg_temp.wp_hex('salt2'), pg_temp.wp_hex('pin_0000')),
+    pg_temp.wp_reset_sql('M4', 'pin_0000')
+  ] LOOP
+    v_result := pg_temp.wp_rpc('U5', v_sql, pg_temp.wp_fresh_amr());
+    PERFORM pg_temp.wp_assert(v_result = '{"status":"unavailable"}',
+      pg_catalog.format('C7 at another merchant: %s -> %s', v_sql, v_result));
+  END LOOP;
+  PERFORM pg_temp.wp_assert(
+    wallet_pin_private.consume_wallet_pin_proof(pg_temp.wp_id('C7'), pg_temp.wp_id('M1'),
+      'imei', 950, pg_temp.wp_hex('idem3'), v_proof) = 'unavailable',
+    'a proof cannot be spent while its customer row is at another merchant');
+  UPDATE public.customers SET merchant_id = pg_temp.wp_id('M1') WHERE id = pg_temp.wp_id('C7');
+  PERFORM pg_temp.wp_assert(
+    (pg_temp.wp_pin('C7')).failed_attempts = 0
+      AND wallet_pin_private.consume_wallet_pin_proof(pg_temp.wp_id('C7'), pg_temp.wp_id('M1'),
+        'imei', 950, pg_temp.wp_hex('idem3'), v_proof) = 'consumed',
+    'moving C7 back restores the PIN and the proof');
 
   -- Soft delete: no PIN call resolves the customer, and an unspent proof
   -- cannot be spent.

@@ -1,0 +1,109 @@
+import { fileURLToPath } from 'node:url';
+import type {
+  RpcResult,
+  ScheduledNotificationWorkerClient,
+} from './scheduled-notification-rpc.ts';
+
+type ClaimOptions = {
+  channels?: string[];
+  expiresAt?: string | null;
+  id?: string;
+  message?: string;
+  title?: string;
+};
+
+/** Builds a valid claimed broadcast with deterministic, suffix-derived UUIDs. */
+function makeScheduledNotificationClaim(
+  suffix: string,
+  options: ClaimOptions = {}
+) {
+  const serial = suffix.padStart(3, '0');
+  return {
+    action_url: null,
+    channels: options.channels ?? ['in_app'],
+    delivery_claim_token: `123e4567-e89b-42d3-a456-${suffix.padStart(12, '0')}`,
+    expires_at: options.expiresAt ?? null,
+    id: options.id ?? `d8543bf1-5f03-4fd1-8a2a-2f7f1658c${serial}`,
+    message: options.message ?? `Notification ${suffix}`,
+    target_merchant_ids: [],
+    target_segment: null,
+    target_type: 'all',
+    title: options.title ?? `Notification ${suffix}`,
+  };
+}
+
+/** A claim the worker cannot parse but can still identify and finalize. */
+function makeMalformedScheduledNotificationClaim(suffix: string) {
+  return {
+    ...makeScheduledNotificationClaim(suffix),
+    target_merchant_ids: null,
+    title: '',
+  };
+}
+
+export type ScheduledNotificationClaimResult = {
+  failure?: string;
+  id?: string;
+  recipients?: number;
+  status: string;
+};
+
+type ScheduledNotificationDeliveryModule = {
+  processScheduledNotificationClaims(
+    client: ScheduledNotificationWorkerClient,
+    claimed: unknown[]
+  ): Promise<ScheduledNotificationClaimResult[]>;
+};
+
+/**
+ * Loads the Deno worker at runtime. Web tests run it under Vitest, but the
+ * web TypeScript program cannot compile it (`.ts` specifiers, Deno globals),
+ * so the specifier stays non-literal and the module is typed by its contract.
+ */
+async function loadScheduledNotificationDelivery() {
+  const modulePath: string = fileURLToPath(
+    new URL('./scheduled-notification-delivery.ts', import.meta.url)
+  );
+  return (await import(
+    /* @vite-ignore */ modulePath
+  )) as ScheduledNotificationDeliveryModule;
+}
+
+export type RpcCall = {
+  args?: Record<string, unknown>;
+  name: string;
+};
+
+/** Records every RPC call while delegating responses to the scenario handler. */
+function makeScheduledNotificationTestClient(
+  handleRpc: (
+    name: string,
+    args: Record<string, unknown> | undefined
+  ) => Promise<RpcResult>
+) {
+  const calls: RpcCall[] = [];
+  const client: ScheduledNotificationWorkerClient = {
+    rpc: (name, args) => {
+      calls.push({ args, name });
+      return handleRpc(name, args);
+    },
+  };
+  return { calls, client };
+}
+
+function finalizeCallsFor(calls: RpcCall[], notificationId: string) {
+  return calls.filter(
+    (call) =>
+      call.name === 'finalize_scheduled_admin_notification_v1' &&
+      call.args?.p_notification_id === notificationId
+  );
+}
+
+/** The single primary export: every helper the worker behaviour tests share. */
+export const scheduledNotificationTestSupport = {
+  finalizeCallsFor,
+  loadScheduledNotificationDelivery,
+  makeMalformedScheduledNotificationClaim,
+  makeScheduledNotificationClaim,
+  makeScheduledNotificationTestClient,
+};

@@ -18,7 +18,8 @@ const endpoint = '/api/payments/oxygen/recovery';
 export function useOxygenPaymentRecovery(
   workflowId: string,
   reference: string,
-  version: number
+  version: number,
+  refreshWorkflow?: () => Promise<void>
 ) {
   const [state, setState] = useState<OxygenPaymentRecoveryState | null>(null);
   const [watching, setWatching] = useState(false);
@@ -92,6 +93,13 @@ export function useOxygenPaymentRecovery(
                 action: nextAction,
               }),
             });
+        if (response.status === 409 && !cached && refreshWorkflow) {
+          // Refresh the parent version, but never replay this request: the
+          // conflict can also represent an in-flight provider operation.
+          await refreshWorkflow().catch(() => {
+            // The recovery response below remains the authoritative fallback.
+          });
+        }
         if (
           response.status === 409 &&
           !cached &&

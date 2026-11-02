@@ -34,6 +34,22 @@ const confirmed = {
   pending: false,
 };
 beforeEach(() => mocks.fetch.mockReset());
+it('refreshes the canonical workflow after a recovery conflict without retrying the action', async () => {
+  const refresh = vi.fn().mockResolvedValue(undefined);
+  mocks.fetch
+    .mockResolvedValueOnce(Response.json({ ...pending, pending: false }))
+    .mockResolvedValueOnce(Response.json({}, { status: 409 }))
+    .mockResolvedValueOnce(Response.json({ ...pending, pending: false }));
+  const { result } = renderHook(() =>
+    useOxygenPaymentRecovery(workflow, reference, 7, refresh)
+  );
+  await waitFor(() => expect(result.current.state).not.toBeNull());
+  await act(async () => result.current.checkStatus());
+  expect(refresh).toHaveBeenCalledOnce();
+  expect(
+    mocks.fetch.mock.calls.filter(([, options]) => options?.method === 'POST')
+  ).toHaveLength(1);
+});
 it('allows an explicit check to reclaim a pending read and confirm payment', async () => {
   mocks.fetch
     .mockResolvedValueOnce(Response.json(pending))

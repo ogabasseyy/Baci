@@ -20,7 +20,8 @@ function EnabledPaymentReady(props: Props) {
   const recovery = useOxygenPaymentRecovery(
     props.workflowId,
     props.reference,
-    props.version
+    props.version,
+    props.readSaved
   );
   return (
     <OxygenPaymentCompletion

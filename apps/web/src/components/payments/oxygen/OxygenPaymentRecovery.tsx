@@ -51,7 +51,7 @@ export function OxygenPaymentRecovery({
     run,
     awaitingConfirmation,
     confirmationDelayed,
-  } = useOxygenPaymentRecovery(workflowId, reference, version);
+  } = useOxygenPaymentRecovery(workflowId, reference, version, readSaved);
   const opened = useRef(false);
   useEffect(() => {
     if (!autoOpen || !state || state.pending || busy || error || opened.current)

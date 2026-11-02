@@ -4,6 +4,7 @@ import { HandCoins, X } from 'lucide-react';
 import type React from 'react';
 import { useId } from 'react';
 import type { CartItem } from '@/hooks/cart';
+import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { NegotiationModalStatusContent } from './NegotiationModalStatusContent';
 import { NegotiationUploadForm } from './NegotiationUploadForm';
 import { useNegotiationModalController } from './use-negotiation-modal-controller';
@@ -46,8 +47,8 @@ export const NegotiationModal: React.FC<NegotiationModalProps> = ({
   variantAttributes,
   variantId,
   variantName,
-  vatRate = 0,
 }) => {
+  const merchant = useMerchantSafe()?.merchant;
   const offerInputId = useId();
   const uploadFileInputId = useId();
   const uploadLinkInputId = useId();
@@ -60,6 +61,7 @@ export const NegotiationModal: React.FC<NegotiationModalProps> = ({
     isOpen,
     itemId,
     merchantId,
+    merchantSlug: merchant?.id === merchantId ? merchant.slug : undefined,
     onSuccess,
     productBrand,
     productName,
@@ -68,7 +70,6 @@ export const NegotiationModal: React.FC<NegotiationModalProps> = ({
     variantAttributes,
     variantId,
     variantName,
-    vatRate,
   });
   const { dialogRef, offerInputRef } = useNegotiationModalFocus({
     isOpen,

@@ -10,8 +10,8 @@ const m = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: m.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: m.csrf }));
-vi.mock('@/ai/provider', () => ({
-  checkRateLimit: m.rate,
+vi.mock('@/lib/rate-limit', () => ({
+  checkOxygenProviderRateLimit: m.rate,
 }));
 vi.mock('@/lib/payments/oxygen/runtime-connection', () => ({
   connectOxygenRuntime: m.connect,
@@ -77,19 +77,8 @@ it('allows a multi-step checkout budget while keeping each operation limited', a
     })
   );
   expect(result.status).toBe(429);
-  expect(m.rate).toHaveBeenNthCalledWith(
-    1,
-    'action:oxygen-provider-request:user',
-    {
-      requests: 30,
-      windowMs: 60_000,
-    }
-  );
-  expect(m.rate).toHaveBeenNthCalledWith(
-    2,
-    'action:oxygen-provider-action:refresh_kyc:user',
-    { requests: 6, windowMs: 60_000 }
-  );
+  expect(m.rate).toHaveBeenNthCalledWith(1, 'user', 'request', 30);
+  expect(m.rate).toHaveBeenNthCalledWith(2, 'user', 'action:refresh_kyc', 6);
   expect(m.connect).not.toHaveBeenCalled();
 });
 
@@ -112,8 +101,9 @@ it('keeps OTP resends at six attempts per minute', async () => {
   );
   expect(result.status).toBe(429);
   expect(m.rate).toHaveBeenLastCalledWith(
-    'action:oxygen-provider-action:resend_customer_otp:user',
-    { requests: 6, windowMs: 60_000 }
+    'user',
+    'action:resend_customer_otp',
+    6
   );
   expect(m.connect).not.toHaveBeenCalled();
 });

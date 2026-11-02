@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { checkRateLimit } from '@/ai/provider';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
@@ -23,6 +22,7 @@ import {
   performOxygenAction,
   readOxygenSnapshot,
 } from '@/lib/payments/oxygen/runtime-service';
+import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
 
 export const maxDuration = 120;
 const headers = {
@@ -77,10 +77,7 @@ export async function POST(request: NextRequest) {
       NextResponse.json({ error: 'Invalid request' }, { status: 403, headers })
     );
   if (
-    !checkRateLimit(`action:oxygen-provider-request:${auth.user.id}`, {
-      requests: 30,
-      windowMs: 60_000,
-    }).allowed
+    !(await checkOxygenProviderRateLimit(auth.user.id, 'request', 30)).allowed
   )
     return NextResponse.json(
       { error: 'Too many requests' },
@@ -98,9 +95,12 @@ export async function POST(request: NextRequest) {
   // Background lookups must not consume the same six-call budget as OTPs.
   // Admission is bounded above; each validated operation retains its own limit.
   if (
-    !checkRateLimit(
-      `action:oxygen-provider-action:${input.submission.command.action}:${auth.user.id}`,
-      { requests: 6, windowMs: 60_000 }
+    !(
+      await checkOxygenProviderRateLimit(
+        auth.user.id,
+        `action:${input.submission.command.action}`,
+        6
+      )
     ).allowed
   )
     return NextResponse.json(

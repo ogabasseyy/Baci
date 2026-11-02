@@ -174,6 +174,19 @@ export function checkImeiPollRateLimit(
   );
 }
 
+/** Authenticated Oxygen provider budgets must be shared across instances. */
+export function checkOxygenProviderRateLimit(
+  userId: string,
+  bucket: string,
+  maxRequests: number
+): Promise<RateLimitResult> {
+  return applyRateLimit(userId, `oxygen-provider:${bucket}`, {
+    maxRequests,
+    windowMs: 60_000,
+    failClosedWithoutRedis: true,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Response helper
 // ---------------------------------------------------------------------------

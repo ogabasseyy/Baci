@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   __resetRateLimitStoreForTesting,
   checkImeiPollRateLimit,
+  checkOxygenProviderRateLimit,
   checkRateLimit,
   getTrustedClientIdentifier,
   setRateLimitDiagnosticHook,
@@ -26,6 +27,52 @@ vi.mock('@upstash/ratelimit', () => ({
 vi.mock('./redis', () => ({
   getRedis: mockGetRedis,
 }));
+
+it('fails closed for Oxygen provider requests without shared Redis', async () => {
+  mockGetRedis.mockReturnValue(null);
+  await expect(
+    checkOxygenProviderRateLimit('customer', 'action:validate_customer', 6)
+  ).resolves.toMatchObject({ allowed: false });
+});
+it('uses the same distributed Oxygen budget across requests', async () => {
+  __resetRateLimitStoreForTesting();
+  mockGetRedis.mockReturnValue({});
+  mockLimiterLimit.mockResolvedValueOnce({
+    success: true,
+    limit: 6,
+    remaining: 1,
+    reset: 10,
+  });
+  mockLimiterLimit.mockResolvedValueOnce({
+    success: false,
+    limit: 6,
+    remaining: 0,
+    reset: 10,
+  });
+  expect(
+    (
+      await checkOxygenProviderRateLimit(
+        'customer',
+        'action:validate_customer',
+        6
+      )
+    ).allowed
+  ).toBe(true);
+  expect(
+    (
+      await checkOxygenProviderRateLimit(
+        'customer',
+        'action:validate_customer',
+        6
+      )
+    ).allowed
+  ).toBe(false);
+  expect(mockLimiterLimit).toHaveBeenLastCalledWith(
+    'customer:oxygen-provider:action:validate_customer'
+  );
+  mockGetRedis.mockReturnValue(null);
+  __resetRateLimitStoreForTesting();
+});
 
 describe('legacy bridge rate limit keying', () => {
   beforeEach(() => {

@@ -5,6 +5,10 @@ import { readGiglWebhookBody } from '@/lib/shipping/gigl-webhook-body';
 import { readGiglWebhookConfig } from '@/lib/shipping/gigl-webhook-config';
 import { openGiglWebhookDelivery } from '@/lib/shipping/gigl-webhook-delivery';
 import { createGiglWebhookExpediteClient } from '@/lib/shipping/gigl-webhook-expedite-client';
+import {
+  GIGL_WEBHOOK_ACKNOWLEDGEMENT,
+  GIGL_WEBHOOK_NO_STORE,
+} from '@/lib/shipping/gigl-webhook-response-constants';
 import { giglWebhookExpediteResultSchema } from '@/schemas/gigl-webhook-expedite-result';
 
 /**
@@ -33,23 +37,19 @@ import { giglWebhookExpediteResultSchema } from '@/schemas/gigl-webhook-expedite
  * path per IP (rate-limit-routes.ts) before any key derivation runs.
  */
 
-const noStore = { 'Cache-Control': 'no-store' };
-
-const ACKNOWLEDGEMENT = {
-  status: 'success',
-  message: 'Webhook received successfully',
-} as const;
-
 function unavailable(): NextResponse {
   return NextResponse.json(
     { error: 'Webhook unavailable', code: 'GIGL_WEBHOOK_UNAVAILABLE' },
-    { status: 503, headers: noStore }
+    { status: 503, headers: GIGL_WEBHOOK_NO_STORE }
   );
 }
 
 export function GET(): Response {
   // Reachability probe for registration; carries no state.
-  return NextResponse.json({ status: 'ok' }, { headers: noStore });
+  return NextResponse.json(
+    { status: 'ok' },
+    { headers: GIGL_WEBHOOK_NO_STORE }
+  );
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -64,11 +64,11 @@ export async function POST(request: Request): Promise<Response> {
     return body.reason === 'too_large'
       ? NextResponse.json(
           { error: 'Payload too large', code: 'GIGL_WEBHOOK_TOO_LARGE' },
-          { status: 413, headers: noStore }
+          { status: 413, headers: GIGL_WEBHOOK_NO_STORE }
         )
       : NextResponse.json(
           { error: 'Unreadable payload', code: 'GIGL_WEBHOOK_UNREADABLE' },
-          { status: 400, headers: noStore }
+          { status: 400, headers: GIGL_WEBHOOK_NO_STORE }
         );
   }
 
@@ -80,7 +80,7 @@ export async function POST(request: Request): Promise<Response> {
     });
     return NextResponse.json(
       { error: 'Invalid webhook payload', code: 'GIGL_WEBHOOK_REJECTED' },
-      { status: 401, headers: noStore }
+      { status: 401, headers: GIGL_WEBHOOK_NO_STORE }
     );
   }
 
@@ -125,5 +125,7 @@ export async function POST(request: Request): Promise<Response> {
     expedited: result.data.expedited,
   });
 
-  return NextResponse.json(ACKNOWLEDGEMENT, { headers: noStore });
+  return NextResponse.json(GIGL_WEBHOOK_ACKNOWLEDGEMENT, {
+    headers: GIGL_WEBHOOK_NO_STORE,
+  });
 }

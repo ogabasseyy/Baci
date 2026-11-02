@@ -166,4 +166,9 @@ fi
 # The imported web graph can include Next `server-only` marker modules. The
 # standalone worker is still a server graph, so use React's server export
 # condition to make those sentinels resolve to their empty server entry.
+if [ "$LABEL" = "gigl-tracking" ] && [ "$SCRIPT_PATH" = "src/scripts/process-gigl-tracking.ts" ]; then
+  # The cache lock is bound to this PID and inherited descriptor. The tsx CLI
+  # starts a child, so use Node's loader hook without changing process identity.
+  exec node --import tsx --conditions react-server "$SCRIPT_FILE" "$@"
+fi
 "$TSX_BIN" --conditions react-server "$SCRIPT_FILE" "$@"

@@ -1,5 +1,6 @@
 import {
   chmod,
+  link,
   mkdir,
   mkdtemp,
   readFile,
@@ -40,15 +41,44 @@ afterEach(async () => {
 });
 
 describe('GIGL tracking token cache', () => {
+  it('refuses reads, writes and deletion without a held worker lock', async () => {
+    const { directory } = await fixture();
+    const cache = createGiglTrackingTokenCache({
+      isLocked: () => false,
+      directory,
+      credentials,
+      now: () => now,
+    });
+    expect(await cache.load()).toBeNull();
+    await expect(cache.save(token)).rejects.toThrow('Cache lock unavailable');
+    await expect(cache.clear()).rejects.toThrow('Cache lock unavailable');
+  });
+
+  it('does not publish a token if the lock is lost while encrypting', async () => {
+    const { directory } = await fixture();
+    let checks = 0;
+    const cache = createGiglTrackingTokenCache({
+      directory,
+      credentials,
+      now: () => now,
+      isLocked: () => ++checks === 1,
+    });
+    await expect(cache.save(token)).rejects.toThrow('Cache lock unavailable');
+    await expect(stat(join(directory, 'token.json'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
   it('reuses a token in another invocation using private permissions', async () => {
     const { directory } = await fixture();
     const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
       directory,
       credentials,
       now: () => now,
     });
     await cache.save(token);
     const later = createGiglTrackingTokenCache({
+      isLocked: () => true,
       directory,
       credentials,
       now: () => now + 1_000,
@@ -61,17 +91,75 @@ describe('GIGL tracking token cache', () => {
     expect(await readFile(join(directory, 'token.json'), 'utf8')).not.toContain(
       credentials.password
     );
+    const stored = await readFile(join(directory, 'token.json'), 'utf8');
+    expect(stored).not.toContain(token.token);
+    expect(JSON.parse(stored)).not.toHaveProperty('fingerprint');
+  });
+
+  it('rejects a modified encrypted record', async () => {
+    const { directory } = await fixture();
+    const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
+      directory,
+      credentials,
+      now: () => now,
+    });
+    await cache.save(token);
+    const path = join(directory, 'token.json');
+    const record = JSON.parse(await readFile(path, 'utf8'));
+    record.tag = `${record.tag[0] === '0' ? '1' : '0'}${record.tag.slice(1)}`;
+    await writeFile(path, JSON.stringify(record));
+    expect(await cache.load()).toBeNull();
+  });
+
+  it('invalidates the legacy plaintext format without reusing its token', async () => {
+    const { directory } = await fixture();
+    const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
+      directory,
+      credentials,
+      now: () => now,
+    });
+    await cache.save(token);
+    const path = join(directory, 'token.json');
+    await writeFile(
+      path,
+      JSON.stringify({ fingerprint: 'a'.repeat(64), token })
+    );
+    expect(await cache.load()).toBeNull();
+    await expect(stat(path)).rejects.toMatchObject({ code: 'ENOENT' });
+    await cache.save(token);
+    expect(await cache.load()).toEqual(token);
+  });
+
+  it('round-trips the largest supported token and channel', async () => {
+    const { directory } = await fixture();
+    const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
+      directory,
+      credentials,
+      now: () => now,
+    });
+    const largest = {
+      ...token,
+      token: '\u0001'.repeat(8192),
+      userChannelCode: '\u0001'.repeat(256),
+    };
+    await cache.save(largest);
+    expect(await cache.load()).toEqual(largest);
   });
 
   it('does not reuse expired tokens or tokens from rotated credentials', async () => {
     const { directory } = await fixture();
     await createGiglTrackingTokenCache({
+      isLocked: () => true,
       directory,
       credentials,
       now: () => now,
     }).save(token);
     expect(
       await createGiglTrackingTokenCache({
+        isLocked: () => true,
         directory,
         credentials,
         now: () => token.expiresAt,
@@ -79,6 +167,7 @@ describe('GIGL tracking token cache', () => {
     ).toBeNull();
     expect(
       await createGiglTrackingTokenCache({
+        isLocked: () => true,
         directory,
         credentials: { ...credentials, password: 'rotated' },
         now: () => now,
@@ -89,12 +178,14 @@ describe('GIGL tracking token cache', () => {
   it('does not resurrect an old token when credentials rotate back after a cache miss', async () => {
     const { directory } = await fixture();
     const original = createGiglTrackingTokenCache({
+      isLocked: () => true,
       directory,
       credentials,
       now: () => now,
     });
     await original.save(token);
     const rotated = createGiglTrackingTokenCache({
+      isLocked: () => true,
       directory,
       credentials: { ...credentials, password: 'rotated' },
       now: () => now,
@@ -108,6 +199,7 @@ describe('GIGL tracking token cache', () => {
     const workerParent = join(root, 'baci-workers');
     const directory = join(workerParent, 'gigl-tracking-token-cache');
     const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
       directory,
       credentials,
       now: () => now,
@@ -123,6 +215,7 @@ describe('GIGL tracking token cache', () => {
   ])('preserves a finite provider customer type %s', async (customerType) => {
     const { directory } = await fixture();
     const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
       directory,
       credentials,
       now: () => now,
@@ -135,6 +228,7 @@ describe('GIGL tracking token cache', () => {
   it('refuses a symlink cache file without changing its target', async () => {
     const { directory, root } = await fixture();
     const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
       directory,
       credentials,
       now: () => now,
@@ -150,12 +244,27 @@ describe('GIGL tracking token cache', () => {
     expect(await readFile(target, 'utf8')).toBe('untouched');
   });
 
+  it('refuses a token file with an additional hard link', async () => {
+    const { directory } = await fixture();
+    const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
+      directory,
+      credentials,
+      now: () => now,
+    });
+    await cache.save(token);
+    await link(join(directory, 'token.json'), join(directory, 'unexpected'));
+    expect(await cache.load()).toBeNull();
+    await expect(cache.save(token)).rejects.toThrow('Unsafe token cache file');
+  });
+
   it('does not use a symlink as the cache directory', async () => {
     const { root, directory } = await fixture();
     const target = join(root, 'other');
     await mkdir(target, { mode: 0o700 });
     await symlink(target, directory);
     const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
       directory,
       credentials,
       now: () => now,
@@ -168,6 +277,7 @@ describe('GIGL tracking token cache', () => {
     const { root, directory } = await fixture();
     await chmod(root, 0o777);
     const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
       directory,
       credentials,
       now: () => now,
@@ -182,6 +292,7 @@ describe('GIGL tracking token cache', () => {
     await mkdir(parent, { mode: 0o700 });
     await chmod(root, 0o777);
     const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
       directory: join(parent, 'cache'),
       credentials,
       now: () => now,
@@ -192,6 +303,7 @@ describe('GIGL tracking token cache', () => {
   it('clears only the cached token', async () => {
     const { directory } = await fixture();
     const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
       directory,
       credentials,
       now: () => now,

@@ -46,6 +46,21 @@ describe('tracking token cache integration', () => {
     expect(cache.clear).toHaveBeenCalledOnce();
   });
 
+  it('does not overwrite a concurrent refresh when its original token is unchanged', async () => {
+    const cache = {
+      load: vi.fn().mockResolvedValue(token),
+      save: vi.fn(),
+      clear: vi.fn(),
+    };
+    await runWithGiglTrackingTokenCache({
+      cache,
+      createProvider: (initial) => ({ currentToken: initial }),
+      run: async () => 'done',
+    });
+    expect(cache.save).not.toHaveBeenCalled();
+    expect(cache.clear).not.toHaveBeenCalled();
+  });
+
   it('continues the batch when the cache is unavailable', async () => {
     const cache = {
       load: vi.fn().mockRejectedValue(new Error('unavailable')),
@@ -61,5 +76,24 @@ describe('tracking token cache integration', () => {
       })
     ).resolves.toBe('done');
     expect(createProvider).toHaveBeenCalledWith(null);
+  });
+
+  it('releases the cache handle when provider construction fails', async () => {
+    const cache = {
+      load: vi.fn().mockResolvedValue(token),
+      save: vi.fn(),
+      clear: vi.fn(),
+      release: vi.fn().mockResolvedValue(undefined),
+    };
+    await expect(
+      runWithGiglTrackingTokenCache({
+        cache,
+        createProvider: (): { currentToken: typeof token | null } => {
+          throw new Error('constructor failed');
+        },
+        run: async () => 'unused',
+      })
+    ).rejects.toThrow('constructor failed');
+    expect(cache.release).toHaveBeenCalledOnce();
   });
 });

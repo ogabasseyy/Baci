@@ -8,13 +8,21 @@ import { processClaimedGiglTrackingMonitors } from '@/app/api/cron/gigl-tracking
 import { runGiglTrackingMonitorBatch } from '@/app/api/cron/gigl-tracking/run-gigl-tracking-monitor-batch';
 import { createGiglTrackingWorkerClient } from '@/lib/gigl-tracking-worker-client';
 import { GiglProvider } from '@/lib/shipping/providers/gigl';
+import { hasVerifiedGiglCacheLock } from '@/lib/shipping/providers/gigl-cache-lock-verification';
 import { runWithGiglTrackingTokenCache } from '@/lib/shipping/providers/gigl-tracking-cache-runner';
 import { createGiglTrackingTokenCache } from '@/lib/shipping/providers/gigl-tracking-token-cache';
+import {
+  GIGL_BASE_URL,
+  GIGL_EMAIL,
+  GIGL_PASSWORD,
+} from '@/lib/shipping/providers/gigl.constants';
 
 interface CliLogger {
   error(message: string): void;
   info(message: string, summary: string): void;
 }
+
+let cacheRunActive = false;
 
 type RunBatch = (options: {
   batchSize: number;
@@ -59,33 +67,46 @@ async function runBatchDirectly(
   if (
     env.BACI_WORKER_PROFILE !== 'gigl-tracking' ||
     !home ||
-    !isAbsolute(home)
+    !isAbsolute(home) ||
+    !GIGL_BASE_URL ||
+    !GIGL_EMAIL ||
+    !GIGL_PASSWORD
   ) {
     return runGiglTrackingMonitorBatch(options);
   }
-  const cache = createGiglTrackingTokenCache({
-    directory: join(home, 'baci-workers', 'gigl-tracking-token-cache'),
-    credentials: {
-      baseUrl: env.GIGL_BASE_URL?.trim() ?? '',
-      email: env.GIGL_EMAIL?.trim() ?? '',
-      password: env.GIGL_PASSWORD?.trim() ?? '',
-    },
-  });
-  return runWithGiglTrackingTokenCache({
-    cache,
-    createProvider: (initial) => new GiglProvider(initial),
-    run: (provider) =>
-      runGiglTrackingMonitorBatch({
-        ...options,
-        processMonitors: (client, monitors, workerId) =>
-          processClaimedGiglTrackingMonitors(
-            client,
-            monitors,
-            workerId,
-            (numbers) => provider.trackShipments(numbers)
-          ),
-      }),
-  });
+  const directory = join(home, 'baci-workers', 'gigl-tracking-token-cache');
+  if (cacheRunActive || !hasVerifiedGiglCacheLock(directory, 9)) {
+    return runGiglTrackingMonitorBatch(options);
+  }
+  cacheRunActive = true;
+  try {
+    const cache = createGiglTrackingTokenCache({
+      directory,
+      isLocked: () => cacheRunActive && hasVerifiedGiglCacheLock(directory, 9),
+      credentials: {
+        baseUrl: GIGL_BASE_URL,
+        email: GIGL_EMAIL,
+        password: GIGL_PASSWORD,
+      },
+    });
+    return await runWithGiglTrackingTokenCache({
+      cache,
+      createProvider: (initial) => new GiglProvider(initial),
+      run: (provider) =>
+        runGiglTrackingMonitorBatch({
+          ...options,
+          processMonitors: (client, monitors, workerId) =>
+            processClaimedGiglTrackingMonitors(
+              client,
+              monitors,
+              workerId,
+              (numbers) => provider.trackShipments(numbers)
+            ),
+        }),
+    });
+  } finally {
+    cacheRunActive = false;
+  }
 }
 
 export async function runGiglTrackingCli({
@@ -154,6 +175,9 @@ export async function runGiglTrackingCli({
 
 const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : '';
 if (import.meta.url === invokedPath) {
+  process.once('exit', (code) => {
+    process.stderr.write(`[gigl-tracking] Finished at ${new Date().toISOString()} (exit ${code})\n`);
+  });
   runGiglTrackingCli().then((exitCode) => {
     process.exitCode = exitCode;
   });

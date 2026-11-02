@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { createHmac, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, realpath, rename, rm } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join } from 'node:path';
@@ -9,24 +9,26 @@ import {
   giglTrackingTokenSchema,
 } from '@/schemas/gigl-tracking-token-cache';
 import type { GiglToken } from './gigl.constants';
+import {
+  type CacheCredentials,
+  decryptGiglToken,
+  encryptGiglToken,
+} from './gigl-tracking-cache-crypto';
 
 const maxLifetime = 20 * 24 * 60 * 60 * 1000;
-
-type Credentials = { baseUrl: string; email: string; password: string };
+const maxRecordBytes = 110_000;
 
 export function createGiglTrackingTokenCache({
   directory,
   credentials,
   now = Date.now,
+  isLocked,
 }: {
   directory: string;
-  credentials: Credentials;
+  credentials: CacheCredentials;
   now?: () => number;
+  isLocked: () => boolean;
 }) {
-  const fingerprint = createHmac('sha256', credentials.password)
-    .update(JSON.stringify([credentials.baseUrl, credentials.email]))
-    .digest('hex');
-
   async function validateDirectory(create: boolean): Promise<string> {
     if (!isAbsolute(directory)) throw new Error('Unsafe token cache path');
     const parentPath = await realpath(dirname(directory));
@@ -91,6 +93,7 @@ export function createGiglTrackingTokenCache({
   }
 
   async function load(): Promise<GiglToken | null> {
+    if (!isLocked()) return null;
     try {
       const file = join(await validateDirectory(false), 'token.json');
       const handle = await open(
@@ -104,26 +107,32 @@ export function createGiglTrackingTokenCache({
           info.nlink !== 1 ||
           info.uid !== process.getuid?.() ||
           (info.mode & 0o777) !== 0o600 ||
-          info.size > 16_384
+          info.size > maxRecordBytes
         )
           return null;
-        const buffer = Buffer.alloc(16_385);
+        const buffer = Buffer.alloc(maxRecordBytes + 1);
         const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-        if (bytesRead > 16_384) return null;
+        if (bytesRead > maxRecordBytes) return null;
         const parsed = giglTrackingTokenCacheRecordSchema.safeParse(
           JSON.parse(buffer.subarray(0, bytesRead).toString('utf8'))
         );
-        if (!parsed.success) return null;
-        if (
-          parsed.data.fingerprint !== fingerprint ||
-          !usable(parsed.data.token)
-        ) {
-          // Normal worker invocations are serialized by the GIGL tracking lock.
-          // Remove a stale record so reverting credentials cannot resurrect it.
+        let token: GiglToken | null = null;
+        if (parsed.success) {
+          try {
+            const result = giglTrackingTokenSchema.safeParse(
+              await decryptGiglToken(credentials, parsed.data)
+            );
+            if (result.success && usable(result.data)) token = result.data;
+          } catch {
+            // Wrong credentials or a modified ciphertext is a cache miss.
+          }
+        }
+        if (!token) {
+          if (!isLocked()) return null;
           await rm(file, { force: true });
           return null;
         }
-        return parsed.data.token;
+        return isLocked() ? token : null;
       } finally {
         await handle.close();
       }
@@ -133,6 +142,7 @@ export function createGiglTrackingTokenCache({
   }
 
   async function save(token: GiglToken): Promise<void> {
+    if (!isLocked()) throw new Error('Cache lock unavailable');
     const parsed = giglTrackingTokenSchema.parse(token);
     if (!usable(parsed)) throw new Error('Invalid cached token expiry');
     const resolvedDirectory = await validateDirectory(true);
@@ -142,10 +152,11 @@ export function createGiglTrackingTokenCache({
     const handle = await open(temporary, 'wx', 0o600);
     try {
       await handle.writeFile(
-        JSON.stringify({ fingerprint, token: parsed }),
+        JSON.stringify(await encryptGiglToken(credentials, parsed)),
         'utf8'
       );
       await handle.close();
+      if (!isLocked()) throw new Error('Cache lock unavailable');
       await rename(temporary, file);
     } finally {
       await handle.close().catch(() => undefined);
@@ -154,8 +165,10 @@ export function createGiglTrackingTokenCache({
   }
 
   async function clear(): Promise<void> {
+    if (!isLocked()) throw new Error('Cache lock unavailable');
     const file = join(await validateDirectory(false), 'token.json');
     await validateExistingFile(file);
+    if (!isLocked()) throw new Error('Cache lock unavailable');
     await rm(file, { force: true });
   }
 

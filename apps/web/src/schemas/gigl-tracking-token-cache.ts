@@ -8,6 +8,13 @@ export const giglTrackingTokenSchema = z.strictObject({
 });
 
 export const giglTrackingTokenCacheRecordSchema = z.strictObject({
-  fingerprint: z.string().length(64),
-  token: giglTrackingTokenSchema,
+  version: z.literal(1),
+  salt: z.string().regex(/^[a-f0-9]{32}$/),
+  iv: z.string().regex(/^[a-f0-9]{24}$/),
+  tag: z.string().regex(/^[a-f0-9]{32}$/),
+  ciphertext: z
+    .string()
+    .min(1)
+    .max(100000)
+    .regex(/^[A-Za-z0-9+/]+={0,2}$/),
 });

@@ -40,6 +40,7 @@ describe('tracking token reuse across invocations', () => {
       const invoke = (password: string) =>
         runWithGiglTrackingTokenCache({
           cache: createGiglTrackingTokenCache({
+            isLocked: () => true,
             directory: join(root, 'cache'),
             credentials: { ...credentials, password },
           }),
@@ -82,6 +83,7 @@ describe('tracking token reuse across invocations', () => {
       const invoke = (password: string, fail = false) =>
         runWithGiglTrackingTokenCache({
           cache: createGiglTrackingTokenCache({
+            isLocked: () => true,
             directory: join(root, 'cache'),
             credentials: {
               baseUrl: 'https://gigl.example.test',

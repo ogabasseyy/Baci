@@ -6,6 +6,7 @@ type TokenCache = {
   load(): Promise<GiglToken | null>;
   save(token: GiglToken): Promise<void>;
   clear(): Promise<void>;
+  release?(): Promise<void>;
 };
 
 export async function runWithGiglTrackingTokenCache<
@@ -21,15 +22,21 @@ export async function runWithGiglTrackingTokenCache<
   run: (provider: Provider) => Promise<Result>;
 }): Promise<Result> {
   const initial = await cache.load().catch(() => null);
-  const provider = createProvider(initial);
+  const initialSnapshot = initial && JSON.stringify(initial);
+  let provider: Provider | undefined;
   try {
+    provider = createProvider(initial);
     return await run(provider);
   } finally {
     try {
-      if (provider.currentToken) await cache.save(provider.currentToken);
-      else if (initial) await cache.clear();
+      if (provider?.currentToken) {
+        if (JSON.stringify(provider.currentToken) !== initialSnapshot)
+          await cache.save(provider.currentToken);
+      } else if (provider && initial) await cache.clear();
     } catch {
       // Tracking remains available if the private optimization is unavailable.
+    } finally {
+      await cache.release?.().catch(() => undefined);
     }
   }
 }

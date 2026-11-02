@@ -4,10 +4,10 @@ The scoped GIGL tracking cron can reuse the provider login token across runs. It
 
 The worker installation must create and secure `$HOME/baci-workers` before the cron runs. The cache creates only its final directory; if the worker parent is missing or unsafe, the poller falls back to provider authentication until the installation is repaired.
 
-Manual poller runs must acquire the same `gigl-tracking.lock` used by cron. Calling the TypeScript script directly without that lock can race a cache update and cause an extra provider login; cache-file operations do not implement their own cross-process lock.
+The installed tracking wrapper takes a separate private cache lock and passes its descriptor to the worker. The worker verifies the lock, owning process and private file before using the cache; if verification fails, tracking proceeds without caching. Calling the TypeScript script directly without the wrapper therefore runs uncached. Concurrent calls within the same process also bypass the cache while another cache-enabled batch is running.
 
 The cache is bound to the configured provider URL, email, and password. Changing any of these invalidates the cached record. Tokens past their recorded expiry are not reused, and provider rejection continues through the existing refresh path. Do not put the cache file or its contents in logs, diagnostics, support bundles, or source control.
 
-Treat `token.json` as password-equivalent, not merely as an expiring bearer token: its fingerprint permits offline password guesses if the file is exposed. Exclude it from backups and diagnostic exports, restrict access to the worker account, and rotate the provider password as well as the token if the file is exposed.
+The cache encrypts the token with AES-256-GCM using a per-record random salt and a key derived from the provider credentials with scrypt. An exposed record still permits offline password guesses, so treat the whole directory as password-equivalent. Exclude it, including temporary or `.stale` files left by interruption, from backups and diagnostic exports. Restrict access to the worker account, and rotate the provider password as well as the token if a record is exposed.
 
 After an approved rollout, verify directory ownership and permissions without printing file contents, then compare provider login counts over successive polling intervals and after a controlled credential rotation. A passing local test or a merged PR does not establish the live provider behavior.

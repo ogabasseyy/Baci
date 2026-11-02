@@ -135,10 +135,16 @@ export async function ComparePageContent({ params }: ComparePageContentProps) {
       <div className="min-h-[70vh] bg-store-background text-store-background-text">
         <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
           <header className="space-y-4">
-            <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            <h1
+              className="text-3xl font-bold tracking-tight sm:text-4xl"
+              data-cwv-lcp-copy="compare"
+            >
               {page.heading}
             </h1>
-            <p className="max-w-3xl text-base text-store-background-text/70 sm:text-lg">
+            <p
+              className="max-w-3xl text-base text-store-background-text/70 sm:text-lg"
+              data-cwv-lcp-copy="authority-hub"
+            >
               {page.summaryVerdict}
             </p>
           </header>

@@ -21,10 +21,16 @@ export function CompareIndexPageContent({
   return (
     <main className="mx-auto max-w-6xl bg-store-background px-4 py-10 text-store-background-text sm:px-6 lg:px-8">
       <header className="max-w-3xl space-y-3">
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+        <h1
+          className="text-3xl font-bold tracking-tight sm:text-4xl"
+          data-cwv-lcp-copy="compare"
+        >
           {categoryName} comparisons
         </h1>
-        <p className="text-base text-store-background-text/65 sm:text-lg">
+        <p
+          className="text-base text-store-background-text/65 sm:text-lg"
+          data-cwv-lcp-copy="authority-hub"
+        >
           Compare prices, specs, condition, warranty, and buying fit across{' '}
           {categoryName.toLowerCase()} available from {merchantName}.
         </p>

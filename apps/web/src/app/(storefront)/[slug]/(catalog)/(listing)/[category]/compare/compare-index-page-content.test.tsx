@@ -37,12 +37,15 @@ describe('CompareIndexPageContent', () => {
 
     expect(
       screen.getByRole('heading', { name: 'Smartphones comparisons' })
-    ).toBeInTheDocument();
+    ).toHaveAttribute('data-cwv-lcp-copy', 'compare');
     expect(screen.getByRole('main')).toHaveClass(
       'bg-store-background',
       'text-store-background-text'
     );
-    expect(screen.getByText(/available from Demo Store/i)).toBeInTheDocument();
+    expect(screen.getByText(/available from Demo Store/i)).toHaveAttribute(
+      'data-cwv-lcp-copy',
+      'authority-hub'
+    );
     expect(
       screen.getByRole('link', {
         name: 'Compare Google Pixel 8 with Xiaomi 13T',

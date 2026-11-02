@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const GPT_SCRIPT_SRC = 'https://securepubads.g.doubleclick.net/tag/js/gpt.js';
+const mockWaitForLcpWindowEnd = vi.fn(() => Promise.resolve());
+
+vi.mock('@/lib/posthog/wait-for-lcp', () => ({
+  waitForLcpWindowEnd: () => mockWaitForLcpWindowEnd(),
+}));
 
 async function loadBootstrap() {
   vi.resetModules();
@@ -17,6 +22,8 @@ function addLoadedGptScript() {
 describe('google-ad-bootstrap', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    mockWaitForLcpWindowEnd.mockReset();
+    mockWaitForLcpWindowEnd.mockImplementation(() => Promise.resolve());
     document.head.replaceChildren();
     delete (window as { googletag?: typeof window.googletag }).googletag;
   });
@@ -123,5 +130,31 @@ describe('google-ad-bootstrap', () => {
     expect(pubAdsService.enableSingleRequest).toHaveBeenCalledOnce();
     expect(pubAdsService.collapseEmptyDivs).toHaveBeenCalledOnce();
     expect(pubAdsService.setTargeting).toHaveBeenCalledWith('path', '/');
+  });
+
+  it('waits for the LCP window to end before injecting gpt.js into document.head', async () => {
+    let resolveLcpGate: (() => void) | undefined;
+    mockWaitForLcpWindowEnd.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveLcpGate = resolve;
+        })
+    );
+
+    const { ensureGoogleAdManagerBoot } = await loadBootstrap();
+
+    void ensureGoogleAdManagerBoot();
+
+    expect(mockWaitForLcpWindowEnd).toHaveBeenCalledOnce();
+    expect(
+      document.head.querySelector(`script[src="${GPT_SCRIPT_SRC}"]`)
+    ).toBeNull();
+
+    resolveLcpGate?.();
+    await Promise.resolve();
+
+    expect(
+      document.head.querySelector(`script[src="${GPT_SCRIPT_SRC}"]`)
+    ).not.toBeNull();
   });
 });

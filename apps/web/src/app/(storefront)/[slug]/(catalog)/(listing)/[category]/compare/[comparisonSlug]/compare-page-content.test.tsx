@@ -167,10 +167,10 @@ describe('ComparePageContent', () => {
       screen.getByRole('heading', {
         name: /iPhone 17 Pro Max vs Samsung Galaxy Z TriFold/i,
       })
-    ).toBeInTheDocument();
+    ).toHaveAttribute('data-cwv-lcp-copy', 'compare');
     expect(
       screen.getByText(/Both phones target flagship buyers/i)
-    ).toBeInTheDocument();
+    ).toHaveAttribute('data-cwv-lcp-copy', 'authority-hub');
     expect(
       screen.getByRole('table', { name: /Product comparison table/i })
     ).toBeInTheDocument();

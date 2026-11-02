@@ -1,11 +1,12 @@
-import { formatCurrencyCompact } from '@/lib/currency';
 import { buildCategorySupportLinks } from '@/lib/storefront-compare/build-commercial-support-links';
 import { buildCuratedCompareSlugSet } from '@/lib/storefront-compare/compare-indexability-policy';
 import { loadCompareCategoryInventorySafely } from '@/lib/storefront-compare/load-compare-category-inventory-safely';
 import { loadMaintainedCompareRouteManifestSafely } from '@/lib/storefront-compare/load-maintained-compare-route-manifest-safely';
-import { normalizeInferredBrands } from '@/lib/storefront-compare/normalize-inferred-brands';
-import { resolveCanonicalBrandKey } from '@/lib/storefront-compare/resolve-canonical-brand-key';
 import { loadCategoryScopedSemanticInventorySafely } from '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely';
+import {
+  buildClusterFeaturedProducts,
+  type ClusterFeaturedInventoryProduct,
+} from './build-cluster-featured-products';
 import { buildClusterHubLinks } from './build-cluster-hub-links';
 import type {
   BuildInformationalClusterModelInput,
@@ -13,24 +14,10 @@ import type {
   InformationalClusterModel,
 } from './content-cluster-types';
 import { inferContentClusterContext } from './infer-content-cluster-context';
-import { isAvailableProduct } from './is-available-product';
 import { loadPriceBandDestinationPoolSafely } from './load-price-band-destination-pool-safely';
 import { verifyPriceBandLinkAgainstDestination } from './verify-price-band-link-against-destination';
 
-interface CategoryInventoryProduct {
-  slug: string;
-  name: string;
-  brand?: string | null;
-  price: number;
-  category_slug?: string | null;
-  category_slugs?: string[] | null;
-  product_key_specs?: Record<string, unknown> | null;
-  condition?: string | null;
-  stock?: number | null;
-  is_parent?: boolean | null;
-  parent_product_id?: string | null;
-  manage_stock?: boolean | null;
-}
+type CategoryInventoryProduct = ClusterFeaturedInventoryProduct;
 
 type OverrideCategoryProduct = NonNullable<
   InformationalClusterCategoryData['products']
@@ -69,58 +56,6 @@ function toCategoryInventoryProduct(
     parent_product_id: product.parent_product_id ?? null,
     manage_stock: product.manage_stock ?? null,
   };
-}
-
-// Featured picks link to PDPs, which resolve regardless of stock state;
-// raw-pool availability is the intentional gate here (hub indexability
-// thresholds are what destination verification protects).
-function isInStock(product: CategoryInventoryProduct) {
-  return isAvailableProduct(product);
-}
-
-function buildProductHref(storeUrl: string, product: CategoryInventoryProduct) {
-  return product.category_slug
-    ? `${storeUrl}/${product.category_slug}/${product.slug}`
-    : `${storeUrl}/products/${product.slug}`;
-}
-
-function buildFeaturedProducts(
-  storeUrl: string,
-  categorySlug: string,
-  inferredBrands: string[],
-  products: CategoryInventoryProduct[],
-  countryCode?: string | null
-) {
-  const inStockProducts = products.filter(isInStock);
-  const normalizedBrands = normalizeInferredBrands(
-    categorySlug,
-    inferredBrands
-  );
-  const preferredProducts =
-    normalizedBrands.length > 0
-      ? inStockProducts.filter((product) =>
-          normalizedBrands.includes(
-            resolveCanonicalBrandKey(categorySlug, product.brand ?? '')
-          )
-        )
-      : [];
-  // When brands are inferred, featured picks stay on-brand; falling back
-  // to the full pool would surface irrelevant child-category products.
-  const selectedPool =
-    normalizedBrands.length > 0 ? preferredProducts : inStockProducts;
-
-  return selectedPool
-    .slice()
-    .sort(
-      (left, right) =>
-        left.price - right.price || left.slug.localeCompare(right.slug)
-    )
-    .slice(0, 2)
-    .map((product) => ({
-      href: buildProductHref(storeUrl, product),
-      title: product.name,
-      description: `${product.brand ?? 'Storefront pick'} • ${formatCurrencyCompact(product.price, countryCode || 'NG')}`,
-    }));
 }
 
 export async function buildInformationalClusterModel(
@@ -204,6 +139,7 @@ export async function buildInformationalClusterModel(
     categoryName,
     products,
     inferredBrands: inferred.brands,
+    preferredPriceBandSlugs: inferred.matchedPriceBands,
     approvedCompareSlugs,
     requireInferredBrandRelevance: true,
     compareProducts: input.categoryDataOverride
@@ -278,12 +214,13 @@ export async function buildInformationalClusterModel(
       label: `Shop more ${categoryName.toLowerCase()}`,
     },
     commerceLinks: finalCommerceLinks.slice(0, 5),
-    featuredProducts: buildFeaturedProducts(
+    featuredProducts: buildClusterFeaturedProducts(
       input.storeUrl,
       categorySlug,
       inferred.brands,
       products,
-      input.countryCode
+      input.countryCode,
+      `${input.post.title} ${input.post.slug}`
     ),
   };
 }

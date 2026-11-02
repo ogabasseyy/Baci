@@ -51,25 +51,43 @@ export function classifyTransferReferenceFailure(
   return httpStatusOf(error) === 404 ? 'not_found' : 'uncertain';
 }
 
+/** The binding fields of a parsed TSQ wallet-transfer record. */
+export interface TransferRecordBinding {
+  third_party_reference: string;
+  amount: number;
+  source_wallet: string;
+  destination_wallet: string;
+  status: 'pending' | 'successful' | 'success' | 'failed';
+}
+
+/**
+ * A parsed record: its status counts only when our reference, the amount
+ * and both wallets bind. The one rule every TSQ reader shares, including
+ * provider-transfer-reader.ts.
+ */
+export function classifyTransferRecord(
+  record: TransferRecordBinding,
+  expected: TransferReferenceBinding
+): Exclude<TransferReferenceLookup, 'not_found'> {
+  if (
+    record.third_party_reference !== expected.reference ||
+    record.amount !== expected.amountKobo ||
+    record.source_wallet !== expected.sourceWalletId ||
+    record.destination_wallet !== expected.destinationWalletId
+  )
+    return 'uncertain';
+  if (record.status === 'pending') return 'pending';
+  if (record.status === 'failed') return 'failed';
+  return 'submitted';
+}
+
 /** A TSQ body: a status counts only when bound to our transfer. */
 export function classifyTransferReferenceResponse(
   response: unknown,
   expected: TransferReferenceBinding
 ): TransferReferenceLookup {
   const live = tsq.walletTransferResponse.safeParse(response);
-  if (live.success) {
-    const record = live.data.data;
-    if (
-      record.third_party_reference !== expected.reference ||
-      record.amount !== expected.amountKobo ||
-      record.source_wallet !== expected.sourceWalletId ||
-      record.destination_wallet !== expected.destinationWalletId
-    )
-      return 'uncertain';
-    if (record.status === 'pending') return 'pending';
-    if (record.status === 'failed') return 'failed';
-    return 'submitted';
-  }
+  if (live.success) return classifyTransferRecord(live.data.data, expected);
   const normalized = verification.normalized.safeParse(response);
   if (
     normalized.success &&

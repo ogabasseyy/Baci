@@ -52,7 +52,7 @@ jobs:
             echo '::error::source_sha is not a commit in this repository.' >&2
             exit 1
           fi
-          held="$(git ls-tree --name-only "$SOURCE_SHA" -- .github/storefront-release-gate.json)"
+          held="$(git ls-tree --full-tree --name-only "$SOURCE_SHA" -- .github/storefront-release-gate.json)"
           if [[ -n "$held" ]]; then
             echo '::error::This source is held by the storefront release gate (.github/storefront-release-gate.json). It ships only in the deliberate owner store release; see docs/runbooks/storefront-release-gate.md.' >&2
             exit 1

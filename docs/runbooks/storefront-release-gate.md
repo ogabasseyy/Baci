@@ -17,14 +17,27 @@ every storefront PiggyVest change must be safe to ship the moment it merges.
   release, and published Android to 100% of production. Now the iOS and
   Android storefront release workflows start only from an owner tag or a
   manual run ("Run workflow" in GitHub Actions).
+- **Releases ship only commits on `main`.** Both release workflows first
+  check that the commit they would build is on `main`, and stop if it is not.
+  A tag on an unmerged branch, or a manual run started from another branch,
+  fails before anything is built or uploaded.
 - **No OTA updates from gated code.** The iOS OTA export refuses any source
   commit that contains the gate file. Commits from before the gate can still
   be exported.
 - **A CI check keeps the gate honest.** The `Test storefront release gate` step
-  of CI fails if a push trigger comes back on either release workflow, the tag
-  or manual-run trigger disappears, the OTA refusal step is removed or moved,
-  another workflow starts building, shipping or dispatching the storefront
-  apps, or a new PiggyVest storefront file has no server-off test.
+  of CI fails if:
+  - a push trigger comes back on either release workflow, or the tag or
+    manual-run trigger disappears;
+  - the "on main" check or the OTA refusal step is removed, moved, moved to
+    another job, or made skippable;
+  - another workflow or a composite action under `.github/actions/` starts
+    building, shipping or dispatching the storefront apps. A workflow may
+    start another workflow only by naming its file literally (for example
+    `gh workflow run security.yml`); starting one by display name, numeric ID
+    or a variable fails, because the check cannot tell which workflow it is;
+  - the CI step itself is made skippable or stops running one of the gate's
+    test files;
+  - a new PiggyVest storefront file has no server-off test.
 
 Customers see no change when the gate merges.
 
@@ -36,15 +49,32 @@ build, so any later submission is a manual run of a workflow listed below.
 
 ## Making a deliberate release (owner)
 
-Start from the Actions tab on `main`, or push a tag from `main`.
+Start from the Actions tab on `main`, or push a tag on a commit that is on
+`main`. Anything else is refused.
 
 | Platform | Manual run | Tag |
 | --- | --- | --- |
 | iOS | "iOS Storefront Production Release": builds, uploads to TestFlight and submits for App Review with automatic release. Leave the build number empty to use the next one. | `v<build>-storefront-ios`: the number becomes the build number and must be higher than the last one |
-| Android | "Android Storefront Production Release" with `publish_to_play` on: choose the `internal` track first, then `production`. | `v<version code>-storefront`: publishes straight to production; the number must be higher than the current one |
+| Android | "Android Storefront Production Release" with `publish_to_play` on and the `internal` track, to test first. | `v<version code>-storefront`: publishes straight to 100% of production; the number must be higher than every version code already uploaded, including the internal test build |
 
 To resubmit a build that is already on TestFlight, run "iOS Storefront Submit
 for Review".
+
+### Android: ship exactly the commit you tested
+
+Every run builds the commit it starts from. A second manual run with the
+`production` track rebuilds whatever `main` is at that moment, which may
+include changes merged after the internal test. To release exactly what was
+tested:
+
+1. Run "Android Storefront Production Release" with `publish_to_play` on and
+   the `internal` track. Note the commit the run built (the run's commit SHA
+   in GitHub Actions).
+2. Test the internal build.
+3. Push a production tag on that same commit:
+   `git tag v<version code>-storefront <tested commit> && git push origin v<version code>-storefront`.
+   The tag run rebuilds the tested commit, publishes it to production and
+   points the in-app update prompt at it.
 
 ## Rules for storefront PiggyVest pull requests
 
@@ -59,16 +89,20 @@ for Review".
    server or has the owner's written approval in the pull request.
 4. **A server-off test for each new PiggyVest file.** The CI gate requires a
    `*.server-off.test.tsx` test for every new storefront source file that is a
-   PiggyVest file. That test shows the file behaves like production when the
-   server keeps PiggyVest off.
+   PiggyVest file, and that test must import the file it covers (with a
+   relative path or the `@/` alias). The test shows the file behaves like
+   production when the server keeps PiggyVest off. An empty placeholder test,
+   or one that imports something else, does not count.
 
 ### Which files count, and where the test goes
 
 A file counts when it is new since the gate's baseline commit (recorded in the
-gate file), is app source (not a test, test helper, mock, type declaration,
-`.styles.ts`, `.types.ts`, or anything under `test-support/`, `scripts/` or
-`tools/`), and either has "PiggyVest", "wallet" or "savings" in its path or
-mentions PiggyVest in its code.
+gate file), is app source, and either has "PiggyVest", "wallet" or "savings"
+in its path or mentions PiggyVest in its code. These are not app source:
+tests, test helpers (`.test-support`, `.test-utils`, `.test-fixture`,
+`.test-fixtures` and `-test-harness` files), mocks, type declarations,
+`.styles.ts` and `.types.ts` files, and anything under `test-support/`,
+`scripts/` or `tools/`.
 
 | New file | Server-off test |
 | --- | --- |
@@ -77,6 +111,11 @@ mentions PiggyVest in its code.
 
 Moving or renaming an existing PiggyVest file makes it new, so it needs a
 server-off test too.
+
+The baseline commit must be a commit on `main`. CI refuses a baseline that
+exists only on a pull request branch: that commit disappears when the pull
+request is squash-merged, and naming it would let the pull request's own new
+files skip the rule.
 
 ## OTA updates while the gate is on
 
@@ -87,13 +126,12 @@ that release is safe too.
 ## Checking the gate locally
 
 ```sh
-node --test .github/scripts/storefront-release-gate.test.mjs \
-  .github/scripts/storefront-release-gate-workflows.test.mjs \
-  .github/scripts/storefront-release-gate-server-off.test.mjs
+node --test .github/scripts/storefront-release-gate*.test.mjs
 ```
 
-The check needs full git history, because it compares against the baseline
-commit. New files count once they are added to git or are untracked and not
+The check needs full git history and an up-to-date `origin/main`
+(`git fetch origin main`), because it compares against the baseline commit on
+`main`. New files count once they are added to git or are untracked and not
 ignored.
 
 ## Ending the gate (cutover)
@@ -131,3 +169,5 @@ cutover pull request:
    removes the `Test storefront release gate` CI step.
 4. Decides on the OTA refusal step. Keeping it is harmless: it only refuses
    commits from the gate period, which the deliberate release already covers.
+5. Keeps the "on main" check in both release workflows. It only refuses
+   commits that never reached `main`, which should never ship.

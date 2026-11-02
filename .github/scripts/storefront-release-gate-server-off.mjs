@@ -1,6 +1,8 @@
 // Server-off rule of the storefront release gate: while the gate is in place,
-// every new PiggyVest storefront source file must ship with a test that proves
-// it behaves exactly like production when the server keeps PiggyVest off.
+// every new PiggyVest storefront source file must ship with a test that imports
+// it and proves it behaves exactly like production when the server keeps
+// PiggyVest off.
+import path from 'node:path';
 
 export const STOREFRONT_ROOT = 'apps/mobile-storefront';
 export const SERVER_OFF_TEST_SUFFIX = '.server-off.test.tsx';
@@ -12,7 +14,7 @@ const SOURCE_EXTENSION = /\.[cm]?[jt]sx?$/;
 const NOT_SHIPPED = [
   /\.d\.ts$/,
   /\.(?:test|spec)\.[cm]?[jt]sx?$/,
-  /\.test-(?:support|utils|fixtures)\.[cm]?[jt]sx?$/,
+  /[.-]test-(?:support|utils|fixtures?|harness)\.[cm]?[jt]sx?$/,
   /\.(?:styles|types)\.ts$/,
   /(?:^|\/)__tests__\//,
   /(?:^|\/)__mocks__\//,
@@ -54,7 +56,35 @@ export function serverOffTestPaths(path) {
   return [`${APP_PREFIX}${relative}${SERVER_OFF_TEST_SUFFIX}`, mirrored];
 }
 
-/** Each new PiggyVest file without a server-off test, with the preferred test path. */
+// Static imports, re-exports, side-effect imports, require() and import().
+const MODULE_SPECIFIER =
+  /\b(?:from\s*|import\s*\(\s*|require\s*\(\s*|^\s*import\s+)(['"])([^'"\n]+)\1/gm;
+const COMMENT = /\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm;
+
+function withoutExtension(file) {
+  return file.replace(SOURCE_EXTENSION, '');
+}
+
+/** True when the test file imports `source`, through a relative or `@/` specifier. */
+export function importsModule(testPath, testContent, source) {
+  const target = withoutExtension(source);
+  const accepted = new Set([target, ...(path.posix.basename(target) === 'index' ? [path.posix.dirname(target)] : [])]);
+  for (const match of (testContent ?? '').replace(COMMENT, '').matchAll(MODULE_SPECIFIER)) {
+    const specifier = match[2];
+    let resolved;
+    if (specifier.startsWith('@/')) resolved = `${APP_PREFIX}${specifier.slice(2)}`;
+    else if (specifier.startsWith('./') || specifier.startsWith('../')) {
+      resolved = path.posix.join(path.posix.dirname(testPath), specifier);
+    }
+    if (resolved !== undefined && accepted.has(withoutExtension(path.posix.normalize(resolved)))) return true;
+  }
+  return false;
+}
+
+/**
+ * Each new PiggyVest file without a server-off test that imports it, with the
+ * preferred test path, plus `test` when a test exists but does not import it.
+ */
 export function findMissingServerOffTests({ newFiles, tracked, readContent }) {
   const present = new Set(tracked);
   return [...newFiles]
@@ -63,6 +93,8 @@ export function findMissingServerOffTests({ newFiles, tracked, readContent }) {
     .filter((file) => isPiggyvestSource(file, () => readContent(file)))
     .flatMap((file) => {
       const accepted = serverOffTestPaths(file);
-      return accepted.some((test) => present.has(test)) ? [] : [{ file, expected: accepted[0] }];
+      const existing = accepted.filter((test) => present.has(test));
+      if (existing.some((test) => importsModule(test, readContent(test), file))) return [];
+      return [existing.length === 0 ? { file, expected: accepted[0] } : { file, expected: accepted[0], test: existing[0] }];
     });
 }

@@ -22,6 +22,9 @@ test('counts only storefront source that ships in the app bundle', () => {
     `${APP}/components/wallet/WalletPinSheet.test.tsx`,
     `${APP}/components/wallet/WalletPinSheet.server-off.test.tsx`,
     `${APP}/components/wallet/wallet-pin.test-support.ts`,
+    `${APP}/schemas/customer-savings-drafts.test-fixture.ts`,
+    `${APP}/components/wallet/WalletHome-test-harness.tsx`,
+    `${APP}/components/wallet/wallet-checkout.test-utils.tsx`,
     `${APP}/components/wallet/WalletPinSheet.styles.ts`,
     `${APP}/components/wallet/WalletPinSheet.types.ts`,
     `${APP}/types/piggyvest.d.ts`,
@@ -70,13 +73,11 @@ test('reports each new PiggyVest file that lacks its server-off test', () => {
     [`${APP}/app/wallet/savings/index.tsx`]: 'export default function Screen() {}',
     [`${APP}/lib/read-spend-error.ts`]: "export const code = 'PIGGYVEST_LIMIT';",
     [`${APP}/components/product/ProductCard.tsx`]: 'export function ProductCard() {}',
+    [`${APP}/hooks/use-wallet-pin-proof.server-off.test.tsx`]: "import { useWalletPinProof } from './use-wallet-pin-proof';",
+    [`${APP}/__tests__/app/wallet/savings/index.server-off.test.tsx`]: "import Screen from '@/app/wallet/savings';",
   };
-  const newFiles = [...Object.keys(contents), `${APP}/components/wallet/WalletPinSheet.test.tsx`];
-  const tracked = [
-    ...newFiles,
-    `${APP}/hooks/use-wallet-pin-proof.server-off.test.tsx`,
-    `${APP}/__tests__/app/wallet/savings/index.server-off.test.tsx`,
-  ];
+  const newFiles = [...Object.keys(contents).slice(0, 5), `${APP}/components/wallet/WalletPinSheet.test.tsx`];
+  const tracked = [...newFiles, ...Object.keys(contents).slice(5)];
   const read = [];
   const missing = findMissingServerOffTests({
     newFiles,
@@ -96,7 +97,51 @@ test('reports each new PiggyVest file that lacks its server-off test', () => {
       expected: `${APP}/lib/read-spend-error.server-off.test.tsx`,
     },
   ]);
-  assert.deepEqual(read.sort(), [`${APP}/components/product/ProductCard.tsx`, `${APP}/lib/read-spend-error.ts`]);
+  assert.deepEqual(read.sort(), [
+    `${APP}/__tests__/app/wallet/savings/index.server-off.test.tsx`,
+    `${APP}/components/product/ProductCard.tsx`,
+    `${APP}/hooks/use-wallet-pin-proof.server-off.test.tsx`,
+    `${APP}/lib/read-spend-error.ts`,
+  ]);
+});
+
+test('a server-off test counts only when it imports the file it covers', () => {
+  const sheet = `${APP}/components/wallet/WalletPinSheet.tsx`;
+  const colocated = `${APP}/components/wallet/WalletPinSheet.server-off.test.tsx`;
+  const mirrored = `${APP}/__tests__/components/wallet/WalletPinSheet.server-off.test.tsx`;
+  const check = (testContent, testPath = colocated) =>
+    findMissingServerOffTests({
+      newFiles: [sheet],
+      tracked: [sheet, testPath],
+      readContent: (path) => (path === testPath ? testContent : 'export function WalletPinSheet() {}'),
+    });
+  for (const text of [
+    "import { WalletPinSheet } from './WalletPinSheet';",
+    "import { WalletPinSheet } from '@/components/wallet/WalletPinSheet';",
+    "const { WalletPinSheet } = require('./WalletPinSheet.tsx');",
+    'const { WalletPinSheet } = await import("@/components/wallet/WalletPinSheet");',
+    "import {\n  WalletPinSheet,\n} from './WalletPinSheet';",
+  ]) {
+    assert.deepEqual(check(text), [], text);
+  }
+  assert.deepEqual(check("import { WalletPinSheet } from '../../../components/wallet/WalletPinSheet';", mirrored), []);
+  for (const text of [
+    "test('off', () => {});",
+    "import { WalletPinKeypad } from './WalletPinKeypad';",
+    "import { WalletPinSheet } from './wallet/WalletPinSheet';",
+    "jest.mock('./WalletPinSheet');",
+    "// import { WalletPinSheet } from './WalletPinSheet';",
+  ]) {
+    assert.deepEqual(check(text), [{ file: sheet, expected: colocated, test: colocated }], text);
+  }
+  const index = `${APP}/components/wallet/savings/index.tsx`;
+  const indexTest = `${APP}/components/wallet/savings/index.server-off.test.tsx`;
+  const covered = findMissingServerOffTests({
+    newFiles: [index],
+    tracked: [index, indexTest],
+    readContent: (path) => (path === indexTest ? "import { Savings } from '@/components/wallet/savings';" : ''),
+  });
+  assert.deepEqual(covered, []);
 });
 
 test('a server-off test next to an app/ screen does not count: storefront screen tests live under __tests__/app', () => {

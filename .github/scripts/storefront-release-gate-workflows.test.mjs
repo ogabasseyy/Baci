@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  dispatchesWorkflow,
   dispatchOnlyFailures,
+  readJob,
   readStep,
   readStepNames,
   readWorkflowTriggers,
@@ -107,22 +107,24 @@ test('detects workflows that build or ship the storefront app', () => {
   assert.equal(shipsStorefront('working-directory: apps/mobile-storefront\nrun: pnpm exec expo export --platform ios\n'), true);
   assert.equal(shipsStorefront('uses: r0adkll/upload-google-play@x\n  packageName: com.ogabassey.store\n'), true);
   assert.equal(shipsStorefront('run: npx eas update --branch production\nworking-directory: apps/mobile-storefront\n'), true);
+  assert.equal(shipsStorefront('run: pnpm --filter @baci/mobile-storefront exec eas update --branch production --auto\n'), true);
+  assert.equal(shipsStorefront('working-directory: apps/mobile-storefront\nrun: npx eas-cli@latest update --channel production\n'), true);
+  assert.equal(shipsStorefront('working-directory: apps/mobile-storefront\nrun: npx  eas  build --platform ios\n'), true);
+  assert.equal(shipsStorefront('run: pnpm --filter @baci/mobile-storefront exec eas workflow:run release.yml\n'), true);
+  assert.equal(shipsStorefront('uses: apple-actions/upload-testflight-build@v3\n  app-path: apps/mobile-storefront/out.ipa\n'), true);
+  assert.equal(shipsStorefront('run: xcrun altool --upload-app -f apps/mobile-storefront/out.ipa\n'), true);
   assert.equal(shipsStorefront('WORKING_DIR: apps/mobile-admin\nrun: bundle exec fastlane ios release\n'), false);
   assert.equal(shipsStorefront('run: pnpm --filter @baci/mobile-storefront exec jest\n'), false);
-});
-
-test('detects another workflow dispatching a gated workflow', () => {
-  assert.equal(dispatchesWorkflow('run: gh workflow run ios-storefront-release.yml --ref main', 'ios-storefront-release.yml'), true);
-  assert.equal(dispatchesWorkflow('run: gh workflow run --ref main ios-storefront-release.yml', 'ios-storefront-release.yml'), true);
-  assert.equal(dispatchesWorkflow('run: gh  workflow  run "ios-storefront-release.yml" -f build_number=9', 'ios-storefront-release.yml'), true);
-  assert.equal(dispatchesWorkflow("  workflow_id: 'ios-storefront-release.yml',", 'ios-storefront-release.yml'), true);
-  assert.equal(dispatchesWorkflow('url: /repos/o/r/actions/workflows/ios-storefront-release.yml/dispatches', 'ios-storefront-release.yml'), true);
-  assert.equal(dispatchesWorkflow('run: gh workflow run security.yml\nnotes: ios-storefront-release.yml', 'ios-storefront-release.yml'), false);
-  assert.equal(dispatchesWorkflow('run: gh workflow run security.yml', 'ios-storefront-release.yml'), false);
+  assert.equal(shipsStorefront('run: pnpm --filter @baci/mobile-storefront exec easy-test\n'), false);
 });
 
 const STEPS = `jobs:
+  gate:
+    steps:
+      - name: Guard the source
+        run: echo gate
   export:
+    if: github.ref == 'refs/heads/main'
     steps:
       - name: Check out main history
         uses: actions/checkout@v7
@@ -135,14 +137,32 @@ const STEPS = `jobs:
           echo "guarded"
       - name: Validate
         run: echo validate
+
+  # Publishing runs after the export.
+  publish:
+    needs: export
+    steps:
+      - name: Publish
+        run: echo publish
 `;
 
+test('reads one job block, so a step in another job never counts', () => {
+  const exportJob = readJob(STEPS, 'export');
+  assert.match(exportJob, /^  export:\n    if: github\.ref == 'refs\/heads\/main'/);
+  assert.deepEqual(readStepNames(exportJob), ['Check out main history', 'Guard the source', 'Validate']);
+  assert.deepEqual(readStepNames(readJob(STEPS, 'gate')), ['Guard the source']);
+  assert.deepEqual(readStepNames(readJob(STEPS, 'publish')), ['Publish']);
+  assert.equal(readJob(STEPS, 'missing'), undefined);
+  assert.equal(readJob('name: x\non:\n  export:\n', 'export'), undefined, 'only keys under the top-level jobs: block are jobs');
+});
+
 test('reads step names in order and a step block scalar run script', () => {
-  assert.deepEqual(readStepNames(STEPS), ['Check out main history', 'Guard the source', 'Validate']);
-  const step = readStep(STEPS, 'Guard the source');
+  const exportJob = readJob(STEPS, 'export');
+  assert.deepEqual(readStepNames(exportJob), ['Check out main history', 'Guard the source', 'Validate']);
+  const step = readStep(exportJob, 'Guard the source');
   assert.equal(step.run, 'set -euo pipefail\n\necho "guarded"');
   assert.match(step.text, /SOURCE_SHA: \$\{\{ inputs\.source_sha \}\}/);
   assert.doesNotMatch(step.text, /validate/);
-  assert.equal(readStep(STEPS, 'Validate').run, undefined, 'a plain scalar run is not a block script');
-  assert.equal(readStep(STEPS, 'Missing'), undefined);
+  assert.equal(readStep(exportJob, 'Validate').run, undefined, 'a plain scalar run is not a block script');
+  assert.equal(readStep(exportJob, 'Missing'), undefined);
 });

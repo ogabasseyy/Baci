@@ -1,6 +1,6 @@
 // Line-based reader for the parts of a GitHub Actions workflow that the
-// storefront release gate checks: the top-level `on:` triggers and named step
-// blocks. It reads only the plain block style these workflows use and reports
+// storefront release gate checks: the top-level `on:` triggers, job blocks
+// and named step blocks. It reads only the plain block style these workflows use and reports
 // any other shape as unreadable, so a trigger it cannot read fails the gate
 // instead of slipping past it. It runs with no installed packages, which lets
 // CI run the gate before dependencies are installed.
@@ -113,10 +113,11 @@ export function dispatchOnlyFailures(name, text) {
     : [`${name} must trigger only on workflow_dispatch (found: ${names.join(', ')})`];
 }
 
-const STOREFRONT_APP = /apps\/mobile-storefront\b|com\.ogabassey\.store\b/;
-const SHIPPING_TOOL = /\bfastlane\b|upload-google-play|\bexpo export\b|\beas (?:build|submit|update)\b/;
+const STOREFRONT_APP = /apps\/mobile-storefront\b|@baci\/mobile-storefront\b|com\.ogabassey\.store\b/;
+const SHIPPING_TOOL =
+  /\bfastlane\b|upload-google-play|upload-testflight|\baltool\b|\bexpo\s+export\b|\beas(?:-cli(?:@[\w.^~-]+)?)?\s+(?:build|submit|update|workflow:run)\b/;
 
-/** True when a workflow builds, uploads, submits or exports the storefront app. */
+/** True when a workflow or action builds, uploads, submits or exports the storefront app. */
 export function shipsStorefront(text) {
   return STOREFRONT_APP.test(text) && SHIPPING_TOOL.test(text);
 }
@@ -126,15 +127,27 @@ function escapeRegExp(value) {
 }
 
 /**
- * True when a workflow starts another workflow by file name: anywhere on a
- * `gh workflow run` line (flags may come first), the REST dispatch URL, or a
- * `workflow_id:` argument (actions/github-script createWorkflowDispatch).
+ * The text of one job under the top-level `jobs:` block, from its `  <id>:`
+ * line to the next job, or undefined. Checks that read steps use this, so a
+ * step moved into another job never counts.
  */
-export function dispatchesWorkflow(text, workflowFile) {
-  const file = escapeRegExp(workflowFile);
-  return new RegExp(
-    `gh\\s+workflow\\s+run\\b[^\\n]*${file}|/workflows/${file}/dispatches|workflow_id:\\s*["']?${file}`
-  ).test(text);
+export function readJob(text, id) {
+  const lines = text.split(/\r?\n/);
+  const jobsAt = lines.findIndex((line) => /^jobs\s*:\s*(?:#.*)?$/.test(line));
+  if (jobsAt === -1) return undefined;
+  const header = new RegExp(`^  ${escapeRegExp(id)}\\s*:\\s*(?:#.*)?$`);
+  let start = -1;
+  for (let index = jobsAt + 1; index < lines.length; index += 1) {
+    if (lines[index].trim() !== '' && indentOf(lines[index]) === 0) break;
+    if (header.test(lines[index])) {
+      start = index;
+      break;
+    }
+  }
+  if (start === -1) return undefined;
+  let end = start + 1;
+  while (end < lines.length && (lines[end].trim() === '' || indentOf(lines[end]) > 2)) end += 1;
+  return lines.slice(start, end).join('\n');
 }
 
 const STEP_NAME = /^(\s*)- name:\s*(.+?)\s*$/;

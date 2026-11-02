@@ -1,0 +1,119 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const root = resolve(__dirname, '../../../../docs');
+const read = (name: string) => readFileSync(resolve(root, name), 'utf8');
+
+const runbook = read('piggyvest-legacy-migration-runbook.md');
+const listSql = read('piggyvest-legacy-migration/01-balance-list.sql');
+const zeroSql = read('piggyvest-legacy-migration/02-zero-out.sql');
+const code = (sql: string) =>
+  sql
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('--'))
+    .join('\n');
+
+describe('01-balance-list.sql (coordinator list)', () => {
+  const sql = code(listSql);
+
+  it('is read only and never writes', () => {
+    expect(sql).toMatch(/BEGIN\s+READ\s+ONLY/i);
+    expect(sql).not.toMatch(/\b(INSERT|UPDATE|DELETE|TRUNCATE|DROP|ALTER)\b/i);
+    expect(sql).toMatch(/ROLLBACK/i);
+  });
+
+  it('selects explicit columns and only positive balances', () => {
+    expect(sql).not.toMatch(/select\s+\*/i);
+    expect(sql).not.toMatch(/\w+\.\*/);
+    expect(sql).toMatch(/available_balance\s*>\s*0/);
+  });
+
+  it('flags wallets whose stored balance disagrees with the ledger', () => {
+    expect(sql).toMatch(/matches_ledger/);
+    expect(sql).toMatch(/IS NOT DISTINCT FROM/i);
+  });
+});
+
+describe('02-zero-out.sql (the one reviewed update)', () => {
+  const sql = code(zeroSql);
+
+  it('runs in one transaction that defaults to ROLLBACK', () => {
+    expect(sql).toMatch(/^\s*BEGIN;/im);
+    expect(sql).toMatch(/^\s*ROLLBACK;/im);
+    expect(sql).not.toMatch(/^\s*COMMIT;/im);
+    expect(zeroSql.trimEnd().split('\n').at(-1)).toBe('-- COMMIT;');
+    expect(zeroSql.match(/^--\s*COMMIT;/gm)).toHaveLength(1);
+  });
+
+  it('refuses an empty list and reports row counts', () => {
+    expect(sql).toMatch(/list is empty/i);
+    expect(sql).toMatch(/GET DIAGNOSTICS/i);
+  });
+
+  it('keys every row to merchant, customer, wallet and credit reference', () => {
+    for (const col of [
+      'wallet_id',
+      'merchant_id',
+      'customer_id',
+      'expected_balance',
+      'piggyvest_credit_reference',
+    ]) {
+      expect(sql).toContain(col);
+    }
+    expect(sql).toMatch(/expected_balance\s+numeric\(12,2\)\s+NOT NULL/i);
+    expect(sql).toMatch(/expected_balance\s*>\s*0/);
+  });
+
+  it('locks wallets, then compares exact balance null-safely', () => {
+    expect(sql).toMatch(/FOR UPDATE/i);
+    expect(sql).toMatch(/IS DISTINCT FROM/i);
+    const lockAt = sql.search(/FOR UPDATE/i);
+    const clockAt = sql.search(/clock_timestamp\(\)/i);
+    expect(lockAt).toBeGreaterThan(-1);
+    expect(clockAt).toBeGreaterThan(lockAt);
+    expect(sql).not.toMatch(/\bnow\(\)/i);
+  });
+
+  it('writes a balanced ledger row and only ever sets balance to zero', () => {
+    expect(sql).toMatch(/customer_wallet_transactions/);
+    expect(sql).toMatch(/'debit'/);
+    expect(sql).toMatch(/piggyvest_legacy_migration/);
+    expect(sql).toMatch(/available_balance\s*=\s*0/);
+    expect(sql).toMatch(/available_balance\s*=\s*l\.expected_balance/);
+    expect(sql).not.toMatch(/total_(earned|redeemed)\s*=/);
+  });
+
+  it('cannot run twice for the same wallet', () => {
+    expect(sql).toMatch(/already (migrated|zeroed)/i);
+  });
+
+  it('never selects star and ships with an empty reviewed list', () => {
+    expect(sql).not.toMatch(/select\s+\*/i);
+    expect(zeroSql).toContain('-- >>> REVIEWED ROWS BELOW');
+    expect(zeroSql).not.toMatch(/'[0-9a-f]{8}-[0-9a-f]{4}-/i);
+  });
+});
+
+describe('runbook', () => {
+  it('has the required sections in order', () => {
+    const order = [
+      '## Before you start',
+      '## 1. Coordinator list',
+      '## 2. Credit each customer by hand in PiggyVest',
+      '## 3. Record each credit',
+      '## 4. Dry run the SQL update',
+      '## 5. Commit and verify',
+      '## If something goes wrong',
+    ].map((h) => runbook.indexOf(h));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('points at both SQL files and forbids production work by agents', () => {
+    expect(runbook).toContain('01-balance-list.sql');
+    expect(runbook).toContain('02-zero-out.sql');
+    expect(runbook).toMatch(/owner/i);
+    expect(runbook).toMatch(/credit before|credit first|only after/i);
+  });
+});

@@ -19,33 +19,33 @@ main as written. Keep only the logic worth having, rewritten inside four planned
 | **Total** | **39** | |
 
 "Re-port logic" means a task reads the old file for its rules and writes new code and a new migration under main's
-current conventions. It never means copying the file.
+conventions. It never means copying the file.
 
 ## Source and how to re-check it
 
 - **Source:** the local, private backup ref `refs/backups/2026-10-31/cursor-savings-phase1`, commit
   `d5e56bb67a47adf8f6fd8b4a5d836cfd06ce9c6a`. A snapshot of an old worktree; not on GitHub, and it must not be pushed.
 - **The 39 files:** every migration under `supabase/migrations/` from `20260912140000` to `20260912185000`
-  (inclusive) that the backup commit adds on top of the main commit it branched from. The same range also holds
+  (inclusive) that the backup commit adds on top of its main base. The same range also holds
   `20260912150000_backfill_manual_order_document_dates.sql`, byte-identical on main and not part of this record.
-- **Hash:** SHA-256 of each file's bytes as stored in that commit. Where main's old subsystem reports under
-  `apps/web/src/lib/piggyvest/*.report.md` quote a frozen hash for one of these files, it is the same value.
+- **Hash:** SHA-256 of each file's bytes in that commit. Where main's `apps/web/src/lib/piggyvest/*.report.md` quote a
+  frozen hash for one of these files, it is the same value.
 - **Compared with:** `origin/main` at `bf5052a3669f5f29cc48295f5e4a1eac4c2b0635` (committed 2026-11-02). 36 of the 39 paths
   do not exist on main. 3 paths exist on main with different content (see "Versions already on main").
-- **Re-check one file** in any clone that has the ref:
-  `git show "refs/backups/2026-10-31/cursor-savings-phase1:supabase/migrations/<file>" | shasum -a 256`.
+- **Re-check:** the 39 backup hashes are author-attested; only a clone with the private ref can verify them:
+  `git show "<ref>:supabase/migrations/<file>" | shasum -a 256`. Anyone can check the 3 main-side hashes, the path
+  counts and the version collisions from `origin/main`.
 
 ## Why none of them can be ported as written
 
 Each file is tied to the staging integration in one of two ways (the "Tie" column below):
-
 - **direct:** the file itself refers to the staging integration registry, the staging wallet and goal mappings or
   provisioning tables, the staging policy writer login, or a check that only lets it run on a local test database.
 - **chain:** the file only works on top of objects created earlier in this same chain (the goal-policy bindings and
   scope lock, or schemas built on them), and those require the staging integration registry.
 
-The launch design is different: money-moving work runs under the dedicated PiggyVest primary logins, each wallet
-holds one kind of money (the backing state), and a goal has a single exit claim (R3).
+The launch design differs: money moves under the dedicated PiggyVest primary logins, each wallet holds one kind of
+money (the backing state), and a goal has a single exit claim (R3).
 
 The backed-up chain would not even apply on top of main. Main's `20260912140000` is a different, consumer-derived
 replay backfill: it has no bindings or consents tables, but it already creates `terms`, `snapshots`,
@@ -55,8 +55,9 @@ would therefore fail because those tables and function signatures already exist.
 
 This record supersedes [piggyvest-local-draft-contract-2026-09-19.md](../piggyvest-local-draft-contract-2026-09-19.md)
 where it calls the unported purchase and cancel command functions, device change, draft closure and collection
-reconciliation "a separate deployment prerequisite". They are dropped or deferred as recorded here, none of them is a
-deployment prerequisite, and the reserve-principal purchase is never revived (R3).
+reconciliation "a separate deployment prerequisite". None is a prerequisite: purchase, draft closure and collection
+reconciliation are dropped, device change is deferred, the cancel snapshot and recovery read are re-ported under new
+names in `P7-goal-refund-request`, and the reserve-principal purchase is never revived (R3).
 
 ## Per-file verdicts
 
@@ -295,6 +296,5 @@ as well as `apps/web`.
 
 ## Out of scope
 
-The same backup ref holds 10 other migrations that are not on main by name: staging inbox and mapping files at other
-version numbers, savings engagement storage, interest accrual and interest policy files, and a UBA Redvault checkout
-pilot. They are not goal-lifecycle files and this record makes no decision about them.
+The backup ref holds 10 other migrations not on main by name (staging inbox and mapping files, savings engagement,
+interest accrual and policy, a UBA Redvault checkout pilot). They are not goal-lifecycle files; no decision is made here.

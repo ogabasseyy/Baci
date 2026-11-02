@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type React from 'react';
 import { useMerchantSafe } from '@/hooks/merchant/use-merchant';
+import { normalizeStorefrontCategorySlug } from '@/lib/normalize-storefront-category-slug';
 import { asRoute } from '@/lib/routes';
 import { Logo } from './logo';
 import {
@@ -45,7 +46,23 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
     pathname
   );
   const businessName = merchantContext?.merchant?.business_name || 'Ogabassey';
-  const categories = merchantContext?.navigationCategories ?? [];
+  const seenCategorySlugs = new Set<string>();
+  const normalizedCategories = (merchantContext?.navigationCategories ?? [])
+    .map((category) => {
+      const normalizedSlug = normalizeStorefrontCategorySlug(category.slug);
+      if (!normalizedSlug || seenCategorySlugs.has(normalizedSlug)) {
+        return null;
+      }
+      seenCategorySlugs.add(normalizedSlug);
+      return {
+        name: category.name,
+        slug: normalizedSlug,
+      };
+    })
+    .filter(
+      (category): category is { name: string; slug: string } =>
+        category !== null
+    );
 
   const buildHref = (path: string) => {
     if (path === '/') {
@@ -148,16 +165,18 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
         >
           {renderSection('Shop & Services', MOBILE_MENU_SHOP_ITEMS)}
 
-          {categories.length > 0 && (
+          {normalizedCategories.length > 0 && (
             <div className="mb-5 px-4">
               <h2 className="mb-2 px-1 font-bold text-store-background-text/60 text-xs uppercase tracking-widest">
                 Categories
               </h2>
               <ul className="flex flex-wrap gap-1.5 px-1">
-                {categories.map((category) => (
+                {normalizedCategories.map((category) => (
                   <li key={category.slug}>
                     <Link
-                      href={asRoute(buildHref(`/${category.slug}`))}
+                      href={asRoute(
+                        buildHref(`/${encodeURIComponent(category.slug)}`)
+                      )}
                       prefetch={false}
                       onClick={() => onClose('navigate')}
                       className="inline-flex items-center rounded-full bg-store-background-text/10 px-3 py-1.5 font-medium text-store-background-text/80 text-xs transition-colors hover:bg-store-primary/10 hover:text-store-primary"

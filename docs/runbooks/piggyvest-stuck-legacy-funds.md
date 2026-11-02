@@ -30,6 +30,8 @@ are in the
    The blocks that take a pasted id only answer for Ogabassey rows: no rows means the id is
    wrong, so stop and check it.
 5. Do not run any wallet function by hand outside these blocks.
+6. Before the first production step, run the fixture suite (see "Testing the SQL blocks") and
+   record its date and result in the ops log. CI does not run it yet.
 
 ## Part A: the ₦10,000 order
 
@@ -113,7 +115,9 @@ Expected: one row with `processing | checkout | airtime | 103.00`, vendor `kuda`
 `provider_fallback` empty, `split_wallet` 103, `split_card` 0, `debited` 103.00, `reversed` 0
 and `refunded` 0. Copy `vtu_id` into the ops log.
 
-- **The row is gone:** the checker settled it. Run B4 to see how, then go to "After both parts".
+- **The row is gone:** the checker settled it. If the ops log holds the `vtu_id` from an earlier
+  step, run B4 with it to see how, then go to "After both parts". V4 needs that id, so with no
+  recorded id there is nothing to confirm here: tell the owner.
 - **`debited` is 0:** nothing was taken from the wallet. Still ask the vendor; B3 then closes
   the purchase without moving money. V1 and V4 count completed ledger rows only. A debit
   row that is pending, failed, expired or has no status is a different case, and so is a

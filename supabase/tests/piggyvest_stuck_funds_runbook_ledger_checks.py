@@ -41,6 +41,7 @@ def order_status_checks(rb):
         rc, out, err = rb.sql(o2)
         check(rc == 0 and out.split('|')[3:5] == ['10000.00', '0'],
               f'O2 does not count a {status} reversal as returned: {out or err}')
+    # The funding intents are closed first, so only the wallet-money arm of O1 can list the order.
     rb.fresh()
     rb.cluster.must(rb.db, CLOSE_INTENTS + f"""UPDATE public.customer_wallet_transactions
       SET status = 'pending' WHERE source_id = '{ORDER}' AND source_type = 'order_redemption'""")

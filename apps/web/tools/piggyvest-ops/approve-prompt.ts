@@ -36,6 +36,9 @@ export function createHiddenPrompt(input: PromptInput, output: PromptOutput) {
       let typed = '';
       const finish = (error?: Error) => {
         input.removeListener('data', onData);
+        input.removeListener('end', onClosed);
+        input.removeListener('close', onClosed);
+        input.removeListener('error', onClosed);
         setRawMode.call(input, wasRaw);
         input.pause();
         output.write('\n');
@@ -53,20 +56,41 @@ export function createHiddenPrompt(input: PromptInput, output: PromptOutput) {
           else typed += character;
         }
       };
+      // The terminal went away (end, close or a read error) before Enter:
+      // stop and restore it instead of waiting forever.
+      const onClosed = () => {
+        typed = '';
+        finish(new Error('Input closed'));
+      };
       output.write(question);
       setRawMode.call(input, true);
       input.on('data', onData);
+      input.once('end', onClosed);
+      input.once('close', onClosed);
+      input.once('error', onClosed);
       input.resume();
     });
 }
 
-/** Asks for one visible line (used for retyping the amount). */
+/**
+ * Asks for one visible line (used for retyping the amount). Stops with
+ * "Input closed" if the input ends before a line is typed.
+ */
 export function createLinePrompt(input: Readable, output: Writable) {
   return async (question: string): Promise<string> => {
     const lines = createInterface({ input, output, terminal: false });
+    const closed = new AbortController();
+    const onClosed = () => closed.abort();
+    lines.once('close', onClosed);
+    input.once('error', onClosed);
     try {
-      return await lines.question(question);
+      return await lines.question(question, { signal: closed.signal });
+    } catch (error) {
+      if (closed.signal.aborted) throw new Error('Input closed');
+      throw error;
     } finally {
+      lines.removeListener('close', onClosed);
+      input.removeListener('error', onClosed);
       lines.close();
     }
   };

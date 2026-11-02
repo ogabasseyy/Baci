@@ -13,7 +13,8 @@
 --     any reject closes, and the same values cannot be asked again; a jsonb
 --     'approver' key is ignored; a later engine-role grant voids an approval;
 --     only a dedicated login can open a request; a caller's temporary
---     objects never run inside the functions.
+--     objects never run inside the functions; expiry is judged once the
+--     locks are held, even when a call waited for them.
 --
 -- The runtime part needs committed rows and logins, so it runs outside a
 -- transaction and removes everything it created at the end (and at the
@@ -45,6 +46,7 @@ CREATE EXTENSION IF NOT EXISTS dblink;
 \ir piggyvest_primary_ops_approvals_consume.inc.sql
 \ir piggyvest_primary_ops_approvals_binding.inc.sql
 \ir piggyvest_primary_ops_approvals_hardening.inc.sql
+\ir piggyvest_primary_ops_approvals_expiry_race.inc.sql
 \ir piggyvest_primary_ops_approvals_cleanup.inc.sql
 
 \if :pvops_had_dblink

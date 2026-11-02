@@ -70,9 +70,15 @@ async function decideOne(
   }
   for (const line of describeRequest(request)) deps.out(line);
   deps.out(`You are about to ${decision} this request.`);
-  const typed = await deps.promptLine(
-    `Retype the amount (${formatNaira(request.amountKobo)}) to confirm: `
-  );
+  let typed: string;
+  try {
+    typed = await deps.promptLine(
+      `Retype the amount (${formatNaira(request.amountKobo)}) to confirm: `
+    );
+  } catch {
+    deps.err('Cancelled. Nothing was recorded.');
+    return 1;
+  }
   if (parseNairaInput(typed) !== request.amountKobo) {
     deps.err('The amount you typed does not match. Nothing was recorded.');
     return 1;

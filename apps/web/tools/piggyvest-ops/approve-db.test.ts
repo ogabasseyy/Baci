@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { OpsApproveArgs } from '@/schemas/piggyvest/ops-approvals';
+import type { OpsApproveArgs } from '@/schemas/piggyvest/ops-approve-args';
 import {
   type ApproverConnectionConfig,
   buildConnectionConfig,

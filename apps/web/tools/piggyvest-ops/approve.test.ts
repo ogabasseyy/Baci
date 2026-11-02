@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { OpsOpenRequest } from '@/schemas/piggyvest/ops-approvals';
+import type { OpsOpenRequest } from '@/schemas/piggyvest/ops-open-request-row';
 import { type ApproveDeps, main } from './approve';
 import {
   type ApproverConnectionConfig,
@@ -112,6 +112,19 @@ describe('approve CLI', () => {
     expect(h.err.join('\n')).toContain(
       'The amount you typed does not match. Nothing was recorded.'
     );
+  });
+
+  it('stops cleanly when the terminal closes before the amount is retyped', async () => {
+    const h = harness();
+    h.promptLine.mockRejectedValueOnce(new Error('Input closed'));
+    const code = await main(
+      [...base, '--request', REQUEST_ID, '--commit'],
+      h.deps
+    );
+    expect(code).toBe(1);
+    expect(h.decide).not.toHaveBeenCalled();
+    expect(h.err.join('\n')).toContain('Cancelled. Nothing was recorded.');
+    expect(h.close).toHaveBeenCalled();
   });
 
   it('records the approval with the confirmed amount and digest on --commit', async () => {

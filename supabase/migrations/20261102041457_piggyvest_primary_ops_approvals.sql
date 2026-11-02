@@ -52,7 +52,9 @@ RETURNS boolean
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
 SET search_path = pg_catalog, pg_temp
 AS $$
-  SELECT CASE
+  -- COALESCE: a missing required key must answer false, never NULL, which a
+  -- CHECK constraint or an IF NOT ... would let through.
+  SELECT COALESCE(CASE
     WHEN p_destination IS NULL OR pg_catalog.jsonb_typeof(p_destination) <> 'object' THEN false
     WHEN p_destination ? 'label' AND NOT (
       pg_catalog.jsonb_typeof(p_destination -> 'label') = 'string'
@@ -73,7 +75,7 @@ AS $$
       AND pg_catalog.jsonb_typeof(p_destination -> 'ref') = 'string'
       AND (p_destination ->> 'ref') ~ '^[A-Za-z0-9._:-]{8,64}$'
     ELSE false
-  END
+  END, false)
 $$;
 
 -- Requester context: a small object. Only "reason" is read (shown to
@@ -83,12 +85,12 @@ RETURNS boolean
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
 SET search_path = pg_catalog, pg_temp
 AS $$
-  SELECT p_context IS NOT NULL
+  SELECT COALESCE(p_context IS NOT NULL
     AND pg_catalog.jsonb_typeof(p_context) = 'object'
     AND pg_catalog.octet_length(p_context::text) <= 4096
     AND (NOT p_context ? 'reason' OR (
       pg_catalog.jsonb_typeof(p_context -> 'reason') = 'string'
-      AND (p_context ->> 'reason') ~ '^[^[:cntrl:]]{1,200}$'))
+      AND (p_context ->> 'reason') ~ '^[^[:cntrl:]]{1,200}$')), false)
 $$;
 
 -- What an approval is bound to. jsonb text output is canonical, so equal

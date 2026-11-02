@@ -1,10 +1,13 @@
 import { Client } from 'pg';
+import type { OpsApproveArgs } from '@/schemas/piggyvest/ops-approve-args';
 import {
-  type OpsApproveArgs,
-  type OpsOpenRequest,
+  type OpsDecisionResult,
   opsDecisionResultSchema,
+} from '@/schemas/piggyvest/ops-decision-result';
+import {
+  type OpsOpenRequest,
   opsOpenRequestRowSchema,
-} from '@/schemas/piggyvest/ops-approvals';
+} from '@/schemas/piggyvest/ops-open-request-row';
 
 export interface ApproverConnectionConfig {
   host: string;
@@ -20,8 +23,6 @@ export interface ApproverConnectionConfig {
   query_timeout: number;
   statement_timeout: number;
 }
-
-type OpsDecisionResult = ReturnType<typeof opsDecisionResultSchema.parse>;
 
 export interface PgClientLike {
   connect: () => Promise<unknown>;

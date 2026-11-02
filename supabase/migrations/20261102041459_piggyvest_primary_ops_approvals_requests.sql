@@ -60,6 +60,8 @@ BEGIN
   WHERE r.action = p_action AND r.subject_table = p_subject_table
     AND r.subject_id = p_subject_id AND r.state = 'open'
   FOR UPDATE;
+  -- Judge expiry now that the locks are held: the call may have waited.
+  v_now := pg_catalog.clock_timestamp();
 
   -- A rejection is a veto on these exact values: they cannot be asked again.
   -- Only a real change (row version, amount or destination) gives a new
@@ -136,6 +138,8 @@ BEGIN
   ORDER BY (r.state = 'open') DESC, r.opened_at DESC, r.id DESC
   LIMIT 1
   FOR UPDATE;
+  -- Judge expiry now that the locks are held: the call may have waited.
+  v_now := pg_catalog.clock_timestamp();
 
   IF v_id IS NULL THEN
     RAISE EXCEPTION 'ops_approval_missing' USING ERRCODE = 'P0001';

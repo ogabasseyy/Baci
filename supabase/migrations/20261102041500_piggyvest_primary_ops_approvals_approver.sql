@@ -127,6 +127,8 @@ BEGIN
   FROM piggyvest_primary.ops_approval_requests q
   WHERE q.id = p_request_id
   FOR UPDATE;
+  -- Judge expiry now that the row lock is held: the call may have waited.
+  v_now := pg_catalog.clock_timestamp();
 
   IF v_state IS NULL THEN
     RAISE EXCEPTION 'ops_approval_missing' USING ERRCODE = 'P0001';

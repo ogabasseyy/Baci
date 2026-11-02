@@ -55,6 +55,23 @@ describe('createHiddenPrompt', () => {
     expect(input.isRaw).toBe(false);
   });
 
+  it.each([
+    ['ends', (input: FakeTty) => input.emit('end')],
+    ['closes', (input: FakeTty) => input.emit('close')],
+    ['fails', (input: FakeTty) => input.emit('error', new Error('EIO'))],
+  ])('stops instead of hanging when the input %s', async (_label, stop) => {
+    const input = new FakeTty();
+    const answer = createHiddenPrompt(input, output().stream)('Password: ');
+    input.type('secr');
+    stop(input);
+    await expect(answer).rejects.toThrow('Input closed');
+    expect(input.isRaw).toBe(false);
+    expect(input.pause).toHaveBeenCalled();
+    for (const event of ['data', 'end', 'close', 'error']) {
+      expect(input.listenerCount(event)).toBe(0);
+    }
+  });
+
   it('refuses when the input is not a terminal', async () => {
     const input = new FakeTty();
     input.isTTY = false;
@@ -72,5 +89,12 @@ describe('createLinePrompt', () => {
     const answer = createLinePrompt(input, out)('Amount: ');
     input.write('15,000.00\n');
     await expect(answer).resolves.toBe('15,000.00');
+  });
+
+  it('stops instead of hanging when the input ends before an answer', async () => {
+    const input = new PassThrough();
+    const answer = createLinePrompt(input, new PassThrough())('Amount: ');
+    input.end();
+    await expect(answer).rejects.toThrow('Input closed');
   });
 });

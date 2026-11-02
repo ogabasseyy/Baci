@@ -1,4 +1,4 @@
-import type { OpsOpenRequest } from '@/schemas/piggyvest/ops-approvals';
+import type { OpsOpenRequest } from '@/schemas/piggyvest/ops-open-request-row';
 
 const REQUIRED_APPROVALS = 2;
 

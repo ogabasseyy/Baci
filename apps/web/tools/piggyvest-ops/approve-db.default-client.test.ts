@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { OpsApproveArgs } from '@/schemas/piggyvest/ops-approvals';
+import type { OpsApproveArgs } from '@/schemas/piggyvest/ops-approve-args';
 
 const constructed = vi.hoisted(() => ({ configs: [] as unknown[] }));
 

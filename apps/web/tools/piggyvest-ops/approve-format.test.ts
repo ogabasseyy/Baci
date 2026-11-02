@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { OpsOpenRequest } from '@/schemas/piggyvest/ops-approvals';
+import type { OpsOpenRequest } from '@/schemas/piggyvest/ops-open-request-row';
 import {
   describeRequest,
   formatNaira,

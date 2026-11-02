@@ -63,8 +63,30 @@ FROM (VALUES
    'ops_approval_invalid_request', 'label with repeated spaces'),
   ('support_payout', 'pvops_test.subjects', 1, 5000,
    '{"kind":"wallet","ref":"pvw-collection-0001","label":"Collection wallet "}',
-   'ops_approval_invalid_request', 'label with trailing space')
+   'ops_approval_invalid_request', 'label with trailing space'),
+  ('support_payout', 'pvops_test.subjects', 1, 5000, '{"kind":"wallet"}',
+   'ops_approval_invalid_request', 'wallet without a ref'),
+  ('support_payout', 'pvops_test.subjects', 1, 5000, '{"kind":"bank_account","bank_code":"058"}',
+   'ops_approval_invalid_request', 'bank account without a ref'),
+  ('support_payout', 'pvops_test.subjects', 1, 5000, '{"kind":"bank_account","ref":"0123456789"}',
+   'ops_approval_invalid_request', 'bank account without a bank code')
 ) AS v(action, subject_table, version, amount, destination, expected, case_label);
+
+-- The validators answer true or false, never NULL, so a CHECK constraint
+-- cannot let an incomplete destination through either.
+DO $$
+BEGIN
+  IF piggyvest_primary.ops_destination_is_valid('{"kind":"wallet"}') IS DISTINCT FROM false
+     OR piggyvest_primary.ops_destination_is_valid('{"kind":"bank_account","bank_code":"058"}')
+        IS DISTINCT FROM false
+     OR piggyvest_primary.ops_destination_is_valid('{"kind":"bank_account","ref":"0123456789"}')
+        IS DISTINCT FROM false
+     OR piggyvest_primary.ops_destination_is_valid(NULL) IS DISTINCT FROM false
+     OR piggyvest_primary.ops_context_is_valid(NULL) IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'the destination and context validators must return false, never NULL';
+  END IF;
+END
+$$;
 
 -- 3. A rejection is a veto on those exact values: asking again with the same
 --    values is refused, and only a real change (here the row version) can be

@@ -1,7 +1,7 @@
 import {
   type OpsApproveArgs,
   opsApproveArgsSchema,
-} from '@/schemas/piggyvest/ops-approvals';
+} from '@/schemas/piggyvest/ops-approve-args';
 
 export type ParsedApproveArgs =
   | { ok: true; help: true }

@@ -1,196 +1,177 @@
-import { useEffect, useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import Ionicons from '@react-native-vector-icons/ionicons';
+import { useState } from 'react';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
-import { isPrimaryWalletReviewRequired } from '@/lib/piggyvest-primary-capability';
-import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
-import { useAuthStore } from '@/stores/auth-store';
+import type { usePiggyvestWalletSetup } from '@/hooks/use-piggyvest-wallet-setup';
 import { PiggyvestWalletSetupForm } from './PiggyvestWalletSetupForm';
+import { styles } from './piggyvest-wallet-setup.styles';
 import {
   WalletFundPhonePrompt,
   type WalletFundPhoneSubmitResult,
 } from './WalletFundPhonePrompt';
+import { WalletProviderAttribution } from './WalletProviderAttribution';
+import { WalletSetupProfileGate } from './WalletSetupProfileGate';
 
 interface Props {
   colors: (typeof Colors)['light'];
   merchantId: string;
+  insideBottomSheet?: boolean;
   needsPhone: boolean;
   onSubmitPhone: (phone: string) => Promise<WalletFundPhoneSubmitResult>;
-  onRefresh: () => void;
+  setup?: ReturnType<typeof usePiggyvestWalletSetup>;
   onClose: () => void;
 }
 
 export function PiggyvestWalletSetupPanel({
   colors,
   merchantId,
+  insideBottomSheet = false,
   needsPhone,
   onSubmitPhone,
-  onRefresh,
+  setup,
   onClose,
 }: Props) {
-  const [pending, setPending] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(false);
-  const [awaitingAccount, setAwaitingAccount] = useState(false);
-  const [reviewScope, setReviewScope] = useState<{
-    userId: string;
-    merchantId: string;
-  } | null>(null);
-  // Account binding: every input and flow state below belongs to whoever
-  // is signed in. The panel is merchant-keyed by its parent, so without
-  // this an account switch would leave A's retained BVN submittable under
-  // B's session. Remount inputs per account (key below), reset flow state
-  // on change, and ignore in-flight results from a previous account.
-  const authUserId = useAuthStore((state) => state.user?.id ?? null);
-  const reviewRequired =
-    reviewScope?.userId === authUserId && reviewScope.merchantId === merchantId;
-  const authUserIdRef = useRef(authUserId);
-  authUserIdRef.current = authUserId;
-  const previousAuthUserIdRef = useRef(authUserId);
-  useEffect(() => {
-    if (previousAuthUserIdRef.current === authUserId) return;
-    previousAuthUserIdRef.current = authUserId;
-    setPending(false);
-    setBusy(false);
-    setError(false);
-    setAwaitingAccount(false);
-    setReviewScope(null);
-  }, [authUserId]);
-
-  useEffect(() => {
-    if (!authUserId) return;
-    const requestUserId = authUserId;
-    let active = true;
-    void piggyvestPrimaryWalletApi
-      .read(merchantId, requestUserId)
-      .catch((error: unknown) => {
-        if (
-          active &&
-          authUserIdRef.current === requestUserId &&
-          isPrimaryWalletReviewRequired(error)
-        ) {
-          setReviewScope({ userId: requestUserId, merchantId });
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [authUserId, merchantId]);
-
-  async function refresh() {
-    if (busy) return;
-    const requestUserId = authUserIdRef.current;
-    setBusy(true);
-    setError(false);
-    setAwaitingAccount(false);
-    try {
-      const result = await piggyvestPrimaryWalletApi.read(
-        merchantId,
-        requestUserId ?? undefined
-      );
-      if (authUserIdRef.current !== requestUserId) return;
-      if (result.account) onRefresh();
-      else setAwaitingAccount(true);
-    } catch (error) {
-      if (authUserIdRef.current !== requestUserId) return;
-      if (requestUserId && isPrimaryWalletReviewRequired(error)) {
-        setReviewScope({ userId: requestUserId, merchantId });
-      } else {
-        setError(true);
-      }
-    } finally {
-      if (authUserIdRef.current === requestUserId) setBusy(false);
-    }
-  }
-
+  const [recoveryFormScope, setRecoveryFormScope] = useState<string | null>(
+    null
+  );
+  const showRecoveryForm = recoveryFormScope === setup?.scopeKey;
+  const processing = setup?.state === 'processing';
+  const checking = !setup || setup.state === 'checking';
+  const unavailable = setup?.state === 'unavailable';
   return (
-    <View style={{ padding: 24, gap: 20 }}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Close add money"
-        onPress={onClose}
-      >
-        <Text style={{ color: colors.text, textAlign: 'right' }}>Close</Text>
-      </Pressable>
-      {reviewRequired ? (
-        <Text accessibilityRole="alert" style={{ color: colors.text }}>
+    <View style={styles.sheet}>
+      <View style={styles.header}>
+        <View style={styles.headerCopy}>
+          <Text style={[styles.eyebrow, { color: colors.textSecondary }]}>
+            YOUR WALLET
+          </Text>
+          <Text
+            accessibilityRole="header"
+            style={[styles.title, { color: colors.text }]}
+          >
+            {processing ? 'Setting up your account' : 'Set up your wallet'}
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close add money"
+          onPress={onClose}
+          style={[styles.closeButton, { backgroundColor: colors.muted }]}
+        >
+          <Ionicons name="close" size={22} color={colors.text} />
+        </Pressable>
+      </View>
+      {needsPhone ? (
+        <WalletFundPhonePrompt
+          colors={colors}
+          insideBottomSheet={insideBottomSheet}
+          onSubmit={onSubmitPhone}
+        />
+      ) : checking ? (
+        <View
+          accessible
+          accessibilityRole="progressbar"
+          accessibilityLabel="Checking account availability"
+        >
+          <ActivityIndicator color={colors.primary} />
+          <Text style={[styles.body, { color: colors.textSecondary }]}>
+            Checking account availability…
+          </Text>
+        </View>
+      ) : setup?.reviewRequired ? (
+        <Text
+          accessibilityRole="alert"
+          style={[styles.body, { color: colors.textSecondary }]}
+        >
           Your PiggyVest wallet setup needs review. Please contact support
           before trying again.
         </Text>
-      ) : needsPhone ? (
-        <WalletFundPhonePrompt
-          key={authUserId ?? 'signed-out'}
-          colors={colors}
-          onSubmit={onSubmitPhone}
-        />
-      ) : pending ? (
-        <>
-          <Text style={{ color: colors.text }}>
-            We’re confirming your PiggyVest account. No deposit has been
-            confirmed yet.
+      ) : processing || unavailable ? (
+        <View style={styles.pending}>
+          <Text style={[styles.body, { color: colors.textSecondary }]}>
+            {processing
+              ? 'Account setup is processing. You can continue using the app.'
+              : 'Could not check your account. Please try again.'}
           </Text>
+          {setup?.delayed || setup?.hasCheckError ? (
+            <Text
+              accessibilityRole="alert"
+              style={[styles.body, { color: colors.textSecondary }]}
+            >
+              {setup?.hasCheckError
+                ? 'We could not check your account. Try again, or contact support if this continues.'
+                : 'We’re still checking your account. If setup does not finish, contact support so we can verify your wallet.'}
+            </Text>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Refresh PiggyVest account"
-            disabled={busy}
-            onPress={refresh}
+            disabled={setup?.isChecking}
+            onPress={setup?.refresh}
           >
             <Text style={{ color: colors.primary }}>
-              {busy ? 'Checking account…' : 'Refresh account'}
+              {setup?.isChecking ? 'Checking account…' : 'Check again'}
             </Text>
           </Pressable>
-          {error ? (
-            <Text accessibilityRole="alert" style={{ color: colors.error }}>
-              Could not check your account. Please try again later.
-            </Text>
+          {processing && setup?.recoverable ? (
+            showRecoveryForm ? (
+              <WalletSetupProfileGate
+                colors={colors}
+                merchantId={merchantId}
+                insideBottomSheet={insideBottomSheet}
+              >
+                <PiggyvestWalletSetupForm
+                  key={setup.scopeKey}
+                  colors={colors}
+                  merchantId={merchantId}
+                  insideBottomSheet={insideBottomSheet}
+                  onSubmit={setup.recover}
+                />
+              </WalletSetupProfileGate>
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Re-enter BVN to recover wallet setup"
+                onPress={() => setRecoveryFormScope(setup?.scopeKey ?? null)}
+              >
+                <Text style={{ color: colors.primary }}>Try setup again</Text>
+              </Pressable>
+            )
           ) : null}
-          {awaitingAccount ? (
-            <Text style={{ color: colors.textSecondary }}>
-              Your account is still being prepared. Check again shortly.
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Done"
+            onPress={onClose}
+            style={[styles.submit, { backgroundColor: colors.primary }]}
+          >
+            <Text
+              style={[styles.submitText, { color: colors.primaryForeground }]}
+            >
+              Done
             </Text>
-          ) : null}
-        </>
-      ) : (
-        <PiggyvestWalletSetupForm
-          key={authUserId ?? 'signed-out'}
+          </Pressable>
+        </View>
+      ) : setup?.state === 'not_started' ? (
+        <WalletSetupProfileGate
           colors={colors}
           merchantId={merchantId}
-          onSubmit={async (input) => {
-            // Flip pending only once creation succeeds without an
-            // account yet: flipping first would unmount the form and
-            // wipe its BVN on every failure (even a catch-side reset
-            // remounts fresh state). A rejection propagates so the
-            // still-mounted form keeps its input and shows its error
-            // for correction and resubmission.
-            const requestUserId = authUserIdRef.current;
-            // Bound before sending: the client authenticates with the
-            // token it read for this user (or throws), so a switch
-            // mid-flight cannot onboard the new account with the
-            // previous account's BVN.
-            let result: Awaited<
-              ReturnType<typeof piggyvestPrimaryWalletApi.create>
-            >;
-            try {
-              result = await piggyvestPrimaryWalletApi.create(
-                input,
-                requestUserId ?? undefined
-              );
-            } catch (error) {
-              if (authUserIdRef.current !== requestUserId) return;
-              if (requestUserId && isPrimaryWalletReviewRequired(error)) {
-                setReviewScope({ userId: requestUserId, merchantId });
-                return;
-              }
-              throw error;
-            }
-            // Switched mid-flight: the input belonged to the previous
-            // account, so never apply its outcome to the new one.
-            if (authUserIdRef.current !== requestUserId) return;
-            if (result.account) onRefresh();
-            else setPending(true);
-          }}
+          insideBottomSheet={insideBottomSheet}
+        >
+          <PiggyvestWalletSetupForm
+            key={setup.scopeKey}
+            colors={colors}
+            merchantId={merchantId}
+            insideBottomSheet={insideBottomSheet}
+            onSubmit={setup.submit}
+          />
+        </WalletSetupProfileGate>
+      ) : null}
+      <View style={[styles.footer, { borderColor: colors.border }]}>
+        <WalletProviderAttribution
+          provider="piggyvest"
+          color={colors.textSecondary}
         />
-      )}
-      <Text style={{ color: colors.textSecondary }}>Powered by PiggyVest</Text>
+      </View>
     </View>
   );
 }

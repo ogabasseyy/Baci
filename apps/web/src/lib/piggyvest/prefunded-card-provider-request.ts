@@ -3,11 +3,17 @@ import 'server-only';
 async function readBoundedJson(
   response: Response,
   maxResponseBytes: number,
-  deadline: Promise<never>
+  deadline: Promise<never>,
+  abortResponse: () => void
 ): Promise<unknown> {
   const declaredLength = Number(response.headers.get('content-length'));
   if (Number.isFinite(declaredLength) && declaredLength > maxResponseBytes) {
-    void response.body?.cancel().catch(() => undefined);
+    abortResponse();
+    try {
+      void response.body?.cancel().catch(() => undefined);
+    } catch {
+      // A failed best-effort body cancellation must not mask the size error.
+    }
     throw new Error('PROVIDER_RESPONSE_TOO_LARGE');
   }
   if (!response.body) throw new Error('PROVIDER_INVALID_RESPONSE');
@@ -28,9 +34,18 @@ async function readBoundedJson(
       chunks.push(result.value);
     }
   } finally {
-    // Never wait on cancellation: a body that ignores it would otherwise
-    // hold this call past its deadline. The caller aborts the request.
-    if (!complete) void reader.cancel().catch(() => undefined);
+    if (!complete) {
+      abortResponse();
+      try {
+        // Cancellation may itself hang (for example, when a stream's
+        // underlying cancel algorithm never settles). Start cleanup and
+        // observe rejection, but keep the request deadline authoritative.
+        void reader.cancel().catch(() => undefined);
+      } catch {
+        // Cleanup is best-effort; preserve the read/timeout failure.
+      }
+    }
+
     reader.releaseLock();
   }
   const bytes = new Uint8Array(length);
@@ -103,14 +118,17 @@ export async function requestPrefundedCardProviderJson({
         httpError.responseBody = await readBoundedJson(
           response,
           maxResponseBytes,
-          deadline
+          deadline,
+          () => controller.abort()
         );
       } catch {
         httpError.responseBody = undefined;
       }
       throw httpError;
     }
-    return await readBoundedJson(response, maxResponseBytes, deadline);
+    return await readBoundedJson(response, maxResponseBytes, deadline, () =>
+      controller.abort()
+    );
   } catch (error) {
     // Abort fence: a request that fails here (byte cap, deadline, HTTP
     // error, transport) never keeps streaming in the background.

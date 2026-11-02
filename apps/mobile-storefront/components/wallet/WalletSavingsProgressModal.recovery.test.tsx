@@ -15,6 +15,7 @@ describe('completed unresolved savings device recovery', () => {
       <WalletSavingsProgressModal
         addAmount=""
         colors={Colors.light}
+        progressAvailable
         goal={{
           id: 'completed-unresolved',
           title: 'Unavailable device',

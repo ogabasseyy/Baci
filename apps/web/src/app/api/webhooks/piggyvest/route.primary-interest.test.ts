@@ -141,6 +141,22 @@ it.each([
   expect(mocks.dispatch).toHaveBeenCalledTimes(1);
   expect(mocks.legacyFrom).not.toHaveBeenCalled();
 });
+it('keeps captured interest retryable when both primary handlers are disabled', async () => {
+  mocks.intake.mockResolvedValue('disabled');
+  mocks.dispatch.mockResolvedValue('disabled');
+
+  const response = await POST(request());
+
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    received: true,
+    captured: true,
+    processing: 'deferred',
+  });
+  expect(mocks.dispatch).toHaveBeenCalledTimes(1);
+  expect(mocks.processPiggyvestEvent).not.toHaveBeenCalled();
+  expect(mocks.legacyFrom).not.toHaveBeenCalled();
+});
 it('does not dispatch forged interest', async () => {
   expect((await POST(request(false))).status).toBe(401);
   expect(mocks.dispatch).not.toHaveBeenCalled();

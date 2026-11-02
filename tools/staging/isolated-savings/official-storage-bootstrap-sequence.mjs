@@ -17,6 +17,9 @@ export async function storageBootstrapSequence(actions) {
       failure = true;
     }
   }
-  if (failure) throw new Error('Bootstrap failed; verify initializer lockdown through the admin channel');
+  if (failure)
+    throw new Error(
+      'Bootstrap failed; verify initializer lockdown through the admin channel'
+    );
   await actions.verify();
 }

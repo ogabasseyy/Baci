@@ -137,6 +137,9 @@ describe('primary wallet onboarding interest routing API', () => {
     expect(response.status).toBe(409);
     const body = await response.json();
     expect(body.code).toBe('INTEREST_ROUTING_REVIEW_REQUIRED');
+    expect(body.error).toBe(
+      'Your wallet interest routing needs review. Please contact support.'
+    );
     expect(JSON.stringify(body)).not.toContain(payoutWalletId);
   });
 

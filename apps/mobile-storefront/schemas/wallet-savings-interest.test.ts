@@ -29,6 +29,17 @@ it('accepts bounded aggregate and per-goal paid-interest amounts', () => {
   ).toBe(733);
 });
 
+it('accepts history without inventing an earnings value when earnings are unavailable', () => {
+  expect(
+    WalletSavingsInterestResponseSchema.parse({
+      earnings_available: false,
+      credited_interest_kobo: null,
+      goal_interest_kobo: [],
+      interest_history: [],
+    })
+  ).toMatchObject({ earnings_available: false, interest_history: [] });
+});
+
 it.each([
   { credited_interest_kobo: -1, goal_interest_kobo: [] },
   { credited_interest_kobo: 1.5, goal_interest_kobo: [] },
@@ -42,6 +53,11 @@ it.each([
       { goal_id: goalId, credited_interest_kobo: 400 },
       { goal_id: goalId, credited_interest_kobo: 333 },
     ],
+  },
+  {
+    earnings_available: false,
+    credited_interest_kobo: null,
+    goal_interest_kobo: [],
   },
   {
     credited_interest_kobo: 733,

@@ -146,7 +146,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json(
         {
           error:
-            'Your wallet identity needs verification. Please contact support; no duplicate wallet will be created.',
+            outcome.code === 'INTEREST_ROUTING_REVIEW_REQUIRED'
+              ? 'Your wallet interest routing needs review. Please contact support.'
+              : 'Your wallet identity needs verification. Please contact support; no duplicate wallet will be created.',
           code: outcome.code ?? 'OWNERSHIP_REVIEW_REQUIRED',
         },
         { status: 409 }

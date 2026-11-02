@@ -26,6 +26,8 @@ export const primaryRestrictedReadinessRequirements = {
       group: 'piggyvest_primary_provisioner',
       functions: [
         'piggyvest_primary.claim_onboarding(jsonb,text)',
+        'piggyvest_primary.has_onboarding(jsonb)',
+        'piggyvest_primary.can_recover_onboarding(jsonb)',
         'piggyvest_primary.record_onboarding(jsonb,uuid,uuid,text,text)',
         'piggyvest_primary.record_onboarding_rejection(jsonb,uuid,uuid)',
         'piggyvest_primary.read_onboarding(jsonb)',

@@ -1,0 +1,5 @@
+supabase/migrations/tests/piggyvest_onboarding_presence_privileges.sql
+supabase/migrations/tests/piggyvest_security_definer_privileges.sql
+supabase/tests/piggyvest_onboarding_presence.sql
+supabase/tests/piggyvest_preonboarding_savings_recovery.sql
+supabase/tests/storefront_wallet_phone_update.sql

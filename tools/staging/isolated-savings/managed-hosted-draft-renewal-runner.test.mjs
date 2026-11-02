@@ -15,7 +15,18 @@ test('renews the exact hosted-draft route identity for seven days', async () => 
     now: () => 1_800_000_000_000,
     monotonic: () => 0,
     modules: async () => ({ validateRoutingIdentityShape: () => {} }),
-    state: async () => ({ ActiveState: started ? 'active' : 'inactive', MainPID: started ? '123' : '0', LoadState: 'loaded', Restart: 'no', NRestarts: '0', FragmentPath: '/etc/systemd/system/baci-savings-gateway.service', DropInPaths: '', NeedDaemonReload: 'no', UnitFileState: 'static', InvocationID: started ? 'a'.repeat(32) : '' }),
+    state: async () => ({
+      ActiveState: started ? 'active' : 'inactive',
+      MainPID: started ? '123' : '0',
+      LoadState: 'loaded',
+      Restart: 'no',
+      NRestarts: '0',
+      FragmentPath: '/etc/systemd/system/baci-savings-gateway.service',
+      DropInPaths: '',
+      NeedDaemonReload: 'no',
+      UnitFileState: 'static',
+      InvocationID: started ? 'a'.repeat(32) : '',
+    }),
     absent: async (path) => !path.endsWith('ingress.sock') || !started,
     noProcesses: async () => {},
     run: async (command, args) => {
@@ -29,18 +40,25 @@ test('renews the exact hosted-draft route identity for seven days', async () => 
       if (path === '/auth/v1/admin/users') return 403;
       return 200;
     },
-    create: async (name, value, group, owned) => owned.push({ name, value, group }),
-    remove: async () => {}, socket: async () => {}, noNewPrivs: async () => 0,
-    report: () => {}, pause: async () => {},
+    create: async (name, value, group, owned) =>
+      owned.push({ name, value, group }),
+    remove: async () => {},
+    socket: async () => {},
+    noNewPrivs: async () => 0,
+    report: () => {},
+    pause: async () => {},
   };
   actions.modules = async () => ({
     validateRoutingIdentityShape: () => {},
     validateRoutingIdentity: () => {},
-    validateManagedStartup: (binding) => assert.equal(
-      Date.parse(binding.leaseExpiresAt) - Date.parse(binding.leaseNotBefore),
-      604800000
-    ),
-    managedInventory: async () => ({ observedAt: new Date(actions.now()).toISOString() }),
+    validateManagedStartup: (binding) =>
+      assert.equal(
+        Date.parse(binding.leaseExpiresAt) - Date.parse(binding.leaseNotBefore),
+        604800000
+      ),
+    managedInventory: async () => ({
+      observedAt: new Date(actions.now()).toISOString(),
+    }),
   });
   await runHostedDraftRenewal({ identity, uid: 100, gid: 101 }, actions);
 });

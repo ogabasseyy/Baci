@@ -85,6 +85,7 @@ export function LoginEmailStep({
             color={emailError ? colors.error : colors.textSecondary}
           />
           <TextInput
+            accessibilityLabel="Email address"
             style={[styles.input, { color: colors.text }]}
             placeholder="john@example.com"
             placeholderTextColor={colors.placeholder}

@@ -43,6 +43,7 @@ it('displays the confirmed PiggyVest account rather than the legacy account', as
     account: primaryAccount,
     requiresConsent: false,
     provisioningStatus: 'ready',
+    recoverable: false,
   });
   const primary = await readPrimaryFundingAccount(merchantId, userId);
   expect(resolveWalletFundingAccount(legacy, primary)).toEqual({
@@ -110,6 +111,7 @@ it('resolves a server-enabled merchant on first load via one probe', async () =>
     account: primaryAccount,
     requiresConsent: false,
     provisioningStatus: 'ready',
+    recoverable: false,
   });
   const primary = await readPrimaryFundingAccount(
     '00000000-0000-4000-8000-000000000000',
@@ -151,6 +153,7 @@ it('never shows the previous users account after an account switch', async () =>
     account: primaryAccount,
     requiresConsent: false,
     provisioningStatus: 'ready',
+    recoverable: false,
   });
   mockUserId = 'user-a';
   const first = await readPrimaryFundingAccount(merchant, 'user-a');
@@ -161,6 +164,7 @@ it('never shows the previous users account after an account switch', async () =>
     account: accountB,
     requiresConsent: false,
     provisioningStatus: 'ready',
+    recoverable: false,
   });
   mockUserId = 'user-b';
   const second = await readPrimaryFundingAccount(merchant, 'user-b');
@@ -190,6 +194,7 @@ it('rejects a direct-read snapshot that lands after a mid-flight switch', async 
       account: primaryAccount,
       requiresConsent: false,
       provisioningStatus: 'ready',
+      recoverable: false,
     };
   });
   await expect(readPrimaryFundingAccount(merchantId, userId)).resolves.toEqual({
@@ -205,6 +210,7 @@ it('rejects a probe snapshot that lands after a mid-flight switch', async () => 
       account: primaryAccount,
       requiresConsent: false,
       provisioningStatus: 'ready',
+      recoverable: false,
     };
   });
   await expect(readPrimaryFundingAccount(merchant, userId)).resolves.toEqual({

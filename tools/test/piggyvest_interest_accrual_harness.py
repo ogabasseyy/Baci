@@ -58,7 +58,7 @@ class ScratchInterestAccrual(unittest.TestCase):
             cls.sql_file(migration)
         cls.sql_file(ROOT / 'supabase/migrations/20260912080200_piggyvest_staging_wallet_goal_mappings.sql')
         cls.sql_file(ROOT / 'supabase/migrations/tests/piggyvest_interest_accrual_fixture.sql')
-        for name in ['20260925130000_customer_savings_engagement_storage.sql',
+        for name in ['20260925130050_customer_savings_engagement_storage.sql',
                      '20260925130100_customer_savings_engagement_events.sql']:
             cls.sql_file(ROOT / 'supabase/migrations' / name)
         writer = ROOT / 'supabase/migrations/20260930120000_piggyvest_interest_accrual_observations.sql'

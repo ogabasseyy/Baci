@@ -42,7 +42,7 @@ describe('LoginEmailStep', () => {
     );
 
     fireEvent.changeText(
-      screen.getByPlaceholderText('john@example.com'),
+      screen.getByLabelText('Email address'),
       'shopper@example.com'
     );
     fireEvent.press(screen.getByText('Continue with Code'));

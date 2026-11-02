@@ -20,7 +20,10 @@ describe('worker env reminder', () => {
       { encoding: 'utf8' }
     );
 
-    assert.match(output, /Reminder: create \/home\/bassey\/baci-workers\/\.env/);
+    assert.match(
+      output,
+      /Reminder: create \/home\/bassey\/baci-workers\/\.env/
+    );
     assert.match(output, /GIGL_TRACKING_WORKER_TOKEN=\.\.\./);
     assert.match(output, /silently skips that platform/);
   });

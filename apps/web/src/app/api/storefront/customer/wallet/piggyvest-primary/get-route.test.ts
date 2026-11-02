@@ -43,6 +43,8 @@ vi.mock('@/lib/piggyvest/primary-wallet-executor', () => ({
       providerWalletId: 'wallet-fixture',
     };
     const pending = mocks.state.value === 'routing_pending';
+    if (statement === PRIMARY_WALLET_STATEMENTS.recoverable)
+      return { rows: [{ result: false }] };
     if (statement === PRIMARY_WALLET_STATEMENTS.readRouting)
       return {
         rows: [
@@ -122,7 +124,11 @@ describe('primary wallet GET with a routing-pending wallet (real recovery and sn
     mocks.wallet.mockResolvedValue(wallet(null));
     const response = await GET(new NextRequest(url));
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ status: 'pending', account: null });
+    expect(await response.json()).toEqual({
+      status: 'pending',
+      account: null,
+      recoverable: false,
+    });
     expect(mocks.accounts).not.toHaveBeenCalled();
     expect(mocks.statements).not.toContain(
       PRIMARY_WALLET_STATEMENTS.resolveRouting

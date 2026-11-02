@@ -1,0 +1,1 @@
+export const WALLET_HISTORY_PAGE_SIZE = 20;

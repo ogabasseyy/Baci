@@ -13,12 +13,29 @@ test('draft, missing review and wrong inventory pin cannot start compilation or 
   context.after(() => rm(directory, { recursive: true, force: true }));
   const outputDirectory = path.join(directory, 'not-created');
   const frozen = await readFile(authority.frozenInventory);
-  for (const overrides of [{ status: 'draft' }, { baselineProvenance: 'changed after review' }]) {
-    const inventoryBytes = Buffer.from(JSON.stringify({ ...JSON.parse(frozen), ...overrides }));
-    await assert.rejects(buildReplayNativeUpgrade({ inventoryBytes,
-      reviewedInventorySha256: digest(inventoryBytes), outputDirectory }), /inventory/);
+  for (const overrides of [
+    { status: 'draft' },
+    { baselineProvenance: 'changed after review' },
+  ]) {
+    const inventoryBytes = Buffer.from(
+      JSON.stringify({ ...JSON.parse(frozen), ...overrides })
+    );
+    await assert.rejects(
+      buildReplayNativeUpgrade({
+        inventoryBytes,
+        reviewedInventorySha256: digest(inventoryBytes),
+        outputDirectory,
+      }),
+      /inventory/
+    );
   }
-  await assert.rejects(buildReplayNativeUpgrade({ inventoryBytes: frozen,
-    reviewedInventorySha256: '0'.repeat(64), outputDirectory }), /inventory/);
+  await assert.rejects(
+    buildReplayNativeUpgrade({
+      inventoryBytes: frozen,
+      reviewedInventorySha256: '0'.repeat(64),
+      outputDirectory,
+    }),
+    /inventory/
+  );
   await assert.rejects(stat(outputDirectory), { code: 'ENOENT' });
 });

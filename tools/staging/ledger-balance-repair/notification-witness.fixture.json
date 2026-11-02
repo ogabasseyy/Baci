@@ -1,10 +1,7 @@
 {
   "excludedTargetCount": 7,
   "excludedTargetHash": "0b9bbba3cc9dff53a3bd3e742a97c5713f07b342061f1b558410baa666a0891f",
-  "redactedColumns": [
-    "title",
-    "body"
-  ],
+  "redactedColumns": ["title", "body"],
   "targetCount": 1,
   "targetHash": "2968b91904ac3be2279dbaf93f6a2a2459711cb82f76cf5027c9c3ab02eb6995",
   "targetRowColumnHashes": [

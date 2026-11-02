@@ -116,6 +116,8 @@ describe('primary wallet restricted executor', () => {
   it.each([
     ['routingPending', 6],
     ['readRouting', 1],
+    ['presence', 1],
+    ['recoverable', 1],
     ['resolveRouting', 4],
     ['review', 6],
     ['ownershipHold', 3],

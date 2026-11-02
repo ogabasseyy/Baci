@@ -27,6 +27,23 @@ describe('primary wallet mobile schemas', () => {
     expect(
       schemas.snapshot.safeParse({ status: 'pending', account: null }).success
     ).toBe(true);
+    expect(
+      schemas.snapshot.safeParse({
+        status: 'pending',
+        account: null,
+        recoverable: true,
+      }).success
+    ).toBe(true);
+  });
+  it('defaults pending wallet recovery to false when the server omits it', () => {
+    const snapshot = schemas.snapshot.parse({
+      status: 'pending',
+      account: null,
+    });
+    if (snapshot.status !== 'pending') {
+      throw new Error('Expected a pending wallet snapshot.');
+    }
+    expect(snapshot.recoverable).toBe(false);
   });
   it('rejects provider identifiers injected into setup requests', () => {
     expect(

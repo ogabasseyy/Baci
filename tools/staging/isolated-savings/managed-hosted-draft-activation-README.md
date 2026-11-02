@@ -45,7 +45,7 @@ command from that directory after verifying its checksum list:
   /root/baci-hosted-draft-activation/managed-hosted-draft-identity.json \
   684c10750d7abc80eaec7e78453d4490ba88fed4d06eaed24afdabb4c3d58b0f \
   /root/baci-hosted-draft-activation/managed-install-manifest.json \
-  9d2cbe1cbff31644c7de503ab92f195cebcd44fb6661c91a343e38ce788d2ccc
+  33f7b17a4c91679b7c2306723ece9c9969581a3a837cb794afcfb08a9524af1e
 ```
 
 Do not use this package before parent review. This is not application enablement

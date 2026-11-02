@@ -63,4 +63,34 @@ describe('SettingsNotificationSection', () => {
     );
     expect(screen.queryByLabelText('Toggle push notifications')).toBeNull();
   });
+
+  it('shows an accessible inline registration error without hiding the toggle', () => {
+    render(
+      <SettingsNotificationSection
+        colors={Colors.dark}
+        error="Allow notifications in Settings, then try again."
+        isLoading={false}
+        isRegistered={false}
+        onToggle={jest.fn()}
+      />
+    );
+
+    expect(
+      screen.getByRole('alert', {
+        name: 'Allow notifications in Settings, then try again.',
+      })
+    ).toHaveTextContent('Allow notifications in Settings, then try again.');
+    expect(screen.getByRole('alert')).toHaveProp(
+      'accessibilityLabel',
+      'Allow notifications in Settings, then try again.'
+    );
+    expect(screen.getByRole('alert')).toHaveStyle({
+      color: Colors.dark.error,
+      paddingHorizontal: 16,
+    });
+    expect(screen.getByLabelText('Toggle push notifications')).toHaveProp(
+      'value',
+      false
+    );
+  });
 });

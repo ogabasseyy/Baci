@@ -4,6 +4,7 @@ import { GET } from './route';
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
+  recoverable: vi.fn(),
   runtime: vi.fn(),
   onboardingRuntime: vi.fn(),
   identity: vi.fn(),
@@ -14,6 +15,12 @@ const mocks = vi.hoisted(() => ({
   wallet: vi.fn(),
   provider: vi.fn(),
   order: [] as string[],
+}));
+vi.mock('@/lib/piggyvest/primary-wallet-presence', () => ({
+  hasPrimaryWalletOnboarding: vi.fn().mockResolvedValue(true),
+}));
+vi.mock('@/lib/piggyvest/primary-wallet-recovery-availability', () => ({
+  canRecoverPrimaryWalletOnboarding: mocks.recoverable,
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/piggyvest/primary-wallet-runtime', () => ({
@@ -60,6 +67,7 @@ const url = `https://example.com/api/storefront/customer/wallet/piggyvest-primar
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.order.length = 0;
+  mocks.recoverable.mockResolvedValue(false);
   mocks.executor.mockReturnValue(mocks.execute);
   mocks.auth.mockResolvedValue({
     user: { id: userId },
@@ -114,8 +122,7 @@ describe('primary wallet GET: routing-pending recovery', () => {
         })
     );
     const pending = GET(new NextRequest(url));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(mocks.recover).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(mocks.recover).toHaveBeenCalledOnce());
     expect(mocks.snapshot).toHaveBeenCalledOnce();
     finish('promoted');
     expect((await pending).status).toBe(200);
@@ -238,5 +245,31 @@ describe('primary wallet GET: routing-pending recovery', () => {
     expect(response.status).toBe(503);
     expect(mocks.recover).not.toHaveBeenCalled();
     expect(JSON.stringify(await response.json())).not.toContain('reason');
+  });
+  it('offers explicit retry only from the scoped recovery read and never creates on GET', async () => {
+    mocks.recover.mockResolvedValue('none');
+    mocks.recoverable.mockResolvedValue(true);
+    const response = await GET(new NextRequest(url));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      status: 'pending',
+      account: null,
+      recoverable: true,
+    });
+    expect(mocks.recoverable).toHaveBeenCalledWith(
+      expect.objectContaining({ customerId, userId, merchantId }),
+      mocks.execute
+    );
+    expect(mocks.provider).not.toHaveBeenCalled();
+  });
+  it('fails closed if retry eligibility cannot be confirmed', async () => {
+    mocks.recover.mockResolvedValue('none');
+    mocks.recoverable.mockRejectedValue(new Error('private database detail'));
+    const response = await GET(new NextRequest(url));
+    expect(response.status).toBe(503);
+    expect(JSON.stringify(await response.json())).not.toContain(
+      'private database detail'
+    );
+    expect(mocks.provider).not.toHaveBeenCalled();
   });
 });

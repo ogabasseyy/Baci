@@ -7,20 +7,35 @@ import {
   rmSync,
   statfsSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { delimiter, join } from 'node:path';
 import { bindSql } from './bind-sql.mjs';
 import { CONTRACT_E2E } from './constants.mjs';
 
-export function createDisposablePostgres() {
-  const available = statfsSync('/private/tmp');
+export function createDisposablePostgresDirectory() {
+  const temporaryRoot = realpathSync(tmpdir());
+  const available = statfsSync(temporaryRoot);
   if (available.bavail * available.bsize < 128 * 1024 * 1024)
     throw new Error('Disposable PostgreSQL requires 128 MiB free');
   const directory = realpathSync(
-    mkdtempSync('/private/tmp/baci-contract-e2e-')
+    mkdtempSync(join(temporaryRoot, 'baci-contract-e2e-'))
   );
+  if (
+    Buffer.byteLength(join(directory, `.s.PGSQL.${CONTRACT_E2E.port}`)) >= 104
+  ) {
+    rmSync(directory, { recursive: true, force: true });
+    throw new Error(
+      'Disposable PostgreSQL temporary path is too long for a socket'
+    );
+  }
+  return directory;
+}
+
+export function createDisposablePostgres() {
+  const directory = createDisposablePostgresDirectory();
   const data = join(directory, 'data');
   const environment = {
-    PATH: '/opt/homebrew/bin:/usr/bin:/bin',
+    PATH: [CONTRACT_E2E.postgresBin, '/usr/bin', '/bin'].join(delimiter),
     LANG: 'en_US.UTF-8',
     TZ: 'UTC',
     HOME: directory,

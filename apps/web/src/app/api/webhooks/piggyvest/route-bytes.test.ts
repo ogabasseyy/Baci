@@ -61,27 +61,32 @@ describe('webhook raw request regression', () => {
         headers: { 'x-pvb-signature': signature },
       }
     );
-    const upsert = vi.fn(() => ({
-      select: vi.fn(async () => ({
-        data: [{ body_digest: 'synthetic-digest' }],
-        error: null,
-      })),
-    }));
-    const from = vi.fn(() => ({ upsert }));
-    mocks.createServiceClient.mockReturnValue({ from });
-
     const response = await POST(request);
 
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
+    // Capture happens before parsing. A failed quarantine write leaves the
+    // captured delivery retryable for the provider.
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
       received: true,
-      quarantined: true,
+      captured: true,
+      processing: 'retry',
+      code: 'PIGGYVEST_PROCESSING_RETRY',
     });
-    expect(from).toHaveBeenCalledWith('piggyvest_event_quarantine');
-    expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ reason: 'unparseable', detail: null }),
-      { onConflict: 'body_digest', ignoreDuplicates: true }
+    expect(mocks.createServiceClient).toHaveBeenCalledOnce();
+
+    // Replacing the invalid byte before verification changes the HMAC.
+    const replaced = await POST(
+      new NextRequest('https://staging.example.com/api/webhooks/piggyvest', {
+        method: 'POST',
+        body: '\ufffd',
+        headers: { 'x-pvb-signature': signature },
+      })
     );
+    expect(replaced.status).toBe(401);
+    expect(await replaced.json()).toMatchObject({
+      received: false,
+      code: 'PIGGYVEST_INVALID_SIGNATURE',
+    });
   });
 
   it('does not create a database client when the request stream fails', async () => {

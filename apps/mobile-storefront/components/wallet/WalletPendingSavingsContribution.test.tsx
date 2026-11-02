@@ -31,4 +31,19 @@ describe('WalletPendingSavingsContribution', () => {
       screen.getByRole('button', { name: 'Check contribution status' })
     ).toHaveAccessibilityState({ disabled: true });
   });
+
+  it('explains reserved funds without claiming a pending transfer is credited', () => {
+    render(
+      <WalletPendingSavingsContribution
+        colors={Colors.dark}
+        isChecking={false}
+        onCheck={jest.fn()}
+      />
+    );
+    expect(
+      screen.getByText(/reserved while PiggyVest processes/)
+    ).toBeOnTheScreen();
+    expect(screen.getByText(/only after confirmation/)).toBeOnTheScreen();
+    expect(screen.queryByText(/confirmed your contribution/)).toBeNull();
+  });
 });

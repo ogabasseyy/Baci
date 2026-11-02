@@ -14,6 +14,32 @@ const root = path.resolve(__dirname, '../../../..');
 const execFileAsync = promisify(execFile);
 
 describe('bugfix: PR 3620 pending migration registry', () => {
+  it('registers the raw interest capture migration as pending without authorizing production replay', async () => {
+    const repositoryPath =
+      'supabase/migrations/20261025181703_piggyvest_primary_interest_inbox_capture.sql';
+    const bytes = await readFile(path.join(root, repositoryPath));
+    const expected = {
+      repositoryPath,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+    };
+
+    expect(
+      supabaseHistoryReplayManifest.pendingSources.filter(
+        (source) => source.repositoryPath === repositoryPath
+      )
+    ).toEqual([expected]);
+    expect(
+      supabaseHistoryReplayManifest.productionMappings.some(
+        (source) => source.repositoryPath === repositoryPath
+      )
+    ).toBe(false);
+    expect(
+      supabaseHistoryReplayManifest.postReplaySources.some(
+        (source) => source.repositoryPath === repositoryPath
+      )
+    ).toBe(false);
+  });
+
   it('registers all 96 primary additions only as pending sources', async () => {
     const manifest = supabaseHistoryReplayManifest;
     expect(EXPECTED_PRIMARY_PENDING_SOURCES).toHaveLength(96);

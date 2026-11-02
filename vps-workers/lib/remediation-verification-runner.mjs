@@ -38,8 +38,7 @@ export function runRemediationVerification({
         { cwd: worktreeDir, env: childEnv, shell: false }
       );
     }
-    for (const relativePath of verificationCommand.dependencyCopyPaths ||
-      []) {
+    for (const relativePath of verificationCommand.dependencyCopyPaths || []) {
       try {
         runChecked('rm', ['-rf', '--', join(worktreeDir, relativePath)], {
           cwd: worktreeDir,

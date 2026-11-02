@@ -3,12 +3,15 @@ import { afterAll, beforeAll, expect, it } from 'vitest';
 import { loadStoreLaunchReadiness } from '../../src/lib/store-readiness/load-store-launch-readiness';
 import { getStorePublicationMissingItems } from '../../src/lib/store-readiness/store-publication-missing-items';
 import { publicationRlsClient } from './publication-rls-client';
-import { publicationFixture } from './publication-test-support';
+import {
+  PUBLICATION_FIXTURE_SETUP_TIMEOUT_MS,
+  publicationFixture,
+} from './publication-test-support';
 
 let f: Awaited<ReturnType<typeof publicationFixture>>;
 beforeAll(async () => {
   f = await publicationFixture();
-}, 30000);
+}, PUBLICATION_FIXTURE_SETUP_TIMEOUT_MS);
 afterAll(async () => {
   await f?.close();
 });

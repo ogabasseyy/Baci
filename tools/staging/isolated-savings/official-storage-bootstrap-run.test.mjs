@@ -4,11 +4,17 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-const script = fileURLToPath(new URL('./official-storage-bootstrap-run.mjs', import.meta.url));
+const script = fileURLToPath(
+  new URL('./official-storage-bootstrap-run.mjs', import.meta.url)
+);
 
 test('runner cannot execute without explicit reviewed mode and evidence', () => {
   for (const args of [[], ['--execute-reviewed-private']]) {
-    const result = spawnSync(process.execPath, [script, ...args], { input: '{}', encoding: 'utf8', env: {} });
+    const result = spawnSync(process.execPath, [script, ...args], {
+      input: '{}',
+      encoding: 'utf8',
+      env: {},
+    });
     assert.equal(result.status, 1);
     assert.equal(result.stdout, '');
   }

@@ -44,6 +44,25 @@ describe('primary PiggyVest wallet API client', () => {
       account: null,
       requiresConsent: true,
       provisioningStatus: 'pending',
+      recoverable: false,
+    });
+  });
+  it('preserves only the server-confirmed recoverability signal on pending snapshots', async () => {
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        status: 'pending',
+        account: null,
+        recoverable: true,
+      }),
+    });
+
+    await expect(piggyvestPrimaryWalletApi.read(merchantId)).resolves.toEqual({
+      account: null,
+      requiresConsent: true,
+      provisioningStatus: 'pending',
+      recoverable: true,
     });
   });
   it('requires consent and valid BVN before any request', async () => {

@@ -2,7 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import Colors from '@/constants/Colors';
-import { WalletSavingsProgressModal } from './WalletSavingsProgressModal';
+import { ConfirmedWalletSavingsProgressModal as WalletSavingsProgressModal } from './WalletSavingsProgressModal.test-utils';
 
 jest.mock('expo-image', () => {
   const { View } = jest.requireActual(

@@ -11,18 +11,16 @@ describe('resolveRemediationContainerIdentity', () => {
     assert.deepEqual(result, { gid: 1002, uid: 1001 });
   });
 
-  it(
-    'falls back to the worker process identity when none is supplied',
-    { skip: typeof process.getuid !== 'function' || process.getuid() === 0 },
-    () => {
-      const result = resolveRemediationContainerIdentity({});
+  it('falls back to the worker process identity when none is supplied', {
+    skip: typeof process.getuid !== 'function' || process.getuid() === 0,
+  }, () => {
+    const result = resolveRemediationContainerIdentity({});
 
-      assert.deepEqual(result, {
-        gid: process.getgid(),
-        uid: process.getuid(),
-      });
-    }
-  );
+    assert.deepEqual(result, {
+      gid: process.getgid(),
+      uid: process.getuid(),
+    });
+  });
 
   it('rejects a root worker identity before Docker commands are built', () => {
     assert.throws(

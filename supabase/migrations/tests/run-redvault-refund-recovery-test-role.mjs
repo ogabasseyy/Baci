@@ -1,8 +1,8 @@
+import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const migrations = resolve(directory, '..');
@@ -24,7 +24,19 @@ function run(name, args, input) {
 function sql(input) {
   return run(
     'psql',
-    ['-X', '-v', 'ON_ERROR_STOP=1', '-h', root, '-p', port, '-U', 'postgres', '-d', 'postgres'],
+    [
+      '-X',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-h',
+      root,
+      '-p',
+      port,
+      '-U',
+      'postgres',
+      '-d',
+      'postgres',
+    ],
     input
   );
 }
@@ -32,7 +44,14 @@ function sql(input) {
 let running = false;
 try {
   chmodSync(root, 0o700);
-  run('initdb', ['-D', resolve(root, 'data'), '-U', 'postgres', '--auth=trust', '--no-locale']);
+  run('initdb', [
+    '-D',
+    resolve(root, 'data'),
+    '-U',
+    'postgres',
+    '--auth=trust',
+    '--no-locale',
+  ]);
   run('pg_ctl', [
     '-D',
     resolve(root, 'data'),
@@ -46,18 +65,30 @@ try {
   running = true;
   sql(readFileSync(resolve(directory, 'redvault-native-fixture.sql'), 'utf8'));
   const canonical = readFileSync(
-    resolve(migrations, '20260828040000_bind_transaction_discount_proof_payload.sql'),
+    resolve(
+      migrations,
+      '20260828040000_bind_transaction_discount_proof_payload.sql'
+    ),
     'utf8'
   );
-  sql(canonical.slice(0, canonical.indexOf('CREATE OR REPLACE FUNCTION private.sanitize_')));
+  sql(
+    canonical.slice(
+      0,
+      canonical.indexOf('CREATE OR REPLACE FUNCTION private.sanitize_')
+    )
+  );
   const proof = readFileSync(
     resolve(migrations, '20260527064322_quiz_rpc_secret_private_config.sql'),
     'utf8'
   );
   sql(
     proof.slice(
-      proof.indexOf('CREATE OR REPLACE FUNCTION public.quiz_route_proof_valid('),
-      proof.indexOf('CREATE OR REPLACE FUNCTION public.quiz_rpc_server_secret_configured')
+      proof.indexOf(
+        'CREATE OR REPLACE FUNCTION public.quiz_route_proof_valid('
+      ),
+      proof.indexOf(
+        'CREATE OR REPLACE FUNCTION public.quiz_rpc_server_secret_configured'
+      )
     )
   );
   for (const filename of [
@@ -80,10 +111,16 @@ try {
   sql(readFileSync(resolve(directory, 'redvault-native-checks.sql'), 'utf8'));
   sql(readFileSync(resolve(directory, 'redvault-capture-hold.sql'), 'utf8'));
   process.stdout.write(
-    sql(readFileSync(resolve(directory, 'redvault-refund-recovery-test-role.sql'), 'utf8'))
+    sql(
+      readFileSync(
+        resolve(directory, 'redvault-refund-recovery-test-role.sql'),
+        'utf8'
+      )
+    )
   );
 } finally {
-  if (running) run('pg_ctl', ['-D', resolve(root, 'data'), '-m', 'fast', '-w', 'stop']);
+  if (running)
+    run('pg_ctl', ['-D', resolve(root, 'data'), '-m', 'fast', '-w', 'stop']);
   rmSync(root, { force: true, recursive: true });
   process.stdout.write('Owned temporary cluster stopped and removed.\n');
 }

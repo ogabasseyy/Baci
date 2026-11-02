@@ -12,7 +12,7 @@ export const WALLET_TOP_UP_SOURCE_TYPE = 'wallet_topup';
 /** Structural subset of a wallet transaction the credit watch needs. */
 export interface WalletTopUpCandidate {
   amount: number;
-  created_at: string;
+  created_at: string | null;
   id: string;
   source_type?: string | null;
   type: string;
@@ -42,7 +42,8 @@ function isTopUpCredit(transaction: WalletTopUpCandidate): boolean {
  * the row entirely. Silently keeping such a row would let it be compared by id
  * alone and reported as a fresh credit that may never have landed.
  */
-function toCreatedAt(value: string): number | null {
+function toCreatedAt(value: string | null): number | null {
+  if (!value) return null;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
 }

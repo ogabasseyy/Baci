@@ -39,14 +39,8 @@ describe('buildCodexDockerRuntime', () => {
     assert.match(runtime.launchScript, /baci-internal\/bash/);
     assert.match(runtime.launchScript, /baci-internal\/dash/);
     assert.match(runtime.launchScript, /BACI_CODEX_RAW_DASH_PATH/);
-    assert.match(
-      runtime.launchScript,
-      /exec \/opt\/codex\/bin\/codex "\$@"/
-    );
-    assert.doesNotMatch(
-      runtime.launchScript,
-      /baci-real-dash -c/
-    );
+    assert.match(runtime.launchScript, /exec \/opt\/codex\/bin\/codex "\$@"/);
+    assert.doesNotMatch(runtime.launchScript, /baci-real-dash -c/);
     assert.deepEqual(
       runtime.authArgs.filter((value) => value.startsWith('--mount')),
       Array.from({ length: 11 }, () => '--mount')

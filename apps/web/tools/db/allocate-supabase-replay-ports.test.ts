@@ -77,6 +77,35 @@ describe('allocateSupabaseReplayPorts', () => {
     expect(server.listening).toBe(true);
   });
 
+  it('rejects a wildcard-bound listener even when loopback can bind separately', async () => {
+    const server = createServer();
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, '0.0.0.0', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('no port');
+
+    const loopbackProbe = createServer();
+    let loopbackCanBind = true;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        loopbackProbe.once('error', () => {
+          loopbackCanBind = false;
+          resolve();
+        });
+        loopbackProbe.listen(address.port, '127.0.0.1', resolve);
+      });
+    } finally {
+      if (loopbackProbe.listening)
+        await new Promise<void>((resolve, reject) =>
+          loopbackProbe.close((error) => (error ? reject(error) : resolve()))
+        );
+    }
+    if (process.platform === 'darwin') expect(loopbackCanBind).toBe(true);
+
+    await expect(isLoopbackPortAvailable(address.port)).resolves.toBe(false);
+    expect(server.listening).toBe(true);
+  });
+
   it('fails a pre-start race without disclosing the occupied port', async () => {
     await expect(
       assertSupabaseReplayPortsAvailable(defaults, async () => false)

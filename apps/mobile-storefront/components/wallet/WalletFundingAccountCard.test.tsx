@@ -38,7 +38,9 @@ describe('WalletFundingAccountCard', () => {
     expect(screen.getByText('Test Bank')).toBeOnTheScreen();
     expect(screen.getByText('1234567890')).toBeOnTheScreen();
     expect(screen.getByText('OGABASSEY TEST CUSTOMER')).toBeOnTheScreen();
-    expect(screen.getByText('Powered by PiggyVest')).toBeOnTheScreen();
+    expect(
+      screen.getByRole('image', { name: 'Powered by PiggyVest' })
+    ).toBeOnTheScreen();
     fireEvent.press(
       screen.getByRole('button', { name: 'Copy funding account number' })
     );

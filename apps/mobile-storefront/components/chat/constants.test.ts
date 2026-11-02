@@ -43,6 +43,8 @@ describe('chat constants', () => {
       expect(HIDDEN_ROUTES).toContain('/auth/login');
       expect(HIDDEN_ROUTES).toContain('/order-success');
       expect(HIDDEN_ROUTES).toContain('/quiz');
+      expect(HIDDEN_ROUTES).not.toContain('/notifications');
+      expect(HIDDEN_ROUTES).not.toContain('/settings');
     });
   });
 

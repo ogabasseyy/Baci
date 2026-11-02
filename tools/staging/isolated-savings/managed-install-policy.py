@@ -15,6 +15,7 @@ RUNTIME = '/run/baci-savings-gateway'
 ENV = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'LANG': 'C', 'LC_ALL': 'C', 'HOME': '/'}
 RUNTIME_FILES = (
     'managed-gateway-cli.mjs', 'managed-gateway.mjs', 'managed-files.mjs',
+    'managed-diagnostics.mjs',
     'managed-inventory-helper.mjs', 'private-routing.mjs',
     'private-routing-inventory.mjs', 'private-routing-supervisor-inventory.mjs',
     'private-routing-supervisor-child.py', 'compose.mjs',

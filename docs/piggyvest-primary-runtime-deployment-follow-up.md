@@ -217,3 +217,11 @@ PostgreSQL password validity does not terminate existing sessions. The legacy
 installer or its route/role receipts cannot satisfy missing primary evidence.
 
 Apply the review-classification migration before deploying the new six-argument review and four-argument routing-resolution statements. Verify both overloads in the restricted provisioner readiness check. The old signatures remain conservative wrappers: they do not infer routing-only review from an unclassified contradiction. Identity-matched interest-setting contradictions retain a routing reason atomically; identity mismatches remain ownership-held after the recorded DVA closes.
+
+## Recovered onboarding UI recovery
+
+Apply `20261101223000_piggyvest_primary_onboarding_recovery_read.sql` before deploying the recovery-availability reader. Verify `has_onboarding(jsonb)` and `can_recover_onboarding(jsonb)` on the restricted provisioner, with execution denied to public client roles. No grants or settings are applied by this PR.
+
+The pending snapshot exposes only a scoped `recoverable` boolean: unknown or expired dispatches with no provider IDs may offer an explicit BVN re-entry action. It does not reclaim anything on GET. Re-entry invokes the existing fingerprint-bound onboarding POST, whose claim lease, identity commitment, provider lookup and review holds remain authoritative. Routing-pending, live claims and terminal review states never advertise recovery. A failed or malformed eligibility read fails closed.
+
+The recovered historical checkpoint migration is retained, but main no longer uses its listing fallback. Apply `20261101224000_piggyvest_retire_reconciliation_checkpoint_grants.sql` before role-readiness verification: it revokes the three obsolete checkpoint RPC grants from the evidence worker and public/client roles without deleting functions, rows or historical migrations. Do not expand the exact-grant allowlist to accommodate this retired path.

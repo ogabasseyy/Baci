@@ -1,13 +1,13 @@
 import { cleanUsername } from '@/schemas/username';
 import { supabase } from '../lib/supabase';
 import { CustomerRowSchema } from '../lib/validation';
-import { CUSTOMER_SELECT_COLUMNS } from './auth-customer-schema-compat';
 import type { AuthStoreGet, AuthStoreSet, Customer } from './auth-store.types';
 import {
   getUsernameCooldownNextEligibleAt,
   getUsernamePolicyError,
   parseUsernameWriteResult,
 } from './auth-username-policy';
+import { persistCustomerProfile } from './persist-customer-profile';
 import { getProfileUpdateError } from './profile-update-error';
 
 type AccountIdentity = {
@@ -81,13 +81,12 @@ export function createProfileActions(set: AuthStoreSet, get: AuthStoreGet) {
         );
         if (Object.keys(updates).length === 0) return { success: true };
 
-        const { data: updated, error } = await supabase
-          .from('customers')
-          .update(updates)
-          .eq('id', customer.id)
-          .eq('merchant_id', merchantId)
-          .select(CUSTOMER_SELECT_COLUMNS)
-          .single();
+        const { data: updated, error } = await persistCustomerProfile({
+          customerId: customer.id,
+          merchantId,
+          userId: verifiedUser.id,
+          updates,
+        });
         if (error)
           return { success: false, error: getProfileUpdateError(error) };
 

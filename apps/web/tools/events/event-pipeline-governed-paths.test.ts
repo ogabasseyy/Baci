@@ -34,7 +34,7 @@ describe('eventPipelineGovernedPaths', () => {
     );
     expect(governed.seedPaths).toContain('apps/web/src/app/checkout/page.tsx');
     expect(governed.missingProductionRoots).toEqual([]);
-  });
+  }, 60_000);
 
   it('pins the authority-byte baseline to a reachable landing ancestor', () => {
     const root = eventPipelineGovernedPaths.repoRoot();

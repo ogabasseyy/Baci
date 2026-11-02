@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+import { withManagedDiagnostics } from './managed-diagnostics.mjs';
 import {
   assertManagedRuntime,
   assertManagedSocket,
@@ -117,24 +118,26 @@ export async function managedGatewayMain() {
           return current.value;
         },
         inventory: async () =>
-          JSON.parse(
-            (
-              await execute(
-                '/usr/bin/sudo',
-                [
-                  '-n',
-                  '--',
-                  '/opt/baci-savings-gateway/managed-inventory-helper.mjs',
-                ],
-                {
-                  env: environment,
-                  timeout: 2500,
-                  killSignal: 'SIGKILL',
-                  maxBuffer: 1048576,
-                  signal: controller.signal,
-                }
-              )
-            ).stdout
+          withManagedDiagnostics('inventory', async () =>
+            JSON.parse(
+              (
+                await execute(
+                  '/usr/bin/sudo',
+                  [
+                    '-n',
+                    '--',
+                    '/opt/baci-savings-gateway/managed-inventory-helper.mjs',
+                  ],
+                  {
+                    env: environment,
+                    timeout: 2500,
+                    killSignal: 'SIGKILL',
+                    maxBuffer: 1048576,
+                    signal: controller.signal,
+                  }
+                )
+              ).stdout
+            )
           ),
         prepare: async (config, signal) => {
           runtime = await mkdtemp(join(runtimeDirectory, 'private-'));
@@ -237,7 +240,7 @@ export async function managedGatewayMain() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
-  managedGatewayMain()
+  withManagedDiagnostics('gateway', managedGatewayMain)
     .then(() => process.stdout.write('Managed gateway stopped.\n'))
     .catch(() => {
       process.stderr.write(

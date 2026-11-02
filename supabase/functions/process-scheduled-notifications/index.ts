@@ -1,6 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { processScheduledNotificationClaims } from '../_shared/scheduled-notification-delivery.ts';
+import { getScheduledNotificationWorkerOutcome } from '../_shared/scheduled-notification-worker-outcome.ts';
 
 const CLAIM_LIMIT = 10;
 
@@ -55,16 +56,19 @@ Deno.serve(async (request: Request) => {
     if (error || !Array.isArray(data))
       throw new Error('Notification claim unavailable');
     const results = await processScheduledNotificationClaims(supabase, data);
-    const hasRetry = results.some((result) => result.status === 'retry');
+    const outcome = getScheduledNotificationWorkerOutcome(results);
     const { error: healthResultError } = await supabase.rpc(
       'record_scheduled_notification_worker_health_v1',
       {
-        p_error_code: hasRetry ? 'notification_retry' : null,
-        p_status: hasRetry ? 'failed' : 'succeeded',
+        p_error_code: outcome.errorCode,
+        p_status: outcome.healthStatus,
       }
     );
     if (healthResultError) throw new Error('Worker health unavailable');
-    return Response.json({ processed: results.length, results });
+    return Response.json(
+      { processed: results.length, results },
+      { status: outcome.httpStatus }
+    );
   } catch (error) {
     if (supabase) {
       await recordWorkerFailure(supabase);

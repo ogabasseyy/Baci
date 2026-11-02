@@ -20,6 +20,8 @@ const frozen = {
     '7287bdf24ba8e1be90947d1f335030de079bfe047ddb76b883ea7bab0c0d6f52',
   '20261007220101_piggyvest_primary_interest_inbox_worker.sql':
     '1207928cce8e03ad87f9fb126c2a3c83cee370a8423bb34afb3dcf721e6e1f32',
+  '20261025181703_piggyvest_primary_interest_inbox_capture.sql':
+    'f1bc94fb8bae21c04f68ef6f19e8dd12ec7ab895b341dfacdcf00fdc8384d9e3',
 };
 const service = `[Unit]
 Description=Baci primary savings paid-interest durable inbox worker

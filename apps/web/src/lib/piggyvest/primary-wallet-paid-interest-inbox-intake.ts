@@ -2,7 +2,10 @@ import 'server-only';
 import { primaryWalletPaidInterestInboxSchemas as schemas } from '@/schemas/primary-wallet-paid-interest-inbox';
 import { readPrimaryWalletPaidInterestInboxRuntime } from './primary-wallet-paid-interest-inbox-runtime';
 import { createPrimaryWalletPaidInterestInboxStore } from './primary-wallet-paid-interest-inbox-store';
-import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
+import {
+  normalizePiggyvestSignature,
+  verifyPiggyvestPayloadSignature,
+} from './verify-piggyvest-payload-signature';
 import {
   acceptedWebhookSecrets,
   familyArchivedSecrets,
@@ -19,9 +22,11 @@ export async function dispatchPrimaryWalletPaidInterestInbox(input: {
   const config = readPrimaryWalletPaidInterestInboxRuntime('intake', input.env);
   if (!config) return 'disabled' as const;
   const rawBody = Uint8Array.from(input.rawBody);
+  const signature = normalizePiggyvestSignature(input.signature);
   if (
     !rawBody.byteLength ||
     rawBody.byteLength > 65536 ||
+    !signature ||
     !acceptedWebhookSecrets(
       config,
       familyArchivedSecrets(
@@ -33,7 +38,7 @@ export async function dispatchPrimaryWalletPaidInterestInbox(input: {
     ).some((secret) =>
       verifyPiggyvestPayloadSignature({
         payload: rawBody,
-        signature: input.signature,
+        signature,
         secret,
       })
     )
@@ -48,6 +53,6 @@ export async function dispatchPrimaryWalletPaidInterestInbox(input: {
   }
   return await createPrimaryWalletPaidInterestInboxStore(config).enqueue({
     rawHex: Buffer.from(rawBody).toString('hex'),
-    signature: input.signature ?? '',
+    signature,
   });
 }

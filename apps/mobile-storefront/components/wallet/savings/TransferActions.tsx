@@ -6,8 +6,22 @@ import { runCopyFundingAccount } from './run-copy-funding-account';
 import { startSavingsStyles as styles } from './start-savings.styles';
 import type { TransferModalProps } from './start-savings-transfer-modal-props';
 
-export function TransferActions({ colors, controller }: TransferModalProps) {
+export function TransferActions({
+  colors,
+  controller,
+}: Pick<TransferModalProps, 'colors'> & {
+  controller: Pick<
+    TransferModalProps['controller'],
+    | 'fundingAccount'
+    | 'isSubmitting'
+    | 'handleCopyFundingAccount'
+    | 'submitSavingsGoal'
+  >;
+}) {
   const [isCopying, setIsCopying] = useState(false);
+  const hasFundingAccount = Boolean(
+    controller.fundingAccount?.account_number.trim()
+  );
 
   const handleCopyFundingAccount = () =>
     runCopyFundingAccount(
@@ -29,7 +43,7 @@ export function TransferActions({ colors, controller }: TransferModalProps) {
 
   return (
     <View style={styles.transferActionRow}>
-      {controller.fundingAccount ? (
+      {hasFundingAccount ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Copy savings funding account number"
@@ -47,22 +61,24 @@ export function TransferActions({ colors, controller }: TransferModalProps) {
           </Text>
         </Pressable>
       ) : null}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Retry savings creation"
-        accessibilityState={{ disabled: controller.isSubmitting }}
-        style={[
-          styles.secondaryButton,
-          { borderColor: BRAND.primary, backgroundColor: BRAND.primary },
-          controller.isSubmitting ? styles.buttonDisabled : null,
-        ]}
-        onPress={handleRetrySavingsCreation}
-        disabled={controller.isSubmitting}
-      >
-        <Text style={[styles.secondaryButtonText, { color: palette.white }]}>
-          I&apos;ve funded wallet
-        </Text>
-      </Pressable>
+      {hasFundingAccount ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Retry savings creation"
+          accessibilityState={{ disabled: controller.isSubmitting }}
+          style={[
+            styles.secondaryButton,
+            { borderColor: BRAND.primary, backgroundColor: BRAND.primary },
+            controller.isSubmitting ? styles.buttonDisabled : null,
+          ]}
+          onPress={handleRetrySavingsCreation}
+          disabled={controller.isSubmitting}
+        >
+          <Text style={[styles.secondaryButtonText, { color: palette.white }]}>
+            I&apos;ve funded wallet
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

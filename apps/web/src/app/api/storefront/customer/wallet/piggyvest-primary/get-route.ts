@@ -3,7 +3,9 @@ import { authenticateApiRequest } from '@/lib/api-auth';
 import { createPrimaryWalletExecutor } from '@/lib/piggyvest/primary-wallet-executor';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import { readPrimaryWalletMapping } from '@/lib/piggyvest/primary-wallet-mapping';
+import { hasPrimaryWalletOnboarding } from '@/lib/piggyvest/primary-wallet-presence';
 import { getPrimaryWalletProviderOrigin } from '@/lib/piggyvest/primary-wallet-provider-origin';
+import { canRecoverPrimaryWalletOnboarding } from '@/lib/piggyvest/primary-wallet-recovery-availability';
 import { readPrimaryWalletReview } from '@/lib/piggyvest/primary-wallet-review';
 import { recoverPrimaryWalletRouting } from '@/lib/piggyvest/primary-wallet-routing-recovery';
 import { readPrimaryWalletRuntime } from '@/lib/piggyvest/primary-wallet-runtime';
@@ -66,6 +68,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       environment: runtime.onboarding.environment,
     };
     const execute = createPrimaryWalletExecutor(runtime);
+    if (!(await hasPrimaryWalletOnboarding(scope, execute))) {
+      return NextResponse.json(
+        { status: 'not_started', account: null },
+        {
+          headers: { 'Cache-Control': 'no-store' },
+        }
+      );
+    }
     const providerConfig = {
       token: runtime.providerToken,
       baseUrl: getPrimaryWalletProviderOrigin(runtime.onboarding.environment),
@@ -158,7 +168,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         { status: 503 }
       );
     }
-    return NextResponse.json(snapshot, {
+    const responseSnapshot =
+      snapshot.status === 'pending'
+        ? {
+            ...snapshot,
+            recoverable: await canRecoverPrimaryWalletOnboarding(
+              scope,
+              execute
+            ),
+          }
+        : snapshot;
+    return NextResponse.json(responseSnapshot, {
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch {

@@ -38,6 +38,30 @@ function buildParams(
 }
 
 describe('useWalletFundingAccountController', () => {
+  it('requires a missing phone for primary setup even when legacy DVA is disabled without auto-creating', async () => {
+    mockUseCapability.mockReturnValue(true);
+    const params = buildParams({
+      activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      customerPhone: null,
+      paymentSettings: {
+        ...enabledSettings,
+        wallet_paystack_dva_enabled: false,
+      },
+    });
+    const { result } = renderHook(() =>
+      useWalletFundingAccountController(params)
+    );
+
+    expect(result.current.needsPhone).toBe(true);
+    expect(result.current.canCreateFundingAccount).toBe(false);
+    await act(async () => {
+      await result.current.onSubmitPhone('08012345678');
+    });
+    expect(params.updateProfile).toHaveBeenCalledWith({ phone: '08012345678' });
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(params.setShowFundPanel).not.toHaveBeenCalled();
+  });
+
   it('opens PiggyVest setup without creating a Paystack account or requiring Paystack settings', async () => {
     const params = buildParams({
       activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',

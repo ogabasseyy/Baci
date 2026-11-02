@@ -31,6 +31,30 @@ const interestEvent = {
 };
 
 describe('interestPayoutSuccessEventSchema', () => {
+  it('preserves explicit NGN currency without rescaling the provider net payout', () => {
+    const parsed = interestPayoutSuccessEventSchema.parse({
+      ...observedInterestPayout,
+      eventData: { ...observedInterestPayout.eventData, currency: 'NGN' },
+    });
+
+    expect(parsed.eventData).toMatchObject({ amount: 733, currency: 'NGN' });
+  });
+
+  it.each([
+    'USD',
+    'ngn',
+    '',
+    null,
+    123,
+  ])('rejects explicit foreign or malformed payout currency %s', (currency) => {
+    const result = interestPayoutSuccessEventSchema.safeParse({
+      ...observedInterestPayout,
+      eventData: { ...observedInterestPayout.eventData, currency },
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it('accepts the technical-team payload and preserves its net kobo amount', () => {
     const parsed = interestPayoutSuccessEventSchema.parse(
       observedInterestPayout

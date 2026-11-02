@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 // Regression coverage for CVE-2026-10032: `@a2ui/web_core` `openUrl` permitted
 // `javascript:` URI execution via agent-supplied button actions. Fixed in
@@ -123,6 +123,11 @@ async function loadWebCore() {
   };
 }
 
+let webCoreModules: Awaited<ReturnType<typeof loadWebCore>>;
+beforeAll(async () => {
+  webCoreModules = await loadWebCore();
+}, 30_000);
+
 describe('@a2ui/web_core openUrl integrity (CVE-2026-10032)', () => {
   it('resolves a web_core release containing the openUrl fix', () => {
     const webCorePackage = JSON.parse(
@@ -140,7 +145,7 @@ describe('@a2ui/web_core openUrl integrity (CVE-2026-10032)', () => {
       dataContextModule,
       catalogModule,
       errorsModule,
-    } = await loadWebCore();
+    } = webCoreModules;
     const catalog = new catalogModule.Catalog(
       'integrity',
       [],

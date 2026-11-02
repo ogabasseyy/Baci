@@ -13,7 +13,20 @@ describe('verifyPiggyvestPayloadSignature', () => {
     ).toBe(true);
   });
 
-  it('normalises an uppercase hex signature and surrounding whitespace before comparison', () => {
+  it('accepts uppercase and mixed-case hex signatures', () => {
+    for (const header of [
+      signature.toUpperCase(),
+      signature.replace(/[a-f]/g, (character, index) =>
+        index % 2 === 0 ? character.toUpperCase() : character
+      ),
+    ]) {
+      expect(
+        verifyPiggyvestPayloadSignature({ payload, signature: header, secret })
+      ).toBe(true);
+    }
+  });
+
+  it('normalises surrounding whitespace before comparison', () => {
     expect(
       verifyPiggyvestPayloadSignature({
         payload,

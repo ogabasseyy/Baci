@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
+import { WALLET_HISTORY_PAGE_SIZE } from '@/constants/wallet-history';
 import {
   type WalletTransaction,
   WalletTransactionHistory,
@@ -68,6 +69,34 @@ describe('WalletTransactionHistory', () => {
 
     expect(screen.getByText('Refund - Wallet top-up')).toBeTruthy();
     expect(screen.getByText('+₦1,200')).toBeTruthy();
+  });
+
+  it('caps only the displayed rows without removing transactions from its input', () => {
+    const history = Array.from(
+      { length: WALLET_HISTORY_PAGE_SIZE + 2 },
+      (_, index): WalletTransaction => ({
+        ...transactions[0],
+        id: `history-${index}`,
+        description: `History row ${index + 1}`,
+      })
+    );
+    const original = [...history];
+
+    render(
+      <WalletTransactionHistory colors={Colors.light} transactions={history} />
+    );
+
+    for (let index = 0; index < WALLET_HISTORY_PAGE_SIZE; index += 1) {
+      expect(screen.getByText(`History row ${index + 1}`)).toBeTruthy();
+    }
+    expect(
+      screen.queryByText(`History row ${WALLET_HISTORY_PAGE_SIZE + 1}`)
+    ).toBeNull();
+    expect(
+      screen.queryByText(`History row ${WALLET_HISTORY_PAGE_SIZE + 2}`)
+    ).toBeNull();
+    expect(history).toEqual(original);
+    expect(history).toHaveLength(WALLET_HISTORY_PAGE_SIZE + 2);
   });
 
   it('shows the empty state when there are no transactions', () => {

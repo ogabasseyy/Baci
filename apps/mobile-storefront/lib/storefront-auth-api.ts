@@ -1,6 +1,7 @@
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { resolveApiBaseUrl } from './api-url';
 import { CONFIG } from './config';
+import { getHostedStorefrontOtpClient } from './get-hosted-storefront-otp-client';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -111,9 +112,26 @@ async function postStorefrontAuth<T>(
   }
 }
 
-export function sendStorefrontOtp(
+export async function sendStorefrontOtp(
   email: string
 ): Promise<StorefrontAuthApiResult> {
+  try {
+    const client = getHostedStorefrontOtpClient();
+    if (client) {
+      const { error } = await client.signInWithOtp({
+        email,
+        options: { shouldCreateUser: false },
+      });
+      return error
+        ? { success: false, error: error.message }
+        : { success: true, data: undefined };
+    }
+  } catch {
+    return {
+      success: false,
+      error: 'Could not send your sign-in code. Please try again.',
+    };
+  }
   return postStorefrontAuth(
     '/api/storefront/auth/send-code',
     {
@@ -126,10 +144,30 @@ export function sendStorefrontOtp(
   );
 }
 
-export function verifyStorefrontOtp(
+export async function verifyStorefrontOtp(
   email: string,
   token: string
 ): Promise<StorefrontAuthApiResult<NativeOtpSession>> {
+  try {
+    const client = getHostedStorefrontOtpClient();
+    if (client) {
+      const { data, error } = await client.verifyOtp({
+        email,
+        token,
+        type: 'email',
+      });
+      if (error) return { success: false, error: error.message };
+      const session = readNativeSession({ session: data.session });
+      return session
+        ? { success: true, data: session }
+        : { success: false, error: 'Failed to verify OTP' };
+    }
+  } catch {
+    return {
+      success: false,
+      error: 'Could not verify your sign-in code. Please try again.',
+    };
+  }
   return postStorefrontAuth(
     '/api/storefront/auth/verify-code',
     {

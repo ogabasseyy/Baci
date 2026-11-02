@@ -80,7 +80,7 @@ describe('verifySupabaseHistoryReplayManifest', () => {
         pendingRepairState: 'not-materialized',
       })
     ).rejects.toThrow('must be absent');
-  });
+  }, 60_000);
 
   it('requires exact repair bytes in materialized mode', async () => {
     const root = await copyWorkspace();

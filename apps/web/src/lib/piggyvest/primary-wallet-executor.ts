@@ -19,6 +19,8 @@ const VERIFY_SESSION = `SELECT current_database() AS database_name,
 // Every statement this executor may run, with its exact bound-argument count.
 const STATEMENT_ARITY = new Map<string, number>([
   [PRIMARY_WALLET_STATEMENTS.read, 1],
+  [PRIMARY_WALLET_STATEMENTS.presence, 1],
+  [PRIMARY_WALLET_STATEMENTS.recoverable, 1],
   [PRIMARY_WALLET_STATEMENTS.claim, 2],
   [PRIMARY_WALLET_VERIFICATION_STATEMENT, 2],
   [PRIMARY_WALLET_STATEMENTS.record, 5],

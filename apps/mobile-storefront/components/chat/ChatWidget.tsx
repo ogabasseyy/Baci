@@ -86,7 +86,9 @@ export function ChatWidget({
   // Check if chat should be hidden on current screen or if dismissed by user
   const shouldHide =
     isChatDismissed ||
-    HIDDEN_ROUTES.some((route) => pathname?.startsWith(route));
+    HIDDEN_ROUTES.some(
+      (route) => pathname === route || pathname?.startsWith(`${route}/`)
+    );
 
   const animatedFabStyle = useAnimatedStyle(() => {
     return {

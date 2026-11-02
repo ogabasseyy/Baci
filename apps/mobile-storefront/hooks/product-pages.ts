@@ -4,6 +4,7 @@ import {
   getProductSearchTotalCount,
   orderRecordsByIds,
 } from '@baci/shared';
+import hostedPins from '@/config/hosted-storefront-pins.json';
 import {
   hydrateRowsNeedingBaseInventory,
   hydrateRowsNeedingStorefrontVariants,
@@ -17,6 +18,11 @@ import { PRODUCT_SELECT } from './product-select';
 import { transformProduct } from './product-transform';
 import type { ProductsPage, UseProductsOptions } from './product-utils.types';
 import { fetchRefinedProductsPage } from './refined-product-pages';
+import {
+  buildSandboxProductQuery,
+  fetchSandboxProcessorRefinementsPage,
+  getSandboxProductSort,
+} from './sandbox-product-pages';
 
 const log = createLogger('Products');
 
@@ -32,6 +38,11 @@ export async function fetchProductsPage(
   const normalizedCondition = normalizeProductConditionFilterValue(
     options.condition
   );
+  const useSandboxCatalogSearch =
+    process.env.EXPO_PUBLIC_HOSTED_STOREFRONT === '1' &&
+    process.env.EXPO_PUBLIC_API_URL === hostedPins.apiOrigin &&
+    process.env.EXPO_PUBLIC_SUPABASE_URL === hostedPins.supabaseOrigin &&
+    merchantId === hostedPins.merchantId;
 
   // An explicitly provided search that normalizes to nothing (e.g. "!!")
   // matches nothing: fall through to the unfiltered branch would present
@@ -40,7 +51,7 @@ export async function fetchProductsPage(
     return { nextOffset: null, products: [], total: 0 };
   }
 
-  if (normalizedSearch && options.refinements) {
+  if (normalizedSearch && !useSandboxCatalogSearch && options.refinements) {
     return fetchRefinedProductsPage(
       merchantId,
       normalizedSearch,
@@ -50,7 +61,7 @@ export async function fetchProductsPage(
     );
   }
 
-  if (normalizedSearch) {
+  if (normalizedSearch && !useSandboxCatalogSearch) {
     const { data: rankedResults, error: rankedError } = await withSupabaseRetry(
       async () =>
         await supabase.rpc('search_products_v2', {
@@ -119,28 +130,53 @@ export async function fetchProductsPage(
     };
   }
 
-  let query = supabase
-    .from('products')
-    .select(PRODUCT_SELECT, { count: 'exact' })
-    .eq('merchant_id', merchantId)
-    .eq('status', 'active');
-
-  if (options.category) query = query.eq('category_id', options.category);
-  if (normalizedCondition) {
-    query = query.or(
-      `condition.eq.${normalizedCondition},available_conditions.cs.{${normalizedCondition}}`
+  if (useSandboxCatalogSearch && options.refinements?.processor) {
+    return fetchSandboxProcessorRefinementsPage(
+      merchantId,
+      normalizedSearch,
+      options,
+      normalizedCondition,
+      limit,
+      offset
     );
   }
-  if (options.brand) query = query.eq('brand', options.brand);
-  if (options.minPrice !== undefined)
-    query = query.gte('price', options.minPrice);
-  if (options.maxPrice !== undefined)
-    query = query.lte('price', options.maxPrice);
-  if (options.minRating !== undefined && options.minRating > 0) {
-    query = query.gte('average_rating', options.minRating);
+
+  let query = useSandboxCatalogSearch
+    ? buildSandboxProductQuery(
+        merchantId,
+        normalizedSearch,
+        options,
+        normalizedCondition
+      )
+    : supabase
+        .from('products')
+        .select(PRODUCT_SELECT, { count: 'exact' })
+        .eq('merchant_id', merchantId)
+        .eq('status', 'active');
+
+  if (!useSandboxCatalogSearch) {
+    if (options.category) query = query.eq('category_id', options.category);
+    if (normalizedCondition) {
+      query = query.or(
+        `condition.eq.${normalizedCondition},available_conditions.cs.{${normalizedCondition}}`
+      );
+    }
+    if (options.brand) query = query.eq('brand', options.brand);
+    if (options.minPrice !== undefined) {
+      query = query.gte('price', options.minPrice);
+    }
+    if (options.maxPrice !== undefined) {
+      query = query.lte('price', options.maxPrice);
+    }
+    if (options.minRating !== undefined && options.minRating > 0) {
+      query = query.gte('average_rating', options.minRating);
+    }
   }
 
-  switch (options.sortBy) {
+  const sort = useSandboxCatalogSearch
+    ? getSandboxProductSort(options)
+    : options.sortBy;
+  switch (sort) {
     case 'price_asc':
       query = query.order('price', { ascending: true });
       break;

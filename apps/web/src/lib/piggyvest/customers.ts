@@ -10,9 +10,9 @@ import { type PiggyvestClientConfig, piggyvestRequest } from './client';
  * PiggyVest customer provisioning (sandbox-gated, no live calls).
  *
  * Latest-docs patterns applied:
- * - `returnIfExist=true` plus our `third_party_identifier` make creation
- *   idempotent: retries return `{ new_customer: false }` instead of
- *   duplicating the customer (and its auto-generated default wallet).
+ * - `returnIfExist=true` can match an existing customer by email, phone or
+ *   BVN. A `new_customer: false` response alone does not prove ownership
+ *   or make an uncertain creation request safe to repeat.
  * - BVN is exactly 11 digits; validated before the request leaves.
  * - Creating a customer auto-generates a default wallet and emits
  *   `reserve_virtual_account.success` for its virtual account.

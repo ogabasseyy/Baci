@@ -29,6 +29,9 @@ const workerSource = `${worker}\n${pushDispatch}`;
 const runner = read(
   'supabase/functions/process-scheduled-notifications/index.ts'
 );
+const workerOutcome = read(
+  'supabase/functions/_shared/scheduled-notification-worker-outcome.ts'
+);
 
 describe('scheduled notification delivery safety contract', () => {
   it('snapshots audiences and renews the token-bound claim before bounded pages', () => {
@@ -78,7 +81,12 @@ describe('scheduled notification delivery safety contract', () => {
   it('records retry and execution failures instead of reporting them as success', () => {
     expect(runner).toContain("p_status: 'failed'");
     expect(runner).toContain('recordWorkerFailure');
-    expect(runner).toContain('notification_retry');
+    expect(runner).toContain(
+      "from '../_shared/scheduled-notification-worker-outcome.ts'"
+    );
+    expect(runner).toContain('getScheduledNotificationWorkerOutcome(results)');
+    expect(runner).toContain('{ status: outcome.httpStatus }');
+    expect(workerOutcome).toContain("? 'notification_retry'");
     expect(followUp).toContain('last_failed_at > coalesce');
   });
 });

@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
-import { execSync, execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from 'node:fs';
+import { execFileSync, execSync } from 'node:child_process';
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -40,8 +46,12 @@ test('returns 0 (dep-less) when node_modules is a symlink', () => {
     const target = mkdtempSync(join(tmpdir(), 'nm-target-'));
     symlinkSync(target, join(repo, 'node_modules'));
     mkdirSync(join(repo, 'ci_scripts'), { recursive: true });
-    execSync(`cp "${scriptPath}" "${join(repo, 'ci_scripts/')}"`, { stdio: 'ignore' });
-    execSync(`cp "${isSparseScript}" "${join(repo, 'ci_scripts/')}"`, { stdio: 'ignore' });
+    execSync(`cp "${scriptPath}" "${join(repo, 'ci_scripts/')}"`, {
+      stdio: 'ignore',
+    });
+    execSync(`cp "${isSparseScript}" "${join(repo, 'ci_scripts/')}"`, {
+      stdio: 'ignore',
+    });
 
     assert.equal(runScript(repo), 0);
     rmSync(target, { recursive: true });
@@ -55,8 +65,12 @@ test('returns 1 (not dep-less) for a normal repo with real node_modules', () => 
   try {
     mkdirSync(join(repo, 'node_modules'));
     mkdirSync(join(repo, 'ci_scripts'), { recursive: true });
-    execSync(`cp "${scriptPath}" "${join(repo, 'ci_scripts/')}"`, { stdio: 'ignore' });
-    execSync(`cp "${isSparseScript}" "${join(repo, 'ci_scripts/')}"`, { stdio: 'ignore' });
+    execSync(`cp "${scriptPath}" "${join(repo, 'ci_scripts/')}"`, {
+      stdio: 'ignore',
+    });
+    execSync(`cp "${isSparseScript}" "${join(repo, 'ci_scripts/')}"`, {
+      stdio: 'ignore',
+    });
 
     assert.equal(runScript(repo), 1);
   } finally {
@@ -68,8 +82,12 @@ test('returns 1 (not dep-less) for a normal repo without node_modules', () => {
   const repo = createGitRepo();
   try {
     mkdirSync(join(repo, 'ci_scripts'), { recursive: true });
-    execSync(`cp "${scriptPath}" "${join(repo, 'ci_scripts/')}"`, { stdio: 'ignore' });
-    execSync(`cp "${isSparseScript}" "${join(repo, 'ci_scripts/')}"`, { stdio: 'ignore' });
+    execSync(`cp "${scriptPath}" "${join(repo, 'ci_scripts/')}"`, {
+      stdio: 'ignore',
+    });
+    execSync(`cp "${isSparseScript}" "${join(repo, 'ci_scripts/')}"`, {
+      stdio: 'ignore',
+    });
 
     assert.equal(runScript(repo), 1);
   } finally {

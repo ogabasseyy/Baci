@@ -22,6 +22,11 @@ export const walletHeroStyles = {
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  walletHeroHeaderWithoutAccount: {
+    minHeight: 0,
+    rowGap: 8,
+  },
+  balanceProviderAlignment: { marginLeft: 'auto' },
   walletHeroTitle: {
     color: WALLET_COLORS.white,
     fontSize: 18,
@@ -50,6 +55,7 @@ export const walletHeroStyles = {
     color: WALLET_COLORS.mutedText,
     fontSize: 11,
     fontWeight: TYPOGRAPHY.weight.medium,
+    flexShrink: 1,
   },
   balanceAndAccountRow: {
     flexDirection: 'row',
@@ -57,7 +63,20 @@ export const walletHeroStyles = {
     gap: 12,
     marginTop: 18,
   },
+  balanceAndAccountRowWithoutAccount: { marginTop: 6 },
   balanceBlock: { flex: 1, minWidth: 0 },
+  walletHeroUpperArea: { position: 'relative' },
+  accountSetupSpace: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    right: 0,
+    width: '50%',
+    paddingLeft: 6,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   accountUnavailableMessage: {
     color: WALLET_COLORS.mutedText,
     fontSize: 11,
@@ -70,6 +89,7 @@ export const walletHeroStyles = {
     fontWeight: TYPOGRAPHY.weight.black,
     marginTop: SPACING.sm,
   },
+  balanceAmountWithoutAccount: { marginTop: 0 },
   balanceSummaryRow: {
     marginTop: SPACING.md,
     flexDirection: 'row',

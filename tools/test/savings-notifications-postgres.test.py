@@ -29,12 +29,18 @@ def main():
         sources = [
             "tests/customer_savings_engagement.fixture.sql",
             "20260912120000_piggyvest_savings_ledger_tables.sql",
-            "20260925130000_customer_savings_engagement_storage.sql",
+            "20260925130050_customer_savings_engagement_storage.sql",
             "20260925130100_customer_savings_engagement_events.sql",
             "20260925130200_customer_savings_engagement_delivery.sql",
             "20260925130300_customer_savings_notification_receipts.sql",
+            "20261004130000_push_retryable_outcome.sql",
             "tests/customer_savings_engagement.sql",
             "tests/customer_savings_engagement_schedule.sql",
+            "20261004140000_claim_push_tokenless_retry.sql",
+            "20261004150000_push_retry_schedule.sql",
+            "20261004171000_finish_push_unregistered.sql",
+            "20261006080000_push_delivery_retry_backoff.sql",
+            "../../tools/test/savings-notifications-current.sql",
             "tests/customer_savings_engagement_concurrency.sql",
         ]
         for source in sources:

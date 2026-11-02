@@ -19,7 +19,9 @@ import { getTabBarShadowStyle } from '@/components/navigation/TabBar.shadows';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND } from '@/constants/Colors';
 import { CustomTabBarItem, type CustomTabOptions } from './CustomTabBarItem';
+import { useWalletDiscoveryBubbleVisibility } from './use-wallet-discovery-bubble-visibility';
 import { useWarmTabScreens } from './useWarmTabScreens';
+import { WalletDiscoveryBubble } from './WalletDiscoveryBubble';
 
 const HAS_EXPO_BLUR = UIManager.hasViewManagerConfig('ExpoBlurView');
 const BlurContainer = HAS_EXPO_BLUR ? BlurView : View;
@@ -56,12 +58,16 @@ export function CustomTabBarChrome({
   const tabWidth =
     visibleRoutes.length > 0 ? tabBarContentWidth / visibleRoutes.length : 0;
   const activeIdx = visibleRoutes.findIndex((r) => r.name === activeRouteName);
+  const walletIdx = visibleRoutes.findIndex((route) => route.name === 'wallet');
+  const shouldRenderWalletBubble = preloadProtectedTabs && walletIdx >= 0;
   const safeActiveIdx = activeIdx !== -1 ? activeIdx : 0;
   const pressInHandledRouteKeyRef = useRef<string | null>(null);
   const [optimisticRouteName, setOptimisticRouteName] =
     useState(activeRouteName);
   const [prevActiveRouteName, setPrevActiveRouteName] =
     useState(activeRouteName);
+  const { reserveTouchSpace, onVisibilityChange } =
+    useWalletDiscoveryBubbleVisibility(shouldRenderWalletBubble);
   const animIndex = useSharedValue(safeActiveIdx);
   const targetIndex = useSharedValue(safeActiveIdx);
   const capsuleScale = useSharedValue(1);
@@ -128,7 +134,22 @@ export function CustomTabBarChrome({
   });
 
   return (
-    <View style={styles.outerContainer} testID="custom-tab-bar-wrapper">
+    <View
+      style={[
+        styles.outerContainer,
+        reserveTouchSpace ? styles.outerContainerWithBubble : null,
+        { pointerEvents: 'box-none' },
+      ]}
+      testID="custom-tab-bar-wrapper"
+    >
+      {shouldRenderWalletBubble ? (
+        <WalletDiscoveryBubble
+          homeFocused={activeRouteName === 'index'}
+          walletCenter={8 + tabWidth * (walletIdx + 0.5)}
+          availableWidth={screenWidth - 32}
+          onVisibilityChange={onVisibilityChange}
+        />
+      ) : null}
       <BlurContainer
         intensity={Platform.OS === 'ios' ? 70 : 85}
         tint={isDark ? 'dark' : 'light'}
@@ -259,6 +280,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     ...getTabBarShadowStyle('native'),
   },
+  outerContainerWithBubble: { paddingTop: 96 },
   tabBarContainer: {
     flexDirection: 'row',
     height: 64,

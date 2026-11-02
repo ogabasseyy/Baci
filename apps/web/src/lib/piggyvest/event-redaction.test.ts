@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { PiggyvestWebhookEvent } from '@/schemas/piggyvest/events';
+import {
+  type PiggyvestWebhookEvent,
+  walletTransferOutflowSuccessEventSchema,
+} from '@/schemas/piggyvest/events';
 import { redactEventDetails } from './event-redaction';
 
 const INFLOW = {
@@ -47,6 +50,26 @@ const INFLOW = {
   pvb_meta: null,
 } as unknown as PiggyvestWebhookEvent;
 
+const WALLET_TRANSFER_OUTFLOW = {
+  eventId: 'evt-wallet-transfer-synthetic-001',
+  eventType: 'wallet-transfer.outflow.success',
+  eventCategory: 'wallet_transfer',
+  customer_id: 'pvb-customer-synthetic-001',
+  pvb_reference: 'pvb-ref-wallet-synthetic-001',
+  pvb_wallet: 'pvb-wallet-synthetic-001',
+  eventData: {
+    transaction_id: 'txn-wallet-transfer-candidate-001',
+    amount: 50000,
+    currency: 'NGN',
+    source_wallet: 'source-wallet-sensitive-001',
+    destination_wallet: 'destination-wallet-sensitive-001',
+    narration: 'Sensitive transfer narration',
+    reference: 'private-reference-001',
+    ip_address: '203.0.113.8',
+    provider_response: { token: 'provider-token-sensitive' },
+  },
+} as unknown as PiggyvestWebhookEvent;
+
 describe('redactEventDetails', () => {
   it('keeps reconciliation fields and drops all bank PII from inflows', () => {
     const redacted = redactEventDetails(INFLOW);
@@ -85,5 +108,36 @@ describe('redactEventDetails', () => {
     const redacted = redactEventDetails(event);
     expect(redacted).toMatchObject({ eventId: 'evt-synthetic-002' });
     expect(JSON.stringify(redacted)).not.toContain('9000000001');
+  });
+
+  it('retains only the documented transaction candidate ID for wallet outflow success', () => {
+    const parsed = walletTransferOutflowSuccessEventSchema.parse(
+      WALLET_TRANSFER_OUTFLOW
+    );
+    expect(parsed.eventData.transaction_id).toBe(
+      'txn-wallet-transfer-candidate-001'
+    );
+
+    const redacted = redactEventDetails(parsed);
+    expect(redacted).toEqual({
+      eventId: 'evt-wallet-transfer-synthetic-001',
+      eventType: 'wallet-transfer.outflow.success',
+      eventCategory: 'wallet_transfer',
+      customer_id: 'pvb-customer-synthetic-001',
+      transaction_id: 'txn-wallet-transfer-candidate-001',
+    });
+    expect(JSON.stringify(redacted)).not.toMatch(
+      /50000|NGN|source-wallet-sensitive|destination-wallet-sensitive|Sensitive transfer narration|private-reference|203\.0\.113\.8|provider-token-sensitive/
+    );
+  });
+
+  it('does not retain a missing or non-string wallet outflow transaction ID', () => {
+    for (const transaction_id of [undefined, null, 42, '']) {
+      const event = {
+        ...WALLET_TRANSFER_OUTFLOW,
+        eventData: { ...WALLET_TRANSFER_OUTFLOW.eventData, transaction_id },
+      } as unknown as PiggyvestWebhookEvent;
+      expect(redactEventDetails(event)).not.toHaveProperty('transaction_id');
+    }
   });
 });

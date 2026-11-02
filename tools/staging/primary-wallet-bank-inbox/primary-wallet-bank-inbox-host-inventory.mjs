@@ -11,27 +11,83 @@ process.stdout.write(JSON.stringify({nodeMajor:Number(process.versions.node.spli
 
 export function collectPrimaryBankHostInventory(input = {}) {
   const run = input.run ?? spawnSync;
-  const result = run('/usr/bin/ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=12',
-    'bassey@82.29.190.219', '/usr/bin/node -'], { input: script, encoding: 'utf8', timeout: 20000, maxBuffer: 65536 });
-  if (result.status !== 0) throw new Error('Read-only bank host inventory unavailable');
-  let observed;
-  try { observed = JSON.parse(result.stdout); } catch { throw new Error('Read-only bank host inventory unavailable'); }
-  if (Object.keys(observed).some((key) => !['nodeMajor','accountPresent','paths','units'].includes(key)) ||
-    !Number.isInteger(observed.nodeMajor) || typeof observed.accountPresent !== 'boolean' || !observed.paths || !observed.units)
+  const result = run(
+    '/usr/bin/ssh',
+    [
+      '-o',
+      'BatchMode=yes',
+      '-o',
+      'ConnectTimeout=12',
+      'bassey@82.29.190.219',
+      '/usr/bin/node -',
+    ],
+    { input: script, encoding: 'utf8', timeout: 20000, maxBuffer: 65536 }
+  );
+  if (result.status !== 0)
     throw new Error('Read-only bank host inventory unavailable');
-  const allowedPaths = ['/opt/baci/primary-bank-inbox/bank-inbox.cjs','/opt/baci/primary-bank-inbox/manifest.json',
-    '/etc/baci/primary-bank-inbox.env','/etc/systemd/system/baci-primary-bank-inbox.service','/etc/systemd/system/baci-primary-bank-inbox.timer'];
-  for (const [filename,item] of Object.entries(observed.paths)) {
-    if (!allowedPaths.includes(filename) || Object.keys(item).some((key) => !['state','regular','uid','gid','mode','sha256'].includes(key)) ||
-      !['present','absent','unreadable'].includes(item.state) || (item.sha256!==undefined && !/^[a-f0-9]{64}$/.test(item.sha256)))
+  let observed;
+  try {
+    observed = JSON.parse(result.stdout);
+  } catch {
+    throw new Error('Read-only bank host inventory unavailable');
+  }
+  if (
+    Object.keys(observed).some(
+      (key) => !['nodeMajor', 'accountPresent', 'paths', 'units'].includes(key)
+    ) ||
+    !Number.isInteger(observed.nodeMajor) ||
+    typeof observed.accountPresent !== 'boolean' ||
+    !observed.paths ||
+    !observed.units
+  )
+    throw new Error('Read-only bank host inventory unavailable');
+  const allowedPaths = [
+    '/opt/baci/primary-bank-inbox/bank-inbox.cjs',
+    '/opt/baci/primary-bank-inbox/manifest.json',
+    '/etc/baci/primary-bank-inbox.env',
+    '/etc/systemd/system/baci-primary-bank-inbox.service',
+    '/etc/systemd/system/baci-primary-bank-inbox.timer',
+  ];
+  for (const [filename, item] of Object.entries(observed.paths)) {
+    if (
+      !allowedPaths.includes(filename) ||
+      Object.keys(item).some(
+        (key) =>
+          !['state', 'regular', 'uid', 'gid', 'mode', 'sha256'].includes(key)
+      ) ||
+      !['present', 'absent', 'unreadable'].includes(item.state) ||
+      (item.sha256 !== undefined && !/^[a-f0-9]{64}$/.test(item.sha256))
+    )
       throw new Error('Read-only bank host inventory unavailable');
   }
-  for (const [unit,item] of Object.entries(observed.units)) {
-    if (!['baci-primary-bank-inbox.service','baci-primary-bank-inbox.timer'].includes(unit) ||
-      Object.entries(item).some(([key,value]) => !['LoadState','ActiveState','SubState','FragmentPath','state'].includes(key) || typeof value!=='string' || value.length>512))
+  for (const [unit, item] of Object.entries(observed.units)) {
+    if (
+      ![
+        'baci-primary-bank-inbox.service',
+        'baci-primary-bank-inbox.timer',
+      ].includes(unit) ||
+      Object.entries(item).some(
+        ([key, value]) =>
+          ![
+            'LoadState',
+            'ActiveState',
+            'SubState',
+            'FragmentPath',
+            'state',
+          ].includes(key) ||
+          typeof value !== 'string' ||
+          value.length > 512
+      )
+    )
       throw new Error('Read-only bank host inventory unavailable');
   }
-  return { evidenceSource: 'authorized_host_metadata', host: 'bassey@82.29.190.219',
-    capturedAt: (input.now ?? (() => new Date()))().toISOString(), ...observed,
-    databaseInspected: false, configurationValuesInspected: false, activationAuthorized: false };
+  return {
+    evidenceSource: 'authorized_host_metadata',
+    host: 'bassey@82.29.190.219',
+    capturedAt: (input.now ?? (() => new Date()))().toISOString(),
+    ...observed,
+    databaseInspected: false,
+    configurationValuesInspected: false,
+    activationAuthorized: false,
+  };
 }

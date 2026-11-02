@@ -4,6 +4,7 @@ import { MerchantNotFoundError } from '@/lib/feed-identifier';
 
 const mockGetCachedOpenAIFeedData = vi.fn();
 const mockGetMerchantByIdentifier = vi.fn();
+const mockGetCurrentSlugForAlias = vi.fn();
 const mockResolveFeedMerchant = vi.fn();
 
 vi.mock('@/env', () => ({
@@ -13,6 +14,11 @@ vi.mock('@/env', () => ({
 vi.mock('@/lib/cached-data', () => ({
   getMerchantByIdentifier: (...args: unknown[]) =>
     mockGetMerchantByIdentifier(...args),
+}));
+
+vi.mock('@/lib/slug-alias-cache', () => ({
+  getCurrentSlugForAlias: (...args: unknown[]) =>
+    mockGetCurrentSlugForAlias(...args),
 }));
 
 vi.mock('@/lib/feed-identifier', () => {
@@ -70,6 +76,7 @@ beforeEach(() => {
     slug: 'ogabassey',
     custom_domain: 'ogabassey.com',
   });
+  mockGetCurrentSlugForAlias.mockResolvedValue(null);
   mockResolveFeedMerchant.mockResolvedValue({
     id: '11111111-1111-4111-8111-111111111111',
     business_name: 'Ogabassey',
@@ -192,6 +199,7 @@ describe('GET /api/feed/openai host-scoped merchant inference', () => {
 
     expect(response.status).toBe(400);
     expect(body.error).toBe('No storefront found for the given host');
+    expect(mockGetCurrentSlugForAlias).toHaveBeenCalledWith('ogabassey.com');
     expect(mockResolveFeedMerchant).not.toHaveBeenCalled();
     expect(mockGetCachedOpenAIFeedData).not.toHaveBeenCalled();
   });

@@ -171,5 +171,18 @@ export function nativeActions() {
 export const stopped = (value) =>
   ['inactive', 'failed'].includes(value.ActiveState) && value.MainPID === '0';
 
-export { requireValue, fingerprint, sha, execute, pause, unit, account, code, config, runtime, socketPath, env, MAX_PRIVATE_SMOKE_LEASE_MS };
-
+export {
+  account,
+  code,
+  config,
+  env,
+  execute,
+  fingerprint,
+  MAX_PRIVATE_SMOKE_LEASE_MS,
+  pause,
+  requireValue,
+  runtime,
+  sha,
+  socketPath,
+  unit,
+};

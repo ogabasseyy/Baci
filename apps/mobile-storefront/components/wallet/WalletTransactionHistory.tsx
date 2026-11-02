@@ -2,6 +2,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import type Colors from '@/constants/Colors';
+import { WALLET_HISTORY_PAGE_SIZE } from '@/constants/wallet-history';
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import { hexToRgba } from '@/lib/hex-to-rgba';
 import { styles } from './wallet.styles';
@@ -9,8 +10,10 @@ import { styles } from './wallet.styles';
 type WalletColors = (typeof Colors)['light'];
 
 export interface WalletTransaction {
-  amount: number;
-  created_at: string;
+  goal_id?: string;
+  amount: number | null;
+  created_at: string | null;
+  date_basis?: 'ledger' | 'received' | 'observed' | 'unknown';
   description: string;
   id: string;
   /**
@@ -50,13 +53,24 @@ function humanizeTransactionType(type: WalletTransaction['type']): string {
   return TRANSACTION_TYPE_LABELS[type];
 }
 
-function formatWalletDate(dateString: string) {
-  return new Date(dateString).toLocaleString('en-NG', {
+function formatWalletDate(
+  dateString: string | null,
+  dateBasis?: WalletTransaction['date_basis']
+) {
+  if (!dateString || !Number.isFinite(Date.parse(dateString))) {
+    return 'Date unavailable';
+  }
+  if (dateBasis === 'unknown') return 'Date unavailable';
+  const formatted = new Date(dateString).toLocaleString('en-NG', {
     day: 'numeric',
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
   });
+  if (dateBasis === 'observed') return `Observed ${formatted}`;
+  if (dateBasis === 'received') return `Received ${formatted}`;
+  if (dateBasis === 'ledger') return `Recorded ${formatted}`;
+  return formatted;
 }
 
 export function WalletTransactionHistory({
@@ -86,15 +100,23 @@ export function WalletTransactionHistory({
           </Text>
         </View>
       ) : (
-        transactions.map((transaction) => {
+        transactions.slice(0, WALLET_HISTORY_PAGE_SIZE).map((transaction) => {
+          const amount = transaction.amount;
+          const amountAvailable = amount !== null;
           const isCredit =
-            ['credit', 'cashback', 'bonus', 'refund'].includes(
-              transaction.type
-            ) ||
-            (transaction.type === 'adjustment' && transaction.amount > 0);
+            (amountAvailable &&
+              ['credit', 'cashback', 'bonus', 'refund'].includes(
+                transaction.type
+              )) ||
+            (amountAvailable &&
+              transaction.type === 'adjustment' &&
+              amount > 0);
           const isDebit =
-            ['debit', 'redemption', 'expiry'].includes(transaction.type) ||
-            (transaction.type === 'adjustment' && transaction.amount < 0);
+            (amountAvailable &&
+              ['debit', 'redemption', 'expiry'].includes(transaction.type)) ||
+            (amountAvailable &&
+              transaction.type === 'adjustment' &&
+              amount < 0);
           // Adjustment rows are signed by amount because the backend type is neutral.
           const amountPrefix = isCredit ? '+' : isDebit ? '-' : '';
           const amountColor = isCredit
@@ -115,7 +137,7 @@ export function WalletTransactionHistory({
             <View
               accessible
               accessibilityRole="text"
-              accessibilityLabel={`${accessibleType}. ${transaction.description}. ${amountPrefix}${formatNgnCurrency(Math.abs(transaction.amount))}. ${formatWalletDate(transaction.created_at)}.`}
+              accessibilityLabel={`${accessibleType}. ${transaction.description}. ${amountAvailable ? `${amountPrefix}${formatNgnCurrency(Math.abs(amount))}` : 'Amount unavailable'}. ${formatWalletDate(transaction.created_at, transaction.date_basis)}.`}
               key={transaction.id}
               style={[
                 styles.transactionItem,
@@ -139,16 +161,24 @@ export function WalletTransactionHistory({
                 />
               </View>
               <View style={styles.txDetails}>
-                <Text style={[styles.txDescription, { color: colors.text }]}>
+                <Text
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  style={[styles.txDescription, { color: colors.text }]}
+                >
                   {transaction.description}
                 </Text>
                 <Text style={[styles.txDate, { color: colors.textSecondary }]}>
-                  {formatWalletDate(transaction.created_at)}
+                  {formatWalletDate(
+                    transaction.created_at,
+                    transaction.date_basis
+                  )}
                 </Text>
               </View>
               <Text style={[styles.txAmount, { color: amountColor }]}>
-                {amountPrefix}
-                {formatNgnCurrency(Math.abs(transaction.amount))}
+                {amountAvailable
+                  ? `${amountPrefix}${formatNgnCurrency(Math.abs(amount))}`
+                  : 'Amount unavailable'}
               </Text>
             </View>
           );

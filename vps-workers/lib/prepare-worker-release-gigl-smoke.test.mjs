@@ -17,10 +17,7 @@ describe('prepare worker release GIGL capability smoke', () => {
       script,
       /verify-gigl-tracking-worker-capability\.sh'" \|\| gigl_capability_status=\$\?/
     );
-    assert.match(
-      script,
-      /if \[ "\$gigl_capability_status" -eq 42 \]; then/
-    );
+    assert.match(script, /if \[ "\$gigl_capability_status" -eq 42 \]; then/);
     assert.match(script, /deferring capability verification/);
   });
 
@@ -30,10 +27,7 @@ describe('prepare worker release GIGL capability smoke', () => {
       'utf8'
     );
 
-    assert.match(
-      script,
-      /elif \[ "\$gigl_capability_status" -ne 0 \]; then/
-    );
+    assert.match(script, /elif \[ "\$gigl_capability_status" -ne 0 \]; then/);
     assert.match(
       script,
       /GIGL database capability verification failed; live worker files and crontab were not changed/

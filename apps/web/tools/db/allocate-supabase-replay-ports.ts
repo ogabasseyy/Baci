@@ -37,13 +37,32 @@ function* randomCandidates(): Iterable<number> {
 
 export async function isLoopbackPortAvailable(port: number): Promise<boolean> {
   if (!validPort(port)) return false;
-  return await new Promise<boolean>((resolve) => {
-    const server = createServer();
-    server.once('error', () => resolve(false));
-    server.listen({ exclusive: true, host: '127.0.0.1', port }, () => {
-      server.close((error) => resolve(!error));
+  for (const host of ['127.0.0.1', '0.0.0.0', '::'] as const) {
+    const available = await new Promise<boolean>((resolve) => {
+      const server = createServer();
+      server.once('error', (error: NodeJS.ErrnoException) => {
+        const unsupportedIpv6 =
+          host === '::' &&
+          ['EAFNOSUPPORT', 'EADDRNOTAVAIL', 'EPROTONOSUPPORT'].includes(
+            error.code ?? ''
+          );
+        resolve(unsupportedIpv6);
+      });
+      server.listen(
+        {
+          exclusive: true,
+          host,
+          port,
+          ...(host === '::' ? { ipv6Only: true } : {}),
+        },
+        () => {
+          server.close((error) => resolve(!error));
+        }
+      );
     });
-  });
+    if (!available) return false;
+  }
+  return true;
 }
 
 export async function allocateSupabaseReplayPorts(

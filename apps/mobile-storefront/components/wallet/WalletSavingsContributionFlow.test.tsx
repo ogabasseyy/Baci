@@ -1,7 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
-import Colors from '@/constants/Colors';
+import Colors, { BRAND } from '@/constants/Colors';
 import { WalletSavingsContributionFlow } from './WalletSavingsContributionFlow';
 
 function createProps() {
@@ -56,7 +56,7 @@ describe('WalletSavingsContributionFlow', () => {
       name: 'Continue to payment',
     });
     expect(StyleSheet.flatten(fund.props.style)).toEqual(
-      expect.objectContaining({ backgroundColor: Colors.dark.primary })
+      expect.objectContaining({ backgroundColor: BRAND.primary })
     );
     expect(fund).toHaveAccessibilityState({ disabled: true });
     fireEvent.press(fund);

@@ -26,8 +26,6 @@
     "**/*.test.tsx",
     "jest.config.ts",
     "jest.setup.ts",
-    "expo-env.d.ts",
-    "nativewind-env.d.ts",
-    ".expo/types/**/*.ts"
+    "nativewind-env.d.ts"
   ]
 }

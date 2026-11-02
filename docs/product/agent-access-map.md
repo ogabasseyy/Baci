@@ -1,12 +1,10 @@
 # Baci capabilities and agent access
 
 Reviewed 2 November 2026 against source revision
-`74dd46ca1db110a0b447a5f9bec75645e76d5cc1`. Checkout payment availability was re-reviewed:
-Oxygen remains local-staging QA only, not a production shopper capability. Other
-cited source evidence is unchanged from the previous capability review. This is
-a navigation map, not authorization or proof of current deployment. Check the
-current implementation, live tool discovery and merchant entitlement before
-calling or claiming a tool.
+`373b0daf57f03f09997be3d311a113e625fd5434`. Oxygen remains local-staging QA only. Mobile shipment
+confirmation and error presentation were re-reviewed. This is a navigation map,
+not authorization or proof of current deployment. Check the current implementation,
+live tool discovery and merchant entitlement before calling or claiming a tool.
 
 Baci's positioning is **agent-native commerce infrastructure for African
 merchants**: merchant-owned stores, structured discovery, controlled transactions

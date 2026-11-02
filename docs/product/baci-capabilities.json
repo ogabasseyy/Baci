@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-02T13:47:45+00:00",
-  "source_revision": "74dd46ca1db110a0b447a5f9bec75645e76d5cc1",
-  "evidence_digest": "fe25c4690c1595eb89f2ac292d8cccaa2aa9cfc352c2ad16f8d47f27a74200cc",
-  "claims_digest": "216bcc84a2fb8d5dbfef5656d677168f2f96612bd208c998d454861d47f3dc15",
-  "review_scope": "Source evidence only. Re-reviewed checkout payment availability: Oxygen remains limited to local staging QA with explicit opt-in, loopback Supabase, NGN and full-order-amount checks; it is not enabled for production shoppers. Rechecked cited capability and access-map source bytes across the current main integration; they are unchanged from the previous reviewed tree. Provider, deployment, native acceptance and transaction-readiness limitations remain; no production promotion.",
+  "reviewed_at": "2026-11-02T18:21:48+00:00",
+  "source_revision": "373b0daf57f03f09997be3d311a113e625fd5434",
+  "evidence_digest": "8ac9dba6d6d421d51516596389204db4791b91e8355c704c4728d7cd3b896f0f",
+  "claims_digest": "2a9c9c15309c627c65164ce0d9e84bdaff69701a7fb012a864964272cc95a59d",
+  "review_scope": "Source review: Oxygen checkout remains local staging QA only. Re-reviewed mobile shipment flow: success and unconfirmed-booking alerts wait for the sheet to close; existing shipping limitations remain. Deployment and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

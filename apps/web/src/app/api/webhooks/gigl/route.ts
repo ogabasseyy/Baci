@@ -101,6 +101,13 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const result = giglWebhookExpediteResultSchema.safeParse(data);
+  if (!result.success) {
+    // Contract drift must not swallow the hint: let GIG retry it.
+    logger.error({
+      message: 'GIGL webhook expedite returned an invalid result',
+    });
+    return unavailable();
+  }
   logger.info({
     message: 'GIGL webhook accepted',
     waybill: delivery.waybill,
@@ -110,8 +117,8 @@ export async function POST(request: Request): Promise<Response> {
     statusMapped: delivery.statusCode
       ? mapKnownGiglStatus(delivery.statusCode) !== null
       : null,
-    matched: result.success ? result.data.matched : null,
-    expedited: result.success ? result.data.expedited : null,
+    matched: result.data.matched,
+    expedited: result.data.expedited,
   });
 
   return NextResponse.json(ACKNOWLEDGEMENT, { headers: noStore });

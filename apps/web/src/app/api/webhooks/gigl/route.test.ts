@@ -185,6 +185,19 @@ describe('POST /api/webhooks/gigl', () => {
     expect(response.status).toBe(503);
   });
 
+  it.each([
+    ['null', null],
+    ['an array', [{ matched: 1, expedited: 1 }]],
+    ['a partial object', { matched: 1 }],
+  ])('asks GIG to retry when the database returns %s without an error', async (_label, data) => {
+    expedite.mockResolvedValue({ data, error: null });
+
+    const response = await post(validBody());
+
+    expect(response.status).toBe(503);
+    expect(logger.info).not.toHaveBeenCalled();
+  });
+
   it('never logs the secret, raw body, addresses or account ids', async () => {
     const accepted = validBody();
     await post(accepted);

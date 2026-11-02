@@ -77,6 +77,9 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   // GIG status webhooks are unauthenticated until decrypted, and each one
   // costs a PBKDF2 derivation (10k SHA-1 rounds). Give the carrier's egress
   // its own per-IP bucket so scan bursts never share the generic default.
+  // Deliberately not failClosedWithoutRedis: one derivation is a few ms of
+  // CPU, so the per-instance fallback's multiplied budget stays cheap, while
+  // 429s during a Redis outage would turn away genuine GIG deliveries.
   '/api/webhooks/gigl': { maxRequests: 60, windowMs: 60_000 },
   // Quiz: the Gemma generation route is an expensive AI call, and the claim
   // routes mint real prizes/cash — keep both well below the per-IP default.

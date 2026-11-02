@@ -1,6 +1,10 @@
 import { storefrontRouteSegments } from '@/config/storefront-route-segments';
 import { PLATFORM_ROOT_ROUTE_SEGMENTS } from './routing-constants';
 
+// Matches z.uuid() in OxygenPaymentContent without adding Zod to proxy bundles.
+const OXYGEN_ORDER_ID =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$/i;
+
 /** External storefront paths that can render the Oxygen payment journey. */
 export function isStorefrontCheckoutPath(pathname: string): boolean {
   const segments = pathname.split('/').filter(Boolean);
@@ -15,8 +19,9 @@ export function isStorefrontCheckoutPath(pathname: string): boolean {
 }
 
 export function isOxygenPaymentSurface(pathname: string): boolean {
+  const payment = /^\/payments\/oxygen\/([^/]+)\/?$/.exec(pathname);
   return (
     isStorefrontCheckoutPath(pathname) ||
-    /^\/payments\/oxygen\/[^/]+\/?$/.test(pathname)
+    (payment !== null && OXYGEN_ORDER_ID.test(payment[1]))
   );
 }

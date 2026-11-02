@@ -60,3 +60,25 @@ it('does not extend policies for disabled production or admin routes', () => {
   );
   expect(admin.headers.get('Permissions-Policy')).toContain('camera=()');
 });
+
+it.each([
+  '/payments/oxygen/not-a-uuid',
+  '/payments/oxygen/11111111-1111-1111-1111-111111111111',
+])('withholds Oxygen frames and camera for invalid payment route %s', (path) => {
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  vi.stubEnv('OXYGEN_STAGING_HOSTED_HOSTS', 'frame.example.test');
+  vi.stubEnv('OXYGEN_STAGING_SELFIE_HOSTS', 'frame.example.test');
+  const response = applySecurityHeaders(
+    NextResponse.next(),
+    path,
+    'test',
+    'storefront',
+    false
+  );
+  expect(response.headers.get('Content-Security-Policy')).not.toContain(
+    'frame.example.test'
+  );
+  expect(response.headers.get('Permissions-Policy')).toContain(
+    'camera=(), microphone=()'
+  );
+});

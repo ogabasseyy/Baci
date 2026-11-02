@@ -208,4 +208,18 @@ describe('OgabasseyNavbar', () => {
     );
   });
 
+  it('applies icon-link styling to mobile header actions for tap-target compliance', () => {
+    render(<OgabasseyNavbar storeSlug="/ogabassey" />);
+
+    const notificationsButton = screen.getByRole('button', {
+      name: /toggle notifications/i,
+    });
+    const cartLink = screen.getByRole('link', { name: /open cart/i });
+    const accountLink = screen.getByRole('link', { name: 'View account' });
+
+    expect(notificationsButton).toHaveClass('ogabassey-navbar__icon-link');
+    expect(cartLink).toHaveClass('ogabassey-navbar__icon-link');
+    expect(accountLink).toHaveClass('ogabassey-navbar__icon-link');
+  });
+
 });

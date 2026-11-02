@@ -96,6 +96,16 @@ export const useV2Theme = () => {
   return snapshot;
 };
 
+export const useV2ThemeSafe = (): { theme: V2ThemeMode } => {
+  const store = use(V2ThemeContext);
+  const snapshot = useSyncExternalStore(
+    store?.subscribe ?? subscribeToMissingTheme,
+    store?.getSnapshot ?? getNoTheme,
+    store?.getServerSnapshot ?? getNoTheme
+  );
+  return snapshot ?? { theme: 'standard' };
+};
+
 interface V2ThemeProviderProps {
   children: React.ReactNode;
   /** Initial theme from server (read from cookie) - enables SSR consistency */

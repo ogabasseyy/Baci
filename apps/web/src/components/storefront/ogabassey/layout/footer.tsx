@@ -1,3 +1,5 @@
+'use client';
+
 import type React from 'react';
 import type { MerchantData } from '@/hooks/merchant/types';
 import { Footer } from '../components/Footer';
@@ -5,7 +7,6 @@ import { Footer } from '../components/Footer';
 export interface FooterProps {
   merchant?: MerchantData;
   storeSlug?: string;
-  logo?: string;
 }
 
 const DEFAULT_OGABASSEY_FOOTER_MERCHANT: MerchantData = {

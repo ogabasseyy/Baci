@@ -54,7 +54,7 @@ export function NavbarNotifications({
         aria-label="Toggle notifications"
         aria-expanded={showNotifications}
         type="button"
-        className={`relative flex items-center justify-center hover:text-white transition-colors ${showNotifications ? 'text-white' : ''}`}
+        className={`ogabassey-navbar__icon-link relative flex items-center justify-center transition-colors ${showNotifications ? 'text-white' : ''}`}
       >
         <Bell size={22} />
       </button>

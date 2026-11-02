@@ -687,7 +687,7 @@
     align-items: center;
     display: flex;
     flex: 0 0 auto;
-    gap: 1rem;
+    gap: 0.5rem;
     order: 2;
     position: relative;
   }
@@ -696,10 +696,12 @@
     align-items: center;
     color: color-mix(in srgb, var(--ogabassey-shell-text) 80%, transparent);
     display: flex;
+    height: 2.75rem;
     justify-content: center;
     position: relative;
     text-decoration: none;
     transition: color 0.2s ease;
+    width: 2.75rem;
   }
 
   .ogabassey-navbar__icon-link:hover {
@@ -908,6 +910,11 @@
       flex: 0 0 auto;
       gap: 1.25rem;
       order: 0;
+    }
+
+    .ogabassey-navbar__icon-link {
+      height: auto;
+      width: auto;
     }
 
     .ogabassey-navbar-secondary {

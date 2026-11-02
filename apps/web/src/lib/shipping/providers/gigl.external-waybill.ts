@@ -167,7 +167,9 @@ export async function lookupGiglExternalWaybill(
         giglSchemas.preShipmentData,
         'pre-shipment'
       )
-      .find((entry) => entry.Waybill.trim() === waybill);
+      .find(
+        (entry) => entry.Waybill.trim().toUpperCase() === waybill.toUpperCase()
+      );
     if (!preShipment) {
       return { status: 'not_found' };
     }

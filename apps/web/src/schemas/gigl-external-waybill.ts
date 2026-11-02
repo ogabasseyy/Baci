@@ -9,7 +9,9 @@ export const giglExternalWaybillRequestSchema = z
     waybill: z
       .string()
       .trim()
-      .regex(GIGL_EXTERNAL_WAYBILL_PATTERN, 'Enter a valid GIG waybill number'),
+      .regex(GIGL_EXTERNAL_WAYBILL_PATTERN, 'Enter a valid GIG waybill number')
+      // Every duplicate check compares upper-cased waybills; match that here.
+      .transform((value) => value.toUpperCase()),
   })
   .strict();
 

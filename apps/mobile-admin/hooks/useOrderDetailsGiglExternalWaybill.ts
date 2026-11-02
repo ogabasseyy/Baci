@@ -14,6 +14,7 @@ interface UseOrderDetailsGiglExternalWaybillParams {
   fulfillmentDetails: ShipmentFulfillmentDetails;
   orderId: string;
   orderNumber: string;
+  runAfterShipmentFlowDismissed: (task: () => void) => void;
   setSuccessModal: (value: OrderDetailsSuccessModalState) => void;
 }
 
@@ -27,6 +28,7 @@ export function useOrderDetailsGiglExternalWaybill({
   fulfillmentDetails,
   orderId,
   orderNumber,
+  runAfterShipmentFlowDismissed,
   setSuccessModal,
 }: UseOrderDetailsGiglExternalWaybillParams) {
   const { merchant } = useMerchant();
@@ -59,16 +61,20 @@ export function useOrderDetailsGiglExternalWaybill({
     orderId,
     onLinked: ({ trackingNumber }) => {
       closeShipmentFlow();
-      setSuccessModal({
-        actionLabel: '',
-        actionVariant: 'default',
-        message: `GIG waybill ${trackingNumber} is now tracked on order ${orderNumber}.`,
-        showAction: false,
-        subMessage:
-          'Baci will follow the parcel and update you and the customer as it moves.',
-        title: 'Waybill attached',
-        visible: true,
-      });
+      // Wait for the sheet's exit animation, as the provider and rider paths
+      // do, so iOS doesn't swallow the dialog with the closing sheet.
+      runAfterShipmentFlowDismissed(() =>
+        setSuccessModal({
+          actionLabel: '',
+          actionVariant: 'default',
+          message: `GIG waybill ${trackingNumber} is now tracked on order ${orderNumber}.`,
+          showAction: false,
+          subMessage:
+            'Baci will follow the parcel and update you and the customer as it moves.',
+          title: 'Waybill attached',
+          visible: true,
+        })
+      );
     },
   });
 

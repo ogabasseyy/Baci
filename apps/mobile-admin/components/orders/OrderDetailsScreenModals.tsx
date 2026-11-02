@@ -39,6 +39,7 @@ export function OrderDetailsScreenModals({
     fulfillmentDetails: controller.fulfillmentDetails,
     orderId: order.id,
     orderNumber: order.order_number,
+    runAfterShipmentFlowDismissed: controller.runAfterShipmentFlowDismissed,
     setSuccessModal: controller.setSuccessModal,
   });
   return (

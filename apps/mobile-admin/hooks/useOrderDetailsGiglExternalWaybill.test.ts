@@ -60,16 +60,21 @@ function render(
 ) {
   const closeShipmentFlow = vi.fn();
   const setSuccessModal = vi.fn();
+  const deferred: Array<() => void> = [];
+  const runAfterShipmentFlowDismissed = (task: () => void) => {
+    deferred.push(task);
+  };
   const hook = renderHook(() =>
     useOrderDetailsGiglExternalWaybill({
       closeShipmentFlow,
       fulfillmentDetails,
       orderId: 'order-1',
       orderNumber: 'ORD-1',
+      runAfterShipmentFlowDismissed,
       setSuccessModal,
     })
   );
-  return { closeShipmentFlow, hook, setSuccessModal };
+  return { closeShipmentFlow, deferred, hook, setSuccessModal };
 }
 
 describe('useOrderDetailsGiglExternalWaybill', () => {
@@ -106,10 +111,13 @@ describe('useOrderDetailsGiglExternalWaybill', () => {
   });
 
   it('closes Ship Order and confirms once the waybill is attached', () => {
-    const { closeShipmentFlow, setSuccessModal } = render();
+    const { closeShipmentFlow, deferred, setSuccessModal } = render();
     mocks.onLinked?.({ trackingNumber: '1349639588' });
 
     expect(closeShipmentFlow).toHaveBeenCalledTimes(1);
+    // The dialog waits until the sheet has finished closing.
+    expect(setSuccessModal).not.toHaveBeenCalled();
+    for (const task of deferred) task();
     expect(setSuccessModal).toHaveBeenCalledWith(
       expect.objectContaining({
         message: 'GIG waybill 1349639588 is now tracked on order ORD-1.',

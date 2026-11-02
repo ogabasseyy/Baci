@@ -20,6 +20,15 @@ describe('giglExternalWaybillRequestSchema', () => {
     ).toBe(true);
   });
 
+  it('upper-cases a waybill so it matches the duplicate checks', () => {
+    expect(
+      giglExternalWaybillRequestSchema.parse({
+        action: 'link',
+        waybill: 'gig-123',
+      }).waybill
+    ).toBe('GIG-123');
+  });
+
   it.each([
     { action: 'preview', waybill: '' },
     { action: 'preview', waybill: '123' },

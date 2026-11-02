@@ -197,10 +197,13 @@ escalate. If `balance_matches_ledger` reads `false` or is empty, the wallet does
 history: escalate (A3 explains the comparison). V1 must no longer list the purchase.
 
 **After "delivered", tell the customer (required step).** The checker revisits a successful
-purchase only while commission, cashback or loyalty points are still to be credited, or after
-a success email was recorded as failed. A purchase that earned none of those is never
-revisited and no success notification is ever sent for it, so a settled V4 row does not show
-that the customer was told. Contact the customer to confirm that the airtime arrived, and
+purchase while commission, cashback or loyalty points are still to be credited, after a
+success email was recorded as failed, or when an email attempt got stuck (an attempt was
+started, no sent result was recorded and the claim was cleared or has expired). A purchase
+that earned no credits and has none of those email states is not revisited and no success
+notification is sent for it. Whether the checker sends one cannot be predicted from V4, so a
+settled V4 row does not show that the customer was told, and a checker-sent message does not
+replace the contact below. Contact the customer to confirm that the airtime arrived, and
 record in the ops log who did this and when. If the customer says it did not arrive, stop and
 escalate to the owner with the vendor's evidence. Do not move any money.
 

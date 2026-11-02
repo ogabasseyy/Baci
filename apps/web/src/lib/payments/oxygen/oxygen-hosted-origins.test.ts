@@ -2,6 +2,20 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { readOxygenHostedOrigins } from './oxygen-hosted-origins';
 
 afterEach(() => vi.unstubAllEnvs());
+it('never exposes staging hosts when production mode has no verified deployment identity', () => {
+  vi.stubEnv('VERCEL_ENV', '');
+  vi.stubEnv('NODE_ENV', 'production');
+  vi.stubEnv('OXYGEN_ENVIRONMENT', '');
+  vi.stubEnv('OXYGEN_STAGING_HOSTED_HOSTS', 'stage.example.test');
+  vi.stubEnv('OXYGEN_STAGING_SELFIE_HOSTS', 'stage.example.test');
+  expect(readOxygenHostedOrigins()).toEqual({ hosted: [], selfie: [] });
+  vi.stubEnv('OXYGEN_ENVIRONMENT', 'staging');
+  expect(readOxygenHostedOrigins().hosted).toEqual([
+    'https://stage.example.test',
+  ]);
+  vi.stubEnv('VERCEL_ENV', 'production');
+  expect(readOxygenHostedOrigins()).toEqual({ hosted: [], selfie: [] });
+});
 it('uses exact configured staging hosts with selfie limited to the configured intersection', () => {
   vi.stubEnv('VERCEL_ENV', 'preview');
   vi.stubEnv(

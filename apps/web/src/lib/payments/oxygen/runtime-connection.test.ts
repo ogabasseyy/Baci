@@ -8,7 +8,10 @@ vi.mock('@/env', () => ({
   getSupabaseAnonKey: () => 'synthetic-public-key',
 }));
 
-import { connectOxygenRuntime } from './runtime-connection';
+import {
+  connectOxygenRuntime,
+  oxygenRuntimeCallbackConfiguration,
+} from './runtime-connection';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -79,6 +82,21 @@ it('refuses to enable the staging adapter in a production deployment', () => {
   vi.stubEnv('VERCEL_ENV', 'production');
   expect(connectOxygenRuntime()).toBeNull();
   expect(mocks.create).not.toHaveBeenCalled();
+});
+it('does not use staging callback credentials for an ambiguous or mismatched deployment', () => {
+  vi.stubEnv('VERCEL_ENV', '');
+  vi.stubEnv('NODE_ENV', 'production');
+  vi.stubEnv('OXYGEN_ENVIRONMENT', '');
+  vi.stubEnv('OXYGEN_STAGING_PARTNER_REFERENCE', 'partner');
+  vi.stubEnv('OXYGEN_STAGING_CALLBACK_KEY', 'key');
+  vi.stubEnv('OXYGEN_STAGING_CALLBACK_SECRET', 'secret');
+  expect(oxygenRuntimeCallbackConfiguration()).toBeNull();
+  vi.stubEnv('OXYGEN_ENVIRONMENT', 'staging');
+  expect(oxygenRuntimeCallbackConfiguration()).toMatchObject({
+    partnerReference: 'partner',
+  });
+  vi.stubEnv('VERCEL_ENV', 'production');
+  expect(oxygenRuntimeCallbackConfiguration()).toBeNull();
 });
 
 it('refuses execution when response evidence cannot be encrypted', () => {

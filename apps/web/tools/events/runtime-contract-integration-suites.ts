@@ -1,5 +1,7 @@
 /** Reviewed behavioral suites for split modules; each association must resolve through real imports. */
 export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
+  'apps/web/src/components/payments/oxygen/OxygenPaymentReady.tsx':
+    'apps/web/src/components/payments/oxygen/OxygenActivationRetry.test.tsx',
   'apps/web/src/app/api/shipping/quotes/load-public-merchant-rates.ts':
     'apps/web/src/app/api/shipping/quotes/route.public-rates-client.test.ts',
   'apps/web/src/hooks/cart/use-legacy-cart-instance-adoption.ts':

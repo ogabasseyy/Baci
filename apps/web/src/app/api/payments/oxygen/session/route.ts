@@ -2,13 +2,14 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
+import { resolveOxygenEnvironment } from '@/lib/payments/oxygen/environment';
 import { connectOxygenRuntime } from '@/lib/payments/oxygen/runtime-connection';
 import { createClient } from '@/lib/supabase/server';
 import { oxygenSessionSchema } from '@/schemas/oxygen-session';
 
 /** Normal customer sign-in for the isolated staging handoff. No worker credentials. */
 export async function POST(request: NextRequest) {
-  if (process.env.VERCEL_ENV === 'production' || !connectOxygenRuntime())
+  if (resolveOxygenEnvironment() !== 'staging' || !connectOxygenRuntime())
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   const csrf = await checkCsrfProtection(request);
   if (!csrf.valid)

@@ -1,8 +1,22 @@
-import { expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
 import { reconcileOxygenActivation } from './activation-reconciliation';
+
+beforeEach(() => {
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  vi.stubEnv(
+    'OXYGEN_STAGING_ACTIVATION_TRIAL_BINDINGS',
+    JSON.stringify([
+      {
+        reference: '1e65cf4b-4942-4ade-8149-e894687f6c40',
+        workflowId: '1c0459fe-2d45-4d2c-b41a-0ac640ad9f89',
+      },
+    ])
+  );
+});
+afterEach(() => vi.unstubAllEnvs());
 
 it('reconciles only the current binding without any provider call', async () => {
   const rpc = vi

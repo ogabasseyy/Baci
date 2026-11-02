@@ -1,6 +1,7 @@
 import 'server-only';
+import { resolveOxygenEnvironment } from './environment';
 
-export type OxygenEnvironment = 'staging' | 'production';
+export type { OxygenEnvironment } from './environment';
 export const oxygenProviderOrigins = {
   staging: 'https://staging-api.theoxygen.com/services/partners',
   production: 'https://api.oxygenx.africa/services/partners',
@@ -8,8 +9,8 @@ export const oxygenProviderOrigins = {
 
 /** Deployment-controlled configuration only. Requests cannot choose origins or credentials. */
 export function readOxygenRuntimeConfiguration() {
-  const environment: OxygenEnvironment =
-    process.env.VERCEL_ENV === 'production' ? 'production' : 'staging';
+  const environment = resolveOxygenEnvironment();
+  if (!environment) return null;
   if (
     environment === 'production' &&
     process.env.OXYGEN_PRODUCTION_RUNTIME_ENABLED !== 'true'

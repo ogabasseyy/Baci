@@ -1,3 +1,5 @@
+import { resolveOxygenEnvironment } from './environment';
+
 /** Public browser origins only. This module never reads credentials or tokens. */
 function parseHosts(raw: string | undefined): string[] | null {
   if (!raw) return [];
@@ -30,7 +32,9 @@ export function readOxygenHostedOrigins(): {
   hosted: string[];
   selfie: string[];
 } {
-  const production = process.env.VERCEL_ENV === 'production';
+  const environment = resolveOxygenEnvironment();
+  if (!environment) return { hosted: [], selfie: [] };
+  const production = environment === 'production';
   if (production && process.env.OXYGEN_PRODUCTION_RUNTIME_ENABLED !== 'true')
     return { hosted: [], selfie: [] };
   const hostedNames = parseHosts(

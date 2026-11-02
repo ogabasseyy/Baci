@@ -6,6 +6,7 @@ import {
 import { checkCsrfProtection } from '@/lib/csrf';
 import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
 import { projectOxygenChat } from '@/lib/payments/oxygen/chat-pipeline';
+import { resolveOxygenEnvironment } from '@/lib/payments/oxygen/environment';
 import { oxygenChatRequestSchema } from '@/schemas/oxygen-chat';
 import { oxygenWorkflowSnapshotSchema } from '@/schemas/oxygen-workflow';
 
@@ -32,6 +33,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401, headers }
+    );
+  // Chat continuation is staging-only and must never start production workflows.
+  if (resolveOxygenEnvironment() !== 'staging')
+    return NextResponse.json(
+      { error: 'Application unavailable' },
+      { status: 503, headers }
     );
   // Bearer verification above establishes customer identity. Cookie callers also
   // need browser CSRF protection; a channel string cannot bypass either guard.

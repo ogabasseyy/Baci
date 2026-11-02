@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
@@ -43,10 +43,21 @@ function saved(version = 1) {
   };
 }
 beforeEach(() => vi.stubEnv('OXYGEN_DRAFT_ENCRYPTION_KEY', key));
+afterEach(() => vi.unstubAllEnvs());
 it('refuses invisible workflows before reading drafts', async () => {
   const db = client(query(null));
   await expect(readOxygenDraft(db, 'user', id)).rejects.toMatchObject({
     code: 'not_found',
+  });
+  expect(db.from).toHaveBeenCalledTimes(1);
+});
+it('rejects staging drafts in an ambiguous production-mode deployment', async () => {
+  vi.stubEnv('VERCEL_ENV', '');
+  vi.stubEnv('NODE_ENV', 'production');
+  vi.stubEnv('OXYGEN_ENVIRONMENT', '');
+  const db = client(owned());
+  await expect(readOxygenDraft(db, 'user', id)).rejects.toMatchObject({
+    code: 'stage_locked',
   });
   expect(db.from).toHaveBeenCalledTimes(1);
 });

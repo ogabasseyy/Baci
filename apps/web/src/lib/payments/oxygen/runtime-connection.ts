@@ -6,6 +6,7 @@ import {
   readOxygenActivationBindings,
 } from './activation-binding';
 import { reconcileOxygenCallbackPayment } from './callback-payment-recovery';
+import { resolveOxygenEnvironment } from './environment';
 import { runGeneralOxygenActivation } from './general-activation';
 import { completeOxygenPaidActivation } from './paid-activation';
 import { createOxygenPaymentRecoveryRecorder } from './payment-recovery-evidence';
@@ -242,7 +243,9 @@ export function connectOxygenRuntime() {
   };
 }
 export function oxygenRuntimeCallbackConfiguration(): OxygenCallbackConfiguration | null {
-  const production = process.env.VERCEL_ENV === 'production';
+  const environment = resolveOxygenEnvironment();
+  if (!environment) return null;
+  const production = environment === 'production';
   if (production && process.env.OXYGEN_PRODUCTION_RUNTIME_ENABLED !== 'true')
     return null;
   const prefix = production ? 'OXYGEN_PRODUCTION' : 'OXYGEN_STAGING';

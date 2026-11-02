@@ -68,6 +68,19 @@ it('preserves the existing isolated staging configuration', () => {
     readOxygenRuntimeConfiguration()?.hosts.has('payment.hydrogenpay.com')
   ).toBe(true);
 });
+it('fails closed in production mode without a deployment identity or explicit staging opt-in', () => {
+  set({
+    ...staging,
+    VERCEL_ENV: '',
+    NODE_ENV: 'production',
+    OXYGEN_ENVIRONMENT: '',
+  });
+  expect(readOxygenRuntimeConfiguration()).toBeNull();
+  vi.stubEnv('OXYGEN_ENVIRONMENT', 'staging');
+  expect(readOxygenRuntimeConfiguration()?.environment).toBe('staging');
+  vi.stubEnv('VERCEL_ENV', 'production');
+  expect(readOxygenRuntimeConfiguration()).toBeNull();
+});
 it.each([
   'https://checkout.example.test',
   '*.paystack.com',

@@ -101,6 +101,15 @@ it('passes explicit activation opt-in without making a provider request itself',
   );
 });
 it('retains only explicitly bound staging trial recovery', async () => {
+  vi.stubEnv(
+    'OXYGEN_STAGING_ACTIVATION_TRIAL_BINDINGS',
+    JSON.stringify([
+      {
+        reference: '1e65cf4b-4942-4ade-8149-e894687f6c40',
+        workflowId: '1c0459fe-2d45-4d2c-b41a-0ac640ad9f89',
+      },
+    ])
+  );
   const runtime = configure('staging');
   await runtime.completePaidActivation(
     worker,
@@ -114,5 +123,21 @@ it('retains only explicitly bound staging trial recovery', async () => {
       worker,
       '1c0459fe-2d45-4d2c-b41a-0ac640ad9f89'
     )
-  ).rejects.toThrow('Activation unavailable');
+  ).resolves.toBe(false);
+  expect(m.trial).toHaveBeenCalledOnce();
+  expect(m.general).not.toHaveBeenCalled();
+  vi.stubEnv('OXYGEN_PRODUCTION_AUTOMATIC_ACTIVATION_ENABLED', 'true');
+  await production.completePaidActivation(
+    worker,
+    '1c0459fe-2d45-4d2c-b41a-0ac640ad9f89'
+  );
+  expect(m.trial).toHaveBeenCalledOnce();
+  expect(m.general).toHaveBeenCalledWith(
+    worker,
+    '1c0459fe-2d45-4d2c-b41a-0ac640ad9f89',
+    'production',
+    true,
+    expect.any(Function),
+    'a'.repeat(64)
+  );
 });

@@ -40,6 +40,14 @@ it('is unavailable in production before reading credentials or creating a client
   expect(m.client).not.toHaveBeenCalled();
   expect(m.connect).not.toHaveBeenCalled();
 });
+it('rejects ambiguous production-mode deployment before constructing a runtime', async () => {
+  vi.stubEnv('VERCEL_ENV', '');
+  vi.stubEnv('NODE_ENV', 'production');
+  vi.stubEnv('OXYGEN_ENVIRONMENT', '');
+  expect((await POST(request('{}'))).status).toBe(404);
+  expect(m.connect).not.toHaveBeenCalled();
+  expect(m.client).not.toHaveBeenCalled();
+});
 it('requires CSRF and rate limits before authentication', async () => {
   m.csrf.mockResolvedValue({ valid: false });
   expect((await POST(request('{}'))).status).toBe(403);

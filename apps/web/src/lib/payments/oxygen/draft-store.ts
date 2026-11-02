@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import type { oxygenDraftWriteSchema } from '@/schemas/oxygen-form-draft';
 import { decryptOxygenDraft, encryptOxygenDraft } from './draft-crypto';
+import { resolveOxygenEnvironment } from './environment';
 
 const rowSchema = z.object({
   ciphertext: z.string(),
@@ -18,13 +19,11 @@ export class OxygenDraftError extends Error {
   }
 }
 
-function runtimeEnvironment() {
-  return process.env.VERCEL_ENV === 'production' ? 'production' : 'staging';
-}
-
 function environmentEnabled(environment: unknown) {
+  const runtime = resolveOxygenEnvironment();
   return (
-    environment === runtimeEnvironment() &&
+    runtime !== null &&
+    environment === runtime &&
     (environment !== 'production' ||
       process.env.OXYGEN_PRODUCTION_RUNTIME_ENABLED === 'true')
   );
@@ -46,8 +45,9 @@ async function ownedWorkflow(client: SupabaseClient, workflowId: string) {
   return result.data;
 }
 function getKey() {
+  if (!resolveOxygenEnvironment()) throw new OxygenDraftError('unavailable');
   const key =
-    (runtimeEnvironment() === 'production'
+    (resolveOxygenEnvironment() === 'production'
       ? process.env.OXYGEN_PRODUCTION_DRAFT_ENCRYPTION_KEY
       : process.env.OXYGEN_DRAFT_ENCRYPTION_KEY) ?? '';
   if (!/^[a-f0-9]{64}$/i.test(key)) throw new OxygenDraftError('unavailable');
@@ -149,7 +149,7 @@ export async function readOxygenDraftForLocalAttempt(
   sourceWorkflowId: string
 ) {
   if (
-    runtimeEnvironment() !== 'staging' ||
+    resolveOxygenEnvironment() !== 'staging' ||
     process.env.NODE_ENV !== 'development' ||
     process.env.NEXT_PUBLIC_OXYGEN_LOCAL_CHECKOUT !== 'true'
   )

@@ -1,5 +1,6 @@
 import 'server-only';
 import { z } from 'zod';
+import { resolveOxygenEnvironment } from './environment';
 
 const bindingSchema = z
   .object({ reference: z.uuid(), workflowId: z.uuid() })
@@ -10,11 +11,7 @@ export const oxygenActivationReferenceSchema = z.uuid();
 export function readOxygenActivationBindings(): readonly z.infer<
   typeof bindingSchema
 >[] {
-  if (
-    process.env.VERCEL_ENV === 'production' ||
-    (!process.env.VERCEL_ENV && process.env.NODE_ENV === 'production')
-  )
-    return [];
+  if (resolveOxygenEnvironment() !== 'staging') return [];
   const raw = process.env.OXYGEN_STAGING_ACTIVATION_TRIAL_BINDINGS;
   if (!raw || raw.length > 8192) return [];
   try {

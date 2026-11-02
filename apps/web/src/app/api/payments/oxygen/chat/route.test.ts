@@ -161,3 +161,13 @@ describe('authenticated Oxygen chat continuation', () => {
     expect(mocks.auth).toHaveBeenCalledTimes(1);
   });
 });
+
+it('keeps staging-only chat disabled in production before creating or resuming a workflow', async () => {
+  vi.stubEnv('VERCEL_ENV', 'production');
+  try {
+    expect((await POST(request())).status).toBe(503);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

@@ -4,7 +4,7 @@ import {
   oxygenActivationTrialStateSchema,
 } from './oxygen-activation-trial';
 
-it('allows only the expressly authorized reference and known trial states', () => {
+it('validates UUID shape and known trial states without deciding authorization', () => {
   expect(
     oxygenActivationTrialBodySchema.safeParse({
       reference: 'b75cd437-28af-4008-a1af-7e6810282833',
@@ -14,6 +14,9 @@ it('allows only the expressly authorized reference and known trial states', () =
     oxygenActivationTrialBodySchema.safeParse({
       reference: '438f96ee-37c4-49bb-a56c-51451f9cb624',
     }).success
+  ).toBe(true);
+  expect(
+    oxygenActivationTrialBodySchema.safeParse({ reference: 'invalid' }).success
   ).toBe(false);
   expect(
     oxygenActivationTrialBodySchema.safeParse({

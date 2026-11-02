@@ -63,7 +63,7 @@ it('uses a full GCM tag and rejects truncated and overlong tags for all encrypte
   for (const file of [
     'draft-crypto.ts',
     'phone-handoff-crypto.ts',
-    'response-evidence.ts',
+    'response-evidence-crypto.ts',
   ]) {
     const source = readFileSync(new URL(file, import.meta.url), 'utf8');
     expect(source).toMatch(/createDecipheriv\([\s\S]*?authTagLength:\s*16/);

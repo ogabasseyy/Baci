@@ -23,6 +23,15 @@ import {
   encryptGiglToken,
 } from './gigl-tracking-cache-crypto';
 
+function errorCode(error: unknown): string | undefined {
+  return typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    typeof error.code === 'string'
+    ? error.code
+    : undefined;
+}
+
 const maxLifetime = 20 * 24 * 60 * 60 * 1000;
 const maxRecordBytes = 110_000;
 
@@ -66,7 +75,7 @@ export function createGiglTrackingTokenCache({
       try {
         await mkdir(resolvedDirectory, { mode: 0o700 });
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        if (errorCode(error) !== 'EEXIST') throw error;
       }
     }
     const info = await lstat(resolvedDirectory);
@@ -94,7 +103,7 @@ export function createGiglTrackingTokenCache({
         throw new Error('Unsafe token cache file');
       }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      if (errorCode(error) !== 'ENOENT') throw error;
     }
   }
 
@@ -127,8 +136,8 @@ export function createGiglTrackingTokenCache({
       )
         continue;
       const file = join(path, entry.name);
-      const info = await lstat(file).catch((error: NodeJS.ErrnoException) => {
-        if (error.code === 'ENOENT') return null;
+      const info = await lstat(file).catch((error: unknown) => {
+        if (errorCode(error) === 'ENOENT') return null;
         throw error;
       });
       if (!info) continue;
@@ -232,8 +241,7 @@ export function createGiglTrackingTokenCache({
         await handle.close();
       }
     } catch (error) {
-      let expectedMiss =
-        openingFile && (error as NodeJS.ErrnoException).code === 'ENOENT';
+      let expectedMiss = openingFile && errorCode(error) === 'ENOENT';
       if (expectedMiss) {
         try {
           expectedMiss =

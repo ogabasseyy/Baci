@@ -77,6 +77,7 @@ async function runBatchDirectly(
   }
   const directory = join(home, 'baci-workers', 'gigl-tracking-token-cache');
   if (cacheRunActive || !hasVerifiedGiglCacheLock(directory, 9)) {
+    emitError('[gigl-tracking] token cache unavailable');
     return runGiglTrackingMonitorBatch(options);
   }
   cacheRunActive = true;

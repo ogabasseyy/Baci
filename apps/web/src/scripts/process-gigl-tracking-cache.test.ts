@@ -125,7 +125,9 @@ it('runs without cache when the inherited worker lock is not verified', async ()
     NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon-key', NEXT_PUBLIC_SUPABASE_URL: 'https://projectref.supabase.co',
     HOME: '/home/worker', BACI_WORKER_PROFILE: 'gigl-tracking',
   };
-  await expect(runGiglTrackingCli({ env, logger: { error: vi.fn(), info: vi.fn() } })).resolves.toBe(0);
+  const logger = { error: vi.fn(), info: vi.fn() };
+  await expect(runGiglTrackingCli({ env, logger })).resolves.toBe(0);
+  expect(logger.error).toHaveBeenCalledWith('[gigl-tracking] token cache unavailable');
   expect(mocks.createCache).not.toHaveBeenCalled();
   expect(mocks.runWithCache).not.toHaveBeenCalled();
   expect(mocks.runMonitorBatch).toHaveBeenCalledOnce();

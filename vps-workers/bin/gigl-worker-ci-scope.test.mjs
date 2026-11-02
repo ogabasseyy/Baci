@@ -14,6 +14,8 @@ test('GIGL worker chain and its probes select the worker CI suite', () => {
     'tools/test/gigl-flock-linux-probe.py',
     'tools/test/gigl-lock-exec.test.py',
     'tools/test/gigl-worker-launch-linux-probe.py',
+    'apps/web/src/lib/shipping/providers/gigl.auth.ts',
+    'apps/web/src/lib/shipping/providers/gigl.ts',
     'apps/web/src/lib/shipping/providers/gigl-cache-lock-verification.ts',
     'apps/web/src/lib/shipping/providers/gigl-tracking-token-cache.ts',
     'apps/web/src/lib/shipping/providers/gigl-tracking-cache-crypto.ts',

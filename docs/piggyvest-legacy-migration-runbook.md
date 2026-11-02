@@ -63,7 +63,8 @@ PiggyVest statement. Customers with no confirmed credit are left out of step 4.
    left out in step 3 are not counted). Each PiggyVest reference may appear
    once. The script stops if the counts differ. It ends with `ROLLBACK`, so nothing is saved.
 4. Check the result: every row shows `now_balance` 0 and the right amount.
-   Any error means a balance changed or a row was wrong. Nothing was changed.
+   The script also re-adds the wallet ledger and refuses any wallet whose
+   stored balance differs from it. Any error means a balance changed or a row was wrong. Nothing was changed.
    Fix the list from step 1, not the script.
 
 ## 5. Commit and verify

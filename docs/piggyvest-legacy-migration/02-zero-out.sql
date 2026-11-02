@@ -12,6 +12,8 @@
 --   * every listed wallet must exist, match its merchant and customer, and hold
 --     EXACTLY the expected balance at the moment it is locked;
 --   * a wallet that already has a migration ledger row is refused (no second run);
+--   * every wallet's stored balance must equal its ledger total (same formula
+--     as 01-balance-list.sql and public.backfill_wallet_balances());
 --   * every wallet is changed, nothing else is touched.
 -- It ends with ROLLBACK. Read the printed result, then swap the last two lines
 -- (delete ROLLBACK, uncomment the final COMMIT) and run it again. Nothing is
@@ -126,6 +128,31 @@ BEGIN
     RAISE EXCEPTION 'PiggyVest credit reference already used for a migrated wallet';
   END IF;
 
+  -- The stored balance must also equal the ledger total, or zeroing it would
+  -- leave the ledger non-zero and a later rebuild would resurrect the money.
+  SELECT count(*) INTO v_bad
+  FROM legacy_zero_out_list l
+  WHERE l.expected_balance IS DISTINCT FROM (
+    SELECT COALESCE(SUM(
+      CASE
+        WHEN t.status = 'completed'
+          AND t.type IN ('credit', 'cashback', 'bonus', 'adjustment', 'refund')
+          THEN t.amount
+        WHEN t.status = 'completed'
+          AND t.type IN ('debit', 'redemption', 'expiry')
+          THEN -t.amount
+        WHEN t.status = 'expired' AND t.type = 'expiry'
+          THEN -t.amount
+        ELSE 0
+      END
+    ), 0)
+    FROM public.customer_wallet_transactions t
+    WHERE t.wallet_id = l.wallet_id
+  );
+  IF v_bad <> 0 THEN
+    RAISE EXCEPTION 'ledger total differs from the stored balance on % wallet(s); nothing changed', v_bad;
+  END IF;
+
   -- Time is read only now that every lock is held.
   v_now := clock_timestamp();
 
@@ -150,7 +177,8 @@ BEGIN
   END IF;
 
   UPDATE public.customer_wallets cw
-  SET available_balance = 0
+  SET available_balance = 0,
+      updated_at = v_now
   FROM legacy_zero_out_list l
   WHERE cw.id = l.wallet_id
     AND cw.available_balance = l.expected_balance;

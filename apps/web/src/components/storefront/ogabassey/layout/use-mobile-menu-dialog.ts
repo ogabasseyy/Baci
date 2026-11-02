@@ -17,7 +17,8 @@ export function useMobileMenuDialog({
   // Capture trigger element on open; restore focus when transitioning from open to closed
   useEffect(() => {
     if (isOpen) {
-      triggerElementRef.current = document.activeElement as HTMLElement | null;
+      const active = document.activeElement;
+      triggerElementRef.current = active instanceof HTMLElement ? active : null;
       closeButtonRef.current?.focus();
     } else if (wasOpenRef.current && !isOpen) {
       triggerElementRef.current?.focus();

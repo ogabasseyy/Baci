@@ -98,6 +98,32 @@ describe('useMobileMenuDialog', () => {
     document.body.removeChild(trigger);
   });
 
+  it('handles non-HTMLElement activeElement safely when opening dialog', () => {
+    const svgElem = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    document.body.appendChild(svgElem);
+    if ('focus' in svgElem && typeof svgElem.focus === 'function') {
+      svgElem.focus();
+    }
+
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <TestDialog isOpen={false} onClose={onClose} />
+    );
+
+    expect(() => {
+      rerender(<TestDialog isOpen={true} onClose={onClose} />);
+    }).not.toThrow();
+
+    const closeBtn = screen.getByTestId('close-button');
+    expect(document.activeElement).toBe(closeBtn);
+
+    expect(() => {
+      rerender(<TestDialog isOpen={false} onClose={onClose} />);
+    }).not.toThrow();
+
+    document.body.removeChild(svgElem);
+  });
+
   it('does not restore focus on unmount to prevent focus stealing across navigations', () => {
     const trigger = document.createElement('button');
     document.body.appendChild(trigger);

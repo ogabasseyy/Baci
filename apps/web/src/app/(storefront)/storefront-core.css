@@ -573,7 +573,7 @@
 
   .ogabassey-navbar__logo {
     height: 2.25rem;
-    max-width: min(52vw, 18rem);
+    max-width: min(calc(100vw - 12.5rem), 18rem);
     width: auto;
   }
 

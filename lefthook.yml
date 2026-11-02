@@ -2,7 +2,8 @@ pre-commit:
   parallel: true
   commands:
     lint:
-      glob: "*.{js,ts,jsx,tsx,json}"
+      # Every file type Biome checks; --files-ignore-unknown skips the rest.
+      glob: "*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc,css,graphql,gql}"
       env:
         PUPPETEER_SKIP_DOWNLOAD: "true"
         PUPPETEER_CHROME_SKIP_DOWNLOAD: "true"
@@ -12,6 +13,15 @@ pre-commit:
       # staged files gives the same result for this commit in seconds.
       # The whole-repo `turbo lint` and knip run in CI.
       run: bash ci_scripts/run-lefthook-pnpm.sh exec biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+    lint-config:
+      # A Biome config change can affect every file, so re-lint the repo.
+      glob: "**/biome.{json,jsonc}"
+      env:
+        PUPPETEER_SKIP_DOWNLOAD: "true"
+        PUPPETEER_CHROME_SKIP_DOWNLOAD: "true"
+        PUPPETEER_CHROME_HEADLESS_SHELL_SKIP_DOWNLOAD: "true"
+        PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
+      run: bash ci_scripts/run-lefthook-pnpm.sh turbo lint
     check-podfile-lock:
       run: sh ci_scripts/check-podfile-lock.sh
 

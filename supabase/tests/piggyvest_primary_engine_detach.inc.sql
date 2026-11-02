@@ -22,7 +22,7 @@ UPDATE piggyvest_primary.onboarding_intents SET provider_closed_at = TIMESTAMPTZ
   WHERE id = pg_temp.id(51);
 SELECT pg_temp.wt('disbursement', 'obligation', 'credit_main', 'd-obligation', 'ready', 2000,
   jsonb_build_object('customer', pg_temp.id(50))) AS detach_transfer \gset
-UPDATE piggyvest_primary.wallet_transfers SET state = 'confirmed' WHERE id = :'detach_transfer';
+SELECT pg_temp.confirm(:'detach_transfer');
 SELECT pg_temp.check(piggyvest_primary.request_b_effect(:'detach_transfer', 'confirm_credit', 2000) = 'requested',
   'the settled credit is requested for the worker');
 SELECT pg_temp.check(pg_temp.error_of(format('DELETE FROM public.customers WHERE id = %L', pg_temp.id(50)))

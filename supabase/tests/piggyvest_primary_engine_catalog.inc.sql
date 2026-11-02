@@ -107,7 +107,7 @@ BEGIN
   END LOOP;
   FOR v_name IN SELECT p.proname FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'piggyvest_primary' AND (p.proname LIKE 'on\_settled\_%' OR p.proname LIKE 'on\_failed\_%'
-      OR p.proname = 'on_refund_confirmed') LOOP
+      OR p.proname LIKE 'on\_collect\_%' OR p.proname LIKE 'on\_refund\_%') LOOP
     PERFORM pg_temp.check(EXISTS (SELECT 1 FROM pv_engine_ownership WHERE function_name = v_name),
       format('hook %s is missing from the ownership manifest', v_name));
   END LOOP;

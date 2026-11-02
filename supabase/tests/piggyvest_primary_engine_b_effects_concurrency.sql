@@ -46,8 +46,9 @@ INSERT INTO piggyvest_primary.onboarding_intents(id, integration_id, merchant_id
   VALUES ('e5e10000-0000-4000-8000-000000000006', 'e5e10000-0000-4000-8000-000000000005',
     'e5e10000-0000-4000-8000-000000000002', 'e5e10000-0000-4000-8000-000000000003',
     'e5e10000-0000-4000-8000-000000000001', repeat('f', 64), 'verified', 'pv-race-customer', 'pv-race-main');
-INSERT INTO piggyvest_primary.house_wallets(integration_id, role, provider_wallet_id, business_id, enabled, verified_at)
-  VALUES ('e5e10000-0000-4000-8000-000000000005', 'collection', 'pv-race-collection', 'engine-race-business',
+INSERT INTO piggyvest_primary.house_wallets(integration_id, role, provider_wallet_id, business_id, currency, enabled,
+  verified_at)
+  VALUES ('e5e10000-0000-4000-8000-000000000005', 'collection', 'pv-race-collection', 'engine-race-business', 'NGN',
     true, TIMESTAMPTZ '2026-10-31 00:00:00+00');
 INSERT INTO piggyvest_primary.transfer_authorities(integration_id, capability, executor_login, enabled)
   VALUES ('e5e10000-0000-4000-8000-000000000005', 'worker', current_user, true);
@@ -59,6 +60,13 @@ INSERT INTO piggyvest_primary.wallet_transfers(id, integration_id, kind, source_
   VALUES ('e5e10000-0000-4000-8000-000000000040', 'e5e10000-0000-4000-8000-000000000005', 'disbursement',
     'collection', 'main', 'obligation', 'credit_main', 'race-obligation', 'e5e10000-0000-4000-8000-000000000003',
     2500, 'ready');
+INSERT INTO piggyvest_primary.wallet_transfer_attempts(id, transfer_id, attempt, reference, amount_kobo)
+  VALUES ('e5e10000-0000-4000-8000-000000000041', 'e5e10000-0000-4000-8000-000000000040', 1,
+    'pvb-wt-e5e10000-0000-4000-8000-000000000040-1', 2500);
+UPDATE piggyvest_primary.wallet_transfer_attempts SET state = 'dispatching'
+  WHERE id = 'e5e10000-0000-4000-8000-000000000041';
+UPDATE piggyvest_primary.wallet_transfer_attempts SET state = 'confirmed', proof = '{"status":"successful"}',
+  provider_transaction_id = 'pv-race-txn', fee_kobo = 0 WHERE id = 'e5e10000-0000-4000-8000-000000000041';
 UPDATE piggyvest_primary.wallet_transfers SET state = 'confirmed' WHERE id = 'e5e10000-0000-4000-8000-000000000040';
 SELECT piggyvest_primary.request_b_effect('e5e10000-0000-4000-8000-000000000040', 'confirm_credit', 2500)
   AS race_request \gset
@@ -117,12 +125,15 @@ SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 ALTER TABLE piggyvest_primary.transfer_b_effects DISABLE TRIGGER transfer_b_effects_guard;
 ALTER TABLE piggyvest_primary.wallet_transfers DISABLE TRIGGER wallet_transfers_guard;
 ALTER TABLE piggyvest_primary.house_wallets DISABLE TRIGGER house_wallets_guard;
+ALTER TABLE piggyvest_primary.wallet_transfer_attempts DISABLE TRIGGER wallet_transfer_attempts_guard;
 DELETE FROM piggyvest_primary.transfer_b_effects WHERE transfer_id = 'e5e10000-0000-4000-8000-000000000040';
+DELETE FROM piggyvest_primary.wallet_transfer_attempts WHERE transfer_id = 'e5e10000-0000-4000-8000-000000000040';
 DELETE FROM piggyvest_primary.wallet_transfers WHERE id = 'e5e10000-0000-4000-8000-000000000040';
 DELETE FROM piggyvest_primary.house_wallets WHERE integration_id = 'e5e10000-0000-4000-8000-000000000005';
 ALTER TABLE piggyvest_primary.transfer_b_effects ENABLE TRIGGER transfer_b_effects_guard;
 ALTER TABLE piggyvest_primary.wallet_transfers ENABLE TRIGGER wallet_transfers_guard;
 ALTER TABLE piggyvest_primary.house_wallets ENABLE TRIGGER house_wallets_guard;
+ALTER TABLE piggyvest_primary.wallet_transfer_attempts ENABLE TRIGGER wallet_transfer_attempts_guard;
 DELETE FROM piggyvest_primary.transfer_authorities WHERE integration_id = 'e5e10000-0000-4000-8000-000000000005';
 DELETE FROM public.customer_wallets WHERE customer_id = 'e5e10000-0000-4000-8000-000000000003';
 DELETE FROM piggyvest_primary.onboarding_intents WHERE id = 'e5e10000-0000-4000-8000-000000000006';

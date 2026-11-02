@@ -16,6 +16,15 @@
 --   b_writer    the only functions that may write customer_wallets and
 --               customer_wallet_transactions for transfers
 --   define_once not declared here; the owner defines it exactly once
+-- Owner contract: settle_attempt and fail_attempt call on_settled_<kind> and
+-- on_failed_<kind>. Where that is a dispatcher, the owner implements the
+-- per-purpose sub-hook it routes to, never the dispatcher: a collect goes to
+-- on_collect_confirmed_<purpose> / on_collect_failed_<purpose>, a settled
+-- disbursement to on_refund_confirmed (refunds) or
+-- on_settled_disbursement_obligation (obligations: P5-obligation-disbursement's
+-- "on_settled_disbursement" work), a goal forfeit to its purpose sub-hooks.
+-- request_b_effect already caps a credit with no main-wallet hold debit at its
+-- leg (or the goal purchase it refunds), so no owner restates it.
 -- Keep one row per line in the exact shape below: the CI parser reads them.
 
 CREATE TEMP TABLE pv_engine_ownership (
@@ -30,12 +39,12 @@ INSERT INTO pv_engine_ownership (function_name, owner_task, rule) VALUES
   ('on_settled_disbursement', 'P5-engine-schema', 'dispatcher'),
   ('on_settled_goal_forfeit', 'P5-engine-schema', 'dispatcher'),
   ('on_failed_goal_forfeit', 'P5-engine-schema', 'dispatcher'),
-  ('on_settled_collect_vtu', 'none', 'stub'),
-  ('on_failed_collect_vtu', 'none', 'stub'),
-  ('on_settled_collect_imei', 'none', 'stub'),
-  ('on_failed_collect_imei', 'none', 'stub'),
-  ('on_settled_collect_checkout', 'P6-checkout-collect-outcome', 'stub'),
-  ('on_failed_collect_checkout', 'P6-checkout-collect-outcome', 'stub'),
+  ('on_collect_confirmed_vtu', 'none', 'stub'),
+  ('on_collect_failed_vtu', 'none', 'stub'),
+  ('on_collect_confirmed_imei', 'none', 'stub'),
+  ('on_collect_failed_imei', 'none', 'stub'),
+  ('on_collect_confirmed_checkout', 'P6-checkout-collect-outcome', 'stub'),
+  ('on_collect_failed_checkout', 'P6-checkout-collect-outcome', 'stub'),
   ('on_refund_confirmed', 'P6-checkout-refund-records', 'stub'),
   ('on_settled_disbursement_obligation', 'P5-obligation-disbursement', 'stub'),
   ('on_failed_disbursement', 'P5-obligation-disbursement', 'stub'),
@@ -65,6 +74,7 @@ INSERT INTO pv_engine_ownership (function_name, owner_task, rule) VALUES
   ('session_may_write_b', 'P5-legacy-write-backstop', 'stub'),
   ('request_b_effect', 'P5-engine-schema', 'b_writer'),
   ('apply_b_effect', 'P5-engine-schema', 'b_writer'),
+  ('b_credit_room', 'P5-engine-schema', 'b_writer'),
   ('apply_requested_b_effects', 'P5-engine-schema', 'b_writer'),
   ('settle_attempt', 'P5-transfer-settle', 'define_once'),
   ('fail_attempt', 'P5-transfer-fail-attempts', 'define_once');

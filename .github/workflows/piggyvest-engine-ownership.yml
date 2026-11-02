@@ -36,6 +36,6 @@ jobs:
         with:
           persist-credentials: false
       - name: Test the ownership check
-        run: node --test .github/scripts/piggyvest-hook-ownership.test.mjs
+        run: node --test .github/scripts/piggyvest-hook-ownership.test.mjs .github/scripts/piggyvest-hook-ownership.names.test.mjs
       - name: Check engine function ownership
         run: node .github/scripts/piggyvest-hook-ownership.mjs

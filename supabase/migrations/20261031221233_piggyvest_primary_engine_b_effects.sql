@@ -8,8 +8,10 @@
 -- row keeps who requested it and who applied it, and links the one
 -- customer_wallet_transactions row the change wrote.
 --
--- family_collect groups a collect with the refunds of that collect, so the
--- family's credits can be capped by its hold debit (R4).
+-- family_collect groups a collect (or a goal purchase) with its refunds, so
+-- the family's credits can be capped by its hold debit (R4); a goal
+-- purchase never debited B, so its family is capped by the purchase amount.
+-- b_credit_room answers how much a credit may still return.
 --
 -- session_may_write_b() answers whether the current session may write B
 -- inline. It ships as a stub that is always false, so until the legacy
@@ -81,10 +83,57 @@ REVOKE ALL ON piggyvest_primary.transfer_b_effects
   FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_transfer_enqueuer,
     piggyvest_primary_transfer_worker, piggyvest_primary_transfer_ops;
 
+-- How much a credit may still return. backing names what stands behind it:
+--   applied    the debit it returns took B (payout freeze or hold debit);
+--   requested  that debit still waits for the worker;
+--   missing    there is no such debit, or it went to review;
+--   leg        no debit: the credit pays money that reached the customer's
+--              main wallet (obligations, goal legs, refunds of a goal
+--              purchase), within the leg or the purchase.
+-- room_kobo is the cap less the family's other credits: requested and
+-- applied ones when a request is checked, applied ones when it is applied.
+CREATE FUNCTION piggyvest_primary.b_credit_room(p_family uuid, p_transfer_id uuid, p_effect text,
+  p_applied_only boolean)
+RETURNS TABLE (backing text, room_kobo bigint)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$
+DECLARE
+  v_counted text[] := CASE WHEN p_applied_only THEN ARRAY['applied'] ELSE ARRAY['requested', 'applied'] END;
+  v_family_kind text;
+  v_cap bigint;
+  v_state text;
+  v_used bigint := 0;
+BEGIN
+  IF p_effect = 'payout_failed_restore' THEN
+    SELECT effect.state, effect.amount_kobo INTO v_state, v_cap FROM piggyvest_primary.transfer_b_effects effect
+      WHERE effect.transfer_id = p_transfer_id AND effect.effect = 'payout_freeze_debit';
+    SELECT COALESCE(sum(effect.amount_kobo), 0) INTO v_used FROM piggyvest_primary.transfer_b_effects effect
+      WHERE effect.transfer_id = p_transfer_id AND effect.effect = 'payout_failed_restore'
+        AND effect.state = ANY (v_counted);
+  ELSIF p_family IS NOT NULL THEN
+    SELECT transfer.kind, transfer.amount_kobo INTO v_family_kind, v_cap FROM piggyvest_primary.wallet_transfers transfer
+      WHERE transfer.id = p_family;
+    IF v_family_kind = 'collect' THEN
+      SELECT effect.state, effect.amount_kobo INTO v_state, v_cap FROM piggyvest_primary.transfer_b_effects effect
+        WHERE effect.transfer_id = p_family AND effect.effect = 'hold_debit';
+    ELSIF p_effect = 'confirm_credit' THEN
+      v_state := 'leg';
+    END IF;
+    SELECT COALESCE(sum(effect.amount_kobo), 0) INTO v_used FROM piggyvest_primary.transfer_b_effects effect
+      WHERE effect.family_collect = p_family AND effect.effect <> 'hold_debit' AND effect.state = ANY (v_counted);
+  ELSE
+    SELECT 'leg', transfer.amount_kobo INTO v_state, v_cap FROM piggyvest_primary.wallet_transfers transfer
+      WHERE transfer.id = p_transfer_id;
+  END IF;
+  backing := CASE WHEN v_state IN ('applied', 'requested', 'leg') THEN v_state ELSE 'missing' END;
+  room_kobo := CASE WHEN backing = 'missing' THEN 0 ELSE v_cap - v_used END;
+  RETURN NEXT;
+END $$;
+
 -- Stub: no session writes B inline until the legacy write backstop owns it.
 CREATE FUNCTION piggyvest_primary.session_may_write_b() RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$ SELECT false /* engine-stub */ $$;
 
-REVOKE ALL ON FUNCTION piggyvest_primary.transfer_b_effects_guard(), piggyvest_primary.session_may_write_b()
+REVOKE ALL ON FUNCTION piggyvest_primary.transfer_b_effects_guard(), piggyvest_primary.session_may_write_b(),
+  piggyvest_primary.b_credit_room(uuid, uuid, text, boolean)
   FROM PUBLIC, anon, authenticated, service_role;
 COMMIT;

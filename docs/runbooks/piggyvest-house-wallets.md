@@ -13,7 +13,9 @@ registered, verified and enabled (`apps/web/src/lib/piggyvest/house-wallets.ts`)
 
 - One wallet per role for an integration, and each PiggyVest wallet id once.
 - The wallet's business must be the integration's PiggyVest business.
-- A customer's main or goal wallet is refused.
+- Every wallet is an NGN wallet, and the currency is stated on each row.
+- A customer's main or goal wallet is refused. If a customer record later
+  claims a registered wallet, the engine stops moving money through it.
 - A wallet can be enabled only once it is verified. After verification its id,
   role, business and verification time are locked and the row cannot be
   deleted; only `enabled` can still be switched off and on.
@@ -22,17 +24,17 @@ registered, verified and enabled (`apps/web/src/lib/piggyvest/house-wallets.ts`)
 
 1. Create the three wallets in the PiggyVest business dashboard and note each
    wallet id. Confirm in the dashboard that each one belongs to Ogabassey's
-   business and is not a customer wallet.
+   business, is an NGN wallet, and is not a customer wallet.
 2. Register them unverified (a mistake can still be corrected or deleted):
 
    ```sql
    BEGIN;
-   INSERT INTO piggyvest_primary.house_wallets (integration_id, role, provider_wallet_id, business_id)
+   INSERT INTO piggyvest_primary.house_wallets (integration_id, role, provider_wallet_id, business_id, currency)
    VALUES
-     ('<integration id>', 'collection', '<collection wallet id>', '<business id>'),
-     ('<integration id>', 'interest', '<interest wallet id>', '<business id>'),
-     ('<integration id>', 'fee', '<fee wallet id>', '<business id>');
-   SELECT role, provider_wallet_id, business_id, enabled, verified
+     ('<integration id>', 'collection', '<collection wallet id>', '<business id>', 'NGN'),
+     ('<integration id>', 'interest', '<interest wallet id>', '<business id>', 'NGN'),
+     ('<integration id>', 'fee', '<fee wallet id>', '<business id>', 'NGN');
+   SELECT role, provider_wallet_id, business_id, currency, enabled, verified
    FROM piggyvest_primary.read_house_wallets('<integration id>');
    COMMIT;
    ```
@@ -49,5 +51,7 @@ registered, verified and enabled (`apps/web/src/lib/piggyvest/house-wallets.ts`)
 ## Switching a wallet off
 
 `UPDATE piggyvest_primary.house_wallets SET enabled = false WHERE id = '<row id>';`
-stops new transfers from using it. Transfers already created keep the wallet
-id they were created with.
+stops new transfers from using it. Switching off always succeeds, even when
+the registration checks would now fail (for example after the integration's
+business changed); switching back on re-runs them. Transfers already created
+keep the wallet id they were created with.

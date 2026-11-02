@@ -15,8 +15,11 @@
 //     apply_b_effect (B changes only through request_b_effect), including a
 //     new helper function created in a hook owner's migration;
 //   * builds DDL for piggyvest_primary functions dynamically;
-//   * adds an on_settled_/on_failed_ hook the manifest does not list.
+//   * adds a hook-shaped function (on_settled_, on_failed_, on_collect_,
+//     on_refund_) the manifest does not list.
 // It also fails when a declared (non define_once) function is never created.
+// Unquoted identifiers are matched case-insensitively, as PostgreSQL folds
+// them to lower case; a double-quoted name keeps its exact spelling.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,7 +30,9 @@ const MARKER = /^-- piggyvest-engine-owner: ([A-Za-z0-9-]+)\s*$/gm;
 const DECLARING_TASK = 'P5-engine-schema';
 // A function reference: optional schema, then the name and its argument list.
 // The argument list is optional: ALTER and DROP accept a unique bare name.
-const REFERENCE = String.raw`(?:"?([a-z0-9_]+)"?\s*\.\s*)?"?([a-z0-9_]+)"?\s*(?:\(|(?=[\s,;]|$))`;
+// Each identifier is captured with its quotes so its case can be resolved.
+const REFERENCE = String.raw`(?:("?[a-z0-9_]+"?)\s*\.\s*)?("?[a-z0-9_]+"?)\s*(?:\(|(?=[\s,;]|$))`;
+const HOOK_NAME = /^on_(settled|failed|collect|refund)_/;
 const DDL = /\b(create\s+(?:or\s+replace\s+)?function|alter\s+(?:function|routine))\s+/gi;
 const DROP = /\bdrop\s+(?:function|routine)\s+(?:if\s+exists\s+)?/gi;
 const FORBIDDEN = [
@@ -76,10 +81,19 @@ function statementEnd(sql, from) {
   return end === -1 ? sql.length : end;
 }
 
+// PostgreSQL folds an unquoted identifier to lower case and keeps a quoted
+// one exactly as written.
+function identifier(token) {
+  if (token === undefined) return undefined;
+  return token.startsWith('"') ? token.replaceAll('"', '') : token.toLowerCase();
+}
+
 // An engine function is named with the piggyvest_primary schema, or bare
 // (a search_path trick) when the bare name is a manifest function.
-function engineName(schema, name, manifest) {
-  if (schema) return schema.toLowerCase() === 'piggyvest_primary' ? name : null;
+function engineName(schemaToken, nameToken, manifest) {
+  const schema = identifier(schemaToken);
+  const name = identifier(nameToken);
+  if (schema) return schema === 'piggyvest_primary' ? name : null;
   return manifest.has(name) ? name : null;
 }
 
@@ -126,7 +140,7 @@ export function checkEngineOwnership({ migrationsDir, manifestPath }) {
     const sql = stripComments(raw);
     for (const [, span] of sql.matchAll(EXECUTE)) {
       if (!DYNAMIC_DDL.test(span)) continue;
-      const named = [...manifest.keys()].some((name) => new RegExp(`\\b${name}\\b`).test(span));
+      const named = [...manifest.keys()].some((name) => new RegExp(`\\b${name}\\b`, 'i').test(span));
       if (named || (/piggyvest_primary/i.test(span) && PLACEHOLDER.test(span))) {
         errors.push(`${file}: dynamic DDL on a piggyvest_primary function; write engine DDL literally`);
       }
@@ -136,7 +150,7 @@ export function checkEngineOwnership({ migrationsDir, manifestPath }) {
     for (const { verb, name, at } of collectTouched(sql, manifest)) {
       const entry = manifest.get(name);
       if (!entry) {
-        if (verb === 'create' && /^on_(settled|failed)_/.test(name)) {
+        if (verb === 'create' && HOOK_NAME.test(name)) {
           errors.push(`${file}: ${name} is a hook that is not in the ownership manifest`);
         }
         const hit = verb === 'create' && ownerMigration ? forbiddenTouch(sql, at) : null;
@@ -159,7 +173,11 @@ export function checkEngineOwnership({ migrationsDir, manifestPath }) {
         const allowed = declaring
           ? owners.has(DECLARING_TASK)
           : entry.owner !== 'none' && owners.has(entry.owner);
-        if (!allowed) {
+        if (!allowed && entry.rule === 'dispatcher' && !declaring) {
+          errors.push(
+            `${file}: ${name} is an engine dispatcher; implement the per-purpose sub-hook it routes to (see the ownership manifest)`
+          );
+        } else if (!allowed) {
           const owner = declaring ? DECLARING_TASK : entry.owner;
           errors.push(`${file}: ${name} may only be changed by ${owner}`);
         }

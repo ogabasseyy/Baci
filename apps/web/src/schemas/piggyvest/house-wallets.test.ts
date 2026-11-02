@@ -9,6 +9,7 @@ const row = {
   role: 'collection',
   provider_wallet_id: 'pv-house-collection',
   business_id: 'engine-business',
+  currency: 'NGN',
   enabled: true,
   verified: true,
 };
@@ -41,6 +42,16 @@ describe('houseWalletRowSchema', () => {
     expect(
       houseWalletRowSchema.safeParse({ ...row, verified: 'true' }).success
     ).toBe(false);
+  });
+});
+
+describe('houseWalletRowSchema currency', () => {
+  it('accepts only NGN, the currency every house wallet is registered in', () => {
+    expect(
+      houseWalletRowSchema.safeParse({ ...row, currency: 'USD' }).success
+    ).toBe(false);
+    const { currency: _currency, ...withoutCurrency } = row;
+    expect(houseWalletRowSchema.safeParse(withoutCurrency).success).toBe(false);
   });
 });
 

@@ -3,8 +3,13 @@
 -- entry; it applies inline only when session_may_write_b() is true, and the
 -- worker applies everything else. Runs inside the entry file's transaction.
 
--- No session is an engine session yet: the stub answers false, so a hold
--- debit (which must apply inline) is refused and nothing is written.
+-- The installed session_may_write_b() is kept: the API-session checks below
+-- run against it, not against a copy of the stub.
+SELECT pg_catalog.pg_get_functiondef('piggyvest_primary.session_may_write_b()'::regprocedure)
+  AS shipped_session_may_write_b \gset
+
+-- The suite session is not an engine session, so a hold debit (which must
+-- apply inline) is refused and nothing is written.
 DO $$
 DECLARE
   v_collect uuid := pg_temp.wt('collect', 'vtu', 'deliver_before_collect', 'b-stub-hold', 'held', 10000);
@@ -90,9 +95,8 @@ BEGIN
     = 'review', 'a release without a hold debit must go to review');
 END $$;
 
--- Back to the shipped stub: every API-facing session only requests.
-CREATE OR REPLACE FUNCTION piggyvest_primary.session_may_write_b() RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$ SELECT false /* engine-stub */ $$;
+-- Back to the installed definition: every API-facing session only requests.
+SELECT :'shipped_session_may_write_b' \gexec
 
 -- A test-only SECURITY DEFINER wrapper stands in for a future API-facing RPC.
 CREATE FUNCTION pg_temp.api_request(p_transfer uuid, p_effect text, p_amount bigint) RETURNS text
@@ -101,7 +105,7 @@ LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog AS $$
 $$;
 GRANT EXECUTE ON FUNCTION pg_temp.api_request(uuid, text, bigint) TO authenticated, service_role;
 
-UPDATE piggyvest_primary.wallet_transfers SET state = 'confirmed' WHERE source_ref IN ('m-obligation', 'm-goal-refund');
+SELECT pg_temp.confirm(id) FROM piggyvest_primary.wallet_transfers WHERE source_ref IN ('m-obligation', 'm-goal-refund');
 SELECT id AS obligation_id FROM piggyvest_primary.wallet_transfers WHERE source_ref = 'm-obligation' \gset
 SELECT id AS goal_refund_id FROM piggyvest_primary.wallet_transfers WHERE source_ref = 'm-goal-refund' \gset
 
@@ -118,7 +122,7 @@ RESET ROLE;
 SELECT rolsuper AS engine_suite_superuser FROM pg_catalog.pg_roles WHERE rolname = session_user \gset
 \if :engine_suite_superuser
 SAVEPOINT engine_authenticator;
-UPDATE piggyvest_primary.wallet_transfers SET state = 'confirmed' WHERE source_ref = 'm-goal-leftover';
+SELECT pg_temp.confirm(id) FROM piggyvest_primary.wallet_transfers WHERE source_ref = 'm-goal-leftover';
 SELECT id AS goal_leftover_id FROM piggyvest_primary.wallet_transfers WHERE source_ref = 'm-goal-leftover' \gset
 SET LOCAL SESSION AUTHORIZATION authenticator;
 SET LOCAL ROLE authenticated;
@@ -149,7 +153,7 @@ INSERT INTO public.customer_wallets(customer_id, merchant_id, available_balance)
   VALUES (pg_temp.id(60), pg_temp.id(2), 9999999999.00);
 SELECT pg_temp.wt('disbursement', 'obligation', 'credit_main', 'b-poison', 'ready', 1000,
   jsonb_build_object('customer', pg_temp.id(60))) AS poison_transfer \gset
-UPDATE piggyvest_primary.wallet_transfers SET state = 'confirmed' WHERE id = :'poison_transfer';
+SELECT pg_temp.confirm(:'poison_transfer');
 SELECT pg_temp.check(piggyvest_primary.request_b_effect(:'poison_transfer', 'confirm_credit', 1000) = 'requested',
   'the overflowing credit is requested');
 

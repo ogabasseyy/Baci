@@ -5,15 +5,19 @@
 -- One row per money movement. The (kind, source role, destination role)
 -- triple must be a row of transfer_kinds, and the database pins the actual
 -- PiggyVest wallets from the registries when the row is created: the
--- customer's verified main wallet, the goal's wallet, the enabled house
--- wallet, or an enabled bank destination. Identity is frozen after insert,
--- settled states are final, and row_version is bumped by its own trigger on
--- every update so approvals can bind to an exact version.
+-- customer's verified main wallet, the goal's enabled wallet, the enabled
+-- house wallet, or an enabled bank destination. Identity is frozen after
+-- insert, settled states are final, and row_version is bumped by its own
+-- trigger on every update so approvals can bind to an exact version.
 --
 -- Each submission to PiggyVest is an attempt with the reference
 -- pvb-wt-<transfer>-<attempt>. References are unique forever: attempts are
 -- never deleted, a new attempt is allowed only once every earlier one is
 -- proven failed or aborted, and a confirmed transfer takes no new attempt.
+-- The transfer follows its attempts: it confirms only with a confirmed
+-- attempt, it cannot end cancelled, unpaid or netted while an attempt may
+-- still move money (or has), and its outstanding amount is never netted
+-- below an attempt in flight.
 BEGIN;
 CREATE TABLE piggyvest_primary.wallet_transfers (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
@@ -109,9 +113,28 @@ BEGIN
     IF NEW.outstanding_kobo > OLD.outstanding_kobo THEN
       RAISE EXCEPTION 'an outstanding amount never grows' USING ERRCODE = '42501';
     END IF;
+    IF NEW.outstanding_kobo < OLD.outstanding_kobo AND EXISTS (SELECT 1
+      FROM piggyvest_primary.wallet_transfer_attempts attempt WHERE attempt.transfer_id = OLD.id
+        AND attempt.state IN ('prepared', 'dispatching', 'submitted', 'unknown')
+        AND attempt.amount_kobo > NEW.outstanding_kobo) THEN
+      RAISE EXCEPTION 'cannot net a transfer below an attempt in flight' USING ERRCODE = '55000';
+    END IF;
     IF NEW.state <> OLD.state
       AND (OLD.state IN ('confirmed', 'cancelled', 'failed_unpaid', 'netted') OR NEW.state = 'held') THEN
       RAISE EXCEPTION 'wallet transfer cannot move from % to %', OLD.state, NEW.state USING ERRCODE = '55000';
+    END IF;
+    -- An ambiguous or successful attempt never ends as unpaid; ambiguity goes
+    -- to review instead.
+    IF NEW.state <> OLD.state AND NEW.state IN ('cancelled', 'failed_unpaid', 'netted') AND EXISTS (SELECT 1
+      FROM piggyvest_primary.wallet_transfer_attempts attempt WHERE attempt.transfer_id = OLD.id
+        AND attempt.state IN ('prepared', 'dispatching', 'submitted', 'unknown', 'confirmed')) THEN
+      RAISE EXCEPTION 'a transfer with an attempt in flight or confirmed cannot become %', NEW.state
+        USING ERRCODE = '55000';
+    END IF;
+    IF NEW.state <> OLD.state AND NEW.state = 'confirmed' AND NOT EXISTS (SELECT 1
+      FROM piggyvest_primary.wallet_transfer_attempts attempt
+      WHERE attempt.transfer_id = OLD.id AND attempt.state = 'confirmed') THEN
+      RAISE EXCEPTION 'a transfer confirms only with a confirmed attempt' USING ERRCODE = '55000';
     END IF;
     IF OLD.effect_state = 'applied' AND NEW.effect_state <> 'applied' THEN
       RAISE EXCEPTION 'applied effects are final' USING ERRCODE = '55000';
@@ -127,10 +150,16 @@ BEGIN
       USING ERRCODE = '23503';
   END IF;
   IF v_kind.approval_only THEN
-    -- Approval-only kinds are written by their one pre-declared enqueue
-    -- function (plpgsql, search_path pinned, so its frame is schema-qualified).
+    -- Approval-only kinds are written only from their one pre-declared
+    -- enqueue function (plpgsql, search_path pinned, so its frame is
+    -- schema-qualified). The call stack quotes the text of every statement
+    -- on it, so dynamic SQL could carry a copy of that frame line: any
+    -- dynamic-SQL frame on the stack is refused outright.
     GET DIAGNOSTICS v_stack = PG_CONTEXT;
-    IF v_stack !~ '(^|\n)PL/pgSQL function piggyvest_primary\.enqueue_misrouted_interest_sweep\(' THEN
+    IF v_stack !~ ('(^|\n)PL/pgSQL function piggyvest_primary\.enqueue_misrouted_interest_sweep'
+        || '\(uuid,uuid,text,bigint,uuid\) line [0-9]+ at [^\n]+(\n|$)')
+      OR v_stack ~ '(^|\n)PL/pgSQL function [^\n]* line [0-9]+ at (EXECUTE|FOR over EXECUTE statement|RETURN QUERY|OPEN)(\n|$)'
+    THEN
       RAISE EXCEPTION '% transfers are created only by enqueue_misrouted_interest_sweep', NEW.kind
         USING ERRCODE = '42501';
     END IF;
@@ -155,11 +184,12 @@ BEGIN
     WHERE goal.id = NEW.goal_id AND goal.customer_id = NEW.customer_id AND goal.merchant_id = v_merchant) THEN
     RAISE EXCEPTION 'transfer goal is not a goal of this customer' USING ERRCODE = '23514';
   END IF;
+  -- A refund pays back a collect or a goal purchase of the same customer.
   IF NEW.refund_of IS NOT NULL THEN
     SELECT refunded.* INTO v_refunded FROM piggyvest_primary.wallet_transfers refunded WHERE refunded.id = NEW.refund_of;
-    IF NOT FOUND OR v_refunded.kind <> 'collect' OR v_refunded.integration_id <> NEW.integration_id
+    IF NOT FOUND OR v_refunded.kind NOT IN ('collect', 'goal_purchase') OR v_refunded.integration_id <> NEW.integration_id
       OR v_refunded.customer_id IS DISTINCT FROM NEW.customer_id THEN
-      RAISE EXCEPTION 'a refund must refund a collect of the same customer' USING ERRCODE = '23514';
+      RAISE EXCEPTION 'a refund must refund a collect or goal purchase of the same customer' USING ERRCODE = '23514';
     END IF;
   END IF;
   FOREACH v_side IN ARRAY ARRAY['source', 'destination'] LOOP
@@ -177,10 +207,11 @@ BEGIN
         WHERE intent.integration_id = NEW.integration_id AND intent.customer_id = NEW.customer_id
           AND intent.state = 'verified';
     ELSIF v_role = 'goal' THEN
+      -- enabled is the goal mapping's kill switch, as on every savings path.
       SELECT destination.provider_wallet_id INTO v_wallet FROM piggyvest_primary.savings_destinations destination
         JOIN piggyvest_primary.onboarding_intents intent ON intent.id = destination.intent_id
         WHERE destination.integration_id = NEW.integration_id AND destination.goal_id = NEW.goal_id
-          AND intent.customer_id = NEW.customer_id;
+          AND destination.enabled AND intent.customer_id = NEW.customer_id AND intent.state = 'verified';
     ELSE
       SELECT house.provider_wallet_id INTO v_wallet FROM piggyvest_primary.house_wallets house
         WHERE house.integration_id = NEW.integration_id AND house.role = v_role AND house.enabled;
@@ -191,6 +222,15 @@ BEGIN
     IF v_role IN ('main', 'goal') AND EXISTS (SELECT 1 FROM piggyvest_primary.house_wallets house
       WHERE house.provider_wallet_id = v_wallet) THEN
       RAISE EXCEPTION 'a house wallet is never a customer wallet' USING ERRCODE = '23514';
+    END IF;
+    -- The reverse: no money moves into or out of a house wallet that a
+    -- customer record also claims.
+    IF v_role NOT IN ('main', 'goal') AND (
+      EXISTS (SELECT 1 FROM piggyvest_primary.onboarding_intents intent WHERE intent.provider_wallet_id = v_wallet)
+      OR EXISTS (SELECT 1 FROM piggyvest_primary.goal_wallet_intents intent WHERE intent.provider_wallet_id = v_wallet)
+      OR EXISTS (SELECT 1 FROM piggyvest_primary.savings_destinations destination
+        WHERE destination.provider_wallet_id = v_wallet)) THEN
+      RAISE EXCEPTION 'a house wallet that a customer record claims is unavailable' USING ERRCODE = '23514';
     END IF;
     IF v_side = 'source' THEN
       IF NEW.source_wallet_id IS DISTINCT FROM v_wallet AND NEW.source_wallet_id IS NOT NULL THEN

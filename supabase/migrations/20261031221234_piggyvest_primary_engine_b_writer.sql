@@ -5,21 +5,30 @@
 -- B for a transfer. It is internal (no role may execute it; engine
 -- functions owned by the migration owner call it) and it:
 --   * accepts only the effects transfer_kinds lists for the kind, each in the
---     transfer state it belongs to; debits must be the full leg amount;
+--     transfer state it belongs to; debits must be the full leg amount, no
+--     credit exceeds its own leg, and a confirmation credit is exactly the
+--     confirmed attempt's amount;
 --   * answers 'duplicate' for a repeated (transfer, effect) with the same
 --     amount ('review' while that request is in review) and 'conflict' for
 --     another amount, writing nothing;
---   * under the family lock keeps the collect family's requested and applied
---     credits within its hold debit (R4) and a payout restore within its
---     freeze; anything above is recorded for review and writes nothing;
+--   * under the family lock keeps the family's requested and applied credits
+--     within what backs them (b_credit_room: the hold debit (R4), the payout
+--     freeze, or the leg); anything above is recorded for review and writes
+--     nothing;
 --   * applies inline only when session_may_write_b() is true. A hold debit
 --     must apply inline, so outside an engine session it raises
 --     b_effect_requires_engine_login. A payout freeze is never applied
 --     inline. Everything else stays requested for the worker.
--- apply_requested_b_effects(limit) is that worker pass, executable by the
--- transfer worker role from an enabled worker login only. Each request is
--- applied once under its row lock; concurrent passes skip locked rows, and a
--- request that fails to apply goes to review instead of blocking the rest.
+-- apply_b_effect re-checks a credit under the same family lock when it is
+-- applied: it writes B only while the debit it returns is applied, within
+-- what that debit left. A credit whose debit still waits stays requested; one
+-- whose debit went to review (or never existed) goes to review.
+-- apply_requested_b_effects(limit) is the worker pass, executable by the
+-- transfer worker role from an enabled worker login only, for that login's
+-- integrations. Each request is applied once under its row lock; concurrent
+-- passes skip locked rows and busy families. A request that fails for a
+-- deterministic reason (a data or constraint error) goes to review; any
+-- other failure leaves it requested for a later pass.
 BEGIN;
 CREATE FUNCTION piggyvest_primary.apply_b_effect(p_effect_id uuid, p_inline boolean) RETURNS text
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
@@ -31,6 +40,9 @@ DECLARE
   v_balance numeric;
   v_amount numeric;
   v_debit boolean;
+  v_backing text;
+  v_room bigint;
+  v_family_lock bigint;
   v_ledger uuid := pg_catalog.gen_random_uuid();
 BEGIN
   SELECT effect.* INTO v_effect FROM piggyvest_primary.transfer_b_effects effect
@@ -51,6 +63,28 @@ BEGIN
   END IF;
   v_amount := v_effect.amount_kobo::numeric / 100;
   v_debit := v_effect.effect IN ('hold_debit', 'payout_freeze_debit');
+  IF NOT v_debit THEN
+    -- The request's own lock is held inline; the worker never waits for one.
+    v_family_lock := pg_catalog.hashtextextended(
+      'piggyvest-primary:b-family:' || COALESCE(v_effect.family_collect, v_effect.transfer_id)::text, 0);
+    IF p_inline THEN
+      PERFORM pg_catalog.pg_advisory_xact_lock(v_family_lock);
+    ELSIF NOT pg_catalog.pg_try_advisory_xact_lock(v_family_lock) THEN
+      RETURN 'deferred';
+    END IF;
+    SELECT room.backing, room.room_kobo INTO v_backing, v_room
+      FROM piggyvest_primary.b_credit_room(v_effect.family_collect, v_effect.transfer_id, v_effect.effect, true) room;
+    IF v_backing = 'requested' THEN RETURN 'deferred'; END IF;
+    IF v_backing = 'missing' OR v_effect.amount_kobo > v_room THEN
+      UPDATE piggyvest_primary.transfer_b_effects
+        SET state = 'review', review_reason = CASE WHEN v_backing = 'missing' THEN 'debit_not_applied'
+          ELSE 'credit_above_debit' END
+        WHERE id = p_effect_id;
+      UPDATE piggyvest_primary.wallet_transfers SET effect_state = 'review'
+        WHERE id = v_transfer.id AND effect_state = 'pending';
+      RETURN 'review';
+    END IF;
+  END IF;
   IF v_debit THEN
     UPDATE public.customer_wallets wallet
       SET available_balance = wallet.available_balance - v_amount, updated_at = pg_catalog.clock_timestamp()
@@ -105,9 +139,10 @@ DECLARE
   v_existing piggyvest_primary.transfer_b_effects%ROWTYPE;
   v_family uuid;
   v_states text[];
-  v_debit bigint;
-  v_credits bigint;
+  v_backing text;
+  v_room bigint;
   v_review text;
+  v_result text;
   v_id uuid := pg_catalog.gen_random_uuid();
 BEGIN
   IF p_transfer_id IS NULL OR p_effect IS NULL OR p_amount_kobo IS NULL
@@ -144,22 +179,19 @@ BEGIN
       RAISE EXCEPTION 'a debit must be the full leg amount' USING ERRCODE = '22023';
     END IF;
   ELSE
-    IF v_family IS NOT NULL THEN
-      SELECT COALESCE(sum(effect.amount_kobo) FILTER (WHERE effect.effect = 'hold_debit'), 0),
-          COALESCE(sum(effect.amount_kobo) FILTER (WHERE effect.effect <> 'hold_debit'), 0)
-        INTO v_debit, v_credits FROM piggyvest_primary.transfer_b_effects effect
-        WHERE effect.family_collect = v_family AND effect.state IN ('requested', 'applied');
-    ELSIF p_effect = 'payout_failed_restore' THEN
-      SELECT COALESCE(sum(effect.amount_kobo) FILTER (WHERE effect.effect = 'payout_freeze_debit'), 0), 0
-        INTO v_debit, v_credits FROM piggyvest_primary.transfer_b_effects effect
-        WHERE effect.transfer_id = p_transfer_id AND effect.state IN ('requested', 'applied');
-    ELSE
-      v_debit := v_transfer.amount_kobo;
-      v_credits := 0;
+    IF p_amount_kobo > v_transfer.amount_kobo THEN
+      RAISE EXCEPTION 'a credit cannot exceed its leg' USING ERRCODE = '22023';
     END IF;
-    IF v_debit = 0 THEN
+    IF p_effect = 'confirm_credit' AND p_amount_kobo IS DISTINCT FROM (SELECT sum(attempt.amount_kobo)
+      FROM piggyvest_primary.wallet_transfer_attempts attempt
+      WHERE attempt.transfer_id = p_transfer_id AND attempt.state = 'confirmed') THEN
+      RAISE EXCEPTION 'a confirmation credit must be the confirmed amount' USING ERRCODE = '22023';
+    END IF;
+    SELECT room.backing, room.room_kobo INTO v_backing, v_room
+      FROM piggyvest_primary.b_credit_room(v_family, p_transfer_id, p_effect, false) room;
+    IF v_backing = 'missing' THEN
       v_review := 'credit_without_debit';
-    ELSIF v_credits + p_amount_kobo > v_debit THEN
+    ELSIF p_amount_kobo > v_room THEN
       v_review := 'credit_above_debit';
     END IF;
   END IF;
@@ -173,7 +205,8 @@ BEGIN
     RETURN 'review';
   END IF;
   IF p_effect <> 'payout_freeze_debit' AND piggyvest_primary.session_may_write_b() THEN
-    RETURN piggyvest_primary.apply_b_effect(v_id, true);
+    v_result := piggyvest_primary.apply_b_effect(v_id, true);
+    RETURN CASE WHEN v_result = 'deferred' THEN 'requested' ELSE v_result END;
   END IF;
   IF p_effect = 'hold_debit' THEN
     RAISE EXCEPTION 'b_effect_requires_engine_login' USING ERRCODE = '42501';
@@ -207,23 +240,24 @@ BEGIN
       LIMIT p_limit
       FOR UPDATE OF effect SKIP LOCKED
   LOOP
-    -- One effect that cannot be applied must not stop the others: a lock or
-    -- serialization conflict is left requested for a later pass; any other
-    -- error moves the effect and its transfer to review. Locks taken by this
-    -- loop's own row lock survive the inner rollback.
+    -- One effect that cannot be applied must not stop the others. A data or
+    -- constraint error (an overflow, a violated check) fails the same way on
+    -- every pass, so the effect and its transfer go to review. Anything else
+    -- (a lock, a deadlock, a resource or system error) is left requested for
+    -- a later pass. The loop's own row lock survives the inner rollback.
     BEGIN
       IF piggyvest_primary.apply_b_effect(v_effect, false) = 'applied' THEN
         v_applied := v_applied + 1;
       END IF;
     EXCEPTION
-      WHEN lock_not_available OR deadlock_detected OR serialization_failure THEN
-        NULL;
-      WHEN OTHERS THEN
+      WHEN data_exception OR integrity_constraint_violation THEN
         UPDATE piggyvest_primary.transfer_b_effects SET state = 'review', review_reason = 'apply_failed:' || SQLSTATE
           WHERE id = v_effect AND state = 'requested';
         UPDATE piggyvest_primary.wallet_transfers transfer SET effect_state = 'review'
           FROM piggyvest_primary.transfer_b_effects effect
           WHERE effect.id = v_effect AND transfer.id = effect.transfer_id AND transfer.effect_state = 'pending';
+      WHEN OTHERS THEN
+        NULL;
     END;
   END LOOP;
   RETURN v_applied;

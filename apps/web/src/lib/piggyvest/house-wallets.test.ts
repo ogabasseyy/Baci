@@ -14,6 +14,7 @@ const wallet = (role: string, overrides: Record<string, unknown> = {}) => ({
   role,
   provider_wallet_id: `pv-house-${role}`,
   business_id: 'engine-business',
+  currency: 'NGN',
   enabled: true,
   verified: true,
   ...overrides,
@@ -35,16 +36,19 @@ describe('resolveHouseWallets', () => {
           role: 'collection',
           providerWalletId: 'pv-house-collection',
           businessId: 'engine-business',
+          currency: 'NGN',
         },
         interest: {
           role: 'interest',
           providerWalletId: 'pv-house-interest',
           businessId: 'engine-business',
+          currency: 'NGN',
         },
         fee: {
           role: 'fee',
           providerWalletId: 'pv-house-fee',
           businessId: 'engine-business',
+          currency: 'NGN',
         },
       },
     });
@@ -64,6 +68,7 @@ describe('resolveHouseWallets', () => {
           role: 'collection',
           providerWalletId: 'pv-house-collection',
           businessId: 'engine-business',
+          currency: 'NGN',
         },
       },
     });
@@ -88,6 +93,18 @@ describe('resolveHouseWallets', () => {
       status: 'unavailable',
       reason: 'invalid_response',
     });
+  });
+
+  it('refuses a wallet that is not recorded as NGN, or has no currency', () => {
+    for (const rows of [
+      [wallet('collection', { currency: 'USD' })],
+      [wallet('collection', { currency: undefined })],
+    ]) {
+      expect(resolveHouseWallets(rows)).toEqual({
+        status: 'unavailable',
+        reason: 'invalid_response',
+      });
+    }
   });
 
   it('refuses two rows for one role, one wallet for two roles, or two businesses', () => {
@@ -119,7 +136,7 @@ describe('readHouseWallets', () => {
     expect(result.status).toBe('ready');
     expect(query).toHaveBeenCalledTimes(1);
     expect(query).toHaveBeenCalledWith(
-      'SELECT role, provider_wallet_id, business_id, enabled, verified FROM piggyvest_primary.read_house_wallets($1::uuid)',
+      'SELECT role, provider_wallet_id, business_id, currency, enabled, verified FROM piggyvest_primary.read_house_wallets($1::uuid)',
       [INTEGRATION_ID]
     );
   });

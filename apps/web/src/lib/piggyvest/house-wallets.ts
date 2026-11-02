@@ -26,6 +26,7 @@ export interface HouseWallet {
   role: HouseWalletRole;
   providerWalletId: string;
   businessId: string;
+  currency: 'NGN';
 }
 
 export type HouseWalletRegistry =
@@ -47,7 +48,7 @@ export type HouseWalletQuery = (
 ) => Promise<{ rows: readonly unknown[] }>;
 
 const READ_HOUSE_WALLETS =
-  'SELECT role, provider_wallet_id, business_id, enabled, verified FROM piggyvest_primary.read_house_wallets($1::uuid)';
+  'SELECT role, provider_wallet_id, business_id, currency, enabled, verified FROM piggyvest_primary.read_house_wallets($1::uuid)';
 
 function isConsistent(rows: readonly HouseWalletRow[]): boolean {
   const roles = new Set(rows.map((row) => row.role));
@@ -74,6 +75,7 @@ export function resolveHouseWallets(
         role: row.role,
         providerWalletId: row.provider_wallet_id,
         businessId: row.business_id,
+        currency: row.currency,
       };
     }
   }

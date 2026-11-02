@@ -34,6 +34,10 @@ CREATE TABLE piggyvest_primary.house_wallets (
   role text NOT NULL CHECK (role IN ('collection', 'interest', 'fee')),
   provider_wallet_id text NOT NULL UNIQUE CHECK (octet_length(provider_wallet_id) BETWEEN 1 AND 512),
   business_id text NOT NULL CHECK (octet_length(business_id) BETWEEN 1 AND 512),
+  -- The wallet's currency as the owner confirmed it in the PiggyVest
+  -- dashboard. The provider transfer reader binds NGN from the registered
+  -- wallets when a transfer record names no currency.
+  currency text NOT NULL CHECK (currency = 'NGN'),
   enabled boolean NOT NULL DEFAULT false,
   verified_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
@@ -67,7 +71,9 @@ CREATE INDEX piggyvest_primary_bank_destinations_integration_idx ON piggyvest_pr
 CREATE INDEX piggyvest_primary_bank_destinations_customer_idx ON piggyvest_primary.bank_destinations(customer_id);
 
 -- Before verification a row may be corrected or removed; once verified only
--- the operational enabled switch may change.
+-- the operational enabled switch may change. Switching a wallet off always
+-- succeeds (it is the kill switch); registering or switching one on re-runs
+-- the registration checks.
 CREATE FUNCTION piggyvest_primary.house_wallets_guard() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
 DECLARE
@@ -77,6 +83,7 @@ BEGIN
     IF TG_OP = 'DELETE' OR (pg_catalog.to_jsonb(NEW) - 'enabled') <> (pg_catalog.to_jsonb(OLD) - 'enabled') THEN
       RAISE EXCEPTION 'a verified house wallet is immutable' USING ERRCODE = '42501';
     END IF;
+    IF NOT NEW.enabled THEN RETURN NEW; END IF;
   END IF;
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   SELECT integration.business_id INTO v_business FROM piggyvest_primary.integrations integration
@@ -233,9 +240,10 @@ REVOKE ALL ON piggyvest_primary.house_wallets, piggyvest_primary.bank_destinatio
 -- The one read helper: every registered house wallet of an integration with
 -- its readiness. Callers treat anything but enabled and verified as absent.
 CREATE FUNCTION piggyvest_primary.read_house_wallets(p_integration_id uuid)
-RETURNS TABLE (role text, provider_wallet_id text, business_id text, enabled boolean, verified boolean)
+RETURNS TABLE (role text, provider_wallet_id text, business_id text, currency text, enabled boolean, verified boolean)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$
-  SELECT wallet.role, wallet.provider_wallet_id, wallet.business_id, wallet.enabled, wallet.verified_at IS NOT NULL
+  SELECT wallet.role, wallet.provider_wallet_id, wallet.business_id, wallet.currency, wallet.enabled,
+    wallet.verified_at IS NOT NULL
   FROM piggyvest_primary.house_wallets wallet
   WHERE wallet.integration_id = p_integration_id
   ORDER BY wallet.role

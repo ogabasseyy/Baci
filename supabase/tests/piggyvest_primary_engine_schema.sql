@@ -11,14 +11,19 @@
 --     purposes, delivery modes, duplicates, holds, exit claims and refunds;
 --   * row lifecycle: row_version is bumped on every update and cannot be set
 --     by callers, identity is frozen, settled states are final, attempts use
---     pvb-wt-<transfer>-<attempt> references that are never reused;
---   * interest sweeps exist only through enqueue_misrouted_interest_sweep,
---     whose shipped stub refuses;
---   * the B writer: duplicates, the R4 family cap (review, no write), hold
---     debits only inline in an engine session, payout freezes only by the
---     worker, API sessions only request, the worker applies each request once;
---   * hooks exist, return 'noop' while they are stubs, and the dispatchers
---     route to their per-purpose sub-hooks;
+--     pvb-wt-<transfer>-<attempt> references that are never reused, attempt
+--     states only move forward, and a transfer follows its attempts;
+--   * interest sweeps exist only through enqueue_misrouted_interest_sweep
+--     (dynamic SQL that quotes its frame is refused), whose stub refuses;
+--   * the B writer: duplicates, the R4 family cap counting requested
+--     credits (review, no write), credits bounded by their own leg and the
+--     confirmed amount, a restore only after its freeze took B, refunds of a
+--     goal purchase, hold debits only inline in an engine session, payout
+--     freezes only by the worker, API sessions only request (against the
+--     installed session_may_write_b), the worker applies each request once,
+--     only for its own enabled integration, and retries transient failures;
+--   * hooks exist, return 'noop' while they are stubs, and every dispatcher
+--     routes each purpose to its own sub-hook;
 --   * account deletion detaches settled engine rows (evidence kept) and is
 --     refused while a transfer, a B request or a spend hold is open.
 -- The two-backend apply race is in piggyvest_primary_engine_b_effects_concurrency.sql.
@@ -47,5 +52,9 @@ BEGIN;
 \ir piggyvest_primary_engine_b_effects.inc.sql
 
 \ir piggyvest_primary_engine_detach.inc.sql
+
+\ir piggyvest_primary_engine_b_caps.inc.sql
+
+\ir piggyvest_primary_engine_b_worker.inc.sql
 
 ROLLBACK;

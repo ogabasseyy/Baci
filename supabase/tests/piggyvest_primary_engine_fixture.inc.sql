@@ -44,6 +44,7 @@ $$;
 -- Inserts one transfer as the table owner. The kind's own roles are used
 -- unless p_opts overrides them; wallet ids are left for the database to
 -- resolve. Goal kinds get an exit claim id unless p_opts has "noClaim".
+-- p_opts "integration" picks another integration than the fixture's.
 CREATE FUNCTION pg_temp.wt(
   p_kind text, p_purpose text, p_mode text, p_ref text,
   p_state text DEFAULT 'ready', p_amount bigint DEFAULT 10000, p_opts jsonb DEFAULT '{}'
@@ -61,7 +62,7 @@ BEGIN
     integration_id, kind, source_role, destination_role, purpose, delivery_mode, source_ref,
     customer_id, goal_id, bank_destination_id, refund_of, exit_claim_id, amount_kobo, state)
   VALUES (
-    pg_temp.id(5), p_kind, v_source, v_destination, p_purpose, p_mode, p_ref,
+    COALESCE((p_opts->>'integration')::uuid, pg_temp.id(5)), p_kind, v_source, v_destination, p_purpose, p_mode, p_ref,
     CASE WHEN v_source IN ('main', 'goal') OR v_destination IN ('main', 'goal')
       THEN COALESCE((p_opts->>'customer')::uuid, pg_temp.id(3)) END,
     CASE WHEN v_source = 'goal' OR v_destination = 'goal' THEN pg_temp.id(21) END,
@@ -72,6 +73,26 @@ BEGIN
     p_amount, p_state)
   RETURNING id INTO v_id;
   RETURN v_id;
+END $$;
+
+-- Confirms a transfer the only way the guards allow: one attempt for the
+-- outstanding amount, dispatched and confirmed with its proof. Returns the
+-- attempt id.
+CREATE FUNCTION pg_temp.confirm(p_transfer uuid) RETURNS uuid LANGUAGE plpgsql AS $$
+DECLARE
+  v_attempt uuid;
+  v_n int := (SELECT COALESCE(max(attempt), 0) + 1 FROM piggyvest_primary.wallet_transfer_attempts
+    WHERE transfer_id = p_transfer);
+BEGIN
+  INSERT INTO piggyvest_primary.wallet_transfer_attempts(transfer_id, attempt, reference, amount_kobo)
+    SELECT p_transfer, v_n, 'pvb-wt-' || p_transfer || '-' || v_n, outstanding_kobo
+    FROM piggyvest_primary.wallet_transfers WHERE id = p_transfer
+    RETURNING id INTO v_attempt;
+  UPDATE piggyvest_primary.wallet_transfer_attempts SET state = 'dispatching' WHERE id = v_attempt;
+  UPDATE piggyvest_primary.wallet_transfer_attempts SET state = 'confirmed', proof = '{"status":"successful"}',
+    provider_transaction_id = 'pv-txn-' || v_attempt, fee_kobo = 0 WHERE id = v_attempt;
+  UPDATE piggyvest_primary.wallet_transfers SET state = 'confirmed' WHERE id = p_transfer;
+  RETURN v_attempt;
 END $$;
 
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
@@ -99,10 +120,12 @@ INSERT INTO piggyvest_primary.onboarding_intents(id, integration_id, merchant_id
     repeat('e', 64), 'verified', 'pv-engine-customer', 'pv-engine-main');
 INSERT INTO piggyvest_primary.savings_destinations(integration_id, goal_id, intent_id, provider_wallet_id, enabled)
   VALUES (pg_temp.id(5), pg_temp.id(21), pg_temp.id(6), 'pv-engine-goal', true);
-INSERT INTO piggyvest_primary.house_wallets(integration_id, role, provider_wallet_id, business_id, enabled, verified_at)
+INSERT INTO piggyvest_primary.house_wallets(integration_id, role, provider_wallet_id, business_id, currency, enabled,
+  verified_at)
 VALUES
-  (pg_temp.id(5), 'collection', 'pv-house-collection', 'engine-business', true, TIMESTAMPTZ '2026-10-31 00:00:00+00'),
-  (pg_temp.id(5), 'interest', 'pv-house-interest', 'engine-business', true, TIMESTAMPTZ '2026-10-31 00:00:00+00');
+  (pg_temp.id(5), 'collection', 'pv-house-collection', 'engine-business', 'NGN', true,
+    TIMESTAMPTZ '2026-10-31 00:00:00+00'),
+  (pg_temp.id(5), 'interest', 'pv-house-interest', 'engine-business', 'NGN', true, TIMESTAMPTZ '2026-10-31 00:00:00+00');
 INSERT INTO piggyvest_primary.bank_destinations(id, integration_id, purpose, customer_id, bank_code,
   account_number, account_name, enabled, verified_at)
 VALUES

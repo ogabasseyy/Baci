@@ -15,6 +15,9 @@ export const houseWalletRowSchema = z.strictObject({
   role: houseWalletRoleSchema,
   provider_wallet_id: z.string().min(1).max(512),
   business_id: z.string().min(1).max(512),
+  // The registry only holds NGN wallets; the provider transfer reader binds
+  // NGN from them when a transfer record names no currency.
+  currency: z.literal('NGN'),
   enabled: z.boolean(),
   verified: z.boolean(),
 });

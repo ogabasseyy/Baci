@@ -141,7 +141,7 @@ BEGIN
   PERFORM pg_temp.check(pg_temp.sqlstate_of(format(
     'SELECT pg_temp.wt(''disbursement'', ''refund'', ''credit_main'', ''m-refund-of-refund'', ''ready'', 100,
        jsonb_build_object(''refundOf'', %L))', (SELECT id FROM piggyvest_primary.wallet_transfers WHERE source_ref = 'm-refund'))) = '23514',
-    'a refund must refund a collect');
+    'a refund must refund a collect or a goal purchase, never another refund');
   PERFORM pg_temp.check(pg_temp.sqlstate_of(
     'SELECT pg_temp.wt(''collect'', ''vtu'', ''deliver_before_collect'', ''m-foreign-customer'', ''ready'', 100, ''{"customer":"e5e00000-0000-4000-8000-000000000013"}'')') = '23514',
     'a customer of another merchant must be refused');
@@ -165,3 +165,45 @@ BEGIN
        ''pv-somebody-else'', 100, ''ready'')', pg_temp.id(5), pg_temp.id(3))) = '23514',
     'a caller-supplied wallet id must match the resolved wallet');
 END $$;
+
+-- A goal purchase is refunded Collection -> main like a collect.
+SELECT pg_temp.check(pg_temp.sqlstate_of(format(
+  'SELECT pg_temp.wt(''disbursement'', ''refund'', ''credit_main'', ''m-goal-purchase-refund'', ''awaiting_collect'', 4000,
+     jsonb_build_object(''refundOf'', %L))',
+  (SELECT id FROM piggyvest_primary.wallet_transfers WHERE source_ref = 'm-goal-purchase'))) = 'ok',
+  'a goal purchase must be refundable to the main wallet');
+
+-- Kill switches: a disabled goal mapping, or a goal whose owner's main
+-- wallet is not verified, moves no money; nor does a house wallet that a
+-- customer record also claims.
+SAVEPOINT engine_matrix_switches;
+UPDATE piggyvest_primary.savings_destinations SET enabled = false WHERE goal_id = pg_temp.id(21);
+SELECT pg_temp.check(pg_temp.error_of(
+  'SELECT pg_temp.wt(''goal_refund'', ''cancel'', ''credit_main'', ''m-disabled-goal'')') LIKE '%goal wallet unavailable%'
+  AND pg_temp.error_of(
+  'SELECT pg_temp.wt(''goal_forfeit'', ''cancel_interest'', ''credit_house'', ''m-disabled-goal'')') LIKE '%goal wallet unavailable%'
+  AND pg_temp.error_of(
+  'SELECT pg_temp.wt(''legacy_goal_migration'', ''legacy_goal_balance'', ''credit_goal'', ''m-disabled-goal'')')
+    LIKE '%goal wallet unavailable%',
+  'a disabled goal mapping must not move money in or out');
+ROLLBACK TO SAVEPOINT engine_matrix_switches;
+SAVEPOINT engine_matrix_switches;
+UPDATE piggyvest_primary.onboarding_intents SET state = 'accepted' WHERE id = pg_temp.id(6);
+SELECT pg_temp.check(pg_temp.error_of(
+  'SELECT pg_temp.wt(''goal_forfeit'', ''cancel_interest'', ''credit_house'', ''m-unverified-goal'')')
+    LIKE '%goal wallet unavailable%',
+  'a goal whose owner is not verified must not move money');
+ROLLBACK TO SAVEPOINT engine_matrix_switches;
+SAVEPOINT engine_matrix_switches;
+INSERT INTO piggyvest_primary.onboarding_intents(id, integration_id, merchant_id, customer_id, user_id,
+  request_fingerprint, state, provider_customer_id, provider_wallet_id)
+VALUES (pg_temp.id(7), pg_temp.id(5), pg_temp.id(2), pg_temp.id(4), pg_temp.id(1),
+  repeat('a', 64), 'verified', 'pv-engine-customer-4', 'pv-house-interest');
+SELECT pg_temp.check(pg_temp.error_of(
+  'SELECT pg_temp.wt(''goal_forfeit'', ''cancel_interest'', ''credit_house'', ''m-claimed-house'')')
+    LIKE '%customer record claims%',
+  'a house wallet that a customer record claims must take no money');
+SELECT pg_temp.check(pg_temp.sqlstate_of(
+  'SELECT pg_temp.wt(''collect'', ''vtu'', ''deliver_before_collect'', ''m-unclaimed-house'')') = 'ok',
+  'an unclaimed house wallet still takes money');
+ROLLBACK TO SAVEPOINT engine_matrix_switches;

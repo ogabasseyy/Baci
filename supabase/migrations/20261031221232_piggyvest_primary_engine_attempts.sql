@@ -9,6 +9,11 @@
 -- aborted (one open attempt per transfer), and a confirmed attempt ends the
 -- transfer's attempts. amount_kobo is the amount a settlement proof must
 -- bind to; it never exceeds what the transfer still has outstanding.
+-- States only move forward: prepared -> dispatching or aborted; dispatching
+-- -> submitted, unknown, confirmed or failed; submitted and unknown ->
+-- each other, confirmed or failed. Only a prepared attempt (never sent) can
+-- be aborted, so an attempt that may have reached PiggyVest can never be
+-- written off to make room for a new reference.
 --
 -- Spend holds stop a customer from spending while something is wrong:
 -- negative drift, a collect in review, a support payout freeze, or a
@@ -63,6 +68,13 @@ BEGIN
     END IF;
     IF NEW.state <> OLD.state AND OLD.state IN ('confirmed', 'failed', 'aborted') THEN
       RAISE EXCEPTION 'attempt % is final', OLD.state USING ERRCODE = '55000';
+    END IF;
+    IF NEW.state <> OLD.state AND NOT (NEW.state = ANY (CASE OLD.state
+        WHEN 'prepared' THEN ARRAY['dispatching', 'aborted']
+        WHEN 'dispatching' THEN ARRAY['submitted', 'unknown', 'confirmed', 'failed']
+        WHEN 'submitted' THEN ARRAY['unknown', 'confirmed', 'failed']
+        WHEN 'unknown' THEN ARRAY['submitted', 'confirmed', 'failed'] END)) THEN
+      RAISE EXCEPTION 'attempt cannot move from % to %', OLD.state, NEW.state USING ERRCODE = '55000';
     END IF;
     NEW.updated_at := pg_catalog.clock_timestamp();
     RETURN NEW;

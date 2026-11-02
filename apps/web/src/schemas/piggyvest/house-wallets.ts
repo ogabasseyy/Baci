@@ -2,7 +2,7 @@ import z from 'zod';
 
 /**
  * Wire shape of piggyvest_primary.read_house_wallets
- * (supabase/migrations/20261102044343_piggyvest_primary_engine_schema.sql).
+ * (supabase/migrations/20261102202401_piggyvest_primary_engine_schema.sql).
  * House wallets are Ogabassey's own PiggyVest wallets, never a customer's.
  * The database is the authority; these schemas only refuse to act on a
  * response that does not look like it.

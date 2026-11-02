@@ -117,7 +117,7 @@ export async function redeemDurableOxygenHandoff(
 ) {
   const hash = digest(token);
   const { data, error } = await worker.rpc('oxygen_phone_handoff', {
-    p_operation: 'consume',
+    p_operation: 'peek',
     p_workflow_id: null,
     p_hash: hash,
     p_payload: {},
@@ -130,10 +130,23 @@ export async function redeemDurableOxygenHandoff(
     Date.parse(row.expiresAt) > Date.now() + 300000
   )
     throw new Error('Phone verification unavailable');
-  return {
-    url: hosted(
-      decryptPhoneTarget(row.ciphertext, config.key, { hash, ...row }),
-      config.hosts
-    ),
-  };
+  const url = hosted(
+    decryptPhoneTarget(row.ciphertext, config.key, { hash, ...row }),
+    config.hosts
+  );
+  const result = await worker.rpc('oxygen_phone_handoff', {
+    p_operation: 'consume',
+    p_workflow_id: null,
+    p_hash: hash,
+    p_payload: row,
+  });
+  if (
+    result.error ||
+    !z
+      .object({ consumed: z.literal(true) })
+      .strict()
+      .safeParse(result.data).success
+  )
+    throw new Error('Phone verification unavailable');
+  return { url };
 }

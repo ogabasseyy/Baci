@@ -97,7 +97,7 @@ it('does not issue a QR if the database fails to persist the token', async () =>
     issueDurableOxygenHandoff(client, worker, { call }, 'partner', id, config)
   ).rejects.toThrow();
 });
-it('redeems only matching unexpired encrypted targets and never accepts replay errors', async () => {
+it('validates the peeked target before consuming the exact bound row', async () => {
   const token = 't'.repeat(43);
   const hash = createHash('sha256').update(token).digest('hex');
   const context = {
@@ -107,8 +107,9 @@ it('redeems only matching unexpired encrypted targets and never accepts replay e
     hash,
   };
   const row = {
-    ...context,
-    hash: undefined,
+    workflowId: id,
+    applicationReference: app,
+    environment: 'staging' as const,
     expiresAt: new Date(Date.now() + 60000).toISOString(),
     ciphertext: encryptPhoneTarget(
       'https://selfie.example.test/?token=private',
@@ -116,25 +117,123 @@ it('redeems only matching unexpired encrypted targets and never accepts replay e
       context
     ),
   };
-  delete row.hash;
-  rpc.mockResolvedValueOnce({ data: row, error: null });
+  rpc
+    .mockResolvedValueOnce({ data: row, error: null })
+    .mockResolvedValueOnce({ data: { consumed: true }, error: null });
   expect(await redeemDurableOxygenHandoff(client, token, config)).toEqual({
     url: 'https://selfie.example.test/?token=private',
   });
-  rpc.mockResolvedValueOnce({ data: null, error: { code: '40001' } });
-  await expect(
-    redeemDurableOxygenHandoff(client, token, config)
-  ).rejects.toThrow();
+  expect(rpc.mock.calls[0][1]).toMatchObject({
+    p_operation: 'peek',
+    p_hash: hash,
+    p_payload: {},
+  });
+  expect(rpc.mock.calls[1][1]).toMatchObject({
+    p_operation: 'consume',
+    p_hash: hash,
+    p_payload: row,
+  });
+});
+it('does not consume when the peeked target is untrusted or fails validation', async () => {
+  const token = 't'.repeat(43);
+  const hash = createHash('sha256').update(token).digest('hex');
+  const context = {
+    workflowId: id,
+    applicationReference: app,
+    environment: 'staging' as const,
+    hash,
+  };
+  const row = {
+    workflowId: id,
+    applicationReference: app,
+    environment: 'staging' as const,
+    expiresAt: new Date(Date.now() + 60000).toISOString(),
+    ciphertext: encryptPhoneTarget(
+      'https://removed.example.test/?token=private',
+      config.key,
+      context
+    ),
+  };
   for (const change of [
+    {},
     { environment: 'production' },
     { expiresAt: new Date(Date.now() - 1000).toISOString() },
     { applicationReference: id },
   ]) {
+    rpc.mockReset();
     rpc.mockResolvedValueOnce({ data: { ...row, ...change }, error: null });
     await expect(
       redeemDurableOxygenHandoff(client, token, config)
     ).rejects.toThrow();
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc.mock.calls[0][1].p_operation).toBe('peek');
   }
+});
+it('can redeem the same capability after an allowed host is restored', async () => {
+  const token = 't'.repeat(43);
+  const hash = createHash('sha256').update(token).digest('hex');
+  const context = {
+    workflowId: id,
+    applicationReference: app,
+    environment: 'staging' as const,
+    hash,
+  };
+  const row = {
+    workflowId: id,
+    applicationReference: app,
+    environment: 'staging' as const,
+    expiresAt: new Date(Date.now() + 60000).toISOString(),
+    ciphertext: encryptPhoneTarget(
+      'https://removed.example.test/?token=private',
+      config.key,
+      context
+    ),
+  };
+  rpc.mockResolvedValueOnce({ data: row, error: null });
+  await expect(
+    redeemDurableOxygenHandoff(client, token, config)
+  ).rejects.toThrow();
+  expect(rpc).toHaveBeenCalledTimes(1);
+  rpc
+    .mockResolvedValueOnce({ data: row, error: null })
+    .mockResolvedValueOnce({ data: { consumed: true }, error: null });
+  await expect(
+    redeemDurableOxygenHandoff(client, token, {
+      ...config,
+      hosts: new Set(['removed.example.test']),
+    })
+  ).resolves.toEqual({ url: 'https://removed.example.test/?token=private' });
+});
+it('never returns the target when the atomic consume loses a race or is replayed', async () => {
+  const token = 't'.repeat(43);
+  const hash = createHash('sha256').update(token).digest('hex');
+  const context = {
+    workflowId: id,
+    applicationReference: app,
+    environment: 'staging' as const,
+    hash,
+  };
+  const row = {
+    workflowId: id,
+    applicationReference: app,
+    environment: 'staging' as const,
+    expiresAt: new Date(Date.now() + 60000).toISOString(),
+    ciphertext: encryptPhoneTarget(
+      'https://selfie.example.test/?token=private',
+      config.key,
+      context
+    ),
+  };
+  rpc
+    .mockResolvedValueOnce({ data: row, error: null })
+    .mockResolvedValueOnce({ data: null, error: { code: '40001' } });
+  await expect(
+    redeemDurableOxygenHandoff(client, token, config)
+  ).rejects.toThrow();
+  rpc.mockResolvedValueOnce({ data: null, error: { code: '40001' } });
+  await expect(
+    redeemDurableOxygenHandoff(client, token, config)
+  ).rejects.toThrow();
 });
 it('rejects invalid capability syntax before database access', async () => {
   await expect(

@@ -75,4 +75,15 @@ describe('primary wallet signed inflow boundary', () => {
     ).rejects.toThrow('Wallet inflow reconciliation unavailable');
     expect(apply).toHaveBeenCalledTimes(1);
   });
+  it('passes the readiness refusal through as the retryable prerequisite', async () => {
+    const apply = vi.fn().mockResolvedValue('prerequisite');
+    expect(
+      await applyPrimaryWalletSignedInflow({
+        rawBody,
+        signature,
+        secret,
+        apply,
+      })
+    ).toBe('prerequisite');
+  });
 });

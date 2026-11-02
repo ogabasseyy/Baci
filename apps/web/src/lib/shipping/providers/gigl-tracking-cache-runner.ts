@@ -15,10 +15,13 @@ export async function runWithGiglTrackingTokenCache<
 >({
   cache,
   createProvider,
+  onCacheUnavailable = () =>
+    console.warn('[gigl-tracking] token cache unavailable'),
   run,
 }: {
   cache: TokenCache;
   createProvider: (initial: GiglToken | null) => Provider;
+  onCacheUnavailable?: () => void;
   run: (provider: Provider) => Promise<Result>;
 }): Promise<Result> {
   const initial = await cache.load().catch(() => null);
@@ -35,7 +38,7 @@ export async function runWithGiglTrackingTokenCache<
       } else if (provider && initial) await cache.clear();
     } catch {
       // Tracking remains available if the private optimization is unavailable.
-      console.warn('[gigl-tracking] token cache unavailable');
+      onCacheUnavailable();
     } finally {
       await cache.release?.().catch(() => undefined);
     }

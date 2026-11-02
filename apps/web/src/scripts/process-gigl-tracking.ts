@@ -56,7 +56,8 @@ function isExplicitlyDisabled(value: string | undefined) {
 
 async function runBatchDirectly(
   { batchSize }: { batchSize: number },
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv,
+  emitError: (message: string) => void
 ) {
   const options = {
     batchSize,
@@ -91,6 +92,7 @@ async function runBatchDirectly(
     });
     return await runWithGiglTrackingTokenCache({
       cache,
+      onCacheUnavailable: () => emitError('[gigl-tracking] token cache unavailable'),
       createProvider: (initial) => new GiglProvider(initial),
       run: (provider) =>
         runGiglTrackingMonitorBatch({
@@ -112,7 +114,7 @@ async function runBatchDirectly(
 export async function runGiglTrackingCli({
   env = process.env,
   logger = console,
-  runBatch = (options) => runBatchDirectly(options, env),
+  runBatch,
 }: {
   env?: NodeJS.ProcessEnv;
   logger?: CliLogger;
@@ -143,7 +145,7 @@ export async function runGiglTrackingCli({
   console.warn = () => emitError('[gigl-tracking] internal warning');
 
   try {
-    const result = await runBatch({ batchSize: 25 });
+    const result = await (runBatch ?? ((options) => runBatchDirectly(options, env, emitError)))({ batchSize: 25 });
     if (!result.ok) {
       emitError('[gigl-tracking] failed');
       return 1;

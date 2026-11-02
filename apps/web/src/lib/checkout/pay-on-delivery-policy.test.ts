@@ -92,7 +92,7 @@ describe('merchant POD admission', () => {
       ).ok
     ).toBe(hashMatches);
     expect(rpc).toHaveBeenLastCalledWith(
-      'is_storefront_order_idempotency_hash',
+      'is_storefront_pod_order_idempotency_hash',
       {
         p_merchant_id: input.merchantId,
         p_checkout_idempotency_key: 'existing-key',

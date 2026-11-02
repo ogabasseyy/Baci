@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
-import { Client } from 'pg';
+
+const require = createRequire(
+  new URL('../../apps/web/package.json', import.meta.url)
+);
+const { Client } = require('pg');
 
 const repository = resolve(import.meta.dirname, '../..');
 const bin =
@@ -79,7 +84,8 @@ test('POD persistence policy and concurrent flag revocation', async () => {
       CREATE TRIGGER fixture_default_settings AFTER INSERT ON public.merchants
         FOR EACH ROW EXECUTE FUNCTION public.fixture_default_settings();
       CREATE TABLE public.orders(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),merchant_id uuid,
-        order_number text,total numeric,payment_method text,customer_email text);
+        order_number text,total numeric,payment_method text,customer_email text,
+        checkout_idempotency_key text,checkout_request_hash text);
     `);
     if (!process.argv.includes('--baseline')) {
       await admin.query(
@@ -87,6 +93,15 @@ test('POD persistence policy and concurrent flag revocation', async () => {
           join(
             repository,
             'supabase/migrations/20261101071733_enforce_merchant_pay_on_delivery_policy.sql'
+          ),
+          'utf8'
+        )
+      );
+      await admin.query(
+        readFileSync(
+          join(
+            repository,
+            'supabase/migrations/20261102060000_probe_pod_order_idempotency_hash.sql'
           ),
           'utf8'
         )

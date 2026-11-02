@@ -25,7 +25,7 @@ BEGIN
   -- Real merchant insertion creates default feature rows automatically.
   DELETE FROM public.merchant_feature_settings WHERE merchant_id=missing;
   FOREACH target IN ARRAY ARRAY[disabled,missing] LOOP
-    FOREACH method IN ARRAY ARRAY['pod','pay_on_delivery'] LOOP
+    FOREACH method IN ARRAY ARRAY['pod','pay_on_delivery','POD',' Pay_On_Delivery '] LOOP
       rejected := false;
       BEGIN
         INSERT INTO public.orders(merchant_id,order_number,total,payment_method,customer_email)
@@ -37,13 +37,29 @@ BEGIN
       IF NOT rejected THEN RAISE EXCEPTION 'disabled or missing merchant accepted %',method; END IF;
     END LOOP;
   END LOOP;
-  FOREACH method IN ARRAY ARRAY['pod','pay_on_delivery'] LOOP
+  FOREACH method IN ARRAY ARRAY['pod','pay_on_delivery','POD',' Pay_On_Delivery '] LOOP
     INSERT INTO public.orders(merchant_id,order_number,total,payment_method,customer_email)
     VALUES(enabled,'pod-enabled-'||method,1,method,'fixture@example.com') RETURNING id INTO accepted;
   END LOOP;
   INSERT INTO public.orders(merchant_id,order_number,total,payment_method,customer_email)
   VALUES(disabled,'pod-card-control',1,'card','fixture@example.com') RETURNING id INTO card_order;
-  FOREACH method IN ARRAY ARRAY['pod','pay_on_delivery'] LOOP
+  UPDATE public.orders SET checkout_idempotency_key='card-key',checkout_request_hash=repeat('a',64)
+    WHERE id=card_order;
+  IF public.is_storefront_pod_order_idempotency_hash(disabled,'card-key',repeat('a',64)) THEN
+    RAISE EXCEPTION 'a card order authorized a POD replay';
+  END IF;
+  UPDATE public.orders SET checkout_idempotency_key='pod-key',checkout_request_hash=repeat('b',64)
+    WHERE id=accepted;
+  IF NOT public.is_storefront_pod_order_idempotency_hash(enabled,'pod-key',repeat('b',64)) THEN
+    RAISE EXCEPTION 'accepted POD replay was not found';
+  END IF;
+  IF public.is_storefront_pod_order_idempotency_hash(disabled,'pod-key',repeat('b',64)) THEN
+    RAISE EXCEPTION 'another merchant authorized a POD replay';
+  END IF;
+  IF public.is_storefront_pod_order_idempotency_hash(enabled,'pod-key',repeat('c',64)) THEN
+    RAISE EXCEPTION 'a different hash authorized a POD replay';
+  END IF;
+  FOREACH method IN ARRAY ARRAY['pod','pay_on_delivery','POD',' Pay_On_Delivery '] LOOP
     rejected := false;
     BEGIN
       UPDATE public.orders SET payment_method=method WHERE id=card_order;
@@ -65,7 +81,7 @@ BEGIN
   END;
   IF NOT rejected THEN RAISE EXCEPTION 'another merchant inherited POD permission'; END IF;
   IF EXISTS(SELECT 1 FROM public.orders WHERE merchant_id IN (disabled,missing)
-      AND payment_method IN ('pod','pay_on_delivery')) THEN
+      AND lower(btrim(payment_method)) IN ('pod','pay_on_delivery')) THEN
     RAISE EXCEPTION 'rejected POD attempt left an order behind';
   END IF;
 END $$;

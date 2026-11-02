@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
@@ -147,7 +153,7 @@ it('requests a code only for the matching canonical selected reference', async (
     })
   );
   const request = vi.fn().mockResolvedValue(true);
-  render(
+  const { unmount } = render(
     <OxygenSavedPlans
       workflowId={id}
       state={
@@ -163,4 +169,13 @@ it('requests a code only for the matching canonical selected reference', async (
   ).toBeVisible();
   continueWithSignature();
   await waitFor(() => expect(request).toHaveBeenCalledExactlyOnceWith(ref25));
+  expect(
+    await screen.findByRole('textbox', { name: 'Verification code' })
+  ).toBeVisible();
+  unmount();
+  // input-otp schedules uncancelled selection syncs at 0, 10 and 50 ms.
+  // Let those callbacks settle while the test DOM still exists.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 75));
+  });
 });

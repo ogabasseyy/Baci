@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { primaryRestrictedReadinessRequirements } from './primary-restricted-readiness.constants';
+import { PRIMARY_WALLET_STATEMENTS } from './primary-wallet-statements';
+import { PRIMARY_WALLET_VERIFICATION_STATEMENT } from './primary-wallet-verification';
 
 describe('primaryRestrictedReadinessRequirements', () => {
   it('pins the reviewed evidence and approval windows', () => {
@@ -26,6 +28,23 @@ describe('primaryRestrictedReadinessRequirements', () => {
       for (const fn of capability.functions)
         expect(fn.startsWith('piggyvest_primary.')).toBe(true);
     }
+  });
+
+  it('lists every function the onboarding runtime calls in the onboarding role gate', () => {
+    const onboarding =
+      primaryRestrictedReadinessRequirements.capabilities.find(
+        (capability) => capability.gate === 'onboarding_role'
+      )?.functions ?? [];
+    const called = [
+      ...Object.values(PRIMARY_WALLET_STATEMENTS),
+      PRIMARY_WALLET_VERIFICATION_STATEMENT,
+    ].map((statement) => /piggyvest_primary\.(\w+)\(/.exec(statement)?.[1]);
+    for (const name of called)
+      expect(
+        onboarding.some((signature) =>
+          signature.startsWith(`piggyvest_primary.${name}(`)
+        )
+      ).toBe(true);
   });
 
   it('binds readiness routes to reviewed handlers', () => {

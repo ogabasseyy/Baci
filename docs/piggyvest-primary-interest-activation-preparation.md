@@ -88,6 +88,13 @@ privileged read-only current-layout check before choosing any install/rollback.
   of non-login/non-elevated `piggyvest_primary_evidence`, without parent-group
   escalation or direct private-table privileges. PUBLIC/customer/service-role
   interest entry-point execution must be absent.
+- Known pre-activation blocker: since `20261102032905` (engine readiness stub)
+  the evidence capability is a member of `piggyvest_primary_readiness_reader`
+  and can execute `engine_ready(p_surface text)`. The inventory and prepare
+  checks here still require zero capability memberships and nine RPCs, so they
+  refuse every preparation until they are updated, with the enforcing readiness
+  check, to accept exactly that NOLOGIN, non-elevated reader. See
+  `docs/primary-wallet-bank-signed-inbox.md` (Engine readiness gate).
 - Six interest RPCs: enqueue, claim, finish, readiness, read exact crosswalk,
   apply paid interest. The same existing evidence capability also exposes
   `apply_inflow_environment`, `settle_savings`, `read_dispatched_savings`.

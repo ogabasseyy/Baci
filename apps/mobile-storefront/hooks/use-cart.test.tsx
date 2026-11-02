@@ -1,9 +1,12 @@
+jest.mock('@/lib/config', () => require('./cart-merchant.test-support'));
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useCartStore } from '@/stores/cart-store';
 import { installSharedCartWriter } from '@/stores/shared-cart-writer';
+import { CONFIG as CART_TEST_CONFIG } from './cart-merchant.test-support';
 import { useCart } from './use-cart';
 
 const mockNetInfoFetch = jest.fn();
@@ -195,7 +198,7 @@ describe('useCart stock validation', () => {
         expect(supabase.rpc).toHaveBeenCalledWith(
           'get_storefront_offer_resolution',
           {
-            p_merchant_id: null,
+            p_merchant_id: CART_TEST_CONFIG.MERCHANT_ID,
             p_product_ids: ['product-1'],
           }
         );

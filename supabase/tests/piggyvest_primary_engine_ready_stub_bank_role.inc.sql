@@ -155,3 +155,50 @@ SELECT pg_temp.check(
   AND pg_temp.flags('pv_ready_test_intake', false, 'function:piggyvest_primary.engine_ready(text)'),
   'the intake must stay unsafe if it is ever given the reader');
 ROLLBACK TO SAVEPOINT intake_reader;
+
+-- The capability roles themselves must stay non-login and non-elevated.
+SAVEPOINT worker_capability_login;
+ALTER ROLE primary_bank_inbox_worker LOGIN;
+SELECT pg_temp.check(
+  pg_temp.flags('pv_ready_test_worker', true, 'capability:primary_bank_inbox_worker'),
+  'a worker capability role that can log in must be unsafe');
+ROLLBACK TO SAVEPOINT worker_capability_login;
+
+SAVEPOINT intake_capability_login;
+ALTER ROLE primary_bank_signed_intake LOGIN;
+SELECT pg_temp.check(
+  pg_temp.flags('pv_ready_test_intake', false, 'capability:primary_bank_signed_intake'),
+  'an intake capability role that can log in must be unsafe');
+ROLLBACK TO SAVEPOINT intake_capability_login;
+
+SAVEPOINT worker_capability_createrole;
+ALTER ROLE primary_bank_inbox_worker CREATEROLE;
+SELECT pg_temp.check(
+  pg_temp.flags('pv_ready_test_worker', true, 'capability:primary_bank_inbox_worker'),
+  'an elevated worker capability role must be unsafe');
+ROLLBACK TO SAVEPOINT worker_capability_createrole;
+
+-- Every attribute the reader exception checks, not only LOGIN.
+SAVEPOINT reader_createdb;
+ALTER ROLE piggyvest_primary_readiness_reader CREATEDB;
+SELECT pg_temp.check(
+  pg_temp.flags('pv_ready_test_worker', true, 'membership:piggyvest_primary_readiness_reader'),
+  'a reader that can create databases must make the worker unsafe');
+ROLLBACK TO SAVEPOINT reader_createdb;
+
+SAVEPOINT reader_createrole;
+ALTER ROLE piggyvest_primary_readiness_reader CREATEROLE;
+SELECT pg_temp.check(
+  pg_temp.flags('pv_ready_test_worker', true, 'membership:piggyvest_primary_readiness_reader'),
+  'a reader that can create roles must make the worker unsafe');
+ROLLBACK TO SAVEPOINT reader_createrole;
+
+-- A sequence privilege reached through the reader is a relation violation.
+SAVEPOINT reader_extra_sequence;
+CREATE SCHEMA pv_ready_test_scratch;
+CREATE SEQUENCE pv_ready_test_scratch.counter;
+GRANT USAGE ON SEQUENCE pv_ready_test_scratch.counter TO piggyvest_primary_readiness_reader;
+SELECT pg_temp.check(
+  pg_temp.flags('pv_ready_test_worker', true, 'relation:pv_ready_test_scratch.counter'),
+  'a sequence reached through the reader must be unsafe');
+ROLLBACK TO SAVEPOINT reader_extra_sequence;

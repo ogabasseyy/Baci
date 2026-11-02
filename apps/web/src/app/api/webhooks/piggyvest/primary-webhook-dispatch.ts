@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { authorizesLegacyHandling } from '@/lib/piggyvest/primary-event-owner';
 import { primaryInterestWebhookResponse } from '@/lib/piggyvest/primary-interest-webhook-response';
 import { dispatchPrimaryWalletBankInboxIntake } from '@/lib/piggyvest/primary-wallet-bank-inbox-intake';
 import { dispatchPrimaryCardSignedCustodyIntake } from '@/lib/piggyvest/primary-wallet-card-custody-intake-dispatch';
@@ -100,15 +101,22 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
     if (primary === 'conflict') {
       return 'conflict';
     }
-    // The engine readiness gate refused the credit (not ready, or the check
-    // failed). Retryable, never a fall-through: the captured delivery stays
-    // pending and replays once the engine is ready, and no other credit
-    // path may handle it meanwhile.
-    if (primary === 'prerequisite')
+    // The engine readiness gate refused the primary credit (not ready, or
+    // the check failed) before anything was applied. A legacy-signed
+    // delivery then falls through exactly as if the primary inflow were
+    // switched off: the legacy ledger credits only its own verified plan
+    // wallets, and a primary-owned deposit fails there retryable
+    // (unmapped), so it stays captured and credits once after readiness.
+    // A delivery no legacy key signed is not authorized for legacy
+    // handling; it answers retryable rather than being quarantined.
+    if (primary === 'prerequisite') {
+      if (authorizesLegacyHandling(input.event.eventType, input.families))
+        return null;
       return retryable(
         'PIGGYVEST_PRIMARY_INFLOW_NOT_READY',
         'Primary wallet inflow not ready'
       );
+    }
     // Rollback order matters: the legacy inflow runs first so a
     // rollback-to-legacy still credits; 503 only when it too is
     // unavailable and the inbox already declined as disabled.

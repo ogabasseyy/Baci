@@ -86,13 +86,13 @@ it('with the flag on and the stub installed, never calls apply_inflow and return
   expect(pg.statements.some((s) => s.includes('apply_inflow'))).toBe(false);
 });
 
-it('answers the provider retryable, so the captured delivery replays later instead of reaching any other credit path', async () => {
+it('answers a bank-signed delivery retryable, so the captured delivery replays later', async () => {
   const response = await dispatchPrimaryPiggyvestIntake({
     rawBody: bank.rawBody,
     signature: bank.signature,
     matchedSecret: bank.config.webhookSecret,
     event: bank.event as never,
-    families: ['legacy'],
+    families: ['bank'],
   });
   expect(response).toBeInstanceOf(Response);
   expect((response as Response).status).toBe(503);
@@ -101,5 +101,20 @@ it('answers the provider retryable, so the captured delivery replays later inste
     code: 'PIGGYVEST_PRIMARY_INFLOW_NOT_READY',
     error: 'Primary wallet inflow not ready',
   });
+  expect(pg.statements.some((s) => s.includes('apply_inflow'))).toBe(false);
+});
+
+it('hands a legacy-signed delivery to legacy handling exactly as with the flag off', async () => {
+  // Legacy credits only its own verified plan wallets; a primary-owned
+  // deposit fails there retryable, so it stays captured for the engine.
+  const response = await dispatchPrimaryPiggyvestIntake({
+    rawBody: bank.rawBody,
+    signature: bank.signature,
+    matchedSecret: bank.config.webhookSecret,
+    event: bank.event as never,
+    families: ['legacy'],
+  });
+  expect(response).toBeNull();
+  expect(pg.statements.some((s) => s.includes('engine_ready'))).toBe(true);
   expect(pg.statements.some((s) => s.includes('apply_inflow'))).toBe(false);
 });

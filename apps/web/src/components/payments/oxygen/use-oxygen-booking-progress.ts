@@ -115,13 +115,19 @@ export function useOxygenBookingProgress(
       if (
         !enabled ||
         busy ||
-        !['refresh_details', 'refresh_eligibility'].includes(
-          pendingReadRecovery(snapshot) ?? ''
-        )
+        ![
+          'refresh_details',
+          'refresh_eligibility',
+          'refresh_payment_setup',
+        ].includes(pendingReadRecovery(snapshot) ?? '')
       )
         return;
       const action = pendingReadRecovery(snapshot);
-      if (action === 'refresh_details' || action === 'refresh_eligibility')
+      if (
+        action === 'refresh_details' ||
+        action === 'refresh_eligibility' ||
+        action === 'refresh_payment_setup'
+      )
         await submit({ action });
     },
   };

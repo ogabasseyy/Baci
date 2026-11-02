@@ -4,7 +4,12 @@ import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 /** Only safe pending commands may be resumed by a customer status check. */
 export function pendingReadRecovery(
   snapshot: OxygenRuntimeSnapshot | null
-): 'refresh_kyc' | 'refresh_details' | 'refresh_eligibility' | null {
+):
+  | 'refresh_kyc'
+  | 'refresh_details'
+  | 'refresh_eligibility'
+  | 'refresh_payment_setup'
+  | null {
   const pending = snapshot?.pending;
   if (
     !snapshot?.executionEnabled ||
@@ -22,6 +27,11 @@ export function pendingReadRecovery(
   )
     return 'refresh_eligibility';
   if (!snapshot.state.bookingReference) return null;
+  if (
+    pending.action === 'refresh_payment_setup' &&
+    ['payment_required', 'ready_for_activation'].includes(snapshot.stage)
+  )
+    return 'refresh_payment_setup';
   if (
     pending.action === 'refresh_kyc' &&
     snapshot.stage === 'booked' &&

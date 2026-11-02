@@ -18,6 +18,7 @@ import {
   oxygenRuntimeSnapshotSchema,
 } from '@/schemas/oxygen-runtime-view';
 
+import { pendingReadRecovery } from './oxygen-read-recovery';
 import { rememberPhoneOtpSend } from './phone-otp-window';
 
 const base = '/api/payments/oxygen/workflows';
@@ -157,8 +158,7 @@ export function useOxygenProvider(orderId: string) {
         ? pending.idempotencyKey
         : !(
               pending?.status === 'executing' &&
-              pending.action === command.action &&
-              ['refresh_kyc', 'refresh_details'].includes(command.action)
+              pendingReadRecovery(snapshot) === command.action
             ) &&
             lastKey.current?.action === command.action &&
             lastKey.current.version === snapshot.version

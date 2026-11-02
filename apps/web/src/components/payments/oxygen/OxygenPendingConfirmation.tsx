@@ -109,9 +109,11 @@ export function OxygenPendingConfirmation({
           identityCheck={snapshot?.pending?.action === 'validate_nin'}
           busy={busy}
           refresh={
-            ['refresh_details', 'refresh_eligibility'].includes(
-              pendingReadRecovery(snapshot) ?? ''
-            ) && checkPending
+            [
+              'refresh_details',
+              'refresh_eligibility',
+              'refresh_payment_setup',
+            ].includes(pendingReadRecovery(snapshot) ?? '') && checkPending
               ? checkPending
               : refresh
           }

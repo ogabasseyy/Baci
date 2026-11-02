@@ -7,9 +7,9 @@
 --
 -- This file adds the state store, its event log, the read helpers and the
 -- pre-declared hooks. The transitions are in
--- 20261102033305_piggyvest_primary_wallet_backing_transitions.sql, and the
+-- 20261102093137_piggyvest_primary_wallet_backing_transitions.sql, and the
 -- one-pair ledger index is built concurrently in
--- 20261102033306_piggyvest_primary_wallet_backing_relabel_index.sql.
+-- 20261102093138_piggyvest_primary_wallet_backing_relabel_index.sql.
 --
 -- Ships dark: the tables start empty (no row means legacy), no login is a
 -- member of the new role, and no existing write path calls these functions

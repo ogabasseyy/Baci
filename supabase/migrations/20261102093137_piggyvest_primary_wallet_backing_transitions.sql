@@ -1,4 +1,4 @@
--- Wallet backing transitions (state store: 20261102033304). Each takes the
+-- Wallet backing transitions (state store: 20261102093136). Each takes the
 -- per-customer lock exclusively (assert_wallet_legacy takes it shared) first.
 --   begin_migration: legacy -> migrating for an audited, settled, non-zero
 --     balance, or -> backed for an audited zero / no wallet row. No ledger write.

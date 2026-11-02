@@ -1,38 +1,38 @@
-# P5-backing-state: wallet backing state
+# Recording which kind of money a customer wallet holds
+
+Task: P5-backing-state
+Owner sign-off: required
 
 ## What changes
 
 Each Ogabassey customer wallet gets a recorded "backing state":
 
-- **Legacy**: old-style Ogabassey wallet money. Every wallet starts here.
-- **Migrating**: the wallet is locked while its checked old balance moves to the customer's PiggyVest wallet.
+- **Legacy**: old Ogabassey money. Every wallet starts here.
+- **Migrating**: locked while its checked balance moves to the customer's PiggyVest wallet.
 - **Backed**: the wallet holds only PiggyVest money.
 
-The database gets these states, a history log, and three steps: start a move, finish it, and mark a wallet for review. The app gets one safe way to ask "what state is my wallet in?".
+The database gets these states, a history log, and three steps: start a move, finish it, and mark a wallet for review. The app gets one safe "what state is my wallet in?" check.
 
 ## Why
 
-Each wallet holds one kind of money, so old and PiggyVest money can't be mixed or spent twice. Later changes route payments by state.
+A wallet holds one kind of money, so old and PiggyVest money can't be mixed or spent twice.
 
 ## What could go wrong and how it is prevented
 
-- **A wallet going backwards**: always refused, even for the most privileged ordinary account. History can't be edited or deleted.
-- **Backed without the money arriving**: only a zero balance or a PiggyVest-confirmed move makes a wallet backed. Only the future transfer engine can finish a move.
-- **Money sent to the wrong place**: a move starts only if the customer finished PiggyVest setup, the store's PiggyVest connection is on, and the customer record still belongs to this store and to the person who set up PiggyVest.
-- **The wrong amount**: the checked amount must equal the balance with no old payment pending, and is checked again at the finish; anything different stays locked for review. Balances too large for one history line (about 100 million naira) never start.
-- **Money counted twice**: finishing writes one "moved out" and one "moved in" line for the same amount, balance unchanged. A repeat writes nothing; a different confirmed move goes to review.
-- **A finished transfer undone**: finishing reports a refusal or review instead of failing, even if customer records changed. A failing follow-up step leaves the move standing, marked for review.
-- **A customer deleted mid-move**: blocked while migrating, so the move can finish. Trade-off: a wallet stuck in review blocks deletion until a later change resolves it.
-- **Customers seeing each other's state**: the app check answers only for the signed-in customer. Any error, including a record under another store, means "unknown": stop.
+- **A wallet going backwards**: always refused, and history can't be edited or deleted. Marking a wallet backed by hand is refused too.
+- **Backed without the money arriving**: only a zero balance or a PiggyVest-confirmed move makes a wallet backed, and only the future transfer engine can finish one.
+- **Money sent to the wrong place**: a move starts only if setup is finished, the store's PiggyVest connection is on, and the customer still belongs to this store and the person who set up PiggyVest. Checked again at the finish.
+- **The wrong amount**: the checked amount must equal the balance with no old payment pending, and is checked again at the finish; anything different stays locked for review.
+- **Money counted twice**: finishing writes one "moved out" and one "moved in" line. A repeat of the same move writes nothing; a different confirmed move goes to review.
+- **A finished transfer undone**: finishing reports a refusal or review instead of failing. A failing follow-up step leaves the move standing, flagged for review.
+- **A customer deleted mid-move**: blocked while migrating. Trade-off: a wallet stuck in review blocks deletion until resolved.
+- **Customers seeing each other's state**: the check answers only for the signed-in customer; any error means "unknown".
+- **Freezing payments during the release**: the rule against duplicate "moved" lines is its own release step, built while payments carry on. If interrupted, the next release rebuilds it.
 
 ## How it is tested
 
-Database tests cover every refusal, the largest allowed amount, zero balances, a full move, repeats, changes mid-move, a failing follow-up step, deletion mid-move, every attempt to go backwards, and which accounts may run each step. App tests check every reply, errors, and that no privileged connection is used.
+Database tests cover every refusal, zero and largest balances, a full move, repeats, changes mid-move, a failing follow-up step, deletion, every attempt to go backwards, and who may run each step. They also confirm the duplicate-line rule is unique and finished. App tests check every reply.
 
 ## How it stays switched off
 
-- Nothing records any wallet state yet, so every wallet stays legacy.
-- No login can start or finish a move.
-- The follow-up steps do nothing.
-- The "begin moves after setup" switch reports not ready.
-- No screen uses the new check yet.
+Nothing records any wallet state yet, so every wallet stays legacy. No login can start or finish a move, the follow-up steps do nothing, and no screen uses the new check.

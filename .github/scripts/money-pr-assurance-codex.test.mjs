@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
   at,
   CODEX,
+  claudeRequest,
   claudeVerdict,
   codexClean,
   codexRequest,
@@ -21,7 +22,7 @@ const { reviewers } = parseAssuranceConfig(loadRawConfig());
 
 function codexState(comments) {
   return evaluateReviewers({
-    comments: [...comments, claudeVerdict({}, 20)],
+    comments: [claudeRequest(0), ...comments, claudeVerdict({}, 20)],
     reviews: [],
     head: HEAD,
     reviewers,

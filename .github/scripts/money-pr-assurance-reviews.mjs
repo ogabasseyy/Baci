@@ -1,15 +1,22 @@
 // Reads the adversarial reviewer verdicts, the owner's summary sign-off and
-// review-thread state. Every verdict is bound to the current head SHA and to
-// a trusted reviewer login; anything else is ignored. A comment or review
-// last edited by anyone other than its author no longer counts as the
-// author's: GitHub lets any writer edit other people's comments.
+// review-thread state. Every verdict is bound to the exact current head SHA,
+// to a trusted reviewer login and to the latest request for that commit;
+// anything else is ignored. A comment or review last edited by anyone other
+// than its author no longer counts as the author's: GitHub lets any writer
+// edit other people's comments.
 
 import {
   authoredBy,
   byNewest,
+  createdAt,
+  latestRequest,
   postedAs,
+  requestHint,
   shaMatchesHead,
   short,
+  touchedAt,
+  withdrawn,
+  writtenAt,
   writtenBy,
 } from './money-pr-assurance-authorship.mjs';
 import { evaluateCodex } from './money-pr-assurance-codex.mjs';
@@ -56,35 +63,34 @@ export function parseVerdictBlock(body) {
   return { verdict: distinct[0], head: heads[0], prompt: prompts[0] };
 }
 
-function evaluateVerdictFamily(
-  family,
-  { comments, reviews, head, promptVersion }
-) {
+function evaluateVerdictFamily(family, input) {
+  const { comments, reviews, head, promptVersion } = input;
+  const request = latestRequest(family, input);
+  if (!request) {
+    return {
+      state: 'missing',
+      detail: `${family.name} was not asked for the money-rules review of ${short(head)}: ${requestHint(family, input)}`,
+    };
+  }
   // A marker proves nothing unless it opens the body: quoted or generated
   // text further down could carry it.
   const marker = family.requiredMarker?.replaceAll('{head}', head) ?? null;
-  const posted = [
-    ...comments.map((item) => ({
-      ...item,
-      time: item.updatedAt || item.createdAt,
-      created: item.createdAt,
-    })),
-    // A dismissed review has been withdrawn and never counts as a verdict.
-    ...reviews
-      .filter(({ state }) => state !== 'DISMISSED')
-      .map((item) => ({
-        ...item,
-        time: item.submittedAt,
-        created: item.submittedAt,
-      })),
-  ].filter(
+  const posted = [...comments, ...reviews].filter(
     (item) =>
       postedAs(item, family) &&
       (marker === null || item.body.trimStart().startsWith(marker))
   );
+  // Verdicts are ordered by when their text was last written, so an edited
+  // review or comment is judged by its edit. Dismissed and hidden verdicts
+  // stay in the order: taking back a newer FAIL must not let an older PASS
+  // win.
   const candidates = posted
     .filter((item) => authoredBy(item, family))
-    .map((item) => ({ ...item, parsed: parseVerdictBlock(item.body) }))
+    .map((item) => ({
+      ...item,
+      time: writtenAt(item),
+      parsed: parseVerdictBlock(item.body),
+    }))
     .filter(({ parsed }) => parsed !== null)
     .sort(byNewest);
   const current = candidates.find(
@@ -92,10 +98,11 @@ function evaluateVerdictFamily(
       parsed.error ||
       (shaMatchesHead(parsed.head, head) && parsed.prompt === promptVersion)
   );
-  // Rewriting or blanking a newer verdict must not let an older one win.
+  // Rewriting or blanking a verdict, by edit time, must not let an older
+  // one win.
   const tampered = posted.find(
     (item) =>
-      !authoredBy(item, family) && item.created > (current?.created ?? '')
+      !authoredBy(item, family) && touchedAt(item) > (current?.time ?? '')
   );
   if (tampered) {
     return {
@@ -113,6 +120,18 @@ function evaluateVerdictFamily(
     return {
       state: 'missing',
       detail: `${family.name} has no money-rules verdict on ${short(head)} (${why})`,
+    };
+  }
+  if (createdAt(current) <= request.time) {
+    return {
+      state: 'missing',
+      detail: `${family.name} has not answered the latest money-rules request on ${short(head)}`,
+    };
+  }
+  if (withdrawn(current)) {
+    return {
+      state: 'fail',
+      detail: `${family.name} verdict on ${short(head)} was dismissed or hidden; ask ${family.name} for a fresh review`,
     };
   }
   if (current.parsed.error)
@@ -159,7 +178,10 @@ export function evaluateReviewers({ comments, reviews, head, reviewers }) {
 }
 
 // The owner may approve in a PR comment or a review body; either way the
-// author must be the owner's user account, never a bot.
+// author must be the owner's user account, never a bot, and the approval
+// must name the exact full head commit. A hidden comment, a dismissed review
+// or an edit by another login withdraws it, and so does a later change
+// request from the owner.
 export function evaluateOwnerSignoff({
   comments,
   reviews = [],
@@ -168,29 +190,43 @@ export function evaluateOwnerSignoff({
 }) {
   const escaped = ownerSignoff.phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = new RegExp(`^\\s*${escaped}\\s+([0-9a-f]{7,40})\\s*$`, 'gim');
-  const approvals = [
-    ...comments,
-    ...reviews.filter(({ state }) => state !== 'DISMISSED'),
-  ]
-    .filter(
-      (item) => writtenBy(item, ownerSignoff.logins) && item.userType === 'User'
-    )
+  const owned = [...comments, ...reviews].filter(
+    (item) =>
+      writtenBy(item, ownerSignoff.logins) &&
+      item.userType === 'User' &&
+      !withdrawn(item)
+  );
+  const approvals = owned
     .flatMap((item) =>
-      [...item.body.matchAll(pattern)].map((match) => match[1])
-    );
-  if (approvals.some((sha) => shaMatchesHead(sha, head))) {
+      [...item.body.matchAll(pattern)].map((match) => ({
+        id: item.id,
+        time: writtenAt(item),
+        sha: match[1].toLowerCase(),
+      }))
+    )
+    .sort(byNewest);
+  const approval = approvals.find(({ sha }) => sha === head.toLowerCase());
+  const hint = `Owner sign-off needed: the owner comments "${ownerSignoff.phrase} ${head}"`;
+  if (!approval) {
+    const stale =
+      approvals.length > 0
+        ? ` (latest approval named ${approvals[0].sha.length < 40 ? `only ${approvals[0].sha}` : short(approvals[0].sha)})`
+        : '';
+    return { approved: false, detail: `${hint}${stale}` };
+  }
+  const objection = owned.some(
+    (item) =>
+      item.state === 'CHANGES_REQUESTED' && writtenAt(item) > approval.time
+  );
+  if (objection) {
     return {
-      approved: true,
-      detail: `Owner approved the summary at ${short(head)}`,
+      approved: false,
+      detail: `${hint} (the owner requested changes after approving)`,
     };
   }
-  const stale =
-    approvals.length > 0
-      ? ` (latest approval named ${short(approvals[approvals.length - 1])})`
-      : '';
   return {
-    approved: false,
-    detail: `Owner sign-off needed: the owner comments "${ownerSignoff.phrase} ${short(head)}"${stale}`,
+    approved: true,
+    detail: `Owner approved the summary at ${short(head)}`,
   };
 }
 

@@ -16,50 +16,65 @@ review-thread rule all still apply.
 A pull request is a money-path PR when any changed file, including the old
 name of a renamed file:
 
-- sits under a server or tooling folder listed in `moneyKeywords.roots`
-  (web routes, libraries, schemas, scripts and config, web tools, shared
-  package code, the database folder, `tools/` and the VPS workers) and has a
-  money word from `moneyKeywords.keywords` anywhere in its path, at any
-  depth: PiggyVest, wallet, savings, prefunded and primary card or bank
-  custody, plan transfers, goals, store credit and similar;
-- matches a pattern in `moneyPaths`, for money code whose name has none of
-  those words (the Paystack webhook, airtime checkout, IMEI fulfilment); or
+- has a money word from `moneyKeywords.keywords` anywhere in its path, in
+  any folder and at any depth, ignoring case and treating `-` and `_` alike:
+  PiggyVest, wallet, savings, prefunded and primary card or bank custody,
+  plan transfers, goals, store credit, payments, refunds, payouts,
+  settlements, ledgers, airtime and utilities (VTU), IMEI checks, loyalty
+  and redemptions, and the payment providers by name;
+- matches a pattern in `moneyPaths`, for money code whose path has none of
+  those words: checkout code in the apps and shared packages, the orders
+  API, wallet-releasing self-fulfilment, domain payment callbacks, the
+  service-role client that money webhooks use, the hosted staging request
+  gate, PiggyVest staging tools and the VPS cron runner;
+- is SQL (`moneyKeywords.contentPaths`) whose changed text contains a money
+  word, because database files are named freely. SQL whose changed text
+  GitHub does not return (a very large or renamed file) counts as money; or
 - matches `governancePaths`: the assurance check's own files.
 
-The mobile apps' data, service, schema and hook folders are covered the same
-way. Interface code (web components, mobile screens) and documentation are
-outside those folders on purpose. Every other pull request gets an immediate success
-status saying it is not a money-path PR.
+Interface components, screens, hooks, scripts and tests count like any other
+code: money logic lives in all of them. Only documentation and images
+(`moneyKeywords.outside`) never count. A contract test finds today's money
+code from what each file does (the database money functions it calls or
+defines and the money endpoints it calls) and fails if the configuration
+misses any of it. Every other pull request gets an immediate success status
+saying it is not a money-path PR.
 
 If GitHub cannot list every changed file, the PR is treated as a money-path PR.
 
 ## What a money-path PR needs
 
-All of these must hold on the pull request's **current head commit**. Any new
-push starts over: every verdict and the owner's sign-off must name the new
-commit.
+All of these must hold on the pull request's **current head commit**, named
+in full (all 40 characters). Any new push starts over: both reviewers must
+be asked again and the owner's sign-off must name the new commit.
 
 1. **Two adversarial reviews from different model families**, both following
    the main branch's copy of
-   [the money-rules review prompt](../../.github/prompts/money-rules-adversarial-review.md):
-   - **Codex:** the owner's login comments
-     `@codex review Follow the main branch's .github/prompts/money-rules-adversarial-review.md, not this pull request's copy.`
+   [the money-rules review prompt](../../.github/prompts/money-rules-adversarial-review.md).
+   Each reviewer counts only for its answer to the **latest** request for the
+   head commit: a request from the owner's login, unedited by anyone else and
+   not hidden, that names the prompt and the full head commit. The answer
+   must be posted after that request was last edited; asking again (or
+   editing the request) means waiting for a fresh answer.
+   - **Codex:** comment
+     `@codex review Follow the main branch's .github/prompts/money-rules-adversarial-review.md, not this pull request's copy, for commit <full head commit>.`
      Codex counts when its clean comment ("Didn't find any major issues")
-     names the head commit, came after that request, and Codex has raised no
-     findings on that commit since. Codex's automatic review of each push
-     uses its general rules, so on its own it does not count; ask again after
-     Codex has reviewed an earlier commit.
+     names the head commit and answers that request. Codex's automatic review
+     of each push uses its general rules, so on its own it never counts.
    - **Claude:** comment
-     `@claude Run the review in the main branch's .github/prompts/money-rules-adversarial-review.md (not this pull request's copy) and post its verdict block.`
+     `@claude Run the review in the main branch's .github/prompts/money-rules-adversarial-review.md (not this pull request's copy) for commit <full head commit> and post its verdict block.`
      The verdict counts when it comes from the Claude app in a pull request
      comment or review body (never an inline comment), names the full commit
      Claude reviewed and that commit is the head, uses the current prompt
-     version and says PASS.
-   - A reviewer comment that someone else edited, or a dismissed review, no
-     longer counts. If a newer comment from that reviewer was edited by
-     another login, the reviewer fails until it posts a fresh review. A
-     Codex review or review summary reporting findings on the head after its
-     clean comment also withdraws the clean verdict.
+     version and says PASS. Verdicts are ordered by when their text was last
+     written, so an edited comment or review is judged by its edit.
+   - A reviewer comment that someone else edited, a hidden comment or a
+     dismissed review no longer counts; a dismissed or hidden newest verdict
+     fails the reviewer until it reviews again. If any comment from that
+     reviewer was edited by another login after its verdict, the reviewer
+     fails until it posts a fresh review. A later Codex review on the head
+     (dismissed or not), or a Codex review summary reporting findings on the
+     head, withdraws its clean verdict.
    - Gemini does not count for now: its workflow posts under the shared
      GitHub Actions identity, which any pull-request workflow can use.
 2. **Every review thread resolved.** Fix or answer each finding, then resolve
@@ -84,9 +99,11 @@ commit.
    changes any assurance file (the rules, prompt, configuration or
    workflows), or it changes the CI workflow or change filter listed in
    `signoffPaths`, the owner must comment
-   `summary-approved <first 7 characters of the head commit>` on its own line,
-   in a PR comment or a review. The sign-off covers the summary only; it
-   never waives another requirement.
+   `summary-approved <full 40-character head commit>` on its own line, in a
+   PR comment or a review (the status's workflow run shows the exact line to
+   copy). A hidden comment, a dismissed review, an edit by another login or a
+   later "Request changes" review from the owner withdraws it. The sign-off
+   covers the summary only; it never waives another requirement.
 
 ## Rules for agents
 
@@ -105,11 +122,14 @@ commit.
 The status description shows the first unmet requirement. Open the workflow
 run linked from the status for the full list. `pending` means only CI is still
 running; `failure` means something needs action; `error` means the check could
-not read GitHub and should be re-run. If the pull request itself cannot be
-read after three attempts, the check posts `error` on the head commit (taken
-from the event, or looked up a second way) so an earlier success does not
-stay in place. If even that lookup fails, the run fails red and must be
-re-run before the status can be trusted.
+not read GitHub and should be re-run. Every read, and every status post, is
+tried three times. If the pull request itself still cannot be read, the check
+posts `error` on the head commit (taken from the event, or looked up a second
+way) so an earlier success does not stay in place. If the run fails or is
+cancelled any other way (a failed checkout, a crash, a timeout), a final step
+posts `error` the same way. If even that fails, the run fails red and must be
+re-run before the status can be trusted. Hiding a comment and resolving or
+reopening a review thread send no event, so re-run the check after either.
 
 The status refreshes on pushes, PR edits and labels, reviewer and owner
 comments, submitted, edited or dismissed reviews (through the

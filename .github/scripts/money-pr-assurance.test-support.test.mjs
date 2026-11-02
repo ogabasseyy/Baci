@@ -38,7 +38,7 @@ test('builders produce the shapes the assurance modules read', () => {
     /^MONEY-RULES-VERDICT: FAIL$/m
   );
   assert.match(claudeVerdict().body, new RegExp(`REVIEWED-HEAD: ${HEAD}`));
-  assert.equal(ownerApproval().body, 'summary-approved 0123456');
+  assert.equal(ownerApproval().body, `summary-approved ${HEAD}`);
   assert.equal(ownerApproval().userType, 'User');
   assert.equal(passingChecks().length, 3);
   assert.match(validSummary(), /^Task: P5-engine-schema$/m);

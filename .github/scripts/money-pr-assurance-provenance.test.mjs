@@ -6,7 +6,7 @@ import {
   CI_WORKFLOW,
   checkRun,
   codexClean,
-  codexRequest,
+  moneyRequests,
   claudeVerdict,
   createFakeGitHub,
   HEAD,
@@ -114,7 +114,7 @@ test('check runs are tagged with the workflow file whose run produced them', asy
 });
 
 test('a money PR that also changes the CI producing its checks needs owner sign-off', () => {
-  const comments = [codexRequest(), codexClean(), claudeVerdict()];
+  const comments = [...moneyRequests(), codexClean(), claudeVerdict()];
   const summaries = {
     [SUMMARY_PATH]: validSummary({ signoff: 'not required' }),
   };

@@ -7,6 +7,7 @@ import {
   claudeVerdict,
   codexClean,
   codexRequest,
+  moneyRequests,
   comment,
   HEAD,
   loadRawConfig,
@@ -27,8 +28,8 @@ import {
 
 const { reviewers, ownerSignoff } = parseAssuranceConfig(loadRawConfig());
 
-// Codex counts only after a money-rules request, so `run` adds one before
-// every other comment; `runWithoutRequest` leaves it out.
+// Verdicts count only after a money-rules request, so `run` adds both
+// before every other comment; `runWithoutRequest` leaves them out.
 function runWithoutRequest(comments, reviewList = []) {
   return evaluateReviewers({
     comments,
@@ -39,7 +40,7 @@ function runWithoutRequest(comments, reviewList = []) {
 }
 
 function run(comments, reviewList = []) {
-  return runWithoutRequest([codexRequest(0), ...comments], reviewList);
+  return runWithoutRequest([...moneyRequests(0), ...comments], reviewList);
 }
 
 test('a SHA prefix matches only with at least seven characters', () => {
@@ -251,7 +252,7 @@ test('unresolved review threads are counted, outdated ones included', () => {
 
 test('owner sign-off may also be given in a review body', () => {
   const approval = {
-    ...review(OWNER, `summary-approved ${HEAD.slice(0, 7)}`, HEAD, 4),
+    ...review(OWNER, `summary-approved ${HEAD}`, HEAD, 4),
     userType: 'User',
   };
   assert.equal(

@@ -131,3 +131,38 @@ test('no lookup is made when no trusted item exists', async () => {
   assert.equal(result[0].editor, UNKNOWN_EDITOR);
   assert.equal(fake.calls.length, 0);
 });
+
+test('the last edit time and hidden state are read with the editor', async () => {
+  const items = [
+    review(CLAUDE, 'review verdict', 'abc', 4),
+    comment(OWNER, 'approval', 3),
+    comment(CLAUDE, 'unreadable', 5),
+  ];
+  const { client, fake } = clientFor({
+    PRR_2004: {
+      id: 'PRR_2004',
+      lastEditedAt: '2026-10-31T12:09:00Z',
+      isMinimized: false,
+      editor: { __typename: 'Bot', login: 'claude' },
+    },
+    IC_1003: {
+      id: 'IC_1003',
+      lastEditedAt: null,
+      isMinimized: true,
+      editor: null,
+    },
+  });
+  const result = await attachEditors(client, items, trustedLogins(config));
+  assert.deepEqual(
+    result.map(({ editedAt, minimized }) => ({ editedAt, minimized })),
+    [
+      { editedAt: '2026-10-31T12:09:00Z', minimized: false },
+      { editedAt: null, minimized: true },
+      // An item that could not be read is never trusted.
+      { editedAt: null, minimized: true },
+    ]
+  );
+  const query = JSON.parse(fake.calls[0].body).query;
+  assert.match(query, /isMinimized/);
+  assert.match(query, /lastEditedAt/);
+});

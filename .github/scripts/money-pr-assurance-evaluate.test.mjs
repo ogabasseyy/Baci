@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
   claudeVerdict,
   codexClean,
-  codexRequest,
+  moneyRequests,
   comment,
   EVIDENCE_PATH,
   HEAD,
@@ -75,7 +75,7 @@ test('a money PR fails without a summary', () => {
 
 test('a money PR fails with only one reviewer family', () => {
   assertFails(
-    evaluate({ comments: [codexRequest(), codexClean(), ownerApproval()] }),
+    evaluate({ comments: [...moneyRequests(), codexClean(), ownerApproval()] }),
     /from claude:/i
   );
 });
@@ -127,7 +127,7 @@ test('a money PR fails without sandbox evidence or a dark-until statement', () =
 });
 
 test('owner sign-off is required, bound to the owner and the current head', () => {
-  const without = [codexRequest(), codexClean(), claudeVerdict()];
+  const without = [...moneyRequests(), codexClean(), claudeVerdict()];
   assertFails(evaluate({ comments: without }), /summary-approved 0123456/);
   assertFails(
     evaluate({ comments: [...without, ownerApproval(HEAD, 'someone-else')] }),
@@ -164,7 +164,7 @@ test('changing the assurance rules always needs owner sign-off', () => {
   const summaries = {
     [SUMMARY_PATH]: validSummary({ signoff: 'not required' }),
   };
-  const without = [codexRequest(), codexClean(), claudeVerdict()];
+  const without = [...moneyRequests(), codexClean(), claudeVerdict()];
   const result = evaluate({ files, summaries, comments: without });
   assertFails(result, /summary-approved 0123456/);
   assert.match(result.reasons.join('\n'), /assurance rules/);

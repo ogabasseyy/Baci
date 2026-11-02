@@ -256,3 +256,20 @@ test('relative links and anchors in the assurance documents resolve', () => {
     }
   }
 });
+
+test('a run that fails or is cancelled before posting replaces the status with an error', () => {
+  const evaluate = jobBlock('evaluate');
+  const steps = evaluate.split(/\n {6}- name: /).slice(1);
+  const fallback = steps.at(-1);
+  assert.ok(fallback, 'the evaluate job must end with the fallback step');
+  assert.match(fallback, /\n {8}if: failure\(\) \|\| cancelled\(\)\n/);
+  const script = fallback.slice(fallback.indexOf('run: |'));
+  // Event data reaches the shell only through environment variables.
+  assert.doesNotMatch(script, /\$\{\{/);
+  assert.match(script, /state=error/);
+  assert.match(script, new RegExp(`context=${config.statusContext}`));
+  // The same targets the script uses: the event head, or the PR's head.
+  for (const name of ['PR_NUMBER', 'HEAD_SHA', 'RUN_URL'])
+    assert.match(fallback, new RegExp(`\\n {10}${name}: `));
+  assert.match(script, /pulls\/\$PR_NUMBER/);
+});

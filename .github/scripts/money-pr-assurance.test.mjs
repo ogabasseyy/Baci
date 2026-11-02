@@ -310,3 +310,67 @@ test('a transient failure while collecting the snapshot is retried', async () =>
   assert.equal(statusBodies(fake)[0].state, 'failure');
   assert.deepEqual(sleeps, [2000]);
 });
+
+// Flaky routes answer 502 for their first `failures` calls.
+function flaky(failures, answer) {
+  let calls = 0;
+  return () => {
+    calls += 1;
+    return calls <= failures ? { status: 502, json: {} } : answer;
+  };
+}
+
+const headLookup = {
+  json: { data: { repository: { pullRequest: { headRefOid: OLD_HEAD } } } },
+};
+
+test('on every trigger path, a run that cannot read the PR replaces the head status with an error', async () => {
+  // How each workflow event reaches the script (see money-pr-assurance.yml).
+  const triggers = [
+    ['pull_request_target', { PR_NUMBER: '5', HEAD_SHA: OLD_HEAD }],
+    [
+      'workflow_run (CI or review relay)',
+      { PR_NUMBER: '5', HEAD_SHA: OLD_HEAD },
+    ],
+    ['issue_comment', { PR_NUMBER: '5' }],
+    ['workflow_dispatch', { PR_NUMBER: '5' }],
+  ];
+  for (const [name, env] of triggers) {
+    const { fake, result } = await run(env, {
+      ...flakyPullRoute(5, 99, []),
+      // The second route to the head is flaky too, and is retried.
+      'POST /graphql': flaky(2, headLookup),
+      // So is posting the error itself.
+      [`POST /repos/o/r/statuses/${OLD_HEAD}`]: flaky(2, {
+        status: 201,
+        json: {},
+      }),
+    });
+    assert.equal(result.exitCode, 1, name);
+    const posted = fake.calls
+      .filter(({ key }) => key === `POST /repos/o/r/statuses/${OLD_HEAD}`)
+      .map(({ body }) => JSON.parse(body).state);
+    assert.deepEqual(posted, ['error', 'error', 'error'], name);
+  }
+});
+
+test('a transient failure posting the result status is retried', async () => {
+  const { fake, result, sleeps } = await run(
+    { PR_NUMBER: '5' },
+    {
+      ...prRoute(5, [
+        { filename: 'apps/web/src/app/page.tsx', status: 'modified' },
+      ]),
+      [`POST /repos/o/r/statuses/${HEAD}`]: flaky(1, {
+        status: 201,
+        json: {},
+      }),
+    }
+  );
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(
+    statusBodies(fake).map(({ state }) => state),
+    ['success', 'success']
+  );
+  assert.deepEqual(sleeps, [2000]);
+});

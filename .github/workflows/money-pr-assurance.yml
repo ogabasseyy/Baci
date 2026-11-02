@@ -8,7 +8,7 @@
 # PR adds sandbox evidence or says what keeps it dark, and its owner-readable
 # summary follows the template. PRs that need owner sign-off, including every
 # change to the assurance rules, also need the owner's "summary-approved
-# <sha7>".
+# <full head SHA>".
 # Every other PR gets an immediate success status.
 #
 # The check is ADVISORY until the owner explicitly adds `money-pr-assurance`
@@ -124,6 +124,30 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || '' }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node .github/scripts/money-pr-assurance.mjs
+
+      # If anything above failed or the run was cancelled (a failed checkout,
+      # a crash, a timeout), an earlier success must not stay in place.
+      - name: Replace any earlier status with an error
+        if: failure() || cancelled()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || inputs.pr_number || '' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || '' }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          sha="$HEAD_SHA"
+          if [ -z "$sha" ] && [ -n "$PR_NUMBER" ]; then
+            sha="$(gh api "repos/$REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)"
+          fi
+          if ! printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::No head commit to mark; re-run this workflow."
+            exit 1
+          fi
+          gh api --method POST "repos/$REPOSITORY/statuses/$sha" \
+            -f state=error -f context=money-pr-assurance \
+            -f "description=Assurance could not be evaluated; see the workflow run" \
+            -f "target_url=$RUN_URL"
 
   self-test:
     name: Money PR assurance self-test

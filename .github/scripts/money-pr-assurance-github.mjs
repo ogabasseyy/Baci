@@ -202,6 +202,9 @@ export async function collectSnapshot(
     filename: file.filename,
     previousFilename: file.previous_filename ?? null,
     status: file.status,
+    // Diff text, searched for money words in freely named SQL files. GitHub
+    // leaves it out for large files; those then count as money.
+    patch: typeof file.patch === 'string' ? file.patch : null,
   }));
   const complete = files.length >= pr.changedFiles;
   if (complete && !classifyChangedFiles(files, config).isMoneyPath)

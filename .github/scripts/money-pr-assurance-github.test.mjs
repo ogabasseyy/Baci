@@ -231,7 +231,11 @@ test('a money PR snapshot normalises every source', async () => {
     createdAt: 'c',
     updatedAt: 'u',
     editor: 'claude[bot]',
+    editedAt: 'e',
+    minimized: false,
   });
+  // Each changed file keeps its diff text for SQL content matching.
+  assert.equal(snapshot.files[0].patch, null);
   assert.equal(snapshot.reviews[0].body, '');
   assert.equal(snapshot.reviews[0].commitId, HEAD);
   assert.equal(snapshot.reviews[0].nodeId, 'PRR_2');

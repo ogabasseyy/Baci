@@ -3,27 +3,21 @@
   "version": 1,
   "statusContext": "money-pr-assurance",
   "moneyKeywords": {
-    "$comment": "A changed file is a money path when it sits under one of these roots and its path (after the root) contains one of these words, ignoring case and treating hyphens and underscores alike. The roots are server, database and tooling code plus the mobile apps' data, service and hook folders; interface components, screens and documentation are outside them on purpose.",
-    "roots": [
-      "apps/mobile-admin/hooks/",
-      "apps/mobile-admin/lib/",
-      "apps/mobile-admin/schemas/",
-      "apps/mobile-admin/services/",
-      "apps/mobile-storefront/hooks/",
-      "apps/mobile-storefront/lib/",
-      "apps/mobile-storefront/schemas/",
-      "apps/mobile-storefront/services/",
-      "apps/web/src/app/",
-      "apps/web/src/config/",
-      "apps/web/src/lib/",
-      "apps/web/src/schemas/",
-      "apps/web/src/scripts/",
-      "apps/web/tools/",
-      "packages/shared/src/",
-      "supabase/",
-      "tools/",
-      "vps-workers/"
+    "$comment": "A changed file is a money path when its path contains one of these words anywhere, ignoring case and treating hyphens and underscores alike. Interface components, screens, hooks, scripts and tests count too: money logic lives in all of them. Only documentation and images (`outside`) never count. SQL files are named freely, so their changed text is searched as well (`contentPaths`), and SQL whose changed text GitHub does not return counts as money. `moneyPaths` adds money code whose path has none of the words: checkout code in the apps and shared packages, the orders API, wallet-releasing self-fulfilment, domain payment callbacks, the service-role client that money webhooks use, the hosted staging request gate, PiggyVest staging tools and the VPS cron runner. A contract test finds today's money code from what each file does and fails if any of it is missed.",
+    "outside": [
+      "docs/**",
+      "public/**",
+      "**/*.md",
+      "**/*.mdx",
+      "**/*.png",
+      "**/*.jpg",
+      "**/*.jpeg",
+      "**/*.gif",
+      "**/*.webp",
+      "**/*.svg",
+      "**/*.ico"
     ],
+    "contentPaths": ["**/*.sql"],
     "keywords": [
       "piggyvest",
       "wallet",
@@ -41,20 +35,43 @@
       "purchase-preparation",
       "purchase-pricing",
       "store-credit",
-      "interest-bridge"
+      "interest-bridge",
+      "payment",
+      "payout",
+      "refund",
+      "settlement",
+      "ledger",
+      "withdraw",
+      "shipping-charge",
+      "vtu",
+      "airtime",
+      "imei",
+      "petrock",
+      "paystack",
+      "korapay",
+      "juicyway",
+      "credit-direct",
+      "bnpl",
+      "klump",
+      "redvault",
+      "loyalty",
+      "redeem",
+      "utility",
+      "utilities"
     ]
   },
   "moneyPaths": [
-    "apps/web/src/app/api/payments/webhook/**",
-    "apps/web/src/app/api/payments/juicyway/**",
-    "apps/web/src/lib/payments/**",
-    "apps/web/src/app/api/vtu/**",
-    "apps/web/src/app/api/cron/*vtu*/**",
-    "apps/web/src/lib/vtu*",
-    "apps/web/src/lib/vtu*/**",
-    "apps/web/src/app/api/storefront/imei-check/**",
-    "apps/web/src/lib/imei-lookup-fulfillment*",
-    "apps/web/src/lib/imei-lookup-fulfillment*/**"
+    "apps/**/*checkout*",
+    "apps/**/*checkout*/**",
+    "packages/**/*checkout*",
+    "packages/**/*checkout*/**",
+    "apps/web/src/app/api/orders/**",
+    "apps/web/src/app/api/shipping/self-fulfill/**",
+    "apps/web/src/app/dashboard/domains/callback/**",
+    "apps/web/src/lib/supabase/service.ts",
+    "apps/mobile-storefront/lib/hosted-storefront-app-fetch*",
+    "tools/staging/**",
+    "vps-workers/jobs/run-web-cron*"
   ],
   "governancePaths": [
     ".github/money-path-paths.json",
@@ -78,7 +95,7 @@
     "directory": "docs/piggyvest-contract-evidence"
   },
   "reviewers": {
-    "$comment": "Never trust github-actions[bot]: every workflow token, including one a pull request controls, posts as it. A Gemini family can return once its verdict comes from an identity pull-request workflows cannot use.",
+    "$comment": "Never trust github-actions[bot]: every workflow token, including one a pull request controls, posts as it. A Gemini family can return once its verdict comes from an identity pull-request workflows cannot use. Each reviewer's verdict counts only after the latest request, from a `requestedBy` login, that names the main branch's prompt and the full head commit.",
     "promptPath": ".github/prompts/money-rules-adversarial-review.md",
     "promptVersion": "money-rules-adversarial-review/v1",
     "groups": [["codex"], ["claude"]],
@@ -95,7 +112,9 @@
       },
       "claude": {
         "kind": "verdict-block",
-        "logins": ["claude[bot]"]
+        "logins": ["claude[bot]"],
+        "requestPhrase": "@claude",
+        "requestedBy": ["ogabasseyy"]
       }
     }
   },

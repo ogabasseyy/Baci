@@ -29,6 +29,8 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Every read is idempotent, and so is posting a status (the newest one for
+// a context wins), so a transient failure is retried with growing waits.
 async function withRetries(read, sleep) {
   for (let attempt = 1; ; attempt += 1) {
     try {
@@ -112,16 +114,26 @@ export async function runAssurance({
     apiUrl: env.GITHUB_API_URL || 'https://api.github.com',
   });
   const dryRun = env.DRY_RUN === '1';
+  const post = (sha, state, description) =>
+    withRetries(
+      () =>
+        postStatus(client, {
+          owner: target.owner,
+          repo: target.repo,
+          sha,
+          state,
+          description,
+          context: config.statusContext,
+          targetUrl: env.RUN_URL,
+        }),
+      sleep
+    );
   const postError = (sha) =>
-    postStatus(client, {
-      owner: target.owner,
-      repo: target.repo,
+    post(
       sha,
-      state: 'error',
-      description: 'Assurance could not be evaluated; see the workflow run',
-      context: config.statusContext,
-      targetUrl: env.RUN_URL,
-    }).catch((failure) =>
+      'error',
+      'Assurance could not be evaluated; see the workflow run'
+    ).catch((failure) =>
       log(`::warning::Could not post the error status: ${failure.message}`)
     );
   let numbers;
@@ -166,7 +178,6 @@ export async function runAssurance({
         log(`#${number} is ${pr.state}; skipping.`);
         continue;
       }
-      // Every snapshot read is idempotent, so a transient failure is retried.
       const snapshot = await withRetries(
         () =>
           collectSnapshot(
@@ -186,17 +197,7 @@ export async function runAssurance({
       });
       appendSummary(renderSummary(number, sha, result));
       log(`#${number} ${sha}: ${result.state} - ${result.description}`);
-      if (!dryRun) {
-        await postStatus(client, {
-          owner: target.owner,
-          repo: target.repo,
-          sha,
-          state: result.state,
-          description: result.description,
-          context: config.statusContext,
-          targetUrl: env.RUN_URL,
-        });
-      }
+      if (!dryRun) await post(sha, result.state, result.description);
     } catch (error) {
       exitCode = 1;
       log(
@@ -204,15 +205,20 @@ export async function runAssurance({
       );
       results.push({ number, sha, state: 'error', description: error.message });
       // Fall back to the event's head commit when the PR itself was unread,
-      // and failing that to a GraphQL lookup of the head.
+      // and failing that to a GraphQL lookup of the head, so an earlier
+      // success never outlives a failed check on any trigger.
       const statusSha =
         sha ??
         target.headSha ??
-        (await readHeadSha(client, {
-          owner: target.owner,
-          repo: target.repo,
-          number,
-        }).catch(() => null));
+        (await withRetries(
+          () =>
+            readHeadSha(client, {
+              owner: target.owner,
+              repo: target.repo,
+              number,
+            }),
+          sleep
+        ).catch(() => null));
       if (statusSha && !dryRun) await postError(statusSha);
     }
   }

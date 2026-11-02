@@ -230,14 +230,22 @@ test('a malformed configuration is rejected instead of silently passing PRs', ()
       /moneyKeywords\.keywords/,
     ],
     [
+      { ...raw, moneyKeywords: { ...raw.moneyKeywords, outside: undefined } },
+      /moneyKeywords\.outside/,
+    ],
+    [
       {
         ...raw,
-        moneyKeywords: { ...raw.moneyKeywords, roots: ['apps/web/src'] },
+        moneyKeywords: { ...raw.moneyKeywords, contentPaths: undefined },
       },
-      /end with "\/"/,
+      /moneyKeywords\.contentPaths/,
     ],
     [withFamily('codex', { requestPhrase: undefined }), /requestPhrase/],
     [withFamily('codex', { requestedBy: [] }), /requestedBy/],
+    // Every family must be asked: without a phrase, request binding would
+    // silently switch off.
+    [withFamily('claude', { requestPhrase: undefined }), /requestPhrase/],
+    [withFamily('claude', { requestedBy: undefined }), /requestedBy/],
     [null, /object/],
   ];
   for (const [candidate, pattern] of cases) {

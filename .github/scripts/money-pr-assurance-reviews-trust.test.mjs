@@ -7,6 +7,7 @@ import {
   at,
   CLAUDE,
   CODEX,
+  claudeRequest,
   claudeVerdict,
   codexClean,
   codexRequest,
@@ -29,9 +30,10 @@ import {
 const raw = loadRawConfig();
 const { reviewers, ownerSignoff } = parseAssuranceConfig(raw);
 
+// Claude's money-rules request comes first; Codex's are set per test.
 function run(comments, reviewList = [], config = reviewers) {
   return evaluateReviewers({
-    comments,
+    comments: [claudeRequest(0), ...comments],
     reviews: reviewList,
     head: HEAD,
     reviewers: config,
@@ -108,8 +110,10 @@ test('an owner sign-off edited by another login does not count', () => {
 test("Codex's automatic review without a money-rules request does not count", () => {
   const result = run([codexClean(), claudeVerdict()]);
   assert.equal(result.families.codex.state, 'missing');
-  assert.match(result.families.codex.detail, /money-rules prompt/);
+  assert.match(result.families.codex.detail, /not asked for the money-rules/);
   assert.match(result.families.codex.detail, new RegExp(PROMPT_PATH));
+  // The hint names the full head, ready to copy.
+  assert.match(result.families.codex.detail, new RegExp(HEAD));
 });
 
 test('a money-rules request before the clean comment on the head counts', () => {
@@ -131,14 +135,18 @@ test('a money-rules request before the clean comment on the head counts', () => 
 
 test('a request made for an earlier head does not cover a later clean comment', () => {
   const result = run([
-    codexRequest(1),
+    codexRequest(1, OWNER, OLD_HEAD),
     codexClean(OLD_HEAD, 2),
     codexClean(HEAD, 5),
     claudeVerdict({}, 6),
   ]);
   assert.equal(result.families.codex.state, 'missing');
   const afterFindings = run(
-    [codexRequest(1), codexClean(HEAD, 5), claudeVerdict({}, 6)],
+    [
+      codexRequest(1, OWNER, OLD_HEAD),
+      codexClean(HEAD, 5),
+      claudeVerdict({}, 6),
+    ],
     [review(CODEX, 'findings', OLD_HEAD, 3)]
   );
   assert.equal(afterFindings.families.codex.state, 'missing');
@@ -201,6 +209,8 @@ test('a marker family counts only when its body starts with the marker', () => {
           kind: 'verdict-block',
           logins: ['marked-reviewer[bot]'],
           requiredMarker: '<!-- marked-review sha:{head} -->',
+          requestPhrase: '@marked',
+          requestedBy: [OWNER],
         },
       },
     },
@@ -218,7 +228,13 @@ test('a marker family counts only when its body starts with the marker', () => {
     HEAD,
     3
   );
-  const base = [codexRequest(), codexClean()];
+  const askMarked = comment(
+    OWNER,
+    `@marked Follow ${PROMPT_PATH} for commit ${HEAD}`,
+    1,
+    { id: 6001, nodeId: 'IC_6001' }
+  );
+  const base = [codexRequest(), askMarked, codexClean()];
   assert.equal(run(base, [leading], withMarker).satisfied, true);
   assert.equal(run(base, [buried], withMarker).satisfied, false);
 });
@@ -228,13 +244,14 @@ test('dismissed reviews never count as a verdict or as the owner sign-off', () =
     ...review(CLAUDE, verdictBlock(), HEAD, 3),
     state: 'DISMISSED',
   };
+  // A dismissed verdict is withdrawn: it fails until Claude reviews again.
   assert.equal(
     run([codexRequest(), codexClean()], [dismissedVerdict]).families.claude
       .state,
-    'missing'
+    'fail'
   );
   const dismissedApproval = {
-    ...review(OWNER, `summary-approved ${HEAD.slice(0, 7)}`, HEAD, 4),
+    ...review(OWNER, `summary-approved ${HEAD}`, HEAD, 4),
     state: 'DISMISSED',
   };
   assert.equal(

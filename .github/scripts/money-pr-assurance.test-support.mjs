@@ -94,14 +94,44 @@ export function review(login, body, commitId, minute = 1) {
   };
 }
 
-// The owner's (or an agent's) request for the money-rules Codex review.
-export function codexRequest(minute = 1, login = OWNER) {
+// The owner's (or an agent's) request for the money-rules Codex review of
+// one exact commit.
+export function codexRequest(minute = 1, login = OWNER, sha = HEAD) {
   return comment(
     login,
-    `@codex review Follow the main branch's ${PROMPT_PATH}, not this pull request's copy.`,
+    `@codex review Follow the main branch's ${PROMPT_PATH}, not this pull request's copy, for commit ${sha}.`,
     minute,
     { id: 3000 + minute, nodeId: `IC_${3000 + minute}` }
   );
+}
+
+// The matching request for the money-rules Claude review.
+export function claudeRequest(minute = 1, login = OWNER, sha = HEAD) {
+  return comment(
+    login,
+    `@claude Run the review in the main branch's ${PROMPT_PATH} (not this pull request's copy) for commit ${sha} and post its verdict block.`,
+    minute,
+    { id: 5000 + minute, nodeId: `IC_${5000 + minute}` }
+  );
+}
+
+// Both money-rules requests, as an agent posts them on each new head.
+export function moneyRequests(minute = 1, sha = HEAD) {
+  return [codexRequest(minute, OWNER, sha), claudeRequest(minute, OWNER, sha)];
+}
+
+// GitHub marks an item withdrawn: a dismissed review or a hidden comment.
+export function dismissed(item) {
+  return { ...item, state: 'DISMISSED' };
+}
+
+export function hidden(item) {
+  return { ...item, minimized: true };
+}
+
+// The item's body was last edited at `minute` by `editor`.
+export function editedAt(item, minute, editor, body = item.body) {
+  return { ...item, body, updatedAt: at(minute), editedAt: at(minute), editor };
 }
 
 export function codexClean(sha = HEAD, minute = 2) {
@@ -133,7 +163,7 @@ export function claudeVerdict(options = {}, minute = 3) {
 }
 
 export function ownerApproval(sha = HEAD, login = OWNER, minute = 4) {
-  return comment(login, `summary-approved ${sha.slice(0, 7)}`, minute);
+  return comment(login, `summary-approved ${sha}`, minute);
 }
 
 export const CI_WORKFLOW = '.github/workflows/ci.yml';
@@ -190,7 +220,7 @@ export function moneySnapshot(overrides = {}) {
     summaries: overrides.summaries ?? { [SUMMARY_PATH]: validSummary() },
     evidenceExists: overrides.evidenceExists ?? { [EVIDENCE_PATH]: true },
     comments: overrides.comments ?? [
-      codexRequest(),
+      ...moneyRequests(),
       codexClean(),
       claudeVerdict(),
       ownerApproval(),

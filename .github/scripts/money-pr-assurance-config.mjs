@@ -43,7 +43,7 @@ function parseFamilies(families) {
       fail(`reviewers.families.${name}.kind is not supported`);
     const codex = family.kind === 'codex-clean-comment';
     const prefix = `reviewers.families.${name}`;
-    if (codex && !isNonEmptyString(family.requestPhrase))
+    if (!isNonEmptyString(family.requestPhrase))
       fail(`${prefix}.requestPhrase is required`);
     parsed[name] = {
       name,
@@ -52,12 +52,13 @@ function parseFamilies(families) {
       cleanPhrases: codex
         ? requireStringList(family.cleanPhrases, `${prefix}.cleanPhrases`)
         : [],
-      // Codex reviews automatically; only a review someone asked to use the
-      // money-rules prompt counts, and only these logins may ask.
-      requestPhrase: codex ? family.requestPhrase : null,
-      requestedBy: codex
-        ? requireTrustedLogins(family.requestedBy, `${prefix}.requestedBy`)
-        : [],
+      // A verdict counts only after the latest request, from one of these
+      // logins, to follow the money-rules prompt for the exact head commit.
+      requestPhrase: family.requestPhrase,
+      requestedBy: requireTrustedLogins(
+        family.requestedBy,
+        `${prefix}.requestedBy`
+      ),
       requiredMarker:
         family.requiredMarker === undefined
           ? null
@@ -126,11 +127,17 @@ function normaliseWord(text) {
 function parseMoneyKeywords(value) {
   if (!value || typeof value !== 'object')
     fail('moneyKeywords must be an object');
-  const roots = requireStringList(value.roots, 'moneyKeywords.roots');
-  if (!roots.every((root) => root.endsWith('/')))
-    fail('moneyKeywords.roots entries must end with "/"');
   const keywords = requireStringList(value.keywords, 'moneyKeywords.keywords');
-  return { roots, keywords: [...new Set(keywords.map(normaliseWord))] };
+  return {
+    // Keywords apply everywhere except these patterns, so a new folder is
+    // covered without a configuration change.
+    outside: requireStringList(value.outside, 'moneyKeywords.outside'),
+    contentPaths: requireStringList(
+      value.contentPaths,
+      'moneyKeywords.contentPaths'
+    ),
+    keywords: [...new Set(keywords.map(normaliseWord))],
+  };
 }
 
 function parseRequiredChecks(checks) {
@@ -220,19 +227,39 @@ export function globToRegExp(glob) {
   return new RegExp(`^${pattern}$`, 'i');
 }
 
+const compiledGlobs = new Map();
+
 export function matchesAny(path, globs) {
-  return globs.some((glob) => globToRegExp(glob).test(path));
+  return globs.some((glob) => {
+    if (!compiledGlobs.has(glob)) compiledGlobs.set(glob, globToRegExp(glob));
+    return compiledGlobs.get(glob).test(path);
+  });
 }
 
-// Matches the keyword anywhere below the root, at any depth, ignoring case.
-export function matchesMoneyKeyword(path, { roots, keywords }) {
-  const lower = path.toLowerCase();
-  const root = roots.find((candidate) =>
-    lower.startsWith(candidate.toLowerCase())
+function mentionsKeyword(text, keywords) {
+  const normalised = normaliseWord(text);
+  return keywords.some((word) => normalised.includes(word));
+}
+
+// A money word anywhere in the path, at any depth and ignoring case, or a
+// configured money path; documentation and images never count.
+function isMoneyName(path, { moneyKeywords, moneyPaths }) {
+  if (matchesAny(path, moneyKeywords.outside)) return false;
+  return (
+    matchesAny(path, moneyPaths) ||
+    mentionsKeyword(path, moneyKeywords.keywords)
   );
-  if (!root) return false;
-  const rest = normaliseWord(lower.slice(root.length));
-  return keywords.some((word) => rest.includes(word));
+}
+
+// Database files are named freely, so their changed text is searched too.
+// When GitHub returns no diff text (a large or renamed file), the file
+// counts as money: what it changes cannot be seen.
+export function matchesMoneyContent(file, { contentPaths, keywords }) {
+  const paths = [file.previousFilename, file.filename].filter(isNonEmptyString);
+  if (!paths.some((path) => matchesAny(path, contentPaths))) return false;
+  return (
+    typeof file.patch !== 'string' || mentionsKeyword(file.patch, keywords)
+  );
 }
 
 // Both sides of a rename count, so moving a file out of a money path is
@@ -252,11 +279,16 @@ export function classifyChangedFiles(files, config) {
   const governanceFiles = paths.filter((path) =>
     matchesAny(path, config.governancePaths)
   );
+  const byContent = new Set(
+    changedPaths(
+      files.filter((file) => matchesMoneyContent(file, config.moneyKeywords))
+    )
+  );
   const moneyFiles = paths.filter(
     (path) =>
       governanceFiles.includes(path) ||
-      matchesAny(path, config.moneyPaths) ||
-      matchesMoneyKeyword(path, config.moneyKeywords)
+      byContent.has(path) ||
+      isMoneyName(path, config)
   );
   return { isMoneyPath: moneyFiles.length > 0, moneyFiles, governanceFiles };
 }

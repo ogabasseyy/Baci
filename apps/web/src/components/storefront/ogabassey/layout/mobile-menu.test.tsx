@@ -210,7 +210,7 @@ describe('mobile-menu (layout)', () => {
     ).toBeInTheDocument();
   });
 
-  it('normalizes category alias slugs, deduplicates canonical collisions, and skips blank slugs', () => {
+  it('normalizes category alias slugs, encodes URI characters, deduplicates canonical collisions, and skips blank slugs', () => {
     mocks.merchantContext = {
       basePath: '/ogabassey',
       merchant: { business_name: 'Ogabassey' },
@@ -218,6 +218,7 @@ describe('mobile-menu (layout)', () => {
         { name: 'Phones', slug: 'phones' },
         { name: 'Duplicate Smartphones', slug: 'smartphones' },
         { name: 'Laptops', slug: '  laptop  ' },
+        { name: 'Smart TVs', slug: 'smart tvs' },
         { name: 'Empty Category', slug: '   ' },
       ],
     };
@@ -234,6 +235,10 @@ describe('mobile-menu (layout)', () => {
     expect(screen.getByRole('link', { name: 'Laptops' })).toHaveAttribute(
       'href',
       '/ogabassey/laptops'
+    );
+    expect(screen.getByRole('link', { name: 'Smart TVs' })).toHaveAttribute(
+      'href',
+      '/ogabassey/smart%20tvs'
     );
     expect(
       screen.queryByRole('link', { name: 'Empty Category' })

@@ -5,7 +5,10 @@ stuck in "processing", both in the Ogabassey legacy wallet. It carries out Defau
 PiggyVest launch plan. Plain-English summary for the owner:
 [change summary](../piggyvest-change-summaries/P0-stuck-funds-runbook.md). The SQL blocks
 named below (O1, O2, V1 to V4) are in
-[piggyvest-stuck-legacy-funds.sql](piggyvest-stuck-legacy-funds.sql).
+[piggyvest-stuck-legacy-funds.sql](piggyvest-stuck-legacy-funds.sql). Their fixture checks
+are in the
+[runbook fixture suite](../../supabase/tests/run_piggyvest_stuck_funds_runbook.py); see
+"Testing the SQL blocks" at the end.
 
 - **When:** before either customer's legacy balance is moved into PiggyVest. That Phase 8
   move is not built yet, and it is designed to hold back wallets like these (a "pending hold")
@@ -147,7 +150,8 @@ designed to keep this wallet out.
    the ops log reference. Leave `v_apply` as `false`.
 2. Run it. A dry run always ends with an error that starts **DRY RUN OK**: that is expected
    and nothing was changed. An error that starts **STOP** means the purchase is not in the
-   approved shape. Nothing was changed; escalate.
+   approved shape. Nothing was changed; escalate. Any other error (for example a mistyped id)
+   also means nothing was changed: stop and escalate, and never edit the block to get past it.
 3. With the owner's go-ahead, set `v_apply` to `true` and run it once more.
 
 Before changing anything, the block checks that the purchase:
@@ -203,3 +207,19 @@ does not match its history: escalate. V1 must no longer list the purchase.
 | The checker acts at the same moment | V3 takes the same locks as the checker's refund; whichever runs second sees a closed purchase |
 | A typo in an id, amount or answer | V3 stops before changing anything, and a dry run always comes first |
 | Someone runs the whole SQL file | Every block with a `PASTE` value fails, the write block included, so nothing changes |
+
+## Testing the SQL blocks
+
+`supabase/tests/run_piggyvest_stuck_funds_runbook.py` runs every block above exactly as written,
+with only the `PASTE` values filled in, against a throwaway local PostgreSQL cluster that it
+creates and deletes itself. It uses made-up data only and the latest bodies of
+`cancel_order_as_merchant`, `reverse_wallet_redemption` and `reverse_vtu_wallet_payment` from
+`supabase/migrations`, and it never connects to any other database. From the repository root,
+with PostgreSQL 15 or newer installed (set `PG_BIN` to its `bin` directory if `pg_config` is
+not on the `PATH`):
+
+```sh
+python3 -I supabase/tests/run_piggyvest_stuck_funds_runbook.py
+```
+
+CI does not run it, so run it by hand after any change to this SQL file or to those functions.

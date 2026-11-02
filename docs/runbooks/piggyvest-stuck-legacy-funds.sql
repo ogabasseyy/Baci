@@ -128,9 +128,15 @@ BEGIN
      OR v_row.amount <> v_amount THEN
     RAISE EXCEPTION 'STOP: purchase does not match the approved airtime purchase';
   END IF;
+  -- Shape first, numbers second, as two separate checks so the cast below only ever reads JSON
+  -- numbers. Like the app, a split counts only when its card and wallet are both numbers.
   IF jsonb_typeof(v_row.metadata->'paymentSplit') IS DISTINCT FROM 'object'
-     OR (v_row.metadata->'paymentSplit'->>'card')::numeric IS DISTINCT FROM 0
-     OR (v_row.metadata->'paymentSplit'->>'wallet')::numeric IS DISTINCT FROM v_amount THEN
+     OR jsonb_typeof(v_row.metadata->'paymentSplit'->'card') IS DISTINCT FROM 'number'
+     OR jsonb_typeof(v_row.metadata->'paymentSplit'->'wallet') IS DISTINCT FROM 'number' THEN
+    RAISE EXCEPTION 'STOP: not a wallet-only purchase; escalate';
+  END IF;
+  IF (v_row.metadata->'paymentSplit'->>'card')::numeric <> 0
+     OR (v_row.metadata->'paymentSplit'->>'wallet')::numeric <> v_amount THEN
     RAISE EXCEPTION 'STOP: not a wallet-only purchase; escalate';
   END IF;
   SELECT coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_wallet_payment'

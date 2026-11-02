@@ -30,10 +30,10 @@ vi.mock('@/components/analytics/chatgpt-pixel', () => ({
   ),
 }));
 
-vi.mock('@/components/analytics/facebook-pixel', () => ({
-  FacebookPixel: ({ pixelId }: { pixelId: string }) => (
-    <span data-testid="facebook-pixel">{pixelId}</span>
-  ),
+vi.mock('@/components/analytics/deferred-facebook-pixel', async () => ({
+  DeferredFacebookPixel: (
+    await import('./storefront-shell-facebook.test-support')
+  ).MockDeferredFacebookPixel,
 }));
 
 // Use the test renderer's React instance for Next dynamic boundaries.

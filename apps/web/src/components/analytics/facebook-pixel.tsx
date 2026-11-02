@@ -12,6 +12,7 @@ import {
 
 interface FacebookPixelProps {
   pixelId: string;
+  merchantId?: string;
 }
 
 const CONSENT_STORAGE_KEY = 'baci-cookie-consent';
@@ -39,7 +40,7 @@ function subscribeToConsent(onChange: () => void): () => void {
 // Server renders with consent denied to stay deterministic during hydration.
 const getConsentServerSnapshot = (): boolean => false;
 
-export function FacebookPixel({ pixelId }: FacebookPixelProps) {
+export function FacebookPixel({ pixelId, merchantId }: FacebookPixelProps) {
   const pathname = usePathname();
   const isAllowed = useSyncExternalStore(
     subscribeToConsent,
@@ -49,8 +50,8 @@ export function FacebookPixel({ pixelId }: FacebookPixelProps) {
 
   useLayoutEffect(() => {
     if (!isAllowed || !pathname) return;
-    return activateFacebookPixel(pixelId);
-  }, [pixelId, isAllowed, pathname]);
+    return activateFacebookPixel(pixelId, merchantId);
+  }, [pixelId, merchantId, isAllowed, pathname]);
 
   if (!validFacebookPixelId(pixelId) || !isAllowed) return null;
   return (

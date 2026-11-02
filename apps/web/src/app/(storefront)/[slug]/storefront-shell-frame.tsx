@@ -2,8 +2,8 @@ import { notFound } from 'next/navigation';
 import type React from 'react';
 import { buildMerchantAnalyticsSettings } from '@/components/analytics/analytics-merchant-settings';
 import { ChatgptPixel } from '@/components/analytics/chatgpt-pixel';
+import { DeferredFacebookPixel } from '@/components/analytics/deferred-facebook-pixel';
 import { DeferredSocialPixels } from '@/components/analytics/deferred-social-pixels';
-import { FacebookPixel } from '@/components/analytics/facebook-pixel';
 import { TwitterPixel } from '@/components/analytics/twitter-pixel';
 import { CookieConsent } from '@/components/storefront/cookie-consent';
 import { DeferredPageViewTracker } from '@/components/storefront/deferred-page-view-tracker';
@@ -59,7 +59,12 @@ export function StorefrontShellFrame({
         {shellSnapshot.chatgptPixelId ? (
           <ChatgptPixel pixelId={shellSnapshot.chatgptPixelId} />
         ) : null}
-        {facebookPixelId ? <FacebookPixel pixelId={facebookPixelId} /> : null}
+        {facebookPixelId ? (
+          <DeferredFacebookPixel
+            merchantId={merchant.id}
+            pixelId={facebookPixelId}
+          />
+        ) : null}
         {analyticsSettings?.twitter_pixel_id ? (
           <TwitterPixel
             pixelId={analyticsSettings.twitter_pixel_id}

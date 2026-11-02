@@ -235,6 +235,8 @@ it('keeps the row for retry rather than falling back after an uncertain primary 
 it.each([
   'disabled',
   'unmapped',
+  // The engine readiness gate refused the primary credit: same as disabled.
+  'prerequisite',
 ])('preserves legacy inflow handling for %s primary attribution', async (outcome) => {
   boundary.families = ['legacy'];
   boundary.dispatch.mockResolvedValue(outcome);
@@ -242,6 +244,21 @@ it.each([
   expect(response.status).toBe(200);
   expect(boundary.legacyRecord).toHaveBeenCalledTimes(1);
   expect(boundary.legacyProcess).toHaveBeenCalledTimes(1);
+});
+
+it('keeps a bank-signed row captured without legacy handling while the engine is not ready', async () => {
+  boundary.intake.mockResolvedValue({ outcome: 'not_handled', response: null });
+  boundary.dispatch.mockResolvedValue('prerequisite');
+  const response = await POST(request());
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    received: true,
+    captured: true,
+    processing: 'deferred',
+  });
+  expect(boundary.quarantine).not.toHaveBeenCalled();
+  expect(boundary.legacyRecord).not.toHaveBeenCalled();
+  expect(boundary.legacyProcess).not.toHaveBeenCalled();
 });
 
 it('quarantines a primary conflict without crediting either ledger', async () => {

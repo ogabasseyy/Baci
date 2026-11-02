@@ -6,6 +6,9 @@ SELECT plan(23);
 GRANT USAGE ON SCHEMA extensions TO gigl_tracking_worker;
 
 -- Fixtures: one GIGL shipment per order (one live monitor per order).
+-- Booking economics are out of scope here; the suite rolls back, so the
+-- quote-attestation stamp is disabled only inside this transaction.
+ALTER TABLE public.shipments DISABLE TRIGGER stamp_gigl_shipment_economics;
 SET LOCAL ROLE service_role;
 SELECT set_config('request.jwt.claim.role', 'service_role', true);
 

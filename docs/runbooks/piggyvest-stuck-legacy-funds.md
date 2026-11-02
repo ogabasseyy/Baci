@@ -31,7 +31,9 @@ are in the
    wrong, so stop and check it.
 5. Do not run any wallet function by hand outside these blocks.
 6. Before the first production step, run the fixture suite (see "Testing the SQL blocks") and
-   record its date and result in the ops log. CI does not run it yet.
+   record its date and result in the ops log. CI also runs it on every pull request that changes
+   this SQL file, its fixtures or `supabase/migrations`, but a green CI run does not replace
+   this step: it is the record that the suite passed against the code about to be used.
 
 ## Part A: the ₦10,000 order
 
@@ -256,4 +258,6 @@ not on the `PATH`):
 python3 -I supabase/tests/run_piggyvest_stuck_funds_runbook.py
 ```
 
-CI does not run it, so run it by hand after any change to this SQL file or to those functions.
+CI runs it (job "Quality Gate - Disposable SQL Suites", step "Test PiggyVest stuck-funds runbook SQL")
+whenever this SQL file, its fixtures or `supabase/migrations` change, and any failing check fails the job.
+Run it by hand too before the first production step (ground rule 6).

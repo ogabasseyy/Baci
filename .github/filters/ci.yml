@@ -100,6 +100,8 @@ quiz_db:
   - '.github/scripts/x-pixel-token-authentication.sql.test.mjs'
   - 'supabase/migrations/**'
   - 'supabase/tests/**'
+  - 'docs/runbooks/piggyvest-stuck-legacy-funds.sql'
+  - '.github/scripts/piggyvest-stuck-funds-runbook-ci.test.mjs'
   - 'apps/web/tools/db/replay-registry/**'
   - 'apps/web/tools/db/replay-registry.ts'
   - 'apps/web/tools/db/replay-sql-check-registry.ts'

@@ -426,6 +426,14 @@ jobs:
           done
           node --test .github/scripts/x-pixel-token-authentication.sql.test.mjs
 
+      - name: Test PiggyVest stuck-funds runbook SQL
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+        run: |
+          set -euo pipefail
+          node --test .github/scripts/piggyvest-stuck-funds-runbook-ci.test.mjs
+          python3 -I supabase/tests/run_piggyvest_stuck_funds_runbook.py
+
       - name: Run IMEI authenticated access SQL contracts
         env:
           IMEI_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}

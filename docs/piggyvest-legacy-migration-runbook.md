@@ -18,13 +18,19 @@ Files:
 - You hold the signed-off list approved by the owner and the coordinator.
 - Pause the old wallet spending paths for these customers if any are active,
   so no customer spends while being moved.
+- Drain in-flight VTU purchases. A purchase paid from the old wallet can still
+  be refunded back into it after fulfilment fails, which would put money on a
+  wallet that was already moved. Do not approve or credit a customer until
+  every VTU purchase and refund for that customer has settled (no pending or
+  processing order, no refund waiting). Re-run step 1 afterwards.
 
 ## 1. Coordinator list
 
 1. Run `01-balance-list.sql`. It only reads.
 2. Give the output to the coordinator. Only rows with `eligible` true may go
-   on the list. A row with `matches_ledger` false or a non-zero `pending_count`
-   is excluded: do not credit it and do not list it. Run the list again later,
+   on the list. A row with `matches_ledger` false, a non-zero `pending_count`
+   or `over_zero_out_limit` true is excluded (the update cannot move more than
+   99,999,999.99; take such a balance to the owner): do not credit it and do not list it. Run the list again later,
    once its pending rows have settled and the balance matches the ledger.
 3. The coordinator confirms each customer, wallet and amount, and the owner
    signs the list. Freeze it: a changed balance means a new list.
@@ -53,7 +59,9 @@ PiggyVest statement. Customers with no confirmed credit are left out of step 4.
 2. A second person reviews the rows against the recorded credits.
 3. Run the file as is, with `psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f 02-zero-out.sql`.
    Load all rows in ONE multi-row insert, and set the declared row count to
-   the number of customers on the signed list. The script stops if the counts differ. It ends with `ROLLBACK`, so nothing is saved.
+   the number of rows you actually load (credited customers only; customers
+   left out in step 3 are not counted). Each PiggyVest reference may appear
+   once. The script stops if the counts differ. It ends with `ROLLBACK`, so nothing is saved.
 4. Check the result: every row shows `now_balance` 0 and the right amount.
    Any error means a balance changed or a row was wrong. Nothing was changed.
    Fix the list from step 1, not the script.

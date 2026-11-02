@@ -4,7 +4,9 @@
 --   psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f 02-zero-out.sql
 --
 -- Rules this script enforces (it aborts the whole transaction on any breach):
---   * the list must not be empty and must hold exactly the declared row count;
+--   * the list must not be empty and must hold exactly the declared row count
+--     (exactly one declared row is allowed);
+--   * a PiggyVest credit reference may appear once, and never again after use;
 --   * a wallet with any pending ledger row is refused (its balance can still
 --     change when that row is confirmed or released);
 --   * every listed wallet must exist, match its merchant and customer, and hold
@@ -29,12 +31,16 @@ CREATE TEMP TABLE legacy_zero_out_list (
     CHECK (length(btrim(piggyvest_credit_reference)) > 0)
 ) ON COMMIT DROP;
 
+-- One PiggyVest credit can zero only one wallet (case and spaces ignored).
+CREATE UNIQUE INDEX legacy_zero_out_reference_uq
+  ON legacy_zero_out_list (lower(btrim(piggyvest_credit_reference)));
+
 CREATE TEMP TABLE legacy_zero_out_declared (
   expected_rows integer NOT NULL CHECK (expected_rows > 0)
 ) ON COMMIT DROP;
 
 -- >>> REVIEWED ROWS BELOW (one per customer, copied from the signed-off list)
--- Declare how many customers the signed list holds, then load them in ONE
+-- Declare how many rows you load (credited customers only), then load them in ONE
 -- multi-row INSERT (never several separate INSERT statements).
 -- INSERT INTO legacy_zero_out_declared (expected_rows) VALUES (1);
 -- INSERT INTO legacy_zero_out_list
@@ -51,16 +57,18 @@ DECLARE
   v_done integer;
   v_now timestamptz;
   v_declared integer;
+  v_decl_rows integer;
 BEGIN
   SELECT count(*) INTO v_expected FROM legacy_zero_out_list;
   IF v_expected = 0 THEN
     RAISE EXCEPTION 'legacy zero-out list is empty';
   END IF;
 
-  SELECT d.expected_rows INTO v_declared FROM legacy_zero_out_declared d;
-  IF v_declared IS NULL THEN
-    RAISE EXCEPTION 'declared row count is missing';
+  SELECT count(*) INTO v_decl_rows FROM legacy_zero_out_declared;
+  IF v_decl_rows <> 1 THEN
+    RAISE EXCEPTION 'exactly one declared row count is required, found %', v_decl_rows;
   END IF;
+  SELECT d.expected_rows INTO v_declared FROM legacy_zero_out_declared d;
   IF v_declared IS DISTINCT FROM v_expected THEN
     RAISE EXCEPTION 'row count mismatch: % declared, % loaded', v_declared, v_expected;
   END IF;
@@ -104,6 +112,18 @@ BEGIN
     WHERE t.source_type = 'piggyvest_legacy_migration'
   ) THEN
     RAISE EXCEPTION 'wallet already migrated; refusing a second run';
+  END IF;
+
+  -- A reference already recorded for any wallet cannot be reused.
+  IF EXISTS (
+    SELECT 1
+    FROM public.customer_wallet_transactions t
+    JOIN legacy_zero_out_list l
+      ON lower(btrim(t.metadata ->> 'piggyvest_credit_reference'))
+       = lower(btrim(l.piggyvest_credit_reference))
+    WHERE t.source_type = 'piggyvest_legacy_migration'
+  ) THEN
+    RAISE EXCEPTION 'PiggyVest credit reference already used for a migrated wallet';
   END IF;
 
   -- Time is read only now that every lock is held.

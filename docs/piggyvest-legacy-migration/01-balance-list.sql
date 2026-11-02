@@ -17,6 +17,10 @@ WITH ledger AS (
         WHEN cwt.status = 'completed'
           AND cwt.type IN ('debit', 'redemption', 'expiry')
           THEN -cwt.amount
+        -- Same formula as public.backfill_wallet_balances(): an expired
+        -- expiry row is a debit too.
+        WHEN cwt.status = 'expired' AND cwt.type = 'expiry'
+          THEN -cwt.amount
         ELSE 0
       END
     ), 0) AS ledger_balance,
@@ -36,7 +40,11 @@ SELECT
   (cw.available_balance IS NOT DISTINCT FROM COALESCE(l.ledger_balance, 0)) AS matches_ledger,
   COALESCE(l.pending_count, 0) AS pending_count,
   (cw.available_balance IS NOT DISTINCT FROM COALESCE(l.ledger_balance, 0)
-    AND COALESCE(l.pending_count, 0) = 0) AS eligible,
+    AND COALESCE(l.pending_count, 0) = 0
+    AND cw.available_balance <= 99999999.99) AS eligible,
+  -- 02-zero-out.sql rejects amounts above 99,999,999.99. Such a wallet is
+  -- never eligible: raise it with the owner, do not credit it in PiggyVest.
+  (cw.available_balance > 99999999.99) AS over_zero_out_limit,
   cw.updated_at
 FROM public.customer_wallets cw
 LEFT JOIN public.customers c

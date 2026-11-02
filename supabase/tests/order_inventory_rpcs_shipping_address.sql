@@ -157,9 +157,12 @@ BEGIN
 END;
 $$;
 
--- The live caller: releasing an expired quiz prize cancels its reserved order
+-- The live caller: pg_cron runs the quiz deadline clock as postgres with no
+-- JWT claims, and releasing an expired prize cancels its reserved order
 -- through the nested SECURITY DEFINER chain, with no client-role grants.
 RESET ROLE;
+SELECT set_config('request.jwt.claim.role', '', true);
+SELECT set_config('request.jwt.claims', '', true);
 INSERT INTO public.customers (id, merchant_id, email, full_name)
 VALUES (
   'a4270300-0000-4000-8000-000000000033',

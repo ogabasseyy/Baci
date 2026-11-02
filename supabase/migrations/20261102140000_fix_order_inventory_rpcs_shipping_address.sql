@@ -7,7 +7,8 @@
 --   - private.mark_order_payment_failed_and_release_inventory
 --   - private.complete_order_shipment_with_inventory
 -- The shipping address lives in public.orders.shipping_address (jsonb). The bodies
--- below match the live definitions except for that one column. Parameter names,
+-- below match the live definitions except for that one column and the order row
+-- lock, which now reads only shipping_status (the sole field used) instead of *. Parameter names,
 -- the `delivery_address` key of p_shipping_update, SECURITY DEFINER and the empty
 -- search_path are unchanged. EXECUTE is narrowed to service_role (see the end).
 
@@ -34,7 +35,7 @@ BEGIN
   END IF;
 
   -- 2. Lock order row
-  SELECT * INTO v_order
+  SELECT shipping_status INTO v_order
   FROM public.orders
   WHERE id = p_order_id AND merchant_id = p_merchant_id
   FOR UPDATE;
@@ -152,7 +153,7 @@ BEGIN
   END IF;
 
   -- 2. Lock order row
-  SELECT * INTO v_order
+  SELECT shipping_status INTO v_order
   FROM public.orders
   WHERE id = p_order_id AND merchant_id = p_merchant_id
   FOR UPDATE;

@@ -1,3 +1,4 @@
+import { PIGGYVEST_SUBACCOUNT_NAME_MAX_CHARACTERS as NAME_MAX } from '@/lib/piggyvest/provider-wallet-name.constants';
 import { interestSettings } from './mock-readback';
 import { visibleBalance } from './mock-sandbox-lag';
 import { MockLedger } from './mock-sandbox-ledger';
@@ -185,7 +186,14 @@ export class MockSandbox {
   createWallet(body: Body): MockReply {
     const customer = this.customers.find((c) => c.id === body.customer_id);
     if (!customer) return fail('An error occurred creating wallet');
-    if (this.wallets.some((w) => w.name === body.subaccount_name))
+    // The live sandbox refuses more than 50 characters (2026-10-31).
+    if (String(body.subaccount_name).length > NAME_MAX)
+      return fail('One or more validation errors occurred', 422);
+    // The live sandbox lists a new sub-wallet under its name with every `-`
+    // removed (staging, 2026-10-31). Whether case or spaces change too is
+    // unknown, so only the observed rewrite is modelled.
+    const name = String(body.subaccount_name).replaceAll('-', '');
+    if (this.wallets.some((w) => w.name === name))
       return fail('Wallet name already exists');
     const explicit =
       typeof body.interest_payout_wallet === 'string'
@@ -202,12 +210,13 @@ export class MockSandbox {
       (this.options.subWalletInheritsPayout ? customer.payoutWalletId : null);
     return ok(
       {
-        id: this.addWallet(customer.id, String(body.subaccount_name), {
+        id: this.addWallet(customer.id, name, {
           payoutWalletId,
           interestEnabled: body.enable_interest_accrual === true,
         }).id,
       },
-      'Wallet created'
+      'Wallet creation is being processed',
+      202
     );
   }
 

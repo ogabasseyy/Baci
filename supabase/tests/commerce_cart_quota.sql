@@ -1,5 +1,6 @@
 BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
+\ir pgtap_public_execute.sql
 SET search_path = public, extensions;
 SELECT plan(34);
 GRANT USAGE ON SCHEMA extensions TO commerce_cart_quota;

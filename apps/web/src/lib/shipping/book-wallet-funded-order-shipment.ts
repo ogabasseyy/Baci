@@ -37,7 +37,8 @@ export async function bookWalletFundedOrderShipment(
   prepareQuote?: PrepareQuote,
   readExistingShipment?: ReadExistingShipment
 ): Promise<BookOrderShipmentResult> {
-  // Wallet RPCs enforce merchant-owner or orders.fulfill/orders.edit access.
+  // Wallet RPCs enforce access: a new debit needs the owner or staff with
+  // orders.fulfill AND orders.edit; resuming an existing charge needs either.
   if (!merchantId) {
     throw new OrderShipmentBookingError(
       'Merchant context is required.',

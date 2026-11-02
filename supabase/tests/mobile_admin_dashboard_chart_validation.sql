@@ -28,6 +28,7 @@ BEGIN
   END IF;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_chart_rejected(text, jsonb) TO PUBLIC; -- called after SET ROLE
 
 SELECT pg_temp.assert_chart_rejected(
   'missing start bound',

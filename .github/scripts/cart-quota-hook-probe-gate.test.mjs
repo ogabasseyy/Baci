@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
 import YAML from 'yaml';
+import {
+  REPLAY_SQL_CHECK_REGISTRY_ARGUMENT,
+  readRegisteredReplaySqlChecks,
+} from './replay-sql-check-registry.test-support.mjs';
 
 const deploy = YAML.parse(
   readFileSync(new URL('../workflows/deploy.yml', import.meta.url), 'utf8')
@@ -47,7 +51,13 @@ test('database replay runs the cart quota RLS and worker-scope assertions', () =
   const steps = ci.jobs['quality-db-replay'].steps;
   assert.ok(
     steps.some((step) =>
-      step.run?.includes('--sql-check supabase/tests/commerce_cart_quota.sql')
+      step.run?.includes(REPLAY_SQL_CHECK_REGISTRY_ARGUMENT)
+    ),
+    'the replay must execute the registered SQL suites'
+  );
+  assert.ok(
+    readRegisteredReplaySqlChecks().includes(
+      'supabase/tests/commerce_cart_quota.sql'
     ),
     'the replay must execute the cart quota SQL suite'
   );

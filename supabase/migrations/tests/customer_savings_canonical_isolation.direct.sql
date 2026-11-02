@@ -8,6 +8,7 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN RETURN;
   END;
 END $$;
+GRANT EXECUTE ON FUNCTION pg_temp.isolation_hidden_update(text) TO PUBLIC; -- called after SET ROLE
 SELECT pg_temp.isolation_reject(format('UPDATE public.customer_savings_goals SET goal_kind=%L WHERE id=%L', 'canonical_local', :'legacy_goal'), '23514');
 SELECT pg_temp.isolation_reject(format('UPDATE public.customer_savings_goals SET goal_kind=%L WHERE id=%L', 'legacy', :'canonical_goal'), '23514');
 SELECT pg_temp.isolation_reject(format('UPDATE public.customer_savings_goals SET current_amount=1 WHERE id=%L', :'canonical_goal'), '23514');
@@ -28,6 +29,7 @@ BEGIN
     END LOOP;
   END LOOP;
 END $$;
+GRANT EXECUTE ON FUNCTION pg_temp.reject_contribution_matrix(uuid, uuid, uuid) TO PUBLIC; -- called after SET ROLE
 SELECT pg_temp.reject_contribution_matrix(:'canonical_goal', :'merchant', :'customer');
 INSERT INTO public.customer_savings_contributions(goal_id,merchant_id,customer_id,amount,source_type,status,idempotency_key)
   VALUES(:'legacy_goal', :'merchant', :'customer', 1, 'manual_adjustment', 'pending', 'canonical-isolation-retarget')

@@ -13,6 +13,16 @@ describe('verifyPiggyvestPayloadSignature', () => {
     ).toBe(true);
   });
 
+  it('normalises an uppercase hex signature and surrounding whitespace before comparison', () => {
+    expect(
+      verifyPiggyvestPayloadSignature({
+        payload,
+        signature: `  ${signature.toUpperCase()}\n`,
+        secret,
+      })
+    ).toBe(true);
+  });
+
   it.each([
     undefined,
     '',

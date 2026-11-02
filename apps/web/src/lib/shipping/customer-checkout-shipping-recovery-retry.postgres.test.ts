@@ -107,6 +107,74 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
         ${recoveryConfirm(preview.id)}`)
       ).toThrow(/forbidden_shipping_recovery/);
     });
+    const staffId = '20000000-0000-4000-8000-000000000003';
+    function staffRow(permissions: object, status = 'active') {
+      return `INSERT INTO public.staff_members (id,merchant_id,user_id,role,permissions,status)
+        VALUES (gen_random_uuid(),'${merchantId}','${staffId}','manager',
+          '${JSON.stringify(permissions)}'::jsonb,'${status}');`;
+    }
+    const fulfilEdit = { orders: { fulfill: true, edit: true } };
+    it('lets orders.fulfill + orders.edit staff prepare and confirm their own recovery', () => {
+      const preview = prepare();
+      const output = database.query(`BEGIN; ${staffRow(fulfilEdit)}
+        ${recoveryActorAuth(staffId)} ${preview.sql} ${recoveryConfirm(preview.id)}
+        RESET ROLE; SELECT selected_quote_id FROM public.orders WHERE id='${orderId}';
+        ROLLBACK;`);
+      expect(output).toContain('"confirmed": true');
+      expect(output.trim().split('\n').at(-1)).toBe(preview.id);
+    });
+    it.each([
+      ['orders.edit only', { orders: { view: true, edit: true } }, 'active'],
+      [
+        'orders.fulfill only',
+        { orders: { view: true, fulfill: true } },
+        'active',
+      ],
+      [
+        'explicit fulfill denial',
+        { orders: { fulfill: false, edit: true } },
+        'active',
+      ],
+      [
+        'removed fulfil staff',
+        { orders: { fulfill: true, edit: true } },
+        'removed',
+      ],
+    ])('denies recovery to staff with %s', (_label, permissions, status) => {
+      expect(() =>
+        database.query(`BEGIN; ${staffRow(permissions, status)}
+          ${recoveryActorAuth(staffId)}
+          SELECT public.get_customer_checkout_shipping_recovery_context('${orderId}');
+          ROLLBACK;`)
+      ).toThrow(/forbidden_shipping_recovery/);
+    });
+    it('denies a committed retry after the staff member loses orders.fulfill', () => {
+      const preview = prepare();
+      expect(() =>
+        database.query(`BEGIN; ${staffRow(fulfilEdit)}
+          ${recoveryActorAuth(staffId)} ${preview.sql} ${recoveryConfirm(preview.id)}
+          RESET ROLE; UPDATE public.staff_members SET status='removed' WHERE user_id='${staffId}';
+          ${recoveryActorAuth(staffId)} ${recoveryConfirm(preview.id)} ROLLBACK;`)
+      ).toThrow(/forbidden_shipping_recovery/);
+    });
+    it('denies a committed retry after the staff member loses orders.edit', () => {
+      const preview = prepare();
+      expect(() =>
+        database.query(`BEGIN; ${staffRow(fulfilEdit)}
+          ${recoveryActorAuth(staffId)} ${preview.sql} ${recoveryConfirm(preview.id)}
+          RESET ROLE; UPDATE public.staff_members
+            SET permissions='{"orders":{"fulfill":true}}'::jsonb WHERE user_id='${staffId}';
+          ${recoveryActorAuth(staffId)} ${recoveryConfirm(preview.id)} ROLLBACK;`)
+      ).toThrow(/forbidden_shipping_recovery/);
+    });
+    it('keeps a staff-prepared preview bound to that staff member', () => {
+      const preview = prepare();
+      expect(() =>
+        database.query(`BEGIN; ${staffRow(fulfilEdit)}
+          ${recoveryActorAuth(staffId)} ${preview.sql}
+          ${recoveryActorAuth()} ${recoveryConfirm(preview.id)} ROLLBACK;`)
+      ).toThrow(/forbidden_shipping_recovery/);
+    });
     it('still requires explicit destination confirmation on a retry', () => {
       const preview = prepare();
       expect(() =>

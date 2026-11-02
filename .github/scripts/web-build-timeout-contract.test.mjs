@@ -26,3 +26,17 @@ test('keeps pull-request builds offline from production Supabase', async () => {
     SUPABASE_JWT_SECRET: 'placeholder-jwt-secret',
   });
 });
+
+
+test('reclaims hosted-runner disk before dependency and Next cache restoration', async () => {
+  const workflow = YAML.parse(await readFile('.github/workflows/ci.yml', 'utf8'));
+  const steps = workflow.jobs.build.steps;
+  const reclaim = steps.findIndex((step) => step.name === 'Reclaim unused hosted-runner SDK space');
+  const dependencies = steps.findIndex((step) => step.uses === './.github/actions/pnpm-install-cached');
+  const cache = steps.findIndex((step) => step.id === 'next-cache');
+  assert.ok(reclaim >= 0, 'build archives need disk preparation before extraction');
+  assert.ok(reclaim < dependencies && reclaim < cache);
+  assert.equal(workflow.jobs.build['runs-on'], 'ubuntu-24.04');
+  assert.match(steps[reclaim].run, /sudo rm -rf -- \/usr\/share\/dotnet \/usr\/local\/lib\/android \/opt\/ghc/);
+  assert.doesNotMatch(steps[reclaim].run, /rm[^\n]*(?:node_modules|GITHUB_WORKSPACE|\.next)/);
+});

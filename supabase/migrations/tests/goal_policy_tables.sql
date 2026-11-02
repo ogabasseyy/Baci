@@ -23,6 +23,7 @@ INSERT INTO auth.users(id) VALUES ('97000000-0000-4000-8000-000000000003');
 
 CREATE FUNCTION pg_temp.assert_true(condition boolean, message text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN IF condition IS DISTINCT FROM true THEN RAISE EXCEPTION '%', message; END IF; END $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_true(boolean, text) TO PUBLIC; -- called after SET SESSION AUTHORIZATION
 
 -- The writer role is provisioned out-of-band in real environments; create it
 -- here so the contracted entrypoints are exercisable (rolled back).

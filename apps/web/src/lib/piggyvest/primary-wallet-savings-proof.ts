@@ -1,7 +1,6 @@
 import 'server-only';
 import { piggyvestPrimarySavingsTransferSchemas } from '@/schemas/piggyvest-primary-savings-transfer';
-import { prefundedCardProviderEvidenceSchemas } from '@/schemas/prefunded-card-provider-evidence';
-import { prefundedCardTransferVerificationSchemas } from '@/schemas/prefunded-card-transfer-verification';
+import { piggyvestTransactionStatusSchemas } from '@/schemas/piggyvest-transaction-status';
 
 export function verifyPrimaryWalletSavingsProof(
   storedReservation: unknown,
@@ -13,53 +12,26 @@ export function verifyPrimaryWalletSavingsProof(
     );
   if (!reservation.success) return { status: 'unverified' as const };
   const expected = reservation.data;
-  const success =
-    prefundedCardTransferVerificationSchemas.rich.safeParse(providerResponse);
-  const failure = success.success
-    ? null
-    : prefundedCardTransferVerificationSchemas.richFailed.safeParse(
-        providerResponse
-      );
-  if (!success.success && !failure?.success) {
-    // The transaction-verify endpoint answers the minimal TSQ shape
-    // ({reference, status: success|pending|failed, amount}) — never the
-    // rich single-transaction envelope. Requiring rich bindings here
-    // would hold every reconciled contribution in pending forever, so
-    // accept a TSQ success/failure bound to the reservation's unique
-    // reference and amount. The reference is unguessable
-    // (pvb-save-<operation uuid>), the channel is the authenticated
-    // provider session, and wallets/customer/business stay bound by the
-    // server-side reservation the submit path stored. TSQ exposes no
-    // provider transaction id, so the provider-echoed reference serves
-    // as the settlement idempotency key: unique per operation, so the
-    // database duplicate/conflict handling behaves identically. Rich
-    // stays first so a fully-bound response keeps its provider id.
-    const tsq =
-      prefundedCardProviderEvidenceSchemas.tsq.safeParse(providerResponse);
-    if (!tsq.success) return { status: 'unverified' as const };
-    const observation = tsq.data.data;
-    if (
-      observation.reference !== expected.reference ||
-      observation.amount !== expected.amountKobo ||
-      observation.status === 'pending'
-    )
-      return { status: 'unverified' as const };
-    const bindings = {
-      providerTransactionId: expected.reference,
-      operationId: expected.operationId,
-      reference: expected.reference,
-      amountKobo: expected.amountKobo,
-      sourceWalletId: expected.sourceWalletId,
-      destinationWalletId: expected.destinationWalletId,
-      businessId: expected.businessId,
-    };
-    if (observation.status === 'success')
-      return { status: 'verified' as const, ...bindings };
-    return { status: 'failed' as const, ...bindings };
-  }
-  const actual = (success.success ? success.data : failure?.data)?.data;
-  if (!actual) return { status: 'unverified' as const };
+  // Money moves only on the full TSQ record bound to this reservation
+  // (docs/piggyvest-contract-evidence/2026-10-31.md, P2), parsed with the
+  // shared TSQ schema: our reference in third_party_reference, the exact
+  // amount, a zero fee, the reserved provider customer and business,
+  // source = the customer's main wallet, destination = the goal wallet,
+  // the provider id echoed as internal_reference, and the observed
+  // terminal status ('successful' settles, 'failed' releases). A body
+  // matching only reference, amount and status ("success by reference")
+  // proves neither direction, fee nor either wallet, so it never settles or
+  // releases; like every other mismatch it stays unverified (pending).
+  const parsed =
+    piggyvestTransactionStatusSchemas.walletTransferResponse.safeParse(
+      providerResponse
+    );
+  if (!parsed.success) return { status: 'unverified' as const };
+  const actual = parsed.data.data;
   if (
+    (actual.status !== 'successful' && actual.status !== 'failed') ||
+    actual.internal_reference !== actual.id ||
+    actual.fee !== 0 ||
     expected.sourceWalletId === expected.destinationWalletId ||
     actual.amount !== expected.amountKobo ||
     actual.third_party_reference !== expected.reference ||
@@ -67,13 +39,12 @@ export function verifyPrimaryWalletSavingsProof(
     actual.destination_wallet !== expected.destinationWalletId ||
     actual.customer_id !== expected.providerCustomerId ||
     (actual.business_id !== undefined &&
-      actual.business_id !== expected.businessId) ||
-    (actual.currency !== undefined && actual.currency !== 'NGN')
+      actual.business_id !== expected.businessId)
   )
     return { status: 'unverified' as const };
   // A failed transfer authenticates against the same bindings, but its
   // proof releases the hold instead of settling: no funds moved.
-  if (!success.success)
+  if (actual.status === 'failed')
     return {
       status: 'failed' as const,
       providerTransactionId: actual.id,

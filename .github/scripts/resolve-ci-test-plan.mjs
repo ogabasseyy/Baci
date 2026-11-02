@@ -26,6 +26,10 @@ const ROOT_FULL_TEST_PREFIXES = [
   'tsconfig',
 ];
 
+// Plain-text lists read through fs: `vitest --changed` cannot map them to the
+// tests that consume them, so a targeted run would skip their validation.
+const WEB_FULL_TEST_PREFIXES = ['apps/web/tools/db/replay-registry/'];
+
 const WEB_FULL_TEST_FILES = new Set([
   'apps/web/jest.config.mjs',
   'apps/web/jest.setup.js',
@@ -77,7 +81,9 @@ function isFullAffectedTrigger(file) {
     return true;
   }
 
-  return ROOT_FULL_TEST_PREFIXES.some((prefix) => file.startsWith(prefix));
+  return [...ROOT_FULL_TEST_PREFIXES, ...WEB_FULL_TEST_PREFIXES].some(
+    (prefix) => file.startsWith(prefix)
+  );
 }
 
 function isTargetableWebFile(file) {

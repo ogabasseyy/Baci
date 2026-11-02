@@ -1,10 +1,14 @@
 import 'server-only';
-import { prefundedCardTransferVerificationSchemas as verification } from '@/schemas/prefunded-card-transfer-verification';
 import { primaryWalletCardCustodySchemas as custody } from '@/schemas/primary-wallet-card-custody';
 import { primaryCardTransferProviderSchemas as schemas } from '@/schemas/primary-wallet-card-transfer-provider';
 import { requestPrefundedCardProviderJson } from './prefunded-card-provider-request';
 import { assertPrimaryCardTransferPolicy } from './primary-wallet-card-transfer-policy';
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
+import {
+  classifyTransferReferenceFailure,
+  classifyTransferReferenceResponse,
+  type TransferReferenceLookup,
+} from './transfer-reference-lookup';
 
 export function createPrimaryCardTransferLookup(input: {
   configuration: unknown;
@@ -15,7 +19,7 @@ export function createPrimaryCardTransferLookup(input: {
   return async (
     selected: unknown,
     ownership: unknown
-  ): Promise<'submitted' | 'absent' | 'uncertain'> => {
+  ): Promise<TransferReferenceLookup> => {
     assertPrimaryCardTransferPolicy(config, (input.now ?? Date.now)());
     const command = custody.command.parse(selected);
     const context = custody.context.parse(ownership);
@@ -44,49 +48,17 @@ export function createPrimaryCardTransferLookup(input: {
         init: { method: 'GET' },
       });
     } catch (error) {
-      // Only an authoritative 404 proves the previous holder died before
-      // submitting. Any other failure — timeout, 5xx, malformed body —
-      // stays uncertain so the worker records an unknown outcome instead
-      // of risking a double submission.
-      if (
-        error instanceof Error &&
-        (error as Error & { httpStatus?: unknown }).httpStatus === 404
-      )
-        return 'absent';
-      return 'uncertain';
+      // A 404 is 'not_found', never proof that the previous holder died
+      // before submitting: a just-accepted transfer answers 404 until
+      // PiggyVest indexes it (docs/piggyvest-contract-evidence/2026-10-31.md,
+      // P2). The worker never resubmits on it.
+      return classifyTransferReferenceFailure(error);
     }
-    const rich = verification.rich.safeParse(response);
-    if (
-      rich.success &&
-      rich.data.data.third_party_reference === command.reference &&
-      rich.data.data.amount === command.amountKobo &&
-      rich.data.data.source_wallet === command.sourceWalletId &&
-      rich.data.data.destination_wallet === command.destinationWalletId
-    )
-      return 'submitted';
-    const normalized = verification.normalized.safeParse(response);
-    if (
-      normalized.success &&
-      normalized.data.data.reference === command.reference &&
-      normalized.data.data.amount === command.amountKobo &&
-      normalized.data.data.source_wallet === command.sourceWalletId &&
-      normalized.data.data.destination_wallet === command.destinationWalletId
-    )
-      return 'submitted';
-    // Bound terminal failure: the provider definitively reports this
-    // reference as failed with all reservation fields matching, so no
-    // money moved. Report absent so the worker resubmits with the
-    // identical reference; consigning this to uncertain would strand a
-    // collected checkout as unrecoverable unknown instead of retrying.
-    const failed = verification.richFailed.safeParse(response);
-    if (
-      failed.success &&
-      failed.data.data.third_party_reference === command.reference &&
-      failed.data.data.amount === command.amountKobo &&
-      failed.data.data.source_wallet === command.sourceWalletId &&
-      failed.data.data.destination_wallet === command.destinationWalletId
-    )
-      return 'absent';
-    return 'uncertain';
+    return classifyTransferReferenceResponse(response, {
+      reference: command.reference,
+      amountKobo: command.amountKobo,
+      sourceWalletId: command.sourceWalletId,
+      destinationWalletId: command.destinationWalletId,
+    });
   };
 }

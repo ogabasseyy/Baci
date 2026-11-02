@@ -7,9 +7,15 @@ import {
 import { checkCsrfProtection } from '@/lib/csrf';
 import { ShippingService } from '@/lib/shipping';
 import { buildOrderGiglQuoteRequest } from '@/lib/shipping/build-order-gigl-quote-request';
+import { readMerchantShippingWalletBalance } from '@/lib/shipping/merchant-shipping-wallet-balance';
 import { persistAdminGiglQuote } from '@/lib/shipping/persist-admin-gigl-quote';
 import { resolveBookingMerchantSender } from '@/lib/shipping/resolve-booking-merchant-sender';
 import type { ShippingQuote } from '@/lib/shipping/types';
+import {
+  CUSTOMER_CHECKOUT_REBIND_FORBIDDEN,
+  customerPaidGiglShippingResponse,
+  getAdminOrderGiglCustomerPaidConflict,
+} from './admin-order-gigl-customer-paid-conflict';
 import {
   calculateAdminWalletFunding,
   selectEligibleAdminGiglQuote,
@@ -57,11 +63,15 @@ export async function postAdminOrderGiglQuote(
   const adminOrderId = resolvedInput.admin_order_id;
   const isPreview = resolvedInput.preview === true;
 
+  // The owner and staff granted orders.fulfill may preview the GIG price.
+  // Binding rewrites the order's address and funding source, and the booking
+  // that follows needs orders.edit, so a bind also requires orders.edit. The
+  // DB gates (balance, bind, reserve) enforce the same permissions.
   const access = await getUserAccess(auth.supabase);
   if (
-    !access?.isOwner ||
-    !access.merchantId ||
-    !hasPermission(access, 'orders', 'fulfill')
+    !access?.merchantId ||
+    !hasPermission(access, 'orders', 'fulfill') ||
+    (!isPreview && !hasPermission(access, 'orders', 'edit'))
   ) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -90,6 +100,13 @@ export async function postAdminOrderGiglQuote(
 
   const orderConflict = getAdminOrderGiglQuoteOrderConflict(order);
   if (orderConflict) return orderConflict;
+  const customerPaidConflict = await getAdminOrderGiglCustomerPaidConflict(
+    auth.supabase,
+    access.merchantId,
+    adminOrderId,
+    order
+  );
+  if (customerPaidConflict) return customerPaidConflict;
 
   const boundQuoteId = shouldReuseBoundAdminWalletGiglQuote(order, isPreview);
   if (boundQuoteId) {
@@ -154,24 +171,18 @@ export async function postAdminOrderGiglQuote(
       { status: 503 }
     );
   if (isPreview) {
-    const { data: wallet, error: walletError } = await auth.supabase.rpc(
-      'get_wallet_summary',
-      { p_merchant_id: access.merchantId }
+    const wallet = await readMerchantShippingWalletBalance(
+      auth.supabase,
+      access.merchantId
     );
-    if (walletError) {
+    if (!wallet.ok) {
       return NextResponse.json(
         { error: 'Unable to load wallet' },
         { status: 500 }
       );
     }
-    const walletRow = (Array.isArray(wallet) ? wallet[0] : wallet) as {
-      available_balance?: number | string | null;
-    } | null;
     const { availableBalance, shortfall, canBook } =
-      calculateAdminWalletFunding(
-        quote.price,
-        Number(walletRow?.available_balance ?? 0)
-      );
+      calculateAdminWalletFunding(quote.price, wallet.availableBalance);
     return NextResponse.json({
       quote: toAdminPublicQuote(quote),
       availableBalance,
@@ -219,6 +230,9 @@ export async function postAdminOrderGiglQuote(
     } as never
   );
   if (bindError) {
+    // Settlement can land between the check above and this bind.
+    if (bindError.message?.includes(CUSTOMER_CHECKOUT_REBIND_FORBIDDEN))
+      return customerPaidGiglShippingResponse();
     const already = bindError.message?.includes('already');
     const staleInputs = bindError.message?.includes('stale_order_quote_inputs');
     return NextResponse.json(

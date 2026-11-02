@@ -2,6 +2,7 @@ import 'server-only';
 import { createPrimaryCardCustodyInbox } from './primary-wallet-card-custody-inbox';
 import { readPrimaryCardCustodyInboxRuntime } from './primary-wallet-card-custody-inbox-runtime';
 import type { createPrimaryCardCustodyReader } from './primary-wallet-card-custody-reader';
+import { familyArchivedSecrets } from './webhook-key-archive';
 
 export function createPrimaryCardCustodySignedRuntime(input: {
   fetchImplementation: typeof fetch;
@@ -25,7 +26,24 @@ export function createPrimaryCardCustodySignedRuntime(input: {
     config !== null &&
     readPrimaryCardCustodyInboxRuntime(input.environment, nowMs) !== null;
   const inbox = config
-    ? createPrimaryCardCustodyInbox({ ...input, configuration: config })
+    ? createPrimaryCardCustodyInbox({
+        ...input,
+        configuration: config,
+        archivedSecrets: {
+          intake: familyArchivedSecrets(
+            'custody',
+            input.environment ?? process.env,
+            new Date(nowMs),
+            'ingress'
+          ),
+          worker: familyArchivedSecrets(
+            'custody',
+            input.environment ?? process.env,
+            new Date(nowMs),
+            'replay'
+          ),
+        },
+      })
     : null;
   const response = (body: Record<string, boolean | string>, status: number) =>
     Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });

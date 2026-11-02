@@ -1,4 +1,5 @@
 import { normalizePhoneToE164 } from '@baci/shared/lib';
+import { hasMinimumPhoneDigits } from '@/lib/phone';
 import { shippingService } from '@/lib/shipping';
 import { normalizeReceiverMatchText } from './international-quote-receiver-match';
 import { isVerifiedGiglProviderRateId } from './is-verified-gigl-provider-rate-id';
@@ -10,6 +11,7 @@ import {
 } from './order-shipment-booking-utils';
 import { parseGiglProviderRateId } from './providers/gigl.constants';
 import type { OrderShipmentQuoteRecord } from './refresh-order-shipment-quote';
+import { assertSavedGiglCheckoutPriceCovered } from './saved-gigl-checkout-price-coverage';
 import type { ShippingAddress, ShippingQuote } from './types';
 
 function reconfirm(): never {
@@ -34,6 +36,15 @@ function sameAmount(
   );
 }
 
+/** GIG receives the current phone as SenderPhoneNumber for its pickup rider. */
+function hasUsableSenderPhone(phone: string | null | undefined): boolean {
+  return (
+    typeof phone === 'string' &&
+    hasMinimumPhoneDigits(phone) &&
+    normalizePhoneToE164(phone) !== null
+  );
+}
+
 /** Legacy rates may omit origin; explicit saved origins must remain identical. */
 function matchesSavedRate(
   saved: string | null,
@@ -53,7 +64,12 @@ function matchesSavedRate(
   );
 }
 
-/** Price-only preflight: never changes the paid order, saved quote or consent. */
+/**
+ * Price-only preflight: never changes the paid order, saved quote or consent.
+ * Only pickup fields that affect GIG's price are compared with the saved
+ * quote; sender name and phone are not priced. The current phone must still
+ * be usable because it is what GIG receives.
+ */
 export async function validateSavedGiglCheckoutQuote(
   quote: OrderShipmentQuoteRecord,
   sender: ShippingAddress | undefined,
@@ -67,11 +83,6 @@ export async function validateSavedGiglCheckoutQuote(
     !request.sender ||
     !sender ||
     domesticSendersDiffer(request.sender, sender) ||
-    normalizeReceiverMatchText(request.sender.name) !==
-      normalizeReceiverMatchText(sender.name) ||
-    normalizePhoneToE164(request.sender.phone) === null ||
-    normalizePhoneToE164(request.sender.phone) !==
-      normalizePhoneToE164(sender.phone) ||
     normalizeReceiverMatchText(request.sender.address) !==
       normalizeReceiverMatchText(sender.address) ||
     normalizeReceiverMatchText(request.sender.postalCode) !==
@@ -83,6 +94,15 @@ export async function validateSavedGiglCheckoutQuote(
     quote.provider_cost <= 0
   )
     reconfirm();
+  // The saved phone is not priced, but the current one is sent to GIG.
+  // Refuse before any provider call; this code releases the booking lock.
+  if (!hasUsableSenderPhone(sender.phone)) {
+    throw new OrderShipmentBookingError(
+      'Add a valid business phone number in store settings before booking GIG.',
+      409,
+      'MERCHANT_SENDER_REQUIRED'
+    );
+  }
   let quotes: ShippingQuote[];
   try {
     quotes = await shippingService.getProviderQuotes('GIGL', {
@@ -103,16 +123,16 @@ export async function validateSavedGiglCheckoutQuote(
       'QUOTE_REFRESH_FAILED'
     );
   }
-  const matching = quotes.find(
+  // Same service the customer chose; its live price may differ. Recovery
+  // cannot accept a different price, so price drift never routes there.
+  const sameService = quotes.filter(
     (candidate) =>
       candidate.provider === 'GIGL' &&
       candidate.currency === quote.currency &&
       matchesSavedRate(quote.provider_rate_id, candidate.providerRateId) &&
-      sameAmount(candidate.price, quote.price) &&
-      sameAmount(candidate.providerCost, quote.provider_cost) &&
-      sameAmount(candidate.platformMargin, quote.platform_margin) &&
       candidate.pricingVersion === quote.pricing_version
   );
-  if (!matching) reconfirm();
+  if (sameService.length === 0) reconfirm();
+  assertSavedGiglCheckoutPriceCovered(quote, sameService);
   return quote;
 }

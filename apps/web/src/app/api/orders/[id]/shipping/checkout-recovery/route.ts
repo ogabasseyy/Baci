@@ -53,10 +53,12 @@ export async function POST(
       },
       { status: 400 }
     );
+  // The owner and staff granted orders.fulfill and orders.edit may recover
+  // the paid GIG destination (it rewrites the order, and the booking that
+  // follows needs orders.edit); the recovery RPCs re-check both under lock.
   const access = await getUserAccess(auth.supabase);
   if (
-    !access?.isOwner ||
-    !access.merchantId ||
+    !access?.merchantId ||
     !hasPermission(access, 'orders', 'fulfill') ||
     !hasPermission(access, 'orders', 'edit')
   )

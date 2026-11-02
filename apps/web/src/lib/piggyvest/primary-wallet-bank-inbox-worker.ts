@@ -5,6 +5,10 @@ import { readPrimaryWalletBankInboxRuntime } from './primary-wallet-bank-inbox-r
 import { createPrimaryWalletBankInboxStore } from './primary-wallet-bank-inbox-store';
 import { preparePrimaryWalletInflowReceipt } from './primary-wallet-inflow-receipt';
 import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
+import {
+  acceptedWebhookSecrets,
+  familyArchivedSecrets,
+} from './webhook-key-archive';
 
 export async function drainPrimaryWalletBankInbox(
   input: {
@@ -26,6 +30,18 @@ export async function drainPrimaryWalletBankInbox(
   )
     throw new Error('Primary bank claims unavailable');
   totals.claimed = claims.length;
+  // Stored rows replay: the family's archived keys past their overlap
+  // still re-check bytes that were authentic when accepted. Derived and
+  // bounded; the store above only ever sees the validated operator config.
+  const signingSecrets = acceptedWebhookSecrets(
+    config,
+    familyArchivedSecrets(
+      'bank',
+      input.env ?? process.env,
+      new Date(),
+      'replay'
+    )
+  );
   for (const claim of claims) {
     if (input.signal?.aborted) break;
     const raw = Buffer.from(claim.rawHex, 'hex');
@@ -38,10 +54,7 @@ export async function drainPrimaryWalletBankInbox(
       totals.blocked++;
       continue;
     }
-    const verified = [
-      config.webhookSecret,
-      ...config.retainedWebhookSecrets,
-    ].some((secret) =>
+    const verified = signingSecrets.some((secret) =>
       verifyPiggyvestPayloadSignature({
         payload: raw,
         signature: claim.signature,

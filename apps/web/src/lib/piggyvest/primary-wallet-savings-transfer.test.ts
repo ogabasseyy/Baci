@@ -20,7 +20,7 @@ function ports() {
   return {
     reserve: vi.fn().mockResolvedValue({ status: 'claimed', reservation }),
     adoptPending: vi.fn().mockResolvedValue({ status: 'existing' }),
-    lookupTransfer: vi.fn().mockResolvedValue('absent'),
+    lookupTransfer: vi.fn().mockResolvedValue('not_found'),
     retrieveWallet: vi.fn(async (id: string) => ({
       id,
       api_customer_id: 'source-customer',
@@ -71,74 +71,6 @@ it('drives an adopted reservation through claim and transfer', async () => {
   expect(dependencies.lookupTransfer).not.toHaveBeenCalled();
   expect(dependencies.claimDispatch).toHaveBeenCalledWith(request.operationId);
   expect(dependencies.transfer).toHaveBeenCalledWith(reservation);
-});
-it('resubmits a reclaimed dispatch only after proving the reference absent', async () => {
-  const dependencies = ports();
-  dependencies.reserve.mockResolvedValue({ status: 'pending' });
-  dependencies.adoptPending.mockResolvedValue({
-    status: 'reclaimed',
-    reservation,
-  });
-  expect(
-    await submitPrimaryWalletSavingsTransfer(request, dependencies)
-  ).toEqual({ status: 'pending' });
-  expect(dependencies.lookupTransfer).toHaveBeenCalledWith(reservation);
-  expect(dependencies.claimDispatch).not.toHaveBeenCalled();
-  expect(dependencies.transfer).toHaveBeenCalledWith(reservation);
-});
-it.each([
-  'submitted',
-  'uncertain',
-] as const)('never resubmits a reclaimed dispatch observed as %s', async (observed) => {
-  const dependencies = ports();
-  dependencies.reserve.mockResolvedValue({ status: 'pending' });
-  dependencies.adoptPending.mockResolvedValue({
-    status: 'reclaimed',
-    reservation,
-  });
-  dependencies.lookupTransfer.mockResolvedValue(observed);
-  expect(
-    await submitPrimaryWalletSavingsTransfer(request, dependencies)
-  ).toEqual({ status: 'pending' });
-  expect(dependencies.transfer).not.toHaveBeenCalled();
-  expect(dependencies.cancelBeforeDispatch).not.toHaveBeenCalled();
-});
-it('treats a failed reclaim lookup as uncertain without resubmitting', async () => {
-  const dependencies = ports();
-  dependencies.reserve.mockResolvedValue({ status: 'pending' });
-  dependencies.adoptPending.mockResolvedValue({
-    status: 'reclaimed',
-    reservation,
-  });
-  dependencies.lookupTransfer.mockRejectedValue(new Error('private lookup'));
-  expect(
-    await submitPrimaryWalletSavingsTransfer(request, dependencies)
-  ).toEqual({ status: 'pending' });
-  expect(dependencies.transfer).not.toHaveBeenCalled();
-});
-it('holds a reclaimed dispatch pending when wallets no longer verify', async () => {
-  const dependencies = ports();
-  dependencies.reserve.mockResolvedValue({ status: 'pending' });
-  dependencies.adoptPending.mockResolvedValue({
-    status: 'reclaimed',
-    reservation,
-  });
-  dependencies.retrieveWallet.mockResolvedValue({
-    id: 'source',
-    api_customer_id: 'source-customer',
-    business_id: 'business',
-    currency: 'NGN',
-    status: 'active',
-    balance: 0,
-  });
-  expect(
-    await submitPrimaryWalletSavingsTransfer(request, dependencies)
-  ).toEqual({ status: 'pending' });
-  // No rejection signal ran, so no release path exists here: hold for
-  // reconcile. The pre-dispatch cancel cannot run after dispatch either.
-  expect(dependencies.cancelBeforeDispatch).not.toHaveBeenCalled();
-  expect(dependencies.releaseAfterRejection).not.toHaveBeenCalled();
-  expect(dependencies.transfer).not.toHaveBeenCalled();
 });
 it('never accepts a substituted adoption from storage', async () => {
   const dependencies = ports();
@@ -196,10 +128,10 @@ it.each([
     'explicit decline',
     new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'declined', 200, true),
   ],
-])('releases a definitively rejected (%s) fresh dispatch proven absent', async (_label, rejection) => {
+])('releases a definitively rejected (%s) fresh dispatch whose reference TSQ does not find', async (_label, rejection) => {
   const dependencies = ports();
   dependencies.transfer.mockRejectedValue(rejection);
-  dependencies.lookupTransfer.mockResolvedValue('absent');
+  dependencies.lookupTransfer.mockResolvedValue('not_found');
   expect(
     await submitPrimaryWalletSavingsTransfer(request, dependencies)
   ).toEqual({ status: 'cancelled' });
@@ -236,6 +168,8 @@ it.each([
 });
 it.each([
   'submitted',
+  'pending',
+  'failed',
   'uncertain',
 ] as const)('never releases a definitive rejection observed as %s', async (observed) => {
   const dependencies = ports();
@@ -248,35 +182,16 @@ it.each([
   ).toEqual({ status: 'pending' });
   expect(dependencies.releaseAfterRejection).not.toHaveBeenCalled();
 });
-it('holds pending when the release loses a race after proven absence', async () => {
+it('holds pending when the release loses a race after the reference is not found', async () => {
   const dependencies = ports();
   dependencies.transfer.mockRejectedValue(
     new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'invalid', 422)
   );
-  dependencies.lookupTransfer.mockResolvedValue('absent');
+  dependencies.lookupTransfer.mockResolvedValue('not_found');
   dependencies.releaseAfterRejection.mockResolvedValue(false);
   expect(
     await submitPrimaryWalletSavingsTransfer(request, dependencies)
   ).toEqual({ status: 'pending' });
-});
-it('releases a reclaimed dispatch definitively rejected while still absent', async () => {
-  const dependencies = ports();
-  dependencies.reserve.mockResolvedValue({ status: 'pending' });
-  dependencies.adoptPending.mockResolvedValue({
-    status: 'reclaimed',
-    reservation,
-  });
-  dependencies.lookupTransfer.mockResolvedValue('absent');
-  dependencies.transfer.mockRejectedValue(
-    new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'declined', 200, true)
-  );
-  expect(
-    await submitPrimaryWalletSavingsTransfer(request, dependencies)
-  ).toEqual({ status: 'cancelled' });
-  expect(dependencies.transfer).toHaveBeenCalledWith(reservation);
-  expect(dependencies.releaseAfterRejection).toHaveBeenCalledWith(
-    request.operationId
-  );
 });
 it('cancels before dispatch when the provider source cannot cover the reserved funds', async () => {
   const dependencies = ports();

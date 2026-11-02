@@ -25,6 +25,61 @@ const kyc = {
   address_status: 'NOT_DONE',
 } as const;
 
+it('renews an expired selfie link instead of opening it', async () => {
+  const submit = vi.fn().mockResolvedValue(true);
+  const token = `header.${btoa(JSON.stringify({ exp: 1 }))}.signature`;
+  render(
+    <OxygenGuidedVerification
+      snapshot={{
+        ...base,
+        stage: 'kyc_required',
+        state: {
+          validated: true,
+          kyc,
+          selfieUrl: `https://verify.example/?securityToken=${token}`,
+        },
+      }}
+      busy={false}
+      error=""
+      submit={submit}
+    />
+  );
+  expect(
+    screen.queryByRole('link', { name: 'Continue to selfie verification' })
+  ).toBeNull();
+  await waitFor(() =>
+    expect(submit).toHaveBeenCalledWith({ action: 'selfie_link' })
+  );
+});
+
+it('does not renew an expired selfie link while another command is pending', async () => {
+  const submit = vi.fn();
+  const token = `header.${btoa(JSON.stringify({ exp: 1 }))}.signature`;
+  render(
+    <OxygenGuidedVerification
+      snapshot={{
+        ...base,
+        stage: 'kyc_required',
+        pending: {
+          action: 'validate_nin',
+          status: 'indeterminate',
+          idempotencyKey: base.workflowId,
+        },
+        state: {
+          validated: true,
+          kyc,
+          selfieUrl: `https://verify.example/?securityToken=${token}`,
+        },
+      }}
+      busy={false}
+      error=""
+      submit={submit}
+    />
+  );
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(submit).not.toHaveBeenCalled();
+});
+
 it('checks identity before requesting eligibility, without customer controls', async () => {
   const submit = vi.fn().mockResolvedValue(true);
   const view = render(

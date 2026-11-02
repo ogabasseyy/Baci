@@ -6,6 +6,7 @@ import {
   OxygenSelfieSurfaceContext,
 } from './OxygenPaymentSurfaceContext';
 import type { SubmitOxygenForm } from './OxygenVerificationForms';
+import { selfieLinkExpired } from './selfie-link-expired';
 
 export function useOxygenSelfieHandoff(
   snapshot: OxygenRuntimeSnapshot | null,
@@ -35,6 +36,7 @@ export function useOxygenSelfieHandoff(
       !snapshot.executionEnabled ||
       !state.validated ||
       !url ||
+      selfieLinkExpired(url) ||
       state.bookingReference ||
       state.kyc?.selfie_status === 'DONE' ||
       opened.current === url ||

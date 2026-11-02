@@ -57,6 +57,36 @@ it('opens automatically only after OTP succeeds and once per saved link', () => 
   expect(open).toHaveBeenCalledOnce();
   expect(submit).not.toHaveBeenCalled();
 });
+it('does not automatically open an expired saved selfie link', () => {
+  const open = vi.fn();
+  const submit = vi.fn();
+  const refresh = vi.fn();
+  const token = `header.${btoa(JSON.stringify({ exp: 1 }))}.signature`;
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <OxygenSelfieSurfaceContext.Provider value={open}>
+      {children}
+    </OxygenSelfieSurfaceContext.Provider>
+  );
+  renderHook(
+    () =>
+      useOxygenSelfieHandoff(
+        {
+          ...snapshot,
+          state: {
+            ...snapshot.state,
+            selfieUrl: `https://example.test/?securityToken=${token}`,
+          },
+        },
+        true,
+        false,
+        submit,
+        refresh
+      ),
+    { wrapper }
+  );
+  expect(open).not.toHaveBeenCalled();
+  expect(submit).not.toHaveBeenCalled();
+});
 it('returns to the saved application without reconciling or retrying the NIN hold', () => {
   const open = vi.fn();
   const submit = vi.fn();

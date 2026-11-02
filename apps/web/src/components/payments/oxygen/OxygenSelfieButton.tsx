@@ -2,6 +2,7 @@
 import { useContext } from 'react';
 import { OxygenSelfieSurfaceContext } from './OxygenPaymentSurfaceContext';
 import { oxygenButtonClass } from './oxygen-checkout-styles';
+import { selfieLinkExpired } from './selfie-link-expired';
 
 export function OxygenSelfieButton({
   url,
@@ -11,6 +12,7 @@ export function OxygenSelfieButton({
   workflowId?: string;
 }) {
   const open = useContext(OxygenSelfieSurfaceContext);
+  if (selfieLinkExpired(url)) return null;
   if (!open)
     return (
       <a

@@ -10,6 +10,7 @@ import { OxygenSelfieButton } from './OxygenSelfieButton';
 import { OxygenVerificationActivity } from './OxygenVerificationActivity';
 import type { SubmitOxygenForm } from './OxygenVerificationForms';
 import { oxygenVerificationHeading } from './oxygen-verification-heading';
+import { selfieLinkExpired } from './selfie-link-expired';
 
 type Props = {
   snapshot: OxygenRuntimeSnapshot;
@@ -45,6 +46,9 @@ export function OxygenGuidedVerification({
     ['eligibility_required', 'kyc_required'].includes(snapshot.stage);
   const selfieRequired =
     state.kyc?.selfie_status === 'NOT_DONE' && !selfieConfirmed;
+  const expiredSelfie = Boolean(
+    state.selfieUrl && selfieLinkExpired(state.selfieUrl)
+  );
   // Oxygen confirms the bank during eligibility; bank status cannot gate that check.
   const identityComplete = oxygenEligibilityPrerequisites(state);
   const ninRequired =
@@ -89,7 +93,11 @@ export function OxygenGuidedVerification({
     let delay = 0;
     if (!state.kyc) {
       action = 'refresh_kyc';
-    } else if (selfieRequired && !state.selfieUrl && !count('selfie_link')) {
+    } else if (
+      selfieRequired &&
+      (!state.selfieUrl || expiredSelfie) &&
+      !count('selfie_link')
+    ) {
       action = 'selfie_link';
     } else if (
       identityComplete &&
@@ -128,6 +136,7 @@ export function OxygenGuidedVerification({
     identityComplete,
     bankPending,
     selfieRequired,
+    expiredSelfie,
     eligibilityFailed,
     submit,
   ]);
@@ -151,7 +160,7 @@ export function OxygenGuidedVerification({
         </p>
       </div>
     );
-  const selfie = selfieRequired && state.selfieUrl;
+  const selfie = selfieRequired && !expiredSelfie && state.selfieUrl;
   const recoverable = !selfie && (eligibilityFailed || review);
   async function retryCheck() {
     if (busy || retryLock.current || snapshot.pending) return;

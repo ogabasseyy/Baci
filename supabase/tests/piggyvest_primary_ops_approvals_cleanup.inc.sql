@@ -37,8 +37,8 @@ DECLARE
 BEGIN
   FOR v_login IN
     SELECT rolname FROM pg_catalog.pg_roles
-    WHERE rolname IN ('pvops_test_approver_a', 'pvops_test_approver_b',
-                      'pvops_test_approver_c', 'pvops_test_engine_e')
+    WHERE rolname IN ('pvops_test_requester_r', 'pvops_test_approver_a',
+                      'pvops_test_approver_b', 'pvops_test_approver_c', 'pvops_test_engine_e')
   LOOP
     EXECUTE pg_catalog.format('DROP ROLE %I', v_login);
   END LOOP;

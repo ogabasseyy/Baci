@@ -100,7 +100,7 @@ CREATE TABLE piggyvest_primary.ops_approvals (
 CREATE FUNCTION piggyvest_primary.ops_approval_requests_guard()
 RETURNS trigger
 LANGUAGE plpgsql
-SET search_path = ''
+SET search_path = pg_catalog, pg_temp
 AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN
@@ -131,7 +131,7 @@ $$;
 CREATE FUNCTION piggyvest_primary.ops_approvals_guard()
 RETURNS trigger
 LANGUAGE plpgsql
-SET search_path = ''
+SET search_path = pg_catalog, pg_temp
 AS $$
 BEGIN
   RAISE EXCEPTION 'ops_approvals_are_append_only' USING ERRCODE = '42501';

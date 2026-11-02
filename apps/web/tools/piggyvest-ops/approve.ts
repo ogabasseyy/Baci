@@ -21,7 +21,7 @@ import { createHiddenPrompt, createLinePrompt } from './approve-prompt';
  *
  * Run from apps/web on your own machine (see docs/runbooks/piggyvest-approvals.md):
  *
- *   node_modules/.bin/tsx tools/piggyvest-ops/approve.ts --host <db host> --user <your login>
+ *   ../../node_modules/.bin/tsx tools/piggyvest-ops/approve.ts --host <db host> --user <your login>
  */
 export const USAGE = `PiggyVest two-person approvals
 

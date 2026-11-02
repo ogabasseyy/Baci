@@ -32,7 +32,7 @@ BEGIN
     SELECT 1 FROM piggyvest_primary.ops_approval_requests r
     WHERE r.subject_id = '0a0e0000-0000-4000-8000-000000000001'
       AND r.state = 'consumed' AND r.consumed_by = session_user::text
-      AND r.requested_by = session_user::text AND r.closed_at IS NOT NULL
+      AND r.requested_by = 'pvops_test_requester_r' AND r.closed_at IS NOT NULL
   ) OR (SELECT pg_catalog.array_agg(a.approver_login ORDER BY a.approver_login)
         FROM piggyvest_primary.ops_approvals a
         JOIN piggyvest_primary.ops_approval_requests r ON r.id = a.request_id
@@ -164,7 +164,7 @@ BEGIN
   IF v_row.label IS DISTINCT FROM 'Resolve a transfer that is under review'
      OR v_row.amount_kobo IS DISTINCT FROM 700000::bigint
      OR v_row.amount_naira IS DISTINCT FROM '₦7,000.00'
-     OR v_row.destination IS DISTINCT FROM 'Collection wallet ••••0001'
+     OR v_row.destination IS DISTINCT FROM 'Wallet ••••0001 "Collection wallet"'
      OR v_row.approvals IS DISTINCT FROM 1 OR v_row.decided_by_you IS NOT TRUE
      OR v_row.expires_at <= pg_catalog.now() + interval '23 hours' THEN
     RAISE EXCEPTION 'unexpected listing row: %', v_row;
@@ -175,9 +175,9 @@ BEGIN
     WHERE subject = 'pvops_test.subjects:0a0e0000-0000-4000-8000-000000000005'$q$)
     AS t(amount_naira text, destination text, reason text, requested_by text);
   IF v_row.amount_naira IS DISTINCT FROM '₦1,234,567.89'
-     OR v_row.destination IS DISTINCT FROM 'Ogabassey GTBank (bank 058) ••••6789'
+     OR v_row.destination IS DISTINCT FROM 'Bank 058 ••••6789 "Ogabassey GTBank"'
      OR v_row.reason IS DISTINCT FROM 'Account deletion payout'
-     OR v_row.requested_by IS DISTINCT FROM session_user::text THEN
+     OR v_row.requested_by IS DISTINCT FROM 'pvops_test_requester_r' THEN
     RAISE EXCEPTION 'unexpected bank listing row: %', v_row;
   END IF;
   IF EXISTS (SELECT 1 FROM dblink('pvops_c', $q$

@@ -9,19 +9,23 @@
 --     SESSION_USER really differs): the same login twice, the requester as
 --     approver and a single approval are refused; two distinct approvals
 --     consume exactly once; a changed row version, amount or destination
---     invalidates; an expired request is refused; any reject closes; a jsonb
---     'approver' key is ignored; a later engine-role grant voids an approval.
+--     invalidates; an expired request is refused and can be asked again;
+--     any reject closes, and the same values cannot be asked again; a jsonb
+--     'approver' key is ignored; a later engine-role grant voids an approval;
+--     only a dedicated login can open a request; a caller's temporary
+--     objects never run inside the functions.
 --
 -- The runtime part needs committed rows and logins, so it runs outside a
 -- transaction and removes everything it created at the end (and at the
--- start, after an aborted earlier run). Test logins get a password derived
--- from the database name; they exist only while this suite runs.
+-- start, after an aborted earlier run). Test logins get a password made from
+-- a random secret that lives only in this session, valid for 30 minutes.
 --
--- Auth: dblink connects to this server as each test login with that derived
+-- Auth: dblink connects to this server as each test login with that
 -- password. dblink is dropped at the end only if this file created it.
 --
--- Usage:
---   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+-- Usage: only against a disposable database (the CI DB Replay or a local
+-- scratch cluster), never a shared or hosted one:
+--   psql "$SCRATCH_DATABASE_URL" -v ON_ERROR_STOP=1 \
 --     -f supabase/tests/piggyvest_primary_ops_approvals.sql
 
 \set ON_ERROR_STOP on
@@ -40,6 +44,7 @@ CREATE EXTENSION IF NOT EXISTS dblink;
 \ir piggyvest_primary_ops_approvals_fixture.inc.sql
 \ir piggyvest_primary_ops_approvals_consume.inc.sql
 \ir piggyvest_primary_ops_approvals_binding.inc.sql
+\ir piggyvest_primary_ops_approvals_hardening.inc.sql
 \ir piggyvest_primary_ops_approvals_cleanup.inc.sql
 
 \if :pvops_had_dblink

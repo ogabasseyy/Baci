@@ -80,6 +80,33 @@ SELECT pg_temp.pvops_expect(pg_temp.pvops_consume('misrouted_interest_resolve',
 SELECT pg_temp.pvops_expect(
   pg_temp.pvops_decide('pvops_c', :'req13', 'approve', 1234, :'dig13'),
   'ops_approval_expired', 'expired approve');
+-- The same values can be asked again after expiry: the old request closes as
+-- expired, a fresh one opens, and the old approvals do not carry over.
+SELECT pg_temp.pvops_open('misrouted_interest_resolve', '0a0e0000-0000-4000-8000-000000000013',
+  1, 1234, '{"kind":"wallet","ref":"pvw-interest-0001"}'::jsonb) AS req13b \gset
+SELECT pg_temp.pvops_digest(:'req13b') AS dig13b \gset
+DO $$
+BEGIN
+  IF (SELECT pg_catalog.array_agg(r.state ORDER BY r.opened_at)
+      FROM piggyvest_primary.ops_approval_requests r
+      WHERE r.subject_id = '0a0e0000-0000-4000-8000-000000000013')
+     IS DISTINCT FROM ARRAY['expired', 'open'] THEN
+    RAISE EXCEPTION 'reopening after expiry must close the old request as expired and open a new one';
+  END IF;
+END
+$$;
+SELECT pg_temp.pvops_expect(CASE WHEN :'req13b' <> :'req13' THEN 'new' ELSE 'error: same id' END,
+  'ok', 'a fresh request after expiry');
+SELECT pg_temp.pvops_expect(pg_temp.pvops_consume('misrouted_interest_resolve',
+  '0a0e0000-0000-4000-8000-000000000013', 1, 1234, '{"kind":"wallet","ref":"pvw-interest-0001"}'::jsonb),
+  'ops_approval_insufficient', 'expired approvals do not carry over');
+SELECT pg_temp.pvops_expect(
+  pg_temp.pvops_decide('pvops_a', :'req13b', 'approve', 1234, :'dig13b'), 'ok', 'a approves again');
+SELECT pg_temp.pvops_expect(
+  pg_temp.pvops_decide('pvops_b', :'req13b', 'approve', 1234, :'dig13b'), 'ok', 'b approves again');
+SELECT pg_temp.pvops_expect(pg_temp.pvops_consume('misrouted_interest_resolve',
+  '0a0e0000-0000-4000-8000-000000000013', 1, 1234, '{"kind":"wallet","ref":"pvw-interest-0001"}'::jsonb),
+  'ok', 'fresh approvals consume');
 
 -- 4. Any reject closes the request for good.
 SELECT pg_temp.pvops_open('obligation_reject', '0a0e0000-0000-4000-8000-000000000014',
@@ -115,7 +142,7 @@ BEGIN
              WHERE r.subject_id = '0a0e0000-0000-4000-8000-000000000015')
      OR NOT EXISTS (SELECT 1 FROM piggyvest_primary.ops_approval_requests r
                     WHERE r.subject_id = '0a0e0000-0000-4000-8000-000000000015'
-                      AND r.requested_by = session_user::text) THEN
+                      AND r.requested_by = 'pvops_test_requester_r') THEN
     RAISE EXCEPTION 'a jsonb approver must record no approval and leave the requester unchanged';
   END IF;
   BEGIN

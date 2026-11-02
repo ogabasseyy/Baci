@@ -110,10 +110,19 @@ function loginOf(user: string): string {
   return user.split('.')[0];
 }
 
+/**
+ * The real client, built from the whole config: pg reads an environment
+ * variable only for a field that is missing, and none is.
+ */
+export function createPgClient(config: ApproverConnectionConfig): PgClientLike {
+  return new Client(config);
+}
+
 export async function openApproverSession(
   config: ApproverConnectionConfig,
-  createClient: (config: ApproverConnectionConfig) => PgClientLike = (given) =>
-    new Client(given)
+  createClient: (
+    config: ApproverConnectionConfig
+  ) => PgClientLike = createPgClient
 ): Promise<ApproverSession> {
   const client = createClient(config);
   try {

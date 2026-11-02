@@ -9,7 +9,8 @@ the same two-person approval (owner default 8):
   version, the amount in kobo and the destination;
 - two **different** approvers, neither of them the person who opened the
   request, must approve that exact request within **24 hours**;
-- any single rejection closes the request;
+- any single rejection closes the request, and the same request (same
+  values) can never be asked again;
 - an approved request can be used **once**. If the amount, the destination
   or the record's version changes, the approvals no longer count and a new
   request is needed.
@@ -27,7 +28,7 @@ The SQL is in `supabase/migrations/20261031223553_piggyvest_primary_ops_approval
 | Who | What they hold | What they can do |
 |---|---|---|
 | Each human approver | their own LOGIN, granted only `piggyvest_primary_approver` | list open requests; approve or reject one |
-| Ops / support commands (later PRs) | their own dedicated roles | open a request; carry out an action after two approvals |
+| Ops / support commands and workers (later PRs) | their own dedicated LOGIN and role | open a request; carry out an action after two approvals |
 | Owner (`postgres`) | migration owner | create and remove approver logins |
 
 An approver login counts only while it:
@@ -93,15 +94,15 @@ Database settings, SSL configuration). Run from `apps/web`:
 
 ```sh
 # 1. See what is waiting for you (open, not expired, not opened by you).
-node_modules/.bin/tsx tools/piggyvest-ops/approve.ts \
+../../node_modules/.bin/tsx tools/piggyvest-ops/approve.ts \
   --host <db host> --user pv_approver_amaka --ca <ca file>
 
 # 2. Check one request. This is a dry run: nothing is recorded.
-node_modules/.bin/tsx tools/piggyvest-ops/approve.ts \
+../../node_modules/.bin/tsx tools/piggyvest-ops/approve.ts \
   --host <db host> --user pv_approver_amaka --ca <ca file> --request <id>
 
 # 3. Record your approval (or add --reject to reject it).
-node_modules/.bin/tsx tools/piggyvest-ops/approve.ts \
+../../node_modules/.bin/tsx tools/piggyvest-ops/approve.ts \
   --host <db host> --user pv_approver_amaka --ca <ca file> --request <id> --commit
 ```
 
@@ -113,9 +114,9 @@ The tool:
   looks like one;
 - connects with a verified TLS certificate (plain connections are allowed
   only to this machine);
-- shows the plain action, the naira amount, the destination with only its
-  last four characters, the reason, who asked, the approvals so far and the
-  expiry;
+- shows the plain action, the naira amount, the destination (bank code and
+  last four characters first, then any label in quotes), the reason, who
+  asked, the approvals so far and the expiry;
 - makes you retype the naira amount, and stops if it does not match;
 - records nothing unless you pass `--commit`.
 
@@ -165,7 +166,17 @@ command's dedicated role). Neither function is granted to any role.
 - `piggyvest_primary.open_ops_request(action, subject_table, subject_id,
   row_version, amount_kobo, destination, context)` returns the request id.
   Calling it again with the same values returns the same open request;
-  different values replace it (old approvals never carry over).
+  different values replace it (old approvals never carry over). After 24
+  hours the same values open a fresh request. Values that were rejected can
+  never be asked again: only a changed row version, amount or destination
+  can.
+- Open requests only from a session signed in as a dedicated login: one
+  person's ops or support login, or one worker's login. The owner
+  (`postgres`), a superuser, a login with an elevated attribute, and a shared
+  API login (any member of `anon`, `authenticated` or `service_role`, such as
+  PostgREST's `authenticator`) are refused with
+  `ops_approval_invalid_requester`, because the requester they record would
+  not be one person.
 - `piggyvest_primary.consume_two_approvals(action, subject_table, subject_id,
   row_version, amount_kobo, destination)` returns the request id, or raises.
   Call it in the same transaction as the money movement and pass the
@@ -174,7 +185,9 @@ command's dedicated role). Neither function is granted to any role.
 - `destination` is `{"kind":"none"}`,
   `{"kind":"bank_account","bank_code":"<3-6 digits>","ref":"<10-digit NUBAN>"}`
   or `{"kind":"wallet","ref":"<provider wallet id>"}`, with an optional
-  `"label"` shown to approvers (no run of five or more digits).
+  `"label"` shown to approvers after the masked destination. A label is a
+  plain name of up to 60 characters: letters, single spaces and `& . , ' -`
+  only, so it can carry no digits.
 - `context` is a small object; only `"reason"` is shown to approvers and every
   other key is ignored.
 

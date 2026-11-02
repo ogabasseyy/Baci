@@ -88,7 +88,9 @@ $$;
 -- Functions: the two approver entry points are executable by the approver
 -- role alone; every other ops function (open, consume, helpers, guards) by
 -- nobody but its owner. All are owned by the migration role and pin
--- search_path. No function takes an approver name.
+-- search_path to pg_catalog, then pg_temp last, so a caller's temporary
+-- types or tables can never stand in for a built-in one. No function takes
+-- an approver name.
 DO $$
 DECLARE
   v_fn record;
@@ -119,13 +121,15 @@ BEGIN
       RAISE EXCEPTION 'PUBLIC must not execute %', v_fn.signature;
     END IF;
     IF pg_catalog.pg_get_userbyid(v_fn.proowner) <> current_user
-       OR NOT ('search_path=""' = ANY (COALESCE(v_fn.proconfig, ARRAY[]::text[]))) THEN
-      RAISE EXCEPTION '% must be owned by the migration role with search_path pinned', v_fn.signature;
+       OR v_fn.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, pg_temp'] THEN
+      RAISE EXCEPTION '% must be owned by the migration role with search_path = pg_catalog, pg_temp',
+        v_fn.signature;
     END IF;
-    -- The eligibility helper takes a role oid to re-check stored decisions
-    -- at consume time; it is granted to nobody. Every request and decision
-    -- function must take no identity at all.
-    IF v_fn.signature <> 'piggyvest_primary.ops_login_is_approver(oid)' AND (
+    -- The eligibility helpers take a role oid (to re-check stored decisions
+    -- at consume time, and the requester's own login); they are granted to
+    -- nobody. Every request and decision function takes no identity at all.
+    IF v_fn.signature NOT IN ('piggyvest_primary.ops_login_is_approver(oid)',
+                              'piggyvest_primary.ops_login_is_requester(oid)') AND (
        EXISTS (SELECT 1 FROM pg_catalog.unnest(COALESCE(v_fn.proargnames, ARRAY[]::text[])) a
                WHERE a ~* '(approver|login|user|role)')
        OR 'oid'::regtype::oid = ANY (v_fn.proargtypes::oid[])
@@ -190,7 +194,9 @@ $$;
 
 -- Approver eligibility, decided from the catalog. A plain login holding only
 -- the approver role qualifies; an extra (engine) membership, ADMIN OPTION on
--- the approver role, CREATEROLE, the owner and the NOLOGIN role do not.
+-- the approver role, CREATEROLE, CREATEDB, the owner and the NOLOGIN role do
+-- not, and neither does anyone once the approver role itself can log in or
+-- is a member of another role.
 CREATE ROLE pvops_catalog_login LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
 GRANT piggyvest_primary_approver TO pvops_catalog_login;
 DO $$
@@ -201,6 +207,60 @@ BEGIN
   IF piggyvest_primary.ops_login_is_approver('piggyvest_primary_approver'::regrole)
      OR piggyvest_primary.ops_login_is_approver(current_user::text::regrole) THEN
     RAISE EXCEPTION 'the NOLOGIN role and the migration owner must never qualify';
+  END IF;
+  -- Opening a request needs a dedicated login: not the owner, not a NOLOGIN
+  -- role, not a shared API login such as PostgREST's authenticator.
+  IF NOT piggyvest_primary.ops_login_is_requester('pvops_catalog_login'::regrole) THEN
+    RAISE EXCEPTION 'a plain dedicated login must be able to open requests';
+  END IF;
+  IF piggyvest_primary.ops_login_is_requester(current_user::text::regrole)
+     OR piggyvest_primary.ops_login_is_requester('piggyvest_primary_approver'::regrole)
+     OR piggyvest_primary.ops_login_is_requester('authenticator'::regrole) THEN
+    RAISE EXCEPTION 'the owner, a NOLOGIN role and the shared API login must never open requests';
+  END IF;
+END
+$$;
+ALTER ROLE pvops_catalog_login CREATEROLE;
+DO $$
+BEGIN
+  IF piggyvest_primary.ops_login_is_approver('pvops_catalog_login'::regrole)
+     OR piggyvest_primary.ops_login_is_requester('pvops_catalog_login'::regrole) THEN
+    RAISE EXCEPTION 'CREATEROLE must disqualify an approver and a requester';
+  END IF;
+END
+$$;
+ALTER ROLE pvops_catalog_login NOCREATEROLE CREATEDB;
+DO $$
+BEGIN
+  IF piggyvest_primary.ops_login_is_approver('pvops_catalog_login'::regrole)
+     OR piggyvest_primary.ops_login_is_requester('pvops_catalog_login'::regrole) THEN
+    RAISE EXCEPTION 'CREATEDB must disqualify an approver and a requester';
+  END IF;
+END
+$$;
+ALTER ROLE pvops_catalog_login NOCREATEDB;
+GRANT piggyvest_primary_evidence TO piggyvest_primary_approver;
+DO $$
+BEGIN
+  IF piggyvest_primary.ops_login_is_approver('pvops_catalog_login'::regrole) THEN
+    RAISE EXCEPTION 'a membership held by the approver role itself must disqualify every approver';
+  END IF;
+END
+$$;
+REVOKE piggyvest_primary_evidence FROM piggyvest_primary_approver;
+ALTER ROLE piggyvest_primary_approver LOGIN;
+DO $$
+BEGIN
+  IF piggyvest_primary.ops_login_is_approver('pvops_catalog_login'::regrole) THEN
+    RAISE EXCEPTION 'an approver role that can log in must disqualify every approver';
+  END IF;
+END
+$$;
+ALTER ROLE piggyvest_primary_approver NOLOGIN;
+DO $$
+BEGIN
+  IF NOT piggyvest_primary.ops_login_is_approver('pvops_catalog_login'::regrole) THEN
+    RAISE EXCEPTION 'the plain approver login must qualify again';
   END IF;
 END
 $$;

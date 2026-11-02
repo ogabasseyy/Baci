@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OpsApproveArgs } from '@/schemas/piggyvest/ops-approvals';
 import {
   type ApproverConnectionConfig,
   buildConnectionConfig,
+  createPgClient,
   isLoopbackHost,
   OpsRefusal,
   openApproverSession,
@@ -27,7 +28,7 @@ const listRow = {
     'piggyvest_primary.wallet_transfers:0a0e0000-0000-4000-8000-000000000001',
   amount_kobo: '1500000',
   amount_naira: '₦15,000.00',
-  destination: 'Ogabassey GTBank (bank 058) ••••6789',
+  destination: 'Bank 058 ••••6789 "Ogabassey GTBank"',
   reason: null,
   requested_by: 'pv_ops_tunde',
   opened_at: new Date('2026-10-31T10:00:00Z'),
@@ -99,6 +100,31 @@ describe('buildConnectionConfig', () => {
     ['db.example.com', false],
   ])('treats %s as loopback: %s', (host, loopback) => {
     expect(isLoopbackHost(host)).toBe(loopback);
+  });
+});
+
+describe('createPgClient', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('builds the real pg client from the given fields only, never the environment', () => {
+    vi.stubEnv('PGPASSWORD', 'from-env');
+    vi.stubEnv('PGSSLMODE', 'disable');
+    vi.stubEnv('PGUSER', 'env_login');
+    vi.stubEnv('PGHOST', 'env.example.com');
+    vi.stubEnv('PGDATABASE', 'env_db');
+    const client = createPgClient(
+      buildConnectionConfig(args, 'typed-at-prompt')
+    ) as unknown as Record<
+      'password' | 'ssl' | 'user' | 'host' | 'database',
+      unknown
+    >;
+    expect(client.password).toBe('typed-at-prompt');
+    expect(client.ssl).toEqual({ rejectUnauthorized: true });
+    expect(client.user).toBe('pv_approver_amaka');
+    expect(client.host).toBe(args.host);
+    expect(client.database).toBe('postgres');
   });
 });
 

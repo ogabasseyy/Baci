@@ -3,7 +3,9 @@
 -- open_ops_request and consume_two_approvals are granted to nobody. Later
 -- money commands call them from their own SECURITY DEFINER functions, so the
 -- requester recorded here is the SESSION_USER of the ops session that asked.
--- Every refusal raises, so the caller's money movement rolls back with it.
+-- That session must be a dedicated login (ops_login_is_requester), never the
+-- owner or a shared API login. Every refusal raises, so the caller's money
+-- movement rolls back with it.
 
 CREATE FUNCTION piggyvest_primary.open_ops_request(
   p_action text,
@@ -17,7 +19,7 @@ CREATE FUNCTION piggyvest_primary.open_ops_request(
 RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = ''
+SET search_path = pg_catalog, pg_temp
 AS $$
 DECLARE
   v_now timestamptz := pg_catalog.clock_timestamp();
@@ -26,7 +28,12 @@ DECLARE
   v_open_digest text;
   v_open_expires timestamptz;
   v_id uuid;
+  v_requester_oid oid;
 BEGIN
+  SELECT r.oid INTO v_requester_oid FROM pg_catalog.pg_roles r WHERE r.rolname = SESSION_USER;
+  IF v_requester_oid IS NULL OR NOT piggyvest_primary.ops_login_is_requester(v_requester_oid) THEN
+    RAISE EXCEPTION 'ops_approval_invalid_requester' USING ERRCODE = '42501';
+  END IF;
   IF p_action IS NULL OR NOT EXISTS (
     SELECT 1 FROM piggyvest_primary.ops_approval_actions a WHERE a.action = p_action
   ) THEN
@@ -53,6 +60,18 @@ BEGIN
   WHERE r.action = p_action AND r.subject_table = p_subject_table
     AND r.subject_id = p_subject_id AND r.state = 'open'
   FOR UPDATE;
+
+  -- A rejection is a veto on these exact values: they cannot be asked again.
+  -- Only a real change (row version, amount or destination) gives a new
+  -- digest that may. Checked after the lock and the row lock above, so a
+  -- reject that has just committed is seen.
+  IF EXISTS (
+    SELECT 1 FROM piggyvest_primary.ops_approval_requests r
+    WHERE r.action = p_action AND r.subject_table = p_subject_table
+      AND r.subject_id = p_subject_id AND r.state = 'rejected' AND r.digest = v_digest
+  ) THEN
+    RAISE EXCEPTION 'ops_approval_rejected' USING ERRCODE = 'P0001';
+  END IF;
 
   IF v_open_id IS NOT NULL THEN
     IF v_open_expires > v_now AND v_open_digest = v_digest THEN
@@ -90,7 +109,7 @@ CREATE FUNCTION piggyvest_primary.consume_two_approvals(
 RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = ''
+SET search_path = pg_catalog, pg_temp
 AS $$
 DECLARE
   v_now timestamptz := pg_catalog.clock_timestamp();
@@ -184,6 +203,6 @@ REVOKE ALL ON FUNCTION
   FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_approver;
 
 COMMENT ON FUNCTION piggyvest_primary.open_ops_request(text, text, uuid, bigint, bigint, jsonb, jsonb) IS
-  'Internal. Opens (or returns the identical open) two-person approval request; requester = SESSION_USER. Granted to nobody.';
+  'Internal. Opens (or returns the identical open) two-person approval request; requester = SESSION_USER, a dedicated login. Values once rejected cannot be asked again. Granted to nobody.';
 COMMENT ON FUNCTION piggyvest_primary.consume_two_approvals(text, text, uuid, bigint, bigint, jsonb) IS
   'Internal. Raises unless two distinct approver logins other than the requester approved these exact values within 24h; then consumes the request once. Granted to nobody.';

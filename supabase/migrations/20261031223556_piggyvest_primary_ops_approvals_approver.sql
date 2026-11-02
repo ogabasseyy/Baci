@@ -6,12 +6,13 @@
 -- digest the approver was shown, so it is bound to what they saw. Who
 -- decided is always SESSION_USER; nothing in the call can name an approver.
 
--- Display helpers. Destinations show their label and the last four
--- characters only.
+-- Display helpers. A destination shows its bank code and last four
+-- characters first, then the requester's label last and in quotes, so a
+-- label can never push the real account off the line or pose as it.
 CREATE FUNCTION piggyvest_primary.ops_format_naira(p_amount_kobo bigint)
 RETURNS text
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
-SET search_path = ''
+SET search_path = pg_catalog, pg_temp
 AS $$
   SELECT '₦' || pg_catalog.to_char(p_amount_kobo / 100, 'FM999,999,999,999,990')
     || '.' || pg_catalog.lpad((p_amount_kobo % 100)::text, 2, '0')
@@ -20,17 +21,17 @@ $$;
 CREATE FUNCTION piggyvest_primary.ops_mask_destination(p_destination jsonb)
 RETURNS text
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
-SET search_path = ''
+SET search_path = pg_catalog, pg_temp
 AS $$
   SELECT CASE p_destination ->> 'kind'
     WHEN 'none' THEN 'No payout destination'
     WHEN 'bank_account' THEN
-      COALESCE(p_destination ->> 'label', 'Bank account')
-        || ' (bank ' || (p_destination ->> 'bank_code') || ') ••••'
+      'Bank ' || (p_destination ->> 'bank_code') || ' ••••'
         || pg_catalog.right(p_destination ->> 'ref', 4)
+        || COALESCE(' "' || (p_destination ->> 'label') || '"', '')
     WHEN 'wallet' THEN
-      COALESCE(p_destination ->> 'label', 'PiggyVest wallet')
-        || ' ••••' || pg_catalog.right(p_destination ->> 'ref', 4)
+      'Wallet ••••' || pg_catalog.right(p_destination ->> 'ref', 4)
+        || COALESCE(' "' || (p_destination ->> 'label') || '"', '')
     ELSE 'Unrecognised destination'
   END
 $$;
@@ -54,7 +55,7 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = ''
+SET search_path = pg_catalog, pg_temp
 AS $$
 DECLARE
   v_login text := SESSION_USER::text;
@@ -100,7 +101,7 @@ CREATE FUNCTION piggyvest_approvals.approve_ops_request(
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = ''
+SET search_path = pg_catalog, pg_temp
 AS $$
 DECLARE
   v_now timestamptz := pg_catalog.clock_timestamp();

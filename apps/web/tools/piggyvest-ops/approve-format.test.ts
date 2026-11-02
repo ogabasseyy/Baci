@@ -15,7 +15,7 @@ const request: OpsOpenRequest = {
   subject:
     'piggyvest_primary.wallet_transfers:0a0e0000-0000-4000-8000-000000000001',
   amountKobo: 123_456_789,
-  destination: 'Ogabassey GTBank (bank 058) ••••6789',
+  destination: 'Bank 058 ••••6789 "Ogabassey GTBank"',
   reason: 'Float top-up',
   requestedBy: 'pv_ops_tunde',
   openedAt: new Date('2026-10-31T10:00:00Z'),

@@ -13,7 +13,7 @@ const row = {
     'piggyvest_primary.wallet_transfers:0a0e0000-0000-4000-8000-000000000001',
   amount_kobo: '1500000',
   amount_naira: '₦15,000.00',
-  destination: 'Ogabassey GTBank (bank 058) ••••6789',
+  destination: 'Bank 058 ••••6789 "Ogabassey GTBank"',
   reason: null,
   requested_by: 'pv_ops_tunde',
   opened_at: new Date('2026-10-31T10:00:00Z'),

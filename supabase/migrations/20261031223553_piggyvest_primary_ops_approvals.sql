@@ -43,19 +43,22 @@ GRANT USAGE ON SCHEMA piggyvest_approvals TO piggyvest_primary_approver;
 -- Destination contract: {"kind":"none"}; a bank account
 -- {"kind":"bank_account","bank_code":"<3-6 digits>","ref":"<10-digit NUBAN>"};
 -- or a PiggyVest wallet {"kind":"wallet","ref":"<provider wallet id>"}. An
--- optional "label" (no control characters, no run of 5+ digits, so it cannot
--- carry a full account number) is shown to approvers. No other key is allowed.
+-- optional "label" is shown to approvers after the masked destination. It is
+-- a plain name: letters, single spaces and & . , ' - only, so it can carry no
+-- digits (no account number) and cannot imitate a masked destination. No
+-- other key is allowed.
 CREATE FUNCTION piggyvest_primary.ops_destination_is_valid(p_destination jsonb)
 RETURNS boolean
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
-SET search_path = ''
+SET search_path = pg_catalog, pg_temp
 AS $$
   SELECT CASE
     WHEN p_destination IS NULL OR pg_catalog.jsonb_typeof(p_destination) <> 'object' THEN false
     WHEN p_destination ? 'label' AND NOT (
       pg_catalog.jsonb_typeof(p_destination -> 'label') = 'string'
-      AND (p_destination ->> 'label') ~ '^[^[:cntrl:]]{1,60}$'
-      AND (p_destination ->> 'label') !~ '[0-9]{5}') THEN false
+      AND (p_destination ->> 'label') ~ '^[A-Za-z][A-Za-z&.,'' -]{0,59}$'
+      AND (p_destination ->> 'label') !~ '  '
+      AND (p_destination ->> 'label') !~ ' $') THEN false
     WHEN p_destination ->> 'kind' = 'none' THEN p_destination = '{"kind":"none"}'::jsonb
     WHEN p_destination ->> 'kind' = 'bank_account' THEN
       (SELECT pg_catalog.bool_and(k IN ('kind', 'ref', 'bank_code', 'label'))
@@ -78,7 +81,7 @@ $$;
 CREATE FUNCTION piggyvest_primary.ops_context_is_valid(p_context jsonb)
 RETURNS boolean
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
-SET search_path = ''
+SET search_path = pg_catalog, pg_temp
 AS $$
   SELECT p_context IS NOT NULL
     AND pg_catalog.jsonb_typeof(p_context) = 'object'
@@ -100,7 +103,7 @@ CREATE FUNCTION piggyvest_primary.ops_approval_digest(
 )
 RETURNS text
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
-SET search_path = ''
+SET search_path = pg_catalog, pg_temp
 AS $$
   SELECT pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
     pg_catalog.jsonb_build_object(
@@ -121,7 +124,7 @@ $$;
 CREATE FUNCTION piggyvest_primary.ops_login_is_approver(p_login oid)
 RETURNS boolean
 LANGUAGE sql STABLE
-SET search_path = ''
+SET search_path = pg_catalog, pg_temp
 AS $$
   SELECT EXISTS (
     SELECT 1
@@ -144,9 +147,34 @@ AS $$
   )
 $$;
 
+-- A requester login: a dedicated LOGIN for one person or one worker. It holds
+-- no elevated attribute (so never the migration owner or a superuser) and is
+-- not a shared API login: not a member of anon, authenticated or
+-- service_role, as PostgREST's authenticator is. Otherwise every request
+-- opened through that login would carry the same requester, and the rule
+-- that the requester never approves would mean nothing.
+CREATE FUNCTION piggyvest_primary.ops_login_is_requester(p_login oid)
+RETURNS boolean
+LANGUAGE sql STABLE
+SET search_path = pg_catalog, pg_temp
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_roles AS login
+    WHERE login.oid = p_login
+      AND login.rolcanlogin
+      AND NOT (login.rolsuper OR login.rolcreaterole OR login.rolcreatedb
+        OR login.rolreplication OR login.rolbypassrls)
+      AND NOT pg_catalog.pg_has_role(login.oid, 'anon', 'MEMBER')
+      AND NOT pg_catalog.pg_has_role(login.oid, 'authenticated', 'MEMBER')
+      AND NOT pg_catalog.pg_has_role(login.oid, 'service_role', 'MEMBER')
+  )
+$$;
+
 REVOKE ALL ON FUNCTION
   piggyvest_primary.ops_destination_is_valid(jsonb),
   piggyvest_primary.ops_context_is_valid(jsonb),
   piggyvest_primary.ops_approval_digest(text, text, uuid, bigint, bigint, jsonb),
-  piggyvest_primary.ops_login_is_approver(oid)
+  piggyvest_primary.ops_login_is_approver(oid),
+  piggyvest_primary.ops_login_is_requester(oid)
   FROM PUBLIC, anon, authenticated, service_role;

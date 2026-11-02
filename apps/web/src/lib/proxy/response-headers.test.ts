@@ -182,7 +182,7 @@ it('delegates only explicitly configured staging selfie camera origins on checko
     );
     const product = applySecurityHeaders(
       NextResponse.next(),
-      '/products/phone',
+      '/products/checkout',
       'Mozilla',
       'storefront',
       false
@@ -192,6 +192,35 @@ it('delegates only explicitly configured staging selfie camera origins on checko
     expect(policy.split(', microphone=')[0]).toContain(host);
     expect(policy.split(', microphone=')[1]).not.toContain(host);
     expect(product.headers.get('Permissions-Policy')).toContain('camera=()');
+    expect(product.headers.get('Content-Security-Policy')).not.toContain(host);
+    const nested = applySecurityHeaders(
+      NextResponse.next(),
+      '/shop/other/checkout',
+      'Mozilla',
+      'storefront',
+      false
+    );
+    expect(nested.headers.get('Content-Security-Policy')).not.toContain(host);
+    const slugCheckout = applySecurityHeaders(
+      NextResponse.next(),
+      '/shop/checkout',
+      'Mozilla',
+      'storefront',
+      false
+    );
+    expect(slugCheckout.headers.get('Content-Security-Policy')).toContain(host);
+    const payment = applySecurityHeaders(
+      NextResponse.next(),
+      '/payments/oxygen/6974e8cc-4e90-4ca9-b2cf-aa2abaf461df',
+      'Mozilla',
+      'storefront',
+      false
+    );
+    expect(payment.headers.get('Content-Security-Policy')).toContain(host);
+    expect(payment.headers.get('Permissions-Policy')).toContain(host);
+    expect(payment.headers.get('Permissions-Policy')).not.toContain(
+      'creditdirect'
+    );
   } finally {
     vi.unstubAllEnvs();
   }

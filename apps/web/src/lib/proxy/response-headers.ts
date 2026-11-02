@@ -9,6 +9,10 @@ import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-ori
 import { generateCSP } from '@/lib/proxy/csp';
 import { isLocalhost } from '@/lib/proxy/host';
 import {
+  isOxygenPaymentSurface,
+  isStorefrontCheckoutPath,
+} from '@/lib/proxy/oxygen-payment-surface';
+import {
   canUseLongDownstreamStorefrontCache,
   isCacheablePublicStorefrontDocument,
   isCacheablePublicStorefrontDocumentRequest,
@@ -65,7 +69,7 @@ export function applySecurityHeaders(
   hostname?: string
 ): NextResponse {
   // Apply Content Security Policy
-  const csp = generateCSP(routeType, isLocal, nonce);
+  const csp = generateCSP(routeType, isLocal, nonce, pathname);
   response.headers.set('Content-Security-Policy', csp);
 
   // Add missing security headers
@@ -86,17 +90,21 @@ export function applySecurityHeaders(
   //
   // To avoid handing camera/mic to every storefront page (getRouteType() buckets
   // all marketing/product/category pages as "storefront"), this is scoped to
-  // checkout paths only. Everywhere else stays fully disabled.
+  // checkout paths and the Oxygen payment surface. Everywhere else stays disabled.
   const isCheckoutRoute =
-    routeType === 'storefront' && /\/checkout(\/|$)/.test(pathname);
-  const selfieOrigins = isCheckoutRoute
+    routeType === 'storefront' && isStorefrontCheckoutPath(pathname);
+  const isOxygenRoute =
+    routeType === 'storefront' && isOxygenPaymentSurface(pathname);
+  const selfieOrigins = isOxygenRoute
     ? readOxygenHostedOrigins()
         .selfie.map((origin) => `"${origin}" `)
         .join('')
     : '';
   const cameraAllowlist = isCheckoutRoute
     ? `camera=(self ${selfieOrigins}"https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io"), microphone=(self "https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io")`
-    : 'camera=(), microphone=()';
+    : isOxygenRoute && selfieOrigins
+      ? `camera=(self ${selfieOrigins.trimEnd()}), microphone=()`
+      : 'camera=(), microphone=()';
   response.headers.set(
     'Permissions-Policy',
     `${cameraAllowlist}, geolocation=(), browsing-topics=()`

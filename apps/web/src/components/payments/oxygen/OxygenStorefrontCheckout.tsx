@@ -8,6 +8,10 @@ import { oxygenCheckoutOrderSchema } from '@/schemas/oxygen-checkout-order';
 import { oxygenCustomerPrefillSchema } from '@/schemas/oxygen-customer-prefill';
 import { OxygenApplicationDialog } from './OxygenApplicationDialog';
 import { OxygenMobileOrderSummary } from './OxygenMobileOrderSummary';
+import {
+  ownsOxygenCheckoutOrder,
+  readOwnedOxygenCustomerId,
+} from './oxygen-checkout-ownership';
 
 /** Resume the owned, persisted order inside the existing storefront checkout. */
 export async function OxygenStorefrontCheckout({
@@ -40,16 +44,30 @@ export async function OxygenStorefrontCheckout({
       />
     );
   }
+  const customerId = await readOwnedOxygenCustomerId(
+    client,
+    orderId,
+    merchantId,
+    user.id
+  );
+  if (!customerId) notFound();
   const { data, error } = await client
     .from('orders')
     .select(
-      'id, customer_name, customer_email, currency, subtotal, shipping_fee, tax_amount, total, order_items(id, name, image_url, quantity, price, products:products!order_items_product_id_fkey(images))'
+      'id, merchant_id, customer_id, customers!orders_customer_id_fkey1!inner(id, merchant_id, user_id), customer_name, customer_email, currency, subtotal, shipping_fee, tax_amount, total, order_items(id, name, image_url, quantity, price, products:products!order_items_product_id_fkey(images))'
     )
     .eq('id', orderId)
     .eq('merchant_id', merchantId)
+    .eq('customer_id', customerId)
+    .eq('customers.user_id', user.id)
     .maybeSingle();
   const parsed = oxygenCheckoutOrderSchema.safeParse(data);
-  if (error || !parsed.success) notFound();
+  if (
+    error ||
+    !ownsOxygenCheckoutOrder(data, orderId, merchantId, customerId, user.id) ||
+    !parsed.success
+  )
+    notFound();
   const order = parsed.data;
   const prefill = await readOxygenCustomerPrefill(client, orderId, user.id);
   const names = order.customer_name?.trim().split(/\s+/) ?? [];

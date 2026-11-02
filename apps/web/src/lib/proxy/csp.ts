@@ -1,14 +1,18 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
+import { isOxygenPaymentSurface } from './oxygen-payment-surface';
 import { buildProxyRequestHeaders } from './request-headers';
 
 export function generateCSP(
   routeType: 'admin' | 'auth' | 'storefront' | 'api',
   isLocal: boolean,
-  nonce?: string
+  nonce?: string,
+  pathname?: string
 ): string {
   const hostedOrigins =
-    routeType === 'storefront' ? readOxygenHostedOrigins().hosted : [];
+    routeType === 'storefront' && isOxygenPaymentSurface(pathname ?? '')
+      ? readOxygenHostedOrigins().hosted
+      : [];
   const storefrontUnsafeEval = isLocal ? " 'unsafe-eval'" : '';
   const strictScriptSource = nonce
     ? `'self' 'nonce-${nonce}'`

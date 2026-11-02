@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
+  select: vi.fn(),
   one: vi.fn(),
   eq: vi.fn(),
   from: vi.fn(),
@@ -70,10 +71,11 @@ beforeEach(() => {
   };
   vi.clearAllMocks();
   const query = {
-    select: vi.fn().mockReturnThis(),
+    select: mocks.select,
     eq: mocks.eq,
     maybeSingle: mocks.one,
   };
+  mocks.select.mockReturnValue(query);
   mocks.eq.mockReturnValue(query);
   mocks.from.mockReturnValue(query);
   mocks.auth.mockResolvedValue({
@@ -84,6 +86,13 @@ beforeEach(() => {
     error: null,
     data: {
       id,
+      merchant_id: 'merchant',
+      customer_id: 'customer-row',
+      customers: {
+        id: 'customer-row',
+        merchant_id: 'merchant',
+        user_id: 'customer',
+      },
       customer_name: 'Ada Buyer',
       customer_email: 'ada@example.com',
       currency: 'NGN',
@@ -103,6 +112,98 @@ beforeEach(() => {
       ],
     },
   });
+  mocks.one.mockResolvedValueOnce({
+    data: { id, customer_id: 'customer-row', merchant_id: 'merchant' },
+    error: null,
+  });
+  mocks.one.mockResolvedValueOnce({
+    data: { id: 'customer-row', merchant_id: 'merchant', user_id: 'customer' },
+    error: null,
+  });
+});
+it('rejects another customer even when database policies return the row', async () => {
+  mocks.one.mockReset();
+  mocks.one.mockResolvedValueOnce({
+    data: {
+      id,
+      customer_id: 'other-customer',
+      merchant_id: 'merchant',
+      customer_name: 'Other Buyer',
+      customer_email: 'other@example.com',
+      currency: 'NGN',
+      subtotal: 1,
+      shipping_fee: 0,
+      tax_amount: 0,
+      total: 1,
+      order_items: [],
+    },
+    error: null,
+  });
+  mocks.one.mockResolvedValueOnce({
+    data: {
+      id: 'other-customer',
+      merchant_id: 'merchant',
+      user_id: 'someone-else',
+    },
+    error: null,
+  });
+  await expect(
+    OxygenStorefrontCheckout({
+      orderId: id,
+      merchantId: 'merchant',
+      merchantSlug: 'shop',
+    })
+  ).rejects.toThrow('not found');
+  expect(mocks.from).toHaveBeenCalledTimes(2);
+  expect(mocks.select).toHaveBeenNthCalledWith(
+    1,
+    'id, customer_id, merchant_id'
+  );
+  expect(mocks.select).toHaveBeenNthCalledWith(2, 'id, merchant_id, user_id');
+});
+it('rejects a changed customer binding on the detailed read', async () => {
+  mocks.one
+    .mockReset()
+    .mockResolvedValueOnce({
+      data: { id, customer_id: 'customer-row', merchant_id: 'merchant' },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id: 'customer-row',
+        merchant_id: 'merchant',
+        user_id: 'customer',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        customers: {
+          id: 'customer-row',
+          merchant_id: 'merchant',
+          user_id: 'someone-else',
+        },
+        customer_name: 'Ada Buyer',
+        customer_email: 'ada@example.com',
+        currency: 'NGN',
+        subtotal: 1,
+        shipping_fee: 0,
+        tax_amount: 0,
+        total: 1,
+        order_items: [],
+      },
+      error: null,
+    });
+  await expect(
+    OxygenStorefrontCheckout({
+      orderId: id,
+      merchantId: 'merchant',
+      merchantSlug: 'shop',
+    })
+  ).rejects.toThrow('not found');
 });
 it('resumes the merchant-scoped order and displays persisted totals and checkout contact', async () => {
   render(
@@ -127,7 +228,7 @@ it('resumes the merchant-scoped order and displays persisted totals and checkout
   ).toBeVisible();
 });
 it('refuses an order missing under caller RLS or belonging to a different merchant', async () => {
-  mocks.one.mockResolvedValue({ data: null, error: null });
+  mocks.one.mockReset().mockResolvedValue({ data: null, error: null });
   await expect(
     OxygenStorefrontCheckout({
       orderId: id,
@@ -150,11 +251,29 @@ it('keeps sign-in inside checkout without reading private order data', async () 
 });
 
 it('refuses a missing order total rather than displaying it as zero', async () => {
-  const result = await mocks.one();
-  mocks.one.mockResolvedValue({
-    ...result,
-    data: { ...result.data, total: null },
-  });
+  mocks.one
+    .mockReset()
+    .mockResolvedValueOnce({
+      data: { id, customer_id: 'customer-row', merchant_id: 'merchant' },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id: 'customer-row',
+        merchant_id: 'merchant',
+        user_id: 'customer',
+      },
+      error: null,
+    })
+    .mockResolvedValueOnce({
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        total: null,
+      },
+      error: null,
+    });
   await expect(
     OxygenStorefrontCheckout({
       orderId: id,

@@ -10,7 +10,7 @@ import { OxygenAddressProgress } from './OxygenAddressProgress';
 import { OxygenCustomerForm } from './OxygenCustomerForm';
 import { OxygenGuidedVerification } from './OxygenGuidedVerification';
 import { OxygenLoanSummary } from './OxygenLoanSummary';
-import { OxygenPaymentCompletion } from './OxygenPaymentCompletion';
+import { OxygenPaymentReady } from './OxygenPaymentReady';
 import { OxygenPaymentRecovery } from './OxygenPaymentRecovery';
 import { OxygenPlanForm } from './OxygenPlanForm';
 import {
@@ -242,7 +242,10 @@ export function OxygenProviderStages({
         )}
       {snapshot.stage === 'ready_for_activation' &&
         (s?.bookingReference && s.paymentComplete && s.setupComplete ? (
-          <OxygenPaymentCompletion
+          <OxygenPaymentReady
+            workflowId={snapshot.workflowId}
+            version={snapshot.version}
+            executionEnabled={snapshot.executionEnabled}
             reference={s.bookingReference}
             plan={s}
             products={products}

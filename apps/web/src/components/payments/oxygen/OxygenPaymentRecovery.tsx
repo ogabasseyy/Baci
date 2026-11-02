@@ -81,6 +81,8 @@ export function OxygenPaymentRecovery({
         active={active}
         busy={parentBusy || busy}
         readSaved={readSaved}
+        checkStatus={checkStatus}
+        error={error}
       />
     );
   return (

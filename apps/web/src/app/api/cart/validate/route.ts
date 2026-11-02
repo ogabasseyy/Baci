@@ -101,17 +101,24 @@ export async function POST(request: NextRequest) {
     // Owner identity comes from public product rows, never a caller-selected
     // lookup fallback. Anonymous offer reads are scoped separately per owner.
     const needsVariantList = validVariantIds.length > 0;
-    const { productsResult, variantsResult, offerMap } =
-      await fetchCartCatalogConcurrently(
-        validFormatIds.length > 0
-          ? supabase
+    const productsPromise: Promise<{
+      data: CartProductRow[] | null;
+      error: unknown;
+    }> =
+      validFormatIds.length > 0
+        ? Promise.resolve(
+            supabase
               .from('products')
               .select(
                 'id, merchant_id, name, price, stock, stock_quantity, status, manage_stock, has_condition_offers, has_variants, variant_model, inventory_tracking_policy'
               )
               .in('id', validFormatIds)
               .returns<CartProductRow[]>()
-          : Promise.resolve({ data: null, error: null }),
+          ).then(({ data, error }) => ({ data, error }))
+        : Promise.resolve({ data: null, error: null });
+    const { productsResult, variantsResult, offerMap } =
+      await fetchCartCatalogConcurrently(
+        productsPromise,
         needsVariantList && validFormatIds.length > 0
           ? fetchAllStorefrontProductVariants<CartVariantRow>({
               supabase,

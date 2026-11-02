@@ -160,3 +160,27 @@ it('routes a known non-primary verdict to legacy without probing', async () => {
     mockReadObserved.mockReturnValue(null);
   }
 });
+it('runs the regular top-up when primary card funding is retired', async () => {
+  // fundPrimaryWalletCard rethrows the retired answer only when nothing is
+  // retained on the device, as the caller's cue for the working top-up.
+  mockPrimary.mockRejectedValueOnce(
+    Object.assign(new Error('retired'), {
+      code: 'PRIMARY_CARD_FUNDING_RETIRED',
+    })
+  );
+  const legacyCalls = mockLegacy.mock.calls.length;
+  mockLegacy.mockResolvedValueOnce({
+    authorization_url: 'https://pay.example/authorize',
+    gateway: 'paystack',
+    reference: 'ref-retired-fallback',
+    success: true,
+  });
+  await fundWallet({
+    activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+    fundAmount: '1000',
+    user: { id: '11111111-1111-4111-8111-111111111111' },
+    resetFundPanel: jest.fn(),
+    setIsFundPending: jest.fn(),
+  });
+  expect(mockLegacy.mock.calls.length).toBe(legacyCalls + 1);
+});

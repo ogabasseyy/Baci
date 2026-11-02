@@ -216,6 +216,8 @@ export function createOrderDetailsShipmentActions({
       setShipmentFlowStep('rider');
       return;
     }
+    // The sheet attaches GIG-app waybills itself; never book with a provider.
+    if (pendingShipmentMode === 'external_waybill') return;
 
     try {
       await finalizeShipmentCompletion('provider');

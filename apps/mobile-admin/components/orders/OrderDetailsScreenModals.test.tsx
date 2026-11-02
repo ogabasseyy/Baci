@@ -72,6 +72,10 @@ vi.mock('@/components/orders/ShipmentFlowSheet', () => ({
   },
 }));
 
+vi.mock('@/hooks/useOrderDetailsGiglExternalWaybill', () => ({
+  useOrderDetailsGiglExternalWaybill: () => undefined,
+}));
+
 vi.mock('@/components/orders/ShipOnCreditDialog', () => ({
   ShipOnCreditDialog: () => null,
 }));

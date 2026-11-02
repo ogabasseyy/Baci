@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createGiglWebhookExpediteClient } from './gigl-tracking-worker-client';
+import { createGiglWebhookExpediteClient } from './gigl-webhook-expedite-client';
+
+vi.mock('server-only', () => ({}));
 
 const rpc = vi.fn();
 vi.mock('@supabase/supabase-js', () => ({
@@ -46,10 +48,14 @@ describe('createGiglWebhookExpediteClient', () => {
         },
       })
     );
-    expect(rpc).toHaveBeenCalledWith('gigl_worker_expedite_tracking_monitor', {
-      p_status_code: 'MCRT',
-      p_tracking_number: '1349639673',
-    });
+    expect(rpc).toHaveBeenCalledWith(
+      'gigl_worker_expedite_tracking_monitor',
+      {
+        p_status_code: 'MCRT',
+        p_tracking_number: '1349639673',
+      },
+      undefined
+    );
   });
 
   it('exposes no other worker operation', () => {

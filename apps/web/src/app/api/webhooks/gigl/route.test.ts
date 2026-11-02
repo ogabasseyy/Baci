@@ -11,7 +11,7 @@ const expedite = vi.fn();
 const createGiglWebhookExpediteClient = vi.fn((_env: unknown) => ({
   expedite,
 }));
-vi.mock('@/lib/gigl-tracking-worker-client', () => ({
+vi.mock('@/lib/shipping/gigl-webhook-expedite-client', () => ({
   createGiglWebhookExpediteClient: (env: unknown) =>
     createGiglWebhookExpediteClient(env),
 }));

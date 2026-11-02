@@ -1,10 +1,10 @@
 import { mapKnownGiglStatus } from '@baci/shared/lib/gigl-tracking-status';
 import { NextResponse } from 'next/server';
-import { createGiglWebhookExpediteClient } from '@/lib/gigl-tracking-worker-client';
 import { logger } from '@/lib/logger';
 import { readGiglWebhookBody } from '@/lib/shipping/gigl-webhook-body';
 import { readGiglWebhookConfig } from '@/lib/shipping/gigl-webhook-config';
 import { openGiglWebhookDelivery } from '@/lib/shipping/gigl-webhook-delivery';
+import { createGiglWebhookExpediteClient } from '@/lib/shipping/gigl-webhook-expedite-client';
 import { giglWebhookExpediteResultSchema } from '@/schemas/gigl-webhook-event';
 
 /**

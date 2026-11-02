@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import type {
   RpcResult,
   ScheduledNotificationWorkerClient,
@@ -29,6 +30,43 @@ export function makeScheduledNotificationClaim(
     target_type: 'all',
     title: options.title ?? `Notification ${suffix}`,
   };
+}
+
+/** A claim the worker cannot parse but can still identify and finalize. */
+export function makeMalformedScheduledNotificationClaim(suffix: string) {
+  return {
+    ...makeScheduledNotificationClaim(suffix),
+    target_merchant_ids: null,
+    title: '',
+  };
+}
+
+export type ScheduledNotificationClaimResult = {
+  failure?: string;
+  id: string;
+  recipients?: number;
+  status: string;
+};
+
+type ScheduledNotificationDeliveryModule = {
+  processScheduledNotificationClaims(
+    client: ScheduledNotificationWorkerClient,
+    claimed: unknown[]
+  ): Promise<ScheduledNotificationClaimResult[]>;
+};
+
+/**
+ * Loads the Deno worker at runtime. Web tests run it under Vitest, but the
+ * web TypeScript program cannot compile it (`.ts` specifiers, Deno globals),
+ * so the specifier stays non-literal and the module is typed by its contract.
+ */
+export async function loadScheduledNotificationDelivery() {
+  const modulePath: string = fileURLToPath(
+    new URL('./scheduled-notification-delivery.ts', import.meta.url)
+  );
+  return (await import(
+    /* @vite-ignore */ modulePath
+  )) as ScheduledNotificationDeliveryModule;
 }
 
 export type RpcCall = {

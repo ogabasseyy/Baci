@@ -90,4 +90,27 @@ describe('scheduled notification delivery safety contract', () => {
     expect(workerOutcome).toContain("'notification_delivery_failed'");
     expect(followUp).toContain('last_failed_at > coalesce');
   });
+
+  it('runs the web suite, which holds the worker behaviour tests, whenever the worker changes', () => {
+    const filters = read('.github/filters/ci.yml');
+    const webStart = filters.indexOf('\nweb:\n');
+    expect(webStart).toBeGreaterThanOrEqual(0);
+    const nextGroup = filters.slice(webStart + 6).search(/\n[a-z_]+:\n/);
+    const webPaths = filters.slice(
+      webStart,
+      nextGroup < 0 ? undefined : webStart + 6 + nextGroup
+    );
+    for (const path of [
+      'supabase/functions/_shared/scheduled-notification*',
+      'supabase/functions/process-scheduled-notifications/**',
+    ])
+      expect(webPaths).toContain(`  - '${path}'\n`);
+    for (const suite of [
+      'admin-notification-batch-isolation.test.ts',
+      'admin-notification-worker-outcome.test.ts',
+    ])
+      expect(read(`apps/web/src/lib/${suite}`)).toContain(
+        'supabase/functions/_shared/scheduled-notification'
+      );
+  });
 });

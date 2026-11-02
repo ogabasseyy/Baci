@@ -1,5 +1,7 @@
+// @vitest-environment node
+
 import { describe, expect, it } from 'vitest';
-import { getScheduledNotificationWorkerOutcome } from './scheduled-notification-worker-outcome.ts';
+import { getScheduledNotificationWorkerOutcome } from '../../../../supabase/functions/_shared/scheduled-notification-worker-outcome';
 
 describe('scheduled notification worker outcome', () => {
   it('returns 503 and records failed health when a finalization failed', () => {

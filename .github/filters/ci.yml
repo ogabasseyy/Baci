@@ -293,6 +293,9 @@ deploy_scripts:
 # Root Next config changes affect the web app even when apps/web/** is untouched.
 web:
   - 'public/guides/**'
+  # The scheduled notification worker's behaviour tests live in apps/web.
+  - 'supabase/functions/_shared/scheduled-notification*'
+  - 'supabase/functions/process-scheduled-notifications/**'
   - 'supabase/migrations/*customer_checkout_shipping_recovery*'
   - 'supabase/tests/*recovery*'
   - 'supabase/tests/extract-sql-function-definition*'

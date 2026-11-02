@@ -126,8 +126,22 @@ async function finalizeOrReportFailure(
     return { id: notification.id, status: outcome };
   } catch (finalizeError) {
     if (finalizeError instanceof NotificationClaimLostError) return null;
-    return { failure, id: notification.id, status: 'failed' };
+    return reportFinalizationFailure(notification.id, outcome, failure);
   }
+}
+
+/** Logs only fixed fields: raw RPC or provider error text never reaches logs. */
+function reportFinalizationFailure(
+  notificationId: string,
+  outcome: 'expired' | 'retry',
+  failure: FailureCode
+): ClaimResult {
+  console.error('Scheduled notification finalization failed', {
+    failure,
+    notificationId,
+    outcome,
+  });
+  return { failure, id: notificationId, status: 'failed' };
 }
 
 export async function processScheduledNotificationClaims(
@@ -142,32 +156,21 @@ export async function processScheduledNotificationClaims(
     } catch (parseError) {
       const identity = parseMalformedClaimIdentity(value);
       if (!identity) throw parseError;
-      try {
-        await finalize(
-          client,
-          identity,
-          'retry',
-          parseError instanceof Error
-            ? parseError.message
-            : 'Claim RPC returned a malformed scheduled notification'
-        );
-        results.push({ id: identity.id, status: 'retry' });
-      } catch (error) {
-        if (error instanceof NotificationClaimLostError) continue;
-        results.push({
-          failure: 'malformed_claim_retry_finalization_failed',
-          id: identity.id,
-          status: 'failed',
-        });
-      }
+      const malformedResult = await finalizeOrReportFailure(
+        client,
+        identity,
+        'retry',
+        'malformed_claim_retry_finalization_failed',
+        parseError instanceof Error
+          ? parseError.message
+          : 'Claim RPC returned a malformed scheduled notification'
+      );
+      if (malformedResult) results.push(malformedResult);
       continue;
     }
     try {
-      if (isExpired(notification)) {
-        await finalize(client, notification, 'expired');
-        results.push({ id: notification.id, status: 'expired' });
-        continue;
-      }
+      // Pre-delivery expiry shares the single expired-finalization path below.
+      throwIfExpired(notification);
       const { hasDeferredPushes, recipients } = await deliverPages(
         client,
         notification

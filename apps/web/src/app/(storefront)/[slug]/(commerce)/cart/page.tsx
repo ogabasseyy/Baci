@@ -17,7 +17,19 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function CartPage({
+export default function CartPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  return (
+    <Suspense fallback={<CommerceRouteLoading />}>
+      <ResolvedCartPage params={params} />
+    </Suspense>
+  );
+}
+
+export async function ResolvedCartPage({
   params,
 }: {
   params: Promise<{ slug: string }>;
@@ -30,6 +42,24 @@ export default async function CartPage({
 
   if (!merchant) {
     notFound();
+  }
+
+  // Public snapshot already carries these merchant-scoped settings. Avoid a
+  // second session-bound round trip on every cart navigation. Older snapshots
+  // keep the streamed live-read fallback below; checkout prices on the server.
+  if (
+    typeof merchant.vat_registration_status === 'string' &&
+    typeof merchant.vat_rate === 'number' &&
+    Number.isFinite(merchant.vat_rate)
+  ) {
+    return (
+      <CartPageWrapper
+        merchantId={merchant.id}
+        merchantSlug={merchant.slug}
+        vatEnabled={merchant.vat_registration_status === 'registered'}
+        vatRate={merchant.vat_rate}
+      />
+    );
   }
 
   return (

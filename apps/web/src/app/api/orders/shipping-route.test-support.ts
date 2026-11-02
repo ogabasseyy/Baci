@@ -4,6 +4,10 @@ const { mockCreateAdminClient } = vi.hoisted(() => ({
   mockCreateAdminClient: vi.fn(),
 }));
 
+vi.mock('@/lib/supabase/public', () => ({
+  createPublicClient: vi.fn(() => mockCreateAdminClient()),
+}));
+
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: mockCreateAdminClient,
 }));

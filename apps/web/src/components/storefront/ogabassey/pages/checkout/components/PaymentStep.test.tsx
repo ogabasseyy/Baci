@@ -149,6 +149,39 @@ describe('PaymentStep', () => {
   );
 
   describe('Rendering', () => {
+    it('keeps mobile payment actions inside the padded card content', () => {
+      render(<PaymentStep {...defaultProps} />);
+      const action = screen.getByRole('button', { name: 'Place Order' });
+      const paddedContent = action.closest('.p-6');
+      expect(paddedContent).not.toBeNull();
+      expect(paddedContent).toContainElement(
+        screen.getByRole('checkbox', { name: /email me with exclusive offers/i })
+      );
+    });
+
+    it('hides Oxygen when wallet credit reduces the amount due', () => {
+      vi.stubEnv('NODE_ENV', 'development');
+      vi.stubEnv('NEXT_PUBLIC_OXYGEN_LOCAL_CHECKOUT', 'true');
+      vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'http://127.0.0.1:3451');
+      try {
+        const view = render(
+          <PaymentStep {...defaultProps} paymentTab="installments" />,
+        );
+        expect(screen.getByRole('radio', { name: /oxygen/i })).toBeVisible();
+        expect(screen.getByText('From 25% down payment. Repay the balance monthly.')).toBeInTheDocument();
+        view.rerender(
+          <PaymentStep
+            {...defaultProps}
+            paymentTab="installments"
+            remainingAmount={9000}
+          />,
+        );
+        expect(screen.queryByRole('radio', { name: /oxygen/i })).toBeNull();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it('renders payment step when currentStep is payment', () => {
       // Arrange & Act
       render(<PaymentStep {...defaultProps} />);
@@ -971,6 +1004,14 @@ describe('PaymentStep', () => {
   });
 
   describe('Mobile Place Order Button', () => {
+    it.each(['oxygen', 'credit_direct', 'credpal', 'klump'] as const)(
+      'labels the %s installment action Begin Process', (paymentMethod) => {
+        render(<PaymentStep {...defaultProps} paymentTab="installments" paymentMethod={paymentMethod} />);
+        expect(screen.getByRole('button', { name: 'Begin Process' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Place Order' })).not.toBeInTheDocument();
+      }
+    );
+
     it('shows place order button on mobile', () => {
       // Arrange & Act
       render(<PaymentStep {...defaultProps} />);
@@ -1047,7 +1088,7 @@ describe('PaymentStep', () => {
         />
       );
 
-      const button = screen.getByRole('button', { name: /place order/i });
+      const button = screen.getByRole('button', { name: 'Begin Process' });
       expect(button).toBeDisabled();
     });
 

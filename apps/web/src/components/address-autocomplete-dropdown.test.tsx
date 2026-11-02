@@ -71,3 +71,20 @@ it.each([
   );
   expect(screen.queryByRole('button')).not.toBeInTheDocument();
 });
+
+it('uses the storefront accent for suggestion icons even before highlighting', () => {
+  render(
+    <AddressAutocompleteDropdown
+      isOpen
+      predictions={[prediction]}
+      highlightedIndex={-1}
+      dropdownRef={createRef()}
+      onSelect={vi.fn()}
+    />
+  );
+  const row = screen.getByRole('button', { name: /Allen Avenue Ikeja/ });
+  expect(row.querySelector('svg')?.parentElement).toHaveClass(
+    'text-store-primary',
+    'bg-store-primary/10'
+  );
+});

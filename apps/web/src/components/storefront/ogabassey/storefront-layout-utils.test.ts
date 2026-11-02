@@ -89,7 +89,9 @@ describe('storefront-layout-utils', () => {
     expect(style['--store-on-primary']).toBe('#FFFFFF');
     expect(style['--store-border']).toBe('rgba(214, 32, 39, 0.24)');
     expect(style['--store-accent']).toBe('#d62027');
-    expect(style['--background']).toBe('0 0% 6%');
-    expect(style['--foreground']).toBe('0 0% 98%');
+    expect(style['--background']).toBe('0 0% 100%');
+    expect(style['--foreground']).toBe('240 10% 3.9%');
+    expect(style['--card']).toBe('0 0% 100%');
+    expect(style['--card-foreground']).toBe('240 10% 3.9%');
   });
 });

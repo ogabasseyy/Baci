@@ -1,23 +1,24 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-31T12:06:59+00:00",
-  "source_revision": "add71b5ae9b1e0a31a9cdf62b408b4dc7e916ac2",
-  "evidence_digest": "14c97ea35e13bd435c76163a03f3cb8ce99b4581f5942887395d25642566524e",
-  "claims_digest": "e12b8accdf684f987dc2480453286a56f4ea3a50b32d9927c363a60f789f9486",
-  "review_scope": "Source evidence only. Re-reviewed shipping after the booking sender change: for domestic order bookings, a blank or implausible store phone now stops booking with 400 MERCHANT_SENDER_PHONE_INVALID before any provider request; origin-missing, merchant-missing and lookup-failure codes are unchanged. The shipping claim and its merchant-configuration limitation remain accurate. Across this main integration all other cited capability and access-map sources are unchanged. Support-chat health, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment, native acceptance and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-02T04:39:34+00:00",
+  "source_revision": "1c4d2fdd6b9004b1e470902469a2577d51adab18",
+  "evidence_digest": "f6104a96746ff0e2aa6dcd2f3bd7f38919d42a93c4e7b6215d01282bc5ff6ab1",
+  "claims_digest": "c3f86016cb092dd81d6067c197984497bf16369edb39ecd3f8fc8d645e277ebc",
+  "review_scope": "Source evidence only. Re-reviewed checkout payment availability after adding the Oxygen local-QA option: development mode, explicit local-checkout opt-in, loopback Supabase, NGN and full-order-amount checks are required; production shoppers are not offered Oxygen by this gate. The configurable payment-method claim remains accurate without promoting Oxygen to production availability. Git comparison against the previous reviewed revision shows all other cited capability sources unchanged. Other provider, deployment, native acceptance and transaction-readiness limitations remain; no production promotion. Rechecked all cited source and access-map paths after merging current main; their bytes are unchanged since the prior review. Rechecked cited capability source bytes after the 2 November review-fix and main integration; no cited implementation changes or production promotion.",
   "capabilities": [
     {
       "id": "payments",
       "title": "Checkout payment configuration",
       "status": "code_evidenced",
       "claim": "Baci implements merchant-configured payment methods, including Paystack, Korapay, Credit Direct and pay on delivery, with country and provider eligibility checks.",
-      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Do not promise settlement timing or successful activation without live evidence.",
+      "limitations": "Not every gateway is enabled by default or available to every merchant. Country, currency, subaccount and provider configuration apply. Oxygen checkout is restricted to local staging QA and is not enabled for production shoppers. Do not promise settlement timing or successful activation without live evidence.",
       "source_refs": [
         "apps/web/src/lib/checkout/payment-gateway-availability.ts",
         "apps/web/src/app/dashboard/settings/payments/payment-settings.ts",
         "apps/mobile-admin/app/(admin)/payment-methods.tsx",
         "apps/web/src/components/storefront/ogabassey/pages/checkout/components/payment-step-availability.ts",
-        "apps/web/src/app/api/payments/credit-direct/sign/route.ts"
+        "apps/web/src/app/api/payments/credit-direct/sign/route.ts",
+        "apps/web/src/config/oxygen-storefront-staging.ts"
       ]
     },
     {

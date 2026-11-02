@@ -7,6 +7,11 @@ const mockGetMerchantForApiRequest = vi.fn();
 const mockHasPermission = vi.fn();
 const mockGetQuotes = vi.fn();
 
+// Share rate fixture data across the separate public and admin mock clients.
+vi.mock('@/lib/supabase/public', () => ({
+  createPublicClient: () => mockCreateAdminClient(),
+}));
+
 vi.mock('@/lib/supabase/admin', () => ({
   createAdminClient: mockCreateAdminClient,
 }));

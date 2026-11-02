@@ -2,7 +2,6 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
-import { useEffect } from 'react';
 import { useAuthSafe } from '@/contexts/auth-context';
 import { useCart } from '@/hooks/cart';
 import { useCurrency } from '@/hooks/use-currency';
@@ -18,8 +17,12 @@ import { useCheckoutDeliverySession } from './checkout/hooks/use-checkout-delive
 import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-financial-session';
 import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
 import { useCheckoutPaymentExecution } from './checkout/hooks/use-checkout-payment-execution';
+import { useCheckoutScrollTop } from './checkout/hooks/use-checkout-scroll-top';
+import type { OxygenCheckoutSlots } from './checkout/oxygen-checkout-slots';
 import { checkoutPaymentRails } from './checkout/payment-rail-availability';
-export const CheckoutPage: React.FC = () => {
+
+export type { OxygenCheckoutSlots } from './checkout/oxygen-checkout-slots';
+export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
   const {
     cart,
     clearCart,
@@ -74,7 +77,6 @@ export const CheckoutPage: React.FC = () => {
 
   const { currentStep, completedSteps, setCurrentStep, setCompletedSteps } =
     checkoutFlow;
-  // When opening from mobile app with ?orderId=xxx&gateway=credpal, we resume that order
   const checkoutAttempt = useCheckoutAttemptSession({
     searchParams,
     merchantId: merchant?.id,
@@ -172,9 +174,7 @@ export const CheckoutPage: React.FC = () => {
       preferredGateway,
     });
 
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+  useCheckoutScrollTop();
 
   const {
     crypto,
@@ -292,7 +292,7 @@ export const CheckoutPage: React.FC = () => {
 
   return (
     <CheckoutCartScreen
-      model={screenModel}
+      model={{ ...screenModel, ...oxygenSlots }}
       order={resumedOrder}
       requestedId={searchParams.get('orderId')}
     />

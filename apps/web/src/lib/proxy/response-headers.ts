@@ -5,6 +5,7 @@ import {
 } from '@/config/storefront-cdn-cache-control';
 import { selectStorefrontDocumentCacheKind } from '@/config/storefront-document-cache-kind';
 import { STOREFRONT_METADATA_CACHE_BUCKET_HEADER } from '@/config/storefront-metadata-cache-bots';
+import { readOxygenHostedOrigins } from '@/lib/payments/oxygen/oxygen-hosted-origins';
 import { generateCSP } from '@/lib/proxy/csp';
 import { isLocalhost } from '@/lib/proxy/host';
 import {
@@ -88,8 +89,13 @@ export function applySecurityHeaders(
   // checkout paths only. Everywhere else stays fully disabled.
   const isCheckoutRoute =
     routeType === 'storefront' && /\/checkout(\/|$)/.test(pathname);
+  const selfieOrigins = isCheckoutRoute
+    ? readOxygenHostedOrigins()
+        .selfie.map((origin) => `"${origin}" `)
+        .join('')
+    : '';
   const cameraAllowlist = isCheckoutRoute
-    ? 'camera=(self "https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io"), microphone=(self "https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io")'
+    ? `camera=(self ${selfieOrigins}"https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io"), microphone=(self "https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io")`
     : 'camera=(), microphone=()';
   response.headers.set(
     'Permissions-Policy',

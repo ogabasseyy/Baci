@@ -93,3 +93,29 @@ it('ignores an obsolete selection without mutating form, error or loading state'
   for (const callback of Object.values(cb))
     expect(callback).not.toHaveBeenCalled();
 });
+
+it('carries the actual LGA through without replacing it with city', async () => {
+  vi.mocked(getPlaceDetails).mockResolvedValue({
+    placeId: 'google-id',
+    formattedAddress: 'Example address',
+    city: 'Lagos',
+    state: 'Lagos',
+    lga: 'Ikeja',
+  });
+  const cb = callbacks();
+  await selectAddressPrediction(
+    {
+      ...prediction,
+      provider: 'google',
+      placeId: 'google-id',
+      details: undefined,
+    },
+    'session',
+    cb,
+    () => true
+  );
+  expect(cb.onSelect).toHaveBeenCalledWith(
+    expect.objectContaining({ city: 'Lagos', state: 'Lagos', lga: 'Ikeja' })
+  );
+  expect(getPlaceDetails).toHaveBeenCalledTimes(1);
+});

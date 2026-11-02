@@ -88,6 +88,7 @@ export type CheckoutOrderLifecycleResult =
   | {
       kind: 'payment_ready';
       order: CheckoutPaymentOrder;
+      freshOrder?: true;
       wallet: CheckoutWalletRedemption | null;
       amountDueToGateway: number;
       createdOrderNumber: string;
@@ -274,6 +275,7 @@ export async function runCheckoutOrderLifecycle({
   return {
     kind: 'payment_ready',
     order,
+    ...(submitted.freshOrder ? { freshOrder: true as const } : {}),
     wallet,
     amountDueToGateway,
     createdOrderNumber,

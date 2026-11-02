@@ -120,6 +120,7 @@ export interface SharedCartOrderBinding {
 export type CheckoutStep = 'contact' | 'delivery' | 'payment';
 export type PaymentMethod =
   | 'uba_redvault'
+  | 'oxygen'
   | 'paystack'
   | 'korapay'
   | 'juicyway'

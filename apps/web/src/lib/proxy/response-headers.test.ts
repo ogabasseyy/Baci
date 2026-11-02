@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { applySecurityHeaders } from './response-headers';
 
 describe('proxy response headers', () => {
@@ -159,4 +159,40 @@ describe('proxy response headers', () => {
     expect(response.headers.get('CDN-Cache-Control')).toBeNull();
     expect(response.headers.get('Vercel-Cache-Tag')).toBeNull();
   });
+});
+
+it('delegates only explicitly configured staging selfie camera origins on checkout', () => {
+  const host = 'https://staging.d1l1k5yxed9cvn.amplifyapp.com';
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  vi.stubEnv(
+    'OXYGEN_STAGING_HOSTED_HOSTS',
+    'staging.d1l1k5yxed9cvn.amplifyapp.com'
+  );
+  vi.stubEnv(
+    'OXYGEN_STAGING_SELFIE_HOSTS',
+    'staging.d1l1k5yxed9cvn.amplifyapp.com'
+  );
+  try {
+    const checkout = applySecurityHeaders(
+      NextResponse.next(),
+      '/checkout',
+      'Mozilla',
+      'storefront',
+      false
+    );
+    const product = applySecurityHeaders(
+      NextResponse.next(),
+      '/products/phone',
+      'Mozilla',
+      'storefront',
+      false
+    );
+    expect(checkout.headers.get('Content-Security-Policy')).toContain(host);
+    const policy = checkout.headers.get('Permissions-Policy') ?? '';
+    expect(policy.split(', microphone=')[0]).toContain(host);
+    expect(policy.split(', microphone=')[1]).not.toContain(host);
+    expect(product.headers.get('Permissions-Policy')).toContain('camera=()');
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });

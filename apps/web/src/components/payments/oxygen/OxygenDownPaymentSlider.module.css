@@ -1,0 +1,103 @@
+.control {
+  position: relative;
+  height: 2.75rem;
+  margin-top: 0.5rem;
+}
+.rail {
+  position: absolute;
+  inset-inline: 0.875rem;
+  top: calc(50% - 0.125rem);
+  height: 0.25rem;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--store-primary, #dc2626) 0 var(--slider-progress),
+    var(--store-border, #e5e7eb) var(--slider-progress) 100%
+  );
+  pointer-events: none;
+}
+.marks {
+  position: absolute;
+  inset: 0 0.875rem;
+  pointer-events: none;
+}
+.marks span {
+  position: absolute;
+  top: calc(50% - 0.3rem);
+  width: 2px;
+  height: 0.6rem;
+  border-radius: 1px;
+  background: var(--store-text-muted, #94a3b8);
+  transform: translateX(-50%);
+}
+.slider {
+  position: absolute;
+  display: block;
+  appearance: none;
+  /* Map native 25–90 selection onto the full 0–100 visual rail, including thumb radius. */
+  left: calc(25% - 0.4375rem);
+  right: calc(10% - 0.175rem);
+  width: auto;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  cursor: grab;
+  direction: ltr;
+}
+.slider::-webkit-slider-runnable-track {
+  height: 0.25rem;
+  border-radius: 999px;
+  background: transparent;
+}
+.slider::-moz-range-track {
+  height: 0.25rem;
+  border-radius: 999px;
+  background: transparent;
+}
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  box-sizing: border-box;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-top: -0.75rem;
+  border: 2px solid white;
+  border-radius: 50%;
+  background:
+    var(--store-primary, #dc2626)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 6 6 6-6 6'/%3E%3C/svg%3E")
+    center / 1rem no-repeat;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 18%);
+}
+.slider::-moz-range-thumb {
+  box-sizing: border-box;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 2px solid white;
+  border-radius: 50%;
+  background:
+    var(--store-primary, #dc2626)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 6 6 6-6 6'/%3E%3C/svg%3E")
+    center / 1rem no-repeat;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 18%);
+}
+.slider:active {
+  cursor: grabbing;
+}
+.slider:focus-visible {
+  outline: 2px solid var(--store-primary, #dc2626);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+.slider:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+@media (forced-colors: active) {
+  .slider {
+    appearance: auto;
+  }
+  .marks,
+  .rail {
+    display: none;
+  }
+}

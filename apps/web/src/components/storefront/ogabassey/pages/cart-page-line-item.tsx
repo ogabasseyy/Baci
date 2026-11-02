@@ -1,4 +1,3 @@
-import { CartVariantDetails } from '../components/cart-variant-details';
 import { isProductNegotiable } from '@baci/shared/lib';
 import { Check, Minus, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import Link from 'next/link';
@@ -10,6 +9,7 @@ import {
 } from '@/lib/checkout/cart-entitlement-sanitizer';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { asRoute } from '@/lib/routes';
+import { CartVariantDetails } from '../components/cart-variant-details';
 import { CartPageNegotiationIcon } from './cart-page-negotiation-icon';
 
 interface CartPageLineItemProps {
@@ -77,7 +77,7 @@ export function CartPageLineItem({
             </h3>
           </Link>
 
-          <CartVariantDetails item={item} />
+          <CartVariantDetails item={item} presentation="chips" />
         </div>
 
         <button
@@ -138,79 +138,86 @@ export function CartPageLineItem({
         </div>
       </div>
 
-      <div className="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-3 justify-between items-center">
-        {/* An assured line keeps its removal control even when the
+      {(shippingInsuranceEnabled ||
+        item.hasAssurance ||
+        (hasPriceNegotiation && !isQuizGift)) && (
+        <fieldset
+          aria-label="Product extras"
+          className="mt-4 pt-3 border-t border-gray-100 flex flex-wrap gap-3 justify-between items-center"
+        >
+          {/* An assured line keeps its removal control even when the
             setting is off, so the fee stays removable pre-checkout. */}
-        {(shippingInsuranceEnabled || item.hasAssurance) && (
-          <label className="flex items-start gap-2 cursor-pointer select-none group active:opacity-70 max-w-[70%]">
-            <div className="relative flex items-center mt-0.5">
-              <input
-                type="checkbox"
-                checked={item.hasAssurance || false}
-                onChange={() => onToggleAssurance?.(item.cartItemId)}
-                className="peer sr-only"
-              />
-              <div className="w-9 h-5 bg-store-background-text/20 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-store-primary-text after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-store-background after:border-store-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-store-primary" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
-                <ShieldCheck size={12} className="text-store-primary" />
-                {merchantSlug === 'ogabassey'
-                  ? 'Ogabassey Assurance'
-                  : 'Order Protection'}
-              </span>
-              <p className="text-[10px] text-gray-500 leading-tight mt-0.5">
-                {item.hasAssurance ? (
-                  <>
-                    {merchantSlug === 'ogabassey' ? (
-                      <>
-                        Covers{' '}
-                        <span className="font-bold text-gray-700">
-                          Screen & Liquid Damage
-                        </span>
-                      </>
-                    ) : (
-                      'Standard Shipping Protection'
-                    )}
-                    <span className="ml-1 text-store-primary font-bold">
-                      +₦{(assuranceCost || 0).toLocaleString()}
-                    </span>
-                  </>
-                ) : (
-                  `${merchantSlug === 'ogabassey' ? 'Device Protection' : 'Safety & Shipping Coverage'} (+${assuranceRateLabel})`
-                )}
-              </p>
-            </div>
-          </label>
-        )}
-
-        {hasPriceNegotiation && !isQuizGift && (
-          <div className="flex items-center gap-2">
-            {item.negotiationStatus === 'accepted' ? (
-              <div className="flex items-center gap-1.5 text-xs font-bold text-store-primary bg-store-primary/5 px-3 py-1.5 rounded-lg border border-store-primary/15">
-                <Check size={12} strokeWidth={3} />
-                <span>
-                  Matched @ ₦{(item.negotiatedPrice || 0).toLocaleString()}
+          {(shippingInsuranceEnabled || item.hasAssurance) && (
+            <label className="flex items-start gap-2 cursor-pointer select-none group active:opacity-70 max-w-[70%]">
+              <div className="relative flex items-center mt-0.5">
+                <input
+                  type="checkbox"
+                  checked={item.hasAssurance || false}
+                  onChange={() => onToggleAssurance?.(item.cartItemId)}
+                  className="peer sr-only"
+                />
+                <div className="w-9 h-5 bg-store-background-text/20 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-store-primary-text after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-store-background after:border-store-border after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-store-primary" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                  <ShieldCheck size={12} className="text-store-primary" />
+                  {merchantSlug === 'ogabassey'
+                    ? 'Ogabassey Assurance'
+                    : 'Order Protection'}
                 </span>
+                <p className="text-[10px] text-gray-500 leading-tight mt-0.5">
+                  {item.hasAssurance ? (
+                    <>
+                      {merchantSlug === 'ogabassey' ? (
+                        <>
+                          Covers{' '}
+                          <span className="font-bold text-gray-700">
+                            Screen & Liquid Damage
+                          </span>
+                        </>
+                      ) : (
+                        'Standard Shipping Protection'
+                      )}
+                      <span className="ml-1 text-store-primary font-bold">
+                        +₦{(assuranceCost || 0).toLocaleString()}
+                      </span>
+                    </>
+                  ) : (
+                    `${merchantSlug === 'ogabassey' ? 'Device Protection' : 'Safety & Shipping Coverage'} (+${assuranceRateLabel})`
+                  )}
+                </p>
               </div>
-            ) : itemIsNegotiable ? (
-              <button
-                type="button"
-                onClick={() => onOpenItemNegotiation(item)}
-                className="flex items-center gap-1.5 text-xs font-bold text-store-primary md:hover:bg-store-primary/5 px-2 py-1.5 rounded-lg transition-colors border border-store-primary/15 md:hover:border-store-primary/40 active:bg-store-primary/5 active:scale-95"
-              >
-                <CartPageNegotiationIcon size={14} />
-                <span>Negotiate</span>
-              </button>
-            ) : (
-              <div className="flex items-center gap-1.5 text-xs font-bold text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
-                <Check size={12} strokeWidth={3} />
-                <span>Best price</span>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+            </label>
+          )}
+
+          {hasPriceNegotiation && !isQuizGift && (
+            <div className="flex items-center gap-2">
+              {item.negotiationStatus === 'accepted' ? (
+                <div className="flex items-center gap-1.5 text-xs font-bold text-store-primary bg-store-primary/5 px-3 py-1.5 rounded-lg border border-store-primary/15">
+                  <Check size={12} strokeWidth={3} />
+                  <span>
+                    Matched @ ₦{(item.negotiatedPrice || 0).toLocaleString()}
+                  </span>
+                </div>
+              ) : itemIsNegotiable ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenItemNegotiation(item)}
+                  className="flex items-center gap-1.5 text-xs font-bold text-store-primary md:hover:bg-store-primary/5 px-2 py-1.5 rounded-lg transition-colors border border-store-primary/15 md:hover:border-store-primary/40 active:bg-store-primary/5 active:scale-95"
+                >
+                  <CartPageNegotiationIcon size={14} />
+                  <span>Negotiate</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 text-xs font-bold text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
+                  <Check size={12} strokeWidth={3} />
+                  <span>Best price</span>
+                </div>
+              )}
+            </div>
+          )}
+        </fieldset>
+      )}
     </div>
   );
 }

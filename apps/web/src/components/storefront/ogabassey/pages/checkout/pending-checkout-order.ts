@@ -165,6 +165,7 @@ export function normalizeOrderPaymentMethod(
 
   if (
     paymentMethod === 'uba_redvault' ||
+    paymentMethod === 'oxygen' ||
     paymentMethod === 'klump' ||
     paymentMethod === 'credit_direct' ||
     paymentMethod === 'credpal' ||

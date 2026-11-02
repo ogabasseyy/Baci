@@ -134,14 +134,14 @@ describe('useOrderDetailsGiglExternalWaybill', () => {
 
   it.each([
     ['fulfill-only', { canFulfill: true, canEdit: false }],
-    ['no-fulfill', { canFulfill: false, canEdit: false }],
-  ])('hides the waybill option from %s staff', (_name, access) => {
+    ['edit-only', { canFulfill: false, canEdit: true }],
+  ])('offers the waybill option to %s staff', (_name, access) => {
     mocks.access = access;
-    expect(render().hook.result.current).toBeUndefined();
+    expect(render().hook.result.current).toBe(mocks.externalWaybill);
   });
 
-  it('offers the waybill option to staff with fulfill and edit', () => {
-    mocks.access = { canFulfill: true, canEdit: true };
-    expect(render().hook.result.current).toBe(mocks.externalWaybill);
+  it('hides the waybill option from staff with neither grant', () => {
+    mocks.access = { canFulfill: false, canEdit: false };
+    expect(render().hook.result.current).toBeUndefined();
   });
 });

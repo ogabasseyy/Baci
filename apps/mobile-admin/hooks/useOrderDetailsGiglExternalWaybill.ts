@@ -9,7 +9,6 @@ import {
   shouldPersistFulfillmentDetails,
 } from '@/lib/order-shipment';
 import { supabase } from '@/lib/supabase';
-import { canBookOrderGigl } from '@/schemas/order-fulfill-access';
 
 interface UseOrderDetailsGiglExternalWaybillParams {
   closeShipmentFlow: () => void;
@@ -21,10 +20,10 @@ interface UseOrderDetailsGiglExternalWaybillParams {
 }
 
 /**
- * Ship Order's "Already booked on GIG?" option. Offered only to viewers who
- * can book GIG (owner, or staff with orders.fulfill and orders.edit) when the
- * store has GIG Logistics turned on; the server still enforces the permission,
- * GIG account ownership and the receiver match.
+ * Ship Order's "Already booked on GIG?" option. Mirrors the server rule in
+ * link_external_gigl_waybill: the owner, or staff with orders.fulfill or
+ * orders.edit (the owner passes both grants), when the store has GIG Logistics
+ * turned on. The server also checks GIG account ownership and the receiver.
  */
 export function useOrderDetailsGiglExternalWaybill({
   closeShipmentFlow,
@@ -36,7 +35,7 @@ export function useOrderDetailsGiglExternalWaybill({
 }: UseOrderDetailsGiglExternalWaybillParams) {
   const { merchant } = useMerchant();
   const { isEligible } = useGiglAdminShippingEligibility(merchant);
-  const canBookGigl = canBookOrderGigl(useOrderFulfillAccess());
+  const { canEdit, canFulfill } = useOrderFulfillAccess();
   const externalWaybill = useOrderGiglExternalWaybill({
     // Same save the provider and rider paths make before shipping, so device
     // identifiers entered in the details step are never dropped.
@@ -82,5 +81,5 @@ export function useOrderDetailsGiglExternalWaybill({
     },
   });
 
-  return isEligible && canBookGigl ? externalWaybill : undefined;
+  return isEligible && (canFulfill || canEdit) ? externalWaybill : undefined;
 }

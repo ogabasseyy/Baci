@@ -1,4 +1,4 @@
--- Wallet backing transitions (state store: 20261031221953). Every transition
+-- Wallet backing transitions (state store: 20261102033304). Every transition
 -- takes the per-customer lock exclusively (assert_wallet_legacy takes it
 -- shared), then the backing row, then the wallet row, in that order.
 --

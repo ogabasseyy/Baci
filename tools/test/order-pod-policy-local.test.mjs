@@ -116,7 +116,7 @@ test('POD persistence policy and concurrent flag revocation', async () => {
       readFileSync(
         join(repository, 'supabase/tests/order_pay_on_delivery_policy.sql'),
         'utf8'
-      )
+      ).replace(/^\\set VERBOSITY verbose\n/, '')
     );
     // Match the replay runner's psql execution: it sends statements separately
     // rather than the single multi-statement query used by the pg client.

@@ -1,3 +1,4 @@
+\set VERBOSITY verbose
 -- Business invariant: disabled/missing POD settings cannot create an order
 -- or switch an existing order to POD, regardless of the calling wrapper.
 BEGIN;

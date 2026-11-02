@@ -44,17 +44,59 @@ test('authenticated VTU admission scope', async () => {
     ]);
     started = true;
     await client.connect();
-    await client.query(readFileSync(join(repository, 'tools/test/vtu-admission-fixture.sql'), 'utf8'));
+    await client.query(
+      readFileSync(
+        join(repository, 'tools/test/vtu-admission-fixture.sql'),
+        'utf8'
+      )
+    );
     for (const migration of [
       '20261020071000_vtu_admission_proof.sql',
       '20261020090105_harden_claim_vtu_intent.sql',
-    ]) await client.query(readFileSync(join(repository, 'supabase/migrations', migration), 'utf8'));
-    const resolver = readFileSync(join(repository, 'supabase/migrations/20261020090101_vtu_checkout_customer_rpcs.sql'), 'utf8');
-    const start = resolver.indexOf('CREATE OR REPLACE FUNCTION public._vtu_checkout_caller_customer(');
-    await client.query(resolver.slice(start, resolver.indexOf('$$;', start) + 3));
-    if (!process.argv.includes('--baseline')) await client.query(readFileSync(join(repository,
-      'supabase/migrations/20261101093558_scope_vtu_admission_to_authenticated_customer.sql'), 'utf8'));
-    await client.query(readFileSync(join(repository, 'supabase/tests/vtu_admission_customer_scope.sql'), 'utf8'));
+    ])
+      await client.query(
+        readFileSync(join(repository, 'supabase/migrations', migration), 'utf8')
+      );
+    const resolver = readFileSync(
+      join(
+        repository,
+        'supabase/migrations/20261020090101_vtu_checkout_customer_rpcs.sql'
+      ),
+      'utf8'
+    );
+    const start = resolver.indexOf(
+      'CREATE OR REPLACE FUNCTION public._vtu_checkout_caller_customer('
+    );
+    await client.query(
+      resolver.slice(start, resolver.indexOf('$$;', start) + 3)
+    );
+    if (!process.argv.includes('--baseline'))
+      await client.query(
+        readFileSync(
+          join(
+            repository,
+            'supabase/migrations/20261101093558_scope_vtu_admission_to_authenticated_customer.sql'
+          ),
+          'utf8'
+        )
+      );
+    await client.query(
+      readFileSync(
+        join(repository, 'supabase/tests/vtu_admission_customer_scope.sql'),
+        'utf8'
+      )
+    );
+    if (!process.argv.includes('--baseline')) {
+      const { verifyAdmissionSnapshotRace } = await import(
+        './vtu-admission-snapshot-race.mjs'
+      );
+      await verifyAdmissionSnapshotRace(client, {
+        host: socket,
+        port: 55489,
+        user: 'postgres',
+        database: 'postgres',
+      });
+    }
   } finally {
     await client.end();
     if (started) run('pg_ctl', ['-D', data, '-m', 'fast', 'stop']);

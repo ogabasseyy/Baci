@@ -50,6 +50,13 @@ export async function runDuplicateReference(
     );
   if (!main || !goal || !first?.reference || first.terminal !== 'success')
     return allUnknown(b, 'no settled proof 2 transfer to repeat');
+  // Mirrors the gate's accepted-reference rule, so the gate stays a backstop
+  // and is never tripped on a predictable condition.
+  if (first.sendAccepted !== true)
+    return allUnknown(
+      b,
+      'the proof 2 transfer was not journaled accepted (indeterminate or unresolved); its reference is never re-sent'
+    );
   const reference = first.reference;
 
   const countRows = (call: CallResult): number | null => {

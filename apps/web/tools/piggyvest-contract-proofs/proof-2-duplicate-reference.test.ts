@@ -1,14 +1,18 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryJournal } from './mutation-journal';
 import { runDuplicateReference } from './proof-2-duplicate-reference';
 import { runProof2 } from './proof-2-tsq';
 import { ProofBuilder } from './proof-builder';
+import { withExtension } from './proof-extension';
 import { setupScenario } from './scenario';
 import { makeHarness } from './test-harness.test-support';
 import type { ProofResult } from './types';
 
 let dispose: (() => void) | null = null;
-afterEach(() => dispose?.());
+afterEach(() => {
+  dispose?.();
+  vi.restoreAllMocks();
+});
 function harness(...args: Parameters<typeof makeHarness>) {
   const h = makeHarness(...args);
   dispose = h.dispose;
@@ -81,6 +85,7 @@ describe('proof 2: duplicate-reference re-send', () => {
       reference: journal.entries()[journal.entries().length - 2]?.reference,
       amountKobo: 100_000,
       terminal: 'success',
+      sendAccepted: true,
       sourceDeltaKobo: null,
       destinationDeltaKobo: null,
       feeFromRecordKobo: null,
@@ -91,6 +96,40 @@ describe('proof 2: duplicate-reference re-send', () => {
     expect(transferPosts(h)).toBe(before);
     expect(result.status).toBe('inconclusive');
     expect(answer(result, 'duplicate_reference_rejected')).toBe('unknown');
+  });
+
+  it('never re-sends a reference whose first send was not journaled accepted, and the run carries on', async () => {
+    const h = harness();
+    await setupScenario(h.ctx);
+    // The provider books proof 2's transfer but the reply is lost (502).
+    const ledger = h.mock.sandbox.ledger;
+    const book = ledger.transfer.bind(ledger);
+    vi.spyOn(ledger, 'transfer').mockImplementationOnce((kind, body) => {
+      book(kind, body);
+      return { status: 502, body: { status: false, message: 'Bad Gateway' } };
+    });
+    const result = await withExtension(runProof2, runDuplicateReference)(h.ctx);
+    const outcomes = h.journal
+      .entries()
+      .filter((entry) => entry.slot === 'p2/w2w' && entry.phase === 'outcome')
+      .map((entry) => entry.outcome);
+    expect(outcomes).toEqual(['indeterminate']);
+    expect(h.state.walletTransfer?.terminal).toBe('success');
+    expect(h.state.walletTransfer?.sendAccepted).toBe(false);
+    expect(transferPosts(h)).toBe(1);
+    expect(result.status).toBe('inconclusive');
+    expect(result.reason).toMatch(/not journaled accepted/);
+    for (const id of [
+      'duplicate_reference_rejected',
+      'duplicate_reference_moves_money_again',
+      'duplicate_reference_second_record',
+    ])
+      expect(answer(result, id)).toBe('unknown');
+    expect(
+      h.journal
+        .entries()
+        .some((entry) => entry.slot === 'p2/duplicate_reference')
+    ).toBe(false);
   });
 
   it('sends nothing without a settled proof 2 transfer, or in read-only mode', async () => {

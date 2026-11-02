@@ -278,6 +278,10 @@ export async function runProof2(ctx: ProofContext): Promise<ProofResult> {
     reference: sent.reference,
     amountKobo: amount,
     terminal: watch.terminal,
+    sendAccepted:
+      sent.kind === 'sent'
+        ? sent.outcome === 'accepted'
+        : sent.priorOutcome === 'accepted',
     sourceDeltaKobo: after
       ? delta(before.main.balance, after.main.balance)
       : null,

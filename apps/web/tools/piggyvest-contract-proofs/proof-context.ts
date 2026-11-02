@@ -22,6 +22,8 @@ export interface TransferObservation {
   feeFieldPresent: boolean | null;
   /** Our own reference for the transfer (proof 2's duplicate-reference step re-sends it). */
   reference?: string;
+  /** The send itself was journaled 'accepted' (only such a reference may be re-sent). */
+  sendAccepted?: boolean;
 }
 
 export interface DepositObservation {

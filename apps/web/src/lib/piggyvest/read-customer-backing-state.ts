@@ -1,8 +1,8 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import z from 'zod';
 import {
   type WalletBackingState,
+  walletBackingMerchantIdSchema,
   walletBackingStateSchema,
 } from '@/schemas/piggyvest/wallet-backing-state';
 
@@ -11,8 +11,6 @@ import {
  * not proceed" (refuse, or answer 503); it never means legacy.
  */
 export type CustomerBackingState = WalletBackingState | 'unknown';
-
-const merchantIdSchema = z.uuid();
 
 /**
  * Reads the signed-in customer's wallet backing state at one merchant.
@@ -26,7 +24,9 @@ export async function readCustomerBackingState(
   client: SupabaseClient,
   merchantId: string
 ): Promise<CustomerBackingState> {
-  if (!merchantIdSchema.safeParse(merchantId).success) return 'unknown';
+  if (!walletBackingMerchantIdSchema.safeParse(merchantId).success) {
+    return 'unknown';
+  }
   try {
     const { data, error } = await client.rpc('get_my_wallet_backing_state', {
       p_merchant_id: merchantId,

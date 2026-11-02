@@ -11,7 +11,9 @@
 --                        flip a wallet without a confirmed move.
 --   flag_migration_review records a review reason without changing the state.
 --
--- Refusals of bad input raise with a stable message; outcomes a caller must
+-- Refusals of bad input raise with a stable message: a missing or malformed
+-- argument, or a merchant that is not the one the backing row was recorded
+-- under (the caller must pass the recorded merchant). Outcomes a caller must
 -- record (a refused or reviewed flip) are returned, never raised, so a
 -- confirmed transfer is never rolled back by the flip.
 BEGIN;
@@ -196,7 +198,14 @@ BEGIN
   IF v_found AND v_backing.merchant_id <> p_merchant_id THEN
     RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
   END IF;
+  -- Only the recorded move replays as a no-op; any other confirmed move for a
+  -- backed wallet (or one for an audited zero, which had no move) is reviewed.
   IF v_found AND v_backing.state = 'backed' THEN
+    IF v_backing.move_reference IS DISTINCT FROM p_move_reference THEN
+      PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_reference_mismatch');
+      RETURN pg_catalog.jsonb_build_object('status', 'review', 'reason', 'reference_mismatch',
+        'backingId', v_backing.id);
+    END IF;
     RETURN pg_catalog.jsonb_build_object('status', 'backed', 'changed', false, 'backingId', v_backing.id);
   END IF;
   IF NOT v_found OR v_backing.state <> 'migrating' THEN
@@ -220,7 +229,10 @@ BEGIN
   IF NOT FOUND THEN
     v_balance := 0;
   ELSIF v_wallet_merchant <> p_merchant_id THEN
-    RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
+    -- The wallet row changed merchant after the move began: data, not input.
+    PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_wallet_scope_mismatch');
+    RETURN pg_catalog.jsonb_build_object('status', 'review', 'reason', 'wallet_scope_mismatch',
+      'backingId', v_backing.id);
   END IF;
   IF v_balance IS DISTINCT FROM v_backing.audited_amount THEN
     PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_balance_mismatch');

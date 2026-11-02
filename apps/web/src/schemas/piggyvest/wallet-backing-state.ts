@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod';
 
 /**
  * Reply of public.get_my_wallet_backing_state
@@ -14,3 +14,6 @@ export const walletBackingStateSchema = z.enum([
 ]);
 
 export type WalletBackingState = z.infer<typeof walletBackingStateSchema>;
+
+/** The merchant id the read is scoped to; anything else never reaches the RPC. */
+export const walletBackingMerchantIdSchema = z.uuid();

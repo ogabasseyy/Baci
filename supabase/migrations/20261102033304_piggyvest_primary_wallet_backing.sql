@@ -14,6 +14,13 @@
 -- yet. Later changes wire assert_wallet_legacy into the legacy writers.
 BEGIN;
 
+-- The relabel index below scans customer_wallet_transactions under a SHARE
+-- lock (as its earlier non-concurrent indexes did), and the deletion trigger
+-- briefly locks customers. Bound the wait so a busy table fails this
+-- transaction-wrapped migration fast (it retries next deploy) instead of
+-- queueing wallet writes behind it.
+SET LOCAL lock_timeout = '5s';
+
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'piggyvest_primary_ledger_ops') THEN
     CREATE ROLE piggyvest_primary_ledger_ops NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION;

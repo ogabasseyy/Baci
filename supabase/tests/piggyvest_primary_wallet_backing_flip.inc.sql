@@ -34,8 +34,15 @@ BEGIN
   PERFORM pg_temp.check(EXISTS (SELECT 1 FROM piggyvest_primary.wallet_backing
     WHERE customer_id = pg_temp.c(8) AND review_reason = 'flip_not_migrating'),
     'a refused flip is flagged for review');
-  PERFORM pg_temp.check(pg_temp.flip(2)->>'changed' = 'false',
-    'an audited-zero wallet is already backed: the flip is a no-op');
+  -- An audited-zero wallet never had a move, so a confirmed move reference
+  -- arriving for it is reviewed, not taken as a replay.
+  v_result := pg_temp.flip(2);
+  PERFORM pg_temp.check(v_result->>'status' = 'review' AND v_result->>'reason' = 'reference_mismatch',
+    'a move for an audited-zero wallet must be reviewed: ' || v_result::text);
+  PERFORM pg_temp.check(pg_temp.state(2) = 'backed' AND pg_temp.ledger_rows(2) = 0
+    AND EXISTS (SELECT 1 FROM piggyvest_primary.wallet_backing WHERE customer_id = pg_temp.c(2)
+      AND backed_via = 'audited_zero' AND move_reference IS NULL AND review_reason = 'flip_reference_mismatch'),
+    'the audited-zero wallet stays backed, unchanged, and is flagged');
   PERFORM pg_temp.expect_error(format(
     'SELECT piggyvest_primary.flip_to_backed(%L, %L, %L)', pg_temp.c(1), pg_temp.m(1), 'bad ref'),
     '22023', 'wallet_backing_invalid_move_reference');
@@ -134,6 +141,16 @@ BEGIN
   PERFORM pg_temp.check(pg_temp.begin_move(1, 1500)->>'status' = 'backed', 'begin on backed is a no-op');
   PERFORM pg_temp.check(pg_temp.relabel_rows(1) = 2 AND pg_temp.events(1) = 2,
     'begin on a backed wallet writes nothing');
+
+  -- A different confirmed move for an already-backed wallet is not the same
+  -- flip replayed: it goes to review and the recorded move stands.
+  v_result := piggyvest_primary.flip_to_backed(pg_temp.c(1), pg_temp.m(1),
+    'pvb-wt-' || pg_temp.c(1)::text || '-2');
+  PERFORM pg_temp.check(v_result->>'status' = 'review' AND v_result->>'reason' = 'reference_mismatch',
+    'a second, different move must be reviewed: ' || v_result::text);
+  PERFORM pg_temp.check(pg_temp.relabel_rows(1) = 2 AND EXISTS (SELECT 1 FROM piggyvest_primary.wallet_backing
+    WHERE customer_id = pg_temp.c(1) AND move_reference = 'pvb-wt-' || pg_temp.c(1)::text || '-1'
+      AND review_reason = 'flip_reference_mismatch'), 'the first move stands and the wallet is flagged');
 END $$;
 
 -- The largest amount the ledger row holds flips cleanly: the pair fits.
@@ -207,6 +224,16 @@ BEGIN
       'a moved customer row still reviews, not raises: ' || v_result::text);
     RAISE EXCEPTION USING ERRCODE = 'ZFLP1';
   EXCEPTION WHEN SQLSTATE 'ZFLP1' THEN NULL;
+  END;
+  -- A wallet row moved to another merchant after the move began reviews too.
+  BEGIN
+    UPDATE public.customer_wallets SET merchant_id = pg_temp.id(2) WHERE customer_id = pg_temp.c(7);
+    v_result := pg_temp.flip(7);
+    PERFORM pg_temp.check(v_result->>'status' = 'review' AND v_result->>'reason' = 'wallet_scope_mismatch'
+      AND pg_temp.state(7) = 'migrating' AND pg_temp.relabel_rows(7) = 0,
+      'a moved wallet row reviews, not raises: ' || v_result::text);
+    RAISE EXCEPTION USING ERRCODE = 'ZFLP2';
+  EXCEPTION WHEN SQLSTATE 'ZFLP2' THEN NULL;
   END;
 END $$;
 

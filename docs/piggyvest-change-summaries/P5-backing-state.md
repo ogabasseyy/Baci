@@ -12,7 +12,7 @@ The database gets these states, a history log, and three steps: start a move, fi
 
 ## Why
 
-Each wallet holds one kind of money, so old and PiggyVest money can never be mixed or spent twice. Later changes use these states to route payments.
+Each wallet holds one kind of money, so old and PiggyVest money can't be mixed or spent twice. Later changes route payments by state.
 
 ## What could go wrong and how it is prevented
 
@@ -20,10 +20,10 @@ Each wallet holds one kind of money, so old and PiggyVest money can never be mix
 - **Backed without the money arriving**: only a zero balance or a PiggyVest-confirmed move makes a wallet backed. Only the future transfer engine can finish a move.
 - **Money sent to the wrong place**: a move starts only if the customer finished PiggyVest setup, the store's PiggyVest connection is on, and the customer record still belongs to this store and to the person who set up PiggyVest.
 - **The wrong amount**: the checked amount must equal the balance with no old payment pending, and is checked again at the finish; anything different stays locked for review. Balances too large for one history line (about 100 million naira) never start.
-- **Money counted twice**: finishing writes one "moved out" and one "moved in" line for the same amount, balance unchanged. A repeat writes nothing.
-- **A finished transfer undone**: finishing reports a refusal or review instead of failing, even if the customer record changed. A failing follow-up step leaves the move standing, marked for review.
-- **A customer deleted mid-move**: blocked while migrating, so the move can finish. Trade-off: a wallet stuck in review blocks deletion until a later change can resolve it.
-- **Customers seeing each other's state**: the app check answers only for the signed-in customer. Any error, including a record under another store, answers "unknown", meaning "stop".
+- **Money counted twice**: finishing writes one "moved out" and one "moved in" line for the same amount, balance unchanged. A repeat writes nothing; a different confirmed move goes to review.
+- **A finished transfer undone**: finishing reports a refusal or review instead of failing, even if customer records changed. A failing follow-up step leaves the move standing, marked for review.
+- **A customer deleted mid-move**: blocked while migrating, so the move can finish. Trade-off: a wallet stuck in review blocks deletion until a later change resolves it.
+- **Customers seeing each other's state**: the app check answers only for the signed-in customer. Any error, including a record under another store, means "unknown": stop.
 
 ## How it is tested
 

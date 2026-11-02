@@ -1,16 +1,27 @@
+import { oxygenEligibilityPrerequisites } from '@/lib/payments/oxygen/eligibility-prerequisites';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
 
-/** Only these pending read commands may be resumed by a customer status check. */
+/** Only safe pending commands may be resumed by a customer status check. */
 export function pendingReadRecovery(
   snapshot: OxygenRuntimeSnapshot | null
-): 'refresh_kyc' | 'refresh_details' | null {
+): 'refresh_kyc' | 'refresh_details' | 'refresh_eligibility' | null {
   const pending = snapshot?.pending;
   if (
     !snapshot?.executionEnabled ||
-    !snapshot.state.bookingReference ||
     (pending?.status !== 'queued' && pending?.status !== 'executing')
   )
     return null;
+  if (
+    pending.action === 'refresh_eligibility' &&
+    pending.status === 'queued' &&
+    ['eligibility_required', 'kyc_required'].includes(snapshot.stage) &&
+    snapshot.state.applicationReference &&
+    snapshot.state.eligible === undefined &&
+    !snapshot.state.bookingReference &&
+    oxygenEligibilityPrerequisites(snapshot.state)
+  )
+    return 'refresh_eligibility';
+  if (!snapshot.state.bookingReference) return null;
   if (
     pending.action === 'refresh_kyc' &&
     snapshot.stage === 'booked' &&

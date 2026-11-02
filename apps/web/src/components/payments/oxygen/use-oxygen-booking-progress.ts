@@ -111,14 +111,18 @@ export function useOxygenBookingProgress(
       setPausedAddress(null);
     },
     checkAddress,
-    checkDetails: async () => {
+    checkPending: async () => {
       if (
         !enabled ||
         busy ||
-        pendingReadRecovery(snapshot) !== 'refresh_details'
+        !['refresh_details', 'refresh_eligibility'].includes(
+          pendingReadRecovery(snapshot) ?? ''
+        )
       )
         return;
-      await submit({ action: 'refresh_details' });
+      const action = pendingReadRecovery(snapshot);
+      if (action === 'refresh_details' || action === 'refresh_eligibility')
+        await submit({ action });
     },
   };
 }

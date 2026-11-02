@@ -225,3 +225,52 @@ it('delegates only explicitly configured staging selfie camera origins on checko
     vi.unstubAllEnvs();
   }
 });
+
+it.each([
+  '/checkout/bnpl',
+  '/shop/checkout/bnpl',
+  '/checkout/bnpl/',
+])('delegates Credit Direct camera and microphone on the %s launcher without adding Oxygen origins', (pathname) => {
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  vi.stubEnv('OXYGEN_STAGING_HOSTED_HOSTS', 'oxygen.example.com');
+  vi.stubEnv('OXYGEN_STAGING_SELFIE_HOSTS', 'oxygen.example.com');
+  try {
+    const response = applySecurityHeaders(
+      NextResponse.next(),
+      pathname,
+      'Mozilla',
+      'storefront',
+      false
+    );
+    const permissions = response.headers.get('Permissions-Policy') ?? '';
+    expect(permissions).toContain(
+      'camera=(self "https://checkout.creditdirect.ng"'
+    );
+    expect(permissions).toContain(
+      'microphone=(self "https://checkout.creditdirect.ng"'
+    );
+    expect(permissions).not.toContain('oxygen.example.com');
+    expect(response.headers.get('Content-Security-Policy')).not.toContain(
+      'oxygen.example.com'
+    );
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it.each([
+  '/products/bnpl',
+  '/shop/checkout/bnpl/other',
+  '/products/checkout/bnpl',
+])('keeps camera and microphone disabled on unrelated path %s', (pathname) => {
+  const response = applySecurityHeaders(
+    NextResponse.next(),
+    pathname,
+    'Mozilla',
+    'storefront',
+    false
+  );
+  expect(response.headers.get('Permissions-Policy')).toContain(
+    'camera=(), microphone=()'
+  );
+});

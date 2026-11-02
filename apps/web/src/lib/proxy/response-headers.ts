@@ -93,6 +93,14 @@ export function applySecurityHeaders(
   // checkout paths and the Oxygen payment surface. Everywhere else stays disabled.
   const isCheckoutRoute =
     routeType === 'storefront' && isStorefrontCheckoutPath(pathname);
+  const launcherPath = pathname.endsWith('/')
+    ? pathname.slice(0, -1)
+    : pathname;
+  const isBnplLauncher =
+    launcherPath.endsWith('/bnpl') &&
+    isStorefrontCheckoutPath(launcherPath.slice(0, -5));
+  const isCreditDirectRoute =
+    isCheckoutRoute || (routeType === 'storefront' && isBnplLauncher);
   const isOxygenRoute =
     routeType === 'storefront' && isOxygenPaymentSurface(pathname);
   const selfieOrigins = isOxygenRoute
@@ -100,7 +108,7 @@ export function applySecurityHeaders(
         .selfie.map((origin) => `"${origin}" `)
         .join('')
     : '';
-  const cameraAllowlist = isCheckoutRoute
+  const cameraAllowlist = isCreditDirectRoute
     ? `camera=(self ${selfieOrigins}"https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io"), microphone=(self "https://checkout.creditdirect.ng" "https://app.creditdirect.ng" "https://cdl.test.lendastack.io")`
     : isOxygenRoute && selfieOrigins
       ? `camera=(self ${selfieOrigins.trimEnd()}), microphone=()`

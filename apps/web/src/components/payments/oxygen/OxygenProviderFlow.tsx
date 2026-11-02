@@ -185,7 +185,7 @@ function OxygenProviderSession({
         error={error}
         refresh={refresh}
         checkAddress={bookingProgress.checkAddress}
-        checkDetails={bookingProgress.checkDetails}
+        checkPending={bookingProgress.checkPending}
         selfieConfirmed={selfieConfirmed}
         setComparingPlans={setComparingPlans}
       />

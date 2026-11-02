@@ -18,7 +18,7 @@ type Props = {
   error: string;
   refresh: ReturnType<typeof useOxygenProvider>['refresh'];
   checkAddress?: () => Promise<void>;
-  checkDetails?: () => Promise<void>;
+  checkPending?: () => Promise<void>;
   selfieConfirmed: boolean;
   setComparingPlans: Dispatch<SetStateAction<boolean>>;
 };
@@ -30,7 +30,7 @@ export function OxygenPendingConfirmation({
   error,
   refresh,
   checkAddress,
-  checkDetails,
+  checkPending,
   selfieConfirmed,
   setComparingPlans,
 }: Props) {
@@ -109,8 +109,10 @@ export function OxygenPendingConfirmation({
           identityCheck={snapshot?.pending?.action === 'validate_nin'}
           busy={busy}
           refresh={
-            pendingReadRecovery(snapshot) === 'refresh_details' && checkDetails
-              ? checkDetails
+            ['refresh_details', 'refresh_eligibility'].includes(
+              pendingReadRecovery(snapshot) ?? ''
+            ) && checkPending
+              ? checkPending
               : refresh
           }
         />

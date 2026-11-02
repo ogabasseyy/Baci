@@ -84,6 +84,31 @@ describe('matchExternalWaybillToOrder', () => {
     ).toBe(false);
   });
 
+  it('does not match on one shared name alone', () => {
+    const result = matchExternalWaybillToOrder(order, {
+      ...receiver,
+      ReceiverName: 'Emmanuel Okafor',
+      ReceiverPhoneNumber: '+2348111111111',
+    });
+    expect(result).toMatchObject({ name: 'mismatch', linkable: false });
+    expect(
+      matchExternalWaybillToOrder(order, {
+        ...receiver,
+        ReceiverName: 'AUDU',
+        ReceiverPhoneNumber: '+2348111111111',
+      }).name
+    ).toBe('match');
+  });
+
+  it('does not skip the destination when GIG omits it for an order that has one', () => {
+    expect(
+      matchExternalWaybillToOrder(order, {
+        ...receiver,
+        ReceiverState: undefined,
+      })
+    ).toMatchObject({ destination: 'unknown', linkable: false });
+  });
+
   it('reports unknown when GIG omits the receiver details', () => {
     expect(
       matchExternalWaybillToOrder(order, {

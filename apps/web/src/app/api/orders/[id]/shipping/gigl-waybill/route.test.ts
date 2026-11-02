@@ -9,22 +9,19 @@ vi.mock('@/lib/csrf', () => ({
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: vi.fn() }));
 vi.mock('@/lib/get-merchant-for-api-request', async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import('@/lib/get-merchant-for-api-request')
-  >()),
+  ...((await importOriginal()) as Record<string, unknown>),
   getMerchantForApiRequest: vi.fn(),
 }));
 vi.mock('@/lib/shipping/providers/gigl', () => ({
   giglProvider: { lookupExternalWaybill: vi.fn() },
 }));
 vi.mock('@/lib/shipping/providers/gigl.constants', async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import('@/lib/shipping/providers/gigl.constants')
-  >()),
+  ...((await importOriginal()) as Record<string, unknown>),
   isGiglRuntimeConfigured: () => true,
 }));
 
 import { authenticateApiRequest } from '@/lib/api-auth';
+import { checkCsrfProtection } from '@/lib/csrf';
 import { getMerchantForApiRequest } from '@/lib/get-merchant-for-api-request';
 import { giglProvider } from '@/lib/shipping/providers/gigl';
 import { giglPreShipment } from '@/lib/shipping/providers/gigl.test-helpers';
@@ -169,6 +166,7 @@ describe('POST /api/orders/[id]/shipping/gigl-waybill', () => {
       ...request({ action: 'preview', waybill: WAYBILL })
     );
     expect(response.status).toBe(401);
+    expect(checkCsrfProtection).not.toHaveBeenCalled();
     expect(giglProvider.lookupExternalWaybill).not.toHaveBeenCalled();
   });
 

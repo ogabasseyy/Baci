@@ -123,6 +123,7 @@ describe('persistExternalGiglWaybill', () => {
     ['order_shipment_exists', 409, 'ORDER_SHIPMENT_EXISTS'],
     ['active_merchant_shipping_charge', 409, 'ACTIVE_MERCHANT_SHIPPING_CHARGE'],
     ['order_not_owned', 404, 'ORDER_NOT_FOUND'],
+    ['checkout_shipping_retained', 409, 'CHECKOUT_SHIPPING_RETAINED'],
     ['external_waybill_proof_invalid', 500, 'WAYBILL_LINK_FAILED'],
   ])('maps %s to a safe %i response', async (message, status, code) => {
     const { supabase } = supabaseWith({ data: null, error: { message } });

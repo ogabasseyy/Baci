@@ -27,15 +27,16 @@ function errorResponse(error: string, status: number, code?: string) {
 // only reads GIG; `link` re-checks GIG and creates the tracked shipment.
 export async function POST(request: NextRequest, context: Params) {
   try {
+    // Authenticate first so an unauthenticated caller always gets 401.
+    const auth = await authenticateApiRequest(request);
+    if (auth.error || !auth.user || !auth.supabase) {
+      return errorResponse('Unauthorized', 401);
+    }
+
     const { valid: csrfValid, response: csrfResponse } =
       await checkCsrfProtection(request);
     if (!csrfValid) {
       return csrfResponse ?? errorResponse('CSRF validation failed', 403);
-    }
-
-    const auth = await authenticateApiRequest(request);
-    if (auth.error || !auth.user || !auth.supabase) {
-      return errorResponse('Unauthorized', 401);
     }
 
     const { id } = await context.params;

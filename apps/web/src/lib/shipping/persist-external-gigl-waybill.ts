@@ -21,6 +21,11 @@ const RPC_ERRORS: Record<string, [number, string, string]> = {
     'ORDER_NOT_LINKABLE',
     'This order can no longer take a GIG waybill.',
   ],
+  checkout_shipping_retained: [
+    409,
+    'CHECKOUT_SHIPPING_RETAINED',
+    'The customer paid Baci for GIG delivery on this order. Book it with the GIG option instead.',
+  ],
   active_shipment_booking_lock: [
     409,
     'SHIPMENT_BOOKING_IN_PROGRESS',

@@ -36,6 +36,7 @@ export function OrderDetailsScreenModals({
   const checkoutPaidShippingFee = getCheckoutGiglPaidShippingFee(order);
   const externalWaybill = useOrderDetailsGiglExternalWaybill({
     closeShipmentFlow: controller.closeShipmentFlow,
+    fulfillmentDetails: controller.fulfillmentDetails,
     orderId: order.id,
     orderNumber: order.order_number,
     setSuccessModal: controller.setSuccessModal,

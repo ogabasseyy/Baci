@@ -27,6 +27,8 @@ function errorMessage(error: unknown, fallback: string) {
 
 interface UseOrderGiglExternalWaybillParams {
   orderId: string;
+  /** Saves anything the sheet collected (IMEI, serials) before linking. */
+  beforeLink?: () => Promise<void>;
   onLinked: (result: GiglExternalWaybillLinkResult) => void;
 }
 
@@ -35,6 +37,7 @@ interface UseOrderGiglExternalWaybillParams {
  * the server, show who it is for, then attach it so Baci tracks it.
  */
 export function useOrderGiglExternalWaybill({
+  beforeLink,
   orderId,
   onLinked,
 }: UseOrderGiglExternalWaybillParams) {
@@ -93,6 +96,13 @@ export function useOrderGiglExternalWaybill({
     if (!preview?.linkable) return;
     setError(null);
     setState('linking');
+    try {
+      await beforeLink?.();
+    } catch (cause) {
+      setError(errorMessage(cause, 'Could not save the order details.'));
+      setState('preview');
+      return;
+    }
     try {
       const result = await linkOrderGiglExternalWaybill(
         orderId,

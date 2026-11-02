@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const fetchMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/hooks/orders/authenticated-fetch', () => ({
-  createAuthenticatedFetch: fetchMock,
+  createAuthenticatedFetchText: async (...args: unknown[]) => {
+    const response: Response = await fetchMock(...args);
+    return { response, text: await response.text() };
+  },
 }));
 vi.mock('@/lib/api-client', () => ({ BASE_URL: 'https://example.test' }));
 

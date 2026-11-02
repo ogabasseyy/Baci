@@ -71,5 +71,13 @@ VALUES
     '{"carrierName":"Dispatch Rider","trackingNumber":"2000000005"}', '2000000005'),
   ('41000000-0000-4000-8000-00000000000f', '10000000-0000-4000-8000-000000000002',
     'paid', 'processing', NULL, NULL, NULL, NULL);
+-- G: cancelled through cancelled_at only. H: a customer-paid Baci GIG quote.
+INSERT INTO public.orders (id, merchant_id, payment_status, shipping_status,
+  cancelled_at, shipping_funding_source, shipping_platform_retained_amount)
+VALUES
+  ('41000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001',
+    'paid', 'pending', now(), NULL, 0),
+  ('41000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000001',
+    'paid', 'processing', NULL, 'customer_checkout', 110);
 INSERT INTO public.merchant_shipping_charges (order_id, status) VALUES
   ('41000000-0000-4000-8000-00000000000d', 'reserved');

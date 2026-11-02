@@ -77,7 +77,8 @@ BEGIN
     AND index_meta.indisunique;
   IF v_index_definition IS NULL
      OR v_index_definition NOT LIKE '%(provider, upper(btrim(tracking_number)))%'
-     OR v_index_definition NOT LIKE '%status <> ''cancelled''%' THEN
+     OR v_index_definition NOT LIKE '%status <> ''cancelled''%'
+     OR v_index_definition NOT LIKE '%provider = ''GIGL''%' THEN
     RAISE EXCEPTION 'waybill uniqueness index is missing or changed: %',
       v_index_definition;
   END IF;

@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import { createAuthenticatedFetch } from '@/hooks/orders/authenticated-fetch';
+import { createAuthenticatedFetchText } from '@/hooks/orders/authenticated-fetch';
 import { BASE_URL } from '@/lib/api-client';
 import {
   giglExternalWaybillErrorSchema,
@@ -27,7 +27,9 @@ async function postWaybill<T>(
   body: { action: 'preview' | 'link'; waybill: string },
   schema: z.ZodType<T>
 ): Promise<T> {
-  const response = await createAuthenticatedFetch(
+  // The deadline covers the body too: a stalled stream must not leave the
+  // sheet stuck in "checking" or "linking".
+  const { response, text } = await createAuthenticatedFetchText(
     `${BASE_URL}/api/orders/${encodeURIComponent(orderId)}/shipping/gigl-waybill`,
     {
       body: JSON.stringify(body),
@@ -36,7 +38,12 @@ async function postWaybill<T>(
     },
     REQUEST_TIMEOUT_MS
   );
-  const payload: unknown = await response.json().catch(() => null);
+  let payload: unknown = null;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    payload = null;
+  }
   if (!response.ok) {
     const error = giglExternalWaybillErrorSchema.safeParse(payload);
     throw new GiglExternalWaybillError(

@@ -8,7 +8,7 @@ vi.mock('./providers/gigl', () => ({
   giglProvider: { lookupExternalWaybill: vi.fn() },
 }));
 vi.mock('./providers/gigl.constants', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./providers/gigl.constants')>()),
+  ...((await importOriginal()) as Record<string, unknown>),
   isGiglRuntimeConfigured: () => runtime.configured,
 }));
 

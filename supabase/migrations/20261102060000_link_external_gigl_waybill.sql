@@ -21,12 +21,14 @@ COMMENT ON COLUMN public.shipments.funding_source IS
   'baci_booking: booked through Baci (quote, wallet or checkout funded). external_manual: booked outside Baci (e.g. in the GIG app) and only linked for tracking; no Baci charge.';
 GRANT SELECT (funding_source) ON TABLE public.shipments TO authenticated;
 
--- One live shipment per carrier waybill, across all orders and merchants.
+-- One live GIGL shipment per waybill, across all orders and merchants.
 -- Production held four GIGL rows with distinct tracking numbers when this was
 -- written. Cancelled rows release the waybill so a mistaken link can be fixed.
+-- Other carriers are out of scope (their data was not audited).
 CREATE UNIQUE INDEX shipments_provider_tracking_number_live_key
   ON public.shipments (provider, pg_catalog.upper(pg_catalog.btrim(tracking_number)))
-  WHERE tracking_number IS NOT NULL
+  WHERE provider = 'GIGL'
+    AND tracking_number IS NOT NULL
     AND pg_catalog.btrim(tracking_number) <> ''
     AND status <> 'cancelled';
 
@@ -150,9 +152,18 @@ BEGIN
     RAISE EXCEPTION 'gigl_not_enabled' USING ERRCODE = 'P0001';
   END IF;
 
-  IF v_order.shipping_status IS NULL
+  -- Legacy cancellations can carry cancelled_at with a pending status.
+  IF v_order.cancelled_at IS NOT NULL
+     OR v_order.shipping_status IS NULL
      OR v_order.shipping_status NOT IN ('pending', 'processing', 'shipped') THEN
     RAISE EXCEPTION 'order_not_linkable' USING ERRCODE = 'P0001';
+  END IF;
+
+  -- A customer-paid Baci GIG quote is still withheld from settlement for a
+  -- Baci booking; linking a waybill GIG billed directly would charge twice.
+  IF v_order.shipping_funding_source = 'customer_checkout'
+     OR COALESCE(v_order.shipping_platform_retained_amount, 0) > 0 THEN
+    RAISE EXCEPTION 'checkout_shipping_retained' USING ERRCODE = 'P0001';
   END IF;
 
   IF v_order.shipment_booking_lock_token IS NOT NULL

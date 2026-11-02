@@ -36,14 +36,15 @@ const preview = {
   gig: null,
 } as const;
 
-function setup() {
+function setup(beforeLink?: () => Promise<void>) {
   const queryClient = new QueryClient();
   const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
   const onLinked = vi.fn();
   const wrapper = ({ children }: PropsWithChildren) =>
     createElement(QueryClientProvider, { client: queryClient }, children);
   const hook = renderHook(
-    () => useOrderGiglExternalWaybill({ orderId: 'order-1', onLinked }),
+    () =>
+      useOrderGiglExternalWaybill({ beforeLink, orderId: 'order-1', onLinked }),
     { wrapper }
   );
   return { hook, invalidate, onLinked };
@@ -131,6 +132,23 @@ describe('useOrderGiglExternalWaybill', () => {
     expect(hook.result.current.error).toBe(
       'This waybill is already attached to another order.'
     );
+  });
+
+  it('keeps the sheet open without linking when saving order details fails', async () => {
+    api.preview.mockResolvedValue(preview);
+    const { hook, onLinked } = setup(() =>
+      Promise.reject(new Error('Could not save the IMEI or serial numbers.'))
+    );
+    act(() => hook.result.current.setWaybill('1349639588'));
+    await act(() => hook.result.current.check());
+    await act(() => hook.result.current.link());
+
+    expect(api.link).not.toHaveBeenCalled();
+    expect(onLinked).not.toHaveBeenCalled();
+    expect(hook.result.current).toMatchObject({
+      error: 'Could not save the IMEI or serial numbers.',
+      state: 'preview',
+    });
   });
 
   it('treats a lost response as unconfirmed and refreshes the order', async () => {

@@ -59,10 +59,17 @@ function compareNames(
   orderName: string | null,
   receiverName: string | undefined
 ): ExternalWaybillFieldMatch {
-  const orderTokens = nameTokens(orderName);
+  const orderTokens = new Set(nameTokens(orderName));
   const receiverTokens = new Set(nameTokens(receiverName));
-  if (orderTokens.length === 0 || receiverTokens.size === 0) return 'unknown';
-  return orderTokens.some((token) => receiverTokens.has(token))
+  if (orderTokens.size === 0 || receiverTokens.size === 0) return 'unknown';
+  // Every word of the shorter name must appear in the longer one, so
+  // "Emmanuel Audu" matches "Audu Emmanuel" but a shared first name alone
+  // ("Emmanuel Okafor") does not.
+  const [shorter, longer] =
+    orderTokens.size <= receiverTokens.size
+      ? [orderTokens, receiverTokens]
+      : [receiverTokens, orderTokens];
+  return [...shorter].every((token) => longer.has(token))
     ? 'match'
     : 'mismatch';
 }
@@ -113,9 +120,11 @@ export function matchExternalWaybillToOrder(
   );
   const receiverMatches = name === 'match' || phone === 'match';
   // In-store orders often carry no delivery state; a matching phone number
-  // is then the evidence that the parcel is this customer's.
+  // is then the evidence that the parcel is this customer's. A GIG response
+  // without a destination never skips the check for an order that has one.
+  const orderHasState = normalizeState(order.shipping_address?.state) !== null;
   const destinationAgrees =
-    destination === 'match' || (destination === 'unknown' && phone === 'match');
+    destination === 'match' || (!orderHasState && phone === 'match');
 
   return {
     name,

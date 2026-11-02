@@ -161,7 +161,7 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
     it('enforces the waybill uniqueness index for direct writers too', () => {
       const insert = (status: string) => `INSERT INTO public.shipments
         (merchant_id, provider, tracking_number, status, sender_address, receiver_address, items)
-        VALUES ('${merchantId}', 'TOPSHIP', ' tn-1 ', '${status}', '{}', '{}', '[]');`;
+        VALUES ('${merchantId}', 'GIGL', ' tn-1 ', '${status}', '{}', '{}', '[]');`;
       expect(() => run(`${insert('booked')} ${insert('booked')}`)).toThrow(
         /shipments_provider_tracking_number_live_key/
       );
@@ -220,6 +220,13 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
         '',
         /active_merchant_shipping_charge/,
       ],
+      [
+        'an order cancelled through cancelled_at',
+        '1',
+        '',
+        /order_not_linkable/,
+      ],
+      ['a customer-paid Baci GIG order', '2', '', /checkout_shipping_retained/],
       [
         'a merchant without GIG',
         'a',

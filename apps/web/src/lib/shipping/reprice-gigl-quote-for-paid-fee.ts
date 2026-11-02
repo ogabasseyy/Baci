@@ -4,6 +4,7 @@ import {
   priceGiglQuote,
 } from './gigl-platform-pricing';
 import { priceGiglQuoteUnroundedV1 } from './gigl-platform-pricing-unrounded-v1';
+import { toKobo } from './to-kobo';
 import type { ShippingQuote } from './types';
 
 type RepriceableGiglQuote = Pick<
@@ -15,17 +16,6 @@ type RepriceableGiglQuote = Pick<
   | 'marginBasisPoints'
   | 'pricingVersion'
 >;
-
-function toKobo(value: number | string | null | undefined): number | null {
-  const amount =
-    typeof value === 'string' && value.trim().length > 0
-      ? Number(value)
-      : value;
-  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
-    return null;
-  }
-  return Math.round(amount * 100);
-}
 
 /**
  * Orders paid before GIGL prices were rounded up to whole NGN 100 hold a fee

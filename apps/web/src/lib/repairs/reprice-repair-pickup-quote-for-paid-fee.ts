@@ -5,6 +5,7 @@ import {
 } from '../shipping/gigl-platform-pricing';
 import { priceGiglQuoteUnroundedV1 } from '../shipping/gigl-platform-pricing-unrounded-v1';
 import { repriceGiglQuoteForPaidFee } from '../shipping/reprice-gigl-quote-for-paid-fee';
+import { toKobo } from '../shipping/to-kobo';
 import type { ShippingQuote } from '../shipping/types';
 
 type RepairPickupQuote = Pick<
@@ -16,17 +17,6 @@ type RepairPickupQuote = Pick<
   | 'marginBasisPoints'
   | 'pricingVersion'
 >;
-
-function toKobo(value: number | string | null | undefined): number | null {
-  const amount =
-    typeof value === 'string' && value.trim().length > 0
-      ? Number(value)
-      : value;
-  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
-    return null;
-  }
-  return Math.round(amount * 100);
-}
 
 /**
  * Repair pickups paid under the unrounded v1 rule were accepted whenever the

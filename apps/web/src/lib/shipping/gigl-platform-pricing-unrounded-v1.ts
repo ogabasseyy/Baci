@@ -1,9 +1,7 @@
-import {
-  type GiglPricingSnapshot,
-  minimumChargeKobo,
-  toProviderCostKobo,
-  toSnapshot,
-} from './gigl-pricing-arithmetic';
+import { minimumChargeKobo } from './gigl-minimum-charge-kobo';
+import type { GiglPricingSnapshot } from './gigl-pricing-constants';
+import { toSnapshot } from './gigl-pricing-snapshot';
+import { toProviderCostKobo } from './gigl-provider-cost-kobo';
 
 /**
  * The original v1 rule: cost plus 10%, ceiled to the kobo, without NGN 100

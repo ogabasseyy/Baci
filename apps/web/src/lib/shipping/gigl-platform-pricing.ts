@@ -1,17 +1,17 @@
+import { minimumChargeKobo } from './gigl-minimum-charge-kobo';
 import {
   GIGL_PRICE_ROUNDING_KOBO,
   type GiglPricingSnapshot,
-  minimumChargeKobo,
-  toProviderCostKobo,
-  toSnapshot,
-} from './gigl-pricing-arithmetic';
+} from './gigl-pricing-constants';
+import { toSnapshot } from './gigl-pricing-snapshot';
+import { toProviderCostKobo } from './gigl-provider-cost-kobo';
 
 export {
   GIGL_PLATFORM_MARGIN_BPS,
   GIGL_PRICE_ROUNDING_KOBO,
   GIGL_PRICING_VERSION,
   type GiglPricingSnapshot,
-} from './gigl-pricing-arithmetic';
+} from './gigl-pricing-constants';
 
 /**
  * Convert a fresh GIGL provider tariff (naira) into the bundled public price:

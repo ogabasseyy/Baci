@@ -1,3 +1,7 @@
+# doublestar: `**` also matches zero directories, so package-root files
+# (e.g. apps/mobile-admin/app.config.ts) are included.
+glob_matcher: doublestar
+
 pre-commit:
   parallel: true
   commands:
@@ -22,7 +26,7 @@ pre-commit:
       run: bash ci_scripts/run-lefthook-pnpm.sh exec biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
     lint-config:
       # A Biome config change can affect every file, so re-lint the repo.
-      glob: "{biome.json,biome.jsonc,**/biome.json,**/biome.jsonc}"
+      glob: "**/biome.{json,jsonc}"
       env:
         PUPPETEER_SKIP_DOWNLOAD: "true"
         PUPPETEER_CHROME_SKIP_DOWNLOAD: "true"

@@ -42,7 +42,9 @@ export async function encryptGiglToken(
   const iv = randomBytes(12);
   const key = await deriveKey(credentials, salt);
   try {
-    const cipher = createCipheriv('aes-256-gcm', key, iv);
+    const cipher = createCipheriv('aes-256-gcm', key, iv, {
+      authTagLength: 16,
+    });
     const ciphertext = Buffer.concat([
       cipher.update(JSON.stringify(token), 'utf8'),
       cipher.final(),
@@ -68,7 +70,8 @@ export async function decryptGiglToken(
     const decipher = createDecipheriv(
       'aes-256-gcm',
       key,
-      Buffer.from(record.iv, 'hex')
+      Buffer.from(record.iv, 'hex'),
+      { authTagLength: 16 }
     );
     decipher.setAuthTag(Buffer.from(record.tag, 'hex'));
     const plaintext = Buffer.concat([

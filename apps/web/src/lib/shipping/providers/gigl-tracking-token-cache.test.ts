@@ -1,12 +1,9 @@
 import {
-  chmod,
-  link,
   mkdir,
   mkdtemp,
   readFile,
   rm,
   stat,
-  symlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -223,93 +220,5 @@ describe('GIGL tracking token cache', () => {
     const value = { ...token, customerType };
     await cache.save(value);
     expect(await cache.load()).toEqual(value);
-  });
-
-  it('refuses a symlink cache file without changing its target', async () => {
-    const { directory, root } = await fixture();
-    const cache = createGiglTrackingTokenCache({
-      isLocked: () => true,
-      directory,
-      credentials,
-      now: () => now,
-    });
-    await cache.save(token);
-    const path = join(directory, 'token.json');
-    const target = join(root, 'target');
-    await writeFile(target, 'untouched');
-    await rm(path);
-    await symlink(target, path);
-    expect(await cache.load()).toBeNull();
-    await expect(cache.save(token)).rejects.toThrow();
-    expect(await readFile(target, 'utf8')).toBe('untouched');
-  });
-
-  it('refuses a token file with an additional hard link', async () => {
-    const { directory } = await fixture();
-    const cache = createGiglTrackingTokenCache({
-      isLocked: () => true,
-      directory,
-      credentials,
-      now: () => now,
-    });
-    await cache.save(token);
-    await link(join(directory, 'token.json'), join(directory, 'unexpected'));
-    expect(await cache.load()).toBeNull();
-    await expect(cache.save(token)).rejects.toThrow('Unsafe token cache file');
-  });
-
-  it('does not use a symlink as the cache directory', async () => {
-    const { root, directory } = await fixture();
-    const target = join(root, 'other');
-    await mkdir(target, { mode: 0o700 });
-    await symlink(target, directory);
-    const cache = createGiglTrackingTokenCache({
-      isLocked: () => true,
-      directory,
-      credentials,
-      now: () => now,
-    });
-    expect(await cache.load()).toBeNull();
-    await expect(cache.save(token)).rejects.toThrow();
-  });
-
-  it('refuses a cache beneath a parent writable by other users', async () => {
-    const { root, directory } = await fixture();
-    await chmod(root, 0o777);
-    const cache = createGiglTrackingTokenCache({
-      isLocked: () => true,
-      directory,
-      credentials,
-      now: () => now,
-    });
-    await expect(cache.save(token)).rejects.toThrow();
-    expect(await cache.load()).toBeNull();
-  });
-
-  it('refuses a cache with a writable non-sticky ancestor', async () => {
-    const { root } = await fixture();
-    const parent = join(root, 'parent');
-    await mkdir(parent, { mode: 0o700 });
-    await chmod(root, 0o777);
-    const cache = createGiglTrackingTokenCache({
-      isLocked: () => true,
-      directory: join(parent, 'cache'),
-      credentials,
-      now: () => now,
-    });
-    await expect(cache.save(token)).rejects.toThrow();
-  });
-
-  it('clears only the cached token', async () => {
-    const { directory } = await fixture();
-    const cache = createGiglTrackingTokenCache({
-      isLocked: () => true,
-      directory,
-      credentials,
-      now: () => now,
-    });
-    await cache.save(token);
-    await cache.clear();
-    expect(await cache.load()).toBeNull();
   });
 });

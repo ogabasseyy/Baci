@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isGiglWaybillOwnedByAccount } from './gigl.external-waybill';
+import {
+  isGiglWaybillOwnedByAccount,
+  readGiglErrorMessage,
+} from './gigl.external-waybill';
 import { baseUrl, jsonResponse } from './gigl.test-helpers';
 
 const ACCOUNT_USER_ID = 'e9de76d8-208a-44b6-bf02-9842fb8a9bee';
@@ -216,5 +219,27 @@ describe('isGiglWaybillOwnedByAccount', () => {
         account
       )
     ).toBe(false);
+  });
+});
+
+describe('readGiglErrorMessage', () => {
+  it('reads the GIG message from an error body', async () => {
+    await expect(
+      readGiglErrorMessage(
+        statusResponse(401, { message: 'Shipment Details Not Found.' }),
+        new AbortController().signal
+      )
+    ).resolves.toBe('Shipment Details Not Found.');
+  });
+
+  it('gives up when the lookup deadline fires while the body stalls', async () => {
+    const stalled = new Response(
+      new ReadableStream<Uint8Array>({ start() {} }),
+      { status: 401 }
+    );
+    const controller = new AbortController();
+    const read = readGiglErrorMessage(stalled, controller.signal);
+    controller.abort(new Error('deadline'));
+    await expect(read).resolves.toBe('');
   });
 });

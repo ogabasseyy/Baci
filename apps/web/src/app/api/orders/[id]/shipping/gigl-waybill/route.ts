@@ -76,12 +76,14 @@ export async function POST(request: NextRequest, context: Params) {
     }
 
     const { action, waybill } = parsed.data;
-    const { lookup, preview } = await previewExternalGiglWaybill({
-      merchantId: merchant.merchantId,
-      orderId: orderId.data,
-      supabase: auth.supabase,
-      waybill,
-    });
+    const { lookup, orderSnapshot, preview } = await previewExternalGiglWaybill(
+      {
+        merchantId: merchant.merchantId,
+        orderId: orderId.data,
+        supabase: auth.supabase,
+        waybill,
+      }
+    );
     if (action === 'preview') {
       return NextResponse.json({ preview });
     }
@@ -102,6 +104,7 @@ export async function POST(request: NextRequest, context: Params) {
       lookup,
       merchantId: merchant.merchantId,
       orderId: orderId.data,
+      orderSnapshot,
       supabase: auth.supabase,
       waybill,
     });

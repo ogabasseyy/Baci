@@ -38,6 +38,13 @@ const lookup: FoundExternalWaybill = {
   tracking: null,
 };
 
+const orderSnapshot = {
+  customer_name: 'Audu Emmanuel',
+  customer_phone: '08037608805',
+  phone: null,
+  state: 'Ebonyi',
+};
+
 function supabaseWith(result: { data: unknown; error: unknown }) {
   const rpc = vi.fn().mockResolvedValue(result);
   return { rpc, supabase: { rpc } as unknown as SupabaseClient };
@@ -45,10 +52,13 @@ function supabaseWith(result: { data: unknown; error: unknown }) {
 
 describe('buildExternalWaybillLinkPayload', () => {
   it('signs only verified GIG facts in the shape the RPC accepts', () => {
-    expect(buildExternalWaybillLinkPayload('1349639588', lookup)).toEqual({
+    expect(
+      buildExternalWaybillLinkPayload('1349639588', lookup, orderSnapshot)
+    ).toEqual({
       waybill: '1349639588',
       account_verified: true,
       receiver_match: true,
+      order_receiver: orderSnapshot,
       receiver_address: {
         name: 'Audu Emmanuel',
         phone: '+2348037608805',
@@ -76,14 +86,18 @@ describe('buildExternalWaybillLinkPayload', () => {
   });
 
   it('treats home delivery and a missing price explicitly', () => {
-    const payload = buildExternalWaybillLinkPayload('1', {
-      ...lookup,
-      preShipment: {
-        ...lookup.preShipment,
-        IsHomeDelivery: true,
-        GrandTotal: undefined,
+    const payload = buildExternalWaybillLinkPayload(
+      '1',
+      {
+        ...lookup,
+        preShipment: {
+          ...lookup.preShipment,
+          IsHomeDelivery: true,
+          GrandTotal: undefined,
+        },
       },
-    });
+      orderSnapshot
+    );
     expect(payload).toMatchObject({
       is_station_pickup: false,
       station_address: null,
@@ -101,6 +115,7 @@ describe('persistExternalGiglWaybill', () => {
         lookup,
         merchantId: MERCHANT_ID,
         orderId: ORDER_ID,
+        orderSnapshot,
         supabase,
         waybill: '1349639588',
       })
@@ -123,6 +138,7 @@ describe('persistExternalGiglWaybill', () => {
     ['order_shipment_exists', 409, 'ORDER_SHIPMENT_EXISTS'],
     ['active_merchant_shipping_charge', 409, 'ACTIVE_MERCHANT_SHIPPING_CHARGE'],
     ['order_not_owned', 404, 'ORDER_NOT_FOUND'],
+    ['order_changed_during_link', 409, 'ORDER_CHANGED'],
     ['checkout_shipping_retained', 409, 'CHECKOUT_SHIPPING_RETAINED'],
     ['external_waybill_proof_invalid', 500, 'WAYBILL_LINK_FAILED'],
   ])('maps %s to a safe %i response', async (message, status, code) => {
@@ -132,6 +148,7 @@ describe('persistExternalGiglWaybill', () => {
         lookup,
         merchantId: MERCHANT_ID,
         orderId: ORDER_ID,
+        orderSnapshot,
         supabase,
         waybill: '1349639588',
       })
@@ -145,6 +162,7 @@ describe('persistExternalGiglWaybill', () => {
         lookup,
         merchantId: MERCHANT_ID,
         orderId: ORDER_ID,
+        orderSnapshot,
         supabase,
         waybill: '1349639588',
       })

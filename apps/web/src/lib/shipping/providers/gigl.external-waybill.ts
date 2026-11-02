@@ -28,10 +28,16 @@ export type GiglExternalWaybillLookup =
       tracking: TrackingResult | null;
     };
 
-async function readGiglErrorMessage(response: Response): Promise<string> {
+// The lookup deadline must also cover error bodies: safeFetch stops
+// watching the signal once headers arrive.
+export async function readGiglErrorMessage(
+  response: Response,
+  signal: AbortSignal
+): Promise<string> {
   try {
     const payload = await readResponseJson(response, {
       maxResponseBytes: GIGL_ERROR_BODY_MAX_BYTES,
+      signal,
     });
     const parsed = giglSchemas.envelopeObject.safeParse(payload);
     return parsed.success ? (parsed.data.message ?? '') : '';
@@ -40,13 +46,15 @@ async function readGiglErrorMessage(response: Response): Promise<string> {
   }
 }
 
-const isTokenRejectedUnlessNotFound: GiglTokenRejectionCheck = async (
-  response
-) => {
-  if (response.status !== 401 && response.status !== 403) return false;
-  const message = await readGiglErrorMessage(response.clone());
-  return !GIGL_NOT_FOUND_MESSAGE.test(message);
-};
+function tokenRejectedUnlessNotFound(
+  signal: AbortSignal
+): GiglTokenRejectionCheck {
+  return async (response) => {
+    if (response.status !== 401 && response.status !== 403) return false;
+    const message = await readGiglErrorMessage(response.clone(), signal);
+    return !GIGL_NOT_FOUND_MESSAGE.test(message);
+  };
+}
 
 function isNotFoundEnvelope(envelope: GiglApiEnvelope): boolean {
   return (
@@ -73,11 +81,11 @@ async function fetchGiglLookup(
       signal,
     }),
     { maxResponseBytes: GIGL_TRACKING_RESPONSE_MAX_BYTES },
-    isTokenRejectedUnlessNotFound
+    tokenRejectedUnlessNotFound(signal)
   );
 
   if (!result.envelope) {
-    const message = await readGiglErrorMessage(result.response);
+    const message = await readGiglErrorMessage(result.response, signal);
     if (
       result.response.status === 401 &&
       GIGL_NOT_FOUND_MESSAGE.test(message)

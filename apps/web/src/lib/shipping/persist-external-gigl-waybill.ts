@@ -3,6 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   ExternalWaybillError,
+  type ExternalWaybillOrderSnapshot,
   type FoundExternalWaybill,
 } from './external-gigl-waybill-preview';
 import { createShippingQuoteRouteProof } from './shipping-quote-route-proof';
@@ -41,6 +42,11 @@ const RPC_ERRORS: Record<string, [number, string, string]> = {
     'ORDER_SHIPMENT_EXISTS',
     'This order already has a shipment.',
   ],
+  order_changed_during_link: [
+    409,
+    'ORDER_CHANGED',
+    'This order changed while GIG was being checked. Check the waybill again.',
+  ],
   waybill_already_linked: [
     409,
     'WAYBILL_ALREADY_LINKED',
@@ -56,7 +62,8 @@ function trimmed(value: string | undefined): string | null {
 /** The exact GIG facts the database accepts, signed by this server. */
 export function buildExternalWaybillLinkPayload(
   waybill: string,
-  lookup: FoundExternalWaybill
+  lookup: FoundExternalWaybill,
+  orderSnapshot: ExternalWaybillOrderSnapshot
 ) {
   const { preShipment, tracking } = lookup;
   const isStationPickup = preShipment.IsHomeDelivery === false;
@@ -64,6 +71,7 @@ export function buildExternalWaybillLinkPayload(
     waybill,
     account_verified: true,
     receiver_match: true,
+    order_receiver: orderSnapshot,
     receiver_address: {
       name: trimmed(preShipment.ReceiverName),
       phone: trimmed(preShipment.ReceiverPhoneNumber),
@@ -105,10 +113,12 @@ export async function persistExternalGiglWaybill({
   lookup,
   merchantId,
   orderId,
+  orderSnapshot,
   supabase,
   waybill,
 }: {
   lookup: FoundExternalWaybill;
+  orderSnapshot: ExternalWaybillOrderSnapshot;
   merchantId: string;
   orderId: string;
   supabase: SupabaseClient;
@@ -118,7 +128,7 @@ export async function persistExternalGiglWaybill({
     action: LINK_EXTERNAL_GIGL_WAYBILL_ACTION,
     merchantId,
     subjectId: orderId,
-    payload: buildExternalWaybillLinkPayload(waybill, lookup),
+    payload: buildExternalWaybillLinkPayload(waybill, lookup, orderSnapshot),
   });
   const { data, error } = (await supabase.rpc(
     'link_external_gigl_waybill' as never,

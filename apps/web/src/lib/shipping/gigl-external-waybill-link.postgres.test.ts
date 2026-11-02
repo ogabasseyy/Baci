@@ -4,7 +4,10 @@ import { createGiglExternalWaybillLinkTestDatabase } from '../../../../../supaba
 vi.mock('server-only', () => ({}));
 vi.mock('@/env', () => ({ getSupabaseServiceRoleKey: () => 's'.repeat(32) }));
 
-import type { FoundExternalWaybill } from './external-gigl-waybill-preview';
+import type {
+  ExternalWaybillOrderSnapshot,
+  FoundExternalWaybill,
+} from './external-gigl-waybill-preview';
 import {
   buildExternalWaybillLinkPayload,
   LINK_EXTERNAL_GIGL_WAYBILL_ACTION,
@@ -44,13 +47,20 @@ function proof(
   orderId: string,
   waybill = '2000000001',
   merchant = merchantId,
-  edit: (payload: Record<string, unknown>) => Record<string, unknown> = (p) => p
+  edit: (payload: Record<string, unknown>) => Record<string, unknown> = (p) =>
+    p,
+  snapshot: ExternalWaybillOrderSnapshot = {
+    customer_name: null,
+    customer_phone: null,
+    phone: null,
+    state: null,
+  }
 ) {
   return createShippingQuoteRouteProof({
     action: LINK_EXTERNAL_GIGL_WAYBILL_ACTION,
     merchantId: merchant,
     subjectId: orderId,
-    payload: edit(buildExternalWaybillLinkPayload(waybill, lookup)),
+    payload: edit(buildExternalWaybillLinkPayload(waybill, lookup, snapshot)),
   });
 }
 
@@ -201,6 +211,18 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
       expect(() =>
         run(`${actor(ownerId)} ${link(order('a'), makeProof())}`)
       ).toThrow(/external_waybill_proof_invalid/);
+    });
+
+    it('rejects a link when the order receiver changed after the GIG check', () => {
+      const stale = proof(order('a'), '2000000001', merchantId, (p) => p, {
+        customer_name: null,
+        customer_phone: null,
+        phone: null,
+        state: 'Lagos',
+      });
+      expect(() => run(`${actor(ownerId)} ${link(order('a'), stale)}`)).toThrow(
+        /order_changed_during_link/
+      );
     });
 
     it('rejects a signed payload that GIG did not verify', () => {

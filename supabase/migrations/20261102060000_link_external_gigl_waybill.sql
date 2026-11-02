@@ -134,6 +134,19 @@ BEGIN
      OR pg_catalog.jsonb_typeof(v_payload->'sender_address') IS DISTINCT FROM 'object' THEN
     RAISE EXCEPTION 'external_waybill_link_invalid' USING ERRCODE = '22023';
   END IF;
+  -- The receiver was matched against an earlier read of the order; refuse
+  -- if the customer or delivery fields changed before this row lock.
+  IF pg_catalog.jsonb_typeof(v_payload->'order_receiver') IS DISTINCT FROM 'object'
+     OR (v_payload->'order_receiver'->>'customer_name') IS DISTINCT FROM v_order.customer_name
+     OR (v_payload->'order_receiver'->>'customer_phone') IS DISTINCT FROM v_order.customer_phone
+     OR (v_payload->'order_receiver'->>'phone') IS DISTINCT FROM (
+       CASE WHEN pg_catalog.jsonb_typeof(v_order.shipping_address->'phone') = 'string'
+         THEN v_order.shipping_address->>'phone' END)
+     OR (v_payload->'order_receiver'->>'state') IS DISTINCT FROM (
+       CASE WHEN pg_catalog.jsonb_typeof(v_order.shipping_address->'state') = 'string'
+         THEN v_order.shipping_address->>'state' END) THEN
+    RAISE EXCEPTION 'order_changed_during_link' USING ERRCODE = '40001';
+  END IF;
   IF pg_catalog.jsonb_typeof(v_payload->'price') = 'number' THEN
     v_price := (v_payload->>'price')::numeric;
     IF v_price < 0 THEN v_price := NULL; END IF;

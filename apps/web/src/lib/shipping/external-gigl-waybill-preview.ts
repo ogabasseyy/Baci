@@ -43,6 +43,21 @@ export type FoundExternalWaybill = Extract<
   { status: 'found' }
 >;
 
+/**
+ * The order receiver fields GIG was compared against. The link RPC rejects
+ * the link if any changed before the order row was locked.
+ */
+export interface ExternalWaybillOrderSnapshot {
+  customer_name: string | null;
+  customer_phone: string | null;
+  phone: string | null;
+  state: string | null;
+}
+
+function textOrNull(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
 export interface ExternalWaybillPreview {
   waybill: string;
   linkable: boolean;
@@ -267,7 +282,11 @@ export async function previewExternalGiglWaybill({
   orderId: string;
   supabase: SupabaseClient;
   waybill: string;
-}): Promise<{ lookup: FoundExternalWaybill; preview: ExternalWaybillPreview }> {
+}): Promise<{
+  lookup: FoundExternalWaybill;
+  orderSnapshot: ExternalWaybillOrderSnapshot;
+  preview: ExternalWaybillPreview;
+}> {
   const order = await loadOrder(supabase, merchantId, orderId);
   await assertMerchantCanLink(supabase, merchantId, order, waybill);
   const lookup = await lookupOwnedWaybill(waybill);
@@ -281,6 +300,12 @@ export async function previewExternalGiglWaybill({
 
   return {
     lookup,
+    orderSnapshot: {
+      customer_name: textOrNull(order.customer_name),
+      customer_phone: textOrNull(order.customer_phone),
+      phone: textOrNull(order.shipping_address?.phone),
+      state: textOrNull(order.shipping_address?.state),
+    },
     preview: {
       waybill,
       linkable,

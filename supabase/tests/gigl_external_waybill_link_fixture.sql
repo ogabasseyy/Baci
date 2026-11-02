@@ -6,7 +6,10 @@ ALTER TABLE public.orders
   ADD COLUMN shipping_provider text,
   ADD COLUMN fulfillment_type text,
   ADD COLUMN self_fulfillment_data jsonb,
-  ADD COLUMN updated_at timestamptz;
+  ADD COLUMN updated_at timestamptz,
+  ADD COLUMN customer_name text,
+  ADD COLUMN customer_phone text,
+  ADD COLUMN shipping_address jsonb;
 CREATE TABLE public.merchant_feature_settings (
   merchant_id uuid PRIMARY KEY, shipping_providers jsonb
 );

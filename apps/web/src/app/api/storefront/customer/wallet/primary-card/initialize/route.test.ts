@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { primaryWalletCardCheckoutFixture as fixture } from '@/lib/piggyvest/primary-wallet-card-checkout.test-fixture';
+import type * as PrimaryCardRuntimeModule from '@/lib/piggyvest/primary-wallet-card-checkout-runtime';
 import { enabledPrimaryCardRuntimeEnv } from '@/lib/piggyvest/primary-wallet-card-checkout-runtime.test-support';
 import { primaryWalletCardCheckoutRouteFixture } from '../primary-wallet-card-checkout-route.test-fixture';
 import { POST } from './route';
@@ -29,10 +30,7 @@ vi.mock('pg', () => ({
 vi.mock(
   '@/lib/piggyvest/primary-wallet-card-checkout-runtime',
   async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@/lib/piggyvest/primary-wallet-card-checkout-runtime')
-      >();
+    const actual = await importOriginal<typeof PrimaryCardRuntimeModule>();
     mocks.runtime.mockImplementation(
       actual.readPrimaryWalletCardCheckoutRuntime
     );
@@ -89,9 +87,9 @@ function expectNoBoundaryReached() {
 }
 
 it('starts from a complete primary card environment the strict reader would enable', async () => {
-  const actual = await vi.importActual<
-    typeof import('@/lib/piggyvest/primary-wallet-card-checkout-runtime')
-  >('@/lib/piggyvest/primary-wallet-card-checkout-runtime');
+  const actual = await vi.importActual<typeof PrimaryCardRuntimeModule>(
+    '@/lib/piggyvest/primary-wallet-card-checkout-runtime'
+  );
   expect(
     actual.readPrimaryWalletCardCheckoutRuntime(process.env)?.settings
   ).toMatchObject({ merchantId: fixture.settings.merchantId });

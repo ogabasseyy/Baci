@@ -512,17 +512,19 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     const schema = generateProductSchema(product, 'TestStore', 'USD', 'NG');
     const variants = schema.hasVariant as Record<string, unknown>[];
 
-    expect(variants[0]?.brand).toEqual({
+    expect(schema.brand).toEqual({
       '@type': 'Brand',
       name: 'Samsung',
     });
+    expect(variants[0]).not.toHaveProperty('brand');
     expect(schema.gtin).toBe('1234567890123');
     expect(schema.mpn).toBe('SM-S25-256-JB');
     expect(variants[0]).not.toHaveProperty('gtin');
     expect(variants[0]).not.toHaveProperty('mpn');
-    expect(variants[0]?.description).toBe(
+    expect(schema.description).toBe(
       'A flagship device with variant-specific merchandising.'
     );
+    expect(variants[0]).not.toHaveProperty('description');
     expect(variants[0]?.color).toBe('Titanium Jetblack');
     expect(variants[0]?.size).toBe('256GB / 12GB');
   });
@@ -543,7 +545,6 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     const schema = generateProductSchema(product, 'TestStore', 'USD', 'NG');
     const variants = schema.hasVariant as Record<string, unknown>[];
 
-    expect(variants[0]?.description).toBe('A test product');
     expect(variants[0]).not.toHaveProperty('color');
     expect(variants[0]).not.toHaveProperty('size');
   });
@@ -689,6 +690,48 @@ describe('generateProductSchema - ProductGroup for variant products', () => {
     expect(returnPolicy.applicableCountry).toBe('NG');
     expect(returnPolicy.returnPolicyCountry).toBe('NG');
     expect(returnPolicy.merchantReturnDays).toBe(7);
+  });
+
+  it('defines shared offer policies once and references them from later variants', () => {
+    const product = makeProduct({
+      variants: [1, 2, 3].map((n) => ({
+        id: `v${n}`,
+        product_id: 'test-123',
+        merchant_id: 'm1',
+        attributes: { storage: `${n * 128}GB` },
+        stock_quantity: 5,
+      })),
+    });
+
+    const schema = generateProductSchema(
+      product,
+      'TestStore',
+      'NGN',
+      'NG',
+      undefined,
+      undefined,
+      { productUrl: 'https://shop.example/phones/test-product' }
+    );
+    const offers = (schema.hasVariant as Record<string, unknown>[]).map(
+      (variant) => variant.offers as Record<string, unknown>
+    );
+
+    expect(offers[0]?.shippingDetails).toMatchObject({
+      '@id': 'https://shop.example/phones/test-product#shipping-policy',
+      '@type': 'OfferShippingDetails',
+    });
+    expect(offers[0]?.hasMerchantReturnPolicy).toMatchObject({
+      '@id': 'https://shop.example/phones/test-product#return-policy',
+      '@type': 'MerchantReturnPolicy',
+    });
+    for (const offer of offers.slice(1)) {
+      expect(offer.shippingDetails).toEqual({
+        '@id': 'https://shop.example/phones/test-product#shipping-policy',
+      });
+      expect(offer.hasMerchantReturnPolicy).toEqual({
+        '@id': 'https://shop.example/phones/test-product#return-policy',
+      });
+    }
   });
 
   it('uses structured trust profile shipping and return settings instead of hardcoded defaults', () => {

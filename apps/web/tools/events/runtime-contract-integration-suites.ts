@@ -1,5 +1,9 @@
 /** Reviewed behavioral suites for split modules; each association must resolve through real imports. */
 export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
+  'apps/web/src/components/payments/oxygen/oxygen-checkout-ownership.ts':
+    'apps/web/src/components/payments/oxygen/OxygenStorefrontCheckout.test.tsx',
+  'apps/web/src/lib/proxy/oxygen-payment-surface.ts':
+    'apps/web/src/lib/proxy/response-headers.test.ts',
   'apps/web/src/components/payments/oxygen/OxygenPaymentReady.tsx':
     'apps/web/src/components/payments/oxygen/OxygenActivationRetry.test.tsx',
   'apps/web/src/app/api/shipping/quotes/load-public-merchant-rates.ts':
@@ -23,15 +27,15 @@ export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
   'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order-card-payment.ts':
     'apps/web/src/components/storefront/ogabassey/pages/checkout/handlers/place-order.test.ts',
   'apps/web/src/lib/payments/oxygen/interaction-payload.ts':
-    'apps/web/src/lib/payments/oxygen/interaction.test.ts',
+    'apps/web/src/lib/payments/oxygen/interaction.toanalyticsevent.test.ts',
   'apps/web/src/lib/payments/oxygen/interaction-presentation.ts':
     'apps/web/src/lib/payments/oxygen/interaction.test.ts',
   'apps/web/src/lib/payments/oxygen/interaction-response-mapping.ts':
-    'apps/web/src/lib/payments/oxygen/interaction.test.ts',
+    'apps/web/src/lib/payments/oxygen/interaction.mapoxygenlookupresult-200-outcomes.test.ts',
   'apps/web/src/lib/payments/oxygen/interaction-storage.ts':
-    'apps/web/src/lib/payments/oxygen/interaction.test.ts',
+    'apps/web/src/lib/payments/oxygen/interaction.handoff-marker.test.ts',
   'apps/web/src/lib/payments/oxygen/interaction-transition.ts':
-    'apps/web/src/lib/payments/oxygen/interaction.test.ts',
+    'apps/web/src/lib/payments/oxygen/interaction.snapshotforrevalidate-and-applyoxygendismiss.test.ts',
   'apps/web/src/lib/payments/oxygen/redact-diagnostic.ts':
     'apps/web/src/lib/payments/oxygen/security-review.test.ts',
   'apps/web/src/components/payments/oxygen/oxygen-interaction-lookup.ts':

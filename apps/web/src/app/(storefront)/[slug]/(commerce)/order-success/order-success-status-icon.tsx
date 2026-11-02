@@ -14,7 +14,7 @@ export function OrderSuccessStatusIcon({
           ? 'bg-green-100'
           : hasRecoveryState
             ? 'bg-amber-100'
-            : 'bg-gray-100'
+            : 'bg-store-secondary'
       }`}
     >
       {hasValidatedOrder ? (
@@ -22,7 +22,9 @@ export function OrderSuccessStatusIcon({
       ) : (
         <Loader2
           className={`size-10 ${
-            hasRecoveryState ? 'text-amber-600' : 'animate-spin text-gray-500'
+            hasRecoveryState
+              ? 'text-amber-600'
+              : 'animate-spin text-store-secondary-text'
           }`}
         />
       )}

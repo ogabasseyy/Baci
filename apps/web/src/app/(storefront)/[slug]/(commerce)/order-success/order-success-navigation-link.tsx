@@ -18,7 +18,7 @@ export function OrderSuccessNavigationLink({
       className={`inline-flex w-full items-center justify-center gap-2 rounded-xl px-6 py-4 font-bold transition-colors ${
         primary
           ? 'bg-store-primary text-store-primary-text hover:bg-store-primary/90'
-          : 'border border-gray-200 bg-white text-gray-900 hover:bg-gray-50'
+          : 'border border-store-border bg-store-background text-store-background-text hover:bg-store-secondary hover:text-store-secondary-text'
       }`}
     >
       {children}

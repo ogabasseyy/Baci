@@ -20,3 +20,15 @@ it('uses merchant primary and contrasting text tokens for primary actions', () =
     'text-store-primary-text'
   );
 });
+it('uses merchant surface and border tokens for secondary actions', () => {
+  render(
+    <OrderSuccessNavigationLink href="/shop">
+      Continue shopping
+    </OrderSuccessNavigationLink>
+  );
+  expect(screen.getByRole('link')).toHaveClass(
+    'bg-store-background',
+    'text-store-background-text',
+    'border-store-border'
+  );
+});

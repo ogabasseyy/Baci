@@ -171,7 +171,7 @@ export function OrderSuccessContent() {
   const googleCustomerReviewProducts = buildGoogleReviewProducts(order);
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20 pt-10">
+    <div className="min-h-screen bg-store-secondary pb-20 pt-10">
       {/* Google Customer Reviews Opt-in */}
       {merchant && order?.customer_email && (
         <GoogleCustomerReviews
@@ -185,14 +185,16 @@ export function OrderSuccessContent() {
       )}
 
       <div className="max-w-xl mx-auto px-4">
-        <div className="bg-white rounded-3xl shadow-xl border border-gray-100 p-8 text-center">
+        <div className="bg-store-background rounded-3xl shadow-xl border border-store-border p-8 text-center">
           <OrderSuccessStatusIcon
             hasValidatedOrder={hasValidatedOrder}
             hasRecoveryState={hasRecoveryState}
           />
 
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{heading}</h1>
-          <p className="text-gray-500 mb-8">{description}</p>
+          <h1 className="text-3xl font-bold text-store-background-text mb-2">
+            {heading}
+          </h1>
+          <p className="text-store-background-text/60 mb-8">{description}</p>
 
           {/* Payer handoff (Pay for Me only): copyable payment
               instructions the requester forwards — amount plus transfer
@@ -206,7 +208,7 @@ export function OrderSuccessContent() {
             />
           )}
           {isLoading && (
-            <div className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-500 mb-8">
+            <div className="inline-flex items-center gap-2 rounded-full bg-store-secondary px-4 py-2 text-sm text-store-secondary-text/60 mb-8">
               <Loader2 className="size-4 animate-spin" />
               <span>Fetching your order summary…</span>
             </div>
@@ -251,7 +253,7 @@ export function OrderSuccessContent() {
             {hasValidatedOrder && customerSession.isAuthenticated ? (
               <Link
                 href={asRoute(getHref('/account/orders'))}
-                className="inline-flex items-center justify-center gap-2 px-6 py-4 bg-white text-gray-900 font-bold rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors w-full"
+                className="inline-flex items-center justify-center gap-2 px-6 py-4 bg-store-background text-store-background-text font-bold rounded-xl border border-store-border hover:bg-store-secondary hover:text-store-secondary-text transition-colors w-full"
               >
                 View My Orders
               </Link>
@@ -262,7 +264,7 @@ export function OrderSuccessContent() {
                     `/track-order?token=${encodeURIComponent(order.tracking_token)}`
                   )
                 )}
-                className="inline-flex items-center justify-center gap-2 px-6 py-4 bg-white text-gray-900 font-bold rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors w-full"
+                className="inline-flex items-center justify-center gap-2 px-6 py-4 bg-store-background text-store-background-text font-bold rounded-xl border border-store-border hover:bg-store-secondary hover:text-store-secondary-text transition-colors w-full"
               >
                 Track My Order
               </Link>
@@ -273,7 +275,7 @@ export function OrderSuccessContent() {
                 href={BACI_GOOGLE_REVIEW_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center justify-center gap-2 px-6 py-4 bg-white text-gray-900 font-bold rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors w-full"
+                className="inline-flex items-center justify-center gap-2 px-6 py-4 bg-store-background text-store-background-text font-bold rounded-xl border border-store-border hover:bg-store-secondary hover:text-store-secondary-text transition-colors w-full"
               >
                 <Star size={18} />
                 Leave a Google Review

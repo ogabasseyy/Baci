@@ -4,6 +4,7 @@ import { drainPrimaryWalletBankInbox } from './primary-wallet-bank-inbox-worker'
 
 const store = vi.hoisted(() => ({
   readiness: vi.fn(),
+  engineReady: vi.fn(),
   claim: vi.fn(),
   process: vi.fn(),
   retry: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock('./primary-wallet-bank-inbox-store', () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   store.readiness.mockResolvedValue(true);
+  store.engineReady.mockResolvedValue({ ready: true, missing: [] });
   store.claim.mockResolvedValue([fixture.claim]);
   store.process.mockResolvedValue('prerequisite');
   store.retry.mockResolvedValue(true);

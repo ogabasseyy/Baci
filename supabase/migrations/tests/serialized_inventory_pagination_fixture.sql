@@ -1,0 +1,12 @@
+CREATE SCHEMA auth;
+CREATE SCHEMA private;
+CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql AS $$ SELECT 'service_role'::text $$;
+CREATE FUNCTION public.has_merchant_access(uuid) RETURNS boolean LANGUAGE sql AS $$ SELECT true $$;
+CREATE TABLE public.products (id uuid primary key, has_variants boolean);
+CREATE TABLE public.product_variants (id uuid primary key, product_id uuid, attributes jsonb, condition text, is_inventory_anchor boolean);
+CREATE TABLE public.branches (id uuid primary key, name text);
+CREATE TABLE private.variant_inventory_events (inventory_unit_id uuid, event_type text);
+CREATE TABLE public.variant_inventory (id uuid primary key, merchant_id uuid, variant_id uuid, branch_id uuid, identifier_type text, identifier_value text, status text, source text, order_id uuid, order_item_id uuid, sold_at timestamptz, reserved_at timestamptz, first_reserved_at timestamptz, reservation_expires_at timestamptz, created_at timestamptz, updated_at timestamptz);
+INSERT INTO public.products VALUES ('00000000-0000-0000-0000-000000000001', false);
+INSERT INTO public.product_variants VALUES ('00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', '{}', NULL, true);
+INSERT INTO public.variant_inventory (id, merchant_id, variant_id, status, source, created_at, updated_at) SELECT ('00000000-0000-0000-0000-' || lpad(g::text,12,'0'))::uuid, '00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000002', 'available', 'merchant_stock', '2026-01-01'::timestamptz + g * interval '1 second', now() FROM generate_series(1,3) g;

@@ -138,8 +138,6 @@ SELECT * FROM (VALUES
    'RLS/policy helper evaluated for anon sessions'),
   ('public.is_storefront_order_idempotency_hash(uuid,text,text)',
    'guest or bearer flow; token/secret verified in the body'),
-  ('public.is_storefront_pod_order_idempotency_hash(uuid,text,text)',
-   'guest checkout replay probe; returns only a merchant-scoped hash match for a POD order'),
   ('public.issue_credit_direct_checkout_token(uuid,text,uuid,text,text)',
    'guest or bearer flow; token/secret verified in the body'),
   ('public.mark_immediate_order_notification_started_with_proof(uuid,text,uuid)',

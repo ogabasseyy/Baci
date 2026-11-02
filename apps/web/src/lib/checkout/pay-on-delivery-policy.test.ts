@@ -9,6 +9,9 @@ const input = {
   paymentMethod: 'pod',
   checkoutRequestHash: null,
   requestIdempotencyKey: null,
+  getReplayClient: () => {
+    throw new Error('unexpected replay probe');
+  },
 };
 const disabled = { data: [{ pay_on_delivery_enabled: false }], error: null };
 describe('merchant POD admission', () => {
@@ -46,10 +49,16 @@ describe('merchant POD admission', () => {
       data: [{ pay_on_delivery_enabled: true }],
       error: null,
     });
+    const getReplayClient = vi.fn();
     expect(
-      await validatePayOnDeliveryPolicy({ ...input, client: { rpc } })
+      await validatePayOnDeliveryPolicy({
+        ...input,
+        client: { rpc },
+        getReplayClient,
+      })
     ).toEqual({ ok: true });
     expect(rpc).toHaveBeenCalledTimes(1);
+    expect(getReplayClient).not.toHaveBeenCalled();
   });
   it.each([
     { data: [] },
@@ -77,10 +86,10 @@ describe('merchant POD admission', () => {
     true,
     false,
   ])('requires confirmed exact replay after disable: %s', async (hashMatches) => {
-    const rpc = vi
+    const rpc = vi.fn().mockResolvedValue(disabled);
+    const replayRpc = vi
       .fn()
-      .mockResolvedValueOnce(disabled)
-      .mockResolvedValueOnce({ data: hashMatches, error: null });
+      .mockResolvedValue({ data: hashMatches, error: null });
     expect(
       (
         await validatePayOnDeliveryPolicy({
@@ -88,10 +97,11 @@ describe('merchant POD admission', () => {
           checkoutRequestHash: 'server-hash',
           requestIdempotencyKey: 'existing-key',
           client: { rpc },
+          getReplayClient: () => ({ rpc: replayRpc }),
         })
       ).ok
     ).toBe(hashMatches);
-    expect(rpc).toHaveBeenLastCalledWith(
+    expect(replayRpc).toHaveBeenLastCalledWith(
       'is_storefront_pod_order_idempotency_hash',
       {
         p_merchant_id: input.merchantId,
@@ -125,6 +135,7 @@ describe('merchant POD admission', () => {
       checkoutRequestHash: 'hash',
       requestIdempotencyKey: 'key',
       client: { rpc },
+      getReplayClient: () => ({ rpc }),
     });
     expect(result).toMatchObject({
       ok: false,
@@ -132,5 +143,18 @@ describe('merchant POD admission', () => {
       body: { code: 'POD_POLICY_UNAVAILABLE' },
     });
     expect(JSON.stringify(result)).not.toContain('private detail');
+  });
+  it('fails closed if the trusted replay client cannot be created', async () => {
+    const result = await validatePayOnDeliveryPolicy({
+      ...input,
+      checkoutRequestHash: 'hash',
+      requestIdempotencyKey: 'key',
+      client: { rpc: vi.fn().mockResolvedValue(disabled) },
+      getReplayClient: () => {
+        throw new Error('private signing detail');
+      },
+    });
+    expect(result).toMatchObject({ ok: false, status: 503 });
+    expect(JSON.stringify(result)).not.toContain('private signing detail');
   });
 });

@@ -2078,6 +2078,15 @@ export async function POST(request: NextRequest) {
       paymentMethod: effectivePaymentMethod,
       checkoutRequestHash,
       requestIdempotencyKey,
+      getReplayClient: () =>
+        createStorefrontOrderRpcClient({
+          fallbackClient: supabase,
+          hasCanonicalDeliveryMetadata: Boolean(
+            canonicalDeliveryMethod || canonicalAirportType
+          ),
+          merchantId: merchant_id,
+          userId: resolvedUserId,
+        }),
     });
     if (!podAdmission.ok) {
       return NextResponse.json(podAdmission.body, {

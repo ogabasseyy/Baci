@@ -16,7 +16,8 @@ DECLARE
   rejected boolean;
   codepoint integer;
 BEGIN
-  IF NOT has_function_privilege('anon','public.is_storefront_pod_order_idempotency_hash(uuid,text,text)','EXECUTE')
+  IF has_function_privilege('anon','public.is_storefront_pod_order_idempotency_hash(uuid,text,text)','EXECUTE')
+    OR NOT has_function_privilege('authenticated','public.is_storefront_pod_order_idempotency_hash(uuid,text,text)','EXECUTE')
     OR has_function_privilege('anon','private.is_pay_on_delivery_method(text)','EXECUTE') THEN
     RAISE EXCEPTION 'POD replay probe privileges are incorrect';
   END IF;
@@ -56,6 +57,7 @@ BEGIN
   END LOOP;
   INSERT INTO public.orders(merchant_id,order_number,total,payment_method,customer_email)
   VALUES(disabled,'pod-card-control',1,'card','fixture@example.com') RETURNING id INTO card_order;
+  PERFORM set_config('request.jwt.claims',jsonb_build_object('role','service_role','storefront_order_context','route','storefront_order_merchant_id',disabled)::text,true);
   UPDATE public.orders SET checkout_idempotency_key='card-key-1234567',checkout_request_hash=repeat('a',64)
     WHERE id=card_order;
   IF public.is_storefront_pod_order_idempotency_hash(disabled,'card-key-1234567',repeat('a',64)) THEN
@@ -63,6 +65,7 @@ BEGIN
   END IF;
   UPDATE public.orders SET checkout_idempotency_key='pod-key',checkout_request_hash=repeat('b',64)
     WHERE id=accepted;
+  PERFORM set_config('request.jwt.claims',jsonb_build_object('role','service_role','storefront_order_context','route','storefront_order_merchant_id',enabled)::text,true);
   IF public.is_storefront_pod_order_idempotency_hash(enabled,'pod-key',repeat('b',64)) THEN
     RAISE EXCEPTION 'short POD replay key was accepted';
   END IF;
@@ -70,6 +73,11 @@ BEGIN
   IF NOT public.is_storefront_pod_order_idempotency_hash(enabled,'pod-key-12345678',repeat('b',64)) THEN
     RAISE EXCEPTION 'accepted POD replay was not found';
   END IF;
+  PERFORM set_config('request.jwt.claims','{"role":"authenticated"}',true);
+  IF public.is_storefront_pod_order_idempotency_hash(enabled,'pod-key-12345678',repeat('b',64)) THEN
+    RAISE EXCEPTION 'ordinary authenticated user accessed the replay probe';
+  END IF;
+  PERFORM set_config('request.jwt.claims',jsonb_build_object('role','service_role','storefront_order_context','route','storefront_order_merchant_id',enabled)::text,true);
   IF public.is_storefront_pod_order_idempotency_hash(disabled,'pod-key-12345678',repeat('b',64)) THEN
     RAISE EXCEPTION 'another merchant authorized a POD replay';
   END IF;
@@ -105,4 +113,34 @@ BEGIN
     RAISE EXCEPTION 'rejected POD attempt left an order behind';
   END IF;
 END $$;
+-- Exercise the SECURITY DEFINER boundary as real PostgREST roles. Guest route
+-- claims intentionally have no sub; ordinary users cannot mint route claims.
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE target uuid := '36700000-0000-4000-8000-000000000001';
+BEGIN
+  PERFORM set_config('request.jwt.claims',jsonb_build_object('role','authenticated','storefront_order_context','route','storefront_order_merchant_id',target)::text,true);
+  IF NOT public.is_storefront_pod_order_idempotency_hash(target,'pod-key-12345678',repeat('b',64)) THEN
+    RAISE EXCEPTION 'scoped guest route could not verify POD replay';
+  END IF;
+  PERFORM set_config('request.jwt.claims','{"role":"authenticated","sub":"11111111-2222-3333-4444-555555555555"}',true);
+  IF public.is_storefront_pod_order_idempotency_hash(target,'pod-key-12345678',repeat('b',64)) THEN
+    RAISE EXCEPTION 'ordinary authenticated caller accessed POD replay';
+  END IF;
+  PERFORM set_config('request.jwt.claims','{"role":"authenticated","storefront_order_context":"route","storefront_order_merchant_id":"36700000-0000-4000-8000-000000000002"}',true);
+  IF public.is_storefront_pod_order_idempotency_hash(target,'pod-key-12345678',repeat('b',64)) THEN
+    RAISE EXCEPTION 'wrong-merchant route claim accessed POD replay';
+  END IF;
+END $$;
+RESET ROLE;
+SET LOCAL ROLE anon;
+DO $$
+BEGIN
+  BEGIN
+    PERFORM public.is_storefront_pod_order_idempotency_hash('36700000-0000-4000-8000-000000000001'::uuid,'pod-key-12345678',repeat('b',64));
+    RAISE EXCEPTION 'anonymous caller executed POD replay probe';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $$;
+RESET ROLE;
 ROLLBACK;

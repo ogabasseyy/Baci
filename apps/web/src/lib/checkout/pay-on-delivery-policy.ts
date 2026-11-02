@@ -50,6 +50,7 @@ export async function validatePayOnDeliveryPolicy(input: {
   paymentMethod: string;
   checkoutRequestHash: string | null;
   requestIdempotencyKey: string | null;
+  getReplayClient: () => PolicyClient;
 }): Promise<PolicyResult> {
   if (!isPayOnDelivery(input.paymentMethod)) return { ok: true };
   const { data, error } = await input.client.rpc(
@@ -72,16 +73,19 @@ export async function validatePayOnDeliveryPolicy(input: {
   // A client-supplied key alone is never replay authorization: the hash must
   // be server-derived and confirmed against that merchant's persisted order.
   if (input.requestIdempotencyKey && input.checkoutRequestHash) {
-    const replay = await input.client.rpc(
-      'is_storefront_pod_order_idempotency_hash',
-      {
-        p_merchant_id: input.merchantId,
-        p_checkout_idempotency_key: input.requestIdempotencyKey,
-        p_checkout_request_hash: input.checkoutRequestHash,
-      }
-    );
-    if (replay.error) return unavailable();
-    if (replay.data === true) return { ok: true };
+    try {
+      const replay = await input
+        .getReplayClient()
+        .rpc('is_storefront_pod_order_idempotency_hash', {
+          p_merchant_id: input.merchantId,
+          p_checkout_idempotency_key: input.requestIdempotencyKey,
+          p_checkout_request_hash: input.checkoutRequestHash,
+        });
+      if (replay.error) return unavailable();
+      if (replay.data === true) return { ok: true };
+    } catch {
+      return unavailable();
+    }
   }
   return { ok: false, status: 403, body: PAY_ON_DELIVERY_DISABLED_BODY };
 }

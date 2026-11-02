@@ -78,6 +78,10 @@ test('POD persistence policy and concurrent flag revocation', async () => {
     await admin.query(`
       CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
       CREATE SCHEMA private;
+      CREATE SCHEMA auth;
+      CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
+        SELECT coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb
+      $$;
       CREATE TABLE public.merchants(id uuid PRIMARY KEY,email text,business_name text,slug text,is_published boolean);
       CREATE TABLE public.merchant_feature_settings(merchant_id uuid PRIMARY KEY,pay_on_delivery_enabled boolean);
       CREATE FUNCTION public.fixture_settings_audit() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -130,6 +134,15 @@ test('POD persistence policy and concurrent flag revocation', async () => {
           join(
             repository,
             'supabase/migrations/20261102063000_harden_pod_replay_bounds.sql'
+          ),
+          'utf8'
+        )
+      );
+      await admin.query(
+        readFileSync(
+          join(
+            repository,
+            'supabase/migrations/20261102064500_scope_pod_replay_probe.sql'
           ),
           'utf8'
         )

@@ -59,6 +59,52 @@ describe('POST order POD policy', () => {
       expect.objectContaining({ p_payment_method: 'pod' })
     );
   });
+  it.each([
+    true,
+    false,
+  ])('uses the scoped replay client for guest=%s', async (guest) => {
+    const client = await setupLoyaltyBridge({
+      get_storefront_payment_settings: {
+        data: [{ pay_on_delivery_enabled: false }],
+        error: null,
+      },
+      is_storefront_pod_order_idempotency_hash: { data: true, error: null },
+    });
+    if (guest)
+      vi.mocked(authenticateApiRequest).mockResolvedValue({
+        user: null,
+        error: 'Not authenticated',
+        supabase: null,
+      });
+    const scoped = {
+      ...client,
+      rpc: vi.fn((...args: Parameters<typeof client.rpc>) =>
+        client.rpc(...args)
+      ),
+    };
+    const { createStorefrontOrderRpcClient } = await import(
+      '@/lib/checkout/storefront-order-rpc-client'
+    );
+    const factory = vi.mocked(createStorefrontOrderRpcClient);
+    factory.mockReturnValue(scoped as never);
+    try {
+      await POST(loyaltyRequest({ payment_method: 'pod' }));
+      expect(scoped.rpc).toHaveBeenCalledWith(
+        'is_storefront_pod_order_idempotency_hash',
+        expect.any(Object)
+      );
+      expect(
+        client.rpc.mock.calls.filter(
+          ([name]) => name === 'get_storefront_payment_settings'
+        )
+      ).toHaveLength(1);
+      expect(factory).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: guest ? null : expect.any(String) })
+      );
+    } finally {
+      factory.mockImplementation(({ fallbackClient }) => fallbackClient);
+    }
+  });
   it('maps a concurrent database policy rejection to a safe client error', async () => {
     await setupLoyaltyBridge({
       get_storefront_payment_settings: {

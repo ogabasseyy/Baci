@@ -172,6 +172,7 @@ describe('verify Ogabassey crawl-depth coverage', () => {
       'https://ogabassey.com.example.invalid/smartphones/fixture-phone',
       '//example.invalid/smartphones/fixture-phone',
       'https://user@ogabassey.com/smartphones/fixture-phone',
+      'https://:secret@ogabassey.com/smartphones/fixture-phone',
       'http://ogabassey.com/smartphones/fixture-phone',
       'http://[broken',
       'javascript:alert(1)',

@@ -61,8 +61,8 @@ function PreviewCard({ preview }: { preview: GiglExternalWaybillPreview }) {
   if (!gig) {
     return (
       <Text style={[styles.message, { color: colors.error }]}>
-        The receiver on this waybill is not this order&apos;s customer. Check
-        the waybill number.
+        This waybill does not match this order&apos;s customer and delivery
+        address. Check the waybill number.
       </Text>
     );
   }

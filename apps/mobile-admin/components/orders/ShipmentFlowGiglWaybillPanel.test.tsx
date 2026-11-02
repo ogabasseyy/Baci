@@ -148,7 +148,9 @@ describe('ShipmentFlowGiglWaybillPanel', () => {
         selected
       />
     );
-    expect(screen.getByText(/not this order's customer/)).toBeTruthy();
+    expect(
+      screen.getByText(/does not match this order's customer/)
+    ).toBeTruthy();
     expect(screen.queryByText('Audu Emmanuel')).toBeNull();
   });
 

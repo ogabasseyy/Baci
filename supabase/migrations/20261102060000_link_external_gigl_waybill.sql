@@ -197,9 +197,9 @@ BEGIN
         = pg_catalog.upper(v_waybill)
       AND shipment.status <> 'cancelled'
   ) OR EXISTS (
+    -- Any merchant: GIG credentials are one shared Baci account.
     SELECT 1 FROM public.orders AS other_order
-    WHERE other_order.merchant_id = v_order.merchant_id
-      AND other_order.id <> p_order_id
+    WHERE other_order.id <> p_order_id
       AND pg_catalog.upper(pg_catalog.btrim(other_order.tracking_number))
         = pg_catalog.upper(v_waybill)
   ) THEN

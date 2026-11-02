@@ -245,6 +245,22 @@ describe('POST /api/orders/[id]/shipping/gigl-waybill', () => {
     expect(preview).toMatchObject({ linkable: false, gig: null });
   });
 
+  it('hides GIG receiver details on a name-only match', async () => {
+    const { supabase } = createSupabase(linkableTables());
+    signIn(supabase);
+    gigFinds({ ReceiverPhoneNumber: '+2348111111111', ReceiverState: 'LAGOS' });
+
+    const response = await POST(
+      ...request({ action: 'preview', waybill: WAYBILL })
+    );
+    const { preview } = await response.json();
+    expect(preview).toMatchObject({
+      linkable: false,
+      match: { name: 'match', phone: 'mismatch', destination: 'mismatch' },
+      gig: null,
+    });
+  });
+
   it('links a matching waybill through the proof-gated RPC', async () => {
     const { rpc, supabase } = createSupabase(linkableTables());
     signIn(supabase);

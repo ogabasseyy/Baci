@@ -275,7 +275,9 @@ export async function previewExternalGiglWaybill({
     order,
     lookup.preShipment
   );
-  const receiverConfirmed = match.name === 'match' || match.phone === 'match';
+  // A shared name alone is weak evidence: reveal GIG's details only on a
+  // matching phone or a full match (receiver and destination).
+  const receiverConfirmed = linkable || match.phone === 'match';
 
   return {
     lookup,

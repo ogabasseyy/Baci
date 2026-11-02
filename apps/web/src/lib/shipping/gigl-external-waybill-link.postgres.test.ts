@@ -150,6 +150,12 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
         run(`${actor(ownerId)} ${link(order('a'))} ${asPostgres}
           ${actor(otherOwnerId)} ${link(order('f'), proof(order('f'), '2000000001', otherMerchantId))}`)
       ).toThrow(/waybill_already_linked/);
+      // A typed self-fulfilment number on another merchant's order.
+      expect(() =>
+        run(
+          `${actor(otherOwnerId)} ${link(order('f'), proof(order('f'), '2000000005', otherMerchantId))}`
+        )
+      ).toThrow(/waybill_already_linked/);
       // A typed self-fulfilment number on another order of the merchant.
       expect(() =>
         run(

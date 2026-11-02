@@ -8,11 +8,43 @@
 -- Privileges are asserted through the catalog (has_function_privilege and
 -- the function ACL), never by calling a function and catching the denial.
 --
+-- The retirement must also hold for grants this replay never sees: a
+-- direct grant made only in production (for example to a login role
+-- created outside migrations) or PUBLIC granted again. The suite adds
+-- both, re-applies the migration and lets the assertions below prove it
+-- removed them. Everything is rolled back at the end.
+--
 -- Usage:
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
 --     -f supabase/tests/primary_card_initialization_retired_privileges.sql
 
 BEGIN;
+
+CREATE ROLE primary_card_retirement_probe NOLOGIN;
+
+DO $$
+DECLARE
+  v_function record;
+BEGIN
+  FOR v_function IN
+    SELECT p.oid::pg_catalog.regprocedure AS signature
+    FROM pg_catalog.pg_proc p
+    WHERE p.pronamespace = 'piggyvest_primary_card'::pg_catalog.regnamespace
+      AND p.proname IN (
+        'reserve',
+        'claim_initialization',
+        'record_initialization'
+      )
+  LOOP
+    EXECUTE pg_catalog.format(
+      'GRANT EXECUTE ON FUNCTION %s TO PUBLIC, primary_card_retirement_probe',
+      v_function.signature
+    );
+  END LOOP;
+END
+$$;
+
+\ir ../migrations/20261031225854_retire_primary_card_initialization.sql
 
 DO $$
 DECLARE

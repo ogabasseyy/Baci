@@ -6,52 +6,50 @@
   now always answers "no longer available" (HTTP 410, code
   `PRIMARY_CARD_FUNDING_RETIRED`), before it checks who is asking, reads any
   settings, or contacts Paystack or the database.
-- The app's card database connector no longer contains the instructions that
-  start a card top-up. Only the read and clean-up instructions remain.
-- A new database change removes everyone's permission to run the three
-  database steps that start a card top-up, including their owner.
-- Checking the status of an existing card top-up no longer tries to restart a
-  stuck one. It only asks Paystack what happened and records the answer.
-- A bug in the clean-up tool for abandoned card checkouts is fixed: it failed
-  whenever it found something to clean up.
+- The app's card database connector no longer contains the steps that start a
+  card top-up.
+- A database change removes everyone's permission to run the three steps that
+  start a card top-up, including permissions given only in production. It
+  checks its own work and stops the deploy if anyone could still run them.
+- Checking an existing card top-up no longer tries to restart a stuck one.
+- The clean-up tool for abandoned card checkouts is fixed: it failed whenever
+  it found something to clean up.
+- The mobile app treats the new answer like today's "not available": it
+  forgets an unfinished top-up that never started and uses the regular top-up.
 
 ## Why
 
 You decided card funding into PiggyVest is dropped. Until now the refusal
-relied on the feature's settings being off; filling them in would have started
-card top-ups again. Now the refusal is built into the code and the database, so
-no setting can turn it back on.
+relied on settings being off; filling them in would have restarted card
+top-ups. Now the code and the database refuse, whatever the settings say.
 
 ## What could go wrong and how it is prevented
 
 - **A customer is mid-way through a card top-up when this ships.** Before
-  merging, a read-only count (in `docs/ops/primary-card-funding-retirement.md`)
-  must show no open card top-ups. If any show up, merging stops until they are
-  resolved.
+  merging, a read-only count (`docs/ops/primary-card-funding-retirement.md`)
+  must show no open card top-ups; otherwise merging waits.
 - **A payment that already happened is lost.** Status checks, Paystack
   notifications and the clean-up tool keep working, so existing payments are
-  still recorded and passed on for crediting.
-- **Older app versions show an error.** Older apps only reach this endpoint
-  when the PiggyVest wallet is reported as enabled for them, and it is not.
-  They keep using today's regular top-up.
-- **Someone rolls back the code.** The database still refuses, so even old
-  code cannot start a card top-up.
+  still recorded.
+- **A phone gets stuck on "pending".** A phone that saved a top-up but never
+  learned its number retries without checking whether the wallet is enabled.
+  The updated app moves on to the regular top-up. Older app versions keep
+  showing "pending" until updated; no money moves.
+- **Someone rolls back the code.** The database still refuses.
 
 ## How it is tested
 
-- With every card setting filled in with working values, a test shows the
-  endpoint still refuses without touching login, settings, Paystack or the
-  database.
-- Tests show status checks still resolve existing top-ups and never restart
-  one.
-- A test runs the real clean-up tool end to end and shows it completes
-  without the retired steps.
-- A database check, run on every pull request, confirms no role can run the
-  three retired steps while the status and clean-up steps keep their
-  permissions.
+- With every card setting filled in, the endpoint still refuses without
+  touching login, settings, Paystack or the database.
+- Status checks still resolve existing top-ups and never restart one.
+- The real clean-up tool runs end to end.
+- A database check on every pull request adds an extra permission, re-applies
+  the change and confirms no role can run the retired steps, while status and
+  clean-up keep theirs.
+- Mobile tests show an unfinished top-up is released and the regular top-up
+  runs, while one that may have been paid is kept.
 
 ## How it stays switched off
 
-There is no switch. The refusal lives in the code and in the database
-permissions. Turning card funding back on would need a new, reviewed database
-change and your explicit decision.
+There is no switch. Turning card funding back on would need a new, reviewed
+database change and your explicit decision.

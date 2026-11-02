@@ -5,7 +5,9 @@ Card top-up into the PiggyVest primary wallet is permanently retired. The web
 any configuration, and migration
 `20261031225854_retire_primary_card_initialization` removes every role's
 `EXECUTE` on the three initialization functions (`reserve`,
-`claim_initialization`, `record_initialization`). Status, webhook
+`claim_initialization`, `record_initialization`), including grants that exist
+only in production, and aborts if any non-superuser role could still run one.
+Status, webhook
 reconciliation, custody intake for existing references and the abandonment CLI
 keep working.
 
@@ -63,9 +65,16 @@ WHERE p.pronamespace = 'piggyvest_primary_card'::regnamespace
 ORDER BY 1;
 ```
 
-**Pass:** every row shows an empty access list (`{}`). The CI suite
-`supabase/tests/primary_card_initialization_retired_privileges.sql` asserts the
+**Pass:** every row shows an empty access list (`{}`). The migration already
+refuses to commit otherwise, so this is a confirmation. The CI suite
+`supabase/tests/primary_card_initialization_retired_privileges.sql` adds an
+extra grantee and a `PUBLIC` grant, re-applies the migration and asserts the
 same thing on every replay, and that the drain functions keep their grants.
+
+**If the deploy stops on this migration** with "can still execute": a grant the
+migration could not remove exists in production. Do not edit the migration;
+an operator inspects that function's access list with the query above and
+removes the grant through a reviewed change, then the deploy is retried.
 
 ## Rollback
 

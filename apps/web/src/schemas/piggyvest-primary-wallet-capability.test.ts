@@ -13,18 +13,32 @@ import {
 } from './piggyvest-primary-wallet-capability';
 
 // The storefront app's own list of codes it treats as "use the legacy flow".
+// This web test runs when the server contract changes; a storefront-only
+// change is held by the app's own isPrimaryWalletNotReady test, which names
+// each of these codes and runs under the storefront jest plan.
 const MOBILE_CAPABILITY_SOURCE = resolve(
   __dirname,
   '../../../mobile-storefront/lib/piggyvest-primary-capability.ts'
 );
 
+// Tolerates a type annotation, a generic type argument, either quote style
+// and line breaks, so a formatting-only rewrite keeps the check meaningful.
+const MOBILE_NOT_READY_CODES_PATTERN =
+  /\bconst PRIMARY_NOT_READY_CODES\b[^=]*=\s*new Set(?:<[^>]*>)?\(\s*\[([^\]]*)\]/;
+
+function parseMobileNotReadyCodes(source: string): string[] {
+  const body = MOBILE_NOT_READY_CODES_PATTERN.exec(source)?.[1] ?? '';
+  const codes = [...body.matchAll(/['"]([A-Z_]+)['"]/g)].map(
+    (match) => match[1] ?? ''
+  );
+  if (codes.length === 0) throw new Error('mobile not-ready codes not found');
+  return codes;
+}
+
 function mobileNotReadyCodes(): string[] {
-  const source = readFileSync(MOBILE_CAPABILITY_SOURCE, 'utf8');
-  const body = /const PRIMARY_NOT_READY_CODES = new Set\(\[([^\]]*)\]\)/.exec(
-    source
-  )?.[1];
-  if (body === undefined) throw new Error('mobile not-ready codes not found');
-  return [...body.matchAll(/'([A-Z_]+)'/g)].map((match) => match[1] ?? '');
+  return parseMobileNotReadyCodes(
+    readFileSync(MOBILE_CAPABILITY_SOURCE, 'utf8')
+  );
 }
 
 describe('PiggyVest primary client capability contract', () => {
@@ -44,6 +58,29 @@ describe('PiggyVest primary client capability contract', () => {
     const mobile = mobileNotReadyCodes();
     expect(mobile.length).toBeGreaterThan(0);
     for (const code of PRIMARY_NOT_READY_CODES) expect(mobile).toContain(code);
+  });
+
+  // A formatting-only rewrite of the mobile list must not break this check.
+  it.each([
+    ["const PRIMARY_NOT_READY_CODES = new Set(['A_CODE', 'B_CODE']);"],
+    ["const PRIMARY_NOT_READY_CODES = new Set<string>(['A_CODE', 'B_CODE']);"],
+    [
+      'const PRIMARY_NOT_READY_CODES: ReadonlySet<string> = new Set([\n  "A_CODE",\n  "B_CODE",\n]);',
+    ],
+    [
+      "const PRIMARY_NOT_READY_CODES = new Set<string>(\n  ['A_CODE', 'B_CODE'] as const\n);",
+    ],
+  ])('reads the mobile codes from %j', (source) => {
+    expect(parseMobileNotReadyCodes(source)).toEqual(['A_CODE', 'B_CODE']);
+  });
+
+  it('fails loudly when the mobile list cannot be found or is empty', () => {
+    expect(() =>
+      parseMobileNotReadyCodes('const OTHER = new Set([]);')
+    ).toThrow('mobile not-ready codes not found');
+    expect(() =>
+      parseMobileNotReadyCodes('const PRIMARY_NOT_READY_CODES = new Set([]);')
+    ).toThrow('mobile not-ready codes not found');
   });
 
   it.each(['ios', 'android'])('accepts the %s platform', (platform) => {

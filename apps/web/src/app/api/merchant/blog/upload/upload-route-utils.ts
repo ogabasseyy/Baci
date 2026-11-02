@@ -8,6 +8,10 @@ import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
+import {
+  deleteMerchantMedia,
+  type MediaDeletionClient,
+} from '@/lib/media/delete-merchant-media';
 
 const uploadPurposeSchema = z.enum(['featured', 'inline']);
 const requestedMerchantIdSchema = z.uuid();
@@ -22,7 +26,7 @@ export const deleteBodySchema = z
   .object({
     path: z.string().min(1).optional(),
     variantPaths: z
-      .union([z.array(z.string().min(1)), variantPathObjectSchema])
+      .union([z.array(z.string().min(1)).max(99), variantPathObjectSchema])
       .optional(),
   })
   .refine(
@@ -35,14 +39,6 @@ export const deleteBodySchema = z
   );
 
 export const MAX_FILE_SIZE = 5 * 1024 * 1024;
-
-type MediaStorageCleanupClient = {
-  storage: {
-    from(bucket: string): {
-      remove(paths: string[]): Promise<{ error: unknown | null }>;
-    };
-  };
-};
 
 const inlineAllowedTypes = [
   'image/jpeg',
@@ -128,22 +124,19 @@ export async function resolveMerchantAccess(input: {
 }
 
 export async function cleanupUploadedPaths(
-  supabase: MediaStorageCleanupClient,
+  supabase: MediaDeletionClient,
+  merchantId: string,
   uploadedPaths: string[]
 ) {
   if (uploadedPaths.length === 0) return;
-  try {
-    const { error } = await supabase.storage
-      .from('media')
-      .remove(uploadedPaths);
-    if (!error) return;
+  const failure = await deleteMerchantMedia({
+    client: supabase,
+    merchantId,
+    identities: uploadedPaths,
+  });
+  if (failure) {
     console.error('Failed to clean up partially uploaded blog media paths', {
-      error,
-      uploadedPaths,
-    });
-  } catch (error) {
-    console.error('Failed to clean up partially uploaded blog media paths', {
-      error,
+      code: failure.body.code,
       uploadedPaths,
     });
   }

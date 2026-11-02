@@ -73,6 +73,44 @@ describe('uploadFeaturedBlogImage', () => {
     }
   });
 
+  it('admits cleanup before removing a partially uploaded original', async () => {
+    const { supabase, upload: storageUpload, remove } = createSupabaseMock();
+    storageUpload
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ error: new Error('variant failed') });
+    const response = await upload({ supabase });
+    expect(response.status).toBe(500);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'claim_merchant_media_deletion_batch',
+      {
+        p_merchant_id: ownerAccess.merchantId,
+        p_identities: [filePath],
+      }
+    );
+    expect(remove).toHaveBeenCalledWith([filePath]);
+    expect(supabase.rpc.mock.invocationCallOrder[0]).toBeLessThan(
+      remove.mock.invocationCallOrder[0]
+    );
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'complete_merchant_media_deletion',
+      {
+        p_merchant_id: ownerAccess.merchantId,
+        p_path: filePath,
+      }
+    );
+  });
+
+  it('does not remove uploaded media if admission fails', async () => {
+    const { supabase, upload: storageUpload, remove } = createSupabaseMock();
+    storageUpload
+      .mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ error: new Error('variant failed') });
+    supabase.rpc.mockRejectedValueOnce(new Error('admission unavailable'));
+    const response = await upload({ supabase });
+    expect(response.status).toBe(500);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
   it('preserves featured validation errors without writing media', async () => {
     const { supabase, upload: storageUpload } = createSupabaseMock();
     mockGenerateFeaturedImageVariants.mockRejectedValue(

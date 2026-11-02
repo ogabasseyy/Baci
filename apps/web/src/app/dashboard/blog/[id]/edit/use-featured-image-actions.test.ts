@@ -71,32 +71,75 @@ describe('useFeaturedImageActions merchant context', () => {
     );
   });
 
-  it('sends the selected merchant context when deleting a persisted featured image', async () => {
-    mockFetchWithCsrf.mockResolvedValueOnce(response({ success: true }));
+  it('clears a saved featured image without deleting the still-referenced file', async () => {
+    const setFormData = vi.fn();
+    const saved = {
+      ...formData,
+      featured_image_url:
+        'https://cdn.example.com/media/merchant-selected/blog/featured.png',
+      featured_image_width: 200,
+      featured_image_height: 100,
+    };
     const { result } = renderHook(() =>
       useFeaturedImageActions({
         merchantId: 'merchant-selected',
-        formData: {
-          ...formData,
-          featured_image_url:
-            'https://cdn.example.com/media/merchant-selected/blog/featured.png',
-        },
-        setFormData: vi.fn(),
+        formData: saved,
+        setFormData,
         toast: vi.fn(),
       })
     );
-
     await act(() => result.current.handleRemoveFeaturedImage());
+    expect(mockFetchWithCsrf).not.toHaveBeenCalled();
+    expect(setFormData).toHaveBeenCalledOnce();
+    const update = setFormData.mock.calls[0][0];
+    expect(update(saved)).toMatchObject({
+      featured_image_url: '',
+      featured_image_width: null,
+      featured_image_height: null,
+      featured_image_variants: {},
+    });
+  });
 
-    expect(mockFetchWithCsrf).toHaveBeenCalledWith(
-      '/api/merchant/blog/upload',
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          'x-baci-merchant-id': 'merchant-selected',
-        }),
-        method: 'DELETE',
+  it('keeps the form cleared if a previously uploaded file is still referenced', async () => {
+    const setFormData = vi.fn();
+    const toast = vi.fn();
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockFetchWithCsrf
+      .mockResolvedValueOnce(
+        response({
+          url: 'https://cdn.example.com/image.png',
+          path: 'merchant-selected/blog/image.png',
+          width: 100,
+          height: 100,
+        })
+      )
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        text: async () => JSON.stringify({ error: 'Still in use' }),
+      });
+    const { result } = renderHook(() =>
+      useFeaturedImageActions({
+        merchantId: 'merchant-selected',
+        formData,
+        setFormData,
+        toast,
       })
     );
+    await act(() =>
+      result.current.handleFeaturedImageUpload([
+        new File(['image'], 'image.png', { type: 'image/png' }),
+      ])
+    );
+    await act(() => result.current.handleRemoveFeaturedImage());
+    const clear = setFormData.mock.calls.at(-1)?.[0];
+    expect(
+      clear({ ...formData, featured_image_url: 'saved' }).featured_image_url
+    ).toBe('');
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Image removed' })
+    );
+    log.mockRestore();
   });
 
   it('fails closed before an inline upload when no merchant is selected', async () => {

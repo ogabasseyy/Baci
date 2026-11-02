@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,6 +19,8 @@ import {
 describe('EditBlogPostPage Discover image upload metadata', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetch.mockReset();
+    mockFetchWithCsrf.mockReset();
     vi.stubEnv('NEXT_PUBLIC_BLOG_MEDIA_CDN_ORIGIN', 'https://cdn.example.com');
     resetEditBlogPageTestSupport();
     window.open = mockWindowOpen;
@@ -98,25 +100,17 @@ describe('EditBlogPostPage Discover image upload metadata', () => {
     ).toBe('inline');
   });
 
-  it('reports non-JSON featured image delete failures with status context', async () => {
+  it('clears a saved featured image without deleting its referenced asset', async () => {
     const user = userEvent.setup();
-    mockFetchWithCsrf.mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      text: async () => '<html>bad gateway</html>',
-    });
     render(<EditBlogPostPage />);
-    await screen.findByRole('heading', { name: /edit post/i });
+    await screen.findByAltText('Featured image preview');
     await user.click(screen.getByRole('button', { name: /remove image/i }));
     await waitFor(() =>
-      expect(mockToast).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: 'Error',
-          description: 'Failed to delete image (500): <html>bad gateway</html>',
-          variant: 'destructive',
-        })
-      )
+      expect(
+        screen.queryByAltText('Featured image preview')
+      ).not.toBeInTheDocument()
     );
+    expect(mockFetchWithCsrf).not.toHaveBeenCalled();
   });
 
   it('deletes the previous session upload before tracking a replacement featured image', async () => {
@@ -164,13 +158,17 @@ describe('EditBlogPostPage Discover image upload metadata', () => {
     await screen.findByRole('button', { name: /upload featured image/i });
     const uploadFeaturedImage = mockFeaturedImageUploader.onFilesSelected;
     expect(uploadFeaturedImage).toBeDefined();
-    await uploadFeaturedImage?.([
-      new File(['first'], 'first.png', { type: 'image/png' }),
-    ]);
+    await act(async () => {
+      await uploadFeaturedImage?.([
+        new File(['first'], 'first.png', { type: 'image/png' }),
+      ]);
+    });
     await waitFor(() => expect(mockFetchWithCsrf).toHaveBeenCalledTimes(1));
-    await uploadFeaturedImage?.([
-      new File(['second'], 'second.png', { type: 'image/png' }),
-    ]);
+    await act(async () => {
+      await uploadFeaturedImage?.([
+        new File(['second'], 'second.png', { type: 'image/png' }),
+      ]);
+    });
     await waitFor(() => expect(mockFetchWithCsrf).toHaveBeenCalledTimes(3));
     const deleteCall = mockFetchWithCsrf.mock.calls.find(
       ([url, options]) =>

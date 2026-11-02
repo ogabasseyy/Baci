@@ -1,0 +1,16 @@
+CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+CREATE SCHEMA private; CREATE SCHEMA auth; CREATE SCHEMA storage;
+CREATE TABLE auth.users(id uuid PRIMARY KEY,email text);
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+CREATE FUNCTION public.check_staff_permission(uuid,uuid,text,text) RETURNS boolean LANGUAGE sql AS $$ SELECT false $$;
+CREATE TABLE public.merchants(id uuid PRIMARY KEY,user_id uuid,email text,business_name text,slug text);
+CREATE TABLE public.products(id uuid PRIMARY KEY,merchant_id uuid,name text,slug text,price numeric,images jsonb,status text);
+CREATE TABLE public.page_configs(id uuid PRIMARY KEY,merchant_id uuid,draft_config jsonb,published_config jsonb);
+CREATE TABLE public.blog_posts(id uuid PRIMARY KEY,merchant_id uuid,content text);
+CREATE TABLE storage.objects(id uuid PRIMARY KEY,bucket_id text,name text);
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+GRANT USAGE ON SCHEMA public,auth,storage TO authenticated;
+GRANT SELECT,INSERT,UPDATE,DELETE ON storage.objects TO authenticated;
+CREATE POLICY fixture_public_storage_read ON storage.objects FOR SELECT USING(true);
+CREATE POLICY fixture_owner_upload ON storage.objects FOR INSERT TO authenticated WITH CHECK(true);
+CREATE POLICY fixture_owner_update ON storage.objects FOR UPDATE TO authenticated USING(true) WITH CHECK(true);

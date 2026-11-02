@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DELETE, POST } from '@/app/api/media/route';
+import { createMediaDeletionRpcMock } from '@/lib/media/media-deletion-rpc.test-support';
 
 const mockCreateServerClient = vi.fn();
 const mockCookies = vi.fn();
@@ -42,6 +43,7 @@ const mockStorageFrom = vi.fn(() => ({
 }));
 
 const mockSupabase = {
+  rpc: createMediaDeletionRpcMock(),
   auth: {
     getUser: vi.fn().mockResolvedValue({
       data: { user: { id: 'user-1' } },
@@ -152,7 +154,7 @@ describe('DELETE /api/media', () => {
     expect(mockRemove).not.toHaveBeenCalled();
   });
 
-  it('returns 500 when storage removal fails', async () => {
+  it('returns pending when storage removal fails', async () => {
     mockRemove.mockResolvedValueOnce({
       error: { message: 'Storage error' },
     });
@@ -167,8 +169,8 @@ describe('DELETE /api/media', () => {
     const response = await DELETE(request);
     const body = await response.json();
 
-    expect(response.status).toBe(500);
-    expect(body.error).toBe('Internal server error');
+    expect(response.status).toBe(503);
+    expect(body.code).toBe('media_delete_pending');
   });
 
   it('returns 403 when CSRF token is invalid', async () => {

@@ -30,9 +30,10 @@ describe('delete blog image handler', () => {
       makeDeleteRequest({ path: `${ownerAccess.merchantId}/blog/cover.png` })
     );
 
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
-      error: 'Failed to delete file',
+      code: 'media_delete_pending',
+      error: 'Deletion is pending. Retry to finish removing this file.',
     });
   });
 

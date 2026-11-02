@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { isManagedBlogStoragePath } from '@/lib/blog-featured-image-variants';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { deleteMerchantMedia } from '@/lib/media/delete-merchant-media';
 import { checkRateLimit } from '@/lib/rate-limiter';
 import { deleteBodySchema, resolveMerchantAccess } from './upload-route-utils';
 
@@ -80,16 +81,13 @@ export async function DELETE(request: NextRequest) {
     if (dedupedPaths.length === 0) {
       return NextResponse.json({ error: 'No path provided' }, { status: 400 });
     }
-    const { error: deleteError } = await auth.supabase.storage
-      .from('media')
-      .remove(dedupedPaths);
-    if (deleteError) {
-      console.error('Delete error:', deleteError);
-      return NextResponse.json(
-        { error: 'Failed to delete file' },
-        { status: 500 }
-      );
-    }
+    const failure = await deleteMerchantMedia({
+      client: auth.supabase,
+      merchantId: access.merchantId,
+      identities: dedupedPaths,
+    });
+    if (failure)
+      return NextResponse.json(failure.body, { status: failure.status });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting blog image:', error);

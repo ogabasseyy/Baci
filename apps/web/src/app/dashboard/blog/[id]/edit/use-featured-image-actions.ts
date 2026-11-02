@@ -1,18 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetchWithCsrf } from '@/lib/api-client';
 import {
-  BLOG_FEATURED_VARIANT_KEYS,
-  extractManagedBlogStoragePath,
-} from '@/lib/blog-managed-storage-paths';
-import {
   normalizeFeaturedImageVariantMap,
   normalizeFeaturedImageVariantPaths,
 } from './edit-blog-form-data';
-import type {
-  FeaturedImageVariantPaths,
-  PostFormData,
-  UploadedFeaturedImage,
-} from './edit-blog-types';
+import type { PostFormData, UploadedFeaturedImage } from './edit-blog-types';
 
 type Toast = (message: {
   title: string;
@@ -94,7 +86,6 @@ async function uploadImage(
 }
 export function useFeaturedImageActions({
   merchantId,
-  formData,
   setFormData,
   toast,
 }: {
@@ -248,41 +239,30 @@ export function useFeaturedImageActions({
       });
       return;
     }
-    let image = uploadedImage.current;
-    if (!image && formData.featured_image_url) {
-      const path = extractManagedBlogStoragePath(
-        formData.featured_image_url,
-        selectedMerchantId
-      );
-      if (path) {
-        const variantPaths: FeaturedImageVariantPaths = {};
-        for (const key of BLOG_FEATURED_VARIANT_KEYS) {
-          const url = formData.featured_image_variants[key];
-          const variantPath =
-            url && extractManagedBlogStoragePath(url, selectedMerchantId);
-          if (variantPath) variantPaths[key] = variantPath;
-        }
-        image = { path, variantPaths };
+    // Clear the editable reference first. Saved posts and revisions can still
+    // reference the old asset, so deletion cannot be a prerequisite to edit.
+    const image = uploadedImage.current;
+    uploadedImage.current = null;
+    featuredUploadGeneration.current += 1;
+    setIsUploading(false);
+    setFormData((previous) => ({
+      ...previous,
+      featured_image_url: '',
+      featured_image_width: null,
+      featured_image_height: null,
+      featured_image_variants: {},
+    }));
+    if (image) {
+      try {
+        await deleteImage(image, selectedMerchantId);
+      } catch (error) {
+        console.error('Error cleaning up uploaded image:', error);
+        toast({
+          title: 'Image removed',
+          description:
+            'Save your changes. The uploaded file could not be deleted yet.',
+        });
       }
-    }
-    try {
-      if (image) await deleteImage(image, selectedMerchantId);
-      setFormData((previous) => ({
-        ...previous,
-        featured_image_url: '',
-        featured_image_width: null,
-        featured_image_height: null,
-        featured_image_variants: {},
-      }));
-      uploadedImage.current = null;
-    } catch (error) {
-      console.error('Error deleting uploaded image:', error);
-      toast({
-        title: 'Error',
-        description:
-          error instanceof Error ? error.message : 'Failed to delete image',
-        variant: 'destructive',
-      });
     }
   };
 

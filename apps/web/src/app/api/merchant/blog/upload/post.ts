@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
       uploadedPaths,
     });
   } catch (error) {
-    await cleanupUploadedPaths(auth.supabase, uploadedPaths);
+    await cleanupUploadedPaths(auth.supabase, access.merchantId, uploadedPaths);
     console.error('Error uploading blog image:', error);
     return NextResponse.json(
       { error: 'Failed to upload image', code: 'UPLOAD_EXCEPTION' },

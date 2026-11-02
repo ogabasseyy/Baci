@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-02T07:03:16+00:00",
-  "source_revision": "d4a3e73b3e544d1c21753c380752f2876424fcfa",
-  "evidence_digest": "3dbac39ca223217f2ad64a1ab08c52ae22cc049301cf2a78daa5e6fbcdc98508",
-  "claims_digest": "25307ff8818ead4103f214c061cfd3c6e373ddd056564c886a427da2cffe3c18",
-  "review_scope": "Source evidence only. Re-reviewed checkout payment availability after adding the Oxygen local-QA option: development mode, explicit local-checkout opt-in, loopback Supabase, NGN and full-order-amount checks are required; production shoppers are not offered Oxygen by this gate. The configurable payment-method claim remains accurate without promoting Oxygen to production availability. Git comparison against the previous reviewed revision shows all other cited capability sources unchanged. Other provider, deployment, native acceptance and transaction-readiness limitations remain; no production promotion. Rechecked all cited source and access-map paths after merging current main; their bytes are unchanged since the prior review. Rechecked cited capability source bytes after the 2 November review-fix and main integration; no cited implementation changes or production promotion.",
+  "reviewed_at": "2026-11-02T10:36:08+00:00",
+  "source_revision": "3b6174a92c890c30c7651c0b49952d1f0b3e175d",
+  "evidence_digest": "15c183411fd39fa847a9d6611790c12ea734c552d1bb2b02ecc6935922ce198c",
+  "claims_digest": "20e9d6bde4a7c3503f16f11667fd582b8d560328832542decd7e13de99d0e278",
+  "review_scope": "Source evidence only. Re-reviewed checkout payment availability: Oxygen remains limited to local staging QA with explicit opt-in, loopback Supabase, NGN and full-order-amount checks; it is not enabled for production shoppers. Rechecked cited capability and access-map source bytes across the 2 November main integration; they are unchanged from the previous reviewed tree. Provider, deployment, native acceptance and transaction-readiness limitations remain; no production promotion.",
   "capabilities": [
     {
       "id": "payments",

@@ -20,6 +20,23 @@ const state = vi.hoisted(() => ({
   confirm: vi.fn(),
   update: vi.fn(),
 }));
+vi.mock('./ShipmentFlowSheetPresence', () => ({
+  ShipmentFlowSheetPresence: ({
+    accessory,
+    children,
+    visible,
+  }: {
+    accessory?: ReactNode;
+    children?: ReactNode;
+    visible: boolean;
+  }) =>
+    visible ? (
+      <section>
+        {children}
+        {accessory}
+      </section>
+    ) : null,
+}));
 vi.mock('@/hooks/useMerchant', () => ({
   useMerchant: () => ({ merchant: { id: 'merchant', user_id: 'owner' } }),
 }));
@@ -175,6 +192,7 @@ describe('ShipmentFlowSheet prepaid recovery reachability', () => {
       queryClient: { invalidateQueries: vi.fn() } as unknown as QueryClient,
       requiresShipmentDetails: false,
       riderPhone: '',
+      runAfterShipmentFlowDismissed: (task: () => void) => task(),
       setFulfillmentDetails: vi.fn(),
       setFulfillmentItemIndex: vi.fn(),
       setIsShipmentSubmitting: vi.fn(),
@@ -182,7 +200,6 @@ describe('ShipmentFlowSheet prepaid recovery reachability', () => {
       setRiderPhone: vi.fn(),
       setShipmentFlowStep: vi.fn(),
       setShowShipmentFlow: vi.fn(),
-      setShowStatusModal: vi.fn(),
       setSuccessModal: vi.fn(),
       shipmentFlowStep: 'method',
       showShipmentFlow: true,
@@ -268,6 +285,7 @@ describe('ShipmentFlowSheet prepaid recovery reachability', () => {
         queryClient: { invalidateQueries: vi.fn() } as unknown as QueryClient,
         requiresShipmentDetails: true,
         riderPhone: '',
+        runAfterShipmentFlowDismissed: (task: () => void) => task(),
         setFulfillmentDetails: vi.fn(),
         setFulfillmentItemIndex: vi.fn(),
         setIsShipmentSubmitting: vi.fn(),
@@ -275,7 +293,6 @@ describe('ShipmentFlowSheet prepaid recovery reachability', () => {
         setRiderPhone: vi.fn(),
         setShipmentFlowStep: setStep,
         setShowShipmentFlow: setVisible,
-        setShowStatusModal: vi.fn(),
         setSuccessModal: vi.fn(),
         shipmentFlowStep: step,
         showShipmentFlow: visible,

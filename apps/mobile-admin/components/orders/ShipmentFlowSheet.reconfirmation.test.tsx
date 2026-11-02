@@ -7,6 +7,23 @@ import { expect, it, vi } from 'vitest';
 import { canUseSelectedShippingProvider } from '@/lib/order-shipment';
 import { ShipmentFlowSheet } from './ShipmentFlowSheet';
 
+vi.mock('./ShipmentFlowSheetPresence', () => ({
+  ShipmentFlowSheetPresence: ({
+    accessory,
+    children,
+    visible,
+  }: {
+    accessory?: ReactNode;
+    children?: ReactNode;
+    visible: boolean;
+  }) =>
+    visible ? (
+      <section>
+        {children}
+        {accessory}
+      </section>
+    ) : null,
+}));
 vi.mock('@/hooks/useMerchant', () => ({
   useMerchant: () => ({ merchant: { id: 'merchant', user_id: 'owner' } }),
 }));

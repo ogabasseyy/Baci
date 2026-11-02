@@ -78,8 +78,10 @@ export function OrderDetailsScreenModals({
         onConfirmSelfFulfillment={() =>
           void controller.handleSubmitSelfFulfillment()
         }
+        onDismissed={controller.handleShipmentFlowDismissed}
         onFulfillmentDetailsChange={controller.updateFulfillmentDetails}
         onModeChange={controller.setPendingShipmentMode}
+        onPresented={() => controller.setShowStatusModal(false)}
         onRiderPhoneChange={controller.setRiderPhone}
         onSelectSavedRider={controller.setRiderPhone}
         onStepBack={controller.handleShipmentFlowBack}

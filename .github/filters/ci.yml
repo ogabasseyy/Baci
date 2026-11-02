@@ -83,6 +83,9 @@ mobile_storefront:
   - '.npmrc'
   - 'pnpm-workspace.yaml'
 quiz_db:
+  - 'tools/test/order-pod-policy-local.test.mjs'
+  - 'tools/test/pod-atomic-install-local.test.mjs'
+  - 'tools/test/pod-atomic-install-checks.sql'
   - '.semgrepignore'
   - '.github/scripts/semgrep-sarif-pg-diagnostic.py'
   - '.github/scripts/semgrep-sarif-pg-diagnostic.test.py'

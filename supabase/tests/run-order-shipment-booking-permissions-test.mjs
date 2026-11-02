@@ -100,6 +100,9 @@ try {
       'utf8'
     )
   );
+  sql(
+    readMigration('20261102120000_atomic_pod_policy.sql')
+  );
   const baseline = readMigration('20260418000000_baseline.sql');
   sql(extractFunction(baseline, 'has_merchant_access'));
   sql(readMigration('20260724000001_deep_merge_get_staff_permissions.sql'));

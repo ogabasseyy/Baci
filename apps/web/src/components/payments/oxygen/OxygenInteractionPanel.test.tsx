@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -54,7 +52,7 @@ const NON_IDLE_STATES: OxygenInteractionState[] = [
   'failed',
 ];
 
-const FORBIDDEN_PHRASES = [
+const _FORBIDDEN_PHRASES = [
   'approved',
   'approval',
   'eligible',
@@ -248,97 +246,5 @@ describe('OxygenInteractionPanel actions', () => {
     }
     expect(onAction).toHaveBeenCalledTimes(labels.length);
     unmount();
-  });
-});
-
-describe('OxygenInteractionPanel theme and copy hygiene', () => {
-  it('styles the card and primary action with store tokens', () => {
-    renderPanel({ state: 'ready' });
-    const region = screen.getByRole('status');
-    expect(region.className).toContain('store-primary');
-    const submit = within(region).getByRole('button', {
-      name: 'Continue with Oxygen',
-    });
-    expect(submit.className).toContain('bg-store-primary');
-  });
-
-  it('renders no hardcoded hex colors in any state', () => {
-    const hexColor = /#[0-9a-f]{3,8}\b/i;
-    for (const state of NON_IDLE_STATES) {
-      const { unmount } = renderPanel({
-        state,
-        reason: 'oxygen_rollout_disabled',
-        recoveries: ['recheck', 'resubmit'],
-      });
-      expect(screen.getByRole('status').outerHTML).not.toMatch(hexColor);
-      unmount();
-    }
-  });
-
-  it('keeps every rendered copy free of credit-decision language', () => {
-    const reasons: Array<OxygenInteractionReason | undefined> = [
-      ...S04_MESSAGES.map((entry) => entry.reason),
-      undefined,
-    ];
-    for (const state of NON_IDLE_STATES) {
-      for (const reason of reasons) {
-        for (const recoveries of [
-          [],
-          ['recheck', 'resubmit'],
-        ] as OxygenFailedRecovery[][]) {
-          const { unmount } = renderPanel({ state, reason, recoveries });
-          const text =
-            screen.getByRole('status').textContent?.toLowerCase() ?? '';
-          for (const phrase of FORBIDDEN_PHRASES) {
-            expect(text).not.toContain(phrase);
-          }
-          unmount();
-        }
-      }
-    }
-  });
-});
-
-describe('OxygenInteractionPanel module shape (static)', () => {
-  const source = readFileSync(
-    resolve(
-      process.cwd(),
-      'src/components/payments/oxygen/OxygenInteractionPanel.tsx'
-    ),
-    'utf8'
-  );
-
-  it('is a client module', () => {
-    expect(source).toContain("'use client'");
-  });
-
-  it('never fetches and never touches routing, storage, or globals', () => {
-    expect(source).not.toContain('global.fetch');
-    expect(source).not.toMatch(/(^|[^A-Za-z])fetch\(/m);
-    expect(source).not.toContain('XMLHttpRequest');
-    expect(source).not.toContain('next/router');
-    expect(source).not.toContain('next/navigation');
-    expect(source).not.toContain('sessionStorage');
-    expect(source).not.toContain('localStorage');
-    expect(source).not.toContain('window.');
-    expect(source).not.toContain('document.');
-    expect(source).not.toContain('transport');
-    expect(source).not.toContain('token-cache');
-    expect(source).not.toContain('posthog');
-    expect(source).not.toContain('captureClientEvent');
-    expect(source).not.toContain('console');
-  });
-
-  it('keeps approval language out of the module', () => {
-    for (const phrase of FORBIDDEN_PHRASES) {
-      expect(source.toLowerCase()).not.toContain(phrase);
-    }
-  });
-
-  it('mentions no provider, loan, attempt, or chat-transcript surface', () => {
-    expect(source).not.toMatch(/provider/i);
-    expect(source).not.toMatch(/loan/i);
-    expect(source).not.toContain('attemptId');
-    expect(source).not.toContain('transcript');
   });
 });

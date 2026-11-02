@@ -86,6 +86,38 @@ describe('GIGL tracking token cache', () => {
     ).toBeNull();
   });
 
+  it('does not resurrect an old token when credentials rotate back after a cache miss', async () => {
+    const { directory } = await fixture();
+    const original = createGiglTrackingTokenCache({
+      directory,
+      credentials,
+      now: () => now,
+    });
+    await original.save(token);
+    const rotated = createGiglTrackingTokenCache({
+      directory,
+      credentials: { ...credentials, password: 'rotated' },
+      now: () => now,
+    });
+    expect(await rotated.load()).toBeNull();
+    expect(await original.load()).toBeNull();
+  });
+
+  it('requires the worker parent to exist before bootstrapping its private cache', async () => {
+    const { root } = await fixture();
+    const workerParent = join(root, 'baci-workers');
+    const directory = join(workerParent, 'gigl-tracking-token-cache');
+    const cache = createGiglTrackingTokenCache({
+      directory,
+      credentials,
+      now: () => now,
+    });
+    await expect(cache.save(token)).rejects.toThrow();
+    await mkdir(workerParent, { mode: 0o700 });
+    await cache.save(token);
+    expect(await cache.load()).toEqual(token);
+  });
+
   it.each([
     -1, 1.5,
   ])('preserves a finite provider customer type %s', async (customerType) => {

@@ -113,12 +113,16 @@ export function createGiglTrackingTokenCache({
         const parsed = giglTrackingTokenCacheRecordSchema.safeParse(
           JSON.parse(buffer.subarray(0, bytesRead).toString('utf8'))
         );
+        if (!parsed.success) return null;
         if (
-          !parsed.success ||
           parsed.data.fingerprint !== fingerprint ||
           !usable(parsed.data.token)
-        )
+        ) {
+          // Normal worker invocations are serialized by the GIGL tracking lock.
+          // Remove a stale record so reverting credentials cannot resurrect it.
+          await rm(file, { force: true });
           return null;
+        }
         return parsed.data.token;
       } finally {
         await handle.close();

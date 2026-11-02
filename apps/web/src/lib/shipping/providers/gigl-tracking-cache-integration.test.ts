@@ -57,4 +57,53 @@ describe('tracking token reuse across invocations', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('logs in again after failed rotation followed by credential rollback', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'gigl-rollback-'));
+    vi.stubEnv('GIGL_BASE_URL', 'https://gigl.example.test');
+    vi.stubEnv('GIGL_EMAIL', 'synthetic@example.test');
+    vi.stubEnv('GIGL_PASSWORD', 'synthetic-password');
+    vi.resetModules();
+    try {
+      const { GiglApiClient } = await import('./gigl.auth');
+      const { createGiglTrackingTokenCache } = await import(
+        './gigl-tracking-token-cache'
+      );
+      const { runWithGiglTrackingTokenCache } = await import(
+        './gigl-tracking-cache-runner'
+      );
+      const safeFetch = vi.fn(
+        async () =>
+          new Response(JSON.stringify(loginResponseWithoutCustomerType), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+      );
+      const invoke = (password: string, fail = false) =>
+        runWithGiglTrackingTokenCache({
+          cache: createGiglTrackingTokenCache({
+            directory: join(root, 'cache'),
+            credentials: {
+              baseUrl: 'https://gigl.example.test',
+              email: 'synthetic@example.test',
+              password,
+            },
+          }),
+          createProvider: (initial) =>
+            new GiglApiClient({ safeFetch, log: vi.fn() }, initial),
+          run: (client) =>
+            fail
+              ? Promise.reject(new Error('simulated login failure'))
+              : client.getApiToken(),
+        });
+      await invoke('synthetic-password');
+      await expect(invoke('rotated-password', true)).rejects.toThrow(
+        'simulated login failure'
+      );
+      await invoke('synthetic-password');
+      expect(safeFetch).toHaveBeenCalledTimes(2);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

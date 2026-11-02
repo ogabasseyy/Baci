@@ -98,7 +98,7 @@ export function createGiglTrackingTokenCache({
       const file = join(await validateDirectory(false), 'token.json');
       const handle = await open(
         file,
-        constants.O_RDONLY | constants.O_NOFOLLOW
+        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
       );
       try {
         const info = await handle.stat();

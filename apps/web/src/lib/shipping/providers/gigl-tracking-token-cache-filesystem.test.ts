@@ -1,8 +1,10 @@
+import { spawnSync } from 'node:child_process';
 import {
   chmod,
   link,
   mkdir,
   mkdtemp,
+  open,
   readFile,
   rm,
   symlink,
@@ -40,6 +42,34 @@ afterEach(async () => {
 });
 
 describe('GIGL tracking token cache filesystem safety', () => {
+  it('returns a cache miss promptly when token.json is a FIFO', async () => {
+    const { directory } = await fixture();
+    await mkdir(directory, { mode: 0o700 });
+    const path = join(directory, 'token.json');
+    expect(spawnSync('mkfifo', ['-m', '600', path]).status).toBe(0);
+    const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
+      directory,
+      credentials,
+      now: () => now,
+    });
+    const pending = cache.load();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const result = await Promise.race([
+        pending,
+        new Promise<'timeout'>((resolve) => {
+          timer = setTimeout(() => resolve('timeout'), 3000);
+        }),
+      ]);
+      expect(result).toBeNull();
+    } finally {
+      clearTimeout(timer);
+      const fifo = await open(path, 'r+');
+      await pending;
+      await fifo.close();
+    }
+  });
   it('refuses a symlink cache file without changing its target', async () => {
     const { directory, root } = await fixture();
     const cache = createGiglTrackingTokenCache({

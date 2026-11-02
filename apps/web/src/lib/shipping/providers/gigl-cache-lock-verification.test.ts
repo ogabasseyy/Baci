@@ -6,12 +6,16 @@ const fs = vi.hoisted(() => ({
   readFileSync: vi.fn(),
   readSync: vi.fn(),
 }));
-vi.mock('node:fs', async (importOriginal) => {
-  const original = await importOriginal<typeof import('node:fs')>();
+vi.mock('node:fs', async () => {
+  const original = (await vi.importActual(
+    'node:fs'
+  )) as typeof import('node:fs');
   return { ...original, ...fs, default: { ...original.default, ...fs } };
 });
-vi.mock('node:worker_threads', async (importOriginal) => {
-  const original = await importOriginal<typeof import('node:worker_threads')>();
+vi.mock('node:worker_threads', async () => {
+  const original = (await vi.importActual(
+    'node:worker_threads'
+  )) as typeof import('node:worker_threads');
   return {
     ...original,
     isMainThread: true,

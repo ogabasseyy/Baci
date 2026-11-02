@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareModalContainer } from '@/components/ui/KeyboardAwareModalContainer';
 import { isRuntimePlatform } from '@/config/runtime-platform';
@@ -15,6 +15,7 @@ import {
 } from './ShipmentFlowSheet.actions';
 import { styles } from './ShipmentFlowSheet.styles';
 import type { ShipmentFlowSheetProps } from './ShipmentFlowSheet.types';
+import { ShipmentFlowSheetPresence } from './ShipmentFlowSheetPresence';
 import {
   ShipmentFlowDetailsStep,
   ShipmentFlowMethodStep,
@@ -38,8 +39,10 @@ export function ShipmentFlowSheet({
   onContinueFromDetails,
   onContinueFromMethod,
   onConfirmSelfFulfillment,
+  onDismissed,
   onFulfillmentDetailsChange,
   onModeChange,
+  onPresented,
   onRiderPhoneChange,
   onSelectSavedRider,
   onStepBack,
@@ -109,7 +112,6 @@ export function ShipmentFlowSheet({
       setActiveScanField(null);
     }
   }, [visible]);
-  if (!visible) return null;
   const handleRequestClose = () => {
     if (isBusy) return;
     onClose();
@@ -142,142 +144,8 @@ export function ShipmentFlowSheet({
     }
   };
   return (
-    <Modal
-      animationType="slide"
-      onRequestClose={handleRequestClose}
-      transparent
-      visible={visible}
-    >
-      <View style={styles.overlay}>
-        <View style={styles.backdrop} />
-        <KeyboardAwareModalContainer
-          align="end"
-          contentContainerStyle={styles.keyboardContent}
-          keyboardVerticalOffset={keyboardVerticalOffset}
-        >
-          <Pressable
-            accessibilityLabel="Cancel shipment flow"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: isBusy }}
-            disabled={isBusy}
-            onPress={handleRequestClose}
-            style={styles.dismissRegion}
-          />
-          <View
-            style={[
-              styles.sheet,
-              {
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                paddingBottom: Math.max(insets.bottom, 16),
-              },
-            ]}
-          >
-            <ShipmentFlowHeader
-              colors={colors}
-              isSubmitting={isBusy}
-              onClose={handleRequestClose}
-              orderNumber={orderNumber}
-              step={step}
-            />
-            <ShipmentFlowProgress
-              colors={colors}
-              currentStepIndex={currentStepIndex}
-              steps={steps}
-            />
-            <ScrollView
-              bounces={false}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              style={styles.content}
-            >
-              {step === 'details' ? (
-                <ShipmentFlowDetailsStep
-                  fulfillmentDetails={fulfillmentDetails}
-                  fulfillmentItemIndex={fulfillmentItemIndex}
-                  hasExistingFulfillment={hasExistingFulfillment}
-                  onFulfillmentDetailsChange={onFulfillmentDetailsChange}
-                  onScanIdentifier={setActiveScanField}
-                />
-              ) : null}
-              {step === 'method' ? (
-                <ShipmentFlowMethodStep
-                  canUseProvider={canUseProvider}
-                  checkoutPaidShippingLabel={checkoutPaidShippingLabel}
-                  giglPanel={
-                    !giglShipping ? undefined : (
-                      <ShipmentFlowGiglPanel
-                        addressDraft={giglShipping.addressDraft}
-                        error={giglShipping.error}
-                        fundingAccount={giglShipping.fundingAccount}
-                        missingFields={giglShipping.missingFields}
-                        onAddressFieldChange={giglShipping.updateAddressField}
-                        onFundWallet={() => void giglShipping.startFunding()}
-                        onRefreshFundingAccount={() =>
-                          void giglShipping.refreshFundingAccount()
-                        }
-                        onModeChange={() => {
-                          if (!recoveryBusy) onModeChange('provider');
-                        }}
-                        onRetryQuote={() => void giglShipping.requestQuote()}
-                        onTransferred={giglShipping.startTransferPoll}
-                        quote={giglShipping.quote}
-                        selected={selectedMode === 'provider'}
-                        state={giglShipping.state}
-                        wallet={giglShipping.wallet}
-                      />
-                    )
-                  }
-                  externalWaybill={externalWaybill}
-                  onModeChange={(mode) => {
-                    if (!isBusy) onModeChange(mode);
-                  }}
-                  providerLabel={providerLabel}
-                  selectedMode={selectedMode}
-                />
-              ) : null}
-              {step === 'method' &&
-              !isSubmitting &&
-              recoveryOrder &&
-              (!recoveryRequired || selectedMode === 'provider') ? (
-                <CheckoutShippingRecoveryPanel
-                  key={`${recoveryOrder.id}:${recoveryAttempt}`}
-                  order={recoveryOrder}
-                  required={recoveryRequired}
-                  onConfirmed={() => setRecoveryRequiredOrderId(null)}
-                  onBlockingChange={setRecoveryBlocking}
-                  onBusyChange={setRecoveryBusy}
-                />
-              ) : null}
-              {step === 'rider' ? (
-                <ShipmentFlowRiderStep
-                  onRiderPhoneChange={onRiderPhoneChange}
-                  onSelectSavedRider={onSelectSavedRider}
-                  riderPhone={riderPhone}
-                  savedRiders={savedRiders}
-                />
-              ) : null}
-            </ScrollView>
-            <ShipmentFlowFooter
-              colors={colors}
-              isSubmitting={isBusy}
-              isPrimaryDisabled={isShipmentFlowPrimaryDisabled({
-                canUseProvider,
-                externalWaybill,
-                giglShipping,
-                isRecoveryBlocking,
-                selectedMode,
-                step,
-              })}
-              onBack={handleBack}
-              onPrimaryAction={() => void handlePrimaryAction()}
-              primaryActionLabel={primaryActionLabel}
-              selectedMode={selectedMode}
-              showBack={showBack}
-              step={step}
-            />
-          </View>
-        </KeyboardAwareModalContainer>
+    <ShipmentFlowSheetPresence
+      accessory={
         <ShipmentIdentifierScanner
           colors={colors}
           field={activeScanField ?? 'imei'}
@@ -290,7 +158,140 @@ export function ShipmentFlowSheet({
           }}
           visible={activeScanField !== null}
         />
-      </View>
-    </Modal>
+      }
+      onDismissed={onDismissed}
+      onRequestClose={handleRequestClose}
+      onShow={onPresented}
+      visible={visible}
+    >
+      <KeyboardAwareModalContainer
+        align="end"
+        contentContainerStyle={styles.keyboardContent}
+        keyboardVerticalOffset={keyboardVerticalOffset}
+      >
+        <Pressable
+          accessibilityLabel="Cancel shipment flow"
+          accessibilityRole="button"
+          accessibilityState={{ disabled: isBusy }}
+          disabled={isBusy}
+          onPress={handleRequestClose}
+          style={styles.dismissRegion}
+        />
+        <View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: colors.card,
+              borderColor: colors.border,
+              paddingBottom: Math.max(insets.bottom, 16),
+            },
+          ]}
+        >
+          <ShipmentFlowHeader
+            colors={colors}
+            isSubmitting={isBusy}
+            onClose={handleRequestClose}
+            orderNumber={orderNumber}
+            step={step}
+          />
+          <ShipmentFlowProgress
+            colors={colors}
+            currentStepIndex={currentStepIndex}
+            steps={steps}
+          />
+          <ScrollView
+            bounces={false}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            style={styles.content}
+          >
+            {step === 'details' ? (
+              <ShipmentFlowDetailsStep
+                fulfillmentDetails={fulfillmentDetails}
+                fulfillmentItemIndex={fulfillmentItemIndex}
+                hasExistingFulfillment={hasExistingFulfillment}
+                onFulfillmentDetailsChange={onFulfillmentDetailsChange}
+                onScanIdentifier={setActiveScanField}
+              />
+            ) : null}
+            {step === 'method' ? (
+              <ShipmentFlowMethodStep
+                canUseProvider={canUseProvider}
+                checkoutPaidShippingLabel={checkoutPaidShippingLabel}
+                externalWaybill={externalWaybill}
+                giglPanel={
+                  !giglShipping ? undefined : (
+                    <ShipmentFlowGiglPanel
+                      addressDraft={giglShipping.addressDraft}
+                      error={giglShipping.error}
+                      fundingAccount={giglShipping.fundingAccount}
+                      missingFields={giglShipping.missingFields}
+                      onAddressFieldChange={giglShipping.updateAddressField}
+                      onFundWallet={() => void giglShipping.startFunding()}
+                      onRefreshFundingAccount={() =>
+                        void giglShipping.refreshFundingAccount()
+                      }
+                      onModeChange={() => {
+                        if (!recoveryBusy) onModeChange('provider');
+                      }}
+                      onRetryQuote={() => void giglShipping.requestQuote()}
+                      onTransferred={giglShipping.startTransferPoll}
+                      quote={giglShipping.quote}
+                      selected={selectedMode === 'provider'}
+                      state={giglShipping.state}
+                      wallet={giglShipping.wallet}
+                    />
+                  )
+                }
+                onModeChange={(mode) => {
+                  if (!isBusy) onModeChange(mode);
+                }}
+                providerLabel={providerLabel}
+                selectedMode={selectedMode}
+              />
+            ) : null}
+            {step === 'method' &&
+            !isSubmitting &&
+            recoveryOrder &&
+            (!recoveryRequired || selectedMode === 'provider') ? (
+              <CheckoutShippingRecoveryPanel
+                key={`${recoveryOrder.id}:${recoveryAttempt}`}
+                order={recoveryOrder}
+                required={recoveryRequired}
+                onConfirmed={() => setRecoveryRequiredOrderId(null)}
+                onBlockingChange={setRecoveryBlocking}
+                onBusyChange={setRecoveryBusy}
+              />
+            ) : null}
+            {step === 'rider' ? (
+              <ShipmentFlowRiderStep
+                onRiderPhoneChange={onRiderPhoneChange}
+                onSelectSavedRider={onSelectSavedRider}
+                riderPhone={riderPhone}
+                savedRiders={savedRiders}
+              />
+            ) : null}
+          </ScrollView>
+          <ShipmentFlowFooter
+            colors={colors}
+            isSubmitting={isBusy}
+            isPrimaryDisabled={isShipmentFlowPrimaryDisabled({
+              canUseProvider,
+              externalWaybill,
+              giglShipping,
+              isRecoveryBlocking,
+              selectedMode,
+              step,
+            })}
+            onBack={handleBack}
+            onPrimaryAction={() => void handlePrimaryAction()}
+            primaryActionLabel={primaryActionLabel}
+            selectedMode={selectedMode}
+            showBack={showBack}
+            step={step}
+          />
+        </View>
+      </KeyboardAwareModalContainer>
+    </ShipmentFlowSheetPresence>
   );
 }

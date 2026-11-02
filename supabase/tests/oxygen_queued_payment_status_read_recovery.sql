@@ -44,6 +44,10 @@ SELECT set_config('request.jwt.claim.sub','efae0000-0000-4000-8000-000000000003'
 DO $$ DECLARE r jsonb; BEGIN
  r:=public.oxygen_runtime('claim','efae0000-0000-4000-8000-000000000081','{"commandId":"efae0000-0000-4000-8000-000000000081"}');
  IF r IS NOT NULL THEN RAISE EXCEPTION 'Retired payment status claimed'; END IF;
+ BEGIN
+  PERFORM public.oxygen_runtime('finish','efae0000-0000-4000-8000-000000000081','{"commandId":"efae0000-0000-4000-8000-000000000081","outcome":"succeeded","stage":"ready_for_activation","state":{"paymentComplete":true,"setupComplete":true}}');
+  RAISE EXCEPTION 'Late retired status result accepted';
+ EXCEPTION WHEN raise_exception THEN IF SQLERRM<>'Command is not executing' THEN RAISE; END IF; END;
 END $$;
 RESET ROLE;
 UPDATE oxygen_private.commands SET created_at=now()-interval '5 minutes' WHERE id=current_setting('test.fresh.id')::uuid;
@@ -54,7 +58,10 @@ DO $$ DECLARE r jsonb; BEGIN
  IF r->>'status'<>'queued' THEN RAISE EXCEPTION 'Payment recovery could not retire stale queued read'; END IF;
 END $$;
 RESET ROLE;
-DO $$ BEGIN IF (SELECT status FROM oxygen_private.commands WHERE id=current_setting('test.fresh.id')::uuid)<>'failed' THEN RAISE EXCEPTION 'Stale queued status not retired'; END IF; END $$;
+DO $$ BEGIN
+ IF (SELECT status FROM oxygen_private.commands WHERE id=current_setting('test.fresh.id')::uuid)<>'failed' THEN RAISE EXCEPTION 'Stale queued status not retired'; END IF;
+ IF (SELECT state ? 'paymentComplete' FROM oxygen_private.provider_states WHERE workflow_id='efae0000-0000-4000-8000-000000000041') THEN RAISE EXCEPTION 'Late payment result changed canonical state'; END IF;
+END $$;
 UPDATE oxygen_private.payment_recovery SET status='failed' WHERE workflow_id='efae0000-0000-4000-8000-000000000041' AND status='queued';
 INSERT INTO oxygen_private.commands(id,workflow_id,idempotency_key,expected_version,channel,command,status,created_at)
 VALUES('efae0000-0000-4000-8000-000000000088','efae0000-0000-4000-8000-000000000041','efae0000-0000-4000-8000-000000000089',0,'web','{"action":"refresh_payment_setup"}','queued',clock_timestamp());

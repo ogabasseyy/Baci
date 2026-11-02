@@ -93,7 +93,8 @@ export async function runGoalRouting(
       atOnce: result.walletId
         ? readGoalRouting(
             result.readbackRecord,
-            idsFor(result.walletId, owner, business)
+            idsFor(result.walletId, owner, business),
+            result.readback?.accrualEnabled ?? null
           )
         : UNREAD,
       afterRecheck: UNREAD,
@@ -110,7 +111,8 @@ export async function runGoalRouting(
     const read = await readbackPayout(ctx, walletId, business);
     run.afterRecheck = readGoalRouting(
       read.record,
-      idsFor(walletId, owner, business)
+      idsFor(walletId, owner, business),
+      read.facts?.accrualEnabled ?? null
     );
   }
   return runs;

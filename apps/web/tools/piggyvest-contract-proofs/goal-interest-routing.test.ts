@@ -70,6 +70,22 @@ describe('readGoalRouting: pseudonyms, never values', () => {
     expect(read({ interest_enabled: 'yes' }).interestEnabled).toBeNull();
   });
 
+  it('keeps the flag an earlier poll showed unless the latest record shows one', () => {
+    const payoutOnly = { interest_payout_wallet: null };
+    expect(readGoalRouting(payoutOnly, IDS, false).interestEnabled).toBe(false);
+    expect(readGoalRouting(payoutOnly, IDS).interestEnabled).toBeNull();
+    // A flag the latest record shows wins over the earlier one.
+    expect(
+      readGoalRouting({ ...payoutOnly, interest_enabled: true }, IDS, false)
+        .interestEnabled
+    ).toBe(true);
+    // No readback at all is still unread, whatever an earlier poll showed.
+    expect(readGoalRouting(null, IDS, false)).toEqual({
+      interestEnabled: null,
+      payout: 'unread',
+    });
+  });
+
   it('never names main when the proof has no main wallet id', () => {
     expect(
       readGoalRouting(

@@ -105,16 +105,23 @@ function payoutOf(
   return 'other';
 }
 
+/**
+ * `earlierFlag` is the accrual flag an earlier poll of the same readback
+ * showed (the flag can appear reads before the payout destination). The
+ * latest record's own flag wins; the earlier one stands only when the latest
+ * record shows none.
+ */
 export function readGoalRouting(
   record: Record<string, unknown> | null,
-  ids: RoutingIds
+  ids: RoutingIds,
+  earlierFlag: boolean | null = null
 ): GoalRoutingReading {
   if (!record) return { interestEnabled: null, payout: 'unread' };
   const flag = ACCRUAL_FIELDS.map((key) => record[key]).find(
     (value) => typeof value === 'boolean'
   );
   return {
-    interestEnabled: typeof flag === 'boolean' ? flag : null,
+    interestEnabled: typeof flag === 'boolean' ? flag : earlierFlag,
     payout: payoutOf(record, ids),
   };
 }

@@ -1,46 +1,19 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { GOAL_RECHECK_DELAY_MS } from './goal-interest-routing';
-import { p7RoutingGoalName } from './goal-wallet-names';
 import { recordGoalWallets } from './proof-7-goals';
+import {
+  disposeGoalHarness,
+  ownGoalHarness,
+  runGoals,
+} from './proof-7-goals.test-support';
 import { ProofBuilder } from './proof-builder';
 import { setupScenario } from './scenario';
 import { makeHarness } from './test-harness.test-support';
-import type { Answer } from './types';
 
-let dispose: (() => void) | null = null;
-afterEach(() => dispose?.());
-
-async function run(
-  options: Parameters<typeof makeHarness>[0] = {},
-  destinationPaths: string[] = ['interest_payout_wallet'],
-  afterSetup: (h: ReturnType<typeof makeHarness>) => void = () => undefined
-) {
-  const h = makeHarness(options);
-  dispose = h.dispose;
-  await setupScenario(h.ctx);
-  afterSetup(h);
-  const b = new ProofBuilder('p7', 'T');
-  const owner = {
-    qa: h.ctx.qa,
-    customerId: h.state.customerId ?? '',
-    mainWalletId: h.state.mainWalletId,
-  };
-  await recordGoalWallets(
-    h.ctx,
-    b,
-    owner,
-    h.mock.sandbox.businessWalletId,
-    destinationPaths
-  );
-  const result = b.build(h.ctx);
-  const answer = (id: string): Answer | undefined =>
-    result.findings.find((f) => f.id === id)?.answer;
-  return { h, result, answer };
-}
+afterEach(disposeGoalHarness);
 
 describe('recordGoalWallets', () => {
   it('records created, accepted and named-destination findings on the happy path; a null payout leaves inheritance unproven', async () => {
-    const { answer, result } = await run();
+    const { answer, result } = await runGoals();
     expect(answer('goal_without_payout_created')).toBe('yes');
     // Goal (a) reads back payout null: that proves nothing either way.
     expect(answer('goal_without_payout_inherits_business_payout')).toBe(
@@ -66,7 +39,7 @@ describe('recordGoalWallets', () => {
   });
 
   it('records each variant at 0 and 5 minutes as pseudonyms with its verdict', async () => {
-    const { result } = await run();
+    const { result } = await runGoals();
     const row = (id: string) =>
       [
         'http_status',
@@ -116,7 +89,7 @@ describe('recordGoalWallets', () => {
   });
 
   it('a null payout proves nothing: the stays-in-goal answer is unknown and the owner gets a written question', async () => {
-    const { answer, result } = await run();
+    const { answer, result } = await runGoals();
     for (const id of ['a', 'b']) {
       expect(answer(`goal_${id}_interest_stays_in_goal`)).toBe('unknown');
       expect(
@@ -134,7 +107,7 @@ describe('recordGoalWallets', () => {
   });
 
   it('only a readback naming the goal itself proves interest stays in it', async () => {
-    const { answer, result } = await run({
+    const { answer, result } = await runGoals({
       mock: { subWalletPaysItselfWhenUnset: true },
     });
     expect(answer('goal_a_interest_stays_in_goal')).toBe('yes');
@@ -144,7 +117,7 @@ describe('recordGoalWallets', () => {
   });
 
   it('leaves stays-in-goal unknown, and the proof inconclusive, when the payout field never shows', async () => {
-    const { answer, result } = await run({
+    const { answer, result } = await runGoals({
       mock: { goalReadbackOmitsPayout: true },
     });
     expect(answer('goal_a_interest_stays_in_goal')).toBe('unknown');
@@ -153,7 +126,7 @@ describe('recordGoalWallets', () => {
   });
 
   it('warns loudly when a goal wallet inherits the business payout wallet', async () => {
-    const { answer, result } = await run(
+    const { answer, result } = await runGoals(
       { mock: { subWalletInheritsPayout: true } },
       ['interest_payout_wallet'],
       (h) => {
@@ -166,115 +139,15 @@ describe('recordGoalWallets', () => {
     expect(result.notes.join(' ')).toMatch(/INHERITS/);
   });
 
-  it('judges inheritance by the 5-minute reading: null at once, business later, is a yes with the warning', async () => {
-    const { answer, result } = await run(
-      {},
-      ['interest_payout_wallet'],
-      (h) => {
-        const name = p7RoutingGoalName(h.ctx.qa.qaKey, 'a', 1).replaceAll(
-          '-',
-          ''
-        );
-        h.ctx.sleep = async (ms) => {
-          if (ms !== GOAL_RECHECK_DELAY_MS) return;
-          const goal = h.mock.sandbox.wallets.find((w) => w.name === name);
-          if (goal) goal.payoutWalletId = h.mock.sandbox.businessWalletId;
-        };
-      }
-    );
-    expect(result.values.goal_a_payout_at_0m).toBe('null');
-    expect(result.values.goal_a_payout_at_5m).toBe('business');
-    expect(answer('goal_without_payout_inherits_business_payout')).toBe('yes');
-    expect(answer('goal_a_interest_stays_in_goal')).toBe('no');
-    expect(result.notes.join(' ')).toMatch(/INHERITS/);
-  });
-
-  it('judges the explicit destination by the 5-minute reading, like every other goal (d) value', async () => {
-    const { answer, result } = await run(
-      {},
-      ['interest_payout_wallet'],
-      (h) => {
-        const name = p7RoutingGoalName(h.ctx.qa.qaKey, 'd', 1).replaceAll(
-          '-',
-          ''
-        );
-        h.ctx.sleep = async (ms) => {
-          if (ms !== GOAL_RECHECK_DELAY_MS) return;
-          const goal = h.mock.sandbox.wallets.find((w) => w.name === name);
-          if (goal) goal.payoutWalletId = h.state.mainWalletId ?? null;
-        };
-      }
-    );
-    expect(result.values.goal_d_payout_at_0m).toBe('business');
-    expect(result.values.goal_d_payout_at_5m).toBe('main');
-    expect(answer('goal_explicit_readback_names_payout_destination')).toBe(
-      'no'
-    );
-    expect(answer('goal_d_interest_stays_in_goal')).toBe('no');
-  });
-
-  it('keeps the explicit destination read at once when the 5-minute recheck omits the payout field', async () => {
-    const { answer, result } = await run(
-      {},
-      ['interest_payout_wallet'],
-      (h) => {
-        h.ctx.sleep = async (ms) => {
-          if (ms !== GOAL_RECHECK_DELAY_MS) return;
-          const read = h.api.wallet.bind(h.api);
-          h.api.wallet = async (id) => {
-            const call = await read(id);
-            if (call.data === null || typeof call.data !== 'object')
-              return call;
-            const data = { ...(call.data as Record<string, unknown>) };
-            delete data.interest_payout_wallet;
-            return { ...call, data };
-          };
-        };
-      }
-    );
-    expect(result.values.goal_d_payout_at_0m).toBe('business');
-    expect(result.values.goal_d_payout_at_5m).toBe('absent');
-    expect(answer('goal_explicit_readback_names_payout_destination')).toBe(
-      'yes'
-    );
-  });
-
-  it('keeps the opted-out flag read at once when the 5-minute recheck omits it', async () => {
-    const { answer, result } = await run(
-      {},
-      ['interest_payout_wallet'],
-      (h) => {
-        h.ctx.sleep = async (ms) => {
-          if (ms !== GOAL_RECHECK_DELAY_MS) return;
-          // From now on readbacks show the payout but no accrual flag.
-          const read = h.api.wallet.bind(h.api);
-          h.api.wallet = async (id) => {
-            const call = await read(id);
-            if (call.data === null || typeof call.data !== 'object')
-              return call;
-            const data = { ...(call.data as Record<string, unknown>) };
-            delete data.interest_enabled;
-            delete data.enable_interest_accrual;
-            return { ...call, data };
-          };
-        };
-      }
-    );
-    expect(result.values.goal_b_interest_enabled_at_0m).toBe(false);
-    expect(result.values.goal_b_interest_enabled_at_5m).toBeNull();
-    expect(result.values.goal_b_payout_at_5m).toBe('null');
-    expect(answer('goal_opted_out_reads_accrual_off')).toBe('yes');
-  });
-
   it('says no once goal (a) names itself and the main wallet showed the same field', async () => {
-    const { answer } = await run({
+    const { answer } = await runGoals({
       mock: { subWalletPaysItselfWhenUnset: true },
     });
     expect(answer('goal_without_payout_inherits_business_payout')).toBe('no');
   });
 
   it('records the rejection message of an explicit payout, redacted', async () => {
-    const { answer, result } = await run({
+    const { answer, result } = await runGoals({
       mock: { subAccountAcceptsPayout: false },
     });
     expect(answer('goal_explicit_payout_accepted')).toBe('no');
@@ -285,7 +158,7 @@ describe('recordGoalWallets', () => {
   });
 
   it('leaves inheritance unknown when the main wallet never named the destination field', async () => {
-    const { answer } = await run({}, []);
+    const { answer } = await runGoals({}, []);
     expect(answer('goal_without_payout_inherits_business_payout')).toBe(
       'unknown'
     );
@@ -293,7 +166,7 @@ describe('recordGoalWallets', () => {
 
   it('leaves every goal finding unknown when there is no QA customer to own the wallets', async () => {
     const h = makeHarness();
-    dispose = h.dispose;
+    ownGoalHarness(h);
     const b = new ProofBuilder('p7', 'T');
     await recordGoalWallets(
       h.ctx,
@@ -315,12 +188,12 @@ describe('recordGoalWallets', () => {
   });
 
   it('marks the proof inconclusive and explains it when a sub-wallet slot was already executed', async () => {
-    const first = await run();
+    const first = await runGoals();
     const { customers, wallets } = first.h.mock.sandbox;
     const journal = first.h.journal;
     first.h.dispose();
     const h = makeHarness({ journal, runId: 'run2' });
-    dispose = h.dispose;
+    ownGoalHarness(h);
     h.mock.sandbox.customers = customers;
     h.mock.sandbox.wallets = wallets;
     await setupScenario(h.ctx);

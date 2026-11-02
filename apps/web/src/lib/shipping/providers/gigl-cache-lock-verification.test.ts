@@ -10,7 +10,7 @@ vi.mock('node:fs', async () => {
   const original = (await vi.importActual(
     'node:fs'
   )) as typeof import('node:fs');
-  return { ...original, ...fs, default: { ...original.default, ...fs } };
+  return { ...original, ...fs, default: { ...original, ...fs } };
 });
 vi.mock('node:worker_threads', async () => {
   const original = (await vi.importActual(
@@ -19,7 +19,7 @@ vi.mock('node:worker_threads', async () => {
   return {
     ...original,
     isMainThread: true,
-    default: { ...original.default, isMainThread: true },
+    default: { ...original, isMainThread: true },
   };
 });
 

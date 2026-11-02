@@ -54,11 +54,16 @@ describe('GIGL tracking token cache', () => {
     const originalRead = prototype.read;
     const spy = vi.spyOn(prototype, 'read').mockImplementation(function (
       this: unknown,
-      buffer: Buffer,
-      offset: number,
-      length: number,
-      position: number
+      ...args: unknown[]
     ) {
+      const [buffer, offset, length, position] = args;
+      if (
+        !Buffer.isBuffer(buffer) ||
+        typeof offset !== 'number' ||
+        typeof length !== 'number' ||
+        typeof position !== 'number'
+      )
+        throw new Error('Unexpected read arguments');
       return originalRead.call(
         this,
         buffer,

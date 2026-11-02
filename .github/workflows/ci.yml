@@ -206,6 +206,7 @@ jobs:
             src/lib/shipping/customer-checkout-shipping-recovery-delivery.postgres.test.ts \
             src/lib/shipping/customer-checkout-shipping-recovery-retry.postgres.test.ts \
             src/lib/shipping/gigl-wallet-staff-access.postgres.test.ts \
+            src/lib/shipping/gigl-external-waybill-link.postgres.test.ts \
             src/lib/shipping/gigl-price-round-100.postgres.test.ts
       - name: Run Tests
         env:

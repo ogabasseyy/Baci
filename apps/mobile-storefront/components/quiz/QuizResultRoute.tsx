@@ -24,6 +24,7 @@ interface QuizResultRouteProps {
   dismissRecovery: (eventId: string) => void;
   events: QuizEvent[];
   expectedUserId: string | null;
+  getCurrentUserId?: () => string | null;
   lifecycle: QuizV2LifecycleStatus;
   onReset: () => void;
   onRetryRecovery: () => void;
@@ -38,6 +39,7 @@ export function QuizResultRoute({
   dismissRecovery,
   events,
   expectedUserId,
+  getCurrentUserId,
   lifecycle,
   onReset,
   onRetryRecovery,
@@ -76,6 +78,7 @@ export function QuizResultRoute({
       eventId={terminalContext?.eventId}
       eventEndsAt={terminalContext?.eventEndsAt}
       expectedUserId={expectedUserId}
+      getCurrentUserId={getCurrentUserId}
       legacyResult={result}
       lifecycle={lifecycle}
       onReturnToQuizList={returnToLobby}

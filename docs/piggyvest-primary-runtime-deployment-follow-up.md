@@ -103,6 +103,18 @@ build-aware capability gate; no route calls it yet. When wired, it reads:
   A refusal uses `PIGGYVEST_NOT_READY`, `PRIMARY_CARD_NOT_READY` or
   `SAVINGS_NOT_READY`, which released builds already treat as "use the
   legacy flow"; a failed read answers `PIGGYVEST_UNAVAILABLE` instead.
+- A floor proves only the native build. What reads wallet responses is the
+  JavaScript bundle, and an over-the-air update can replace it: the Android
+  runtime version is shared by every `versionCode`, so one Android update
+  reaches every build, and an iOS export targets one build's runtime. Never
+  publish or export an update whose source predates the wallet response
+  contract that the builds at or above a floor rely on. If an update
+  rollback must cross such a contract change, first unset both floors (or
+  raise them past every affected build), and set them again only after the
+  forward fix ships. This rule belongs on the storefront release checklist
+  (P9-mobile-build-header-pilot-removal); a later change may instead have
+  the client send a contract number compiled into the bundle, so the gate
+  keys on the JavaScript rather than the native build.
 - `piggyvest_primary.rollout_cohort` (migration 20261102045635), keyed by
   merchant and customer. It ships empty and only a privileged operator adds
   rows. A customer with no primary onboarding may start one only while

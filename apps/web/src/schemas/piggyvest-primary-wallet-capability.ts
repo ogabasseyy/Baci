@@ -11,7 +11,11 @@ export const PIGGYVEST_CLIENT_BUILD_HEADER = 'X-Baci-Client-Build';
 
 /**
  * Server-only minimum native build per platform. Both must be set for any
- * build to pass; while either is unset every client is refused.
+ * build to pass; while either is unset every client is refused. A floor
+ * proves only the native build: an over-the-air update can replace the
+ * JavaScript that reads wallet responses, so the deployment follow-up
+ * requires unsetting or raising the floors before any update rollback that
+ * crosses a wallet response contract change.
  */
 export const PIGGYVEST_PRIMARY_CLIENT_BUILD_FLOOR_VARIABLES = {
   ios: 'PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_IOS',

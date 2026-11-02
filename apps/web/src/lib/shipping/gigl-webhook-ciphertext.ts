@@ -1,8 +1,7 @@
 import 'server-only';
 
 import { GIGL_WEBHOOK_MAX_ENCRYPTED_CHARS } from './gigl-webhook-limits';
-
-const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
+import { GIGL_WEBHOOK_BASE64_PATTERN } from './gigl-webhook-patterns';
 
 /**
  * GIG documents the body as the bare base64 string. A .NET JSON serializer
@@ -24,7 +23,7 @@ export function extractGiglWebhookCiphertext(rawBody: string): string | null {
     candidate.length === 0 ||
     candidate.length > GIGL_WEBHOOK_MAX_ENCRYPTED_CHARS ||
     candidate.length % 4 !== 0 ||
-    !BASE64_PATTERN.test(candidate)
+    !GIGL_WEBHOOK_BASE64_PATTERN.test(candidate)
   ) {
     return null;
   }

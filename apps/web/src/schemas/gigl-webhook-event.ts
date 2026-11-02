@@ -1,7 +1,5 @@
 import z from 'zod';
-
-/** GIG waybills are numeric today; allow alphanumerics for international. */
-export const GIGL_WAYBILL_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
+import { GIGL_WAYBILL_PATTERN } from '@/lib/shipping/gigl-webhook-patterns';
 
 const waybillSchema = z.preprocess(
   (value) => (typeof value === 'number' ? String(value) : value),

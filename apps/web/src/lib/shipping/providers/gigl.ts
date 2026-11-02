@@ -16,6 +16,14 @@ import { GiglApiClient } from './gigl.auth';
 import { bookGiglShipment } from './gigl.booking';
 import { GIGL_QUOTE_TIMEOUT_MS, type GiglFetchOptions } from './gigl.constants';
 import { findNearestGiglServiceCentres } from './gigl.directory';
+import {
+  type GiglExternalWaybillLookup,
+  lookupGiglExternalWaybill,
+} from './gigl.external-waybill';
+import {
+  attestGiglWaybillOwnership,
+  type GiglWaybillOwnership,
+} from './gigl.preshipment-ownership';
 import { getGiglQuotes } from './gigl.quotes';
 import { GiglStationsService } from './gigl.stations';
 import { trackGiglShipment } from './gigl.tracking';
@@ -75,6 +83,22 @@ export class GiglProvider extends BaseShippingProvider {
       this.apiClient,
       this.providerIo,
       trackingNumbers
+    );
+  }
+
+  /** Read-only lookup of a waybill that may have been booked outside Baci. */
+  lookupExternalWaybill(waybill: string): Promise<GiglExternalWaybillLookup> {
+    return lookupGiglExternalWaybill(this.apiClient, this.providerIo, waybill);
+  }
+
+  /** Whether GIG says Baci's own GIG account holds this waybill. */
+  attestWaybillOwnership(
+    trackingNumber: string
+  ): Promise<GiglWaybillOwnership> {
+    return attestGiglWaybillOwnership(
+      this.apiClient,
+      this.providerIo,
+      trackingNumber
     );
   }
 

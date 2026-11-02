@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 
 interface UseMobileMenuDialogOptions {
   isOpen: boolean;
-  onClose: () => void;
+  onClose: (reason?: 'dismiss' | 'navigate') => void;
 }
 
 export function useMobileMenuDialog({
@@ -48,7 +48,7 @@ export function useMobileMenuDialog({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        onClose();
+        onClose('dismiss');
         return;
       }
 

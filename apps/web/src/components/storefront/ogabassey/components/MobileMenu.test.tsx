@@ -169,4 +169,23 @@ describe('MobileMenu', () => {
     unmount();
     document.body.removeChild(trigger);
   });
+
+  it('reports appropriate closure reason on dismissal versus navigation', () => {
+    const onClose = vi.fn();
+    const { rerender } = render(<MobileMenu isOpen={true} onClose={onClose} />);
+
+    // Close button passes 'dismiss'
+    fireEvent.click(screen.getByRole('button', { name: /close menu/i }));
+    expect(onClose).toHaveBeenCalledWith('dismiss');
+
+    onClose.mockClear();
+    // Backdrop passes 'dismiss'
+    fireEvent.click(screen.getByRole('button', { name: /dismiss menu backdrop/i }));
+    expect(onClose).toHaveBeenCalledWith('dismiss');
+
+    onClose.mockClear();
+    // Navigating via link passes 'navigate'
+    fireEvent.click(screen.getByRole('link', { name: 'Home' }));
+    expect(onClose).toHaveBeenCalledWith('navigate');
+  });
 });

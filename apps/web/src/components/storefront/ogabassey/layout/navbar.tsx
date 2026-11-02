@@ -161,9 +161,11 @@ export const OgabasseyNavbar: React.FC<NavbarProps> = ({
       {isMenuOpen ? (
         <DeferredMobileMenu
           isOpen={isMenuOpen}
-          onClose={() => {
+          onClose={(reason = 'dismiss') => {
             setIsMenuOpen(false);
-            menuButtonRef.current?.focus();
+            if (reason === 'dismiss') {
+              menuButtonRef.current?.focus();
+            }
           }}
           storeSlug={basePath}
         />

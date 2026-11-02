@@ -19,7 +19,7 @@ import { useMobileMenuDialog } from './use-mobile-menu-dialog';
 
 export interface MobileMenuProps {
   isOpen: boolean;
-  onClose: () => void;
+  onClose: (reason?: 'dismiss' | 'navigate') => void;
   logo?: string;
   storeSlug?: string;
 }
@@ -80,7 +80,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
               <Link
                 href={asRoute(buildHref(item.path))}
                 prefetch={false}
-                onClick={onClose}
+                onClick={() => onClose('navigate')}
                 aria-current={isActive ? 'page' : undefined}
                 className={`group flex w-full items-center justify-between rounded-xl p-2.5 text-sm transition-colors ${
                   isActive
@@ -124,7 +124,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
         aria-label="Dismiss menu backdrop"
         tabIndex={-1}
         className="fade-in absolute inset-0 animate-in border-0 bg-black/60 p-0 duration-200 backdrop-blur-xs"
-        onClick={onClose}
+        onClick={() => onClose('dismiss')}
       />
 
       {/* Sidebar */}
@@ -137,7 +137,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
           <button
             type="button"
             ref={closeButtonRef}
-            onClick={onClose}
+            onClick={() => onClose('dismiss')}
             className="rounded-full p-2 text-store-background-text/70 transition-colors hover:bg-store-background-text/10 hover:text-store-background-text"
             aria-label="Close menu"
           >
@@ -162,7 +162,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                     <Link
                       href={asRoute(buildHref(`/${category.slug}`))}
                       prefetch={false}
-                      onClick={onClose}
+                      onClick={() => onClose('navigate')}
                       className="inline-flex items-center rounded-full bg-store-background-text/10 px-3 py-1.5 font-medium text-store-background-text/80 text-xs transition-colors hover:bg-store-primary/10 hover:text-store-primary"
                     >
                       {category.name}
@@ -182,7 +182,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
           <Link
             href={asRoute(buildHref('/account/login'))}
             prefetch={false}
-            onClick={onClose}
+            onClick={() => onClose('navigate')}
             className="block w-full rounded-xl bg-store-primary py-3.5 text-center font-bold text-store-primary-text shadow-lg transition-transform active:scale-95"
           >
             Login / Register

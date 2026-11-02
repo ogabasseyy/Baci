@@ -125,7 +125,7 @@ describe('useMobileMenuDialog', () => {
     render(<TestDialog isOpen={true} onClose={onClose} />);
 
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledWith('dismiss');
   });
 
   it('traps Tab navigation within the dialog elements', () => {

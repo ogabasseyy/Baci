@@ -23,10 +23,12 @@ type Outcome = Exclude<ScheduledNotificationResultStatus, 'failed'>;
 type FailureCode =
   | 'expired_finalization_failed'
   | 'malformed_claim_retry_finalization_failed'
-  | 'retry_finalization_failed';
+  | 'retry_finalization_failed'
+  | 'unidentifiable_claim_skipped';
 type ClaimResult = {
   failure?: FailureCode;
-  id: string;
+  /** Absent only when the claim carried no usable identity. */
+  id?: string;
   recipients?: number;
   status: ScheduledNotificationResultStatus;
 };
@@ -155,7 +157,16 @@ export async function processScheduledNotificationClaims(
       notification = parseClaimedNotification(value);
     } catch (parseError) {
       const identity = parseMalformedClaimIdentity(value);
-      if (!identity) throw parseError;
+      if (!identity) {
+        // Nothing identifies the row, so it cannot be finalized; its lease
+        // expires on its own. Report it and keep the rest of the batch.
+        const failure = 'unidentifiable_claim_skipped';
+        console.error('Scheduled notification claim could not be identified', {
+          failure,
+        });
+        results.push({ failure, status: 'failed' });
+        continue;
+      }
       const malformedResult = await finalizeOrReportFailure(
         client,
         identity,

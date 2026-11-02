@@ -107,6 +107,7 @@ describe('scheduled notification delivery safety contract', () => {
       expect(webPaths).toContain(`  - '${path}'\n`);
     for (const suite of [
       'admin-notification-batch-isolation.test.ts',
+      'admin-notification-batch-unidentifiable-claim.test.ts',
       'admin-notification-worker-outcome.test.ts',
     ])
       expect(read(`apps/web/src/lib/${suite}`)).toContain(

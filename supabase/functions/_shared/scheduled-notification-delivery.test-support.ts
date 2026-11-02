@@ -43,7 +43,7 @@ export function makeMalformedScheduledNotificationClaim(suffix: string) {
 
 export type ScheduledNotificationClaimResult = {
   failure?: string;
-  id: string;
+  id?: string;
   recipients?: number;
   status: string;
 };

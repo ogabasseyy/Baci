@@ -46,6 +46,8 @@ describe('admin notification codex review repairs contract', () => {
     expect(deliveryWorker).not.toContain('if (!notification) throw error');
     // Per-claim error paths report failures; they never rethrow into the batch.
     expect(deliveryWorker).not.toMatch(/\bthrow error;/);
+    expect(deliveryWorker).not.toContain('throw parseError');
+    expect(deliveryWorker).toContain("'unidentifiable_claim_skipped'");
   });
 
   it('defers mixed-channel quiet-hour pushes so the parent stays claimable', () => {

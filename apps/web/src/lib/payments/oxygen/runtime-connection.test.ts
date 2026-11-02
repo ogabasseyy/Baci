@@ -30,7 +30,7 @@ it('uses ordinary Auth worker credentials and a separate partner login on the fi
     OXYGEN_STAGING_PARTNER_SECRET: 'synthetic-secret',
     OXYGEN_STAGING_WORKER_EMAIL: 'worker@example.test',
     OXYGEN_STAGING_WORKER_PASSWORD: 'synthetic-password',
-    OXYGEN_STAGING_HOSTED_HOSTS: 'hosted.example.test',
+    OXYGEN_STAGING_HOSTED_HOSTS: 'hosted.example.test,payment.hydrogenpay.com',
     OXYGEN_DRAFT_ENCRYPTION_KEY: 'a'.repeat(64),
   }))
     vi.stubEnv(name, value);

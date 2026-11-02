@@ -66,6 +66,13 @@ it('preserves the existing isolated staging configuration', () => {
   });
   expect(
     readOxygenRuntimeConfiguration()?.hosts.has('payment.hydrogenpay.com')
+  ).toBe(false);
+  vi.stubEnv(
+    'OXYGEN_STAGING_HOSTED_HOSTS',
+    'staging.example.test,payment.hydrogenpay.com'
+  );
+  expect(
+    readOxygenRuntimeConfiguration()?.hosts.has('payment.hydrogenpay.com')
   ).toBe(true);
 });
 it('fails closed in production mode without a deployment identity or explicit staging opt-in', () => {

@@ -61,7 +61,6 @@ export function readOxygenRuntimeConfiguration() {
   )
     return null;
   const hosts = new Set(names);
-  if (environment === 'staging') hosts.add('payment.hydrogenpay.com');
   return {
     environment,
     baseUrl: oxygenProviderOrigins[environment],

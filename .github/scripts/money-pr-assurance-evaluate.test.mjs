@@ -37,7 +37,7 @@ test('a non-money PR passes without any reviews', () => {
     {
       pr: { number: 1, headSha: HEAD, body: '', labels: [], changedFiles: 1 },
       files: [
-        { filename: 'apps/web/src/components/hero.tsx', status: 'modified' },
+        { filename: 'apps/web/src/components/hero.tsx', status: 'modified', patch: '+// copy' },
       ],
     },
     config
@@ -255,7 +255,7 @@ test('an incomplete changed-file list is treated as a money-path PR', () => {
         changedFiles: 4000,
       },
       files: [
-        { filename: 'apps/web/src/components/hero.tsx', status: 'modified' },
+        { filename: 'apps/web/src/components/hero.tsx', status: 'modified', patch: '+// copy' },
       ],
       summaries: {},
       evidenceExists: {},

@@ -82,12 +82,15 @@ export function matchesMoneyContent(
 }
 
 // Other code is judged by what its changed lines do, whatever it is called:
-// the same detection the contract sweep uses. A runtime file whose diff
-// GitHub did not return is judged by its path alone.
+// the same detection the contract sweep uses. Runtime code under a money
+// root whose diff GitHub did not return cannot be judged, so it fails closed
+// and counts as money; tests, fixtures, docs and images never do.
+const RUNTIME_ROOTS = /^(?:apps|packages|supabase|scripts)\//;
+
 export function matchesMoneyOperation(file, { contentPaths, contentWords }) {
   if (matchesAny(file.filename, contentPaths)) return false;
-  if (!isRuntimeCode(file.filename) || typeof file.patch !== 'string')
-    return false;
+  if (!isRuntimeCode(file.filename)) return false;
+  if (typeof file.patch !== 'string') return RUNTIME_ROOTS.test(file.filename);
   return moneyOperation(changedText(file.patch), contentWords) !== null;
 }
 

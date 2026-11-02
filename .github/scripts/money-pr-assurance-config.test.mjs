@@ -72,9 +72,10 @@ test('a PR touching only unrelated files is not a money-path PR', () => {
       {
         filename: 'apps/web/src/components/storefront/hero.tsx',
         status: 'modified',
+        patch: '+// copy',
       },
       {
-        filename: 'docs/piggyvest-change-summaries/TEMPLATE.md',
+        filename: 'docs/guide/overview.md',
         status: 'modified',
       },
     ],
@@ -99,7 +100,7 @@ test('PiggyVest server code, wallet migrations and governance files are money pa
         filename: '.github/scripts/money-pr-assurance-config.mjs',
         status: 'modified',
       },
-      { filename: 'apps/web/src/app/page.tsx', status: 'modified' },
+      { filename: 'apps/web/src/app/page.tsx', status: 'modified', patch: '+// copy' },
     ],
     config
   );
@@ -121,6 +122,7 @@ test('moving a money file out of a money path still counts as a money-path chang
         filename: 'apps/web/src/lib/other/transfer.ts',
         previousFilename: 'apps/web/src/lib/piggyvest/transfer.ts',
         status: 'renamed',
+        patch: '+// moved',
       },
     ],
     config

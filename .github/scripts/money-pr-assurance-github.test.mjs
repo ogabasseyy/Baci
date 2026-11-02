@@ -99,7 +99,7 @@ test('a non-money PR snapshot skips review, thread and check reads', async () =>
       },
     },
     'GET /repos/o/r/pulls/7/files?per_page=100': {
-      json: [{ filename: 'apps/web/src/app/page.tsx', status: 'modified' }],
+      json: [{ filename: 'apps/web/src/app/page.tsx', status: 'modified', patch: '+// copy' }],
     },
   });
   const client = createGitHubClient({

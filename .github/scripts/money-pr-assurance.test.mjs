@@ -42,7 +42,7 @@ test('targets come from the PR number or the commit SHA, validated', () => {
 test('a non-money PR gets a success status', async () => {
   const { fake, summaries } = await run(
     { PR_NUMBER: '5' },
-    prRoute(5, [{ filename: 'apps/web/src/app/page.tsx', status: 'modified' }])
+    prRoute(5, [{ filename: 'apps/web/src/app/page.tsx', status: 'modified', patch: '+// copy' }])
   );
   const [status] = statusBodies(fake);
   assert.equal(status.state, 'success');
@@ -115,7 +115,7 @@ test('a closed PR is skipped and dry runs post nothing', async () => {
   assert.equal(statusBodies(closed.fake).length, 0);
   const dry = await run(
     { PR_NUMBER: '5', DRY_RUN: '1' },
-    prRoute(5, [{ filename: 'apps/web/src/app/page.tsx', status: 'modified' }])
+    prRoute(5, [{ filename: 'apps/web/src/app/page.tsx', status: 'modified', patch: '+// copy' }])
   );
   assert.equal(statusBodies(dry.fake).length, 0);
   assert.equal(dry.result.results[0].state, 'success');

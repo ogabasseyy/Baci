@@ -65,6 +65,32 @@ test('a generic UI file is not money', () => {
       "+await supabase.rpc('debit_merchant_balance', {});"
     )
   );
-  // No diff text (a very large file): judged by its path alone.
-  assert.ok(!isMoney(path, null));
+});
+
+test('runtime code with no returned diff fails closed; docs, images and tests do not', () => {
+  const runtime = 'apps/web/src/components/storefront/hero.tsx';
+  assert.ok(isMoney(runtime, null));
+  assert.ok(isMoney('packages/shared/src/format.ts', undefined));
+  assert.ok(isMoney('scripts/tidy.sh', null));
+  assert.ok(!isMoney('docs/guide/overview.md', null));
+  assert.ok(!isMoney('apps/web/public/hero.png', null));
+  assert.ok(!isMoney('apps/web/src/components/hero.test.tsx', null));
+  assert.ok(!isMoney('apps/web/src/components/__tests__/hero.tsx', null));
+  assert.ok(!isMoney('README.md', null));
+  // Outside the money-relevant roots, a missing diff is not money.
+  assert.ok(!isMoney('tools/misc/tidy.ts', null));
+});
+
+test('governance coverage includes the human-readable rules', () => {
+  for (const path of [
+    'docs/piggyvest-change-summaries/TEMPLATE.md',
+    'docs/runbooks/money-pr-assurance.md',
+  ]) {
+    const result = classifyChangedFiles(
+      [{ filename: path, status: 'modified', patch: '+x' }],
+      config
+    );
+    assert.ok(result.isMoneyPath, path);
+    assert.deepEqual(result.governanceFiles, [path]);
+  }
 });

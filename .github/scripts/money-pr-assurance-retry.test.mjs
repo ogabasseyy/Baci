@@ -33,7 +33,7 @@ test('a transient failure reading the PR is retried with growing waits', async (
   const { fake, result, sleeps } = await run(
     { PR_NUMBER: '5' },
     flakyPullRoute(5, 2, [
-      { filename: 'apps/web/src/app/page.tsx', status: 'modified' },
+      { filename: 'apps/web/src/app/page.tsx', status: 'modified', patch: '+// copy' },
     ])
   );
   assert.equal(result.exitCode, 0);
@@ -179,7 +179,7 @@ test('a transient failure posting the result status is retried', async () => {
     { PR_NUMBER: '5' },
     {
       ...prRoute(5, [
-        { filename: 'apps/web/src/app/page.tsx', status: 'modified' },
+        { filename: 'apps/web/src/app/page.tsx', status: 'modified', patch: '+// copy' },
       ]),
       [`POST /repos/o/r/statuses/${HEAD}`]: flaky(1, {
         status: 201,

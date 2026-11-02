@@ -105,11 +105,15 @@ build-aware capability gate; no route calls it yet. When wired, it reads:
   legacy flow"; a failed read answers `PIGGYVEST_UNAVAILABLE` instead.
 - `piggyvest_primary.rollout_cohort` (migration 20261102045635), keyed by
   merchant and customer. It ships empty and only a privileged operator adds
-  rows. A customer without a verified primary wallet may start onboarding
-  only while listed and while every readiness reader in
+  rows. A customer with no primary onboarding may start one only while
+  listed and while every readiness reader in
   `primary-readiness-registry.ts` reports ready; none is registered yet, so
-  onboarding stays closed. A customer whose wallet is already verified needs
-  only the build floor. Include
+  onboarding stays closed. A customer whose wallet is verified, or whose
+  onboarding is in flight (an intent or mapping not yet released), needs
+  only the build floor: removing them from the cohort, or a reader dropping
+  to not ready, never strands a provider-side wallet. Route wiring admits an
+  in-flight customer to resume that onboarding only, never a fresh claim.
+  Include
   `read_rollout_cohort_membership(jsonb)` in the restricted provisioner's
   verified grants; it returns only a boolean for the scoped customer.
 

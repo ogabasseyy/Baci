@@ -4,10 +4,12 @@ import {
   PIGGYVEST_CLIENT_PLATFORM_HEADER,
   PIGGYVEST_PRIMARY_CLIENT_BUILD_FLOOR_VARIABLES,
   type PiggyvestClientPlatform,
+  type PiggyvestPrimaryExistingOnboarding,
   type PiggyvestPrimaryNotReadyCode,
   piggyvestClientBuildFloorSchema,
   piggyvestClientBuildSchema,
   piggyvestClientPlatformSchema,
+  piggyvestPrimaryExistingOnboardingSchema,
 } from '@/schemas/piggyvest-primary-wallet-capability';
 import {
   type PrimaryReadinessId,
@@ -111,28 +113,40 @@ export function resolvePrimaryClientCapability(input: {
 }
 
 /**
- * Onboarding gate. After the build floor, a customer whose wallet is
- * already verified needs nothing else (they keep reading their wallet even
- * outside the cohort). Anyone else needs rollout cohort membership and
- * every readiness reader. Reads run in that order and stop at the first
- * refusal; only a literal `true` from a read counts, and a failed read is
- * `unavailable`, never a refusal.
+ * Onboarding gate. After the build floor, a customer who already has an
+ * onboarding needs nothing else: a verified customer keeps reading their
+ * wallet, and an in-flight onboarding (an intent or mapping not yet
+ * released) can still be read back, recorded and verified, even after the
+ * customer leaves the cohort or a readiness reader stops reporting ready.
+ * Their admission was checked when the onboarding was first claimed, and
+ * refusing them would strand a provider-side wallet. Only a customer with
+ * no onboarding (a fresh claim) also needs rollout cohort membership and
+ * every readiness reader.
+ *
+ * Route wiring treats a pass for an in-flight onboarding as resume-only:
+ * it admits that customer's existing onboarding, never a fresh claim.
+ *
+ * Reads run in that order and stop at the first refusal. Only an exact
+ * `verified` or `in_flight` answer skips the cohort (anything else counts
+ * as none), only a literal `true` counts as membership, and a failed read
+ * is `unavailable`, never a refusal.
  */
 export async function resolvePrimaryOnboardingCapability(input: {
   headers: HeaderReader;
   refusalCode: PiggyvestPrimaryNotReadyCode;
-  readVerifiedWallet: () => Promise<boolean>;
+  readExistingOnboarding: () => Promise<PiggyvestPrimaryExistingOnboarding>;
   readCohortMembership: () => Promise<boolean>;
   registry?: PrimaryReadinessRegistry;
   env?: NodeJS.ProcessEnv;
 }): Promise<PrimaryWalletCapabilityVerdict> {
   const client = resolvePrimaryClientCapability(input);
   if (!client.enabled) return client;
-  let verified: unknown;
   let member: unknown;
   try {
-    verified = await input.readVerifiedWallet();
-    if (verified === true) return { enabled: true };
+    const existing = piggyvestPrimaryExistingOnboardingSchema.safeParse(
+      await input.readExistingOnboarding()
+    );
+    if (existing.success && existing.data !== 'none') return { enabled: true };
     member = await input.readCohortMembership();
   } catch {
     return UNAVAILABLE;

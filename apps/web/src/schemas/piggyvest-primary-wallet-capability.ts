@@ -55,6 +55,20 @@ export const piggyvestClientBuildFloorSchema = z
   .regex(/^[1-9][0-9]{0,9}$/)
   .transform(Number);
 
+/**
+ * What the customer already has on the primary wallet: a verified wallet,
+ * an onboarding intent or mapping that is not released yet (`in_flight`),
+ * or nothing. Only `none` is a fresh claim.
+ */
+export const piggyvestPrimaryExistingOnboardingSchema = z.enum([
+  'verified',
+  'in_flight',
+  'none',
+]);
+export type PiggyvestPrimaryExistingOnboarding = z.infer<
+  typeof piggyvestPrimaryExistingOnboardingSchema
+>;
+
 export const piggyvestPrimaryRolloutCohortRowsSchema = z
   .array(z.strictObject({ result: z.boolean() }))
   .length(1);

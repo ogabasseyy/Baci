@@ -1,4 +1,5 @@
 import { describe, expect, it, type Mock, vi } from 'vitest';
+import type { PiggyvestPrimaryExistingOnboarding } from '@/schemas/piggyvest-primary-wallet-capability';
 import {
   PRIMARY_READINESS_IDS,
   type PrimaryReadinessId,
@@ -25,24 +26,26 @@ function registry(blocked?: PrimaryReadinessId): ReaderMocks {
 type OnboardingOverrides = {
   headers?: Headers;
   env?: NodeJS.ProcessEnv;
-  verified?: () => Promise<boolean>;
+  existing?: () => Promise<PiggyvestPrimaryExistingOnboarding>;
   member?: () => Promise<boolean>;
   readers?: ReaderMocks;
 };
 
 function onboarding(overrides: OnboardingOverrides) {
-  const readVerifiedWallet = vi.fn(overrides.verified ?? (async () => false));
+  const readExistingOnboarding = vi.fn(
+    overrides.existing ?? (async () => 'none' as const)
+  );
   const readCohortMembership = vi.fn(overrides.member ?? (async () => true));
   const readers = overrides.readers ?? registry();
   const verdict = resolvePrimaryOnboardingCapability({
     headers: overrides.headers ?? client('ios', '120'),
     env: overrides.env ?? floors,
     refusalCode: 'PIGGYVEST_NOT_READY',
-    readVerifiedWallet,
+    readExistingOnboarding,
     readCohortMembership,
     registry: readers,
   });
-  return { verdict, readVerifiedWallet, readCohortMembership, readers };
+  return { verdict, readExistingOnboarding, readCohortMembership, readers };
 }
 
 describe('resolvePrimaryOnboardingCapability', () => {
@@ -58,18 +61,21 @@ describe('resolvePrimaryOnboardingCapability', () => {
     ['a malformed header', client('ios', '0120')],
     ['a below-floor build', client('ios', '119')],
   ])('refuses %s before any read', async (_label, headers) => {
-    const { verdict, readVerifiedWallet, readCohortMembership, readers } =
+    const { verdict, readExistingOnboarding, readCohortMembership, readers } =
       onboarding({ headers });
     await expect(verdict).resolves.toEqual(refused('client_build'));
-    expect(readVerifiedWallet).not.toHaveBeenCalled();
+    expect(readExistingOnboarding).not.toHaveBeenCalled();
     expect(readCohortMembership).not.toHaveBeenCalled();
     for (const id of PRIMARY_READINESS_IDS)
       expect(readers[id]).not.toHaveBeenCalled();
   });
 
-  it('lets a verified customer outside the cohort read with only the floor', async () => {
+  it.each([
+    ['a verified customer', 'verified'],
+    ['a customer with an in-flight onboarding', 'in_flight'],
+  ] as const)('lets %s outside the cohort continue with only the floor', async (_label, existing) => {
     const { verdict, readCohortMembership, readers } = onboarding({
-      verified: async () => true,
+      existing: async () => existing,
       member: async () => false,
       readers: registry('interest_marker'),
     });
@@ -78,13 +84,27 @@ describe('resolvePrimaryOnboardingCapability', () => {
     expect(readers.interest_marker).not.toHaveBeenCalled();
   });
 
-  it('still refuses a verified customer on an old build', async () => {
-    const { verdict, readVerifiedWallet } = onboarding({
+  it.each(
+    PRIMARY_READINESS_IDS
+  )('lets an in-flight onboarding resume while %s is not ready', async (blocked) => {
+    const { verdict, readers } = onboarding({
+      existing: async () => 'in_flight',
+      readers: registry(blocked),
+    });
+    await expect(verdict).resolves.toEqual({ enabled: true });
+    expect(readers[blocked]).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'verified',
+    'in_flight',
+  ] as const)('still refuses a %s customer on an old build', async (existing) => {
+    const { verdict, readExistingOnboarding } = onboarding({
       headers: client(),
-      verified: async () => true,
+      existing: async () => existing,
     });
     await expect(verdict).resolves.toEqual(refused('client_build'));
-    expect(readVerifiedWallet).not.toHaveBeenCalled();
+    expect(readExistingOnboarding).not.toHaveBeenCalled();
   });
 
   it('refuses a new customer outside the cohort without reading readiness', async () => {
@@ -109,7 +129,7 @@ describe('resolvePrimaryOnboardingCapability', () => {
       headers: client('android', '700'),
       env: floors,
       refusalCode: 'PIGGYVEST_NOT_READY',
-      readVerifiedWallet: async () => false,
+      readExistingOnboarding: async () => 'none',
       readCohortMembership: async () => true,
     });
     await expect(verdict).resolves.toEqual({
@@ -129,23 +149,23 @@ describe('resolvePrimaryOnboardingCapability', () => {
         client('ios', '9999999999'),
         client('android', '9999999999'),
       ]) {
-        const { verdict, readVerifiedWallet, readCohortMembership } =
+        const { verdict, readExistingOnboarding, readCohortMembership } =
           onboarding({
             env: env as NodeJS.ProcessEnv,
             headers,
-            verified: async () => true,
+            existing: async () => 'verified',
             member: async () => true,
           });
         await expect(verdict).resolves.toEqual(refused('build_floor_unset'));
-        expect(readVerifiedWallet).not.toHaveBeenCalled();
+        expect(readExistingOnboarding).not.toHaveBeenCalled();
         expect(readCohortMembership).not.toHaveBeenCalled();
       }
   });
 
   it.each([
     [
-      'the verified-wallet read fails',
-      { verified: () => Promise.reject(new Error('db down')) },
+      'the existing-onboarding read fails',
+      { existing: () => Promise.reject(new Error('db down')) },
     ],
     [
       'the cohort read fails',
@@ -170,15 +190,21 @@ describe('resolvePrimaryOnboardingCapability', () => {
     });
   });
 
-  const truthy = (value: unknown) =>
-    (async () => value) as unknown as () => Promise<boolean>;
+  const answer = <T>(value: unknown) =>
+    (async () => value) as unknown as () => Promise<T>;
 
   it.each([
-    [
-      'a truthy non-boolean verified answer',
-      { verified: truthy('yes'), member: async () => false },
-    ],
-    ['a truthy non-boolean cohort answer', { member: truthy(1) }],
+    ...[true, 'yes', 'VERIFIED', 'in-flight', 'ready', null].map(
+      (value) =>
+        [
+          `the unrecognised existing-onboarding answer ${JSON.stringify(value)}`,
+          {
+            existing: answer<PiggyvestPrimaryExistingOnboarding>(value),
+            member: async () => false,
+          },
+        ] satisfies [string, OnboardingOverrides]
+    ),
+    ['a truthy non-boolean cohort answer', { member: answer<boolean>(1) }],
   ] satisfies [
     string,
     OnboardingOverrides,

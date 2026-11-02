@@ -9,6 +9,7 @@ import {
   piggyvestClientBuildFloorSchema,
   piggyvestClientBuildSchema,
   piggyvestClientPlatformSchema,
+  piggyvestPrimaryExistingOnboardingSchema,
   piggyvestPrimaryRolloutCohortRowsSchema,
 } from './piggyvest-primary-wallet-capability';
 
@@ -134,6 +135,15 @@ describe('PiggyVest primary client capability contract', () => {
       expect(piggyvestClientBuildFloorSchema.safeParse(value).success).toBe(
         false
       );
+  });
+
+  it('reads only the three existing-onboarding answers', () => {
+    for (const value of ['verified', 'in_flight', 'none'])
+      expect(piggyvestPrimaryExistingOnboardingSchema.parse(value)).toBe(value);
+    for (const value of [true, 'VERIFIED', 'in-flight', '', null, undefined])
+      expect(
+        piggyvestPrimaryExistingOnboardingSchema.safeParse(value).success
+      ).toBe(false);
   });
 
   it('reads exactly one boolean cohort membership row', () => {

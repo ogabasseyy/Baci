@@ -161,7 +161,6 @@ export function connectOxygenRuntime() {
         (entry) => entry.workflowId === workflow
       )
     ) {
-      if (environment !== 'staging') throw new Error('Activation unavailable');
       await completeOxygenPaidActivation(
         worker,
         workflow,

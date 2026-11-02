@@ -187,7 +187,7 @@ describe('MobileMenu', () => {
 
     onClose.mockClear();
     // Backdrop passes 'dismiss'
-    fireEvent.click(screen.getByRole('button', { name: /dismiss menu backdrop/i }));
+    fireEvent.click(screen.getByRole('presentation'));
     expect(onClose).toHaveBeenCalledWith('dismiss');
 
     onClose.mockClear();

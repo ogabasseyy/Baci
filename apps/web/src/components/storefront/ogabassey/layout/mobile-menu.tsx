@@ -118,11 +118,9 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
       ref={dialogRef}
     >
       {/* Backdrop */}
-      <button
-        type="button"
-        aria-label="Dismiss menu backdrop"
-        tabIndex={-1}
-        className="fade-in absolute inset-0 animate-in border-0 bg-black/60 p-0 duration-200 backdrop-blur-xs"
+      <div
+        role="presentation"
+        className="fade-in absolute inset-0 animate-in bg-black/60 duration-200 backdrop-blur-xs"
         onClick={() => onClose('dismiss')}
       />
 

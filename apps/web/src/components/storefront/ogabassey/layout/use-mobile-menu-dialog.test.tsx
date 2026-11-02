@@ -100,10 +100,10 @@ describe('useMobileMenuDialog', () => {
 
   it('handles non-HTMLElement activeElement safely when opening dialog', () => {
     const svgElem = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svgElem.setAttribute('tabindex', '0');
     document.body.appendChild(svgElem);
-    if ('focus' in svgElem && typeof svgElem.focus === 'function') {
-      svgElem.focus();
-    }
+    svgElem.focus();
+    expect(document.activeElement).toBe(svgElem);
 
     const onClose = vi.fn();
     const { rerender } = render(

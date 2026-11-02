@@ -352,6 +352,24 @@ describe('processPiggyvestEvent', () => {
     expect(mockResolve).toHaveBeenCalledTimes(3);
   });
 
+  it('raises the unmapped alert once per deposit even under a new event id', async () => {
+    const unmapped = new InflowLedgerError(
+      'INFLOW_LEDGER_UNMAPPED',
+      'no mapping'
+    );
+    mockRecordInflow.mockRejectedValue(unmapped);
+    await expect(
+      processPiggyvestEvent(supabase, inflowEvent as never)
+    ).rejects.toBe(unmapped);
+    await expect(
+      processPiggyvestEvent(supabase, {
+        ...inflowEvent,
+        eventId: '01K8TESTINFLOW002',
+      } as never)
+    ).rejects.toBe(unmapped);
+    expect(mockAlert).toHaveBeenCalledTimes(1);
+  });
+
   it('does not raise the unmapped alert for other inflow failures', async () => {
     mockRecordInflow.mockRejectedValue(new Error('storage unavailable'));
     await expect(

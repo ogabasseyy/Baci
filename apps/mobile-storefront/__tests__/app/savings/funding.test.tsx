@@ -9,7 +9,14 @@ jest.mock('expo-router', () => ({
   },
 }));
 
-it('sends old plan-funding links to the wallet without showing a plan account', () => {
-  render(<SavingsPlanFundingRoute />);
-  expect(mockRedirect).toHaveBeenCalledWith('/wallet');
+describe('SavingsPlanFundingRoute', () => {
+  beforeEach(() => {
+    mockRedirect.mockClear();
+  });
+
+  it('sends old plan-funding links to the wallet without showing a plan account', () => {
+    render(<SavingsPlanFundingRoute />);
+    expect(mockRedirect).toHaveBeenCalledTimes(1);
+    expect(mockRedirect).toHaveBeenCalledWith('/wallet');
+  });
 });

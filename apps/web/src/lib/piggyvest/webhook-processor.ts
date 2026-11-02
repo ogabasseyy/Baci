@@ -283,11 +283,16 @@ export async function processPiggyvestEvent(
       error instanceof InflowLedgerError &&
       error.code === 'INFLOW_LEDGER_UNMAPPED'
     ) {
-      // Page an operator once per event, but keep the delivery retryable: the
+      // Page an operator once per deposit (provider transaction, since a
+      // redelivery may carry a new event id), but keep the delivery retryable: the
       // mapping may still be committing. The alert is best effort and can
       // never change the retry outcome.
       try {
-        alertOncePerEvent(event.eventId, () =>
+        const alertKey =
+          event.eventType === 'bank-transfer.inflow.success'
+            ? `txn:${event.eventData.transaction_id}`
+            : `event:${event.eventId}`;
+        alertOncePerEvent(alertKey, () =>
           emitPiggyvestWebhookAlert('PIGGYVEST_INFLOW_UNMAPPED', {
             eventType: event.eventType,
             operationId: event.eventId,

@@ -2,6 +2,18 @@ import { screen, waitFor } from '@testing-library/react';
 import { useRouter } from 'next/navigation';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const navigation = vi.hoisted(() => ({ document: vi.fn() }));
+vi.mock('./checkout/navigate-checkout-result', async (importOriginal) => {
+  const original =
+    await importOriginal<
+      typeof import('./checkout/navigate-checkout-result')
+    >();
+  return {
+    navigateCheckoutResult: (path: string, client: (url: string) => void) =>
+      original.navigateCheckoutResult(path, client, navigation.document),
+  };
+});
+
 // Mirrors the mock surface of checkout-page.test.tsx — the page pulls in the
 // whole storefront shell, so every heavy dependency is stubbed.
 vi.mock('next/navigation', () => ({
@@ -303,10 +315,11 @@ it('hands the actual checkout to Oxygen using the cookie session, without initia
   const fetchMock = stubFetch();
   await placeOxygenOrder();
   await waitFor(() =>
-    expect(push).toHaveBeenCalledWith(
+    expect(navigation.document).toHaveBeenCalledWith(
       '/ogabassey/checkout?oxygenOrderId=00000000-0000-4000-8000-0000000000a1'
     )
   );
+  expect(push).not.toHaveBeenCalled();
   expect(called(fetchMock, '/api/payments/initialize')).toBe(false);
   vi.unstubAllEnvs();
   vi.restoreAllMocks();

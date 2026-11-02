@@ -18,6 +18,7 @@ import { useCheckoutFinancialSession } from './checkout/hooks/use-checkout-finan
 import { useCheckoutFormSession } from './checkout/hooks/use-checkout-form-session';
 import { useCheckoutPaymentExecution } from './checkout/hooks/use-checkout-payment-execution';
 import { useCheckoutScrollTop } from './checkout/hooks/use-checkout-scroll-top';
+import { navigateCheckoutResult } from './checkout/navigate-checkout-result';
 import type { OxygenCheckoutSlots } from './checkout/oxygen-checkout-slots';
 import { checkoutPaymentRails } from './checkout/payment-rail-availability';
 
@@ -214,7 +215,12 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
     merchant,
     navigation: {
       flow: checkoutFlow,
-      pushSuccessRoute: (url) => router.push(asRoute(url)),
+      pushSuccessRoute: (url) =>
+        navigateCheckoutResult(
+          url,
+          (path) => router.push(asRoute(path)),
+          (path) => window.location.assign(path)
+        ),
       getHref,
     },
     payment: {

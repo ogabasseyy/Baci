@@ -72,4 +72,20 @@ describe('CookieConsent', () => {
       zIndex: 50,
     });
   });
+
+  it('uses composited transitions and splits banner copy into smaller text blocks to avoid LCP hijacking', () => {
+    render(<CookieConsent />);
+    act(() => vi.advanceTimersByTime(1000));
+
+    const dialog = screen.getByRole('dialog', { name: 'Cookie consent' });
+    const card = dialog.firstElementChild;
+    expect(card).toHaveClass('transition-[opacity,transform]');
+    expect(card).not.toHaveClass('transition-all');
+    expect(
+      screen.getByText('We use cookies to improve your experience.')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/By using our store, you agree to our/i)
+    ).toBeInTheDocument();
+  });
 });

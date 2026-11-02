@@ -1,7 +1,6 @@
 import 'server-only';
 
-/** Largest encrypted payload accepted, in base64 characters. */
-export const GIGL_WEBHOOK_MAX_ENCRYPTED_CHARS = 16_384;
+import { GIGL_WEBHOOK_MAX_ENCRYPTED_CHARS } from './gigl-webhook-limits';
 
 const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
 

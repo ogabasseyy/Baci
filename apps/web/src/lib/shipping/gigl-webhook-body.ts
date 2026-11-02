@@ -1,8 +1,9 @@
 import 'server-only';
 
-/** GIG's sample delivery is ~600 bytes; addresses can make it longer. */
-export const GIGL_WEBHOOK_MAX_BODY_BYTES = 16 * 1024;
-const READ_TIMEOUT_MS = 5_000;
+import {
+  GIGL_WEBHOOK_MAX_BODY_BYTES,
+  GIGL_WEBHOOK_READ_TIMEOUT_MS,
+} from './gigl-webhook-limits';
 
 export type GiglWebhookBodyResult =
   | { ok: true; text: string }
@@ -30,7 +31,7 @@ export async function readGiglWebhookBody(
   let length = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<'timeout'>((resolve) => {
-    timer = setTimeout(() => resolve('timeout'), READ_TIMEOUT_MS);
+    timer = setTimeout(() => resolve('timeout'), GIGL_WEBHOOK_READ_TIMEOUT_MS);
   });
 
   try {

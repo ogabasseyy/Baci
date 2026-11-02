@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  GIGL_WEBHOOK_MAX_BODY_BYTES,
-  readGiglWebhookBody,
-} from './gigl-webhook-body';
+import { readGiglWebhookBody } from './gigl-webhook-body';
+import { GIGL_WEBHOOK_MAX_BODY_BYTES } from './gigl-webhook-limits';
 
 vi.mock('server-only', () => ({}));
 

@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  extractGiglWebhookCiphertext,
-  GIGL_WEBHOOK_MAX_ENCRYPTED_CHARS,
-} from './gigl-webhook-ciphertext';
+import { extractGiglWebhookCiphertext } from './gigl-webhook-ciphertext';
 import { GIG_DOC_SAMPLE_BODY } from './gigl-webhook-crypto.test-support';
+import { GIGL_WEBHOOK_MAX_ENCRYPTED_CHARS } from './gigl-webhook-limits';
 
 vi.mock('server-only', () => ({}));
 

@@ -1,2 +1,4 @@
 supabase/tests/piggyvest_primary_wallet_restrictions_privileges.sql
 supabase/tests/piggyvest_primary_wallet_restrictions.sql
+supabase/tests/piggyvest_primary_wallet_restriction_events.sql
+supabase/tests/piggyvest_primary_wallet_restriction_authority.sql

@@ -15,7 +15,10 @@
 --   * malformed identities raise 22023 instead of being stored.
 -- Grants are asserted through the catalog in
 -- piggyvest_primary_wallet_restrictions_privileges.sql. The calls here run as
--- the session role (the functions' owner).
+-- the session role (the functions' owner), bound to the fixture's
+-- integration A. Event-id reuse is covered in
+-- piggyvest_primary_wallet_restriction_events.sql and the integration binding
+-- in piggyvest_primary_wallet_restriction_authority.sql.
 --
 -- Usage:
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -23,54 +26,8 @@
 
 BEGIN;
 
-CREATE FUNCTION pg_temp.check(p_ok boolean, p_message text) RETURNS void
-LANGUAGE plpgsql AS $$
-BEGIN
-  IF p_ok IS DISTINCT FROM true THEN RAISE EXCEPTION '%', p_message; END IF;
-END $$;
-
--- A creation event with the lien sample's snapshot unless told otherwise.
-CREATE FUNCTION pg_temp.rec(
-  p_wallet text, p_event text, p_restriction text, p_kind text,
-  p_occurred timestamptz DEFAULT NULL, p_amount bigint DEFAULT 1000000
-) RETURNS text LANGUAGE sql AS $$
-  SELECT piggyvest_primary.record_wallet_restriction(
-    p_wallet, p_event, p_restriction, p_kind, p_amount, 650733, 1650733, p_occurred)
-$$;
-
-CREATE FUNCTION pg_temp.lift(
-  p_wallet text, p_event text, p_restriction text, p_kind text, p_lifted timestamptz
-) RETURNS text LANGUAGE sql AS $$
-  SELECT piggyvest_primary.lift_wallet_restriction(
-    p_wallet, p_event, p_restriction, p_kind, p_lifted)
-$$;
-
-CREATE FUNCTION pg_temp.blocked(p_wallet text) RETURNS boolean LANGUAGE sql AS $$
-  SELECT blocked FROM piggyvest_primary.wallet_restriction_state(p_wallet)
-$$;
-
-CREATE FUNCTION pg_temp.active(p_wallet text) RETURNS integer LANGUAGE sql AS $$
-  SELECT active_count FROM piggyvest_primary.wallet_restriction_state(p_wallet)
-$$;
-
-CREATE FUNCTION pg_temp.kinds(p_wallet text) RETURNS text[] LANGUAGE sql AS $$
-  SELECT active_kinds FROM piggyvest_primary.wallet_restriction_state(p_wallet)
-$$;
-
-CREATE FUNCTION pg_temp.rows(p_wallet text) RETURNS bigint LANGUAGE sql AS $$
-  SELECT count(*) FROM piggyvest_primary.wallet_restrictions
-  WHERE provider_wallet_id = p_wallet
-$$;
-
--- Expects p_sql to raise 22023 (invalid_parameter_value).
-CREATE FUNCTION pg_temp.rejects(p_sql text, p_message text) RETURNS void
-LANGUAGE plpgsql AS $$
-BEGIN
-  EXECUTE p_sql;
-  RAISE EXCEPTION 'accepted: %', p_message;
-EXCEPTION WHEN invalid_parameter_value THEN
-  NULL;
-END $$;
+-- The fixture (two integrations, the caller's authority) and the helpers.
+\ir piggyvest_primary_wallet_restrictions_fixture.inc.sql
 
 -- A wallet with no restriction is not blocked; the state is always one row.
 DO $$ BEGIN
@@ -170,8 +127,8 @@ BEGIN
     'a lift dated after the placement did not lift it');
   PERFORM pg_temp.check(NOT pg_temp.blocked('wr-d'), 'a lift dated after the placement still blocks');
   PERFORM pg_temp.check(
-    pg_temp.lift('wr-d', 'evt-d-lift-1', 'rst-d', 'Lien', '2026-10-01T12:00:00Z') = 'lifted',
-    'replaying a superseded lift changed the outcome');
+    pg_temp.lift('wr-d', 'evt-d-lift-1', 'rst-d', 'Lien', '2026-10-01T12:00:00Z') = 'duplicate',
+    'a redelivered superseded lift is not a duplicate');
   SELECT * INTO v FROM piggyvest_primary.wallet_restrictions WHERE provider_wallet_id = 'wr-d';
   PERFORM pg_temp.check(v.lift_event_id = 'evt-d-lift-2' AND v.lifted_at = '2026-10-01T14:00:00Z'
     AND pg_temp.rows('wr-d') = 1, 'the latest lift by provider time is not the one kept');

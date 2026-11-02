@@ -38,6 +38,9 @@ export function useSheetExitPresence(
   const dismissPendingRef = useRef(false);
   // True once the modal was released but its release not yet reported.
   const releasedRef = useRef(false);
+  // True when the sheet closed itself (e.g. a pan-down) before `visible`
+  // turned false, so there is no exit animation left to wait for.
+  const closedBySheetRef = useRef(false);
 
   // Adjust during render so the modal never commits a hidden frame between
   // `visible` flipping and the exit animation starting.
@@ -49,6 +52,10 @@ export function useSheetExitPresence(
 
   useEffect(() => {
     visibleRef.current = visible;
+  }, [visible]);
+
+  useEffect(() => {
+    if (visible) closedBySheetRef.current = false;
   }, [visible]);
 
   useEffect(() => {
@@ -77,6 +84,11 @@ export function useSheetExitPresence(
 
   useEffect(() => {
     if (!isExiting) return;
+    if (closedBySheetRef.current) {
+      closedBySheetRef.current = false;
+      setIsPresented(false);
+      return;
+    }
     const timer = setTimeout(() => setIsPresented(false), exitFallbackMs);
     return () => clearTimeout(timer);
   }, [isExiting, exitFallbackMs]);
@@ -87,9 +99,14 @@ export function useSheetExitPresence(
     }
   };
 
+  // The sheet already closed itself; release as soon as `visible` follows.
+  const markClosedBySheet = () => {
+    closedBySheetRef.current = true;
+  };
+
   // For the modal's onDismiss: the native modal has gone.
   const reportDismissed = () =>
     reportRelease(dismissPendingRef, releasedRef, onDismissedRef);
 
-  return { finishExit, isPresented, reportDismissed };
+  return { finishExit, isPresented, markClosedBySheet, reportDismissed };
 }

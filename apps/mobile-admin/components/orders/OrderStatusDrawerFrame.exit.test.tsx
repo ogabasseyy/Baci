@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SHEET_EXIT_FALLBACK_MS } from '@/hooks/useSheetExitPresence';
@@ -29,13 +29,24 @@ vi.mock('@gorhom/bottom-sheet', () => ({
   __esModule: true,
   default: ({
     children,
+    onClose,
     ref,
   }: {
     children?: ReactNode;
+    onClose?: () => void;
     ref?: { current: unknown };
   }) => {
     if (ref) ref.current = { close: vi.fn(), snapToIndex: vi.fn() };
-    return <section aria-label="gorhom-status-drawer">{children}</section>;
+    return (
+      <section aria-label="gorhom-status-drawer">
+        {children}
+        <button
+          aria-label="Pan status drawer down"
+          onClick={onClose}
+          type="button"
+        />
+      </section>
+    );
   },
   BottomSheetBackdrop: () => null,
   BottomSheetScrollView: passThrough,
@@ -105,6 +116,29 @@ describe('OrderStatusDrawerFrame exit', () => {
         ORDER_STATUS_DRAWER_EXIT_FALLBACK_MS - SHEET_EXIT_FALLBACK_MS
       );
     });
+    expect(
+      screen.queryByLabelText('gorhom-status-drawer')
+    ).not.toBeInTheDocument();
+  });
+
+  it('removes a drawer the user swiped closed without waiting for the fallback', () => {
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <OrderStatusDrawerFrame {...props} onClose={onClose} visible={true}>
+        <span>Status rows</span>
+      </OrderStatusDrawerFrame>
+    );
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Pan status drawer down' })
+    );
+    expect(onClose).toHaveBeenCalledOnce();
+    rerender(
+      <OrderStatusDrawerFrame {...props} onClose={onClose} visible={false}>
+        <span>Status rows</span>
+      </OrderStatusDrawerFrame>
+    );
+
     expect(
       screen.queryByLabelText('gorhom-status-drawer')
     ).not.toBeInTheDocument();

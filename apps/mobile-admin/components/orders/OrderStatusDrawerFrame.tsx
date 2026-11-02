@@ -65,7 +65,7 @@ export function OrderStatusDrawerFrame({
   });
   const visibleRef = useRef(visible);
   const sheetRef = useRef<BottomSheet>(null);
-  const { finishExit, isPresented } = useSheetExitPresence(
+  const { finishExit, isPresented, markClosedBySheet } = useSheetExitPresence(
     visible,
     undefined,
     ORDER_STATUS_DRAWER_EXIT_FALLBACK_MS
@@ -120,6 +120,9 @@ export function OrderStatusDrawerFrame({
       return;
     }
 
+    // A pan-down or backdrop tap already closed the sheet; no second close
+    // event is guaranteed, so release it as soon as the parent hides it.
+    markClosedBySheet();
     onClose();
   };
 

@@ -76,6 +76,18 @@ describe('useSheetExitPresence', () => {
     expect(result.current.isPresented).toBe(false);
   });
 
+  it('releases at once when the sheet closed itself before being hidden', () => {
+    const { rerender, result } = renderHook(
+      ({ visible }) => useSheetExitPresence(visible),
+      { initialProps: { visible: true } }
+    );
+
+    act(() => result.current.markClosedBySheet());
+    rerender({ visible: false });
+
+    expect(result.current.isPresented).toBe(false);
+  });
+
   it('ignores a stale exit callback when the sheet is reopened mid-close', () => {
     const { rerender, result } = renderHook(
       ({ visible }) => useSheetExitPresence(visible),

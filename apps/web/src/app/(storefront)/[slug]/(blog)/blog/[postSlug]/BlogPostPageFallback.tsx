@@ -4,17 +4,17 @@ export function BlogPostPageFallback() {
   return (
     <div className="min-h-screen bg-background">
       {/* Breadcrumb skeleton */}
-      <div className="border-b bg-white">
+      <div className="border-b border-border bg-background">
         <div className="container mx-auto px-4 py-4">
           <div className="h-4 w-28 rounded bg-muted/40" />
         </div>
       </div>
 
       <main className="container mx-auto px-4 py-8">
-        <article className="max-w-6xl mx-auto bg-white rounded-3xl p-6 md:p-10 md:px-12 shadow-sm border border-gray-100 overflow-hidden">
+        <article className="max-w-6xl mx-auto bg-card text-card-foreground rounded-3xl p-6 md:p-10 md:px-12 shadow-sm border border-border overflow-hidden">
           {/* Featured image skeleton — layout-identical to the real hero
               container so replacing it causes no CLS. */}
-          <div className="aspect-video rounded-2xl overflow-hidden mb-8 relative bg-gray-100">
+          <div className="aspect-video rounded-2xl overflow-hidden mb-8 relative bg-muted">
             <div className="absolute inset-0 animate-pulse bg-muted/30" />
           </div>
 

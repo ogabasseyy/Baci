@@ -1,7 +1,7 @@
 \set ON_ERROR_STOP on
 \ir primary-wallet-savings-dispatch.integration.sql
 \ir ../../../../../supabase/migrations/20261007153000_piggyvest_primary_savings_pending_recovery.sql
-\ir ../../../../../supabase/migrations/20261102044438_piggyvest_preonboarding_savings_recovery.sql
+\ir ../../../../../supabase/migrations/20261102072617_piggyvest_preonboarding_savings_recovery.sql
 -- Pending-savings recovery only reads what already exists. It answers
 -- "nothing pending" (NULL) for a customer whose onboarding is absent or
 -- incomplete, keeps refusing callers it cannot bind (42501), and never changes

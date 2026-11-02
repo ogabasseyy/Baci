@@ -1,6 +1,6 @@
 -- PiggyVest primary-wallet restrictions (Freeze and Lien): the writers and
 -- the spend-gate read, over the tables of
--- 20261031221945_piggyvest_primary_wallet_restrictions.sql. Nothing calls
+-- 20261102034228_piggyvest_primary_wallet_restrictions.sql. Nothing calls
 -- them yet.
 --
 -- * Bound to one integration. Both writers take the integration and its

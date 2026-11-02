@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-02T02:09:50+00:00",
-  "source_revision": "52700b00e45c971466768f772169ac43db6f8d7d",
-  "evidence_digest": "7c8028dbc085b1fbf41740e41c3847ca5c4764efdc163482babf78397f3c5c0d",
-  "claims_digest": "62a9333fd78f006c9a1b37dbdae5d428670de428baaf633988b33d030c098873",
-  "review_scope": "Source evidence only. Re-reviewed checkout payment availability after adding the Oxygen local-QA option: development mode, explicit local-checkout opt-in, loopback Supabase, NGN and full-order-amount checks are required; production shoppers are not offered Oxygen by this gate. The configurable payment-method claim remains accurate without promoting Oxygen to production availability. Git comparison against the previous reviewed revision shows all other cited capability sources unchanged. Other provider, deployment, native acceptance and transaction-readiness limitations remain; no production promotion. Rechecked cited capability source bytes after the 2 November review-fix and main integration; no cited implementation changes or production promotion.",
+  "reviewed_at": "2026-11-02T04:14:32+00:00",
+  "source_revision": "278f759b187f61f4312b2d4a48cadfeb3fdc5c23",
+  "evidence_digest": "b1f89e19c67b37960416c5656c3b78424dfc51dfe8c7f4a4a0d3aa88a7e02f7d",
+  "claims_digest": "d670f6067ae37e8c960f9be797334588f89db9226f2346d93949a25cd8794892",
+  "review_scope": "Source evidence only. Re-reviewed checkout payment availability after adding the Oxygen local-QA option: development mode, explicit local-checkout opt-in, loopback Supabase, NGN and full-order-amount checks are required; production shoppers are not offered Oxygen by this gate. The configurable payment-method claim remains accurate without promoting Oxygen to production availability. Git comparison against the previous reviewed revision shows all other cited capability sources unchanged. Other provider, deployment, native acceptance and transaction-readiness limitations remain; no production promotion. Rechecked all cited source and access-map paths after merging current main; their bytes are unchanged since the prior review. Rechecked cited capability source bytes after the 2 November review-fix and main integration; no cited implementation changes or production promotion.",
   "capabilities": [
     {
       "id": "payments",

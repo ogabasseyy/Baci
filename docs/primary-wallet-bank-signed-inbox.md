@@ -69,6 +69,39 @@ Inventory all nonsystem effective ACLs in the real target before approval. The
 fixture's blanket PUBLIC-function revokes are test baseline isolation, **not** a
 production installer or instruction to revoke live grants wholesale.
 
+## Engine readiness gate
+
+After its session check and before any claim, the worker asks
+`piggyvest_primary.engine_ready('bank_inbox')` whether the PiggyVest ledger and
+transfer engine fences are in place. Until the enforcing readiness check
+replaces the stub (`20261102032905`), the answer is always not ready, so the
+worker claims nothing: stored receipts stay pending exactly as captured, with no
+attempt spent and no lease taken, and credit once after readiness passes. A
+failed or malformed answer counts as not ready. A gated drain returns zero
+counters plus `engineNotReady` (the missing marker ids, never customer data),
+so it is distinguishable from an empty inbox.
+
+The worker capability role holds exactly one membership,
+`piggyvest_primary_readiness_reader` (NOLOGIN, inherit only), which can execute
+`engine_ready` and nothing else. `bank_role_safe` accepts that membership and
+function for the worker only and still rejects any other membership, any reader
+that is itself a member of a role or can log in, and any other effective grant.
+The intake never holds the reader. The rules live in
+`bank_role_violations(login, worker)`, which lists each violation so the SQL
+suite can test them without logging in as the worker.
+
+Two activation inventories still expect the old role shape and reject the new
+one, so both must be updated with the enforcing readiness check, before either
+worker is activated. Until then neither worker can be prepared for activation,
+which fails closed (no money moves):
+
+- `tools/staging/primary-wallet-bank-inbox/` expects no capability membership
+  and five RPCs; the worker capability now holds the reader and `engine_ready`.
+- `tools/staging/primary-wallet-paid-interest-inbox/` runs as the evidence
+  login and expects no capability membership and nine RPCs; the evidence
+  capability now holds the reader, so it sees one membership and ten RPCs
+  (`engine_ready(p_surface text)` added).
+
 ## Stable SHA-256 values
 
 ```text

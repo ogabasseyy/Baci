@@ -21,3 +21,4 @@ supabase/tests/oxygen_draft_explicit_ownership.sql
 supabase/tests/oxygen_queued_recovery_reclaim.sql
 supabase/tests/oxygen_callback_backlog_aggregate.sql
 supabase/tests/oxygen_address_callback_redelivery.sql
+supabase/tests/oxygen_cancelled_plan_cache.sql

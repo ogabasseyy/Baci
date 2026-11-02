@@ -15,7 +15,7 @@ pre-commit:
       run: bash ci_scripts/run-lefthook-pnpm.sh exec biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
     lint-config:
       # A Biome config change can affect every file, so re-lint the repo.
-      glob: "**/biome.{json,jsonc}"
+      glob: "{biome.json,biome.jsonc,**/biome.json,**/biome.jsonc}"
       env:
         PUPPETEER_SKIP_DOWNLOAD: "true"
         PUPPETEER_CHROME_SKIP_DOWNLOAD: "true"

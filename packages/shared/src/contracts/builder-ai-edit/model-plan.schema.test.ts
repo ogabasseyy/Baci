@@ -13,9 +13,12 @@ function visitSchema(value: unknown, depth = 0): number {
   const schemaDepth = typeof record.type === 'string' ? depth + 1 : depth;
   if (record.type === 'object') expect(record.additionalProperties).toBe(false);
   expect(record).not.toHaveProperty('unknown');
+  const itemSchemas = Array.isArray(record.items)
+    ? record.items
+    : [record.items];
   const children = [
     ...Object.values((record.properties ?? {}) as Record<string, unknown>),
-    record.items,
+    ...itemSchemas,
     ...(Array.isArray(record.oneOf) ? record.oneOf : []),
     ...(Array.isArray(record.anyOf) ? record.anyOf : []),
     ...(Array.isArray(record.allOf) ? record.allOf : []),
@@ -32,6 +35,7 @@ function assertSupportedKeywords(value: unknown): void {
   const supported = new Set([
     '$schema',
     '$ref',
+    'additionalItems',
     'additionalProperties',
     'allOf',
     'anyOf',
@@ -68,8 +72,18 @@ function assertSupportedKeywords(value: unknown): void {
   Object.values((record.properties ?? {}) as Record<string, unknown>).forEach(
     assertSupportedKeywords
   );
-  if (record.items && !Array.isArray(record.items))
+  if (Array.isArray(record.items)) {
+    record.items.forEach(assertSupportedKeywords);
+  } else if (record.items) {
     assertSupportedKeywords(record.items);
+  }
+  if (
+    record.additionalItems &&
+    typeof record.additionalItems === 'object' &&
+    !Array.isArray(record.additionalItems)
+  ) {
+    assertSupportedKeywords(record.additionalItems);
+  }
   for (const branch of ['oneOf', 'anyOf', 'allOf']) {
     const schemas = record[branch];
     if (Array.isArray(schemas)) schemas.forEach(assertSupportedKeywords);

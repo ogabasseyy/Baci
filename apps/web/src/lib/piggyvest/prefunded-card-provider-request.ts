@@ -28,7 +28,9 @@ async function readBoundedJson(
       chunks.push(result.value);
     }
   } finally {
-    if (!complete) await reader.cancel().catch(() => undefined);
+    // Never wait on cancellation: a body that ignores it would otherwise
+    // hold this call past its deadline. The caller aborts the request.
+    if (!complete) void reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
   const bytes = new Uint8Array(length);
@@ -110,6 +112,9 @@ export async function requestPrefundedCardProviderJson({
     }
     return await readBoundedJson(response, maxResponseBytes, deadline);
   } catch (error) {
+    // Abort fence: a request that fails here (byte cap, deadline, HTTP
+    // error, transport) never keeps streaming in the background.
+    controller.abort();
     if (error instanceof Error && error.message.startsWith('PROVIDER_'))
       throw error;
     throw new Error('PROVIDER_UNAVAILABLE');

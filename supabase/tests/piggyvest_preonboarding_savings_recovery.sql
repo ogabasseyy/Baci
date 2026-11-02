@@ -225,6 +225,8 @@ BEGIN
 END;
 $settled$;
 
+\ir piggyvest_preonboarding_savings_recovery_disabled.inc.sql
+
 \ir piggyvest_preonboarding_savings_recovery_ordering.inc.sql
 
 -- Cutover: the runtime moves to a second integration of the same merchant

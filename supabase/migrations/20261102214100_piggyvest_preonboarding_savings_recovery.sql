@@ -18,8 +18,11 @@ BEGIN
     OR (SELECT count(*) FROM jsonb_object_keys(scope))<>6 THEN
     RAISE EXCEPTION 'invalid savings scope' USING ERRCODE='42501';
   END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM piggyvest_primary.integrations binding
+  -- Lock the binding, authority, customer and goal rows. reserve_savings takes
+  -- the goal FOR UPDATE, which conflicts with this FOR SHARE, so a reservation
+  -- cannot commit between the ownership, unattributed and read statements
+  -- below; under READ COMMITTED it either finished before or waits for us.
+  PERFORM 1 FROM piggyvest_primary.integrations binding
     JOIN piggyvest_primary.savings_authorities authority ON authority.integration_id=binding.id
     JOIN public.customers customer ON customer.merchant_id=binding.merchant_id
     JOIN public.customer_savings_goals goal ON goal.customer_id=customer.id AND goal.merchant_id=customer.merchant_id
@@ -29,7 +32,8 @@ BEGIN
       AND binding.business_id=scope->>'businessId' AND binding.environment=scope->>'environment'
       AND customer.id=(scope->>'customerId')::uuid AND customer.user_id=(scope->>'userId')::uuid
       AND goal.id=read_pending_savings.goal_id
-  ) THEN
+    FOR SHARE OF binding,authority,customer,goal;
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'savings recovery ownership unavailable' USING ERRCODE='42501';
   END IF;
   -- The answer must be definite. Any reserved or dispatched transfer on this

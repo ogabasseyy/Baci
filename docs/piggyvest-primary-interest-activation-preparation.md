@@ -88,7 +88,7 @@ privileged read-only current-layout check before choosing any install/rollback.
   of non-login/non-elevated `piggyvest_primary_evidence`, without parent-group
   escalation or direct private-table privileges. PUBLIC/customer/service-role
   interest entry-point execution must be absent.
-- Known pre-activation blocker: since `20261031225605` (engine readiness stub)
+- Known pre-activation blocker: since `20261102032905` (engine readiness stub)
   the evidence capability is a member of `piggyvest_primary_readiness_reader`
   and can execute `engine_ready(p_surface text)`. The inventory and prepare
   checks here still require zero capability memberships and nine RPCs, so they

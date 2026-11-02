@@ -74,7 +74,7 @@ production installer or instruction to revoke live grants wholesale.
 After its session check and before any claim, the worker asks
 `piggyvest_primary.engine_ready('bank_inbox')` whether the PiggyVest ledger and
 transfer engine fences are in place. Until the enforcing readiness check
-replaces the stub (`20261031225605`), the answer is always not ready, so the
+replaces the stub (`20261102032905`), the answer is always not ready, so the
 worker claims nothing: stored receipts stay pending exactly as captured, with no
 attempt spent and no lease taken, and credit once after readiness passes. A
 failed or malformed answer counts as not ready. A gated drain returns zero

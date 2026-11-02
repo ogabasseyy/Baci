@@ -185,11 +185,13 @@ export function OgabasseyV2Quiz({ merchantSlug }: OgabasseyV2QuizProps) {
           </div>
         </section>
 
-        {isLoading ? null : <QuizPlayInAppPanel
+        {isLoading || status === 'question' || status === 'submitting' ? null : (
+          <QuizPlayInAppPanel
             events={appQuiz.events}
             onRetry={appQuiz.retry}
             status={appQuiz.status}
-          />}
+          />
+        )}
 
         {isLoading ? (
           <section aria-live="polite" className={panel}>Checking your quiz access…</section>

@@ -87,7 +87,7 @@ describe('listCurrentQuizEventsV2', () => {
       ]);
     });
 
-    it('stops after four pages', async () => {
+    it('stops after twenty pages', async () => {
       const { rpc, supabase } = client((offset) => ({
         data: appQuizEventsResponse([], {
           hasMore: true,

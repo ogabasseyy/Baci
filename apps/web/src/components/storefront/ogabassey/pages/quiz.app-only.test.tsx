@@ -2,10 +2,10 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
-import { apiGet } from '@/lib/api-client';
+import { apiGet, apiPost } from '@/lib/api-client';
 import { appQuizEvent, appQuizEventsResponse } from './app-quiz-event.test-support';
 import { OgabasseyV2Quiz } from './quiz';
-import { eventResponse, mockCustomer } from './quiz.test-support';
+import { attemptResponse, eventResponse, mockCustomer } from './quiz.test-support';
 
 vi.mock('@/contexts/customer-auth-context', () => ({
   useCustomerAuth: vi.fn(),
@@ -74,6 +74,21 @@ describe('OgabasseyV2Quiz app-only prize quizzes', () => {
     expect(
       await screen.findByRole('button', { name: 'Start exam for Daily Quiz' })
     ).toBeInTheDocument();
+  });
+
+  it('hides the app panel while a timed web attempt is in progress', async () => {
+    mockListings();
+    vi.mocked(apiPost).mockResolvedValueOnce(attemptResponse);
+
+    render(<OgabasseyV2Quiz merchantSlug="ogabassey" />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Start exam for Daily Quiz' })
+    );
+
+    expect(await screen.findByText('Pick the winning answer')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Play in the Ogabassey app to win' })
+    ).not.toBeInTheDocument();
   });
 
   it('shows the app call to action to signed-out visitors', () => {

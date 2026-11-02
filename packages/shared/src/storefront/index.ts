@@ -1,3 +1,4 @@
+export { isStablePublicMediaUrl } from '../storefront-release/is-stable-public-media-url';
 export {
   type BuildOrderIdempotencyPayloadOptions,
   buildOrderIdempotencyPayload,

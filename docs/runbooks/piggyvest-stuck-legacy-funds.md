@@ -48,8 +48,9 @@ payment status by hand.
 
 Expected: exactly one row with `wallet_held` 10000.00, `payment_status` `unpaid` (or
 `cancelled` if the sweep already ran), `shipping_status` `pending` or `processing`,
-`payments_in_flight` 0 and `completed_payments` 0. Copy `order_id` and `order_number` into the
-ops log.
+`payments_in_flight` 0 and `completed_payments` 0. A `payment_status` of `pending` together
+with `payments_in_flight` above 0 is the started-card-payment case below. Copy `order_id` and
+`order_number` into the ops log.
 
 Stop instead of continuing if:
 
@@ -59,9 +60,14 @@ Stop instead of continuing if:
   new list first.
 - **`completed_payments` above 0.** Cancelling would also start a card refund. That is a
   separate owner decision.
-- **`payments_in_flight` above 0.** The cancel will refuse with "A payment attempt needs to be
-  checked". Check that payment in the Paystack dashboard and let the payment checker settle it.
-  Do not work around the refusal.
+- **`payments_in_flight` above 0** (`payment_status` usually reads `pending`): the customer
+  started a card payment for the rest of the order. The cancel will refuse with "A payment
+  attempt needs to be checked". No automatic checker clears an abandoned attempt on an unpaid
+  order, so do not wait for one. Look the attempt up in the Paystack dashboard and record the
+  result in the ops log. If it succeeded, this is a completed payment and a separate owner
+  decision. If it was abandoned or failed, stop and escalate to the owner, who either approves
+  a small follow-up change that closes that attempt or defers this order in writing. Do not
+  work around the refusal.
 
 ### A2. Cancel it (owner-approved write, in the dashboard)
 
@@ -95,8 +101,8 @@ actually delivered.
 ### B1. Find and classify (block V1, READ-ONLY)
 
 Expected: one row with `processing | checkout | airtime | 103.00`, vendor `kuda` or `monnify`,
-`split_wallet` 103, `split_card` 0, `debited` 103.00, `reversed` 0 and `refunded` 0. Copy
-`vtu_id` into the ops log.
+`provider_fallback` empty, `split_wallet` 103, `split_card` 0, `debited` 103.00, `reversed` 0
+and `refunded` 0. Copy `vtu_id` into the ops log.
 
 - **The row is gone:** the checker settled it. Run B4 to see how, then go to "After both parts".
 - **`debited` is 0:** nothing was taken from the wallet. Still ask the vendor; B3 then closes
@@ -104,6 +110,9 @@ Expected: one row with `processing | checkout | airtime | 103.00`, vendor `kuda`
 - **Other rows:** they are not part of this approval. Record them and tell the owner.
 - **Any other shape** (a card part, a debit other than 0 or 103.00, money already returned):
   stop and escalate. The B3 block refuses these shapes anyway.
+- **`provider_fallback` is filled in:** the app re-routed the purchase from Monnify to Kuda, so
+  ask Kuda. A "failed" answer goes through B3 as normal. A "delivered" answer needs the app's
+  cashback and commission correction, which B3 cannot make, so B3 refuses it: escalate.
 
 ### B2. Ask the vendor (block V2, READ-ONLY)
 
@@ -142,7 +151,8 @@ Before changing anything, the block checks that the purchase:
 
 - is an Ogabassey purchase that is still processing;
 - is a wallet-only purchase of exactly the approved amount;
-- has exactly the wallet debit expected, and no money returned yet.
+- has exactly the wallet debit expected, and no money returned yet;
+- when the answer is "delivered", was not re-routed from Monnify to Kuda (see B1).
 
 What it then does:
 
@@ -178,8 +188,9 @@ purchase.
 | Risk | What prevents it |
 |---|---|
 | The order was paid after all | O1 shows `completed_payments`; the runbook stops there |
-| A card payment for the order is still open | The cancel refuses until the payment is settled |
+| A card payment for the order is still open | The cancel refuses; the runbook checks Paystack and escalates instead of waiting |
 | Airtime repaid although it was delivered | Money is returned only on the vendor's written, final "failed" |
+| Wrong cashback on a re-routed purchase | V3 refuses "delivered" for a purchase re-routed from Monnify to Kuda |
 | A step runs twice, or two people run it | A second cancel changes nothing; V3 refuses a purchase that is no longer processing |
 | The checker acts at the same moment | V3 takes the same locks as the checker's refund; whichever runs second sees a closed purchase |
 | A typo in an id, amount or answer | V3 stops before changing anything, and a dry run always comes first |

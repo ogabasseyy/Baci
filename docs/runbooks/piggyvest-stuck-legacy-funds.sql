@@ -61,6 +61,7 @@ SELECT o.shipping_status, o.cancelled_by, o.cancelled_at IS NOT NULL AS has_canc
 -- [V1] READ-ONLY: Ogabassey airtime, data and bill purchases without a final result
 SELECT v.id AS vtu_id, v.status, v.source, v.type, v.amount,
        coalesce(v.metadata->>'provider', 'kuda') AS vendor,
+       v.metadata->>'providerFallback' AS provider_fallback,
        v.metadata->'paymentSplit'->>'wallet' AS split_wallet,
        v.metadata->'paymentSplit'->>'card' AS split_card,
        l.debited, l.reversed, l.refunded, v.created_at::date AS created_on
@@ -139,6 +140,11 @@ BEGIN
   IF v_debits > 1 OR v_foreign > 0 OR v_debit NOT IN (0, v_amount)
      OR (v_debit = 0 AND v_row.metadata->>'walletDebited' = 'true') THEN
     RAISE EXCEPTION 'STOP: the wallet ledger does not match the purchase; escalate';
+  END IF;
+  -- The app corrects a re-routed purchase's cashback and commission before it records
+  -- success. This block cannot, so a delivered answer on one is escalated instead.
+  IF v_outcome = 'delivered' AND v_row.metadata->>'providerFallback' IS NOT NULL THEN
+    RAISE EXCEPTION 'STOP: purchase was re-routed (provider fallback); escalate';
   END IF;
 
   UPDATE public.vtu_transactions

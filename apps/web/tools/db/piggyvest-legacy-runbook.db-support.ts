@@ -35,6 +35,11 @@ const findBinDir = (): string | undefined => {
 };
 
 export const binDir = findBinDir();
+if (!binDir && process.env.REQUIRE_PG_TESTS === '1') {
+  throw new Error(
+    'REQUIRE_PG_TESTS=1 but no PostgreSQL binaries were found (set PG_BIN)'
+  );
+}
 if (!binDir) {
   console.warn(
     'piggyvest-legacy-runbook.db tests: no PostgreSQL binaries found (set PG_BIN); real-database tests are SKIPPED'
@@ -83,48 +88,7 @@ export const startScratch = (): Scratch => {
   const dir = mkdtempSync(join(tmpdir(), 'pvlegacy-'));
   process.env.LC_ALL = 'C';
   process.env.LANG = 'C';
-  execFileSync(
-    bin('initdb'),
-    [
-      '-D',
-      join(dir, 'data'),
-      '-A',
-      'trust',
-      '-U',
-      process.env.USER ?? 'postgres',
-    ],
-    { stdio: 'ignore' }
-  );
-  execFileSync(
-    bin('pg_ctl'),
-    [
-      '-D',
-      join(dir, 'data'),
-      '-o',
-      `-c listen_addresses='' -k ${dir}`,
-      '-w',
-      '-l',
-      join(dir, 'log'),
-      'start',
-    ],
-    { stdio: 'ignore' }
-  );
-  execFileSync(bin('createdb'), ['-h', dir, 'scratch']);
-  const psql = (sql: string, file?: string) =>
-    spawnSync(
-      bin('psql'),
-      [
-        '-h',
-        dir,
-        '-d',
-        'scratch',
-        '-v',
-        'ON_ERROR_STOP=1',
-        '-At',
-        ...(file ? ['-f', file] : ['-c', sql]),
-      ],
-      { encoding: 'utf8' }
-    );
+  const role = process.env.PGUSER || process.env.USER || 'postgres';
   const stop = () => {
     spawnSync(bin('pg_ctl'), [
       '-D',
@@ -135,6 +99,48 @@ export const startScratch = (): Scratch => {
     ]);
     rmSync(dir, { recursive: true, force: true });
   };
+  const psql = (sql: string, file?: string) =>
+    spawnSync(
+      bin('psql'),
+      [
+        '-h',
+        dir,
+        '-U',
+        role,
+        '-d',
+        'scratch',
+        '-v',
+        'ON_ERROR_STOP=1',
+        '-At',
+        ...(file ? ['-f', file] : ['-c', sql]),
+      ],
+      { encoding: 'utf8' }
+    );
+  try {
+    execFileSync(
+      bin('initdb'),
+      ['-D', join(dir, 'data'), '-A', 'trust', '-U', role],
+      { stdio: 'ignore' }
+    );
+    execFileSync(
+      bin('pg_ctl'),
+      [
+        '-D',
+        join(dir, 'data'),
+        '-o',
+        `-c listen_addresses='' -k ${dir}`,
+        '-w',
+        '-l',
+        join(dir, 'log'),
+        'start',
+      ],
+      { stdio: 'ignore' }
+    );
+    execFileSync(bin('createdb'), ['-h', dir, '-U', role, 'scratch']);
+  } catch (error) {
+    stop();
+    throw error;
+  }
   const ddl = psql(DDL);
   if (ddl.status !== 0) {
     stop();

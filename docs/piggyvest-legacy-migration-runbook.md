@@ -76,6 +76,16 @@ PiggyVest statement. Customers with no confirmed credit are left out of step 4.
 3. Each migrated wallet has one ledger row of source
    `piggyvest_legacy_migration` holding the amount, date and PiggyVest
    reference. Keep the signed list and the output with this runbook record.
+4. Keep the pause from "Before you start" in force after the commit. A credit
+   or refund that was already waiting on a wallet lock can still land on the
+   zeroed wallet just after the commit, so the first re-run can look clean.
+5. After the longest in-flight purchase or refund window has passed (at least
+   one hour), run `01-balance-list.sql` once more and confirm no migrated
+   wallet is listed. Only then lift the pause.
+6. If a migrated wallet shows a balance again, do NOT credit PiggyVest a second
+   time: the customer was already paid once. Stop and ask the owner. The script
+   refuses that wallet on purpose, so the extra amount needs a new reviewed
+   change.
 
 ## If something goes wrong
 

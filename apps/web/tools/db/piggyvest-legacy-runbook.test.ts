@@ -129,3 +129,11 @@ describe('runbook', () => {
     expect(runbook).toMatch(/credit before|credit first|only after/i);
   });
 });
+
+describe('runbook late-credit guard', () => {
+  it('keeps the pause past commit and bars a second PiggyVest credit', () => {
+    expect(runbook).toMatch(/Keep the pause[\s\S]*after the commit/);
+    expect(runbook).toMatch(/at least\s+one hour/);
+    expect(runbook).toMatch(/do NOT credit PiggyVest a second\s+time/);
+  });
+});

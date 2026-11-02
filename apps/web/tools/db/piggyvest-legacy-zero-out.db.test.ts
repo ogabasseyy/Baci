@@ -184,6 +184,7 @@ describe.skipIf(!binDir)('02-zero-out.sql against a scratch Postgres', () => {
     ]);
     const r = run([row(W1, C1, '500.00'), row(W2, C2, '0')], 2, true);
     expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/legacy_zero_out_list_expected_balance_check/);
     expect(balance(W1)).toBe('500.00');
     expect(ledgerRows()).toBe('0');
   });
@@ -199,6 +200,7 @@ describe.skipIf(!binDir)('02-zero-out.sql against a scratch Postgres', () => {
       true
     );
     expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/legacy_zero_out_reference_uq/);
     expect(balance(W1)).toBe('500.00');
     expect(balance(W2)).toBe('250.00');
   });

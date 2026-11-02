@@ -1,5 +1,5 @@
 -- disable-transaction
--- Follow-up to 20261102093136_piggyvest_primary_wallet_backing: at most one
+-- Follow-up to 20261102202151_piggyvest_primary_wallet_backing: at most one
 -- legacy-out (-X) and one PiggyVest-in (+X) relabel row per backing row,
 -- whatever writes them. The index stays empty until a wallet flips.
 -- customer_wallet_transactions is the live wallet ledger, so the index is

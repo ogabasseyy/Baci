@@ -1,7 +1,8 @@
--- Wallet backing transitions (state store: 20261102093136). Each takes the
+-- Wallet backing transitions (state store: 20261102202151). Each takes the
 -- per-customer lock exclusively (assert_wallet_legacy takes it shared) first.
 --   begin_migration: legacy -> migrating for an audited, settled, non-zero
---     balance, or -> backed for an audited zero / no wallet row. No ledger write.
+--     balance, or -> backed for an audited zero / no wallet row. No ledger write;
+--     an audited zero runs the same backed hooks as a flip (no relabel rows).
 --   flip_to_backed: migrating -> backed after a confirmed move. Owner-only, for
 --     the transfer engine's SECURITY DEFINER settle.
 --   flag_migration_review: records a review reason, state unchanged.
@@ -161,6 +162,10 @@ BEGIN
   INSERT INTO piggyvest_primary.wallet_backing_events(backing_id, event, from_state, to_state, amount)
   VALUES (v_backing.id, CASE WHEN v_target = 'backed' THEN 'backed_audited_zero' ELSE 'migration_begun' END,
     'legacy', v_target, p_audited_amount);
+  IF v_target = 'backed' THEN
+    RETURN pg_catalog.jsonb_build_object('status', v_target, 'changed', true, 'backingId', v_backing.id,
+      'hooks', piggyvest_primary.run_backed_flip_hooks(v_backing.id, p_customer_id, p_merchant_id));
+  END IF;
   RETURN pg_catalog.jsonb_build_object('status', v_target, 'changed', true, 'backingId', v_backing.id);
 END $$;
 
@@ -173,8 +178,9 @@ DECLARE
   v_wallet_merchant uuid;
   v_balance numeric;
   v_amount numeric(12,2);
-  v_credit text;
-  v_convert text;
+  v_customer_user uuid;
+  v_intent_user uuid;
+  v_hooks jsonb;
 BEGIN
   IF p_customer_id IS NULL OR p_merchant_id IS NULL THEN
     RAISE EXCEPTION 'wallet_backing_scope_required' USING ERRCODE = '22023';
@@ -216,12 +222,21 @@ BEGIN
 
   -- The customer must still be this merchant's, locked so it cannot move
   -- mid-flip; a moved row is data, not input, so it goes to review.
-  PERFORM 1 FROM public.customers c
+  SELECT c.user_id INTO v_customer_user FROM public.customers c
   WHERE c.id = p_customer_id AND c.merchant_id = p_merchant_id FOR SHARE;
   IF NOT FOUND THEN
     PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_customer_scope_mismatch');
     RETURN pg_catalog.jsonb_build_object('status', 'review', 'reason', 'customer_scope_mismatch',
       'backingId', v_backing.id);
+  END IF;
+  -- The recorded onboarding intent must still belong to the user the customer
+  -- row names now (a relink, or none, since begin reviews); NULL never passes.
+  SELECT i.user_id INTO v_intent_user FROM piggyvest_primary.onboarding_intents i
+  WHERE i.id = v_backing.onboarding_intent_id AND i.customer_id = p_customer_id
+    AND i.merchant_id = p_merchant_id FOR SHARE;
+  IF NOT FOUND OR v_customer_user IS NULL OR v_intent_user IS NULL OR v_customer_user <> v_intent_user THEN
+    PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_user_mismatch');
+    RETURN pg_catalog.jsonb_build_object('status', 'review', 'reason', 'user_mismatch', 'backingId', v_backing.id);
   END IF;
   -- The balance must still be the audited amount and fully settled; anything
   -- else stays migrating for review. No wallet row is a zero balance.
@@ -248,46 +263,38 @@ BEGIN
   END IF;
   v_amount := v_backing.audited_amount;
 
-  -- Backed first, so the relabel rows are written against a backed wallet.
-  UPDATE piggyvest_primary.wallet_backing
-  SET state = 'backed', backed_via = 'confirmed_move', move_reference = p_move_reference,
-    backed_at = pg_catalog.clock_timestamp(), updated_at = pg_catalog.clock_timestamp()
-  WHERE id = v_backing.id;
-  -- The relabel pair: the same X leaves as legacy money and arrives as
-  -- PiggyVest money. available_balance is not touched.
-  IF v_amount > 0 THEN
-    INSERT INTO public.customer_wallet_transactions(wallet_id, customer_id, merchant_id, type, amount,
-      balance_after, source_type, source_id, status, description, metadata, created_at)
-    VALUES (v_wallet_id, p_customer_id, p_merchant_id, 'adjustment', -v_amount, 0,
-      'piggyvest_legacy_migration', v_backing.id, 'completed', 'Old wallet balance moved to PiggyVest',
-      pg_catalog.jsonb_build_object('leg', 'legacy_out'), pg_catalog.clock_timestamp());
-    INSERT INTO public.customer_wallet_transactions(wallet_id, customer_id, merchant_id, type, amount,
-      balance_after, source_type, source_id, status, description, metadata, created_at)
-    VALUES (v_wallet_id, p_customer_id, p_merchant_id, 'adjustment', v_amount, v_amount,
-      'piggyvest_legacy_migration', v_backing.id, 'completed', 'Balance now held in your PiggyVest wallet',
-      pg_catalog.jsonb_build_object('leg', 'piggyvest_in'), pg_catalog.clock_timestamp());
-  END IF;
-  INSERT INTO piggyvest_primary.wallet_backing_events(backing_id, event, from_state, to_state, amount, move_reference)
-  VALUES (v_backing.id, 'backed_confirmed_move', 'migrating', 'backed', v_amount, p_move_reference);
+  -- Backed first, so the relabel rows are written against a backed wallet. The
+  -- relabel pair: the same X leaves as legacy money and arrives as PiggyVest
+  -- money; available_balance is not touched. A leg that already exists (the
+  -- ledger is writable by other paths) rolls this whole block back and goes
+  -- to review: a flip outcome is returned, never raised.
+  BEGIN
+    UPDATE piggyvest_primary.wallet_backing
+    SET state = 'backed', backed_via = 'confirmed_move', move_reference = p_move_reference,
+      backed_at = pg_catalog.clock_timestamp(), updated_at = pg_catalog.clock_timestamp()
+    WHERE id = v_backing.id;
+    IF v_amount > 0 THEN
+      INSERT INTO public.customer_wallet_transactions(wallet_id, customer_id, merchant_id, type, amount,
+        balance_after, source_type, source_id, status, description, metadata, created_at)
+      VALUES (v_wallet_id, p_customer_id, p_merchant_id, 'adjustment', -v_amount, 0,
+        'piggyvest_legacy_migration', v_backing.id, 'completed', 'Old wallet balance moved to PiggyVest',
+        pg_catalog.jsonb_build_object('leg', 'legacy_out'), pg_catalog.clock_timestamp());
+      INSERT INTO public.customer_wallet_transactions(wallet_id, customer_id, merchant_id, type, amount,
+        balance_after, source_type, source_id, status, description, metadata, created_at)
+      VALUES (v_wallet_id, p_customer_id, p_merchant_id, 'adjustment', v_amount, v_amount,
+        'piggyvest_legacy_migration', v_backing.id, 'completed', 'Balance now held in your PiggyVest wallet',
+        pg_catalog.jsonb_build_object('leg', 'piggyvest_in'), pg_catalog.clock_timestamp());
+    END IF;
+    INSERT INTO piggyvest_primary.wallet_backing_events(backing_id, event, from_state, to_state, amount, move_reference)
+    VALUES (v_backing.id, 'backed_confirmed_move', 'migrating', 'backed', v_amount, p_move_reference);
+  EXCEPTION WHEN unique_violation THEN
+    PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_relabel_conflict');
+    RETURN pg_catalog.jsonb_build_object('status', 'review', 'reason', 'relabel_conflict', 'backingId', v_backing.id);
+  END;
 
-  -- A failing hook rolls back only its own work: the flip stands and the
-  -- wallet goes to review.
-  BEGIN
-    v_credit := piggyvest_primary.on_backed_flip_credit_deferred(v_backing.id);
-  EXCEPTION WHEN OTHERS THEN
-    v_credit := 'error';
-  END;
-  BEGIN
-    v_convert := piggyvest_primary.on_backed_flip_convert_obligations(v_backing.id);
-  EXCEPTION WHEN OTHERS THEN
-    v_convert := 'error';
-  END;
-  IF v_credit = 'error' OR v_convert = 'error' THEN
-    PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_hook_error');
-  END IF;
+  v_hooks := piggyvest_primary.run_backed_flip_hooks(v_backing.id, p_customer_id, p_merchant_id);
   RETURN pg_catalog.jsonb_build_object('status', 'backed', 'changed', true, 'backingId', v_backing.id,
-    'relabelledAmount', v_amount,
-    'hooks', pg_catalog.jsonb_build_object('creditDeferred', v_credit, 'convertObligations', v_convert));
+    'relabelledAmount', v_amount, 'hooks', v_hooks);
 END $$;
 
 REVOKE ALL ON FUNCTION piggyvest_primary.flag_migration_review(uuid, uuid, text) FROM PUBLIC, anon, authenticated, service_role;

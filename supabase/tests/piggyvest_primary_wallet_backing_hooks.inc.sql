@@ -76,12 +76,34 @@ BEGIN
     'a raising hook flags the wallet for review');
 END $$;
 
+-- An audited zero reaches backed without a flip, so begin runs the same
+-- contained hooks once (with no relabel rows); a repeat begin does not.
+DO $$
+DECLARE
+  v_result jsonb;
+  v_backing uuid;
+BEGIN
+  UPDATE public.customer_wallets SET available_balance = 0 WHERE customer_id = pg_temp.c(8);
+  v_result := pg_temp.begin_move(8, 0);
+  v_backing := (SELECT id FROM piggyvest_primary.wallet_backing WHERE customer_id = pg_temp.c(8));
+  PERFORM pg_temp.check(v_result->>'status' = 'backed'
+    AND v_result->'hooks' = '{"creditDeferred":"recorded","convertObligations":"recorded"}'::jsonb,
+    'an audited zero must call both hooks: ' || v_result::text);
+  PERFORM pg_temp.check((SELECT count(*) FROM hook_calls WHERE backing_id = v_backing) = 2
+    AND (SELECT relabel_rows FROM hook_calls WHERE hook = 'credit_deferred' AND backing_id = v_backing) = 0,
+    'each hook runs once for an audited zero, with no relabel rows');
+  PERFORM pg_temp.check(pg_temp.begin_move(8, 0)->>'changed' = 'false'
+    AND (SELECT count(*) FROM hook_calls WHERE backing_id = v_backing) = 2,
+    'a repeated audited zero must not call the hooks again');
+END $$;
+
 ROLLBACK TO SAVEPOINT wallet_backing_hook_stubs;
 
 DO $$
 BEGIN
   PERFORM pg_temp.check(pg_temp.state(9) = 'migrating' AND pg_temp.state(12) = 'migrating',
     'the stub flips are rolled back with their savepoint');
+  PERFORM pg_temp.check(pg_temp.state(8) = 'legacy', 'the audited-zero stub is rolled back too');
   PERFORM pg_temp.check(piggyvest_primary.on_backed_flip_convert_obligations(pg_temp.id(1)) = 'noop',
     'the shipped hooks are restored');
 END $$;

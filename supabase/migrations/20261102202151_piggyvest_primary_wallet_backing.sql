@@ -7,9 +7,9 @@
 --
 -- This file adds the state store, its event log, the read helpers and the
 -- pre-declared hooks. The transitions are in
--- 20261102093137_piggyvest_primary_wallet_backing_transitions.sql, and the
+-- 20261102202152_piggyvest_primary_wallet_backing_transitions.sql, and the
 -- one-pair ledger index is built concurrently in
--- 20261102093138_piggyvest_primary_wallet_backing_relabel_index.sql.
+-- 20261102202153_piggyvest_primary_wallet_backing_relabel_index.sql.
 --
 -- Ships dark: the tables start empty (no row means legacy), no login is a
 -- member of the new role, and no existing write path calls these functions
@@ -244,6 +244,35 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT false
 $$;
 
+-- Runs both post-backed hooks, each contained: a failing (or NULL-returning)
+-- hook rolls back only its own work, the wallet goes to review, and the
+-- caller's transition stands. begin_migration (audited zero) and
+-- flip_to_backed, the only two paths into backed, both call it under the
+-- wallet-backing lock; flag_migration_review is defined with them.
+CREATE FUNCTION piggyvest_primary.run_backed_flip_hooks(p_backing_id uuid, p_customer_id uuid, p_merchant_id uuid)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  v_credit text;
+  v_convert text;
+BEGIN
+  BEGIN
+    v_credit := piggyvest_primary.on_backed_flip_credit_deferred(p_backing_id);
+  EXCEPTION WHEN OTHERS THEN
+    v_credit := NULL;
+  END;
+  BEGIN
+    v_convert := piggyvest_primary.on_backed_flip_convert_obligations(p_backing_id);
+  EXCEPTION WHEN OTHERS THEN
+    v_convert := NULL;
+  END;
+  v_credit := COALESCE(v_credit, 'error');
+  v_convert := COALESCE(v_convert, 'error');
+  IF 'error' IN (v_credit, v_convert) THEN
+    PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_hook_error');
+  END IF;
+  RETURN pg_catalog.jsonb_build_object('creditDeferred', v_credit, 'convertObligations', v_convert);
+END $$;
+
 -- Customer-scoped read for web and app routes, called with the request's own
 -- session. 'none' when the caller has no customer record at this merchant.
 -- The state comes from backing_state, so a row recorded under another
@@ -266,6 +295,7 @@ REVOKE ALL ON FUNCTION piggyvest_primary.is_backed(uuid, uuid) FROM PUBLIC, anon
 REVOKE ALL ON FUNCTION piggyvest_primary.assert_wallet_legacy(uuid, uuid) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION piggyvest_primary.on_backed_flip_credit_deferred(uuid) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION piggyvest_primary.on_backed_flip_convert_obligations(uuid) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION piggyvest_primary.run_backed_flip_hooks(uuid, uuid, uuid) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION piggyvest_primary.on_onboarding_verified(uuid) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION piggyvest_primary.onboarding_verified_hook_ready() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.get_my_wallet_backing_state(uuid) FROM PUBLIC, anon, authenticated, service_role;

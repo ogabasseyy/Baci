@@ -37,6 +37,7 @@ DECLARE
     'piggyvest_primary.begin_migration(uuid,uuid,uuid,numeric)',
     'piggyvest_primary.flip_to_backed(uuid,uuid,text)',
     'piggyvest_primary.flag_migration_review(uuid,uuid,text)',
+    'piggyvest_primary.run_backed_flip_hooks(uuid,uuid,uuid)',
     'piggyvest_primary.on_backed_flip_credit_deferred(uuid)',
     'piggyvest_primary.on_backed_flip_convert_obligations(uuid)',
     'piggyvest_primary.on_onboarding_verified(uuid)',

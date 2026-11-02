@@ -8,7 +8,7 @@ export type ParsedApproveArgs =
   | { ok: true; args: OpsApproveArgs }
   | { ok: false; error: string };
 
-export const PASSWORD_REFUSAL =
+const PASSWORD_REFUSAL =
   'Passwords are never accepted on the command line. You will be asked for yours at a hidden prompt.';
 
 const VALUE_FLAGS = {

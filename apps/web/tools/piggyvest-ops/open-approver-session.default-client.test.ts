@@ -20,9 +20,8 @@ vi.mock('pg', () => ({
   },
 }));
 
-const { buildConnectionConfig, openApproverSession } = await import(
-  './approve-db'
-);
+const { buildConnectionConfig } = await import('./build-connection-config');
+const { openApproverSession } = await import('./open-approver-session');
 
 const args: OpsApproveArgs = {
   host: 'db.abcdefghijklmnopqrst.supabase.co',

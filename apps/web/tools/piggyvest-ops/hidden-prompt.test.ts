@@ -1,11 +1,6 @@
 import { EventEmitter } from 'node:events';
-import { PassThrough } from 'node:stream';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  createHiddenPrompt,
-  createLinePrompt,
-  type PromptInput,
-} from './approve-prompt';
+import { createHiddenPrompt, type PromptInput } from './hidden-prompt';
 
 class FakeTty extends EventEmitter implements PromptInput {
   isTTY = true;
@@ -79,22 +74,5 @@ describe('createHiddenPrompt', () => {
       createHiddenPrompt(input, output().stream)('Password: ')
     ).rejects.toThrow('A hidden prompt needs an interactive terminal');
     expect(input.setRawMode).not.toHaveBeenCalled();
-  });
-});
-
-describe('createLinePrompt', () => {
-  it('returns one typed line', async () => {
-    const input = new PassThrough();
-    const out = new PassThrough();
-    const answer = createLinePrompt(input, out)('Amount: ');
-    input.write('15,000.00\n');
-    await expect(answer).resolves.toBe('15,000.00');
-  });
-
-  it('stops instead of hanging when the input ends before an answer', async () => {
-    const input = new PassThrough();
-    const answer = createLinePrompt(input, new PassThrough())('Amount: ');
-    input.end();
-    await expect(answer).rejects.toThrow('Input closed');
   });
 });

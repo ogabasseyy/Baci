@@ -3,18 +3,19 @@ import { pathToFileURL } from 'node:url';
 import { parseApproveArgs } from './approve-args';
 import {
   type ApproverConnectionConfig,
-  type ApproverSession,
   buildConnectionConfig,
-  OpsRefusal,
-  openApproverSession,
-} from './approve-db';
+} from './build-connection-config';
+import { describeRequest } from './describe-request';
+import { formatNaira } from './format-naira';
+import { createHiddenPrompt } from './hidden-prompt';
+import { createLinePrompt } from './line-prompt';
 import {
-  describeRequest,
-  formatNaira,
-  parseNairaInput,
-  refusalMessage,
-} from './approve-format';
-import { createHiddenPrompt, createLinePrompt } from './approve-prompt';
+  type ApproverSession,
+  openApproverSession,
+} from './open-approver-session';
+import { OpsRefusal } from './ops-refusal';
+import { parseNairaInput } from './parse-naira-input';
+import { refusalMessage } from './refusal-message';
 
 /**
  * Two-person approvals: list and decide PiggyVest ops requests as yourself.
@@ -23,7 +24,7 @@ import { createHiddenPrompt, createLinePrompt } from './approve-prompt';
  *
  *   ../../node_modules/.bin/tsx tools/piggyvest-ops/approve.ts --host <db host> --user <your login>
  */
-export const USAGE = `PiggyVest two-person approvals
+const USAGE = `PiggyVest two-person approvals
 
   --host <host>        database host (required)
   --user <login>       your personal approver login (required)

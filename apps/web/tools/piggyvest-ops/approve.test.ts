@@ -4,11 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OpsOpenRequest } from '@/schemas/piggyvest/ops-open-request-row';
 import { type ApproveDeps, main } from './approve';
-import {
-  type ApproverConnectionConfig,
-  type ApproverSession,
-  OpsRefusal,
-} from './approve-db';
+import type { ApproverConnectionConfig } from './build-connection-config';
+import type { ApproverSession } from './open-approver-session';
+import { OpsRefusal } from './ops-refusal';
 
 const REQUEST_ID = '3f0e0000-0000-4000-8000-000000000001';
 const open: OpsOpenRequest = {

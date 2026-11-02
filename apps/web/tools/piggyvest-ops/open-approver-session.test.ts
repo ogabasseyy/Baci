@@ -1,14 +1,12 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { OpsApproveArgs } from '@/schemas/piggyvest/ops-approve-args';
 import {
   type ApproverConnectionConfig,
   buildConnectionConfig,
-  createPgClient,
-  isLoopbackHost,
-  OpsRefusal,
-  openApproverSession,
-  type PgClientLike,
-} from './approve-db';
+} from './build-connection-config';
+import type { PgClientLike } from './create-pg-client';
+import { openApproverSession } from './open-approver-session';
+import { OpsRefusal } from './ops-refusal';
 
 const args: OpsApproveArgs = {
   host: 'db.abcdefghijklmnopqrst.supabase.co',
@@ -65,68 +63,6 @@ function fakeClient(
   };
   return { create, calls, ended: () => ended, config: () => config };
 }
-
-describe('buildConnectionConfig', () => {
-  it('uses verified TLS for a remote host and the prompted password only', () => {
-    const config = buildConnectionConfig(args, 'prompted-secret', 'CA PEM');
-    expect(config).toMatchObject({
-      host: args.host,
-      port: 5432,
-      database: 'postgres',
-      user: 'pv_approver_amaka',
-      password: 'prompted-secret',
-      ssl: { rejectUnauthorized: true, ca: 'CA PEM' },
-      application_name: 'baci-piggyvest-approve',
-      // Non-empty, so pg never substitutes PGOPTIONS or PGCLIENTENCODING.
-      options: '-c search_path=pg_catalog',
-      client_encoding: 'UTF8',
-    });
-  });
-
-  it('allows plain TCP only on this machine', () => {
-    expect(buildConnectionConfig({ ...args, host: '127.0.0.1' }, 'x').ssl).toBe(
-      false
-    );
-    expect(buildConnectionConfig(args, 'x').ssl).toEqual({
-      rejectUnauthorized: true,
-    });
-  });
-
-  it.each([
-    ['localhost', true],
-    ['127.0.0.1', true],
-    ['::1', true],
-    ['127.0.0.1.example.com', false],
-    ['db.example.com', false],
-  ])('treats %s as loopback: %s', (host, loopback) => {
-    expect(isLoopbackHost(host)).toBe(loopback);
-  });
-});
-
-describe('createPgClient', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it('builds the real pg client from the given fields only, never the environment', () => {
-    vi.stubEnv('PGPASSWORD', 'from-env');
-    vi.stubEnv('PGSSLMODE', 'disable');
-    vi.stubEnv('PGUSER', 'env_login');
-    vi.stubEnv('PGHOST', 'env.example.com');
-    vi.stubEnv('PGDATABASE', 'env_db');
-    const client = createPgClient(
-      buildConnectionConfig(args, 'typed-at-prompt')
-    ) as unknown as Record<
-      'password' | 'ssl' | 'user' | 'host' | 'database',
-      unknown
-    >;
-    expect(client.password).toBe('typed-at-prompt');
-    expect(client.ssl).toEqual({ rejectUnauthorized: true });
-    expect(client.user).toBe('pv_approver_amaka');
-    expect(client.host).toBe(args.host);
-    expect(client.database).toBe('postgres');
-  });
-});
 
 describe('openApproverSession', () => {
   it('refuses a connection that signed in as another login', async () => {

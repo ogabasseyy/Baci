@@ -1,5 +1,3 @@
-import { Client } from 'pg';
-import type { OpsApproveArgs } from '@/schemas/piggyvest/ops-approve-args';
 import {
   type OpsDecisionResult,
   opsDecisionResultSchema,
@@ -8,30 +6,9 @@ import {
   type OpsOpenRequest,
   opsOpenRequestRowSchema,
 } from '@/schemas/piggyvest/ops-open-request-row';
-
-export interface ApproverConnectionConfig {
-  host: string;
-  port: number;
-  database: string;
-  user: string;
-  password: string;
-  ssl: false | { rejectUnauthorized: true; ca?: string };
-  application_name: string;
-  options: string;
-  client_encoding: string;
-  connectionTimeoutMillis: number;
-  query_timeout: number;
-  statement_timeout: number;
-}
-
-export interface PgClientLike {
-  connect: () => Promise<unknown>;
-  query: (
-    text: string,
-    values?: unknown[]
-  ) => Promise<{ rows: readonly unknown[] }>;
-  end: () => Promise<unknown>;
-}
+import type { ApproverConnectionConfig } from './build-connection-config';
+import { createPgClient, type PgClientLike } from './create-pg-client';
+import { OpsRefusal } from './ops-refusal';
 
 export interface DecisionInput {
   requestId: string;
@@ -44,51 +21,6 @@ export interface ApproverSession {
   listOpen: () => Promise<OpsOpenRequest[]>;
   decide: (input: DecisionInput) => Promise<OpsDecisionResult>;
   close: () => Promise<void>;
-}
-
-/** A refusal raised by the approval functions (e.g. ops_approval_expired). */
-export class OpsRefusal extends Error {
-  constructor(readonly code: string) {
-    super(code);
-    this.name = 'OpsRefusal';
-  }
-}
-
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
-
-export function isLoopbackHost(host: string): boolean {
-  return LOOPBACK_HOSTS.has(host);
-}
-
-/**
- * Every field is explicit, so pg never falls back to environment variables
- * or a password file. The password is only ever the one typed at the prompt.
- * Remote connections always verify the server certificate.
- */
-export function buildConnectionConfig(
-  args: OpsApproveArgs,
-  password: string,
-  certificateAuthority?: string
-): ApproverConnectionConfig {
-  return {
-    host: args.host,
-    port: args.port,
-    database: args.database,
-    user: args.user,
-    password,
-    ssl: isLoopbackHost(args.host)
-      ? false
-      : {
-          rejectUnauthorized: true,
-          ...(certificateAuthority ? { ca: certificateAuthority } : {}),
-        },
-    application_name: 'baci-piggyvest-approve',
-    options: '-c search_path=pg_catalog',
-    client_encoding: 'UTF8',
-    connectionTimeoutMillis: 10_000,
-    query_timeout: 15_000,
-    statement_timeout: 10_000,
-  };
 }
 
 const LIST_SQL = `SELECT request_id, action, label, subject, amount_kobo, amount_naira,
@@ -109,14 +41,6 @@ function rethrow(error: unknown): never {
 /** The login part of "login" or a pooler user "login.<project ref>". */
 function loginOf(user: string): string {
   return user.split('.')[0];
-}
-
-/**
- * The real client, built from the whole config: pg reads an environment
- * variable only for a field that is missing, and none is.
- */
-export function createPgClient(config: ApproverConnectionConfig): PgClientLike {
-  return new Client(config);
 }
 
 export async function openApproverSession(

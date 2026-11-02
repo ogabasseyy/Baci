@@ -56,20 +56,24 @@ BEGIN
   END LOOP;
   INSERT INTO public.orders(merchant_id,order_number,total,payment_method,customer_email)
   VALUES(disabled,'pod-card-control',1,'card','fixture@example.com') RETURNING id INTO card_order;
-  UPDATE public.orders SET checkout_idempotency_key='card-key',checkout_request_hash=repeat('a',64)
+  UPDATE public.orders SET checkout_idempotency_key='card-key-1234567',checkout_request_hash=repeat('a',64)
     WHERE id=card_order;
-  IF public.is_storefront_pod_order_idempotency_hash(disabled,'card-key',repeat('a',64)) THEN
+  IF public.is_storefront_pod_order_idempotency_hash(disabled,'card-key-1234567',repeat('a',64)) THEN
     RAISE EXCEPTION 'a card order authorized a POD replay';
   END IF;
   UPDATE public.orders SET checkout_idempotency_key='pod-key',checkout_request_hash=repeat('b',64)
     WHERE id=accepted;
-  IF NOT public.is_storefront_pod_order_idempotency_hash(enabled,'pod-key',repeat('b',64)) THEN
+  IF public.is_storefront_pod_order_idempotency_hash(enabled,'pod-key',repeat('b',64)) THEN
+    RAISE EXCEPTION 'short POD replay key was accepted';
+  END IF;
+  UPDATE public.orders SET checkout_idempotency_key='pod-key-12345678' WHERE id=accepted;
+  IF NOT public.is_storefront_pod_order_idempotency_hash(enabled,'pod-key-12345678',repeat('b',64)) THEN
     RAISE EXCEPTION 'accepted POD replay was not found';
   END IF;
-  IF public.is_storefront_pod_order_idempotency_hash(disabled,'pod-key',repeat('b',64)) THEN
+  IF public.is_storefront_pod_order_idempotency_hash(disabled,'pod-key-12345678',repeat('b',64)) THEN
     RAISE EXCEPTION 'another merchant authorized a POD replay';
   END IF;
-  IF public.is_storefront_pod_order_idempotency_hash(enabled,'pod-key',repeat('c',64)) THEN
+  IF public.is_storefront_pod_order_idempotency_hash(enabled,'pod-key-12345678',repeat('c',64)) THEN
     RAISE EXCEPTION 'a different hash authorized a POD replay';
   END IF;
   FOREACH method IN ARRAY ARRAY['pod','pay_on_delivery','POD',' Pay_On_Delivery ',E'\tPOD\n',U&'\00A0Pay_On_Delivery\00A0'] LOOP
@@ -85,6 +89,9 @@ BEGIN
   UPDATE public.merchant_feature_settings SET pay_on_delivery_enabled=false WHERE merchant_id=enabled;
   -- The exact persisted identity remains accepted after disabling POD.
   UPDATE public.orders SET payment_method=payment_method WHERE id=accepted;
+  UPDATE public.orders SET payment_method='pod' WHERE id=accepted;
+  UPDATE public.orders SET payment_method='pay_on_delivery' WHERE id=accepted;
+  UPDATE public.orders SET payment_method='POD' WHERE id=accepted;
   rejected := false;
   BEGIN
     UPDATE public.orders SET merchant_id=disabled WHERE id=accepted;

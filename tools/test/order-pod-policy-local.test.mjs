@@ -125,6 +125,15 @@ test('POD persistence policy and concurrent flag revocation', async () => {
           'utf8'
         )
       );
+      await admin.query(
+        readFileSync(
+          join(
+            repository,
+            'supabase/migrations/20261102063000_harden_pod_replay_bounds.sql'
+          ),
+          'utf8'
+        )
+      );
     }
     await admin.query(
       readFileSync(

@@ -165,6 +165,44 @@ describe('verify Ogabassey crawl-depth coverage', () => {
     );
   });
 
+  it('does not count external or malformed module hrefs as internal inventory', () => {
+    const target = 'https://ogabassey.com/smartphones/fixture-phone';
+    for (const href of [
+      'https://example.invalid/smartphones/fixture-phone',
+      'https://ogabassey.com.example.invalid/smartphones/fixture-phone',
+      '//example.invalid/smartphones/fixture-phone',
+      'https://user@ogabassey.com/smartphones/fixture-phone',
+      'https://:secret@ogabassey.com/smartphones/fixture-phone',
+      'http://ogabassey.com/smartphones/fixture-phone',
+      'http://[broken',
+      'javascript:alert(1)',
+    ]) {
+      for (const value of [href, { href }]) {
+        const report = buildCrawlDepthCoverageReport([target], collectModuleHrefs(value));
+        expect(report.missingMaintainedRows).toBe(1);
+        expect(report.coveredMaintainedRows).toBe(0);
+      }
+    }
+    for (const href of [
+      '/smartphones/fixture-phone',
+      'smartphones/fixture-phone',
+      'https://ogabassey.com/smartphones/fixture-phone',
+      '//ogabassey.com/smartphones/fixture-phone',
+    ]) {
+      for (const value of [href, { href }]) {
+        expect(buildCrawlDepthCoverageReport([target], collectModuleHrefs(value)).coveredMaintainedRows).toBe(1);
+      }
+    }
+  });
+
+  it('does not treat object metadata as an href', () => {
+    expect(collectModuleHrefs({ title: '/smartphones/fixture-phone' }).size).toBe(0);
+  });
+
+  it('labels output as module inventory, not live crawl evidence', () => {
+    expect(formatCrawlDepthCoverageReport(buildCrawlDepthCoverageReport([], new Set()))).toContain('module_inventory_coverage');
+  });
+
   it('reports missing maintained rows with samples', () => {
     const report = buildCrawlDepthCoverageReport(
       [

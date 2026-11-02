@@ -4,83 +4,19 @@ import { createGiglExternalWaybillLinkTestDatabase } from '../../../../../supaba
 vi.mock('server-only', () => ({}));
 vi.mock('@/env', () => ({ getSupabaseServiceRoleKey: () => 's'.repeat(32) }));
 
-import type {
-  ExternalWaybillOrderSnapshot,
-  FoundExternalWaybill,
-} from './external-gigl-waybill-preview';
 import {
-  buildExternalWaybillLinkPayload,
-  LINK_EXTERNAL_GIGL_WAYBILL_ACTION,
-} from './persist-external-gigl-waybill';
-import { giglPreShipment } from './providers/gigl.test-helpers';
-import { createShippingQuoteRouteProof } from './shipping-quote-route-proof';
-
-const merchantId = '10000000-0000-4000-8000-000000000001';
-const otherMerchantId = '10000000-0000-4000-8000-000000000002';
-const ownerId = '20000000-0000-4000-8000-000000000001';
-const otherOwnerId = '20000000-0000-4000-8000-000000000002';
-const staffId = '20000000-0000-4000-8000-000000000003';
-const order = (suffix: string) =>
-  `41000000-0000-4000-8000-00000000000${suffix}`;
-
-const lookup: FoundExternalWaybill = {
-  status: 'found',
-  account: { userChannelCode: 'IND000000', userId: 'gig-user' },
-  preShipment: giglPreShipment({
-    Waybill: '2000000001',
-    ReceiverName: 'Ada Lovelace',
-    ReceiverPhoneNumber: '+2348000000000',
-    ReceiverAddress: 'ABAKALIKI => ABAKALIKI (CENTRAL PARK)',
-    ReceiverState: 'EBONYI',
-    SenderName: 'Shop',
-    IsHomeDelivery: false,
-    GrandTotal: 45852.2,
-  }),
-  tracking: null,
-};
-
-function sqlJson(value: unknown): string {
-  return `'${JSON.stringify(value).replaceAll("'", "''")}'::jsonb`;
-}
-
-function proof(
-  orderId: string,
-  waybill = '2000000001',
-  merchant = merchantId,
-  edit: (payload: Record<string, unknown>) => Record<string, unknown> = (p) =>
-    p,
-  snapshot: ExternalWaybillOrderSnapshot = {
-    customer_name: null,
-    customer_phone: null,
-    phone: null,
-    state: null,
-  }
-) {
-  return createShippingQuoteRouteProof({
-    action: LINK_EXTERNAL_GIGL_WAYBILL_ACTION,
-    merchantId: merchant,
-    subjectId: orderId,
-    payload: edit(buildExternalWaybillLinkPayload(waybill, lookup, snapshot)),
-  });
-}
-
-function actor(user: string): string {
-  return `SELECT set_config('request.jwt.claim.role','authenticated',true);
-    SELECT set_config('request.jwt.claim.sub','${user}',true);
-    SET LOCAL ROLE authenticated;`;
-}
-
-function link(orderId: string, routeProof: unknown = proof(orderId)): string {
-  return `SELECT public.link_external_gigl_waybill('${orderId}', ${sqlJson(routeProof)}) IS NOT NULL;`;
-}
-
-function staff(permissions: object): string {
-  return `INSERT INTO public.staff_members (id, merchant_id, user_id, role, permissions, status)
-    VALUES (gen_random_uuid(), '${merchantId}', '${staffId}', 'manager',
-      '${JSON.stringify(permissions)}'::jsonb, 'active');`;
-}
-
-const asPostgres = 'RESET ROLE;';
+  actor,
+  asPostgres,
+  link,
+  merchantId,
+  order,
+  otherMerchantId,
+  otherOwnerId,
+  ownerId,
+  proof,
+  staff,
+  staffId,
+} from './gigl-external-waybill-link.postgres.test-support';
 
 // Dedicated DB CI invokes this explicitly with BACI_SHIPPING_QUOTE_POSTGRES=1.
 describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(

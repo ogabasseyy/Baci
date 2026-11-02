@@ -84,6 +84,8 @@
   "governancePaths": [
     ".github/money-path-paths.json",
     ".github/prompts/money-rules-adversarial-review.md",
+    "docs/piggyvest-change-summaries/TEMPLATE.md",
+    "docs/runbooks/money-pr-assurance.md",
     ".github/scripts/money-pr-assurance*",
     ".github/workflows/money-pr-assurance*.yml"
   ],

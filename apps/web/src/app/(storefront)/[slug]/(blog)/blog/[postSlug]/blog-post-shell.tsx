@@ -46,7 +46,7 @@ export function BlogPostShell({
     <>
       {beforeChrome}
       <div className="min-h-screen bg-background">
-        <div className="border-b bg-white">
+        <div className="border-b border-border bg-background">
           <div className="container mx-auto px-4 py-4">
             <Link
               href={asRoute(blogHref)}
@@ -59,9 +59,9 @@ export function BlogPostShell({
         </div>
 
         <main className="container mx-auto px-4 py-8">
-          <article className="max-w-6xl mx-auto bg-white rounded-3xl p-6 md:p-10 md:px-12 shadow-sm border border-gray-100 overflow-hidden">
+          <article className="max-w-6xl mx-auto bg-card text-card-foreground rounded-3xl p-6 md:p-10 md:px-12 shadow-sm border border-border overflow-hidden">
             {hero && (
-              <div className="aspect-video rounded-2xl overflow-hidden mb-8 relative bg-gray-100">
+              <div className="aspect-video rounded-2xl overflow-hidden mb-8 relative bg-muted">
                 {/* Explicit per-format `<picture>` (AVIF `<source>` + jpeg/png
                     `<img>` fallback) for the blog post LCP hero. Cloudflare Free
                     ignores `Vary: Accept`, so a single `format=auto` URL would

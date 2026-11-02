@@ -2,16 +2,23 @@ pre-commit:
   parallel: true
   commands:
     lint:
-      # Every file type Biome checks; --files-ignore-unknown skips the rest.
-      glob: "*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc,css,graphql,gql}"
+      # Only the packages whose `lint` script is `biome check` (what `turbo
+      # lint` covers), and every file type Biome handles there.
+      glob:
+        - "apps/web/**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc,css,graphql,gql}"
+        - "apps/mobile-admin/**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc,css,graphql,gql}"
+        - "apps/mobile-storefront/**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc,css,graphql,gql}"
+        - "apps/cloudflare-evidence-qualification-worker/**/*.{js,jsx,ts,tsx,mjs,cjs,mts,cts,json,jsonc,css,graphql,gql}"
       env:
         PUPPETEER_SKIP_DOWNLOAD: "true"
         PUPPETEER_CHROME_SKIP_DOWNLOAD: "true"
         PUPPETEER_CHROME_HEADLESS_SHELL_SKIP_DOWNLOAD: "true"
         PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false"
-      # Every package's lint script is `biome check`, so checking only the
-      # staged files gives the same result for this commit in seconds.
-      # The whole-repo `turbo lint` and knip run in CI.
+      # Lints the staged files of those packages instead of every file in
+      # all of them. Like the old hook, Biome reads the working-tree copy,
+      # so a partially staged file is checked as it is on disk. CI runs the
+      # full `turbo lint` and knip for web changes; mobile-only changes rely
+      # on this hook for lint.
       run: bash ci_scripts/run-lefthook-pnpm.sh exec biome check --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
     lint-config:
       # A Biome config change can affect every file, so re-lint the repo.

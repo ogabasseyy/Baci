@@ -1,5 +1,5 @@
 -- Contract test: the onboarding rollout cohort
--- (20261102121709_piggyvest_primary_rollout_cohort.sql).
+-- (20261102214100_piggyvest_primary_rollout_cohort.sql).
 --
 -- Proves, against live PostgreSQL:
 --   * the cohort ships empty, so onboarding stays closed;

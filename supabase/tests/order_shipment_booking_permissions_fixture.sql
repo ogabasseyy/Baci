@@ -17,6 +17,9 @@ GRANT USAGE ON SCHEMA private TO service_role;
 
 CREATE TYPE public.staff_role AS ENUM ('sales_rep', 'manager');
 CREATE TABLE public.merchants (id uuid PRIMARY KEY, user_id uuid);
+CREATE TABLE public.merchant_feature_settings (
+  merchant_id uuid PRIMARY KEY, pay_on_delivery_enabled boolean
+);
 CREATE TABLE public.staff_members (
   id uuid PRIMARY KEY, merchant_id uuid, user_id uuid,
   role public.staff_role, permissions jsonb, status text

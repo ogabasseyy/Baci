@@ -100,6 +100,9 @@ try {
       'utf8'
     )
   );
+  sql(
+    readMigration('20261101071733_enforce_merchant_pay_on_delivery_policy.sql')
+  );
   const baseline = readMigration('20260418000000_baseline.sql');
   sql(extractFunction(baseline, 'has_merchant_access'));
   sql(readMigration('20260724000001_deep_merge_get_staff_permissions.sql'));

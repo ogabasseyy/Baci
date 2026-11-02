@@ -24,11 +24,86 @@ is_postdeploy_migration() {
   esac
 }
 
+# The POD probe's initial grant must never commit without its route-bound
+# replacement. Refuse incomplete checkout files or partial remote history.
+verify_pod_replay_migration_history() {
+  local history="$1" directory="$2" base version name recorded file predecessor correction present=0 applied=0
+  local -a group=(
+    20261102060000_probe_pod_order_idempotency_hash
+    20261102061500_align_pod_whitespace_classification
+    20261102063000_harden_pod_replay_bounds
+    20261102064500_scope_pod_replay_probe
+  )
+  for base in "${group[@]}"; do
+    version="${base%%_*}"; name="${base#*_}"
+    if [ -f "$directory/$base.sql" ]; then present=$((present + 1)); fi
+    recorded="$(awk -F '\t' -v version="$version" '$1 == version { print "recorded:" $2; exit }' <<<"$history")"
+    if [ -n "$recorded" ]; then
+      if [ "$recorded" != "recorded:$name" ]; then
+        echo "::error::POD migration identity mismatch: $version" >&2
+        return 1
+      fi
+      applied=$((applied + 1))
+    fi
+  done
+  predecessor="$(awk -F '\t' '$1 == "20261101071733" { print "recorded:" $2; exit }' <<<"$history")"
+  correction="$(awk -F '\t' '$1 == "20261101071734" { print "recorded:" $2; exit }' <<<"$history")"
+  if [ "$present" -eq 0 ] && [ "$applied" -eq 0 ] && [ -z "$predecessor" ] && [ -z "$correction" ] &&
+    [ ! -f "$directory/20261101071733_enforce_merchant_pay_on_delivery_policy.sql" ] &&
+    [ ! -f "$directory/20261101071734_harden_initial_pod_trigger.sql" ]; then return 0; fi
+  if [ "$present" -ne 4 ] || { [ "$applied" -ne 0 ] && [ "$applied" -ne 4 ]; }; then
+    echo "::error::incomplete POD replay migration files or history ($present files, $applied applied)" >&2
+    return 1
+  fi
+  if [ -n "$predecessor" ] && [ "$predecessor" != 'recorded:enforce_merchant_pay_on_delivery_policy' ]; then
+    echo '::error::POD enforcement migration identity mismatch' >&2
+    return 1
+  fi
+  if [ -z "$predecessor" ] && { [ "$applied" -ne 0 ] || [ ! -f "$directory/20261101071733_enforce_merchant_pay_on_delivery_policy.sql" ]; }; then
+    echo '::error::POD enforcement predecessor is missing' >&2
+    return 1
+  fi
+  if [ -n "$correction" ] && [ "$correction" != 'recorded:harden_initial_pod_trigger' ]; then
+    echo '::error::initial POD hardening migration identity mismatch' >&2
+    return 1
+  fi
+  if [ -n "$correction" ] && [ -z "$predecessor" ]; then
+    echo '::error::initial POD hardening is recorded without its predecessor' >&2
+    return 1
+  fi
+  if [ -z "$correction" ] && [ ! -f "$directory/20261101071734_harden_initial_pod_trigger.sql" ]; then
+    echo '::error::initial POD hardening migration is missing' >&2
+    return 1
+  fi
+  for file in "$directory"/20261102*.sql; do
+    [ -f "$file" ] || continue
+    base="$(basename "$file" .sql)"; version="${base%%_*}"
+    if [[ "$version" > '20261102060000' && "$version" < '20261102064500' ]]; then
+      case "$base" in
+        20261102061500_align_pod_whitespace_classification|20261102063000_harden_pod_replay_bounds) ;;
+        *) echo "::error::unexpected migration within POD atomic group: $base" >&2; return 1 ;;
+      esac
+    fi
+  done
+}
+
 # These migrations replace live database contracts. They must be sent in
 # one Management API transaction so the broad predecessor is never observable
 # without its scoped replacement.
 atomic_migration_group_next_base() {
   case "$1" in
+    20261101071733_enforce_merchant_pay_on_delivery_policy)
+      printf '%s\n' '20261101071734_harden_initial_pod_trigger'
+      ;;
+    20261102060000_probe_pod_order_idempotency_hash)
+      printf '%s\n' '20261102061500_align_pod_whitespace_classification'
+      ;;
+    20261102061500_align_pod_whitespace_classification)
+      printf '%s\n' '20261102063000_harden_pod_replay_bounds'
+      ;;
+    20261102063000_harden_pod_replay_bounds)
+      printf '%s\n' '20261102064500_scope_pod_replay_probe'
+      ;;
     20260827140000_enforce_storefront_order_delivery_metadata)
       printf '%s\n' '20260828091000_harden_storefront_order_rpc_context_and_replays'
       ;;

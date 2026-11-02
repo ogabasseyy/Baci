@@ -59,13 +59,16 @@ DECLARE
   v_customer uuid;
   v_principal numeric;
   v_target numeric;
+  v_status text;
   v_ledger_interest numeric;
   v_primary_interest numeric;
 BEGIN
-  SELECT goal.merchant_id, goal.customer_id, goal.current_amount, goal.target_amount
-    INTO v_merchant, v_customer, v_principal, v_target
+  SELECT goal.merchant_id, goal.customer_id, goal.current_amount, goal.target_amount, goal.status
+    INTO v_merchant, v_customer, v_principal, v_target, v_status
     FROM public.customer_savings_goals goal WHERE goal.id = p_goal;
-  IF NOT FOUND THEN
+  -- get_customer_savings_earnings reports per-goal interest only for these
+  -- statuses; any other goal gets the neutral prompt (NULL status included).
+  IF NOT FOUND OR v_status IS NULL OR v_status NOT IN ('active', 'paused', 'completed') THEN
     RETURN savings_notifications.progress_message(NULL, NULL);
   END IF;
   -- Count only paid_interest postings and production receipts, exactly as the per-goal interest of
@@ -101,7 +104,12 @@ CREATE OR REPLACE FUNCTION piggyvest_primary.notify_paid_interest()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog AS $$
 DECLARE v_progress text;
 BEGIN
-  IF NEW.net_kobo > 0 THEN
+  -- Only production receipts are interest the app's savings display counts, so
+  -- only they are announced.
+  IF NEW.net_kobo > 0 AND EXISTS (
+    SELECT 1 FROM piggyvest_primary.integrations integration
+    WHERE integration.id = NEW.integration_id AND integration.environment = 'production'
+      AND integration.merchant_id = NEW.merchant_id) THEN
     BEGIN
       v_progress := savings_notifications.interest_progress(NEW.goal_id);
     EXCEPTION WHEN OTHERS THEN

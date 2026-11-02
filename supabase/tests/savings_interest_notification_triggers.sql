@@ -206,5 +206,21 @@ INSERT INTO piggyvest_primary.paid_interest_receipts(integration_id, payout_id, 
 SELECT pg_temp.check(
   savings_notifications.interest_progress(pg_temp.id(33)) = 'You’re now 20% of the way there.',
   'a staging-environment receipt must not raise the progress above what the app displays');
+-- The notifier is gated the same way: it must not announce interest its own
+-- progress text, and the app's savings display, refuse to count.
+SELECT pg_temp.check((SELECT count(*) = 0 FROM pg_temp.notices(pg_temp.id(33))),
+  'a staging-environment receipt must not enqueue a customer-facing interest notice');
+
+-- 12. A goal outside active/paused/completed has no per-goal interest in the
+-- app's savings display, so its notice carries the neutral prompt, not a
+-- percentage.
+INSERT INTO public.customer_savings_goals(id, merchant_id, customer_id, product_id, title, status,
+  source_mode, target_amount, current_amount, contribution_amount, contribution_frequency,
+  start_date, maturity_date, terms_accepted_at, non_withdrawable_accepted_at)
+  VALUES (pg_temp.id(34), pg_temp.id(10), pg_temp.id(20), pg_temp.id(11), 'Interest copy goal',
+    'cancelled', 'manual', 1000, 200, 100, 'daily', current_date, current_date + 30, now(), now());
+SELECT pg_temp.check(
+  savings_notifications.interest_progress(pg_temp.id(34)) = 'Open your savings to see your latest balance.',
+  'a cancelled goal must read the neutral prompt, never a progress percentage');
 
 ROLLBACK;

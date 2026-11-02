@@ -1,0 +1,24 @@
+# Money PR Assurance Review Relay: lets Money PR Assurance re-evaluate a pull
+# request when a review is submitted, edited or dismissed.
+#
+# GitHub runs pull_request_review workflows from the pull request's own copy
+# of the workflow file, so the evaluator must never run on that event. This
+# relay holds no permissions, uses no actions or secrets and does nothing;
+# Money PR Assurance listens for its completion through workflow_run, which
+# always runs the default branch's copy of the evaluator.
+name: Money PR Assurance Review Relay
+
+on:
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+
+permissions: {}
+
+jobs:
+  relay:
+    name: Relay review event to money PR assurance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Hand the review event to Money PR Assurance
+        run: echo "Money PR Assurance re-evaluates this pull request when this run completes."

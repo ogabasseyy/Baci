@@ -1,0 +1,125 @@
+{
+  "$comment": "Money-path PR assurance configuration, read from the default branch by .github/workflows/money-pr-assurance.yml. See docs/runbooks/money-pr-assurance.md. Changing this file is itself a money-path change.",
+  "version": 1,
+  "statusContext": "money-pr-assurance",
+  "moneyKeywords": {
+    "$comment": "A changed file is a money path when it sits under one of these server roots and its path (after the root) contains one of these words, ignoring case. Interface code and documentation are outside the roots on purpose.",
+    "roots": [
+      "apps/web/src/app/",
+      "apps/web/src/config/",
+      "apps/web/src/lib/",
+      "apps/web/src/schemas/",
+      "apps/web/src/scripts/",
+      "apps/web/tools/",
+      "packages/shared/src/",
+      "supabase/",
+      "tools/",
+      "vps-workers/"
+    ],
+    "keywords": [
+      "piggyvest",
+      "wallet",
+      "savings",
+      "prefunded",
+      "primary_card",
+      "primary-card",
+      "primary_bank",
+      "primary-bank",
+      "primary_inflow",
+      "primary-inflow",
+      "primary_interest",
+      "primary-interest",
+      "primary-restricted",
+      "primary-pending-sources",
+      "plan_transfer",
+      "plan-transfer",
+      "goal_policy",
+      "cancel_plan",
+      "cancel-plan",
+      "purchase_preparation",
+      "purchase-pricing",
+      "store_credit",
+      "store-credit",
+      "interest-bridge"
+    ]
+  },
+  "moneyPaths": [
+    "apps/web/src/app/api/payments/webhook/**",
+    "apps/web/src/app/api/vtu/checkout/**",
+    "apps/web/src/lib/vtu-checkout*",
+    "apps/web/src/lib/imei-lookup-fulfillment*"
+  ],
+  "governancePaths": [
+    ".github/money-path-paths.json",
+    ".github/prompts/money-rules-adversarial-review.md",
+    ".github/scripts/money-pr-assurance*",
+    ".github/workflows/money-pr-assurance*.yml"
+  ],
+  "summary": {
+    "directory": "docs/piggyvest-change-summaries",
+    "ignoredFiles": ["TEMPLATE.md", "README.md"],
+    "maxWords": 450,
+    "headings": [
+      "What changes",
+      "Why",
+      "What could go wrong and how it is prevented",
+      "How it is tested",
+      "How it stays switched off"
+    ]
+  },
+  "evidence": {
+    "directory": "docs/piggyvest-contract-evidence"
+  },
+  "reviewers": {
+    "$comment": "Never trust github-actions[bot]: every workflow token, including one a pull request controls, posts as it. A Gemini family can return once its verdict comes from an identity pull-request workflows cannot use.",
+    "promptPath": ".github/prompts/money-rules-adversarial-review.md",
+    "promptVersion": "money-rules-adversarial-review/v1",
+    "groups": [["codex"], ["claude"]],
+    "families": {
+      "codex": {
+        "kind": "codex-clean-comment",
+        "logins": ["chatgpt-codex-connector[bot]"],
+        "cleanPhrases": [
+          "Didn't find any major issues",
+          "Didn’t find any major issues"
+        ],
+        "requestPhrase": "@codex review",
+        "requestedBy": ["ogabasseyy"]
+      },
+      "claude": {
+        "kind": "verdict-block",
+        "logins": ["claude[bot]"]
+      }
+    }
+  },
+  "ownerSignoff": {
+    "logins": ["ogabasseyy"],
+    "label": "owner-signoff",
+    "phrase": "summary-approved"
+  },
+  "requiredChecks": [
+    {
+      "name": "Quality Gate"
+    },
+    {
+      "name": "Quality Gate - DB Replay",
+      "skipAllowedUnlessChanged": [
+        "supabase/migrations/**",
+        "supabase/tests/**",
+        "apps/web/tools/db/replay-registry/**",
+        "apps/web/tools/db/replay-registry.ts",
+        "apps/web/tools/db/replay-sql-check-registry.ts"
+      ]
+    },
+    {
+      "name": "Quality Gate - Disposable SQL Suites",
+      "skipAllowedUnlessChanged": [
+        "supabase/migrations/**",
+        "supabase/tests/**",
+        "apps/web/tools/db/replay-registry/**",
+        "apps/web/tools/db/replay-registry.ts",
+        "apps/web/tools/db/replay-sql-check-registry.ts"
+      ]
+    }
+  ]
+}

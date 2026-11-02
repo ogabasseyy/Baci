@@ -11,6 +11,22 @@ BEGIN
   IF SQLERRM<>'merchant_scope_required' THEN RAISE;END IF;
  END;
  PERFORM public.get_storefront_offer_resolution('77777777-7777-4777-8777-777777777777','{}'::uuid[]);
+ -- A forged legacy claim cannot upgrade the effective anon database role.
+ PERFORM set_config('request.jwt.claims','',true);
+ PERFORM set_config('request.jwt.claim.role','service_role',true);
+ BEGIN
+  PERFORM public.get_storefront_offer_resolution(NULL,'{}'::uuid[]);
+  RAISE EXCEPTION 'forged legacy role upgraded anonymous caller';
+ EXCEPTION WHEN insufficient_privilege THEN
+  IF SQLERRM<>'merchant_scope_required' THEN RAISE; END IF;
+ END;
+ PERFORM set_config('request.jwt.claims','{"role":"service_role"}',true);
+ BEGIN
+  PERFORM public.get_storefront_offer_resolution(NULL,'{}'::uuid[]);
+  RAISE EXCEPTION 'forged JWT role upgraded anonymous caller';
+ EXCEPTION WHEN insufficient_privilege THEN
+  IF SQLERRM<>'merchant_scope_required' THEN RAISE; END IF;
+ END;
 END $$;
 RESET ROLE;
 -- A direct database session without claims is intentionally not an
@@ -25,7 +41,7 @@ DO $$ BEGIN
   IF SQLERRM<>'merchant_scope_required' THEN RAISE; END IF;
  END;
 END $$;
--- Verify the claim.role fallback independently of the JSON JWT claim.
+-- An explicitly assumed authenticated database role remains authorized.
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.role','authenticated',true);
 DO $$ BEGIN PERFORM public.get_storefront_offer_resolution(NULL,'{}'::uuid[]); END $$;

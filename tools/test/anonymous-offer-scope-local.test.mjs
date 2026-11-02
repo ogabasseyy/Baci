@@ -62,7 +62,7 @@ test('anonymous offer merchant scope', async () => {
       source.slice(start, source.indexOf('  RETURN QUERY', end)) +
         '  RETURN;\nEND;\n$$;'
     );
-    if (!process.argv.includes('--baseline'))
+    if (!process.argv.includes('--baseline')) {
       await client.query(
         readFileSync(
           join(
@@ -72,6 +72,16 @@ test('anonymous offer merchant scope', async () => {
           'utf8'
         )
       );
+      await client.query(
+        readFileSync(
+          join(
+            repository,
+            'supabase/migrations/20261102090000_harden_offer_authority_caller_role.sql'
+          ),
+          'utf8'
+        )
+      );
+    }
     await client.query(
       readFileSync(
         join(repository, 'supabase/tests/anonymous_offer_merchant_scope.sql'),

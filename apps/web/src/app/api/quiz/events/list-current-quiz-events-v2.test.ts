@@ -43,6 +43,22 @@ describe('listCurrentQuizEventsV2', () => {
     });
   });
 
+  it('excludes test-mode events so they are not framed as app-only prizes', async () => {
+    const { supabase } = client(() => ({
+      data: appQuizEventsResponse([
+        appQuizEvent({ id: id(1) }),
+        appQuizEvent({ id: id(2), mode: 'test' }),
+      ]),
+      error: null,
+    }));
+
+    const result = await listCurrentQuizEventsV2(supabase, MERCHANT_ID);
+
+    expect(result.ok && result.events.map((event) => event.id)).toEqual([
+      id(1),
+    ]);
+  });
+
   describe('bugfix: live quiz pushed off the first page', () => {
     it('reads later pages so a live quiz on page two is listed', async () => {
       const { supabase } = client((offset) =>
@@ -83,7 +99,7 @@ describe('listCurrentQuizEventsV2', () => {
 
       await listCurrentQuizEventsV2(supabase, MERCHANT_ID);
 
-      expect(rpc).toHaveBeenCalledTimes(4);
+      expect(rpc).toHaveBeenCalledTimes(20);
     });
   });
 

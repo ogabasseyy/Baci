@@ -47,6 +47,12 @@ describe('QuizPlayInAppPanel', () => {
     expect(screen.queryByRole('button')).toBeNull();
   });
 
+  it('says no prize quizzes are on when the list is ready and empty', () => {
+    render(<QuizPlayInAppPanel events={[]} />);
+
+    expect(screen.getByText(/No prize quizzes are on right now/)).toBeInTheDocument();
+  });
+
   it('announces loading while the current quizzes load', () => {
     render(<QuizPlayInAppPanel events={[]} status="loading" />);
 

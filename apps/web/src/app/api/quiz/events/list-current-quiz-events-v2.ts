@@ -4,19 +4,24 @@ import {
   quizV2EventsResponseSchema,
 } from '@baci/shared/schemas';
 import type { ServerSupabaseClient } from '@/app/api/quiz/_shared/route-helpers-guards';
+import { logger } from '@/lib/logger';
 
 const PAGE_SIZE = 50;
 // list_quiz_events_v2 orders by start time (newest first) and paginates before
 // any status filter, so later scheduled/completed events can push a live quiz
 // off the first page. Pages are read here on the server (bounded) so the web
 // client gets every joinable quiz in one request.
-const MAX_PAGES = 4;
+const MAX_PAGES = 20;
 
 export type CurrentQuizEventsResult =
   | { events: QuizV2Event[]; ok: true; serverNow: string }
   | { error: unknown; ok: false };
 
-/** Active and scheduled v2 events for the caller, across bounded pages. */
+/**
+ * Active and scheduled live (prize) v2 events for the caller, across bounded
+ * pages. Test-mode events are excluded: they are not prizes and browser
+ * sessions may start them, so they must not be framed as app-only.
+ */
 export async function listCurrentQuizEventsV2(
   supabase: ServerSupabaseClient,
   merchantId: string
@@ -45,9 +50,18 @@ export async function listCurrentQuizEventsV2(
     const { pagination } = parsed.data;
     offset = pagination?.hasMore ? pagination.nextOffset : null;
   }
+  if (offset !== null) {
+    logger.warn({
+      context: 'listCurrentQuizEventsV2',
+      message: 'Current quiz listing hit the page cap; later events omitted',
+      merchantId,
+    });
+  }
   return {
     events: events.filter(
-      (event) => event.status === 'active' || event.status === 'scheduled'
+      (event) =>
+        event.mode === 'live' &&
+        (event.status === 'active' || event.status === 'scheduled')
     ),
     ok: true,
     serverNow,

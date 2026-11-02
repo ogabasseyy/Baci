@@ -61,6 +61,13 @@ export function QuizPlayInAppPanel({
         </div>
       ) : null}
 
+      {status === 'ready' && events.length === 0 ? (
+        <p className="mt-5 text-sm text-store-background-text/70">
+          No prize quizzes are on right now. Download the app to be notified
+          when the next one starts.
+        </p>
+      ) : null}
+
       {events.length > 0 ? (
         <ul aria-label="Quizzes in the app" className="mt-5 grid gap-3 md:grid-cols-2">
           {events.map((event) => (

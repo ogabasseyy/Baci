@@ -35,6 +35,18 @@ SELECT dblink_connect('engine_race_b', format(
 -- Both backends run the pass as the transfer worker role. A suite login that
 -- only administers that role (the replay image's non-superuser login created
 -- it) is given SET on it for the race and loses it again at the end.
+SELECT 'DIAG' AS tag, current_user, session_user,
+  (SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname = current_user) AS su,
+  (SELECT rolcreaterole FROM pg_catalog.pg_roles WHERE rolname = current_user) AS crole,
+  pg_catalog.pg_has_role(current_user, 'piggyvest_primary_transfer_worker', 'MEMBER') AS is_member,
+  pg_catalog.pg_has_role(current_user, 'piggyvest_primary_transfer_worker', 'USAGE') AS has_usage,
+  pg_catalog.pg_has_role(current_user, 'piggyvest_primary_transfer_worker', 'SET') AS has_set,
+  (SELECT pg_catalog.pg_get_userbyid(r.grantor) || ':' || m.rolname || ':' || r.admin_option FROM pg_catalog.pg_auth_members r
+     JOIN pg_catalog.pg_roles m ON m.oid = r.member
+     WHERE r.roleid = 'piggyvest_primary_transfer_worker'::regrole LIMIT 1) AS first_grant,
+  (SELECT count(*) FROM pg_catalog.pg_auth_members WHERE roleid = 'piggyvest_primary_transfer_worker'::regrole) AS grants,
+  pg_catalog.pg_get_userbyid((SELECT proowner FROM pg_catalog.pg_proc WHERE proname = 'apply_requested_b_effects' LIMIT 1)) AS fn_owner;
+
 SELECT NOT pg_catalog.pg_has_role(current_user, 'piggyvest_primary_transfer_worker', 'SET')
   AS engine_race_grant_worker \gset
 

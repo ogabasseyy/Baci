@@ -11,11 +11,9 @@ import {
 } from '@/lib/storefront-trust/build-merchant-trust-profile';
 import { DeferredShellFeature } from './components/deferred-shell-feature';
 import { GoogleAdManager } from './components/GoogleAdManager';
-import { MobileFooter } from './components/MobileFooter';
 import { OgabasseyNavbar as Navbar } from './layout/navbar';
 import {
   type OgabasseyChromeSection,
-  shouldHideOgabasseyMobileFooter,
   shouldHideOgabasseyNavigation,
 } from './storefront-layout-utils';
 
@@ -80,6 +78,9 @@ function buildSemanticFooterFallbackLinks(
   return [
     ['About Us', '/about'],
     ['All Products', '/products'],
+    ['Swap / Trade-in', '/swap'],
+    ['IMEI Checker', '/imei-check'],
+    ['Repairs', '/repairs'],
     ['Blog', '/blog'],
     ['Track Order', '/track-order'],
     ['Contact Us', '/contact'],
@@ -138,10 +139,6 @@ export function OgabasseyLayoutChrome({
     pathname,
     hideNavigation
   );
-  const resolvedHideMobileFooter = shouldHideOgabasseyMobileFooter(
-    pathname,
-    hideNavigation
-  );
 
   if (section === 'header') {
     return (
@@ -158,35 +155,31 @@ export function OgabasseyLayoutChrome({
     }
 
     return (
-      <>
-        {!resolvedHideMobileFooter && <MobileFooter storeSlug={basePath} />}
-
-        <DeferredShellFeature
+      <DeferredShellFeature
+        fallback={
+          <StorefrontSemanticFooterFallback
+            basePath={basePath}
+            merchant={merchant}
+          />
+        }
+        timeoutMs={1600}
+        activateOnInteraction
+        deferInteractionActivationUntilNextPaint
+      >
+        <Suspense
           fallback={
             <StorefrontSemanticFooterFallback
               basePath={basePath}
               merchant={merchant}
             />
           }
-          timeoutMs={1600}
-          activateOnInteraction
-          deferInteractionActivationUntilNextPaint
         >
-          <Suspense
-            fallback={
-              <StorefrontSemanticFooterFallback
-                basePath={basePath}
-                merchant={merchant}
-              />
-            }
-          >
-            <StorefrontDeferredFooterChrome
-              basePath={basePath}
-              merchant={merchant}
-            />
-          </Suspense>
-        </DeferredShellFeature>
-      </>
+          <StorefrontDeferredFooterChrome
+            basePath={basePath}
+            merchant={merchant}
+          />
+        </Suspense>
+      </DeferredShellFeature>
     );
   }
 

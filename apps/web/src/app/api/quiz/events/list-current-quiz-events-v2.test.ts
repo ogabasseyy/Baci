@@ -65,7 +65,10 @@ describe('listCurrentQuizEventsV2', () => {
         offset === 0
           ? {
               data: appQuizEventsResponse(
-                [appQuizEvent({ id: id(1), status: 'completed' })],
+                [
+                  appQuizEvent({ id: id(1), status: 'scheduled' }),
+                  appQuizEvent({ id: id(3), status: 'completed' }),
+                ],
                 { hasMore: true, nextOffset: 50, offset }
               ),
               error: null,
@@ -83,13 +86,29 @@ describe('listCurrentQuizEventsV2', () => {
       const result = await listCurrentQuizEventsV2(supabase, MERCHANT_ID);
 
       expect(result.ok && result.events.map((event) => event.id)).toEqual([
+        id(1),
         id(2),
       ]);
     });
 
+    it('stops at the first page of completed history instead of scanning it all', async () => {
+      const { rpc, supabase } = client((offset) => ({
+        data: appQuizEventsResponse(
+          [appQuizEvent({ id: id(4), status: 'completed' })],
+          { hasMore: true, nextOffset: offset + 50, offset }
+        ),
+        error: null,
+      }));
+
+      const result = await listCurrentQuizEventsV2(supabase, MERCHANT_ID);
+
+      expect(rpc).toHaveBeenCalledTimes(1);
+      expect(result.ok && result.events).toEqual([]);
+    });
+
     it('fails closed after twenty pages instead of returning a partial list', async () => {
       const { rpc, supabase } = client((offset) => ({
-        data: appQuizEventsResponse([], {
+        data: appQuizEventsResponse([appQuizEvent({ id: id(offset + 5) })], {
           hasMore: true,
           nextOffset: offset + 50,
           offset,

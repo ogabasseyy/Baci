@@ -13,6 +13,13 @@ const PAGE_SIZE = 50;
 // client gets every joinable quiz in one request.
 const MAX_PAGES = 20;
 
+function isJoinable(event: QuizV2Event) {
+  return (
+    event.mode === 'live' &&
+    (event.status === 'active' || event.status === 'scheduled')
+  );
+}
+
 export type CurrentQuizEventsResult =
   | { events: QuizV2Event[]; ok: true; serverNow: string }
   | { error: unknown; ok: false };
@@ -66,6 +73,10 @@ export async function listCurrentQuizEventsV2(
         error: new Error('Quiz listing cursor did not advance'),
         ok: false,
       };
+    } else if (!parsed.data.events.some(isJoinable)) {
+      // Newest-first: a page with nothing joinable is completed history, and
+      // live windows last minutes, so nothing joinable is older.
+      offset = null;
     } else {
       offset = pagination.nextOffset;
     }
@@ -83,11 +94,7 @@ export async function listCurrentQuizEventsV2(
     };
   }
   return {
-    events: events.filter(
-      (event) =>
-        event.mode === 'live' &&
-        (event.status === 'active' || event.status === 'scheduled')
-    ),
+    events: events.filter(isJoinable),
     ok: true,
     serverNow,
   };

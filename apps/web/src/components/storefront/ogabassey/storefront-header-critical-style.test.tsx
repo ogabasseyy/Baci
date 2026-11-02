@@ -34,6 +34,7 @@ it('anchors sticky header actions on mobile without emitting mobile bottom-foote
   expect(navbarValues.top).toBe('0');
   expect(actionValues.display).toBe('flex');
   expect(actionValues.order).toBe('2');
+  expect(actionValues.position).toBe('relative');
   expect(hasMobileFooterRule).toBe(false);
 });
 

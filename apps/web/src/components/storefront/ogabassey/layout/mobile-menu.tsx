@@ -1,86 +1,27 @@
 'use client';
 
-import {
-  Crown,
-  FileText,
-  Heart,
-  HelpCircle,
-  Home,
-  LayoutGrid,
-  MapPin,
-  MessageSquare,
-  Newspaper,
-  Package,
-  RefreshCw,
-  ScanBarcode,
-  ShoppingBag,
-  Star,
-  User,
-  Wallet,
-  Wrench,
-  X,
-} from 'lucide-react';
+import { X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type React from 'react';
-import { useEffect, useRef } from 'react';
 import { useMerchantSafe } from '@/hooks/merchant/use-merchant';
 import { asRoute } from '@/lib/routes';
 import { Logo } from './logo';
+import {
+  MOBILE_MENU_ACCOUNT_ITEMS,
+  MOBILE_MENU_SHOP_ITEMS,
+  MOBILE_MENU_SUPPORT_ITEMS,
+  type MobileMenuItem,
+  resolveActiveMobileMenuPath,
+  resolveMobileMenuBasePath,
+} from './mobile-menu-routes';
+import { useMobileMenuDialog } from './use-mobile-menu-dialog';
 
 export interface MobileMenuProps {
   isOpen: boolean;
   onClose: () => void;
   logo?: string;
   storeSlug?: string;
-}
-
-interface MobileMenuItem {
-  label: string;
-  icon: React.ElementType;
-  path: string;
-}
-
-const KNOWN_TOP_LEVEL_ROUTES = new Set([
-  'about',
-  'account',
-  'blog',
-  'cart',
-  'checkout',
-  'contact',
-  'faq',
-  'imei-check',
-  'member-status',
-  'pages',
-  'privacy',
-  'products',
-  'receipts',
-  'repairs',
-  'reviews',
-  'swap',
-  'terms',
-  'track-order',
-  'wallet',
-  'wishlist',
-]);
-
-function resolveMobileMenuBasePath(
-  propStoreSlug: string | undefined,
-  merchantBasePath: string | undefined,
-  pathname: string | null
-): string {
-  const candidate = propStoreSlug ?? merchantBasePath;
-  if (candidate !== undefined) {
-    const trimmed = candidate.trim().replace(/^\/+|\/+$/g, '');
-    return trimmed ? `/${trimmed}` : '';
-  }
-
-  const firstSegment = pathname?.split('/').filter(Boolean)[0] || '';
-  if (!firstSegment || KNOWN_TOP_LEVEL_ROUTES.has(firstSegment)) {
-    return '';
-  }
-
-  return `/${firstSegment}`;
 }
 
 export const MobileMenu: React.FC<MobileMenuProps> = ({
@@ -90,94 +31,10 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 }) => {
   const pathname = usePathname();
   const merchantContext = useMerchantSafe();
-  const dialogRef = useRef<HTMLDivElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const triggerElementRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (isOpen) {
-      triggerElementRef.current = document.activeElement as HTMLElement | null;
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    return () => {
-      triggerElementRef.current?.focus();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (isOpen) {
-      closeButtonRef.current?.focus();
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-
-      if (event.key === 'Tab') {
-        const dialog = dialogRef.current;
-        if (!dialog) {
-          return;
-        }
-
-        const focusableElements = dialog.querySelectorAll<HTMLElement>(
-          'button:not([disabled]):not([tabindex="-1"]), [href]:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])'
-        );
-
-        if (focusableElements.length === 0) {
-          event.preventDefault();
-          return;
-        }
-
-        const firstElement = focusableElements[0];
-        const lastElement = focusableElements[focusableElements.length - 1];
-
-        if (event.shiftKey) {
-          if (
-            document.activeElement === firstElement ||
-            !dialog.contains(document.activeElement)
-          ) {
-            event.preventDefault();
-            lastElement.focus();
-          }
-        } else {
-          if (
-            document.activeElement === lastElement ||
-            !dialog.contains(document.activeElement)
-          ) {
-            event.preventDefault();
-            firstElement.focus();
-          }
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  const { dialogRef, closeButtonRef } = useMobileMenuDialog({
+    isOpen,
+    onClose,
+  });
 
   if (!isOpen) {
     return null;
@@ -198,55 +55,26 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
     return `${basePath}${path}`;
   };
 
-  const matchesPath = (path: string) => {
-    const fullPath = buildHref(path);
-    if (path === '/') {
-      return pathname === fullPath || pathname === `${fullPath}/`;
-    }
-    return pathname === fullPath || Boolean(pathname?.startsWith(`${fullPath}/`));
-  };
-
-  const shopItems: MobileMenuItem[] = [
-    { label: 'Home', icon: Home, path: '/' },
-    { label: 'All Products', icon: LayoutGrid, path: '/products' },
-    { label: 'Swap / Trade-in', icon: RefreshCw, path: '/swap' },
-    { label: 'IMEI Checker', icon: ScanBarcode, path: '/imei-check' },
-    { label: 'Repairs', icon: Wrench, path: '/repairs' },
-    { label: 'Blog', icon: Newspaper, path: '/blog' },
+  const allItems = [
+    ...MOBILE_MENU_SHOP_ITEMS,
+    ...MOBILE_MENU_ACCOUNT_ITEMS,
+    ...MOBILE_MENU_SUPPORT_ITEMS,
   ];
 
-  const accountItems: MobileMenuItem[] = [
-    { label: 'My Account', icon: User, path: '/account' },
-    { label: 'Wallet', icon: Wallet, path: '/wallet' },
-    { label: 'Saved Items', icon: Heart, path: '/wishlist' },
-    { label: 'Orders', icon: ShoppingBag, path: '/account/orders' },
-    { label: 'Member Status', icon: Crown, path: '/member-status' },
-    { label: 'Receipts', icon: FileText, path: '/receipts' },
-    { label: 'Address Book', icon: MapPin, path: '/account/addresses' },
-    { label: 'My Reviews', icon: Star, path: '/reviews' },
-  ];
-
-  const supportItems: MobileMenuItem[] = [
-    { label: 'Track Order', icon: Package, path: '/track-order' },
-    { label: 'Help & Support', icon: HelpCircle, path: '/faq' },
-    { label: 'Contact Us', icon: MessageSquare, path: '/contact' },
-  ];
-
-  const activePath = [...shopItems, ...accountItems, ...supportItems]
-    .map((item) => item.path)
-    .filter(matchesPath)
-    .sort((a, b) => b.length - a.length)[0];
-
-  const isItemActive = (path: string) => path === activePath;
+  const activePath = resolveActiveMobileMenuPath({
+    items: allItems,
+    pathname,
+    buildHref,
+  });
 
   const renderSection = (title: string, items: MobileMenuItem[]) => (
-    <div className="px-4 mb-5 last:mb-0">
-      <h3 className="text-xs font-bold text-store-background-text/60 uppercase tracking-widest mb-2 px-1">
+    <div className="mb-5 px-4 last:mb-0">
+      <h3 className="mb-2 px-1 font-bold text-store-background-text/60 text-xs uppercase tracking-widest">
         {title}
       </h3>
       <ul className="space-y-1">
         {items.map((item) => {
-          const isActive = isItemActive(item.path);
+          const isActive = item.path === activePath;
           return (
             <li key={item.path}>
               <Link
@@ -254,10 +82,10 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                 prefetch={false}
                 onClick={onClose}
                 aria-current={isActive ? 'page' : undefined}
-                className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-colors text-sm group ${
+                className={`group flex w-full items-center justify-between rounded-xl p-2.5 text-sm transition-colors ${
                   isActive
-                    ? 'bg-store-primary/10 text-store-primary font-bold'
-                    : 'hover:bg-store-background-text/5 text-store-background-text/80 font-medium'
+                    ? 'bg-store-primary/10 font-bold text-store-primary'
+                    : 'font-medium text-store-background-text/80 hover:bg-store-background-text/5'
                 }`}
               >
                 <span className="flex items-center gap-3">
@@ -295,19 +123,22 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
         type="button"
         aria-label="Dismiss menu backdrop"
         tabIndex={-1}
-        className="absolute inset-0 border-0 bg-black/60 p-0 backdrop-blur-xs animate-in fade-in duration-200"
+        className="fade-in absolute inset-0 animate-in border-0 bg-black/60 p-0 duration-200 backdrop-blur-xs"
         onClick={onClose}
       />
 
       {/* Sidebar */}
-      <div className="absolute inset-y-0 left-0 w-[85%] max-w-[320px] bg-store-background text-store-background-text shadow-2xl animate-in slide-in-from-left duration-300 flex flex-col border-r border-store-border">
-        <div className="px-4 py-4 border-b border-store-border flex items-center justify-between">
-          <Logo className="h-8 w-auto" color="black" />
+      <div className="slide-in-from-left absolute inset-y-0 left-0 flex w-[85%] max-w-[320px] flex-col border-store-border border-r bg-store-background text-store-background-text shadow-2xl animate-in duration-300">
+        <div className="flex items-center justify-between border-store-border border-b px-4 py-4">
+          <Logo
+            className="h-8 w-auto text-store-background-text"
+            color="current"
+          />
           <button
             type="button"
             ref={closeButtonRef}
             onClick={onClose}
-            className="p-2 hover:bg-store-background-text/10 rounded-full text-store-background-text/70 hover:text-store-background-text transition-colors"
+            className="rounded-full p-2 text-store-background-text/70 transition-colors hover:bg-store-background-text/10 hover:text-store-background-text"
             aria-label="Close menu"
           >
             <X size={20} aria-hidden="true" />
@@ -316,13 +147,13 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 
         <nav
           aria-label="Mobile storefront navigation"
-          className="flex-1 overflow-y-auto py-4 hide-scrollbar"
+          className="hide-scrollbar flex-1 overflow-y-auto py-4"
         >
-          {renderSection('Shop & Services', shopItems)}
+          {renderSection('Shop & Services', MOBILE_MENU_SHOP_ITEMS)}
 
           {categories.length > 0 && (
-            <div className="px-4 mb-5">
-              <h3 className="text-xs font-bold text-store-background-text/60 uppercase tracking-widest mb-2 px-1">
+            <div className="mb-5 px-4">
+              <h3 className="mb-2 px-1 font-bold text-store-background-text/60 text-xs uppercase tracking-widest">
                 Categories
               </h3>
               <ul className="flex flex-wrap gap-1.5 px-1">
@@ -332,7 +163,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                       href={asRoute(buildHref(`/${category.slug}`))}
                       prefetch={false}
                       onClick={onClose}
-                      className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-store-background-text/10 text-store-background-text/80 hover:bg-store-primary/10 hover:text-store-primary transition-colors"
+                      className="inline-flex items-center rounded-full bg-store-background-text/10 px-3 py-1.5 font-medium text-store-background-text/80 text-xs transition-colors hover:bg-store-primary/10 hover:text-store-primary"
                     >
                       {category.name}
                     </Link>
@@ -342,21 +173,21 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
             </div>
           )}
 
-          {renderSection('Account & Wallet', accountItems)}
-          {renderSection('Support', supportItems)}
+          {renderSection('Account & Wallet', MOBILE_MENU_ACCOUNT_ITEMS)}
+          {renderSection('Support', MOBILE_MENU_SUPPORT_ITEMS)}
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-store-border bg-store-background-text/5">
+        <div className="border-store-border border-t bg-store-background-text/5 p-4">
           <Link
             href={asRoute(buildHref('/account/login'))}
             prefetch={false}
             onClick={onClose}
-            className="block w-full text-center bg-store-primary text-store-primary-text font-bold py-3.5 rounded-xl shadow-lg active:scale-95 transition-transform"
+            className="block w-full rounded-xl bg-store-primary py-3.5 text-center font-bold text-store-primary-text shadow-lg transition-transform active:scale-95"
           >
             Login / Register
           </Link>
-          <p className="text-center text-xs text-store-background-text/60 mt-3">
+          <p className="mt-3 text-center text-store-background-text/60 text-xs">
             &copy; {businessName}
           </p>
         </div>

@@ -137,7 +137,9 @@ describe('MobileMenu', () => {
     trigger.focus();
     expect(document.activeElement).toBe(trigger);
 
-    const { unmount } = render(<MobileMenu isOpen={true} onClose={vi.fn()} />);
+    const { rerender, unmount } = render(
+      <MobileMenu isOpen={true} onClose={vi.fn()} />
+    );
 
     const dialog = screen.getByRole('dialog', { name: /mobile menu/i });
     expect(dialog).toHaveAttribute('id', 'mobile-menu');
@@ -159,10 +161,12 @@ describe('MobileMenu', () => {
     fireEvent.keyDown(document, { key: 'Tab', shiftKey: false });
     expect(document.activeElement).toBe(closeButton);
 
-    unmount();
+    // Closing via rerender (isOpen: true -> false) restores focus to trigger
+    rerender(<MobileMenu isOpen={false} onClose={vi.fn()} />);
     expect(document.body.style.overflow).toBe('');
     expect(document.activeElement).toBe(trigger);
 
+    unmount();
     document.body.removeChild(trigger);
   });
 });

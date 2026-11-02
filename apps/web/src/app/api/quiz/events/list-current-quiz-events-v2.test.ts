@@ -118,19 +118,32 @@ describe('listCurrentQuizEventsV2', () => {
       ]);
     });
 
-    it('stops at the first page of completed history instead of scanning it all', async () => {
-      const { rpc, supabase } = client((offset) => ({
-        data: appQuizEventsResponse(
-          [appQuizEvent({ id: id(4), status: 'completed' })],
-          { hasMore: true, nextOffset: offset + 50, offset }
-        ),
-        error: null,
-      }));
+    it('keeps scanning past a page of ended events to find an older live quiz', async () => {
+      const { rpc, supabase } = client((offset) =>
+        offset === 0
+          ? {
+              data: appQuizEventsResponse(
+                [appQuizEvent({ id: id(4), status: 'completed' })],
+                { hasMore: true, nextOffset: 50, offset }
+              ),
+              error: null,
+            }
+          : {
+              data: appQuizEventsResponse([appQuizEvent({ id: id(8) })], {
+                hasMore: false,
+                nextOffset: null,
+                offset,
+              }),
+              error: null,
+            }
+      );
 
       const result = await listCurrentQuizEventsV2(supabase, MERCHANT_ID);
 
-      expect(rpc).toHaveBeenCalledTimes(1);
-      expect(result.ok && result.events).toEqual([]);
+      expect(rpc).toHaveBeenCalledTimes(2);
+      expect(result.ok && result.events.map((event) => event.id)).toEqual([
+        id(8),
+      ]);
     });
 
     it('fails closed after twenty pages instead of returning a partial list', async () => {

@@ -13,10 +13,6 @@ const PAGE_SIZE = 50;
 // client gets every joinable quiz in one request.
 const MAX_PAGES = 20;
 
-function isOpenOrUpcoming(event: QuizV2Event) {
-  return event.status === 'active' || event.status === 'scheduled';
-}
-
 function isJoinable(event: QuizV2Event) {
   return (
     event.mode === 'live' &&
@@ -77,11 +73,6 @@ export async function listCurrentQuizEventsV2(
         error: new Error('Quiz listing cursor did not advance'),
         ok: false,
       };
-    } else if (!parsed.data.events.some(isOpenOrUpcoming)) {
-      // Newest-first: a page with no active or scheduled event (of any mode,
-      // so test-mode rows cannot end the scan early) is completed history, and
-      // live windows last minutes, so nothing joinable is older.
-      offset = null;
     } else {
       offset = pagination.nextOffset;
     }

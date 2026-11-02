@@ -36,8 +36,8 @@ export const OGABASSEY_HOME_HEADER_CHROME_CRITICAL_CSS = `
 .ogabassey-navbar-search{display:block;position:relative;width:100%}
 .ogabassey-navbar-search .ogabassey-navbar-search__input,.ogabassey-navbar-search input{background:var(--ogabassey-surface);border:0;border-radius:0.875rem;box-sizing:border-box;color:var(--store-foreground,var(--ogabassey-surface-text));display:block;font-size:0.9375rem;height:2.75rem;outline:0;padding:0 1rem 0 2.75rem;width:100%}
 .ogabassey-navbar-search__icon{color:color-mix(in srgb,var(--store-foreground,var(--ogabassey-surface-text,#111827)) 38%,transparent);height:1.25rem;left:1rem;pointer-events:none;position:absolute;top:50%;translate:0 -50%;width:1.25rem;z-index:20}
-.ogabassey-navbar__desktop-actions{align-items:center;display:flex;flex:0 0 auto;gap:1rem;order:2;position:relative}
-.ogabassey-navbar__icon-link{align-items:center;color:color-mix(in srgb,var(--ogabassey-shell-text) 80%,transparent);display:flex;justify-content:center;position:relative;text-decoration:none}
+.ogabassey-navbar__desktop-actions{align-items:center;display:flex;flex:0 0 auto;gap:0.5rem;order:2;position:relative}
+.ogabassey-navbar__icon-link{align-items:center;color:color-mix(in srgb,var(--ogabassey-shell-text) 80%,transparent);display:flex;height:2.75rem;justify-content:center;position:relative;text-decoration:none;width:2.75rem}
 .ogabassey-navbar__cart-badge{position:absolute;transform:scale(0)}
 .ogabassey-navbar__cart-badge[data-visible="true"]{transform:scale(1)}
 .ogabassey-navbar-secondary{background:var(--ogabassey-surface);border-bottom:1px solid var(--ogabassey-border);display:none;position:relative;z-index:10}
@@ -51,6 +51,7 @@ export const OGABASSEY_HOME_HEADER_CHROME_CRITICAL_CSS = `
 .ogabassey-navbar__search-wrap{flex:1 1 auto;margin-left:auto;margin-right:auto;max-width:42rem;order:0;width:auto}
 .ogabassey-navbar-search .ogabassey-navbar-search__input,.ogabassey-navbar-search input{height:3rem}
 .ogabassey-navbar__desktop-actions{align-items:center;display:flex;flex:0 0 auto;gap:1.25rem;order:0}
+.ogabassey-navbar__icon-link{height:auto;width:auto}
 .ogabassey-navbar-secondary{display:block}
 }
 }`.trim();

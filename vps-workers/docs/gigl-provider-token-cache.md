@@ -10,7 +10,7 @@ If the worker reports `token cache unavailable`, tracking continues without reus
 
 The cache is bound to the configured provider URL, email, and password. Changing any of these invalidates the cached record. Tokens past their recorded expiry are not reused, and provider rejection continues through the existing refresh path. Do not put the cache file or its contents in logs, diagnostics, support bundles, or source control.
 
-The cache encrypts the token with AES-256-GCM using a per-record random salt and a key derived from the provider credentials with scrypt. An exposed record still permits offline password guesses, so treat the whole directory as password-equivalent. Exclude it, including temporary or `.stale` files left by interruption, from backups and diagnostic exports. Restrict access to the worker account, and rotate the provider password as well as the token if a record is exposed.
+The cache encrypts the token with AES-256-GCM using a per-record random salt and a key derived from the provider credentials with scrypt. An exposed record still permits offline password guesses, so treat the whole directory as password-equivalent. Exclude it, including hidden `.<uuid>.tmp` files left by interruption, from backups and diagnostic exports. Restrict access to the worker account, and rotate the provider password as well as the token if a record is exposed.
 
 The worker synchronizes the temporary token file before replacement and the cache directory after replacement or deletion. A synchronization failure disables that cache operation and emits the bounded warning; actual power-loss durability still depends on the filesystem and storage honoring synchronization requests.
 

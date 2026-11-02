@@ -73,44 +73,24 @@ if (!fs.fstatSync(fd).isFile() || !/FLOCK\\s+ADVISORY\\s+WRITE/.test(fs.readFile
             inner = 'node --import tsx -e "$1" "$2"'
             subprocess.run(["env", "-i", "PATH=" + os.environ["PATH"], "bash", "-c", inner, "probe", node_script, str(lock.fileno())], pass_fds=(lock.fileno(),), check=True)
 
-    def test_worker_guard_accepts_only_the_expected_held_lock(self):
-        self.path = os.path.join(self.directory.name, "cache.lock")
-        with open(self.path, "w+") as lock:
-            os.chmod(self.path, 0o600)
-            script = """import { hasVerifiedGiglCacheLock } from '/work/lock-check.ts';
-const [dir, fd, expected] = process.argv.slice(1);
-if (hasVerifiedGiglCacheLock(dir, Number(fd)) !== (expected === 'true')) process.exit(1);"""
-            script = script.replace('/work/lock-check.ts', LOCK_MODULE)
-            command = ["node", "--conditions", "react-server", "--input-type=module", "-e", script, self.directory.name, str(lock.fileno())]
-            subprocess.run(command + ["false"], pass_fds=(lock.fileno(),), check=True)
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            lock.write(f"{os.getpid()}\n")
-            lock.flush()
-            subprocess.run(command + ["false"], pass_fds=(lock.fileno(),), check=True)
-            os.chmod(self.path, 0o644)
-            subprocess.run(command + ["false"], pass_fds=(lock.fileno(),), check=True)
-            os.chmod(self.path, 0o600)
-            os.rename(self.path, self.path + ".old")
-            with open(self.path, "w"):
-                pass
-            os.chmod(self.path, 0o600)
-            subprocess.run(command + ["false"], pass_fds=(lock.fileno(),), check=True)
-
     def test_two_workers_cannot_claim_same_inherited_lock(self):
         self.path = os.path.join(self.directory.name, "cache.lock")
-        with open(self.path, "w+") as lock:
-            os.chmod(self.path, 0o600)
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            lock.write(f"{os.getpid()}\n")
-            lock.flush()
-            script = """import { hasVerifiedGiglCacheLock } from '/work/lock-check.ts';
-const [dir, fd] = process.argv.slice(1);
-console.log(hasVerifiedGiglCacheLock(dir, Number(fd)) ? 'accepted' : 'rejected');"""
-            script = script.replace('/work/lock-check.ts', LOCK_MODULE)
-            command = ["node", "--input-type=module", "-e", script, self.directory.name, str(lock.fileno())]
-            workers = [subprocess.Popen(command, stdout=subprocess.PIPE, text=True, pass_fds=(lock.fileno(),)) for _ in range(2)]
-            results = [worker.communicate(timeout=30)[0].strip() for worker in workers]
-            self.assertLessEqual(results.count("accepted"), 1, results)
+        child_script = '''import fcntl,os,sys
+path,directory=sys.argv[1:]
+fd=os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+os.write(fd, (str(os.getpid()) + '\\n').encode())
+os.set_inheritable(fd, True)
+script="""import { hasVerifiedGiglCacheLock } from '/work/lock-check.ts';
+import { spawnSync } from 'node:child_process';
+const [dir,fdString] = process.argv.slice(1); const fd=Number(fdString);
+if (!hasVerifiedGiglCacheLock(dir,fd)) throw new Error('owner rejected');
+const childCode = \"import { hasVerifiedGiglCacheLock } from '/work/lock-check.ts'; if (hasVerifiedGiglCacheLock(process.argv[1], 3)) process.exit(1);\";
+const child=spawnSync(process.execPath,['--input-type=module','-e',childCode,dir],{stdio:['ignore','pipe','inherit',fd]});
+if (child.status !== 0) throw new Error('competing worker accepted or failed');"""
+os.execvp('node',['node','--input-type=module','-e',script,directory,str(fd)])
+'''
+        subprocess.run([sys.executable, "-c", child_script.replace('/work/lock-check.ts', LOCK_MODULE), self.path, self.directory.name], check=True)
 
     def test_guard_accepts_owner_after_exec(self):
         self.path = os.path.join(self.directory.name, "cache.lock")

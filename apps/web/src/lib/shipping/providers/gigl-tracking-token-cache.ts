@@ -276,8 +276,10 @@ export function createGiglTrackingTokenCache({
 
   async function clear(): Promise<void> {
     if (!isLocked()) throw new Error('Cache lock unavailable');
-    const file = join(await validateDirectory(false), 'token.json');
+    const resolvedDirectory = await validateDirectory(false);
+    const file = join(resolvedDirectory, 'token.json');
     await validateExistingFile(file);
+    await removeOrphanedTemporaryFiles(resolvedDirectory);
     if (!isLocked()) throw new Error('Cache lock unavailable');
     await rm(file, { force: true });
     await syncDirectory(dirname(file));

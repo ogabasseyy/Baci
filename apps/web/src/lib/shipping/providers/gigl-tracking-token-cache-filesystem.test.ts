@@ -42,6 +42,23 @@ afterEach(async () => {
 });
 
 describe('GIGL tracking token cache filesystem safety', () => {
+  it('removes owned orphan files when clearing a token', async () => {
+    const { directory } = await fixture();
+    const cache = createGiglTrackingTokenCache({
+      directory,
+      credentials,
+      now: () => now,
+      isLocked: () => true,
+    });
+    await cache.save(token);
+    const orphan = join(directory, '.11111111-1111-4111-8111-111111111111.tmp');
+    await writeFile(orphan, 'ciphertext', { mode: 0o600 });
+    await cache.clear();
+    await expect(lstat(orphan)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(lstat(join(directory, 'token.json'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
   it('removes only owned private orphaned temporary files under the lock', async () => {
     const { directory, root } = await fixture();
     await mkdir(directory, { mode: 0o700 });

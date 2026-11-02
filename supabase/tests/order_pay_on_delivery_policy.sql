@@ -144,6 +144,7 @@ SELECT 1 / CASE WHEN NOT has_function_privilege(current_user, 'public.is_storefr
 SELECT set_config('baci.pod_probe_result', 'not_run', true);
 -- Verify the replay role can execute an empty PL/pgSQL block first.
 DO $$ BEGIN NULL; END $$;
+\set ON_ERROR_STOP off
 DO $$
 BEGIN
   BEGIN
@@ -155,6 +156,23 @@ BEGIN
 EXCEPTION WHEN OTHERS OR query_canceled OR assert_failure THEN
   PERFORM set_config('baci.pod_probe_result', SQLSTATE, true);
 END $$;
+\set pod_do_state :SQLSTATE
+\set ON_ERROR_STOP on
+-- BEGIN psql-only safe diagnostic
+\if :ERROR
+ROLLBACK;
+-- Fixed lines report only a known SQLSTATE category through the runner.
+SELECT 1 / CASE WHEN :'pod_do_state' = '42501' THEN 0 ELSE 1 END;
+SELECT 1 / CASE WHEN :'pod_do_state' = 'P0001' THEN 0 ELSE 1 END;
+SELECT 1 / CASE WHEN :'pod_do_state' = '57014' THEN 0 ELSE 1 END;
+SELECT 1 / CASE WHEN :'pod_do_state' = '42601' THEN 0 ELSE 1 END;
+SELECT 1 / CASE WHEN :'pod_do_state' = '42P01' THEN 0 ELSE 1 END;
+SELECT 1 / CASE WHEN :'pod_do_state' = '42883' THEN 0 ELSE 1 END;
+SELECT 1 / CASE WHEN :'pod_do_state' = '25006' THEN 0 ELSE 1 END;
+SELECT 1 / CASE WHEN :'pod_do_state' = 'XX000' THEN 0 ELSE 1 END;
+SELECT 1 / 0;
+\endif
+-- END psql-only safe diagnostic
 RESET ROLE;
 -- Distinct fixed lines distinguish an unexpected success, an application
 -- exception, and other errors in the replay runner's sanitized output.

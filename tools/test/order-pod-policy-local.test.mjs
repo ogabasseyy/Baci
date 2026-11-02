@@ -116,7 +116,12 @@ test('POD persistence policy and concurrent flag revocation', async () => {
       readFileSync(
         join(repository, 'supabase/tests/order_pay_on_delivery_policy.sql'),
         'utf8'
-      ).replace(/^\\set VERBOSITY verbose\n/, '')
+      )
+        .replace(
+          /-- BEGIN psql-only safe diagnostic[\s\S]*?-- END psql-only safe diagnostic\n/,
+          ''
+        )
+        .replace(/^\\set .*\n/gm, '')
     );
     // Match the replay runner's psql execution: it sends statements separately
     // rather than the single multi-statement query used by the pg client.
@@ -143,6 +148,53 @@ test('POD persistence policy and concurrent flag revocation', async () => {
       { encoding: 'utf8', timeout: 30000 }
     );
     assert.equal(replay.status, 0, replay.stderr);
+    // Prove the psql-only diagnostic fails at the expected fixed line when
+    // the anonymous DO itself raises, without logging its error message.
+    const suite = readFileSync(
+      join(repository, 'supabase/tests/order_pay_on_delivery_policy.sql'),
+      'utf8'
+    );
+    const start = suite.indexOf(
+      'DO $$\nBEGIN\n  BEGIN\n    PERFORM public.is_storefront_pod_order_idempotency_hash'
+    );
+    const end = suite.indexOf('END $$;', start) + 'END $$;'.length;
+    assert.ok(start >= 0 && end > start);
+    const injected = `${suite.slice(0, start)}DO $$ BEGIN RAISE EXCEPTION USING ERRCODE='42501', MESSAGE='synthetic'; END $$;${suite.slice(end)}`;
+    const expectedLine = injected
+      .slice(
+        0,
+        injected.indexOf("SELECT 1 / CASE WHEN :'pod_do_state' = '42501'")
+      )
+      .split('\n').length;
+    const rejected = spawnSync(
+      join(bin, 'psql'),
+      [
+        '-X',
+        '-w',
+        '-v',
+        'ON_ERROR_STOP=1',
+        '-h',
+        socket,
+        '-p',
+        '55483',
+        '-U',
+        'postgres',
+        '-d',
+        'postgres',
+        '-f',
+        '-',
+      ],
+      { encoding: 'utf8', input: injected, timeout: 30000 }
+    );
+    assert.notEqual(
+      rejected.status,
+      0,
+      'injected DO failure must fail the suite'
+    );
+    assert.match(
+      rejected.stderr,
+      new RegExp(`psql:<stdin>:${expectedLine}: ERROR:`)
+    );
     const merchant = '36700000-0000-4000-8000-000000000004';
     await admin.query(
       "SELECT set_config('request.jwt.claim.role','service_role',false)"

@@ -8,6 +8,9 @@ CREATE SCHEMA private;
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$
   SELECT NULLIF(current_setting('request.jwt.claim.sub', true), '')::uuid
 $$;
+CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
+  SELECT coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb
+$$;
 CREATE FUNCTION auth.role() RETURNS text LANGUAGE sql STABLE AS $$
   SELECT NULLIF(current_setting('request.jwt.claim.role', true), '')
 $$;
@@ -17,6 +20,9 @@ GRANT USAGE ON SCHEMA private TO service_role;
 
 CREATE TYPE public.staff_role AS ENUM ('sales_rep', 'manager');
 CREATE TABLE public.merchants (id uuid PRIMARY KEY, user_id uuid);
+CREATE TABLE public.merchant_feature_settings (
+  merchant_id uuid PRIMARY KEY, pay_on_delivery_enabled boolean
+);
 CREATE TABLE public.staff_members (
   id uuid PRIMARY KEY, merchant_id uuid, user_id uuid,
   role public.staff_role, permissions jsonb, status text
@@ -26,6 +32,7 @@ CREATE TABLE public.customers (id uuid PRIMARY KEY, user_id uuid);
 CREATE TABLE public.orders (
   id uuid PRIMARY KEY, merchant_id uuid, customer_id uuid, source text,
   payment_method text, payment_status text, shipping_status text,
+  checkout_idempotency_key text, checkout_request_hash text,
   shipment_id uuid, tracking_number text, shipment_booking_lock_token uuid,
   shipment_booking_started_at timestamptz
 );

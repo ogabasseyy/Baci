@@ -115,6 +115,10 @@ $$;
 -- Preserve no-row semantics and payment-state guards after the repair.
 UPDATE public.orders SET payment_method = 'uba_redvault'
 WHERE id = '40000000-0000-4000-8000-000000000005';
+-- This scenario intentionally exercises an enabled POD payment rail.
+INSERT INTO public.merchant_feature_settings(merchant_id,pay_on_delivery_enabled)
+SELECT merchant_id,true FROM public.orders WHERE id='40000000-0000-4000-8000-000000000006'
+ON CONFLICT(merchant_id) DO UPDATE SET pay_on_delivery_enabled=true;
 UPDATE public.orders SET payment_method = 'pod', payment_status = 'unpaid'
 WHERE id = '40000000-0000-4000-8000-000000000006';
 UPDATE public.orders SET payment_method = 'uba_redvault', payment_status = 'unpaid'

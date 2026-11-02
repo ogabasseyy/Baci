@@ -172,7 +172,8 @@ BEGIN
     END LOOP;
     FOREACH v_table IN ARRAY ARRAY['public.customer_savings_goals',
       'piggyvest_savings_ledger.operations', 'piggyvest_savings_ledger.postings',
-      'piggyvest_primary.paid_interest_receipts', 'piggyvest_primary.paid_interest_reversals'] LOOP
+      'piggyvest_primary.paid_interest_receipts', 'piggyvest_primary.paid_interest_reversals',
+      'piggyvest_primary.integrations'] LOOP
       PERFORM pg_temp.check(
         pg_catalog.has_table_privilege(v_owner, pg_catalog.to_regclass(v_table), 'SELECT')
           AND (SELECT role.rolsuper OR role.rolbypassrls OR NOT relation.relrowsecurity

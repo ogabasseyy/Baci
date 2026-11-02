@@ -20,6 +20,11 @@ import { useSheetExitPresence } from '@/hooks/useSheetExitPresence';
 import { logOrderStatusDebug } from './order-status-debug';
 import { getStatusDrawerSnapPoints } from './order-status-drawer-snap-points';
 
+// Safety net only: the drawer is released by its own close callback. Gorhom's
+// close spring from the tallest snap point outlasts the default sheet bound,
+// so this one waits longer before forcing the release.
+export const ORDER_STATUS_DRAWER_EXIT_FALLBACK_MS = 1500;
+
 interface OrderStatusDrawerFrameProps {
   children: ReactNode;
   closeLabel: string;
@@ -60,7 +65,11 @@ export function OrderStatusDrawerFrame({
   });
   const visibleRef = useRef(visible);
   const sheetRef = useRef<BottomSheet>(null);
-  const { finishExit, isPresented } = useSheetExitPresence(visible);
+  const { finishExit, isPresented } = useSheetExitPresence(
+    visible,
+    undefined,
+    ORDER_STATUS_DRAWER_EXIT_FALLBACK_MS
+  );
 
   useEffect(() => {
     visibleRef.current = visible;

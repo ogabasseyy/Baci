@@ -168,6 +168,19 @@ describe('ShipmentFlowSheetPresence', () => {
     expect(screen.queryByTestId('ship-modal')).not.toBeInTheDocument();
   });
 
+  it('keeps the modal when the slide-out is interrupted instead of finished', () => {
+    const { rerender } = renderSheet(true);
+    rerender(
+      <ShipmentFlowSheetPresence onRequestClose={vi.fn()} visible={false}>
+        <p>Fulfillment Details</p>
+      </ShipmentFlowSheetPresence>
+    );
+
+    act(() => mocks.onExit?.(false));
+
+    expect(screen.getByTestId('ship-modal')).toBeInTheDocument();
+  });
+
   it('renders nothing when the sheet has not been opened', () => {
     renderSheet(false);
 

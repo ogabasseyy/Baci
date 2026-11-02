@@ -58,6 +58,24 @@ describe('useSheetExitPresence', () => {
     expect(result.current.isPresented).toBe(false);
   });
 
+  it('waits for a sheet-specific fallback before forcing the release', () => {
+    const { rerender, result } = renderHook(
+      ({ visible }) => useSheetExitPresence(visible, undefined, 1500),
+      { initialProps: { visible: true } }
+    );
+    rerender({ visible: false });
+
+    act(() => {
+      vi.advanceTimersByTime(SHEET_EXIT_FALLBACK_MS);
+    });
+    expect(result.current.isPresented).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(1500 - SHEET_EXIT_FALLBACK_MS);
+    });
+    expect(result.current.isPresented).toBe(false);
+  });
+
   it('ignores a stale exit callback when the sheet is reopened mid-close', () => {
     const { rerender, result } = renderHook(
       ({ visible }) => useSheetExitPresence(visible),
@@ -107,6 +125,26 @@ describe('useSheetExitPresence', () => {
       });
 
       expect(onDismissed).toHaveBeenCalledOnce();
+    });
+
+    it('reports the previous close once when the sheet reopens before it was reported', () => {
+      const onDismissed = vi.fn();
+      const hook = closeAndRelease(onDismissed);
+
+      hook.rerender({ visible: true });
+      expect(onDismissed).toHaveBeenCalledOnce();
+
+      act(() => {
+        vi.advanceTimersByTime(SHEET_DISMISS_REPORT_MS);
+      });
+      expect(onDismissed).toHaveBeenCalledOnce();
+
+      hook.rerender({ visible: false });
+      act(() => hook.result.current.finishExit());
+      act(() => {
+        vi.advanceTimersByTime(SHEET_DISMISS_REPORT_MS);
+      });
+      expect(onDismissed).toHaveBeenCalledTimes(2);
     });
 
     it('does not report for a sheet that was never opened', () => {

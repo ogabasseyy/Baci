@@ -81,8 +81,10 @@ export function ShipmentFlowSheetPresence({
             entering={SlideInDown.duration(SHEET_OPEN_DURATION_MS)}
             exiting={SlideOutDown.duration(
               SHEET_CLOSE_DURATION_MS
-            ).withCallback(() => {
-              runOnJS(finishExit)();
+            ).withCallback((finished) => {
+              // An interrupted slide is not a finished close; the presence
+              // fallback still releases the modal if nothing completes.
+              if (finished) runOnJS(finishExit)();
             })}
             style={styles.sheetLayer}
           >

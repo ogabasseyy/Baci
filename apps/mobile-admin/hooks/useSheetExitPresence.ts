@@ -1,12 +1,25 @@
-import { useEffect, useRef, useState } from 'react';
+import { type RefObject, useEffect, useRef, useState } from 'react';
 
 // Upper bound for an exit animation to report completion. If the callback is
 // ever missed, the modal is still released so an invisible layer can never
-// keep blocking taps on the screen underneath.
+// keep blocking taps on the screen underneath. Sheets with a longer close
+// animation pass their own bound.
 export const SHEET_EXIT_FALLBACK_MS = 600;
 // iOS reports the native dismissal through the modal's onDismiss; Android has
 // no such event, so the release is reported after this delay at the latest.
 export const SHEET_DISMISS_REPORT_MS = 350;
+
+/** Reports a released sheet once; later calls do nothing until it presents again. */
+function reportRelease(
+  dismissPendingRef: RefObject<boolean>,
+  releasedRef: RefObject<boolean>,
+  onDismissedRef: RefObject<(() => void) | undefined>
+) {
+  if (!dismissPendingRef.current) return;
+  dismissPendingRef.current = false;
+  releasedRef.current = false;
+  onDismissedRef.current?.();
+}
 
 /**
  * Keeps a sheet's modal mounted after `visible` turns false so its exit
@@ -15,12 +28,16 @@ export const SHEET_DISMISS_REPORT_MS = 350;
  */
 export function useSheetExitPresence(
   visible: boolean,
-  onDismissed?: () => void
+  onDismissed?: () => void,
+  exitFallbackMs = SHEET_EXIT_FALLBACK_MS
 ) {
   const [isPresented, setIsPresented] = useState(visible);
   const visibleRef = useRef(visible);
   const onDismissedRef = useRef(onDismissed);
+  // True from presenting until the release is reported.
   const dismissPendingRef = useRef(false);
+  // True once the modal was released but its release not yet reported.
+  const releasedRef = useRef(false);
 
   // Adjust during render so the modal never commits a hidden frame between
   // `visible` flipping and the exit animation starting.
@@ -40,38 +57,39 @@ export function useSheetExitPresence(
 
   useEffect(() => {
     if (isPresented) {
+      // Reopened before the last release was reported: report it now, so
+      // what waited on the previous close runs instead of being held until
+      // (or bundled with) the next one.
+      if (releasedRef.current) {
+        reportRelease(dismissPendingRef, releasedRef, onDismissedRef);
+      }
       dismissPendingRef.current = true;
       return;
     }
-    const timer = setTimeout(() => {
-      if (!dismissPendingRef.current) return;
-      dismissPendingRef.current = false;
-      onDismissedRef.current?.();
-    }, SHEET_DISMISS_REPORT_MS);
+    if (!dismissPendingRef.current) return;
+    releasedRef.current = true;
+    const timer = setTimeout(
+      () => reportRelease(dismissPendingRef, releasedRef, onDismissedRef),
+      SHEET_DISMISS_REPORT_MS
+    );
     return () => clearTimeout(timer);
   }, [isPresented]);
 
-  // For the modal's onDismiss: the native modal has gone.
-  const reportDismissed = () => {
-    if (!dismissPendingRef.current) return;
-    dismissPendingRef.current = false;
-    onDismissedRef.current?.();
-  };
-
   useEffect(() => {
     if (!isExiting) return;
-    const timer = setTimeout(
-      () => setIsPresented(false),
-      SHEET_EXIT_FALLBACK_MS
-    );
+    const timer = setTimeout(() => setIsPresented(false), exitFallbackMs);
     return () => clearTimeout(timer);
-  }, [isExiting]);
+  }, [isExiting, exitFallbackMs]);
 
   const finishExit = () => {
     if (!visibleRef.current) {
       setIsPresented(false);
     }
   };
+
+  // For the modal's onDismiss: the native modal has gone.
+  const reportDismissed = () =>
+    reportRelease(dismissPendingRef, releasedRef, onDismissedRef);
 
   return { finishExit, isPresented, reportDismissed };
 }

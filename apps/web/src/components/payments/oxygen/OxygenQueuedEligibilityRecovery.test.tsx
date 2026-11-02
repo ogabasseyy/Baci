@@ -59,9 +59,13 @@ it.each([
     return Response.json({ draft: null, version: 0 });
   });
   render(<OxygenProviderFlow orderId={workflowId} />);
-  fireEvent.click(
-    await screen.findByRole('button', { name: 'Check for an update' })
-  );
+  const button = await screen.findByRole('button', {
+    name: 'Check for an update',
+  });
+  const statusReadsBeforeClick = fetcher.mock.calls.filter(([url]) =>
+    String(url).includes('/workflows/actions?')
+  ).length;
+  fireEvent.click(button);
   if (status === 'queued') {
     await waitFor(() => expect(commands).toHaveLength(1));
     expect(commands[0]).toMatchObject({
@@ -74,7 +78,7 @@ it.each([
         fetcher.mock.calls.filter(([url]) =>
           String(url).includes('/workflows/actions?')
         ).length
-      ).toBeGreaterThan(1)
+      ).toBeGreaterThan(statusReadsBeforeClick)
     );
     expect(commands).toHaveLength(0);
   }

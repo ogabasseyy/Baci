@@ -12,6 +12,7 @@ import {
   short,
   touchedAt,
   withdrawn,
+  writtenAt,
 } from './money-pr-assurance-authorship.mjs';
 
 function reviewedCommit(body) {
@@ -42,7 +43,7 @@ function isFullHead(sha, head) {
 // findings on the head.
 function contradiction(family, { comments, reviews, head }, clean) {
   const later = [...comments, ...reviews].filter(
-    (item) => postedAs(item, family) && touchedAt(item) > clean.time
+    (item) => postedAs(item, family) && touchedAt(item) > clean.created
   );
   const tampered = later.find((item) => !authoredBy(item, family));
   if (tampered) {
@@ -80,22 +81,25 @@ export function evaluateCodex(family, input) {
     )
     .map((item) => ({
       id: item.id,
-      time: createdAt(item),
+      time: writtenAt(item),
+      created: createdAt(item),
       sha: reviewedCommit(item.body),
     }))
     .sort(byNewest);
-  const onHead = cleans.filter(({ sha }) => shaMatchesHead(sha, head));
-  // The request names the full commit, so a clean comment that answers it
-  // is bound to that exact commit, not just to its short prefix.
-  const current = onHead.find(({ time }) => time > request.time);
-  if (!current) {
-    const latestSha = cleans[0]?.sha;
-    const why =
-      onHead.length > 0
-        ? 'it has not answered the latest money-rules request'
-        : latestSha
-          ? `latest clean verdict was for ${short(latestSha)}`
-          : 'no clean verdict found';
+  // The newest clean verdict overall decides: an older clean for the head
+  // does not count once a newer one names another commit, and it must come
+  // after the latest request (both by last-edit time).
+  const current = cleans[0];
+  if (
+    !current ||
+    !shaMatchesHead(current.sha, head) ||
+    current.time <= request.time
+  ) {
+    const why = !current
+      ? 'no clean verdict found'
+      : !shaMatchesHead(current.sha, head)
+        ? `latest clean verdict was for ${short(current.sha)}`
+        : 'it has not answered the latest money-rules request';
     return {
       state: 'missing',
       detail: `Codex has no clean verdict on ${short(head)} (${why})`,

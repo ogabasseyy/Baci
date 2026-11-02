@@ -8,7 +8,6 @@
 import {
   authoredBy,
   byNewest,
-  createdAt,
   latestRequest,
   postedAs,
   requestHint,
@@ -93,18 +92,23 @@ function evaluateVerdictFamily(family, input) {
     }))
     .filter(({ parsed }) => parsed !== null)
     .sort(byNewest);
-  const current = candidates.find(
-    ({ parsed }) =>
-      parsed.error ||
-      (shaMatchesHead(parsed.head, head) && parsed.prompt === promptVersion)
-  );
+  // The newest verdict overall decides; an older one for the head must not
+  // win once a newer one names another commit or prompt.
+  const newest = candidates[0];
+  const current =
+    newest &&
+    (newest.parsed.error ||
+      (shaMatchesHead(newest.parsed.head, head) &&
+        newest.parsed.prompt === promptVersion))
+      ? newest
+      : undefined;
   // Rewriting or blanking a verdict, by edit time, must not let an older
   // one win.
   const tampered = posted.find(
     (item) =>
       !authoredBy(item, family) && touchedAt(item) > (current?.time ?? '')
   );
-  if (tampered) {
+  if (tampered && (current || !newest)) {
     return {
       state: 'fail',
       detail: `${family.name} has a comment last edited by ${tampered.editor ?? 'an unknown login'}; ask ${family.name} for a fresh review`,
@@ -122,7 +126,7 @@ function evaluateVerdictFamily(family, input) {
       detail: `${family.name} has no money-rules verdict on ${short(head)} (${why})`,
     };
   }
-  if (createdAt(current) <= request.time) {
+  if (current.time <= request.time) {
     return {
       state: 'missing',
       detail: `${family.name} has not answered the latest money-rules request on ${short(head)}`,

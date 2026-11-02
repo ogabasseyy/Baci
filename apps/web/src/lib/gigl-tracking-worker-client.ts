@@ -223,6 +223,35 @@ export function createGiglTrackingWorkerClient(
   };
 }
 
+export interface GiglWebhookExpediteResponse {
+  data: unknown;
+  error: { code?: string; message?: string } | null;
+}
+
+export interface GiglWebhookExpediteClient {
+  expedite(trackingNumber: string): PromiseLike<GiglWebhookExpediteResponse>;
+}
+
+/**
+ * Webhook-only capability: after a GIG status webhook decrypts and names
+ * Baci's account, the route may make that waybill's monitor due through the
+ * single expedite wrapper. Same token, validation, and origin pin as the
+ * poller client, but it cannot reach the claim/apply/pause/fail/release
+ * wrappers; the authoritative status still comes from the poller.
+ */
+export function createGiglWebhookExpediteClient(
+  env: Readonly<Record<string, string | undefined>>
+): GiglWebhookExpediteClient {
+  const rpc = createValidatedPostgrestClient(env);
+  return {
+    expedite: (trackingNumber) =>
+      rpc(
+        'gigl_worker_expedite_tracking_monitor' as never,
+        { p_tracking_number: trackingNumber } as never
+      ) as PromiseLike<GiglWebhookExpediteResponse>,
+  };
+}
+
 /**
  * Smoke-only raw client for the scope path probe: identical
  * validation, origin pin, and worker-JWT authorization, but NO RPC

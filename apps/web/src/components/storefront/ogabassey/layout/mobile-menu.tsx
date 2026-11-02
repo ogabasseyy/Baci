@@ -18,6 +18,27 @@ import { resolveActiveMobileMenuPath } from './resolve-active-mobile-menu-path';
 import { resolveMobileMenuBasePath } from './resolve-mobile-menu-base-path';
 import { useMobileMenuDialog } from './use-mobile-menu-dialog';
 
+function getCanonicalNavigationCategories(
+  categories?: readonly { name: string; slug: string }[]
+): Array<{ name: string; slug: string }> {
+  if (!categories || categories.length === 0) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const result: Array<{ name: string; slug: string }> = [];
+  for (const category of categories) {
+    const normalizedSlug = normalizeStorefrontCategorySlug(category.slug);
+    if (normalizedSlug && !seen.has(normalizedSlug)) {
+      seen.add(normalizedSlug);
+      result.push({
+        name: category.name,
+        slug: normalizedSlug,
+      });
+    }
+  }
+  return result;
+}
+
 export interface MobileMenuProps {
   isOpen: boolean;
   onClose: (reason?: 'dismiss' | 'navigate') => void;
@@ -46,23 +67,9 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
     pathname
   );
   const businessName = merchantContext?.merchant?.business_name || 'Ogabassey';
-  const seenCategorySlugs = new Set<string>();
-  const normalizedCategories = (merchantContext?.navigationCategories ?? [])
-    .map((category) => {
-      const normalizedSlug = normalizeStorefrontCategorySlug(category.slug);
-      if (!normalizedSlug || seenCategorySlugs.has(normalizedSlug)) {
-        return null;
-      }
-      seenCategorySlugs.add(normalizedSlug);
-      return {
-        name: category.name,
-        slug: normalizedSlug,
-      };
-    })
-    .filter(
-      (category): category is { name: string; slug: string } =>
-        category !== null
-    );
+  const normalizedCategories = getCanonicalNavigationCategories(
+    merchantContext?.navigationCategories
+  );
 
   const buildHref = (path: string) => {
     if (path === '/') {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   formatMerchantAmount,
   formatMerchantPrice,
@@ -103,5 +103,19 @@ describe('bugfix: prices rendered with a single trailing decimal digit', () => {
     expect(formatMerchantPrice(1500, { payout_currency: currency })).toBe(
       formatCurrency(1500, noDecimals, currency, locale)
     );
+  });
+});
+
+describe('formatMerchantPrice formatter reuse', () => {
+  it('does not build a new number formatter when the same price format repeats', () => {
+    const merchant = { payout_currency: 'GHS' };
+    const first = formatMerchantPrice(1500.5, merchant);
+    const numberFormat = vi.spyOn(Intl, 'NumberFormat');
+    try {
+      expect(formatMerchantPrice(1500.5, merchant)).toBe(first);
+      expect(numberFormat).not.toHaveBeenCalled();
+    } finally {
+      numberFormat.mockRestore();
+    }
   });
 });

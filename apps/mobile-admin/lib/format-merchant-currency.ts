@@ -55,18 +55,25 @@ export function formatMerchantAmount(
   return formatCurrency(amount, options, currency, locale);
 }
 
+// Resolved once per currency: price lists format many amounts per render.
+const fractionDigitsCache = new Map<string, number>();
+
 /** The currency's minor-unit digits: 2 for NGN, 0 for JPY/XAF/XOF. */
 function currencyFractionDigits(currency: string): number {
+  const cached = fractionDigitsCache.get(currency);
+  if (cached !== undefined) return cached;
+  let digits = 2;
   try {
-    return (
+    digits =
       new Intl.NumberFormat('en', {
         currency,
         style: 'currency',
-      }).resolvedOptions().maximumFractionDigits ?? 2
-    );
+      }).resolvedOptions().maximumFractionDigits ?? 2;
   } catch {
-    return 2;
+    digits = 2;
   }
+  fractionDigitsCache.set(currency, digits);
+  return digits;
 }
 
 /**

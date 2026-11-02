@@ -131,6 +131,25 @@ describe('ShipmentFlowGiglPanel', () => {
     expect(screen.getByText('From your wallet')).toBeTruthy();
   });
 
+  it('replaces the loading line with the top-up call to action when the wallet turns out short', () => {
+    const { rerender } = render(
+      <ShipmentFlowGiglPanel
+        {...base}
+        quote={null}
+        selected
+        state="loading"
+        wallet={null}
+      />
+    );
+    expect(screen.queryByRole('button', { name: 'Fund wallet' })).toBeNull();
+
+    rerender(<ShipmentFlowGiglPanel {...base} selected />);
+
+    expect(screen.queryByText('From your wallet')).toBeNull();
+    expect(screen.getByText('Top up ₦10,000 to book')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Fund wallet' })).toBeTruthy();
+  });
+
   it('shows only server-reported accessible address fields', () => {
     render(
       <ShipmentFlowGiglPanel

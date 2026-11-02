@@ -42,8 +42,9 @@ function getQuoteSummary(
     .join(' · ');
 }
 
-// While a price loads the card keeps the height of a priced card, so the
-// sheet does not jump when the price arrives.
+// While a price loads the card keeps the height of a priced card the wallet
+// can pay, so the common case does not jump when the price arrives. A short
+// wallet adds the top-up line and the Fund wallet button on purpose.
 const LOADING_PRICE = '₦ …';
 const LOADING_DETAILS: ShipmentOptionDetail[] = [{ text: 'From your wallet' }];
 

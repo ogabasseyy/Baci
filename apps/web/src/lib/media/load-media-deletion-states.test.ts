@@ -26,4 +26,16 @@ describe('media deletion status loading', () => {
       )
     ).toBeNull();
   });
+  it('omits deleted files still present in a stale storage listing', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: [{ path: 'merchant/deleted.webp', state: 'deleted' }],
+      error: null,
+    });
+    expect(
+      await loadMediaDeletionStates({ rpc }, 'merchant', [
+        { name: 'deleted.webp' },
+        { name: 'active.webp' },
+      ])
+    ).toEqual([{ name: 'active.webp', deletionState: 'active' }]);
+  });
 });

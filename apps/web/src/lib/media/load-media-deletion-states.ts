@@ -14,13 +14,24 @@ export async function loadMediaDeletionStates<T extends { name: string }>(
     });
     const parsed = mediaDeletionStatesSchema.safeParse(result.data);
     if (result.error || !parsed.success) return null;
-    const pending = new Set(parsed.data.map((row) => row.path));
-    return files.map((file) => ({
-      ...file,
-      deletionState: pending.has(`${merchantId}/${file.name}`)
-        ? 'pending'
-        : 'active',
-    }));
+    const pending = new Set(
+      parsed.data
+        .filter((row) => row.state === 'pending')
+        .map((row) => row.path)
+    );
+    const deleted = new Set(
+      parsed.data
+        .filter((row) => row.state === 'deleted')
+        .map((row) => row.path)
+    );
+    return files
+      .filter((file) => !deleted.has(`${merchantId}/${file.name}`))
+      .map((file) => ({
+        ...file,
+        deletionState: pending.has(`${merchantId}/${file.name}`)
+          ? 'pending'
+          : 'active',
+      }));
   } catch {
     return null;
   }

@@ -48,7 +48,17 @@ test('POD persistence policy and concurrent flag revocation', async () => {
   let started = false;
   let connected = false;
   try {
-    run('initdb', ['-D', data, '-A', 'trust', '-U', 'postgres', '--no-locale']);
+    run('initdb', [
+      '-D',
+      data,
+      '-A',
+      'trust',
+      '-U',
+      'postgres',
+      '--no-locale',
+      '-E',
+      'UTF8',
+    ]);
     run('pg_ctl', [
       '-D',
       data,
@@ -102,6 +112,15 @@ test('POD persistence policy and concurrent flag revocation', async () => {
           join(
             repository,
             'supabase/migrations/20261102060000_probe_pod_order_idempotency_hash.sql'
+          ),
+          'utf8'
+        )
+      );
+      await admin.query(
+        readFileSync(
+          join(
+            repository,
+            'supabase/migrations/20261102061500_align_pod_whitespace_classification.sql'
           ),
           'utf8'
         )

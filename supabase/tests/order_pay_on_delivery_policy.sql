@@ -14,7 +14,20 @@ DECLARE
   accepted uuid;
   card_order uuid;
   rejected boolean;
+  codepoint integer;
 BEGIN
+  IF NOT has_function_privilege('anon','public.is_storefront_pod_order_idempotency_hash(uuid,text,text)','EXECUTE')
+    OR has_function_privilege('anon','private.is_pay_on_delivery_method(text)','EXECUTE') THEN
+    RAISE EXCEPTION 'POD replay probe privileges are incorrect';
+  END IF;
+  FOREACH codepoint IN ARRAY ARRAY[9,10,11,12,13,32,160,5760,8192,8193,8194,8195,8196,8197,8198,8199,8200,8201,8202,8232,8233,8239,8287,12288,65279] LOOP
+    IF NOT private.is_pay_on_delivery_method(chr(codepoint) || 'POD' || chr(codepoint)) THEN
+      RAISE EXCEPTION 'POD classifier rejected whitespace codepoint %',codepoint;
+    END IF;
+  END LOOP;
+  IF private.is_pay_on_delivery_method('p od') OR private.is_pay_on_delivery_method(NULL) THEN
+    RAISE EXCEPTION 'POD classifier admitted a non-POD method';
+  END IF;
   INSERT INTO public.merchants(id,email,business_name,slug,is_published) VALUES
     (enabled,'pod-enabled@example.com','POD enabled','pod-policy-enabled',true),
     (disabled,'pod-disabled@example.com','POD disabled','pod-policy-disabled',true),
@@ -25,7 +38,7 @@ BEGIN
   -- Real merchant insertion creates default feature rows automatically.
   DELETE FROM public.merchant_feature_settings WHERE merchant_id=missing;
   FOREACH target IN ARRAY ARRAY[disabled,missing] LOOP
-    FOREACH method IN ARRAY ARRAY['pod','pay_on_delivery','POD',' Pay_On_Delivery '] LOOP
+    FOREACH method IN ARRAY ARRAY['pod','pay_on_delivery','POD',' Pay_On_Delivery ',E'\tPOD\n',U&'\00A0Pay_On_Delivery\00A0'] LOOP
       rejected := false;
       BEGIN
         INSERT INTO public.orders(merchant_id,order_number,total,payment_method,customer_email)
@@ -37,7 +50,7 @@ BEGIN
       IF NOT rejected THEN RAISE EXCEPTION 'disabled or missing merchant accepted %',method; END IF;
     END LOOP;
   END LOOP;
-  FOREACH method IN ARRAY ARRAY['pod','pay_on_delivery','POD',' Pay_On_Delivery '] LOOP
+  FOREACH method IN ARRAY ARRAY['pod','pay_on_delivery','POD',' Pay_On_Delivery ',E'\tPOD\n',U&'\00A0Pay_On_Delivery\00A0'] LOOP
     INSERT INTO public.orders(merchant_id,order_number,total,payment_method,customer_email)
     VALUES(enabled,'pod-enabled-'||method,1,method,'fixture@example.com') RETURNING id INTO accepted;
   END LOOP;
@@ -59,7 +72,7 @@ BEGIN
   IF public.is_storefront_pod_order_idempotency_hash(enabled,'pod-key',repeat('c',64)) THEN
     RAISE EXCEPTION 'a different hash authorized a POD replay';
   END IF;
-  FOREACH method IN ARRAY ARRAY['pod','pay_on_delivery','POD',' Pay_On_Delivery '] LOOP
+  FOREACH method IN ARRAY ARRAY['pod','pay_on_delivery','POD',' Pay_On_Delivery ',E'\tPOD\n',U&'\00A0Pay_On_Delivery\00A0'] LOOP
     rejected := false;
     BEGIN
       UPDATE public.orders SET payment_method=method WHERE id=card_order;

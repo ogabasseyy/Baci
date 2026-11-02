@@ -15,6 +15,24 @@ const state = vi.hoisted(() => ({
   confirm: vi.fn(),
   update: vi.fn(),
 }));
+vi.mock('./ShipmentFlowSheetPresence', () => ({
+  ShipmentFlowSheetPresence: ({
+    accessory,
+    children,
+    visible,
+  }: {
+    accessory?: ReactNode;
+    children?: ReactNode;
+    visible: boolean;
+  }) =>
+    visible ? (
+      <section>
+        {children}
+        {accessory}
+      </section>
+    ) : null,
+}));
+
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ user: { id: state.userId } }),
 }));

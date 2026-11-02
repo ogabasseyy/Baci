@@ -85,10 +85,15 @@ function isAuthRejectedEnvelope(envelope: GiglApiEnvelope): boolean {
 }
 
 export class GiglApiClient {
-  private cachedToken: GiglToken | null = null;
+  private cachedToken: GiglToken | null;
   private tokenRequest: Promise<GiglToken> | null = null;
 
-  constructor(private readonly io: GiglProviderIo) {}
+  constructor(
+    private readonly io: GiglProviderIo,
+    initialToken: GiglToken | null = null
+  ) {
+    this.cachedToken = initialToken;
+  }
 
   get currentToken(): GiglToken | null {
     return this.cachedToken;

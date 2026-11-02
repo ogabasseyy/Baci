@@ -1,10 +1,15 @@
 import 'dotenv/config';
 
 import { randomUUID } from 'node:crypto';
+import { isAbsolute, join } from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
+import { processClaimedGiglTrackingMonitors } from '@/app/api/cron/gigl-tracking/gigl-tracking-monitor-worker';
 import { runGiglTrackingMonitorBatch } from '@/app/api/cron/gigl-tracking/run-gigl-tracking-monitor-batch';
 import { createGiglTrackingWorkerClient } from '@/lib/gigl-tracking-worker-client';
+import { GiglProvider } from '@/lib/shipping/providers/gigl';
+import { runWithGiglTrackingTokenCache } from '@/lib/shipping/providers/gigl-tracking-cache-runner';
+import { createGiglTrackingTokenCache } from '@/lib/shipping/providers/gigl-tracking-token-cache';
 
 interface CliLogger {
   error(message: string): void;
@@ -45,10 +50,41 @@ async function runBatchDirectly(
   { batchSize }: { batchSize: number },
   env: NodeJS.ProcessEnv = process.env
 ) {
-  return runGiglTrackingMonitorBatch({
+  const options = {
     batchSize,
     client: createGiglTrackingWorkerClient(env),
     workerId: `gigl-tracking-vps-${randomUUID()}`,
+  };
+  const home = env.HOME;
+  if (
+    env.BACI_WORKER_PROFILE !== 'gigl-tracking' ||
+    !home ||
+    !isAbsolute(home)
+  ) {
+    return runGiglTrackingMonitorBatch(options);
+  }
+  const cache = createGiglTrackingTokenCache({
+    directory: join(home, 'baci-workers', 'gigl-tracking-token-cache'),
+    credentials: {
+      baseUrl: env.GIGL_BASE_URL?.trim() ?? '',
+      email: env.GIGL_EMAIL?.trim() ?? '',
+      password: env.GIGL_PASSWORD?.trim() ?? '',
+    },
+  });
+  return runWithGiglTrackingTokenCache({
+    cache,
+    createProvider: (initial) => new GiglProvider(initial),
+    run: (provider) =>
+      runGiglTrackingMonitorBatch({
+        ...options,
+        processMonitors: (client, monitors, workerId) =>
+          processClaimedGiglTrackingMonitors(
+            client,
+            monitors,
+            workerId,
+            (numbers) => provider.trackShipments(numbers)
+          ),
+      }),
   });
 }
 

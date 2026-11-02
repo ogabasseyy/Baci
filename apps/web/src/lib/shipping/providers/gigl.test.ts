@@ -10,6 +10,21 @@ import { trackGiglShipmentBatch } from './gigl.tracking-batch';
 const trackGiglShipmentBatchMock = vi.mocked(trackGiglShipmentBatch);
 
 describe('GiglProvider orchestrator', () => {
+  it('uses a supplied tracking token in its isolated API client', async () => {
+    const token = {
+      token: 'synthetic-token',
+      userChannelCode: 'channel',
+      customerType: 1,
+      expiresAt: Date.now() + 60_000,
+    };
+    const provider = new GiglProvider(token);
+    trackGiglShipmentBatchMock.mockResolvedValueOnce(new Map());
+    await provider.trackShipments(['WB-1']);
+    expect(provider.currentToken).toEqual(token);
+    expect(
+      trackGiglShipmentBatchMock.mock.calls.at(-1)?.[0].currentToken
+    ).toEqual(token);
+  });
   it('exports the singleton and provider metadata', () => {
     expect(giglProvider).toBeInstanceOf(GiglProvider);
     expect(giglProvider).toMatchObject({

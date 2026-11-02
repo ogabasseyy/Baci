@@ -60,8 +60,8 @@ function getChatAnchor(container: HTMLElement) {
 
 function expectMobileOffsetContract(anchor: HTMLElement) {
   expect(anchor).toHaveAttribute('data-mobile-offset-cart', '6.75rem');
-  expect(anchor).toHaveAttribute('data-mobile-offset-default', '5.75rem');
-  expect(anchor).toHaveAttribute('data-mobile-offset-product', '6.25rem');
+  expect(anchor).toHaveAttribute('data-mobile-offset-default', '1rem');
+  expect(anchor).toHaveAttribute('data-mobile-offset-product', '1rem');
   expect(anchor).toHaveAttribute('data-mobile-offset-screen', '1rem');
 }
 

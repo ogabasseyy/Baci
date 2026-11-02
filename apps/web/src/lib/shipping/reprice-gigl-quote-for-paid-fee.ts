@@ -2,8 +2,8 @@ import {
   GIGL_PLATFORM_MARGIN_BPS,
   GIGL_PRICING_VERSION,
   priceGiglQuote,
-  priceGiglQuoteUnroundedV1,
 } from './gigl-platform-pricing';
+import { priceGiglQuoteUnroundedV1 } from './gigl-platform-pricing-unrounded-v1';
 import type { ShippingQuote } from './types';
 
 type RepriceableGiglQuote = Pick<

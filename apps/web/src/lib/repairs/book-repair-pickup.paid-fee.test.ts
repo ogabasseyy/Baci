@@ -54,6 +54,39 @@ describe('bookRepairPickup paid pickup fee', () => {
     });
   });
 
+  it('bugfix: books a pre-rounding pickup when GIG cost fell and the rounded price exceeds the paid fee', async () => {
+    // Paid 9,835.58 at cost 8,941.43; cost 8,940 is 9,834 unrounded but 9,900 rounded.
+    mocks.getProviderQuotes.mockResolvedValueOnce([
+      {
+        ...sampleQuote,
+        price: 9900,
+        providerCost: 8940,
+        platformMargin: 960,
+        marginBasisPoints: 1000,
+        pricingVersion: 'gigl_platform_margin_v1',
+      },
+    ]);
+    const inserts: Array<{ table: string; payload: unknown }> = [];
+    const supabase = makeSupabase(
+      happyResponses({
+        'repairs.select': {
+          data: { ...repairRow, pickup_fee: 9835.58 },
+          error: null,
+        },
+      }),
+      [],
+      inserts
+    );
+
+    const result = await bookRepairPickup(supabase, merchantId, repairId);
+
+    expect(result).toMatchObject({ ok: true });
+    expect(inserts).toContainEqual({
+      table: 'repair_pickup_quotes',
+      payload: expect.objectContaining({ charge: 9834 }),
+    });
+  });
+
   it('still refuses a pickup when GIG cost itself rose above the paid fee', async () => {
     mocks.getProviderQuotes.mockResolvedValueOnce([
       {

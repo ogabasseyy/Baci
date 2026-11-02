@@ -115,7 +115,7 @@ build-aware capability gate; no route calls it yet. When wired, it reads:
   (P9-mobile-build-header-pilot-removal); a later change may instead have
   the client send a contract number compiled into the bundle, so the gate
   keys on the JavaScript rather than the native build.
-- `piggyvest_primary.rollout_cohort` (migration 20261102045635), keyed by
+- `piggyvest_primary.rollout_cohort` (migration 20261102121709), keyed by
   merchant and customer. It ships empty and only a privileged operator adds
   rows. A customer with no primary onboarding may start one only while
   listed and while every readiness reader in

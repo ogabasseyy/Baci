@@ -8,8 +8,8 @@
 --   - private.complete_order_shipment_with_inventory
 -- The shipping address lives in public.orders.shipping_address (jsonb). The bodies
 -- below match the live definitions except for that one column. Parameter names,
--- the `delivery_address` key of p_shipping_update, SECURITY DEFINER, the empty
--- search_path and the existing grants are unchanged.
+-- the `delivery_address` key of p_shipping_update, SECURITY DEFINER and the empty
+-- search_path are unchanged. EXECUTE is narrowed to service_role (see the end).
 
 CREATE OR REPLACE FUNCTION private.cancel_order_and_release_inventory(
   p_merchant_id uuid,
@@ -209,11 +209,26 @@ BEGIN
 END;
 $$;
 
--- CREATE OR REPLACE keeps the existing ACLs; restate them so the replayed history
--- and production agree on exactly who may execute these functions.
-REVOKE ALL ON FUNCTION private.cancel_order_and_release_inventory(uuid, uuid, text, text, jsonb) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION private.cancel_order_and_release_inventory(uuid, uuid, text, text, jsonb) TO authenticated, service_role;
-REVOKE ALL ON FUNCTION private.mark_order_payment_failed_and_release_inventory(uuid, uuid, text, text, jsonb) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION private.mark_order_payment_failed_and_release_inventory(uuid, uuid, text, text, jsonb) TO authenticated, service_role;
-REVOKE ALL ON FUNCTION private.complete_order_shipment_with_inventory(uuid, uuid, jsonb, jsonb) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION private.complete_order_shipment_with_inventory(uuid, uuid, jsonb, jsonb) TO authenticated, service_role;
+-- Close the authenticated entry points before these bodies start succeeding.
+-- Their only authorization is has_merchant_access, which admits any active staff
+-- member regardless of orders.edit / orders.fulfill, and the legacy cancel path
+-- skips the supported cancellation RPC's payment and reconciliation gates. No
+-- app calls them; the remaining caller (private.release_quiz_prize_reservation_v2)
+-- is a SECURITY DEFINER function owned by postgres and is unaffected. Restrict
+-- every wrapper and implementation to service_role.
+REVOKE ALL ON FUNCTION public.cancel_order_and_release_inventory(uuid, uuid, text, text, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cancel_order_and_release_inventory(uuid, uuid, text, text, jsonb) TO service_role;
+REVOKE ALL ON FUNCTION private.cancel_order_and_release_inventory(uuid, uuid, text, text, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.cancel_order_and_release_inventory(uuid, uuid, text, text, jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.cancel_provider_shipment_order_and_release_inventory(uuid, uuid, numeric, timestamptz) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cancel_provider_shipment_order_and_release_inventory(uuid, uuid, numeric, timestamptz) TO service_role;
+REVOKE ALL ON FUNCTION private.cancel_provider_shipment_order_and_release_inventory(uuid, uuid, numeric, timestamptz) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.cancel_provider_shipment_order_and_release_inventory(uuid, uuid, numeric, timestamptz) TO service_role;
+REVOKE ALL ON FUNCTION public.mark_order_payment_failed_and_release_inventory(uuid, uuid, text, text, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.mark_order_payment_failed_and_release_inventory(uuid, uuid, text, text, jsonb) TO service_role;
+REVOKE ALL ON FUNCTION private.mark_order_payment_failed_and_release_inventory(uuid, uuid, text, text, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.mark_order_payment_failed_and_release_inventory(uuid, uuid, text, text, jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.complete_order_shipment_with_inventory(uuid, uuid, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.complete_order_shipment_with_inventory(uuid, uuid, jsonb, jsonb) TO service_role;
+REVOKE ALL ON FUNCTION private.complete_order_shipment_with_inventory(uuid, uuid, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.complete_order_shipment_with_inventory(uuid, uuid, jsonb, jsonb) TO service_role;

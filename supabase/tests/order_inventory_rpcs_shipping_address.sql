@@ -1,7 +1,9 @@
 -- Regression check: the order inventory lifecycle RPCs wrote to
 -- public.orders.delivery_address, a column that does not exist, so every call
 -- raised 42703 (undefined_column). They must succeed against the replayed
--- schema and write the address to public.orders.shipping_address.
+-- schema and write the address to public.orders.shipping_address. Because they
+-- authorize any active staff member, they must be executable by service_role
+-- only.
 --
 -- Usage:
 --   pnpm --filter @baci/web db:replay:chronological \
@@ -152,6 +154,33 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'cancel with NULL address overwrote shipping_address';
   END IF;
+END;
+$$;
+
+-- These bodies only check has_merchant_access (any active staff member), so
+-- only service_role may execute them; authenticated callers must not.
+DO $$
+DECLARE
+  v_fn text;
+BEGIN
+  FOREACH v_fn IN ARRAY ARRAY[
+    'public.cancel_order_and_release_inventory(uuid,uuid,text,text,jsonb)',
+    'private.cancel_order_and_release_inventory(uuid,uuid,text,text,jsonb)',
+    'public.cancel_provider_shipment_order_and_release_inventory(uuid,uuid,numeric,timestamptz)',
+    'private.cancel_provider_shipment_order_and_release_inventory(uuid,uuid,numeric,timestamptz)',
+    'public.mark_order_payment_failed_and_release_inventory(uuid,uuid,text,text,jsonb)',
+    'private.mark_order_payment_failed_and_release_inventory(uuid,uuid,text,text,jsonb)',
+    'public.complete_order_shipment_with_inventory(uuid,uuid,jsonb,jsonb)',
+    'private.complete_order_shipment_with_inventory(uuid,uuid,jsonb,jsonb)'
+  ] LOOP
+    IF pg_catalog.has_function_privilege('authenticated', v_fn, 'EXECUTE')
+      OR pg_catalog.has_function_privilege('anon', v_fn, 'EXECUTE') THEN
+      RAISE EXCEPTION '% is executable by a client role', v_fn;
+    END IF;
+    IF NOT pg_catalog.has_function_privilege('service_role', v_fn, 'EXECUTE') THEN
+      RAISE EXCEPTION '% is not executable by service_role', v_fn;
+    END IF;
+  END LOOP;
 END;
 $$;
 

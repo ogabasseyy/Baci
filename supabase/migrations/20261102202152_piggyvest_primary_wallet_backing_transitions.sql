@@ -7,9 +7,8 @@
 --     the transfer engine's SECURITY DEFINER settle.
 --   flag_migration_review: records a review reason, state unchanged.
 -- Bad input raises with a stable message (a missing or malformed argument, or
--- a merchant other than the one the backing row was recorded under). Flip
--- outcomes (refused, review) are returned, never raised, so a confirmed
--- transfer is never rolled back by the flip.
+-- another merchant's backing row). Flip outcomes (refused, review) are
+-- returned, never raised, so a confirmed transfer is never rolled back.
 BEGIN;
 
 CREATE FUNCTION piggyvest_primary.flag_migration_review(p_customer_id uuid, p_merchant_id uuid, p_reason text)
@@ -27,8 +26,7 @@ BEGIN
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended('piggyvest-wallet-backing:' || p_customer_id::text, 0));
   -- An existing row is flagged where it stands (its merchant is the scope), so
-  -- the flip's review paths never raise; only a new row needs the customer to
-  -- still belong to the merchant.
+  -- review paths never raise; a new row needs the customer at the merchant.
   SELECT * INTO v_backing FROM piggyvest_primary.wallet_backing b
   WHERE b.customer_id = p_customer_id FOR UPDATE;
   v_found := FOUND;
@@ -85,13 +83,13 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
   END IF;
-  -- The intent must still belong to the user the customer row names now.
+  -- The intent must belong to the customer's current user.
   SELECT * INTO v_intent FROM piggyvest_primary.onboarding_intents i WHERE i.id = p_intent_id FOR SHARE;
   IF NOT FOUND OR v_intent.customer_id IS DISTINCT FROM p_customer_id OR v_intent.merchant_id <> p_merchant_id
     OR v_intent.user_id IS DISTINCT FROM v_customer_user THEN
     RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
   END IF;
-  -- Verified and still open: a closed provider account cannot receive the move.
+  -- Verified and open: a closed provider account cannot receive the move.
   IF v_intent.state <> 'verified' OR v_intent.provider_closed_at IS NOT NULL THEN
     RAISE EXCEPTION 'wallet_backing_unverified' USING ERRCODE = '55000';
   END IF;
@@ -108,8 +106,7 @@ BEGIN
   IF v_found AND v_backing.merchant_id <> p_merchant_id THEN
     RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
   END IF;
-  -- A repeat (migrating or backed) replays only with the recorded intent and
-  -- audited amount; anything else is refused, never a success-shaped no-op.
+  -- A repeat replays only with the recorded intent and amount; else refused.
   IF v_found AND v_backing.state IN ('migrating', 'backed') THEN
     IF v_backing.onboarding_intent_id <> p_intent_id THEN
       RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
@@ -120,8 +117,7 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object('status', v_backing.state, 'changed', false, 'backingId', v_backing.id);
   END IF;
 
-  -- The audited amount must equal the balance right now, under the wallet
-  -- lock; no wallet row is a zero balance.
+  -- The audited amount must equal the balance now, under the wallet lock.
   SELECT w.id, w.merchant_id, w.available_balance INTO v_wallet_id, v_wallet_merchant, v_balance
   FROM public.customer_wallets w WHERE w.customer_id = p_customer_id FOR UPDATE;
   IF NOT FOUND THEN
@@ -162,11 +158,9 @@ BEGIN
   INSERT INTO piggyvest_primary.wallet_backing_events(backing_id, event, from_state, to_state, amount)
   VALUES (v_backing.id, CASE WHEN v_target = 'backed' THEN 'backed_audited_zero' ELSE 'migration_begun' END,
     'legacy', v_target, p_audited_amount);
-  IF v_target = 'backed' THEN
-    RETURN pg_catalog.jsonb_build_object('status', v_target, 'changed', true, 'backingId', v_backing.id,
-      'hooks', piggyvest_primary.run_backed_flip_hooks(v_backing.id, p_customer_id, p_merchant_id));
-  END IF;
-  RETURN pg_catalog.jsonb_build_object('status', v_target, 'changed', true, 'backingId', v_backing.id);
+  RETURN pg_catalog.jsonb_build_object('status', v_target, 'changed', true, 'backingId', v_backing.id)
+    || CASE WHEN v_target = 'backed' THEN pg_catalog.jsonb_build_object('hooks',
+      piggyvest_primary.run_backed_flip_hooks(v_backing.id, p_customer_id, p_merchant_id)) ELSE '{}'::jsonb END;
 END $$;
 
 CREATE FUNCTION piggyvest_primary.flip_to_backed(p_customer_id uuid, p_merchant_id uuid, p_move_reference text)
@@ -181,6 +175,7 @@ DECLARE
   v_customer_user uuid;
   v_intent_user uuid;
   v_hooks jsonb;
+  v_reason text;
 BEGIN
   IF p_customer_id IS NULL OR p_merchant_id IS NULL THEN
     RAISE EXCEPTION 'wallet_backing_scope_required' USING ERRCODE = '22023';
@@ -196,8 +191,7 @@ BEGIN
   IF v_found AND v_backing.merchant_id <> p_merchant_id THEN
     RAISE EXCEPTION 'wallet_backing_scope_unavailable' USING ERRCODE = '42501';
   END IF;
-  -- Only the recorded move replays as a no-op; any other confirmed move for a
-  -- backed wallet (or one for an audited zero, which had no move) is reviewed.
+  -- Only the recorded move replays as a no-op; any other is reviewed.
   IF v_found AND v_backing.state = 'backed' THEN
     IF v_backing.move_reference IS DISTINCT FROM p_move_reference THEN
       PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_reference_mismatch');
@@ -207,8 +201,8 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object('status', 'backed', 'changed', false, 'backingId', v_backing.id);
   END IF;
   IF NOT v_found OR v_backing.state <> 'migrating' THEN
-    -- Flag a recorded row, or a customer still at this merchant; a customer
-    -- that is gone is refused without a flag, so the refusal never raises.
+    -- Flag a recorded row or a customer still at this merchant; a customer
+    -- that is gone is refused unflagged.
     IF NOT v_found THEN
       PERFORM 1 FROM public.customers c
       WHERE c.id = p_customer_id AND c.merchant_id = p_merchant_id FOR KEY SHARE;
@@ -220,8 +214,7 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object('status', 'refused', 'reason', 'not_migrating');
   END IF;
 
-  -- The customer must still be this merchant's, locked so it cannot move
-  -- mid-flip; a moved row is data, not input, so it goes to review.
+  -- The customer must still be this merchant's, locked mid-flip; else review.
   SELECT c.user_id INTO v_customer_user FROM public.customers c
   WHERE c.id = p_customer_id AND c.merchant_id = p_merchant_id FOR SHARE;
   IF NOT FOUND THEN
@@ -238,8 +231,7 @@ BEGIN
     PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_user_mismatch');
     RETURN pg_catalog.jsonb_build_object('status', 'review', 'reason', 'user_mismatch', 'backingId', v_backing.id);
   END IF;
-  -- The balance must still be the audited amount and fully settled; anything
-  -- else stays migrating for review. No wallet row is a zero balance.
+  -- The balance must still be the audited amount, fully settled; else review.
   SELECT w.id, w.merchant_id, w.available_balance INTO v_wallet_id, v_wallet_merchant, v_balance
   FROM public.customer_wallets w WHERE w.customer_id = p_customer_id FOR UPDATE;
   IF NOT FOUND THEN
@@ -263,11 +255,12 @@ BEGIN
   END IF;
   v_amount := v_backing.audited_amount;
 
-  -- Backed first, so the relabel rows are written against a backed wallet. The
-  -- relabel pair: the same X leaves as legacy money and arrives as PiggyVest
-  -- money; available_balance is not touched. A leg that already exists (the
-  -- ledger is writable by other paths) rolls this whole block back and goes
-  -- to review: a flip outcome is returned, never raised.
+  -- Backed first, so the relabel pair is written against a backed wallet: the
+  -- same X leaves as legacy money and arrives as PiggyVest money
+  -- (available_balance is untouched). If any write here fails (an existing leg
+  -- hits the one-pair index, a trigger or constraint objects) the whole block
+  -- rolls back and the wallet goes to review: a flip outcome is returned,
+  -- never raised.
   BEGIN
     UPDATE piggyvest_primary.wallet_backing
     SET state = 'backed', backed_via = 'confirmed_move', move_reference = p_move_reference,
@@ -287,9 +280,10 @@ BEGIN
     END IF;
     INSERT INTO piggyvest_primary.wallet_backing_events(backing_id, event, from_state, to_state, amount, move_reference)
     VALUES (v_backing.id, 'backed_confirmed_move', 'migrating', 'backed', v_amount, p_move_reference);
-  EXCEPTION WHEN unique_violation THEN
-    PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_relabel_conflict');
-    RETURN pg_catalog.jsonb_build_object('status', 'review', 'reason', 'relabel_conflict', 'backingId', v_backing.id);
+  EXCEPTION WHEN OTHERS THEN
+    v_reason := CASE WHEN SQLSTATE = '23505' THEN 'relabel_conflict' ELSE 'relabel_failed' END;
+    PERFORM piggyvest_primary.flag_migration_review(p_customer_id, p_merchant_id, 'flip_' || v_reason);
+    RETURN pg_catalog.jsonb_build_object('status', 'review', 'reason', v_reason, 'backingId', v_backing.id);
   END;
 
   v_hooks := piggyvest_primary.run_backed_flip_hooks(v_backing.id, p_customer_id, p_merchant_id);

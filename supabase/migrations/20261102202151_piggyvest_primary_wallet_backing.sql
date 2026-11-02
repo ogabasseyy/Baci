@@ -6,19 +6,15 @@
 -- Nothing returns to legacy.
 --
 -- This file adds the state store, its event log, the read helpers and the
--- pre-declared hooks. The transitions are in
--- 20261102202152_piggyvest_primary_wallet_backing_transitions.sql, and the
--- one-pair ledger index is built concurrently in
--- 20261102202153_piggyvest_primary_wallet_backing_relabel_index.sql.
+-- hooks; transitions are in 20261102202152_..._transitions.sql and the
+-- one-pair ledger index (built concurrently) in 20261102202153_..._relabel_index.sql.
 --
 -- Ships dark: the tables start empty (no row means legacy), no login is a
--- member of the new role, and no existing write path calls these functions
--- yet. Later changes wire assert_wallet_legacy into the legacy writers.
+-- member of the new role, and no existing write path calls these functions.
 BEGIN;
 
--- The deletion trigger briefly locks customers. Bound the wait so a busy
--- table fails this transaction-wrapped migration fast (it retries next
--- deploy) instead of queueing customer writes behind it.
+-- The deletion trigger briefly locks customers: bound the wait so a busy table
+-- fails this migration fast (it retries next deploy) instead of queueing writes.
 SET LOCAL lock_timeout = '5s';
 
 DO $$ BEGIN
@@ -244,11 +240,9 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT false
 $$;
 
--- Runs both post-backed hooks, each contained: a failing (or NULL-returning)
--- hook rolls back only its own work, the wallet goes to review, and the
--- caller's transition stands. begin_migration (audited zero) and
--- flip_to_backed, the only two paths into backed, both call it under the
--- wallet-backing lock; flag_migration_review is defined with them.
+-- Runs both post-backed hooks, each contained: a failing (or NULL) hook rolls
+-- back only its own work and flags the wallet for review. begin_migration
+-- (audited zero) and flip_to_backed, the only paths into backed, call it.
 CREATE FUNCTION piggyvest_primary.run_backed_flip_hooks(p_backing_id uuid, p_customer_id uuid, p_merchant_id uuid)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
@@ -273,10 +267,9 @@ BEGIN
   RETURN pg_catalog.jsonb_build_object('creditDeferred', v_credit, 'convertObligations', v_convert);
 END $$;
 
--- Customer-scoped read for web and app routes, called with the request's own
--- session. 'none' when the caller has no customer record at this merchant.
--- The state comes from backing_state, so a row recorded under another
--- merchant raises (the web helper reads it as 'unknown') instead of legacy.
+-- Customer-scoped read for web and app routes, run with the request's own
+-- session: 'none' without a customer record at this merchant; a row recorded
+-- under another merchant raises (the web helper reads 'unknown').
 CREATE FUNCTION public.get_my_wallet_backing_state(p_merchant_id uuid)
 RETURNS text LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
 DECLARE

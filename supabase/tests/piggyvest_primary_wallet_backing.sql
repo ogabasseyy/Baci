@@ -118,6 +118,8 @@ $$;
 
 \ir piggyvest_primary_wallet_backing_flip.inc.sql
 
+\ir piggyvest_primary_wallet_backing_flip_review.inc.sql
+
 \ir piggyvest_primary_wallet_backing_guards.inc.sql
 
 \ir piggyvest_primary_wallet_backing_hooks.inc.sql

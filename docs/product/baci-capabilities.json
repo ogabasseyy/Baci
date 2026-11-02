@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-01T21:27:44+00:00",
-  "source_revision": "a9f4bb3d98a7b2adeba570cd944f9d14f83a96b6",
-  "evidence_digest": "b4934f87b107580160eab578918a099112ba2483cddb95d3cc68673e37d3aee5",
-  "claims_digest": "e52c707837ebefc29874f10131d6a31566268f8b3707ffef189b653bd4f3e92c",
-  "review_scope": "Source evidence only. Re-reviewed checkout payment availability after adding the Oxygen local-QA option: development mode, explicit local-checkout opt-in, loopback Supabase, NGN and full-order-amount checks are required; production shoppers are not offered Oxygen by this gate. The configurable payment-method claim remains accurate without promoting Oxygen to production availability. Git comparison against the previous reviewed revision shows all other cited capability sources unchanged. Other provider, deployment, native acceptance and transaction-readiness limitations remain; no production promotion.",
+  "reviewed_at": "2026-11-02T02:09:50+00:00",
+  "source_revision": "52700b00e45c971466768f772169ac43db6f8d7d",
+  "evidence_digest": "7c8028dbc085b1fbf41740e41c3847ca5c4764efdc163482babf78397f3c5c0d",
+  "claims_digest": "62a9333fd78f006c9a1b37dbdae5d428670de428baaf633988b33d030c098873",
+  "review_scope": "Source evidence only. Re-reviewed checkout payment availability after adding the Oxygen local-QA option: development mode, explicit local-checkout opt-in, loopback Supabase, NGN and full-order-amount checks are required; production shoppers are not offered Oxygen by this gate. The configurable payment-method claim remains accurate without promoting Oxygen to production availability. Git comparison against the previous reviewed revision shows all other cited capability sources unchanged. Other provider, deployment, native acceptance and transaction-readiness limitations remain; no production promotion. Rechecked cited capability source bytes after the 2 November review-fix and main integration; no cited implementation changes or production promotion.",
   "capabilities": [
     {
       "id": "payments",

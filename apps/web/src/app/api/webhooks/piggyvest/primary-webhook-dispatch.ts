@@ -3,6 +3,7 @@ import { primaryInterestWebhookResponse } from '@/lib/piggyvest/primary-interest
 import { dispatchPrimaryWalletBankInboxIntake } from '@/lib/piggyvest/primary-wallet-bank-inbox-intake';
 import { dispatchPrimaryCardSignedCustodyIntake } from '@/lib/piggyvest/primary-wallet-card-custody-intake-dispatch';
 import { dispatchPrimaryWalletInflow } from '@/lib/piggyvest/primary-wallet-inflow-dispatch';
+import type { WebhookKeyScope } from '@/lib/piggyvest/webhook-key-archive';
 import type { PiggyvestWebhookKeyFamily } from '@/lib/piggyvest/webhook-secret-union';
 import type { PiggyvestWebhookEvent } from '@/schemas/piggyvest/events';
 
@@ -34,12 +35,21 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
   matchedSecret: string;
   event: PiggyvestWebhookEvent;
   families: readonly PiggyvestWebhookKeyFamily[];
+  /**
+   * `replay` for stored deliveries: each family intake then also accepts
+   * its OWN family's archived keys past their overlap. A key archived for
+   * one family never reaches another family's intake: the intake call is
+   * gated on `families`, and each runtime only merges its own family.
+   */
+  keyScope?: WebhookKeyScope;
 }): Promise<Response | 'conflict' | null> {
+  const { keyScope } = input;
   if (input.event.eventType === 'wallet-transfer.outflow.success') {
     if (input.families.includes('custody')) {
       const custody = await dispatchPrimaryCardSignedCustodyIntake({
         rawBody: input.rawBody,
         signature: input.signature,
+        keyScope,
       });
       if (custody.response) return custody.response;
       if (custody.outcome === 'disabled')
@@ -54,6 +64,7 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
       const primary = await primaryInterestWebhookResponse({
         rawBody: input.rawBody,
         signature: input.signature,
+        keyScope,
       });
       if (primary === 'disabled')
         return retryable(
@@ -69,6 +80,7 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
       const bank = await dispatchPrimaryWalletBankInboxIntake({
         rawBody: input.rawBody,
         signature: input.signature,
+        keyScope,
       });
       if (bank.response) return bank.response;
       bankInboxDisabled = bank.outcome === 'disabled';

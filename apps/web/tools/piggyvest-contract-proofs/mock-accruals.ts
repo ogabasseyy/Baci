@@ -42,13 +42,14 @@ export function accruedInterestReply(
     created_at: '2026-10-01T00:00:00.000Z',
     updated_at: '2026-10-01T00:00:00.000Z',
   }));
+  // The live accrual page info has no previousCursor (staging, 2026-10-31),
+  // unlike the transaction list.
   return ok({
     paginatedPayload: {
       edges,
       pageInfo: {
         hasNextPage: window.hasNextPage,
         endCursor: window.endCursor,
-        previousCursor: window.previousCursor,
       },
     },
   });

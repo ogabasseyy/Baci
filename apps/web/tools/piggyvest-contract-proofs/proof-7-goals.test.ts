@@ -41,7 +41,8 @@ describe('recordGoalWallets', () => {
     expect(answer('goal_explicit_readback_names_payout_destination')).toBe(
       'yes'
     );
-    expect(result.values.goal_explicit_http_status).toBe(200);
+    // Sub-wallet creation answers 202 "processing", as the live sandbox did.
+    expect(result.values.goal_explicit_http_status).toBe(202);
   });
 
   it('warns loudly when a goal wallet inherits the business payout wallet', async () => {

@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import { requestPrefundedCardProviderJson } from './prefunded-card-provider-request';
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
+import {
+  jsonResponse,
+  liveJustSubmittedNotFound,
+  liveTransactionStatus,
+} from './transaction-status-live.test-support';
 
 const operationId = '11111111-1111-4111-8111-111111111111';
 const reservation = {
@@ -177,5 +183,93 @@ describe('primary savings reconciliation', () => {
       expect(dependencies.settle).not.toHaveBeenCalled();
       expect(dependencies.release).toHaveBeenCalledTimes(1);
     }
+  });
+  describe('money moves only on a fully bound record', () => {
+    const binding = {
+      reference: reservation.reference,
+      amountKobo: reservation.amountKobo,
+      sourceWalletId: reservation.sourceWalletId,
+      destinationWalletId: reservation.destinationWalletId,
+      customerId: reservation.providerCustomerId,
+    };
+    async function providerFailure(status: number, body: unknown) {
+      return await requestPrefundedCardProviderJson({
+        url: 'https://staging.piggyvest.business/api/v1/transaction/verify',
+        token: 'synthetic-token',
+        timeoutMs: 1000,
+        maxResponseBytes: 65536,
+        fetchImplementation: async () => jsonResponse(body, status),
+        init: { method: 'GET' },
+      }).then(
+        () => {
+          throw new Error('Expected the provider request to reject');
+        },
+        (error: unknown) => error
+      );
+    }
+
+    it.each([
+      'success',
+      'failed',
+    ])('neither settles nor releases on a reference, amount and %s match alone', async (status) => {
+      const dependencies = ports();
+      dependencies.queryProvider.mockResolvedValue({
+        status: true,
+        data: { status, reference: 'our-reference', amount: 2000 },
+      });
+      expect(
+        await reconcilePrimaryWalletSavings(operationId, dependencies)
+      ).toEqual({ status: 'pending' });
+      expect(dependencies.settle).not.toHaveBeenCalled();
+      expect(dependencies.release).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['a TSQ 404', 404, liveJustSubmittedNotFound],
+      ['an uncertain 500', 500, { status: false }],
+    ])('never releases on %s', async (_label, status, body) => {
+      const dependencies = ports();
+      dependencies.queryProvider.mockRejectedValue(
+        await providerFailure(status, body)
+      );
+      expect(
+        await reconcilePrimaryWalletSavings(operationId, dependencies)
+      ).toEqual({ status: 'pending' });
+      expect(dependencies.settle).not.toHaveBeenCalled();
+      expect(dependencies.release).not.toHaveBeenCalled();
+    });
+
+    it('never settles a matching success whose destination is not the goal wallet', async () => {
+      const dependencies = ports();
+      const live = liveTransactionStatus(binding, 'successful');
+      dependencies.queryProvider.mockResolvedValue({
+        ...live,
+        data: { ...live.data, destination_wallet: 'another-goal' },
+      });
+      expect(
+        await reconcilePrimaryWalletSavings(operationId, dependencies)
+      ).toEqual({ status: 'pending' });
+      expect(dependencies.settle).not.toHaveBeenCalled();
+    });
+
+    it('releases once on a terminal failure of the exact live record', async () => {
+      const dependencies = ports();
+      const live = liveTransactionStatus(binding, 'failed');
+      dependencies.queryProvider.mockResolvedValue(live);
+      expect(
+        await reconcilePrimaryWalletSavings(operationId, dependencies)
+      ).toEqual({ status: 'cancelled' });
+      expect(dependencies.settle).not.toHaveBeenCalled();
+      expect(dependencies.release).toHaveBeenCalledOnce();
+      expect(dependencies.release).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'failed',
+          providerTransactionId: live.data.id,
+          reference: 'our-reference',
+          sourceWalletId: 'source',
+          destinationWalletId: 'destination',
+        })
+      );
+    });
   });
 });

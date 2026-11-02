@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createDedicatedAccount, createOrGetCustomer } from '@/lib/paystack';
+import { merchantWalletFundingAccountRowsSchema } from '@/schemas/merchant-wallet-funding';
 import { isAmbiguousPaystackProvisioningFailure } from './is-ambiguous-paystack-provisioning-failure';
 import { logMerchantWalletProvisioningError } from './merchant-wallet-provisioning-logging';
 import { resumeMerchantWalletFundingRequest } from './resume-merchant-wallet-funding-request';
@@ -12,17 +13,33 @@ export type MerchantWalletAccount = {
   status: 'active' | 'pending' | 'disabled';
 };
 
+// The DEFINER projection admits the owner and orders.fulfill staff and returns
+// only these safe columns; provider identifiers and metadata stay owner-RLS.
+async function readFundingAccountRows(
+  supabase: SupabaseClient,
+  merchantId: string
+) {
+  const { data, error } = await supabase.rpc(
+    'get_merchant_wallet_funding_account',
+    { p_merchant_id: merchantId }
+  );
+  if (error) throw error;
+  const parsed = merchantWalletFundingAccountRowsSchema.safeParse(data ?? []);
+  if (!parsed.success) throw new Error('INVALID_FUNDING_ACCOUNT_ROWS');
+  return parsed.data;
+}
+
+function singleRow<T>(rows: T[]): T | null {
+  // Mirrors maybeSingle(): more than one live account is a data fault.
+  if (rows.length > 1) throw new Error('MULTIPLE_FUNDING_ACCOUNTS');
+  return rows[0] ?? null;
+}
+
 export async function getMerchantWalletAccount(
   supabase: SupabaseClient,
   merchantId: string
 ): Promise<MerchantWalletAccount | null> {
-  const { data, error } = await supabase
-    .from('merchant_wallet_payment_accounts')
-    .select('account_name, account_number, bank_name, currency, status')
-    .eq('merchant_id', merchantId)
-    .in('status', ['active', 'pending'])
-    .maybeSingle();
-  if (error) throw error;
+  const data = singleRow(await readFundingAccountRows(supabase, merchantId));
   if (!data) return null;
   return {
     accountName: data.account_name,
@@ -43,13 +60,11 @@ export async function requestMerchantWalletAccount(
     phone?: string;
   }
 ) {
-  const { data: existing, error: existingError } = await supabase
-    .from('merchant_wallet_payment_accounts')
-    .select('account_name, account_number, bank_name, currency, status')
-    .eq('merchant_id', merchant.id)
-    .eq('status', 'active')
-    .maybeSingle();
-  if (existingError) throw existingError;
+  const existing = singleRow(
+    (await readFundingAccountRows(supabase, merchant.id)).filter(
+      (row) => row.status === 'active'
+    )
+  );
   if (existing)
     return {
       status: 'active' as const,

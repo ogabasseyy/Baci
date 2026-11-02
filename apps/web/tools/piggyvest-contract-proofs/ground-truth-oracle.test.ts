@@ -27,15 +27,19 @@ const PROOFS = [
 ];
 const SEEDS = Array.from({ length: 200 }, (_, index) => index + 1);
 
-async function runSeed(seed: number): Promise<string[]> {
+async function runSeed(
+  seed: number
+): Promise<{ problems: string[]; goalWalletFound: boolean }> {
   const scenario = scenarioFor(seed);
   const h = makeHarness({ mock: scenario.mock, maxPolls: scenario.maxPolls });
   const results: ProofResult[] = [];
   const problems: string[] = [];
   let mainRows = 0;
   let qaWallets = 0;
+  let goalWalletFound = false;
   try {
     await setupScenario(h.ctx);
+    goalWalletFound = h.state.goalWalletId !== null;
     qaWallets = h.mock.sandbox.wallets.filter(
       (wallet) => wallet.customerId === h.state.customerId
     ).length;
@@ -65,10 +69,13 @@ async function runSeed(seed: number): Promise<string[]> {
   } finally {
     h.dispose();
   }
-  return problems.map(
-    (problem) =>
-      `seed ${seed}: ${problem} [${JSON.stringify({ maxPolls: scenario.maxPolls, ...scenario.mock })}]`
-  );
+  return {
+    goalWalletFound,
+    problems: problems.map(
+      (problem) =>
+        `seed ${seed}: ${problem} [${JSON.stringify({ maxPolls: scenario.maxPolls, ...scenario.mock })}]`
+    ),
+  };
 }
 
 describe('ground-truth oracle: the seeded scenarios themselves', () => {
@@ -216,7 +223,18 @@ describe('ground-truth oracle: the comparison itself bites', () => {
 describe('ground-truth oracle: every seeded run', () => {
   it('only ever answers what the sandbox truly does, and is never observed with an unknown it depends on', async () => {
     const problems: string[] = [];
-    for (const seed of SEEDS) problems.push(...(await runSeed(seed)));
+    let goalWallets = 0;
+    for (const seed of SEEDS) {
+      const run = await runSeed(seed);
+      problems.push(...run.problems);
+      if (run.goalWalletFound) goalWallets += 1;
+    }
     expect(problems).toEqual([]);
+    // A goal wallet the harness cannot find only turns findings `unknown`,
+    // which the checks above accept. The mock renames wallets as the live
+    // sandbox does (2026-10-31), so most runs must still find theirs.
+    // 192/200 seeds do today (the rest drop the create or the list on
+    // purpose); an exact name lookup finds 0.
+    expect(goalWallets).toBeGreaterThan(SEEDS.length * 0.8);
   }, 600_000);
 });

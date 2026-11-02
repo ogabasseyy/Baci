@@ -105,13 +105,57 @@ describe('QuizResultsPanel', () => {
     expect(screen.getByText('You finished at')).toBeTruthy();
     expect(screen.getByText(/:\d{2}:\d{2}/)).toBeTruthy();
     expect(
-      screen.getByText('Finish time will be used as a tie breaker')
+      screen.getByText('Ties consider the finish time of your best attempt')
     ).toBeTruthy();
     expect(
       screen.getByText('The leaderboard will appear when the quiz ends in')
     ).toBeTruthy();
     expect(screen.getByRole('timer').props.children).toBe('0:30');
     jest.useRealTimers();
+  });
+
+  it('keeps the current attempt finish time when the provisional best is older', async () => {
+    const currentSubmission = '2026-10-01T12:30:00.000Z';
+    const bestSubmission = '2026-10-01T12:00:00.000Z';
+    const format = (date: string) =>
+      new Intl.DateTimeFormat(undefined, {
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+      }).format(Date.parse(date));
+    jest.mocked(fetchQuizLiveLeaderboard).mockResolvedValue({
+      currentPlayer: {
+        displayName: 'Player',
+        isCurrentCustomer: true,
+        rank: 1,
+        score: 10,
+        status: 'submitted',
+        submittedAt: bestSubmission,
+        totalTimeSeconds: 10,
+      },
+      entries: [],
+      participantCount: 1,
+      status: 'live',
+    });
+    render(
+      <QuizResultsPanel
+        eventId="event-1"
+        eventEndsAt="2099-01-01T00:00:00.000Z"
+        expectedUserId="user-1"
+        legacyResult={null}
+        lifecycle="pending_results"
+        submittedAt={currentSubmission}
+        styles={createQuizStyles(colors)}
+        v2Result={{
+          attemptId: 'a2',
+          availability: 'pending',
+          availableAt: null,
+        }}
+      />
+    );
+    expect(await screen.findByText('Provisional best score')).toBeTruthy();
+    expect(screen.getByText(format(currentSubmission))).toBeTruthy();
+    expect(screen.queryByText(format(bestSubmission))).toBeNull();
   });
 
   it('offers a simulated checkout for a final test prize', () => {

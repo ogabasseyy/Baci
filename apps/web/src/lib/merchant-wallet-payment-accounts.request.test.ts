@@ -40,6 +40,48 @@ describe('merchant wallet payment-account provisioning — request', () => {
     expect(customer).not.toHaveBeenCalled();
   });
 
+  it('reads the existing account through the safe RPC projection', async () => {
+    const supabase = client([
+      {
+        account_name: 'A',
+        account_number: '1234567890',
+        bank_name: 'B',
+        status: 'active',
+      },
+    ]);
+    await requestMerchantWalletAccount(supabase, { id: 'm', email: 'e' });
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'get_merchant_wallet_funding_account',
+      { p_merchant_id: 'm' }
+    );
+  });
+
+  it('does not treat a pending account as reusable', async () => {
+    const result = await requestMerchantWalletAccount(
+      client([
+        {
+          account_name: 'A',
+          account_number: '1234567890',
+          bank_name: 'B',
+          status: 'pending',
+        },
+      ]),
+      { id: 'm', email: 'e' }
+    );
+    expect(result.status).toBe('pending');
+    expect(customer).toHaveBeenCalled();
+  });
+
+  it('fails before inserting a request when the account read is forbidden', async () => {
+    await expect(
+      requestMerchantWalletAccount(
+        client([], { accountRpcError: new Error('forbidden') }),
+        { id: 'm', email: 'e' }
+      )
+    ).rejects.toThrow('forbidden');
+    expect(customer).not.toHaveBeenCalled();
+  });
+
   it('persists request before customer provisioning', async () => {
     const result = await requestMerchantWalletAccount(client(), {
       id: 'm',
@@ -97,7 +139,10 @@ describe('merchant wallet payment-account provisioning — request', () => {
       account: null,
       requestId: 'req1',
     });
-    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'fail_merchant_wallet_funding_request',
+      expect.anything()
+    );
   });
 
   it('requires review when the failure transition itself fails', async () => {
@@ -144,7 +189,10 @@ describe('merchant wallet payment-account provisioning — request', () => {
       account: null,
       requestId: 'req1',
     });
-    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'fail_merchant_wallet_funding_request',
+      expect.anything()
+    );
   });
 
   it('marks the request failed when DVA provisioning throws', async () => {
@@ -157,7 +205,10 @@ describe('merchant wallet payment-account provisioning — request', () => {
       account: null,
       requestId: 'req1',
     });
-    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'fail_merchant_wallet_funding_request',
+      expect.anything()
+    );
   });
 
   it('allows a later retry after a provider failure is transitioned to failed', async () => {

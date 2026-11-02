@@ -1,3 +1,5 @@
+import { matchesProviderWalletName } from '@/lib/piggyvest/provider-wallet-name';
+import { goalWalletName } from './goal-wallet-names';
 import { pickString } from './loose-schemas';
 import type { PayoutReadback } from './payout-analysis';
 import { readbackPayout } from './proof-7-readback';
@@ -58,17 +60,19 @@ export async function runGoalVariant(
   let walletId: string | null = null;
   if (sent.kind === 'resumed') {
     result.resumedOutcome = sent.priorOutcome;
-    const wanted = `${owner.qa.goalWalletName}${variant.nameSuffix}`.slice(
-      0,
-      120
-    );
+    const wanted = goalWalletName(owner.qa.goalWalletName, variant.nameSuffix);
     const list = usableList(await api.customerWallets(owner.customerId, 'ASC'));
-    const found = list?.edges.find(
-      (edge) => pickString(edge, ['name']) === wanted
-    );
-    walletId = pickString(found, ['id']);
-    // An unreadable list says nothing about whether the wallet exists.
-    result.exists = list === null ? null : walletId !== null;
+    // The sandbox rewrites names, so match letters and digits only; two
+    // matches are ambiguous and pick nothing.
+    const found =
+      list?.edges.filter((edge) =>
+        matchesProviderWalletName(pickString(edge, ['name']), wanted)
+      ) ?? [];
+    walletId = found.length === 1 ? pickString(found[0], ['id']) : null;
+    // An unreadable list, or an ambiguous one, says nothing about whether
+    // the wallet exists.
+    result.exists =
+      list === null || found.length > 1 ? null : walletId !== null;
   } else {
     result.httpStatus = sent.call.httpStatus;
     if (sent.call.ok) {

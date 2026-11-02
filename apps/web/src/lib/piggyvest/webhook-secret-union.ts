@@ -3,6 +3,12 @@ import { readPrimaryWalletBankInboxSecrets } from './primary-wallet-bank-inbox-r
 import { readPrimaryCardCustodyIntakeSecrets } from './primary-wallet-card-custody-intake-runtime';
 import { readPrimaryWalletPaidInterestInboxSecrets } from './primary-wallet-paid-interest-inbox-runtime';
 import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
+import {
+  derivePiggyvestKeyVersion,
+  partitionArchivedKeys,
+  readWebhookKeyArchive,
+  type WebhookKeyArchiveIssue,
+} from './webhook-key-archive';
 
 interface WebhookSecretConfig {
   webhookSecret?: unknown;
@@ -24,9 +30,22 @@ export type PiggyvestWebhookKeyFamily =
   | 'custody'
   | 'interest';
 
+/**
+ * Where a key stands at ingress:
+ * - `current`: configured key, always accepted;
+ * - `overlap`: rotated out but inside the bounded overlap window, still
+ *   accepted for new deliveries;
+ * - `replay-only`: rotated out and past the window. Never accepted for a
+ *   new delivery; it only re-checks bodies that were already stored.
+ */
+export type PiggyvestWebhookKeyStatus = 'current' | 'overlap' | 'replay-only';
+
 export interface PiggyvestFamilySecret {
   secret: string;
   family: PiggyvestWebhookKeyFamily;
+  /** Operator label for archived keys; derived (non-secret) otherwise. */
+  version?: string;
+  status?: PiggyvestWebhookKeyStatus;
 }
 
 /**
@@ -39,7 +58,9 @@ export interface PiggyvestFamilySecret {
 export function collectPiggyvestWebhookSecretsWithFamilies(
   env: NodeJS.ProcessEnv = process.env
 ): PiggyvestFamilySecret[] {
-  return collectPiggyvestWebhookSecretsWithStatus(env).secrets;
+  return collectPiggyvestWebhookSecretsWithStatus(env).secrets.map(
+    ({ secret, family }) => ({ secret, family })
+  );
 }
 
 export function collectPiggyvestWebhookSecrets(
@@ -54,9 +75,20 @@ export function collectPiggyvestWebhookSecrets(
   ];
 }
 
-function collectPiggyvestWebhookSecretsWithStatus(
-  env: NodeJS.ProcessEnv = process.env
-): { secrets: PiggyvestFamilySecret[]; misconfigured: boolean } {
+interface CollectedKeys {
+  /** Keys accepted for new deliveries: current plus in-overlap archived. */
+  secrets: PiggyvestFamilySecret[];
+  /** Archived keys past the overlap: replay re-checks only. */
+  replayOnly: PiggyvestFamilySecret[];
+  misconfigured: boolean;
+  /** Why the retired-key archive could not be used, when it could not. */
+  archiveIssue?: WebhookKeyArchiveIssue;
+}
+
+export function collectPiggyvestWebhookSecretsWithStatus(
+  env: NodeJS.ProcessEnv = process.env,
+  now: Date = new Date()
+): CollectedKeys {
   // Secrets-only readers: key material survives incomplete provisioning
   // (missing database password, unparseable scope, expired worker) so the
   // outer gate verifies and the unready intake answers a retryable 503
@@ -70,6 +102,7 @@ function collectPiggyvestWebhookSecretsWithStatus(
     ['interest', () => readPrimaryWalletPaidInterestInboxSecrets(env)],
   ];
   const secrets: PiggyvestFamilySecret[] = [];
+  const replayOnly: PiggyvestFamilySecret[] = [];
   let misconfigured = false;
   const seen = new Set<string>();
   const push = (candidate: unknown, family: PiggyvestWebhookKeyFamily) => {
@@ -79,7 +112,12 @@ function collectPiggyvestWebhookSecretsWithStatus(
       !seen.has(`${family}:${candidate}`)
     ) {
       seen.add(`${family}:${candidate}`);
-      secrets.push({ secret: candidate, family });
+      secrets.push({
+        secret: candidate,
+        family,
+        version: derivePiggyvestKeyVersion(candidate),
+        status: 'current',
+      });
     }
   };
   push(readLegacyWebhookSecret(env), 'legacy');
@@ -100,7 +138,40 @@ function collectPiggyvestWebhookSecretsWithStatus(
       misconfigured = true;
     }
   }
-  return { secrets, misconfigured };
+  // Archived (retired) keys: accepted only inside the overlap window, and
+  // never shadowing a key that is current under the same family.
+  const archive = readWebhookKeyArchive(env);
+  let archiveIssue: WebhookKeyArchiveIssue | undefined;
+  if (!archive.ok) {
+    misconfigured = true;
+    archiveIssue = archive.reason;
+  } else {
+    const { overlap, replayOnly: expired } = partitionArchivedKeys(
+      archive,
+      now
+    );
+    const current = new Set(
+      secrets.map((key) => `${key.family}:${key.secret}`)
+    );
+    const add = (
+      entries: typeof overlap,
+      target: PiggyvestFamilySecret[],
+      status: PiggyvestWebhookKeyStatus
+    ) => {
+      for (const entry of entries) {
+        if (current.has(`${entry.family}:${entry.secret}`)) continue;
+        target.push({
+          secret: entry.secret,
+          family: entry.family,
+          version: entry.version,
+          status,
+        });
+      }
+    };
+    add(overlap, secrets, 'overlap');
+    add(expired, replayOnly, 'replay-only');
+  }
+  return { secrets, replayOnly, misconfigured, archiveIssue };
 }
 
 /**
@@ -129,7 +200,14 @@ export function matchPiggyvestWebhookSecretWithFamilies(input: {
   rawBody: Uint8Array;
   signature: string | null;
   secrets: readonly PiggyvestFamilySecret[];
-}): { secret: string; families: PiggyvestWebhookKeyFamily[] } | undefined {
+}):
+  | {
+      secret: string;
+      families: PiggyvestWebhookKeyFamily[];
+      keyVersion: string;
+      keyStatus: PiggyvestWebhookKeyStatus;
+    }
+  | undefined {
   const match = input.secrets.find((candidate) =>
     verifyPiggyvestPayloadSignature({
       payload: input.rawBody,
@@ -138,44 +216,84 @@ export function matchPiggyvestWebhookSecretWithFamilies(input: {
     })
   );
   if (!match) return undefined;
+  const sameSecret = input.secrets.filter(
+    (candidate) => candidate.secret === match.secret
+  );
   const families = [
-    ...new Set(
-      input.secrets
-        .filter((candidate) => candidate.secret === match.secret)
-        .map((candidate) => candidate.family)
-    ),
+    ...new Set(sameSecret.map((candidate) => candidate.family)),
   ];
-  return { secret: match.secret, families };
+  // A secret that is current under any family is current; otherwise the
+  // first (earliest-ordered) entry names its version and status.
+  const labelled =
+    sameSecret.find((candidate) => candidate.status === 'current') ?? match;
+  return {
+    secret: match.secret,
+    families,
+    keyVersion: labelled.version ?? derivePiggyvestKeyVersion(match.secret),
+    keyStatus: labelled.status ?? 'current',
+  };
 }
 
 export type PiggyvestWebhookVerification =
   | { status: 'unconfigured' }
   | { status: 'invalid' }
+  | { status: 'revoked'; keyVersion: string }
   | {
       status: 'verified';
       secret: string;
       families: PiggyvestWebhookKeyFamily[];
+      keyVersion?: string;
+      keyStatus?: Exclude<PiggyvestWebhookKeyStatus, 'replay-only'>;
+      /**
+       * Part of the key set could not be loaded (unreadable archive, failed
+       * family), so `families` is only what WAS loaded: treat "not
+       * authorized" as retryable, never terminal.
+       */
+      incompleteKeySet?: boolean;
     };
 
 /**
  * Single entry point for the outer gate: collects every secret a
  * downstream intake trusts, then reports whether this delivery verifies
  * and which key families the matched secret authorizes.
+ *
+ * Only keys accepted at ingress participate: current keys and archived
+ * keys inside the overlap window. A signature that only a revoked
+ * (replay-only) key can produce is reported as `revoked`, distinct from
+ * `invalid`, so operators can tell a stale provider key from forgery.
  */
 export function verifyPiggyvestWebhookSecrets(input: {
   rawBody: Uint8Array;
   signature: string | null;
   env?: NodeJS.ProcessEnv;
+  now?: Date;
 }): PiggyvestWebhookVerification {
-  const { secrets, misconfigured } = collectPiggyvestWebhookSecretsWithStatus(
-    input.env
-  );
-  if (secrets.length === 0) return { status: 'unconfigured' };
+  const { secrets, replayOnly, misconfigured } =
+    collectPiggyvestWebhookSecretsWithStatus(input.env, input.now);
+  // No current key means the server is not configured to receive anything:
+  // an overlap key alone is a half-finished rotation, not a configuration.
+  if (!secrets.some((key) => key.status === 'current')) {
+    return { status: 'unconfigured' };
+  }
   const match = matchPiggyvestWebhookSecretWithFamilies({ ...input, secrets });
-  // A delivery that matches no loaded key is invalid — unless a family
-  // failed to load, in which case the key set is incomplete and the
-  // delivery may be legitimate. Report unconfigured (retryable 503) so
-  // the provider retries instead of the route 200-acking it as invalid.
-  if (!match) return { status: misconfigured ? 'unconfigured' : 'invalid' };
-  return { status: 'verified', secret: match.secret, families: match.families };
+  // No loaded key matches: invalid, unless a family failed to load. Then the
+  // delivery may be legitimate, so report unconfigured (retryable 503).
+  if (!match) {
+    if (misconfigured) return { status: 'unconfigured' };
+    const revoked = matchPiggyvestWebhookSecretWithFamilies({
+      ...input,
+      secrets: replayOnly,
+    });
+    return revoked
+      ? { status: 'revoked', keyVersion: revoked.keyVersion }
+      : { status: 'invalid' };
+  }
+  return {
+    status: 'verified',
+    secret: match.secret,
+    families: match.families,
+    keyVersion: match.keyVersion,
+    keyStatus: match.keyStatus === 'overlap' ? 'overlap' : 'current',
+    incompleteKeySet: misconfigured,
+  };
 }

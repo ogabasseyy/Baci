@@ -5,7 +5,7 @@
 // from the server via cookies, ensuring SSR/CSR consistency.
 import type React from 'react';
 
-import { useV2ThemeSafe } from '../providers/v2-theme-context';
+import { useV2ThemeSafe } from '../providers/use-v2-theme-safe';
 
 export const Logo: React.FC<React.SVGProps<SVGSVGElement>> = ({ className, ...props }) => {
   const { theme } = useV2ThemeSafe();

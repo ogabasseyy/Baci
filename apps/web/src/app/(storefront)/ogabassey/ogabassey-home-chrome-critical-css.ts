@@ -31,7 +31,7 @@ export const OGABASSEY_HOME_HEADER_CHROME_CRITICAL_CSS = `
 .ogabassey-navbar__menu-button{align-items:center;background:transparent;border:0;color:var(--ogabassey-shell-text);cursor:pointer;display:flex;flex:0 0 auto;height:2.75rem;justify-content:center;padding:0;width:2.75rem}
 .ogabassey-navbar__menu-button svg{height:1.5rem;width:1.5rem}
 .ogabassey-navbar__logo-link{align-items:center;color:var(--ogabassey-shell-text);cursor:pointer;display:flex;min-width:0;text-decoration:none}
-.ogabassey-navbar__logo{height:2.25rem;max-width:min(calc(100vw - 15.5rem),18rem);width:auto}
+.ogabassey-navbar__logo{height:2.25rem;max-width:clamp(4.5rem,calc(100vw - 15.5rem),18rem);width:auto}
 .ogabassey-navbar__search-wrap{order:3;position:relative;width:100%;z-index:30}
 .ogabassey-navbar-search{display:block;position:relative;width:100%}
 .ogabassey-navbar-search .ogabassey-navbar-search__input,.ogabassey-navbar-search input{background:var(--ogabassey-surface);border:0;border-radius:0.875rem;box-sizing:border-box;color:var(--store-foreground,var(--ogabassey-surface-text));display:block;font-size:0.9375rem;height:2.75rem;outline:0;padding:0 1rem 0 2.75rem;width:100%}

@@ -573,10 +573,18 @@
 
   .ogabassey-navbar__logo {
     height: 2.25rem;
-    max-width: min(calc(100vw - 15.5rem), 18rem);
+    max-width: clamp(4.5rem, calc(100vw - 15.5rem), 18rem);
     width: auto;
   }
 
+  /* Focus & Reading Flow Trade-off: Semantic DOM order is structured as
+     [Brand] -> [Search] -> [Actions] so screen-reader users navigating landmark
+     hierarchy encounter the primary catalog search capability before secondary
+     account/cart controls across viewports. On mobile viewports (<768px),
+     the primary row visually wraps search below actions via `order: 3` and
+     `width: 100%` for one-thumb reachability. This divergence from visual order
+     is an accepted layout trade-off to maintain desktop reading order without
+     desktop focus inversion. */
   .ogabassey-navbar__search-wrap {
     order: 3;
     position: relative;

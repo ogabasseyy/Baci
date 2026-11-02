@@ -222,12 +222,12 @@ describe('OgabasseyNavbar', () => {
     expect(accountLink).toHaveClass('ogabassey-navbar__icon-link');
   });
 
-  it('caps the mobile navbar logo width to prevent wrapping actions at 360px', async () => {
+  it('caps the mobile navbar logo width with a 4.5rem floor to prevent wrapping and collapse on narrow viewports down to 320px', async () => {
     const { OGABASSEY_HOME_HEADER_CHROME_CRITICAL_CSS } = await import(
       '@/app/(storefront)/ogabassey/ogabassey-home-chrome-critical-css'
     );
     expect(OGABASSEY_HOME_HEADER_CHROME_CRITICAL_CSS).toContain(
-      '.ogabassey-navbar__logo{height:2.25rem;max-width:min(calc(100vw - 15.5rem),18rem);width:auto}'
+      '.ogabassey-navbar__logo{height:2.25rem;max-width:clamp(4.5rem,calc(100vw - 15.5rem),18rem);width:auto}'
     );
   });
 });

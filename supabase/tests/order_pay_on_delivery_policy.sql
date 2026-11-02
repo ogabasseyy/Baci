@@ -140,13 +140,21 @@ SET LOCAL ROLE anon;
 SELECT 1 / CASE WHEN current_user = 'anon' THEN 1 ELSE 0 END;
 SELECT 1 / CASE WHEN has_language_privilege(current_user, 'plpgsql', 'USAGE') THEN 1 ELSE 0 END;
 SELECT 1 / CASE WHEN NOT has_function_privilege(current_user, 'public.is_storefront_pod_order_idempotency_hash(uuid,text,text)', 'EXECUTE') THEN 1 ELSE 0 END;
+-- Capture only the SQLSTATE, never a database error message or row data.
+SELECT set_config('baci.pod_probe_result', 'not_run', true);
 DO $$
 BEGIN
   BEGIN
     PERFORM public.is_storefront_pod_order_idempotency_hash('36700000-0000-4000-8000-000000000001'::uuid,'pod-key-12345678',repeat('b',64));
-    RAISE EXCEPTION 'anonymous caller executed POD replay probe';
-  EXCEPTION WHEN insufficient_privilege THEN NULL;
+    PERFORM set_config('baci.pod_probe_result', 'allowed', true);
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM set_config('baci.pod_probe_result', SQLSTATE, true);
   END;
 END $$;
 RESET ROLE;
+-- Distinct fixed lines distinguish an unexpected success, an application
+-- exception, and other errors in the replay runner's sanitized output.
+SELECT 1 / CASE WHEN current_setting('baci.pod_probe_result') = 'allowed' THEN 0 ELSE 1 END;
+SELECT 1 / CASE WHEN current_setting('baci.pod_probe_result') = 'P0001' THEN 0 ELSE 1 END;
+SELECT 1 / CASE WHEN current_setting('baci.pod_probe_result') = '42501' THEN 1 ELSE 0 END;
 ROLLBACK;

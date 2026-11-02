@@ -11,6 +11,7 @@ import { assertQuotePriceMatchesOrderFee } from '@/lib/shipping/assert-quote-pri
 import { assertShippableOrderState } from '@/lib/shipping/assert-shippable-order-state';
 import { attachBookingQuoteMetadata } from '@/lib/shipping/attach-booking-quote-metadata';
 import type { BookOrderRecord } from '@/lib/shipping/book-order-shipment-types';
+import { toBookingMerchantSenderError } from '@/lib/shipping/booking-merchant-sender-error';
 import { buildOrderShipmentBookingRequest } from '@/lib/shipping/build-order-shipment-booking-request';
 import {
   findReusableOrderShipment,
@@ -184,21 +185,7 @@ export async function bookOrderShipment(
       merchantId
     );
     if (!merchantSenderResult.ok) {
-      const isOriginMissing = merchantSenderResult.status === 400;
-      const isMerchantMissing = merchantSenderResult.status === 404;
-      throw new OrderShipmentBookingError(
-        isOriginMissing
-          ? 'Merchant shipping origin is not configured.'
-          : isMerchantMissing
-            ? 'Merchant details not found.'
-            : 'Failed to resolve merchant shipping origin. Please try again.',
-        merchantSenderResult.status,
-        isOriginMissing
-          ? 'MERCHANT_ORIGIN_MISSING'
-          : isMerchantMissing
-            ? 'MERCHANT_NOT_FOUND'
-            : 'MERCHANT_LOOKUP_FAILED'
-      );
+      throw toBookingMerchantSenderError(merchantSenderResult);
     }
     merchantSender = merchantSenderResult.sender;
   }

@@ -13,18 +13,9 @@ import { stripComments } from './security-integrity-strip-comments';
 import { versionAt } from './security-integrity-version-at';
 import { isAtLeast } from './security-integrity-version-floor';
 
-// Regression coverage for CVE-2026-104844 (GHSA-rj75-hqrm-r3gf):
-// `postcss-selector-parser` had quadratic complexity in flat selector
-// parsing (per-index `indexOf` scans over class/id index arrays), allowing
-// CPU exhaustion on attacker-supplied selectors. Fixed upstream in 7.1.6;
-// the 7.x line breaks @tailwindcss/typography's exact 6.0.10 dependency,
-// so 6.0.10 carries a backport patch (see `pnpm-workspace.yaml`
-// patchedDependencies). The guard asserts the Set-based membership code
-// is present, plus a timeout-controlled behavioral case that fails on
-// the actual pre-fix CPU-exhaustion condition. Every installed copy is
-// guarded (mirroring the graphql-tools suite): a nested pristine
-// duplicate under a dependent must not escape while the hoisted copy
-// passes.
+// GHSA-rj75-hqrm-r3gf and the follow-up flat-selector DoS advisory are
+// fixed upstream in 6.1.5. Guard all installed copies and retain the existing
+// parser behavior and linear-time Set membership tests after retiring the backport.
 
 const require = createRequire(import.meta.url);
 
@@ -59,14 +50,14 @@ describe('postcss-selector-parser integrity (CVE-2026-104844)', () => {
 
   it.each(
     candidateRoots()
-  )('resolves postcss-selector-parser at or above the 6.0.10 floor in %s', (root) => {
+  )('resolves postcss-selector-parser at or above the 6.1.5 floor in %s', (root) => {
     // A floor, like the katex suite: a future patched 6.0.x bump must
     // not fail this gate. Fail-closed: an unpatched bump still fails
     // the backport markers and the linear-time behavior case.
     expect(
       isAtLeast(
         parseVersion(versionAt(root, 'postcss-selector-parser')),
-        [6, 0, 10]
+        [6, 1, 5]
       )
     ).toBe(true);
   });

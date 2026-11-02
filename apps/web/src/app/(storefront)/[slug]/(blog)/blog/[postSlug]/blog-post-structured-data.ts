@@ -12,6 +12,7 @@ import {
 } from '@/lib/blog-structured-data-images';
 import { buildBlogVideoMetadata } from '@/lib/blog-video-metadata';
 import type { resolveBlogCatalogPrices } from '@/lib/resolve-blog-catalog-prices';
+import { resolveBlogPostKeywords } from '@/lib/resolve-blog-post-keywords';
 import {
   generateBlogPostSchema,
   generateBreadcrumbSchema,
@@ -49,6 +50,7 @@ type BlogPostStructuredDataInput = {
     featured_image_url?: string | null;
     featured_image_variants?: Record<string, unknown> | null;
     featured_image_width?: number | null;
+    focus_keyword?: string | null;
     keywords?: string[] | null;
     published_at: string;
     reading_time_minutes?: number | null;
@@ -135,7 +137,7 @@ export function buildBlogPostStructuredData({
         ),
       },
       wordCount: post.word_count ?? undefined,
-      keywords: post.keywords ?? undefined,
+      keywords: resolveBlogPostKeywords(post),
       category: post.category ?? undefined,
       readingTime: post.reading_time_minutes ?? undefined,
       blogId: `${blogIndexUrl}#blog`,

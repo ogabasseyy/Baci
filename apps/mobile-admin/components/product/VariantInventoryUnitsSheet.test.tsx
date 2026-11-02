@@ -203,6 +203,24 @@ describe('VariantInventoryUnitsSheet', () => {
     expect(screen.getByText('Notes: First batch')).toBeInTheDocument();
   });
 
+  it('preserves existing notes when saving another field', () => {
+    mocks.updateMutateAsync.mockResolvedValueOnce({ success: true });
+    render(
+      <VariantInventoryUnitsSheet
+        colors={colors}
+        productId="product-1"
+        onClose={vi.fn()}
+        visible={true}
+      />
+    );
+    fireEvent.click(screen.getByLabelText('Edit unit 123456789012345'));
+    fireEvent.click(screen.getByLabelText('Select status defective'));
+    fireEvent.click(screen.getByLabelText('Save unit changes'));
+    expect(mocks.updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'defective', notes: 'First batch' })
+    );
+  });
+
   it('enters inline edit mode, modifies fields, and triggers update mutation', () => {
     mocks.useBranches.mockReturnValue({
       data: [

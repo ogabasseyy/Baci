@@ -35,6 +35,7 @@ describe('saveSettings non-profile channels', () => {
       data: {
         business_name: 'Test Store',
         country: 'NG',
+        phone: '',
         site_description: '',
         support_email: '',
         support_phone: '',
@@ -71,6 +72,7 @@ describe('saveSettings non-profile channels', () => {
       data: {
         business_name: 'Test Store',
         country: 'NG',
+        phone: '',
         site_description: '',
         support_email: '',
         support_phone: '',
@@ -108,6 +110,7 @@ describe('saveSettings non-profile channels', () => {
       data: {
         business_name: 'First Store',
         country: 'NG',
+        phone: '',
         site_description: '',
         support_email: '',
         support_phone: '',

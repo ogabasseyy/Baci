@@ -75,7 +75,9 @@ export const FINDING_TRUTH: Record<string, (c: TruthContext) => Truth> = {
   w2w_changes_counter: (c) => bool(c.o.w2wIncrementsCounter),
   bank_outflow_changes_counter: (c) => bool(c.o.bankIncrementsCounter),
   // proof 5
-  existing_accrual_schema_accepts_response: () => 'any',
+  // The mock's accrual reply copies the live shape (2026-10-31), so the
+  // existing typed schema must accept it whenever the read succeeds.
+  existing_accrual_schema_accepts_response: YES,
   accrual_records_observed: (c) => bool(c.o.accruedEdgeCount > 0),
   accrual_edge_shape_observed: (c) => bool(c.o.accruedEdgeCount > 0),
   accrual_cursor_advances: (c) =>

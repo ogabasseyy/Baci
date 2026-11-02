@@ -70,6 +70,7 @@ test('the Quality Gate generates route types and reaches the tools, worker, and 
     '../../tools/staging/prefunded-card/treasury-snapshot-cli.ts',
     '../../tools/staging/prefunded-card/treasury-snapshot-cli.test.ts',
     'tools/events/**/*.ts',
+    'tools/blog/**/*.ts',
     'tools/db/**/*.ts',
     'tools/cost/**/*.ts',
     'src/scripts/process-domain-events.ts',

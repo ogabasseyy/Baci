@@ -160,7 +160,18 @@ $$;
 -- The live caller: releasing an expired quiz prize cancels its reserved order
 -- through the nested SECURITY DEFINER chain, with no client-role grants.
 RESET ROLE;
-SET LOCAL session_replication_role = replica;
+INSERT INTO public.customers (id, merchant_id, email, full_name)
+VALUES (
+  'a4270300-0000-4000-8000-000000000033',
+  'a4270300-0000-4000-8000-000000000001',
+  'order-inventory-rpcs-42703-winner@example.com', 'Quiz Winner'
+);
+INSERT INTO public.products (id, merchant_id, name, price, manage_stock, status)
+VALUES (
+  'a4270300-0000-4000-8000-000000000035',
+  'a4270300-0000-4000-8000-000000000001',
+  'Quiz prize', 1, false, 'active'
+);
 INSERT INTO public.orders (id, merchant_id, order_number, total, shipping_status)
 VALUES (
   'a4270300-0000-4000-8000-000000000015',
@@ -172,6 +183,10 @@ VALUES (
   'a4270300-0000-4000-8000-000000000001',
   'rpc-42703-quiz', 'RPC 42703 quiz', 'active'
 );
+-- Seed the transferred award/reservation shape directly; their lifecycle
+-- triggers are not under test.
+ALTER TABLE public.quiz_awards DISABLE TRIGGER USER;
+ALTER TABLE public.quiz_prize_reservations DISABLE TRIGGER USER;
 INSERT INTO public.quiz_awards (
   id, event_id, customer_id, award_type, status, amount, reserved_order_id
 ) VALUES (
@@ -192,7 +207,8 @@ INSERT INTO public.quiz_prize_reservations (
   'unlimited', 'transferred',
   'a4270300-0000-4000-8000-000000000032', now()
 );
-SET LOCAL session_replication_role = origin;
+ALTER TABLE public.quiz_awards ENABLE TRIGGER USER;
+ALTER TABLE public.quiz_prize_reservations ENABLE TRIGGER USER;
 
 DO $$
 BEGIN

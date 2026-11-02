@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-02T20:04:57+00:00",
-  "source_revision": "7e2217c44a8390764fa38cbc37cc37998a05b59d",
-  "evidence_digest": "b692cf5be560da15c4e4170b18bc9d45d8f583dcf4ba4eb9705ad5867f8a9c79",
-  "claims_digest": "3d5321991d5d94b68a3e9cd1dd658d01237b2d53704335ae57cffaf38ae1b4c7",
-  "review_scope": "Source review: Oxygen remains local staging QA only. Cited capability and access-map sources were checked and remain unchanged across the main integration. Deployment and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-02T21:08:58+00:00",
+  "source_revision": "ee1a8d343dea9ae5792cedd02d85a7985afff6c9",
+  "evidence_digest": "5ad9a15cf4a5bf815b2435506ba0610875c320f8733ab6d7c263efe220638a30",
+  "claims_digest": "152c2f76e3031a21f893bdcd5a7cf6f228b15b4695990eabd87035a9f6fd29a5",
+  "review_scope": "Source review: GIGL webhook deliveries are decrypted, account-matched tracking hints that only expedite the existing authoritative tracking poller; carrier configuration and operational readiness remain separate. Cited capability and access-map sources remain unchanged across this main integration. Oxygen remains local staging QA only; deployment and transaction readiness require separate verification.",
   "capabilities": [
     {
       "id": "payments",

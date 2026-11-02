@@ -27,7 +27,7 @@
 BEGIN;
 
 CREATE OR REPLACE FUNCTION savings_notifications.progress_message(p_saved_kobo numeric, p_target_kobo numeric)
-RETURNS text LANGUAGE plpgsql IMMUTABLE SET search_path = pg_catalog AS $$
+RETURNS text LANGUAGE plpgsql STABLE SET search_path = pg_catalog AS $$
 DECLARE v_progress integer;
 BEGIN
   IF p_saved_kobo IS NULL OR p_target_kobo IS NULL OR p_saved_kobo < 0 OR p_target_kobo <= 0
@@ -68,7 +68,7 @@ BEGIN
   IF NOT FOUND THEN
     RETURN savings_notifications.progress_message(NULL, NULL);
   END IF;
-  -- Count only paid_interest postings, exactly as the per-goal interest of
+  -- Count only paid_interest postings and production receipts, exactly as the per-goal interest of
   -- get_customer_savings_earnings (the app's savings display) does, so the
   -- notice never reads higher than the balance the customer then opens.
   SELECT coalesce(sum(posting.amount_kobo), 0) INTO v_ledger_interest
@@ -79,6 +79,8 @@ BEGIN
       AND posting.account = 'paid_interest';
   SELECT coalesce(sum(receipt.net_kobo - coalesce(reversal.amount_kobo, 0)), 0) INTO v_primary_interest
     FROM piggyvest_primary.paid_interest_receipts receipt
+    JOIN piggyvest_primary.integrations integration ON integration.id = receipt.integration_id
+      AND integration.environment = 'production' AND integration.merchant_id = receipt.merchant_id
     LEFT JOIN LATERAL (
       SELECT sum(reversed.amount_kobo) AS amount_kobo
       FROM piggyvest_primary.paid_interest_reversals reversed

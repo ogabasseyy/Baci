@@ -49,7 +49,7 @@ BEGIN
     SELECT * FROM (VALUES
       ('piggyvest_primary.notify_paid_interest()', true, 'v'),
       ('savings_notifications.interest_recorded()', true, 'v'),
-      ('savings_notifications.progress_message(numeric,numeric)', false, 'i'),
+      ('savings_notifications.progress_message(numeric,numeric)', false, 's'),
       ('savings_notifications.interest_progress(uuid)', false, 'v')
     ) AS expected(signature, definer, volatility)
   LOOP

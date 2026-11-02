@@ -52,13 +52,15 @@ INSERT INTO public.customer_savings_goals(id, merchant_id, customer_id, product_
   start_date, maturity_date, terms_accepted_at, non_withdrawable_accepted_at)
 SELECT pg_temp.id(n), pg_temp.id(10), pg_temp.id(20), pg_temp.id(11), 'Interest copy goal', 'active',
   'manual', 1000, 200, 100, 'daily', current_date, current_date + 30, now(), now()
-FROM (VALUES (30), (31), (32)) AS goal(n);
+FROM (VALUES (30), (31), (32), (33)) AS goal(n);
 
 INSERT INTO piggyvest_primary.integrations(id, merchant_id, business_id, environment, executor_login, enabled)
   VALUES (pg_temp.id(40), pg_temp.id(10), 'interest-copy-business', 'production',
     'interest_copy_fixture_executor', true),
   (pg_temp.id(42), pg_temp.id(10), 'interest-copy-business-b', 'production',
-    'interest_copy_fixture_executor_b', true);
+    'interest_copy_fixture_executor_b', true),
+  (pg_temp.id(44), pg_temp.id(10), 'interest-copy-business-staging', 'staging',
+    'interest_copy_fixture_executor_staging', true);
 SET LOCAL session_replication_role = replica;
 INSERT INTO piggyvest_primary.paid_interest_crosswalks(id, integration_id, goal_id, api_wallet_id,
   api_customer_id, onboarding_customer_id, webhook_customer_id, source_wallet_id, accrued_wallet_id,
@@ -71,6 +73,10 @@ VALUES (pg_temp.id(41), pg_temp.id(40), pg_temp.id(30), 'copy-api-wallet', 'copy
   (pg_temp.id(43), pg_temp.id(42), pg_temp.id(32), 'copy-api-wallet-b', 'copy-api-customer-b',
   'copy-onboarding-customer-b', 'copy-webhook-customer-b', 'copy-source-b', 'copy-accrued-b',
   'copy-destination-b', NULL, repeat('a', 64), repeat('b', 64), 'synthetic-interest-copy-fixture-b',
+  'provider_net_is_customer_plan_interest', true),
+  (pg_temp.id(45), pg_temp.id(44), pg_temp.id(33), 'copy-api-wallet-s', 'copy-api-customer-s',
+  'copy-onboarding-customer-s', 'copy-webhook-customer-s', 'copy-source-s', 'copy-accrued-s',
+  'copy-destination-s', NULL, repeat('a', 64), repeat('b', 64), 'synthetic-interest-copy-fixture-s',
   'provider_net_is_customer_plan_interest', true);
 SET LOCAL session_replication_role = origin;
 

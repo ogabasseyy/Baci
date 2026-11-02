@@ -196,4 +196,15 @@ SELECT pg_temp.check(
   savings_notifications.interest_progress(pg_temp.id(32)) = 'You’re now 20% of the way there.',
   'the other integration''s goal must net its own reversed payout (₦200 of ₦1,000)');
 
+-- 11. A receipt recorded under a non-production integration is not interest
+-- the app's savings display counts, so the notice progress must not either
+-- (the goal stays at ₦200 of ₦1,000).
+INSERT INTO piggyvest_primary.paid_interest_receipts(integration_id, payout_id, crosswalk_id,
+  goal_id, merchant_id, customer_id, net_kobo, financial_identity, body_digest)
+  VALUES (pg_temp.id(44), 'copy-payout-staging', pg_temp.id(45), pg_temp.id(33), pg_temp.id(10),
+    pg_temp.id(20), 30000, jsonb_build_object('payoutId', 'copy-payout-staging'), repeat('a', 64));
+SELECT pg_temp.check(
+  savings_notifications.interest_progress(pg_temp.id(33)) = 'You’re now 20% of the way there.',
+  'a staging-environment receipt must not raise the progress above what the app displays');
+
 ROLLBACK;

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MerchantContext } from '@/lib/get-merchant-for-api-request';
 import {
   buildDeniedStaffCtx,
   buildPostRequest,
@@ -7,7 +8,6 @@ import {
   expectNoWrites,
   getMocks,
   MERCHANT_B_ID,
-  type MerchantContext,
   mockAuthSuccess,
   mockProvenCustomer,
   ORDER_ID,

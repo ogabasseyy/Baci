@@ -1,0 +1,5 @@
+supabase/tests/wallet_pin_store.sql
+# Two live dblink backends; it commits its own fixtures and removes them.
+supabase/tests/wallet_pin_store_concurrency.sql
+# Same two backends: the clock is read after the lock on issue and reset.
+supabase/tests/wallet_pin_store_concurrency_clock.sql

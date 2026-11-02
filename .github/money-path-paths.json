@@ -3,7 +3,7 @@
   "version": 1,
   "statusContext": "money-pr-assurance",
   "moneyKeywords": {
-    "$comment": "A changed file is a money path when its path contains one of these words anywhere, ignoring case and treating hyphens and underscores alike. Interface components, screens, hooks, scripts and tests count too: money logic lives in all of them. Only documentation and images (`outside`) never count. SQL files are named freely, so their changed text is searched as well (`contentPaths`), and SQL whose changed text GitHub does not return counts as money. `moneyPaths` adds money code whose path has none of the words: checkout code in the apps and shared packages, the orders API, wallet-releasing self-fulfilment, domain payment callbacks, the service-role client that money webhooks use, the hosted staging request gate, PiggyVest staging tools and the VPS cron runner. A contract test finds today's money code from what each file does and fails if any of it is missed.",
+    "$comment": "A changed file is a money path when its path contains one of these words anywhere, ignoring case and treating hyphens and underscores alike. Interface components, screens, hooks, scripts and tests count too: money logic lives in all of them. Only documentation and images (`outside`) never count. SQL files are named freely, so their changed text is searched as well (`contentPaths`) for the keywords and, as whole words or identifier parts, the money verbs in `contentWords`; other code files count when the lines they add or remove call or define a money operation (`money-pr-assurance-detect.mjs`, shared with the contract sweep), and SQL whose changed text GitHub does not return counts as money. `moneyPaths` adds money code whose path has none of the words: checkout code in the apps and shared packages, the orders API, wallet-releasing self-fulfilment, domain payment callbacks, the service-role client that money webhooks use, the hosted staging request gate, PiggyVest staging tools and the VPS cron runner. A contract test finds today's money code from what each file does and fails if any of it is missed.",
     "outside": [
       "docs/**",
       "public/**",
@@ -18,6 +18,14 @@
       "**/*.ico"
     ],
     "contentPaths": ["**/*.sql"],
+    "contentWords": [
+      "debit",
+      "credit",
+      "settle",
+      "transfer",
+      "balance",
+      "charge"
+    ],
     "keywords": [
       "piggyvest",
       "wallet",

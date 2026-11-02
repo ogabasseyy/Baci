@@ -28,8 +28,16 @@ name of a renamed file:
   service-role client that money webhooks use, the hosted staging request
   gate, PiggyVest staging tools and the VPS cron runner;
 - is SQL (`moneyKeywords.contentPaths`) whose changed text contains a money
-  word, because database files are named freely. SQL whose changed text
-  GitHub does not return (a very large or renamed file) counts as money; or
+  word, or one of the money verbs in `moneyKeywords.contentWords` (debit,
+  credit, settle, transfer, balance, charge) as a whole word or identifier
+  part, because database files are named freely. SQL whose changed text
+  GitHub does not return (a very large or renamed file) counts as money;
+- is other runtime code (not tests, fixtures or docs) whose added or removed
+  lines call or define a money operation (a money database function or money
+  API endpoint), whatever the file is called. This uses
+  `money-pr-assurance-detect.mjs`, the same detection as the contract sweep.
+  Runtime code whose diff GitHub does not return is judged by its path
+  alone; or
 - matches `governancePaths`: the assurance check's own files.
 
 Interface components, screens, hooks, scripts and tests count like any other

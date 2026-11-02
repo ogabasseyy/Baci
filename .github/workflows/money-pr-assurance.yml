@@ -58,6 +58,13 @@ on:
       # Read by the contract tests: CI job names and the CI change filter.
       - '.github/workflows/ci.yml'
       - '.github/filters/ci.yml'
+      # The contract sweep reads every tracked runtime file, so it runs
+      # whenever application or runtime code changes.
+      - 'apps/**'
+      - 'packages/**'
+      - 'supabase/**'
+      - 'vps-workers/**'
+      - 'tools/**'
 
 permissions: {}
 

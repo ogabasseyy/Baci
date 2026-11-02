@@ -157,6 +157,13 @@ test('the self-test runs whenever any governance file changes', () => {
     '.github/workflows/ci.yml',
     '.github/filters/ci.yml',
     'docs/runbooks/money-pr-assurance.md',
+    // The coverage sweep reads all runtime code, so ordinary app changes
+    // must re-run it.
+    'apps/web/src/lib/order-fulfilment.ts',
+    'packages/shared/src/money.ts',
+    'supabase/migrations/20261102000000_x.sql',
+    'vps-workers/jobs/run-web-cron.sh',
+    'tools/staging/plan.py',
   ]) {
     assert.ok(
       triggers.some((pattern) => pattern.test(path)),

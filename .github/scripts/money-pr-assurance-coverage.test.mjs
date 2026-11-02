@@ -7,6 +7,11 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import {
+  CODE,
+  isRuntimeCode,
+  moneyOperation as detectMoneyOperation,
+} from './money-pr-assurance-detect.mjs';
 import { loadRawConfig } from './money-pr-assurance.test-support.mjs';
 import {
   classifyChangedFiles,
@@ -16,35 +21,15 @@ import {
 const config = parseAssuranceConfig(loadRawConfig());
 const repoRoot = new URL('../../', import.meta.url).pathname;
 
-// A database function moves or holds money when its name names a money
-// noun. Pure reads (get_, list_, ...) are left out.
-const MONEY_NOUN =
-  /wallet|savings|piggyvest|store_?credit|prefund|primary_(?:card|bank|inflow|interest)|plan_transfer|refund|payout|payment|vtu|airtime|imei|petrock|loyalty|ledger|settle|withdraw|debit|bnpl|klump|redvault|credit_direct|shipping_charge/i;
-const READ_ONLY = /^(?:get|list|count|search|read|is|has|can)_/i;
-const RPC_CALL = /\.rpc\s*(?:<[^>]*>)?\s*\(\s*['"`]([a-z0-9_]+)['"`]/gi;
-const SQL_FUNCTION =
-  /create\s+(?:or\s+replace\s+)?function\s+(?:[a-z_]+\.)?"?([a-z0-9_]+)/gi;
-// A call to one of the app's own money endpoints, from any client.
-const MONEY_ROUTE =
-  /['"`]\/api\/(?:[a-z0-9[\]-]+\/)*(?:wallet|savings|piggyvest|payments?|payouts?|refunds?|vtu|imei-check|loyalty)(?:[/?'"`$]|-)/i;
-const CODE = /\.(?:ts|tsx|js|jsx|mjs|cjs|sql|py|sh)$/;
-// Tests, fixtures and generated types describe money code without running
-// it; route tables name money routes without calling them.
-const NOT_RUNTIME = [
-  /(?:^|\/)(?:__tests__|tests?|test-support|fixtures?|__mocks__)\//,
-  /\.(?:test|spec|test-support|test-utils|test-fixtures)\.[a-z]+$/,
-  /^apps\/web\/src\/types\/supabase\.ts$/,
-  /^apps\/web\/src\/lib\/(?:proxy\/|rate-limit)/,
-  /^docs\//,
-];
+const words = config.moneyKeywords.contentWords;
+const asDiff = (text) =>
+  text
+    .split('\n')
+    .map((line) => `+${line}`)
+    .join('\n');
 
 function moneyOperation(text) {
-  for (const pattern of [RPC_CALL, SQL_FUNCTION]) {
-    for (const [, name] of text.matchAll(pattern)) {
-      if (MONEY_NOUN.test(name) && !READ_ONLY.test(name)) return name;
-    }
-  }
-  return MONEY_ROUTE.exec(text)?.[0] ?? null;
+  return detectMoneyOperation(text, words);
 }
 
 function isMoney(path, patch) {
@@ -67,7 +52,7 @@ function trackedFiles() {
 test('every tracked file that runs a money operation is a money path', () => {
   const operations = [];
   for (const path of trackedFiles()) {
-    if (NOT_RUNTIME.some((pattern) => pattern.test(path))) continue;
+    if (!isRuntimeCode(path)) continue;
     let text;
     try {
       text = readFileSync(`${repoRoot}${path}`, 'utf8');
@@ -76,7 +61,7 @@ test('every tracked file that runs a money operation is a money path', () => {
     }
     const operation = moneyOperation(text);
     // The whole file stands in for its diff: any change to it is judged.
-    if (operation) operations.push({ path, operation, text });
+    if (operation) operations.push({ path, operation, text: asDiff(text) });
   }
   assert.ok(operations.length > 500, 'the sweep must see the money code');
   const missed = operations

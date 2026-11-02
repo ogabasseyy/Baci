@@ -187,6 +187,16 @@ export function checkOxygenProviderRateLimit(
   });
 }
 
+export function checkOxygenPhoneRedemptionRateLimit(
+  request: NextRequest
+): Promise<RateLimitResult> {
+  return applyRateLimit(
+    getTrustedClientIdentifier(request),
+    'oxygen-phone-redemption',
+    { maxRequests: 10, windowMs: 60_000, failClosedWithoutRedis: true }
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Response helper
 // ---------------------------------------------------------------------------

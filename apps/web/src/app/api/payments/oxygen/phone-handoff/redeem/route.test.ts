@@ -9,8 +9,8 @@ const m = vi.hoisted(() => ({
   worker: vi.fn(),
 }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: m.csrf }));
-vi.mock('@/lib/ensure-action-rate-limit', () => ({
-  ensureActionRateLimit: m.limit,
+vi.mock('@/lib/rate-limit', () => ({
+  checkOxygenPhoneRedemptionRateLimit: m.limit,
 }));
 vi.mock('@/lib/payments/oxygen/runtime-connection', () => ({
   connectOxygenRuntime: m.connect,
@@ -36,7 +36,7 @@ const request = (
 beforeEach(() => {
   vi.resetAllMocks();
   m.csrf.mockResolvedValue({ valid: true });
-  m.limit.mockResolvedValue(true);
+  m.limit.mockResolvedValue({ allowed: true });
   m.connect.mockReturnValue({
     worker: m.worker,
     phoneConfiguration: { origin: 'https://handoff.example.test' },
@@ -48,7 +48,7 @@ beforeEach(() => {
 it('requires CSRF, rate limit, origin and valid capability before worker login', async () => {
   m.csrf.mockResolvedValueOnce({ valid: false });
   expect((await POST(request())).status).toBe(403);
-  m.limit.mockResolvedValueOnce(false);
+  m.limit.mockResolvedValueOnce({ allowed: false });
   expect((await POST(request())).status).toBe(429);
   expect((await POST(request(undefined, 'https://evil.test'))).status).toBe(
     403

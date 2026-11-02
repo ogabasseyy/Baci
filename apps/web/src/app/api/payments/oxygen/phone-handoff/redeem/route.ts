@@ -1,8 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
 import { redeemDurableOxygenHandoff } from '@/lib/payments/oxygen/durable-phone-handoff';
 import { connectOxygenRuntime } from '@/lib/payments/oxygen/runtime-connection';
+import { checkOxygenPhoneRedemptionRateLimit } from '@/lib/rate-limit';
 import { oxygenPhoneRedemptionSchema } from '@/schemas/oxygen-phone-handoff';
 export const maxDuration = 30;
 const headers = {
@@ -18,12 +18,7 @@ export async function POST(request: NextRequest) {
       csrf.response ??
       NextResponse.json({ error: 'Invalid request' }, { status: 403, headers })
     );
-  if (
-    !(await ensureActionRateLimit('oxygen-phone-redemption', {
-      requests: 10,
-      windowMs: 60000,
-    }))
-  )
+  if (!(await checkOxygenPhoneRedemptionRateLimit(request)).allowed)
     return NextResponse.json(
       { error: 'Please wait and try again' },
       { status: 429, headers }

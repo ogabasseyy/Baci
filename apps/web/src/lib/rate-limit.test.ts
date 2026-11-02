@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   __resetRateLimitStoreForTesting,
   checkImeiPollRateLimit,
+  checkOxygenPhoneRedemptionRateLimit,
   checkOxygenProviderRateLimit,
   checkRateLimit,
   getTrustedClientIdentifier,
@@ -32,6 +33,15 @@ it('fails closed for Oxygen provider requests without shared Redis', async () =>
   mockGetRedis.mockReturnValue(null);
   await expect(
     checkOxygenProviderRateLimit('customer', 'action:validate_customer', 6)
+  ).resolves.toMatchObject({ allowed: false });
+});
+it('fails closed for anonymous Oxygen handoff redemption without shared Redis', async () => {
+  mockGetRedis.mockReturnValue(null);
+  const request = new NextRequest(
+    'https://example.test/api/payments/oxygen/phone-handoff/redeem'
+  );
+  await expect(
+    checkOxygenPhoneRedemptionRateLimit(request)
   ).resolves.toMatchObject({ allowed: false });
 });
 it('uses the same distributed Oxygen budget across requests', async () => {

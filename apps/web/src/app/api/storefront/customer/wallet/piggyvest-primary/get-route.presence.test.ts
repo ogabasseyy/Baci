@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { PRIMARY_WALLET_SNAPSHOT_VERSION_HEADER } from '@/lib/piggyvest/primary-wallet-snapshot-contract';
 import { PRIMARY_WALLET_STATEMENTS } from '@/lib/piggyvest/primary-wallet-statements';
 import { GET } from './get-route';
 
@@ -60,6 +61,11 @@ const scope = {
 };
 const url = `https://example.com/api/storefront/customer/wallet/piggyvest-primary?merchantId=${merchantId}`;
 const statements = () => mocks.calls.map((call) => call.statement);
+// A client that understands the not_started status says so explicitly.
+const notStartedClient = () =>
+  new NextRequest(url, {
+    headers: { [PRIMARY_WALLET_SNAPSHOT_VERSION_HEADER]: '2' },
+  });
 
 function expectNoProviderOrReviewRead() {
   expect(mocks.wallet).not.toHaveBeenCalled();
@@ -110,16 +116,41 @@ beforeEach(() => {
 
 describe('primary wallet GET onboarding presence', () => {
   it('reports not started with no intent before any provider, mapping or review read', async () => {
-    const response = await GET(new NextRequest(url));
+    const response = await GET(notStartedClient());
 
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('vary')).toContain(
+      PRIMARY_WALLET_SNAPSHOT_VERSION_HEADER
+    );
     expect(await response.json()).toEqual({
       status: 'not_started',
       account: null,
     });
     expectNoProviderOrReviewRead();
     expect(mocks.calls[0]?.parameters).toEqual([JSON.stringify(scope)]);
+  });
+
+  // Installed mobile builds parse the snapshot with a strict union that only
+  // knows pending and ready; they must keep the reply they already accept.
+  it.each([
+    ['sends no snapshot version', undefined],
+    ['sends the original snapshot version', '1'],
+    ['sends an unknown snapshot version', 'not_started'],
+  ])('keeps the legacy pending reply when a client %s', async (_label, version) => {
+    const headers: Record<string, string> = version
+      ? { [PRIMARY_WALLET_SNAPSHOT_VERSION_HEADER]: version }
+      : {};
+
+    const response = await GET(new NextRequest(url, { headers }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('vary')).toContain(
+      PRIMARY_WALLET_SNAPSHOT_VERSION_HEADER
+    );
+    expect(await response.json()).toEqual({ status: 'pending', account: null });
+    expectNoProviderOrReviewRead();
   });
 
   it.each([
@@ -132,7 +163,7 @@ describe('primary wallet GET onboarding presence', () => {
   ])('fails closed when %s', async (_label, outcome) => {
     mocks.presence.mockImplementation(outcome);
 
-    const response = await GET(new NextRequest(url));
+    const response = await GET(notStartedClient());
 
     expect(response.status).toBe(503);
     const body = await response.json();
@@ -147,7 +178,7 @@ describe('primary wallet GET onboarding presence', () => {
   it('keeps the existing wallet read once a durable intent exists', async () => {
     mocks.presence.mockResolvedValue({ rows: [{ result: true }] });
 
-    const response = await GET(new NextRequest(url));
+    const response = await GET(notStartedClient());
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(

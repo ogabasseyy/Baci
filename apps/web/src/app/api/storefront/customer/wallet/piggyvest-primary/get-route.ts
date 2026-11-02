@@ -9,6 +9,10 @@ import { readPrimaryWalletReview } from '@/lib/piggyvest/primary-wallet-review';
 import { recoverPrimaryWalletRouting } from '@/lib/piggyvest/primary-wallet-routing-recovery';
 import { readPrimaryWalletRuntime } from '@/lib/piggyvest/primary-wallet-runtime';
 import { readPrimaryWalletSnapshot } from '@/lib/piggyvest/primary-wallet-snapshot';
+import {
+  notStartedPrimaryWalletSnapshot,
+  PRIMARY_WALLET_SNAPSHOT_VERSION_HEADER,
+} from '@/lib/piggyvest/primary-wallet-snapshot-contract';
 import { verifyPrimaryWalletMapping } from '@/lib/piggyvest/primary-wallet-verification';
 import { retrievePiggyvestFundingAccounts } from '@/lib/piggyvest/wallet-funding';
 import { retrievePiggyvestWallet } from '@/lib/piggyvest/wallets';
@@ -70,10 +74,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // A customer with no durable onboarding intent has nothing to read at
     // the provider or in review storage: answer before either is touched.
     // A failed or malformed presence read throws and fails closed below.
+    // Only a client that advertises the not_started status receives it;
+    // installed builds keep the pending reply their strict schema accepts.
     if (!(await hasPrimaryWalletOnboarding(scope, execute))) {
       return NextResponse.json(
-        { status: 'not_started', account: null },
-        { headers: { 'Cache-Control': 'no-store' } }
+        notStartedPrimaryWalletSnapshot(request.headers),
+        {
+          headers: {
+            'Cache-Control': 'no-store',
+            Vary: PRIMARY_WALLET_SNAPSHOT_VERSION_HEADER,
+          },
+        }
       );
     }
     const providerConfig = {

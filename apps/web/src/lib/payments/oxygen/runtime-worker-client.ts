@@ -2,9 +2,19 @@ import 'server-only';
 import { createClient } from '@supabase/supabase-js';
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 
+function createWorkerSupabaseClient() {
+  return createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
 /** A connection owns one ordinary worker session; it is never shared across requests. */
 export function createOxygenWorkerClient(email: string, password: string) {
-  type Worker = ReturnType<typeof createClient>;
+  type Worker = ReturnType<typeof createWorkerSupabaseClient>;
   let cached: { client: Worker; validUntil: number } | undefined;
   let pending: Promise<Worker> | undefined;
   return async (): Promise<Worker> => {
@@ -12,13 +22,7 @@ export function createOxygenWorkerClient(email: string, password: string) {
     if (!pending) {
       pending = (async () => {
         try {
-          const client = createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
-            auth: {
-              persistSession: false,
-              autoRefreshToken: false,
-              detectSessionInUrl: false,
-            },
-          });
+          const client = createWorkerSupabaseClient();
           const { data, error } = await client.auth.signInWithPassword({
             email,
             password,

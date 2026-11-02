@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 2 November 2026 against source revision
-`278f759b187f61f4312b2d4a48cadfeb3fdc5c23`. Checkout payment availability was re-reviewed:
+`1c4d2fdd6b9004b1e470902469a2577d51adab18`. Checkout payment availability was re-reviewed:
 Oxygen remains local-staging QA only, not a production shopper capability. Other
 cited source evidence is unchanged from the previous capability review. This is
 a navigation map, not authorization or proof of current deployment. Check the

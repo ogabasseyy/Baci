@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-02T04:14:32+00:00",
-  "source_revision": "278f759b187f61f4312b2d4a48cadfeb3fdc5c23",
-  "evidence_digest": "b1f89e19c67b37960416c5656c3b78424dfc51dfe8c7f4a4a0d3aa88a7e02f7d",
-  "claims_digest": "d670f6067ae37e8c960f9be797334588f89db9226f2346d93949a25cd8794892",
+  "reviewed_at": "2026-11-02T04:39:34+00:00",
+  "source_revision": "1c4d2fdd6b9004b1e470902469a2577d51adab18",
+  "evidence_digest": "f6104a96746ff0e2aa6dcd2f3bd7f38919d42a93c4e7b6215d01282bc5ff6ab1",
+  "claims_digest": "c3f86016cb092dd81d6067c197984497bf16369edb39ecd3f8fc8d645e277ebc",
   "review_scope": "Source evidence only. Re-reviewed checkout payment availability after adding the Oxygen local-QA option: development mode, explicit local-checkout opt-in, loopback Supabase, NGN and full-order-amount checks are required; production shoppers are not offered Oxygen by this gate. The configurable payment-method claim remains accurate without promoting Oxygen to production availability. Git comparison against the previous reviewed revision shows all other cited capability sources unchanged. Other provider, deployment, native acceptance and transaction-readiness limitations remain; no production promotion. Rechecked all cited source and access-map paths after merging current main; their bytes are unchanged since the prior review. Rechecked cited capability source bytes after the 2 November review-fix and main integration; no cited implementation changes or production promotion.",
   "capabilities": [
     {

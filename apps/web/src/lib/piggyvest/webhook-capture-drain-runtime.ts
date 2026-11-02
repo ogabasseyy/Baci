@@ -16,6 +16,11 @@ import {
   type CaptureDrainExecutor,
   createCaptureDrainPgExecutor,
 } from './webhook-capture-pg-executor';
+import {
+  collectPrimaryIntakeEvidence,
+  type PrimaryIntakeEvidence,
+  type PrimaryIntakeFamily,
+} from './webhook-capture-primary-intake-readiness';
 import { replayPrimaryDelivery } from './webhook-capture-primary-replay';
 import { createPgCaptureQueue } from './webhook-capture-queue';
 
@@ -64,6 +69,7 @@ export function readPiggyvestCaptureDrainRuntime(
 export type CaptureDrainRun =
   | { status: 'disabled' }
   | { status: 'unconfigured' }
+  | { status: 'intake_not_ready'; notReady: PrimaryIntakeFamily[] }
   | { status: 'drained'; summary: DrainSummary };
 
 export interface CaptureDrainRuntimeDeps {
@@ -72,6 +78,8 @@ export interface CaptureDrainRuntimeDeps {
   ) => CaptureDrainExecutor;
   process?: DrainDeps['process'];
   now?: () => Date;
+  /** Whether each primary intake can finish a replay on this host. */
+  primaryIntake?: (env: NodeJS.ProcessEnv, now: Date) => PrimaryIntakeEvidence;
 }
 
 export async function runPiggyvestWebhookCaptureDrain(input: {
@@ -83,6 +91,14 @@ export async function runPiggyvestWebhookCaptureDrain(input: {
   if (!isPiggyvestCaptureDrainEnabled(env)) return { status: 'disabled' };
   const runtime = readPiggyvestCaptureDrainRuntime(env);
   if (!runtime) return { status: 'unconfigured' };
+  // A primary intake that is off or broken answers every replay 503, which
+  // would spend the rows' attempt budget on a configuration gap. Leave the
+  // rows untouched (no connection, no claim) until the intakes are ready.
+  const { notReady } = (deps.primaryIntake ?? collectPrimaryIntakeEvidence)(
+    env,
+    deps.now?.() ?? new Date()
+  );
+  if (notReady.length > 0) return { status: 'intake_not_ready', notReady };
   const executor = (deps.createExecutor ?? createCaptureDrainPgExecutor)(
     runtime
   );

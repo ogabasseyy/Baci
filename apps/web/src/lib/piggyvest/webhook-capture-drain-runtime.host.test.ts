@@ -81,6 +81,7 @@ function store() {
       deps: {
         createExecutor: () => model.executor,
         now: () => new Date(now),
+        primaryIntake: () => ({ notReady: [] }),
       },
     });
   return { ...model, add, run };

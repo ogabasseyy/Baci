@@ -142,6 +142,16 @@ describe('runPiggyvestWebhookCaptureDrainCli', () => {
     });
   });
 
+  it('does not claim anything while a primary intake is not ready', async () => {
+    mocks.intakesNotReady = ['bank'];
+    await expect(cli(['--once'])).resolves.toBe(1);
+    expect(JSON.parse(output[0] ?? '')).toEqual({
+      status: 'intake_not_ready',
+      notReady: ['bank'],
+    });
+    expect(createExecutor).not.toHaveBeenCalled();
+  });
+
   it('redacts a database failure and says the rows stay pending', async () => {
     createExecutor.mockImplementation(() => ({
       query: async () => {

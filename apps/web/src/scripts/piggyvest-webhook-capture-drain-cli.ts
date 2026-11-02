@@ -94,6 +94,10 @@ export async function runPiggyvestWebhookCaptureDrainCli(input: {
       write(UNCONFIGURED);
       return 1;
     }
+    if (run.status === 'intake_not_ready') {
+      write(JSON.stringify(run));
+      return 1;
+    }
     write(JSON.stringify({ status: 'drained', ...run.summary }));
     return 0;
   } catch {

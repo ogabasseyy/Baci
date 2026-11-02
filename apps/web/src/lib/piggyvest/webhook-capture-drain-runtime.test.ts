@@ -94,7 +94,11 @@ function store() {
 const run = (executor: CaptureDrainExecutor, env = ENV) =>
   runPiggyvestWebhookCaptureDrain({
     env,
-    deps: { createExecutor: () => executor, now: () => new Date(now) },
+    deps: {
+      createExecutor: () => executor,
+      now: () => new Date(now),
+      primaryIntake: () => ({ notReady: [] }),
+    },
   });
 
 beforeEach(() => {
@@ -139,6 +143,20 @@ describe('enable flag and configuration', () => {
         PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_ENABLED: flag,
       })
     ).toBe(false);
+  });
+
+  it('leaves every row untouched and opens no connection while a primary intake is not ready', async () => {
+    const createExecutor = vi.fn();
+    const primaryIntake = vi.fn(() => ({ notReady: ['bank' as const] }));
+    await expect(
+      runPiggyvestWebhookCaptureDrain({
+        env: ENV,
+        deps: { createExecutor, primaryIntake, now: () => new Date(T0) },
+      })
+    ).resolves.toEqual({ status: 'intake_not_ready', notReady: ['bank'] });
+    expect(primaryIntake).toHaveBeenCalledWith(ENV, new Date(T0));
+    expect(createExecutor).not.toHaveBeenCalled();
+    expect(mocks.pgClient).not.toHaveBeenCalled();
   });
 
   it('fails closed without opening a connection when the login is not configured', async () => {

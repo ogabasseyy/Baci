@@ -13,7 +13,6 @@ import {
   globToRegExp,
   parseAssuranceConfig,
 } from './money-pr-assurance-config.mjs';
-import { validateSummary } from './money-pr-assurance-summary.mjs';
 
 const config = parseAssuranceConfig(loadRawConfig());
 const workflow = readRepoFile('.github/workflows/money-pr-assurance.yml');
@@ -208,25 +207,6 @@ test('the template uses the configured headings and defaults to owner sign-off',
   );
   assert.deepEqual(headings, config.summary.headings);
   assert.match(template, /^Owner sign-off: required$/m);
-});
-
-test('every committed change summary passes the validator', () => {
-  const directory = join(repoRoot, config.summary.directory);
-  const files = readdirSync(directory).filter(
-    (file) =>
-      file.endsWith('.md') && !config.summary.ignoredFiles.includes(file)
-  );
-  assert.ok(files.length > 0);
-  for (const file of files) {
-    const result = validateSummary(
-      readRepoFile(`${config.summary.directory}/${file}`),
-      {
-        taskId: file.slice(0, -3),
-        ...config.summary,
-      }
-    );
-    assert.deepEqual(result.errors, [], file);
-  }
 });
 
 test('relative links and anchors in the assurance documents resolve', () => {

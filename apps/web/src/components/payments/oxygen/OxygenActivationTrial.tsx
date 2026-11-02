@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { z } from 'zod';
 import { fetchWithCsrf } from '@/lib/api-client';
-import { oxygenActivationBinding } from '@/lib/payments/oxygen/activation-binding';
 import { oxygenActivationTrialStateSchema } from '@/schemas/oxygen-activation-trial';
 
 const endpoint = '/api/payments/oxygen/activation-trial';
@@ -21,7 +20,6 @@ export function OxygenActivationTrial({
   const lock = useRef(false);
   const statusEndpoint = `${endpoint}?reference=${encodeURIComponent(reference)}`;
   useEffect(() => {
-    if (!oxygenActivationBinding(reference)) return;
     let cancelled = false;
     void fetchWithCsrf(statusEndpoint, { cache: 'no-store' })
       .then(async (response) => {
@@ -37,7 +35,7 @@ export function OxygenActivationTrial({
     return () => {
       cancelled = true;
     };
-  }, [reference, statusEndpoint]);
+  }, [statusEndpoint]);
   useEffect(() => {
     if (
       lock.current ||

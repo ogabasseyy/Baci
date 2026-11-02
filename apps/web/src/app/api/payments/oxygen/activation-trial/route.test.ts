@@ -37,6 +37,21 @@ const request = (reference = 'b75cd437-28af-4008-a1af-7e6810282833') =>
   });
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  vi.stubEnv(
+    'OXYGEN_STAGING_ACTIVATION_TRIAL_BINDINGS',
+    JSON.stringify([
+      {
+        reference: 'b75cd437-28af-4008-a1af-7e6810282833',
+        workflowId: '52ab6696-762b-4e9f-8f99-a9d926a29b2c',
+      },
+      {
+        reference: '1e65cf4b-4942-4ade-8149-e894687f6c40',
+        workflowId: '1c0459fe-2d45-4d2c-b41a-0ac640ad9f89',
+      },
+    ])
+  );
+  vi.stubEnv('OXYGEN_DRAFT_ENCRYPTION_KEY', 'a'.repeat(64));
   m.auth.mockResolvedValue({
     user: { id: 'customer' },
     supabase: { rpc: vi.fn() },
@@ -73,7 +88,9 @@ it('checks ownership before worker login and returns only stored status', async 
   expect(
     (
       await GET(
-        new NextRequest('http://local/api/payments/oxygen/activation-trial')
+        new NextRequest(
+          'http://local/api/payments/oxygen/activation-trial?reference=b75cd437-28af-4008-a1af-7e6810282833'
+        )
       )
     ).status
   ).toBe(200);
@@ -140,10 +157,57 @@ it('never writes reconciliation from GET even when confirmation is missing', asy
   expect(
     (
       await GET(
-        new NextRequest('http://local/api/payments/oxygen/activation-trial')
+        new NextRequest(
+          'http://local/api/payments/oxygen/activation-trial?reference=b75cd437-28af-4008-a1af-7e6810282833'
+        )
       )
     ).status
   ).toBe(200);
   expect(m.reconcile).not.toHaveBeenCalled();
+  expect(m.worker).not.toHaveBeenCalled();
+});
+
+it('requires an explicit valid reference for status before connecting', async () => {
+  expect(
+    (
+      await GET(
+        new NextRequest('http://local/api/payments/oxygen/activation-trial')
+      )
+    ).status
+  ).toBe(400);
+  expect(
+    (
+      await GET(
+        new NextRequest(
+          'http://local/api/payments/oxygen/activation-trial?reference=invalid'
+        )
+      )
+    ).status
+  ).toBe(400);
+  expect(m.connect).not.toHaveBeenCalled();
+});
+it('rejects an absent or invalid evidence key before ownership, worker or provider operations', async () => {
+  for (const key of ['', 'invalid']) {
+    vi.stubEnv('OXYGEN_DRAFT_ENCRYPTION_KEY', key);
+    expect((await POST(request())).status).toBe(503);
+  }
+  expect(m.read).not.toHaveBeenCalled();
+  expect(m.worker).not.toHaveBeenCalled();
+  expect(m.run).not.toHaveBeenCalled();
+});
+it('does not permit trials with empty config or in production', async () => {
+  vi.stubEnv('OXYGEN_STAGING_ACTIVATION_TRIAL_BINDINGS', '');
+  expect((await POST(request())).status).toBe(404);
+  vi.stubEnv(
+    'OXYGEN_STAGING_ACTIVATION_TRIAL_BINDINGS',
+    JSON.stringify([
+      {
+        reference: 'b75cd437-28af-4008-a1af-7e6810282833',
+        workflowId: '52ab6696-762b-4e9f-8f99-a9d926a29b2c',
+      },
+    ])
+  );
+  vi.stubEnv('VERCEL_ENV', 'production');
+  expect((await POST(request())).status).toBe(404);
   expect(m.worker).not.toHaveBeenCalled();
 });

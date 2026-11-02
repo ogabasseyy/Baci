@@ -31,7 +31,10 @@ it('uses ordinary Auth worker credentials and a separate partner login on the fi
     OXYGEN_DRAFT_ENCRYPTION_KEY: 'a'.repeat(64),
   }))
     vi.stubEnv(name, value);
-  mocks.signIn.mockResolvedValue({ error: null });
+  mocks.signIn.mockResolvedValue({
+    error: null,
+    data: { session: { expires_at: Math.floor(Date.now() / 1000) + 300 } },
+  });
   const client = { auth: { signInWithPassword: mocks.signIn } };
   mocks.create.mockReturnValue(client);
   const requests: string[] = [];
@@ -90,5 +93,31 @@ it('refuses execution when response evidence cannot be encrypted', () => {
     vi.stubEnv(name, 'synthetic-configured');
   vi.stubEnv('OXYGEN_DRAFT_ENCRYPTION_KEY', '');
   expect(connectOxygenRuntime()).toBeNull();
+  expect(mocks.create).not.toHaveBeenCalled();
+});
+
+it('rejects a trial request without a configured exact staging binding before provider login', async () => {
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  for (const [name, value] of Object.entries({
+    OXYGEN_STAGING_PARTNER_REFERENCE: 'partner',
+    OXYGEN_STAGING_PARTNER_SECRET: 'synthetic-secret',
+    OXYGEN_STAGING_WORKER_EMAIL: 'worker@example.test',
+    OXYGEN_STAGING_WORKER_PASSWORD: 'synthetic-password',
+    OXYGEN_STAGING_HOSTED_HOSTS: 'hosted.example.test',
+    OXYGEN_DRAFT_ENCRYPTION_KEY: 'a'.repeat(64),
+    OXYGEN_STAGING_ACTIVATION_TRIAL_BINDINGS: '',
+  }))
+    vi.stubEnv(name, value);
+  const fetcher = vi.fn();
+  vi.stubGlobal('fetch', fetcher);
+  const runtime = connectOxygenRuntime();
+  expect(runtime).not.toBeNull();
+  await expect(
+    runtime?.activationTrialRequest(
+      'activate',
+      '70000000-0000-4000-8000-000000000001'
+    )
+  ).rejects.toThrow();
+  expect(fetcher).not.toHaveBeenCalled();
   expect(mocks.create).not.toHaveBeenCalled();
 });

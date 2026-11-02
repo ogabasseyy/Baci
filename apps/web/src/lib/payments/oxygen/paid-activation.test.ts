@@ -1,9 +1,54 @@
-import { expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
-import { oxygenActivationTrialWorkflow } from './activation-trial';
+const oxygenActivationTrialWorkflow = '52ab6696-762b-4e9f-8f99-a9d926a29b2c';
+
 import { completeOxygenPaidActivation } from './paid-activation';
+
+beforeEach(() => {
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  vi.stubEnv(
+    'OXYGEN_STAGING_ACTIVATION_TRIAL_BINDINGS',
+    JSON.stringify([
+      {
+        reference: 'b75cd437-28af-4008-a1af-7e6810282833',
+        workflowId: oxygenActivationTrialWorkflow,
+      },
+    ])
+  );
+});
+afterEach(() => vi.unstubAllEnvs());
+
+it('does not read or activate a trial when bindings are absent or production is selected', async () => {
+  const rpc = vi.fn();
+  const request = vi.fn();
+  vi.stubEnv('OXYGEN_STAGING_ACTIVATION_TRIAL_BINDINGS', '');
+  await completeOxygenPaidActivation(
+    { rpc },
+    oxygenActivationTrialWorkflow,
+    request,
+    'a'.repeat(64)
+  );
+  vi.stubEnv(
+    'OXYGEN_STAGING_ACTIVATION_TRIAL_BINDINGS',
+    JSON.stringify([
+      {
+        reference: 'b75cd437-28af-4008-a1af-7e6810282833',
+        workflowId: oxygenActivationTrialWorkflow,
+      },
+    ])
+  );
+  vi.stubEnv('VERCEL_ENV', 'production');
+  await completeOxygenPaidActivation(
+    { rpc },
+    oxygenActivationTrialWorkflow,
+    request,
+    'a'.repeat(64)
+  );
+  expect(rpc).not.toHaveBeenCalled();
+  expect(request).not.toHaveBeenCalled();
+});
 
 it.each([
   'activated',

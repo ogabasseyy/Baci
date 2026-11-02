@@ -39,11 +39,17 @@ it('never repeats an indeterminate activation when reopened', async () => {
     fetcher.mock.calls.some(([, options]) => options?.method === 'POST')
   ).toBe(false);
 });
-it('does not act on another booking', () => {
+it('does not activate another booking when the server declines trial access', async () => {
+  fetcher.mockResolvedValue(
+    Response.json({ error: 'Trial unavailable' }, { status: 404 })
+  );
   render(
     <OxygenActivationTrial reference="438f96ee-37c4-49bb-a56c-51451f9cb624" />
   );
-  expect(fetcher).not.toHaveBeenCalled();
+  await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+  expect(
+    fetcher.mock.calls.some(([, options]) => options?.method === 'POST')
+  ).toBe(false);
 });
 
 it('shows provider rejection without a repeat activation button', async () => {

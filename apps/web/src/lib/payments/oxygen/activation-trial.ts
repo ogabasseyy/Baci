@@ -7,16 +7,12 @@ import {
   oxygenActivationReferenceSchema,
 } from './activation-binding';
 import type { OxygenRuntimeRpc } from './runtime-service';
-export const oxygenActivationTrialReference =
-  'b75cd437-28af-4008-a1af-7e6810282833';
-export const oxygenActivationTrialWorkflow =
-  '52ab6696-762b-4e9f-8f99-a9d926a29b2c';
 export type OxygenActivationTrialOperation = 'payment' | 'activate';
 async function rpc(
   client: OxygenRuntimeRpc,
   operation: string,
-  payload: Record<string, unknown> = {},
-  reference = oxygenActivationTrialReference
+  payload: Record<string, unknown>,
+  reference: string
 ) {
   const binding = oxygenActivationBinding(reference);
   if (!binding) throw new Error('Activation trial unavailable');
@@ -29,7 +25,7 @@ async function rpc(
 }
 export async function readOxygenActivationTrial(
   user: OxygenRuntimeRpc,
-  reference = oxygenActivationTrialReference
+  reference: string
 ) {
   return oxygenActivationTrialStateSchema.parse(
     await rpc(user, 'status', {}, reference)
@@ -41,10 +37,10 @@ export async function runOxygenActivationTrial(
   worker: OxygenRuntimeRpc,
   request: (
     operation: OxygenActivationTrialOperation,
-    reference?: string
+    reference: string
   ) => Promise<Response>,
   key: string,
-  reference = oxygenActivationTrialReference
+  reference: string
 ) {
   if (!/^[a-f0-9]{64}$/i.test(key)) throw new Error('Evidence unavailable');
   oxygenActivationReferenceSchema.parse(reference);

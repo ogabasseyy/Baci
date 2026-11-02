@@ -1,8 +1,27 @@
-import { expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
 
 import { runOxygenActivationTrial } from './activation-trial';
+
+const trialReference = 'b75cd437-28af-4008-a1af-7e6810282833';
+beforeEach(() => {
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  vi.stubEnv(
+    'OXYGEN_STAGING_ACTIVATION_TRIAL_BINDINGS',
+    JSON.stringify([
+      {
+        reference: trialReference,
+        workflowId: '52ab6696-762b-4e9f-8f99-a9d926a29b2c',
+      },
+      {
+        reference: '1e65cf4b-4942-4ade-8149-e894687f6c40',
+        workflowId: '1c0459fe-2d45-4d2c-b41a-0ac640ad9f89',
+      },
+    ])
+  );
+});
+afterEach(() => vi.unstubAllEnvs());
 
 it.each([
   'activated',
@@ -47,7 +66,13 @@ it.each([
       { status: mode === 'rejected' ? 400 : 200 }
     );
   });
-  await runOxygenActivationTrial({ rpc }, { rpc }, request, 'a'.repeat(64));
+  await runOxygenActivationTrial(
+    { rpc },
+    { rpc },
+    request,
+    'a'.repeat(64),
+    trialReference
+  );
   const activations = request.mock.calls.filter(
     (call) => call[0] === 'activate'
   );
@@ -75,7 +100,13 @@ it.each([
 it('does not repeat a claimed or completed trial', async () => {
   const rpc = vi.fn().mockResolvedValue({ error: null, data: null });
   const request = vi.fn();
-  await runOxygenActivationTrial({ rpc }, { rpc }, request, 'a'.repeat(64));
+  await runOxygenActivationTrial(
+    { rpc },
+    { rpc },
+    request,
+    'a'.repeat(64),
+    trialReference
+  );
   expect(request).not.toHaveBeenCalled();
 });
 

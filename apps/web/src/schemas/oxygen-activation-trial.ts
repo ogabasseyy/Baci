@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { oxygenActivationReferenceSchema } from '@/lib/payments/oxygen/activation-binding';
 export const oxygenActivationTrialStateSchema = z
   .object({
     status: z.enum([
@@ -16,6 +15,6 @@ export const oxygenActivationTrialStateSchema = z
   .strict();
 export const oxygenActivationTrialBodySchema = z
   .object({
-    reference: oxygenActivationReferenceSchema,
+    reference: z.uuid(),
   })
   .strict();

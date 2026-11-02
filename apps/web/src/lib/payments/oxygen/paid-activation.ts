@@ -1,5 +1,5 @@
 import 'server-only';
-import { oxygenActivationBindings } from './activation-binding';
+import { readOxygenActivationBindings } from './activation-binding';
 import { reconcileOxygenActivation } from './activation-reconciliation';
 import {
   type OxygenActivationTrialOperation,
@@ -15,11 +15,11 @@ export async function completeOxygenPaidActivation(
   workflow: string,
   request: (
     operation: OxygenActivationTrialOperation,
-    reference?: string
+    reference: string
   ) => Promise<Response>,
   key: string
 ) {
-  const binding = oxygenActivationBindings.find(
+  const binding = readOxygenActivationBindings().find(
     (entry) => entry.workflowId === workflow
   );
   if (!binding) return;

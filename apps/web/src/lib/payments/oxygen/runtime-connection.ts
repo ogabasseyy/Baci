@@ -1,10 +1,9 @@
 import 'server-only';
-import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { getSupabaseAnonKey, getSupabaseUrl } from '@/env';
 import {
-  oxygenActivationBindings,
+  oxygenActivationBinding,
   oxygenActivationReferenceSchema,
+  readOxygenActivationBindings,
 } from './activation-binding';
 import { reconcileOxygenCallbackPayment } from './callback-payment-recovery';
 import { runGeneralOxygenActivation } from './general-activation';
@@ -14,6 +13,7 @@ import { oxygenPhoneConfiguration } from './phone-handoff-configuration';
 import { createOxygenProvider } from './provider';
 import { createOxygenResponseRecorder } from './response-evidence';
 import { readOxygenRuntimeConfiguration } from './runtime-configuration';
+import { createOxygenWorkerClient } from './runtime-worker-client';
 import { loginOxygenPartner } from './transport';
 import type { OxygenCallbackConfiguration } from './webhook-receiver';
 
@@ -75,7 +75,7 @@ export function connectOxygenRuntime() {
   };
   const activationTrialRequest = async (
     operation: import('./activation-trial').OxygenActivationTrialOperation,
-    bookingReference = 'b75cd437-28af-4008-a1af-7e6810282833'
+    bookingReference: string
   ) => {
     if (
       environment !== 'staging' ||
@@ -83,6 +83,8 @@ export function connectOxygenRuntime() {
     )
       throw new Error('Unsupported trial operation');
     oxygenActivationReferenceSchema.parse(bookingReference);
+    if (!oxygenActivationBinding(bookingReference))
+      throw new Error('Unsupported trial operation');
     const path =
       operation === 'payment'
         ? 'split-payment-setup/confirmation'
@@ -162,7 +164,10 @@ export function connectOxygenRuntime() {
     workflow: string
   ) => {
     if (
-      oxygenActivationBindings.some((entry) => entry.workflowId === workflow)
+      environment === 'staging' &&
+      readOxygenActivationBindings().some(
+        (entry) => entry.workflowId === workflow
+      )
     ) {
       if (environment !== 'staging') throw new Error('Activation unavailable');
       await completeOxygenPaidActivation(
@@ -233,22 +238,7 @@ export function connectOxygenRuntime() {
     },
     partnerReference: reference,
     hosts,
-    worker: async () => {
-      // Fresh, non-admin client; do not mutate the globally cached anonymous client.
-      const client = createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-          detectSessionInUrl: false,
-        },
-      });
-      const { error } = await client.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) throw new Error('Workflow unavailable');
-      return client;
-    },
+    worker: createOxygenWorkerClient(email, password),
   };
 }
 export function oxygenRuntimeCallbackConfiguration(): OxygenCallbackConfiguration | null {

@@ -34,10 +34,7 @@ export async function CheckoutContent({
   if (oxygenOrderId && !z.uuid().safeParse(oxygenOrderId).success) notFound();
 
   // Check for new template
-  if (
-    (merchant as unknown as { template_id?: string }).template_id ===
-    'new-template'
-  ) {
+  if (merchant.template_id === 'new-template') {
     return (
       <CheckoutThemeProvider>
         <CheckoutCartCapacityGate

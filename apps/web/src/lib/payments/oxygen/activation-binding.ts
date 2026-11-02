@@ -1,21 +1,39 @@
+import 'server-only';
 import { z } from 'zod';
-/** Individually authorized staging bookings. This does not enable production activation. */
-export const oxygenActivationBindings = [
-  {
-    reference: 'b75cd437-28af-4008-a1af-7e6810282833',
-    workflowId: '52ab6696-762b-4e9f-8f99-a9d926a29b2c',
-  },
-  {
-    reference: '1e65cf4b-4942-4ade-8149-e894687f6c40',
-    workflowId: '1c0459fe-2d45-4d2c-b41a-0ac640ad9f89',
-  },
-] as const;
-export const oxygenActivationReferenceSchema = z.enum([
-  oxygenActivationBindings[0].reference,
-  oxygenActivationBindings[1].reference,
-]);
+
+const bindingSchema = z
+  .object({ reference: z.uuid(), workflowId: z.uuid() })
+  .strict();
+export const oxygenActivationReferenceSchema = z.uuid();
+
+/** Operator-provisioned individual staging trials only; production has none. */
+export function readOxygenActivationBindings(): readonly z.infer<
+  typeof bindingSchema
+>[] {
+  if (
+    process.env.VERCEL_ENV === 'production' ||
+    (!process.env.VERCEL_ENV && process.env.NODE_ENV === 'production')
+  )
+    return [];
+  const raw = process.env.OXYGEN_STAGING_ACTIVATION_TRIAL_BINDINGS;
+  if (!raw || raw.length > 8192) return [];
+  try {
+    const parsed = z.array(bindingSchema).max(20).safeParse(JSON.parse(raw));
+    if (!parsed.success) return [];
+    const refs = new Set(parsed.data.map((entry) => entry.reference));
+    const workflows = new Set(parsed.data.map((entry) => entry.workflowId));
+    if (
+      refs.size !== parsed.data.length ||
+      workflows.size !== parsed.data.length
+    )
+      return [];
+    return parsed.data;
+  } catch {
+    return [];
+  }
+}
 export function oxygenActivationBinding(reference: string) {
-  return oxygenActivationBindings.find(
+  return readOxygenActivationBindings().find(
     (binding) => binding.reference === reference
   );
 }

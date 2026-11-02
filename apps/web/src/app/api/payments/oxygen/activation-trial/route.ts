@@ -2,6 +2,10 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
+import {
+  oxygenActivationBinding,
+  readOxygenActivationBindings,
+} from '@/lib/payments/oxygen/activation-binding';
 import { reconcileOxygenActivation } from '@/lib/payments/oxygen/activation-reconciliation';
 import {
   readOxygenActivationTrial,
@@ -18,17 +22,24 @@ export async function GET(request: NextRequest) {
       { error: 'Unauthorized' },
       { status: 401, headers }
     );
-  if (!connectOxygenRuntime())
+  const parsed = oxygenActivationTrialBodySchema.safeParse({
+    reference: request.nextUrl.searchParams.get('reference'),
+  });
+  if (!parsed.success)
+    return NextResponse.json(
+      { error: 'Invalid request' },
+      { status: 400, headers }
+    );
+  if (
+    !oxygenActivationBinding(parsed.data.reference) ||
+    !connectOxygenRuntime()
+  )
     return NextResponse.json(
       { error: 'Trial unavailable' },
       { status: 404, headers }
     );
   try {
-    const { reference } = oxygenActivationTrialBodySchema.parse({
-      reference:
-        request.nextUrl.searchParams.get('reference') ??
-        'b75cd437-28af-4008-a1af-7e6810282833',
-    });
+    const { reference } = parsed.data;
     return NextResponse.json(
       await readOxygenActivationTrial(auth.supabase, reference),
       {
@@ -78,6 +89,22 @@ export async function POST(request: NextRequest) {
       { status: 400, headers }
     );
   }
+  if (!readOxygenActivationBindings().length)
+    return NextResponse.json(
+      { error: 'Trial unavailable' },
+      { status: 404, headers }
+    );
+  if (!oxygenActivationBinding(reference))
+    return NextResponse.json(
+      { error: 'Invalid request' },
+      { status: 400, headers }
+    );
+  const key = process.env.OXYGEN_DRAFT_ENCRYPTION_KEY;
+  if (!key || !/^[a-f0-9]{64}$/i.test(key))
+    return NextResponse.json(
+      { error: 'Trial unavailable' },
+      { status: 503, headers }
+    );
   const connection = connectOxygenRuntime();
   if (!connection)
     return NextResponse.json(
@@ -93,7 +120,7 @@ export async function POST(request: NextRequest) {
         auth.supabase,
         worker,
         connection.activationTrialRequest,
-        process.env.OXYGEN_DRAFT_ENCRYPTION_KEY ?? '',
+        key,
         reference
       );
     const after = await readOxygenActivationTrial(auth.supabase, reference);

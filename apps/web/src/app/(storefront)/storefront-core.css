@@ -577,14 +577,15 @@
     width: auto;
   }
 
-  /* Focus & Reading Flow Trade-off: Semantic DOM order is structured as
-     [Brand] -> [Search] -> [Actions] so screen-reader users navigating landmark
-     hierarchy encounter the primary catalog search capability before secondary
-     account/cart controls across viewports. On mobile viewports (<768px),
-     the primary row visually wraps search below actions via `order: 3` and
-     `width: 100%` for one-thumb reachability. This divergence from visual order
-     is an accepted layout trade-off to maintain desktop reading order without
-     desktop focus inversion. */
+  /* Accessibility Exception — WCAG 2.4.3 (Focus Order) & WCAG 1.3.2 (Meaningful Sequence):
+     Semantic DOM order is intentionally preserved as [Brand] -> [Search] -> [Actions]
+     so assistive technologies and landmark-navigation users encounter the primary catalog search
+     capability before secondary header actions across all viewports.
+     On mobile viewports (<768px), CSS flex order positions header actions on row 1 (`order: 2`)
+     and full-width search on row 2 (`order: 3`) for one-thumb ergonomic reachability.
+     This divergence between mobile visual order and reading/focus order is an explicit, documented
+     accessibility exception accepted to maintain identical landmark hierarchy across responsive
+     breakpoints without duplicating interactive elements or introducing desktop focus inversion. */
   .ogabassey-navbar__search-wrap {
     order: 3;
     position: relative;

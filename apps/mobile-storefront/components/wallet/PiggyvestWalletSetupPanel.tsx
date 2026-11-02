@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
+import { isPrimaryWalletReviewRequired } from '@/lib/piggyvest-primary-capability';
 import { piggyvestPrimaryWalletApi } from '@/lib/piggyvest-primary-wallet';
 import { useAuthStore } from '@/stores/auth-store';
 import { PiggyvestWalletSetupForm } from './PiggyvestWalletSetupForm';
@@ -30,12 +31,18 @@ export function PiggyvestWalletSetupPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [awaitingAccount, setAwaitingAccount] = useState(false);
+  const [reviewScope, setReviewScope] = useState<{
+    userId: string;
+    merchantId: string;
+  } | null>(null);
   // Account binding: every input and flow state below belongs to whoever
   // is signed in. The panel is merchant-keyed by its parent, so without
   // this an account switch would leave A's retained BVN submittable under
   // B's session. Remount inputs per account (key below), reset flow state
   // on change, and ignore in-flight results from a previous account.
   const authUserId = useAuthStore((state) => state.user?.id ?? null);
+  const reviewRequired =
+    reviewScope?.userId === authUserId && reviewScope.merchantId === merchantId;
   const authUserIdRef = useRef(authUserId);
   authUserIdRef.current = authUserId;
   const previousAuthUserIdRef = useRef(authUserId);
@@ -46,7 +53,28 @@ export function PiggyvestWalletSetupPanel({
     setBusy(false);
     setError(false);
     setAwaitingAccount(false);
+    setReviewScope(null);
   }, [authUserId]);
+
+  useEffect(() => {
+    if (!authUserId) return;
+    const requestUserId = authUserId;
+    let active = true;
+    void piggyvestPrimaryWalletApi
+      .read(merchantId, requestUserId)
+      .catch((error: unknown) => {
+        if (
+          active &&
+          authUserIdRef.current === requestUserId &&
+          isPrimaryWalletReviewRequired(error)
+        ) {
+          setReviewScope({ userId: requestUserId, merchantId });
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [authUserId, merchantId]);
 
   async function refresh() {
     if (busy) return;
@@ -62,9 +90,13 @@ export function PiggyvestWalletSetupPanel({
       if (authUserIdRef.current !== requestUserId) return;
       if (result.account) onRefresh();
       else setAwaitingAccount(true);
-    } catch {
+    } catch (error) {
       if (authUserIdRef.current !== requestUserId) return;
-      setError(true);
+      if (requestUserId && isPrimaryWalletReviewRequired(error)) {
+        setReviewScope({ userId: requestUserId, merchantId });
+      } else {
+        setError(true);
+      }
     } finally {
       if (authUserIdRef.current === requestUserId) setBusy(false);
     }
@@ -79,7 +111,12 @@ export function PiggyvestWalletSetupPanel({
       >
         <Text style={{ color: colors.text, textAlign: 'right' }}>Close</Text>
       </Pressable>
-      {needsPhone ? (
+      {reviewRequired ? (
+        <Text accessibilityRole="alert" style={{ color: colors.text }}>
+          Your PiggyVest wallet setup needs review. Please contact support
+          before trying again.
+        </Text>
+      ) : needsPhone ? (
         <WalletFundPhonePrompt
           key={authUserId ?? 'signed-out'}
           colors={colors}
@@ -129,10 +166,22 @@ export function PiggyvestWalletSetupPanel({
             // token it read for this user (or throws), so a switch
             // mid-flight cannot onboard the new account with the
             // previous account's BVN.
-            const result = await piggyvestPrimaryWalletApi.create(
-              input,
-              requestUserId ?? undefined
-            );
+            let result: Awaited<
+              ReturnType<typeof piggyvestPrimaryWalletApi.create>
+            >;
+            try {
+              result = await piggyvestPrimaryWalletApi.create(
+                input,
+                requestUserId ?? undefined
+              );
+            } catch (error) {
+              if (authUserIdRef.current !== requestUserId) return;
+              if (requestUserId && isPrimaryWalletReviewRequired(error)) {
+                setReviewScope({ userId: requestUserId, merchantId });
+                return;
+              }
+              throw error;
+            }
             // Switched mid-flight: the input belonged to the previous
             // account, so never apply its outcome to the new one.
             if (authUserIdRef.current !== requestUserId) return;

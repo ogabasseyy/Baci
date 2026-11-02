@@ -28,9 +28,7 @@ export type GiglExternalWaybillLookup =
       tracking: TrackingResult | null;
     };
 
-// The lookup deadline must also cover error bodies: safeFetch stops
-// watching the signal once headers arrive.
-export async function readGiglErrorMessage(
+async function parseGiglErrorMessage(
   response: Response,
   signal: AbortSignal
 ): Promise<string> {
@@ -44,6 +42,33 @@ export async function readGiglErrorMessage(
   } catch {
     return '';
   }
+}
+
+/**
+ * Reads GIG's error message without ever outliving the lookup deadline.
+ * safeFetch stops watching the signal once headers arrive, and cancelling a
+ * cloned stream can wait on its unread twin, so the read is raced against
+ * the signal and abandoned (with a non-blocking cancel) when it fires.
+ */
+export function readGiglErrorMessage(
+  response: Response,
+  signal: AbortSignal
+): Promise<string> {
+  return new Promise((resolve) => {
+    const giveUp = () => {
+      void response.body?.cancel().catch(() => undefined);
+      resolve('');
+    };
+    if (signal.aborted) {
+      giveUp();
+      return;
+    }
+    signal.addEventListener('abort', giveUp, { once: true });
+    void parseGiglErrorMessage(response, signal).then((message) => {
+      signal.removeEventListener('abort', giveUp);
+      resolve(message);
+    });
+  });
 }
 
 function tokenRejectedUnlessNotFound(

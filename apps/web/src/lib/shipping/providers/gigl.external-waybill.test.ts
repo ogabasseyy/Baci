@@ -246,6 +246,21 @@ describe('readGiglErrorMessage', () => {
     ).resolves.toBe('Shipment Details Not Found.');
   });
 
+  it('gives up on an oversized cloned body that never closes', async () => {
+    const original = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(20 * 1_024));
+        },
+      }),
+      { status: 401, headers: { 'Content-Length': String(64 * 1_024) } }
+    );
+    const controller = new AbortController();
+    const read = readGiglErrorMessage(original.clone(), controller.signal);
+    controller.abort(new Error('deadline'));
+    await expect(read).resolves.toBe('');
+  });
+
   it('gives up when the lookup deadline fires while the body stalls', async () => {
     const stalled = new Response(
       new ReadableStream<Uint8Array>({ start() {} }),

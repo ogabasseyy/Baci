@@ -120,6 +120,12 @@ pass except `drain_schedule: DRAIN_NOT_ENABLED`. Fix anything else first:
 - `DRAIN_LOGIN_UNSAFE` lists which session check failed;
 - `DRAIN_FAMILY_KEY_MISSING:<families>`: the host lacks the current key of
   those families;
+- `PRIMARY_INTAKE_NOT_READY:<families>`: the primary intake of those
+  families (bank, custody, interest) is switched off or not fully configured
+  on this host, so the drain would answer every replay of that family with a
+  retry and, once the attempt budget ran out, leave it for review. Enable and
+  configure the intake in the worker env file first. A signing key alone is
+  not enough;
 - `DRAIN_ALERTS_NOT_CONFIGURED`: `POSTHOG_PROJECT_TOKEN` is missing.
 
 The worker host cannot see the web app's setting from Step 5, so the

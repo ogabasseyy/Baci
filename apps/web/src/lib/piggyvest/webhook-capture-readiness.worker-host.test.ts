@@ -66,6 +66,7 @@ beforeEach(() => {
     drain: {
       login: { ok: true },
       schedule: { enabled: true, cron: 'installed' },
+      primaryIntake: { notReady: [] },
       alerts: { configured: true },
     },
   };
@@ -107,6 +108,23 @@ describe('worker-host readiness', () => {
     expect(gates(host)).toEqual([
       'key_configuration:DRAIN_FAMILY_KEY_MISSING:custody,interest',
     ]);
+  });
+
+  it.each([
+    [['bank'], 'PRIMARY_INTAKE_NOT_READY:bank'],
+    [['custody', 'interest'], 'PRIMARY_INTAKE_NOT_READY:custody,interest'],
+    [
+      ['bank', 'custody', 'interest'],
+      'PRIMARY_INTAKE_NOT_READY:bank,custody,interest',
+    ],
+  ] as const)('is not ready to attest while the primary intake of %j cannot finish a replay', (notReady, reason) => {
+    // Signing keys, the drain login and an empty backlog all pass: with an
+    // intake disabled on this host every replay of its family answers 503,
+    // so attesting would stop the provider's retries for nothing.
+    if (host.drain) host.drain.primaryIntake = { notReady: [...notReady] };
+    expect(gates(host)).toEqual([`primary_intake:${reason}`]);
+    const report = inspectPiggyvestWebhookCaptureReadiness(host);
+    expect(report).toMatchObject({ status: 'not-ready', readyToAttest: false });
   });
 
   it('is not ready to attest while the drain alerts cannot leave the host', () => {

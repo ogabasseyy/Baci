@@ -32,6 +32,9 @@ export const piggyvestCaptureDrainSessionRowSchema = z.object({
   login_safe: z.boolean(),
   membership_count: z.int().nonnegative(),
   worker_membership: z.boolean(),
+  grants_usable: z.boolean(),
+  capture_surface_denied: z.boolean(),
+  unexpected_privileges: z.int().nonnegative(),
   tls: z.boolean(),
 });
 

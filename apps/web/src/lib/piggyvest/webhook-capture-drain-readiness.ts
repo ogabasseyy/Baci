@@ -6,13 +6,18 @@ import type {
   CaptureDrainExecutor,
   CaptureDrainSessionCheck,
 } from './webhook-capture-pg-executor';
+import {
+  collectPrimaryIntakeEvidence,
+  type PrimaryIntakeEvidence,
+} from './webhook-capture-primary-intake-readiness';
 import type { WebhookCaptureEvidence } from './webhook-capture-readiness';
 
 /**
  * Evidence the worker host collects before the owner attests the capture
  * drain (PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED=true on the web app):
- * the dedicated login really is the narrow drain session, and the drain is
- * both enabled and scheduled on this host. Metadata only: no key, password,
+ * the dedicated login really is the narrow drain session, the drain is
+ * both enabled and scheduled on this host, and the primary intakes it
+ * replays through are enabled here. Metadata only: no key, password,
  * body or signature is read into the report.
  */
 
@@ -30,6 +35,8 @@ export type CaptureDrainCronState =
 export interface CaptureDrainEvidence {
   login: CaptureDrainLoginEvidence;
   schedule: { enabled: boolean; cron: CaptureDrainCronState };
+  /** Which primary intakes can finish a replayed delivery on this host. */
+  primaryIntake: PrimaryIntakeEvidence;
   /**
    * Whether the drain's alerts leave this host. The console line only
    * reaches a local log file here, so paging relies on the server-side
@@ -145,6 +152,7 @@ export async function collectCaptureDrainEvidence(input: {
         enabled: isPiggyvestCaptureDrainEnabled(env),
         cron: captureDrainCronState(crontab),
       },
+      primaryIntake: collectPrimaryIntakeEvidence(env, now),
       alerts: { configured: isPostHogServerConfigured(env) },
     },
   };

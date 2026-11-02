@@ -52,8 +52,9 @@ export async function settleReplayResult(
     result.conflict !== true &&
     result.outOfScope === undefined;
   if (completed) {
-    await settle(deps, row, 'processed', null);
-    return 'processed';
+    return (await settle(deps, row, 'processed', null))
+      ? 'processed'
+      : 'retried';
   }
   if (result?.outOfScope !== undefined) {
     // Not this runtime's to judge: the key set and attempt count are

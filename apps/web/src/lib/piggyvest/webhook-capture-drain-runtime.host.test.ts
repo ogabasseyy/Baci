@@ -157,6 +157,27 @@ describe('re-verification against the host key set', () => {
     expect(alertLines().join('\n')).not.toContain('REPLAY_UNVERIFIABLE');
   });
 
+  it('defers an interest payout whose shared secret the host has loaded only as the bank key', async () => {
+    // The web app holds one secret as both the bank and the interest key,
+    // so admission recorded both; this host has not loaded the interest
+    // assignment yet. Parking it as authority lost would strand it.
+    const model = store();
+    const row = model.add('shared-1', mocks.bankKey, ['bank', 'interest'], {
+      eventType: 'interest-payout.success',
+    });
+    now += 121 * SECOND;
+
+    await expect(model.run()).resolves.toMatchObject({
+      summary: { claimed: 1, retried: 1, needsReview: 0 },
+    });
+    expect(row).toMatchObject({
+      processing_state: 'pending',
+      attempts: 0,
+      last_error: 'KEY_SET_INCOMPLETE',
+    });
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+
   it('still parks a row whose key version the host holds but whose signature fails', async () => {
     const model = store();
     const row = model.add(

@@ -16,6 +16,14 @@
 -- service_role. No existing function is replaced; each keeps its
 -- definition and its service_role grant, which the web receiver still uses.
 --
+-- What the login can reach beyond that is what PUBLIC grants every role,
+-- which is exactly what the anonymous anon role already holds. Revoking
+-- from the worker role does not remove a PUBLIC grant, so PUBLIC's access
+-- to the capture surface is revoked here by name, and the drain's session
+-- check and supabase/tests/piggyvest_webhook_capture_worker_role.sql then
+-- hold the line: the login may use nothing anon cannot, apart from the
+-- three entry points, and cannot inherit around them.
+--
 -- Nothing runs until the login exists and the worker host flag is on, so
 -- applying this migration changes no behaviour.
 
@@ -99,14 +107,17 @@ REVOKE ALL ON FUNCTION public.resolve_claimed_piggyvest_webhook_capture(uuid, uu
 GRANT USAGE ON SCHEMA public TO piggyvest_webhook_capture_worker;
 
 -- No direct table authority, and never the capture door or the trigger.
+-- PUBLIC is named too: every role inherits it, so a PUBLIC grant would
+-- reach the drain login through the worker role's membership regardless
+-- of what is revoked from the worker role itself.
 REVOKE ALL ON TABLE public.piggyvest_webhook_captures
-  FROM piggyvest_webhook_capture_worker;
+  FROM PUBLIC, piggyvest_webhook_capture_worker;
 REVOKE ALL ON FUNCTION public.capture_piggyvest_webhook_delivery(jsonb)
-  FROM piggyvest_webhook_capture_worker;
+  FROM PUBLIC, piggyvest_webhook_capture_worker;
 REVOKE ALL ON FUNCTION public.piggyvest_webhook_captures_immutable_evidence()
-  FROM piggyvest_webhook_capture_worker;
+  FROM PUBLIC, piggyvest_webhook_capture_worker;
 REVOKE ALL ON FUNCTION public.resolve_piggyvest_webhook_capture(uuid, uuid, text, text)
-  FROM piggyvest_webhook_capture_worker;
+  FROM PUBLIC, piggyvest_webhook_capture_worker;
 
 -- Re-assert the API-role denials before widening, then grant exactly the
 -- drain's three entry points (claim, claim-bound resolve, status).

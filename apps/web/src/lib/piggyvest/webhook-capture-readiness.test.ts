@@ -61,6 +61,7 @@ beforeEach(() => {
     drain: {
       login: { ok: true },
       schedule: { enabled: true, cron: 'installed' },
+      primaryIntake: { notReady: [] },
       alerts: { configured: true },
     },
   };
@@ -78,6 +79,7 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     expect(report.notReady).toEqual([]);
     expect(report.checks.map((check) => check.gate)).toEqual([
       'key_configuration',
+      'primary_intake',
       'migration_and_table',
       'storage',
       'drain_login',
@@ -102,6 +104,7 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
       report.notReady.map((entry) => `${entry.gate}:${entry.reason}`)
     ).toEqual([
       'key_configuration:NO_CURRENT_KEY',
+      'primary_intake:PRIMARY_INTAKE_NOT_CHECKED',
       'migration_and_table:CAPTURE_FUNCTIONS_MISSING',
       'storage:NOT_VERIFIABLE_WITHOUT_MIGRATION',
       'drain_login:DRAIN_LOGIN_NOT_CHECKED',
@@ -116,6 +119,7 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     ready.drain = {
       login: { ok: false, reason: 'unsafe', failedChecks: ['membership'] },
       schedule: { enabled: false, cron: 'missing' },
+      primaryIntake: { notReady: [] },
       alerts: { configured: true },
     };
     expect(notReadyGates(ready)).toEqual([
@@ -129,6 +133,7 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     ready.drain = {
       login: { ok: true },
       schedule: { enabled: true, cron: 'missing' },
+      primaryIntake: { notReady: [] },
       alerts: { configured: true },
     };
     expect(notReadyGates(ready)).toEqual([

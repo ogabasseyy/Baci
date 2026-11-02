@@ -8,22 +8,30 @@ import { parseStoredPiggyvestEvent } from './webhook-capture-stored-event';
 /**
  * How the drain settles a claimed row. Kept apart from the per-row decision
  * logic so each outcome (deferred, needs_review, resolve failure) has one
- * place that sets the state, the error code and the operator alert.
+ * place that sets the state, the error code and the operator alert. An
+ * outcome is only counted, and its alert only raised, once the database
+ * recorded it; otherwise the row counts as retried.
  */
 
 export type RowOutcome = 'processed' | 'retried' | 'needsReview';
 
+/**
+ * True only when the database recorded the resolution. False when this
+ * pass no longer holds the lease (another pass re-claimed the row, so it
+ * settles it instead) or the database failed (the lease expires and the
+ * row is claimed again); replay is idempotent either way.
+ */
 export async function settle(
   deps: DrainDeps,
   row: PiggyvestClaimedCapture,
   state: CaptureResolution,
   error: string | null
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await deps.resolve(row.capture_id, row.claim_token, state, error);
+    return await deps.resolve(row.capture_id, row.claim_token, state, error);
   } catch {
-    // The lease expires and the row is claimed again; replay is idempotent.
     console.warn('[PiggyVest Webhook] Failed to resolve captured delivery');
+    return false;
   }
 }
 
@@ -38,12 +46,12 @@ export async function deferForIncompleteKeySet(
   row: PiggyvestClaimedCapture,
   reason: string
 ): Promise<void> {
+  if (!(await settle(deps, row, 'deferred', 'KEY_SET_INCOMPLETE'))) return;
   emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_KEYS_UNCONFIGURED', {
     captureId: row.capture_id,
     eventType: row.event_type,
     reason: `replay deferred, key set incomplete: ${reason}`,
   });
-  await settle(deps, row, 'deferred', 'KEY_SET_INCOMPLETE');
 }
 
 /**
@@ -59,12 +67,13 @@ export async function setAsideOutOfScope(
   row: PiggyvestClaimedCapture,
   scope: string
 ): Promise<RowOutcome> {
+  const code = `REPLAY_OUT_OF_SCOPE_${scope}`;
+  if (!(await settle(deps, row, 'needs_review', code))) return 'retried';
   emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_REPLAY_DEFERRED', {
     captureId: row.capture_id,
     eventType: row.event_type,
     reason: `set aside for review: ${scope}; a provider redelivery closes it`,
   });
-  await settle(deps, row, 'needs_review', `REPLAY_OUT_OF_SCOPE_${scope}`);
   return 'needsReview';
 }
 
@@ -79,6 +88,7 @@ export async function parkForReview(
   reason: string,
   attempts?: number
 ): Promise<RowOutcome> {
+  if (!(await settle(deps, row, 'needs_review', code))) return 'retried';
   emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_NEEDS_REVIEW', {
     captureId: row.capture_id,
     eventType: row.event_type,
@@ -86,7 +96,6 @@ export async function parkForReview(
     attempts,
     reason,
   });
-  await settle(deps, row, 'needs_review', code);
   return 'needsReview';
 }
 

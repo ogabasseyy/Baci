@@ -11,6 +11,7 @@ import {
   drainScheduleReason,
 } from './webhook-capture-drain-readiness';
 import type { CaptureDrainExecutor } from './webhook-capture-pg-executor';
+import { collectPrimaryIntakeEvidence } from './webhook-capture-primary-intake-readiness';
 
 const NOW = new Date('2026-10-30T12:00:00.000Z');
 const WORKERS = '/srv/baci-worker/baci-workers';
@@ -62,6 +63,7 @@ describe('gate reasons', () => {
     const drain = {
       login: { ok: true },
       schedule: { enabled: true, cron: 'installed' },
+      primaryIntake: { notReady: [] },
     } as const;
     expect(drainAlertReason({ ...drain, alerts: { configured: true } })).toBe(
       null
@@ -84,6 +86,7 @@ describe('gate reasons', () => {
       drainLoginReason({
         login,
         schedule: { enabled: true, cron: 'installed' },
+        primaryIntake: { notReady: [] },
         alerts: { configured: true },
       })
     ).toBe(reason);
@@ -100,6 +103,7 @@ describe('gate reasons', () => {
       drainScheduleReason({
         login: { ok: true },
         schedule,
+        primaryIntake: { notReady: [] },
         alerts: { configured: true },
       })
     ).toBe(reason);
@@ -138,11 +142,24 @@ describe('collectCaptureDrainEvidence', () => {
       drain: {
         login: { ok: true },
         schedule: { enabled: true, cron: 'installed' },
+        primaryIntake: { notReady: ['bank', 'custody', 'interest'] },
         alerts: { configured: true },
       },
     });
     expect(query).toHaveBeenCalledWith('status', []);
     expect(query).not.toHaveBeenCalledWith('claim', expect.anything());
+  });
+
+  it('reads which primary intakes can finish a replay from the host env and the check time', async () => {
+    const evidence = await collectCaptureDrainEvidence({
+      env: { NODE_ENV: 'test' },
+      now: NOW,
+      executor: executor(),
+      readCrontab: async () => CRON_LINE,
+    });
+    expect(evidence.drain?.primaryIntake).toEqual(
+      collectPrimaryIntakeEvidence({ NODE_ENV: 'test' }, NOW)
+    );
   });
 
   it('reports an unconfigured login without connecting', async () => {
@@ -156,6 +173,7 @@ describe('collectCaptureDrainEvidence', () => {
     expect(evidence.drain).toEqual({
       login: { ok: false, reason: 'not_configured' },
       schedule: { enabled: false, cron: 'unreadable' },
+      primaryIntake: { notReady: ['bank', 'custody', 'interest'] },
       alerts: { configured: false },
     });
   });
@@ -201,6 +219,7 @@ describe('collectCaptureDrainEvidence', () => {
     expect(evidence.drain).toEqual({
       login: { ok: false, reason: 'unsafe', failedChecks: ['membership'] },
       schedule: { enabled: true, cron: 'unreadable' },
+      primaryIntake: { notReady: ['bank', 'custody', 'interest'] },
       alerts: { configured: true },
     });
   });

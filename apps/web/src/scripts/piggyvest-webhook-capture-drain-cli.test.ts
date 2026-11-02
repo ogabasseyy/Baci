@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   dispatch: vi.fn(),
   execFile: vi.fn(),
   primaryKeys: { bank: '', custody: '', interest: '' },
+  intakesNotReady: [] as string[],
 }));
 const secrets = (key: string) => (key ? { webhookSecret: key } : null);
 
@@ -31,6 +32,18 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime', () => ({
   readPrimaryWalletPaidInterestInboxSecrets: () =>
     secrets(mocks.primaryKeys.interest),
 }));
+
+vi.mock(
+  '@/lib/piggyvest/webhook-capture-primary-intake-readiness',
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import('@/lib/piggyvest/webhook-capture-primary-intake-readiness')
+    >()),
+    // The real readers need a full intake configuration; their own suites
+    // cover them. Here the host either has every intake or lacks some.
+    collectPrimaryIntakeEvidence: () => ({ notReady: mocks.intakesNotReady }),
+  })
+);
 
 import { deterministicTestKey } from '@/lib/piggyvest/deterministic-test-data.test-support';
 import type { CaptureDrainExecutor } from '@/lib/piggyvest/webhook-capture-pg-executor';
@@ -74,6 +87,7 @@ const cli = (argv: string[], env: NodeJS.ProcessEnv = ENV, crontab = CRON) =>
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.primaryKeys = { bank: '', custody: '', interest: '' };
+  mocks.intakesNotReady = [];
   output = [];
   createExecutor = vi.fn(() => scriptedCaptureExecutor([]));
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -160,6 +174,18 @@ describe('runPiggyvestWebhookCaptureDrainCli', () => {
         gate: 'key_configuration',
         reason: 'DRAIN_FAMILY_KEY_MISSING:bank,custody,interest',
       },
+    ]);
+  });
+
+  it('is not ready to attest while a primary intake it replays through is not enabled on the host', async () => {
+    // Keys, login, schedule and alerts all pass; the bank intake does not.
+    mocks.primaryKeys = { ...PRIMARY_KEYS };
+    mocks.intakesNotReady = ['bank'];
+    await expect(cli(['--readiness'])).resolves.toBe(1);
+    const report = JSON.parse(output[0] ?? '');
+    expect(report.readyToAttest).toBe(false);
+    expect(report.notReady).toEqual([
+      { gate: 'primary_intake', reason: 'PRIMARY_INTAKE_NOT_READY:bank' },
     ]);
   });
 

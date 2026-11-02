@@ -67,12 +67,33 @@ describe('session and statement rows', () => {
       login_safe: true,
       membership_count: 1,
       worker_membership: true,
+      grants_usable: true,
+      capture_surface_denied: true,
+      unexpected_privileges: 0,
       tls: true,
     };
     expect(piggyvestCaptureDrainSessionRowSchema.parse(row)).toEqual(row);
     expect(
       piggyvestCaptureDrainSessionRowSchema.safeParse({ ...row, tls: 't' })
         .success
+    ).toBe(false);
+    for (const unreadable of [
+      { grants_usable: null },
+      { capture_surface_denied: 'f' },
+      { unexpected_privileges: null },
+      { unexpected_privileges: -1 },
+      { unexpected_privileges: 1.5 },
+    ]) {
+      expect(
+        piggyvestCaptureDrainSessionRowSchema.safeParse({
+          ...row,
+          ...unreadable,
+        }).success
+      ).toBe(false);
+    }
+    const { unexpected_privileges: _omitted, ...withoutCount } = row;
+    expect(
+      piggyvestCaptureDrainSessionRowSchema.safeParse(withoutCount).success
     ).toBe(false);
   });
 

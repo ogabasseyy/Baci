@@ -33,6 +33,9 @@ const safeSession = {
   login_safe: true,
   membership_count: 1,
   worker_membership: true,
+  grants_usable: true,
+  capture_surface_denied: true,
+  unexpected_privileges: 0,
   tls: true,
 };
 
@@ -143,6 +146,18 @@ describe('createCaptureDrainPgExecutor', () => {
     ['a switched current role', { role_name: 'service_role' }],
     ['another database', { database_name: 'other' }],
     ['an elevated login', { login_safe: false }],
+    [
+      'a login that cannot inherit the worker role grants',
+      { grants_usable: false },
+    ],
+    [
+      'a login that holds the capture table or functions',
+      { capture_surface_denied: false },
+    ],
+    [
+      'a login with a privilege beyond the entry points and PUBLIC',
+      { unexpected_privileges: 1 },
+    ],
   ])('refuses %s and runs no statement', async (_label, override) => {
     session = [{ ...safeSession, ...override }];
     await expect(executor().query('claim', [10, 300, 120])).rejects.toThrow(
@@ -156,6 +171,10 @@ describe('createCaptureDrainPgExecutor', () => {
     ['no verification row', []],
     ['two verification rows', [safeSession, safeSession]],
     ['a malformed verification row', [{ ...safeSession, tls: 'true' }]],
+    [
+      'a row with no privilege count',
+      [{ ...safeSession, unexpected_privileges: null }],
+    ],
   ])('refuses %s', async (_label, rows) => {
     session = rows;
     await expect(executor().query('status', [])).rejects.toThrow(
@@ -245,6 +264,27 @@ describe('verifySession', () => {
       ok: false,
       reason: 'unsafe',
       failedChecks: ['session_user', 'membership', 'tls'],
+    });
+  });
+
+  it.each([
+    [{ grants_usable: false }, ['grants']],
+    [{ capture_surface_denied: false }, ['capture_surface']],
+    [{ unexpected_privileges: 3 }, ['extra_privileges']],
+    [
+      {
+        grants_usable: false,
+        capture_surface_denied: false,
+        unexpected_privileges: 2,
+      },
+      ['grants', 'capture_surface', 'extra_privileges'],
+    ],
+  ])('names a login that cannot use, or reaches beyond, its grants: %j', async (override, failedChecks) => {
+    session = [{ ...safeSession, ...override }];
+    await expect(executor().verifySession()).resolves.toEqual({
+      ok: false,
+      reason: 'unsafe',
+      failedChecks,
     });
   });
 

@@ -56,4 +56,33 @@ describe('capture drain executor SQL contract', () => {
     expect(workerGrants).not.toContain('resolve_piggyvest_webhook_capture');
     expect(workerGrants).not.toContain('capture_piggyvest_webhook_delivery');
   });
+
+  describe('session check object names', () => {
+    const named = (name: string) =>
+      [
+        ...CAPTURE_DRAIN_VERIFY_SESSION_SQL.matchAll(
+          /to_regprocedure\('public\.([a-z_]+)\(/g
+        ),
+      ].filter((match) => match[1] === name).length;
+
+    it('requires, and excludes from the exposure count, exactly the functions the migration grants', () => {
+      // Once in grants_usable and once in the unexpected_privileges exclusion.
+      for (const name of workerGrants) expect(named(name)).toBe(2);
+    });
+
+    it.each([
+      'capture_piggyvest_webhook_delivery',
+      'resolve_piggyvest_webhook_capture',
+      'piggyvest_webhook_captures_immutable_evidence',
+    ])('denies the login %s and never counts it as an entry point', (name) => {
+      expect(workerGrants).not.toContain(name);
+      expect(named(name)).toBe(1);
+    });
+
+    it('still names the capture table it keeps the login away from', () => {
+      expect(CAPTURE_DRAIN_VERIFY_SESSION_SQL).toContain(
+        "to_regclass('public.piggyvest_webhook_captures')"
+      );
+    });
+  });
 });

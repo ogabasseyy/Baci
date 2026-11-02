@@ -21,7 +21,8 @@ import { inspectPiggyvestWebhookCaptureReadiness } from '@/lib/piggyvest/webhook
  * --readiness  connects as the drain login, reads only the metadata
  *              counters, and prints the readiness report (exit 0 once
  *              every gate this host can check passes: login, schedule,
- *              family keys, alert delivery and a fresh backlog)
+ *              family keys, primary intakes, alert delivery and a fresh
+ *              backlog)
  * --plan       prints what the drain does; reads nothing
  *
  * Output is counts, gate names and reasons only: never a body, signature,

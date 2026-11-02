@@ -108,6 +108,15 @@ describe('settleReplayResult', () => {
     });
   });
 
+  it('never counts a row processed when this pass lost its lease', async () => {
+    resolve.mockResolvedValue(false);
+    await expect(settled({ status: 200 })).resolves.toEqual({
+      outcome: 'retried',
+      state: 'processed',
+      error: null,
+    });
+  });
+
   it('dead-letters only after the attempt budget is spent', async () => {
     const exhausted = { ...stored, attempts: MAX_DRAIN_ATTEMPTS };
     await expect(settled({ status: 500 }, false, exhausted)).resolves.toEqual({

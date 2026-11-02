@@ -125,11 +125,17 @@ async function drainRow(
     return 'retried';
   }
   if (verification.status === 'unverifiable') {
+    const parked = await settle(
+      deps,
+      row,
+      'needs_review',
+      'REPLAY_SIGNATURE_UNVERIFIABLE'
+    );
+    if (!parked) return 'retried';
     emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_REPLAY_UNVERIFIABLE', {
       captureId: row.capture_id,
       keyVersion: row.key_version,
     });
-    await settle(deps, row, 'needs_review', 'REPLAY_SIGNATURE_UNVERIFIABLE');
     return 'needsReview';
   }
 

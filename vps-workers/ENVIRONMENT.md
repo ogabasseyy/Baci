@@ -96,7 +96,9 @@ the owner turns it on; see `docs/piggyvest-webhook-capture-drain-runbook.md`.
   custody, interest), the same as the web app's, and those intakes' own
   configuration: the drain re-verifies every stored signature and replays
   through the same intakes the web receiver uses. A delivery signed with a
-  key this host lacks waits; `--readiness` names any missing family.
+  key this host lacks waits; `--readiness` names any missing family
+  (`DRAIN_FAMILY_KEY_MISSING`) and any family whose intake is not enabled
+  and fully configured on this host (`PRIMARY_INTAKE_NOT_READY`).
 - `POSTHOG_PROJECT_TOKEN`: the drain's alerts are sent to PostHog as
   `piggyvest_money_alert`; on this host the console line only reaches the
   local log file. `--readiness` reports `DRAIN_ALERTS_NOT_CONFIGURED`

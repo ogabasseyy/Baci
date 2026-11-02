@@ -13,7 +13,10 @@ import {
  * drain login, proves on every connection that the session is exactly that
  * login (SESSION_USER and CURRENT_USER), that the login is a member of the
  * worker role and of nothing else, that neither carries an elevated
- * attribute, and that the connection is TLS. Only then does it run one of
+ * attribute, that it can actually use the worker role's grants (inheritance),
+ * that nothing, PUBLIC included, gives it the capture table or the capture
+ * functions, that it reaches nothing beyond what anon already can, and that
+ * the connection is TLS. Only then does it run one of
  * three fixed statements. Any doubt fails closed with a generic error that
  * names no host, login detail or password.
  *
@@ -38,7 +41,24 @@ export const CAPTURE_DRAIN_STATEMENTS: Readonly<
 
 // One row about the session: who is connected, what the login may do, how
 // many roles it belongs to, whether its single membership is the worker
-// role (itself non-login, non-elevated and a member of nothing), and TLS.
+// role (itself non-login, non-elevated and a member of nothing), TLS, and
+// what the login can actually reach:
+// - grants_usable: the login really holds the schema USAGE and the three
+//   entry points (has_function_privilege follows rolinherit and the
+//   membership's inherit option, so a login that cannot inherit the worker
+//   role's grants fails here instead of with a permission error later);
+// - capture_surface_denied: no privilege, from any source including PUBLIC,
+//   on the capture table, the capture door, the shared resolve function or
+//   the evidence trigger function;
+// - unexpected_privileges: privileges the login holds by name rather than
+//   through PUBLIC, on anything but the three entry points and USAGE on
+//   public. It counts pg_shdepend, which records an ACL (or ownership)
+//   dependency of every object on each role named in its ACL, for the login
+//   and every role whose privileges it inherits, so it is an indexed lookup
+//   that does not scan the catalogs. Zero bounds the login to the worker
+//   role's grants plus what PUBLIC grants every role, which is exactly what
+//   the anonymous anon role already holds; the capture surface is denied even
+//   from PUBLIC (capture_surface_denied).
 // $1 is the worker role and $2 the drain login, whose row is the one
 // checked; SESSION_USER must also be that login (checked in sessionFailures).
 // The text runs verbatim in supabase/tests/piggyvest_webhook_capture_drain_session_check.sql.
@@ -55,6 +75,35 @@ export const CAPTURE_DRAIN_VERIFY_SESSION_SQL = `SELECT pg_catalog.current_datab
       AND NOT worker.rolcreaterole AND NOT worker.rolcreatedb AND NOT worker.rolreplication
       AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_auth_members parent WHERE parent.member = worker.oid)
   ) AS worker_membership,
+  (
+    pg_catalog.has_schema_privilege(login.oid, 'public', 'USAGE')
+    AND COALESCE(pg_catalog.has_function_privilege(login.oid, pg_catalog.to_regprocedure('public.claim_piggyvest_webhook_captures(integer,integer,integer)'), 'EXECUTE'), false)
+    AND COALESCE(pg_catalog.has_function_privilege(login.oid, pg_catalog.to_regprocedure('public.resolve_claimed_piggyvest_webhook_capture(uuid,uuid,text,text)'), 'EXECUTE'), false)
+    AND COALESCE(pg_catalog.has_function_privilege(login.oid, pg_catalog.to_regprocedure('public.piggyvest_webhook_capture_status()'), 'EXECUTE'), false)
+  ) AS grants_usable,
+  NOT (
+    COALESCE(pg_catalog.has_function_privilege(login.oid, pg_catalog.to_regprocedure('public.capture_piggyvest_webhook_delivery(jsonb)'), 'EXECUTE'), false)
+    OR COALESCE(pg_catalog.has_function_privilege(login.oid, pg_catalog.to_regprocedure('public.resolve_piggyvest_webhook_capture(uuid,uuid,text,text)'), 'EXECUTE'), false)
+    OR COALESCE(pg_catalog.has_function_privilege(login.oid, pg_catalog.to_regprocedure('public.piggyvest_webhook_captures_immutable_evidence()'), 'EXECUTE'), false)
+    OR COALESCE(pg_catalog.has_table_privilege(login.oid, pg_catalog.to_regclass('public.piggyvest_webhook_captures'), 'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER'), false)
+    OR COALESCE(pg_catalog.has_any_column_privilege(login.oid, pg_catalog.to_regclass('public.piggyvest_webhook_captures'), 'SELECT, INSERT, UPDATE, REFERENCES'), false)
+  ) AS capture_surface_denied,
+  (
+    SELECT count(*)::integer FROM pg_catalog.pg_shdepend d
+    WHERE d.refclassid = 'pg_catalog.pg_authid'::pg_catalog.regclass AND d.deptype IN ('a', 'o')
+      AND d.dbid IN (0, (SELECT db.oid FROM pg_catalog.pg_database db WHERE db.datname = pg_catalog.current_database()))
+      AND d.refobjid IN (SELECT r.oid FROM pg_catalog.pg_roles r WHERE pg_catalog.pg_has_role(login.oid, r.oid, 'USAGE'))
+      AND NOT (d.classid = 'pg_catalog.pg_proc'::pg_catalog.regclass AND d.objsubid = 0 AND d.objid = ANY (ARRAY[
+        COALESCE(pg_catalog.to_regprocedure('public.claim_piggyvest_webhook_captures(integer,integer,integer)')::oid, 0),
+        COALESCE(pg_catalog.to_regprocedure('public.resolve_claimed_piggyvest_webhook_capture(uuid,uuid,text,text)')::oid, 0),
+        COALESCE(pg_catalog.to_regprocedure('public.piggyvest_webhook_capture_status()')::oid, 0)]))
+      AND NOT (d.classid = 'pg_catalog.pg_namespace'::pg_catalog.regclass AND d.objid = 'public'::pg_catalog.regnamespace)
+  ) + (
+    SELECT count(*)::integer FROM pg_catalog.pg_namespace n
+    CROSS JOIN LATERAL pg_catalog.aclexplode(n.nspacl) acl
+    WHERE n.nspname = 'public' AND acl.privilege_type <> 'USAGE'
+      AND acl.grantee IN (SELECT r.oid FROM pg_catalog.pg_roles r WHERE pg_catalog.pg_has_role(login.oid, r.oid, 'USAGE'))
+  ) AS unexpected_privileges,
   EXISTS (
     SELECT 1 FROM pg_catalog.pg_stat_ssl s WHERE s.pid = pg_catalog.pg_backend_pid() AND s.ssl
   ) AS tls
@@ -66,6 +115,9 @@ export type CaptureDrainSessionCheck =
   | 'current_user'
   | 'login_privileges'
   | 'membership'
+  | 'grants'
+  | 'capture_surface'
+  | 'extra_privileges'
   | 'tls';
 
 export type CaptureDrainSessionVerdict =
@@ -129,6 +181,9 @@ function sessionFailures(
     ['current_user', session.role_name === PIGGYVEST_CAPTURE_DRAIN_LOGIN],
     ['login_privileges', session.login_safe],
     ['membership', session.membership_count === 1 && session.worker_membership],
+    ['grants', session.grants_usable],
+    ['capture_surface', session.capture_surface_denied],
+    ['extra_privileges', session.unexpected_privileges === 0],
     ['tls', session.tls],
   ];
   return checks.flatMap(([check, passed]) => (passed ? [] : [check]));

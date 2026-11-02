@@ -37,12 +37,17 @@ describe('settle', () => {
     );
   });
 
-  it('swallows a failed resolve: the lease expires and the row is claimed again', async () => {
+  it('swallows a failed resolve and reports it unsettled: the lease expires and the row is claimed again', async () => {
     resolve.mockRejectedValue(new Error('database down'));
 
-    await expect(
-      settle(deps, stored, 'processed', null)
-    ).resolves.toBeUndefined();
+    await expect(settle(deps, stored, 'processed', null)).resolves.toBe(false);
+  });
+
+  it('reports a lost lease (the database matched no row) as unsettled', async () => {
+    resolve.mockResolvedValue(false);
+    await expect(settle(deps, stored, 'processed', null)).resolves.toBe(false);
+    resolve.mockResolvedValue(true);
+    await expect(settle(deps, stored, 'processed', null)).resolves.toBe(true);
   });
 });
 
@@ -92,6 +97,15 @@ describe('parkForReview', () => {
     expect(alerts).toHaveBeenCalledWith(
       expect.stringContaining('because of a reason')
     );
+  });
+
+  it('neither counts nor alerts a review it did not record because the lease was lost', async () => {
+    resolve.mockResolvedValue(false);
+
+    await expect(parkForReview(deps, stored, 'CODE', 'r')).resolves.toBe(
+      'retried'
+    );
+    expect(alerts).not.toHaveBeenCalled();
   });
 
   it('includes the attempt count only when given', async () => {

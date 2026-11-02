@@ -7,6 +7,7 @@ import {
   drainLoginReason,
   drainScheduleReason,
 } from './webhook-capture-drain-readiness';
+import { primaryIntakeReason } from './webhook-capture-primary-intake-readiness';
 import {
   collectPiggyvestWebhookSecretsWithStatus,
   type PiggyvestWebhookKeyFamily,
@@ -39,6 +40,7 @@ const DRAIN_REPLAY_FAMILIES: readonly PiggyvestWebhookKeyFamily[] = [
 
 export type CaptureReadinessGate =
   | 'key_configuration'
+  | 'primary_intake'
   | 'migration_and_table'
   | 'storage'
   | 'drain_login'
@@ -172,6 +174,7 @@ export function inspectPiggyvestWebhookCaptureReadiness(
   const storage = storageReasons(evidence.storage);
   const results: [CaptureReadinessGate, string | null][] = [
     ['key_configuration', keys.reason],
+    ['primary_intake', primaryIntakeReason(evidence.drain?.primaryIntake)],
     ['migration_and_table', storage.migration],
     ['storage', storage.storage],
     ['drain_login', drainLoginReason(evidence.drain)],

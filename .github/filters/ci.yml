@@ -292,6 +292,11 @@ deploy_scripts:
   - '.github/workflows/preview.yml'
 # Root Next config changes affect the web app even when apps/web/** is untouched.
 web:
+  - '.github/actions/typecheck-cache/**'
+  - '.github/scripts/ci-typecheck-cache.test.mjs'
+  - '.github/scripts/find-trusted-typecheck-state*'
+  - '.github/scripts/diff-guardian-runner.test.mjs'
+  - '.github/workflows/diff-guardian.yml'
   - 'public/guides/**'
   - 'supabase/migrations/*customer_checkout_shipping_recovery*'
   - 'supabase/tests/*recovery*'

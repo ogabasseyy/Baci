@@ -21,6 +21,12 @@ DO $$ BEGIN
  EXCEPTION WHEN raise_exception THEN
   IF SQLERRM <> 'order_not_cancellable' THEN RAISE; END IF;
  END;
+ BEGIN
+  UPDATE public.orders SET shipping_status='cancelled',cancelled_by='merchant' WHERE id='ab120000-0000-4000-8000-000000000004';
+  RAISE EXCEPTION 'Oxygen order was cancelled by merchant';
+ EXCEPTION WHEN raise_exception THEN
+  IF SQLERRM <> 'order_not_cancellable' THEN RAISE; END IF;
+ END;
 END $$;
 -- Opening an application alone must not trap a customer in Oxygen.
 UPDATE public.orders SET payment_method='card' WHERE id='ab120000-0000-4000-8000-000000000004';

@@ -3,7 +3,7 @@
   "version": 1,
   "statusContext": "money-pr-assurance",
   "moneyKeywords": {
-    "$comment": "A changed file is a money path when it sits under one of these roots and its path (after the root) contains one of these words, ignoring case. The roots are server, database and tooling code plus the mobile apps' data, service and hook folders; interface components, screens and documentation are outside them on purpose.",
+    "$comment": "A changed file is a money path when it sits under one of these roots and its path (after the root) contains one of these words, ignoring case and treating hyphens and underscores alike. The roots are server, database and tooling code plus the mobile apps' data, service and hook folders; interface components, screens and documentation are outside them on purpose.",
     "roots": [
       "apps/mobile-admin/hooks/",
       "apps/mobile-admin/lib/",
@@ -29,24 +29,17 @@
       "wallet",
       "savings",
       "prefunded",
-      "primary_card",
       "primary-card",
-      "primary_bank",
       "primary-bank",
-      "primary_inflow",
       "primary-inflow",
-      "primary_interest",
       "primary-interest",
       "primary-restricted",
       "primary-pending-sources",
-      "plan_transfer",
       "plan-transfer",
-      "goal_policy",
-      "cancel_plan",
+      "goal-policy",
       "cancel-plan",
-      "purchase_preparation",
+      "purchase-preparation",
       "purchase-pricing",
-      "store_credit",
       "store-credit",
       "interest-bridge"
     ]
@@ -57,9 +50,11 @@
     "apps/web/src/lib/payments/**",
     "apps/web/src/app/api/vtu/**",
     "apps/web/src/app/api/cron/*vtu*/**",
-    "apps/web/src/lib/vtu-*",
+    "apps/web/src/lib/vtu*",
+    "apps/web/src/lib/vtu*/**",
     "apps/web/src/app/api/storefront/imei-check/**",
-    "apps/web/src/lib/imei-lookup-fulfillment*"
+    "apps/web/src/lib/imei-lookup-fulfillment*",
+    "apps/web/src/lib/imei-lookup-fulfillment*/**"
   ],
   "governancePaths": [
     ".github/money-path-paths.json",

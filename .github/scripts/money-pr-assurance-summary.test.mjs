@@ -82,6 +82,9 @@ test('code, SQL and markup are rejected so the owner reads plain English', () =>
     ['Calls `transfer()` once.', /backticks/],
     ['    indented code line', /indented/],
     ['SELECT amount FROM wallets', /SQL/],
+    ['select amount from wallets', /SQL/],
+    ['Select id, amount From wallets', /SQL/],
+    ['update wallets set balance = 100', /SQL/],
     ['It will create table ledgers first.', /SQL/],
     ['Then grant execute on the function.', /SQL/],
     ['The refund_customer_wallet function changes.', /code identifier/],
@@ -94,7 +97,7 @@ test('code, SQL and markup are rejected so the owner reads plain English', () =>
   }
   // Ordinary English that uses SQL words is allowed.
   const english =
-    'Customers select a device from the list and update their goal later.';
+    'Customers select a device from the list and update their goal later, so the set of choices stays clear.';
   assert.deepEqual(errorsFor(validSummary({ extra: `\n${english}\n` })), []);
   // Nested list items are not mistaken for indented code.
   assert.deepEqual(
@@ -236,4 +239,26 @@ test('reported line numbers count lines hidden in comments', () => {
 test('a task id with underscores on the Task line is not flagged as code', () => {
   const text = validSummary({ taskId: 'p6_wallet_pin' });
   assert.deepEqual(errorsFor(text, { taskId: 'p6_wallet_pin' }), []);
+});
+
+test('an oversized summary is refused before any pattern runs', () => {
+  // Far beyond any 450-word summary; refusing it outright also keeps the
+  // checks fast whatever a pull request puts in the file.
+  const huge = validSummary({ extra: `\n${'select from '.repeat(2000)}\n` });
+  const result = validateSummary(huge, { taskId: TASK_ID, ...summaryConfig });
+  assert.deepEqual(result.errors, [
+    'Is far longer than the 450-word limit allows.',
+  ]);
+  assert.equal(result.ownerSignoffRequired, true);
+});
+
+test('long lines just under the size cap are checked without stalling', {
+  timeout: 10000,
+}, () => {
+  const line = 'select from where import a from '.repeat(250).slice(0, 7000);
+  const result = validateSummary(validSummary({ extra: `\n${line}\n` }), {
+    taskId: TASK_ID,
+    ...summaryConfig,
+  });
+  assert.ok(result.errors.length > 0);
 });

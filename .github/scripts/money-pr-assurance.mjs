@@ -166,11 +166,16 @@ export async function runAssurance({
         log(`#${number} is ${pr.state}; skipping.`);
         continue;
       }
-      const snapshot = await collectSnapshot(
-        client,
-        { owner: target.owner, repo: target.repo, number },
-        config,
-        pr
+      // Every snapshot read is idempotent, so a transient failure is retried.
+      const snapshot = await withRetries(
+        () =>
+          collectSnapshot(
+            client,
+            { owner: target.owner, repo: target.repo, number },
+            config,
+            pr
+          ),
+        sleep
       );
       const result = evaluateAssurance(snapshot, config);
       results.push({

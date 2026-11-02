@@ -118,6 +118,11 @@ function parseSummary(summary) {
   };
 }
 
+// Hyphens and underscores are interchangeable in file names here.
+function normaliseWord(text) {
+  return text.toLowerCase().replaceAll('_', '-');
+}
+
 function parseMoneyKeywords(value) {
   if (!value || typeof value !== 'object')
     fail('moneyKeywords must be an object');
@@ -125,7 +130,7 @@ function parseMoneyKeywords(value) {
   if (!roots.every((root) => root.endsWith('/')))
     fail('moneyKeywords.roots entries must end with "/"');
   const keywords = requireStringList(value.keywords, 'moneyKeywords.keywords');
-  return { roots, keywords: keywords.map((word) => word.toLowerCase()) };
+  return { roots, keywords: [...new Set(keywords.map(normaliseWord))] };
 }
 
 function parseRequiredChecks(checks) {
@@ -226,7 +231,7 @@ export function matchesMoneyKeyword(path, { roots, keywords }) {
     lower.startsWith(candidate.toLowerCase())
   );
   if (!root) return false;
-  const rest = lower.slice(root.length);
+  const rest = normaliseWord(lower.slice(root.length));
   return keywords.some((word) => rest.includes(word));
 }
 

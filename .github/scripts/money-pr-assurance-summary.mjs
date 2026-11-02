@@ -8,18 +8,25 @@ const TASK_LINE = /^task:\s*(.*?)\s*$/i;
 const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s/;
 
+// Statement shapes, in any letter case. Each pattern is linear: a summary
+// comes from the pull request, so no pattern may backtrack across a line.
 const SQL_PATTERNS = [
-  /\b(?:SELECT|INSERT|UPDATE|DELETE)\b.*\b(?:FROM|INTO|SET|WHERE)\b/,
+  /\bselect\s+(?:\*|[\w.]+(?:\s*,\s*[\w.]+)*)\s+from\s+[\w.]+/i,
+  /\bupdate\s+[\w.]+\s+set\s+[\w.]+\s*=/i,
+  /\b(?:SELECT|INSERT|UPDATE|DELETE)\s+\S+\s+(?:FROM|INTO|SET|WHERE)\b/,
   /\b(?:create|alter|drop)\s+(?:or\s+replace\s+)?(?:table|function|policy|index|view|schema|role|trigger|type|extension)\b/i,
   /\b(?:insert\s+into|delete\s+from|truncate\s+table|security\s+definer|language\s+plpgsql|returns\s+table)\b/i,
   /\b(?:grant|revoke)\s+(?:all|select|insert|update|delete|execute|usage)\b/i,
-  /\bselect\b.*\bfrom\b.*\bwhere\b/i,
 ];
+
+// Generous for any summary within the word limit; anything longer is
+// refused before the line checks run.
+const CHARS_PER_WORD = 20;
 
 const CODE_PATTERNS = [
   [/=>|===|!==|&&|\|\||::|\(\)\s*;|[{}]/, 'contains code'],
   [
-    /\b(?:const|let|var)\s+\w+\s*=|\bfunction\s*\w*\s*\(|\bimport\s+.+\s+from\s+['"]/,
+    /\b(?:const|let|var)\s+\w+\s*=|\bfunction\s*\w*\s*\(|\bimport\s+[^'"]*?\bfrom\s+['"]/,
     'contains code',
   ],
   [
@@ -136,6 +143,13 @@ function readMetadata(preamble, taskId, errors) {
 }
 
 export function validateSummary(text, { taskId, headings, maxWords }) {
+  if (String(text).length > maxWords * CHARS_PER_WORD) {
+    return {
+      errors: [`Is far longer than the ${maxWords}-word limit allows.`],
+      ownerSignoffRequired: true,
+      wordCount: countWords(String(text)),
+    };
+  }
   const errors = [];
   const visible = stripComments(String(text).replace(/\r\n?/g, '\n'), errors);
   const lines = visible.split('\n');

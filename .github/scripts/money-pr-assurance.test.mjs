@@ -272,3 +272,41 @@ test('a comment-triggered run that cannot read the PR still marks its head', asy
   );
   assert.equal(JSON.parse(posts[0].body).state, 'error');
 });
+
+test('a transient failure while collecting the snapshot is retried', async () => {
+  let calls = 0;
+  const routes = {
+    ...prRoute(6, [
+      {
+        filename: 'apps/web/src/lib/piggyvest/transfer.ts',
+        status: 'modified',
+      },
+    ]),
+    'GET /repos/o/r/issues/6/comments?per_page=100': () => {
+      calls += 1;
+      return calls === 1 ? { status: 502, json: {} } : { json: [] };
+    },
+    'GET /repos/o/r/pulls/6/reviews?per_page=100': { json: [] },
+    'POST /graphql': {
+      json: {
+        data: {
+          repository: {
+            pullRequest: {
+              reviewThreads: { pageInfo: { hasNextPage: false }, nodes: [] },
+            },
+          },
+        },
+      },
+    },
+    [`GET /repos/o/r/actions/runs?head_sha=${HEAD}&per_page=100`]: {
+      json: { workflow_runs: [] },
+    },
+    [`GET /repos/o/r/commits/${HEAD}/check-runs?per_page=100`]: {
+      json: { check_runs: [] },
+    },
+  };
+  const { fake, result, sleeps } = await run({ PR_NUMBER: '6' }, routes);
+  assert.equal(result.exitCode, 0);
+  assert.equal(statusBodies(fake)[0].state, 'failure');
+  assert.deepEqual(sleeps, [2000]);
+});

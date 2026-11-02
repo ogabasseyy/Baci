@@ -86,6 +86,13 @@ test('money code whose file name lacks those words is still a money path', () =>
     // Shared contracts and libraries, at any depth.
     'packages/shared/src/lib/piggyvest-purchase-money.ts',
     'packages/shared/src/contracts/piggyvest-payment-leg-recovery.ts',
+    // Hyphen and underscore spellings match alike, at any depth.
+    'apps/web/src/schemas/purchase-preparation.ts',
+    'apps/web/src/schemas/purchase_pricing.ts',
+    'tools/staging/interest_bridge/plan.py',
+    'apps/web/src/lib/vtu/fulfil.ts',
+    'apps/web/src/lib/vtufulfillment.ts',
+    'apps/web/src/lib/imei-lookup-fulfillment/refund.ts',
     // Mobile clients' money calls, hooks and schemas.
     'apps/mobile-storefront/lib/piggyvest/plan-wallet-live-service.ts',
     'apps/mobile-storefront/lib/customer-savings-plan-funding.ts',

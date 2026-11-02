@@ -95,6 +95,7 @@ tracking:
   # by the worker graph (pinned by deploy-tracking-graph.test.mjs), so
   # their staleness cannot affect the poller or the smoke.
   - 'vps-workers/deploy.sh'
+  - 'vps-workers/bin/gigl-cache-lock-exec.py'
   - 'vps-workers/bin/gigl-tracking-scoped-env.sh'
   - 'vps-workers/bin/process-gigl-tracking.sh'
   - 'vps-workers/bin/run-web-script.sh'

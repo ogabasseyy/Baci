@@ -1,9 +1,13 @@
+import { createHash } from 'node:crypto';
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
 import { readBoundedJsonBody } from '@/lib/events/read-bounded-json-body';
 import { resolveOxygenEnvironment } from '@/lib/payments/oxygen/environment';
 import { connectOxygenRuntime } from '@/lib/payments/oxygen/runtime-connection';
+import {
+  checkOxygenProviderRateLimit,
+  getTrustedClientIdentifier,
+} from '@/lib/rate-limit';
 import { createClient } from '@/lib/supabase/server';
 import { oxygenSessionSchema } from '@/schemas/oxygen-session';
 
@@ -18,10 +22,13 @@ export async function POST(request: NextRequest) {
       NextResponse.json({ error: 'Invalid request' }, { status: 403 })
     );
   if (
-    !(await ensureActionRateLimit('oxygen-session', {
-      requests: 5,
-      windowMs: 60_000,
-    }))
+    !(
+      await checkOxygenProviderRateLimit(
+        getTrustedClientIdentifier(request),
+        'session-ip',
+        5
+      )
+    ).allowed
   )
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   const body = await readBoundedJsonBody(request, 8192);
@@ -31,6 +38,14 @@ export async function POST(request: NextRequest) {
       { error: 'Invalid sign-in details' },
       { status: 400 }
     );
+  const accountKey = createHash('sha256')
+    .update(parsed.data.email.trim().toLowerCase())
+    .digest('hex');
+  if (
+    !(await checkOxygenProviderRateLimit(accountKey, 'session-account', 5))
+      .allowed
+  )
+    return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   try {
     const client = await createClient();
     const { error, data } = await client.auth.signInWithPassword(parsed.data);

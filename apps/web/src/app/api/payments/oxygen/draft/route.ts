@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { checkRateLimit } from '@/ai/provider';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
@@ -9,6 +8,7 @@ import {
   readOxygenDraftForLocalAttempt,
   saveOxygenDraft,
 } from '@/lib/payments/oxygen/draft-store';
+import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
 import { oxygenDraftWriteSchema } from '@/schemas/oxygen-form-draft';
 
 const headers = {
@@ -85,10 +85,8 @@ export async function PUT(request: NextRequest) {
       NextResponse.json({ error: 'Invalid request' }, { status: 403, headers })
     );
   if (
-    !checkRateLimit(`action:oxygen-draft-save:${auth.user.id}`, {
-      requests: 90,
-      windowMs: 60_000,
-    }).allowed
+    !(await checkOxygenProviderRateLimit(auth.user.id, 'draft-save', 90))
+      .allowed
   )
     return NextResponse.json(
       { error: 'Too many requests' },

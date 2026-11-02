@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
 import {
   oxygenActivationBinding,
   readOxygenActivationBindings,
@@ -12,6 +11,7 @@ import {
   runOxygenActivationTrial,
 } from '@/lib/payments/oxygen/activation-trial';
 import { connectOxygenRuntime } from '@/lib/payments/oxygen/runtime-connection';
+import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
 import { oxygenActivationTrialBodySchema } from '@/schemas/oxygen-activation-trial';
 export const maxDuration = 120;
 const headers = { 'Cache-Control': 'no-store' };
@@ -67,10 +67,8 @@ export async function POST(request: NextRequest) {
       NextResponse.json({ error: 'Invalid request' }, { status: 403, headers })
     );
   if (
-    !(await ensureActionRateLimit('oxygen-activation-trial', {
-      requests: 3,
-      windowMs: 60000,
-    }))
+    !(await checkOxygenProviderRateLimit(auth.user.id, 'activation-trial', 3))
+      .allowed
   )
     return NextResponse.json(
       { error: 'Too many requests' },

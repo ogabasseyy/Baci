@@ -10,8 +10,8 @@ const m = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: m.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: m.csrf }));
-vi.mock('@/ai/provider', () => ({
-  checkRateLimit: m.rate,
+vi.mock('@/lib/rate-limit', () => ({
+  checkOxygenProviderRateLimit: m.rate,
 }));
 vi.mock('@/lib/payments/oxygen/draft-store', () => ({
   readOxygenDraft: m.read,
@@ -123,8 +123,5 @@ it('rate limits autosave and bounds payload size', async () => {
 it('reuses the authenticated user for the save limit without another session lookup', async () => {
   expect((await PUT(put())).status).toBe(200);
   expect(m.auth).toHaveBeenCalledOnce();
-  expect(m.rate).toHaveBeenCalledWith('action:oxygen-draft-save:user', {
-    requests: 90,
-    windowMs: 60_000,
-  });
+  expect(m.rate).toHaveBeenCalledWith('user', 'draft-save', 90);
 });

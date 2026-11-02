@@ -17,8 +17,8 @@ vi.mock('@/lib/payments/oxygen/activation-reconciliation', () => ({
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: m.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: m.csrf }));
-vi.mock('@/lib/ensure-action-rate-limit', () => ({
-  ensureActionRateLimit: m.limit,
+vi.mock('@/lib/rate-limit', () => ({
+  checkOxygenProviderRateLimit: m.limit,
 }));
 vi.mock('@/lib/payments/oxygen/runtime-connection', () => ({
   connectOxygenRuntime: m.connect,
@@ -57,7 +57,7 @@ beforeEach(() => {
     supabase: { rpc: vi.fn() },
   });
   m.csrf.mockResolvedValue({ valid: true });
-  m.limit.mockResolvedValue(true);
+  m.limit.mockResolvedValue({ allowed: true });
   m.worker.mockResolvedValue({ rpc: vi.fn() });
   m.connect.mockReturnValue({
     worker: m.worker,
@@ -75,7 +75,7 @@ it('authenticates and validates exact booking before worker or activation work',
 it('enforces CSRF and rate limits', async () => {
   m.csrf.mockResolvedValueOnce({ valid: false });
   expect((await POST(request())).status).toBe(403);
-  m.limit.mockResolvedValueOnce(false);
+  m.limit.mockResolvedValueOnce({ allowed: false });
   expect((await POST(request())).status).toBe(429);
   expect(m.run).not.toHaveBeenCalled();
 });

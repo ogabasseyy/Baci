@@ -9,8 +9,9 @@ const m = vi.hoisted(() => ({
   signIn: vi.fn(),
 }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: m.csrf }));
-vi.mock('@/lib/ensure-action-rate-limit', () => ({
-  ensureActionRateLimit: m.rate,
+vi.mock('@/lib/rate-limit', () => ({
+  checkOxygenProviderRateLimit: m.rate,
+  getTrustedClientIdentifier: () => 'test-ip',
 }));
 vi.mock('@/lib/payments/oxygen/runtime-connection', () => ({
   connectOxygenRuntime: m.connect,
@@ -30,7 +31,7 @@ beforeEach(() => {
   vi.stubEnv('VERCEL_ENV', 'preview');
   m.connect.mockReturnValue({});
   m.csrf.mockResolvedValue({ valid: true });
-  m.rate.mockResolvedValue(true);
+  m.rate.mockResolvedValue({ allowed: true });
   m.client.mockResolvedValue({ auth: { signInWithPassword: m.signIn } });
 });
 afterEach(() => vi.unstubAllEnvs());
@@ -53,9 +54,25 @@ it('requires CSRF and rate limits before authentication', async () => {
   expect((await POST(request('{}'))).status).toBe(403);
   expect(m.client).not.toHaveBeenCalled();
   m.csrf.mockResolvedValue({ valid: true });
-  m.rate.mockResolvedValue(false);
+  m.rate.mockResolvedValue({ allowed: false });
   expect((await POST(request('{}'))).status).toBe(429);
   expect(m.client).not.toHaveBeenCalled();
+});
+it('blocks a throttled account even when its IP is allowed', async () => {
+  m.rate
+    .mockResolvedValueOnce({ allowed: true })
+    .mockResolvedValueOnce({ allowed: false });
+  const response = await POST(
+    request(
+      JSON.stringify({
+        email: 'customer@example.invalid',
+        password: 'synthetic-password',
+      })
+    )
+  );
+  expect(response.status).toBe(429);
+  expect(m.client).not.toHaveBeenCalled();
+  expect(m.rate.mock.calls[1][0]).not.toContain('customer@example.invalid');
 });
 it.each([
   '{',

@@ -5,7 +5,7 @@ import { readGiglWebhookBody } from '@/lib/shipping/gigl-webhook-body';
 import { readGiglWebhookConfig } from '@/lib/shipping/gigl-webhook-config';
 import { openGiglWebhookDelivery } from '@/lib/shipping/gigl-webhook-delivery';
 import { createGiglWebhookExpediteClient } from '@/lib/shipping/gigl-webhook-expedite-client';
-import { giglWebhookExpediteResultSchema } from '@/schemas/gigl-webhook-event';
+import { giglWebhookExpediteResultSchema } from '@/schemas/gigl-webhook-expedite-result';
 
 /**
  * GIG Logistics status webhook (Agility "add-webhook-user" registration).

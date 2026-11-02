@@ -1,10 +1,8 @@
 import 'server-only';
 import { giglWebhookEventSchema } from '@/schemas/gigl-webhook-event';
+import { extractGiglWebhookCiphertext } from './gigl-webhook-ciphertext';
 import type { GiglWebhookConfig } from './gigl-webhook-config';
-import {
-  decryptGiglWebhookPayload,
-  extractGiglWebhookCiphertext,
-} from './gigl-webhook-crypto';
+import { decryptGiglWebhookPayload } from './gigl-webhook-crypto';
 
 export type GiglWebhookRejection =
   | 'malformed'

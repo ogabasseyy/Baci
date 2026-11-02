@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  giglWebhookEventSchema,
-  giglWebhookExpediteResultSchema,
-} from './gigl-webhook-event';
+import { giglWebhookEventSchema } from './gigl-webhook-event';
 
 const event = {
   Waybill: '1349104478',
@@ -73,23 +70,5 @@ describe('giglWebhookEventSchema informational fields', () => {
       Status: null,
       StatusCode: null,
     });
-  });
-});
-
-describe('giglWebhookExpediteResultSchema', () => {
-  it('accepts the RPC counts', () => {
-    expect(
-      giglWebhookExpediteResultSchema.parse({ matched: 1, expedited: 0 })
-    ).toEqual({ matched: 1, expedited: 0 });
-  });
-
-  it('rejects negative or missing counts', () => {
-    expect(
-      giglWebhookExpediteResultSchema.safeParse({ matched: -1, expedited: 0 })
-        .success
-    ).toBe(false);
-    expect(
-      giglWebhookExpediteResultSchema.safeParse({ matched: 1 }).success
-    ).toBe(false);
   });
 });

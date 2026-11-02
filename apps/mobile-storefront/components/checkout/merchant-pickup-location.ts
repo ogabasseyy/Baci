@@ -41,13 +41,14 @@ function getAddressGeography(address: string): {
   for (let index = parts.length - 1; index >= 2; index -= 1) {
     const stateName = canonicalState(parts[index]);
     const state = NIGERIAN_STATES.find(
-      (candidate) => candidate.name.toLowerCase() === stateName.toLowerCase()
+      (candidate) => candidate.name.toLowerCase() === stateName
     );
-    const cityLooksLikePostcode = isPostcode(parts[index - 1]);
+    if (!state) continue;
     const suffixIsAddressMetadata = parts
       .slice(index + 1)
       .every((part) => /^(nigeria|ng)$/i.test(part) || isPostcode(part));
-    if (state && suffixIsAddressMetadata) {
+    if (suffixIsAddressMetadata) {
+      const cityLooksLikePostcode = isPostcode(parts[index - 1]);
       return {
         city: cityLooksLikePostcode
           ? index >= 3 && !isPostcode(parts[index - 2])

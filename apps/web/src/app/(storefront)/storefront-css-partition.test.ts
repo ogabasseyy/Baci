@@ -78,7 +78,7 @@ describe('storefront CSS partitioning', () => {
       '--ogabassey-chrome-text: var(--ogabassey-shell-text);'
     );
     expect(normalizedCoreCss).toMatch(
-      /\.ogabassey-footer \{ background: var\(--ogabassey-chrome-background\); color: var\(--ogabassey-chrome-text\); \}/
+      /\.ogabassey-footer \{ background: var\(--ogabassey-chrome-background\); color: var\(--ogabassey-chrome-text\); content-visibility: auto; contain-intrinsic-size: auto 1100px; \}/
     );
     expect(normalizedCoreCss).toMatch(
       /\.ogabassey-navbar__top \{ background: var\(--ogabassey-chrome-background\); color: var\(--ogabassey-chrome-text\);/

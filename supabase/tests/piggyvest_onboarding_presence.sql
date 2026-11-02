@@ -1,5 +1,5 @@
 -- Contract test for piggyvest_primary.has_onboarding(jsonb)
--- (20261102045351_piggyvest_onboarding_presence.sql).
+-- (20261102074217_piggyvest_onboarding_presence.sql).
 --
 -- Proves, against live PostgreSQL:
 --   * an owned scope with no intent reads false, and another customer's

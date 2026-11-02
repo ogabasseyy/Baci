@@ -1,5 +1,5 @@
 -- Catalog-only ACL and shape contract for piggyvest_primary.has_onboarding(jsonb)
--- (20261102045351_piggyvest_onboarding_presence.sql). A denied EXECUTE cannot
+-- (20261102074217_piggyvest_onboarding_presence.sql). A denied EXECUTE cannot
 -- be trapped on the replay image, so every denial is read from the catalog.
 --
 -- On the replay image this is a regression guard: no default privilege there

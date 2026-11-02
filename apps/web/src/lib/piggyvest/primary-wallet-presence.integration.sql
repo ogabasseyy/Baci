@@ -13,7 +13,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER IN SCHEMA piggyvest_primary
   GRANT EXECUTE ON FUNCTIONS TO service_role, anon, authenticated;
 ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER
   GRANT EXECUTE ON FUNCTIONS TO PUBLIC;
-\ir ../../../../../supabase/migrations/20261102045351_piggyvest_onboarding_presence.sql
+\ir ../../../../../supabase/migrations/20261102074217_piggyvest_onboarding_presence.sql
 ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER IN SCHEMA piggyvest_primary
   REVOKE EXECUTE ON FUNCTIONS FROM service_role, anon, authenticated;
 -- The replay runs each SQL check in its own session.

@@ -1,9 +1,9 @@
 'use client';
 
-import { snapchatEvents } from '@/components/analytics/snapchat-pixel';
-import { tiktokEvents } from '@/components/analytics/tiktok-pixel';
 import { isMarketingAllowed } from '@/lib/marketing-consent';
+import { snapchatEvents } from './snapchat-pixel-events';
 import { socialPixelContext } from './social-pixel-context';
+import { tiktokEvents } from './tiktok-pixel-events';
 
 type Item = { id: string; name: string; price: number; quantity: number };
 type FunnelEvent = 'view_item' | 'add_to_cart' | 'begin_checkout';
@@ -45,6 +45,9 @@ function whenReady(destination: 'tiktok' | 'snapchat', send: () => void) {
           entry.send();
     });
   }
+  pending[destination] = pending[destination].filter(
+    (entry) => entry.owner === owner && entry.url === window.location.href
+  );
   if (pending[destination].length < 100)
     pending[destination].push({ url: window.location.href, owner, send });
 }

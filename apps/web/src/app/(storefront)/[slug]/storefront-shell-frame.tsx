@@ -2,10 +2,9 @@ import { notFound } from 'next/navigation';
 import type React from 'react';
 import { buildMerchantAnalyticsSettings } from '@/components/analytics/analytics-merchant-settings';
 import { ChatgptPixel } from '@/components/analytics/chatgpt-pixel';
-import { FacebookPixel } from '@/components/analytics/facebook-pixel';
-import { SnapchatPixel } from '@/components/analytics/snapchat-pixel';
-import { TikTokPixel } from '@/components/analytics/tiktok-pixel';
-import { TwitterPixel } from '@/components/analytics/twitter-pixel';
+import { DeferredFacebookPixel } from '@/components/analytics/deferred-facebook-pixel';
+import { DeferredSocialPixels } from '@/components/analytics/deferred-social-pixels';
+import { DeferredTwitterPixel } from '@/components/analytics/deferred-twitter-pixel';
 import { CookieConsent } from '@/components/storefront/cookie-consent';
 import { DeferredPageViewTracker } from '@/components/storefront/deferred-page-view-tracker';
 import { WebMcpStorefrontTools } from '@/components/storefront/webmcp-storefront-tools';
@@ -60,19 +59,24 @@ export function StorefrontShellFrame({
         {shellSnapshot.chatgptPixelId ? (
           <ChatgptPixel pixelId={shellSnapshot.chatgptPixelId} />
         ) : null}
-        {facebookPixelId ? <FacebookPixel pixelId={facebookPixelId} /> : null}
+        {facebookPixelId ? (
+          <DeferredFacebookPixel
+            merchantId={merchant.id}
+            pixelId={facebookPixelId}
+          />
+        ) : null}
         {analyticsSettings?.twitter_pixel_id ? (
-          <TwitterPixel
+          <DeferredTwitterPixel
+            merchantId={merchant.id}
             pixelId={analyticsSettings.twitter_pixel_id}
             eventIds={analyticsSettings.twitter_event_ids}
           />
         ) : null}
-        {analyticsSettings?.tiktok_pixel_id ? (
-          <TikTokPixel pixelId={analyticsSettings.tiktok_pixel_id} />
-        ) : null}
-        {analyticsSettings?.snapchat_pixel_id ? (
-          <SnapchatPixel pixelId={analyticsSettings.snapchat_pixel_id} />
-        ) : null}
+        <DeferredSocialPixels
+          merchantId={merchant.id}
+          tiktokPixelId={analyticsSettings?.tiktok_pixel_id}
+          snapchatPixelId={analyticsSettings?.snapchat_pixel_id}
+        />
         <DeferredPageViewTracker merchantId={merchant.id} />
         <CookieConsent />
         {/*

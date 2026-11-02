@@ -21,6 +21,9 @@ let active:
       pathname: string;
       pending: Observation[];
       fbq: FacebookQueue;
+      merchantId?: string;
+      activated: boolean;
+      pageViewStarted: boolean;
     }
   | undefined;
 const ready = new WeakSet<FacebookQueue>();
@@ -59,17 +62,78 @@ function configure(fbq: FacebookQueue, id: string): void {
   }
 }
 
-export function activateFacebookPixel(id: string): (() => void) | undefined {
-  if (!validFacebookPixelId(id) || !isAnalyticsAllowed()) return;
+export function prepareFacebookPixel(
+  id: string,
+  merchantId: string
+): (() => void) | undefined {
+  if (!merchantId || !validFacebookPixelId(id) || !isAnalyticsAllowed()) return;
   const token = Symbol(id);
   const fbq = sdk();
-  active = { id, token, pathname: window.location.pathname, pending: [], fbq };
-  fbq.disablePushState = true;
-  if (ready.has(fbq)) configure(fbq, id);
-  sendFacebookPixelEvent('PageView');
+  active = {
+    id,
+    token,
+    merchantId,
+    pathname: window.location.pathname,
+    pending: [],
+    fbq,
+    activated: false,
+    pageViewStarted: false,
+  };
   return () => {
     if (active?.token !== token) return;
+    const wasActivated = active.activated;
     active = undefined;
+    if (wasActivated && ready.has(fbq)) fbq('consent', 'revoke');
+  };
+}
+
+export function activateFacebookPixel(
+  id: string,
+  merchantId?: string
+): (() => void) | undefined {
+  if (!validFacebookPixelId(id) || !isAnalyticsAllowed()) return;
+  const fbq = sdk();
+  const prepared =
+    active &&
+    !active.activated &&
+    active.id === id &&
+    active.merchantId === merchantId &&
+    active.fbq === fbq &&
+    active.pathname === window.location.pathname
+      ? active
+      : undefined;
+  if (
+    active &&
+    !active.activated &&
+    active.merchantId &&
+    active.merchantId !== merchantId
+  )
+    return;
+  const token = prepared?.token ?? Symbol(id);
+  active = prepared ?? {
+    id,
+    token,
+    pathname: window.location.pathname,
+    pending: [],
+    fbq,
+    activated: false,
+    pageViewStarted: false,
+  };
+  active.activated = true;
+  fbq.disablePushState = true;
+  if (ready.has(fbq)) configure(fbq, id);
+  if (!active.pageViewStarted) {
+    active.pageViewStarted = true;
+    sendFacebookPixelEvent('PageView');
+  }
+  if (ready.has(fbq)) flushPendingFacebookEvents();
+  return () => {
+    if (active?.token !== token) return;
+    if (prepared) {
+      active.activated = false;
+    } else {
+      active = undefined;
+    }
     if (ready.has(fbq)) fbq('consent', 'revoke');
   };
 }
@@ -82,7 +146,7 @@ export function sendFacebookPixelEvent(
   if (!active || !isAnalyticsAllowed() || typeof window === 'undefined') return;
   const fbq = window.fbq as FacebookQueue | undefined;
   if (!fbq || active.pathname !== window.location.pathname) return;
-  if (!ready.has(fbq)) {
+  if (!active.activated || !ready.has(fbq)) {
     if (active.pending.length < 50)
       active.pending.push({ url: window.location.href, event, data, options });
     return;
@@ -102,13 +166,18 @@ export function facebookPixelReady(): void {
   if (!fbq) return;
   ready.add(fbq);
   if (
-    !active ||
+    !active?.activated ||
     active.fbq !== fbq ||
     !isAnalyticsAllowed() ||
     active.pathname !== window.location.pathname
   )
     return;
   configure(fbq, active.id);
+  flushPendingFacebookEvents();
+}
+
+function flushPendingFacebookEvents(): void {
+  if (!active) return;
   const pending = active.pending;
   active.pending = [];
   for (const observation of pending) {

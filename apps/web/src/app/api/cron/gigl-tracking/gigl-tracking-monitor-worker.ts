@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { giglProvider } from '@/lib/shipping/providers/gigl';
+import type { GiglWaybillOwnership } from '@/lib/shipping/providers/gigl.preshipment-ownership';
 import type { TrackingResult } from '@/lib/shipping/types';
 import type { Database, Json } from '@/types/supabase';
 import { nullableSupabaseRpcArgument } from './nullable-supabase-rpc-argument';
@@ -30,11 +31,21 @@ type WorkerSupabase = Pick<SupabaseClient<Database>, 'rpc'>;
 type TrackShipments = (
   trackingNumbers: readonly string[]
 ) => Promise<Map<string, TrackingResult>>;
+type AttestWaybillOwnership = (
+  trackingNumber: string
+) => Promise<GiglWaybillOwnership>;
 
 const UNRECOGNIZED_LIFECYCLE_ERROR =
   'GIGL tracking result has no recognized lifecycle event';
 
-function serializeEvents(events: TrackingResult['events']): Json {
+// The database refunds a merchant-wallet GIGL charge on GIG's cancellation
+// only when this worker marks the cancellation events "account_attested":
+// GIG's preshipment record shows the waybill belongs to Baci's own GIG
+// account, so a decoy waybill from a merchant's own account never refunds.
+function serializeEvents(
+  events: TrackingResult['events'],
+  accountAttested: boolean
+): Json {
   return events.map((event) => ({
     description: event.description,
     location: event.location ?? null,
@@ -43,7 +54,43 @@ function serializeEvents(events: TrackingResult['events']): Json {
     provider_event_id: event.providerEventId ?? null,
     provider_event_key: event.providerEventKey ?? event.providerEventId ?? null,
     raw_status: event.rawStatus ?? event.status,
+    ...(accountAttested && event.status === 'cancelled'
+      ? { account_attested: true }
+      : {}),
   }));
+}
+
+// Only cancellations need the extra GIG lookup (rare); one lookup per
+// waybill per batch. Only a definite 'owned' attests. 'not_owned', an
+// 'unavailable' answer and a thrown lookup all apply the cancellation
+// unattested, so cancellations with no merchant-wallet charge (customer
+// checkout, prepaid, orderless repair pickups) are never blocked by GIG.
+// A booked wallet charge that is not refunded makes the database guard
+// raise 55P03, the apply rolls back and the normal failure/backoff path
+// retries; a later poll re-runs this lookup and self-heals once GIG answers.
+function createCancellationAttestor(attest: AttestWaybillOwnership) {
+  const lookups = new Map<string, Promise<GiglWaybillOwnership>>();
+  return async (
+    result: TrackingResult,
+    trackingNumber: string
+  ): Promise<boolean> => {
+    if (result.status !== 'cancelled') return false;
+    let lookup = lookups.get(trackingNumber);
+    if (!lookup) {
+      lookup = Promise.resolve()
+        .then(() => attest(trackingNumber))
+        .then(
+          (ownership): GiglWaybillOwnership =>
+            ownership === 'owned' || ownership === 'not_owned'
+              ? ownership
+              : 'unavailable',
+          (): GiglWaybillOwnership => 'unavailable'
+        );
+      lookups.set(trackingNumber, lookup);
+    }
+    const ownership = await lookup;
+    return ownership === 'owned';
+  };
 }
 
 async function recordFailure(
@@ -69,7 +116,8 @@ async function applyResult(
   supabase: WorkerSupabase,
   monitor: ClaimedGiglTrackingMonitor,
   workerId: string,
-  result: TrackingResult
+  result: TrackingResult,
+  accountAttested: boolean
 ) {
   const { data, error } = await supabase.rpc('apply_gigl_tracking_result', {
     p_actual_delivery: nullableSupabaseRpcArgument(
@@ -78,7 +126,7 @@ async function applyResult(
     p_current_location: nullableSupabaseRpcArgument(
       result.events[0]?.location ?? null
     ),
-    p_events: serializeEvents(result.events),
+    p_events: serializeEvents(result.events, accountAttested),
     p_shipment_id: monitor.shipment_id,
     p_status: result.status,
     p_tracking_epoch_id: monitor.tracking_epoch_id,
@@ -121,7 +169,9 @@ export async function processClaimedGiglTrackingMonitors(
   monitors: ClaimedGiglTrackingMonitor[],
   workerId: string,
   trackShipments: TrackShipments = (trackingNumbers) =>
-    giglProvider.trackShipments(trackingNumbers)
+    giglProvider.trackShipments(trackingNumbers),
+  attestWaybillOwnership: AttestWaybillOwnership = (trackingNumber) =>
+    giglProvider.attestWaybillOwnership(trackingNumber)
 ): Promise<GiglTrackingMonitorSummary> {
   const summary: GiglTrackingMonitorSummary = {
     applied: 0,
@@ -148,6 +198,7 @@ export async function processClaimedGiglTrackingMonitors(
     return summary;
   }
 
+  const attestCancellation = createCancellationAttestor(attestWaybillOwnership);
   await Promise.all(
     monitors.map(async (monitor) => {
       const result = results.get(monitor.tracking_number);
@@ -163,7 +214,17 @@ export async function processClaimedGiglTrackingMonitors(
           await releaseClaim(supabase, monitor, workerId);
           throw new Error(UNRECOGNIZED_LIFECYCLE_ERROR);
         }
-        const applied = await applyResult(supabase, monitor, workerId, result);
+        const accountAttested = await attestCancellation(
+          result,
+          monitor.tracking_number
+        );
+        const applied = await applyResult(
+          supabase,
+          monitor,
+          workerId,
+          result,
+          accountAttested
+        );
         if (applied) {
           summary.applied += 1;
         } else {

@@ -88,7 +88,8 @@ order already cancelled and changes nothing.
 
 Fill in the `order_id` from A1. Expected:
 `cancelled | merchant | true | 10000.00 | 10000.00 | 0 | 0 | true`, and O1 now returns no
-rows. The payment status keeps its old value (usually `unpaid`). That is normal: a merchant
+rows. If `balance_matches_ledger` reads `false` or is empty, the wallet does not match its
+history: escalate. The payment status keeps its old value (usually `unpaid`). That is normal: a merchant
 cancel is recorded in the shipping status and the cancelled time.
 
 ## Part B: the ₦103 airtime purchase
@@ -164,7 +165,8 @@ What it then does:
   the app writes, so the customer's history shows the refund and the checker leaves it alone.
 - **Failed, wallet never charged:** closes it as failed with no credit.
 - **Delivered:** marks it successful and moves no money. Within a few minutes the checker
-  credits any commission and cashback the purchase earned, as for any successful purchase.
+  credits any commission, cashback and loyalty points the purchase earned, as for any
+  successful purchase.
   It may not send the customer the usual success email, so tell the customer if needed.
 
 The block runs as one transaction under the same locks as the checker's own refund, so the
@@ -176,8 +178,9 @@ Fill in the `vtu_id`. Expected after "failed":
 `failed | vendor_confirmed_failed | 103.00 | 103.00 | 0 | true | false`. After "delivered":
 `successful | vendor_confirmed_delivered | 103.00 | 0 | 0 | true`, then `credits_pending`.
 That last column may read `true` at first. Run V4 again after about ten minutes: it must read
-`false`, which means the checker has credited the commission and cashback. If it stays `true`,
-escalate. V1 must no longer list the purchase.
+`false`, which means the checker has credited the commission, cashback and loyalty points. If
+it stays `true`, escalate. If `balance_matches_ledger` reads `false` or is empty, the wallet
+does not match its history: escalate. V1 must no longer list the purchase.
 
 ## After both parts
 

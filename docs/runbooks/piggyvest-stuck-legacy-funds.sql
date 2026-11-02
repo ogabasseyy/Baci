@@ -56,7 +56,7 @@ SELECT o.shipping_status, o.cancelled_by, o.cancelled_at IS NOT NULL AS has_canc
                                ORDER BY t.created_at DESC, t.id DESC LIMIT 1) AS balance_matches_ledger
   FROM public.orders o
   JOIN public.merchants m ON m.id = o.merchant_id AND m.slug = 'ogabassey'
-  JOIN public.customer_wallets w ON w.customer_id = o.customer_id AND w.merchant_id = o.merchant_id
+  LEFT JOIN public.customer_wallets w ON w.customer_id = o.customer_id AND w.merchant_id = o.merchant_id
  WHERE o.id = 'PASTE-ORDER-ID';
 
 -- [V1] READ-ONLY: Ogabassey airtime, data and bill purchases without a final result
@@ -192,8 +192,8 @@ BEGIN
 END $$;
 
 -- [V4] READ-ONLY: confirm the purchase is closed and the wallet matches its ledger.
--- credits_pending: a successful purchase whose commission or cashback the checker has not
--- credited yet.
+-- credits_pending: a successful purchase whose commission, cashback or loyalty points the
+-- checker has not credited yet.
 SELECT v.status, v.metadata->'opsResolution'->>'outcome' AS outcome,
        l.debited, l.returned, l.refunded,
        w.available_balance = (SELECT t.balance_after FROM public.customer_wallet_transactions t
@@ -203,10 +203,12 @@ SELECT v.status, v.metadata->'opsResolution'->>'outcome' AS outcome,
          AND ((coalesce(v.merchant_commission, 0) > 0
                AND v.metadata->>'merchantWalletCredited' IS DISTINCT FROM 'true')
            OR (coalesce(v.customer_cashback, 0) > 0
-               AND v.metadata->>'customerWalletCredited' IS DISTINCT FROM 'true')) AS credits_pending
+               AND v.metadata->>'customerWalletCredited' IS DISTINCT FROM 'true')
+           OR (v.type = 'airtime' AND coalesce(v.customer_cashback, 0) >= 3
+               AND v.metadata->>'loyaltyPointsAwarded' IS DISTINCT FROM 'true')) AS credits_pending
   FROM public.vtu_transactions v
   JOIN public.merchants m ON m.id = v.merchant_id AND m.slug = 'ogabassey'
-  JOIN public.customer_wallets w ON w.customer_id = v.customer_id AND w.merchant_id = v.merchant_id
+  LEFT JOIN public.customer_wallets w ON w.customer_id = v.customer_id AND w.merchant_id = v.merchant_id
  CROSS JOIN LATERAL (
    SELECT coalesce(sum(t.amount) FILTER (WHERE t.source_type = 'vtu_wallet_payment'
                                            AND t.type = 'redemption'), 0) AS debited,

@@ -1,6 +1,9 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { oxygenHandoffMarkerKey } from '@/lib/payments/oxygen/interaction';
+import {
+  type OxygenMarkerStorage,
+  oxygenHandoffMarkerKey,
+} from '@/lib/payments/oxygen/interaction';
 import { useOxygenInteraction } from './use-oxygen-interaction';
 import {
   createHarness,

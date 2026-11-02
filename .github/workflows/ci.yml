@@ -68,6 +68,8 @@ jobs:
         run: node --test .github/scripts/pilot-change-detection-contract.test.mjs
       - name: Test CI change-scope resolver
         run: bash .github/scripts/resolve-ci-change-scope.test.sh
+      - name: Test PiggyVest stuck-funds runbook CI wiring
+        run: node --test .github/scripts/piggyvest-stuck-funds-runbook-ci.test.mjs
       # paths-filter can't infer a base on merge_group events, so skip it there
       # and run every gate (the queue validates the full integration anyway).
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -425,6 +427,13 @@ jobs:
             test -x "$PG_BIN/$binary"
           done
           node --test .github/scripts/x-pixel-token-authentication.sql.test.mjs
+
+      - name: Test PiggyVest stuck-funds runbook SQL
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+        run: |
+          set -euo pipefail
+          python3 -I supabase/tests/run_piggyvest_stuck_funds_runbook.py
 
       - name: Run IMEI authenticated access SQL contracts
         env:

@@ -49,6 +49,11 @@ import { MobileMenu, OgabasseyMobileMenu } from './mobile-menu';
 describe('mobile-menu (layout)', () => {
   beforeEach(() => {
     mocks.pathname = '/ogabassey/wallet';
+    mocks.merchantContext = {
+      basePath: '/ogabassey',
+      merchant: { business_name: 'Ogabassey' },
+      navigationCategories: [{ name: 'Smartphones', slug: 'smartphones' }],
+    };
   });
 
   it('dismisses the open menu when Escape is pressed', () => {
@@ -203,5 +208,54 @@ describe('mobile-menu (layout)', () => {
     expect(
       screen.getByRole('dialog', { name: /mobile menu/i })
     ).toBeInTheDocument();
+  });
+
+  it('normalizes category alias slugs, encodes URI characters, deduplicates canonical collisions, and skips blank slugs', () => {
+    mocks.merchantContext = {
+      basePath: '/ogabassey',
+      merchant: { business_name: 'Ogabassey' },
+      navigationCategories: [
+        { name: 'Phones', slug: 'phones' },
+        { name: 'Duplicate Smartphones', slug: 'smartphones' },
+        { name: 'Laptops', slug: '  laptop  ' },
+        { name: 'Smart TVs', slug: 'smart tvs' },
+        { name: 'Empty Category', slug: '   ' },
+      ],
+    };
+
+    render(<MobileMenu isOpen={true} onClose={vi.fn()} />);
+
+    expect(screen.getByRole('link', { name: 'Phones' })).toHaveAttribute(
+      'href',
+      '/ogabassey/smartphones'
+    );
+    expect(
+      screen.queryByRole('link', { name: 'Duplicate Smartphones' })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Laptops' })).toHaveAttribute(
+      'href',
+      '/ogabassey/laptops'
+    );
+    expect(screen.getByRole('link', { name: 'Smart TVs' })).toHaveAttribute(
+      'href',
+      '/ogabassey/smart%20tvs'
+    );
+    expect(
+      screen.queryByRole('link', { name: 'Empty Category' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('omits the Categories section when all category slugs normalize to null', () => {
+    mocks.merchantContext = {
+      basePath: '/ogabassey',
+      merchant: { business_name: 'Ogabassey' },
+      navigationCategories: [{ name: 'Blank', slug: '   ' }],
+    };
+
+    render(<MobileMenu isOpen={true} onClose={vi.fn()} />);
+
+    expect(
+      screen.queryByRole('heading', { level: 2, name: 'Categories' })
+    ).not.toBeInTheDocument();
   });
 });

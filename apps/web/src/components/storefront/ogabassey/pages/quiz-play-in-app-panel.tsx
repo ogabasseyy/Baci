@@ -55,7 +55,7 @@ export function QuizPlayInAppPanel({
           <span>We couldn&apos;t load the current quizzes.</span>
           {onRetry ? (
             <button type="button" onClick={onRetry} className={secondaryButton}>
-              Try again
+              Reload app quizzes
             </button>
           ) : null}
         </div>

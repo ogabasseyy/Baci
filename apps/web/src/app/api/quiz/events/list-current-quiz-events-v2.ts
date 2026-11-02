@@ -27,6 +27,7 @@ export async function listCurrentQuizEventsV2(
   merchantId: string
 ): Promise<CurrentQuizEventsResult> {
   const events: QuizV2Event[] = [];
+  const seen = new Set<string>();
   let serverNow = '';
   let offset: number | null = 0;
   for (let page = 0; page < MAX_PAGES && offset !== null; page += 1) {
@@ -46,7 +47,13 @@ export async function listCurrentQuizEventsV2(
     );
     if (!parsed.success) return { error: parsed.error, ok: false };
     serverNow ||= parsed.data.serverNow;
-    events.push(...parsed.data.events);
+    for (const event of parsed.data.events) {
+      // Offsets shift if the list changes mid-scan; keep the first copy.
+      if (!seen.has(event.id)) {
+        seen.add(event.id);
+        events.push(event);
+      }
+    }
     const { pagination } = parsed.data;
     if (!pagination?.hasMore) {
       offset = null;
@@ -66,9 +73,14 @@ export async function listCurrentQuizEventsV2(
   if (offset !== null) {
     logger.warn({
       context: 'listCurrentQuizEventsV2',
-      message: 'Current quiz listing hit the page cap; later events omitted',
+      message: 'Current quiz listing hit the page cap; refusing a partial list',
       merchantId,
     });
+    // A partial list would read as "no quizzes on" and hide a live prize quiz.
+    return {
+      error: new Error('Quiz listing exceeded the page cap'),
+      ok: false,
+    };
   }
   return {
     events: events.filter(

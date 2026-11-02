@@ -66,7 +66,7 @@ describe('QuizPlayInAppPanel', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       "We couldn't load the current quizzes."
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reload app quizzes' }));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });

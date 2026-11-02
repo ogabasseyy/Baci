@@ -87,7 +87,7 @@ describe('listCurrentQuizEventsV2', () => {
       ]);
     });
 
-    it('stops after twenty pages', async () => {
+    it('fails closed after twenty pages instead of returning a partial list', async () => {
       const { rpc, supabase } = client((offset) => ({
         data: appQuizEventsResponse([], {
           hasMore: true,
@@ -97,10 +97,28 @@ describe('listCurrentQuizEventsV2', () => {
         error: null,
       }));
 
-      await listCurrentQuizEventsV2(supabase, MERCHANT_ID);
+      const result = await listCurrentQuizEventsV2(supabase, MERCHANT_ID);
 
       expect(rpc).toHaveBeenCalledTimes(20);
+      expect(result.ok).toBe(false);
     });
+  });
+
+  it('lists an event once when it appears on two pages after the list shifts', async () => {
+    const { supabase } = client((offset) => ({
+      data: appQuizEventsResponse([appQuizEvent({ id: id(1) })], {
+        hasMore: offset === 0,
+        nextOffset: offset === 0 ? 50 : null,
+        offset,
+      }),
+      error: null,
+    }));
+
+    const result = await listCurrentQuizEventsV2(supabase, MERCHANT_ID);
+
+    expect(result.ok && result.events.map((event) => event.id)).toEqual([
+      id(1),
+    ]);
   });
 
   it('fails closed when the pagination cursor does not advance', async () => {

@@ -60,7 +60,7 @@ describe('OgabasseyV2Quiz app-only prize quizzes', () => {
     const alert = await screen.findByText("We couldn't load the current quizzes.");
     expect(alert).toBeInTheDocument();
     failV2 = false;
-    fireEvent.click(screen.getAllByRole('button', { name: 'Try again' })[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'Reload app quizzes' }));
 
     const list = await screen.findByRole('list', { name: 'Quizzes in the app' });
     expect(within(list).getByText('Redmi Warriors')).toBeInTheDocument();

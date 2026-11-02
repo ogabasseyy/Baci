@@ -14,8 +14,8 @@ import { oxygenPhoneConfiguration } from './phone-handoff-configuration';
 import { createOxygenProvider } from './provider';
 import { createOxygenResponseRecorder } from './response-evidence';
 import { readOxygenRuntimeConfiguration } from './runtime-configuration';
+import { oxygenRuntimeProviderToken } from './runtime-provider-token-cache';
 import { createOxygenWorkerClient } from './runtime-worker-client';
-import { loginOxygenPartner } from './transport';
 import type { OxygenCallbackConfiguration } from './webhook-receiver';
 
 /** Runtime secrets are injected by the host, never by a checkout request.
@@ -33,28 +33,19 @@ export function connectOxygenRuntime() {
     baseUrl,
     environment,
   } = configuration;
-  let cachedLogin: Awaited<ReturnType<typeof loginOxygenPartner>> | undefined;
-  let pendingLogin: ReturnType<typeof loginOxygenPartner> | undefined;
   const providerDeps = {
     fetch,
     environment,
     redactionSecrets: [reference, secret],
-    token: async () => {
-      if (cachedLogin && Date.now() < cachedLogin.expiresAtMs - 30_000)
-        return cachedLogin.token;
-      pendingLogin ??= loginOxygenPartner(
-        { fetchImpl: fetch },
-        {
+    token: async () =>
+      (
+        await oxygenRuntimeProviderToken({
+          environment,
           baseUrl,
           reference,
           secret,
-        }
-      ).finally(() => {
-        pendingLogin = undefined;
-      });
-      cachedLogin = await pendingLogin;
-      return cachedLogin.token;
-    },
+        })
+      ).token,
   };
   const provider = {
     ...createOxygenProvider(providerDeps),

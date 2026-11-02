@@ -82,5 +82,12 @@ VALUES
     'paid', 'pending', now(), NULL, 0),
   ('41000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000001',
     'paid', 'processing', NULL, 'customer_checkout', 110);
+-- I: a merchant-wallet order with a bound Baci quote but no charge yet.
+INSERT INTO public.orders (id, merchant_id, payment_status, shipping_status,
+  shipping_provider, selected_quote_id, shipping_funding_source,
+  shipping_provider_cost, shipping_platform_margin, shipping_pricing_version)
+VALUES ('41000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000001',
+  'paid', 'processing', 'GIGL', '70000000-0000-4000-8000-000000000001',
+  'merchant_wallet', 100, 10, 'gigl_platform_margin_v1');
 INSERT INTO public.merchant_shipping_charges (order_id, status) VALUES
   ('41000000-0000-4000-8000-00000000000d', 'reserved');

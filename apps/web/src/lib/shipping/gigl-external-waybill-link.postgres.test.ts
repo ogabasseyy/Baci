@@ -121,6 +121,16 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
       );
     });
 
+    it('clears an unused Baci wallet quote when linking', () => {
+      const row =
+        last(`${actor(ownerId)} ${link(order('3'), proof(order('3'), '2000000003'))}
+        ${asPostgres}
+        SELECT selected_quote_id IS NULL, shipping_funding_source IS NULL,
+          shipping_provider_cost IS NULL, shipping_platform_retained_amount
+        FROM public.orders WHERE id = '${order('3')}';`);
+      expect(row).toBe('t|t|t|0');
+    });
+
     it('replaces rider details on an order that was self-fulfilled', () => {
       const row =
         last(`${actor(ownerId)} ${link(order('e'), proof(order('e'), '2000000005'))}

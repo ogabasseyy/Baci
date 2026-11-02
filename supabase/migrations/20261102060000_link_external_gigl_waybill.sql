@@ -240,13 +240,23 @@ BEGIN
     RAISE EXCEPTION 'waybill_already_linked' USING ERRCODE = '23505';
   END;
 
-  -- Rider details no longer describe how the order travels.
+  -- Rider details no longer describe how the order travels, and an unused
+  -- Baci quote must not make the order look Baci- or wallet-funded. Same
+  -- clearing as self-fulfilment; checkout-funded orders were refused above.
   UPDATE public.orders
   SET shipment_id = v_shipment_id,
       tracking_number = v_waybill,
       shipping_provider = 'GIGL',
       fulfillment_type = 'provider',
       self_fulfillment_data = NULL,
+      selected_quote_id = NULL,
+      shipping_funding_source = NULL,
+      shipping_provider_cost = NULL,
+      shipping_platform_margin = NULL,
+      shipping_pricing_version = NULL,
+      shipping_platform_retained_amount = 0,
+      shipment_booking_lock_token = NULL,
+      shipment_booking_started_at = NULL,
       shipping_status = 'shipped',
       updated_at = pg_catalog.now()
   WHERE id = p_order_id;

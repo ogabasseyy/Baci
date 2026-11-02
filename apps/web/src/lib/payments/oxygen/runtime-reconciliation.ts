@@ -57,7 +57,7 @@ export async function reconcileOxygenCallbacks(
     .array(
       z.object({
         id: z.uuid(),
-        retryKey: z.uuid().optional(),
+        retryKey: z.uuid(),
         kind: z.enum(['address', 'transaction']),
         workflowIds: z.array(z.uuid()),
       })
@@ -72,7 +72,7 @@ export async function reconcileOxygenCallbacks(
       try {
         if (job.kind === 'transaction' && paymentCheck) {
           reads++;
-          await paymentCheck(id, job.id, job.retryKey ?? job.id);
+          await paymentCheck(id, job.id, job.retryKey);
           continue;
         }
         const snapshot = oxygenRuntimeSnapshotSchema.parse(
@@ -102,7 +102,7 @@ export async function reconcileOxygenCallbacks(
           .parse(
             await oxygenRuntimeRpc(worker, 'reconcile', id, {
               version: snapshot.version,
-              idempotencyKey: job.retryKey ?? job.id,
+              idempotencyKey: job.retryKey,
               command,
             })
           );
@@ -179,7 +179,7 @@ export async function reconcileOxygenCallbacks(
     }
     await callbackRpc(worker, partner, complete ? 'complete' : 'defer', {
       id: job.id,
-      ...(job.retryKey ? { retryKey: job.retryKey } : {}),
+      retryKey: job.retryKey,
     });
   }
 }

@@ -27,3 +27,4 @@ supabase/tests/oxygen_authorized_retry_plan_acceptance.sql
 supabase/tests/oxygen_queued_eligibility_recovery.sql
 supabase/tests/oxygen_queued_payment_status_read_recovery.sql
 supabase/tests/oxygen_callback_worker_isolation.sql
+supabase/tests/oxygen_callback_inflight_fairness.sql

@@ -161,7 +161,14 @@ it('processes an address callback only for its supplied application, without dra
       let data: unknown = { recorded: true };
       if (args.p_operation === 'accept') data = { result: 'accepted' };
       if (args.p_operation === 'pending')
-        data = [{ id: callback, kind: 'address', workflowIds: [workflow] }];
+        data = [
+          {
+            id: callback,
+            retryKey: callback,
+            kind: 'address',
+            workflowIds: [workflow],
+          },
+        ];
       if (args.p_operation === 'worker_status')
         data = {
           workflowId: workflow,
@@ -235,7 +242,7 @@ it('processes an address callback only for its supplied application, without dra
     'oxygen_callback',
     expect.objectContaining({
       p_operation: 'complete',
-      p_payload: { id: callback },
+      p_payload: { id: callback, retryKey: callback },
     })
   );
 });

@@ -36,6 +36,7 @@ it('does not query or mutate the provider for unmatched callbacks', async () => 
     data: [
       {
         id: '60000000-0000-4000-8000-000000000001',
+        retryKey: '60000000-0000-4000-8000-000000000002',
         kind: 'transaction',
         workflowIds: [],
       },

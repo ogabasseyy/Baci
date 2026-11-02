@@ -18,8 +18,9 @@ export async function OxygenPaymentContent({
   if (!error && user) {
     const { data: order, error: orderError } = await client
       .from('orders')
-      .select('merchant_id')
+      .select('merchant_id, customers!orders_customer_id_fkey1!inner(user_id)')
       .eq('id', orderId)
+      .eq('customers.user_id', user.id)
       .maybeSingle();
     if (orderError || !order) notFound();
     const { data: merchant, error: merchantError } = await client

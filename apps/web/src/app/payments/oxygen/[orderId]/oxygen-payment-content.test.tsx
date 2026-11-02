@@ -62,3 +62,27 @@ it('does not redirect when caller RLS does not expose the order', async () => {
   await expect(OxygenPaymentContent(props)).rejects.toThrow('not found');
   expect(mocks.merchant).not.toHaveBeenCalled();
 });
+it('does not redirect to another customer’s order even when it is readable', async () => {
+  mocks.from.mockImplementation((table: string) => {
+    let ownerConstrained = false;
+    const query = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn((column: string, value: string) => {
+        if (column === 'customers.user_id' && value === 'customer')
+          ownerConstrained = true;
+        return query;
+      }),
+      maybeSingle: vi.fn(async () =>
+        table === 'orders'
+          ? {
+              data: ownerConstrained ? null : { merchant_id: 'merchant' },
+              error: null,
+            }
+          : { data: { slug: 'shop' }, error: null }
+      ),
+    };
+    return query;
+  });
+  await expect(OxygenPaymentContent(props)).rejects.toThrow('not found');
+  expect(mocks.from).not.toHaveBeenCalledWith('merchants');
+});

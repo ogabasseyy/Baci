@@ -31,7 +31,7 @@ describe('createGiglWebhookExpediteClient', () => {
     rpc.mockResolvedValue({ data: { matched: 1, expedited: 1 }, error: null });
     const client = createGiglWebhookExpediteClient(configuredEnv);
 
-    await expect(client.expedite('1349639673')).resolves.toEqual({
+    await expect(client.expedite('1349639673', 'MCRT')).resolves.toEqual({
       data: { matched: 1, expedited: 1 },
       error: null,
     });
@@ -47,6 +47,7 @@ describe('createGiglWebhookExpediteClient', () => {
       })
     );
     expect(rpc).toHaveBeenCalledWith('gigl_worker_expedite_tracking_monitor', {
+      p_status_code: 'MCRT',
       p_tracking_number: '1349639673',
     });
   });

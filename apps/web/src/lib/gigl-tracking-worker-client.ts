@@ -229,7 +229,10 @@ export interface GiglWebhookExpediteResponse {
 }
 
 export interface GiglWebhookExpediteClient {
-  expedite(trackingNumber: string): PromiseLike<GiglWebhookExpediteResponse>;
+  expedite(
+    trackingNumber: string,
+    statusCode: string | null
+  ): PromiseLike<GiglWebhookExpediteResponse>;
 }
 
 /**
@@ -244,10 +247,13 @@ export function createGiglWebhookExpediteClient(
 ): GiglWebhookExpediteClient {
   const rpc = createValidatedPostgrestClient(env);
   return {
-    expedite: (trackingNumber) =>
+    expedite: (trackingNumber, statusCode) =>
       rpc(
         'gigl_worker_expedite_tracking_monitor' as never,
-        { p_tracking_number: trackingNumber } as never
+        {
+          p_status_code: statusCode,
+          p_tracking_number: trackingNumber,
+        } as never
       ) as PromiseLike<GiglWebhookExpediteResponse>,
   };
 }

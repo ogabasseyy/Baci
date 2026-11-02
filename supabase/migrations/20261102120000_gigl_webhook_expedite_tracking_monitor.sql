@@ -11,12 +11,16 @@
 -- apply and pause these monitors, so "poll this waybill sooner" adds no new
 -- authority, and no authenticator membership changes (no reload window).
 
+-- One row per GIGL shipment, so the build is brief; like the existing claim
+-- index (20260803000500) it stays in the migration transaction, keeping the
+-- wrapper and guard patch atomic with it.
 CREATE INDEX IF NOT EXISTS shipment_tracking_monitors_live_tracking_number_idx
   ON public.shipment_tracking_monitors (tracking_number)
   WHERE state IN ('active', 'final_poll', 'paused');
 
 CREATE OR REPLACE FUNCTION public.gigl_worker_expedite_tracking_monitor(
-  p_tracking_number text
+  p_tracking_number text,
+  p_status_code text DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -25,6 +29,7 @@ SET search_path = ''
 AS $$
 DECLARE
   waybill text := btrim(p_tracking_number);
+  status_code text := upper(nullif(btrim(p_status_code), ''));
   matched_count integer;
   expedited_count integer;
 BEGIN
@@ -34,22 +39,37 @@ BEGIN
   IF waybill IS NULL OR waybill !~ '^[A-Za-z0-9][A-Za-z0-9-]{0,63}$' THEN
     RAISE EXCEPTION 'GIGL waybill is invalid' USING ERRCODE = '22023';
   END IF;
+  IF char_length(status_code) > 64 THEN
+    RAISE EXCEPTION 'GIGL status code is invalid' USING ERRCODE = '22023';
+  END IF;
 
   -- Terminal and inactive monitors stay untouched: a webhook can never
   -- reactivate a retired timeline. A paused (unchanged-for-a-day) monitor
   -- is woken, and the poller's claim/apply then resumes its normal cadence,
   -- because a fresh GIG scan means the shipment moved again. Monitors with
   -- no schedule (parked) or in failure backoff keep their schedule, so a
-  -- burst of webhooks cannot hammer GIG during a tracking outage. A monitor
-  -- polled within the last minute becomes due one minute after that poll,
-  -- which bounds GIG calls when GIG sends scan bursts, retries or replays
-  -- for one waybill. Repeated deliveries converge on the same next_poll_at.
+  -- burst of webhooks cannot hammer GIG during a tracking outage.
+  --
+  -- GIG deliveries carry no nonce, so a captured one can be replayed. A
+  -- delivery whose status code the poller has already recorded for the
+  -- monitor's current epoch therefore changes nothing: replays (and GIG's
+  -- own retries) become permanent no-ops once that scan is ingested, while
+  -- a genuinely new scan still expedites. Deliveries without a status code
+  -- fall back to the debounce: a monitor polled within the last minute
+  -- becomes due one minute after that poll.
   WITH candidates AS (
     SELECT monitor.shipment_id,
       greatest(
         now(),
         coalesce(monitor.last_polled_at + interval '1 minute', now())
-      ) AS due_at
+      ) AS due_at,
+      status_code IS NOT NULL AND EXISTS (
+        SELECT 1
+        FROM public.shipment_tracking_events AS event
+        WHERE event.shipment_id = monitor.shipment_id
+          AND event.tracking_epoch_id = monitor.tracking_epoch_id
+          AND upper(btrim(event.raw_status)) = status_code
+      ) AS already_recorded
     FROM public.shipment_tracking_monitors AS monitor
     JOIN public.shipments AS shipment ON shipment.id = monitor.shipment_id
     WHERE monitor.provider = 'GIGL'
@@ -65,6 +85,7 @@ BEGIN
     SET next_poll_at = candidates.due_at, updated_at = now()
     FROM candidates
     WHERE monitor.shipment_id = candidates.shipment_id
+      AND NOT candidates.already_recorded
       AND monitor.consecutive_failures = 0
       AND monitor.next_poll_at > candidates.due_at
     RETURNING monitor.shipment_id
@@ -81,11 +102,11 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.gigl_worker_expedite_tracking_monitor(text)
+ALTER FUNCTION public.gigl_worker_expedite_tracking_monitor(text, text)
   OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.gigl_worker_expedite_tracking_monitor(text)
+REVOKE ALL ON FUNCTION public.gigl_worker_expedite_tracking_monitor(text, text)
   FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.gigl_worker_expedite_tracking_monitor(text)
+GRANT EXECUTE ON FUNCTION public.gigl_worker_expedite_tracking_monitor(text, text)
   TO gigl_tracking_worker;
 
 -- Add the wrapper to the worker's PostgREST path allowlist, preserving every

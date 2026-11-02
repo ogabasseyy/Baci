@@ -2,7 +2,7 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap WITH SCHEMA extensions;
 \ir pgtap_public_execute.sql
 SET search_path = public, extensions;
-SELECT plan(23);
+SELECT plan(25);
 GRANT USAGE ON SCHEMA extensions TO gigl_tracking_worker;
 
 -- Fixtures: one GIGL shipment per order (one live monitor per order).
@@ -24,7 +24,7 @@ SELECT ('6a11d7e0-0000-4000-8000-00000000001' || n)::uuid,
   '6a11d7e0-0000-4000-8000-000000000001',
   'GIGL-WEBHOOK-00' || n,
   1000
-FROM generate_series(1, 6) AS n;
+FROM generate_series(1, 7) AS n;
 INSERT INTO public.shipments (
   order_id, merchant_id, provider, tracking_number,
   sender_address, receiver_address, items
@@ -34,12 +34,12 @@ SELECT ('6a11d7e0-0000-4000-8000-00000000001' || n)::uuid,
   'GIGL',
   '770000000' || n,
   '{}'::jsonb, '{}'::jsonb, '[]'::jsonb
-FROM generate_series(1, 6) AS n;
+FROM generate_series(1, 7) AS n;
 
 RESET ROLE;
 -- 1: due later, polled long ago. 2: polled 10 seconds ago. 3: terminal.
 -- 4: paused after unchanged polls. 5: in failure backoff. 6: parked
--- (paused with no schedule).
+-- (paused with no schedule). 7: the poller already recorded scan MSHC.
 UPDATE public.shipment_tracking_monitors
 SET state = 'active', next_poll_at = now() + interval '15 minutes',
   last_polled_at = now() - interval '10 minutes'
@@ -63,29 +63,42 @@ UPDATE public.shipment_tracking_monitors
 SET state = 'paused', next_poll_at = NULL,
   last_polled_at = now() - interval '2 hours'
 WHERE tracking_number = '7700000006';
+UPDATE public.shipment_tracking_monitors
+SET state = 'active', next_poll_at = now() + interval '15 minutes',
+  last_polled_at = now() - interval '10 minutes'
+WHERE tracking_number = '7700000007';
+INSERT INTO public.shipment_tracking_events (
+  shipment_id, tracking_epoch_id, tracking_number, provider,
+  provider_event_key, raw_status, normalized_status, description, occurred_at
+)
+SELECT shipment_id, tracking_epoch_id, tracking_number, 'GIGL',
+  'shipment:webhook-replay', 'MSHC', 'out_for_delivery',
+  'Out for delivery', now() - interval '20 minutes'
+FROM public.shipment_tracking_monitors
+WHERE tracking_number = '7700000007';
 
 -- Privileges: only the confined worker role may execute the wrapper.
 SELECT ok(
   NOT has_function_privilege(
-    'anon', 'public.gigl_worker_expedite_tracking_monitor(text)', 'EXECUTE'
+    'anon', 'public.gigl_worker_expedite_tracking_monitor(text,text)', 'EXECUTE'
   ),
   'anon cannot expedite GIGL monitors'
 );
 SELECT ok(
   NOT has_function_privilege(
-    'authenticated', 'public.gigl_worker_expedite_tracking_monitor(text)', 'EXECUTE'
+    'authenticated', 'public.gigl_worker_expedite_tracking_monitor(text,text)', 'EXECUTE'
   ),
   'authenticated cannot expedite GIGL monitors'
 );
 SELECT ok(
   NOT has_function_privilege(
-    'service_role', 'public.gigl_worker_expedite_tracking_monitor(text)', 'EXECUTE'
+    'service_role', 'public.gigl_worker_expedite_tracking_monitor(text,text)', 'EXECUTE'
   ),
   'service_role holds no direct grant on the webhook wrapper'
 );
 SELECT ok(
   has_function_privilege(
-    'gigl_tracking_worker', 'public.gigl_worker_expedite_tracking_monitor(text)', 'EXECUTE'
+    'gigl_tracking_worker', 'public.gigl_worker_expedite_tracking_monitor(text,text)', 'EXECUTE'
   ),
   'the GIGL worker role may expedite monitors'
 );
@@ -143,6 +156,16 @@ SELECT is(
   public.gigl_worker_expedite_tracking_monitor('7700000006'),
   '{"matched": 1, "expedited": 0}'::jsonb,
   'a parked monitor without a schedule stays parked'
+);
+SELECT is(
+  public.gigl_worker_expedite_tracking_monitor('7700000007', ' mshc '),
+  '{"matched": 1, "expedited": 0}'::jsonb,
+  'a replayed status the poller already recorded is a no-op'
+);
+SELECT is(
+  public.gigl_worker_expedite_tracking_monitor('7700000007', 'MDLV'),
+  '{"matched": 1, "expedited": 1}'::jsonb,
+  'a new status for the same waybill still expedites'
 );
 SELECT is(
   public.gigl_worker_expedite_tracking_monitor('7799999999'),

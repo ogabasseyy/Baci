@@ -18,7 +18,8 @@ import { giglWebhookExpediteResultSchema } from '@/schemas/gigl-webhook-event';
  * - A delivery is a hint, never truth: it only makes the waybill's GIGL
  *   monitor due, and the VPS poller reads the authoritative status from
  *   GIG's tracking API, so order updates and customer notifications keep
- *   their single existing writer. Duplicates and retries are no-ops.
+ *   their single existing writer. A retry or replay of a scan the poller has
+ *   already recorded changes nothing (GIG sends no nonce to dedupe on).
  *
  * Status mapping:
  * - Settings missing -> 503 before the body is read (GIG retries).
@@ -91,7 +92,10 @@ export async function POST(request: Request): Promise<Response> {
     return unavailable();
   }
 
-  const { data, error } = await client.expedite(delivery.waybill);
+  const { data, error } = await client.expedite(
+    delivery.waybill,
+    delivery.statusCode
+  );
   if (error) {
     logger.error({
       message: 'GIGL webhook could not expedite tracking',

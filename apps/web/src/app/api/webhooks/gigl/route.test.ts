@@ -64,7 +64,7 @@ describe('POST /api/webhooks/gigl', () => {
 
     expect(await snapshot(response)).toEqual({ status: 200, body: ACK });
     expect(response.headers.get('cache-control')).toBe('no-store');
-    expect(expedite).toHaveBeenCalledExactlyOnceWith('1349639673');
+    expect(expedite).toHaveBeenCalledExactlyOnceWith('1349639673', 'MCRT');
   });
 
   it('acts on every GIG status and flags codes the tracker cannot map', async () => {
@@ -73,6 +73,11 @@ describe('POST /api/webhooks/gigl', () => {
     await post(validBody({ StatusCode: null }));
 
     expect(expedite).toHaveBeenCalledTimes(3);
+    expect(expedite.mock.calls.map(([, statusCode]) => statusCode)).toEqual([
+      'MCRT',
+      'ZZNEW',
+      null,
+    ]);
     expect(logger.info.mock.calls.map(([entry]) => entry.statusMapped)).toEqual(
       [true, false, null]
     );
@@ -82,7 +87,7 @@ describe('POST /api/webhooks/gigl', () => {
     const response = await post(JSON.stringify(validBody()));
 
     expect(response.status).toBe(200);
-    expect(expedite).toHaveBeenCalledWith('1349639673');
+    expect(expedite).toHaveBeenCalledWith('1349639673', 'MCRT');
   });
 
   it('acknowledges an unknown waybill without changing anything', async () => {

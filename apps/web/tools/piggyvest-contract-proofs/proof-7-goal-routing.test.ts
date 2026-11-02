@@ -195,14 +195,26 @@ describe('runGoalRouting: what is not sent or not read', () => {
     expect(runs.d.afterRecheck.payout).toBe('business');
   });
 
-  it('keeps every id and name out of evidence text', async () => {
+  it('registers both name forms and the id, so a provider message echoing them leaks neither', async () => {
     const { h, owner, business } = await ready();
     const runs = await runGoalRouting(h.ctx, owner, business);
     for (const run of runs) {
-      const text = h.redactor.text(
-        `${run.walletName} ${run.walletName.replaceAll('-', '')} ${run.result?.walletId}`
+      // The sandbox lists the name without hyphens; no pattern catches that
+      // form, so only its registration keeps it out of evidence.
+      const flat = run.walletName.replaceAll('-', '');
+      expect(h.redactor.pseudonym(run.walletName)).toMatch(/^Q\d+$/);
+      expect(h.redactor.pseudonym(flat)).toMatch(/^Q\d+$/);
+      const echoed = h.redactor.message(
+        `The subaccount name ${flat} has already been taken`
       );
-      expect(h.redactor.leaks(text)).toEqual([]);
+      expect(echoed).not.toMatch(/bacisave|baci-save-/);
+      expect(h.redactor.text(`listed as ${run.walletName}`)).not.toContain(
+        run.walletName
+      );
+      const walletId = run.result?.walletId;
+      expect(walletId).toBeTruthy();
+      if (walletId)
+        expect(h.redactor.text(`id ${walletId}`)).not.toContain(walletId);
     }
   });
 });

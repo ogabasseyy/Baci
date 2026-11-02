@@ -78,6 +78,21 @@ DO $$ BEGIN
   RAISE EXCEPTION 'unbound SESSION_USER accepted';
 EXCEPTION WHEN insufficient_privilege THEN NULL; END $$;
 RESET SESSION AUTHORIZATION;
+-- Cutover: a second integration of the same merchant, with its own executor
+-- login, under which customer 02 has no intent. The transfer dispatched under
+-- integration 04 is invisible to that scoped read, so it must refuse.
+CREATE ROLE recovery_cutover_fixture LOGIN;
+GRANT piggyvest_primary_authorizer TO recovery_cutover_fixture;
+INSERT INTO piggyvest_primary.integrations(id,merchant_id,business_id,environment,executor_login,enabled)
+  VALUES ('00000000-0000-4000-8000-0000000000b4','00000000-0000-4000-8000-000000000001','fixture-business','production','recovery_cutover_fixture',true);
+INSERT INTO piggyvest_primary.savings_authorities(integration_id,executor_login,enabled)
+  VALUES ('00000000-0000-4000-8000-0000000000b4','recovery_cutover_fixture',true);
+SET SESSION AUTHORIZATION recovery_cutover_fixture;
+DO $$ BEGIN
+  PERFORM piggyvest_primary.read_pending_savings('{"merchantId":"00000000-0000-4000-8000-000000000001","customerId":"00000000-0000-4000-8000-000000000002","userId":"00000000-0000-4000-8000-000000000003","integrationId":"00000000-0000-4000-8000-0000000000b4","businessId":"fixture-business","environment":"production"}','00000000-0000-4000-8000-000000000006');
+  RAISE EXCEPTION 'in-flight transfer under another integration read as nothing pending';
+EXCEPTION WHEN insufficient_privilege THEN NULL; END $$;
+RESET SESSION AUTHORIZATION;
 -- Reads changed nothing: same operations, same states, same balances.
 DO $$ BEGIN
   IF EXISTS (SELECT id,state,amount_kobo,reference FROM piggyvest_primary.savings_operations
@@ -95,6 +110,13 @@ SET SESSION AUTHORIZATION primary_authorizer_fixture;
 DO $$ BEGIN
   IF piggyvest_primary.read_pending_savings('{"merchantId":"00000000-0000-4000-8000-000000000001","customerId":"00000000-0000-4000-8000-000000000002","userId":"00000000-0000-4000-8000-000000000003","integrationId":"00000000-0000-4000-8000-000000000004","businessId":"fixture-business","environment":"staging"}','00000000-0000-4000-8000-000000000006') IS NOT NULL
     THEN RAISE EXCEPTION 'settled or cancelled operation recovered'; END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+-- With nothing in flight on the goal, the cutover caller gets a definite NULL.
+SET SESSION AUTHORIZATION recovery_cutover_fixture;
+DO $$ BEGIN
+  IF piggyvest_primary.read_pending_savings('{"merchantId":"00000000-0000-4000-8000-000000000001","customerId":"00000000-0000-4000-8000-000000000002","userId":"00000000-0000-4000-8000-000000000003","integrationId":"00000000-0000-4000-8000-0000000000b4","businessId":"fixture-business","environment":"production"}','00000000-0000-4000-8000-000000000006') IS NOT NULL
+    THEN RAISE EXCEPTION 'cutover caller recovered a settled operation'; END IF;
 END $$;
 RESET SESSION AUTHORIZATION;
 INSERT INTO piggyvest_primary.savings_operations(id,integration_id,intent_id,goal_id,amount_kobo,source_wallet_id,destination_wallet_id,reference,state,wallet_transaction_id)

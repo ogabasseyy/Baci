@@ -7,7 +7,9 @@ BEGIN;
 -- and savings authority bound to SESSION_USER, the scoped customer and user,
 -- and a goal that customer owns. Any of those failing still raises 42501.
 -- The read returns only reserved or dispatched operations reached through the
--- caller's own intents and never writes.
+-- caller's own intents and never writes. It answers NULL only when nothing is
+-- in flight on the goal at all; an in-flight transfer it cannot attribute to
+-- the scoped integration also raises 42501.
 CREATE OR REPLACE FUNCTION piggyvest_primary.read_pending_savings(scope jsonb, goal_id uuid)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE recovered jsonb;
@@ -43,6 +45,17 @@ BEGIN
     AND goal.customer_id=intent.customer_id AND goal.merchant_id=intent.merchant_id
     AND operation.state IN ('reserved','dispatched')
   ORDER BY operation.created_at,operation.id LIMIT 1;
+  -- "Nothing pending" must be definite. A reserved or dispatched transfer on
+  -- this goal that the scoped read could not attribute (for example one made
+  -- under another integration of the same merchant before a cutover) leaves
+  -- the answer unknown, so refuse instead of letting the client release it.
+  IF recovered IS NULL AND EXISTS (
+    SELECT 1 FROM piggyvest_primary.savings_operations operation
+    WHERE operation.goal_id=read_pending_savings.goal_id
+      AND operation.state IN ('reserved','dispatched')
+  ) THEN
+    RAISE EXCEPTION 'savings recovery ownership unavailable' USING ERRCODE='42501';
+  END IF;
   RETURN recovered;
 END $$;
 REVOKE ALL ON FUNCTION piggyvest_primary.read_pending_savings(jsonb,uuid) FROM PUBLIC,anon,authenticated,service_role;

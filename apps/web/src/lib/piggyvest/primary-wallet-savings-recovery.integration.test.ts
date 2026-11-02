@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,25 @@ const fixture = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   'primary-wallet-savings-recovery.integration.sql'
 );
+
+function missingIncludes(file: string, seen = new Set<string>()): string[] {
+  if (seen.has(file)) return [];
+  seen.add(file);
+  return readFileSync(file, 'utf8')
+    .split('\n')
+    .filter((line) => line.startsWith('\\ir '))
+    .flatMap((line) => {
+      const target = path.resolve(path.dirname(file), line.slice(4).trim());
+      if (!existsSync(target)) return [path.relative(process.cwd(), target)];
+      return missingIncludes(target, seen);
+    });
+}
+
+// The isolated run below is gated off in CI, so a migration re-stamp that
+// left a stale include would otherwise go unnoticed until someone ran it.
+it('includes only migrations and fixtures that exist', () => {
+  expect(missingIncludes(fixture)).toEqual([]);
+});
 
 it.runIf(process.env.BACI_PRIMARY_WALLET_SQL_TESTS === 'true')(
   'recovers pending savings without onboarding gating or writes in isolated PostgreSQL',

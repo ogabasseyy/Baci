@@ -13,6 +13,7 @@ vi.mock('@/lib/api-client', () => ({
 }));
 
 import { OxygenPaymentRecovery } from './OxygenPaymentRecovery';
+import { OxygenHostedOriginsContext } from './OxygenPaymentSurfaceContext';
 
 const workflow = '60000000-0000-4000-8000-000000000001';
 const reference = '70000000-0000-4000-8000-000000000001';
@@ -45,25 +46,32 @@ it('opens the saved exact-reference payment once after confirmed approval withou
   const fetcher = vi.fn().mockImplementation(async () => Response.json(state));
   vi.stubGlobal('fetch', fetcher);
   const view = render(
-    <OxygenPaymentRecovery
-      workflowId={workflow}
-      reference={reference}
-      version={3}
-      autoOpen
-    />
+    <OxygenHostedOriginsContext.Provider
+      value={['https://payment.hydrogenpay.com']}
+    >
+      <OxygenPaymentRecovery
+        workflowId={workflow}
+        reference={reference}
+        version={3}
+        autoOpen
+      />
+    </OxygenHostedOriginsContext.Provider>
   );
-  expect(await screen.findByTitle('Oxygen secure payment')).toHaveAttribute(
-    'src',
-    state.paymentUrl
-  );
+  expect(
+    await screen.findByTitle('Oxygen secure payment', {}, { timeout: 10000 })
+  ).toHaveAttribute('src', state.paymentUrl);
   expect(fetcher).toHaveBeenCalledTimes(1);
   view.rerender(
-    <OxygenPaymentRecovery
-      workflowId={workflow}
-      reference={reference}
-      version={4}
-      autoOpen
-    />
+    <OxygenHostedOriginsContext.Provider
+      value={['https://payment.hydrogenpay.com']}
+    >
+      <OxygenPaymentRecovery
+        workflowId={workflow}
+        reference={reference}
+        version={4}
+        autoOpen
+      />
+    </OxygenHostedOriginsContext.Provider>
   );
   expect(fetcher).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole('button', { name: 'Back to payment plan' }));

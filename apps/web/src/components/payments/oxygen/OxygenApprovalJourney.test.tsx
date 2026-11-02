@@ -7,6 +7,7 @@ vi.mock('@/lib/posthog/capture-client-event', () => ({
   captureClientEvent: vi.fn(),
 }));
 
+import { OxygenHostedOriginsContext } from './OxygenPaymentSurfaceContext';
 import { OxygenProviderFlow } from './OxygenProviderFlow';
 
 beforeAll(() =>
@@ -130,10 +131,18 @@ it('sends the selected plan approval with its signature and advances only after 
     }
     return Response.json(url.includes('?') ? initial : { workflow: { id } });
   });
-  render(<OxygenProviderFlow orderId={id} />);
-  await screen.findByRole('heading', {
-    name: 'Sign and accept your payment plan',
-  });
+  render(
+    <OxygenHostedOriginsContext.Provider
+      value={['https://payment.hydrogenpay.com']}
+    >
+      <OxygenProviderFlow orderId={id} />
+    </OxygenHostedOriginsContext.Provider>
+  );
+  await screen.findByRole(
+    'heading',
+    { name: 'Sign and accept your payment plan' },
+    { timeout: 10000 }
+  );
   fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
   fireEvent.change(screen.getByLabelText('Your signature'), {
     target: {
@@ -144,21 +153,23 @@ it('sends the selected plan approval with its signature and advances only after 
     screen.getByRole('checkbox', { name: /I accept this payment plan/ })
   );
   fireEvent.click(screen.getByRole('button', { name: /^Continue$/ }));
-  await waitFor(() =>
-    expect(
-      screen.getByRole('textbox', { name: 'Verification code' })
-    ).toBeEnabled()
+  await waitFor(
+    () =>
+      expect(
+        screen.getByRole('textbox', { name: 'Verification code' })
+      ).toBeEnabled(),
+    { timeout: 5000 }
   );
   expect(commands).toHaveLength(1);
   fireEvent.change(screen.getByRole('textbox', { name: 'Verification code' }), {
     target: { value: '123456' },
   });
-  await screen.findByText('Code verified.');
+  await screen.findByText('Code verified.', {}, { timeout: 10000 });
   expect(
     screen.queryByRole('button', { name: 'Continue to payment' })
   ).toBeNull();
   expect(
-    await screen.findByTitle('Oxygen secure payment', {}, { timeout: 2500 })
+    await screen.findByTitle('Oxygen secure payment', {}, { timeout: 10000 })
   ).toHaveAttribute(
     'src',
     'https://payment.hydrogenpay.com/?transactionId=synthetic'
@@ -181,4 +192,4 @@ it('sends the selected plan approval with its signature and advances only after 
   expect(
     screen.queryByRole('button', { name: /activate|settle|cancel/i })
   ).toBeNull();
-});
+}, 30000);

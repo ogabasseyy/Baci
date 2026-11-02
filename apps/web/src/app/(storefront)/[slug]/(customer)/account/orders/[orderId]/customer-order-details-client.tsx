@@ -25,7 +25,7 @@ async function fetchCustomerOrder(
 ): Promise<OrderFetchResult> {
   try {
     const response = await fetch(
-      `/api/storefront/account/orders/${orderId}?merchantSlug=${encodeURIComponent(merchantSlug)}`,
+      `/api/storefront/account/orders/${encodeURIComponent(orderId)}?merchantSlug=${encodeURIComponent(merchantSlug)}`,
       { signal }
     );
     const data = (await response.json()) as {
@@ -85,7 +85,7 @@ export default function CustomerOrderDetailsClient() {
   useEffect(() => {
     if (!merchantLoading && !authLoading && !isAuthenticated) {
       const redirectPath = orderId
-        ? `${resolvedBasePath}/account/orders/${orderId}`
+        ? `${resolvedBasePath}/account/orders/${encodeURIComponent(orderId)}`
         : `${resolvedBasePath}/account/orders`;
       router.push(
         asRoute(
@@ -138,7 +138,7 @@ export default function CustomerOrderDetailsClient() {
 
   if (merchantLoading || authLoading) {
     return (
-      <div className="min-h-screen bg-linear-to-b from-background to-muted/20">
+      <div className="min-h-screen bg-linear-to-b from-store-background to-store-secondary/20">
         <div className="container mx-auto max-w-5xl px-4 py-8">
           <Skeleton className="mb-4 h-8 w-48" />
           <Skeleton className="mb-4 h-48" />
@@ -157,7 +157,7 @@ export default function CustomerOrderDetailsClient() {
         actionHref={asRoute(
           `${resolvedBasePath}/account/login?redirect=${encodeURIComponent(
             orderId
-              ? `${resolvedBasePath}/account/orders/${orderId}`
+              ? `${resolvedBasePath}/account/orders/${encodeURIComponent(orderId)}`
               : `${resolvedBasePath}/account/orders`
           )}`
         )}
@@ -189,13 +189,13 @@ export default function CustomerOrderDetailsClient() {
 
   if (isLoadingOrder) {
     return (
-      <div className="min-h-screen bg-linear-to-b from-background to-muted/20">
+      <div className="min-h-screen bg-linear-to-b from-store-background to-store-secondary/20">
         <div className="container mx-auto max-w-5xl px-4 py-8">
           <div className="flex items-center justify-center py-20">
             <output aria-label="Loading order" className="sr-only">
               Loading order
             </output>
-            <Loader2 className="size-8 animate-spin text-muted-foreground" />
+            <Loader2 className="size-8 animate-spin text-store-background-text/60" />
           </div>
         </div>
       </div>

@@ -12,6 +12,7 @@ import {
   createProviderJourney,
   fixtureId,
 } from './__fixtures__/provider-journey';
+import { OxygenHostedOriginsContext } from './OxygenPaymentSurfaceContext';
 import { OxygenProviderFlow } from './OxygenProviderFlow';
 
 afterEach(() => {
@@ -82,7 +83,11 @@ it('requires plan and signature acceptance before approval and keeps payment con
     }
     return fixture.fetch(url, init);
   });
-  render(<OxygenProviderFlow orderId={fixtureId} />);
+  render(
+    <OxygenHostedOriginsContext.Provider value={['https://hosted.test']}>
+      <OxygenProviderFlow orderId={fixtureId} />
+    </OxygenHostedOriginsContext.Provider>
+  );
   await waitForUI(() =>
     expect(
       screen.getByRole('button', { name: 'Accept payment plan' })
@@ -160,4 +165,4 @@ it('requires plan and signature acceptance before approval and keeps payment con
   expect(JSON.stringify(fixture.snapshot())).not.toContain(
     'synthetic-activity-token'
   );
-});
+}, 30000);

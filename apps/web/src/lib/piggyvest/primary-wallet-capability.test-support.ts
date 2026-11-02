@@ -4,7 +4,7 @@ import type { PiggyvestPrimaryNotReadyCode } from '@/schemas/piggyvest-primary-w
 export const floors = {
   PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_IOS: '120',
   PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_ANDROID: '700',
-} as NodeJS.ProcessEnv;
+} as unknown as NodeJS.ProcessEnv;
 
 export function client(platform?: string, build?: string): Headers {
   const headers = new Headers();

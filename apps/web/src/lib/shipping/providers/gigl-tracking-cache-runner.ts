@@ -35,6 +35,7 @@ export async function runWithGiglTrackingTokenCache<
       } else if (provider && initial) await cache.clear();
     } catch {
       // Tracking remains available if the private optimization is unavailable.
+      console.warn('[gigl-tracking] token cache unavailable');
     } finally {
       await cache.release?.().catch(() => undefined);
     }

@@ -62,6 +62,7 @@ describe('tracking token cache integration', () => {
   });
 
   it('continues the batch when the cache is unavailable', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const cache = {
       load: vi.fn().mockRejectedValue(new Error('unavailable')),
       save: vi.fn().mockRejectedValue(new Error('unavailable')),
@@ -76,6 +77,10 @@ describe('tracking token cache integration', () => {
       })
     ).resolves.toBe('done');
     expect(createProvider).toHaveBeenCalledWith(null);
+    expect(warn).toHaveBeenCalledWith(
+      '[gigl-tracking] token cache unavailable'
+    );
+    warn.mockRestore();
   });
 
   it('releases the cache handle when provider construction fails', async () => {

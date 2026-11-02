@@ -25,9 +25,11 @@ const EMPTY_EVENTS: XEventIds = {};
 export function TwitterPixel({
   pixelId,
   eventIds = EMPTY_EVENTS,
+  merchantId,
 }: {
   pixelId: string;
   eventIds?: XEventIds;
+  merchantId?: string;
 }) {
   const allowed = useSyncExternalStore(subscribe, marketingAllowed, denied);
   const pathname = usePathname();
@@ -42,24 +44,32 @@ export function TwitterPixel({
     | { token: object | undefined; pixelId: string; serializedEvents: string }
     | undefined
   >(undefined);
+  const lastPageView = useRef<{ token: object; pathname: string } | undefined>(
+    undefined
+  );
   const [sdkReady, setSdkReady] = useState(false);
   useEffect(() => {
     const token = allowed
-      ? initializeXPixel(pixelId, JSON.parse(serializedEvents))
+      ? initializeXPixel(pixelId, JSON.parse(serializedEvents), merchantId)
       : undefined;
     activation.current = { token, pixelId, serializedEvents };
     return () => {
       if (token) resetXPixel(token);
     };
-  }, [pixelId, serializedEvents, allowed]);
+  }, [pixelId, serializedEvents, allowed, merchantId]);
   useEffect(() => {
     if (
       allowed &&
       pathname &&
+      activation.current?.token &&
       activation.current?.pixelId === pixelId &&
-      activation.current.serializedEvents === serializedEvents
-    )
+      activation.current.serializedEvents === serializedEvents &&
+      (lastPageView.current?.token !== activation.current.token ||
+        lastPageView.current.pathname !== pathname)
+    ) {
+      lastPageView.current = { token: activation.current.token, pathname };
       measureXEvent('pageView', { conversion_id: crypto.randomUUID() });
+    }
   }, [allowed, pixelId, serializedEvents, pathname]);
   useEffect(() => {
     if (

@@ -4,7 +4,7 @@ import { buildMerchantAnalyticsSettings } from '@/components/analytics/analytics
 import { ChatgptPixel } from '@/components/analytics/chatgpt-pixel';
 import { DeferredFacebookPixel } from '@/components/analytics/deferred-facebook-pixel';
 import { DeferredSocialPixels } from '@/components/analytics/deferred-social-pixels';
-import { TwitterPixel } from '@/components/analytics/twitter-pixel';
+import { DeferredTwitterPixel } from '@/components/analytics/deferred-twitter-pixel';
 import { CookieConsent } from '@/components/storefront/cookie-consent';
 import { DeferredPageViewTracker } from '@/components/storefront/deferred-page-view-tracker';
 import { WebMcpStorefrontTools } from '@/components/storefront/webmcp-storefront-tools';
@@ -66,7 +66,8 @@ export function StorefrontShellFrame({
           />
         ) : null}
         {analyticsSettings?.twitter_pixel_id ? (
-          <TwitterPixel
+          <DeferredTwitterPixel
+            merchantId={merchant.id}
             pixelId={analyticsSettings.twitter_pixel_id}
             eventIds={analyticsSettings.twitter_event_ids}
           />

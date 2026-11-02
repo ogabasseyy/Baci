@@ -27,30 +27,90 @@ type Activation = {
   events: XEventIds;
   ready: boolean;
   pending: Pending[];
+  merchantId?: string;
+  prepared: boolean;
+  initialized: boolean;
 };
 let current: Activation | undefined;
 let configured: { pixelId: string; queue: Window['twq'] } | undefined;
 export function resetXPixel(activation?: object): void {
-  if (!activation || current === activation) current = undefined;
+  if (!activation) {
+    current = undefined;
+  } else if (current === activation) {
+    if (current.prepared) {
+      current.initialized = false;
+      current.ready = false;
+    } else current = undefined;
+  }
 }
-export function initializeXPixel(
+function sameEvents(left: XEventIds, right: XEventIds): boolean {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  return [...keys].every(
+    (key) => left[key as keyof XEventIds] === right[key as keyof XEventIds]
+  );
+}
+export function prepareXPixel(
   pixelId: string,
-  eventIds: unknown
-): object | undefined {
-  current = undefined;
+  eventIds: unknown,
+  merchantId: string
+): (() => void) | undefined {
   if (
     typeof window === 'undefined' ||
+    !merchantId ||
     !/^[A-Za-z0-9]{1,64}$/.test(pixelId) ||
     !isMarketingAllowed()
   )
     return;
-  const parsed = parseXEventIds(eventIds);
   const activation: Activation = {
+    pixelId,
+    events: parseXEventIds(eventIds) ?? {},
+    ready: false,
+    pending: [],
+    merchantId,
+    prepared: true,
+    initialized: false,
+  };
+  current = activation;
+  return () => {
+    if (current === activation) current = undefined;
+  };
+}
+export function initializeXPixel(
+  pixelId: string,
+  eventIds: unknown,
+  merchantId?: string
+): object | undefined {
+  if (
+    current?.prepared &&
+    (current.merchantId !== merchantId || current.pixelId !== pixelId)
+  )
+    return;
+  if (
+    typeof window === 'undefined' ||
+    !/^[A-Za-z0-9]{1,64}$/.test(pixelId) ||
+    !isMarketingAllowed()
+  ) {
+    current = undefined;
+    return;
+  }
+  const parsed = parseXEventIds(eventIds);
+  if (
+    current?.prepared &&
+    (current.merchantId !== merchantId ||
+      current.pixelId !== pixelId ||
+      !sameEvents(current.events, parsed ?? {}))
+  )
+    return;
+  const candidate = current?.prepared ? current : undefined;
+  const activation: Activation = candidate ?? {
     pixelId,
     events: parsed ?? {},
     ready: false,
     pending: [],
+    prepared: false,
+    initialized: false,
   };
+  activation.initialized = true;
   current = activation;
   if (!window.twq) {
     const queue: unknown[][] = [];
@@ -67,7 +127,8 @@ export function initializeXPixel(
 }
 /** Called only by the mounted Next Script's readiness notification. */
 export function markXPixelReady(activation: object | undefined): void {
-  if (!current || current !== activation || !window.twq) return;
+  if (!current || current !== activation || !current.initialized || !window.twq)
+    return;
   if (!isMarketingAllowed()) {
     current.pending = [];
     return;
@@ -82,7 +143,10 @@ export function markXPixelReady(activation: object | undefined): void {
   }
   const pending = current.pending.splice(0);
   for (const entry of pending)
-    if (entry.url === window.location.href)
+    if (
+      entry.url === window.location.href ||
+      (current.prepared && entry.event !== 'pageView')
+    )
       measureXEvent(entry.event, entry.params);
 }
 /** Browser observations never assert that an order was paid. */

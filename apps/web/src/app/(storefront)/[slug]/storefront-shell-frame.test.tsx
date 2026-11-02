@@ -10,18 +10,10 @@ const notFound = vi.fn(() => {
   throw new Error('NEXT_NOT_FOUND');
 });
 
-vi.mock('@/components/analytics/twitter-pixel', () => ({
-  TwitterPixel: ({
-    pixelId,
-    eventIds,
-  }: {
-    pixelId: string;
-    eventIds?: Record<string, string | undefined>;
-  }) => (
-    <span data-testid="x-pixel" data-events={JSON.stringify(eventIds)}>
-      {pixelId}
-    </span>
-  ),
+vi.mock('@/components/analytics/deferred-twitter-pixel', async () => ({
+  DeferredTwitterPixel: (
+    await import('./storefront-shell-twitter.test-support')
+  ).MockDeferredTwitterPixel,
 }));
 
 vi.mock('@/components/analytics/chatgpt-pixel', () => ({

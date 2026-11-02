@@ -39,6 +39,40 @@ afterEach(async () => {
 });
 
 describe('GIGL tracking token cache', () => {
+  it('loads a complete record when file reads return short chunks', async () => {
+    const { directory } = await fixture();
+    const cache = createGiglTrackingTokenCache({
+      directory,
+      credentials,
+      now: () => now,
+      isLocked: () => true,
+    });
+    await cache.save(token);
+    const probe = await open(join(directory, 'token.json'), 'r');
+    const prototype = Object.getPrototypeOf(probe);
+    await probe.close();
+    const originalRead = prototype.read;
+    const spy = vi.spyOn(prototype, 'read').mockImplementation(function (
+      this: unknown,
+      buffer: Buffer,
+      offset: number,
+      length: number,
+      position: number
+    ) {
+      return originalRead.call(
+        this,
+        buffer,
+        offset,
+        Math.min(length, 7),
+        position
+      );
+    });
+    try {
+      expect(await cache.load()).toEqual(token);
+    } finally {
+      spy.mockRestore();
+    }
+  });
   it('does not replace a usable cached token when syncing the new file fails', async () => {
     const { directory } = await fixture();
     const cache = createGiglTrackingTokenCache({

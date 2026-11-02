@@ -67,10 +67,13 @@ it('reports a load failure even when the batch acquires no token', async () => {
   }));
   mocks.runWithCache.mockImplementation(async ({ cache }) => {
     await cache.load();
+    const options = mocks.runWithCache.mock.calls.at(-1)?.[0];
+    options?.onCacheUnavailable();
     return { ok: true, summary: { applied: 0, claimed: 0, failed: 0, paused: 0, success: true } };
   });
   await expect(runGiglTrackingCli({ env, logger })).resolves.toBe(0);
   expect(logger.error).toHaveBeenCalledWith('[gigl-tracking] token cache unavailable');
+  expect(logger.error).toHaveBeenCalledTimes(1);
 });
 
 it('uses the private token cache for the scoped VPS poller', async () => {

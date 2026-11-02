@@ -81,7 +81,12 @@ async function runBatchDirectly(
   }
   cacheRunActive = true;
   try {
-    const reportCacheUnavailable = () => emitError('[gigl-tracking] token cache unavailable');
+    let cacheUnavailableReported = false;
+    const reportCacheUnavailable = () => {
+      if (cacheUnavailableReported) return;
+      cacheUnavailableReported = true;
+      emitError('[gigl-tracking] token cache unavailable');
+    };
     const cache = createGiglTrackingTokenCache({
       directory,
       isLocked: () => cacheRunActive && hasVerifiedGiglCacheLock(directory, 9),

@@ -139,7 +139,17 @@ export function createGiglTrackingTokenCache({
           return null;
         }
         const buffer = Buffer.alloc(maxRecordBytes + 1);
-        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+        let bytesRead = 0;
+        while (bytesRead < buffer.length) {
+          const result = await handle.read(
+            buffer,
+            bytesRead,
+            buffer.length - bytesRead,
+            bytesRead
+          );
+          if (result.bytesRead === 0) break;
+          bytesRead += result.bytesRead;
+        }
         if (bytesRead > maxRecordBytes) {
           onUnavailable();
           return null;

@@ -82,6 +82,12 @@ if (process.env.GIGL_TEST_HOLD === '1') setTimeout(() => {}, 60000);
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), 'uncached')
 
+    def test_corrupt_helper_keeps_worker_available_without_cache(self):
+        (self.wrapper.parent / 'gigl-cache-lock-exec.py').write_text('def broken(\n')
+        result = subprocess.run(['bash', str(self.wrapper)], env={**self.env, 'GIGL_TEST_HOLD': '0'}, capture_output=True, text=True, timeout=120)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), 'uncached')
+
 
 if __name__ == '__main__':
     unittest.main()

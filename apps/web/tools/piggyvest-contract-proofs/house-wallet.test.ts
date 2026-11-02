@@ -1,16 +1,36 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { admitHouseWallet } from './house-wallet';
 import type { MockCreated } from './mock-reply.test-support';
 import { dataOf } from './mock-reply.test-support';
+import { ok } from './mock-sandbox-types';
 import { setupScenario } from './scenario';
 import { makeHarness } from './test-harness.test-support';
 
 let dispose: (() => void) | null = null;
-afterEach(() => dispose?.());
+afterEach(() => {
+  dispose?.();
+  vi.restoreAllMocks();
+});
 function harness(...args: Parameters<typeof makeHarness>) {
   const h = makeHarness(...args);
   dispose = h.dispose;
   return h;
+}
+
+/** The business wallet's readback, with its api_customer_id key rewritten. */
+function rewriteBinding(
+  h: ReturnType<typeof harness>,
+  rewrite: (record: Record<string, unknown>) => void
+) {
+  const sandbox = h.mock.sandbox;
+  const read = sandbox.retrieveWallet.bind(sandbox);
+  vi.spyOn(sandbox, 'retrieveWallet').mockImplementation((id) => {
+    const reply = read(id);
+    if (id !== sandbox.businessWalletId) return reply;
+    const record = { ...dataOf(reply) };
+    rewrite(record);
+    return ok(record);
+  });
 }
 
 describe('admitHouseWallet', () => {
@@ -74,6 +94,36 @@ describe('admitHouseWallet', () => {
     const result = await admitHouseWallet(h.ctx);
     expect(result).toMatchObject({ walletId: null, binding: 'unread' });
     expect(h.state.authorized.has('missing-house-wallet-01')).toBe(false);
+  });
+
+  it('fails closed when the readback does not report a customer binding at all', async () => {
+    const h = harness();
+    rewriteBinding(h, (record) => {
+      delete record.api_customer_id;
+    });
+    await setupScenario(h.ctx);
+    const id = h.mock.sandbox.businessWalletId;
+    const result = await admitHouseWallet(h.ctx);
+    expect(result).toEqual({ walletId: null, binding: 'unread' });
+    expect(h.state.houseWalletId).toBeNull();
+    expect(h.state.authorized.has(id)).toBe(false);
+  });
+
+  it('admits only an explicit null binding, never an empty or non-string one', async () => {
+    for (const value of ['', 0, false]) {
+      const h = harness();
+      rewriteBinding(h, (record) => {
+        record.api_customer_id = value;
+      });
+      await setupScenario(h.ctx);
+      const id = h.mock.sandbox.businessWalletId;
+      const result = await admitHouseWallet(h.ctx);
+      expect(result.walletId).toBeNull();
+      expect(result.binding).not.toBe('unbound');
+      expect(h.state.authorized.has(id)).toBe(false);
+      h.dispose();
+      vi.restoreAllMocks();
+    }
   });
 
   it('reads the binding in read-only mode but authorizes nothing', async () => {

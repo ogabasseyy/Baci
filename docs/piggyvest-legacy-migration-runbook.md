@@ -22,8 +22,10 @@ Files:
 ## 1. Coordinator list
 
 1. Run `01-balance-list.sql`. It only reads.
-2. Give the output to the coordinator. Rows where `matches_ledger` is false
-   must be explained before anyone is credited. Do not credit them.
+2. Give the output to the coordinator. Only rows with `eligible` true may go
+   on the list. A row with `matches_ledger` false or a non-zero `pending_count`
+   is excluded: do not credit it and do not list it. Run the list again later,
+   once its pending rows have settled and the balance matches the ledger.
 3. The coordinator confirms each customer, wallet and amount, and the owner
    signs the list. Freeze it: a changed balance means a new list.
 
@@ -49,7 +51,9 @@ PiggyVest statement. Customers with no confirmed credit are left out of step 4.
    marked lines: wallet id, merchant id, customer id, exact amount and the
    PiggyVest reference.
 2. A second person reviews the rows against the recorded credits.
-3. Run the file as is. It ends with `ROLLBACK`, so nothing is saved.
+3. Run the file as is, with `psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f 02-zero-out.sql`.
+   Load all rows in ONE multi-row insert, and set the declared row count to
+   the number of customers on the signed list. The script stops if the counts differ. It ends with `ROLLBACK`, so nothing is saved.
 4. Check the result: every row shows `now_balance` 0 and the right amount.
    Any error means a balance changed or a row was wrong. Nothing was changed.
    Fix the list from step 1, not the script.
@@ -57,7 +61,8 @@ PiggyVest statement. Customers with no confirmed credit are left out of step 4.
 ## 5. Commit and verify
 
 1. Change the last line from `-- COMMIT;` to `COMMIT;` and remove the
-   `ROLLBACK;` line above it. Run the file again.
+   `ROLLBACK;` line above it. Run the file again with the same
+   `-v ON_ERROR_STOP=1` option.
 2. Run `01-balance-list.sql` again. The migrated customers must be gone.
 3. Each migrated wallet has one ledger row of source
    `piggyvest_legacy_migration` holding the amount, date and PiggyVest
@@ -65,7 +70,8 @@ PiggyVest statement. Customers with no confirmed credit are left out of step 4.
 
 ## If something goes wrong
 
-- Script error: nothing was saved. Read the message, then re-check the list.
+- Script error: nothing was saved. A pending-row error means that customer
+  must come off the list until the row settles. Read the message, then re-check the list.
 - Customer credited in PiggyVest but not zeroed: leave them out of the update
   until the script passes; do not credit again.
 - Run committed by mistake with a wrong row: stop and ask the owner. Do not

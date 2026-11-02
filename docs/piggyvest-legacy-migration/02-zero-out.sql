@@ -1,10 +1,12 @@
 -- PiggyVest legacy migration, step 4/5: the one reviewed SQL update.
 -- Sets each listed old wallet to zero and records the amount, date and the
 -- PiggyVest credit reference in the wallet ledger. Owner runs it, never an agent.
---   psql "$DATABASE_URL" -f 02-zero-out.sql
+--   psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f 02-zero-out.sql
 --
 -- Rules this script enforces (it aborts the whole transaction on any breach):
---   * the list must not be empty;
+--   * the list must not be empty and must hold exactly the declared row count;
+--   * a wallet with any pending ledger row is refused (its balance can still
+--     change when that row is confirmed or released);
 --   * every listed wallet must exist, match its merchant and customer, and hold
 --     EXACTLY the expected balance at the moment it is locked;
 --   * a wallet that already has a migration ledger row is refused (no second run);
@@ -27,7 +29,14 @@ CREATE TEMP TABLE legacy_zero_out_list (
     CHECK (length(btrim(piggyvest_credit_reference)) > 0)
 ) ON COMMIT DROP;
 
+CREATE TEMP TABLE legacy_zero_out_declared (
+  expected_rows integer NOT NULL CHECK (expected_rows > 0)
+) ON COMMIT DROP;
+
 -- >>> REVIEWED ROWS BELOW (one per customer, copied from the signed-off list)
+-- Declare how many customers the signed list holds, then load them in ONE
+-- multi-row INSERT (never several separate INSERT statements).
+-- INSERT INTO legacy_zero_out_declared (expected_rows) VALUES (1);
 -- INSERT INTO legacy_zero_out_list
 --   (wallet_id, merchant_id, customer_id, expected_balance, piggyvest_credit_reference)
 -- VALUES
@@ -41,10 +50,19 @@ DECLARE
   v_bad integer;
   v_done integer;
   v_now timestamptz;
+  v_declared integer;
 BEGIN
   SELECT count(*) INTO v_expected FROM legacy_zero_out_list;
   IF v_expected = 0 THEN
     RAISE EXCEPTION 'legacy zero-out list is empty';
+  END IF;
+
+  SELECT d.expected_rows INTO v_declared FROM legacy_zero_out_declared d;
+  IF v_declared IS NULL THEN
+    RAISE EXCEPTION 'declared row count is missing';
+  END IF;
+  IF v_declared IS DISTINCT FROM v_expected THEN
+    RAISE EXCEPTION 'row count mismatch: % declared, % loaded', v_declared, v_expected;
   END IF;
 
   -- Lock every listed wallet in a fixed order before reading any value.
@@ -67,6 +85,16 @@ BEGIN
      OR cw.available_balance IS DISTINCT FROM l.expected_balance;
   IF v_bad <> 0 THEN
     RAISE EXCEPTION 'balance or owner mismatch on % wallet(s); nothing changed', v_bad;
+  END IF;
+
+  -- A pending row (reservation, redemption) can still credit the wallet back.
+  IF EXISTS (
+    SELECT 1
+    FROM public.customer_wallet_transactions t
+    JOIN legacy_zero_out_list l ON l.wallet_id = t.wallet_id
+    WHERE t.status = 'pending'
+  ) THEN
+    RAISE EXCEPTION 'wallet has a pending ledger row; exclude it and retry later';
   END IF;
 
   IF EXISTS (

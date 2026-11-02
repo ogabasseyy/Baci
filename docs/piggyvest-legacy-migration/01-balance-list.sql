@@ -3,6 +3,7 @@
 --   psql "$DATABASE_URL" -f 01-balance-list.sql
 -- Output: one row per old in-app wallet that still holds money.
 -- Save the output as the coordinator list. Do not edit it by hand.
+-- Only rows with eligible = true may go on the signed list.
 BEGIN READ ONLY;
 
 WITH ledger AS (
@@ -18,7 +19,8 @@ WITH ledger AS (
           THEN -cwt.amount
         ELSE 0
       END
-    ), 0) AS ledger_balance
+    ), 0) AS ledger_balance,
+    count(*) FILTER (WHERE cwt.status = 'pending') AS pending_count
   FROM public.customer_wallet_transactions cwt
   GROUP BY cwt.wallet_id
 )
@@ -32,6 +34,9 @@ SELECT
   cw.available_balance AS legacy_balance,
   COALESCE(l.ledger_balance, 0) AS ledger_balance,
   (cw.available_balance IS NOT DISTINCT FROM COALESCE(l.ledger_balance, 0)) AS matches_ledger,
+  COALESCE(l.pending_count, 0) AS pending_count,
+  (cw.available_balance IS NOT DISTINCT FROM COALESCE(l.ledger_balance, 0)
+    AND COALESCE(l.pending_count, 0) = 0) AS eligible,
   cw.updated_at
 FROM public.customer_wallets cw
 LEFT JOIN public.customers c

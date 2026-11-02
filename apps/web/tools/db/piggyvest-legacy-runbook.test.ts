@@ -33,6 +33,11 @@ describe('01-balance-list.sql (coordinator list)', () => {
     expect(sql).toMatch(/matches_ledger/);
     expect(sql).toMatch(/IS NOT DISTINCT FROM/i);
   });
+
+  it('counts pending ledger rows and marks eligibility', () => {
+    expect(sql).toMatch(/pending_count/);
+    expect(sql).toMatch(/AS eligible/);
+  });
 });
 
 describe('02-zero-out.sql (the one reviewed update)', () => {
@@ -82,6 +87,13 @@ describe('02-zero-out.sql (the one reviewed update)', () => {
     expect(sql).toMatch(/available_balance\s*=\s*0/);
     expect(sql).toMatch(/available_balance\s*=\s*l\.expected_balance/);
     expect(sql).not.toMatch(/total_(earned|redeemed)\s*=/);
+  });
+
+  it('refuses pending rows and checks a declared row count', () => {
+    expect(sql).toMatch(/status\s*=\s*'pending'/);
+    expect(sql).toMatch(/pending ledger row/);
+    expect(sql).toMatch(/row count mismatch/);
+    expect(zeroSql).toContain('ON_ERROR_STOP=1');
   });
 
   it('cannot run twice for the same wallet', () => {

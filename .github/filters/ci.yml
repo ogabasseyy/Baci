@@ -101,6 +101,7 @@ quiz_db:
   - 'supabase/migrations/**'
   - 'supabase/tests/**'
   - 'docs/runbooks/piggyvest-stuck-legacy-funds.sql'
+  - 'docs/runbooks/piggyvest-stuck-legacy-funds.md'
   - '.github/scripts/piggyvest-stuck-funds-runbook-ci.test.mjs'
   - 'apps/web/tools/db/replay-registry/**'
   - 'apps/web/tools/db/replay-registry.ts'

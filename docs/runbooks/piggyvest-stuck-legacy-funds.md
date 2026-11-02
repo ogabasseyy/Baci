@@ -120,8 +120,9 @@ and `refunded` 0. Copy `vtu_id` into the ops log.
 - **The row is gone:** the checker settled it. If the ops log holds the `vtu_id` from an earlier
   step, run B4 with it to see how, then go to "After both parts". V4 needs that id, so with no
   recorded id there is nothing to confirm here: tell the owner.
-- **`debited` is 0:** nothing was taken from the wallet. Still ask the vendor; B3 then closes
-  the purchase without moving money. V1 and V4 count completed ledger rows only. A debit
+- **`debited` is 0:** nothing was taken from the wallet. Still ask the vendor. If the vendor
+  says it failed, B3 closes the purchase without moving money. If the vendor says it was
+  delivered, B3 refuses (the wallet never paid for it): escalate. V1 and V4 count completed ledger rows only. A debit
   row that is pending, failed, expired or has no status is a different case, and so is a
   return row in any status: B3 refuses both, so escalate.
 - **Other rows:** V1 is an inventory of every unfinished Ogabassey purchase, so unrelated

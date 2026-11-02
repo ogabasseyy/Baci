@@ -2,12 +2,14 @@ import { useOrderGiglExternalWaybill } from '@/hooks/orders/useOrderGiglExternal
 import { useGiglAdminShippingEligibility } from '@/hooks/useGiglAdminShippingEligibility';
 import { useMerchant } from '@/hooks/useMerchant';
 import type { OrderDetailsSuccessModalState } from '@/hooks/useOrderDetailsUiState';
+import { useOrderFulfillAccess } from '@/hooks/useOrderFulfillAccess';
 import {
   buildOrderFulfillmentDetailsForPersistence,
   type ShipmentFulfillmentDetails,
   shouldPersistFulfillmentDetails,
 } from '@/lib/order-shipment';
 import { supabase } from '@/lib/supabase';
+import { canBookOrderGigl } from '@/schemas/order-fulfill-access';
 
 interface UseOrderDetailsGiglExternalWaybillParams {
   closeShipmentFlow: () => void;
@@ -19,9 +21,10 @@ interface UseOrderDetailsGiglExternalWaybillParams {
 }
 
 /**
- * Ship Order's "Already booked on GIG?" option. Offered to anyone who can
- * ship orders when the store has GIG Logistics turned on; the server enforces
- * the fulfil/edit permission, GIG account ownership and the receiver match.
+ * Ship Order's "Already booked on GIG?" option. Offered only to viewers who
+ * can book GIG (owner, or staff with orders.fulfill and orders.edit) when the
+ * store has GIG Logistics turned on; the server still enforces the permission,
+ * GIG account ownership and the receiver match.
  */
 export function useOrderDetailsGiglExternalWaybill({
   closeShipmentFlow,
@@ -33,6 +36,7 @@ export function useOrderDetailsGiglExternalWaybill({
 }: UseOrderDetailsGiglExternalWaybillParams) {
   const { merchant } = useMerchant();
   const { isEligible } = useGiglAdminShippingEligibility(merchant);
+  const canBookGigl = canBookOrderGigl(useOrderFulfillAccess());
   const externalWaybill = useOrderGiglExternalWaybill({
     // Same save the provider and rider paths make before shipping, so device
     // identifiers entered in the details step are never dropped.
@@ -78,5 +82,5 @@ export function useOrderDetailsGiglExternalWaybill({
     },
   });
 
-  return isEligible ? externalWaybill : undefined;
+  return isEligible && canBookGigl ? externalWaybill : undefined;
 }

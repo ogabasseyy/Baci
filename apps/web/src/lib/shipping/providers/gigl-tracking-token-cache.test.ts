@@ -1,6 +1,7 @@
 import {
   mkdir,
   mkdtemp,
+  open,
   readFile,
   rm,
   stat,
@@ -8,7 +9,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createGiglTrackingTokenCache } from './gigl-tracking-token-cache';
 
 const roots: string[] = [];
@@ -38,6 +39,32 @@ afterEach(async () => {
 });
 
 describe('GIGL tracking token cache', () => {
+  it('does not replace a usable cached token when syncing the new file fails', async () => {
+    const { directory } = await fixture();
+    const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
+      directory,
+      credentials,
+      now: () => now,
+    });
+    await cache.save(token);
+    const probe = await open(join(directory, 'token.json'), 'r');
+    const prototype = Object.getPrototypeOf(probe) as {
+      sync: () => Promise<void>;
+    };
+    await probe.close();
+    const sync = vi
+      .spyOn(prototype, 'sync')
+      .mockRejectedValueOnce(new Error('synthetic sync failure'));
+    try {
+      await expect(
+        cache.save({ ...token, token: 'new-token' })
+      ).rejects.toThrow('synthetic sync failure');
+      expect(await cache.load()).toEqual(token);
+    } finally {
+      sync.mockRestore();
+    }
+  });
   it('refuses reads, writes and deletion without a held worker lock', async () => {
     const { directory } = await fixture();
     const cache = createGiglTrackingTokenCache({

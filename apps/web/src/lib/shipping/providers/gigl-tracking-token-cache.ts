@@ -23,11 +23,13 @@ export function createGiglTrackingTokenCache({
   credentials,
   now = Date.now,
   isLocked,
+  onUnavailable = () => undefined,
 }: {
   directory: string;
   credentials: CacheCredentials;
   now?: () => number;
   isLocked: () => boolean;
+  onUnavailable?: () => void;
 }) {
   async function validateDirectory(create: boolean): Promise<string> {
     if (!isAbsolute(directory)) throw new Error('Unsafe token cache path');
@@ -92,14 +94,38 @@ export function createGiglTrackingTokenCache({
     return token.expiresAt > now() && token.expiresAt <= now() + maxLifetime;
   }
 
-  async function load(): Promise<GiglToken | null> {
-    if (!isLocked()) return null;
+  async function syncDirectory(path: string): Promise<void> {
+    const handle = await open(
+      path,
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+    );
     try {
-      const file = join(await validateDirectory(false), 'token.json');
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  }
+
+  async function load(): Promise<GiglToken | null> {
+    if (!isLocked()) {
+      onUnavailable();
+      return null;
+    }
+    let resolvedDirectory: string;
+    try {
+      resolvedDirectory = await validateDirectory(false);
+    } catch {
+      onUnavailable();
+      return null;
+    }
+    let openingFile = true;
+    try {
+      const file = join(resolvedDirectory, 'token.json');
       const handle = await open(
         file,
         constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
       );
+      openingFile = false;
       try {
         const info = await handle.stat();
         if (
@@ -108,11 +134,16 @@ export function createGiglTrackingTokenCache({
           info.uid !== process.getuid?.() ||
           (info.mode & 0o777) !== 0o600 ||
           info.size > maxRecordBytes
-        )
+        ) {
+          onUnavailable();
           return null;
+        }
         const buffer = Buffer.alloc(maxRecordBytes + 1);
         const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-        if (bytesRead > maxRecordBytes) return null;
+        if (bytesRead > maxRecordBytes) {
+          onUnavailable();
+          return null;
+        }
         const parsed = giglTrackingTokenCacheRecordSchema.safeParse(
           JSON.parse(buffer.subarray(0, bytesRead).toString('utf8'))
         );
@@ -128,15 +159,35 @@ export function createGiglTrackingTokenCache({
           }
         }
         if (!token) {
-          if (!isLocked()) return null;
+          if (!isLocked()) {
+            onUnavailable();
+            return null;
+          }
           await rm(file, { force: true });
+          await syncDirectory(dirname(file));
           return null;
         }
-        return isLocked() ? token : null;
+        if (!isLocked()) {
+          onUnavailable();
+          return null;
+        }
+        return token;
       } finally {
         await handle.close();
       }
-    } catch {
+    } catch (error) {
+      let expectedMiss =
+        openingFile && (error as NodeJS.ErrnoException).code === 'ENOENT';
+      if (expectedMiss) {
+        try {
+          expectedMiss =
+            isLocked() &&
+            (await validateDirectory(false)) === resolvedDirectory;
+        } catch {
+          expectedMiss = false;
+        }
+      }
+      if (!expectedMiss) onUnavailable();
       return null;
     }
   }
@@ -155,9 +206,11 @@ export function createGiglTrackingTokenCache({
         JSON.stringify(await encryptGiglToken(credentials, parsed)),
         'utf8'
       );
+      await handle.sync();
       await handle.close();
       if (!isLocked()) throw new Error('Cache lock unavailable');
       await rename(temporary, file);
+      await syncDirectory(resolvedDirectory);
     } finally {
       await handle.close().catch(() => undefined);
       await rm(temporary, { force: true });
@@ -170,6 +223,7 @@ export function createGiglTrackingTokenCache({
     await validateExistingFile(file);
     if (!isLocked()) throw new Error('Cache lock unavailable');
     await rm(file, { force: true });
+    await syncDirectory(dirname(file));
   }
 
   return { load, save, clear };

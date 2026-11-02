@@ -24,7 +24,10 @@ export async function runWithGiglTrackingTokenCache<
   onCacheUnavailable?: () => void;
   run: (provider: Provider) => Promise<Result>;
 }): Promise<Result> {
-  const initial = await cache.load().catch(() => null);
+  const initial = await cache.load().catch(() => {
+    onCacheUnavailable();
+    return null;
+  });
   const initialSnapshot = initial && JSON.stringify(initial);
   let provider: Provider | undefined;
   try {

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Experimental cache-lock launcher; failure runs the worker without a lock."""
 import fcntl
+import errno
 import os
 import stat
 import sys
@@ -73,13 +74,13 @@ def main():
     if len(sys.argv) < 2:
         raise SystemExit(2)
     try:
-        os.close(LOCK_FD)
-    except OSError:
-        pass
-    try:
-        acquire()
-    except OSError:
-        pass
+        os.fstat(LOCK_FD)
+    except OSError as error:
+        if error.errno == errno.EBADF:
+            try:
+                acquire()
+            except OSError:
+                pass
     os.execvp(sys.argv[1], sys.argv[1:])
 
 

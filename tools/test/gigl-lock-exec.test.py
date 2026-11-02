@@ -33,6 +33,23 @@ class LockExecTest(unittest.TestCase):
             args.append("hold")
         return subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=self.env)
 
+    def test_unrelated_inherited_fd_nine_remains_open_and_locked(self):
+        script = r'''import fcntl, os, sys
+fd = os.open(sys.argv[2], os.O_CREAT | os.O_RDWR, 0o600)
+fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+os.dup2(fd, 9, inheritable=True)
+if fd != 9: os.close(fd)
+os.execv(sys.executable, [sys.executable, sys.argv[1], sys.executable, '-c',
+    "import fcntl, os, subprocess, sys; os.fstat(9); "
+    "p=subprocess.run([sys.executable,'-c',\"import fcntl,os,sys; f=os.open(sys.argv[1],os.O_RDWR); fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB)\",sys.argv[1]],capture_output=True); "
+    "sys.exit(0 if p.returncode != 0 else 1)", sys.argv[2]])
+'''
+        result = subprocess.run(
+            [sys.executable, '-c', script, str(HELPER), str(self.home / 'unrelated.lock')],
+            env=self.env, capture_output=True, text=True, timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_contender_runs_uncached_and_killed_holder_releases(self):
         holder = self.start(hold=True)
         try:

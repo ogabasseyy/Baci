@@ -83,6 +83,25 @@ describe('tracking token cache integration', () => {
     warn.mockRestore();
   });
 
+  it('reports a rejected cache load even when no token is obtained', async () => {
+    const onCacheUnavailable = vi.fn();
+    const cache = {
+      load: vi.fn().mockRejectedValue(new Error('private detail')),
+      save: vi.fn(),
+      clear: vi.fn(),
+    };
+    await expect(
+      runWithGiglTrackingTokenCache({
+        cache,
+        createProvider: () => ({ currentToken: null }),
+        onCacheUnavailable,
+        run: async () => 'done',
+      })
+    ).resolves.toBe('done');
+    expect(onCacheUnavailable).toHaveBeenCalledOnce();
+    expect(onCacheUnavailable).toHaveBeenCalledWith();
+  });
+
   it('releases the cache handle when provider construction fails', async () => {
     const cache = {
       load: vi.fn().mockResolvedValue(token),

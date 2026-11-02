@@ -12,4 +12,6 @@ The cache is bound to the configured provider URL, email, and password. Changing
 
 The cache encrypts the token with AES-256-GCM using a per-record random salt and a key derived from the provider credentials with scrypt. An exposed record still permits offline password guesses, so treat the whole directory as password-equivalent. Exclude it, including temporary or `.stale` files left by interruption, from backups and diagnostic exports. Restrict access to the worker account, and rotate the provider password as well as the token if a record is exposed.
 
+The worker synchronizes the temporary token file before replacement and the cache directory after replacement or deletion. A synchronization failure disables that cache operation and emits the bounded warning; actual power-loss durability still depends on the filesystem and storage honoring synchronization requests.
+
 After an approved rollout, verify directory ownership and permissions without printing file contents, then compare provider login counts over successive polling intervals and after a controlled credential rotation. A passing local test or a merged PR does not establish the live provider behavior.

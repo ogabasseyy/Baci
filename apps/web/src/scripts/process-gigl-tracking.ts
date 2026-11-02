@@ -81,9 +81,11 @@ async function runBatchDirectly(
   }
   cacheRunActive = true;
   try {
+    const reportCacheUnavailable = () => emitError('[gigl-tracking] token cache unavailable');
     const cache = createGiglTrackingTokenCache({
       directory,
       isLocked: () => cacheRunActive && hasVerifiedGiglCacheLock(directory, 9),
+      onUnavailable: reportCacheUnavailable,
       credentials: {
         baseUrl: GIGL_BASE_URL,
         email: GIGL_EMAIL,
@@ -92,7 +94,7 @@ async function runBatchDirectly(
     });
     return await runWithGiglTrackingTokenCache({
       cache,
-      onCacheUnavailable: () => emitError('[gigl-tracking] token cache unavailable'),
+      onCacheUnavailable: reportCacheUnavailable,
       createProvider: (initial) => new GiglProvider(initial),
       run: (provider) =>
         runGiglTrackingMonitorBatch({

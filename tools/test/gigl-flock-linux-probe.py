@@ -5,6 +5,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
+
+LOCK_MODULE = (Path(__file__).resolve().parents[2] / 'apps/web/src/lib/shipping/providers/gigl-cache-lock-verification.ts').as_uri()
 
 
 class LinuxFlockProbe(unittest.TestCase):
@@ -77,6 +80,7 @@ if (!fs.fstatSync(fd).isFile() || !/FLOCK\\s+ADVISORY\\s+WRITE/.test(fs.readFile
             script = """import { hasVerifiedGiglCacheLock } from '/work/lock-check.ts';
 const [dir, fd, expected] = process.argv.slice(1);
 if (hasVerifiedGiglCacheLock(dir, Number(fd)) !== (expected === 'true')) process.exit(1);"""
+            script = script.replace('/work/lock-check.ts', LOCK_MODULE)
             command = ["node", "--conditions", "react-server", "--input-type=module", "-e", script, self.directory.name, str(lock.fileno())]
             subprocess.run(command + ["false"], pass_fds=(lock.fileno(),), check=True)
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -102,6 +106,7 @@ if (hasVerifiedGiglCacheLock(dir, Number(fd)) !== (expected === 'true')) process
             script = """import { hasVerifiedGiglCacheLock } from '/work/lock-check.ts';
 const [dir, fd] = process.argv.slice(1);
 console.log(hasVerifiedGiglCacheLock(dir, Number(fd)) ? 'accepted' : 'rejected');"""
+            script = script.replace('/work/lock-check.ts', LOCK_MODULE)
             command = ["node", "--input-type=module", "-e", script, self.directory.name, str(lock.fileno())]
             workers = [subprocess.Popen(command, stdout=subprocess.PIPE, text=True, pass_fds=(lock.fileno(),)) for _ in range(2)]
             results = [worker.communicate(timeout=30)[0].strip() for worker in workers]
@@ -128,7 +133,7 @@ os.execvp('node',['node','--input-type=module','-e',script,directory,str(fd),str
             for path in (self.path, self.path + ".old"):
                 if os.path.exists(path):
                     os.unlink(path)
-            subprocess.run([sys.executable, "-c", child_script, self.path, self.directory.name, scenario], check=True)
+            subprocess.run([sys.executable, "-c", child_script.replace('/work/lock-check.ts', LOCK_MODULE), self.path, self.directory.name, scenario], check=True)
 
     def test_worker_thread_cannot_claim_main_threads_lock(self):
         self.path = os.path.join(self.directory.name, "cache.lock")
@@ -141,7 +146,7 @@ os.set_inheritable(fd, True)
 script=\"const {Worker}=require('node:worker_threads');const [dir,fd]=process.argv.slice(1);const code=\\\"const {parentPort,workerData}=require('node:worker_threads');import('/work/lock-check.ts').then(m=>parentPort.postMessage(m.hasVerifiedGiglCacheLock(workerData.dir,workerData.fd)))\\\";const w=new Worker(code,{eval:true,workerData:{dir,fd:Number(fd)}});w.on('message',accepted=>{if(accepted)process.exitCode=1});w.on('error',()=>process.exitCode=1);\"
 os.execvp('node',['node','-e',script,directory,str(fd)])
 """
-        subprocess.run([sys.executable, "-c", child_script, self.path, self.directory.name], check=True)
+        subprocess.run([sys.executable, "-c", child_script.replace('/work/lock-check.ts', LOCK_MODULE), self.path, self.directory.name], check=True)
 
 
 if __name__ == "__main__":

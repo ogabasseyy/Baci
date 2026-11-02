@@ -2,9 +2,9 @@ import { spawnSync } from 'node:child_process';
 import {
   chmod,
   link,
+  lstat,
   mkdir,
   mkdtemp,
-  open,
   readFile,
   rm,
   symlink,
@@ -12,7 +12,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createGiglTrackingTokenCache } from './gigl-tracking-token-cache';
 
 const roots: string[] = [];
@@ -42,34 +42,81 @@ afterEach(async () => {
 });
 
 describe('GIGL tracking token cache filesystem safety', () => {
-  it('returns a cache miss promptly when token.json is a FIFO', async () => {
+  it('does not report a normal first-run cache miss as a failure', async () => {
     const { directory } = await fixture();
+    const onUnavailable = vi.fn();
     await mkdir(directory, { mode: 0o700 });
-    const path = join(directory, 'token.json');
-    expect(spawnSync('mkfifo', ['-m', '600', path]).status).toBe(0);
     const cache = createGiglTrackingTokenCache({
       isLocked: () => true,
       directory,
       credentials,
       now: () => now,
+      onUnavailable,
     });
-    const pending = cache.load();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
-      const result = await Promise.race([
-        pending,
-        new Promise<'timeout'>((resolve) => {
-          timer = setTimeout(() => resolve('timeout'), 3000);
-        }),
-      ]);
-      expect(result).toBeNull();
-    } finally {
-      clearTimeout(timer);
-      const fifo = await open(path, 'r+');
-      await pending;
-      await fifo.close();
-    }
+    expect(await cache.load()).toBeNull();
+    expect(onUnavailable).not.toHaveBeenCalled();
   });
+
+  it('reports a missing cache directory after the worker lock is acquired', async () => {
+    const { directory } = await fixture();
+    const onUnavailable = vi.fn();
+    const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
+      directory,
+      credentials,
+      now: () => now,
+      onUnavailable,
+    });
+    expect(await cache.load()).toBeNull();
+    expect(onUnavailable).toHaveBeenCalledOnce();
+  });
+  it('reports a lost worker lock instead of treating it as a normal missing file', async () => {
+    const { directory } = await fixture();
+    await mkdir(directory, { mode: 0o700 });
+    const onUnavailable = vi.fn();
+    const isLocked = vi.fn().mockReturnValueOnce(true).mockReturnValue(false);
+    const cache = createGiglTrackingTokenCache({
+      directory,
+      credentials,
+      now: () => now,
+      isLocked,
+      onUnavailable,
+    });
+    expect(await cache.load()).toBeNull();
+    expect(onUnavailable).toHaveBeenCalledOnce();
+  });
+  it('returns a cache miss promptly when token.json is a FIFO', async () => {
+    const { directory } = await fixture();
+    await mkdir(directory, { mode: 0o700 });
+    const path = join(directory, 'token.json');
+    expect(spawnSync('mkfifo', ['-m', '600', path]).status).toBe(0);
+    const script = `
+      import { createGiglTrackingTokenCache } from './src/lib/shipping/providers/gigl-tracking-token-cache.ts';
+      const cache = createGiglTrackingTokenCache({
+        isLocked: () => true, directory: process.argv[1],
+        credentials: { baseUrl: 'https://example.test', email: 'test@example.test', password: 'test' },
+        now: () => 1800000000000,
+      });
+      if (await cache.load() !== null) process.exitCode = 1;
+    `;
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        '--conditions',
+        'react-server',
+        '--input-type=module',
+        '-e',
+        script,
+        directory,
+      ],
+      { cwd: process.cwd(), encoding: 'utf8', timeout: 15000 }
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect((await lstat(path)).isFIFO()).toBe(true);
+  }, 20000);
   it('refuses a symlink cache file without changing its target', async () => {
     const { directory, root } = await fixture();
     const cache = createGiglTrackingTokenCache({
@@ -87,6 +134,24 @@ describe('GIGL tracking token cache filesystem safety', () => {
     expect(await cache.load()).toBeNull();
     await expect(cache.save(token)).rejects.toThrow();
     expect(await readFile(target, 'utf8')).toBe('untouched');
+  });
+
+  it('reports an unsafe cache file even if no token is saved', async () => {
+    const { directory } = await fixture();
+    const onUnavailable = vi.fn();
+    await mkdir(directory, { mode: 0o700 });
+    await writeFile(join(directory, 'token.json'), 'unsafe', { mode: 0o644 });
+    await chmod(join(directory, 'token.json'), 0o644);
+    const cache = createGiglTrackingTokenCache({
+      isLocked: () => true,
+      directory,
+      credentials,
+      now: () => now,
+      onUnavailable,
+    });
+    expect(await cache.load()).toBeNull();
+    expect(onUnavailable).toHaveBeenCalledOnce();
+    expect(onUnavailable).toHaveBeenCalledWith();
   });
 
   it('refuses a token file with an additional hard link', async () => {

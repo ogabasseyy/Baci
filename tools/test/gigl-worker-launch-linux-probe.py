@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 import unittest
 
-SOURCE = Path('/src')
+SOURCE = Path(__file__).resolve().parents[2]
 
 
 class WorkerLaunchProbe(unittest.TestCase):
@@ -46,7 +46,7 @@ if (process.env.SUPABASE_SERVICE_ROLE_KEY) process.exit(9);
 const dir = join(process.env.HOME!, 'baci-workers', 'gigl-tracking-token-cache');
 console.log(hasVerifiedGiglCacheLock(dir, 9) ? 'locked' : 'uncached');
 if (process.env.GIGL_TEST_HOLD === '1') setTimeout(() => {}, 60000);
-""")
+""".replace('/src/apps/web/src/lib/shipping/providers/gigl-cache-lock-verification.ts', (SOURCE / 'apps/web/src/lib/shipping/providers/gigl-cache-lock-verification.ts').as_uri()))
         fake_bin = self.root / 'fake-bin'
         fake_bin.mkdir()
         if not real_modules:

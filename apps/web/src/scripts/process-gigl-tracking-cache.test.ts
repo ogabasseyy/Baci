@@ -54,6 +54,25 @@ it('emits the safe cache warning through the CLI logger', async () => {
   expect(logger.error).toHaveBeenCalledWith('[gigl-tracking] token cache unavailable');
 });
 
+it('reports a load failure even when the batch acquires no token', async () => {
+  const env: NodeJS.ProcessEnv = {
+    NODE_ENV: 'test', GIGL_BASE_URL: 'https://gigl.example.com', GIGL_EMAIL: 'worker@example.com',
+    GIGL_PASSWORD: 'provider-password', GIGL_TRACKING_WORKER_TOKEN: 'header.payload.signature',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon-key', NEXT_PUBLIC_SUPABASE_URL: 'https://projectref.supabase.co',
+    HOME: '/home/worker', BACI_WORKER_PROFILE: 'gigl-tracking',
+  };
+  const logger = { error: vi.fn(), info: vi.fn() };
+  mocks.createCache.mockImplementation(({ onUnavailable }) => ({
+    load: async () => { onUnavailable(); return null; },
+  }));
+  mocks.runWithCache.mockImplementation(async ({ cache }) => {
+    await cache.load();
+    return { ok: true, summary: { applied: 0, claimed: 0, failed: 0, paused: 0, success: true } };
+  });
+  await expect(runGiglTrackingCli({ env, logger })).resolves.toBe(0);
+  expect(logger.error).toHaveBeenCalledWith('[gigl-tracking] token cache unavailable');
+});
+
 it('uses the private token cache for the scoped VPS poller', async () => {
   const env: NodeJS.ProcessEnv = {
     NODE_ENV: 'test',
@@ -81,6 +100,7 @@ it('uses the private token cache for the scoped VPS poller', async () => {
   expect(mocks.createCache).toHaveBeenCalledWith({
     directory: '/home/worker/baci-workers/gigl-tracking-token-cache',
     isLocked: expect.any(Function),
+    onUnavailable: expect.any(Function),
     credentials: {
       baseUrl: 'https://actual-provider.example.com',
       email: 'actual-provider@example.com',

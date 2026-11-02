@@ -6,15 +6,24 @@ import {
 
 describe('walletPinPepperSchema', () => {
   it('trims and accepts 32 to 512 characters', () => {
-    expect(walletPinPepperSchema.parse(`  ${'p'.repeat(32)}  `)).toBe(
-      'p'.repeat(32)
+    const base = 'abcdefghijklmnop';
+    expect(walletPinPepperSchema.parse(`  ${base.repeat(2)}  `)).toBe(
+      base.repeat(2)
     );
-    expect(walletPinPepperSchema.parse('p'.repeat(512))).toBe('p'.repeat(512));
+    expect(walletPinPepperSchema.parse(base.repeat(32))).toBe(base.repeat(32));
   });
 
   it.each([
-    'p'.repeat(31),
-    'p'.repeat(513),
+    'p'.repeat(40),
+    'ab'.repeat(20),
+    '0123456789'.repeat(4).slice(0, 9).repeat(5),
+  ])('rejects a long but low-entropy pepper (case %#)', (value) => {
+    expect(walletPinPepperSchema.safeParse(value).success).toBe(false);
+  });
+
+  it.each([
+    'abcdefghijklmnop'.repeat(2).slice(0, 31),
+    'abcdefghijklmnop'.repeat(33),
     '',
     7,
   ])('rejects an unusable pepper (case %#)', (value) => {
@@ -28,14 +37,15 @@ describe('walletPinPepperEnvSchema', () => {
   });
 
   it('accepts a trimmed pepper', () => {
-    expect(walletPinPepperEnvSchema.parse(` ${'p'.repeat(40)} `)).toBe(
-      'p'.repeat(40)
+    expect(walletPinPepperEnvSchema.parse(` ${'abcdefghij'.repeat(4)} `)).toBe(
+      'abcdefghij'.repeat(4)
     );
   });
 
   it.each([
     'short-secret-value',
-    'p'.repeat(513),
+    'abcdefghijklmnop'.repeat(33),
+    'p'.repeat(40),
     7,
   ])('reads an unusable pepper as unset instead of failing (case %#)', (value) => {
     const result = walletPinPepperEnvSchema.safeParse(value);

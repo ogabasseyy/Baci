@@ -5,6 +5,7 @@ import z from 'zod';
 // or verified. Messages never echo the value.
 export const WALLET_PIN_PEPPER_MIN_LENGTH = 32;
 export const WALLET_PIN_PEPPER_MAX_LENGTH = 512;
+export const WALLET_PIN_PEPPER_MIN_DISTINCT_CHARACTERS = 10;
 
 export const walletPinPepperSchema = z
   .string()
@@ -14,7 +15,14 @@ export const walletPinPepperSchema = z
   })
   .max(WALLET_PIN_PEPPER_MAX_LENGTH, {
     message: 'WALLET_PIN_PEPPER must be at most 512 characters',
-  });
+  })
+  .refine(
+    (value) => new Set(value).size >= WALLET_PIN_PEPPER_MIN_DISTINCT_CHARACTERS,
+    {
+      message:
+        'WALLET_PIN_PEPPER must be generated randomly (too few distinct characters)',
+    }
+  );
 
 // env.ts entry. The PIN feature is optional and ships dark, so this never
 // fails boot: blank and unusable values both read as unset, and a bad value

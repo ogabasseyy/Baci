@@ -45,9 +45,9 @@ describe('WALLET_PIN_PEPPER environment declaration', () => {
   });
 
   it('exposes the trimmed pepper to server code', async () => {
-    vi.stubEnv('WALLET_PIN_PEPPER', `  ${'p'.repeat(40)}  `);
+    vi.stubEnv('WALLET_PIN_PEPPER', `  ${'abcdefghij'.repeat(4)}  `);
     const { env } = await loadEnvModule();
-    expect(env.WALLET_PIN_PEPPER).toBe('p'.repeat(40));
+    expect(env.WALLET_PIN_PEPPER).toBe('abcdefghij'.repeat(4));
   });
 
   // The PIN feature is optional and dark: a mistyped pepper must switch only
@@ -73,7 +73,7 @@ describe('WALLET_PIN_PEPPER environment declaration', () => {
 
   it('is never part of the client environment', async () => {
     vi.stubGlobal('window', {});
-    vi.stubEnv('WALLET_PIN_PEPPER', 'p'.repeat(40));
+    vi.stubEnv('WALLET_PIN_PEPPER', 'abcdefghij'.repeat(4));
     const { env } = await loadEnvModule();
     expect(env.WALLET_PIN_PEPPER).toBeUndefined();
   });

@@ -30,3 +30,5 @@ Database tests cover lock times, sign-in rules, single use, expiry, every mismat
 ## How it stays switched off
 
 Nothing spends a proof yet. With the server's PIN key unset, no PIN can be set, and with no signing key in the database nothing can be set or checked either. Every shop's PIN switch starts off; only owner-approved runbook steps add the signing key and turn a shop on.
+
+The server's PIN key is also checked for variety: a long but repetitive value is treated as unset, so the key must be randomly generated.

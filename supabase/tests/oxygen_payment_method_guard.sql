@@ -26,7 +26,11 @@ UPDATE public.orders SET payment_method='oxygen' WHERE id='efab0000-0000-4000-80
 SET LOCAL ROLE authenticated;
 SELECT public.oxygen_start_workflow('efab0000-0000-4000-8000-000000000031','web');
 RESET ROLE;
+-- Simulate a legacy or externally corrupted order to exercise the runtime's
+-- independent checks; the new order guard prevents this transition normally.
+ALTER TABLE public.orders DISABLE TRIGGER oxygen_order_payment_method_fence;
 UPDATE public.orders SET payment_method='paystack' WHERE id='efab0000-0000-4000-8000-000000000031';
+ALTER TABLE public.orders ENABLE TRIGGER oxygen_order_payment_method_fence;
 SET LOCAL ROLE authenticated;
 DO $$ DECLARE wid uuid; snap jsonb; BEGIN
  SELECT id INTO wid FROM public.oxygen_workflows WHERE order_id='efab0000-0000-4000-8000-000000000031';

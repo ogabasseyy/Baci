@@ -44,6 +44,15 @@ function mapReuseOrderError(
     };
   }
 
+  if (message === 'oxygen_payment_in_progress') {
+    return {
+      status: 409,
+      code: 'oxygen_payment_in_progress',
+      error:
+        'Your Oxygen payment is in progress. Return to your existing application or contact support before paying again.',
+    };
+  }
+
   if (message === 'order_already_paid' || message === 'order_not_reusable') {
     return { status: 409, error: 'Order is no longer reusable' };
   }
@@ -63,6 +72,7 @@ function isExpectedReuseOrderError(
       'merchant_mismatch',
       'order_already_paid',
       'order_not_reusable',
+      'oxygen_payment_in_progress',
       'serialized_inventory_unavailable',
     ].includes(error.message || '')
   );

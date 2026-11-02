@@ -262,6 +262,12 @@ export async function resolvePendingCheckoutOrder({
   });
 
   if (!reuseResponse.ok) {
+    const failure = await Promise.resolve()
+      .then(() => reuseResponse.json())
+      .catch(() => null);
+    if (failure?.code === 'oxygen_payment_in_progress') {
+      throw new Error('Your Oxygen payment is in progress. Return to your existing application or contact support before paying again.');
+    }
     if (shouldClearStoredOrder(reuseResponse.status)) {
       return { reusableOrder: null, clearStoredOrder: true };
     }

@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS "public"."transactions" (
     "merchant_amount" numeric(15,2),
     "created_at" timestamp with time zone DEFAULT "now"(),
     "updated_at" timestamp with time zone DEFAULT "now"(),
-    CONSTRAINT "transactions_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'processing'::"text", 'completed'::"text", 'failed'::"text", 'cancelled'::"text"]))),
+    CONSTRAINT "transactions_status_check" CHECK (("status" = ANY (ARRAY['pending'::"text", 'processing'::"text", 'completed'::"text", 'failed'::"text", 'cancelled'::"text", 'refunded'::"text", 'refund_pending'::"text"]))),
     CONSTRAINT "transactions_transaction_type_check" CHECK (("transaction_type" = ANY (ARRAY['payment'::"text", 'payout'::"text", 'refund'::"text", 'fee'::"text", 'conversion'::"text"])))
 );
 CREATE TABLE IF NOT EXISTS "public"."customer_wallets" (

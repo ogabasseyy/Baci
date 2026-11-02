@@ -135,7 +135,22 @@ def missing_wallet_checks(rb):
              f'O2 shows a missing wallet as a mismatch: {out or err}')
 
 
+def refund_status_checks(rb):
+    """O1 counts a payment that is being or has been refunded as a completed payment, so the
+    stop rule trips for it; the fixture must be able to hold those statuses to prove it."""
+    for status in ('refund_pending', 'refunded'):
+        rb.fresh()
+        rb.cluster.must(rb.db, f"""INSERT INTO public.transactions (merchant_id, order_id,
+          transaction_type, amount, currency, status, gateway, gateway_reference) VALUES
+          ('{MERCHANT}', '{ORDER}', 'payment', 5000.00, 'NGN', '{status}', 'paystack',
+           'PSK-TEST-{status}')""")
+        rc, out, err = rb.sql(rb.blocks['O1'])
+        rb.check(rc == 0 and out.split('|')[7:9] == ['0', '1'],
+                 f'O1 counts a {status} payment as a completed payment: {out or err}')
+
+
 def run(rb):
+    refund_status_checks(rb)
     order_status_checks(rb)
     debit_display_checks(rb)
     return_checks(rb)

@@ -200,6 +200,12 @@ that the customer was told. Contact the customer to confirm that the airtime arr
 record in the ops log who did this and when. If the customer says it did not arrive, stop and
 escalate to the owner with the vendor's evidence. Do not move any money.
 
+**After "failed", tell the customer (required step).** V3 sends no failure or refund message,
+and once it has written the refund markers the checker never revisits the purchase, so nothing
+else tells the customer. Contact them to say the airtime was not delivered and the ₦103 is
+back in their wallet, and record in the ops log who did this and when. The wallet history also
+shows the refund, but do not rely on that alone.
+
 ## After both parts
 
 - When the Phase 8 legacy provenance report is available, run it for these two customers.
@@ -221,6 +227,7 @@ escalate to the owner with the vendor's evidence. Do not move any money.
 | The checker acts at the same moment | V3 takes the same locks as the checker's refund; whichever runs second sees a closed purchase |
 | A wallet debit that is not completed is treated as money taken | V3 refuses any purchase with a pending, failed, expired or status-less debit row |
 | A delivered purchase earns nothing, so no success notification is sent | B4 makes contacting the customer a required step, recorded in the ops log |
+| A refunded customer is never told, because V3 sends no message and the checker skips the purchase | B4 makes contacting the customer a required step after "failed" too |
 | A typo in an id, amount or answer | V3 stops before changing anything, and a dry run always comes first |
 | Someone runs the whole SQL file | Every block with a `PASTE` value fails, the write block included, so nothing changes |
 

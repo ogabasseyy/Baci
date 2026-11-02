@@ -32,10 +32,10 @@ Returning the ₦103 before the vendor answers could repay airtime the customer 
 - **Money that never left the wallet is returned.** The read-only checks count only completed
   wallet entries, and the airtime step refuses a purchase whose wallet entry is pending,
   failed, expired or has no status.
-- **A customer is never told their airtime arrived.** The runbook marks the purchase
-  successful directly, so the app does not send its success message, and the automatic checker
-  revisits the purchase only while commission, cashback or points are still owed. After a
-  "delivered" answer the runbook makes contacting the customer a required, logged step.
+- **A customer is never told the outcome.** The runbook closes the purchase directly, so the
+  app sends no message, and the automatic checker does not revisit it once it is refunded, or
+  once it is successful with no commission, cashback or points owed. After either answer the
+  runbook makes contacting the customer a required, logged step.
 - **A typo or a missed value.** The airtime step checks the purchase, amount, vendor answer
   and wallet history first, and always starts with a practice run that changes nothing.
 - **Bad timing with the automatic checker.** The airtime step takes the app's refund locks
@@ -45,7 +45,7 @@ Returning the ₦103 before the vendor answers could repay airtime the customer 
 ## How it is tested
 
 Every step ran on a throwaway test database with the app's real cancel and refund functions
-and made-up customers. 119 saved checks, all passing, cover finding only the right order and
+and made-up customers. 121 saved checks, all passing, cover finding only the right order and
 purchase, the practice run changing nothing, each amount returned exactly once, "delivered"
 moving no money, and refusing every wrong case: wrong amount or type, card payment, other
 merchant, re-routed purchase, already refunded, missing evidence, a damaged record, a wallet

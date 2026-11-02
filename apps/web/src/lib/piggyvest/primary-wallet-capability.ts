@@ -127,9 +127,9 @@ export function resolvePrimaryClientCapability(input: {
  * it admits that customer's existing onboarding, never a fresh claim.
  *
  * Reads run in that order and stop at the first refusal. Only an exact
- * `verified` or `in_flight` answer skips the cohort (anything else counts
- * as none), only a literal `true` counts as membership, and a failed read
- * is `unavailable`, never a refusal.
+ * `verified` or `in_flight` answer skips the cohort, `none` goes on to it,
+ * and any other answer is `unavailable`. Only a literal `true` counts as
+ * membership, and a failed read is `unavailable`, never a refusal.
  */
 export async function resolvePrimaryOnboardingCapability(input: {
   headers: HeaderReader;
@@ -143,10 +143,12 @@ export async function resolvePrimaryOnboardingCapability(input: {
   if (!client.enabled) return client;
   let member: unknown;
   try {
-    const existing = piggyvestPrimaryExistingOnboardingSchema.safeParse(
+    // An unrecognised answer throws into the catch below (unavailable): it
+    // must never fall through to a fresh claim for a customer in the cohort.
+    const existing = piggyvestPrimaryExistingOnboardingSchema.parse(
       await input.readExistingOnboarding()
     );
-    if (existing.success && existing.data !== 'none') return { enabled: true };
+    if (existing !== 'none') return { enabled: true };
     member = await input.readCohortMembership();
   } catch {
     return UNAVAILABLE;

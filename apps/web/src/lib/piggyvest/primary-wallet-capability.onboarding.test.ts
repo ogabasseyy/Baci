@@ -193,23 +193,25 @@ describe('resolvePrimaryOnboardingCapability', () => {
   const answer = <T>(value: unknown) =>
     (async () => value) as unknown as () => Promise<T>;
 
-  it.each([
-    ...[true, 'yes', 'VERIFIED', 'in-flight', 'ready', null].map(
-      (value) =>
-        [
-          `the unrecognised existing-onboarding answer ${JSON.stringify(value)}`,
-          {
-            existing: answer<PiggyvestPrimaryExistingOnboarding>(value),
-            member: async () => false,
-          },
-        ] satisfies [string, OnboardingOverrides]
-    ),
-    ['a truthy non-boolean cohort answer', { member: answer<boolean>(1) }],
-  ] satisfies [
-    string,
-    OnboardingOverrides,
-  ][])('does not open on %s', async (_label, overrides) => {
-    const { verdict } = onboarding(overrides);
+  it.each(
+    [true, 'yes', 'VERIFIED', 'in-flight', 'ready', null].map(
+      (value) => [JSON.stringify(value), value] as const
+    )
+  )('reports unavailable, never a cohort claim, for the unrecognised existing-onboarding answer %s', async (_label, value) => {
+    const { verdict, readCohortMembership } = onboarding({
+      existing: answer<PiggyvestPrimaryExistingOnboarding>(value),
+      member: async () => true,
+    });
+    await expect(verdict).resolves.toEqual({
+      enabled: false,
+      status: 'unavailable',
+      code: 'PIGGYVEST_UNAVAILABLE',
+    });
+    expect(readCohortMembership).not.toHaveBeenCalled();
+  });
+
+  it('does not open on a truthy non-boolean cohort answer', async () => {
+    const { verdict } = onboarding({ member: answer<boolean>(1) });
     await expect(verdict).resolves.toEqual(refused('rollout_cohort'));
   });
 });

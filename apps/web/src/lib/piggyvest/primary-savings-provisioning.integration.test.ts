@@ -90,6 +90,19 @@ it.runIf(process.env.BACI_PRIMARY_WALLET_SQL_TESTS === 'true')(
         ],
         options
       );
+      // Current goal wallet names (prepare_goal_wallet, <=50 characters).
+      execFileSync(
+        'psql',
+        [
+          ...connection,
+          '-f',
+          path.join(
+            migrations,
+            '20261031221500_piggyvest_primary_goal_wallet_short_name.sql'
+          ),
+        ],
+        options
+      );
       expect(
         execFileSync('psql', [...connection, '-c', assertions], options)
       ).toContain('DO');
@@ -148,7 +161,8 @@ it.runIf(process.env.BACI_PRIMARY_WALLET_SQL_TESTS === 'true')(
         };
       };
       const selectedGoal = '00000000-0000-4000-8000-000000000009';
-      const walletName = `baci-save:00000000-0000-4000-8000-000000000004:${selectedGoal}`;
+      // buildPrimaryGoalWalletName(integration ...0004, goal ...0009)
+      const walletName = 'baci-save-d1e0c725f2d0e417131599010bfe73a8';
       const input = {
         scope: JSON.parse(scope),
         goalId: selectedGoal,

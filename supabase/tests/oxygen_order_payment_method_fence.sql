@@ -19,4 +19,12 @@ DO $$ BEGIN
   END;
   UPDATE public.orders SET payment_method='oxygen' WHERE id='ab120000-0000-4000-8000-000000000004';
 END $$;
+-- Cleanup must not cancel an old unpaid commerce order with a live workflow.
+UPDATE public.orders SET created_at=now()-interval '10 days' WHERE id='ab120000-0000-4000-8000-000000000004';
+SELECT public.mark_abandoned_orders(72);
+DO $$ BEGIN
+ IF (SELECT payment_status FROM public.orders WHERE id='ab120000-0000-4000-8000-000000000004') <> 'unpaid' THEN
+  RAISE EXCEPTION 'Cleanup cancelled an Oxygen workflow order';
+ END IF;
+END $$;
 ROLLBACK;

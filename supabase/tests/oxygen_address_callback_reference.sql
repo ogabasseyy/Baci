@@ -47,11 +47,11 @@ DO $$ DECLARE jobs jsonb; BEGIN
 END $$;
 RESET ROLE;
 DO $$ BEGIN
- IF NOT EXISTS (SELECT 1 FROM oxygen_private.callback_inbox WHERE partner_reference='response-evidence-fixture' AND NOT event ? 'applicationReference' AND status='observed' AND resolution_error='ambiguous_address') THEN
+ IF NOT EXISTS (SELECT 1 FROM oxygen_private.callback_inbox WHERE partner_reference='response-evidence-fixture' AND NOT event ? 'applicationReference' AND status='observed' AND resolution_error='missing_application_reference') THEN
   RAISE EXCEPTION 'Ambiguous legacy callback was not quarantined';
  END IF;
 END $$;
--- Cross-merchant/worker refusal, then unique legacy phone compatibility.
+-- Cross-merchant/worker refusal, then quarantine even a unique legacy phone.
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efae0000-0000-4000-8000-000000000001',true);
 DO $$ BEGIN
@@ -65,7 +65,12 @@ SELECT set_config('request.jwt.claim.sub','efae0000-0000-4000-8000-000000000003'
 SELECT public.oxygen_callback('accept','response-evidence-fixture','{"kind":"address","phoneNumber":"08020000000"}');
 DO $$ DECLARE jobs jsonb; BEGIN
  jobs:=public.oxygen_callback('pending','response-evidence-fixture','{"kind":"address"}');
- IF jsonb_array_length(jobs)<>2 THEN RAISE EXCEPTION 'Unique legacy address callback was lost'; END IF;
+ IF jsonb_array_length(jobs)<>1 THEN RAISE EXCEPTION 'Unique phone-only callback must not be attributed'; END IF;
 END $$;
 RESET ROLE;
+DO $$ BEGIN
+ IF NOT EXISTS (SELECT 1 FROM oxygen_private.callback_inbox WHERE partner_reference='response-evidence-fixture' AND event->>'phoneNumber'='08020000000' AND status='observed' AND resolution_error='missing_application_reference') THEN
+  RAISE EXCEPTION 'Unique phone-only callback was not quarantined';
+ END IF;
+END $$;
 ROLLBACK;

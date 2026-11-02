@@ -1,198 +1,65 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import type React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const mocks = vi.hoisted(() => ({
-  merchantContext: {
-    basePath: '/ogabassey',
-    merchant: { business_name: 'Ogabassey' },
-    navigationCategories: [{ name: 'Smartphones', slug: 'smartphones' }],
-  } as {
-    basePath?: string;
-    merchant?: { business_name?: string };
-    navigationCategories?: { name: string; slug: string }[];
-  } | null,
-  pathname: '/ogabassey/wallet',
-}));
+import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({
-  usePathname: () => mocks.pathname,
+  usePathname: () => '/ogabassey',
 }));
 
 vi.mock('next/link', () => ({
   default: ({
     children,
     href,
-    prefetch: _prefetch,
-    ...rest
   }: {
     children: React.ReactNode;
     href: string;
-    prefetch?: boolean;
-  }) => (
-    <a href={href} {...rest}>
-      {children}
-    </a>
-  ),
+  }) => <a href={href}>{children}</a>,
 }));
 
 vi.mock('@/hooks/merchant/use-merchant', () => ({
-  useMerchantSafe: () => mocks.merchantContext,
+  useMerchantSafe: () => ({
+    basePath: '/ogabassey',
+    merchant: { business_name: 'Ogabassey' },
+    navigationCategories: [{ name: 'Smartphones', slug: 'smartphones' }],
+  }),
 }));
 
 vi.mock('../layout/logo', () => ({
   Logo: () => <span>Baci</span>,
 }));
 
-import { MobileMenu } from './MobileMenu';
+import {
+  MobileMenu,
+  OgabasseyMobileMenu,
+} from './MobileMenu';
+import {
+  MobileMenu as CanonicalMobileMenu,
+  OgabasseyMobileMenu as CanonicalOgabasseyMobileMenu,
+} from '../layout/mobile-menu';
 
-describe('MobileMenu', () => {
-  beforeEach(() => {
-    mocks.pathname = '/ogabassey/wallet';
+describe('MobileMenu compatibility re-export', () => {
+  it('re-exports the canonical layout components by identity', () => {
+    expect(MobileMenu).toBe(CanonicalMobileMenu);
+    expect(OgabasseyMobileMenu).toBe(CanonicalOgabasseyMobileMenu);
   });
 
-  it('dismisses the open menu when Escape is pressed', () => {
-    const onClose = vi.fn();
-
-    render(<MobileMenu isOpen={true} onClose={onClose} />);
-
-    fireEvent.keyDown(document, { key: 'Escape' });
-
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not attach Escape dismissal while closed', () => {
-    const onClose = vi.fn();
-
-    render(<MobileMenu isOpen={false} onClose={onClose} />);
-
-    fireEvent.keyDown(document, { key: 'Escape' });
-
-    expect(onClose).not.toHaveBeenCalled();
-  });
-
-  it('exposes consolidated shop, account, wallet, and support links with basePath-aware active state', () => {
-    const onClose = vi.fn();
-
-    render(<MobileMenu isOpen={true} onClose={onClose} />);
+  it('renders through the compatibility MobileMenu export', () => {
+    render(<MobileMenu isOpen={true} onClose={vi.fn()} />);
 
     expect(
       screen.getByRole('dialog', { name: /mobile menu/i })
     ).toHaveAttribute('aria-modal', 'true');
-
-    expect(
-      screen.getByRole('heading', { level: 2, name: 'Shop & Services' })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { level: 2, name: 'Categories' })
-    ).toBeInTheDocument();
-
     expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
       'href',
       '/ogabassey'
     );
-    expect(screen.getByRole('link', { name: 'All Products' })).toHaveAttribute(
-      'href',
-      '/ogabassey/products'
-    );
-    expect(screen.getByRole('link', { name: 'Smartphones' })).toHaveAttribute(
-      'href',
-      '/ogabassey/smartphones'
-    );
-    expect(screen.getByRole('link', { name: 'Wallet' })).toHaveAttribute(
-      'href',
-      '/ogabassey/wallet'
-    );
-    expect(screen.getByRole('link', { name: 'Wallet' })).toHaveAttribute(
-      'aria-current',
-      'page'
-    );
-    expect(screen.getByRole('link', { name: 'Saved Items' })).toHaveAttribute(
-      'href',
-      '/ogabassey/wishlist'
-    );
-    expect(screen.getByRole('link', { name: 'IMEI Checker' })).toHaveAttribute(
-      'href',
-      '/ogabassey/imei-check'
-    );
-    expect(screen.getByRole('link', { name: 'Repairs' })).toHaveAttribute(
-      'href',
-      '/ogabassey/repairs'
-    );
+  });
+
+  it('renders through the compatibility OgabasseyMobileMenu export', () => {
+    render(<OgabasseyMobileMenu isOpen={true} onClose={vi.fn()} />);
+
     expect(
-      screen.getByRole('link', { name: 'Help & Support' })
-    ).toHaveAttribute('href', '/ogabassey/faq');
-  });
-
-  it('marks only the most specific matching route as active on nested account paths', () => {
-    mocks.pathname = '/ogabassey/account/orders';
-
-    render(<MobileMenu isOpen={true} onClose={vi.fn()} />);
-
-    expect(screen.getByRole('link', { name: 'Orders' })).toHaveAttribute(
-      'aria-current',
-      'page'
-    );
-    expect(
-      screen.getByRole('link', { name: 'My Account' })
-    ).not.toHaveAttribute('aria-current');
-  });
-
-  it('manages initial focus, focus trap, and body scroll lock', () => {
-    const trigger = document.createElement('button');
-    document.body.appendChild(trigger);
-    trigger.focus();
-    expect(document.activeElement).toBe(trigger);
-
-    const { rerender, unmount } = render(
-      <MobileMenu isOpen={true} onClose={vi.fn()} />
-    );
-
-    const dialog = screen.getByRole('dialog', { name: /mobile menu/i });
-    expect(dialog).toHaveAttribute('id', 'mobile-menu');
-
-    const closeButton = screen.getByRole('button', { name: /close menu/i });
-    expect(document.activeElement).toBe(closeButton);
-    expect(document.body.style.overflow).toBe('hidden');
-
-    const focusable = dialog.querySelectorAll<HTMLElement>(
-      'button:not([disabled]):not([tabindex="-1"]), [href]:not([disabled]):not([tabindex="-1"])'
-    );
-    const lastFocusable = focusable[focusable.length - 1];
-
-    // Shift+Tab on first element wraps to last element
-    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
-    expect(document.activeElement).toBe(lastFocusable);
-
-    // Tab on last element wraps back to first element
-    fireEvent.keyDown(document, { key: 'Tab', shiftKey: false });
-    expect(document.activeElement).toBe(closeButton);
-
-    // Closing via rerender (isOpen: true -> false) restores focus to trigger
-    rerender(<MobileMenu isOpen={false} onClose={vi.fn()} />);
-    expect(document.body.style.overflow).toBe('');
-    expect(document.activeElement).toBe(trigger);
-
-    unmount();
-    document.body.removeChild(trigger);
-  });
-
-  it('reports appropriate closure reason on dismissal versus navigation', () => {
-    const onClose = vi.fn();
-    const { rerender } = render(<MobileMenu isOpen={true} onClose={onClose} />);
-
-    // Close button passes 'dismiss'
-    fireEvent.click(screen.getByRole('button', { name: /close menu/i }));
-    expect(onClose).toHaveBeenCalledWith('dismiss');
-
-    onClose.mockClear();
-    // Backdrop passes 'dismiss'
-    fireEvent.click(screen.getByRole('presentation'));
-    expect(onClose).toHaveBeenCalledWith('dismiss');
-
-    onClose.mockClear();
-    // Navigating via link passes 'navigate'
-    fireEvent.click(screen.getByRole('link', { name: 'Home' }));
-    expect(onClose).toHaveBeenCalledWith('navigate');
+      screen.getByRole('dialog', { name: /mobile menu/i })
+    ).toHaveAttribute('aria-modal', 'true');
   });
 });

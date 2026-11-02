@@ -128,7 +128,19 @@
     background: var(--ogabassey-chrome-background);
     color: var(--ogabassey-chrome-text);
     content-visibility: auto;
-    contain-intrinsic-size: auto 520px;
+    contain-intrinsic-size: auto 1100px;
+  }
+
+  @media (min-width: 768px) {
+    .ogabassey-footer {
+      contain-intrinsic-size: auto 910px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .ogabassey-footer {
+      contain-intrinsic-size: auto 770px;
+    }
   }
 
   .ogabassey-category-hub-card {
@@ -677,6 +689,7 @@
     flex: 0 0 auto;
     gap: 1rem;
     order: 2;
+    position: relative;
   }
 
   .ogabassey-navbar__icon-link {

@@ -23,7 +23,7 @@ import {
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type React from 'react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useMerchantSafe } from '@/hooks/merchant/use-merchant';
 import { asRoute } from '@/lib/routes';
 import { Logo } from './logo';
@@ -90,16 +90,88 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 }) => {
   const pathname = usePathname();
   const merchantContext = useMerchantSafe();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const triggerElementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      triggerElementRef.current = document.activeElement as HTMLElement | null;
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    return () => {
+      triggerElementRef.current?.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      closeButtonRef.current?.focus();
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
-      return;
+      return undefined;
+    }
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return undefined;
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         onClose();
+        return;
+      }
+
+      if (event.key === 'Tab') {
+        const dialog = dialogRef.current;
+        if (!dialog) {
+          return;
+        }
+
+        const focusableElements = dialog.querySelectorAll<HTMLElement>(
+          'button:not([disabled]):not([tabindex="-1"]), [href]:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([tabindex="-1"]), select:not([disabled]):not([tabindex="-1"]), textarea:not([disabled]):not([tabindex="-1"]), [tabindex]:not([tabindex="-1"])'
+        );
+
+        if (focusableElements.length === 0) {
+          event.preventDefault();
+          return;
+        }
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        if (event.shiftKey) {
+          if (
+            document.activeElement === firstElement ||
+            !dialog.contains(document.activeElement)
+          ) {
+            event.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          if (
+            document.activeElement === lastElement ||
+            !dialog.contains(document.activeElement)
+          ) {
+            event.preventDefault();
+            firstElement.focus();
+          }
+        }
       }
     };
 
@@ -169,7 +241,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 
   const renderSection = (title: string, items: MobileMenuItem[]) => (
     <div className="px-4 mb-5 last:mb-0">
-      <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 px-1">
+      <h3 className="text-xs font-bold text-store-background-text/60 uppercase tracking-widest mb-2 px-1">
         {title}
       </h3>
       <ul className="space-y-1">
@@ -185,7 +257,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                 className={`w-full flex items-center justify-between p-2.5 rounded-xl transition-colors text-sm group ${
                   isActive
                     ? 'bg-store-primary/10 text-store-primary font-bold'
-                    : 'hover:bg-gray-50 text-gray-700 font-medium'
+                    : 'hover:bg-store-background-text/5 text-store-background-text/80 font-medium'
                 }`}
               >
                 <span className="flex items-center gap-3">
@@ -195,7 +267,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                     className={
                       isActive
                         ? 'text-store-primary'
-                        : 'text-gray-400 group-hover:text-store-primary'
+                        : 'text-store-background-text/50 group-hover:text-store-primary'
                     }
                   />
                   {item.label}
@@ -210,11 +282,13 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 
   return (
     <div
+      id="mobile-menu"
       role="dialog"
       aria-modal="true"
       aria-label="Mobile menu"
       data-open="true"
       className="fixed inset-0 z-100"
+      ref={dialogRef}
     >
       {/* Backdrop */}
       <button
@@ -226,13 +300,14 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
       />
 
       {/* Sidebar */}
-      <div className="absolute inset-y-0 left-0 w-[85%] max-w-[320px] bg-white shadow-2xl animate-in slide-in-from-left duration-300 flex flex-col">
-        <div className="px-4 py-4 border-b border-gray-100 flex items-center justify-between">
+      <div className="absolute inset-y-0 left-0 w-[85%] max-w-[320px] bg-store-background text-store-background-text shadow-2xl animate-in slide-in-from-left duration-300 flex flex-col border-r border-store-border">
+        <div className="px-4 py-4 border-b border-store-border flex items-center justify-between">
           <Logo className="h-8 w-auto" color="black" />
           <button
             type="button"
+            ref={closeButtonRef}
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full text-gray-500"
+            className="p-2 hover:bg-store-background-text/10 rounded-full text-store-background-text/70 hover:text-store-background-text transition-colors"
             aria-label="Close menu"
           >
             <X size={20} aria-hidden="true" />
@@ -247,7 +322,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
 
           {categories.length > 0 && (
             <div className="px-4 mb-5">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 px-1">
+              <h3 className="text-xs font-bold text-store-background-text/60 uppercase tracking-widest mb-2 px-1">
                 Categories
               </h3>
               <ul className="flex flex-wrap gap-1.5 px-1">
@@ -257,7 +332,7 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
                       href={asRoute(buildHref(`/${category.slug}`))}
                       prefetch={false}
                       onClick={onClose}
-                      className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 hover:bg-store-primary/10 hover:text-store-primary transition-colors"
+                      className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium bg-store-background-text/10 text-store-background-text/80 hover:bg-store-primary/10 hover:text-store-primary transition-colors"
                     >
                       {category.name}
                     </Link>
@@ -272,16 +347,16 @@ export const MobileMenu: React.FC<MobileMenuProps> = ({
         </nav>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-100 bg-gray-50">
+        <div className="p-4 border-t border-store-border bg-store-background-text/5">
           <Link
             href={asRoute(buildHref('/account/login'))}
             prefetch={false}
             onClick={onClose}
-            className="block w-full text-center bg-gray-900 text-white font-bold py-3.5 rounded-xl shadow-lg active:scale-95 transition-transform"
+            className="block w-full text-center bg-store-primary text-store-primary-text font-bold py-3.5 rounded-xl shadow-lg active:scale-95 transition-transform"
           >
             Login / Register
           </Link>
-          <p className="text-center text-xs text-gray-500 mt-3">
+          <p className="text-center text-xs text-store-background-text/60 mt-3">
             &copy; {businessName}
           </p>
         </div>

@@ -130,4 +130,39 @@ describe('MobileMenu', () => {
       screen.getByRole('link', { name: 'My Account' })
     ).not.toHaveAttribute('aria-current');
   });
+
+  it('manages initial focus, focus trap, and body scroll lock', () => {
+    const trigger = document.createElement('button');
+    document.body.appendChild(trigger);
+    trigger.focus();
+    expect(document.activeElement).toBe(trigger);
+
+    const { unmount } = render(<MobileMenu isOpen={true} onClose={vi.fn()} />);
+
+    const dialog = screen.getByRole('dialog', { name: /mobile menu/i });
+    expect(dialog).toHaveAttribute('id', 'mobile-menu');
+
+    const closeButton = screen.getByRole('button', { name: /close menu/i });
+    expect(document.activeElement).toBe(closeButton);
+    expect(document.body.style.overflow).toBe('hidden');
+
+    const focusable = dialog.querySelectorAll<HTMLElement>(
+      'button:not([disabled]):not([tabindex="-1"]), [href]:not([disabled]):not([tabindex="-1"])'
+    );
+    const lastFocusable = focusable[focusable.length - 1];
+
+    // Shift+Tab on first element wraps to last element
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(lastFocusable);
+
+    // Tab on last element wraps back to first element
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: false });
+    expect(document.activeElement).toBe(closeButton);
+
+    unmount();
+    expect(document.body.style.overflow).toBe('');
+    expect(document.activeElement).toBe(trigger);
+
+    document.body.removeChild(trigger);
+  });
 });

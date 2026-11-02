@@ -10,9 +10,10 @@ const NavbarNotificationsPanel = lazy(async () => {
 
 function NotificationsPanelLoading() {
   return (
-    <div role="status"
+    <div
+      role="status"
       aria-label="Loading notifications"
-      className="absolute top-full right-0 mt-4 block w-80 rounded-xl border border-store-border bg-store-background p-4 shadow-xl"
+      className="absolute top-full right-0 mt-4 block w-[min(20rem,calc(100vw-2rem))] rounded-xl border border-store-border bg-store-background p-4 shadow-xl md:w-80"
     >
       <div className="h-4 w-28 animate-pulse rounded-full bg-store-background-text/15" />
     </div>
@@ -47,7 +48,7 @@ export function NavbarNotifications({
   }, [showNotifications]);
 
   return (
-    <div className="relative flex items-center" ref={notificationRef}>
+    <div className="flex items-center md:relative" ref={notificationRef}>
       <button
         onClick={() => setShowNotifications((current) => !current)}
         aria-label="Toggle notifications"

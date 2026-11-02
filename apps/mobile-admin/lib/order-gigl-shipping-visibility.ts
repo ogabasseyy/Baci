@@ -3,7 +3,6 @@ import { canUseSelectedShippingProvider } from './order-shipment';
 interface OrderGiglShippingVisibilityInput {
   /** Owner, or staff with orders.fulfill and orders.edit. */
   canBookGigl?: boolean;
-  hasRecoverableWalletCharge?: boolean;
   order?: {
     selected_quote_id?: string | null;
     shipment_id?: string | null;
@@ -15,24 +14,23 @@ interface OrderGiglShippingVisibilityInput {
 
 export function getOrderGiglShippingVisibility({
   canBookGigl = false,
-  hasRecoverableWalletCharge = false,
   order,
 }: OrderGiglShippingVisibilityInput) {
+  const isGiglOrder = order?.shipping_provider?.trim().toUpperCase() === 'GIGL';
   const isSavedMerchantWalletGiglOrder = Boolean(
-    order?.shipping_provider?.trim().toUpperCase() === 'GIGL' &&
-      order.shipping_funding_source === 'merchant_wallet' &&
+    isGiglOrder &&
+      order?.shipping_funding_source === 'merchant_wallet' &&
       order.selected_quote_id
   );
-  // Keep merchant-wallet GIGL bookings on the bound quote so recovery can
-  // reach the existing reservation instead of forcing a replacement quote.
-  // Only the owner and staff with orders.fulfill and orders.edit can create
-  // the first wallet debit, so anyone else is only offered booking when a
-  // recoverable charge already exists.
   const canUseProvider = order ? canUseSelectedShippingProvider(order) : false;
+  // Booking binds the saved quote (and debits the wallet for wallet orders), so
+  // the server rejects it for anyone without GIG booking rights: owner, or
+  // staff with orders.fulfill and orders.edit. Do not offer it to them.
+  const needsBookingRights =
+    isSavedMerchantWalletGiglOrder ||
+    (isGiglOrder && order?.shipping_funding_source === 'customer_checkout');
   const providerBookingAvailable =
-    isSavedMerchantWalletGiglOrder && !canBookGigl
-      ? canUseProvider && hasRecoverableWalletCharge
-      : canUseProvider;
+    needsBookingRights && !canBookGigl ? false : canUseProvider;
 
   return {
     isSavedMerchantWalletGiglOrder,

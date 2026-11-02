@@ -35,16 +35,6 @@ describe('getOrderGiglShippingVisibility', () => {
     ).toBe(false);
   });
 
-  it('allows booking without GIG rights only when a recoverable wallet charge already exists', () => {
-    const visibility = getOrderGiglShippingVisibility({
-      canBookGigl: false,
-      hasRecoverableWalletCharge: true,
-      order: savedWalletOrder,
-    });
-
-    expect(visibility.providerBookingAvailable).toBe(true);
-  });
-
   it('only enables direct provider booking for an unbooked selected quote', () => {
     expect(
       getOrderGiglShippingVisibility({

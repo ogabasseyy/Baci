@@ -163,14 +163,14 @@ describe('ComparePageContent', () => {
       })) as ReactElement
     );
 
-    expect(
-      screen.getByRole('heading', {
-        name: /iPhone 17 Pro Max vs Samsung Galaxy Z TriFold/i,
-      })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Both phones target flagship buyers/i)
-    ).toBeInTheDocument();
+    const heading = screen.getByRole('heading', {
+      name: /iPhone 17 Pro Max vs Samsung Galaxy Z TriFold/i,
+    });
+    const verdict = screen.getByText(/Both phones target flagship buyers/i);
+    expect(heading).toBeInTheDocument();
+    expect(heading).toHaveAttribute('data-cwv-lcp-copy', 'compare');
+    expect(verdict).toBeInTheDocument();
+    expect(verdict).toHaveAttribute('data-cwv-lcp-copy', 'authority-hub');
     expect(
       screen.getByRole('table', { name: /Product comparison table/i })
     ).toBeInTheDocument();

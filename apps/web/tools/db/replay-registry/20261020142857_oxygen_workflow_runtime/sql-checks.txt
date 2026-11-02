@@ -25,3 +25,4 @@ supabase/tests/oxygen_cancelled_plan_cache.sql
 supabase/tests/oxygen_kyc_read_reclamation.sql
 supabase/tests/oxygen_authorized_retry_plan_acceptance.sql
 supabase/tests/oxygen_queued_eligibility_recovery.sql
+supabase/tests/oxygen_queued_payment_status_read_recovery.sql

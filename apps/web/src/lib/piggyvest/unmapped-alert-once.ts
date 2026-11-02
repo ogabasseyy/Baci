@@ -1,3 +1,7 @@
+import type { PiggyvestWebhookEvent } from '@/schemas/piggyvest/events';
+import { InflowLedgerError } from './inflow-ledger';
+import { emitPiggyvestWebhookAlert } from './webhook-alerts';
+
 const MAX_REMEMBERED_EVENTS = 500;
 const alerted = new Set<string>();
 
@@ -19,4 +23,35 @@ export function alertOncePerEvent(key: string, emit: () => void): void {
 
 export function resetUnmappedAlertMemoryForTests(): void {
   alerted.clear();
+}
+
+/**
+ * Page an operator once per deposit (provider transaction, since a redelivery
+ * may carry a new event id) while the delivery stays retryable: the mapping
+ * may still be committing. Best effort; it never changes the retry outcome.
+ */
+export function alertUnmappedInflow(
+  error: unknown,
+  event: PiggyvestWebhookEvent
+): void {
+  if (
+    !(error instanceof InflowLedgerError) ||
+    error.code !== 'INFLOW_LEDGER_UNMAPPED'
+  ) {
+    return;
+  }
+  try {
+    const alertKey =
+      event.eventType === 'bank-transfer.inflow.success'
+        ? `txn:${event.eventData.transaction_id}`
+        : `event:${event.eventId}`;
+    alertOncePerEvent(alertKey, () =>
+      emitPiggyvestWebhookAlert('PIGGYVEST_INFLOW_UNMAPPED', {
+        eventType: event.eventType,
+        operationId: event.eventId,
+      })
+    );
+  } catch {
+    // Alerting must not affect the money path.
+  }
 }

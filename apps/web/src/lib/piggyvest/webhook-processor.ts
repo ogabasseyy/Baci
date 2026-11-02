@@ -20,8 +20,7 @@ import {
   applyOutflowTerminal,
   outflowReferenceCandidates,
 } from './transfer-outbox';
-import { alertOncePerEvent } from './unmapped-alert-once';
-import { emitPiggyvestWebhookAlert } from './webhook-alerts';
+import { alertUnmappedInflow } from './unmapped-alert-once';
 import { claimPiggyvestEvent, resolvePiggyvestEvent } from './webhook-inbox';
 
 /**
@@ -279,29 +278,7 @@ export async function processPiggyvestEvent(
       });
       return 'processed';
     }
-    if (
-      error instanceof InflowLedgerError &&
-      error.code === 'INFLOW_LEDGER_UNMAPPED'
-    ) {
-      // Page an operator once per deposit (provider transaction, since a
-      // redelivery may carry a new event id), but keep the delivery retryable: the
-      // mapping may still be committing. The alert is best effort and can
-      // never change the retry outcome.
-      try {
-        const alertKey =
-          event.eventType === 'bank-transfer.inflow.success'
-            ? `txn:${event.eventData.transaction_id}`
-            : `event:${event.eventId}`;
-        alertOncePerEvent(alertKey, () =>
-          emitPiggyvestWebhookAlert('PIGGYVEST_INFLOW_UNMAPPED', {
-            eventType: event.eventType,
-            operationId: event.eventId,
-          })
-        );
-      } catch {
-        // Alerting must not affect the money path.
-      }
-    }
+    alertUnmappedInflow(error, event);
     await resolvePiggyvestEvent(supabase, {
       eventId: event.eventId,
       claimToken: claimed.claimToken,

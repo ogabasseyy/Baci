@@ -5,10 +5,7 @@ import { logger } from '@/lib/logger';
 import { createPrimaryWalletCardCheckoutExecutor } from '@/lib/piggyvest/primary-wallet-card-checkout-executor';
 import { isCheckoutRouteOwner } from '@/lib/piggyvest/primary-wallet-card-checkout-ownership';
 import { createPrimaryWalletCardCheckoutProvider } from '@/lib/piggyvest/primary-wallet-card-checkout-provider';
-import {
-  readPrimaryWalletCardCheckoutRuntime,
-  readPrimaryWalletCardCheckoutRuntimeDrain,
-} from '@/lib/piggyvest/primary-wallet-card-checkout-runtime';
+import { readPrimaryWalletCardCheckoutRuntimeDrain } from '@/lib/piggyvest/primary-wallet-card-checkout-runtime';
 import { createPrimaryWalletCardCheckoutService } from '@/lib/piggyvest/primary-wallet-card-checkout-service';
 import { primaryWalletCardCheckoutSchemas as schemas } from '@/schemas/primary-wallet-card-checkout';
 
@@ -23,10 +20,31 @@ function error(code: string, status: number) {
   );
 }
 
+// Card top-up into the PiggyVest primary wallet is permanently retired.
+// The refusal is unconditional code (no flag or env can re-enable it) and
+// is backed by a database grant revocation on the initialization
+// functions. It answers before authentication, body parsing, runtime/env
+// reads, Paystack or the database, so nothing about the caller or the
+// deployment is consulted.
+function fundingRetired() {
+  return NextResponse.json(
+    {
+      error:
+        'Card top-up into this wallet is no longer available. Please use another way to fund your wallet.',
+      code: 'PRIMARY_CARD_FUNDING_RETIRED',
+    },
+    { status: 410, headers: { 'Cache-Control': 'no-store' } }
+  );
+}
+
 export async function handlePrimaryWalletCardCheckout(
   request: NextRequest,
   action: 'initialize' | 'status'
 ) {
+  if (action !== 'status') return fundingRetired();
+  // Status stays live: it drains operations created before retirement
+  // (provider verification, collection evidence, abandonment) through the
+  // recovery reader and never starts or re-initializes a checkout.
   const auth = await authenticateApiRequest(request);
   if (auth.error || !auth.user || !auth.supabase)
     return error('UNAUTHORIZED', 401);
@@ -38,17 +56,10 @@ export async function handlePrimaryWalletCardCheckout(
   } catch {
     return error('INVALID_INPUT', 400);
   }
-  const parsed = (
-    action === 'initialize' ? schemas.request : schemas.statusRequest
-  ).safeParse(body);
+  const parsed = schemas.statusRequest.safeParse(body);
   if (!parsed.success) return error('INVALID_INPUT', 400);
   try {
-    // New reservations stop at expiry; status polling drains through the
-    // recovery reader so pre-expiry operations still resolve.
-    const runtime =
-      action === 'initialize'
-        ? readPrimaryWalletCardCheckoutRuntime()
-        : readPrimaryWalletCardCheckoutRuntimeDrain();
+    const runtime = readPrimaryWalletCardCheckoutRuntimeDrain();
     if (!runtime || runtime.settings.merchantId !== parsed.data.merchantId)
       return error('PRIMARY_CARD_NOT_READY', 503);
     if (!auth.user.email_confirmed_at || !auth.user.email)
@@ -63,9 +74,8 @@ export async function handlePrimaryWalletCardCheckout(
     if (
       queryError ||
       !identity.success ||
-      // Single source of truth with the service layer: ownership binds
-      // the immutable IDs; only initialize additionally requires the
-      // stored email to match the confirmed one.
+      // Single source of truth with the service layer: status ownership
+      // binds the immutable IDs, never the mutable email.
       !isCheckoutRouteOwner({
         action,
         settingsMerchantId: runtime.settings.merchantId,
@@ -93,12 +103,7 @@ export async function handlePrimaryWalletCardCheckout(
         fetch
       ),
     });
-    const result =
-      action === 'initialize'
-        ? await service.initialize(parsed.data)
-        : await service.status(
-            schemas.statusRequest.parse(parsed.data).operationId
-          );
+    const result = await service.status(parsed.data.operationId);
     return NextResponse.json(result, {
       status:
         result.status === 'custody_pending' ||
@@ -117,10 +122,7 @@ export async function handlePrimaryWalletCardCheckout(
       message: 'Primary card checkout handler failed',
       action,
       merchantId: parsed.data.merchantId,
-      operationId:
-        action === 'status'
-          ? schemas.statusRequest.parse(parsed.data).operationId
-          : null,
+      operationId: parsed.data.operationId,
       errorClass:
         unknownError instanceof Error
           ? unknownError.constructor.name

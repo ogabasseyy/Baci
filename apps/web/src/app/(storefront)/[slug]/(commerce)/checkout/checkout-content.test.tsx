@@ -98,3 +98,27 @@ it('rejects unknown merchants and otherwise renders the default checkout', async
     CheckoutContent({ params: Promise.resolve({ slug: 'missing' }) })
   ).rejects.toThrow('not found');
 });
+
+it.each([
+  ['shop', 'merchant-1'],
+  ['shop.example.com', 'merchant-2'],
+])('resumes the existing Oxygen order before template checkout for %s', async (slug, merchantId) => {
+  const id = '60000000-0000-4000-8000-000000000001';
+  if (slug === 'shop')
+    mocks.merchant.mockResolvedValue({
+      id: merchantId,
+      slug: 'shop',
+      template_id: 'new-template',
+    });
+  render(
+    await CheckoutContent({
+      params: Promise.resolve({ slug }),
+      searchParams: Promise.resolve({ oxygenOrderId: id }),
+    })
+  );
+  expect(
+    screen.getByRole('region', { name: `confirmation ${id}` })
+  ).toHaveTextContent(`Oxygen checkout for ${merchantId}`);
+  expect(screen.queryByText('New checkout')).toBeNull();
+  expect(screen.queryByText('Default checkout')).toBeNull();
+});

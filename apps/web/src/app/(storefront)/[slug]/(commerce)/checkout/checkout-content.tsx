@@ -33,6 +33,25 @@ export async function CheckoutContent({
   const oxygenOrderId = query?.oxygenOrderId;
   if (oxygenOrderId && !z.uuid().safeParse(oxygenOrderId).success) notFound();
 
+  // Resume the existing order before choosing a fresh-checkout template.
+  if (oxygenOrderId) {
+    return (
+      <CheckoutThemeProvider>
+        <OxygenOrderConfirmationRedirect
+          orderId={oxygenOrderId}
+          merchantId={merchant.id}
+          merchantSlug={merchant.slug}
+        >
+          <OxygenStorefrontCheckout
+            orderId={oxygenOrderId}
+            merchantId={merchant.id}
+            merchantSlug={merchant.slug}
+          />
+        </OxygenOrderConfirmationRedirect>
+      </CheckoutThemeProvider>
+    );
+  }
+
   // Check for new template
   if (merchant.template_id === 'new-template') {
     return (
@@ -50,21 +69,7 @@ export async function CheckoutContent({
   // Default to ogabassey checkout as it's the fully functional implementation
   return (
     <CheckoutThemeProvider>
-      {oxygenOrderId ? (
-        <OxygenOrderConfirmationRedirect
-          orderId={oxygenOrderId}
-          merchantId={merchant.id}
-          merchantSlug={merchant.slug}
-        >
-          <OxygenStorefrontCheckout
-            orderId={oxygenOrderId}
-            merchantId={merchant.id}
-            merchantSlug={merchant.slug}
-          />
-        </OxygenOrderConfirmationRedirect>
-      ) : (
-        <OgabasseyCheckoutPage />
-      )}
+      <OgabasseyCheckoutPage />
     </CheckoutThemeProvider>
   );
 }

@@ -261,7 +261,7 @@ describe('ShipmentFlowGiglPanel', () => {
   });
 
   it('shows staff who cannot book the GIG price and a note instead of a dead option', () => {
-    render(
+    const { rerender } = render(
       <ShipmentFlowGiglPanel
         {...base}
         bookingAllowed={false}
@@ -288,6 +288,17 @@ describe('ShipmentFlowGiglPanel', () => {
     expect(screen.queryByRole('radio', { name: /Ship with GIG/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Fund wallet' })).toBeNull();
     expect(screen.queryByText('1234567890')).toBeNull();
+
+    rerender(
+      <ShipmentFlowGiglPanel
+        {...base}
+        bookingAllowed={false}
+        state="funding_pending"
+      />
+    );
+    expect(
+      screen.queryByRole('button', { name: 'Check funding status' })
+    ).toBeNull();
   });
 
   it('does not show the booking note to users who can book GIG', () => {

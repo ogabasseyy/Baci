@@ -174,6 +174,8 @@ export function ShipmentFlowGiglPanel({
         </Text>
       )}
 
+      {/* Preview-only staff may still fill a missing address and retry, so
+          they can see a delivery price; nothing here books or charges. */}
       {missingFields.map((field) => (
         <View key={field} style={panelStyles.field}>
           <Text style={{ color: colors.text }}>{FIELD_LABELS[field]}</Text>
@@ -204,7 +206,7 @@ export function ShipmentFlowGiglPanel({
           onPress={onFundWallet}
         />
       ) : null}
-      {state === 'funding_pending' && !fundingAccount ? (
+      {bookingAllowed && state === 'funding_pending' && !fundingAccount ? (
         <View>
           <Text style={{ color: colors.textSecondary }}>
             Your bank transfer account is being prepared. Check again shortly.

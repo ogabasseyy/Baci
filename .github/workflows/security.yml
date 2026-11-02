@@ -143,7 +143,9 @@ jobs:
         github.event.pull_request.head.repo.full_name == github.repository &&
         needs.changes.outputs.semgrep_relevant == 'true'
       )
-    timeout-minutes: 60
+    # Full scans cover the entire repository and exceeded the previous
+    # one-hour job limit. Keep targeted PR and push scans bounded as before.
+    timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 180 || 60 }}
     permissions:
       contents: read
       security-events: write

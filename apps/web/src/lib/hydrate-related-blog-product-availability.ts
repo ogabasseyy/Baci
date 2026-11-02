@@ -17,7 +17,6 @@ import type {
 } from '@/lib/related-blog-products';
 import { isValidUuid } from '@/lib/sanitize-core';
 import { createOfferAuthorityRpcCall } from '@/lib/supabase/offer-authority-rpc';
-import { toFinitePrice } from '@/lib/to-finite-price';
 
 interface AvailabilityResolution {
   available?: boolean;
@@ -89,11 +88,12 @@ export async function hydrateRelatedBlogProductAvailability(
             // every pair. Lookup failures throw into the shared
             // catch below (warn + undefined pairs, or rethrow with
             // throwOnError) exactly like the old error branch.
+            if (!merchantId || !isValidUuid(merchantId))
+              throw new Error('Offer hydration requires a merchant context');
             const resolutions = await fetchOfferResolutions(
               createOfferAuthorityRpcCall(supabase),
               {
-                merchantId:
-                  merchantId && isValidUuid(merchantId) ? merchantId : null,
+                merchantId,
                 productIds: validOfferCandidates.map((product) => product.id),
               }
             );

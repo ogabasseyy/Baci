@@ -85,6 +85,8 @@ export const primarySavingsProvisioningSchemas = {
   wallet: piggyvestPrimaryWalletSnapshotSchemas.wallet.extend({
     name: z.string().min(1).max(200),
     type: z.literal('api'),
+    interest_enabled: z.boolean().nullable().optional(),
+    interest_payout_wallet: piggyvestProviderIdSchema.nullable().optional(),
   }),
   accounts: piggyvestPrimaryWalletSnapshotSchemas.accounts.min(1),
   proof: z.strictObject({

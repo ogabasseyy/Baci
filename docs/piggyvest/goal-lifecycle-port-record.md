@@ -1,7 +1,7 @@
 # PiggyVest goal lifecycle: port record for the 39 backed-up migrations
 
-> Decision record, 2026-10-31. Documentation only: nothing here changes the database, the app or any flag.
-> Task id: `P7-lifecycle-port-record`. Plan rule this record enforces: R3, one exit per goal.
+> Decision taken 2026-10-31 (program plan); written, and every statement about main checked, on 2026-11-02.
+> Documentation only: nothing here changes the database, the app or any flag. Task: `P7-lifecycle-port-record`. Rule: R3.
 
 ## Decision
 
@@ -24,15 +24,13 @@ current conventions. It never means copying the file.
 ## Source and how to re-check it
 
 - **Source:** the local, private backup ref `refs/backups/2026-10-31/cursor-savings-phase1`, commit
-  `d5e56bb67a47adf8f6fd8b4a5d836cfd06ce9c6a`. It is a snapshot of an old worktree. It is not on GitHub and must not
-  be pushed.
+  `d5e56bb67a47adf8f6fd8b4a5d836cfd06ce9c6a`. A snapshot of an old worktree; not on GitHub, and it must not be pushed.
 - **The 39 files:** every migration under `supabase/migrations/` from `20260912140000` to `20260912185000`
   (inclusive) that the backup commit adds on top of the main commit it branched from. The same range also holds
-  `20260912150000_backfill_manual_order_document_dates.sql`, which is byte-identical on main and is not part of this
-  record.
+  `20260912150000_backfill_manual_order_document_dates.sql`, byte-identical on main and not part of this record.
 - **Hash:** SHA-256 of each file's bytes as stored in that commit. Where main's old subsystem reports under
   `apps/web/src/lib/piggyvest/*.report.md` quote a frozen hash for one of these files, it is the same value.
-- **Compared with:** `origin/main` at `93a3735dc2e8023ec2efe1f1a6ad945ee528051f` (2026-11-02). 36 of the 39 paths
+- **Compared with:** `origin/main` at `bf5052a3669f5f29cc48295f5e4a1eac4c2b0635` (committed 2026-11-02). 36 of the 39 paths
   do not exist on main. 3 paths exist on main with different content (see "Versions already on main").
 - **Re-check one file** in any clone that has the ref:
   `git show "refs/backups/2026-10-31/cursor-savings-phase1:supabase/migrations/<file>" | shasum -a 256`.
@@ -229,7 +227,7 @@ record drops.
 These functions stay defined, because migrations are append-only. No launch-path code may call them, and no re-port
 may replace or extend them (rule 7 below): re-ported logic goes under new names. Their handlers (`goal-policy-store`,
 `goal-lifecycle`, `customer-funding-capability`) are reached only through `runtime-composition`, like the modules in
-the last table, and are input for `P7-retire-unported-goal-handlers`, which retires them or records why one stays.
+the last table. The optional task `P7-retire-unported-goal-handlers` (below) retires them or records why one stays.
 
 ## Rules for every re-port task (R3)
 
@@ -242,9 +240,10 @@ the last table, and are input for `P7-retire-unported-goal-handlers`, which reti
 5. No reference to the staging registry, staging mappings, the staging policy writer login or a local-database-only
    check. Function privileges follow [function-privileges.md](../agent-guidance/function-privileges.md).
 6. The price guarantee and the protected offer are not revived. Price-follow replaces both.
-7. Never CREATE OR REPLACE, alter or extend an existing `piggyvest_goal_policy.*` function. A same-signature
-   replacement would silently change the body that main's draft chain uses. One with a renamed parameter or a new
-   return type fails to apply, and one failing migration blocks every deploy. New logic uses new function names.
+7. Never CREATE OR REPLACE, alter or extend an existing `piggyvest_goal_policy.*` function. With the same argument
+   names it succeeds and silently swaps the body that main's draft chain uses. A renamed input parameter or a new
+   return type is refused (SQLSTATE 42P13, checked on PostgreSQL 18), and one failing migration blocks every deploy.
+   Use new function names.
 
 ## Code on main that calls functions that were never ported
 
@@ -253,8 +252,9 @@ test tools call 25 functions in 10 schemas that are not defined by any migration
 sits in the shared statement catalog (`postgres-statements.ts`), restricted to staging logins, and the staging
 funding route loads that catalog through its wallet-mapping reader. No app route reaches the handlers that would run
 these statements: they are wired only in `runtime-composition`, which only tests, fixtures and a package smoke script
-import. Re-port tasks add new functions under new names and do not bring these 25 back. This table, and the two notes
-under it, are the input for the optional clean-up task `P7-retire-unported-goal-handlers`.
+import. Re-port tasks add new functions under new names and do not bring these 25 back. This table and the notes under
+it are the input for `P7-retire-unported-goal-handlers`, an optional task: all of this code is already unmounted and
+nothing on the launch path waits for it. If it is never done, this section stays the inventory.
 
 | Schema | Functions with no definition on main | Calling module | Verdict |
 | --- | --- | --- | --- |

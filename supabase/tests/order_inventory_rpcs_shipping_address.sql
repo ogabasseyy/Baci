@@ -157,6 +157,68 @@ BEGIN
 END;
 $$;
 
+-- The live caller: releasing an expired quiz prize cancels its reserved order
+-- through the nested SECURITY DEFINER chain, with no client-role grants.
+RESET ROLE;
+SET LOCAL session_replication_role = replica;
+INSERT INTO public.orders (id, merchant_id, order_number, total, shipping_status)
+VALUES (
+  'a4270300-0000-4000-8000-000000000015',
+  'a4270300-0000-4000-8000-000000000001', 'RPC-42703-QUIZ', 0, 'pending'
+);
+INSERT INTO public.quiz_events (id, merchant_id, slug, title, status)
+VALUES (
+  'a4270300-0000-4000-8000-000000000031',
+  'a4270300-0000-4000-8000-000000000001',
+  'rpc-42703-quiz', 'RPC 42703 quiz', 'active'
+);
+INSERT INTO public.quiz_awards (
+  id, event_id, customer_id, award_type, status, amount, reserved_order_id
+) VALUES (
+  'a4270300-0000-4000-8000-000000000032',
+  'a4270300-0000-4000-8000-000000000031',
+  'a4270300-0000-4000-8000-000000000033',
+  'grand', 'claimed', 0,
+  'a4270300-0000-4000-8000-000000000015'
+);
+INSERT INTO public.quiz_prize_reservations (
+  id, event_id, merchant_id, product_id, inventory_kind, state, award_id,
+  transferred_at
+) VALUES (
+  'a4270300-0000-4000-8000-000000000034',
+  'a4270300-0000-4000-8000-000000000031',
+  'a4270300-0000-4000-8000-000000000001',
+  'a4270300-0000-4000-8000-000000000035',
+  'unlimited', 'transferred',
+  'a4270300-0000-4000-8000-000000000032', now()
+);
+SET LOCAL session_replication_role = origin;
+
+DO $$
+BEGIN
+  IF NOT private.release_quiz_prize_reservation_v2(
+    'a4270300-0000-4000-8000-000000000031', 'claim_expired'
+  ) THEN
+    RAISE EXCEPTION 'expired quiz prize was not released';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.orders
+    WHERE id = 'a4270300-0000-4000-8000-000000000015'
+      AND shipping_status = 'cancelled'
+      AND payment_status = 'cancelled'
+      AND notes = 'Expired quiz prize'
+  ) THEN
+    RAISE EXCEPTION 'expired quiz prize order was not cancelled';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.quiz_prize_reservations
+    WHERE id = 'a4270300-0000-4000-8000-000000000034' AND state = 'released'
+  ) THEN
+    RAISE EXCEPTION 'expired quiz prize reservation was not released';
+  END IF;
+END;
+$$;
+
 -- These bodies only check has_merchant_access (any active staff member), so
 -- only service_role may execute them; authenticated callers must not.
 DO $$

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import {
+  type CaptureDrainEvidence,
   type CaptureDrainLoginEvidence,
   captureDrainCronState,
   collectCaptureDrainEvidence,
@@ -60,11 +61,11 @@ describe('gate reasons', () => {
   });
 
   it('requires the drain alerts to leave the host', () => {
-    const drain = {
+    const drain: Omit<CaptureDrainEvidence, 'alerts'> = {
       login: { ok: true },
       schedule: { enabled: true, cron: 'installed' },
       primaryIntake: { notReady: [] },
-    } as const;
+    };
     expect(drainAlertReason({ ...drain, alerts: { configured: true } })).toBe(
       null
     );

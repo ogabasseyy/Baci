@@ -21,7 +21,7 @@ describe('collectPrimaryIntakeEvidence against the real runtime readers', () => 
   it('does not take an enable flag for a working intake', () => {
     // Flags without the credentials, scope and drain attestation the
     // intakes also require: the replay answers 503 for each of these.
-    const flagsOnly = {
+    const flagsOnly: NodeJS.ProcessEnv = {
       NODE_ENV: 'test',
       PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED: 'true',
       PIGGYVEST_PRIMARY_INFLOWS_ENABLED: 'true',

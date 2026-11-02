@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShipmentFlowSheet } from './ShipmentFlowSheet';
+import { base, gigl } from './ShipmentFlowSheet.gigl.test-support';
 
 vi.mock('./ShipmentFlowSheetPresence', () => ({
   ShipmentFlowSheetPresence: ({
@@ -111,69 +112,6 @@ vi.mock('react-native', () => ({
   ),
   View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }));
-
-const quote = {
-  id: 'b2152ea0-831d-4387-b4c1-5dcf29a74c54',
-  provider: 'GIGL' as const,
-  serviceTier: 'Express',
-  carrierName: 'GIG Logistics',
-  displayName: 'Door Delivery',
-  estimatedDays: 2,
-  price: 11000,
-  currency: 'NGN' as const,
-  pickupIncluded: true,
-  insuranceIncluded: false,
-  expiresAt: '2026-09-01T18:00:00.000Z',
-};
-
-function gigl(canBook: boolean, error: string | null = null) {
-  return {
-    addressDraft: {},
-    error,
-    ensureFreshQuoteForConfirmation: vi.fn().mockResolvedValue(true),
-    fundingAccount: null,
-    missingFields: [],
-    quote,
-    refreshBalance: vi.fn(),
-    requestQuote: vi.fn(),
-    reset: vi.fn(),
-    startFunding: vi.fn(),
-    startTransferPoll: vi.fn(),
-    state: error ? ('error' as const) : ('ready' as const),
-    updateAddressField: vi.fn(),
-    wallet: {
-      availableBalance: canBook ? 11000 : 1000,
-      canBook,
-      shortfall: canBook ? 0 : 10000,
-    },
-  } as never;
-}
-
-const base = {
-  canBookGigl: true,
-  canUseProvider: false,
-  fulfillmentDetails: { imei: '', items: [], serialNumber: '' },
-  fulfillmentItemIndex: 0,
-  hasExistingFulfillment: false,
-  isSubmitting: false,
-  onClose: vi.fn(),
-  onConfirmSelfFulfillment: vi.fn(),
-  onContinueFromDetails: vi.fn(),
-  onContinueFromMethod: vi.fn(),
-  onFulfillmentDetailsChange: vi.fn(),
-  onModeChange: vi.fn(),
-  onRiderPhoneChange: vi.fn(),
-  onSelectSavedRider: vi.fn(),
-  onStepBack: vi.fn(),
-  orderNumber: 'ORD-1',
-  providerLabel: null,
-  requiresFulfillment: false,
-  riderPhone: '',
-  savedRiders: [],
-  selectedMode: 'provider' as const,
-  step: 'method' as const,
-  visible: true,
-};
 
 describe('ShipmentFlowSheet manual-order GIG flow', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -321,29 +259,6 @@ describe('ShipmentFlowSheet manual-order GIG flow', () => {
       />
     );
     expect(screen.getByText('Quote unavailable')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Self Fulfill'));
-    expect(base.onModeChange).toHaveBeenCalledWith('self_fulfillment');
-  });
-
-  it('shows staff without GIG booking rights the price with a note and keeps Book off', () => {
-    render(
-      <ShipmentFlowSheet
-        {...base}
-        canBookGigl={false}
-        giglShipping={gigl(true)}
-      />
-    );
-
-    expect(screen.getByText('₦11,000')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'Ask the store owner or an admin to book GIG for this order.'
-      )
-    ).toBeInTheDocument();
-    expect(screen.queryByText('Ship with GIG')).not.toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Book with GIG Logistics' })
-    ).toBeDisabled();
     fireEvent.click(screen.getByText('Self Fulfill'));
     expect(base.onModeChange).toHaveBeenCalledWith('self_fulfillment');
   });

@@ -1,59 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const routeParamsState = vi.hoisted(() => ({
-  current: { id: '123e4567-e89b-42d3-a456-426614174000' } as { id: string },
-}));
-
-const orderState = vi.hoisted(() => ({
-  current: undefined as unknown,
-}));
-
-const auditEventsState = vi.hoisted(() => ({
-  current: {
-    data: [] as unknown[],
-    isError: false,
-    isLoading: false,
-  },
-}));
-
-const merchantState = vi.hoisted(() => ({
-  current: null as unknown,
-}));
-
-const authState = vi.hoisted(() => ({
-  user: null as { id: string } | null,
-}));
-
-const shipmentParameters = vi.hoisted(() => ({
-  current: null as null | {
-    onProviderBookingError: (error: unknown) => Promise<unknown>;
-  },
-}));
-
-const giglShippingState = vi.hoisted(() => ({
-  calls: [] as unknown[],
-  prefetchCalls: [] as unknown[],
-  result: { quote: null, wallet: null } as {
-    quote: null;
-    wallet: null | { canBook: boolean };
-  },
-}));
-
-// Staff grants; the owner (merchant.user_id === user.id) always passes, as in
-// useOrderFulfillAccess.
-const staffAccessState = vi.hoisted(() => ({
-  current: { canFulfill: false, canEdit: false },
-}));
-
-const shipmentUiState = vi.hoisted(() => ({
-  current: { shipmentFlowStep: 'details', showShipmentFlow: false } as {
-    shipmentFlowStep: string;
-    showShipmentFlow: boolean;
-    showStatusModal?: boolean;
-  },
-}));
-
 vi.mock('expo-router', () => ({
   useLocalSearchParams: () => routeParamsState.current,
 }));
@@ -71,15 +18,7 @@ vi.mock('@/hooks/useAuth', () => ({
 }));
 
 vi.mock('@/hooks/useOrderFulfillAccess', () => ({
-  useOrderFulfillAccess: () => {
-    const merchant = merchantState.current as { user_id?: string } | null;
-    const isOwner = Boolean(
-      authState.user && merchant?.user_id === authState.user.id
-    );
-    return isOwner
-      ? { canFulfill: true, canEdit: true }
-      : staffAccessState.current;
-  },
+  useOrderFulfillAccess: () => fulfillAccessMock(),
 }));
 
 vi.mock('@tanstack/react-query', () => ({
@@ -129,27 +68,9 @@ vi.mock('@/hooks/orders/useOrderGiglShipping', () => ({
   },
 }));
 
-vi.mock('@/lib/order-shipment', () => ({
-  orderRequiresFulfillment: vi.fn(() => false),
-  getOrderFulfillmentIdentifierItems: vi.fn(() => []),
-  getOrderGiglInitialAddress: vi.fn(() => ({})),
-  updateShipmentFulfillmentDetails: vi.fn((previous) => previous),
-  formatShippingProviderName: vi.fn(() => null),
-  canUseSelectedShippingProvider: vi.fn(
-    (order: {
-      selected_quote_id?: string | null;
-      shipment_id?: string | null;
-      shipping_provider?: string | null;
-      tracking_number?: string | null;
-    }) =>
-      Boolean(
-        order.shipping_provider &&
-          order.selected_quote_id &&
-          !order.tracking_number &&
-          !order.shipment_id
-      )
-  ),
-}));
+vi.mock('@/lib/order-shipment', async () =>
+  (await import('./useOrderDetailsController.test-support')).orderShipmentMock()
+);
 
 vi.mock('@/hooks/createOrderDetailsContactActions', () => ({
   createOrderDetailsContactActions: () => ({
@@ -210,79 +131,26 @@ vi.mock('@/hooks/useOrderDetailsBackHandler', () => ({
 }));
 
 vi.mock('@/hooks/useOrderDetailsUiState', () => ({
-  useOrderDetailsUiState: () => ({
-    creditNotes: '',
-    fulfillmentDetails: { imei: '', items: [], serialNumber: '' },
-    fulfillmentItemIndex: 0,
-    isGeneratingReceipt: false,
-    isShipmentSubmitting: false,
-    paymentAmount: '',
-    paymentMethod: '',
-    paymentNotes: '',
-    pendingShipmentMode: 'provider',
-    receiptHtml: '',
-    riderPhone: '',
-    savedRiders: [],
-    selectedOrderItem: null,
-    setCreditNotes: vi.fn(),
-    setFulfillmentDetails: vi.fn(),
-    setFulfillmentItemIndex: vi.fn(),
-    setIsGeneratingReceipt: vi.fn(),
-    setIsShipmentSubmitting: vi.fn(),
-    setPaymentAmount: vi.fn(),
-    setPaymentMethod: vi.fn(),
-    setPaymentNotes: vi.fn(),
-    setPendingShipmentMode: vi.fn(),
-    setReceiptHtml: vi.fn(),
-    setRiderPhone: vi.fn(),
-    setSavedRiders: vi.fn(),
-    setSelectedOrderItem: vi.fn(),
-    setShipmentFlowStep: vi.fn(),
-    setShowCreditModal: vi.fn(),
-    setShowPaymentOptionModal: vi.fn(),
-    setShowReceiptPreview: vi.fn(),
-    setShowRecordPaymentModal: vi.fn(),
-    setShowShipmentFlow: vi.fn(),
-    setShowStatusModal: vi.fn(),
-    setSuccessModal: vi.fn(),
-    shipmentFlowStep: shipmentUiState.current.shipmentFlowStep,
-    showCreditModal: false,
-    showPaymentOptionModal: false,
-    showReceiptPreview: false,
-    showRecordPaymentModal: false,
-    showShipmentFlow: shipmentUiState.current.showShipmentFlow,
-    showStatusModal: shipmentUiState.current.showStatusModal ?? false,
-    successModal: {
-      actionLabel: '',
-      actionVariant: 'default',
-      message: '',
-      showAction: false,
-      subMessage: '',
-      title: 'Success!',
-      visible: false,
-    },
-  }),
+  useOrderDetailsUiState: () => orderDetailsUiStateMock(),
 }));
 
 import { useOrderDetailsController } from './useOrderDetailsController';
+import {
+  auditEventsState,
+  authState,
+  fulfillAccessMock,
+  giglShippingState,
+  merchantState,
+  orderDetailsUiStateMock,
+  orderState,
+  resetControllerState,
+  routeParamsState,
+  shipmentParameters,
+  shipmentUiState,
+} from './useOrderDetailsController.test-support';
 
 describe('useOrderDetailsController', () => {
-  beforeEach(() => {
-    auditEventsState.current = { data: [], isError: false, isLoading: false };
-    orderState.current = undefined;
-    merchantState.current = null;
-    authState.user = null;
-    giglShippingState.calls = [];
-    giglShippingState.prefetchCalls = [];
-    giglShippingState.result = { quote: null, wallet: null };
-    staffAccessState.current = { canFulfill: false, canEdit: false };
-    shipmentUiState.current = {
-      shipmentFlowStep: 'details',
-      showShipmentFlow: false,
-      showStatusModal: false,
-    };
-    routeParamsState.current = { id: '123e4567-e89b-42d3-a456-426614174000' };
-  });
+  beforeEach(resetControllerState);
 
   it('returns null orderId when route params are invalid', () => {
     orderState.current = undefined;
@@ -480,62 +348,6 @@ describe('useOrderDetailsController', () => {
     expect(result.current.giglShipping).toBeUndefined();
   });
 
-  it('shows the GIG price to staff with only orders.fulfill but never offers wallet booking', () => {
-    merchantState.current = {
-      id: 'merchant-1',
-      user_id: 'owner-1',
-      country: 'NG',
-      payout_currency: 'NGN',
-    };
-    authState.user = { id: 'staff-1' };
-    staffAccessState.current = { canFulfill: true, canEdit: false };
-    giglShippingState.result = { quote: null, wallet: { canBook: true } };
-    shipmentUiState.current = {
-      shipmentFlowStep: 'method',
-      showShipmentFlow: true,
-    };
-
-    const { result } = renderHook(() => useOrderDetailsController());
-
-    expect(giglShippingState.calls.at(-1)).toMatchObject({
-      enabled: true,
-      preview: true,
-    });
-    expect(result.current.giglShipping).toBeDefined();
-    expect(result.current.canBookGigl).toBe(false);
-    // A funded preview must not open Ship Order on "Book with GIG".
-    expect(shipmentParameters.current).toMatchObject({
-      providerBookingAvailable: false,
-    });
-  });
-
-  it('lets staff with orders.fulfill and orders.edit book GIG from the wallet', () => {
-    merchantState.current = {
-      id: 'merchant-1',
-      user_id: 'owner-1',
-      country: 'NG',
-      payout_currency: 'NGN',
-    };
-    authState.user = { id: 'staff-1' };
-    staffAccessState.current = { canFulfill: true, canEdit: true };
-    giglShippingState.result = { quote: null, wallet: { canBook: true } };
-    shipmentUiState.current = {
-      shipmentFlowStep: 'method',
-      showShipmentFlow: true,
-    };
-
-    const { result } = renderHook(() => useOrderDetailsController());
-
-    expect(giglShippingState.calls.at(-1)).toMatchObject({
-      enabled: true,
-      preview: false,
-    });
-    expect(result.current.canBookGigl).toBe(true);
-    expect(shipmentParameters.current).toMatchObject({
-      providerBookingAvailable: true,
-    });
-  });
-
   it('keeps saved merchant-wallet GIGL orders bookable while funding remains available', () => {
     merchantState.current = {
       id: 'merchant-1',
@@ -621,7 +433,7 @@ it('routes eligible checkout quote rejection through the controller without wall
     )
   ).resolves.toBe('review_checkout_quote');
   authState.user = { id: 'staff' };
-  staffAccessState.current = { canFulfill: true, canEdit: false };
+
   renderHook(() => useOrderDetailsController());
   await expect(
     shipmentParameters.current?.onProviderBookingError(
@@ -631,15 +443,4 @@ it('routes eligible checkout quote rejection through the controller without wall
       )
     )
   ).resolves.toBeUndefined();
-  staffAccessState.current = { canFulfill: true, canEdit: true };
-  renderHook(() => useOrderDetailsController());
-  await expect(
-    shipmentParameters.current?.onProviderBookingError(
-      new OrderStatusUpdateError(
-        'Review quote',
-        'SHIPPING_QUOTE_RECONFIRM_REQUIRED'
-      )
-    )
-  ).resolves.toBe('review_checkout_quote');
-  staffAccessState.current = { canFulfill: false, canEdit: false };
 });

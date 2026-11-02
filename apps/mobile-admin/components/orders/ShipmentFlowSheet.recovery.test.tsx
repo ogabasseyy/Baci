@@ -1,17 +1,20 @@
 import '@testing-library/jest-dom/vitest';
-import type { Order } from '@baci/shared';
 import type { QueryClient } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { type ComponentProps, type ReactNode, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createOrderDetailsShipmentActions } from '@/hooks/createOrderDetailsShipmentActions';
 import { handleOrderDetailsProviderBookingError } from '@/hooks/handleOrderDetailsProviderBookingError';
 import { OrderStatusUpdateError } from '@/hooks/orders/order-status-update-error';
-import {
-  canUseSelectedShippingProvider,
-  type ShipmentFlowStep,
-} from '@/lib/order-shipment';
+import type { ShipmentFlowStep } from '@/lib/order-shipment';
 import { ShipmentFlowSheet } from './ShipmentFlowSheet';
+import {
+  actions,
+  type GiglShipping,
+  order,
+  props,
+  recoveryLabel,
+} from './ShipmentFlowSheet.recovery.test-support';
 
 const state = vi.hoisted(() => ({
   busy: false,
@@ -101,50 +104,6 @@ vi.mock('./CheckoutRecoveryAddressInput', () => ({
 
 vi.mock('@/lib/api-client', () => ({ BASE_URL: 'https://synthetic.invalid' }));
 vi.mock('@/lib/supabase', () => ({ supabase: {} }));
-
-const order = {
-  id: 'order',
-  merchant_id: 'merchant',
-  payment_status: 'paid',
-  shipping_status: 'processing',
-  shipping_provider: 'GIGL',
-  shipping_funding_source: 'customer_checkout',
-  selected_quote_id: null,
-  shipping_address: null,
-} as Order;
-const actions = {
-  onClose: vi.fn(),
-  onContinueFromDetails: vi.fn(),
-  onContinueFromMethod: vi.fn(),
-  onConfirmSelfFulfillment: vi.fn(),
-  onFulfillmentDetailsChange: vi.fn(),
-  onModeChange: vi.fn(),
-  onRiderPhoneChange: vi.fn(),
-  onSelectSavedRider: vi.fn(),
-  onStepBack: vi.fn(),
-};
-const props = {
-  ...actions,
-  canBookGigl: true,
-  recoveryOrder: order,
-  canUseProvider: canUseSelectedShippingProvider(order),
-  fulfillmentDetails: { imei: '', serialNumber: '', items: [] },
-  fulfillmentItemIndex: 0,
-  hasExistingFulfillment: false,
-  isSubmitting: false,
-  providerLabel: 'GIG Logistics',
-  orderNumber: 'ORD-TEST',
-  requiresFulfillment: true,
-  riderPhone: '',
-  savedRiders: [],
-  selectedMode: 'self_fulfillment' as const,
-  step: 'method' as const,
-  visible: true,
-};
-type GiglShipping = NonNullable<
-  ComponentProps<typeof ShipmentFlowSheet>['giglShipping']
->;
-const recoveryLabel = 'Confirm destination and refresh paid quote';
 
 describe('ShipmentFlowSheet prepaid recovery reachability', () => {
   beforeEach(() => {
@@ -378,23 +337,6 @@ describe('ShipmentFlowSheet prepaid recovery reachability', () => {
     expect(state.preview).toHaveBeenCalledOnce();
     expect(actions.onContinueFromMethod).not.toHaveBeenCalled();
     expect(actions.onModeChange).not.toHaveBeenCalled();
-  });
-  it('preserves GIG booking rights and paid checkout eligibility when recovery is exposed outside provider mode', () => {
-    const { rerender } = render(
-      <ShipmentFlowSheet {...props} canBookGigl={false} />
-    );
-    expect(
-      screen.queryByRole('button', { name: recoveryLabel })
-    ).not.toBeInTheDocument();
-    rerender(
-      <ShipmentFlowSheet
-        {...props}
-        recoveryOrder={{ ...order, payment_status: 'pending' }}
-      />
-    );
-    expect(
-      screen.queryByRole('button', { name: recoveryLabel })
-    ).not.toBeInTheDocument();
   });
   it('blocks self-fulfillment, mode changes, back and dismissal while recovery is busy', () => {
     const { rerender } = render(

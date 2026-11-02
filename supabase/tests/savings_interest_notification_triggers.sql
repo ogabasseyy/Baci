@@ -4,9 +4,11 @@
 --   * every recorded paid-interest insert with a positive amount enqueues
 --     exactly one notification, keyed to that payout or ledger operation, with
 --     the "Your savings just grew" title, the exact naira amount and the
---     goal's progress after the credit (principal plus net paid interest:
---     interest reserved for a purchase still counts, and every partial
---     reversal of a payout is subtracted once, matched on its integration);
+--     goal's progress after the credit (principal plus net paid interest, the
+--     same per-goal interest the app's savings display adds: interest
+--     reserved for a purchase is left out until it is released, and every
+--     partial reversal of a payout is subtracted once, matched on its
+--     integration);
 --   * no interest notice ever claims the goal is reached, so a reversal that
 --     takes the goal back below target leaves no live completion claim;
 --   * a zero-net payout, an accrual (pending interest), a non-interest
@@ -173,10 +175,11 @@ SELECT pg_temp.check(
   'another goal''s ledger credit must never count toward this goal (₦900 of ₦1,000)');
 
 -- 7. Legacy ledger: reserving paid interest for a purchase and releasing it
--- back moves existing interest, so neither enqueues a notice. Reserved
--- interest is still the customer's, so it keeps counting toward progress, as
--- it does toward completion, and a credit while the reservation is open is
--- announced with that progress (₦200 + ₦50 + ₦10 = ₦260 of ₦1,000).
+-- back moves existing interest, so neither enqueues a notice. Progress uses
+-- the interest the app's savings display shows, which leaves reserved
+-- interest out, so a credit while the reservation is open is announced with
+-- the same figure the customer then sees (₦200 + ₦50 - ₦20 + ₦10 = ₦240 of
+-- ₦1,000), and releasing the reservation restores it.
 INSERT INTO piggyvest_savings_ledger.operations(id, integration_id, merchant_id, customer_id,
   goal_id, command, evidence_id, reference_id)
   VALUES (pg_temp.id(63), pg_temp.id(50), pg_temp.id(10), pg_temp.id(20), pg_temp.id(31),
@@ -184,8 +187,8 @@ INSERT INTO piggyvest_savings_ledger.operations(id, integration_id, merchant_id,
 INSERT INTO piggyvest_savings_ledger.postings(operation_id, account, amount_kobo)
   VALUES (pg_temp.id(63), 'paid_interest', -2000), (pg_temp.id(63), 'purchase_interest', 2000);
 SELECT pg_temp.check(
-  savings_notifications.interest_progress(pg_temp.id(31)) = 'You’re now 25% of the way there.',
-  'interest reserved for a purchase must still count toward progress (₦250 of ₦1,000)');
+  savings_notifications.interest_progress(pg_temp.id(31)) = 'You’re now 23% of the way there.',
+  'interest reserved for a purchase must leave progress, as it leaves the app display (₦230 of ₦1,000)');
 INSERT INTO piggyvest_savings_ledger.operations(id, integration_id, merchant_id, customer_id,
   goal_id, command, evidence_id, reference_id)
   VALUES (pg_temp.id(65), pg_temp.id(50), pg_temp.id(10), pg_temp.id(20), pg_temp.id(31),
@@ -193,9 +196,9 @@ INSERT INTO piggyvest_savings_ledger.operations(id, integration_id, merchant_id,
 INSERT INTO piggyvest_savings_ledger.postings(operation_id, account, amount_kobo)
   VALUES (pg_temp.id(65), 'paid_interest', 1000), (pg_temp.id(65), 'internal_clearing', -1000);
 SELECT pg_temp.check(
-  (SELECT body = '₦10.00 interest added to your savings. You’re now 26% of the way there.'
+  (SELECT body = '₦10.00 interest added to your savings. You’re now 24% of the way there.'
    FROM pg_temp.notices(pg_temp.id(31)) WHERE event_key = 'interest:' || pg_temp.id(65)::text),
-  'a credit while a purchase reservation is open must count the reserved interest (26%)');
+  'a credit while a purchase reservation is open must match the app display (24%, not 26%)');
 INSERT INTO piggyvest_savings_ledger.operations(id, integration_id, merchant_id, customer_id,
   goal_id, command, evidence_id, reference_id)
   VALUES (pg_temp.id(64), pg_temp.id(50), pg_temp.id(10), pg_temp.id(20), pg_temp.id(31),
@@ -205,6 +208,9 @@ INSERT INTO piggyvest_savings_ledger.postings(operation_id, account, amount_kobo
 SELECT pg_temp.check(
   (SELECT count(*) = 2 AND bool_and(NOT notice.voided) FROM pg_temp.notices(pg_temp.id(31)) notice),
   'moving existing paid interest must neither enqueue nor void a notice');
+SELECT pg_temp.check(
+  savings_notifications.interest_progress(pg_temp.id(31)) = 'You’re now 26% of the way there.',
+  'releasing a purchase reservation must restore its interest to progress (₦260 of ₦1,000)');
 
 -- 8. Legacy ledger: the reversal voids the notice and enqueues nothing new.
 INSERT INTO piggyvest_savings_ledger.operations(id, integration_id, merchant_id, customer_id,

@@ -4,8 +4,9 @@
 -- legacy savings ledger) now read "Your savings just grew 🎉" and
 -- "₦X interest added to your savings. <progress>", where <progress> is the
 -- goal's position after the credit: principal plus net paid interest (paid
--- interest, including interest reserved for a purchase, less reversals),
--- against the goal target. Below the target it is a floored percentage or,
+-- interest less reversals), against the goal target. That is the same
+-- per-goal interest the app's savings display adds, so interest reserved for
+-- a purchase is left out until it is released, as it is in the app. Below the target it is a floored percentage or,
 -- under 1%, the naira amount left. At or past the target it points to the
 -- live balance and never claims completion, which only the reversal-aware
 -- goal-completed notice announces.
@@ -65,15 +66,15 @@ BEGIN
   IF NOT FOUND THEN
     RETURN savings_notifications.progress_message(NULL, NULL);
   END IF;
-  -- Interest reserved for a purchase is still the customer's: count it, as
-  -- completion and the ledger snapshot do, so a reserve or release nets to
-  -- zero and only spent or reversed interest lowers progress.
+  -- Count only paid_interest postings, exactly as the per-goal interest of
+  -- get_customer_savings_earnings (the app's savings display) does, so the
+  -- notice never reads higher than the balance the customer then opens.
   SELECT coalesce(sum(posting.amount_kobo), 0) INTO v_ledger_interest
     FROM piggyvest_savings_ledger.postings posting
     JOIN piggyvest_savings_ledger.operations operation ON operation.id = posting.operation_id
     WHERE operation.goal_id = p_goal AND operation.merchant_id = v_merchant
       AND operation.customer_id = v_customer
-      AND posting.account IN ('paid_interest', 'purchase_interest');
+      AND posting.account = 'paid_interest';
   SELECT coalesce(sum(receipt.net_kobo - coalesce(reversal.amount_kobo, 0)), 0) INTO v_primary_interest
     FROM piggyvest_primary.paid_interest_receipts receipt
     LEFT JOIN LATERAL (

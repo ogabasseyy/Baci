@@ -227,7 +227,7 @@ describe('OgabasseyNavbar', () => {
       '@/app/(storefront)/ogabassey/ogabassey-home-chrome-critical-css'
     );
     expect(OGABASSEY_HOME_HEADER_CHROME_CRITICAL_CSS).toContain(
-      '.ogabassey-navbar__logo{height:2.25rem;max-width:min(calc(100vw - 12.5rem),18rem);width:auto}'
+      '.ogabassey-navbar__logo{height:2.25rem;max-width:min(calc(100vw - 15.5rem),18rem);width:auto}'
     );
   });
 });

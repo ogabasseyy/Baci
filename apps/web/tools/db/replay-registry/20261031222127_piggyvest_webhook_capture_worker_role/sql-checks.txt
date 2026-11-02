@@ -1,1 +1,0 @@
-supabase/tests/piggyvest_webhook_capture_worker_role.sql

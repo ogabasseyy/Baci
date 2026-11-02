@@ -20,7 +20,8 @@ import { inspectPiggyvestWebhookCaptureReadiness } from '@/lib/piggyvest/webhook
  *              PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_ENABLED=true on this host
  * --readiness  connects as the drain login, reads only the metadata
  *              counters, and prints the readiness report (exit 0 once
- *              every gate but the web attestation passes)
+ *              every gate this host can check passes: login, schedule,
+ *              family keys, alert delivery and a fresh backlog)
  * --plan       prints what the drain does; reads nothing
  *
  * Output is counts, gate names and reasons only: never a body, signature,
@@ -31,7 +32,7 @@ const MODES = ['--once', '--readiness', '--plan'] as const;
 type Mode = (typeof MODES)[number];
 
 const PLAN =
-  'Plan only: no database or provider operations. --once claims at most 10 captured PiggyVest deliveries as the dedicated drain login, re-verifies each stored signature, replays rows a primary intake owns through that intake, and defers legacy-family rows with an alert. It does nothing unless PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_ENABLED=true on this host.';
+  'Plan only: no database or provider operations. --once claims at most 10 captured PiggyVest deliveries as the dedicated drain login, re-verifies each stored signature, replays rows a primary intake owns through that intake, and sets legacy-family rows aside for review with an alert (a row signed by a key this host lacks waits instead). It does nothing unless PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_ENABLED=true on this host.';
 const UNCONFIGURED =
   'PiggyVest capture drain login is not configured; nothing was claimed.';
 const FAILURE =

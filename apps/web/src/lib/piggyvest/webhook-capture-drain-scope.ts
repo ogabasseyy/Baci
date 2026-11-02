@@ -10,8 +10,9 @@ import type { PiggyvestWebhookKeyFamily } from './webhook-secret-union';
  * primary intake owns: each primary intake writes through its own
  * dedicated login. Everything the receiver would hand to the legacy path
  * (legacy-signed deliveries, record-only events, quarantine writes) needs
- * the service role, so the drain defers it with an alert and leaves it to
- * the receiver's own retry path (provider redelivery).
+ * the service role, so the drain sets it aside for review with an alert
+ * and leaves it to the receiver's own retry path (provider redelivery),
+ * which still closes it.
  */
 
 /** True when the event's owning primary intake family signed it. */

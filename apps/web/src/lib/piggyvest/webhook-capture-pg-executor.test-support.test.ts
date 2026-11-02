@@ -138,14 +138,20 @@ describe('createStatefulCaptureExecutor', () => {
   });
 
   it('lets a tokenless inline finisher close only a pending row', async () => {
-    const { executor, queue, advance, rows, stored } = model();
-    const inline = () =>
-      executor.query('resolve', [stored.id, null, 'processed', null]);
+    const { completeInline, queue, advance, rows, stored } = model();
     advance(121 * SECOND);
     await queue.claim(5);
     // The receiver cannot overwrite a row the drain holds.
-    await expect(inline()).resolves.toEqual([{ resolved: false }]);
+    expect(completeInline(stored.id)).toBe(false);
     expect(rows[0]?.processing_state).toBe('claimed');
+  });
+
+  it('refuses a tokenless resolve through the drain statement (claim-bound entry point)', async () => {
+    const { executor, rows, stored } = model();
+    await expect(
+      executor.query('resolve', [stored.id, null, 'processed', null])
+    ).rejects.toThrow();
+    expect(rows[0]?.processing_state).toBe('pending');
   });
 
   it('reports metadata-only counters', async () => {

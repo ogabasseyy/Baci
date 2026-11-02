@@ -48,8 +48,8 @@ describe('settleReplayResult', () => {
     [
       'out of scope',
       { status: 200, outOfScope: 'LEGACY_PATH' },
-      'deferred',
-      'REPLAY_DEFERRED_LEGACY_PATH',
+      'needs_review',
+      'REPLAY_OUT_OF_SCOPE_LEGACY_PATH',
     ],
     [
       'a conflict',
@@ -82,7 +82,7 @@ describe('settleReplayResult', () => {
     expect(outcome.error).toBe(error);
   });
 
-  it('defers out-of-scope rows ahead of every other verdict', async () => {
+  it('sets out-of-scope rows aside for review ahead of every other verdict', async () => {
     const outcome = await settled(
       {
         status: 503,
@@ -92,8 +92,11 @@ describe('settleReplayResult', () => {
       },
       true
     );
-    expect(outcome.state).toBe('deferred');
-    expect(outcome.error).toBe('REPLAY_DEFERRED_LEGACY_PATH');
+    expect(outcome).toEqual({
+      outcome: 'needsReview',
+      state: 'needs_review',
+      error: 'REPLAY_OUT_OF_SCOPE_LEGACY_PATH',
+    });
   });
 
   it('treats a thrown attempt like a failed one, deferred while the key set is incomplete', async () => {

@@ -13,9 +13,9 @@ import {
 } from './webhook-capture-drain-result';
 import {
   deferForIncompleteKeySet,
-  deferOutOfScope,
   parkForReview,
   type RowOutcome,
+  setAsideBeforeReplay,
   settle,
 } from './webhook-capture-drain-settle';
 import type { CaptureResolution } from './webhook-capture-queue';
@@ -45,7 +45,14 @@ export interface ReplayDelivery {
   rawBody: Buffer;
   signature: string;
   matchedSecret: string;
+  /** Processing authority: verified families narrowed to the recorded ones. */
   families: readonly PiggyvestWebhookKeyFamily[];
+  /**
+   * Families recorded at admission. Never processing authority; it only
+   * tells a row a legacy path could take (set aside on a runtime that holds
+   * no legacy path) from a wrong-family delivery (quarantined).
+   */
+  recordedFamilies: readonly PiggyvestWebhookKeyFamily[];
   /**
    * Part of the key set was unavailable when the replay verified, so
    * `families` may be only part of what the recorded authority covers.
@@ -68,6 +75,9 @@ export interface DrainDeps {
     signature: string;
     /** Families durably recorded at admission: the ceiling on authority. */
     recordedFamilies: readonly PiggyvestWebhookKeyFamily[];
+    /** Version of the key admission matched (never key material). */
+    keyVersion: string;
+    captureId: string;
   }): StoredPiggyvestDeliveryVerification;
   /**
    * Runs a processing pipeline over the stored bytes. A non-2xx status
@@ -80,7 +90,7 @@ export interface DrainDeps {
    * Optional replay scope, checked before anything else. A runtime that
    * does not hold every processing path (the worker-host drain holds no
    * service-role authority) names why it must leave a row alone; the row
-   * is then deferred with an alert, unverified and unprocessed.
+   * is then set aside for review with an alert, unverified and unprocessed.
    */
   outOfScope?(row: PiggyvestClaimedCapture): string | null;
 }
@@ -96,14 +106,13 @@ async function drainRow(
   deps: DrainDeps,
   row: PiggyvestClaimedCapture
 ): Promise<RowOutcome> {
-  const scope = deps.outOfScope?.(row) ?? null;
-  if (scope) return deferOutOfScope(deps, row, scope);
-
   const rawBody = Buffer.from(row.raw_hex, 'hex');
   const verification = deps.verify({
     rawBody,
     signature: row.signature,
     recordedFamilies: row.key_families,
+    keyVersion: row.key_version,
+    captureId: row.capture_id,
   });
 
   if (verification.status === 'unconfigured') {
@@ -185,6 +194,7 @@ async function drainRow(
       signature: row.signature,
       matchedSecret: verification.secret,
       families,
+      recordedFamilies: row.key_families,
       incompleteKeySet: verification.incompleteKeySet,
       keyScope: 'replay',
     });
@@ -210,7 +220,16 @@ export async function drainPiggyvestWebhookCaptures(
     retried: 0,
     needsReview: 0,
   };
+  // Rows this runtime may not replay are settled first, before any replay
+  // runs: a provider redelivery completed inline cannot close a claimed
+  // row, so each such row is held only for the instant of the claim.
+  const inScope: PiggyvestClaimedCapture[] = [];
   for (const row of rows) {
+    const scope = deps.outOfScope?.(row) ?? null;
+    if (scope) summary[await setAsideBeforeReplay(deps, row, scope)] += 1;
+    else inScope.push(row);
+  }
+  for (const row of inScope) {
     const outcome = await drainRow(deps, row);
     summary[outcome] += 1;
   }

@@ -6,14 +6,13 @@ Since #3861 the website keeps an exact copy of every genuine PiggyVest
 notification before it replies. This change adds the background job that
 finishes any stored notification whose processing did not complete.
 
-- A new database role, `piggyvest_webhook_capture_worker`, can only take a
-  stored notification off the queue, mark it done or put it back, and read
-  queue counts. It cannot log in, cannot store new notifications and cannot
-  read the stored data directly.
+- A new database role can only take a stored notification off the queue,
+  settle one it took itself, and read queue counts. It cannot log in, store
+  new notifications or read the stored data directly.
 - The job runs every minute on the VPS under a separate login that you
   create later from the runbook. It never uses the all-powerful admin key.
-- A readiness check now also confirms that login and that the job is
-  switched on and scheduled.
+- A readiness check confirms that login, the schedule, the VPS signing
+  keys, that alerts reach PostHog, and that nothing waits too long.
 
 ## Why
 
@@ -24,27 +23,26 @@ requires finishing it automatically.
 ## What could go wrong and how it is prevented
 
 - **Paying twice.** Every ledger that moves money ignores a transaction it has
-  already applied, so finishing the same notification again changes nothing.
-  The tests crash the job mid-run and check the money moves exactly once.
-- **The job using too much power.** Before every action it checks it is
-  connected as exactly its own login, that the login belongs to one role
-  only, has no special rights, and uses an encrypted connection. Otherwise it
-  stops.
-- **Old-style notifications.** Older ("legacy") notifications need the admin
-  key, which the job does not have. It leaves them in the queue and raises
-  an alert, and PiggyVest's resend still covers them. The runbook says not to
-  turn on the "job owns the retry" switch while an old-style key is set.
-- **Forged data.** Each stored notification's signature is checked again
-  before use.
+  already applied. The tests crash the job mid-run and check the money moves
+  exactly once.
+- **The job using too much power.** Before every action it checks it is its
+  own login, in one role only, with no special rights, over an encrypted
+  connection. A database test runs that exact check.
+- **Old-style notifications.** These need the admin key, which the job does
+  not have. It sets them aside for review with an alert, so they never hold
+  up other work; PiggyVest's resend still closes them.
+- **A missing or outdated key on the VPS.** The notification waits instead of
+  being treated as forged, and readiness names the missing key.
+- **Alerts nobody sees.** VPS alerts go to PostHog; readiness fails without it.
 
 ## How it is tested
 
-Automated tests cover: the switch off means no database connection at all;
-a login with an extra role or without encryption is refused; all of #3861's
-existing job tests now run through the new database path; a crashed run is
-picked up after five minutes and applied once; old-style notifications are
-put back with an alert and no admin connection is ever made. A database test
-checks the role's exact permissions.
+Automated tests cover: the switch off means no database connection; a login
+with an extra role or without encryption is refused; #3861's job tests run
+through the new database path; a crashed run is picked up later and applied
+once; set-aside notifications never come back to block new deposits; a
+notification signed with a key the VPS lacks waits; and nothing the job runs
+can reach an admin connection.
 
 ## How it stays switched off
 

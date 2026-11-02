@@ -1,20 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const primary = vi.hoisted(() => ({ bank: '', custody: '', interest: '' }));
+const secrets = (key: string) => (key ? { webhookSecret: key } : null);
+
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/piggyvest/primary-wallet-bank-inbox-runtime', () => ({
-  readPrimaryWalletBankInboxSecrets: () => null,
+  readPrimaryWalletBankInboxSecrets: () => secrets(primary.bank),
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-card-custody-intake-runtime', () => ({
-  readPrimaryCardCustodyIntakeSecrets: () => null,
+  readPrimaryCardCustodyIntakeSecrets: () => secrets(primary.custody),
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime', () => ({
-  readPrimaryWalletPaidInterestInboxSecrets: () => null,
+  readPrimaryWalletPaidInterestInboxSecrets: () => secrets(primary.interest),
 }));
 
 import { deterministicKeySource } from '@/lib/piggyvest/deterministic-test-data.test-support';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import {
-  collectPiggyvestWebhookCaptureEvidence,
   inspectPiggyvestWebhookCaptureReadiness,
   type WebhookCaptureEvidence,
 } from './webhook-capture-readiness';
@@ -27,8 +28,18 @@ const MINUTE = 60_000;
 let key: string;
 let ready: WebhookCaptureEvidence;
 
+// The web app's view: no worker-host evidence, so the attestation is read
+// from its own environment.
+const onWebApp = (evidence: WebhookCaptureEvidence): WebhookCaptureEvidence => {
+  const { drain: _drain, ...web } = evidence;
+  return web;
+};
+
 beforeEach(() => {
   key = freshKey();
+  primary.bank = freshKey();
+  primary.custody = freshKey();
+  primary.interest = freshKey();
   ready = {
     env: {
       NODE_ENV: 'test',
@@ -50,6 +61,7 @@ beforeEach(() => {
     drain: {
       login: { ok: true },
       schedule: { enabled: true, cron: 'installed' },
+      alerts: { configured: true },
     },
   };
 });
@@ -70,12 +82,16 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
       'storage',
       'drain_login',
       'drain_schedule',
+      'drain_alerts',
       'worker',
     ]);
     expect(report.readyToAttest).toBe(true);
   });
 
   it('reports every missing piece at once as a clear not-ready list', () => {
+    primary.bank = '';
+    primary.custody = '';
+    primary.interest = '';
     const report = inspectPiggyvestWebhookCaptureReadiness({
       env: { NODE_ENV: 'test' },
       now: NOW,
@@ -90,6 +106,7 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
       'storage:NOT_VERIFIABLE_WITHOUT_MIGRATION',
       'drain_login:DRAIN_LOGIN_NOT_CHECKED',
       'drain_schedule:DRAIN_SCHEDULE_NOT_CHECKED',
+      'drain_alerts:DRAIN_ALERTS_NOT_CHECKED',
       'worker:DRAIN_NOT_SCHEDULED',
     ]);
     expect(report.readyToAttest).toBe(false);
@@ -99,6 +116,7 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     ready.drain = {
       login: { ok: false, reason: 'unsafe', failedChecks: ['membership'] },
       schedule: { enabled: false, cron: 'missing' },
+      alerts: { configured: true },
     };
     expect(notReadyGates(ready)).toEqual([
       'drain_login:DRAIN_LOGIN_UNSAFE',
@@ -111,21 +129,30 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     ready.drain = {
       login: { ok: true },
       schedule: { enabled: true, cron: 'missing' },
+      alerts: { configured: true },
     };
     expect(notReadyGates(ready)).toEqual([
       'drain_schedule:DRAIN_CRON_NOT_INSTALLED',
     ]);
   });
 
-  it('is ready to attest when only the attestation itself is missing', () => {
+  it('is never ready to attest on the web app, where worker-host evidence cannot be collected', () => {
     ready.env = { ...ready.env, PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: '' };
-    const report = inspectPiggyvestWebhookCaptureReadiness(ready);
+    const web = onWebApp(ready);
+    const report = inspectPiggyvestWebhookCaptureReadiness(web);
     expect(report.status).toBe('not-ready');
-    expect(notReadyGates(ready)).toEqual(['worker:DRAIN_NOT_SCHEDULED']);
-    expect(report.readyToAttest).toBe(true);
+    expect(report.notReady).toContainEqual({
+      gate: 'worker',
+      reason: 'DRAIN_NOT_SCHEDULED',
+    });
+    // Worker-host evidence cannot be collected on the web app.
+    expect(report.readyToAttest).toBe(false);
   });
 
   it('does not count an overlap-only key as configuration', () => {
+    primary.bank = '';
+    primary.custody = '';
+    primary.interest = '';
     ready.env = {
       ...ready.env,
       PIGGYVEST_SECRET_KEY: '',
@@ -180,9 +207,13 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     ]);
   });
 
-  it('requires the drain attestation and a fresh backlog', () => {
+  it('requires the drain attestation and a fresh backlog on the web app', () => {
+    const workerGate = () =>
+      notReadyGates(onWebApp(ready)).filter((gate) =>
+        gate.startsWith('worker:')
+      );
     ready.env = { ...ready.env, PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: '' };
-    expect(notReadyGates(ready)).toEqual(['worker:DRAIN_NOT_SCHEDULED']);
+    expect(workerGate()).toEqual(['worker:DRAIN_NOT_SCHEDULED']);
 
     ready.env = {
       ...ready.env,
@@ -194,18 +225,18 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
         NOW.getTime() - 16 * MINUTE
       ).toISOString();
     }
-    expect(notReadyGates(ready)).toEqual(['worker:DRAIN_BACKLOG_STALE']);
+    expect(workerGate()).toEqual(['worker:DRAIN_BACKLOG_STALE']);
 
     if (ready.storage.ok) {
       ready.storage.status.oldestUnprocessedAt = new Date(
         NOW.getTime() - 5 * MINUTE
       ).toISOString();
     }
-    expect(notReadyGates(ready)).toEqual([]);
+    expect(workerGate()).toEqual([]);
   });
 
   it('states which reply a processing failure gets, and that deferred 200 needs the drain', () => {
-    const attested = inspectPiggyvestWebhookCaptureReadiness(ready);
+    const attested = inspectPiggyvestWebhookCaptureReadiness(onWebApp(ready));
     expect(attested.processingFailureReply).toBe('200-deferred');
     expect(attested.notes).toEqual([
       expect.stringContaining('replays only deliveries a primary intake owns'),
@@ -213,7 +244,7 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     expect(attested.notes[0]).toContain('legacy-family webhook key');
 
     ready.env = { ...ready.env, PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: '' };
-    const unattested = inspectPiggyvestWebhookCaptureReadiness(ready);
+    const unattested = inspectPiggyvestWebhookCaptureReadiness(onWebApp(ready));
     expect(unattested.processingFailureReply).toBe('503-retry');
     expect(unattested.notes).toEqual([
       expect.stringContaining('deferred 200 reply'),
@@ -225,7 +256,7 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
     );
     expect(unattested.notes[0]).toContain('503');
     // Still not ready: the worker gate is what the note explains.
-    expect(unattested.notReady.map((entry) => entry.gate)).toEqual(['worker']);
+    expect(unattested.notReady.map((entry) => entry.gate)).toContain('worker');
   });
 
   it.each([
@@ -237,62 +268,18 @@ describe('inspectPiggyvestWebhookCaptureReadiness', () => {
       ...ready.env,
       PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED: value,
     };
-    const report = inspectPiggyvestWebhookCaptureReadiness(ready);
+    const report = inspectPiggyvestWebhookCaptureReadiness(onWebApp(ready));
     expect(report.processingFailureReply).toBe('503-retry');
-    expect(report.notReady).toEqual([
-      { gate: 'worker', reason: 'DRAIN_NOT_SCHEDULED' },
-    ]);
+    expect(report.notReady).toContainEqual({
+      gate: 'worker',
+      reason: 'DRAIN_NOT_SCHEDULED',
+    });
   });
 
   it('is advisory only and never exposes key material', () => {
     const report = inspectPiggyvestWebhookCaptureReadiness(ready);
     expect(report.enforced).toBe(false);
-    expect(JSON.stringify(report)).not.toContain(key);
-  });
-});
-
-describe('collectPiggyvestWebhookCaptureEvidence', () => {
-  const status = {
-    pending: 1,
-    claimed: 0,
-    needsReview: 0,
-    oldestUnprocessedAt: null,
-    lastCapturedAt: null,
-    lastProcessedAt: null,
-  };
-  const collect = (rpc: () => Promise<{ data: unknown; error: unknown }>) =>
-    collectPiggyvestWebhookCaptureEvidence({
-      client: { rpc: vi.fn(rpc) } as unknown as PiggyvestIntakeServiceClient,
-      env: { NODE_ENV: 'test' },
-      now: NOW,
-    });
-
-  it('reads the counters through the status function', async () => {
-    await expect(
-      collect(async () => ({ data: status, error: null }))
-    ).resolves.toMatchObject({ storage: { ok: true, status } });
-  });
-
-  it.each([
-    ['PGRST202', 'function_missing'],
-    ['42883', 'function_missing'],
-    ['08006', 'unreachable'],
-  ])('classifies database error %s as %s', async (code, reason) => {
-    await expect(
-      collect(async () => ({ data: null, error: { code, message: 'x' } }))
-    ).resolves.toMatchObject({ storage: { ok: false, reason } });
-  });
-
-  it('treats a thrown transport error as unreachable and a bad shape as invalid', async () => {
-    await expect(
-      collect(async () => {
-        throw new Error('socket closed');
-      })
-    ).resolves.toMatchObject({ storage: { ok: false, reason: 'unreachable' } });
-    await expect(
-      collect(async () => ({ data: { nope: true }, error: null }))
-    ).resolves.toMatchObject({
-      storage: { ok: false, reason: 'invalid_response' },
-    });
+    for (const secret of [key, primary.bank, primary.custody, primary.interest])
+      expect(JSON.stringify(report)).not.toContain(secret);
   });
 });

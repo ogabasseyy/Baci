@@ -92,6 +92,12 @@ the owner turns it on; see `docs/piggyvest-webhook-capture-drain-runbook.md`.
 - `PIGGYVEST_PRIMARY_DB_HOST`, `PIGGYVEST_PRIMARY_DB_PORT`,
   `PIGGYVEST_PRIMARY_DB_NAME`, `PIGGYVEST_PRIMARY_DB_CA`: the database the
   PiggyVest primary logins share; the connection verifies the certificate.
-- The webhook signing keys of the families the drain replays (bank, custody,
-  interest) and those intakes' own configuration: the drain re-verifies every
-  stored signature and replays through the same intakes the web receiver uses.
+- The current webhook signing keys of the families the drain replays (bank,
+  custody, interest), the same as the web app's, and those intakes' own
+  configuration: the drain re-verifies every stored signature and replays
+  through the same intakes the web receiver uses. A delivery signed with a
+  key this host lacks waits; `--readiness` names any missing family.
+- `POSTHOG_PROJECT_TOKEN`: the drain's alerts are sent to PostHog as
+  `piggyvest_money_alert`; on this host the console line only reaches the
+  local log file. `--readiness` reports `DRAIN_ALERTS_NOT_CONFIGURED`
+  without it.

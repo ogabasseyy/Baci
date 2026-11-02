@@ -62,6 +62,7 @@ function delivery(
     signature: 'ab'.repeat(64),
     matchedSecret: 'matched-secret',
     families,
+    recordedFamilies: families,
     incompleteKeySet,
     keyScope: 'replay',
   };
@@ -151,6 +152,32 @@ describe('replayPrimaryDelivery', () => {
     await expect(
       replayPrimaryDelivery(delivery(body, families))
     ).resolves.toEqual({ status: 503, outOfScope: 'LEGACY_PATH' });
+  });
+
+  it('sets aside a legacy-authorized delivery the host verified only under the owner family, instead of quarantining it', async () => {
+    // Admission recorded bank and legacy (one secret configured for both on
+    // the web app); the worker host holds that secret only as the bank key,
+    // so verification narrows to bank. Setting it aside grants nothing.
+    mocks.dispatch.mockResolvedValue(null);
+    await expect(
+      replayPrimaryDelivery({
+        ...delivery(inflow, ['bank']),
+        recordedFamilies: ['bank', 'legacy'],
+      })
+    ).resolves.toEqual({ status: 503, outOfScope: 'LEGACY_PATH' });
+    expect(mocks.dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ families: ['bank'] })
+    );
+  });
+
+  it('still quarantines when admission recorded no family the legacy path accepts', async () => {
+    mocks.dispatch.mockResolvedValue(null);
+    await expect(
+      replayPrimaryDelivery({
+        ...delivery(inflow, ['interest']),
+        recordedFamilies: ['interest'],
+      })
+    ).resolves.toEqual({ status: 200, authorizationQuarantine: true });
   });
 
   it('turns an intake failure into a plain retry without its detail', async () => {

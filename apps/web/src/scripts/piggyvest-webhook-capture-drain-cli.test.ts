@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ dispatch: vi.fn(), execFile: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  dispatch: vi.fn(),
+  execFile: vi.fn(),
+  primaryKeys: { bank: '', custody: '', interest: '' },
+}));
+const secrets = (key: string) => (key ? { webhookSecret: key } : null);
 
 vi.mock('server-only', () => ({}));
 vi.mock('dotenv/config', () => ({}));
@@ -16,13 +21,15 @@ vi.mock('@/app/api/webhooks/piggyvest/primary-webhook-dispatch', () => ({
   dispatchPrimaryPiggyvestIntake: mocks.dispatch,
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-bank-inbox-runtime', () => ({
-  readPrimaryWalletBankInboxSecrets: () => null,
+  readPrimaryWalletBankInboxSecrets: () => secrets(mocks.primaryKeys.bank),
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-card-custody-intake-runtime', () => ({
-  readPrimaryCardCustodyIntakeSecrets: () => null,
+  readPrimaryCardCustodyIntakeSecrets: () =>
+    secrets(mocks.primaryKeys.custody),
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime', () => ({
-  readPrimaryWalletPaidInterestInboxSecrets: () => null,
+  readPrimaryWalletPaidInterestInboxSecrets: () =>
+    secrets(mocks.primaryKeys.interest),
 }));
 
 import { deterministicTestKey } from '@/lib/piggyvest/deterministic-test-data.test-support';
@@ -44,6 +51,12 @@ const ENV: NodeJS.ProcessEnv = {
   PIGGYVEST_PRIMARY_DB_NAME: 'postgres',
   PIGGYVEST_PRIMARY_DB_CA: 'placeholder-ca',
   PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_DB_PASSWORD: PASSWORD,
+  POSTHOG_PROJECT_TOKEN: 'placeholder-posthog-project-token',
+};
+const PRIMARY_KEYS = {
+  bank: deterministicTestKey('capture-drain-cli:bank'),
+  custody: deterministicTestKey('capture-drain-cli:custody'),
+  interest: deterministicTestKey('capture-drain-cli:interest'),
 };
 const CRON = `* * * * * flock -n /w/locks/piggyvest-webhook-capture-drain.lock bash -lc 'cd /w && timeout 50s /w/bin/process-piggyvest-webhook-capture-drain.sh --once' >> /w/logs/x.log 2>&1`;
 
@@ -60,6 +73,7 @@ const cli = (argv: string[], env: NodeJS.ProcessEnv = ENV, crontab = CRON) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.primaryKeys = { bank: '', custody: '', interest: '' };
   output = [];
   createExecutor = vi.fn(() => scriptedCaptureExecutor([]));
   vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -126,13 +140,36 @@ describe('runPiggyvestWebhookCaptureDrainCli', () => {
     expect(output[0]).toContain('stay pending');
   });
 
-  it('prints a readiness report with no secrets and passes once only the attestation is missing', async () => {
+  it('prints a readiness report with no secrets and passes once every host gate does', async () => {
+    mocks.primaryKeys = { ...PRIMARY_KEYS };
     await expect(cli(['--readiness'])).resolves.toBe(0);
     const report = JSON.parse(output[0] ?? '');
     expect(report.readyToAttest).toBe(true);
-    expect(report.notReady).toEqual([{ gate: 'worker', reason: 'DRAIN_NOT_SCHEDULED' }]);
-    expect(output[0]).not.toContain(PASSWORD);
-    expect(output[0]).not.toContain(KEY);
+    expect(report.notReady).toEqual([]);
+    for (const secret of [PASSWORD, KEY, ...Object.values(PRIMARY_KEYS)])
+      expect(output[0]).not.toContain(secret);
+  });
+
+  it('is not ready to attest on a host that holds no key of a family the drain replays', async () => {
+    // Only the legacy key: the host could not verify a single row it replays.
+    await expect(cli(['--readiness'])).resolves.toBe(1);
+    const report = JSON.parse(output[0] ?? '');
+    expect(report.readyToAttest).toBe(false);
+    expect(report.notReady).toEqual([
+      {
+        gate: 'key_configuration',
+        reason: 'DRAIN_FAMILY_KEY_MISSING:bank,custody,interest',
+      },
+    ]);
+  });
+
+  it('is not ready to attest while the drain alerts cannot leave the host', async () => {
+    mocks.primaryKeys = { ...PRIMARY_KEYS };
+    const env = { ...ENV, POSTHOG_PROJECT_TOKEN: '' };
+    await expect(cli(['--readiness'], env)).resolves.toBe(1);
+    expect(JSON.parse(output[0] ?? '').notReady).toEqual([
+      { gate: 'drain_alerts', reason: 'DRAIN_ALERTS_NOT_CONFIGURED' },
+    ]);
   });
 
   it('reports a missing cron entry as not ready to attest', async () => {

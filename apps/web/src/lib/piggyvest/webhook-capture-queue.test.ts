@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
-import { createCaptureQueue } from './webhook-capture-queue';
+import { createCaptureQueue } from './webhook-capture-service-queue';
 
 const claimRow = {
   capture_id: '4204dc18-efb3-44d0-b9a2-1362448d4f21',

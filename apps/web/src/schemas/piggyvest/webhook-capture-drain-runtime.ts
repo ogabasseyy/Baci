@@ -5,7 +5,7 @@ import { piggyvestCaptureStatusSchema } from './webhook-capture';
 /**
  * Configuration and wire shapes of the PiggyVest webhook capture drain,
  * which runs on the worker host under its own database login
- * (supabase/migrations/20261031222127_piggyvest_webhook_capture_worker_role.sql).
+ * (supabase/migrations/20261102032434_piggyvest_webhook_capture_worker_role.sql).
  * The login is fixed here, never read from the environment, so a
  * misconfigured host cannot point the drain at a broader identity.
  */

@@ -7,7 +7,8 @@ example after a crash or a database blip.
 
 The drain runs on the worker host (VPS) every minute. It connects to the
 database with its **own login**, never the service-role key, and that login
-can only lease, settle and count captured deliveries.
+can only lease, count and settle captured deliveries. It can settle only a
+delivery it leased itself.
 
 Everything below is for the owner to run later, with approval. Nothing in
 the pull request that adds the drain changes production behaviour by itself.
@@ -23,11 +24,15 @@ the pull request that adds the drain changes production behaviour by itself.
 3. Claims at most 10 stored deliveries that are at least two minutes old,
    re-checks each stored signature, and hands the ones a PiggyVest primary
    intake owns (bank inflow, card custody outflow, interest payout) to that
-   intake, which writes through its own dedicated login.
-4. Leaves deliveries that only the legacy path can finish (legacy-family
-   deliveries and record-only events) in the queue and raises a
-   `PIGGYVEST_WEBHOOK_REPLAY_DEFERRED` alert. The web receiver's own retry
-   (provider redelivery) still covers them.
+   intake, which writes through its own dedicated login. A delivery signed
+   with a key this host does not hold yet waits (it is retried later and
+   never used up) and raises `PIGGYVEST_WEBHOOK_KEYS_UNCONFIGURED`.
+4. Sets aside, for review, deliveries that only the legacy path can finish
+   (legacy-family deliveries and record-only events such as interest
+   accruals) and raises a `PIGGYVEST_WEBHOOK_REPLAY_DEFERRED` alert. They
+   leave the drain's queue, so they can never hold up other deliveries. The
+   web receiver keeps asking PiggyVest to redeliver them, and a successful
+   redelivery closes them automatically.
 
 Replaying is safe to repeat: every downstream ledger is keyed on PiggyVest's
 transaction id. If the job is killed mid-run, the claimed delivery returns
@@ -35,27 +40,41 @@ to the queue five minutes later and the next run finishes it.
 
 ## Before you start
 
-- The migration `20261031222127_piggyvest_webhook_capture_worker_role` is
-  applied by the normal deploy (it only creates the non-login role and its
-  three grants).
+- The migration `20261102032434_piggyvest_webhook_capture_worker_role` is
+  applied by the normal deploy (it only creates the non-login role, one
+  claim-bound settle function, and three grants).
 - The worker env file already holds the PiggyVest primary configuration the
-  intakes need (database host/port/name/CA, the bank, custody and interest
-  signing keys, each intake's own settings, and the same environment marker
-  the other PiggyVest primary workers use). Without it the drain can
-  claim deliveries but the intakes answer "unavailable", and the deliveries
-  wait for a later run.
+  intakes need (database host/port/name/CA, the **current bank, custody and
+  interest signing keys, the same as the web app's**, each intake's own
+  settings, and the same environment marker the other PiggyVest primary
+  workers use). Without it the drain can claim deliveries but cannot finish
+  them, and they wait for a later run. When a key is rotated on the web app,
+  copy it to the worker host too.
+- The worker env file holds `POSTHOG_PROJECT_TOKEN`, so the drain's alerts
+  reach PostHog as the `piggyvest_money_alert` event (see
+  docs/piggyvest-money-alerts.md). On this host the console line only goes
+  to a local log file that nobody watches.
 
 ## Step 1: create the login (privileged database session)
 
 Generate the password in the password manager. Never paste it into chat,
-a ticket or the repository.
+a ticket, the repository, or **any SQL text**: SQL is kept in editor
+history, `~/.psql_history` and the database's statement logs.
+
+Create the login without a password:
 
 ```sql
 CREATE ROLE baci_piggyvest_webhook_capture_drain
   LOGIN INHERIT NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION
   CONNECTION LIMIT 3
-  PASSWORD '<from the password manager>'
   IN ROLE piggyvest_webhook_capture_worker;
+```
+
+Then set the password from `psql`, which prompts for it and sends only a
+hashed verifier (the password itself is never part of a statement):
+
+```
+\password baci_piggyvest_webhook_capture_drain
 ```
 
 Read-only check: the login must belong to exactly one role.
@@ -96,9 +115,15 @@ NODE_ENV=production BACI_WORKER_PROFILE=piggyvest-webhook-capture-drain \
 ```
 
 It prints a JSON report (gate names and counts only). Expect every gate to
-pass except `drain_schedule: DRAIN_NOT_ENABLED` and
-`worker: DRAIN_NOT_SCHEDULED`. Fix anything else first; for example
-`DRAIN_LOGIN_UNSAFE` lists which session check failed.
+pass except `drain_schedule: DRAIN_NOT_ENABLED`. Fix anything else first:
+
+- `DRAIN_LOGIN_UNSAFE` lists which session check failed;
+- `DRAIN_FAMILY_KEY_MISSING:<families>`: the host lacks the current key of
+  those families;
+- `DRAIN_ALERTS_NOT_CONFIGURED`: `POSTHOG_PROJECT_TOKEN` is missing.
+
+The worker host cannot see the web app's setting from Step 5, so the
+report says `"processingFailureReply": "unknown"`; that is expected.
 
 ## Step 4: switch the drain on
 
@@ -108,7 +133,10 @@ next minute's run picks it up. Watch
 lines like `{"status":"drained","claimed":0,...}`.
 
 Run the readiness check again: it should now exit 0 with
-`"readyToAttest": true`.
+`"readyToAttest": true`. Keep running it (for example daily, and after any
+key rotation): once the drain is on, `worker: DRAIN_BACKLOG_STALE` means a
+stored delivery has waited more than 15 minutes, so the drain is not
+finishing work.
 
 ## Step 5 (optional): let the drain own the retry
 
@@ -123,7 +151,10 @@ Only set it when **all** of these hold:
   and `PVB_SECRET_KEY` are empty and `PIGGYVEST_WEBHOOK_KEY_ARCHIVE` has no
   legacy entry still inside its overlap window. The drain does not replay
   legacy-family deliveries, so for those the provider's redelivery must stay
-  the retry.
+  the retry;
+- you accept that a record-only event (an interest accrual notice) whose
+  processing fails is then not redelivered: the drain sets it aside for
+  review instead. No money moves on these events.
 
 Without this step the drain still finishes primary deliveries; the receiver
 simply keeps asking PiggyVest to redeliver as well.
@@ -141,11 +172,15 @@ was claimed when the drain stopped returns to the queue after five minutes.
 
 ## Alerts
 
+All alerts reach PostHog as `piggyvest_money_alert` once
+`POSTHOG_PROJECT_TOKEN` is set on the host.
+
 - `PIGGYVEST_WEBHOOK_REPLAY_DEFERRED`: a delivery only the legacy path can
-  finish was left in the queue. Check that the receiver's redelivery
-  finished it; the alert repeats (at most hourly per delivery) until then.
+  finish was set aside for review. A successful PiggyVest redelivery closes
+  it on its own; if it is still in review a day later, finish it by hand.
 - `PIGGYVEST_WEBHOOK_NEEDS_REVIEW`: a delivery cannot be finished
   automatically (for example a conflicting redelivery or an unreadable
   body). It stays stored for review.
-- `PIGGYVEST_WEBHOOK_KEYS_UNCONFIGURED`: the host's key set is incomplete;
-  affected deliveries wait without using up their retries.
+- `PIGGYVEST_WEBHOOK_KEYS_UNCONFIGURED`: the host's key set is incomplete
+  or out of date (for example a rotation not copied over); affected
+  deliveries wait without using up their retries.

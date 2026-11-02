@@ -1,6 +1,4 @@
 import 'server-only';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import {
   type PiggyvestCaptureStatus,
   type PiggyvestClaimedCapture,
@@ -16,10 +14,12 @@ import type { CaptureDrainExecutor } from './webhook-capture-pg-executor';
  * Database-backed queue over the captured deliveries, for the drain. A row
  * is leased for LEASE_SECONDS (a crashed worker's lease simply expires and
  * the row is claimed again) and is only claimable after MIN_AGE_SECONDS, so
- * the receiver's own inline processing normally finishes first.
+ * the receiver's own inline processing normally finishes first. The
+ * service-role variant is webhook-capture-service-queue.ts, kept apart so
+ * the worker host's import graph never reaches a service client.
  */
-const LEASE_SECONDS = 300;
-const MIN_AGE_SECONDS = 120;
+export const LEASE_SECONDS = 300;
+export const MIN_AGE_SECONDS = 120;
 
 /**
  * 'pending' releases a failed row: it keeps the attempt it spent (bounded by
@@ -44,43 +44,10 @@ export interface CaptureQueue {
   ): Promise<boolean>;
 }
 
-export function createCaptureQueue(
-  supabase: PiggyvestIntakeServiceClient
-): CaptureQueue {
-  const db: SupabaseClient = supabase;
-  return {
-    async claim(limit) {
-      const { data, error } = await db.rpc('claim_piggyvest_webhook_captures', {
-        p_limit: limit,
-        p_lease_seconds: LEASE_SECONDS,
-        p_min_age_seconds: MIN_AGE_SECONDS,
-      });
-      const parsed = piggyvestClaimedCapturesSchema.safeParse(data);
-      if (error || !parsed.success) {
-        throw new Error('PiggyVest capture claim failed');
-      }
-      return parsed.data;
-    },
-    async resolve(captureId, claimToken, state, errorCode) {
-      const { data, error } = await db.rpc(
-        'resolve_piggyvest_webhook_capture',
-        {
-          p_id: captureId,
-          p_claim_token: claimToken,
-          p_state: state,
-          p_error: errorCode,
-        }
-      );
-      if (error) throw new Error('PiggyVest capture resolve failed');
-      return data === true;
-    },
-  };
-}
-
 /**
- * The same queue over the worker host's dedicated drain login (see
- * webhook-capture-pg-executor.ts) instead of a service-role client: same
- * lease, same grace period, same fenced resolve. Every response is parsed
+ * The queue over the worker host's dedicated drain login (see
+ * webhook-capture-pg-executor.ts), never a service-role client: the same
+ * lease, grace period and fenced resolve as the service-role queue. Every response is parsed
  * before it is trusted and every failure is reported without detail.
  */
 export function createPgCaptureQueue(

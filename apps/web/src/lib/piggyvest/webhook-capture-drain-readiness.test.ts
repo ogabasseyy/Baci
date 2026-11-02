@@ -6,6 +6,7 @@ import {
   type CaptureDrainLoginEvidence,
   captureDrainCronState,
   collectCaptureDrainEvidence,
+  drainAlertReason,
   drainLoginReason,
   drainScheduleReason,
 } from './webhook-capture-drain-readiness';
@@ -54,6 +55,20 @@ describe('gate reasons', () => {
   it('names a missing check rather than passing it', () => {
     expect(drainLoginReason(undefined)).toBe('DRAIN_LOGIN_NOT_CHECKED');
     expect(drainScheduleReason(undefined)).toBe('DRAIN_SCHEDULE_NOT_CHECKED');
+    expect(drainAlertReason(undefined)).toBe('DRAIN_ALERTS_NOT_CHECKED');
+  });
+
+  it('requires the drain alerts to leave the host', () => {
+    const drain = {
+      login: { ok: true },
+      schedule: { enabled: true, cron: 'installed' },
+    } as const;
+    expect(drainAlertReason({ ...drain, alerts: { configured: true } })).toBe(
+      null
+    );
+    expect(drainAlertReason({ ...drain, alerts: { configured: false } })).toBe(
+      'DRAIN_ALERTS_NOT_CONFIGURED'
+    );
   });
 
   it.each<[CaptureDrainLoginEvidence, string | null]>([
@@ -69,6 +84,7 @@ describe('gate reasons', () => {
       drainLoginReason({
         login,
         schedule: { enabled: true, cron: 'installed' },
+        alerts: { configured: true },
       })
     ).toBe(reason);
   });
@@ -80,7 +96,13 @@ describe('gate reasons', () => {
     [{ enabled: true, cron: 'duplicated' } as const, 'DRAIN_CRON_DUPLICATED'],
     [{ enabled: true, cron: 'unreadable' } as const, 'DRAIN_CRON_UNREADABLE'],
   ])('maps schedule evidence %j to %s', (schedule, reason) => {
-    expect(drainScheduleReason({ login: { ok: true }, schedule })).toBe(reason);
+    expect(
+      drainScheduleReason({
+        login: { ok: true },
+        schedule,
+        alerts: { configured: true },
+      })
+    ).toBe(reason);
   });
 });
 
@@ -98,6 +120,7 @@ describe('collectCaptureDrainEvidence', () => {
   const env = {
     NODE_ENV: 'test',
     PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_ENABLED: 'true',
+    POSTHOG_PROJECT_TOKEN: 'placeholder-posthog-project-token',
   } as const;
 
   it('reads storage and the session through the drain login, and the schedule from the host', async () => {
@@ -115,6 +138,7 @@ describe('collectCaptureDrainEvidence', () => {
       drain: {
         login: { ok: true },
         schedule: { enabled: true, cron: 'installed' },
+        alerts: { configured: true },
       },
     });
     expect(query).toHaveBeenCalledWith('status', []);
@@ -132,6 +156,7 @@ describe('collectCaptureDrainEvidence', () => {
     expect(evidence.drain).toEqual({
       login: { ok: false, reason: 'not_configured' },
       schedule: { enabled: false, cron: 'unreadable' },
+      alerts: { configured: false },
     });
   });
 
@@ -176,6 +201,7 @@ describe('collectCaptureDrainEvidence', () => {
     expect(evidence.drain).toEqual({
       login: { ok: false, reason: 'unsafe', failedChecks: ['membership'] },
       schedule: { enabled: true, cron: 'unreadable' },
+      alerts: { configured: true },
     });
   });
 });

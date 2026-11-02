@@ -4,13 +4,16 @@
 -- Proves, against live PostgreSQL and through the catalog only:
 --   * piggyvest_webhook_capture_worker exists, cannot log in, holds no
 --     elevated attribute and is a member of no other role;
---   * it may lease, settle and count captures (claim / resolve / status)
---     and nothing else: no capture, no evidence trigger, no table or column
---     privilege, no other schema object granted to it here;
---   * the three functions it may run are still SECURITY DEFINER with a
---     pinned search_path, and their ACLs name exactly the owner,
---     service_role and the worker (the capture function: owner and
---     service_role only), with no PUBLIC, anon or authenticated entry;
+--   * it may lease, settle and count captures (claim / claim-bound
+--     resolve / status) and nothing else: not the shared resolve function
+--     (whose tokenless branch is the web receiver's), no capture, no
+--     evidence trigger, no table or column privilege, no other schema
+--     object granted to it here;
+--   * the claim-bound resolve refuses a call without a claim token;
+--   * the functions it may run are SECURITY DEFINER with a pinned
+--     search_path, and their ACLs name exactly the intended grantees (the
+--     claim-bound resolve: the worker only), with no PUBLIC, anon or
+--     authenticated entry;
 --   * no login is a member of the worker yet: the drain login is
 --     provisioned later from the runbook, so the migration alone leaves
 --     the drain dark.
@@ -19,7 +22,8 @@
 -- object (a denied EXECUTE cannot be trapped on the pinned replay image),
 -- and the suite never SETs ROLE into the new role (the managed replay
 -- administrator cannot). The claim/resolve/status behaviour itself is
--- covered by piggyvest_webhook_durable_capture.sql.
+-- covered by piggyvest_webhook_durable_capture.sql, and the drain's session
+-- check by piggyvest_webhook_capture_drain_session_check.sql.
 --
 -- Usage:
 --   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -57,6 +61,8 @@ END
 $$;
 
 -- What the worker may run (ZGRT1) and what it must not (ZGRT2..ZGRT4).
+-- The shared resolve function is denied: its tokenless branch can close a
+-- row nobody leased, including a needs_review row.
 DO $$
 DECLARE
   v_fn regprocedure;
@@ -67,7 +73,7 @@ BEGIN
   END IF;
   FOREACH v_fn IN ARRAY ARRAY[
     'public.claim_piggyvest_webhook_captures(integer,integer,integer)'::regprocedure,
-    'public.resolve_piggyvest_webhook_capture(uuid,uuid,text,text)'::regprocedure,
+    'public.resolve_claimed_piggyvest_webhook_capture(uuid,uuid,text,text)'::regprocedure,
     'public.piggyvest_webhook_capture_status()'::regprocedure
   ] LOOP
     IF NOT pg_catalog.has_function_privilege('piggyvest_webhook_capture_worker', v_fn, 'EXECUTE') THEN
@@ -76,6 +82,7 @@ BEGIN
   END LOOP;
 
   FOREACH v_fn IN ARRAY ARRAY[
+    'public.resolve_piggyvest_webhook_capture(uuid,uuid,text,text)'::regprocedure,
     'public.capture_piggyvest_webhook_delivery(jsonb)'::regprocedure,
     'public.piggyvest_webhook_captures_immutable_evidence()'::regprocedure
   ] LOOP
@@ -110,7 +117,7 @@ BEGIN
       AND acl.grantee = 'piggyvest_webhook_capture_worker'::regrole
       AND p.oid NOT IN (
         'public.claim_piggyvest_webhook_captures(integer,integer,integer)'::regprocedure,
-        'public.resolve_piggyvest_webhook_capture(uuid,uuid,text,text)'::regprocedure,
+        'public.resolve_claimed_piggyvest_webhook_capture(uuid,uuid,text,text)'::regprocedure,
         'public.piggyvest_webhook_capture_status()'::regprocedure
       )
   ) OR EXISTS (
@@ -121,7 +128,7 @@ BEGIN
     WHERE n.nspname = 'public'
       AND acl.grantee = 'piggyvest_webhook_capture_worker'::regrole
   ) THEN
-    RAISE EXCEPTION 'the worker holds a grant beyond the three drain functions'
+    RAISE EXCEPTION 'the worker holds a grant beyond the three drain entry points'
       USING ERRCODE = 'ZGRT4';
   END IF;
 END
@@ -141,6 +148,7 @@ BEGIN
   FOREACH v_fn IN ARRAY ARRAY[
     'public.claim_piggyvest_webhook_captures(integer,integer,integer)'::regprocedure,
     'public.resolve_piggyvest_webhook_capture(uuid,uuid,text,text)'::regprocedure,
+    'public.resolve_claimed_piggyvest_webhook_capture(uuid,uuid,text,text)'::regprocedure,
     'public.piggyvest_webhook_capture_status()'::regprocedure,
     'public.capture_piggyvest_webhook_delivery(jsonb)'::regprocedure
   ] LOOP
@@ -170,8 +178,12 @@ BEGIN
       ) AS named;
 
     v_expected := CASE
-      WHEN v_fn = 'public.capture_piggyvest_webhook_delivery(jsonb)'::regprocedure
-        THEN ARRAY['service_role']
+      WHEN v_fn IN (
+        'public.capture_piggyvest_webhook_delivery(jsonb)'::regprocedure,
+        'public.resolve_piggyvest_webhook_capture(uuid,uuid,text,text)'::regprocedure
+      ) THEN ARRAY['service_role']
+      WHEN v_fn = 'public.resolve_claimed_piggyvest_webhook_capture(uuid,uuid,text,text)'::regprocedure
+        THEN ARRAY['piggyvest_webhook_capture_worker']
       ELSE ARRAY['piggyvest_webhook_capture_worker', 'service_role']
     END;
 
@@ -184,6 +196,7 @@ BEGIN
   FOREACH v_fn IN ARRAY ARRAY[
     'public.claim_piggyvest_webhook_captures(integer,integer,integer)'::regprocedure,
     'public.resolve_piggyvest_webhook_capture(uuid,uuid,text,text)'::regprocedure,
+    'public.resolve_claimed_piggyvest_webhook_capture(uuid,uuid,text,text)'::regprocedure,
     'public.piggyvest_webhook_capture_status()'::regprocedure,
     'public.capture_piggyvest_webhook_delivery(jsonb)'::regprocedure
   ] LOOP
@@ -215,6 +228,21 @@ BEGIN
     RAISE EXCEPTION 'a login is already a member of piggyvest_webhook_capture_worker'
       USING ERRCODE = 'ZDRK1';
   END IF;
+END
+$$;
+
+-- The claim-bound resolve refuses a call without a claim token before the
+-- shared function is reached (ZCLM1). Run as the replay administrator; the
+-- raised error is the function's own, so it is trappable.
+DO $$
+BEGIN
+  BEGIN
+    PERFORM public.resolve_claimed_piggyvest_webhook_capture(
+      gen_random_uuid(), NULL, 'processed', NULL);
+    RAISE EXCEPTION 'a tokenless claim-bound resolve was accepted' USING ERRCODE = 'ZCLM1';
+  EXCEPTION WHEN invalid_parameter_value THEN
+    NULL;
+  END;
 END
 $$;
 

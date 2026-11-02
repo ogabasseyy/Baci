@@ -3,9 +3,10 @@ import type { PiggyvestClaimedCapture } from '@/schemas/piggyvest/webhook-captur
 import type { DrainDeps } from './webhook-capture-drain';
 import {
   deferForIncompleteKeySet,
-  deferOutOfScope,
+  parkContentQuarantined,
   parkForReview,
   type RowOutcome,
+  setAsideOutOfScope,
   settle,
 } from './webhook-capture-drain-settle';
 
@@ -57,7 +58,7 @@ export async function settleReplayResult(
   if (result?.outOfScope !== undefined) {
     // Not this runtime's to judge: the key set and attempt count are
     // irrelevant, the path it needs simply is not here.
-    return deferOutOfScope(deps, row, result.outOfScope);
+    return setAsideOutOfScope(deps, row, result.outOfScope);
   }
   if (result?.conflict === true) {
     return parkForReview(
@@ -68,14 +69,7 @@ export async function settleReplayResult(
     );
   }
   if (result?.contentQuarantine === true) {
-    // The bytes verified, so the key set cannot change this outcome: only a
-    // parser fix plus a resend can make them processable.
-    return parkForReview(
-      deps,
-      row,
-      'REPLAY_CONTENT_QUARANTINED',
-      'body rejected by the parser; request a resend after the fix'
-    );
+    return parkContentQuarantined(deps, row);
   }
   if (result?.keySetIncomplete === true || verifiedWithIncompleteKeySet) {
     // The key set is incomplete (the replay verified under only the

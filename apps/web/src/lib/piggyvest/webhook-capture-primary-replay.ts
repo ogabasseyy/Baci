@@ -1,6 +1,5 @@
 import 'server-only';
 import { dispatchPrimaryPiggyvestIntake } from '@/app/api/webhooks/piggyvest/primary-webhook-dispatch';
-import { piggyvestWebhookEventSchema } from '@/schemas/piggyvest/events';
 import {
   authorizesLegacyHandling,
   primaryOwnerFamily,
@@ -9,6 +8,7 @@ import type {
   ReplayDelivery,
   ReplayProcessResult,
 } from './webhook-capture-drain';
+import { parseStoredPiggyvestEvent } from './webhook-capture-stored-event';
 
 /**
  * Processing step of the worker-host capture drain (R5): the receiver's
@@ -26,24 +26,16 @@ import type {
  * - an inflow redelivery conflict: conflict (parked for review);
  * - anything only the legacy path could finish (a record-only event, a
  *   legacy-authorized delivery no primary intake claimed): out of scope,
- *   deferred with an alert and left to the receiver's own retry.
+ *   set aside for review with an alert; a provider redelivery the
+ *   receiver completes inline still closes it.
  */
 export async function replayPrimaryDelivery(
   delivery: ReplayDelivery
 ): Promise<ReplayProcessResult> {
   const { rawBody, signature, matchedSecret, families, incompleteKeySet } =
     delivery;
-  let payload: unknown;
-  try {
-    payload = JSON.parse(
-      new TextDecoder('utf-8', { fatal: true }).decode(rawBody)
-    );
-  } catch {
-    return { status: 200, contentQuarantine: true };
-  }
-  const parsed = piggyvestWebhookEventSchema.safeParse(payload);
-  if (!parsed.success) return { status: 200, contentQuarantine: true };
-  const event = parsed.data;
+  const event = parseStoredPiggyvestEvent(rawBody);
+  if (!event) return { status: 200, contentQuarantine: true };
 
   // Same rule as the receiver: while the key set is incomplete, an owned
   // event counts as completed only if its owning family loaded and ran.
@@ -70,10 +62,16 @@ export async function replayPrimaryDelivery(
   if (primary === 'conflict') return { status: 200, conflict: true };
   if (primary) return { status: primary.status };
 
-  if (!authorizesLegacyHandling(event.eventType, families)) {
-    return incompleteKeySet === true
-      ? { status: 503, keySetIncomplete: true }
-      : { status: 200, authorizationQuarantine: true };
+  // Whether the legacy path may take it is judged on what admission
+  // recorded: the worker host holds no legacy key, so its verification
+  // never reports the legacy family even for a secret the web app also
+  // holds as the legacy key. Setting a row aside grants nothing, so the
+  // wider recorded set cannot widen authority; processing above used only
+  // the narrowed `families`.
+  if (authorizesLegacyHandling(event.eventType, delivery.recordedFamilies)) {
+    return { status: 503, outOfScope: 'LEGACY_PATH' };
   }
-  return { status: 503, outOfScope: 'LEGACY_PATH' };
+  return incompleteKeySet === true
+    ? { status: 503, keySetIncomplete: true }
+    : { status: 200, authorizationQuarantine: true };
 }

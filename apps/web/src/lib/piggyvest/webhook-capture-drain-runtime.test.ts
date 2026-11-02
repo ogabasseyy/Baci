@@ -39,6 +39,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-paid-interest-inbox-runtime', () => ({
 }));
 
 import { deterministicTestKey } from './deterministic-test-data.test-support';
+import { schemaValidInflow } from './webhook-capture-drain.test-support';
 import {
   isPiggyvestCaptureDrainEnabled,
   readPiggyvestCaptureDrainRuntime,
@@ -63,41 +64,6 @@ const ENV: NodeJS.ProcessEnv = {
   PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_DB_PASSWORD: 'placeholder-password',
 };
 
-// A schema-valid bank inflow; only the ids vary between rows.
-const body = (eventId: string, eventType: string, transactionId: string) =>
-  JSON.stringify({
-    eventId,
-    eventType,
-    eventCategory: 'inflow_transaction',
-    customer_id: 'fixture-customer',
-    pvb_reference: 'fixture-pvb-reference',
-    pvb_wallet: 'fixture-wallet',
-    eventData: {
-      id: `data-${eventId}`,
-      customer_id: 'fixture-customer',
-      destination_wallet_id: 'fixture-conduit',
-      type: 'inter',
-      category: 'bank_transfer_inflow',
-      amount: 10000,
-      currency: 'NGN',
-      narration: '',
-      ip_address: '',
-      transaction_id: transactionId,
-      timestamp: '2026-10-07T10:00:00.000Z',
-      status: 'COMPLETED',
-      third_party_reference: '',
-      initiator_reference: '',
-      internal_reference: '',
-      provider: 'fixture-bank',
-      destination_wallet_balance: 10000,
-      destination_wallet_ledger_balance: 10000,
-      destination_transaction_balance: 10000,
-      reference: `reference-${eventId}`,
-      recipient_bank_account_number: '0123456789',
-      sender_name: 'Fixture sender',
-      fee: 0,
-    },
-  });
 const sign = (key: string, text: string) =>
   createHmac('sha512', key).update(text).digest('hex');
 
@@ -114,7 +80,7 @@ function store() {
     key: string,
     families: ('legacy' | 'bank')[]
   ) => {
-    const text = body(eventId, eventType, `txn-${eventId}`);
+    const text = schemaValidInflow(eventId, eventType);
     return model.insert({
       raw_hex: Buffer.from(text).toString('hex'),
       signature: sign(key, text),
@@ -201,7 +167,7 @@ describe('enable flag and configuration', () => {
 });
 
 describe('worker-host replay', () => {
-  it('replays primary rows, defers legacy-family rows with an alert, and never builds a service client', async () => {
+  it('replays primary rows, sets legacy-family rows aside with an alert, and never builds a service client', async () => {
     const model = store();
     const primary = model.add(
       'p1',
@@ -218,16 +184,17 @@ describe('worker-host replay', () => {
 
     expect(result).toEqual({
       status: 'drained',
-      summary: { claimed: 2, processed: 1, retried: 1, needsReview: 0 },
+      summary: { claimed: 2, processed: 1, retried: 0, needsReview: 1 },
     });
     expect(model.rows.find((r) => r.id === primary.id)).toMatchObject({
       processing_state: 'processed',
     });
     expect(model.rows.find((r) => r.id === legacy.id)).toMatchObject({
-      processing_state: 'pending',
-      attempts: 0,
-      last_error: 'REPLAY_DEFERRED_LEGACY_FAMILY',
+      processing_state: 'needs_review',
+      last_error: 'REPLAY_OUT_OF_SCOPE_LEGACY_FAMILY',
     });
+    // A provider redelivery the receiver completes inline still closes it.
+    expect(model.completeInline(legacy.id)).toBe(true);
     expect(mocks.dispatch).toHaveBeenCalledTimes(1);
     expect(credits).toEqual(new Map([['txn-p1', 1]]));
     const deferral = alerts.mock.calls

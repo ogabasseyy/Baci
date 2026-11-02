@@ -1,4 +1,5 @@
 import 'server-only';
+import { isPostHogServerConfigured } from '@/lib/posthog/server';
 import { piggyvestCaptureStatusRowSchema } from '@/schemas/piggyvest/webhook-capture-drain-runtime';
 import { isPiggyvestCaptureDrainEnabled } from './webhook-capture-attestation';
 import type {
@@ -29,6 +30,12 @@ export type CaptureDrainCronState =
 export interface CaptureDrainEvidence {
   login: CaptureDrainLoginEvidence;
   schedule: { enabled: boolean; cron: CaptureDrainCronState };
+  /**
+   * Whether the drain's alerts leave this host. The console line only
+   * reaches a local log file here, so paging relies on the server-side
+   * PostHog money alert (see docs/piggyvest-money-alerts.md).
+   */
+  alerts: { configured: boolean };
 }
 
 const CRON_WRAPPER = '/bin/process-piggyvest-webhook-capture-drain.sh --once';
@@ -81,6 +88,13 @@ export function drainScheduleReason(
   return reasons[drain.schedule.cron];
 }
 
+export function drainAlertReason(
+  drain: CaptureDrainEvidence | undefined
+): string | null {
+  if (!drain) return 'DRAIN_ALERTS_NOT_CHECKED';
+  return drain.alerts.configured ? null : 'DRAIN_ALERTS_NOT_CONFIGURED';
+}
+
 // Undefined function or table, or no EXECUTE grant: the migration that
 // creates or grants them has not been applied to this database.
 const MIGRATION_STATES = new Set(['42883', '42P01', '42501']);
@@ -131,6 +145,7 @@ export async function collectCaptureDrainEvidence(input: {
         enabled: isPiggyvestCaptureDrainEnabled(env),
         cron: captureDrainCronState(crontab),
       },
+      alerts: { configured: isPostHogServerConfigured(env) },
     },
   };
 }

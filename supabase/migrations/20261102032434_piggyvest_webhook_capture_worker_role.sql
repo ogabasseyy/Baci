@@ -6,12 +6,15 @@
 -- docs/piggyvest-webhook-capture-drain-runbook.md. That login is a member
 -- of exactly one role, created here: piggyvest_webhook_capture_worker.
 --
--- The role can lease, settle and count captured deliveries through the
--- existing SECURITY DEFINER functions (claim, resolve, status). It cannot
--- log in, capture new deliveries, run the evidence trigger, or touch
--- public.piggyvest_webhook_captures directly. No function is created or
--- replaced: the three functions keep their definitions and their existing
--- service_role grants, which the web receiver still uses.
+-- The role can lease, count and settle captured deliveries: the existing
+-- SECURITY DEFINER claim and status functions, plus one new claim-bound
+-- entry point over the shared resolve function. It cannot log in, capture
+-- new deliveries, run the evidence trigger, touch
+-- public.piggyvest_webhook_captures directly, or call the shared resolve
+-- function itself: that function's tokenless branch (inline completion by
+-- the web receiver, which may also close a needs_review row) stays with
+-- service_role. No existing function is replaced; each keeps its
+-- definition and its service_role grant, which the web receiver still uses.
 --
 -- Nothing runs until the login exists and the worker host flag is on, so
 -- applying this migration changes no behaviour.
@@ -67,6 +70,32 @@ BEGIN
 END
 $$;
 
+-- The drain settles only rows it leased. Every resolve it makes carries
+-- the claim token its own claim returned, so a call without one is refused
+-- before the shared function is reached.
+CREATE FUNCTION public.resolve_claimed_piggyvest_webhook_capture(
+  p_id uuid,
+  p_claim_token uuid,
+  p_state text,
+  p_error text
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog
+AS $$
+BEGIN
+  IF p_id IS NULL OR p_claim_token IS NULL THEN
+    RAISE EXCEPTION 'a claimed capture and its claim token are required'
+      USING ERRCODE = '22023';
+  END IF;
+  RETURN public.resolve_piggyvest_webhook_capture(p_id, p_claim_token, p_state, p_error);
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.resolve_claimed_piggyvest_webhook_capture(uuid, uuid, text, text)
+  FROM PUBLIC, anon, authenticated, service_role;
+
 GRANT USAGE ON SCHEMA public TO piggyvest_webhook_capture_worker;
 
 -- No direct table authority, and never the capture door or the trigger.
@@ -76,9 +105,11 @@ REVOKE ALL ON FUNCTION public.capture_piggyvest_webhook_delivery(jsonb)
   FROM piggyvest_webhook_capture_worker;
 REVOKE ALL ON FUNCTION public.piggyvest_webhook_captures_immutable_evidence()
   FROM piggyvest_webhook_capture_worker;
+REVOKE ALL ON FUNCTION public.resolve_piggyvest_webhook_capture(uuid, uuid, text, text)
+  FROM piggyvest_webhook_capture_worker;
 
 -- Re-assert the API-role denials before widening, then grant exactly the
--- drain's three entry points.
+-- drain's three entry points (claim, claim-bound resolve, status).
 REVOKE ALL ON FUNCTION public.claim_piggyvest_webhook_captures(integer, integer, integer)
   FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.resolve_piggyvest_webhook_capture(uuid, uuid, text, text)
@@ -88,7 +119,7 @@ REVOKE ALL ON FUNCTION public.piggyvest_webhook_capture_status()
 
 GRANT EXECUTE ON FUNCTION public.claim_piggyvest_webhook_captures(integer, integer, integer)
   TO piggyvest_webhook_capture_worker;
-GRANT EXECUTE ON FUNCTION public.resolve_piggyvest_webhook_capture(uuid, uuid, text, text)
+GRANT EXECUTE ON FUNCTION public.resolve_claimed_piggyvest_webhook_capture(uuid, uuid, text, text)
   TO piggyvest_webhook_capture_worker;
 GRANT EXECUTE ON FUNCTION public.piggyvest_webhook_capture_status()
   TO piggyvest_webhook_capture_worker;

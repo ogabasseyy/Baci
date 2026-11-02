@@ -3,6 +3,7 @@ import type { PiggyvestClaimedCapture } from '@/schemas/piggyvest/webhook-captur
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 import type { DrainDeps } from './webhook-capture-drain';
 import type { CaptureResolution } from './webhook-capture-queue';
+import { parseStoredPiggyvestEvent } from './webhook-capture-stored-event';
 
 /**
  * How the drain settles a claimed row. Kept apart from the per-row decision
@@ -46,13 +47,14 @@ export async function deferForIncompleteKeySet(
 }
 
 /**
- * Defer a row this drain runtime must not replay (`scope` names why, for
+ * Set aside a row this drain runtime must not replay (`scope` names why, for
  * example LEGACY_FAMILY: the worker host holds no service-role authority).
- * The row is not judged: the deferral spends no attempt and never
- * dead-letters, so the web receiver's own retry can still complete it, and
- * the alert makes every such row visible. No secret or body is logged.
+ * The row leaves the claimable set (needs_review), so such rows can never
+ * crowd out work this runtime can finish, and the receiver keeps asking for
+ * redelivery while it is in review. A redelivery the receiver completes
+ * inline still closes it as processed. No secret or body is logged.
  */
-export async function deferOutOfScope(
+export async function setAsideOutOfScope(
   deps: DrainDeps,
   row: PiggyvestClaimedCapture,
   scope: string
@@ -60,10 +62,10 @@ export async function deferOutOfScope(
   emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_REPLAY_DEFERRED', {
     captureId: row.capture_id,
     eventType: row.event_type,
-    reason: `replay deferred: ${scope}`,
+    reason: `set aside for review: ${scope}; a provider redelivery closes it`,
   });
-  await settle(deps, row, 'deferred', `REPLAY_DEFERRED_${scope}`);
-  return 'retried';
+  await settle(deps, row, 'needs_review', `REPLAY_OUT_OF_SCOPE_${scope}`);
+  return 'needsReview';
 }
 
 /**
@@ -86,4 +88,37 @@ export async function parkForReview(
   });
   await settle(deps, row, 'needs_review', code);
   return 'needsReview';
+}
+
+/**
+ * The stored bytes verified (or were admitted) but the parser rejects them,
+ * so no key set can change the outcome: only a parser fix plus a resend can
+ * make them processable.
+ */
+export function parkContentQuarantined(
+  deps: DrainDeps,
+  row: PiggyvestClaimedCapture
+): Promise<RowOutcome> {
+  return parkForReview(
+    deps,
+    row,
+    'REPLAY_CONTENT_QUARANTINED',
+    'body rejected by the parser; request a resend after the fix'
+  );
+}
+
+/**
+ * The scope check runs before verification and replay, so nothing has read
+ * the body yet: one the parser rejects is parked as a content quarantine
+ * (what the receiver leaves such a row pending for), so the review reason
+ * says what is actually wrong. Anything else is set aside under its scope.
+ */
+export function setAsideBeforeReplay(
+  deps: DrainDeps,
+  row: PiggyvestClaimedCapture,
+  scope: string
+): Promise<RowOutcome> {
+  return parseStoredPiggyvestEvent(Buffer.from(row.raw_hex, 'hex'))
+    ? setAsideOutOfScope(deps, row, scope)
+    : parkContentQuarantined(deps, row);
 }

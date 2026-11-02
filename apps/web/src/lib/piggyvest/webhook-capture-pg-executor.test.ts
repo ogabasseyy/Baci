@@ -109,9 +109,14 @@ describe('createCaptureDrainPgExecutor', () => {
     ]);
     const [verify, statement] = clients[0]?.calls ?? [];
     expect(verify?.text).toContain('SESSION_USER');
-    expect(verify?.values).toEqual([PIGGYVEST_CAPTURE_WORKER_ROLE]);
+    expect(verify?.values).toEqual([
+      PIGGYVEST_CAPTURE_WORKER_ROLE,
+      PIGGYVEST_CAPTURE_DRAIN_LOGIN,
+    ]);
+    // The claim-bound entry point: the worker can never reach the tokenless
+    // (inline completion) branch of the shared resolve function.
     expect(statement?.text).toBe(
-      'SELECT public.resolve_piggyvest_webhook_capture($1::uuid, $2::uuid, $3::text, $4::text) AS resolved'
+      'SELECT public.resolve_claimed_piggyvest_webhook_capture($1::uuid, $2::uuid, $3::text, $4::text) AS resolved'
     );
     expect(statement?.values).toEqual(['capture', 'token', 'processed', null]);
     expect(rows).toEqual([{ resolved: true }]);

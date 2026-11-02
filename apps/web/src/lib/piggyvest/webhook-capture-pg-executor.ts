@@ -23,18 +23,26 @@ import {
 
 export type CaptureDrainStatement = 'claim' | 'resolve' | 'status';
 
-const STATEMENTS: Readonly<Record<CaptureDrainStatement, string>> = {
+// Resolve goes through the claim-bound entry point: the worker can settle
+// only rows it leased, never through the tokenless branch the web receiver
+// uses for inline completion.
+export const CAPTURE_DRAIN_STATEMENTS: Readonly<
+  Record<CaptureDrainStatement, string>
+> = {
   claim:
     'SELECT capture_id, claim_token, raw_hex, signature, key_version, key_families, attempts, event_type, provider_transaction_id FROM public.claim_piggyvest_webhook_captures($1::integer, $2::integer, $3::integer)',
   resolve:
-    'SELECT public.resolve_piggyvest_webhook_capture($1::uuid, $2::uuid, $3::text, $4::text) AS resolved',
+    'SELECT public.resolve_claimed_piggyvest_webhook_capture($1::uuid, $2::uuid, $3::text, $4::text) AS resolved',
   status: 'SELECT public.piggyvest_webhook_capture_status() AS status',
 };
 
 // One row about the session: who is connected, what the login may do, how
 // many roles it belongs to, whether its single membership is the worker
 // role (itself non-login, non-elevated and a member of nothing), and TLS.
-const VERIFY_SESSION = `SELECT pg_catalog.current_database() AS database_name,
+// $1 is the worker role and $2 the drain login, whose row is the one
+// checked; SESSION_USER must also be that login (checked in sessionFailures).
+// The text runs verbatim in supabase/tests/piggyvest_webhook_capture_drain_session_check.sql.
+export const CAPTURE_DRAIN_VERIFY_SESSION_SQL = `SELECT pg_catalog.current_database() AS database_name,
   SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (login.rolcanlogin AND NOT login.rolsuper AND NOT login.rolbypassrls
     AND NOT login.rolcreaterole AND NOT login.rolcreatedb AND NOT login.rolreplication) AS login_safe,
@@ -50,7 +58,7 @@ const VERIFY_SESSION = `SELECT pg_catalog.current_database() AS database_name,
   EXISTS (
     SELECT 1 FROM pg_catalog.pg_stat_ssl s WHERE s.pid = pg_catalog.pg_backend_pid() AND s.ssl
   ) AS tls
-FROM pg_catalog.pg_roles login WHERE login.rolname = SESSION_USER`;
+FROM pg_catalog.pg_roles login WHERE login.rolname = $2::text`;
 
 export type CaptureDrainSessionCheck =
   | 'database'
@@ -160,8 +168,9 @@ export function createCaptureDrainPgExecutor(
     const client = createClient(clientConfig(runtime.database));
     try {
       await client.connect();
-      const verified = await client.query(VERIFY_SESSION, [
+      const verified = await client.query(CAPTURE_DRAIN_VERIFY_SESSION_SQL, [
         PIGGYVEST_CAPTURE_WORKER_ROLE,
+        PIGGYVEST_CAPTURE_DRAIN_LOGIN,
       ]);
       const failed = sessionFailures(verified.rows, runtime.database.name);
       if (failed.length > 0) throw new UnsafeSession(failed);
@@ -173,7 +182,7 @@ export function createCaptureDrainPgExecutor(
 
   return {
     async query(statement, parameters) {
-      const text = STATEMENTS[statement];
+      const text = CAPTURE_DRAIN_STATEMENTS[statement];
       try {
         const result = await withVerifiedSession((client) =>
           client.query(text, [...parameters])

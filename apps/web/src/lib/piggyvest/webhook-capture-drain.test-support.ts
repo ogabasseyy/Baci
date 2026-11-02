@@ -52,6 +52,46 @@ export const inflow = JSON.stringify({
   eventData: { transaction_id: 'txn-77', amount: 1000 },
 });
 
+/** A bank inflow the receiver's event schema accepts; only the ids vary. */
+export const schemaValidInflow = (
+  eventId: string,
+  eventType = 'bank-transfer.inflow.success',
+  transactionId = `txn-${eventId}`
+) =>
+  JSON.stringify({
+    eventId,
+    eventType,
+    eventCategory: 'inflow_transaction',
+    customer_id: 'fixture-customer',
+    pvb_reference: 'fixture-pvb-reference',
+    pvb_wallet: 'fixture-wallet',
+    eventData: {
+      id: `data-${eventId}`,
+      customer_id: 'fixture-customer',
+      destination_wallet_id: 'fixture-conduit',
+      type: 'inter',
+      category: 'bank_transfer_inflow',
+      amount: 10000,
+      currency: 'NGN',
+      narration: '',
+      ip_address: '',
+      transaction_id: transactionId,
+      timestamp: '2026-10-07T10:00:00.000Z',
+      status: 'COMPLETED',
+      third_party_reference: '',
+      initiator_reference: '',
+      internal_reference: '',
+      provider: 'fixture-bank',
+      destination_wallet_balance: 10000,
+      destination_wallet_ledger_balance: 10000,
+      destination_transaction_balance: 10000,
+      reference: `reference-${eventId}`,
+      recipient_bank_account_number: '0123456789',
+      sender_name: 'Fixture sender',
+      fee: 0,
+    },
+  });
+
 export interface ResolvedCall {
   id: string;
   state: string;

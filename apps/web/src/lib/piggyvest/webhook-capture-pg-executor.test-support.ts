@@ -16,7 +16,10 @@ import type { PiggyvestWebhookKeyFamily } from './webhook-secret-union';
  * - createStatefulCaptureExecutor models the capture table and the claim /
  *   resolve rules of 20261030231100_piggyvest_webhook_durable_capture_functions.sql
  *   (lease, grace period, expired-lease re-claim, token fencing, backoff),
- *   for crash and re-claim scenarios.
+ *   for crash and re-claim scenarios. Its 'resolve' statement is the
+ *   worker's claim-bound entry point (a call without a token is refused);
+ *   `completeInline` is the web receiver's tokenless completion, which the
+ *   worker cannot reach.
  */
 
 export interface ScriptedResolve {
@@ -242,6 +245,8 @@ export function createStatefulCaptureExecutor(clock: () => number) {
         string,
         string | null,
       ];
+      if (token === null)
+        throw new Error('a claimed capture and its claim token are required');
       return [{ resolved: resolve(id, token, state, error) }];
     }
     return [{ status: status() }];
@@ -253,5 +258,7 @@ export function createStatefulCaptureExecutor(clock: () => number) {
       new Promise((done) => done(answer(statement, parameters))),
     verifySession: () => Promise.resolve({ ok: true }),
   };
-  return { executor, rows, insert };
+  /** The receiver's inline completion: tokenless, a pending row only. */
+  const completeInline = (id: string) => resolve(id, null, 'processed', null);
+  return { executor, rows, insert, completeInline };
 }

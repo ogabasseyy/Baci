@@ -4,7 +4,6 @@ import {
   type PiggyvestCaptureDrainRuntime,
   piggyvestCaptureDrainRuntimeSchema,
 } from '@/schemas/piggyvest/webhook-capture-drain-runtime';
-import { verifyStoredPiggyvestDelivery } from './verify-stored-piggyvest-delivery';
 import { isPiggyvestCaptureDrainEnabled } from './webhook-capture-attestation';
 import {
   type DrainDeps,
@@ -12,6 +11,7 @@ import {
   drainPiggyvestWebhookCaptures,
 } from './webhook-capture-drain';
 import { workerHostReplayScope } from './webhook-capture-drain-scope';
+import { verifyOnWorkerHost } from './webhook-capture-host-verify';
 import {
   type CaptureDrainExecutor,
   createCaptureDrainPgExecutor,
@@ -26,11 +26,13 @@ import { createPgCaptureQueue } from './webhook-capture-queue';
  * Dark by default. Unless PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_ENABLED is
  * exactly 'true' on the host it reads no configuration and opens no
  * connection. When enabled it connects only as the dedicated drain login
- * (never a service-role key), re-verifies every stored signature, replays
- * rows a primary intake owns through that intake's own login, and defers
- * legacy-family rows with an alert. Replay is idempotent because every
- * downstream ledger keys on the provider transaction id, so a crash at any
- * point is recovered by the next pass once the lease expires.
+ * (never a service-role key), re-verifies every stored signature (a row
+ * signed by a key this host does not hold is deferred, never parked),
+ * replays rows a primary intake owns through that intake's own login, and
+ * sets legacy-family rows aside for review with an alert. Replay is
+ * idempotent because every downstream ledger keys on the provider
+ * transaction id, so a crash at any point is recovered by the next pass
+ * once the lease expires.
  */
 
 export { isPiggyvestCaptureDrainEnabled };
@@ -91,7 +93,7 @@ export async function runPiggyvestWebhookCaptureDrain(input: {
       resolve: (id, token, state, error) =>
         queue.resolve(id, token, state, error),
       verify: (delivery) =>
-        verifyStoredPiggyvestDelivery({
+        verifyOnWorkerHost({
           ...delivery,
           env,
           now: deps.now?.() ?? new Date(),

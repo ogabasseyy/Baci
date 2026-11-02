@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  explicitDestinationAnswer,
   finalReading,
   GOAL_RECHECK_DELAY_MS,
   GOAL_ROUTING_VARIANTS,
@@ -91,6 +92,15 @@ describe('finalReading', () => {
     expect(finalReading(at('main'), at('unread')).payout).toBe('main');
   });
 
+  it('a recheck that omits the payout field never overrides a payout already read', () => {
+    expect(finalReading(at('self'), at('absent')).payout).toBe('self');
+    expect(finalReading(at('business'), at('absent')).payout).toBe('business');
+    expect(finalReading(at('null'), at('absent')).payout).toBe('null');
+    // With nothing read before, the omitted field is all there is.
+    expect(finalReading(at('unread'), at('absent')).payout).toBe('absent');
+    expect(finalReading(at('absent'), at('null')).payout).toBe('null');
+  });
+
   it('keeps a known accrual flag when the recheck shows the payout but not the flag', () => {
     expect(
       finalReading(
@@ -157,5 +167,27 @@ describe('inheritsBusinessPayoutAnswer: goal (a) from its final reading', () => 
     'unread',
   ])('unknown when the payout is %s', (payout) => {
     expect(inheritsBusinessPayoutAnswer(payout, SHOWN)).toBe('unknown');
+  });
+});
+
+describe('explicitDestinationAnswer: goal (d) from its final reading', () => {
+  it('yes only when the readback names the business wallet it was set to', () => {
+    expect(explicitDestinationAnswer('business')).toBe('yes');
+  });
+
+  it.each<PayoutPseudonym>([
+    'self',
+    'main',
+    'other',
+    'null',
+  ])('no when the destination field is readable and is %s', (payout) => {
+    expect(explicitDestinationAnswer(payout)).toBe('no');
+  });
+
+  it.each<PayoutPseudonym>([
+    'absent',
+    'unread',
+  ])('unknown when the payout is %s: an unread field is never a no', (payout) => {
+    expect(explicitDestinationAnswer(payout)).toBe('unknown');
   });
 });

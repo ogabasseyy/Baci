@@ -12,13 +12,14 @@ import {
   type GoalVariantResult,
   runGoalVariant,
 } from './proof-7-goal-variants';
+import { readbackPayout } from './proof-7-readback';
 import type { ProofContext } from './proof-context';
-import { recordOf } from './read-rules';
 
 /**
  * Proof 7, goal routing: creates the four goal variants (opted in or out,
  * payout unset, main or business) under one owner, reads each back at once,
- * waits GOAL_RECHECK_DELAY_MS and reads every created goal once more. Each
+ * waits GOAL_RECHECK_DELAY_MS and reads every created goal again, polling
+ * within the settle budget exactly as the first reading does. Each
  * variant is its own journaled slot: a re-run finds it by its deterministic
  * name and never resends it.
  */
@@ -104,9 +105,11 @@ export async function runGoalRouting(
   for (const run of created) {
     const walletId = run.result?.walletId;
     if (!walletId) continue;
-    const call = await ctx.api.wallet(walletId);
+    // Polled like the first reading: the payout field can show a few reads
+    // late, and one bare read that omits it must not stand for the recheck.
+    const read = await readbackPayout(ctx, walletId, business);
     run.afterRecheck = readGoalRouting(
-      recordOf(call),
+      read.record,
       idsFor(walletId, owner, business)
     );
   }

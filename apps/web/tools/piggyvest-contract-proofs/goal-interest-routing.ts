@@ -120,18 +120,21 @@ export function readGoalRouting(
 }
 
 /**
- * The later reading decides, field by field: the first reading stands when
- * the recheck was unread, and its accrual flag stands when the recheck showed
- * the payout but not the flag.
+ * The later reading decides, field by field. The first reading stands when
+ * the recheck was unread; its payout stands when the recheck omitted the
+ * payout field (an omission says nothing about where interest goes); and its
+ * accrual flag stands when the recheck did not show one.
  */
 export function finalReading(
   atOnce: GoalRoutingReading,
   afterRecheck: GoalRoutingReading
 ): GoalRoutingReading {
   if (afterRecheck.payout === 'unread') return atOnce;
+  const keepFirstPayout =
+    afterRecheck.payout === 'absent' && atOnce.payout !== 'unread';
   return {
     interestEnabled: afterRecheck.interestEnabled ?? atOnce.interestEnabled,
-    payout: afterRecheck.payout,
+    payout: keepFirstPayout ? atOnce.payout : afterRecheck.payout,
   };
 }
 
@@ -169,4 +172,16 @@ export function inheritsBusinessPayoutAnswer(
   if (!mainDestinationPaths.includes(PAYOUT_FIELD)) return 'unknown';
   if (payout === 'self' || payout === 'main' || payout === 'other') return 'no';
   return payout === 'null' ? 'unobservable' : 'unknown';
+}
+
+/**
+ * "Does goal (d), created with the business wallet as its payout, read back
+ * naming that wallet?", from its final reading. Only a readback naming the
+ * business wallet is a yes. A readable destination field that names anything
+ * else, or is empty, is a no; a field the readback omitted, or no readback at
+ * all, is unknown, never a no.
+ */
+export function explicitDestinationAnswer(payout: PayoutPseudonym): Answer {
+  if (payout === 'business') return 'yes';
+  return payout === 'absent' || payout === 'unread' ? 'unknown' : 'no';
 }

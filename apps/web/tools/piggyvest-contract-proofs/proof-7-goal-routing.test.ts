@@ -109,6 +109,40 @@ describe('runGoalRouting: the four variants', () => {
     expect(runs.a.afterRecheck.payout).toBe('self');
   });
 
+  it('polls the five-minute recheck like the first reading when the payout field shows late', async () => {
+    const { h, owner, business } = await ready();
+    h.ctx.sleep = async (ms) => {
+      if (ms !== GOAL_RECHECK_DELAY_MS) return;
+      // From the recheck on, each goal hides the payout field for two reads.
+      for (const w of h.mock.sandbox.wallets)
+        if (w.name.startsWith('bacisave')) w.payoutHiddenReads = 2;
+    };
+    const runs = byId(await runGoalRouting(h.ctx, owner, business));
+    expect(runs.d.atOnce.payout).toBe('business');
+    expect(runs.d.afterRecheck.payout).toBe('business');
+    expect(runs.c.afterRecheck.payout).toBe('main');
+    expect(runs.a.afterRecheck.payout).toBe('null');
+  });
+
+  it('spends the polling budget once on a recheck that never shows the payout, then reports it absent', async () => {
+    const { h, owner, business } = await ready({ maxPolls: 3 });
+    h.ctx.sleep = async (ms) => {
+      if (ms !== GOAL_RECHECK_DELAY_MS) return;
+      for (const w of h.mock.sandbox.wallets)
+        if (w.name.startsWith('bacisave')) w.payoutHiddenReads = 50;
+    };
+    const walletReads = () =>
+      h.mock.calls.filter(
+        (c) => c.method === 'GET' && c.pathname.startsWith('/api/v1/wallet/')
+      ).length;
+    const before = walletReads();
+    const runs = byId(await runGoalRouting(h.ctx, owner, business));
+    expect(runs.d.atOnce.payout).toBe('business');
+    expect(runs.d.afterRecheck.payout).toBe('absent');
+    // Per goal: one settled first read, then 1 + maxPolls (3) recheck reads.
+    expect(walletReads() - before).toBe(4 * (1 + 4));
+  });
+
   it('reads self when the sandbox pays an unset goal to itself, and business when it inherits', async () => {
     const self = await ready({ mock: { subWalletPaysItselfWhenUnset: true } });
     const selfRuns = byId(

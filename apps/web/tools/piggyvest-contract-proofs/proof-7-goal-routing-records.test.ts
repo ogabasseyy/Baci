@@ -164,7 +164,7 @@ describe('recordStaysInGoal: only a readback naming the goal itself is a yes', (
     expect(values.goal_c_verdict).toBe(verdict);
   });
 
-  it('the 5-minute reading decides; the first stands only when the recheck is unread', () => {
+  it('the 5-minute reading decides; the first stands when the recheck is unread or omits the payout', () => {
     const later = record(run('a', result(), reading('null'), reading('self')));
     expect(later.finding?.answer).toBe('yes');
     expect(later.values.goal_a_verdict).toBe('proven');
@@ -174,6 +174,12 @@ describe('recordStaysInGoal: only a readback naming the goal itself is a yes', (
       run('a', result(), reading('self'), reading('main'))
     );
     expect(flipped.finding?.answer).toBe('no');
+    // A recheck that omits the payout field keeps the settled first reading.
+    const omitted = record(
+      run('a', result(), reading('self'), reading('absent'))
+    );
+    expect(omitted.finding?.answer).toBe('yes');
+    expect(omitted.values.goal_a_payout_at_5m).toBe('absent');
   });
 });
 

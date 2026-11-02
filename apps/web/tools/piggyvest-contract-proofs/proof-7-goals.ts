@@ -1,10 +1,10 @@
 import {
+  explicitDestinationAnswer,
   finalReading,
   inheritsBusinessPayoutAnswer,
   POST_CREATION_PAYOUT_DOCS_CHECKED,
   POST_CREATION_PAYOUT_UPDATE_DOCUMENTED,
 } from './goal-interest-routing';
-import { destinationAnswer } from './payout-analysis';
 import { type GoalRoutingRun, runGoalRouting } from './proof-7-goal-routing';
 import {
   NULL_DETAIL,
@@ -122,12 +122,17 @@ export async function recordGoalWallets(
   const main = run('c')?.result ?? null;
   const explicit = run('d')?.result ?? null;
   const unsetInherits = inheritance(run('a'), mainDestinationPaths);
+  // Judged by the same final reading as goal (d)'s verdict and values.
+  const explicitRun = run('d');
+  const explicitPayout = explicitRun
+    ? finalReading(explicitRun.atOnce, explicitRun.afterRecheck).payout
+    : 'unread';
   const answers: Record<string, [Answer | 'unobservable', string?]> = {
     goal_without_payout_created: [answerOf(unset?.exists ?? null)],
     goal_without_payout_inherits_business_payout: unsetInherits,
     goal_explicit_payout_accepted: [answerOf(explicit?.accepted ?? null)],
     goal_explicit_readback_names_payout_destination: [
-      destinationAnswer(explicit?.readback ?? null),
+      explicitDestinationAnswer(explicitPayout),
     ],
     goal_opted_out_created: [answerOf(optedOut?.exists ?? null)],
     goal_opted_out_reads_accrual_off: [accrualOffAnswer(run('b'))],

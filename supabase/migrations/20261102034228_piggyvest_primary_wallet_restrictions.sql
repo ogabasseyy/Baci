@@ -17,11 +17,13 @@
 --   superseded lifts included), so an event id names one event even after
 --   the row stops naming it.
 --
--- The writers and the spend-gate read are added by the next migration
--- (..._piggyvest_primary_wallet_restriction_functions.sql); nothing calls
--- them yet. Both tables are deny-all: RLS, a restrictive false policy, and no
--- table privilege for PUBLIC, the API roles (service_role included) or the
--- PiggyVest roles.
+-- This migration also adds the spend-gate read, wallet_restriction_state
+-- (evidence and piggyvest_primary_authorizer): it counts every active
+-- restriction of the wallet, whichever integration recorded it. The writers
+-- are added by the next migration (..._wallet_restriction_functions.sql);
+-- nothing calls any of them yet. Both tables are deny-all: RLS, a restrictive
+-- false policy, and no table privilege for PUBLIC, the API roles
+-- (service_role included) or the PiggyVest roles.
 BEGIN;
 
 CREATE TABLE piggyvest_primary.wallet_restrictions (
@@ -125,4 +127,30 @@ COMMENT ON TABLE piggyvest_primary.wallet_restrictions IS
   'PiggyVest Freeze/Lien restrictions on provider wallets, owned by the integration that recorded them. An active row blocks spends and transfers from its wallet, whatever its kind. Reachable only through record/lift_wallet_restriction and wallet_restriction_state.';
 COMMENT ON TABLE piggyvest_primary.wallet_restriction_events IS
   'Every restriction creation or lift event accepted by record/lift_wallet_restriction, kept for good so a reused event id is a duplicate (same role and facts) or a conflict. Deny-all; written only by those functions.';
+
+CREATE FUNCTION piggyvest_primary.wallet_restriction_state(p_provider_wallet_id text)
+RETURNS TABLE (blocked boolean, active_count integer, active_kinds text[])
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$
+BEGIN
+  IF p_provider_wallet_id IS NULL
+    OR pg_catalog.octet_length(p_provider_wallet_id) NOT BETWEEN 1 AND 512
+  THEN
+    RAISE EXCEPTION 'invalid wallet restriction identity' USING ERRCODE = '22023';
+  END IF;
+  -- Every active restriction blocks, whatever its kind (unknown included)
+  -- and whichever integration recorded it.
+  RETURN QUERY
+    SELECT pg_catalog.count(*) > 0,
+      pg_catalog.count(*)::integer,
+      COALESCE(pg_catalog.array_agg(DISTINCT r.kind ORDER BY r.kind), ARRAY[]::text[])
+    FROM piggyvest_primary.wallet_restrictions AS r
+    WHERE r.provider_wallet_id = p_provider_wallet_id AND r.is_active;
+END $$;
+
+REVOKE ALL ON FUNCTION piggyvest_primary.wallet_restriction_state(text)
+  FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.wallet_restriction_state(text)
+  TO piggyvest_primary_evidence, piggyvest_primary_authorizer;
+COMMENT ON FUNCTION piggyvest_primary.wallet_restriction_state(text) IS
+  'Evidence and authorizer. One row: blocked (any active restriction of any kind, from any integration), active_count, active_kinds. Invalid wallet ids raise 22023.';
 COMMIT;

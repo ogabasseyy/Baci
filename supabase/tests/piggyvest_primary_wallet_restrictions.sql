@@ -172,6 +172,38 @@ BEGIN
     AND pg_temp.kinds('wr-r') = '{lien}'::text[], 'a later re-placement of another kind does not block');
 END $$;
 
+-- A lift naming another kind than its restriction is inconsistent provider
+-- data: a conflict for review that changes nothing, in either arrival order.
+DO $$
+DECLARE v_before text;
+BEGIN
+  PERFORM pg_temp.rec('wr-k', 'evt-k-create', 'rst-k', 'Lien');
+  v_before := pg_temp.snapshot('wr-k', 'rst-k');
+  PERFORM pg_temp.check(
+    pg_temp.lift('wr-k', 'evt-k-lift-1', 'rst-k', 'Freeze', '2026-10-01T12:00:00Z') = 'conflict'
+    AND pg_temp.lift('wr-k', 'evt-k-lift-2', 'rst-k', NULL, '2026-10-01T12:00:00Z') = 'conflict',
+    'a lift naming another kind is not a conflict');
+  PERFORM pg_temp.check(pg_temp.blocked('wr-k') AND pg_temp.snapshot('wr-k', 'rst-k') = v_before
+    AND pg_temp.events('wr-k') = 1, 'a lift naming another kind changed the restriction');
+  PERFORM pg_temp.check(
+    pg_temp.lift('wr-k', 'evt-k-lift-3', 'rst-k', ' LIEN', '2026-10-01T12:00:00Z') = 'lifted'
+    AND NOT pg_temp.blocked('wr-k'), 'a lift naming the same kind did not lift');
+
+  PERFORM pg_temp.lift('wr-l', 'evt-l-lift', 'rst-l', 'Freeze', '2026-10-01T12:00:00Z');
+  PERFORM pg_temp.check(
+    pg_temp.lift('wr-l', 'evt-l-lift-2', 'rst-l', 'Lien', '2026-10-01T13:00:00Z') = 'conflict',
+    'a second early lift naming another kind is not a conflict');
+  PERFORM pg_temp.check(pg_temp.rec('wr-l', 'evt-l-create', 'rst-l', 'Lien') = 'conflict',
+    'a creation of another kind than its early lift is not a conflict');
+  PERFORM pg_temp.check(
+    (SELECT provider_event_id IS NULL AND lift_event_id = 'evt-l-lift'
+     FROM piggyvest_primary.wallet_restrictions WHERE provider_wallet_id = 'wr-l'),
+    'a conflicting creation or lift changed the early lift');
+  PERFORM pg_temp.check(
+    pg_temp.rec('wr-l', 'evt-l-create-2', 'rst-l', 'Lien', '2026-10-01T13:00:00Z') = 'recorded'
+    AND pg_temp.blocked('wr-l'), 'a creation dated after an early lift of another kind does not block');
+END $$;
+
 -- An unknown kind is recorded and blocks; kinds are matched case-insensitively.
 DO $$
 DECLARE v piggyvest_primary.wallet_restrictions%ROWTYPE;

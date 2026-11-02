@@ -1,6 +1,6 @@
--- PiggyVest primary-wallet restrictions (Freeze and Lien): the writers and the
--- spend-gate read over the tables of the preceding *_piggyvest_primary_wallet_
--- restrictions migration. Nothing calls them yet.
+-- PiggyVest primary-wallet restrictions (Freeze and Lien): the two writers over
+-- the store of the preceding *_piggyvest_primary_wallet_restrictions migration.
+-- Nothing calls them yet.
 --
 -- * Bound to one integration. Both writers take the integration and its
 --   environment first and raise 42501, storing nothing, unless the
@@ -16,14 +16,14 @@
 --   by provider time is kept; a creation dated after the kept lift places the
 --   restriction again. A lifted restriction's new creation event without
 --   such a time cannot be told from a redelivery, so it is a conflict.
+-- * A lift and the restriction it names must agree on the kind (Freeze, Lien
+--   or unknown); otherwise the event is a conflict and releases nothing.
 -- * Fail closed. Any property other than Freeze or Lien, or none, is kind
 --   'unknown' and blocks. A creation without a provider restriction id is
 --   recorded under its event id and blocks until ops resolve it. Snapshot
---   amounts are stored as sent and never decide blocking. The state read
---   counts every active restriction of the wallet, from any integration.
+--   amounts are stored as sent and never decide blocking.
 --
--- Only piggyvest_primary_evidence may record/lift; wallet_restriction_state
--- is also open to piggyvest_primary_authorizer (the spend gate).
+-- Only piggyvest_primary_evidence may record or lift.
 BEGIN;
 
 CREATE FUNCTION piggyvest_primary.record_wallet_restriction(
@@ -133,6 +133,11 @@ BEGIN
       RETURN 'conflict';
     END IF;
     v_result := 'duplicate';
+  ELSIF v_row.kind <> v_kind
+    AND (p_occurred_at IS NULL OR p_occurred_at <= v_row.lifted_at)
+  THEN
+    -- The early lift names another kind and would end this placement.
+    RETURN 'conflict';
   ELSE
     -- Only the lift had arrived, or this creation is dated after the kept
     -- lift (a re-placement): it becomes the placement, and provider time
@@ -236,8 +241,9 @@ BEGIN
       p_lift_event_id, p_lifted_at)
     RETURNING r.* INTO v_row;
     v_result := 'lifted';
-  ELSIF v_row.integration_id <> p_integration_id THEN
-    -- Another integration's restriction is never lifted here.
+  ELSIF v_row.integration_id <> p_integration_id OR v_row.kind <> v_kind THEN
+    -- Another integration's restriction, or a lift naming another kind, is
+    -- never applied here.
     RETURN 'conflict';
   ELSE
     -- Keep the latest lift by provider time; an older one changes nothing.
@@ -260,41 +266,17 @@ BEGIN
   RETURN v_result;
 END $$;
 
-CREATE FUNCTION piggyvest_primary.wallet_restriction_state(p_provider_wallet_id text)
-RETURNS TABLE (blocked boolean, active_count integer, active_kinds text[])
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$
-BEGIN
-  IF p_provider_wallet_id IS NULL
-    OR pg_catalog.octet_length(p_provider_wallet_id) NOT BETWEEN 1 AND 512
-  THEN
-    RAISE EXCEPTION 'invalid wallet restriction identity' USING ERRCODE = '22023';
-  END IF;
-  -- Every active restriction blocks, whatever its kind (unknown included)
-  -- and whichever integration recorded it.
-  RETURN QUERY
-    SELECT pg_catalog.count(*) > 0,
-      pg_catalog.count(*)::integer,
-      COALESCE(pg_catalog.array_agg(DISTINCT r.kind ORDER BY r.kind), ARRAY[]::text[])
-    FROM piggyvest_primary.wallet_restrictions AS r
-    WHERE r.provider_wallet_id = p_provider_wallet_id AND r.is_active;
-END $$;
-
 REVOKE ALL ON FUNCTION
   piggyvest_primary.record_wallet_restriction(uuid, text, text, text, text, text, bigint, bigint, bigint, timestamptz),
-  piggyvest_primary.lift_wallet_restriction(uuid, text, text, text, text, text, timestamptz),
-  piggyvest_primary.wallet_restriction_state(text)
+  piggyvest_primary.lift_wallet_restriction(uuid, text, text, text, text, text, timestamptz)
   FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION
   piggyvest_primary.record_wallet_restriction(uuid, text, text, text, text, text, bigint, bigint, bigint, timestamptz),
   piggyvest_primary.lift_wallet_restriction(uuid, text, text, text, text, text, timestamptz)
   TO piggyvest_primary_evidence;
-GRANT EXECUTE ON FUNCTION piggyvest_primary.wallet_restriction_state(text)
-  TO piggyvest_primary_evidence, piggyvest_primary_authorizer;
 
 COMMENT ON FUNCTION piggyvest_primary.record_wallet_restriction(uuid, text, text, text, text, text, bigint, bigint, bigint, timestamptz) IS
   'Evidence-only, bound to the integration whose evidence authority is the session login (else 42501). Records restriction-created for a provider wallet. Returns recorded | already_lifted | duplicate | conflict. Unknown properties are kind unknown and block; invalid identities raise 22023.';
 COMMENT ON FUNCTION piggyvest_primary.lift_wallet_restriction(uuid, text, text, text, text, text, timestamptz) IS
   'Evidence-only, bound to the integration whose evidence authority is the session login (else 42501). Records restriction-lifted (provider lifted_at) for the restriction it names on the wallet it names. Returns lifted | stale | duplicate | conflict; invalid input raises 22023.';
-COMMENT ON FUNCTION piggyvest_primary.wallet_restriction_state(text) IS
-  'Evidence and authorizer. One row: blocked (any active restriction of any kind, from any integration), active_count, active_kinds. Invalid wallet ids raise 22023.';
 COMMIT;

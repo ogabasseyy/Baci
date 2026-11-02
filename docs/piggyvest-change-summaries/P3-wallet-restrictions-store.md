@@ -14,11 +14,11 @@ A frozen or liened wallet must not spend or transfer (money rules R1 and R2). Un
 ## What could go wrong and how it is prevented
 
 - An unfamiliar restriction could be ignored. Anything not clearly a freeze or a lien is stored as "unknown" and still blocks, as does a restriction without PiggyVest's restriction number, until reviewed.
-- A message could arrive twice. Each message counts once, by its PiggyVest message number, and every accepted number is remembered for good, even after a newer lift replaces an older one. A reused number with different details is a conflict and changes nothing, so it can be reviewed.
-- The lift could arrive before the restriction. The lift is kept, so the late restriction arrives lifted; PiggyVest's times decide the order.
-- A lift could clear the wrong thing. A lift clears only the restriction it names, on the wallet it names.
+- A message could arrive twice. Each message counts once, by its PiggyVest message number, and every accepted number is remembered for good, even after a newer lift replaces an older one. A reused number with different details is a conflict for review and changes nothing.
+- The lift could arrive first. It is kept, so the late restriction arrives lifted; PiggyVest's times decide the order.
+- A lift could clear the wrong thing. A lift clears only the restriction it names, on the wallet it names, and only when it names the same kind; a restriction placed again after its lift blocks again.
 - The wrong login, or a switched-off connection, could lift a freeze. Every write names our PiggyVest connection and its environment, and is refused unless that connection and its evidence login are switched on and the caller is that login. A restriction belongs to the connection that recorded it, but any restriction blocks the wallet.
-- Someone could read or change the record. Customer logins, app logins and the general admin key cannot reach it. Only the dedicated evidence login can record restrictions, and only it and the dedicated payment-check login can ask whether a wallet is restricted.
+- Someone could read or change the record. Customer logins, app logins and the general admin key cannot reach it. Only the dedicated evidence login records restrictions; only it and the payment-check login can ask about them.
 
 ## How it is tested
 
@@ -26,4 +26,4 @@ Database tests prove that a restriction blocks until lifted; repeats are ignored
 
 ## How it stays switched off
 
-Nothing writes to the record yet. The webhook step that fills it is a later change, PiggyVest webhooks are still answered "not ready" in production, and the dedicated evidence login is not yet set up there.
+Nothing writes to the record yet. The webhook step that fills it comes later, PiggyVest webhooks are still answered "not ready" in production, and the evidence login is not set up there.

@@ -20,13 +20,6 @@ BEGIN;
 
 \ir piggyvest_primary_wallet_restrictions_fixture.inc.sql
 
-CREATE FUNCTION pg_temp.snapshot(p_wallet text, p_restriction text) RETURNS text
-LANGUAGE sql AS $$
-  SELECT concat_ws('|', r.provider_event_id, r.lift_event_id, r.lifted_at, r.is_active, r.updated_at)
-  FROM piggyvest_primary.wallet_restrictions AS r
-  WHERE r.provider_wallet_id = p_wallet AND r.provider_restriction_id = p_restriction
-$$;
-
 -- A stale lift id reused with different facts (the lift that the row no
 -- longer names) is a conflict and keeps the restriction active.
 DO $$

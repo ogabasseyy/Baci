@@ -7,6 +7,44 @@ const OFFER_ID = '22222222-2222-4222-8222-222222222222';
 const MERCHANT_ID = '33333333-3333-4333-8333-333333333333';
 
 describe('fetchOfferResolutions', () => {
+  it('bounds overlapping chunks and returns no partial result when a chunk fails', async () => {
+    const ids = Array.from(
+      { length: 1000 },
+      (_, i) => `11111111-1111-4111-8111-${String(i).padStart(12, '0')}`
+    );
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const call = vi.fn(async () => {
+      await gate;
+      return { data: [], error: null };
+    });
+    const pending = fetchOfferResolutions(call, {
+      merchantId: MERCHANT_ID,
+      productIds: ids,
+    });
+    try {
+      await Promise.resolve();
+      expect(call).toHaveBeenCalledTimes(3);
+    } finally {
+      release();
+      await pending;
+    }
+    expect(call).toHaveBeenCalledTimes(5);
+    const failing = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [], error: null })
+      .mockResolvedValueOnce({ data: null, error: { message: 'failed' } })
+      .mockResolvedValue({ data: [], error: null });
+    await expect(
+      fetchOfferResolutions(failing, {
+        merchantId: MERCHANT_ID,
+        productIds: ids,
+      })
+    ).rejects.toThrow('failed');
+    expect(failing).toHaveBeenCalledTimes(3);
+  });
   it('batches product ids into a single call', async () => {
     const callRpc = vi.fn().mockResolvedValue({
       data: [{ product_id: PRODUCT_ID, offer_id: OFFER_ID, price_basis: 80 }],

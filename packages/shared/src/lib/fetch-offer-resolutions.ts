@@ -12,11 +12,12 @@ export type OfferAuthorityRpcCall = (args: {
  * 200 products therefore stay below PostgREST's 1000-row response cap.
  */
 const AUTHORITY_BATCH_SIZE = 200;
+const MAX_CONCURRENT_BATCHES = 3;
 
 /**
  * The one live-offer fetch: batched authority calls (chunked to the
  * response-safe batch size) merged into one map keyed by
- * `productId::offerId`. Chunks run serially by design — merge order
+ * `productId::offerId`. Up to three chunks run concurrently; merge order
  * stays deterministic and a chunk failure fails the whole lookup
  * closed with no partial map. Throws OfferAuthorityInputError for
  * malformed ids (adapters fail closed) and Error for lookup failures.
@@ -43,14 +44,31 @@ export async function fetchOfferResolutions(
   if (malformed.length > 0) throw new OfferAuthorityInputError(malformed);
   const merged = new Map<string, ResolvedOfferResolution>();
   const batchSize = AUTHORITY_BATCH_SIZE;
-  for (let index = 0; index < distinct.length; index += batchSize) {
-    const { data, error } = await callRpc({
-      p_merchant_id: args.merchantId ?? null,
-      p_product_ids: distinct.slice(index, index + batchSize),
-    });
-    if (error) throw new Error(error.message);
-    for (const [key, resolution] of buildOfferResolutionMap(data)) {
-      merged.set(key, resolution);
+  for (
+    let index = 0;
+    index < distinct.length;
+    index += batchSize * MAX_CONCURRENT_BATCHES
+  ) {
+    const batch = distinct.slice(
+      index,
+      index + batchSize * MAX_CONCURRENT_BATCHES
+    );
+    const results = await Promise.all(
+      Array.from({ length: Math.ceil(batch.length / batchSize) }, (_, chunk) =>
+        callRpc({
+          p_merchant_id: args.merchantId ?? null,
+          p_product_ids: batch.slice(
+            chunk * batchSize,
+            (chunk + 1) * batchSize
+          ),
+        })
+      )
+    );
+    for (const { data, error } of results) {
+      if (error) throw new Error(error.message);
+      for (const [key, resolution] of buildOfferResolutionMap(data)) {
+        merged.set(key, resolution);
+      }
     }
   }
   return merged;

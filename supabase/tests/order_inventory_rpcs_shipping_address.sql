@@ -157,9 +157,10 @@ BEGIN
 END;
 $$;
 
--- The live caller: pg_cron runs the quiz deadline clock as postgres with no
--- JWT claims, and releasing an expired prize cancels its reserved order
--- through the nested SECURITY DEFINER chain, with no client-role grants.
+-- The live caller: expiring a transferred quiz prize (the claim-expiry path,
+-- invoked under the service_role claim) cancels its reserved order through the
+-- nested SECURITY DEFINER chain, with no client-role grants. The pg_cron
+-- deadline clock only releases untransferred reservations, which never cancel.
 RESET ROLE;
 INSERT INTO public.customers (id, merchant_id, email, full_name)
 VALUES (
@@ -210,9 +211,6 @@ INSERT INTO public.quiz_prize_reservations (
 );
 ALTER TABLE public.quiz_awards ENABLE TRIGGER USER;
 ALTER TABLE public.quiz_prize_reservations ENABLE TRIGGER USER;
--- Run the release itself with no JWT claims, as pg_cron does.
-SELECT set_config('request.jwt.claim.role', '', true);
-SELECT set_config('request.jwt.claims', '', true);
 
 DO $$
 BEGIN

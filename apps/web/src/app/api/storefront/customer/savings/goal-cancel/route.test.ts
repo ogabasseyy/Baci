@@ -13,6 +13,10 @@ const mocks = vi.hoisted(() => ({
   submit: vi.fn(),
   status: vi.fn(),
   gated: vi.fn(),
+  featureOn: vi.fn(),
+}));
+vi.mock('@/lib/piggyvest/piggyvest-feature-on', () => ({
+  isPiggyvestFeatureOn: mocks.featureOn,
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
@@ -46,6 +50,7 @@ const patch = (body: unknown) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.featureOn.mockReturnValue(true);
   mocks.auth.mockResolvedValue({ user: { id: 'u' }, supabase: {} });
   mocks.csrf.mockResolvedValue({ valid: true });
   mocks.recovery.mockReturnValue({
@@ -87,11 +92,41 @@ it.each([
   expect(mocks.submit).not.toHaveBeenCalled();
 });
 
-it('never reads the gated savings runtime, flags or kill switch', async () => {
+it('reads the recovery runtime for lookups but never the gated savings runtime', async () => {
   mocks.issue.mockResolvedValue({ status: 'issued', operationId });
   expect((await post(issue)).status).toBe(200);
   expect(mocks.recovery).toHaveBeenCalledOnce();
   expect(mocks.gated).not.toHaveBeenCalled();
+});
+
+// The kill switch and the wallet/savings flags must stop new money movement:
+// the recovery runtime ignores them, so the route checks them itself.
+it.each([
+  ['issue', issue],
+  ['submit', submit],
+])('refuses the %s step with 503 when the flags or kill switch are off', async (_step, body) => {
+  mocks.featureOn.mockReturnValue(false);
+  const response = await post(body);
+  expect(response.status).toBe(503);
+  expect((await response.json()).code).toBe('SAVINGS_NOT_READY');
+  expect(mocks.issue).not.toHaveBeenCalled();
+  expect(mocks.submit).not.toHaveBeenCalled();
+});
+
+it('requires both the wallet and the deposit_to_goal flags to start a cancel', async () => {
+  mocks.featureOn.mockImplementation((feature: string) => feature !== 'wallet');
+  expect((await post(issue)).status).toBe(503);
+  mocks.featureOn.mockImplementation(
+    (feature: string) => feature !== 'deposit_to_goal'
+  );
+  expect((await post(issue)).status).toBe(503);
+  expect(mocks.issue).not.toHaveBeenCalled();
+});
+
+it('keeps the status check available when the flags are off', async () => {
+  mocks.featureOn.mockReturnValue(false);
+  mocks.status.mockResolvedValue({ status: 'confirmed' });
+  expect((await patch({ merchantId, operationId })).status).toBe(200);
 });
 
 it("issues the server operation id for the customer's own goal", async () => {

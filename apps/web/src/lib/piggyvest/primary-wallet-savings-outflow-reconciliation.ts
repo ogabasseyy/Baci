@@ -8,6 +8,8 @@ import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconcil
 import { createSavingsVerifyQueryProvider } from './primary-wallet-savings-reconciliation-runtime';
 import { createPrimaryWalletSavingsReconciliationStore } from './primary-wallet-savings-reconciliation-store';
 
+const GOAL_CANCEL_REFERENCE_PREFIX = 'pvb-cancel-';
+
 // Webhook-driven savings reconciliation: outflow webhooks attribute by
 // provider reference, so resolve each candidate to its dispatched operation
 // and run the SAME proof (re-query the provider, then settle or release)
@@ -72,6 +74,13 @@ export async function runPrimaryWalletSavingsOutflowReconciliation(input: {
       '[PiggyVest Webhook] Goal cancel reconciliation skipped:',
       error instanceof Error ? error.message : error
     );
-    return 'unmatched';
+    // A failed lookup of OUR cancel reference must stay retryable: calling it
+    // unmatched would mark the webhook processed and strand a refunded cancel
+    // until the customer polls. Unrelated legacy references stay unmatched.
+    return input.references.some((reference) =>
+      reference.startsWith(GOAL_CANCEL_REFERENCE_PREFIX)
+    )
+      ? 'pending'
+      : 'unmatched';
   }
 }

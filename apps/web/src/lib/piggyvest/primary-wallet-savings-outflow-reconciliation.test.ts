@@ -229,7 +229,7 @@ it('settles a dispatched goal cancel named by the reference when no savings tran
     )
   ).toBe(true);
 });
-it('does not fail a legacy outflow when the goal cancel lookup is unavailable', async () => {
+it('keeps a goal cancel reference retryable when its lookup fails', async () => {
   mockGoalCancelLookup(true);
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   expect(
@@ -239,7 +239,20 @@ it('does not fail a legacy outflow when the goal cancel lookup is unavailable', 
       references: [cancelReference],
       fetchImplementation: vi.fn(),
     })
-  ).toBe('unmatched');
+  ).toBe('pending');
   expect(warn).toHaveBeenCalled();
+  warn.mockRestore();
+});
+it('does not fail a legacy outflow when the lookup fails for an unrelated reference', async () => {
+  mockGoalCancelLookup(true);
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  expect(
+    await runPrimaryWalletSavingsOutflowReconciliation({
+      configuration,
+      providerToken: 'test-token',
+      references: ['legacy-reference-1'],
+      fetchImplementation: vi.fn(),
+    })
+  ).toBe('unmatched');
   warn.mockRestore();
 });

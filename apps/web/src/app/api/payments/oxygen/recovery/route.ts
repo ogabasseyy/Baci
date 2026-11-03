@@ -2,12 +2,12 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
 import {
   performOxygenPaymentRecovery,
   readOxygenPaymentRecovery,
 } from '@/lib/payments/oxygen/payment-recovery';
 import { connectOxygenRuntime } from '@/lib/payments/oxygen/runtime-connection';
+import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
 import { oxygenPaymentRecoveryRequestSchema } from '@/schemas/oxygen-payment-recovery';
 
 const headers = {
@@ -61,10 +61,8 @@ export async function POST(request: NextRequest) {
       NextResponse.json({ error: 'Invalid request' }, { status: 403, headers })
     );
   if (
-    !(await ensureActionRateLimit('oxygen-payment-recovery', {
-      requests: 10,
-      windowMs: 60000,
-    }))
+    !(await checkOxygenProviderRateLimit(auth.user.id, 'payment-recovery', 10))
+      .allowed
   )
     return NextResponse.json(
       { error: 'Too many requests' },

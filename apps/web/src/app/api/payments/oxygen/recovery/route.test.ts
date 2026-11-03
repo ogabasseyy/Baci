@@ -13,8 +13,8 @@ const m = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: m.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: m.csrf }));
-vi.mock('@/lib/ensure-action-rate-limit', () => ({
-  ensureActionRateLimit: m.limit,
+vi.mock('@/lib/rate-limit', () => ({
+  checkOxygenProviderRateLimit: m.limit,
 }));
 vi.mock('@/lib/payments/oxygen/runtime-connection', () => ({
   connectOxygenRuntime: m.connect,
@@ -47,7 +47,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   m.auth.mockResolvedValue({ user: { id }, supabase: { rpc: vi.fn() } });
   m.csrf.mockResolvedValue({ valid: true });
-  m.limit.mockResolvedValue(true);
+  m.limit.mockResolvedValue({ allowed: true });
   m.connect.mockReturnValue({
     worker: vi.fn(),
     recoveryProvider: vi.fn(),
@@ -96,10 +96,11 @@ it('rejects malformed JSON, unknown operations and approval attempts', async () 
   expect(m.perform).not.toHaveBeenCalled();
 });
 it('limits explicit recovery requests and never exposes internal error details', async () => {
-  m.limit.mockResolvedValue(false);
+  m.limit.mockResolvedValue({ allowed: false });
   expect((await POST(request())).status).toBe(429);
+  expect(m.limit).toHaveBeenCalledWith(id, 'payment-recovery', 10);
   expect(m.perform).not.toHaveBeenCalled();
-  m.limit.mockResolvedValue(true);
+  m.limit.mockResolvedValue({ allowed: true });
   m.perform.mockRejectedValue(new Error('secret-link-token'));
   const response = await POST(request());
   expect(response.status).toBe(409);

@@ -84,9 +84,16 @@ export async function alertUnmappedInflow(
     return;
   }
   try {
-    const txn =
+    const rawTxn =
       event.eventType === 'bank-transfer.inflow.success'
-        ? String(event.eventData.transaction_id)
+        ? event.eventData.transaction_id
+        : null;
+    // Only a real id keys the deposit: a missing one must not become the
+    // shared string 'undefined' and silence later deposits.
+    const txn =
+      (typeof rawTxn === 'string' && rawTxn.length > 0) ||
+      (typeof rawTxn === 'number' && Number.isFinite(rawTxn))
+        ? String(rawTxn)
         : null;
     const alertKey = txn ? `txn:${txn}` : `event:${event.eventId}`;
     // The PostHog identity follows the deposit, so a redelivery with a new

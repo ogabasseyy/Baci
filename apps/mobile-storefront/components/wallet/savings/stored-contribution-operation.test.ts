@@ -60,7 +60,7 @@ describe('resolveStoredOperation', () => {
     });
   });
 
-  it('treats SAVINGS_MERCHANT_NOT_PRIMARY like not found: unrecorded goes to legacy, recorded primary is released', async () => {
+  it('SAVINGS_MERCHANT_NOT_PRIMARY: unrecorded goes to legacy, recorded primary is kept as unknown', async () => {
     mockCheckStatus.mockRejectedValue(
       Object.assign(new Error('x'), { code: 'SAVINGS_MERCHANT_NOT_PRIMARY' })
     );
@@ -70,9 +70,10 @@ describe('resolveStoredOperation', () => {
       confirmed: false,
     });
     expect(await run('op', 'primary')).toEqual({
-      operationId: null,
-      rail: null,
+      operationId: 'op',
+      rail: 'primary',
       confirmed: false,
+      unknown: true,
     });
   });
 

@@ -10,10 +10,10 @@ jest.mock('@/lib/piggyvest-primary-savings-status', () => ({
 }));
 jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
 
-// A merchant with PiggyVest off cannot hold a primary record: the status
-// check releases the operation instead of leaving it stuck.
+// With PiggyVest off the status check never releases a primary id on a
+// config-derived answer: the id is kept and nothing new is submitted.
 describe('server keeps PiggyVest off', () => {
-  it('releases the operation for a merchant that is not primary', async () => {
+  it('keeps the operation for a merchant reported not primary', async () => {
     const clearOperation = jest.fn();
     await checkPendingPrimarySavings({
       merchantId: 'm',
@@ -23,6 +23,6 @@ describe('server keeps PiggyVest off', () => {
       refetchWallet: jest.fn(async () => undefined),
       setPending: jest.fn(),
     });
-    expect(clearOperation).toHaveBeenCalledTimes(1);
+    expect(clearOperation).not.toHaveBeenCalled();
   });
 });

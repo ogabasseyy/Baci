@@ -159,6 +159,27 @@ describe('alertUnmappedInflow', () => {
     expect(mockLog.mock.calls[0]?.[1]).toMatchObject({ operationId: 'evt-5' });
   });
 
+  it.each([
+    undefined,
+    null,
+    '',
+  ])('falls back to the event id when the inflow transaction id is %p', async (transactionId) => {
+    reset();
+    await alertUnmappedInflow(unmapped, {
+      ...event,
+      eventId: 'evt-a',
+      eventData: { transaction_id: transactionId },
+    } as never);
+    await alertUnmappedInflow(unmapped, {
+      ...event,
+      eventId: 'evt-b',
+      eventData: { transaction_id: transactionId },
+    } as never);
+    // Two distinct deposits without a usable id must not collapse into one.
+    expect(mockLog).toHaveBeenCalledTimes(2);
+    expect(mockLog.mock.calls[0]?.[1]).toMatchObject({ operationId: 'evt-a' });
+  });
+
   it('stays silent for other errors', async () => {
     reset();
     await alertUnmappedInflow(

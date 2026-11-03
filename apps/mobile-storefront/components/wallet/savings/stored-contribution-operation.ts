@@ -62,15 +62,19 @@ export async function resolveStoredOperation(input: {
     return { ...keep, confirmed: result.status === 'confirmed' };
   } catch (error) {
     const code = getErrorCode(error);
-    if (
-      code === 'CONTRIBUTION_NOT_FOUND' ||
-      code === 'SAVINGS_MERCHANT_NOT_PRIMARY'
-    ) {
-      // Recorded primary: primary has no record (or this merchant can hold
-      // none), release. Unrecorded: only the legacy rail can hold it, so keep
-      // the id and resubmit there.
+    if (code === 'CONTRIBUTION_NOT_FOUND') {
+      // Recorded primary: primary has no record, release. Unrecorded: only
+      // the legacy rail can hold it, so keep the id and resubmit there.
       return input.rail === 'primary'
         ? released
+        : { operationId: input.operationId, rail: 'legacy', confirmed: false };
+    }
+    if (code === 'SAVINGS_MERCHANT_NOT_PRIMARY') {
+      // Derived from runtime config, not the provider record: a stale binding
+      // must never release a recorded primary id. An unrecorded id predates
+      // the stored rail (primary was dark then), so it can only be legacy.
+      return input.rail === 'primary'
+        ? { ...keep, unknown: true }
         : { operationId: input.operationId, rail: 'legacy', confirmed: false };
     }
     return { ...keep, unknown: true };

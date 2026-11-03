@@ -9,8 +9,10 @@ const mocks = vi.hoisted(() => ({
   getMerchantForApiRequest: vi.fn(),
 }));
 
-vi.mock('@/lib/ensure-action-rate-limit', () => ({
-  ensureActionRateLimit: mocks.ensureActionRateLimit,
+vi.mock('@/lib/rate-limit', () => ({
+  checkOxygenProviderRateLimit: async (...args: unknown[]) => ({
+    allowed: await mocks.ensureActionRateLimit(...args),
+  }),
 }));
 
 vi.mock('@/lib/api-auth', () => ({

@@ -13,8 +13,11 @@ vi.mock('@/lib/api-auth', () => ({
     r.headers.get('Authorization')?.match(/^bearer\s+(.+)$/i)?.[1] ?? null,
 }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
-vi.mock('@/lib/ensure-action-rate-limit', () => ({
-  ensureActionRateLimit: mocks.rate,
+vi.mock('@/lib/rate-limit', () => ({
+  getTrustedClientIdentifier: () => 'trusted-ip',
+  checkOxygenProviderRateLimit: async (...args: unknown[]) => ({
+    allowed: await mocks.rate(...args),
+  }),
 }));
 
 import { POST } from './route';
@@ -156,9 +159,11 @@ describe('authenticated Oxygen chat continuation', () => {
   it('handles unavailable storage and rate limits', async () => {
     mocks.rpc.mockRejectedValue(new Error('private'));
     expect((await POST(request())).status).toBe(503);
-    mocks.rate.mockResolvedValue(false);
+    mocks.rate.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
     expect((await POST(request())).status).toBe(429);
-    expect(mocks.auth).toHaveBeenCalledTimes(1);
+    expect(mocks.auth).toHaveBeenCalledTimes(2);
+    expect(mocks.rate).toHaveBeenLastCalledWith('customer', 'chat', 20);
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -170,4 +175,33 @@ it('keeps staging-only chat disabled in production before creating or resuming a
   } finally {
     vi.unstubAllEnvs();
   }
+});
+
+it('bounds IP traffic after authentication and keeps customer budgets distinct', async () => {
+  mocks.rate.mockResolvedValueOnce(false);
+  expect((await POST(request())).status).toBe(429);
+  expect(mocks.auth).toHaveBeenCalledOnce();
+  expect(mocks.rate).toHaveBeenCalledWith('trusted-ip', 'chat-ip', 60);
+  mocks.auth.mockResolvedValueOnce({
+    user: { id: 'other' },
+    supabase: { rpc: mocks.rpc },
+  });
+  expect((await POST(request())).status).toBe(200);
+  expect((await POST(request())).status).toBe(200);
+  expect(mocks.rate).toHaveBeenCalledWith('other', 'chat', 20);
+  expect(mocks.rate).toHaveBeenCalledWith('customer', 'chat', 20);
+});
+
+it('applies the IP budget even when authentication fails', async () => {
+  mocks.auth.mockResolvedValueOnce({ error: 'unauthorized' });
+  mocks.rate.mockResolvedValueOnce(false);
+  expect((await POST(request())).status).toBe(429);
+  expect(mocks.auth.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.rate.mock.invocationCallOrder[0]
+  );
+  expect(mocks.rate).toHaveBeenCalledExactlyOnceWith(
+    'trusted-ip',
+    'chat-ip',
+    60
+  );
 });

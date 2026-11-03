@@ -4,9 +4,12 @@ import {
   getBearerTokenFromRequest,
 } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
 import { projectOxygenChat } from '@/lib/payments/oxygen/chat-pipeline';
 import { resolveOxygenEnvironment } from '@/lib/payments/oxygen/environment';
+import {
+  checkOxygenProviderRateLimit,
+  getTrustedClientIdentifier,
+} from '@/lib/rate-limit';
 import { oxygenChatRequestSchema } from '@/schemas/oxygen-chat';
 import { oxygenWorkflowSnapshotSchema } from '@/schemas/oxygen-workflow';
 
@@ -18,21 +21,29 @@ const headers = {
 
 /** Authenticated conversation continuation, not an inbound WhatsApp webhook. */
 export async function POST(request: NextRequest) {
+  const auth = await authenticateApiRequest(request);
   if (
-    !(await ensureActionRateLimit('oxygen-chat', {
-      requests: 20,
-      windowMs: 60_000,
-    }))
+    !(
+      await checkOxygenProviderRateLimit(
+        getTrustedClientIdentifier(request),
+        'chat-ip',
+        60
+      )
+    ).allowed
   )
     return NextResponse.json(
       { error: 'Too many requests' },
       { status: 429, headers }
     );
-  const auth = await authenticateApiRequest(request);
   if (auth.error || !auth.user || !auth.supabase)
     return NextResponse.json(
       { error: 'Unauthorized' },
       { status: 401, headers }
+    );
+  if (!(await checkOxygenProviderRateLimit(auth.user.id, 'chat', 20)).allowed)
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers }
     );
   // Chat continuation is staging-only and must never start production workflows.
   if (resolveOxygenEnvironment() !== 'staging')

@@ -1,10 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
 import { decideOxygenNewInitiation } from '@/lib/payments/oxygen/availability';
 import { resolveOxygenOrderContext } from '@/lib/payments/oxygen/context';
 import { mapInitiationDecision } from '@/lib/payments/oxygen/initiation';
+import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
 import { oxygenAttemptRequestSchema } from '@/schemas/oxygen-requests';
 
 // POST /api/payments/oxygen/attempts — Phase A initiation probe. Pinned
@@ -25,11 +25,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const allowed = await ensureActionRateLimit('oxygen-initiation', {
-    requests: 10,
-    windowMs: 60_000,
-  });
-  if (!allowed) {
+  const limit = await checkOxygenProviderRateLimit(
+    auth.user.id,
+    'initiation',
+    10
+  );
+  if (!limit.allowed) {
     return NextResponse.json(
       { error: 'Too many Oxygen requests. Please try again shortly.' },
       { status: 429 }

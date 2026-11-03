@@ -7,6 +7,7 @@ import {
   mockProvenCustomer,
   ORDER_ID,
   POST,
+  SESSION_USER_ID,
 } from './route.test-helpers';
 
 describe('POST /api/payments/oxygen/attempts', () => {
@@ -44,8 +45,9 @@ describe('POST /api/payments/oxygen/attempts', () => {
       error: 'Too many Oxygen requests. Please try again shortly.',
     });
     expect(getMocks().ensureActionRateLimit).toHaveBeenCalledWith(
-      'oxygen-initiation',
-      { requests: 10, windowMs: 60_000 }
+      SESSION_USER_ID,
+      'initiation',
+      10
     );
     expect(getMocks().authenticateApiRequest).toHaveBeenCalledOnce();
     expect(csrfSpy).toHaveBeenCalledOnce();
@@ -58,11 +60,12 @@ describe('POST /api/payments/oxygen/attempts', () => {
     await POST(buildPostRequest({ orderId: ORDER_ID }));
 
     expect(getMocks().ensureActionRateLimit).toHaveBeenCalledWith(
-      'oxygen-initiation',
-      expect.anything()
+      SESSION_USER_ID,
+      'initiation',
+      10
     );
     for (const call of getMocks().ensureActionRateLimit.mock.calls) {
-      expect(call[0]).not.toBe('oxygen-availability');
+      expect(call[1]).not.toBe('availability');
     }
   });
   it('rejects a cookie POST without a CSRF token after auth', async () => {

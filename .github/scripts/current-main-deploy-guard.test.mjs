@@ -33,7 +33,7 @@ async function verifySupersededFile(
         return response({ jobs: runJobs, total_count: runJobs.length });
       }
       const shaMatch = url.match(/head_sha=([0-9a-f]{40})/);
-      const runs = shaMatch && workflowRuns.some((r) => r.head_sha === shaMatch[1]) ? workflowRuns.filter((r) => r.head_sha === shaMatch[1]) : workflowRuns;
+      const runs = shaMatch ? workflowRuns.filter((r) => r.head_sha === shaMatch[1] || !/^[0-9a-f]{40}$/.test(r.head_sha ?? '')) : workflowRuns;
       return response({ total_count: runs.length, workflow_runs: runs });
     },
     repository: 'ogabasseyy/Baci',

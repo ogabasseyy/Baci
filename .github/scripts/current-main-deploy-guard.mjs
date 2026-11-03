@@ -119,7 +119,7 @@ async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, tok
   }
   const deployJobs = jobsBody.jobs.filter((j) => j?.name === 'deploy-production');
   if (deployJobs.length === 0) {
-    if (run.status === 'completed' && run.conclusion !== 'cancelled') {
+    if (run.status === 'completed' && (run.conclusion !== 'cancelled' || jobsBody.jobs.length > 0)) {
       throw new Error('missing deploy-production job in workflow run');
     }
     return false;

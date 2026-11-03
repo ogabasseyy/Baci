@@ -7,12 +7,11 @@ const migration = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../../../../supabase/migrations/20261103025419_piggyvest_deposits_ledger_only.sql'
 );
-const sql = readFileSync(migration, 'utf8')
-  .split('\n')
-  .filter((line) => !line.trim().startsWith('--'))
-  .join('\n');
-
 it('uses wildcard selects only to hydrate local row variables, never to return rows', () => {
+  const sql = readFileSync(migration, 'utf8')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('--'))
+    .join('\n');
   const wildcards = [...sql.matchAll(/select\s+(?:\w+\.)?\*[^;]*;/gi)].map(
     (m) => m[0]
   );

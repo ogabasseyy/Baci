@@ -58,13 +58,16 @@ it.runIf(process.env.BACI_PRIMARY_WALLET_SQL_TESTS === 'true')(
       );
       expect(result).toContain('DO');
     } finally {
-      if (started)
-        execFileSync(
-          'pg_ctl',
-          ['-D', data, '-m', 'immediate', '-w', 'stop'],
-          options
-        );
-      rmSync(directory, { recursive: true, force: true });
+      try {
+        if (started)
+          execFileSync(
+            'pg_ctl',
+            ['-D', data, '-m', 'immediate', '-w', 'stop'],
+            options
+          );
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
     }
   },
   60000

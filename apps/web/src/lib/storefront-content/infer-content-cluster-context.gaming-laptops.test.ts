@@ -281,4 +281,15 @@ describe('inferContentClusterContext - gaming laptops', () => {
     });
     expect(standArticle.categorySlug).toBe('laptops');
   });
+
+  it('preserves GPU mentions in explicit gaming-laptops category guides', () => {
+    const post = inferContentClusterContext({
+      title: 'Best Gaming Laptops with RTX 4060 GPUs in Nigeria',
+      excerpt: 'Comparing portable machines with discrete graphics.',
+      category: 'Gaming Laptops',
+      tags: ['laptops'],
+      keywords: ['gpu'],
+    });
+    expect(post.categorySlug).toBe('gaming-laptops');
+  });
 });

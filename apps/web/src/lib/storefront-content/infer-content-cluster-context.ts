@@ -19,7 +19,7 @@ import { tokenizeContentText } from './tokenize-content-text';
 interface InferContentClusterContextInput
   extends Pick<
     PublishedClusterPost,
-    'title' | 'excerpt' | 'category' | 'tags' | 'keywords'
+    'category' | 'excerpt' | 'keywords' | 'tags' | 'title'
   > {
   merchant_intent?: unknown;
   merchant_intent_source?: unknown;
@@ -45,9 +45,7 @@ function hasPhrase(haystack: string, needle: string) {
   let searchFrom = 0;
   for (;;) {
     const matchIndex = haystack.indexOf(normalizedNeedle, searchFrom);
-    if (matchIndex === -1) {
-      return false;
-    }
+    if (matchIndex === -1) return false;
     if (
       isPhraseBoundary(haystack[matchIndex - 1]) &&
       isPhraseBoundary(haystack[matchIndex + normalizedNeedle.length])
@@ -63,57 +61,57 @@ type ClusterSupportEntry = [
   (typeof CONTENT_CLUSTER_SUPPORT)[SupportedClusterCategory],
 ];
 
+function hasExcludedGamingLaptopSubject(
+  targetText: string,
+  hasLaptopInContext = false
+): boolean {
+  const hasLaptop =
+    hasLaptopInContext ||
+    hasPhrase(targetText, 'gaming laptop') ||
+    hasPhrase(targetText, 'gaming laptops');
+  const isGpu = (s: string) =>
+    s === 'gpu' || s === 'gpus' || s.startsWith('graphics card');
+  return EXCLUDED_GAMING_LAPTOP_SUBJECTS.some(
+    (s) => !(hasLaptop && isGpu(s)) && hasPhrase(targetText, s)
+  );
+}
+
 function isDedicatedGamingLaptopContent(
   titleHaystack: string,
   contentHaystack: string,
   excerptHaystack = ''
 ): boolean {
-  const hasTitleGamingLaptopPhrase =
+  const hasTitleGamingLaptop =
     hasPhrase(titleHaystack, 'gaming laptop') ||
     hasPhrase(titleHaystack, 'gaming laptops');
-  const hasTitleLaptopToken =
+  const hasTitleLaptop =
     hasPhrase(titleHaystack, 'laptop') || hasPhrase(titleHaystack, 'laptops');
   const hasTitleDedicatedModel = DEDICATED_GAMING_LAPTOP_TOKENS.some((token) =>
     hasPhrase(titleHaystack, token)
   );
-  const isGpu = (subject: string) =>
-    subject === 'gpu' ||
-    subject === 'gpus' ||
-    subject === 'graphics card' ||
-    subject === 'graphics cards';
 
-  if (
-    hasTitleGamingLaptopPhrase ||
-    (hasTitleDedicatedModel && hasTitleLaptopToken)
-  ) {
-    return !EXCLUDED_GAMING_LAPTOP_SUBJECTS.some(
-      (subject) =>
-        !(hasTitleGamingLaptopPhrase && isGpu(subject)) &&
-        hasPhrase(titleHaystack, subject)
-    );
+  if (hasTitleGamingLaptop || (hasTitleDedicatedModel && hasTitleLaptop)) {
+    return !hasExcludedGamingLaptopSubject(titleHaystack);
   }
 
-  const hasMetadataLaptopToken =
+  const hasMetadataLaptop =
     hasPhrase(contentHaystack, 'laptop') ||
     hasPhrase(contentHaystack, 'laptops') ||
     hasPhrase(contentHaystack, 'gaming laptop') ||
     hasPhrase(contentHaystack, 'gaming laptops');
 
-  if (hasTitleDedicatedModel && hasMetadataLaptopToken) {
+  if (hasTitleDedicatedModel && hasMetadataLaptop) {
     const titleAndExcerpt = [titleHaystack, excerptHaystack]
       .filter(Boolean)
       .join(' ');
     const hasLaptop =
-      hasTitleLaptopToken ||
+      hasTitleLaptop ||
       hasPhrase(excerptHaystack, 'laptop') ||
       hasPhrase(excerptHaystack, 'laptops') ||
       hasPhrase(excerptHaystack, 'gaming laptop') ||
       hasPhrase(excerptHaystack, 'gaming laptops');
 
-    return !EXCLUDED_GAMING_LAPTOP_SUBJECTS.some(
-      (subject) =>
-        !(hasLaptop && isGpu(subject)) && hasPhrase(titleAndExcerpt, subject)
-    );
+    return !hasExcludedGamingLaptopSubject(titleAndExcerpt, hasLaptop);
   }
 
   return false;
@@ -137,9 +135,11 @@ function inferCategorySlug(
     .find(({ name }) => hasPhrase(explicitCategory, name));
 
   if (explicitMatch) {
+    const isGamingOrLaptop =
+      explicitMatch.categorySlug === 'gaming' ||
+      explicitMatch.categorySlug === 'laptops';
     if (
-      (explicitMatch.categorySlug === 'gaming' ||
-        explicitMatch.categorySlug === 'laptops') &&
+      isGamingOrLaptop &&
       isDedicatedGamingLaptopContent(
         title ?? '',
         contentHaystack,
@@ -148,11 +148,10 @@ function inferCategorySlug(
     ) {
       return 'gaming-laptops';
     }
-    if (
-      explicitMatch.categorySlug === 'gaming-laptops' &&
-      EXCLUDED_GAMING_LAPTOP_SUBJECTS.some((s) => hasPhrase(title ?? '', s))
-    ) {
-      return 'laptops';
+    if (explicitMatch.categorySlug === 'gaming-laptops') {
+      return hasExcludedGamingLaptopSubject(title ?? '')
+        ? 'laptops'
+        : 'gaming-laptops';
     }
     return explicitMatch.categorySlug;
   }
@@ -204,10 +203,11 @@ function resolveKind(
 ): ContentClusterKind | null {
   // The public RPC excludes stale classifications. Reject malformed metadata
   // here too so older adapters and unclassified rows retain the heuristic path.
+  const source = input.merchant_intent_source;
   if (
-    input.merchant_intent_source !== 'merchant_declared' &&
-    input.merchant_intent_source !== 'verified_receipt' &&
-    input.merchant_intent_source !== 'reviewed'
+    source !== 'merchant_declared' &&
+    source !== 'verified_receipt' &&
+    source !== 'reviewed'
   ) {
     return inferredKind;
   }

@@ -65,6 +65,8 @@ function queueDeps(stored: PiggyvestClaimedCapture) {
       status: 'verified',
       secret: 'matched-secret',
       families: ['legacy'],
+      keyVersion: 'k-0123456789abcdef',
+      keyStatus: 'current',
     }),
     process: async (delivery) => {
       const response = await processVerifiedDelivery(delivery, {

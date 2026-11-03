@@ -24,7 +24,16 @@ const BARE_REFERENCE = /(?:^|[\s;&|("'])((?:\.github|(?:[\w@.-]+(?:\/[\w@.-]+)*\
 const HAS_EXTENSION = /\.\w+$/;
 const SCRIPT_REFERENCE_ONLY = /\.(?:sh|bash|zsh|mjs|cjs|js|ts|py|rb|rake)$/;
 const LOCAL_USES = /^\s*(?:-\s+)?uses:\s*['"]?\.\/(\.github\/(?:actions|workflows)\/[^\s'"#]+?)\/?['"]?\s*(?:#.*)?$/gm;
-const WORKING_DIRECTORY = /^\s*(?:-\s+)?working-directory:\s*(\S+)\s*$/gm;
+const WORKING_DIRECTORY = /^\s*(?:-\s+)?working-directory:\s*(.+?)\s*$/gm;
+const ENV_EXPRESSION = /\$\{\{\s*env\.(\w+)\s*\}\}/g;
+
+// `${{ env.NAME }}` becomes the literal value the same file gives NAME.
+function resolveEnvExpression(value, source) {
+  return value.replace(ENV_EXPRESSION, (whole, name) => {
+    const literal = source.match(new RegExp(`^\\s*${name}:\\s*['"]?([^\\s'"#]+)['"]?\\s*(?:#.*)?$`, 'm'));
+    return literal ? literal[1] : whole;
+  });
+}
 // The gate's own modules and every test file describe shipping commands as
 // data and are run only to check code, so they are not followed.
 const GATE_OWN_FILE = /^\.github\/scripts\/storefront-release-gate(?:-[\w-]+)?\.mjs$/;
@@ -57,7 +66,7 @@ export function expandReferences(text, readFile) {
       if (!missing.includes(label)) missing.push(label);
       return;
     }
-    const directories = [...base, ...[...source.matchAll(WORKING_DIRECTORY)].map((match) => match[1].replace(/\/$/, ''))];
+    const directories = [...base, ...[...source.matchAll(WORKING_DIRECTORY)].map((match) => resolveEnvExpression(match[1], source).replace(/\/$/, ''))];
     // A caller workflow and the local action or reusable workflow it uses run
     // as one unit, so shipping split across the two files is still seen.
     for (const [, used] of source.matchAll(LOCAL_USES)) {

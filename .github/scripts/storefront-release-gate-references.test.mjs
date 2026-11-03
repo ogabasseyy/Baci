@@ -160,3 +160,20 @@ test('script bodies from the storefront package keep their scope even when the b
   assert.doesNotMatch(expandReferences('run: pnpm -C apps/other upload', reader({ ...files, 'package.json': '{}' })).scopedText, /eas submit/);
   assert.doesNotMatch(expandReferences('run: echo hi', reader(files)).scopedText, /eas submit/);
 });
+
+test('a working directory given through an env expression resolves to its literal value', () => {
+  const files = {
+    'package.json': '{"scripts":{}}',
+    'apps/mobile-storefront/package.json': JSON.stringify({ scripts: { ship: 'fastlane ios release' } }),
+  };
+  const yaml = [
+    'env:',
+    '  WORKING_DIR: apps/mobile-storefront',
+    'jobs:',
+    '  a:',
+    '    steps:',
+    '      - working-directory: ${{ env.WORKING_DIR }}',
+    '        run: pnpm run ship',
+  ].join('\n');
+  assert.match(expandReferences(yaml, reader(files)).scopedText, /fastlane ios release/);
+});

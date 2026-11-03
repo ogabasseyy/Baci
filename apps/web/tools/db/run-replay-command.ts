@@ -63,7 +63,24 @@ function boundedPsqlDiagnostic(
   ).exec(output);
   const line = Number(match?.[1]);
   if (!Number.isSafeInteger(line) || line < 1) return '';
-  return ` (line=${line}${match?.[2] ? `,sqlstate=${match[2]}` : ''})`;
+  if (match?.[2]) return ` (line=${line},sqlstate=${match[2]})`;
+  // The client/server may not emit SQLSTATE. Never return raw stderr: only
+  // classify a fixed set of error categories, with no identifiers or values.
+  const errorLine = output.slice(match?.index ?? 0).split(/\r?\n/, 1)[0] ?? '';
+  const reason = /anonymous draft save executed/i.test(errorLine)
+    ? 'anonymous-draft-save-executed'
+    : /permission denied/i.test(errorLine)
+      ? 'permission-denied'
+      : /function .+ does not exist/i.test(errorLine)
+        ? 'undefined-function'
+        : /column .+ does not exist/i.test(errorLine)
+          ? 'undefined-column'
+          : /invalid input syntax/i.test(errorLine)
+            ? 'invalid-input'
+            : /duplicate key/i.test(errorLine)
+              ? 'unique-violation'
+              : null;
+  return ` (line=${line}${reason ? `,reason=${reason}` : ''})`;
 }
 
 function commandFailure(

@@ -69,7 +69,7 @@ SET LOCAL ROLE anon;
 SELECT set_config('request.jwt.claim.sub','',true);
 SELECT set_config('request.jwt.claims','{}',true);
 -- Distinct SQLSTATEs identify the failing privilege check without leaking data.
-\set VERBOSITY sqlstate
+\set VERBOSITY default
 DO $$ BEGIN
  IF has_function_privilege('anon','public.oxygen_save_form_draft(uuid,integer,uuid,text,text,timestamp with time zone)','EXECUTE') THEN
   RAISE EXCEPTION 'Anonymous draft save privilege granted' USING ERRCODE='P1001';

@@ -1,6 +1,7 @@
 import 'server-only';
 import { piggyvestInterestPayoutWalletIdSchema } from '@/schemas/piggyvest-primary-wallet-onboarding';
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
+import { isPiggyvestFeatureOn } from './piggyvest-switches';
 
 export function readPrimaryWalletRuntime(env: NodeJS.ProcessEnv = process.env) {
   return parseRuntime(env, false);
@@ -43,7 +44,7 @@ export function readPrimaryWalletRuntimeDrain(
 }
 
 function parseRuntime(env: NodeJS.ProcessEnv, drain: boolean) {
-  if (!drain && env.PIGGYVEST_PRIMARY_ENABLED !== 'true') return null;
+  if (!drain && !isPiggyvestFeatureOn('wallet', env)) return null;
   const environment = env.PIGGYVEST_PRIMARY_ENVIRONMENT;
   if (
     (env.VERCEL_ENV === 'production' && environment !== 'production') ||

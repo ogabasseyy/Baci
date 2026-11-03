@@ -14,3 +14,12 @@ it('refuses enabled but incomplete configuration rather than silently losing pri
     })
   ).toThrow('configuration unavailable');
 });
+it('master kill switch turns the inflow runtime off even when fully enabled', () => {
+  expect(
+    readPrimaryWalletInflowRuntime({
+      NODE_ENV: 'test',
+      PIGGYVEST_PRIMARY_INFLOWS_ENABLED: 'true',
+      PIGGYVEST_KILL_SWITCH: 'true',
+    })
+  ).toBeNull();
+});

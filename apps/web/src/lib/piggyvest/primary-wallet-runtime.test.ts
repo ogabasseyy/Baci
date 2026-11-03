@@ -106,3 +106,17 @@ describe('primary wallet runtime environment', () => {
     ).toBeNull();
   });
 });
+describe('master kill switch', () => {
+  it('blocks new wallet work but never the drain reader', () => {
+    expect(readPrimaryWalletRuntime(env)).not.toBeNull();
+    for (const value of ['true', 'garbage', '']) {
+      const killed = { ...env, PIGGYVEST_KILL_SWITCH: value };
+      expect(readPrimaryWalletRuntime(killed)).toBeNull();
+      expect(readPrimaryWalletOnboardingRuntime(killed)).toBeNull();
+      expect(readPrimaryWalletRuntimeDrain(killed)).not.toBeNull();
+    }
+    expect(
+      readPrimaryWalletRuntime({ ...env, PIGGYVEST_KILL_SWITCH: 'false' })
+    ).not.toBeNull();
+  });
+});

@@ -1,4 +1,5 @@
 import 'server-only';
+import { isPiggyvestKilled } from './piggyvest-switches';
 
 const PREFIX = 'PIGGYVEST_SAVINGS_FUNDING_';
 
@@ -51,7 +52,8 @@ export function readPiggyvestPlanFundingRuntime(
   configuration: unknown;
   postgresConfiguration: unknown;
 } | null {
-  if (read('DISPLAY_ENABLED', env) !== 'true') return null;
+  if (isPiggyvestKilled(env) || read('DISPLAY_ENABLED', env) !== 'true')
+    return null;
   const allowlist =
     read('CUSTOMER_ALLOWLIST', env)
       ?.split(',')

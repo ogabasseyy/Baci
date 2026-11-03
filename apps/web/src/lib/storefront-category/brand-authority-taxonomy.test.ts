@@ -238,4 +238,11 @@ describe('brand authority taxonomy', () => {
       displayName: 'Xiaomi and Redmi',
     });
   });
+
+  it('pins total brand-authority entries across all categories to 27', () => {
+    const totalEntries = brandAuthorityTaxonomy
+      .getSupportedCategories()
+      .flatMap((category) => brandAuthorityTaxonomy.getEntries(category));
+    expect(totalEntries).toHaveLength(27);
+  });
 });

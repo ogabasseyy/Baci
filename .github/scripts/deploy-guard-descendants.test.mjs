@@ -89,3 +89,24 @@ test('bugfix: a repeated deployed run for a non-descendant SHA is not treated as
   const fetchImpl = farAheadFetch({ runs: [dup(4), dup(5), expectedRun], jobs: { 4: deployedJob, 5: deployedJob } });
   assert.deepEqual(await verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), { currentSha, expectedSha });
 });
+
+test('bugfix: fails closed when a descendant comparison response is incomplete', async () => {
+  const fetchImpl = farAheadFetch({
+    runs: [{ conclusion: 'success', head_branch: 'main', head_sha: intermediateSha, id: 3, status: 'completed' }, expectedRun],
+    compares: { [intermediateSha]: {} },
+    jobs: { 3: deployedJob },
+  });
+  await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /incomplete descendant comparison/);
+});
+
+test('routes a 101-commit compare with a truncated commit list through the run-based check', async () => {
+  const base = farAheadFetch({
+    runs: [{ conclusion: 'success', head_branch: 'main', head_sha: intermediateSha, id: 3, status: 'completed' }, expectedRun],
+    compares: { [intermediateSha]: ahead },
+    jobs: { 3: deployedJob },
+  });
+  const fetchImpl = async (url) => /\/compare\/a{40}\.\.\.b{40}/.test(url)
+    ? response({ commits: Array.from({ length: 100 }, () => ({ sha: currentSha })), files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 101 })
+    : base(url);
+  await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /superseded deployment SHA/);
+});

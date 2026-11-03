@@ -28,6 +28,9 @@ export async function descendantAlreadyDeployed({ apiRoot, expectedSha, fetchImp
         `${apiRoot}/repos/${repository}/compare/${expectedSha}...${sha}?per_page=1`,
         token
       );
+      if (typeof cmp?.status !== 'string' || typeof cmp?.merge_base_commit?.sha !== 'string') {
+        throw new Error('incomplete descendant comparison');
+      }
       if (
         cmp?.status === 'ahead' &&
         cmp?.merge_base_commit?.sha?.toLowerCase() === expectedSha.toLowerCase()

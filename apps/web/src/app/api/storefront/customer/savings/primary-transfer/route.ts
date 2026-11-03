@@ -157,7 +157,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { error: 'Savings is not enabled.', code: 'CUSTOMER_SAVINGS_DISABLED' },
         { status: 403 }
       );
-    const { merchantId: _merchantId, ...selection } = parsed.data;
+    const { merchantId: _merchantId, pinProof, ...selection } = parsed.data;
     const result = await submitPrimaryWalletSavings({
       configuration: runtime.configuration,
       reconciliationConfiguration: runtime.reconciliationConfiguration,
@@ -171,7 +171,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         businessId: runtime.businessId,
       },
       request: selection,
+      pinProof,
     });
+    if (result.status === 'pin_refused')
+      return NextResponse.json(
+        {
+          error: 'Please confirm your PIN again to continue.',
+          code: 'PIN_PROOF_REFUSED',
+        },
+        { status: 403, headers: { 'Cache-Control': 'no-store' } }
+      );
     if (result.status === 'insufficient')
       return NextResponse.json(
         {

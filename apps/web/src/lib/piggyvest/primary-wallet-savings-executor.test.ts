@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { createPrimaryWalletSavingsExecutor } from './primary-wallet-savings-executor';
 
@@ -34,8 +35,9 @@ const scope = {
   userId: '44444444-4444-4444-8444-444444444444',
   businessId: 'business',
 };
+const pinProof = createHash('sha256').update('s5-executor-proof').digest('hex');
 const statement =
-  'SELECT piggyvest_primary.reserve_savings($1::jsonb,$2::jsonb) AS result';
+  'SELECT piggyvest_primary.reserve_savings_with_pin($1::jsonb,$2::jsonb,$3::text) AS result';
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.end.mockResolvedValue(undefined);
@@ -57,10 +59,12 @@ it('uses a restricted TLS session for parameterized reservations', async () => {
   await createPrimaryWalletSavingsExecutor(config)(statement, [
     JSON.stringify(scope),
     '{}',
+    pinProof,
   ]);
   expect(mocks.query).toHaveBeenLastCalledWith(statement, [
     JSON.stringify(scope),
     '{}',
+    pinProof,
   ]);
   expect(mocks.end).toHaveBeenCalledOnce();
 });
@@ -81,6 +85,7 @@ it('rejects another environment or unknown statements before connecting', async 
     execute(statement, [
       JSON.stringify({ ...scope, environment: 'production' }),
       '{}',
+      pinProof,
     ])
   ).rejects.toThrow();
   await expect(
@@ -94,6 +99,7 @@ it('does not reserve after unsafe session verification', async () => {
     createPrimaryWalletSavingsExecutor(config)(statement, [
       JSON.stringify(scope),
       '{}',
+      pinProof,
     ])
   ).rejects.toThrow('database unavailable');
   expect(mocks.query).toHaveBeenCalledTimes(1);

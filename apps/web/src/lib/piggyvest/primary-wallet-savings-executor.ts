@@ -4,7 +4,7 @@ import { piggyvestPrimarySavingsRuntimeSchema } from '@/schemas/piggyvest-primar
 import { piggyvestPrimaryWalletStoreSchemas } from '@/schemas/piggyvest-primary-wallet-store';
 
 const reserve =
-  'SELECT piggyvest_primary.reserve_savings($1::jsonb,$2::jsonb) AS result';
+  'SELECT piggyvest_primary.reserve_savings_with_pin($1::jsonb,$2::jsonb,$3::text) AS result';
 const manage =
   'SELECT piggyvest_primary.manage_savings($1::jsonb,$2::uuid,$3::text) AS result';
 const read =
@@ -30,7 +30,8 @@ export function createPrimaryWalletSavingsExecutor(configuration: unknown) {
         statement !== manage &&
         statement !== read &&
         statement !== recover) ||
-      parameters.length !== (statement === manage ? 3 : 2) ||
+      parameters.length !==
+        (statement === manage || statement === reserve ? 3 : 2) ||
       parameters.some(
         (parameter) => typeof parameter !== 'string' || parameter.length > 8192
       )

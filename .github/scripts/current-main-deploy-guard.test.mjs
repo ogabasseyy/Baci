@@ -91,24 +91,25 @@ test('distinguishes post-promote failure from pre-promote failure', async () => 
     verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'failure', head_sha: currentSha, id: 123, status: 'completed' }], [{ sha: currentSha }], [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'success', name: 'Deploy to Vercel (with retry)' }] }]),
     /superseded deployment SHA/
   );
-  const result = await verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'failure', head_sha: currentSha, id: 123, status: 'completed' }], [{ sha: currentSha }], [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'failure', name: 'Deploy to Vercel (with retry)' }] }]);
+  const result = await verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'failure', head_sha: currentSha, id: 123, status: 'completed' }], [{ sha: currentSha }], [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'skipped', name: 'Deploy to Vercel (with retry)' }] }]);
   assert.deepEqual(result, { currentSha, expectedSha });
 });
 
 test('accepts an in-flight ancestor when superseding commit is queued or in_progress without deploy', async () => {
   const result = await verifySupersededFile(
     'apps/web/src/app/page.tsx',
-    [{ conclusion: null, head_sha: currentSha, id: 124, status: 'queued' }, { conclusion: 'cancelled', head_sha: intermediateSha, id: 125, status: 'completed' }],
+    [{ conclusion: null, head_sha: currentSha, id: 124, run_attempt: 1, status: 'queued' }, { conclusion: 'cancelled', head_sha: intermediateSha, id: 125, status: 'completed' }],
     [{ sha: intermediateSha }, { sha: currentSha }],
-    [{ conclusion: 'cancelled', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'cancelled', name: 'Deploy to Vercel (with retry)' }] }]
+    [{ conclusion: 'cancelled', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'skipped', name: 'Deploy to Vercel (with retry)' }] }]
   );
   assert.deepEqual(result, { currentSha, expectedSha });
 });
 
-test('rejects an ancestor when superseding job or deploy step succeeded while in_progress', async () => {
+test('rejects an ancestor when superseding job or deploy step is active or succeeded', async () => {
   for (const jobs of [
     [{ conclusion: 'success', name: 'deploy-production', status: 'completed' }],
     [{ conclusion: null, name: 'deploy-production', status: 'in_progress', steps: [{ conclusion: 'success', name: 'Deploy to Vercel (with retry)' }] }],
+    [{ conclusion: null, name: 'deploy-production', status: 'in_progress', steps: [{ name: 'Deploy to Vercel (with retry)', status: 'in_progress' }] }],
   ]) {
     await assert.rejects(
       verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: null, head_sha: currentSha, id: 126, status: 'in_progress' }], [{ sha: currentSha }], jobs),
@@ -117,21 +118,23 @@ test('rejects an ancestor when superseding job or deploy step succeeded while in
   }
 });
 
-test('handles cancelled runs correctly based on whether deploy step succeeded', async () => {
-  await assert.rejects(
-    verifySupersededFile(
-      'apps/web/src/app/page.tsx',
-      [{ conclusion: 'cancelled', head_sha: currentSha, id: 127, status: 'completed' }],
-      [{ sha: currentSha }],
-      [{ conclusion: 'cancelled', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'success', name: 'Deploy to Vercel (with retry)' }] }]
-    ),
-    /superseded deployment SHA/
-  );
+test('fails closed when publication step was attempted and accepts pre-deploy cancellation', async () => {
+  for (const conclusion of ['success', 'failure', 'cancelled']) {
+    await assert.rejects(
+      verifySupersededFile(
+        'apps/web/src/app/page.tsx',
+        [{ conclusion: 'cancelled', head_sha: currentSha, id: 127, status: 'completed' }],
+        [{ sha: currentSha }],
+        [{ conclusion: 'cancelled', name: 'deploy-production', status: 'completed', steps: [{ conclusion, name: 'Deploy to Vercel (with retry)' }] }]
+      ),
+      /superseded deployment SHA/
+    );
+  }
   const result = await verifySupersededFile(
     'apps/web/src/app/page.tsx',
     [{ conclusion: 'cancelled', head_sha: currentSha, id: 128, status: 'completed' }],
     [{ sha: currentSha }],
-    [{ conclusion: 'cancelled', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'cancelled', name: 'Deploy to Vercel (with retry)' }] }]
+    [{ conclusion: 'cancelled', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'skipped', name: 'Deploy to Vercel (with retry)' }] }]
   );
   assert.deepEqual(result, { currentSha, expectedSha });
 });

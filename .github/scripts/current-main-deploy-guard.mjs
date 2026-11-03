@@ -126,7 +126,10 @@ async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, tok
     if (job.conclusion !== 'skipped') {
       if (Array.isArray(job.steps) && job.steps.length > 0) {
         const deployStep = job.steps.find((s) => s?.name === 'Deploy to Vercel (with retry)');
-        if (deployStep?.conclusion === 'success') return true;
+        const attempted =
+          deployStep?.status === 'in_progress' ||
+          (Boolean(deployStep?.conclusion) && deployStep.conclusion !== 'skipped');
+        if (attempted) return true;
         if (job.status === 'completed' && !deployStep) {
           throw new Error('missing Deploy to Vercel step in deploy-production job');
         }

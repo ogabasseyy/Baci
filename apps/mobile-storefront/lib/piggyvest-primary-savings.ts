@@ -15,6 +15,8 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
   onRail?: (rail: 'primary' | 'legacy') => void;
   /** False for an id already bound to primary: it must never reach legacy. */
   allowLegacyFallback?: boolean;
+  /** Single-use PIN proof bound to this goal, operation and amount. */
+  pinProof?: string;
 }) {
   const amountKobo = Math.round(input.amount * 100);
   if (
@@ -27,6 +29,7 @@ export async function addPiggyvestPrimarySavingsContribution(input: {
     goalId: input.goalId,
     operationId: input.idempotencyKey,
     amountKobo,
+    pinProof: input.pinProof,
   });
   // Fresh client per operation: the factory caches the access token in a
   // closure, so a module-level singleton would keep serving the previous

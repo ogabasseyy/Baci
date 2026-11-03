@@ -17,6 +17,7 @@ jest.mock('@/lib/piggyvest-primary-capability', () => ({
     mockUseCapability(...args),
 }));
 
+import { PLAN_NOT_SET_UP_MESSAGE } from '@/lib/customer-savings-plan-funding';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 
 const input = {
@@ -116,4 +117,18 @@ it('requires BVN for primary merchants while the capability probe is pending', a
     })
   );
   expect(result.current.planFundingRequiresBvn).toBe(true);
+});
+
+it('maps the endpoint SAVINGS_WALLET_NOT_FOUND error to the not-set-up state', async () => {
+  mockFetchExistingSavingsPlanFunding.mockRejectedValueOnce(
+    Object.assign(new Error('Savings wallet setup has not started.'), {
+      code: 'SAVINGS_WALLET_NOT_FOUND',
+    })
+  );
+  const { result } = renderHook(() => useSavingsPlanFunding(input));
+  await act(async () => {
+    await result.current.fetchExistingPlanFunding();
+  });
+  expect(result.current.planFundingPhase).toBe('error');
+  expect(result.current.fundingError).toBe(PLAN_NOT_SET_UP_MESSAGE);
 });

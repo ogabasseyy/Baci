@@ -3,6 +3,7 @@ import {
   fetchExistingSavingsPlanFunding,
   fetchSavingsPlanFunding,
 } from '@/lib/customer-savings';
+import { PLAN_NOT_SET_UP_MESSAGE } from '@/lib/customer-savings-plan-funding';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { usePiggyvestPrimaryCapability } from '@/lib/piggyvest-primary-capability';
 import { getErrorMessage } from './start-savings-controller.utils';
@@ -22,6 +23,19 @@ type UseSavingsPlanFundingInput = {
   identityKey?: string;
   loadExisting?: boolean;
 };
+
+// The status endpoint answers a never-started setup with a 404 code, which
+// the API client throws before the response is read as not_found.
+function planFundingErrorMessage(error: unknown): string {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === 'SAVINGS_WALLET_NOT_FOUND'
+  ) {
+    return PLAN_NOT_SET_UP_MESSAGE;
+  }
+  return getErrorMessage(error, 'Unable to load the plan account.');
+}
 
 function isBvn(value: string): boolean {
   return /^\d{11}$/.test(value.trim());
@@ -97,9 +111,7 @@ export function useSavingsPlanFunding({
       applyResponse(response);
     } catch (error) {
       if (!isCurrentRequest(generation, requestScopeKey)) return;
-      setFundingError(
-        getErrorMessage(error, 'Unable to load the plan account.')
-      );
+      setFundingError(planFundingErrorMessage(error));
       setPhase('error');
     }
   };
@@ -137,9 +149,7 @@ export function useSavingsPlanFunding({
       applyResponse(response);
     } catch (error) {
       if (!isCurrentRequest(generation, requestScopeKey)) return;
-      setFundingError(
-        getErrorMessage(error, 'Unable to load the plan account.')
-      );
+      setFundingError(planFundingErrorMessage(error));
       setPhase('error');
     }
   };

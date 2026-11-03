@@ -4,7 +4,7 @@
 // .github that cannot be read fails closed, because the gate cannot see what
 // it does.
 import path from 'node:path';
-import { scriptInvocations } from './storefront-release-gate-scripts.mjs';
+import { scriptInvocations, STOREFRONT_DIR } from './storefront-release-gate-scripts.mjs';
 
 const SCRIPT_REFERENCE = /[\w@./-]+\.(?:sh|bash|zsh|mjs|cjs|js|ts|py|rb|rake)\b/g;
 // Extensionless scripts. Executed: the argument of bash/sh/zsh/source or a
@@ -47,6 +47,10 @@ export function expandReferences(text, readFile) {
   const seen = new Set();
   const missing = [];
   const parts = [text];
+  // Parts that came from the storefront package or its directory: they ship the
+  // storefront even when their own text never names the app.
+  const scopedParts = [];
+  const inStorefront = (directory) => directory === STOREFRONT_DIR || directory?.startsWith(`${STOREFRONT_DIR}/`);
   const visit = (source, depth, base = []) => {
     if (depth > MAX_DEPTH) {
       const label = `a reference chain deeper than ${MAX_DEPTH} levels`;
@@ -78,6 +82,7 @@ export function expandReferences(text, readFile) {
       seen.add(key);
       const content = body.replace(COMMENT_LINE, '');
       parts.push(content);
+      if (inStorefront(directory)) scopedParts.push(content);
       visit(content, depth + 1, directory ? [directory] : []);
     }
     const references = [
@@ -100,10 +105,11 @@ export function expandReferences(text, readFile) {
         seen.add(found);
         const content = readFile(found).replace(COMMENT_LINE, '');
         parts.push(content);
+        if (inStorefront(path.posix.dirname(found))) scopedParts.push(content);
         visit(content, depth + 1, [path.posix.dirname(found)]);
       }
     }
   };
   visit(text, 0);
-  return { text: parts.join('\n'), missing };
+  return { text: parts.join('\n'), scopedText: scopedParts.join('\n'), missing };
 }

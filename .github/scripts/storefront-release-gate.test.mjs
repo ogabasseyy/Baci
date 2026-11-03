@@ -255,3 +255,20 @@ test('the OTA export may not run anything before its checkout and guard', () => 
   const failures = collectGateFailures(withFiles({ [OTA_WORKFLOW]: first }));
   assert.deepEqual(failures, [`${OTA_WORKFLOW} must start its export job with an actions/checkout step: nothing may run before the guard`]);
 });
+
+test('the gate fails when a workflow ships the storefront through a package script that never names the app', () => {
+  const withScripts = (file, scripts) => {
+    const manifest = JSON.parse(repository.readFile(file));
+    return JSON.stringify({ ...manifest, scripts: { ...manifest.scripts, ...scripts } });
+  };
+  const root = withScripts('package.json', { 'zz:ship': 'turbo run zz:upload' });
+  const storefront = withScripts('apps/mobile-storefront/package.json', { 'zz:upload': 'eas submit --platform ios' });
+  const workflow = 'on:\n  push:\n    branches: [main]\njobs:\n  a:\n    steps:\n      - run: pnpm run zz:ship\n';
+  const failures = collectGateFailures(
+    withFiles({ '.github/workflows/nightly-ship.yml': workflow, 'package.json': root, 'apps/mobile-storefront/package.json': storefront })
+  );
+  assert.ok(
+    failures.includes('.github/workflows/nightly-ship.yml builds or ships the storefront app but is not covered by the storefront release gate'),
+    failures.join('\n')
+  );
+});

@@ -150,6 +150,17 @@ The check needs full git history and an up-to-date `origin/main`
 `main`. New files count once they are added to git or are untracked and not
 ignored.
 
+## Documented limitations
+
+The gate reads workflows, composite actions under `.github/actions`, and the
+scripts they reference. It is a guard against accidental shipping, not against
+a deliberate edit of the guard itself. Any change under `.github/` needs the
+owner's code-owner review, which is the control for deliberate tampering. These
+shapes are therefore accepted and not hardened further:
+
+- A local composite action or reusable workflow referenced from outside
+  `.github/actions` and `.github/workflows` is not followed.
+
 ## Ending the gate (cutover)
 
 The cutover follows the one deliberate PiggyVest release and needs the owner's

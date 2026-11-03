@@ -148,3 +148,15 @@ test('a reference chain deeper than the expansion limit fails closed', () => {
   assert.equal(missing.length, 1);
   assert.match(missing[0], /deeper than/);
 });
+
+test('script bodies from the storefront package keep their scope even when the body never names the app', () => {
+  const files = {
+    'package.json': JSON.stringify({ scripts: { ship: 'turbo run upload', other: 'echo hi' } }),
+    'apps/mobile-storefront/package.json': JSON.stringify({ scripts: { upload: 'eas submit', lint: 'biome check' } }),
+    'apps/other/package.json': JSON.stringify({ scripts: { upload: 'eas submit' } }),
+  };
+  const scoped = expandReferences('run: turbo run upload', reader(files));
+  assert.match(scoped.scopedText, /eas submit/);
+  assert.doesNotMatch(expandReferences('run: pnpm -C apps/other upload', reader({ ...files, 'package.json': '{}' })).scopedText, /eas submit/);
+  assert.doesNotMatch(expandReferences('run: echo hi', reader(files)).scopedText, /eas submit/);
+});

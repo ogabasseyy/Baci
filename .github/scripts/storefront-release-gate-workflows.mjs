@@ -119,8 +119,9 @@ const SHIPPING_TOOL =
   /(?<![\w\x27"\/.-])fastlane(?![\w\x27"\/-])|upload-google-play|upload-testflight|\baltool\b|\bexpo\s+export\b|\b(?:bundle|assemble|publish)\w*Release\b|\beas(?:-cli(?:@[\w.^~-]+)?)?\s+(?:build|submit|update|workflow:run)\b/;
 
 /** True when a workflow or action builds, uploads, submits or exports the storefront app. */
-export function shipsStorefront(text) {
-  return STOREFRONT_APP.test(text) && SHIPPING_TOOL.test(text);
+export function shipsStorefront(text, scopedText = '') {
+  // `scopedText` is the part of `text` read from the storefront package or directory.
+  return (STOREFRONT_APP.test(text) && SHIPPING_TOOL.test(text)) || SHIPPING_TOOL.test(scopedText);
 }
 
 function escapeRegExp(value) {

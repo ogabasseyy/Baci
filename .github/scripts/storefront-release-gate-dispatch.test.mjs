@@ -111,3 +111,21 @@ test('pushing a tag through a variable or an explicit ref fails closed', () => {
   }
   assert.equal(createsReleaseTag('run: git push origin main'), false);
 });
+
+test('git global options before the subcommand do not hide a tag or push', () => {
+  for (const text of [
+    'run: git -C . tag v1-storefront',
+    'run: git -C "$DIR" push --tags',
+    'run: git -c user.name=ci tag -a v1-storefront -m x',
+    'run: git --no-pager tag v2',
+    'run: git --git-dir=.git push origin v1-storefront',
+    'run: git --git-dir .git --work-tree . push --follow-tags',
+    'run: git --work-tree=. -c core.x=y -C sub tag v3',
+    'run: git -C sub push origin "$TAG"',
+  ]) {
+    assert.equal(createsReleaseTag(text), true, text);
+  }
+  for (const text of ['run: git -C sub push origin HEAD', 'run: git --no-pager log -1', 'run: git -c a=b status']) {
+    assert.equal(createsReleaseTag(text), false, text);
+  }
+});

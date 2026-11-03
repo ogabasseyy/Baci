@@ -84,11 +84,11 @@ function workflowFailures(repository) {
   for (const file of [...repository.listWorkflows(), ...repository.listActions()].sort()) {
     // The scripts a file runs count as part of it: delegating the build,
     // upload or dispatch to a script must not hide it from the gate.
-    const { text, missing } = expandReferences(repository.readFile(file) ?? '', repository.readFile);
+    const { text, scopedText, missing } = expandReferences(repository.readFile(file) ?? '', repository.readFile);
     for (const script of missing) {
       failures.push(`${file} runs ${script}, which is missing: the storefront release gate cannot read what it does`);
     }
-    if (!GATED_WORKFLOWS.includes(file) && shipsStorefront(text)) {
+    if (!GATED_WORKFLOWS.includes(file) && shipsStorefront(text, scopedText)) {
       failures.push(`${file} builds or ships the storefront app but is not covered by the storefront release gate`);
     }
     failures.push(...dispatchFailures(file, text, GATED_WORKFLOWS));

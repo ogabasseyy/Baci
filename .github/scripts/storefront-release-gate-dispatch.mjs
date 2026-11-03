@@ -68,9 +68,17 @@ const RELEASE_API = /\b(?:gh\s+api|curl|fetch)\b.*\/releases\b(?!\/(?:latest|tag
 const RELEASE_ACTION =
   /\buses:\s*(?:softprops\/action-gh-release|actions\/create-release|ncipollo\/release-action|marvinpinto\/action-automatic-releases)\b/;
 
+// Git global options that may sit between `git` and the subcommand.
+const GIT_GLOBAL_OPTIONS =
+  /\bgit(?:\s+(?:-C\s+(?:"[^"]*"|'[^']*'|\S+)|-c\s+(?:"[^"]*"|'[^']*'|\S+)|--git-dir(?:=\S+|\s+\S+)|--work-tree(?:=\S+|\s+\S+)|--no-pager|--no-replace-objects|--bare))+(?=\s)/g;
+
+function withoutGitOptions(line) {
+  return line.replace(GIT_GLOBAL_OPTIONS, 'git');
+}
+
 /** True when the text creates or pushes a tag, ref or release. */
 export function createsReleaseTag(text) {
-  return logicalLines(text).some(
+  return logicalLines(text).map(withoutGitOptions).some(
     (line) =>
       TAG_COMMAND.test(line) || PUSH_TAG.test(line) || PUSH_UNRESOLVED.test(line) || REF_API.test(line) || RELEASE_API.test(line) || RELEASE_ACTION.test(line)
   );

@@ -1528,6 +1528,24 @@ describe('generateMetaTitle', () => {
         }
       );
       expect(pcSynonyms).toContain('(PC / Windows / Steam)');
+
+      const xboxSeriesSynonyms = generateMetaTitle(
+        'Forza Motorsport (Xbox, Xbox Series X) Premium Racing Championship Edition Deluxe Pack',
+        {
+          maxLength: 65,
+          suffix: 'Shop',
+        }
+      );
+      expect(xboxSeriesSynonyms).toContain('(Xbox, Xbox Series X)');
+
+      const xboxOneSynonyms = generateMetaTitle(
+        'Forza Horizon 4 (Xbox, Xbox One) Complete Ultimate Edition Racing Pass Pack',
+        {
+          maxLength: 65,
+          suffix: 'Shop',
+        }
+      );
+      expect(xboxOneSynonyms).toContain('(Xbox, Xbox One)');
     });
 
     it('preserves mixed, unknown, edition, and condition qualifiers even when over maxLength', () => {
@@ -1788,6 +1806,22 @@ describe('generateMetaTitle', () => {
       expect(isRedundantPlatformListParenthetical('PS5, Xbox Series X/S')).toBe(
         true
       );
+      expect(
+        isRedundantPlatformListParenthetical('PS5, Xbox Series X & S')
+      ).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('PS5, Xbox Series X and S')
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5, Series X & S')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('PS5, Series S and X')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox, PS5')).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('Xbox, Xbox Series X, PS5')
+      ).toBe(true);
       expect(isRedundantPlatformListParenthetical('PS5 - PS4')).toBe(true);
       expect(isRedundantPlatformListParenthetical('PS5 – PS4')).toBe(true);
       expect(isRedundantPlatformListParenthetical('PS5 — PS4')).toBe(true);
@@ -1860,6 +1894,25 @@ describe('generateMetaTitle', () => {
         false
       );
       expect(isRedundantPlatformListParenthetical('Xbox Series X/S')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox Series X & S')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox Series X and S')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Series X & S')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Series S and X')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox, Xbox Series X')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox, Xbox One')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox / Xbox Series X')).toBe(
         false
       );
     });

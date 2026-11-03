@@ -46,7 +46,14 @@ export const PLATFORM_ID_BY_ALIAS: Record<string, string> = {
 export function isRedundantPlatformListParenthetical(content: string): boolean {
   const normalized = content
     .toLowerCase()
-    .replace(/\b(xbox\s+)?series\s+[xs]\s*[-/|]\s*[xs]\b/gu, 'xbox series x');
+    .replace(
+      /\b(xbox\s+)?series\s+[xs]\s*(?:[-/|]|\s*&\s*|\s+and\s+)\s*[xs]\b/gu,
+      'xbox series x'
+    )
+    .replace(
+      /\b(xbox\s+)?one\s+[xs]\s*(?:[-/|]|\s*&\s*|\s+and\s+)\s*[xs]\b/gu,
+      'xbox one x'
+    );
   const parts = normalized
     .split(
       /\s*(?:[,/&+;|]|\s*[-–—]\s*|\band\b)(?:\s*(?:[,/&+;|]|\s*[-–—]\s*|\band\b))*\s*/u
@@ -54,15 +61,25 @@ export function isRedundantPlatformListParenthetical(content: string): boolean {
     .map((part) => part.replace(/\s+/gu, ' ').trim());
   if (parts.length < 2 || parts.some((part) => !part)) return false;
 
-  const identities = parts.map((part) =>
+  const rawIdentities = parts.map((part) =>
     Object.hasOwn(PLATFORM_ID_BY_ALIAS, part)
       ? PLATFORM_ID_BY_ALIAS[part]
       : null
   );
-  return (
-    identities.every((identity) => identity !== null) &&
-    new Set(identities).size >= 2
+  if (rawIdentities.some((identity) => identity === null)) return false;
+
+  const validIdentities = rawIdentities as string[];
+  const specificXboxIdentities = new Set(
+    validIdentities.filter((id) => id.startsWith('xbox-'))
   );
+  const resolvedIdentities =
+    specificXboxIdentities.size === 1
+      ? validIdentities.map((id) =>
+          id === 'xbox' ? [...specificXboxIdentities][0] : id
+        )
+      : validIdentities;
+
+  return new Set(resolvedIdentities).size >= 2;
 }
 
 export function stripRedundantPlatformParentheticals(title: string): string {

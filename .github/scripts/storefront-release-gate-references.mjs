@@ -4,6 +4,7 @@
 // .github that cannot be read fails closed, because the gate cannot see what
 // it does.
 import path from 'node:path';
+import { scriptInvocations } from './storefront-release-gate-scripts.mjs';
 
 const SCRIPT_REFERENCE = /[\w@./-]+\.(?:sh|bash|zsh|mjs|cjs|js|ts|py|rb|rake)\b/g;
 // Extensionless scripts. Executed: the argument of bash/sh/zsh/source or a
@@ -46,9 +47,9 @@ export function expandReferences(text, readFile) {
   const seen = new Set();
   const missing = [];
   const parts = [text];
-  const visit = (source, depth) => {
+  const visit = (source, depth, base = []) => {
     if (depth > MAX_DEPTH) return;
-    const directories = [...source.matchAll(WORKING_DIRECTORY)].map((match) => match[1].replace(/\/$/, ''));
+    const directories = [...base, ...[...source.matchAll(WORKING_DIRECTORY)].map((match) => match[1].replace(/\/$/, ''))];
     // A caller workflow and the local action or reusable workflow it uses run
     // as one unit, so shipping split across the two files is still seen.
     for (const [, used] of source.matchAll(LOCAL_USES)) {
@@ -64,6 +65,16 @@ export function expandReferences(text, readFile) {
       const content = readFile(found).replace(COMMENT_LINE, '');
       parts.push(content);
       visit(content, depth + 1);
+    }
+    // `pnpm run x`, `npm run x`, `turbo run x` and `make x` hand the work to a script body.
+    const invoked = scriptInvocations(source, directories, readFile);
+    for (const label of invoked.missing) if (!missing.includes(label)) missing.push(label);
+    for (const { key, text: body, directory } of invoked.bodies) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const content = body.replace(COMMENT_LINE, '');
+      parts.push(content);
+      visit(content, depth + 1, directory ? [directory] : []);
     }
     const references = [
       ...[...source.matchAll(SCRIPT_REFERENCE)].map((match) => [match[0], true]),

@@ -166,3 +166,10 @@ test('reads step names in order and a step block scalar run script', () => {
   assert.equal(readStep(exportJob, 'Validate').run, undefined, 'a plain scalar run is not a block script');
   assert.equal(readStep(exportJob, 'Missing'), undefined);
 });
+
+test('a fastlane path segment is not the fastlane tool', () => {
+  const app = 'apps/mobile-storefront\n';
+  assert.equal(shipsStorefront(`${app}path.join(projectRoot, 'fastlane', 'Fastfile')`), false);
+  assert.equal(shipsStorefront(`${app}bundle exec fastlane ios release`), true);
+  assert.equal(shipsStorefront(`${app}fastlane android deploy`), true);
+});

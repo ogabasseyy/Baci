@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { releaseGuardFailures, RELEASE_GUARD_STEP } from './storefront-release-gate-steps.mjs';
+import { releaseGuardFailures, RELEASE_GUARD_STEP, storeSecretsUsed } from './storefront-release-gate-steps.mjs';
 
 function release({ between = '', extraJob = '' } = {}) {
   return `name: Release
@@ -38,4 +38,10 @@ test('a second job in a gated release workflow fails the gate', () => {
   const failures = releaseGuardFailures('release.yml', release({ extraJob }), 'ship');
   assert.equal(failures.length, 1);
   assert.match(failures[0], /only job/);
+});
+
+test('store secrets are every secret except the token and public client config', () => {
+  const text = 'a: ${{ secrets.ASC_API_KEY_ID }}\nb: ${{ secrets.GITHUB_TOKEN }}\nc: ${{ secrets.EXPO_PUBLIC_X }}\nd: ${{ secrets.ASC_API_KEY_ID }}\ne: ${{ secrets.NEXT_PUBLIC_Y }}\nf: ${{ secrets.SENTRY_AUTH_TOKEN }}';
+  assert.deepEqual(storeSecretsUsed(text), ['ASC_API_KEY_ID', 'SENTRY_AUTH_TOKEN']);
+  assert.deepEqual(storeSecretsUsed('run: echo hi'), []);
 });

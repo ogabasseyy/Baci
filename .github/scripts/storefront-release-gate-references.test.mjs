@@ -89,3 +89,40 @@ test('extensionless scripts are followed and an unreadable .github one fails clo
   assert.deepEqual(missing, ['.github/scripts/gone']);
   assert.deepEqual(expandReferences('run: echo hello && ./missing-tool', reader({})).missing, []);
 });
+
+test('package scripts, turbo tasks and make targets are followed', () => {
+  const files = {
+    'package.json': JSON.stringify({ scripts: { release: 'pnpm --filter @baci/mobile-storefront ship', other: 'echo hi' } }),
+    'apps/mobile-storefront/package.json': JSON.stringify({ scripts: { ship: 'bash scripts/up.sh', upload: 'eas submit', preup: 'echo pre' } }),
+    'apps/mobile-storefront/scripts/up.sh': 'fastlane ios release\n',
+    Makefile: 'ship:\n\teas build\n',
+  };
+  for (const [yaml, expected] of [
+    ['run: pnpm run release', /fastlane ios release/],
+    ['run: pnpm release', /fastlane ios release/],
+    ['run: npm run upload --prefix apps/mobile-storefront', /eas submit/],
+    ['run: pnpm -C apps/mobile-storefront upload', /eas submit/],
+    ['working-directory: apps/mobile-storefront\nrun: yarn upload', /eas submit/],
+    ['run: turbo run upload', /eas submit/],
+    ['run: pnpm -r run upload', /eas submit/],
+    ['run: make ship', /eas build/],
+  ]) {
+    const { text, missing } = expandReferences(yaml, reader(files));
+    assert.match(text, expected, yaml);
+    assert.deepEqual(missing, [], yaml);
+  }
+});
+
+test('a storefront-scoped script run that cannot be resolved fails closed; other runs are ignored', () => {
+  const files = { 'apps/mobile-storefront/package.json': '{"scripts":{}}', 'package.json': '{"scripts":{}}' };
+  assert.deepEqual(expandReferences('run: pnpm --filter @baci/mobile-storefront ship', reader(files)).missing, [
+    'package script "ship" for apps/mobile-storefront',
+  ]);
+  assert.deepEqual(expandReferences('working-directory: apps/mobile-storefront\nrun: npm run ship', reader(files)).missing, [
+    'package script "ship" for apps/mobile-storefront',
+  ]);
+  assert.equal(expandReferences('run: make -C apps/mobile-storefront ship', reader(files)).missing.length, 1);
+  for (const yaml of ['run: pnpm install --frozen-lockfile', 'run: pnpm run lint', 'run: npm ci', 'run: pnpm exec jest']) {
+    assert.deepEqual(expandReferences(yaml, reader(files)).missing, [], yaml);
+  }
+});

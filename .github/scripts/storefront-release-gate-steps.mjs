@@ -111,3 +111,13 @@ export function ciGateFailures(workflow, text, gateTests) {
     .filter((file) => !listed.has(file))
     .map((file) => `${workflow} "${CI_GATE_STEP}" must run node --test with ${file}`);
 }
+
+// Secrets that are not store credentials: the token every job has and the
+// public client configuration the OTA export bundles into the app.
+const NON_STORE_SECRET = /^(?:GITHUB_TOKEN|(?:EXPO|NEXT)_PUBLIC_\w+)$/;
+
+/** The store-credential secrets (anything beyond the public client config) a workflow reads. */
+export function storeSecretsUsed(text) {
+  const names = [...text.matchAll(/\bsecrets\.(\w+)/g)].map((match) => match[1]);
+  return [...new Set(names)].filter((name) => !NON_STORE_SECRET.test(name));
+}

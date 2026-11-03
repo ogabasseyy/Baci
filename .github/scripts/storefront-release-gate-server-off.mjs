@@ -85,12 +85,38 @@ const SKIPPED_SUITE = /\b(?:xdescribe|describe\s*\.\s*skip|describe\s*\.\s*todo)
 const LIVE_TEST = /(?<![\w.$])(?:it|test)\s*(?:\.\s*(?:only|concurrent|each|failing)\b[^(]*)?\(/;
 const ASSERTION = /(?<![\w.$])expect\s*(?:\.\s*assertions?\s*)?\(|(?<![\w.$])assert\s*(?:\.\s*\w+)?\s*\(|\.(?:should|toMatchSnapshot)\b/;
 
+const SKIPPED_TEST = /(?<![\w.$])(?:(?:it|test)\s*\.\s*skip|xit|xtest)\s*\(/g;
+
+// Removes the whole call of every skipped test, so an assertion in its body is not counted.
+function withoutSkippedTests(code) {
+  let result = '';
+  let from = 0;
+  for (const match of code.matchAll(SKIPPED_TEST)) {
+    if (match.index < from) continue;
+    let depth = 1;
+    let quote = '';
+    let at = match.index + match[0].length;
+    for (; at < code.length && depth > 0; at += 1) {
+      const char = code[at];
+      if (quote) {
+        if (char === '\\') at += 1;
+        else if (char === quote) quote = '';
+      } else if (char === '"' || char === "'" || char === '`') quote = char;
+      else if (char === '(') depth += 1;
+      else if (char === ')') depth -= 1;
+    }
+    result += code.slice(from, match.index);
+    from = at;
+  }
+  return result + code.slice(from);
+}
+
 /**
  * True when the test file declares at least one test that is not skipped or
  * todo and makes an assertion: an import with a skipped or empty test proves nothing.
  */
 export function hasLiveAssertion(testContent) {
-  const code = (testContent ?? '').replace(COMMENT, '');
+  const code = withoutSkippedTests((testContent ?? '').replace(COMMENT, ''));
   return !SKIPPED_SUITE.test(code) && LIVE_TEST.test(code) && ASSERTION.test(code);
 }
 

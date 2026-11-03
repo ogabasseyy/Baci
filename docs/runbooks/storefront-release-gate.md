@@ -185,5 +185,6 @@ cutover pull request:
    removes the `Test storefront release gate` CI step.
 4. Decides on the OTA refusal step. Keeping it is harmless: it only refuses
    commits from the gate period, which the deliberate release already covers.
-5. Keeps the "on main" check in both release workflows. It only refuses
+5. Keeps the "on main" check in both release workflows and in the manual
+   "iOS Storefront Submit for Review" workflow. It only refuses
    commits that never reached `main`, which should never ship.

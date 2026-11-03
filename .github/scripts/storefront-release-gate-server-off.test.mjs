@@ -203,3 +203,13 @@ test('an import-only or skipped test does not cover a PiggyVest file', () => {
     assert.deepEqual(missing, [{ file: sheet, expected: test, test }], body);
   }
 });
+
+test('an assertion inside a skipped test does not count', () => {
+  const skippedAssert = "it.skip('a', () => { expect(1).toBe(1); });";
+  for (const skipped of [skippedAssert, skippedAssert.replace('it.skip', 'xit'), skippedAssert.replace('it.skip', 'test.skip'), skippedAssert.replace('it.skip', 'xtest')]) {
+    assert.equal(hasLiveAssertion(`${skipped}\nit('live', () => { render(); });`), false, skipped);
+  }
+  const nested = "it.skip('a', () => { call(() => { expect(')').toBe(1); }); });\nit('live', () => {});";
+  assert.equal(hasLiveAssertion(nested), false);
+  assert.equal(hasLiveAssertion(`${skippedAssert}\nit('live', () => { expect(2).toBe(2); });`), true);
+});

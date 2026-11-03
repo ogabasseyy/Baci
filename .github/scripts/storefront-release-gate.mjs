@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { expandReferences } from './storefront-release-gate-references.mjs';
 import { dispatchFailures } from './storefront-release-gate-dispatch.mjs';
 import { findMissingServerOffTests, STOREFRONT_ROOT } from './storefront-release-gate-server-off.mjs';
-import { ciGateFailures, otaGuardFailures, releaseGuardFailures } from './storefront-release-gate-steps.mjs';
+import { ciGateFailures, otaGuardFailures, releaseGuardFailures, storeSecretsUsed } from './storefront-release-gate-steps.mjs';
 import { dispatchOnlyFailures, readJobIds, releaseTriggerFailures, shipsStorefront } from './storefront-release-gate-workflows.mjs';
 
 export { OTA_GUARD_STEP, RELEASE_GUARD_STEP } from './storefront-release-gate-steps.mjs';
@@ -23,6 +23,8 @@ export const RELEASE_WORKFLOWS = new Map([
   ['.github/workflows/ios-storefront-release.yml', { tags: ['v*-storefront-ios'], job: 'build-and-submit' }],
   ['.github/workflows/android-storefront-release.yml', { tags: ['v*-storefront'], job: 'build-and-deploy' }],
 ]);
+// Dispatch-only workflows that hold store credentials run the same on-main guard.
+const GUARDED_DISPATCH_WORKFLOWS = new Map([['.github/workflows/ios-storefront-submit.yml', { job: 'submit' }]]);
 const DISPATCH_ONLY_WORKFLOWS = ['.github/workflows/ios-storefront-submit.yml', OTA_WORKFLOW];
 const GATED_WORKFLOWS = [...RELEASE_WORKFLOWS.keys(), ...DISPATCH_ONLY_WORKFLOWS];
 const CI_WORKFLOW = '.github/workflows/ci.yml';
@@ -60,7 +62,17 @@ function workflowFailures(repository) {
   }
   for (const workflow of DISPATCH_ONLY_WORKFLOWS) {
     const text = repository.readFile(workflow);
-    failures.push(...(text === undefined ? [`${workflow} is missing`] : dispatchOnlyFailures(workflow, text)));
+    if (text === undefined) {
+      failures.push(`${workflow} is missing`);
+      continue;
+    }
+    failures.push(...dispatchOnlyFailures(workflow, text));
+    const guarded = GUARDED_DISPATCH_WORKFLOWS.get(workflow);
+    if (guarded) failures.push(...releaseGuardFailures(workflow, text, guarded.job));
+    // The OTA export is held by its own marker guard (otaGuardFailures).
+    else if (workflow !== OTA_WORKFLOW && storeSecretsUsed(text).length > 0) {
+      failures.push(`${workflow} uses store secrets (${storeSecretsUsed(text).join(', ')}) but has no on-main release guard`);
+    }
   }
   // The guards cover one job each, so a gated workflow may hold no other job.
   for (const workflow of GATED_WORKFLOWS) {

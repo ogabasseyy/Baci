@@ -115,7 +115,8 @@ export function dispatchOnlyFailures(name, text) {
 
 const STOREFRONT_APP = /apps\/mobile-storefront\b|@baci\/mobile-storefront\b|com\.ogabassey\.store\b/;
 const SHIPPING_TOOL =
-  /\bfastlane\b|upload-google-play|upload-testflight|\baltool\b|\bexpo\s+export\b|\beas(?:-cli(?:@[\w.^~-]+)?)?\s+(?:build|submit|update|workflow:run)\b/;
+  // A quoted or path-segment `fastlane` names a directory, not the tool.
+  /(?<![\w\x27"\/.-])fastlane(?![\w\x27"\/-])|upload-google-play|upload-testflight|\baltool\b|\bexpo\s+export\b|\beas(?:-cli(?:@[\w.^~-]+)?)?\s+(?:build|submit|update|workflow:run)\b/;
 
 /** True when a workflow or action builds, uploads, submits or exports the storefront app. */
 export function shipsStorefront(text) {

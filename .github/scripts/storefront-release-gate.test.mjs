@@ -231,3 +231,17 @@ test('a workflow that pushes a release tag fails the gate', () => {
   const failures = collectGateFailures(withFiles({ '.github/workflows/zz-tagger.yml': tagger }));
   assert.equal(failures.filter((failure) => failure.startsWith('.github/workflows/zz-tagger.yml creates a release tag')).length, 1);
 });
+
+const SUBMIT = '.github/workflows/ios-storefront-submit.yml';
+
+test('the manual App Store submit must refuse commits that are not on main', () => {
+  const submit = repository.readFile(SUBMIT);
+  const guard = readStep(readJob(submit, 'submit'), RELEASE_GUARD_STEP).text;
+  const misplaced = `${SUBMIT} must run "${RELEASE_GUARD_STEP}" right after "Checkout" in its submit job`;
+  assert.deepEqual(collectGateFailures(withFiles({ [SUBMIT]: submit.replace(`${guard}\n`, '') })), [misplaced]);
+  const shallow = submit.replace('          fetch-depth: 0\n', '');
+  assert.deepEqual(collectGateFailures(withFiles({ [SUBMIT]: shallow })), [
+    `${SUBMIT} "Checkout" in its submit job must fetch full history (fetch-depth: 0) so the guard can see main`,
+  ]);
+});
+

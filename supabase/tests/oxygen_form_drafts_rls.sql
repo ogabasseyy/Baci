@@ -84,7 +84,7 @@ DO $$ BEGIN
  BEGIN
   PERFORM public.oxygen_save_form_draft('efaa0000-0000-4000-8000-000000000041'::uuid,0::integer,'efaa0000-0000-4000-8000-000000000055'::uuid,repeat('encrypted-fixture',4)::text,repeat('address-fixture',4)::text,(now()+interval '1 day')::timestamptz);
   RAISE EXCEPTION 'Anonymous draft save executed' USING ERRCODE='P1003';
- EXCEPTION WHEN insufficient_privilege THEN NULL; WHEN OTHERS THEN RAISE EXCEPTION 'anonymous draft save unexpected SQLSTATE %', SQLSTATE USING ERRCODE=SQLSTATE; END;
+ EXCEPTION WHEN insufficient_privilege THEN NULL; WHEN query_canceled OR assert_failure OR OTHERS THEN RAISE EXCEPTION 'anonymous draft save unexpected SQLSTATE %', SQLSTATE USING ERRCODE=SQLSTATE; END;
 END $$;
 DO $$ BEGIN
  BEGIN

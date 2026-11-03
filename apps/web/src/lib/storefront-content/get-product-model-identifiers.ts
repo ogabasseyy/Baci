@@ -1,12 +1,10 @@
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
 import { GAME_CATEGORY_PATTERN } from '@/config/storefront-game-category';
+import { MODEL_FAMILY_ALIAS_TOKENS } from '@/config/storefront-model-family-taxonomy';
 import { applyJoinedTitleCorrections } from './apply-joined-title-corrections';
 import type { BuildCommercialGuideLinksContext } from './content-cluster-types';
 import { filterProductModelSourceTokens } from './filter-product-model-source-tokens';
-import {
-  getExcludedModelIdentifierTokens,
-  MODEL_FAMILY_ALIAS_TOKENS,
-} from './get-model-identifier-excluded-tokens';
+import { getExcludedModelIdentifierTokens } from './get-model-identifier-excluded-tokens';
 import { getProductModelIdentifiersFromSources } from './get-product-model-identifiers-from-sources';
 import { getProtectedModelFamilyTokens } from './get-protected-model-family-tokens';
 import { hasConsoleProductDescriptor } from './has-console-product-descriptor';

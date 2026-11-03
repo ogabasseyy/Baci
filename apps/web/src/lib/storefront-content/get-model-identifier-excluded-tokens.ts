@@ -6,12 +6,13 @@ import { modelTokenMatchers } from './model-token-matchers';
 const { isDimensionToken } = modelTokenMatchers;
 
 const YEAR_TOKEN_PATTERN = /^(?:19|20)\d{2}$/u;
-const MODEL_FAMILY_ALIAS_TOKENS = new Set([
+export const MODEL_FAMILY_ALIAS_TOKENS = new Set([
   'airpods',
   'alienware',
   'aorus',
   'blade',
   'buds',
+  'katana',
   'legion',
   'laserjet',
   'latitude',

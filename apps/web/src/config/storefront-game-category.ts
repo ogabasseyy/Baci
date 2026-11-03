@@ -11,3 +11,15 @@ export const GAME_CATEGORY_PATTERN =
  */
 export const COMMERCIAL_GUIDE_GAME_CATEGORY_PATTERN =
   /^(?:gaming(?:-accessories)?|portable-gaming|playstation-[45]|nintendo-switch(?:-2)?|xbox)$/u;
+
+/**
+ * Console platform and hardware brand names requiring brand binding in commercial guide links.
+ */
+export const CONSOLE_BRAND_NAMES = new Set([
+  'nintendo',
+  'playstation',
+  'ps4',
+  'ps5',
+  'switch',
+  'xbox',
+]);

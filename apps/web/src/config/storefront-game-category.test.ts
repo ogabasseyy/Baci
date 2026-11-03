@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   COMMERCIAL_GUIDE_GAME_CATEGORY_PATTERN,
+  CONSOLE_BRAND_NAMES,
   GAME_CATEGORY_PATTERN,
 } from './storefront-game-category';
 
@@ -49,5 +50,22 @@ describe('COMMERCIAL_GUIDE_GAME_CATEGORY_PATTERN', () => {
       false
     );
     expect(COMMERCIAL_GUIDE_GAME_CATEGORY_PATTERN.test('laptops')).toBe(false);
+  });
+});
+
+describe('CONSOLE_BRAND_NAMES', () => {
+  it('contains expected console brands', () => {
+    expect(CONSOLE_BRAND_NAMES.has('ps4')).toBe(true);
+    expect(CONSOLE_BRAND_NAMES.has('ps5')).toBe(true);
+    expect(CONSOLE_BRAND_NAMES.has('playstation')).toBe(true);
+    expect(CONSOLE_BRAND_NAMES.has('xbox')).toBe(true);
+    expect(CONSOLE_BRAND_NAMES.has('switch')).toBe(true);
+    expect(CONSOLE_BRAND_NAMES.has('nintendo')).toBe(true);
+  });
+
+  it('does not contain non-console brands', () => {
+    expect(CONSOLE_BRAND_NAMES.has('apple')).toBe(false);
+    expect(CONSOLE_BRAND_NAMES.has('samsung')).toBe(false);
+    expect(CONSOLE_BRAND_NAMES.has('razer')).toBe(false);
   });
 });

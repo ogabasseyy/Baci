@@ -237,4 +237,28 @@ describe('inferContentClusterContext - gaming laptops', () => {
     });
     expect(laptopArticle.categorySlug).toBe('gaming-laptops');
   });
+
+  it('does not promote desktop articles under explicit Laptops category when content lacks laptop evidence', () => {
+    const desktopArticle = inferContentClusterContext({
+      title: 'Alienware Aurora R16 Review',
+      excerpt: '',
+      category: 'Laptops',
+      tags: ['alienware'],
+      keywords: ['review'],
+    });
+    expect(desktopArticle.categorySlug).toBe('laptops');
+  });
+
+  it('classifies unmapped category posts with new gaming laptop families via fallback article token scoring', () => {
+    for (const family of ['katana', 'nitro', 'aorus', 'blade']) {
+      const post = inferContentClusterContext({
+        title: `Hands-on with the new ${family} gaming laptop`,
+        excerpt: 'Benchmarking performance and refresh rate.',
+        category: 'Hardware Reviews',
+        tags: [family],
+        keywords: [],
+      });
+      expect(post.categorySlug).toBe('gaming-laptops');
+    }
+  });
 });

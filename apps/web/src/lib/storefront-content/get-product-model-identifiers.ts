@@ -3,7 +3,10 @@ import { GAME_CATEGORY_PATTERN } from '@/config/storefront-game-category';
 import { applyJoinedTitleCorrections } from './apply-joined-title-corrections';
 import type { BuildCommercialGuideLinksContext } from './content-cluster-types';
 import { filterProductModelSourceTokens } from './filter-product-model-source-tokens';
-import { getExcludedModelIdentifierTokens } from './get-model-identifier-excluded-tokens';
+import {
+  getExcludedModelIdentifierTokens,
+  MODEL_FAMILY_ALIAS_TOKENS,
+} from './get-model-identifier-excluded-tokens';
 import { getProductModelIdentifiersFromSources } from './get-product-model-identifiers-from-sources';
 import { getProtectedModelFamilyTokens } from './get-protected-model-family-tokens';
 import { hasConsoleProductDescriptor } from './has-console-product-descriptor';
@@ -36,27 +39,6 @@ function tokenize(value: string) {
     );
   return normalizeCompactModelTierTokens(tokens);
 }
-const MODEL_FAMILY_ALIAS_TOKENS = new Set([
-  'airpods',
-  'alienware',
-  'aorus',
-  'blade',
-  'buds',
-  'legion',
-  'laserjet',
-  'latitude',
-  'nitro',
-  'pavilion',
-  'predator',
-  'quest',
-  'redmi',
-  'rog',
-  'series',
-  'thinkpad',
-  'watch',
-  'xps',
-  'inspiron',
-]);
 const LAPTOP_CATEGORY_SLUGS = new Set(['gaming-laptops', 'laptops']);
 const DISPLAY_SIZE_CATEGORY_SLUGS = new Set(LAPTOP_CATEGORY_SLUGS).add(
   'tablets'

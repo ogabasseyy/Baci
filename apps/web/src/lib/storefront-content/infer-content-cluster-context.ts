@@ -67,7 +67,7 @@ type ClusterSupportEntry = [
 
 function isDedicatedGamingLaptopContent(
   titleHaystack: string,
-  haystack: string,
+  contentHaystack: string,
   excerptHaystack = ''
 ): boolean {
   const hasTitleGamingLaptopPhrase =
@@ -96,10 +96,10 @@ function isDedicatedGamingLaptopContent(
   }
 
   const hasMetadataLaptopToken =
-    hasPhrase(haystack, 'laptop') ||
-    hasPhrase(haystack, 'laptops') ||
-    hasPhrase(haystack, 'gaming laptop') ||
-    hasPhrase(haystack, 'gaming laptops');
+    hasPhrase(contentHaystack, 'laptop') ||
+    hasPhrase(contentHaystack, 'laptops') ||
+    hasPhrase(contentHaystack, 'gaming laptop') ||
+    hasPhrase(contentHaystack, 'gaming laptops');
 
   if (hasTitleDedicatedModel && hasMetadataLaptopToken) {
     const titleAndExcerpt = [titleHaystack, excerptHaystack]
@@ -123,6 +123,7 @@ function isDedicatedGamingLaptopContent(
 
 function inferCategorySlug(
   haystack: string,
+  contentHaystack: string,
   tokens: string[],
   explicitCategory: string,
   title?: string,
@@ -143,7 +144,11 @@ function inferCategorySlug(
       explicitMatch.categorySlug === 'laptops'
     ) {
       if (
-        isDedicatedGamingLaptopContent(title ?? '', haystack, excerpt ?? '')
+        isDedicatedGamingLaptopContent(
+          title ?? '',
+          contentHaystack,
+          excerpt ?? ''
+        )
       ) {
         return 'gaming-laptops';
       }
@@ -264,18 +269,19 @@ function inferPriceBands(
 export function inferContentClusterContext(
   input: InferContentClusterContextInput
 ): InferredContentClusterContext {
-  const combinedText = [
+  const contentText = [
     input.title,
     input.excerpt,
-    input.category,
     ...(input.tags ?? []),
     ...(input.keywords ?? []),
   ];
-  const haystack = normalizeText(combinedText.join(' '));
-  const tokens = tokenize(combinedText);
+  const contentHaystack = normalizeText(contentText.join(' '));
+  const haystack = normalizeText([input.category, ...contentText].join(' '));
+  const tokens = tokenize([input.category, ...contentText]);
   const explicitCategory = normalizeText(input.category);
   const categorySlug = inferCategorySlug(
     haystack,
+    contentHaystack,
     tokens,
     explicitCategory,
     normalizeText(input.title),

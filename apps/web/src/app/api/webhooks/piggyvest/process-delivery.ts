@@ -12,7 +12,10 @@ import type { PiggyvestWebhookKeyFamily } from '@/lib/piggyvest/webhook-secret-u
 import type { PiggyvestIntakeServiceClient } from '@/lib/supabase/service';
 import { piggyvestWebhookEventSchema } from '@/schemas/piggyvest/events';
 import { piggyvestWebhookCorrelationSchema } from '@/schemas/piggyvest/webhook-correlation';
-import { dispatchPrimaryPiggyvestIntake } from './primary-webhook-dispatch';
+import {
+  dispatchPrimaryPiggyvestIntake,
+  isKillSwitchDeferral,
+} from './primary-webhook-dispatch';
 import { quarantineAndAck } from './quarantine-and-ack';
 import { toRecordInput } from './record-input';
 
@@ -104,6 +107,14 @@ const keySetIncompleteRetries = new WeakSet<Response>();
  * provider's redelivery (it verifies under the full set and is captured on
  * its own row); this row's recorded authority is never widened.
  */
+/**
+ * True when `response` is the retryable answer given because the master kill
+ * switch is on. Replay settles such a row as deferred (no attempt spent).
+ */
+export function isKillSwitchDeferred(response: Response): boolean {
+  return isKillSwitchDeferral(response);
+}
+
 export function isKeySetIncompleteRetry(response: Response): boolean {
   return keySetIncompleteRetries.has(response);
 }

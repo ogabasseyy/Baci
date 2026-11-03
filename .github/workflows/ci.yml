@@ -43,6 +43,7 @@ jobs:
       quiz_db: ${{ steps.gate.outputs.quiz_db }}
       cwv_runner: ${{ steps.gate.outputs.cwv_runner }}
       deploy_scripts: ${{ steps.gate.outputs.deploy_scripts }}
+      piggyvest_runbook: ${{ steps.gate.outputs.piggyvest_runbook }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -88,6 +89,7 @@ jobs:
           FILTER_QUIZ_DB: ${{ steps.filter.outputs.quiz_db }}
           FILTER_CWV_RUNNER: ${{ steps.filter.outputs.cwv_runner }}
           FILTER_DEPLOY_SCRIPTS: ${{ steps.filter.outputs.deploy_scripts }}
+          FILTER_PIGGYVEST_RUNBOOK: ${{ steps.filter.outputs.piggyvest_runbook }}
           # Generated Muse pin PRs must run the real gates in their
           # pull_request context; workflow_dispatch checks do not satisfy
           # required PR checks.
@@ -121,7 +123,11 @@ jobs:
   quality-lint:
     name: Quality Gate - Lint
     needs: [changes]
-    if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    # Mobile-only PRs never trip the web filter, so lint must also run for the
+    # mobile filters; otherwise the bypassable pre-commit hook is their only
+    # Biome gate. `turbo lint --affected` keeps the run scoped to the changed
+    # packages.
+    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.mobile_storefront == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -443,7 +449,7 @@ jobs:
   quality-misc:
     name: Quality Gate - Misc
     needs: [changes]
-    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_storefront == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.quiz_db == 'true' || needs.changes.outputs.deploy_scripts == 'true' || needs.changes.outputs.piggyvest_runbook == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -480,6 +486,16 @@ jobs:
           pnpm --filter @baci/shared test -- src/storefront/delivery-evidence.test.ts src/storefront/delivery-evidence-manifest.test.ts &&
           pnpm --filter @baci/cloudflare-evidence-qualification-worker test &&
           pnpm --filter @baci/web exec vitest run tools/cost/storefront-origin-budget.test.ts tools/cost/ogabassey-current-origin-baseline.test.ts tools/cost/qualify-cloudflare-evidence-sources.test.ts tools/cost/cloudflare-evidence-process-isolation.test.ts tools/cost/mutate-cloudflare-evidence-sources.test.ts tools/cost/measure-cloudflare-evidence-sources.test.ts tools/cost/verify-cloudflare-evidence-token-policy.test.ts tools/cost/verify-cloudflare-evidence-read-token-policy.test.ts tools/cost/cloudflare-evidence-run-journal.test.ts
+      - name: Run PiggyVest legacy runbook SQL against scratch PostgreSQL
+        if: needs.changes.outputs.piggyvest_runbook == 'true'
+        env:
+          PG_BIN: /usr/lib/postgresql/16/bin
+          REQUIRE_PG_TESTS: '1'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y postgresql-16
+          pnpm --filter @baci/web exec vitest run tools/db/piggyvest-legacy
       - name: Test cart quota guard staging and signed PostgREST
         if: needs.changes.outputs.deploy_scripts == 'true'
         env:
@@ -672,6 +688,9 @@ jobs:
           MOBILE_QUALITY_RESULT: ${{ needs['mobile-quality'].result }}
           SILENT_REVERT_GUARD_RESULT: ${{ needs['silent-revert-guard'].result }}
           QUIZ_DB_CHANGED: ${{ needs.changes.outputs.quiz_db }}
+          WEB_CHANGED: ${{ needs.changes.outputs.web }}
+          MOBILE_ADMIN_CHANGED: ${{ needs.changes.outputs.mobile_admin }}
+          MOBILE_STOREFRONT_CHANGED: ${{ needs.changes.outputs.mobile_storefront }}
           TEST_PLAN_MODE: ${{ needs.changes.outputs.test_plan_mode }}
         run: |
           set -euo pipefail
@@ -692,6 +711,13 @@ jobs:
                 exit 1
               fi
             done
+          fi
+
+          # Same rule for lint: a skip is only success when no lintable
+          # web or mobile paths changed.
+          if [[ ( "$WEB_CHANGED" == "true" || "$MOBILE_ADMIN_CHANGED" == "true" || "$MOBILE_STOREFRONT_CHANGED" == "true" ) && "$TEST_PLAN_MODE" != "config-smoke" && "$LINT_RESULT" == "skipped" ]]; then
+            echo "Web or mobile paths changed but the lint gate was skipped"
+            exit 1
           fi
 
           for result in "$CWV_RUNNER_CONTRACTS_RESULT" "$LINT_RESULT" "$TYPECHECK_RESULT" "$TEST_RESULT" "$WEB_TEST_RESULT" "$MISC_RESULT" "$DB_REPLAY_RESULT" "$DISPOSABLE_SQL_RESULT" "$MOBILE_QUALITY_RESULT" "$SILENT_REVERT_GUARD_RESULT"; do

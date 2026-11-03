@@ -95,6 +95,38 @@ afterEach(() => {
 });
 
 describe('public first-card checkout runtime readiness', () => {
+  it('refuses new checkouts under the kill switch but keeps refresh for existing ones', async () => {
+    const { checkout, options } = fixture();
+    const runtime = readPrefundedCardCheckoutPublicRuntime({
+      ...options,
+      environment: { ...options.environment, PIGGYVEST_KILL_SWITCH: 'true' },
+    });
+    expect(runtime).not.toBeNull();
+    expect(runtime?.mutationsEnabled).toBe(false);
+    expect(runtime?.refreshEnabled).toBe(true);
+    const customer = runtime?.customer({} as SupabaseClient);
+    await expect(customer?.start(checkout.customerRequest)).rejects.toThrow();
+    expect(
+      await customer?.capability({
+        goalId: '00000000-0000-4000-8000-000000000007',
+      })
+    ).toMatchObject({ enabled: false, maximumAmountKobo: 0 });
+  });
+
+  it('disables refresh when the public flag is off even under a kill', () => {
+    const { options } = fixture();
+    expect(
+      readPrefundedCardCheckoutPublicRuntime({
+        ...options,
+        environment: {
+          ...options.environment,
+          PREFUNDED_CARD_CHECKOUT_PUBLIC_ENABLED: 'false',
+          PIGGYVEST_KILL_SWITCH: 'true',
+        },
+      })
+    ).toBeNull();
+  });
+
   it('uses owned-goal authentication without financial database access in read-only mode', async () => {
     const { checkout, options } = fixture();
     const runtime = readPrefundedCardCheckoutPublicRuntime({

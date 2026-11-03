@@ -1,7 +1,7 @@
 # Baci capabilities and agent access
 
 Reviewed 3 November 2026 against source revision
-`36c10be8822908f500b58558fa831b8446180931`. Oxygen remains local-staging QA only.
+`17dc796f4335046a20e17900f4a8bae365411d8f`. Oxygen remains local-staging QA only.
 The Paystack DVA helper now avoids a second-bank retry after an uncertain result;
 the merchant protocol claims remain accurate. Checkout eligibility was reviewed after
 CredPal retirement. This is a navigation map,

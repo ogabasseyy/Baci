@@ -46,9 +46,10 @@ describe('02-zero-out.sql (the one reviewed update)', () => {
   it('runs in one transaction that defaults to ROLLBACK', () => {
     expect(sql).toMatch(/^\s*BEGIN;/im);
     expect(sql).toMatch(/^\s*ROLLBACK;/im);
-    expect(sql).not.toMatch(/^\s*COMMIT;/im);
-    expect(zeroSql.trimEnd().split('\n').at(-1)).toBe('-- COMMIT;');
-    expect(zeroSql.match(/^--\s*COMMIT;/gm)).toHaveLength(1);
+    expect(sql).toMatch(
+      /\\if :do_commit\s+COMMIT;\s+\\else\s+ROLLBACK;\s+\\endif/
+    );
+    expect(sql).toMatch(/zero_out_mode/);
   });
 
   it('refuses an empty list and reports row counts', () => {

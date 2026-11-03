@@ -1,7 +1,11 @@
 -- PiggyVest legacy migration, step 4/5: the one reviewed SQL update.
 -- Sets each listed old wallet to zero and records the amount, date and the
 -- PiggyVest credit reference in the wallet ledger. Owner runs it, never an agent.
---   psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f 02-zero-out.sql
+--   dry run (always ROLLBACK):
+--     psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f 02-zero-out.sql
+--   real run (COMMIT; refuses placeholder references such as DRY-RUN-1):
+--     psql -v ON_ERROR_STOP=1 -v zero_out_mode=commit "$DATABASE_URL" -f 02-zero-out.sql
+--   Run the same unmodified file both times; never edit it to commit.
 --
 -- Rules this script enforces (it aborts the whole transaction on any breach):
 --   * the list must not be empty and must hold exactly the declared row count
@@ -28,10 +32,15 @@
 --     blocks new ones until the run ends. A writer that holds a wallet row and
 --     then needs the ledger can deadlock with the run; PostgreSQL aborts one
 --     of them, and nothing is changed if it is the run.
--- It ends with ROLLBACK. Read the printed result, then swap the last two lines
--- (delete ROLLBACK, uncomment the COMMIT GUARD block and the final COMMIT) and run it again. Nothing is
--- saved until then.
+-- It ends with ROLLBACK unless zero_out_mode=commit is passed. Read the printed
+-- result of the dry run first. Nothing is saved until the commit run.
+\if :{?zero_out_mode}
+\else
+  \set zero_out_mode dry_run
+\endif
+
 BEGIN;
+SELECT set_config('baci.zero_out_mode', :'zero_out_mode', true);
 
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '60s';
@@ -73,7 +82,13 @@ DECLARE
   v_now timestamptz;
   v_declared integer;
   v_decl_rows integer;
+  v_mode text;
 BEGIN
+  v_mode := current_setting('baci.zero_out_mode', true);
+  IF v_mode IS NULL OR v_mode NOT IN ('dry_run', 'commit') THEN
+    RAISE EXCEPTION 'zero_out_mode must be dry_run or commit, got %', v_mode;
+  END IF;
+
   SELECT count(*) INTO v_expected FROM legacy_zero_out_list;
   IF v_expected = 0 THEN
     RAISE EXCEPTION 'legacy zero-out list is empty';
@@ -86,6 +101,15 @@ BEGIN
   SELECT d.expected_rows INTO v_declared FROM legacy_zero_out_declared d;
   IF v_declared IS DISTINCT FROM v_expected THEN
     RAISE EXCEPTION 'row count mismatch: % declared, % loaded', v_declared, v_expected;
+  END IF;
+
+  -- A real run never accepts placeholder references (the dry run may).
+  IF v_mode = 'commit' AND EXISTS (
+    SELECT 1 FROM legacy_zero_out_list l
+    WHERE btrim(l.piggyvest_credit_reference)
+      ~* '^(dry[-_ ]?run|placeholder|test|sample|fake|todo|tbd|xxx)'
+  ) THEN
+    RAISE EXCEPTION 'placeholder PiggyVest reference found; use the real credit reference';
   END IF;
 
   -- One migration run at a time. Held to the end of the transaction.
@@ -231,21 +255,9 @@ FROM legacy_zero_out_list l
 JOIN public.customer_wallets cw ON cw.id = l.wallet_id
 ORDER BY cw.id;
 
--- COMMIT GUARD. The dry run may use placeholder references (DRY-RUN-1 ...).
--- A COMMIT run must not. When you switch to COMMIT, uncomment every line from
--- COMMIT-GUARD-BEGIN to COMMIT-GUARD-END as well; it refuses placeholder
--- references, so a dry-run copy cannot be committed by mistake.
--- COMMIT-GUARD-BEGIN
--- DO $guard$
--- BEGIN
---   IF EXISTS (
---     SELECT 1 FROM legacy_zero_out_list l
---     WHERE btrim(l.piggyvest_credit_reference) ~* '^(dry[-_ ]?run|placeholder|test|sample|fake|todo|tbd|xxx)'
---   ) THEN
---     RAISE EXCEPTION 'placeholder PiggyVest reference found; use the real credit reference';
---   END IF;
--- END
--- $guard$;
--- COMMIT-GUARD-END
+SELECT (:'zero_out_mode' = 'commit') AS do_commit \gset
+\if :do_commit
+COMMIT;
+\else
 ROLLBACK;
--- COMMIT;
+\endif

@@ -47,22 +47,20 @@ describe.skipIf(!binDir)('02-zero-out.sql against a scratch Postgres', () => {
          .join('\n')}
        ${extra}`
     );
-  const run = (rows: string[], declared: number | number[], commit = false) => {
-    let sql = zeroSql.replace(
+  const run = (
+    rows: string[],
+    declared: number | number[],
+    commit: boolean | string = false
+  ) => {
+    const sql = zeroSql.replace(
       '-- <<< REVIEWED ROWS ABOVE',
       `${load(rows, declared)}\n-- <<<`
     );
-    if (commit) {
-      sql = sql
-        .replace(
-          /-- COMMIT-GUARD-BEGIN\n([\s\S]*?)-- COMMIT-GUARD-END/,
-          (_m, body: string) => body.replace(/^-- /gm, '')
-        )
-        .replace('ROLLBACK;\n-- COMMIT;', 'COMMIT;');
-    }
     const file = join(s.dir, 'run.sql');
     writeFileSync(file, sql);
-    return s.psql('', file);
+    const mode =
+      commit === true ? 'commit' : typeof commit === 'string' ? commit : null;
+    return s.psql('', file, mode ? [`zero_out_mode=${mode}`] : []);
   };
   const balance = (w: string) =>
     s
@@ -200,6 +198,26 @@ describe.skipIf(!binDir)('02-zero-out.sql against a scratch Postgres', () => {
   it('allows placeholder references in the ROLLBACK dry run', () => {
     reset([[W1, '500.00']]);
     expect(run([row(W1, C1, '500.00', 'DRY-RUN-1')], 1).status).toBe(0);
+    expect(balance(W1)).toBe('500.00');
+  });
+
+  it('commits with real references when zero_out_mode=commit', () => {
+    reset([[W1, '500.00']]);
+    expect(run([row(W1, C1, '500.00', 'PV-REAL-1')], 1, true).status).toBe(0);
+    expect(balance(W1)).toBe('0.00');
+  });
+
+  it('rolls back with an explicit dry_run mode', () => {
+    reset([[W1, '500.00']]);
+    expect(run([row(W1, C1, '500.00')], 1, 'dry_run').status).toBe(0);
+    expect(balance(W1)).toBe('500.00');
+  });
+
+  it('refuses an unknown zero_out_mode and changes nothing', () => {
+    reset([[W1, '500.00']]);
+    const r = run([row(W1, C1, '500.00')], 1, 'yes');
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/zero_out_mode must be/);
     expect(balance(W1)).toBe('500.00');
   });
 

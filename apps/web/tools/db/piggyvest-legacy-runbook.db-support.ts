@@ -82,9 +82,13 @@ export type AsyncResult = { status: number | null; stderr: string };
 
 export type Scratch = {
   dir: string;
-  psql: (sql: string, file?: string) => SpawnSyncReturns<string>;
+  psql: (
+    sql: string,
+    file?: string,
+    vars?: string[]
+  ) => SpawnSyncReturns<string>;
   // Runs a SQL file without blocking, so two sessions can overlap.
-  psqlFileAsync: (file: string) => Promise<AsyncResult>;
+  psqlFileAsync: (file: string, vars?: string[]) => Promise<AsyncResult>;
   stop: () => void;
 };
 
@@ -110,7 +114,7 @@ export const startScratch = (): Scratch => {
     ]);
     rmSync(dir, { recursive: true, force: true });
   };
-  const psql = (sql: string, file?: string) =>
+  const psql = (sql: string, file?: string, vars: string[] = []) =>
     spawnSync(
       bin('psql'),
       [
@@ -122,12 +126,13 @@ export const startScratch = (): Scratch => {
         'scratch',
         '-v',
         'ON_ERROR_STOP=1',
+        ...vars.flatMap((v) => ['-v', v]),
         '-At',
         ...(file ? ['-f', file] : ['-c', sql]),
       ],
       { encoding: 'utf8' }
     );
-  const psqlFileAsync = (file: string) =>
+  const psqlFileAsync = (file: string, vars: string[] = []) =>
     new Promise<AsyncResult>((done) => {
       const child = spawn(
         bin('psql'),
@@ -140,6 +145,7 @@ export const startScratch = (): Scratch => {
           'scratch',
           '-v',
           'ON_ERROR_STOP=1',
+          ...vars.flatMap((v) => ['-v', v]),
           '-At',
           '-f',
           file,

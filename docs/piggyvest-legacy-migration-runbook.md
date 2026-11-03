@@ -59,7 +59,7 @@ and PiggyVest references in the runbook record.
 ### Dry run on the real schema before any credit
 
 After the list is signed and BEFORE crediting anyone in PiggyVest, run
-`02-zero-out.sql` once as is (it ends with `ROLLBACK`), using
+`02-zero-out.sql` once as is (without the commit switch it always ends with `ROLLBACK`), using
 `psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f docs/piggyvest-legacy-migration/02-zero-out.sql`,
 with the signed rows and
 placeholder references such as `DRY-RUN-1`, `DRY-RUN-2`. This checks the real
@@ -94,7 +94,7 @@ PiggyVest statement. Customers with no confirmed credit are left out of step 4.
    Load all rows in ONE multi-row insert, and set the declared row count to
    the number of rows you actually load (credited customers only; customers
    left out in step 3 are not counted). Each PiggyVest reference may appear
-   once. The script stops if the counts differ. It ends with `ROLLBACK`, so nothing is saved.
+   once. The script stops if the counts differ. Without `zero_out_mode=commit` it always ends with `ROLLBACK`, so nothing is saved.
 4. Check the result: every row shows `now_balance` 0 and the right amount.
    The script also re-adds the wallet ledger and refuses any wallet whose
    stored balance differs from it. Any error means a balance changed or a row was wrong. Nothing was changed.
@@ -102,10 +102,9 @@ PiggyVest statement. Customers with no confirmed credit are left out of step 4.
 
 ## 5. Commit and verify
 
-1. Change the last line from `-- COMMIT;` to `COMMIT;`, remove the
-   `ROLLBACK;` line above it, and uncomment the COMMIT GUARD block
-   (it refuses placeholder references such as `DRY-RUN-1`). Run the file again with the same
-   `-v ON_ERROR_STOP=1` option.
+1. Run the same unmodified file with the commit switch (never edit the file):
+   `psql -v ON_ERROR_STOP=1 -v zero_out_mode=commit "$DATABASE_URL" -f docs/piggyvest-legacy-migration/02-zero-out.sql`.
+   A commit run refuses placeholder references such as `DRY-RUN-1`.
 2. Run `01-balance-list.sql` again. The migrated customers must be gone.
 3. Each migrated wallet has one ledger row of source
    `piggyvest_legacy_migration` holding the amount, date and PiggyVest

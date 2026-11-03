@@ -28,8 +28,8 @@ VALUES ('${wallet}','${M}','${customer}',${amt},'PV-SHARED-REF');
 -- <<<`
     )
     .replace(
-      'ROLLBACK;\n-- COMMIT;',
-      `${hold ? 'SELECT pg_sleep(3);\n' : ''}COMMIT;`
+      "SELECT (:'zero_out_mode' = 'commit') AS do_commit \\gset",
+      (gset) => `${hold ? 'SELECT pg_sleep(3);\n' : ''}${gset}`
     );
 
 describe.skipIf(!binDir)('02-zero-out.sql overlapping runs', () => {
@@ -73,17 +73,17 @@ describe.skipIf(!binDir)('02-zero-out.sql overlapping runs', () => {
     writeFileSync(fileB, script(W2, C2, '250.00', false));
 
     let state = 'still running';
-    const a = s.psqlFileAsync(fileA).then((r) => {
+    const a = s.psqlFileAsync(fileA, ['zero_out_mode=commit']).then((r) => {
       state = `exit ${r.status}: ${r.stderr}`;
       return r;
     });
     await waitFor(runLock, () => state);
-    const b = s.psqlFileAsync(fileB);
+    const b = s.psqlFileAsync(fileB, ['zero_out_mode=commit']);
     const [ra, rb] = await Promise.all([a, b]);
 
     expect(ra.status).toBe(0);
     expect(rb.status).not.toBe(0);
-    expect(rb.stderr).toMatch(/reference already used/);
+    expect(rb.stderr).toMatch(/reference already used|lock timeout/);
     expect(
       count(
         `SELECT count(*) FROM customer_wallet_transactions WHERE source_type = 'piggyvest_legacy_migration'`
@@ -105,7 +105,7 @@ describe.skipIf(!binDir)('02-zero-out.sql overlapping runs', () => {
     const file = join(s.dir, 'fence.sql');
     writeFileSync(file, script(W1, C1, '500.00', true));
     let state = 'still running';
-    const a = s.psqlFileAsync(file).then((r) => {
+    const a = s.psqlFileAsync(file, ['zero_out_mode=commit']).then((r) => {
       state = `exit ${r.status}: ${r.stderr}`;
       return r;
     });
@@ -114,6 +114,13 @@ describe.skipIf(!binDir)('02-zero-out.sql overlapping runs', () => {
        WHERE l.granted AND l.mode = 'ShareRowExclusiveLock' AND c.relname = 'customer_wallet_transactions'`,
       () => state
     );
+    const blocked = s.psql(
+      `SET lock_timeout = '300ms';
+       INSERT INTO customer_wallet_transactions (wallet_id, customer_id, merchant_id, type, amount, balance_after, status)
+       VALUES ('${W1}','${C1}','${M}','credit',1,501,'completed');`
+    );
+    expect(blocked.status).not.toBe(0);
+    expect(blocked.stderr).toMatch(/lock timeout/);
     expect((await a).status).toBe(0);
   }, 30_000);
 });

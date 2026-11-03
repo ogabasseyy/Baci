@@ -163,12 +163,19 @@ BEGIN
     'ACCT_pdsfixture');
   PERFORM pg_temp.check(
     (SELECT metadata ->> 'retained_shipping_collected_by_split' = 'false'
+        AND (metadata ->> 'retained_shipping_amount')::numeric = 0
+        AND (metadata ->> 'retained_shipping_intended_amount')::numeric = 4000
         AND platform_fee = 2050 AND net_amount = 51950
        FROM public.merchant_settlements WHERE id = v_unpaid),
     'T6 an uncollected delivery fee must be flagged and not booked as Baci''s');
   PERFORM pg_temp.check(
     public.get_order_paystack_split_retained_shipping_kobo(pg_temp.fid(2, 8), pg_temp.merchant(), 'pds-buyer@example.test') = 400000,
     'T6 an uncollected delivery fee must still be owed, not counted as retained');
+  -- The prepaid-shipping gate Baci books GIG against.
+  PERFORM pg_temp.check(
+    private.order_settled_gigl_retained_amount(pg_temp.fid(2, 8), pg_temp.merchant()) = 0
+      AND private.order_settled_gigl_retained_amount(pg_temp.fid(2, 7), pg_temp.merchant()) = 4000,
+    'T6 only a collected delivery fee may count as prepaid GIG shipping');
   PERFORM pg_temp.check(
     public.get_merchant_wallet_spendable_balance(pg_temp.merchant()) = 0,
     'T6 GIGL direct split must not create spendable balance');

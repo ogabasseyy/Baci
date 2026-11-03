@@ -33,17 +33,15 @@ describe('resolveChatOrderSettlementRouting', () => {
     });
   });
 
-  it('keeps the unmarked wallet credit when the payload proves nothing', () => {
-    const routing = resolveChatOrderSettlementRouting({
-      gateway: 'paystack',
-      gatewayResponse: { status: 'success' },
-    });
-
-    expect(routing).toEqual({
-      extraMetadata: {},
-      extraParams: {},
-      rpc: 'record_merchant_settlement',
-    });
+  it('fails closed without crediting when the payload proves nothing', () => {
+    // Same rule as the main settlement path: an unprovable payload may be a
+    // split the merchant's bank already received, so nothing is credited.
+    expect(() =>
+      resolveChatOrderSettlementRouting({
+        gateway: 'paystack',
+        gatewayResponse: { status: 'success' },
+      })
+    ).toThrow('paystack_settlement_collection_unknown');
   });
 
   it('leaves non-Paystack chat payments unchanged', () => {

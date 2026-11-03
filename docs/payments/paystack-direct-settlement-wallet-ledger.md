@@ -112,11 +112,16 @@ No existing row is changed.
   the row waits for manual review). REDVAULT, Korapay and Juicyway are
   unchanged. A split to a subaccount that is not the merchant's registered
   one fails with the permanent `paystack_direct_settlement_subaccount_mismatch`.
-- The chat-order webhook path (`resolve-chat-order-settlement-routing.ts`) and
-  the manual DVA reconcile script use the same classification, so Baci-owned
-  chat DVAs stay spendable (`paystack_collection: 'integration'`). A chat
-  payload that proves nothing keeps the old unmarked credit, which the guard
-  treats as not spendable; the reconcile script refuses it instead.
+- The chat-order webhook path (`record-chat-order-settlement.ts`), the
+  order-update-failure fallback (`record-order-update-failure-settlement.ts`)
+  and the manual DVA reconcile script use the same classification, so
+  Baci-owned chat DVAs stay spendable (`paystack_collection: 'integration'`)
+  and verified splits are history only. On every path a payload that proves
+  neither records nothing and the error is logged (fail closed).
+- A GIGL direct split whose verified charge did not carry the delivery fee
+  records `retained_shipping_amount: 0` (the intended fee is kept as
+  `retained_shipping_intended_amount`), so the prepaid-shipping gates never
+  let Baci fund a GIG booking with a fee it never received.
 - Standard Paystack card init (`api/payments/initialize`, via
   `resolve-paystack-split-transaction-charge.ts`): `transaction_charge =
   platform fee + remaining customer-paid GIGL delivery fee`, mirroring

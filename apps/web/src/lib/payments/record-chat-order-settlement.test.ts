@@ -65,4 +65,17 @@ describe('recordChatOrderSettlement', () => {
       'chat_order_settlement_failed: record_paystack_direct_split_settlement: paystack_direct_settlement_subaccount_mismatch'
     );
   });
+
+  it('records nothing when the Paystack payload proves neither collection mode', async () => {
+    const rpc = vi.fn();
+
+    await expect(
+      recordChatOrderSettlement({
+        ...base,
+        gatewayResponse: { status: 'success' },
+        supabase: { rpc },
+      })
+    ).rejects.toThrow('paystack_settlement_collection_unknown');
+    expect(rpc).not.toHaveBeenCalled();
+  });
 });

@@ -179,13 +179,31 @@ BEGIN
     v_collected := v_charge_text::bigint
       >= pg_catalog.round((COALESCE(p_platform_fee, 0) + v_retained) * 100);
   END IF;
+  -- retained_shipping_amount is what every prepaid-shipping consumer reads
+  -- (loadOrderGiglSettledRetainedAmount, private.order_settled_gigl_retained_amount),
+  -- so it holds only a fee Baci's split actually collected. An uncollected
+  -- fee is kept apart as retained_shipping_intended_amount: Baci must not
+  -- fund a GIG booking with money it never received.
+  IF v_retained > 0 AND NOT v_collected THEN
+    RETURN public.record_paystack_direct_split_settlement(
+      p_merchant_id, p_source_type, p_source_id, p_gateway,
+      p_gateway_reference, p_gross_amount, p_gateway_fee,
+      COALESCE(p_platform_fee, 0), p_description,
+      COALESCE(p_metadata, '{}'::jsonb) || jsonb_build_object(
+        'retained_shipping_amount', 0,
+        'retained_shipping_intended_amount', v_retained,
+        'retained_shipping_collected_by_split', false
+      ),
+      p_paystack_subaccount_code
+    );
+  END IF;
   RETURN public.record_paystack_direct_split_settlement(
     p_merchant_id, p_source_type, p_source_id, p_gateway,
     p_gateway_reference, p_gross_amount, p_gateway_fee,
     COALESCE(p_platform_fee, 0) + v_retained, p_description,
     COALESCE(p_metadata, '{}'::jsonb) || jsonb_build_object(
       'retained_shipping_amount', v_retained,
-      'retained_shipping_collected_by_split', v_retained = 0 OR v_collected
+      'retained_shipping_collected_by_split', true
     ),
     p_paystack_subaccount_code
   );

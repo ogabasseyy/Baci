@@ -95,6 +95,16 @@ afterEach(() => {
 });
 
 describe('public first-card checkout runtime readiness', () => {
+  it('is closed by the master kill switch even when enabled', () => {
+    const { options } = fixture();
+    expect(
+      readPrefundedCardCheckoutPublicRuntime({
+        ...options,
+        environment: { ...options.environment, PIGGYVEST_KILL_SWITCH: 'true' },
+      })
+    ).toBeNull();
+  });
+
   it('uses owned-goal authentication without financial database access in read-only mode', async () => {
     const { checkout, options } = fixture();
     const runtime = readPrefundedCardCheckoutPublicRuntime({

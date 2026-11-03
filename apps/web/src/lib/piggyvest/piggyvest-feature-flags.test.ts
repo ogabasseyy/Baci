@@ -15,6 +15,9 @@ describe('feature flag registry', () => {
         'paid_interest',
         'paid_interest_inbox',
         'plan_funding',
+        'prefunded_card_checkout',
+        'prefunded_card_checkout_mutations',
+        'prefunded_card_contributions',
         'wallet',
       ].sort()
     );
@@ -22,6 +25,6 @@ describe('feature flag registry', () => {
   it('maps every feature to a distinct *_ENABLED variable', () => {
     const names = Object.values(PIGGYVEST_FEATURE_FLAGS);
     expect(new Set(names).size).toBe(names.length);
-    for (const name of names) expect(name).toMatch(/^PIGGYVEST_\w+_ENABLED$/);
+    for (const name of names) expect(name).toMatch(/^[A-Z][A-Z0-9_]*_ENABLED$/);
   });
 });

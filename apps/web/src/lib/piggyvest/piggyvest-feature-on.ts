@@ -16,3 +16,19 @@ export function isPiggyvestFeatureOn(
     !isPiggyvestKilled(env) && env[PIGGYVEST_FEATURE_FLAGS[feature]] === 'true'
   );
 }
+
+export type PiggyvestFeatureState = 'on' | 'off' | 'invalid' | 'killed';
+
+/**
+ * Distinguishes a deliberate off (unset or "false") from a malformed value, so
+ * a caller can return null for off and still fail closed loudly on a typo.
+ */
+export function piggyvestFeatureState(
+  feature: PiggyvestFeature,
+  env: PiggyvestSwitchEnv = process.env
+): PiggyvestFeatureState {
+  if (isPiggyvestKilled(env)) return 'killed';
+  const value = env[PIGGYVEST_FEATURE_FLAGS[feature]];
+  if (value === 'true') return 'on';
+  return value === undefined || value === 'false' ? 'off' : 'invalid';
+}

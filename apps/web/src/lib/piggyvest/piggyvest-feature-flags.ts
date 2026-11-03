@@ -11,6 +11,11 @@ export const PIGGYVEST_FEATURE_FLAGS = {
   bank_inbox: 'PIGGYVEST_PRIMARY_BANK_INBOX_ENABLED',
   card_signed_inbox: 'PIGGYVEST_PRIMARY_CARD_SIGNED_INBOX_ENABLED',
   paid_interest_inbox: 'PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_ENABLED',
+  // Prefunded first-card rails bring new money into a savings goal too.
+  prefunded_card_checkout: 'PREFUNDED_CARD_CHECKOUT_PUBLIC_ENABLED',
+  prefunded_card_checkout_mutations:
+    'PREFUNDED_CARD_CHECKOUT_MUTATIONS_ENABLED',
+  prefunded_card_contributions: 'PREFUNDED_CARD_PUBLIC_ENABLED',
 } as const;
 
 export type PiggyvestFeature = keyof typeof PIGGYVEST_FEATURE_FLAGS;

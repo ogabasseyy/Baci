@@ -35,12 +35,21 @@ const sources = roots
 const directRead =
   /\benv\w*\s*(?:\??\.|\??\.?\[\s*['"`])\s*PIGGYVEST_\w*_ENABLED/i;
 const destructured = /\{[^}]*\bPIGGYVEST_\w*_ENABLED\b[^}]*\}\s*=\s*\w*env/i;
+// Enable flags outside the PIGGYVEST_ namespace (the prefunded card rails) are
+// registered too, so inside the piggyvest library any *_ENABLED read is direct.
+const anyEnabledRead =
+  /\benv\w*\s*(?:\??\.|\??\.?\[\s*['"`])\s*[A-Z][A-Z0-9_]*_ENABLED\b/;
+// The registry object may be referenced only by the registry and the helper,
+// so env[PIGGYVEST_FEATURE_FLAGS.x] (or an alias of it) cannot read a flag.
+const registryObject = /\bPIGGYVEST_FEATURE_FLAGS\b/;
+const piggyvestLib = 'src/lib/piggyvest/';
 const templateBuilt = /PIGGYVEST_\w*\$\{/;
 const suffixBuilt = /['"`](?!PIGGYVEST_)\w*_ENABLED['"`]/;
 // Pre-existing staging-only draft gate: hardcoded staging merchant, staging
 // Supabase URL required, and no wallet or money movement. Not a new-money path.
 const allowed = new Set([
   registry,
+  'src/lib/piggyvest/piggyvest-feature-on.ts',
   'src/lib/customer-savings-draft-request.ts',
 ]);
 
@@ -53,10 +62,24 @@ describe('no direct reads of PiggyVest enable flags', () => {
       .filter(
         (file) =>
           !allowed.has(file.path) &&
-          (directRead.test(file.text) || destructured.test(file.text))
+          (directRead.test(file.text) ||
+            destructured.test(file.text) ||
+            registryObject.test(file.text) ||
+            (file.path.startsWith(piggyvestLib) &&
+              anyEnabledRead.test(file.text)))
       )
       .map((file) => file.path);
     expect(offenders).toEqual([]);
+  });
+  it('detects each read pattern the scan relies on', () => {
+    expect(registryObject.test('env[PIGGYVEST_FEATURE_FLAGS.bank_inbox]')).toBe(
+      true
+    );
+    expect(
+      anyEnabledRead.test('environment.PREFUNDED_CARD_PUBLIC_ENABLED')
+    ).toBe(true);
+    expect(anyEnabledRead.test("process.env['X_ENABLED']")).toBe(true);
+    expect(registryObject.test('env.PIGGYVEST_PRIMARY_DB_HOST')).toBe(false);
   });
   it('no module builds a PIGGYVEST_ name or an _ENABLED suffix at runtime', () => {
     const offenders = sources

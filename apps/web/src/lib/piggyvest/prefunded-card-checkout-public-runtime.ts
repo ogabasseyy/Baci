@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { prefundedCardCheckoutSchemas } from '@/schemas/prefunded-card-checkout';
 import { prefundedCardCheckoutEmailSchema } from '@/schemas/prefunded-card-checkout-email';
 import { prefundedCardCheckoutPublicSchemas as schemas } from '@/schemas/prefunded-card-checkout-public-runtime';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 import { createPrefundedCardCheckoutComposition } from './prefunded-card-checkout-composition';
 import { resolvePrefundedCardCheckoutPublicContext } from './prefunded-card-checkout-public-context';
 import { createPrefundedCardPostgresExecutor } from './prefunded-card-postgres-executor';
@@ -21,7 +22,7 @@ export function readPrefundedCardCheckoutPublicRuntime({
   environment?: NodeJS.ProcessEnv;
   fetchImplementation?: typeof fetch;
 }) {
-  if (environment.PREFUNDED_CARD_CHECKOUT_PUBLIC_ENABLED !== 'true')
+  if (!isPiggyvestFeatureOn('prefunded_card_checkout', environment))
     return null;
   try {
     const serialized = environment.PREFUNDED_CARD_CHECKOUT_PUBLIC_CONFIG;
@@ -38,8 +39,10 @@ export function readPrefundedCardCheckoutPublicRuntime({
       unavailable();
     }
 
-    const mutationsEnabled =
-      environment.PREFUNDED_CARD_CHECKOUT_MUTATIONS_ENABLED === 'true';
+    const mutationsEnabled = isPiggyvestFeatureOn(
+      'prefunded_card_checkout_mutations',
+      environment
+    );
     return Object.freeze({
       publicOrigin: configuration.publicOrigin,
       mutationsEnabled,

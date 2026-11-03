@@ -3,7 +3,10 @@ import {
   PIGGYVEST_FEATURE_FLAGS,
   type PiggyvestFeature,
 } from './piggyvest-feature-flags';
-import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
+import {
+  isPiggyvestFeatureOn,
+  piggyvestFeatureState,
+} from './piggyvest-feature-on';
 
 const features = Object.keys(PIGGYVEST_FEATURE_FLAGS) as PiggyvestFeature[];
 const allOn: Record<string, string> = Object.fromEntries(
@@ -39,5 +42,25 @@ describe('per-feature switches', () => {
     const env = { ...allOn, [PIGGYVEST_FEATURE_FLAGS.inflows]: 'false' };
     expect(isPiggyvestFeatureOn('inflows', env)).toBe(false);
     expect(isPiggyvestFeatureOn('deposit_to_goal', env)).toBe(true);
+  });
+});
+
+describe('feature state', () => {
+  const flag = PIGGYVEST_FEATURE_FLAGS.bank_inbox;
+  it('separates on, off, invalid and killed', () => {
+    expect(piggyvestFeatureState('bank_inbox', { [flag]: 'true' })).toBe('on');
+    expect(piggyvestFeatureState('bank_inbox', {})).toBe('off');
+    expect(piggyvestFeatureState('bank_inbox', { [flag]: 'false' })).toBe(
+      'off'
+    );
+    expect(piggyvestFeatureState('bank_inbox', { [flag]: 'TRUE' })).toBe(
+      'invalid'
+    );
+    expect(
+      piggyvestFeatureState('bank_inbox', {
+        [flag]: 'true',
+        PIGGYVEST_KILL_SWITCH: 'true',
+      })
+    ).toBe('killed');
   });
 });

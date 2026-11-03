@@ -31,14 +31,19 @@ function retryable(code: string, error: string): Response {
   );
 }
 
-const MONEY_IN_EVENTS: ReadonlySet<string> = new Set([
-  'bank-transfer.inflow.success',
-  'wallet-transfer.outflow.success',
-  'interest-payout.success',
-]);
-
-function isMoneyInEvent(eventType: string): boolean {
-  return MONEY_IN_EVENTS.has(eventType);
+// A wallet-transfer outflow is a terminal notice for a transfer already
+// submitted, which must keep reconciling. Only a custody-signed one is new
+// card-custody money in, so only that is deferred.
+function isMoneyInDelivery(
+  eventType: string,
+  families: readonly PiggyvestWebhookKeyFamily[]
+): boolean {
+  if (eventType === 'wallet-transfer.outflow.success')
+    return families.includes('custody');
+  return (
+    eventType === 'bank-transfer.inflow.success' ||
+    eventType === 'interest-payout.success'
+  );
 }
 
 export async function dispatchPrimaryPiggyvestIntake(input: {
@@ -60,7 +65,10 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
   // dropped: the retryable 503 makes PiggyVest redeliver, and the deposit is
   // recorded exactly once after the switch is lifted. Without this, a
   // legacy-signed delivery would fall through to the legacy credit path.
-  if (isPiggyvestKilled(process.env) && isMoneyInEvent(input.event.eventType))
+  if (
+    isPiggyvestKilled(process.env) &&
+    isMoneyInDelivery(input.event.eventType, input.families)
+  )
     return retryable(
       'PIGGYVEST_KILL_SWITCH_ACTIVE',
       'PiggyVest intake paused; delivery will be retried'

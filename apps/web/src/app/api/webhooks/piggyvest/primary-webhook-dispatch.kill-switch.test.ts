@@ -38,6 +38,7 @@ beforeEach(() => {
 it.each([
   ['bank-transfer.inflow.success', ['legacy']],
   ['bank-transfer.inflow.success', ['legacy', 'bank']],
+  ['wallet-transfer.outflow.success', ['custody']],
   ['wallet-transfer.outflow.success', ['legacy', 'custody']],
   ['interest-payout.success', ['legacy', 'interest']],
 ] as const)('defers a %s delivery with a retryable 503 while the kill switch is on (%j)', async (eventType, families) => {
@@ -58,6 +59,20 @@ it.each([
     expect(mocks.interest).not.toHaveBeenCalled();
     expect(mocks.bank).not.toHaveBeenCalled();
     expect(mocks.inflow).not.toHaveBeenCalled();
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it('keeps reconciling a legacy-signed outflow notice for an existing transfer while killed', async () => {
+  vi.stubEnv('PIGGYVEST_KILL_SWITCH', 'true');
+  try {
+    const response = await dispatchPrimaryPiggyvestIntake({
+      ...base,
+      event: { eventType: 'wallet-transfer.outflow.success' } as never,
+      families: ['legacy'],
+    });
+    expect(response).toBeNull();
   } finally {
     vi.unstubAllEnvs();
   }

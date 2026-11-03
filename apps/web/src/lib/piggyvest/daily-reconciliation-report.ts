@@ -1,3 +1,4 @@
+import { escapeHtmlText } from '@/lib/sanitize';
 import type {
   BalanceFinding,
   ReconciliationReport,
@@ -12,15 +13,6 @@ export function formatKobo(kobo: number): string {
     .toString()
     .replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return `${sign}₦${naira}.${String(magnitude % 100).padStart(2, '0')}`;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
 }
 
 const READING_TEXT: Record<StuckFinding['reading'], string> = {
@@ -97,8 +89,8 @@ export function renderReconciliationEmail(report: ReconciliationReport): {
   }
   const subject = `PiggyVest daily reconciliation: ${headline} (${date})`;
   const text = [subject, '', ...lines].join('\n');
-  const html = `<h2>${escapeHtml(subject)}</h2>${lines
-    .map((line) => (line === '' ? '<br>' : `<p>${escapeHtml(line)}</p>`))
+  const html = `<h2>${escapeHtmlText(subject)}</h2>${lines
+    .map((line) => (line === '' ? '<br>' : `<p>${escapeHtmlText(line)}</p>`))
     .join('')}`;
   return { subject, text, html };
 }

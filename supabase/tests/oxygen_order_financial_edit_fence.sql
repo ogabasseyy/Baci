@@ -19,8 +19,6 @@ VALUES
  ('efb10000-0000-4000-8000-000000000032','efb10000-0000-4000-8000-000000000011','efb10000-0000-4000-8000-000000000021','OXYGEN-FENCE-2',100,100,'NGN','unpaid','paystack',0,0);
 INSERT INTO public.order_items(id,order_id,name,price,quantity)
 VALUES ('efb10000-0000-4000-8000-000000000061','efb10000-0000-4000-8000-000000000031','Fixture',100,1);
-INSERT INTO public.order_tax_subtotals(id,order_id,vat_category_code,vat_rate,taxable_amount,tax_amount)
-VALUES ('efb10000-0000-4000-8000-000000000071','efb10000-0000-4000-8000-000000000031','S',7.5,100,0);
 INSERT INTO public.oxygen_workflows(id,order_id,merchant_id,customer_id,stage)
 VALUES ('efb10000-0000-4000-8000-000000000041','efb10000-0000-4000-8000-000000000031','efb10000-0000-4000-8000-000000000011','efb10000-0000-4000-8000-000000000021','application_required');
 SELECT set_config('request.jwt.claim.sub','efb10000-0000-4000-8000-000000000001',true);
@@ -41,6 +39,9 @@ UPDATE public.order_items SET price=101 WHERE id='efb10000-0000-4000-8000-000000
 UPDATE public.order_items SET price=100 WHERE id='efb10000-0000-4000-8000-000000000061';
 UPDATE public.orders SET subtotal=100,total=100 WHERE id='efb10000-0000-4000-8000-000000000031';
 RESET ROLE;
+-- Item writes above may rebuild tax rows. Create the fixture only after them.
+INSERT INTO public.order_tax_subtotals(id,order_id,vat_category_code,vat_rate,taxable_amount,tax_amount)
+VALUES ('efb10000-0000-4000-8000-000000000071','efb10000-0000-4000-8000-000000000031','S',7.5,100,0);
 SELECT set_config('request.jwt.claim.sub','efb10000-0000-4000-8000-000000000001',true);
 -- Eligibility is already bound to the original order and customer.
 UPDATE public.oxygen_workflows SET stage='eligibility_required' WHERE id='efb10000-0000-4000-8000-000000000041';
@@ -74,6 +75,11 @@ DELETE FROM oxygen_private.commands WHERE workflow_id='efb10000-0000-4000-8000-0
 UPDATE public.oxygen_workflows SET stage='payment_required' WHERE id='efb10000-0000-4000-8000-000000000041';
 INSERT INTO oxygen_private.provider_states(workflow_id,state) VALUES ('efb10000-0000-4000-8000-000000000041','{"bookingReference":"efb10000-0000-4000-8000-000000000051","booking":{"status":"APPROVED"}}');
 SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+ IF NOT EXISTS (SELECT 1 FROM public.order_tax_subtotals WHERE id='efb10000-0000-4000-8000-000000000071' AND order_id='efb10000-0000-4000-8000-000000000031') THEN
+  RAISE EXCEPTION 'Owner cannot see fixture tax row' USING ERRCODE='P1010';
+ END IF;
+END $$;
 -- Stable sentinel SQLSTATEs P1001-P1009 identify this block's assertions in
 -- sanitized replay logs. Any missing expected rejection still fails the suite.
 DO $$ BEGIN

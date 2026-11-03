@@ -103,7 +103,7 @@ function collectSupersedingShas(comparison, currentSha) {
 }
 
 async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, token) {
-  if (run?.status === 'queued') {
+  if (run?.status === 'queued' && (typeof run.run_attempt !== 'number' || run.run_attempt <= 1)) {
     return false;
   }
   if (!Number.isSafeInteger(run?.id) || run.id <= 0) {

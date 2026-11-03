@@ -86,25 +86,12 @@ test('rejects an ancestor when an intermediate superseding commit has deployed',
   );
 });
 
-test('rejects an ancestor when a superseding commit failed after promote', async () => {
+test('distinguishes post-promote failure from pre-promote failure', async () => {
   await assert.rejects(
-    verifySupersededFile(
-      'apps/web/src/app/page.tsx',
-      [{ conclusion: 'failure', head_sha: currentSha, id: 123, status: 'completed' }],
-      [{ sha: currentSha }],
-      [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'success', name: 'Deploy to Vercel (with retry)' }] }]
-    ),
+    verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'failure', head_sha: currentSha, id: 123, status: 'completed' }], [{ sha: currentSha }], [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'success', name: 'Deploy to Vercel (with retry)' }] }]),
     /superseded deployment SHA/
   );
-});
-
-test('accepts an ancestor when a superseding commit failed before promote', async () => {
-  const result = await verifySupersededFile(
-    'apps/web/src/app/page.tsx',
-    [{ conclusion: 'failure', head_sha: currentSha, id: 123, status: 'completed' }],
-    [{ sha: currentSha }],
-    [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'failure', name: 'Deploy to Vercel (with retry)' }] }]
-  );
+  const result = await verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'failure', head_sha: currentSha, id: 123, status: 'completed' }], [{ sha: currentSha }], [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'failure', name: 'Deploy to Vercel (with retry)' }] }]);
   assert.deepEqual(result, { currentSha, expectedSha });
 });
 
@@ -240,19 +227,21 @@ test('root public guide assets trigger web CI and production deployment', () => 
   assert.ok(ci.web.includes('public/guides/**'));
 });
 
-test('detects earlier successful deploy attempt when latest rerun failed', async () => {
-  await assert.rejects(
-    verifySupersededFile(
-      'apps/web/src/app/page.tsx',
-      [{ conclusion: 'failure', head_sha: currentSha, id: 130, run_attempt: 2, status: 'completed' }],
-      [{ sha: currentSha }],
-      [
-        { conclusion: 'success', name: 'deploy-production', status: 'completed' },
-        { conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'failure', name: 'Deploy to Vercel (with retry)' }] },
-      ]
-    ),
-    /superseded deployment SHA/
-  );
+test('detects earlier successful deploy attempt when rerun is queued or failed', async () => {
+  for (const status of ['queued', 'completed']) {
+    await assert.rejects(
+      verifySupersededFile(
+        'apps/web/src/app/page.tsx',
+        [{ conclusion: status === 'queued' ? null : 'failure', head_sha: currentSha, id: 130, run_attempt: 2, status }],
+        [{ sha: currentSha }],
+        [
+          { conclusion: 'success', name: 'deploy-production', status: 'completed' },
+          { conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'failure', name: 'Deploy to Vercel (with retry)' }] },
+        ]
+      ),
+      /superseded deployment SHA/
+    );
+  }
 });
 
 test('fails closed on malformed identity, API responses, or response truncation', async () => {

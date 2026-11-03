@@ -47,6 +47,7 @@ it('runs the real staging adapter through onboarding, booking, address and appro
     status: 'BOOKED',
   };
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'synthetic-token',
     fetch: async (url, init) => {
       const path = String(url);

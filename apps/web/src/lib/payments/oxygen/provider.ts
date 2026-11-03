@@ -72,13 +72,15 @@ export interface OxygenProvider {
 /** Fixed deployment-selected origin and operation allowlist. No activation or settlement API. */
 export function createOxygenProvider(deps: {
   token(): Promise<string>;
-  environment?: OxygenEnvironment;
+  environment: OxygenEnvironment;
   fetch: typeof fetch;
   redactionSecrets?: string[];
   observe?: (response: OxygenObservedResponse) => Promise<void>;
 }): OxygenProvider {
   let lastResponse: OxygenResponseMetadata | undefined;
-  const environment = deps.environment ?? 'staging';
+  const environment = deps.environment;
+  if (environment !== 'staging' && environment !== 'production')
+    throw new Error('Oxygen environment unavailable');
   return {
     environment,
     responseMetadata: () => lastResponse,

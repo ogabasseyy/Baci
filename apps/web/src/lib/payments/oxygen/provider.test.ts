@@ -8,6 +8,7 @@ describe('Oxygen provider boundary', () => {
   it('uses the staging API and sends approval as multipart without activation', async () => {
     const calls: { url: string; init?: RequestInit }[] = [];
     const provider = createOxygenProvider({
+      environment: 'staging',
       token: async () => 'private',
       fetch: async (url, init) => {
         calls.push({ url: String(url), init });
@@ -28,7 +29,11 @@ describe('Oxygen provider boundary', () => {
   it('rejects activation or arbitrary paths before getting credentials', async () => {
     const token = vi.fn();
     const fetcher = vi.fn();
-    const provider = createOxygenProvider({ token, fetch: fetcher });
+    const provider = createOxygenProvider({
+      environment: 'staging',
+      token,
+      fetch: fetcher,
+    });
     // Runtime callers, including forged requests, cannot add an operation.
     await expect(provider.call('activate' as never, {})).rejects.toThrow(
       'Unsupported Oxygen operation'
@@ -39,6 +44,7 @@ describe('Oxygen provider boundary', () => {
   it('does not retry or expose provider errors', async () => {
     let calls = 0;
     const provider = createOxygenProvider({
+      environment: 'staging',
       token: async () => 'private',
       fetch: async () => {
         calls++;
@@ -61,6 +67,7 @@ it.each([
     .fn()
     .mockResolvedValue(new Response('private', { status }));
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'private',
     fetch: fetcher,
   });
@@ -70,6 +77,7 @@ it.each([
 it('records login failure before sending as not sent', async () => {
   const fetcher = vi.fn();
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => {
       throw new Error('private');
     },
@@ -84,6 +92,7 @@ it('records login failure before sending as not sent', async () => {
 it('loads banks with GET and resolves accounts with POST at fixed staging paths', async () => {
   const fetcher = vi.fn().mockResolvedValue(Response.json({ Status: '00' }));
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'private',
     fetch: fetcher,
   });
@@ -112,6 +121,7 @@ it('maps the known booking statement rejection to a safe code without raw provid
     )
   );
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'private',
     fetch: fetcher,
   });
@@ -124,6 +134,7 @@ it('maps the known booking statement rejection to a safe code without raw provid
 });
 it('does not classify an oversized error response as the known statement rejection', async () => {
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'private',
     fetch: async () =>
       Response.json({ message: 'x'.repeat(17000) }, { status: 400 }),
@@ -137,6 +148,7 @@ it('retains safe login status and static transport code without sending the oper
   const { OxygenTransportError } = await import('./transport');
   const fetcher = vi.fn();
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => {
       throw new OxygenTransportError('auth_failed', 401);
     },
@@ -166,6 +178,7 @@ it.each([
       )
     );
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'secret',
     fetch: fetcher,
   });
@@ -180,6 +193,7 @@ it.each([
   ['book', 400, 'OTP validation failed. Please try again'],
 ] as const)('does not mislabel another provider failure as an invalid OTP (%s %s)', async (operation, status, message) => {
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'secret',
     fetch: async () => Response.json({ message }, { status }),
   });
@@ -195,6 +209,7 @@ it.each([
   ['book', 400, 'Unexpected loan error', undefined],
 ] as const)('maps active loan only for a definite recognised booking rejection (%s %s)', async (operation, status, message, code) => {
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'private',
     fetch: vi
       .fn()
@@ -215,6 +230,7 @@ it.each([
       Response.json({ url: 'https://payment.hydrogenpay.com/' })
     );
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'private',
     fetch: fetcher,
   });
@@ -241,6 +257,7 @@ it.each([
     )
   );
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'private',
     fetch: fetcher,
   });

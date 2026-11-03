@@ -101,6 +101,7 @@ it('durably captures a successful HTTP response before returning it for validati
     return { data: [{ sequence: 1, ciphertext }], error: null };
   });
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'token',
     fetch: vi.fn().mockResolvedValue(Response.json(response.body)),
     observe: createOxygenResponseRecorder(
@@ -132,6 +133,7 @@ it('durably captures a successful HTTP response before returning it for validati
 it('does not return a successful mutation if evidence persistence fails and never automatically repeats it', async () => {
   const fetcher = vi.fn().mockResolvedValue(Response.json(response.body));
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'token',
     fetch: fetcher,
     observe: createOxygenResponseRecorder(
@@ -150,6 +152,7 @@ it('does not return a successful mutation if evidence persistence fails and neve
 it('captures non-JSON replies as metadata without retaining body text', async () => {
   const observe = vi.fn();
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'token',
     fetch: vi
       .fn()
@@ -175,6 +178,7 @@ it('captures the HTTP status when the response stream is lost', async () => {
     },
   });
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'token',
     fetch: vi.fn().mockResolvedValue(new Response(stream, { status: 200 })),
     observe,
@@ -192,6 +196,7 @@ it('captures the HTTP status when the response stream is lost', async () => {
 it('bounds oversized responses and never retains their text', async () => {
   const observe = vi.fn();
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'token',
     fetch: vi
       .fn()
@@ -233,6 +238,7 @@ it('captures documented recovery url responses and retains safe rejection metada
 it('records NIN provider error details and KYC states without retaining identity values', async () => {
   const recorded: unknown[] = [];
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'private-token',
     redactionSecrets: ['private-secret'],
     fetch: async () =>

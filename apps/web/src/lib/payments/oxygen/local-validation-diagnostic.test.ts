@@ -76,6 +76,7 @@ it('retains HTTP metadata without response bodies and clears it before the next 
     )
     .mockRejectedValueOnce(new Error('private-network'));
   const provider = createOxygenProvider({
+    environment: 'staging',
     token: async () => 'private-token',
     fetch: fetcher,
   });

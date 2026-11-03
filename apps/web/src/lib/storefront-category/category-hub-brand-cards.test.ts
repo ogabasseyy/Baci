@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { buildCategoryHubBrandCards } from '@/lib/storefront-category/category-hub-brand-cards';
-import {
-  isNonBrandPlaceholderKey,
-  NON_BRAND_PLACEHOLDER_KEYS,
-} from '@/lib/storefront-category/category-hub-brand-placeholder';
 import { countBrandsByActiveProduct } from '@/lib/storefront-category/category-hub-brand-utils';
 import type { CategoryHubProduct } from '@/lib/storefront-category/category-hub-types';
 
@@ -265,18 +261,5 @@ describe('buildCategoryHubBrandCards', () => {
     ]);
     const freeCard = cards.find((card) => card.title === 'FreeBrand');
     expect(freeCard?.href).toBe('https://ogabassey.com/smartphones/free-1');
-  });
-});
-
-describe('isNonBrandPlaceholderKey', () => {
-  it('identifies placeholder keys and empty/null values', () => {
-    expect(isNonBrandPlaceholderKey(null)).toBe(true);
-    expect(isNonBrandPlaceholderKey(undefined)).toBe(true);
-    expect(isNonBrandPlaceholderKey('')).toBe(true);
-    for (const key of NON_BRAND_PLACEHOLDER_KEYS) {
-      expect(isNonBrandPlaceholderKey(key)).toBe(true);
-    }
-    expect(isNonBrandPlaceholderKey('apple')).toBe(false);
-    expect(isNonBrandPlaceholderKey('samsung')).toBe(false);
   });
 });

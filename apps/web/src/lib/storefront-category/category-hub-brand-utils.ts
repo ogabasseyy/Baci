@@ -1,22 +1,16 @@
 import { generateSlug } from '@/lib/seo-utils';
+import { isNonBrandPlaceholderKey } from '@/lib/storefront-category/category-hub-brand-placeholder';
 import type { CategoryHubProduct } from '@/lib/storefront-category/category-hub-types';
+
+export {
+  isNonBrandPlaceholderKey,
+  NON_BRAND_PLACEHOLDER_KEYS,
+} from '@/lib/storefront-category/category-hub-brand-placeholder';
 
 export interface BrandCountEntry {
   key: string;
   label: string;
   count: number;
-}
-
-export const NON_BRAND_PLACEHOLDER_KEYS = new Set([
-  'gaming',
-  'generic',
-  'unbranded',
-  'other',
-]);
-
-export function isNonBrandPlaceholderKey(key?: string | null): boolean {
-  if (!key) return true;
-  return NON_BRAND_PLACEHOLDER_KEYS.has(key);
 }
 
 function normalizeBrand(brand?: string | null) {
@@ -26,7 +20,7 @@ function normalizeBrand(brand?: string | null) {
   }
 
   const key = generateSlug(label);
-  if (!key || NON_BRAND_PLACEHOLDER_KEYS.has(key)) {
+  if (!key || isNonBrandPlaceholderKey(key)) {
     return null;
   }
 

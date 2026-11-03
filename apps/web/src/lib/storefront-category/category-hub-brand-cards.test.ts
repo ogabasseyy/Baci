@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { buildCategoryHubBrandCards } from '@/lib/storefront-category/category-hub-brand-cards';
 import {
-  countBrandsByActiveProduct,
   isNonBrandPlaceholderKey,
   NON_BRAND_PLACEHOLDER_KEYS,
-} from '@/lib/storefront-category/category-hub-brand-utils';
+} from '@/lib/storefront-category/category-hub-brand-placeholder';
+import { countBrandsByActiveProduct } from '@/lib/storefront-category/category-hub-brand-utils';
 import type { CategoryHubProduct } from '@/lib/storefront-category/category-hub-types';
 
 function buildProduct(

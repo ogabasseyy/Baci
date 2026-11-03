@@ -30,7 +30,7 @@ it('emits only allowlisted flags from the owned container', async () => {
   );
   expect(result).toBeInstanceOf(Error);
   expect((result as Error).message).toBe(
-    `${failure.message} (dbflags=111111001,dbsignal=kill,dbprobe=0)`
+    `${failure.message} (dbflags=111111001,dbsignal=kill,dbprobe=0,dbphases=000)`
   );
   expect(run).toHaveBeenCalledTimes(2);
 });
@@ -77,8 +77,28 @@ it('retains the original failure if state inspection fails and distinguishes una
     run
   );
   expect((result as Error).message).toBe(
-    `${failure.message} (dbflags=000000000,dbsignal=none,dbprobe=0)`
+    `${failure.message} (dbflags=000000000,dbsignal=none,dbprobe=0,dbphases=000)`
   );
+});
+
+it('reports only emitted warning phases, not matching SQL source in crash details', async () => {
+  const run = vi
+    .fn()
+    .mockResolvedValueOnce({ stdout: 'false|0|0|running', stderr: '' })
+    .mockResolvedValueOnce({
+      stdout:
+        "WARNING: OXYGEN_CI_ANON_BEFORE_CALL\nDETAIL: Failed process was running: RAISE WARNING 'OXYGEN_CI_ANON_DENIED'; private-value",
+      stderr: '',
+    });
+  const result = await diagnoseReplayDisconnect(
+    failure,
+    project,
+    expected,
+    inspect,
+    run
+  );
+  expect((result as Error).message).toContain('dbphases=100');
+  expect((result as Error).message).not.toContain('private-value');
 });
 
 it('correlates the fixed SQL probe only with a backend signal detail', async () => {

@@ -109,8 +109,15 @@ export async function diagnoseReplayDisconnect(
             : signal
               ? 'other'
               : 'none';
+    const phases = ['BEFORE_CALL', 'DENIED', 'OTHER_ERROR']
+      .map((phase) =>
+        new RegExp(`WARNING:\\s+OXYGEN_CI_ANON_${phase}\\b`).test(logs)
+          ? '1'
+          : '0'
+      )
+      .join('');
     return new Error(
-      `${failure.message} (dbflags=${flags},dbsignal=${signalClass},dbprobe=${probeMatch ? '1' : '0'})`,
+      `${failure.message} (dbflags=${flags},dbsignal=${signalClass},dbprobe=${probeMatch ? '1' : '0'},dbphases=${phases})`,
       {
         cause: failure,
       }

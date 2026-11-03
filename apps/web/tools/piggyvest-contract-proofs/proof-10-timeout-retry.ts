@@ -221,11 +221,16 @@ export async function stepTimeoutRetry(
     unmeasured || debit === null || goalDelta === null
       ? null
       : transferVerdict(amount, debit, goalDelta, fee);
+  // Rows that disagree with the balances are never 'no' on their own: only a
+  // balance verdict of 'no' (a real second booking) publishes 'no'.
+  const rowsDisagree = !unmeasured && rows !== 1;
   const answer: Answer = unmeasured
     ? 'unknown'
-    : rows !== 1
-      ? 'no'
-      : (verdict?.answer ?? 'unknown');
+    : rows === 1
+      ? (verdict?.answer ?? 'unknown')
+      : verdict?.answer === 'no'
+        ? 'no'
+        : 'unknown';
   b.finding(
     TIMEOUT_BOOKED_ONCE,
     Q[TIMEOUT_BOOKED_ONCE],
@@ -239,7 +244,9 @@ export async function stepTimeoutRetry(
           : rows === null
             ? 'the transaction list never showed the reference within the polling budget'
             : answer === 'unknown'
-              ? verdict?.detail
+              ? rowsDisagree
+                ? `the transaction list shows ${rows} rows for the reference but the balances show one transfer; human review`
+                : verdict?.detail
               : undefined
   );
 }

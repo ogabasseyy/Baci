@@ -1,5 +1,6 @@
 import { matchesProviderWalletName } from '@/lib/piggyvest/provider-wallet-name';
 import { AMOUNTS_KOBO, FUNDING_FLOOR_KOBO } from './constants';
+import { fundingSettled } from './funding-settle';
 import {
   createDataSchema,
   isOwnedBy,
@@ -202,15 +203,16 @@ async function ensureFundedMain(
     );
     return;
   }
-  for (let poll = 0; poll < ctx.maxPolls; poll += 1) {
-    const now = walletDataSchema.safeParse(
-      okData(await api.wallet(state.mainWalletId))
-    );
-    if (now.success && now.data.balance > balance) {
-      ledger.append({ ...movement, settled: true });
-      return;
-    }
-    await ctx.sleep(ctx.pollIntervalMs);
+  if (
+    await fundingSettled(
+      ctx,
+      state.mainWalletId,
+      balance,
+      AMOUNTS_KOBO.fundMain
+    )
+  ) {
+    ledger.append({ ...movement, settled: true });
+    return;
   }
   // The credit may still land under a later baseline.
   ledger.append({ ...movement, settled: false });

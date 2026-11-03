@@ -1,4 +1,5 @@
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
+import { GAME_CATEGORY_PATTERN } from '@/config/storefront-game-category';
 import { applyJoinedTitleCorrections } from './apply-joined-title-corrections';
 import type { BuildCommercialGuideLinksContext } from './content-cluster-types';
 import { filterProductModelSourceTokens } from './filter-product-model-source-tokens';
@@ -60,8 +61,6 @@ const LAPTOP_CATEGORY_SLUGS = new Set(['gaming-laptops', 'laptops']);
 const DISPLAY_SIZE_CATEGORY_SLUGS = new Set(LAPTOP_CATEGORY_SLUGS).add(
   'tablets'
 );
-const GAME_CATEGORY_PATTERN =
-  /^(?:(?:portable-)?gaming|playstation-[45]|nintendo-switch(?:-2)?|xbox)$/u;
 const LEADING_FILLER_TOKENS = new Set(['a', 'an', 'headset', 'the']);
 const GENERIC_MODEL_TIER_TOKENS = new Set([
   'active',

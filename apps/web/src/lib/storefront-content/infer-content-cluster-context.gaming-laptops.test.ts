@@ -215,4 +215,15 @@ describe('inferContentClusterContext - gaming laptops', () => {
     });
     expect(gpuRoundup.categorySlug).toBe('gaming-laptops');
   });
+
+  it('does not promote desktop articles tagged "gaming laptop" when the title lacks laptop evidence', () => {
+    const desktopArticle = inferContentClusterContext({
+      title: 'Alienware Aurora R16 Review',
+      excerpt: 'High-performance gaming desktop benchmarked.',
+      category: 'Gaming',
+      tags: ['gaming laptop', 'alienware', 'gaming'],
+      keywords: ['review'],
+    });
+    expect(desktopArticle.categorySlug).toBe('gaming');
+  });
 });

@@ -69,40 +69,55 @@ function isDedicatedGamingLaptopContent(
   titleHaystack: string,
   haystack: string
 ): boolean {
-  const hasGamingLaptopPhrase =
+  const hasTitleGamingLaptopPhrase =
     hasPhrase(titleHaystack, 'gaming laptop') ||
     hasPhrase(titleHaystack, 'gaming laptops');
 
-  const hasExcludedSubject = EXCLUDED_GAMING_LAPTOP_SUBJECTS.some((subject) => {
-    if (
-      hasGamingLaptopPhrase &&
-      (subject === 'gpu' ||
-        subject === 'gpus' ||
-        subject === 'graphics card' ||
-        subject === 'graphics cards')
-    ) {
-      return false;
-    }
-    return hasPhrase(titleHaystack, subject);
-  });
-  if (hasExcludedSubject) {
-    return false;
-  }
+  const hasTitleLaptopToken =
+    hasPhrase(titleHaystack, 'laptop') || hasPhrase(titleHaystack, 'laptops');
 
-  if (hasGamingLaptopPhrase) {
-    return true;
-  }
-
-  const hasDedicatedModelToken = DEDICATED_GAMING_LAPTOP_TOKENS.some((token) =>
+  const hasTitleDedicatedModel = DEDICATED_GAMING_LAPTOP_TOKENS.some((token) =>
     hasPhrase(titleHaystack, token)
   );
-  const hasLaptopToken =
-    hasPhrase(titleHaystack, 'laptop') ||
-    hasPhrase(titleHaystack, 'laptops') ||
+
+  if (
+    hasTitleGamingLaptopPhrase ||
+    (hasTitleDedicatedModel && hasTitleLaptopToken)
+  ) {
+    const hasTitleExcludedSubject = EXCLUDED_GAMING_LAPTOP_SUBJECTS.some(
+      (subject) => {
+        if (
+          hasTitleGamingLaptopPhrase &&
+          (subject === 'gpu' ||
+            subject === 'gpus' ||
+            subject === 'graphics card' ||
+            subject === 'graphics cards')
+        ) {
+          return false;
+        }
+        return hasPhrase(titleHaystack, subject);
+      }
+    );
+
+    return !hasTitleExcludedSubject;
+  }
+
+  const hasMetadataLaptopToken =
+    hasPhrase(haystack, 'laptop') ||
+    hasPhrase(haystack, 'laptops') ||
     hasPhrase(haystack, 'gaming laptop') ||
     hasPhrase(haystack, 'gaming laptops');
 
-  return hasDedicatedModelToken && hasLaptopToken;
+  if (hasTitleDedicatedModel && hasMetadataLaptopToken) {
+    const hasAnyExcludedSubject = EXCLUDED_GAMING_LAPTOP_SUBJECTS.some(
+      (subject) =>
+        hasPhrase(titleHaystack, subject) || hasPhrase(haystack, subject)
+    );
+
+    return !hasAnyExcludedSubject;
+  }
+
+  return false;
 }
 
 function inferCategorySlug(

@@ -89,7 +89,6 @@ export const CORE_CONTENT_CLUSTER_SUPPORT = {
       'msi',
       'alienware',
       'predator',
-      'razer',
       'refresh rate',
     ],
     brandTokens: laptopBrands,

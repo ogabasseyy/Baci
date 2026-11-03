@@ -234,11 +234,16 @@ BEGIN
   PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 1 AND pg_temp.gp_balance() = 950,
     'replay changed the reservation');
 
+  -- Only one transfer per goal may be in flight (primary_savings_single_pending_goal_idx),
+  -- so the reserved row is removed to let the next claim be attempted. The
+  -- wallet hold from it stays, so the balance remains 950 below.
+  DELETE FROM piggyvest_primary.savings_operations WHERE id = c_op1::uuid;
+
   -- A spent proof cannot fund a different operation.
   v_result := pg_temp.gp_call(c_op2, 5000, pg_temp.gp_token('exact'));
   PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'pin_refused' AND v_result ->> 'reason' = 'mismatch',
     'spent proof reused: ' || v_result::text);
-  PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 1 AND pg_temp.gp_balance() = 950,
+  PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 0 AND pg_temp.gp_balance() = 950,
     'reused proof left a reservation');
 
   -- Cancel and complete proofs are spent only for an active goal of this
@@ -279,8 +284,17 @@ BEGIN
   v_result := pg_temp.gp_call(c_op5, 5000, pg_temp.gp_token('switched-off'));
   PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'pin_refused' AND v_result ->> 'reason' = 'unavailable',
     'merchant off: ' || v_result::text);
-  PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 1 AND pg_temp.gp_balance() = 950
+  PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 0 AND pg_temp.gp_balance() = 950
     AND NOT pg_temp.gp_spent('switched-off'), 'merchant off left a reservation or spent a proof');
+  -- A merchant with PIN checking off funds with no proof (empty or missing);
+  -- the reservation stands and nothing is spent. A garbage proof is still refused.
+  v_result := pg_temp.gp_call(c_op5, 5000, 'not-a-proof');
+  PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'pin_refused' AND v_result ->> 'reason' = 'invalid',
+    'merchant off with garbage proof: ' || v_result::text);
+  v_result := pg_temp.gp_call(c_op5, 5000, '');
+  PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'claimed', 'merchant off without proof: ' || v_result::text);
+  PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 1 AND pg_temp.gp_balance() = 900
+    AND NOT pg_temp.gp_spent('switched-off'), 'merchant off funding changed a proof or the hold');
 END
 $behaviour$;
 

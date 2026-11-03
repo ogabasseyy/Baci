@@ -157,17 +157,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { error: 'Savings is not enabled.', code: 'CUSTOMER_SAVINGS_DISABLED' },
         { status: 403 }
       );
+    // Whether a proof is needed is decided by the database at reservation
+    // time (merchant PIN checking on or off, replay of a reserved operation),
+    // so a merchant without PIN checking keeps funding with no proof.
     const { merchantId: _merchantId, pinProof, ...selection } = parsed.data;
-    // Judged after the not-ready and disabled answers so a merchant without
-    // primary savings still falls back to legacy funding.
-    if (!pinProof)
-      return NextResponse.json(
-        {
-          error: 'Please confirm your PIN to continue.',
-          code: 'PIN_PROOF_REQUIRED',
-        },
-        { status: 400, headers: { 'Cache-Control': 'no-store' } }
-      );
     const result = await submitPrimaryWalletSavings({
       configuration: runtime.configuration,
       reconciliationConfiguration: runtime.reconciliationConfiguration,
@@ -181,8 +174,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         businessId: runtime.businessId,
       },
       request: selection,
-      pinProof,
+      pinProof: pinProof ?? '',
     });
+    if (result.status === 'pin_refused' && result.reason === 'missing')
+      return NextResponse.json(
+        {
+          error: 'Please confirm your PIN to continue.',
+          code: 'PIN_PROOF_REQUIRED',
+        },
+        { status: 400, headers: { 'Cache-Control': 'no-store' } }
+      );
     if (result.status === 'pin_refused')
       return NextResponse.json(
         {

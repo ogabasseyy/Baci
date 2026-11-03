@@ -82,6 +82,15 @@ BEGIN
     IF COALESCE(v_result ->> 'status', '') <> 'claimed' THEN
       RETURN v_result;
     END IF;
+    -- A merchant with PIN checking off funds with no proof presented, as it
+    -- did before PIN checks existed. This is read here, after the reservation
+    -- holds its locks, so it is the state at the transition. A proof that IS
+    -- presented is always judged below, and a merchant with checking on can
+    -- never reserve without one.
+    IF (pin_proof IS NULL OR pin_proof = '')
+      AND wallet_pin_private.merchant_enabled(v_merchant_id) IS NOT TRUE THEN
+      RETURN v_result;
+    END IF;
     -- The proof is judged after the reservation holds its locks, and the
     -- consume function reads the clock itself after locking the proof row.
     v_outcome := wallet_pin_private.consume_wallet_pin_proof(

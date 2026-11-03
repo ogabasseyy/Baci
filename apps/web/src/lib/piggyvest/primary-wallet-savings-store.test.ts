@@ -155,7 +155,6 @@ it('reserves and spends the PIN proof through one fixed statement', async () => 
 });
 it.each([
   undefined,
-  '',
   'not-hex',
   'A'.repeat(64),
 ])('refuses a reservation without a well-formed PIN proof (%s) before storage contact', async (badProof) => {
@@ -189,4 +188,14 @@ it('rejects an unknown PIN refusal reason', async () => {
       pinProof
     )
   ).rejects.toThrow();
+});
+it('passes an empty proof through so the database can decide for merchants without PIN checking', async () => {
+  const execute = vi
+    .fn()
+    .mockResolvedValue({ rows: [{ result: { status: 'pending' } }] });
+  await createPrimaryWalletSavingsStore({ scope, execute }).reserve(
+    { goalId: operationId, operationId, amountKobo: 100 },
+    ''
+  );
+  expect(execute.mock.calls[0]?.[1]?.[2]).toBe('');
 });

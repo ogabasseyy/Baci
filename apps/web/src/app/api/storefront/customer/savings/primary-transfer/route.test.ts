@@ -164,12 +164,21 @@ it('returns pending and binds the request to the authenticated customer', async 
     })
   );
 });
-it('requires a PIN proof before any funding processing once savings is ready', async () => {
+it('lets the database decide a request with no proof, so merchants without PIN checking keep funding', async () => {
   const { pinProof: _omitted, ...withoutProof } = body;
+  mocks.submit.mockResolvedValue({ status: 'pending' });
+  const response = await POST(request(withoutProof));
+  expect(response.status).toBe(202);
+  expect(mocks.submit).toHaveBeenCalledWith(
+    expect.objectContaining({ pinProof: '' })
+  );
+});
+it('asks for the PIN when the database says a proof is missing', async () => {
+  const { pinProof: _omitted, ...withoutProof } = body;
+  mocks.submit.mockResolvedValue({ status: 'pin_refused', reason: 'missing' });
   const response = await POST(request(withoutProof));
   expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({ code: 'PIN_PROOF_REQUIRED' });
-  expect(mocks.submit).not.toHaveBeenCalled();
 });
 it('keeps the not-ready answer ahead of the PIN requirement so legacy funding can take over', async () => {
   const { pinProof: _omitted, ...withoutProof } = body;

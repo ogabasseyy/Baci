@@ -207,6 +207,20 @@ it('refuses a funding request without a PIN proof before any store or provider c
   expect(mocks.reserve).not.toHaveBeenCalled();
   expect(mocks.transfer).not.toHaveBeenCalled();
 });
+it('passes an empty proof to the reservation so the database decides', async () => {
+  mocks.reserve.mockResolvedValue({ status: 'pin_refused', reason: 'missing' });
+  expect(
+    await submitPrimaryWalletSavings({
+      configuration,
+      scope,
+      request,
+      providerToken: 'test-token',
+      pinProof: '',
+    })
+  ).toEqual({ status: 'pin_refused', reason: 'missing' });
+  expect(mocks.reserve).toHaveBeenCalledWith(expect.anything(), '');
+  expect(mocks.transfer).not.toHaveBeenCalled();
+});
 it('passes the PIN proof to the reservation and stops without a transfer when the PIN is refused', async () => {
   mocks.reserve.mockResolvedValue({ status: 'pin_refused', reason: 'used' });
   expect(

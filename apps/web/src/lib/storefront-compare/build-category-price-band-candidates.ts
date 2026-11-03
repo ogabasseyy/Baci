@@ -1,3 +1,4 @@
+import { isAvailableProduct } from '@/lib/storefront-content/is-available-product';
 import type { CommercialSupportProduct } from './build-commercial-support-links';
 import { buildPriceBandCandidate } from './compare-eligibility';
 import { getCuratedPriceBands } from './price-band-taxonomy';
@@ -11,11 +12,21 @@ import { getCuratedPriceBands } from './price-band-taxonomy';
  */
 export type PriceBandCandidate = ReturnType<typeof buildPriceBandCandidate>;
 
+function isProductEligibleForPriceBand(
+  product: CommercialSupportProduct
+): boolean {
+  if (!Number.isFinite(product.price) || product.price <= 0) return false;
+  if (product.has_condition_offers) return true;
+  return isAvailableProduct(product);
+}
+
 export function buildCategoryPriceBandCandidates(
   categorySlug: string,
-  products: CommercialSupportProduct[]
+  products: CommercialSupportProduct[],
+  options?: { merchantCurrency?: string | null }
 ): PriceBandCandidate[] {
-  return getCuratedPriceBands(categorySlug).map((band) =>
-    buildPriceBandCandidate({ categorySlug, band, products })
+  const availableProducts = products.filter(isProductEligibleForPriceBand);
+  return getCuratedPriceBands(categorySlug, options).map((band) =>
+    buildPriceBandCandidate({ categorySlug, band, products: availableProducts })
   );
 }

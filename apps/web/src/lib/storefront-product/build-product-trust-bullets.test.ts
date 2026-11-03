@@ -37,10 +37,69 @@ describe('buildProductTrustBullets', () => {
     expect(
       buildProductTrustBullets(
         makeInput({
-          categorySlug: 'playstation-5',
-          categoryName: 'PlayStation 5',
+          categorySlug: 'cameras',
+          categoryName: 'Cameras',
         })
       )
     ).toEqual(['Available in Open Box condition']);
+  });
+
+  it('omits price-band bullet for NGN-gated categories when currency is not passed to the ungated caller', () => {
+    expect(
+      buildProductTrustBullets(
+        makeInput({
+          categorySlug: 'gaming-laptops',
+          categoryName: 'Gaming Laptops',
+          currentProduct: {
+            slug: 'asus-rog',
+            name: 'ASUS ROG Strix',
+            price: 1_200_000,
+            condition: 'Open Box',
+          },
+        })
+      )
+    ).toEqual(['Available in Open Box condition']);
+  });
+
+  it('preserves price-band bullet for legacy categories with non-NGN currency per backwards compatibility contract', () => {
+    expect(
+      buildProductTrustBullets(
+        makeInput({
+          categorySlug: 'smartphones',
+          categoryName: 'Smartphones',
+          merchantCurrency: 'USD',
+          currentProduct: {
+            slug: 'iphone-16e',
+            name: 'iPhone 16e',
+            price: 450_000,
+            condition: 'Open Box',
+          },
+        })
+      )
+    ).toEqual([
+      'Available in Open Box condition',
+      'Listed in Best Smartphones Under ₦500,000',
+    ]);
+  });
+
+  it('includes price-band bullet for NGN-gated categories when currency is NGN', () => {
+    expect(
+      buildProductTrustBullets(
+        makeInput({
+          categorySlug: 'gaming-laptops',
+          categoryName: 'Gaming Laptops',
+          merchantCurrency: 'NGN',
+          currentProduct: {
+            slug: 'asus-rog',
+            name: 'ASUS ROG Strix',
+            price: 1_200_000,
+            condition: 'Open Box',
+          },
+        })
+      )
+    ).toEqual([
+      'Available in Open Box condition',
+      'Listed in Best Gaming Laptops Under ₦1,500,000',
+    ]);
   });
 });

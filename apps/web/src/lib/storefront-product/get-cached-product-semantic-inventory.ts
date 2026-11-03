@@ -51,6 +51,7 @@ export interface ProductSemanticInventoryRow {
   is_parent?: boolean | null;
   parent_product_id?: string | null;
   manage_stock?: boolean | null;
+  has_condition_offers?: boolean | null;
 }
 
 /**
@@ -70,6 +71,7 @@ export const PRODUCT_SEMANTIC_INVENTORY_BASE_SELECT = `
   is_parent,
   parent_product_id,
   manage_stock,
+  has_condition_offers,
   ${PRODUCT_KEY_SPECS_RELATION_SELECT}
 `;
 
@@ -196,6 +198,7 @@ function toProductSemanticCandidate(
     product_key_specs: normalizeProductKeySpecs(row.product_key_specs),
     is_parent: row.is_parent ?? null,
     parent_product_id: row.parent_product_id ?? null,
-    manage_stock: row.manage_stock,
+    manage_stock: row.manage_stock ?? null,
+    has_condition_offers: row.has_condition_offers ?? false,
   };
 }

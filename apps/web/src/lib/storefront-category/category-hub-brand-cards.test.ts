@@ -294,4 +294,26 @@ describe('buildCategoryHubBrandCards', () => {
     expect(cards[0]?.title).toBe('Apple');
     expect(cards[0]?.secondaryHref).toBeUndefined();
   });
+
+  it('honors explicitly supplied empty brand authority entries without falling back to unverified product eligibility', () => {
+    const products = Array.from({ length: 5 }, (_, i) => ({
+      slug: `ipad-${i}`,
+      brand: 'Apple',
+      name: `iPad ${i}`,
+      price: 200_000,
+      category_slug: 'tablets',
+    }));
+
+    const cards = buildCategoryHubBrandCards({
+      categorySlug: 'tablets',
+      storeUrl: 'https://ogabassey.com',
+      products,
+      brandAuthorityEntries: [],
+    });
+
+    // Does NOT link to /tablets/brands/apple; falls back to top brand with representative product link
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.href).toBe('https://ogabassey.com/tablets/ipad-0');
+    expect(cards[0]?.title).toBe('Apple');
+  });
 });

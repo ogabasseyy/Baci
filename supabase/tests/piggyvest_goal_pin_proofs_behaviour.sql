@@ -1,6 +1,6 @@
 -- REGRESSION TEST (behaviour): reserve_savings_with_pin reserves a goal
 -- funding transfer only when it spends a matching single-use PIN proof, and
--- a refused proof leaves nothing behind (migration 20261103012600).
+-- a refused proof leaves nothing behind (migration 20261103044600).
 --
 -- Synthetic, transaction-local fixture; the final ROLLBACK removes it. The
 -- fixture binds to the replay connection's SESSION_USER, as the recovery
@@ -8,7 +8,7 @@
 -- derived from labels (no PIN is typed, so no pepper or attestation is
 -- involved); the spend function under test reads them like real ones.
 --
--- Registered in the replay registry folder 20261103012600_piggyvest_goal_pin_proofs.
+-- Registered in the replay registry folder 20261103044600_piggyvest_goal_pin_proofs.
 
 BEGIN;
 

@@ -1,9 +1,9 @@
 -- REGRESSION TEST: PIN proof purposes and spend points for goal funding,
--- cancel and complete (migration 20261103012600).
+-- cancel and complete (migration 20261103044600).
 --
 -- Catalog checks only, never call-and-catch (a denied EXECUTE cannot be
 -- trapped on the replay image). Registered in the replay registry folder
--- 20261103012600_piggyvest_goal_pin_proofs.
+-- 20261103044600_piggyvest_goal_pin_proofs.
 
 BEGIN;
 

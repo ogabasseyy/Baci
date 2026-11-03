@@ -1,6 +1,8 @@
 const SHA_PATTERN = /^[0-9a-f]{40}$/i;
 const PAGE_SIZE = 100;
-const MAX_PAGES = 30;
+// Each superseding commit costs ~2 requests (runs + jobs), so the 800-request budget supports
+// about 400 of them; beyond that the guard refuses rather than judge a partial history.
+const MAX_PAGES = 4;
 const LOOKUP_CONCURRENCY = 5;
 // GITHUB_TOKEN allows ~1000 REST calls/hour/repository; leave room for the guard's other calls.
 const MAX_REQUESTS = 800;
@@ -16,7 +18,8 @@ export async function descendantAlreadyDeployed({ apiRoot, comparison, currentSh
     return fetchImpl(url, options);
   };
   const pages = Math.ceil(comparison.total_commits / PAGE_SIZE);
-  if (pages > MAX_PAGES || !Array.isArray(comparison.commits)) throw new Error('incomplete superseding commit list');
+  if (pages > MAX_PAGES) throw new Error('too many superseding commits for the request budget');
+  if (!Array.isArray(comparison.commits)) throw new Error('incomplete superseding commit list');
   const descendants = new Set();
   const add = (commits) => {
     for (const commit of commits) {
@@ -38,7 +41,7 @@ export async function descendantAlreadyDeployed({ apiRoot, comparison, currentSh
   const shas = [...descendants].reverse();
   for (let i = 0; i < shas.length; i += LOOKUP_CONCURRENCY) {
     const batch = await Promise.all(shas.slice(i, i + LOOKUP_CONCURRENCY).map(async (sha) => {
-      const body = await githubJson(counted, `${apiRoot}/repos/${repository}/actions/workflows/deploy.yml/runs?head_sha=${sha}&per_page=${PAGE_SIZE}`, token);
+      const body = await githubJson(counted, `${apiRoot}/repos/${repository}/actions/workflows/deploy.yml/runs?head_sha=${sha}&branch=main&per_page=${PAGE_SIZE}`, token);
       if (!Array.isArray(body?.workflow_runs) || (typeof body.total_count === 'number' && body.total_count > body.workflow_runs.length)) {
         throw new Error('incomplete or invalid workflow runs response');
       }

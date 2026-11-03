@@ -106,7 +106,7 @@ test('bugfix: only ever looks runs up by superseding head_sha (all-time history 
   const urls = [];
   await verify(farAheadFetch({ runs: [expectedRun], urls }));
   const runUrls = urls.filter((u) => u.includes('/deploy.yml/runs'));
-  assert.ok(runUrls.length > 0 && runUrls.every((u) => /head_sha=[0-9a-f]{40}/.test(u) && !u.includes('branch=')));
+  assert.ok(runUrls.length > 0 && runUrls.every((u) => /head_sha=[0-9a-f]{40}/.test(u) && u.includes('branch=main')));
 });
 
 test('bugfix: fails closed when the paged superseding list omits currentSha', async () => {
@@ -118,8 +118,20 @@ test('bugfix: fails closed when the superseding list contains the expected SHA',
 });
 
 test('bugfix: counts every lookup against the request budget and fails closed', async () => {
-  const commitList = Array.from({ length: 900 }, (_, i) => hex(i + 10)).concat(currentSha);
+  const commitList = Array.from({ length: 399 }, (_, i) => hex(i + 10)).concat(currentSha);
+  const runs = commitList.map((sha, i) => run(sha, 9000 + i, 'cancelled'));
   const urls = [];
-  await assert.rejects(verify(farAheadFetch({ runs: [], commitList, urls })), /request budget/);
-  assert.ok(urls.length < 900);
+  await assert.rejects(verify(farAheadFetch({ runs, commitList, urls })), /request budget/);
+  assert.ok(urls.length <= 802);
+});
+
+test('refuses, with a clear error, a gap beyond what the request budget can cover', async () => {
+  const commitList = Array.from({ length: 450 }, (_, i) => hex(i + 10)).concat(currentSha);
+  await assert.rejects(verify(farAheadFetch({ runs: [], commitList })), /too many superseding commits/);
+});
+
+test('covers a few hundred superseding commits with job lookups inside the budget', async () => {
+  const commitList = Array.from({ length: 299 }, (_, i) => hex(i + 10)).concat(currentSha);
+  const runs = commitList.map((sha, i) => run(sha, 9000 + i, 'cancelled'));
+  assert.deepEqual(await verify(farAheadFetch({ runs, commitList })), accepted);
 });

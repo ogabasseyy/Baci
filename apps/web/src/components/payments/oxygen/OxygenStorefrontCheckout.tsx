@@ -8,6 +8,7 @@ import { oxygenCheckoutOrderSchema } from '@/schemas/oxygen-checkout-order';
 import { oxygenCustomerPrefillSchema } from '@/schemas/oxygen-customer-prefill';
 import { OxygenApplicationDialog } from './OxygenApplicationDialog';
 import { OxygenMobileOrderSummary } from './OxygenMobileOrderSummary';
+import { OxygenRecoverySignIn } from './OxygenRecoverySignIn';
 import {
   ownsOxygenCheckoutOrder,
   readOwnedOxygenCustomerId,
@@ -28,22 +29,11 @@ export async function OxygenStorefrontCheckout({
     data: { user },
     error: authError,
   } = await client.auth.getUser();
+  if (authError || !user) {
+    return <OxygenRecoverySignIn merchantSlug={merchantSlug} />;
+  }
   const { selfie: selfieOrigins, hosted: hostedOrigins } =
     readOxygenHostedOrigins();
-  if (authError || !user) {
-    return (
-      <CheckoutPage
-        oxygenStep={
-          <OxygenApplicationDialog
-            orderId={orderId}
-            merchantSlug={merchantSlug}
-            selfieOrigins={selfieOrigins}
-            hostedOrigins={hostedOrigins}
-          />
-        }
-      />
-    );
-  }
   const customerId = await readOwnedOxygenCustomerId(
     client,
     orderId,
@@ -128,6 +118,7 @@ export async function OxygenStorefrontCheckout({
   );
   return (
     <CheckoutPage
+      verifiedOxygenOrderId={order.id}
       oxygenStep={
         <>
           <CheckoutStepCard

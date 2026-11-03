@@ -40,6 +40,9 @@ vi.mock('@/components/storefront/ogabassey/pages/checkout-page', () => ({
     </main>
   ),
 }));
+vi.mock('./OxygenRecoverySignIn', () => ({
+  OxygenRecoverySignIn: () => <p>Sign in to resume</p>,
+}));
 vi.mock('./OxygenProviderFlow', () => ({
   OxygenProviderFlow: ({
     orderId,
@@ -206,13 +209,13 @@ it('rejects a changed customer binding on the detailed read', async () => {
   ).rejects.toThrow('not found');
 });
 it('resumes the merchant-scoped order and displays persisted totals and checkout contact', async () => {
-  render(
-    await OxygenStorefrontCheckout({
-      orderId: id,
-      merchantId: 'merchant',
-      merchantSlug: 'shop',
-    })
-  );
+  const checkout = await OxygenStorefrontCheckout({
+    orderId: id,
+    merchantId: 'merchant',
+    merchantSlug: 'shop',
+  });
+  expect(checkout.props.verifiedOxygenOrderId).toBe(id);
+  render(checkout);
   expect(mocks.eq).toHaveBeenCalledWith('merchant_id', 'merchant');
   expect(mocks.eq).toHaveBeenCalledWith('id', id);
   expect(screen.getByText('Saved phone × 1')).toBeVisible();
@@ -237,16 +240,16 @@ it('refuses an order missing under caller RLS or belonging to a different mercha
     })
   ).rejects.toThrow('not found');
 });
-it('keeps sign-in inside checkout without reading private order data', async () => {
+it('allows sign-in before checkout without reading private order data', async () => {
   mocks.auth.mockResolvedValue({ data: { user: null }, error: null });
-  render(
-    await OxygenStorefrontCheckout({
-      orderId: id,
-      merchantId: 'merchant',
-      merchantSlug: 'shop',
-    })
-  );
-  expect(screen.getByText(`Verify ${id} for`)).toBeVisible();
+  const checkout = await OxygenStorefrontCheckout({
+    orderId: id,
+    merchantId: 'merchant',
+    merchantSlug: 'shop',
+  });
+  expect(checkout.props.verifiedOxygenOrderId).toBeUndefined();
+  render(checkout);
+  expect(screen.getByText('Sign in to resume')).toBeVisible();
   expect(mocks.from).not.toHaveBeenCalled();
 });
 

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
 import { expect, it, vi } from 'vitest';
 
+const mocks = vi.hoisted(() => ({ origins: vi.fn() }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({
@@ -9,33 +9,17 @@ vi.mock('@/lib/supabase/server', () => ({
   }),
 }));
 vi.mock('@/lib/payments/oxygen/oxygen-hosted-origins', () => ({
-  readOxygenHostedOrigins: () => ({
-    hosted: ['https://payment.example.test'],
-    selfie: ['https://selfie.example.test'],
-  }),
+  readOxygenHostedOrigins: mocks.origins,
 }));
-vi.mock('@/components/storefront/ogabassey/pages/checkout-page', () => ({
-  CheckoutPage: ({ oxygenStep }: { oxygenStep: ReactNode }) => (
-    <main>{oxygenStep}</main>
-  ),
-}));
-vi.mock('./OxygenApplicationDialog', () => ({
-  OxygenApplicationDialog: ({
-    hostedOrigins,
-    selfieOrigins,
-  }: {
-    hostedOrigins: string[];
-    selfieOrigins: string[];
-  }) => (
-    <p>
-      {hostedOrigins.join(',')} {selfieOrigins.join(',')}
-    </p>
+vi.mock('./OxygenRecoverySignIn', () => ({
+  OxygenRecoverySignIn: ({ merchantSlug }: { merchantSlug: string }) => (
+    <p>Sign in for {merchantSlug}</p>
   ),
 }));
 
 import { OxygenStorefrontCheckout } from './OxygenStorefrontCheckout';
 
-it('passes public payment and selfie origins to the resumed checkout before authentication', async () => {
+it('offers sign-in without loading hosted origins or private order data', async () => {
   render(
     await OxygenStorefrontCheckout({
       orderId: 'order',
@@ -43,7 +27,6 @@ it('passes public payment and selfie origins to the resumed checkout before auth
       merchantSlug: 'shop',
     })
   );
-  expect(
-    screen.getByText('https://payment.example.test https://selfie.example.test')
-  ).toBeVisible();
+  expect(screen.getByText('Sign in for shop')).toBeVisible();
+  expect(mocks.origins).not.toHaveBeenCalled();
 });

@@ -1,5 +1,4 @@
 'use client';
-
 import { useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
 import { useAuthSafe } from '@/contexts/auth-context';
@@ -48,7 +47,6 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
     quoteItemsFingerprint,
     sharedCartRef: checkoutSharedCartRef,
   } = deriveCheckoutCartModel(cart, hasPriceNegotiation, sharedCartRef);
-
   const {
     paystackCheckoutAvailable,
     korapayCheckoutAvailable,
@@ -76,7 +74,6 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
     clear: clearCheckoutSession,
     inferredLocation,
   } = checkoutFormState;
-
   const { currentStep, completedSteps, setCurrentStep, setCompletedSteps } =
     checkoutFlow;
   const checkoutAttempt = useCheckoutAttemptSession({
@@ -244,7 +241,9 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
       checkoutCart.length === 0,
       isLoadingResumedOrder,
       Boolean(isAutoTriggerProcessing),
-      Boolean(resumeOrderId && resumeOrderError)
+      Boolean(resumeOrderId && resumeOrderError),
+      oxygenSlots.verifiedOxygenOrderId,
+      searchParams.get('oxygenOrderId')
     )
   ) {
     return (
@@ -294,6 +293,8 @@ export const CheckoutPage: React.FC<OxygenCheckoutSlots> = (oxygenSlots) => {
       model={{ ...screenModel, ...oxygenSlots }}
       order={resumedOrder}
       requestedId={searchParams.get('orderId')}
+      verifiedOxygenOrderId={oxygenSlots.verifiedOxygenOrderId}
+      requestedOxygenId={searchParams.get('oxygenOrderId')}
     />
   );
 };

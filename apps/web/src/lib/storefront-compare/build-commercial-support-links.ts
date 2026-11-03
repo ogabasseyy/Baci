@@ -24,6 +24,10 @@ export interface CommercialSupportProduct {
   price: number;
   category_slug?: string | null;
   product_key_specs?: Record<string, unknown> | null;
+  stock?: number | null;
+  stock_quantity?: number | null;
+  manage_stock?: boolean | null;
+  has_condition_offers?: boolean | null;
 }
 
 export function buildCategorySupportLinks(input: {

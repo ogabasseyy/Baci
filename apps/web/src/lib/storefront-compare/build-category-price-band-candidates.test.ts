@@ -62,4 +62,25 @@ describe('buildCategoryPriceBandCandidates', () => {
       })
     ).toEqual([]);
   });
+
+  it('excludes managed out-of-stock products without condition offers from candidates', () => {
+    const products = [
+      ...Array.from({ length: 6 }, (_, i) => ({
+        slug: `apple-${i}`,
+        name: `Apple ${i}`,
+        brand: 'Apple',
+        price: 400_000,
+        manage_stock: true,
+        stock: 0,
+        has_condition_offers: false,
+      })),
+    ];
+
+    const candidates = buildCategoryPriceBandCandidates(
+      'smartphones',
+      products
+    );
+    expect(candidates[0]?.activeProductCount).toBe(0);
+    expect(candidates[0]?.isIndexable).toBe(false);
+  });
 });

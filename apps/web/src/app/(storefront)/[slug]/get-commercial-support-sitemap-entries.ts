@@ -104,6 +104,20 @@ export async function getCommercialSupportSitemapEntries(
             name: product.name,
             brand: product.brand,
             price: product.price,
+            stock:
+              typeof product.stock === 'number'
+                ? product.stock
+                : typeof product.stock === 'string'
+                  ? Number(product.stock)
+                  : null,
+            stock_quantity:
+              typeof product.stock_quantity === 'number'
+                ? product.stock_quantity
+                : typeof product.stock_quantity === 'string'
+                  ? Number(product.stock_quantity)
+                  : null,
+            manage_stock: product.manage_stock,
+            has_condition_offers: product.has_condition_offers ?? false,
             category_slug: getRawProductCategorySlug(product, categorySlug),
             product_key_specs: normalizeProductKeySpecs(
               product.product_key_specs

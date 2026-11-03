@@ -19,6 +19,7 @@ export function ownsOxygenCheckoutOrder(
   return (
     order?.id === orderId &&
     order.merchant_id === merchantId &&
+    order.payment_method === 'oxygen' &&
     order.customer_id === customerId &&
     customer?.id === customerId &&
     customer.merchant_id === merchantId &&
@@ -35,15 +36,17 @@ export async function readOwnedOxygenCustomerId(
 ): Promise<string | null> {
   const orderResult = await client
     .from('orders')
-    .select('id, customer_id, merchant_id')
+    .select('id, customer_id, merchant_id, payment_method')
     .eq('id', orderId)
     .eq('merchant_id', merchantId)
+    .eq('payment_method', 'oxygen')
     .maybeSingle();
   const order = record(orderResult.data);
   if (
     orderResult.error ||
     order?.id !== orderId ||
     order.merchant_id !== merchantId ||
+    order.payment_method !== 'oxygen' ||
     typeof order.customer_id !== 'string' ||
     !order.customer_id
   )

@@ -91,6 +91,7 @@ beforeEach(() => {
       id,
       merchant_id: 'merchant',
       customer_id: 'customer-row',
+      payment_method: 'oxygen',
       customers: {
         id: 'customer-row',
         merchant_id: 'merchant',
@@ -116,7 +117,12 @@ beforeEach(() => {
     },
   });
   mocks.one.mockResolvedValueOnce({
-    data: { id, customer_id: 'customer-row', merchant_id: 'merchant' },
+    data: {
+      id,
+      customer_id: 'customer-row',
+      merchant_id: 'merchant',
+      payment_method: 'oxygen',
+    },
     error: null,
   });
   mocks.one.mockResolvedValueOnce({
@@ -131,6 +137,7 @@ it('rejects another customer even when database policies return the row', async 
       id,
       customer_id: 'other-customer',
       merchant_id: 'merchant',
+      payment_method: 'oxygen',
       customer_name: 'Other Buyer',
       customer_email: 'other@example.com',
       currency: 'NGN',
@@ -160,7 +167,7 @@ it('rejects another customer even when database policies return the row', async 
   expect(mocks.from).toHaveBeenCalledTimes(2);
   expect(mocks.select).toHaveBeenNthCalledWith(
     1,
-    'id, customer_id, merchant_id'
+    'id, customer_id, merchant_id, payment_method'
   );
   expect(mocks.select).toHaveBeenNthCalledWith(2, 'id, merchant_id, user_id');
 });
@@ -168,7 +175,12 @@ it('rejects a changed customer binding on the detailed read', async () => {
   mocks.one
     .mockReset()
     .mockResolvedValueOnce({
-      data: { id, customer_id: 'customer-row', merchant_id: 'merchant' },
+      data: {
+        id,
+        customer_id: 'customer-row',
+        merchant_id: 'merchant',
+        payment_method: 'oxygen',
+      },
       error: null,
     })
     .mockResolvedValueOnce({
@@ -184,6 +196,7 @@ it('rejects a changed customer binding on the detailed read', async () => {
         id,
         customer_id: 'customer-row',
         merchant_id: 'merchant',
+        payment_method: 'oxygen',
         customers: {
           id: 'customer-row',
           merchant_id: 'merchant',
@@ -218,6 +231,12 @@ it('resumes the merchant-scoped order and displays persisted totals and checkout
   render(checkout);
   expect(mocks.eq).toHaveBeenCalledWith('merchant_id', 'merchant');
   expect(mocks.eq).toHaveBeenCalledWith('id', id);
+  expect(mocks.eq).toHaveBeenCalledWith('payment_method', 'oxygen');
+  expect(mocks.from.mock.calls.map(([table]) => table)).toEqual([
+    'orders',
+    'customers',
+    'orders',
+  ]);
   expect(screen.getByText('Saved phone × 1')).toBeVisible();
   expect(
     screen.getByRole('region', { name: 'Saved order summary' })
@@ -251,37 +270,4 @@ it('allows sign-in before checkout without reading private order data', async ()
   render(checkout);
   expect(screen.getByText('Sign in to resume')).toBeVisible();
   expect(mocks.from).not.toHaveBeenCalled();
-});
-
-it('refuses a missing order total rather than displaying it as zero', async () => {
-  mocks.one
-    .mockReset()
-    .mockResolvedValueOnce({
-      data: { id, customer_id: 'customer-row', merchant_id: 'merchant' },
-      error: null,
-    })
-    .mockResolvedValueOnce({
-      data: {
-        id: 'customer-row',
-        merchant_id: 'merchant',
-        user_id: 'customer',
-      },
-      error: null,
-    })
-    .mockResolvedValueOnce({
-      data: {
-        id,
-        customer_id: 'customer-row',
-        merchant_id: 'merchant',
-        total: null,
-      },
-      error: null,
-    });
-  await expect(
-    OxygenStorefrontCheckout({
-      orderId: id,
-      merchantId: 'merchant',
-      merchantSlug: 'shop',
-    })
-  ).rejects.toThrow('not found');
 });

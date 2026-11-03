@@ -1,3 +1,4 @@
+import { isAuthSessionMissingError } from '@supabase/supabase-js';
 import { notFound } from 'next/navigation';
 import { CheckoutStepCard } from '@/components/storefront/ogabassey/pages/checkout/components/CheckoutStepCard';
 import { CheckoutPage } from '@/components/storefront/ogabassey/pages/checkout-page';
@@ -29,9 +30,19 @@ export async function OxygenStorefrontCheckout({
     data: { user },
     error: authError,
   } = await client.auth.getUser();
-  if (authError || !user) {
-    return <OxygenRecoverySignIn merchantSlug={merchantSlug} />;
+  if (authError && (!isAuthSessionMissingError(authError) || user)) {
+    return (
+      <main className="mx-auto w-full max-w-lg px-4 py-8">
+        <p role="alert">We couldn’t confirm your sign-in. Please try again.</p>
+        <a
+          href={`/${encodeURIComponent(merchantSlug)}/checkout?oxygenOrderId=${encodeURIComponent(orderId)}`}
+        >
+          Try again
+        </a>
+      </main>
+    );
   }
+  if (!user) return <OxygenRecoverySignIn merchantSlug={merchantSlug} />;
   const { selfie: selfieOrigins, hosted: hostedOrigins } =
     readOxygenHostedOrigins();
   const customerId = await readOwnedOxygenCustomerId(
@@ -44,11 +55,12 @@ export async function OxygenStorefrontCheckout({
   const { data, error } = await client
     .from('orders')
     .select(
-      'id, merchant_id, customer_id, customers!orders_customer_id_fkey1!inner(id, merchant_id, user_id), customer_name, customer_email, currency, subtotal, shipping_fee, tax_amount, total, order_items(id, name, image_url, quantity, price, products:products!order_items_product_id_fkey(images))'
+      'id, merchant_id, customer_id, payment_method, customers!orders_customer_id_fkey1!inner(id, merchant_id, user_id), customer_name, customer_email, currency, subtotal, shipping_fee, tax_amount, total, order_items(id, name, image_url, quantity, price, products:products!order_items_product_id_fkey(images))'
     )
     .eq('id', orderId)
     .eq('merchant_id', merchantId)
     .eq('customer_id', customerId)
+    .eq('payment_method', 'oxygen')
     .eq('customers.user_id', user.id)
     .maybeSingle();
   const parsed = oxygenCheckoutOrderSchema.safeParse(data);

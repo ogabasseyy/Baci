@@ -19,7 +19,7 @@ it('acknowledges only durable storage and never treats settlement as received fu
       deduplicationKey: 'address:synthetic',
       action: 'reconcile_kyc',
     })
-  ).resolves.toBe('accepted');
+  ).resolves.toEqual({ result: 'accepted' });
   rpc.mockResolvedValue({ data: null, error: { code: 'storage_failure' } });
   await expect(
     acceptOxygenCallback({ rpc }, 'partner', {

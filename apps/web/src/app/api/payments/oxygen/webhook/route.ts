@@ -17,12 +17,13 @@ export async function POST(request: Request) {
   // Header authentication and body validation run before worker login.
   return await receiveOxygenWebhook(request, configuration, async (event) => {
     const worker = await connection.worker();
-    const result = await acceptOxygenCallback(
+    const acceptance = await acceptOxygenCallback(
       worker,
       connection.partnerReference,
       event
     );
     if (
+      !(acceptance.result === 'duplicate' && acceptance.wakeNeeded === false) &&
       event.kind !== 'settlement' &&
       !(event.kind === 'address' && !event.applicationReference)
     )
@@ -51,6 +52,6 @@ export async function POST(request: Request) {
           /* Durable queued inbox remains available for replay. */
         }
       });
-    return result;
+    return acceptance.result;
   });
 }

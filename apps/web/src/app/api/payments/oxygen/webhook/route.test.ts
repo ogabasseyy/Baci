@@ -79,7 +79,38 @@ it('does not acknowledge failed persistence or schedule provider work', async ()
   expect(m.after).not.toHaveBeenCalled();
 });
 
-it('dispatches a durably accepted transaction to the exact callback payment recovery binding', async () => {
+it('acknowledges a terminal duplicate without scheduling another drain', async () => {
+  m.rpc.mockResolvedValue({
+    error: null,
+    data: { result: 'duplicate', wakeNeeded: false },
+  });
+  const incoming = new Request('https://local/api/payments/oxygen/webhook', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      api_key: 'synthetic-key',
+      api_secret: 'synthetic-secret',
+    },
+    body: JSON.stringify({
+      phone_number: '08000000000',
+      transaction_reference: 'synthetic-transaction',
+      amount_deducted: '100.00',
+      amount_sent: '100.00',
+      loan_request_reference: '70000000-0000-4000-8000-000000000001',
+    }),
+  });
+  const response = await POST(incoming);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ received: true });
+  expect(m.after).not.toHaveBeenCalled();
+});
+
+it.each([
+  { result: 'accepted', wakeNeeded: true },
+  { result: 'accepted', wakeNeeded: false }, // A new delivery must always wake.
+  { result: 'duplicate', wakeNeeded: true },
+  { result: 'duplicate' }, // Older database migrations do not return wakeNeeded.
+] as const)('wakes a pending $result transaction using the exact callback recovery binding', async (acceptance) => {
   const id = '60000000-0000-4000-8000-000000000001';
   const retry = '60000000-0000-4000-8000-000000000002';
   const reference = '70000000-0000-4000-8000-000000000001';
@@ -97,7 +128,7 @@ it('dispatches a durably accepted transaction to the exact callback payment reco
       data:
         args.p_operation === 'pending'
           ? [{ id, kind: 'transaction', retryKey: retry, workflowIds: [id] }]
-          : { result: 'accepted', recorded: true },
+          : { ...acceptance, recorded: true },
     })
   );
   const incoming = new Request('https://local/api/payments/oxygen/webhook', {
@@ -126,7 +157,10 @@ it('dispatches a durably accepted transaction to the exact callback payment reco
   );
 });
 
-it('processes an address callback only for its supplied application, without draining old transaction jobs', async () => {
+it.each([
+  'accepted',
+  'duplicate',
+] as const)('wakes a pending %s address callback only for its supplied application', async (acceptance) => {
   const workflow = '60000000-0000-4000-8000-000000000011';
   const application = '60000000-0000-4000-8000-000000000012';
   const callback = '60000000-0000-4000-8000-000000000013';
@@ -158,7 +192,8 @@ it('processes an address callback only for its supplied application, without dra
   m.rpc.mockImplementation(
     async (_name: string, args: Record<string, unknown>) => {
       let data: unknown = { recorded: true };
-      if (args.p_operation === 'accept') data = { result: 'accepted' };
+      if (args.p_operation === 'accept')
+        data = { result: acceptance, wakeNeeded: true };
       if (args.p_operation === 'pending')
         data = [
           {

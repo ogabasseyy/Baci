@@ -36,8 +36,11 @@ export async function acceptOxygenCallback(
   event: OxygenWebhookEvent
 ) {
   return z
-    .object({ result: z.enum(['accepted', 'duplicate']) })
-    .parse(await callbackRpc(worker, partner, 'accept', event)).result;
+    .object({
+      result: z.enum(['accepted', 'duplicate']),
+      wakeNeeded: z.boolean().optional(),
+    })
+    .parse(await callbackRpc(worker, partner, 'accept', event));
 }
 /** A callback is a hint to perform a scoped provider read. Neither monetary
  * callback fields nor redirects can confirm payment, activation or settlement. */

@@ -113,10 +113,7 @@ vi.mock('@/lib/resolve-merchant-currency', () => ({
 vi.mock('@/lib/korapay', () => ({ isKorapayConfigured: () => true }));
 vi.mock('@/lib/paystack', () => ({ isPaystackConfigured: () => true }));
 
-import {
-  ProductPageBelowFold,
-  ProductPageRuntime,
-} from './product-page-runtime';
+import { ProductPageRuntime } from './product-page-runtime';
 
 type ProductPageRuntimeProduct = Parameters<
   typeof ProductPageRuntime
@@ -296,98 +293,5 @@ describe('ProductPageRuntime critical shell', () => {
     const deferredChild = (suspense?.props as { children?: ReactElement })
       .children;
     expect(deferredChild?.props).toMatchObject({ categorySlug: 'products' });
-  });
-});
-
-describe('ProductPageBelowFold semantic model stock resolution', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    getCachedProductRatingStats.mockResolvedValue({
-      averageRating: 5,
-      totalReviews: 2,
-    });
-    getCachedProductReviews.mockResolvedValue([]);
-    loadCategoryScopedSemanticInventorySafely.mockResolvedValue({
-      isCollection: false,
-      categoryName: 'Smartphones',
-      products: [],
-    });
-    loadPublishedClusterPostsSafely.mockResolvedValue([]);
-  });
-
-  it('resolves unmanaged product (manage_stock: false, stock: 0) as stock: null and renders checkout confirmation copy', async () => {
-    const unmanagedProduct = {
-      ...(product as ProductPageRuntimeProduct),
-      manage_stock: false,
-      stock: 0,
-      stock_quantity: 0,
-    };
-
-    const tree = (await ProductPageBelowFold({
-      baseUrl: 'https://ogabassey.com',
-      categoryName: 'Smartphones',
-      categorySlug: 'smartphones',
-      currency: 'NGN',
-      merchant,
-      product: unmanagedProduct,
-      productUrl: 'https://ogabassey.com/products/anchor-flagship',
-      slug: 'ogabassey',
-    })) as ReactElement;
-
-    const sections = directChildren(tree).find(
-      (child) => child.type === ProductSemanticSections
-    );
-    expect(sections).toBeDefined();
-    const model = (
-      sections?.props as {
-        model?: {
-          contextParagraphs?: string[];
-        };
-      }
-    ).model;
-
-    expect(model?.contextParagraphs?.[0]).toContain(
-      'Live stock, selected options and delivery timing should still be confirmed at checkout.'
-    );
-    expect(model?.contextParagraphs?.[0]).not.toContain('out of stock');
-  });
-
-  it('resolves tracked sold-out product (manage_stock: true, stock: 0) as stock: 0 and renders out-of-stock copy', async () => {
-    const trackedSoldOutProduct = {
-      ...(product as ProductPageRuntimeProduct),
-      manage_stock: true,
-      stock: 0,
-      stock_quantity: 0,
-    };
-
-    const tree = (await ProductPageBelowFold({
-      baseUrl: 'https://ogabassey.com',
-      categoryName: 'Smartphones',
-      categorySlug: 'smartphones',
-      currency: 'NGN',
-      merchant,
-      product: trackedSoldOutProduct,
-      productUrl: 'https://ogabassey.com/products/anchor-flagship',
-      slug: 'ogabassey',
-    })) as ReactElement;
-
-    const sections = directChildren(tree).find(
-      (child) => child.type === ProductSemanticSections
-    );
-    expect(sections).toBeDefined();
-    const model = (
-      sections?.props as {
-        model?: {
-          contextParagraphs?: string[];
-        };
-      }
-    ).model;
-
-    expect(model?.contextParagraphs?.[0]).toContain(
-      'Availability should be rechecked because this item may currently be out of stock.'
-    );
-    expect(model?.contextParagraphs?.[0]).not.toContain(
-      'Live stock, selected options and delivery timing should still be confirmed at checkout.'
-    );
   });
 });

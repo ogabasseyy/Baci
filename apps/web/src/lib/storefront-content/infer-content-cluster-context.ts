@@ -236,7 +236,13 @@ function inferBrands(
         .flatMap(
           (s) => Object.entries(s.brandTokens) as [string, readonly string[]][]
         )
-        .filter(([, a]) => a.some((alias) => hasPhrase(haystack, alias)))
+        .filter(([, a]) =>
+          a.some((alias) =>
+            alias === 'blade'
+              ? hasPhrase(haystack, 'blade') && hasPhrase(haystack, 'razer')
+              : hasPhrase(haystack, alias)
+          )
+        )
         .map(([brand]) => brand)
     ),
   ];

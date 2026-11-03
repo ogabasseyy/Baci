@@ -126,4 +126,15 @@ describe('inferContentClusterContext - gaming laptops promotion & demotion', () 
       expect(guide.categorySlug).toBe('gaming-laptops');
     }
   });
+
+  it('does not attribute razer brand to blade titles lacking razer parent brand', () => {
+    const post = inferContentClusterContext({
+      title: 'Blade Vampire Action Game Review',
+      excerpt: 'Exciting gothic combat and vampire hunter lore.',
+      category: 'Laptops',
+      tags: ['blade', 'action'],
+      keywords: ['review'],
+    });
+    expect(post.brands).not.toContain('razer');
+  });
 });

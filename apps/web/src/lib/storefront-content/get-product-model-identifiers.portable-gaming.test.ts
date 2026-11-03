@@ -48,4 +48,20 @@ describe('getProductModelIdentifiers portable gaming', () => {
     });
     expect(tuf).toEqual(['tuf f15']);
   });
+
+  it('retains family aliases for non-gaming laptop category slugs', () => {
+    const latitude = getProductModelIdentifiers({
+      categorySlug: 'laptops',
+      brands: ['Dell'],
+      productSlugs: ['dell-latitude-5410'],
+    });
+    expect(latitude).toEqual(['latitude 5410']);
+
+    const omen = getProductModelIdentifiers({
+      categorySlug: 'laptops',
+      brands: ['HP'],
+      productSlugs: ['hp-omen-16'],
+    });
+    expect(omen).toEqual(['omen 16']);
+  });
 });

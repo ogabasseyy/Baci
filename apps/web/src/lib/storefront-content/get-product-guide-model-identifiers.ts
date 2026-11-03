@@ -35,10 +35,7 @@ export function getProductGuideModelIdentifiers(
               'gaming',
             ]);
             const rest = identifierTokens.slice(1);
-            return [
-              ...(hasTufGaming ? [['tuf', 'gaming', ...rest].join(' ')] : []),
-              rest.join(' '),
-            ];
+            return hasTufGaming ? [['tuf', 'gaming', ...rest].join(' ')] : [];
           })
         : [];
     if (identifierTokens.length < 2 || !/^\d{3,}$/u.test(modelCode)) {

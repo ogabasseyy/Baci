@@ -328,7 +328,12 @@ BEGIN
     PERFORM pg_temp.gc_assert(SQLERRM = 'cannot delete goal with unsettled goal cancellations',
       'goal deletion guard raised another error: ' || SQLERRM);
   END;
+  -- The earlier bank-inbox guard refuses a customer whose provider wallet is
+  -- still open before this guard runs, so the fixture's wallet is closed first.
+  -- The close is undone with the failed delete when the handler below runs.
   BEGIN
+    UPDATE piggyvest_primary.onboarding_intents SET provider_closed_at = pg_catalog.clock_timestamp()
+     WHERE id = 'f3860000-0000-4000-8000-000000000007';
     DELETE FROM public.customers WHERE id = 'f3860000-0000-4000-8000-000000000003';
     RAISE EXCEPTION 'a customer with a dispatched cancel was deleted' USING ERRCODE = 'PVT00';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN

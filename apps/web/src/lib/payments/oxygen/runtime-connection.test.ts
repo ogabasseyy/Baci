@@ -99,6 +99,33 @@ it('does not use staging callback credentials for an ambiguous or mismatched dep
   expect(oxygenRuntimeCallbackConfiguration()).toBeNull();
 });
 
+it('selects callback credentials only from the configured deployment environment', () => {
+  for (const [name, value] of Object.entries({
+    OXYGEN_STAGING_PARTNER_REFERENCE: 'stage-partner',
+    OXYGEN_STAGING_CALLBACK_KEY: 'stage-key',
+    OXYGEN_STAGING_CALLBACK_SECRET: 'stage-secret',
+    OXYGEN_PRODUCTION_PARTNER_REFERENCE: 'prod-partner',
+    OXYGEN_PRODUCTION_CALLBACK_KEY: 'prod-key',
+    OXYGEN_PRODUCTION_CALLBACK_SECRET: 'prod-secret',
+    OXYGEN_PRODUCTION_RUNTIME_ENABLED: 'true',
+  }))
+    vi.stubEnv(name, value);
+  vi.stubEnv('OXYGEN_ENVIRONMENT', 'staging');
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  expect(oxygenRuntimeCallbackConfiguration()).toEqual({
+    partnerReference: 'stage-partner',
+    auth: { mode: 'API_KEY', apiKey: 'stage-key', apiSecret: 'stage-secret' },
+  });
+  vi.stubEnv('OXYGEN_ENVIRONMENT', 'production');
+  vi.stubEnv('VERCEL_ENV', 'production');
+  expect(oxygenRuntimeCallbackConfiguration()).toEqual({
+    partnerReference: 'prod-partner',
+    auth: { mode: 'API_KEY', apiKey: 'prod-key', apiSecret: 'prod-secret' },
+  });
+  vi.stubEnv('OXYGEN_PRODUCTION_CALLBACK_SECRET', '');
+  expect(oxygenRuntimeCallbackConfiguration()).toBeNull();
+});
+
 it('refuses execution when response evidence cannot be encrypted', () => {
   vi.stubEnv('VERCEL_ENV', 'preview');
   for (const name of [

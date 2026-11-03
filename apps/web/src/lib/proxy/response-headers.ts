@@ -69,7 +69,13 @@ export function applySecurityHeaders(
   hostname?: string
 ): NextResponse {
   // Apply Content Security Policy
-  const csp = generateCSP(routeType, isLocal, nonce, pathname);
+  const csp = generateCSP(
+    routeType,
+    isLocal,
+    nonce,
+    pathname,
+    request?.nextUrl.searchParams
+  );
   response.headers.set('Content-Security-Policy', csp);
 
   // Add missing security headers
@@ -102,7 +108,8 @@ export function applySecurityHeaders(
   const isCreditDirectRoute =
     isCheckoutRoute || (routeType === 'storefront' && isBnplLauncher);
   const isOxygenRoute =
-    routeType === 'storefront' && isOxygenPaymentSurface(pathname);
+    routeType === 'storefront' &&
+    isOxygenPaymentSurface(pathname, request?.nextUrl.searchParams);
   const selfieOrigins = isOxygenRoute
     ? readOxygenHostedOrigins()
         .selfie.map((origin) => `"${origin}" `)

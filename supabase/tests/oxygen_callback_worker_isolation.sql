@@ -50,6 +50,15 @@ SELECT set_config('test.foreign.env.id',id::text,true),set_config('test.foreign.
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efae0000-0000-4000-8000-000000000003',true);
 DO $$ DECLARE jobs jsonb; BEGIN
+ BEGIN
+  PERFORM public.oxygen_callback('accept','other-partner','{"kind":"transaction","bookedLoanReference":"efae0000-0000-4000-8000-000000000072","deduplicationKey":"foreign-worker"}');
+  RAISE EXCEPTION 'Worker accepted callback for another partner';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ -- Authenticated callbacks without a partner field are hints only. A foreign
+ -- booking reference must not resolve to another partner's workflow.
+ PERFORM public.oxygen_callback('accept','response-evidence-fixture','{"kind":"transaction","bookedLoanReference":"efae0000-0000-4000-8000-000000000072","deduplicationKey":"foreign-reference"}');
+ jobs:=public.oxygen_callback('pending','response-evidence-fixture','{"kind":"transaction"}');
+ IF jsonb_array_length(jobs)<>0 THEN RAISE EXCEPTION 'Foreign booking became a reconciliation candidate'; END IF;
  jobs:=public.oxygen_callback('pending','response-evidence-fixture','{"kind":"address"}');
  IF jsonb_array_length(jobs)<>1 OR jobs->0->'workflowIds'<>'["efae0000-0000-4000-8000-000000000041"]'::jsonb THEN RAISE EXCEPTION 'Cross-partner or environment candidate leakage'; END IF;
  BEGIN PERFORM public.oxygen_callback('pending','other-partner','{}'); RAISE EXCEPTION 'Worker read another partner'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;

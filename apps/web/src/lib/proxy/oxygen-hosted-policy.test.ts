@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { afterEach, expect, it, vi } from 'vitest';
 import { applySecurityHeaders } from './response-headers';
 
@@ -15,7 +15,11 @@ it('allows only exact configured hosted origins and delegates camera only to sel
     '/shop/checkout',
     'test',
     'storefront',
-    false
+    false,
+    undefined,
+    new NextRequest(
+      'https://shop.example.test/shop/checkout?oxygenOrderId=6974e8cc-4e90-4ca9-b2cf-aa2abaf461df'
+    )
   );
   const csp = response.headers.get('Content-Security-Policy') ?? '';
   const camera = response.headers.get('Permissions-Policy') ?? '';
@@ -81,4 +85,44 @@ it.each([
   expect(response.headers.get('Permissions-Policy')).toContain(
     'camera=(), microphone=()'
   );
+});
+
+it.each([
+  '/checkout',
+  '/shop/checkout',
+])('limits Oxygen policy on %s to a single valid order query', (path) => {
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  vi.stubEnv('OXYGEN_STAGING_HOSTED_HOSTS', 'frame.example.test');
+  vi.stubEnv('OXYGEN_STAGING_SELFIE_HOSTS', 'frame.example.test');
+  const order = '6974e8cc-4e90-4ca9-b2cf-aa2abaf461df';
+  for (const [query, expected] of [
+    ['', false],
+    ['?oxygenOrderId=bad', false],
+    [`?oxygenOrderId=${order}&oxygenOrderId=${order}`, false],
+    [`?oxygenOrderId=${order}`, true],
+  ] as const) {
+    const request = new NextRequest(`https://shop.example.test${path}${query}`);
+    const response = applySecurityHeaders(
+      NextResponse.next(),
+      path,
+      'test',
+      'storefront',
+      false,
+      undefined,
+      request
+    );
+    expect(
+      response.headers
+        .get('Content-Security-Policy')
+        ?.includes('https://frame.example.test')
+    ).toBe(expected);
+    expect(
+      response.headers
+        .get('Permissions-Policy')
+        ?.includes('https://frame.example.test')
+    ).toBe(expected);
+    expect(response.headers.get('Permissions-Policy')).toContain(
+      'https://checkout.creditdirect.ng'
+    );
+  }
 });

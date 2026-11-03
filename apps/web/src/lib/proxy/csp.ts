@@ -7,10 +7,12 @@ export function generateCSP(
   routeType: 'admin' | 'auth' | 'storefront' | 'api',
   isLocal: boolean,
   nonce?: string,
-  pathname?: string
+  pathname?: string,
+  searchParams?: URLSearchParams
 ): string {
   const hostedOrigins =
-    routeType === 'storefront' && isOxygenPaymentSurface(pathname ?? '')
+    routeType === 'storefront' &&
+    isOxygenPaymentSurface(pathname ?? '', searchParams)
       ? readOxygenHostedOrigins().hosted
       : [];
   const storefrontUnsafeEval = isLocal ? " 'unsafe-eval'" : '';

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import samples from './__fixtures__/webhook-samples.json';
 import type { OxygenWebhookEvent } from './webhook';
 import { receiveOxygenWebhook } from './webhook-receiver';
@@ -103,6 +103,20 @@ describe('Oxygen callback receiver', () => {
     );
     expect(response.status).toBe(401);
     expect(accepted).toEqual([]);
+  });
+  it('rejects staging credentials on the production receiver before accepting', async () => {
+    const accept = vi.fn();
+    const production = {
+      partnerReference: 'production-partner',
+      auth: {
+        mode: 'API_KEY' as const,
+        apiKey: 'production-key',
+        apiSecret: 'production-secret',
+      },
+    };
+    const response = await receiveOxygenWebhook(request(), production, accept);
+    expect(response.status).toBe(401);
+    expect(accept).not.toHaveBeenCalled();
   });
   it('fails closed with empty configured credentials', async () => {
     const response = await receiveOxygenWebhook(

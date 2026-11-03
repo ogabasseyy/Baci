@@ -5,6 +5,7 @@ import {
 } from '../utils';
 import type { CheckoutOrderItem } from '@/lib/checkout/build-order-items';
 import { initializeCardPayment } from './place-order-card-payment';
+import { navigateToOxygenOrder } from './navigate-to-oxygen-order';
 import { routePlaceOrderFinancing } from './place-order-financing';
 import type { LegacyOrderData, PlaceOrderOptions } from './place-order-types';
 import type { buildShippingAddress } from './place-order-shipping';
@@ -61,7 +62,7 @@ export async function routePlaceOrderPayment(
   }
 
   if (paymentMethod === 'oxygen') {
-    routerPush(`/payments/oxygen/${order.id}`);
+    navigateToOxygenOrder(order.id);
     return;
   }
 

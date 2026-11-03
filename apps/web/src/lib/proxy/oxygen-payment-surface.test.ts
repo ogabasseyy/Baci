@@ -21,8 +21,14 @@ it.each([
   '/checkout/',
   '/shop/checkout',
   '/shop/checkout/',
-])('keeps checkout %s as a payment surface', (path) => {
-  expect(isOxygenPaymentSurface(path)).toBe(true);
+])('only grants checkout %s with a valid order query', (path) => {
+  expect(isOxygenPaymentSurface(path)).toBe(false);
+  expect(
+    isOxygenPaymentSurface(
+      path,
+      new URLSearchParams('oxygenOrderId=6974e8cc-4e90-4ca9-b2cf-aa2abaf461df')
+    )
+  ).toBe(true);
 });
 it('permits the trailing slash for a valid payment order', () => {
   expect(

@@ -178,7 +178,11 @@ it('delegates only explicitly configured staging selfie camera origins on checko
       '/checkout',
       'Mozilla',
       'storefront',
-      false
+      false,
+      undefined,
+      new NextRequest(
+        'https://shop.example.test/checkout?oxygenOrderId=6974e8cc-4e90-4ca9-b2cf-aa2abaf461df'
+      )
     );
     const product = applySecurityHeaders(
       NextResponse.next(),
@@ -206,7 +210,11 @@ it('delegates only explicitly configured staging selfie camera origins on checko
       '/shop/checkout',
       'Mozilla',
       'storefront',
-      false
+      false,
+      undefined,
+      new NextRequest(
+        'https://example.test/shop/checkout?oxygenOrderId=6974e8cc-4e90-4ca9-b2cf-aa2abaf461df'
+      )
     );
     expect(slugCheckout.headers.get('Content-Security-Policy')).toContain(host);
     const payment = applySecurityHeaders(

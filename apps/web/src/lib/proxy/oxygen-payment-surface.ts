@@ -18,10 +18,16 @@ export function isStorefrontCheckoutPath(pathname: string): boolean {
   );
 }
 
-export function isOxygenPaymentSurface(pathname: string): boolean {
+export function isOxygenPaymentSurface(
+  pathname: string,
+  searchParams?: URLSearchParams
+): boolean {
   const payment = /^\/payments\/oxygen\/([^/]+)\/?$/.exec(pathname);
+  const orderIds = searchParams?.getAll('oxygenOrderId') ?? [];
   return (
-    isStorefrontCheckoutPath(pathname) ||
+    (isStorefrontCheckoutPath(pathname) &&
+      orderIds.length === 1 &&
+      OXYGEN_ORDER_ID.test(orderIds[0])) ||
     (payment !== null && OXYGEN_ORDER_ID.test(payment[1]))
   );
 }

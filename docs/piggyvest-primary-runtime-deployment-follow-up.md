@@ -89,8 +89,8 @@ provisioning flag is not the separate savings-transfer activation flag.
 
 ### Client build floors and onboarding rollout cohort (gate not wired yet)
 
-`apps/web/src/lib/piggyvest/primary-wallet-capability.ts` holds the
-build-aware capability gate; no route calls it yet. When wired, it reads:
+`apps/web/src/lib/piggyvest/primary-client-capability.ts` and
+`primary-onboarding-capability.ts` hold the build-aware capability gate; no route calls it yet. When wired, it reads:
 
 - `PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_IOS` and
   `PIGGYVEST_PRIMARY_MIN_CLIENT_BUILD_ANDROID`: the lowest storefront native
@@ -100,9 +100,9 @@ build-aware capability gate; no route calls it yet. When wired, it reads:
   sets them only after the release that sends the build headers passes App
   Review. Clients send `X-Baci-Client-Platform` (`ios` or `android`) and
   `X-Baci-Client-Build`; a missing or malformed pair counts as an old build.
-  A refusal uses `PIGGYVEST_NOT_READY`, `PRIMARY_CARD_NOT_READY` or
-  `SAVINGS_NOT_READY`, which released builds already treat as "use the
-  legacy flow"; a failed read answers `PIGGYVEST_UNAVAILABLE` instead.
+  A refusal uses `PRIMARY_CARD_NOT_READY` or `SAVINGS_NOT_READY`, which
+  released builds already treat as "use the legacy flow" (never the base
+  `PIGGYVEST_NOT_READY`, which they cache merchant-wide); a failed read answers `PIGGYVEST_UNAVAILABLE` instead.
 - A floor proves only the native build. What reads wallet responses is the
   JavaScript bundle, and an over-the-air update can replace it: the Android
   runtime version is shared by every `versionCode`, so one Android update

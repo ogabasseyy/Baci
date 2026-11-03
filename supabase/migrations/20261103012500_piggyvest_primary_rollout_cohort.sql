@@ -2,7 +2,7 @@
 --
 -- A customer who has no verified primary wallet may start onboarding only
 -- while listed here, and only when their app build and every readiness
--- reader also pass (apps/web/src/lib/piggyvest/primary-wallet-capability.ts).
+-- reader also pass (apps/web/src/lib/piggyvest/primary-onboarding-capability.ts).
 -- The table ships empty, so onboarding stays closed. Only a privileged
 -- operator adds rows; no API, client, worker or provisioner role can read
 -- or write the table directly. The onboarding provisioner reads one

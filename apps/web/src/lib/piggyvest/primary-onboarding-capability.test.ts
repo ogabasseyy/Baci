@@ -1,11 +1,11 @@
 import { describe, expect, it, type Mock, vi } from 'vitest';
 import type { PiggyvestPrimaryExistingOnboarding } from '@/schemas/piggyvest-primary-wallet-capability';
+import { resolvePrimaryOnboardingCapability } from './primary-onboarding-capability';
 import {
   PRIMARY_READINESS_IDS,
   type PrimaryReadinessId,
   type PrimaryReadinessReader,
 } from './primary-readiness-registry';
-import { resolvePrimaryOnboardingCapability } from './primary-wallet-capability';
 import {
   client,
   floors,
@@ -213,5 +213,19 @@ describe('resolvePrimaryOnboardingCapability', () => {
   it('does not open on a truthy non-boolean cohort answer', async () => {
     const { verdict } = onboarding({ member: answer<boolean>(1) });
     await expect(verdict).resolves.toEqual(refused('rollout_cohort'));
+  });
+});
+
+describe('refusal code scope', () => {
+  it('answers unavailable, never the cacheable base code, when the caller passes it', async () => {
+    await expect(
+      resolvePrimaryOnboardingCapability({
+        headers: client('ios', '1'),
+        env: floors,
+        refusalCode: 'PIGGYVEST_NOT_READY' as unknown as 'SAVINGS_NOT_READY',
+        readExistingOnboarding: async () => 'none',
+        readCohortMembership: async () => false,
+      })
+    ).resolves.toMatchObject({ status: 'unavailable' });
   });
 });

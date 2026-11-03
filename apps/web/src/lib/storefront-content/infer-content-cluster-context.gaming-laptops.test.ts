@@ -115,6 +115,15 @@ describe('inferContentClusterContext - gaming laptops', () => {
       keywords: ['buyer guide'],
     });
     expect(geforceGraphicsCard.categorySlug).toBe('gaming');
+
+    const desktopGpuIncidental = inferContentClusterContext({
+      title: 'RTX 5080 GPU Guide',
+      excerpt: 'Desktop performance compared against mobile laptop GPUs.',
+      category: 'Gaming',
+      tags: ['gaming', 'rtx'],
+      keywords: ['benchmark'],
+    });
+    expect(desktopGpuIncidental.categorySlug).toBe('gaming');
   });
 
   it('keeps Gaming and Laptops categories for accessory articles mentioning gaming laptops without promoting to gaming-laptops', () => {
@@ -159,34 +168,18 @@ describe('inferContentClusterContext - gaming laptops', () => {
   });
 
   it('promotes dedicated gaming laptop articles for newly supported families (predator, aorus) to gaming-laptops', () => {
-    const predatorGuide = inferContentClusterContext({
-      title: 'Acer Predator Helios 16 Buyer Guide',
-      excerpt: 'Comprehensive buyer guide for mobile gamers.',
-      category: 'Gaming',
-      tags: ['gaming', 'laptop'],
-      keywords: ['buyer guide'],
-    });
-    expect(predatorGuide.categorySlug).toBe('gaming-laptops');
-
-    const aorusGuide = inferContentClusterContext({
-      title: 'Gigabyte Aorus 16X Buyer Guide',
-      excerpt: 'Testing thermals and frame rates on Aorus 16X.',
-      category: 'Gaming',
-      tags: ['gaming', 'laptop'],
-      keywords: ['buyer guide'],
-    });
-    expect(aorusGuide.categorySlug).toBe('gaming-laptops');
-
-    for (const [title, brand] of [
-      ['Razer Blade 16 Laptop Review', 'razer'],
-      ['Acer Nitro 15 Laptop Review', 'acer'],
-      ['MSI Katana 15 Laptop Review', 'msi'],
+    for (const [title, brand, category] of [
+      ['Acer Predator Helios 16 Buyer Guide', 'acer', 'Gaming'],
+      ['Gigabyte Aorus 16X Buyer Guide', 'gigabyte', 'Gaming'],
+      ['Razer Blade 16 Laptop Review', 'razer', 'Laptops'],
+      ['Acer Nitro 15 Laptop Review', 'acer', 'Laptops'],
+      ['MSI Katana 15 Laptop Review', 'msi', 'Laptops'],
     ]) {
       const guide = inferContentClusterContext({
         title,
         excerpt: 'Mobile gaming review.',
-        category: 'Laptops',
-        tags: ['laptops', brand],
+        category,
+        tags: [category.toLowerCase(), brand, 'laptop'],
         keywords: ['review'],
       });
       expect(guide.categorySlug).toBe('gaming-laptops');
@@ -270,23 +263,22 @@ describe('inferContentClusterContext - gaming laptops', () => {
     expect(standArticle.categorySlug).toBe('laptops');
   });
 
-  it('preserves GPU and desktop replacement mentions in explicit gaming-laptops category guides', () => {
-    const gpuPost = inferContentClusterContext({
-      title: 'Best Gaming Laptops with RTX 4060 GPUs in Nigeria',
-      excerpt: 'Comparing portable machines with discrete graphics.',
-      category: 'Gaming Laptops',
-      tags: ['laptops'],
-      keywords: ['gpu'],
-    });
-    expect(gpuPost.categorySlug).toBe('gaming-laptops');
-
-    const desktopReplacementPost = inferContentClusterContext({
-      title: 'Best Gaming Laptops for Desktop Replacement',
-      excerpt: 'Heavy-duty gaming rigs replacing desktops.',
-      category: 'Gaming Laptops',
-      tags: ['laptops'],
-      keywords: ['desktop replacement'],
-    });
-    expect(desktopReplacementPost.categorySlug).toBe('gaming-laptops');
+  it('preserves legitimate gaming-laptop guides with GPU, desktop-class, monitor pairing, or bundled accessories', () => {
+    for (const [title, kw] of [
+      ['Best Gaming Laptops with RTX 4060 GPUs in Nigeria', 'gpu'],
+      ['Best Gaming Laptops for Desktop Replacement', 'desktop replacement'],
+      ['Alienware m16 Desktop-Class Review', 'desktop-class'],
+      ['Best Gaming Laptops and Monitor Pairings', 'monitors'],
+      ['Top 10 Gaming Laptops with Free Accessories', 'accessories'],
+    ]) {
+      const post = inferContentClusterContext({
+        title,
+        excerpt: 'Legitimate gaming laptop guide.',
+        category: 'Gaming Laptops',
+        tags: ['laptops', 'gaming'],
+        keywords: [kw],
+      });
+      expect(post.categorySlug).toBe('gaming-laptops');
+    }
   });
 });

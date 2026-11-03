@@ -61,57 +61,58 @@ type ClusterSupportEntry = [
   (typeof CONTENT_CLUSTER_SUPPORT)[SupportedClusterCategory],
 ];
 
-const hasLaptopPhrase = (text: string) =>
-  hasPhrase(text, 'laptop') ||
-  hasPhrase(text, 'laptops') ||
-  hasPhrase(text, 'gaming laptop') ||
-  hasPhrase(text, 'gaming laptops');
+const hasGamingLaptopPhrase = (t: string) =>
+  hasPhrase(t, 'gaming laptop') || hasPhrase(t, 'gaming laptops');
+
+const hasLaptopPhrase = (t: string) =>
+  hasPhrase(t, 'laptop') || hasPhrase(t, 'laptops') || hasGamingLaptopPhrase(t);
+
+const isExemptSubject = (s: string, t: string, hasGaming: boolean) =>
+  s === 'gpu' || s === 'gpus' || s.startsWith('graphics card')
+    ? hasGaming
+    : s === 'desktop' || s === 'desktops'
+      ? hasPhrase(t, 'desktop replacement') || hasPhrase(t, 'desktop-class')
+      : s === 'monitor' || s === 'monitors'
+        ? hasGaming &&
+          (hasPhrase(t, 'pairing') ||
+            hasPhrase(t, 'pairings') ||
+            hasPhrase(t, 'paired'))
+        : s === 'accessories' || s === 'accessory'
+          ? hasGaming &&
+            (hasPhrase(t, 'with free accessories') ||
+              hasPhrase(t, 'with accessories') ||
+              hasPhrase(t, 'bundled accessories'))
+          : false;
 
 function hasExcludedGamingLaptopSubject(
   targetText: string,
   hasLaptopInContext = false
 ): boolean {
   const hasLaptop = hasLaptopInContext || hasLaptopPhrase(targetText);
-  const isExempt = (s: string) =>
-    s === 'gpu' ||
-    s === 'gpus' ||
-    s.startsWith('graphics card') ||
-    ((s === 'desktop' || s === 'desktops') &&
-      hasPhrase(targetText, 'desktop replacement'));
-
+  const hasGaming = hasGamingLaptopPhrase(targetText);
   return EXCLUDED_GAMING_LAPTOP_SUBJECTS.some(
-    (s) => !(hasLaptop && isExempt(s)) && hasPhrase(targetText, s)
+    (s) =>
+      !(hasLaptop && isExemptSubject(s, targetText, hasGaming)) &&
+      hasPhrase(targetText, s)
   );
 }
 
 function isDedicatedGamingLaptopContent(
-  titleHaystack: string,
-  contentHaystack: string,
-  excerptHaystack = ''
+  title: string,
+  content: string,
+  excerpt = ''
 ): boolean {
-  const hasTitleLaptop = hasLaptopPhrase(titleHaystack);
-  const hasTitleDedicated = DEDICATED_GAMING_LAPTOP_TOKENS.some((token) =>
-    hasPhrase(titleHaystack, token)
+  const hasLaptop = hasLaptopPhrase(title);
+  const hasDedicated = DEDICATED_GAMING_LAPTOP_TOKENS.some((t) =>
+    hasPhrase(title, t)
   );
-
-  if (
-    (hasTitleLaptop && hasTitleDedicated) ||
-    hasPhrase(titleHaystack, 'gaming laptop') ||
-    hasPhrase(titleHaystack, 'gaming laptops')
-  ) {
-    return !hasExcludedGamingLaptopSubject(titleHaystack);
+  if ((hasLaptop && hasDedicated) || hasGamingLaptopPhrase(title)) {
+    return !hasExcludedGamingLaptopSubject(title);
   }
-
-  if (hasTitleDedicated && hasLaptopPhrase(contentHaystack)) {
-    const titleAndExcerpt = [titleHaystack, excerptHaystack]
-      .filter(Boolean)
-      .join(' ');
-    return !hasExcludedGamingLaptopSubject(
-      titleAndExcerpt,
-      hasLaptopPhrase(titleAndExcerpt)
-    );
+  if (hasDedicated && hasLaptopPhrase(content)) {
+    const combined = [title, excerpt].filter(Boolean).join(' ');
+    return !hasExcludedGamingLaptopSubject(combined, hasLaptopPhrase(combined));
   }
-
   return false;
 }
 

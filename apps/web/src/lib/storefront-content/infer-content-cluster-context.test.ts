@@ -215,4 +215,37 @@ describe('inferContentClusterContext', () => {
     );
     expect(realBrandGaming.brands).not.toContain('gaming');
   });
+
+  it('infers brand tokens for acer, razer, and gigabyte under plain laptops category', () => {
+    const acerLaptop = inferContentClusterContext({
+      title: 'Acer Swift 3 vs Aspire 5 for Nigerian Students',
+      excerpt:
+        'Comparing lightweight Acer notebooks for school and light work.',
+      category: 'Laptops',
+      tags: ['laptops', 'acer'],
+      keywords: ['acer', 'swift', 'aspire'],
+    });
+    expect(acerLaptop.categorySlug).toBe('laptops');
+    expect(acerLaptop.brands).toContain('acer');
+
+    const razerLaptop = inferContentClusterContext({
+      title: 'Razer Book 13 Productivity Laptop Review',
+      excerpt: 'Compact ultrabook performance and display test.',
+      category: 'Laptops',
+      tags: ['laptops', 'razer'],
+      keywords: ['razer', 'ultrabook'],
+    });
+    expect(razerLaptop.categorySlug).toBe('laptops');
+    expect(razerLaptop.brands).toContain('razer');
+
+    const gigabyteLaptop = inferContentClusterContext({
+      title: 'Gigabyte Aero 14 Creator Laptop Review',
+      excerpt: 'OLED screen and fast rendering for designers.',
+      category: 'Laptops',
+      tags: ['laptops', 'gigabyte'],
+      keywords: ['gigabyte', 'creator'],
+    });
+    expect(gigabyteLaptop.categorySlug).toBe('laptops');
+    expect(gigabyteLaptop.brands).toContain('gigabyte');
+  });
 });

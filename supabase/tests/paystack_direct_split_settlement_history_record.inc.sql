@@ -151,17 +151,21 @@ BEGIN
     'T6 the checkout read must require the order''s customer email, got: '
       || COALESCE(v_caught, 'success'));
 
-  -- Split charge 2,050 + 4,000 delivery = 605000 kobo: collected.
+  -- Split charge 2,050 + 4,000 delivery = 605000 kobo: collected. Paystack's
+  -- verified shares are present, as the executor forwards them: merchant
+  -- 47,950, Baci 5,150 (its 6,050 charge less Paystack's 900 fee).
   v_paid := public.record_paystack_direct_split_settlement_gigl_v1(
     pg_temp.merchant(), 'order', pg_temp.fid(2, 7), 'paystack', 'PDS-REF-7',
     54000, 900, 2050, 'Order payment via paystack',
-    '{"paystack_transaction_charge_kobo":"605000"}'::jsonb, 'ACCT_pdsfixture');
+    '{"paystack_transaction_charge_kobo":"605000","paystack_subaccount_share_kobo":"4795000","paystack_integration_share_kobo":"515000"}'::jsonb,
+    'ACCT_pdsfixture');
   PERFORM pg_temp.check(
-    (SELECT platform_fee = 6050 AND net_amount = 47950
+    (SELECT platform_fee = 5150 AND net_amount = 47950 AND gateway_fee = 900
+        AND gross_amount - gateway_fee - platform_fee = net_amount
         AND metadata ->> 'retained_shipping_amount' = '4000.00'
         AND metadata ->> 'retained_shipping_collected_by_split' = 'true'
        FROM public.merchant_settlements WHERE id = v_paid),
-    'T6 GIGL direct split must record the retained delivery fee');
+    'T6 GIGL direct split must record the retained delivery fee and the verified shares');
   PERFORM pg_temp.check(
     public.get_order_paystack_split_retained_shipping_kobo(pg_temp.fid(2, 7), pg_temp.merchant(), 'pds-buyer@example.test') = 0,
     'T6 a retained fee must not be retained twice');

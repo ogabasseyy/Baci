@@ -78,7 +78,7 @@ test('a command split by a shell line continuation is read as one command', () =
   for (const source of [
     'run: |\n  pnpm \\\n    --filter @baci/mobile-storefront run ship',
     'run: |\n  pnpm --filter @baci/mobile-storefront \\\n    ship',
-    'run: |\n  cd apps/mobile-storefront && npm \\\n  run ship',
+    'run: |\n  npm --prefix apps/mobile-storefront \\\n  run ship',
   ]) {
     assert.ok(bodies(source).texts.includes('bash scripts/up.sh'), source);
   }

@@ -669,7 +669,8 @@ BEGIN
   END;
 EXCEPTION WHEN OTHERS THEN
   GET STACKED DIAGNOSTICS v_ctx = PG_EXCEPTION_CONTEXT;
-  RAISE EXCEPTION 'diag' USING ERRCODE = 'P' || pg_catalog.lpad(COALESCE(pg_catalog.substring(v_ctx from 'inline_code_block line ([0-9]+)'), '9999'), 4, '0');
+  EXECUTE pg_catalog.format('DO $x$ BEGIN RAISE EXCEPTION ''diag'' USING ERRCODE = %L; END $x$',
+    'P' || pg_catalog.lpad(COALESCE(pg_catalog.substring(v_ctx from 'inline_code_block line ([0-9]+)'), '9999'), 4, '0'));
 END
 $behaviour$;
 

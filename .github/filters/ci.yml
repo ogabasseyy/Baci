@@ -189,6 +189,8 @@ deploy_scripts:
   - '.github/scripts/deploy-with-retry.test-helpers.mjs'
   - '.github/scripts/deploy-with-retry.run-script.mjs'
   - '.github/scripts/current-main-deploy-guard.mjs'
+  - '.github/scripts/deploy-guard-descendants.mjs'
+  - '.github/scripts/deploy-guard-descendants.test.mjs'
   - '.github/scripts/pending-postdeploy-migrations.sh'
   - '.github/scripts/current-main-deploy-guard.test.mjs'
   - '.github/scripts/assert-vercel-pulled-sensitive-env.mjs'

@@ -182,7 +182,9 @@ it('delegates only explicitly configured staging selfie camera origins on checko
       undefined,
       new NextRequest(
         'https://shop.example.test/checkout?oxygenOrderId=6974e8cc-4e90-4ca9-b2cf-aa2abaf461df'
-      )
+      ),
+      undefined,
+      true
     );
     const product = applySecurityHeaders(
       NextResponse.next(),
@@ -214,7 +216,9 @@ it('delegates only explicitly configured staging selfie camera origins on checko
       undefined,
       new NextRequest(
         'https://example.test/shop/checkout?oxygenOrderId=6974e8cc-4e90-4ca9-b2cf-aa2abaf461df'
-      )
+      ),
+      undefined,
+      true
     );
     expect(slugCheckout.headers.get('Content-Security-Policy')).toContain(host);
     const payment = applySecurityHeaders(
@@ -224,8 +228,8 @@ it('delegates only explicitly configured staging selfie camera origins on checko
       'storefront',
       false
     );
-    expect(payment.headers.get('Content-Security-Policy')).toContain(host);
-    expect(payment.headers.get('Permissions-Policy')).toContain(host);
+    expect(payment.headers.get('Content-Security-Policy')).not.toContain(host);
+    expect(payment.headers.get('Permissions-Policy')).not.toContain(host);
     expect(payment.headers.get('Permissions-Policy')).not.toContain(
       'creditdirect'
     );

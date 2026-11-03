@@ -66,7 +66,8 @@ export function applySecurityHeaders(
   isLocal: boolean,
   nonce?: string,
   request?: NextRequest,
-  hostname?: string
+  hostname?: string,
+  oxygenOwned = false
 ): NextResponse {
   // Apply Content Security Policy
   const csp = generateCSP(
@@ -74,7 +75,8 @@ export function applySecurityHeaders(
     isLocal,
     nonce,
     pathname,
-    request?.nextUrl.searchParams
+    request?.nextUrl.searchParams,
+    oxygenOwned
   );
   response.headers.set('Content-Security-Policy', csp);
 
@@ -108,6 +110,7 @@ export function applySecurityHeaders(
   const isCreditDirectRoute =
     isCheckoutRoute || (routeType === 'storefront' && isBnplLauncher);
   const isOxygenRoute =
+    oxygenOwned &&
     routeType === 'storefront' &&
     isOxygenPaymentSurface(pathname, request?.nextUrl.searchParams);
   const selfieOrigins = isOxygenRoute

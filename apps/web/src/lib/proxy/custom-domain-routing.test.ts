@@ -34,7 +34,7 @@ describe('custom-domain routing', () => {
       'shop.example'
     );
   });
-  it('forwards the Oxygen resume query into custom-domain document policy', async () => {
+  it('does not widen custom-domain policy without an authenticated owner', async () => {
     vi.stubEnv('VERCEL_ENV', 'preview');
     vi.stubEnv('OXYGEN_STAGING_HOSTED_HOSTS', 'frame.example.test');
     vi.stubEnv('OXYGEN_STAGING_SELFIE_HOSTS', 'frame.example.test');
@@ -49,7 +49,7 @@ describe('custom-domain routing', () => {
       };
       for (const [query, expected] of [
         ['', false],
-        ['?oxygenOrderId=6974e8cc-4e90-4ca9-b2cf-aa2abaf461df', true],
+        ['?oxygenOrderId=6974e8cc-4e90-4ca9-b2cf-aa2abaf461df', false],
       ] as const) {
         const request = new NextRequest(`https://shop.example${path}${query}`);
         const response = await runCustomDomainRouting(

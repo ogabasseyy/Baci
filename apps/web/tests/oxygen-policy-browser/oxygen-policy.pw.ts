@@ -49,7 +49,7 @@ test.afterAll(async () => {
   delete process.env.OXYGEN_STAGING_SELFIE_HOSTS;
 });
 
-test('ordinary checkout blocks the frame; full navigation enables a valid Oxygen entry', async ({
+test('ordinary checkout and an unverified Oxygen URL both block the frame', async ({
   page,
 }) => {
   await page.route(`${frameOrigin}/**`, (route) =>
@@ -80,11 +80,13 @@ test('ordinary checkout blocks the frame; full navigation enables a valid Oxygen
   );
   await page.getByRole('link', { name: 'Resume' }).click();
   const resumed = await responsePromise;
-  expect(resumed.headers()['content-security-policy']).toContain(frameOrigin);
-  expect(resumed.headers()['permissions-policy']).toContain(frameOrigin);
+  expect(resumed.headers()['content-security-policy']).not.toContain(
+    frameOrigin
+  );
+  expect(resumed.headers()['permissions-policy']).not.toContain(frameOrigin);
   await expect(
     page.frameLocator('iframe').getByText('Synthetic frame loaded')
-  ).toBeVisible();
+  ).toHaveCount(0);
 });
 
 test('a custom-domain-shaped checkout receives the same scoped document policies', async ({
@@ -132,8 +134,8 @@ test('a custom-domain-shaped checkout receives the same scoped document policies
   await page.getByRole('link', { name: 'Resume' }).click();
   expect(
     (await resumedResponse).headers()['content-security-policy']
-  ).toContain(frameOrigin);
+  ).not.toContain(frameOrigin);
   await expect(
     page.frameLocator('iframe').getByText('Synthetic frame loaded')
-  ).toBeVisible();
+  ).toHaveCount(0);
 });

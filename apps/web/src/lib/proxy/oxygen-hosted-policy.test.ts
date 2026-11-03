@@ -19,7 +19,9 @@ it('allows only exact configured hosted origins and delegates camera only to sel
     undefined,
     new NextRequest(
       'https://shop.example.test/shop/checkout?oxygenOrderId=6974e8cc-4e90-4ca9-b2cf-aa2abaf461df'
-    )
+    ),
+    undefined,
+    true
   );
   const csp = response.headers.get('Content-Security-Policy') ?? '';
   const camera = response.headers.get('Permissions-Policy') ?? '';
@@ -109,7 +111,9 @@ it.each([
       'storefront',
       false,
       undefined,
-      request
+      request,
+      undefined,
+      true
     );
     expect(
       response.headers

@@ -8,9 +8,11 @@ export function generateCSP(
   isLocal: boolean,
   nonce?: string,
   pathname?: string,
-  searchParams?: URLSearchParams
+  searchParams?: URLSearchParams,
+  oxygenOwned = false
 ): string {
   const hostedOrigins =
+    oxygenOwned &&
     routeType === 'storefront' &&
     isOxygenPaymentSurface(pathname ?? '', searchParams)
       ? readOxygenHostedOrigins().hosted

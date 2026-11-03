@@ -167,6 +167,9 @@ BEGIN
        FROM public.merchant_settlements WHERE id = v_unpaid),
     'T6 an uncollected delivery fee must be flagged and not booked as Baci''s');
   PERFORM pg_temp.check(
+    public.get_order_paystack_split_retained_shipping_kobo(pg_temp.fid(2, 8), pg_temp.merchant(), 'pds-buyer@example.test') = 400000,
+    'T6 an uncollected delivery fee must still be owed, not counted as retained');
+  PERFORM pg_temp.check(
     public.get_merchant_wallet_spendable_balance(pg_temp.merchant()) = 0,
     'T6 GIGL direct split must not create spendable balance');
 END

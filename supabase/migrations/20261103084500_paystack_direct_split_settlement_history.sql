@@ -96,7 +96,12 @@ BEGIN
    WHERE settlement.source_type = 'order'
      AND settlement.source_id = p_order_id
      AND settlement.merchant_id = p_merchant_id
-     AND settlement.status IS DISTINCT FROM 'cancelled';
+     AND settlement.status IS DISTINCT FROM 'cancelled'
+     -- A direct split whose verified charge never carried the fee to Baci
+     -- did not retain it; a later payment for the order may still collect it.
+     AND COALESCE(
+       settlement.metadata ->> 'retained_shipping_collected_by_split', 'true'
+     ) <> 'false';
 
   SELECT GREATEST(
     COALESCE((
@@ -143,8 +148,12 @@ REVOKE ALL ON FUNCTION private.gigl_order_remaining_retained_shipping(uuid, uuid
 -- kobo. The storefront calls it with the request-scoped client, so the
 -- caller proves the order the same way checkout does: order id, merchant and
 -- the order's customer email. The value is the customer-facing delivery
--- price the shopper already sees (never tariff or margin). A failed proof
--- and an unknown order raise the same error, so it is not an oracle.
+-- price the shopper already sees (never tariff or margin). A wrong email and
+-- an unknown order raise the same error. Accepted disclosure: a caller who
+-- already holds the order and merchant ids can confirm the customer email,
+-- as get_order_payment_snapshot's email check already allows. A failed proof
+-- raises rather than returning 0, because 0 would silently drop the fee from
+-- Baci's split.
 CREATE OR REPLACE FUNCTION public.get_order_paystack_split_retained_shipping_kobo(
   p_order_id uuid,
   p_merchant_id uuid,

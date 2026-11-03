@@ -84,8 +84,8 @@ describe('DeferredChatWidget', () => {
     expect(anchor).toHaveClass('ogabassey-chat-anchor--hidden');
     expect(anchor).toHaveAttribute('data-mobile-offset', 'default');
     expect(anchor).toHaveAttribute('data-mobile-offset-cart', '6.75rem');
-    expect(anchor).toHaveAttribute('data-mobile-offset-default', '5.75rem');
-    expect(anchor).toHaveAttribute('data-mobile-offset-product', '6.25rem');
+    expect(anchor).toHaveAttribute('data-mobile-offset-default', '1rem');
+    expect(anchor).toHaveAttribute('data-mobile-offset-product', '1rem');
     expect(anchor).toHaveAttribute('data-mobile-offset-screen', '1rem');
     expect(
       screen.getByRole('button', { name: 'Open AI chat assistant' })

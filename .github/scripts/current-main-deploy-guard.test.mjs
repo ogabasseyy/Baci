@@ -41,13 +41,11 @@ async function verifySupersededFile(
   workflowRuns = [{ conclusion: 'success', head_sha: currentSha }],
   commits = [{ sha: currentSha }]
 ) {
-  let call = 0;
   return verifyCurrentMainDeployment({
     expectedSha,
-    fetchImpl: async () => {
-      call += 1;
-      if (call === 1) return response({ object: { sha: currentSha } });
-      if (call === 2) return makeCompareResponse(filename, commits);
+    fetchImpl: async (url) => {
+      if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
+      if (url.includes('/compare/')) return makeCompareResponse(filename, commits);
       return response({ workflow_runs: workflowRuns });
     },
     repository: 'ogabasseyy/Baci',
@@ -82,8 +80,8 @@ test('accepts an in-flight ancestor when no superseding commit has deployed yet'
     expectedSha,
     fetchImpl: async (url) => {
       urls.push(url);
-      if (urls.length === 1) return response({ object: { sha: currentSha } });
-      if (urls.length === 2) {
+      if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
+      if (url.includes('/compare/')) {
         return makeCompareResponse('apps/web/src/app/page.tsx', [{ sha: intermediateSha }, { sha: currentSha }]);
       }
       return response({ workflow_runs: [{ conclusion: 'success', head_sha: olderDeployedSha }] });
@@ -93,7 +91,7 @@ test('accepts an in-flight ancestor when no superseding commit has deployed yet'
   });
 
   assert.deepEqual(result, { currentSha, expectedSha });
-  assert.match(urls[2], /\/actions\/workflows\/deploy\.yml\/runs\?branch=main/);
+  assert.ok(urls.some((u) => u.includes('head_sha=')));
 });
 
 test('rejects an ancestor when an intermediate superseding commit has deployed', async () => {
@@ -238,20 +236,18 @@ test('fails closed on malformed identity and GitHub API responses', async () => 
     verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: currentSha }], [{ sha: 'bad-sha' }]),
     /invalid superseding commit SHA/
   );
-  let call = 0;
   await assert.rejects(
     verifyCurrentMainDeployment({
       expectedSha,
-      fetchImpl: async () => {
-        call += 1;
-        if (call === 1) return response({ object: { sha: currentSha } });
-        if (call === 2) return makeCompareResponse('apps/web/src/app/page.tsx');
-        return response({ total_count: 101, workflow_runs: [{ conclusion: 'success', head_sha: currentSha }] });
+      fetchImpl: async (url) => {
+        if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
+        if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx');
+        return response({ workflow_runs: 'not-an-array' });
       },
       repository: 'ogabasseyy/Baci',
       token: 'test-token',
     }),
-    /incomplete or invalid workflow runs response/
+    /invalid workflow runs response/
   );
 });
 

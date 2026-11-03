@@ -136,30 +136,28 @@ async function hasSupersedingDeployment({
   supersedingShas,
   token,
 }) {
-  const runsBody = await githubJson(
-    fetchImpl,
-    `${apiRoot}/repos/${repository}/actions/workflows/deploy.yml/runs?branch=main&per_page=100`,
-    token
-  );
-  if (
-    !Array.isArray(runsBody?.workflow_runs) ||
-    (typeof runsBody?.total_count === 'number' &&
-      runsBody.total_count > runsBody.workflow_runs.length)
-  ) {
-    throw new Error('incomplete or invalid workflow runs response');
-  }
-  for (const run of runsBody.workflow_runs) {
-    if (typeof run?.head_sha !== 'string' || !SHA_PATTERN.test(run.head_sha)) {
-      throw new Error('invalid workflow run SHA');
+  for (const sha of supersedingShas) {
+    const runsBody = await githubJson(
+      fetchImpl,
+      `${apiRoot}/repos/${repository}/actions/workflows/deploy.yml/runs?head_sha=${sha}`,
+      token
+    );
+    if (!Array.isArray(runsBody?.workflow_runs)) {
+      throw new Error('invalid workflow runs response');
     }
-    if (
-      supersedingShas.has(run.head_sha.toLowerCase()) &&
-      (run.conclusion === 'success' ||
-        (run.status === 'completed' &&
-          run.conclusion !== 'cancelled' &&
-          run.conclusion !== 'skipped'))
-    ) {
-      return true;
+    for (const run of runsBody.workflow_runs) {
+      if (typeof run?.head_sha !== 'string' || !SHA_PATTERN.test(run.head_sha)) {
+        throw new Error('invalid workflow run SHA');
+      }
+      if (
+        run.head_sha.toLowerCase() === sha.toLowerCase() &&
+        (run.conclusion === 'success' ||
+          (run.status === 'completed' &&
+            run.conclusion !== 'cancelled' &&
+            run.conclusion !== 'skipped'))
+      ) {
+        return true;
+      }
     }
   }
   return false;

@@ -74,10 +74,27 @@ export function buildStorefrontMetadataTitle(input: {
     maxLength: Number.POSITIVE_INFINITY,
     suffix: input.suffix,
   });
-  const effectiveTitle =
-    fullTitle.length > maxLength
-      ? stripRedundantPlatformParentheticals(fullTitle)
-      : fullTitle;
+  let effectiveTitle = fullTitle;
+  if (fullTitle.length > maxLength) {
+    if (input.suffix) {
+      const normalizedSuffix = input.suffix.replace(/\s+/gu, ' ').trim();
+      const suffixFragment = ` | ${normalizedSuffix}`;
+      if (fullTitle.endsWith(suffixFragment)) {
+        const baseTitle = fullTitle
+          .slice(0, fullTitle.length - suffixFragment.length)
+          .trim();
+        const compactBaseTitle =
+          stripRedundantPlatformParentheticals(baseTitle);
+        effectiveTitle = compactBaseTitle
+          ? `${compactBaseTitle}${suffixFragment}`
+          : normalizedSuffix;
+      } else {
+        effectiveTitle = stripRedundantPlatformParentheticals(fullTitle);
+      }
+    } else {
+      effectiveTitle = stripRedundantPlatformParentheticals(fullTitle);
+    }
+  }
   const title = applyWordBoundaryMaxLength(
     effectiveTitle,
     maxLength,

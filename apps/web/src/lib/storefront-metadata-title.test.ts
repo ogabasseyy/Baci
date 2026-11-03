@@ -101,4 +101,17 @@ describe('buildStorefrontMetadataTitle', () => {
       absolute: 'Buy EA Sports FC 27 | Store',
     });
   });
+
+  it('compacts a platform-list-only title to suffix without an orphan leading pipe', () => {
+    const result = buildStorefrontMetadataTitle({
+      maxLength: 15,
+      suffix: 'Ogabassey',
+      title: '(PS5, PS4, Xbox, Switch & Switch 2)',
+    });
+
+    expect(result.title).toBe('Ogabassey');
+    expect(result.metadataTitle).toEqual({
+      absolute: 'Ogabassey',
+    });
+  });
 });

@@ -34,34 +34,40 @@ export async function creditIdsOf(
 }
 
 /**
- * The fee on THIS funding's own credit record: a credit row that was not
- * listed before the funding was sent. Null while no such row shows a fee
- * (not visible yet, not readable, no fee field, or the earlier rows could not
- * be listed so the own row cannot be told apart). Never a neighbour's fee.
+ * The fee on THIS funding's own credit record: the single credit row that was
+ * not listed before the funding was sent AND whose amount is the gross. Null
+ * (unread) when no such row shows a fee: zero candidates, MORE than one
+ * candidate, an unreadable record, or earlier rows that could not be listed.
+ * Never a neighbour's fee, never the largest of several.
  */
 async function ownRecordFeeKobo(
   ctx: ProofContext,
   walletId: string,
+  grossKobo: number,
   priorCreditIds: ReadonlySet<string> | null
 ): Promise<number | null> {
   if (priorCreditIds === null) return null;
   const list = usableList(
     await ctx.api.transactions({ wallet_id: walletId, limit: '20' })
   );
-  let max: number | null = null;
-  for (const edge of list?.edges ?? []) {
+  const candidates = (list?.edges ?? []).filter((edge) => {
     const id = pickString(edge, ['id']);
-    if (id === null || priorCreditIds.has(id)) continue;
-    if (pickString(edge, ['type']) !== 'credit') continue;
-    const record = recordOf(await ctx.api.transaction(id, walletId));
-    const fee = analyseRecord(record, {
-      sourceWalletId: null,
-      destinationWalletId: walletId,
-      amountKobo: null,
-    }).feeKobo;
-    if (fee !== null && (max === null || fee > max)) max = fee;
-  }
-  return max;
+    return (
+      id !== null &&
+      !priorCreditIds.has(id) &&
+      pickString(edge, ['type']) === 'credit' &&
+      (edge as Record<string, unknown>).amount === grossKobo
+    );
+  });
+  const [only] = candidates;
+  if (candidates.length !== 1) return null;
+  const id = pickString(only, ['id']);
+  if (id === null) return null;
+  return analyseRecord(recordOf(await ctx.api.transaction(id, walletId)), {
+    sourceWalletId: null,
+    destinationWalletId: walletId,
+    amountKobo: null,
+  }).feeKobo;
 }
 
 export async function fundingSettled(
@@ -81,7 +87,12 @@ export async function fundingSettled(
       const balance = now.data.balance;
       // Never lock in an unread fee: keep looking until a record shows one.
       if (balance > balanceBefore && feeKobo === null)
-        feeKobo = await ownRecordFeeKobo(ctx, walletId, priorCreditIds);
+        feeKobo = await ownRecordFeeKobo(
+          ctx,
+          walletId,
+          grossKobo,
+          priorCreditIds
+        );
       if (
         movementSettled({
           creditedKobo: balance - balanceBefore,

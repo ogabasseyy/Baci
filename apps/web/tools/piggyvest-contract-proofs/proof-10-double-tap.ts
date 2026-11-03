@@ -149,8 +149,8 @@ export async function stepDoubleTap(
   // Only a definitive rejection can show deduplication; an accepted or
   // indeterminate repeat may still have booked a hidden second transfer.
   const accepted = again.outcome !== 'rejected';
+  // Balances decide: a list row count never makes a `no` on its own.
   const secondSeen =
-    (rowsAfter !== null && rowsAfter > 1) ||
     (extraDebit !== null && extraDebit > 0) ||
     (extraCredit !== null && extraCredit > 0);
   // A balance INCREASE (negative extra debit) is an unexplained credit, not a
@@ -160,19 +160,26 @@ export async function stepDoubleTap(
   // inconsistent read (lag, paging), not evidence about the repeat.
   const rowsShrank =
     rowsBefore !== null && rowsAfter !== null && rowsAfter < rowsBefore;
+  // More rows than the step's own baseline while the balances show no second
+  // booking disagrees with them: unknown, for human review.
+  const rowsDisagree =
+    rowsBefore !== null && rowsAfter !== null && rowsAfter > rowsBefore;
   const answer: Answer = !quietBefore
     ? 'unknown'
     : secondSeen
       ? 'no'
       : rowsBefore === null ||
           rowsShrank ||
+          rowsDisagree ||
           unexplainedCredit ||
           rowsAfter === null ||
           extraDebit === null ||
           extraCredit === null ||
           accepted
         ? 'unknown'
-        : answerOf(rowsAfter === 1 && extraDebit === 0 && extraCredit === 0);
+        : answerOf(
+            rowsAfter === rowsBefore && extraDebit === 0 && extraCredit === 0
+          );
   b.finding(
     TAP_ONCE,
     TAP_ONCE_Q,

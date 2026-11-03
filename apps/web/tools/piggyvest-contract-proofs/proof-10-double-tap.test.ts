@@ -200,4 +200,31 @@ describe('S8 stale balances after a terminal success', () => {
     expect(await stepDoubleTap(h.ctx, b, main, goal, fund, ledger)).toBe(false);
     expect(ledger.isQuiet(main, goal)).toBe(false);
   });
+
+  it('never answers no from a row count alone: an extra row with unchanged balances is unknown', async () => {
+    const { h, b, main, goal, fund } = await setup();
+    const real = h.ctx.api.transactions.bind(h.ctx.api);
+    const again = h.ctx.api.transferWalletAgain.bind(h.ctx.api);
+    let repeated = false;
+    h.ctx.api.transferWalletAgain = async (...args) => {
+      repeated = true;
+      return again(...args);
+    };
+    h.ctx.api.transactions = async (...args) => {
+      const out = await real(...args);
+      const data = (out.data ?? {}) as { edges?: unknown[] };
+      // A second row sharing the reference (a fee leg or paging duplicate).
+      return repeated && Array.isArray(data.edges) && data.edges.length > 0
+        ? {
+            ...out,
+            data: { ...data, edges: [...data.edges, data.edges[0]] },
+          }
+        : out;
+    };
+    await stepDoubleTap(h.ctx, b, main, goal, fund);
+    const values = b.build(h.ctx).values;
+    expect(values.double_tap_extra_debit_kobo).toBe(0);
+    expect(values.double_tap_rows_with_reference).toBe(2);
+    expect(answer(b, h, TAP_ONCE)).toBe('unknown');
+  });
 });

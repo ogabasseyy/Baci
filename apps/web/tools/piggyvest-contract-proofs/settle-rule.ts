@@ -13,7 +13,7 @@ import { transferVerdict } from './verdict-rule';
  * record shows it, and until then only the full gross counts as complete.
  */
 
-/** The credit a fully landed movement shows: gross minus the recorded fee. */
+/** The credit a landed movement shows: gross minus its own recorded fee (unread: the gross). */
 export function expectedCreditKobo(
   grossKobo: number,
   feeKobo: number | null
@@ -21,7 +21,11 @@ export function expectedCreditKobo(
   return grossKobo - (feeKobo ?? 0);
 }
 
-/** Did the destination show the full expected credit? An unread credit never did. */
+/**
+ * Did the destination show EXACTLY one transfer's credit? Over-credit is not
+ * complete: it is evidence of a double booking, never a settled single
+ * movement. An unread credit never is.
+ */
 export function creditComplete(
   creditedKobo: number | null,
   grossKobo: number,
@@ -29,7 +33,7 @@ export function creditComplete(
 ): boolean {
   return (
     creditedKobo !== null &&
-    creditedKobo >= expectedCreditKobo(grossKobo, feeKobo)
+    creditedKobo === expectedCreditKobo(grossKobo, feeKobo)
   );
 }
 

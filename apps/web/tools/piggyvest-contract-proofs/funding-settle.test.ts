@@ -143,4 +143,48 @@ describe('fundingSettled', () => {
       await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain, null)
     ).toBe(false);
   });
+
+  it('stays unsettled on an over-credit that holds still', async () => {
+    const h = makeHarness();
+    dispose = h.dispose;
+    await setupScenario(h.ctx);
+    const main = h.state.mainWalletId as string;
+    const real = h.api.wallet.bind(h.api);
+    h.api.wallet = async (id) => {
+      const call = await real(id);
+      const data = (call.data ?? {}) as Record<string, unknown>;
+      return {
+        ...call,
+        data: { ...data, balance: AMOUNTS_KOBO.fundMain * 2 },
+      };
+    };
+    expect(
+      await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain, new Set())
+    ).toBe(false);
+  });
+
+  it('reads no fee when more than one new credit row matches the gross', async () => {
+    const h = makeHarness();
+    dispose = h.dispose;
+    await setupScenario(h.ctx);
+    const main = h.state.mainWalletId as string;
+    // A second credit of the same gross is also new: which one is ours?
+    h.mock.sandbox.ledger.fund({
+      wallet_id: main,
+      amount: AMOUNTS_KOBO.fundMain,
+    });
+    const real = h.api.wallet.bind(h.api);
+    h.api.wallet = async (id) => {
+      const call = await real(id);
+      const data = (call.data ?? {}) as Record<string, unknown>;
+      // Net of the setup fee only: settles only if a fee was (wrongly) read.
+      return {
+        ...call,
+        data: { ...data, balance: AMOUNTS_KOBO.fundMain - 5_000 },
+      };
+    };
+    expect(
+      await fundingSettled(h.ctx, main, 0, AMOUNTS_KOBO.fundMain, new Set())
+    ).toBe(false);
+  });
 });

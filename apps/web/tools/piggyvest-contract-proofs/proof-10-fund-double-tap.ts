@@ -5,7 +5,7 @@ import { EARLIER_UNSETTLED, MovementLedger } from './movement-ledger';
 import { awaitTerminal, delta, readingOf, settledWallets } from './poll';
 import type { ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
-import { creditComplete } from './settle-rule';
+import { oneFullTransferLanded } from './settle-rule';
 import { transferVerdict } from './verdict-rule';
 
 export {
@@ -130,14 +130,13 @@ export async function stepFundGoal(
     watch.terminal === 'success' && main$ !== null && goal$ !== null
       ? await readTransferFeeKobo(ctx, sent.reference, main)
       : null;
-  // Settled by the shared rule: the goal shows the full credit (the amount
-  // less the recorded fee) and the main debit covers at least the amount.
+  // Settled by the shared rule: debit and credit each equal ONE transfer
+  // (the amount within its own recorded fee); an over-credit is not settled.
   record(
     watch.terminal === 'success' &&
       main$ !== null &&
       goal$ !== null &&
-      creditComplete(goal$, amount, fee) &&
-      -main$ >= amount
+      oneFullTransferLanded(amount, -main$, goal$, fee)
   );
   if (watch.terminal !== 'success' || main$ === null || goal$ === null) {
     b.inconclusive('the goal funding did not reach a settled, measured result');

@@ -20,6 +20,19 @@ describe('settle rule', () => {
     expect(creditComplete(null, 100, 0)).toBe(false);
   });
 
+  it('never treats an over-credit (a double booking) as a complete single movement', () => {
+    expect(creditComplete(200, 100, null)).toBe(false);
+    expect(creditComplete(101, 100, 5)).toBe(false);
+    expect(
+      movementSettled({
+        creditedKobo: 200,
+        previousCreditedKobo: 200,
+        grossKobo: 100,
+        feeKobo: null,
+      })
+    ).toBe(false);
+  });
+
   it('settles only when complete AND unchanged since the previous observation', () => {
     const base = { grossKobo: 100, feeKobo: 5 };
     expect(

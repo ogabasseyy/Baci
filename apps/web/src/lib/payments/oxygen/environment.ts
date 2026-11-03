@@ -10,10 +10,11 @@ export function resolveOxygenEnvironment(): OxygenEnvironment | null {
   if (deployment === 'preview' || deployment === 'development')
     return explicit && explicit !== 'staging' ? null : 'staging';
   if (deployment) return null;
-  if (explicit === 'staging') return 'staging';
-  if (explicit === 'production') return null;
-  return process.env.NODE_ENV === 'development' ||
-    process.env.NODE_ENV === 'test'
-    ? 'staging'
-    : null;
+  // Non-Vercel production requires an explicit production selection.
+  if (process.env.NODE_ENV === 'production')
+    return explicit === 'production' ? 'production' : null;
+  // Only local development and tests may default to staging without Vercel.
+  if (process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test')
+    return null;
+  return explicit === 'production' ? null : 'staging';
 }

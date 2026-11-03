@@ -10,9 +10,7 @@ it('never exposes staging hosts when production mode has no verified deployment 
   vi.stubEnv('OXYGEN_STAGING_SELFIE_HOSTS', 'stage.example.test');
   expect(readOxygenHostedOrigins()).toEqual({ hosted: [], selfie: [] });
   vi.stubEnv('OXYGEN_ENVIRONMENT', 'staging');
-  expect(readOxygenHostedOrigins().hosted).toEqual([
-    'https://stage.example.test',
-  ]);
+  expect(readOxygenHostedOrigins()).toEqual({ hosted: [], selfie: [] });
   vi.stubEnv('VERCEL_ENV', 'production');
   expect(readOxygenHostedOrigins()).toEqual({ hosted: [], selfie: [] });
 });

@@ -75,7 +75,7 @@ it('preserves the existing isolated staging configuration', () => {
     readOxygenRuntimeConfiguration()?.hosts.has('payment.hydrogenpay.com')
   ).toBe(true);
 });
-it('fails closed in production mode without a deployment identity or explicit staging opt-in', () => {
+it('fails closed in production mode for ambiguous or staging deployment settings', () => {
   set({
     ...staging,
     VERCEL_ENV: '',
@@ -84,7 +84,7 @@ it('fails closed in production mode without a deployment identity or explicit st
   });
   expect(readOxygenRuntimeConfiguration()).toBeNull();
   vi.stubEnv('OXYGEN_ENVIRONMENT', 'staging');
-  expect(readOxygenRuntimeConfiguration()?.environment).toBe('staging');
+  expect(readOxygenRuntimeConfiguration()).toBeNull();
   vi.stubEnv('VERCEL_ENV', 'production');
   expect(readOxygenRuntimeConfiguration()).toBeNull();
 });
@@ -95,5 +95,30 @@ it.each([
   'evil.test/path',
 ])('rejects malformed hosted-host configuration %s', (host) => {
   set({ ...staging, VERCEL_ENV: 'preview', OXYGEN_STAGING_HOSTED_HOSTS: host });
+  expect(readOxygenRuntimeConfiguration()).toBeNull();
+});
+
+it('requires the production runtime gate and production-only credentials on a self-hosted Node build', () => {
+  set({
+    ...staging,
+    VERCEL_ENV: '',
+    NODE_ENV: 'production',
+    OXYGEN_ENVIRONMENT: 'production',
+    OXYGEN_PRODUCTION_RUNTIME_ENABLED: '',
+    OXYGEN_PRODUCTION_PARTNER_REFERENCE: 'production-reference',
+    OXYGEN_PRODUCTION_PARTNER_SECRET: 'production-secret',
+    OXYGEN_PRODUCTION_WORKER_EMAIL: 'worker@example.test',
+    OXYGEN_PRODUCTION_WORKER_PASSWORD: 'production-password',
+    OXYGEN_PRODUCTION_HOSTED_HOSTS: 'checkout.example.test',
+    OXYGEN_PRODUCTION_DRAFT_ENCRYPTION_KEY: 'b'.repeat(64),
+  });
+  expect(readOxygenRuntimeConfiguration()).toBeNull();
+  vi.stubEnv('OXYGEN_PRODUCTION_RUNTIME_ENABLED', 'true');
+  expect(readOxygenRuntimeConfiguration()).toMatchObject({
+    environment: 'production',
+    reference: 'production-reference',
+    baseUrl: 'https://api.oxygenx.africa/services/partners',
+  });
+  vi.stubEnv('OXYGEN_PRODUCTION_PARTNER_SECRET', '');
   expect(readOxygenRuntimeConfiguration()).toBeNull();
 });

@@ -92,9 +92,7 @@ it('does not use staging callback credentials for an ambiguous or mismatched dep
   vi.stubEnv('OXYGEN_STAGING_CALLBACK_SECRET', 'secret');
   expect(oxygenRuntimeCallbackConfiguration()).toBeNull();
   vi.stubEnv('OXYGEN_ENVIRONMENT', 'staging');
-  expect(oxygenRuntimeCallbackConfiguration()).toMatchObject({
-    partnerReference: 'partner',
-  });
+  expect(oxygenRuntimeCallbackConfiguration()).toBeNull();
   vi.stubEnv('VERCEL_ENV', 'production');
   expect(oxygenRuntimeCallbackConfiguration()).toBeNull();
 });

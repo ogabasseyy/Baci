@@ -185,7 +185,7 @@ describe('submitBankTransferContribution primary routing', () => {
     expect(input.setShowSuccessModal).toHaveBeenCalledWith(true);
   });
 
-  it('keeps the id and shows nothing when the PIN sheet is closed', async () => {
+  it('keeps the id and says the goal was created when the PIN sheet is closed', async () => {
     mockAddPrimaryContribution.mockRejectedValue(
       Object.assign(new Error('Please confirm your PIN to continue.'), {
         code: 'PIN_PROOF_REQUIRED',
@@ -206,7 +206,10 @@ describe('submitBankTransferContribution primary routing', () => {
     });
     expect(mockAddPrimaryContribution).toHaveBeenCalledTimes(1);
     expect(mockAddSavingsContribution).not.toHaveBeenCalled();
-    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Goal created',
+      "Your goal was created. Add money to it from your wallet when you're ready."
+    );
     expect(input.setInitialContributionIdempotencyKey).not.toHaveBeenCalledWith(
       null
     );

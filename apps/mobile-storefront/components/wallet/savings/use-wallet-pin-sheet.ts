@@ -49,9 +49,13 @@ export function useWalletPinSheet({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  // Bumped every time the sheet opens, closes or switches request, so an
+  // answer that arrives for an earlier one can tell it is stale.
+  const generation = useRef(0);
   const operationId = request?.operationId ?? null;
 
   useEffect(() => {
+    generation.current += 1;
     setPin('');
     setConfirmPin('');
     setError(null);
@@ -76,39 +80,48 @@ export function useWalletPinSheet({
     };
   }, [operationId]);
 
-  const guarded = async (work: () => Promise<void>) => {
+  const guarded = async (work: (isCurrent: () => boolean) => Promise<void>) => {
     if (busyRef.current) return;
+    const started = generation.current;
+    const isCurrent = () => generation.current === started;
     busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
-      await work();
+      await work(isCurrent);
     } finally {
-      busyRef.current = false;
-      setBusy(false);
+      // A stale run must not clear the busy state of the request now shown.
+      if (isCurrent()) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
   };
 
   const submitNewPin = (kind: 'set' | 'reset') =>
-    guarded(async () => {
+    guarded(async (isCurrent) => {
       if (!WalletPinSchemas.pin.safeParse(pin).success)
         return setError(PIN_FORMAT);
       if (pin !== confirmPin) return setError(PIN_MISMATCH);
       try {
         await submitWalletPin(kind, pin);
+        if (!isCurrent()) return;
         setNotice(PIN_SAVED);
         setStep('enter');
       } catch (failure) {
+        if (!isCurrent()) return;
         if (codeOf(failure) === 'PIN_ALREADY_SET') setStep('enter');
         else setError(messageOf(failure));
       } finally {
-        setPin('');
-        setConfirmPin('');
+        if (isCurrent()) {
+          setPin('');
+          setConfirmPin('');
+        }
       }
     });
 
   const submitEntry = () =>
-    guarded(async () => {
+    guarded(async (isCurrent) => {
       if (!request) return;
       if (!WalletPinSchemas.pin.safeParse(pin).success)
         return setError(PIN_FORMAT);
@@ -122,9 +135,13 @@ export function useWalletPinSheet({
           operationId: request.operationId,
           amountKobo: request.amountKobo,
         });
+        // The sheet was closed or re-opened while this check was in flight:
+        // the proof belongs to a request nobody is waiting on any more.
+        if (!isCurrent()) return;
         setPin('');
         onProof(proof);
       } catch (failure) {
+        if (!isCurrent()) return;
         setPin('');
         const code = codeOf(failure);
         if (code === 'PIN_NOT_SET') setStep('set');

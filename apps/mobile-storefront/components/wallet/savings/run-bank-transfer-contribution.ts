@@ -16,6 +16,9 @@ import {
   resolveStoredOperation,
 } from './stored-contribution-operation';
 
+const PIN_CLOSED_MESSAGE =
+  "Your goal was created. Add money to it from your wallet when you're ready.";
+
 /**
  * Moves the first contribution of a created goal, bound to the rail of the
  * attempt that owns the stored operation id (see resolveStoredOperation).
@@ -176,9 +179,17 @@ export async function runBankTransferContribution(
     }
   } catch (error) {
     if (!ctx.isMounted()) return;
-    // The customer closed the PIN sheet: nothing was sent, the id and rail
-    // stay for the next attempt and there is nothing to report.
-    if (isPinCancelled(error)) return;
+    // The customer closed the PIN sheet: nothing was sent and the id and rail
+    // stay for the next attempt. Say plainly that the goal already exists.
+    if (isPinCancelled(error)) {
+      input.setFormError(PIN_CLOSED_MESSAGE);
+      showAppAlert({
+        title: 'Goal created',
+        message: PIN_CLOSED_MESSAGE,
+        variant: 'info',
+      });
+      return;
+    }
     if (getErrorCode(error) === 'WALLET_UNAVAILABLE') {
       // The server cancelled the reservation; the id can never be reused.
       input.setInitialContributionIdempotencyKey(null);

@@ -91,7 +91,7 @@ describe('wallet PIN on the first contribution', () => {
     expect(mockShowAlert).not.toHaveBeenCalled();
   });
 
-  it('keeps the id and rail and stays quiet when the customer closes the prompt', async () => {
+  it('keeps the id and rail and tells the customer the goal exists when they close the prompt', async () => {
     mockAddPrimary.mockRejectedValue(needsPin());
     const input = await run(jest.fn(async () => null));
     expect(mockAddPrimary).toHaveBeenCalledTimes(1);
@@ -99,8 +99,17 @@ describe('wallet PIN on the first contribution', () => {
     expect(input.setInitialContributionIdempotencyKey).not.toHaveBeenCalledWith(
       null
     );
+    expect(input.setInitialContributionRail).not.toHaveBeenCalledWith(
+      'stored-op',
+      'legacy'
+    );
     expect(input.setShowSuccessModal).not.toHaveBeenCalled();
-    expect(mockShowAlert).not.toHaveBeenCalled();
+    const message =
+      "Your goal was created. Add money to it from your wallet when you're ready.";
+    expect(input.setFormError).toHaveBeenCalledWith(message);
+    expect(mockShowAlert).toHaveBeenCalledWith(
+      expect.objectContaining({ message, variant: 'info' })
+    );
   });
 
   it('shows the server copy and no "coming soon" when no prompt is available', async () => {

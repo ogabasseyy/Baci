@@ -109,10 +109,9 @@ describe('live-sandbox-mutations', () => {
       '/api/v1/transfer/test/funding',
       '/api/v1/transfer/wallet',
       '/api/v1/transfer/bank',
-      // proof 7: a NEW payout-routing customer, then two goal sub-wallets
+      // proof 7: a NEW payout-routing customer, then four goal sub-wallets
       '/api/v1/customers',
-      '/api/v1/wallet/sub-account',
-      '/api/v1/wallet/sub-account',
+      ...Array(4).fill('/api/v1/wallet/sub-account'),
       // proof 8: collection to main, main to goal, goal to main
       '/api/v1/transfer/wallet',
       '/api/v1/transfer/wallet',
@@ -125,10 +124,10 @@ describe('live-sandbox-mutations', () => {
       .split('\n')
       .map((line) => JSON.parse(line));
     expect(journalLines.map((entry) => entry.phase)).toEqual(
-      Array(18).fill(['intent', 'outcome']).flat()
+      Array(20).fill(['intent', 'outcome']).flat()
     );
     // Every slot mints its own reference except the deliberate repeat.
-    expect(new Set(journalLines.map((entry) => entry.reference)).size).toBe(17);
+    expect(new Set(journalLines.map((entry) => entry.reference)).size).toBe(19);
     const referenceOf = (slot: string) =>
       journalLines.find((entry) => entry.slot === slot)?.reference;
     expect(referenceOf('p2/duplicate_reference')).toBe(referenceOf('p2/w2w'));
@@ -139,12 +138,12 @@ describe('live-sandbox-mutations', () => {
       ...deps,
       now: () => new Date('2026-10-31T10:00:00Z'),
     });
-    expect(posts(mock).length).toBe(18);
+    expect(posts(mock).length).toBe(20);
     expect(mock.calls.length).toBeGreaterThan(before);
     expect(second.proofs.some((p) => p.status === 'inconclusive')).toBe(true);
 
     await runHarness({ ...cfg, newAttempt: true }, deps);
-    expect(posts(mock).length).toBeGreaterThan(18);
+    expect(posts(mock).length).toBeGreaterThan(20);
   });
 
   it('uses unique references for every booked transfer', async () => {

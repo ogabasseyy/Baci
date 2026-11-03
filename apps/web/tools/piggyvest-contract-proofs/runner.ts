@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { RUN_MODES, SANDBOX_ORIGIN } from './constants';
+import { RUN_MODES, SANDBOX_ORIGIN, STANDALONE_PROOFS } from './constants';
 import { buildEvidence, renderMarkdown } from './evidence';
 import { type WrittenEvidence, writeEvidence } from './evidence-writer';
 import { createGuardedFetch } from './guarded-fetch';
@@ -34,7 +34,7 @@ import { loadAllowlist } from './qa-allowlist';
 import { isProof7KeyOf } from './qa-keys';
 import { Redactor } from './redactor';
 import { ResponseCapture } from './response-capture';
-import type { RunConfig } from './run-mode';
+import { assertProofScope, type RunConfig } from './run-mode';
 import {
   assertSandboxBaseUrl,
   assertTestKey,
@@ -103,28 +103,55 @@ export interface RunSummary {
 }
 
 /**
- * The attempt number is per QA customer: it is the newest attempt that this
- * customer (or one of its own derived proof-7 keys) has used. Taking the
- * maximum across the whole journal would let one customer's `--new-attempt`
- * make another customer's executed mutations look fresh and be resent.
- * `--new-attempt` opens the next attempt for the selected customer only.
+ * The attempt number is per QA customer (its own entries plus its derived
+ * proof-7 keys); another customer's `--new-attempt` never moves it.
+ * `--new-attempt` opens one above every attempt this customer has used. A run
+ * that includes the shared scenario resumes the newest attempt holding the
+ * customer's OWN entries: an attempt opened by a proof-7-only run holds only
+ * proof-7 slots, and resuming it would make every executed scenario slot look
+ * fresh and send it again. A proof-7-only run resumes the newest of either.
  */
 export function currentAttempt(
   journal: Journal,
   qaKey: string,
-  newAttempt: boolean
+  newAttempt: boolean,
+  includesScenario: boolean
 ): number {
-  const latest = Math.max(
-    0,
-    ...journal
-      .entries()
-      .filter(
-        (entry) => entry.qaKey === qaKey || isProof7KeyOf(qaKey, entry.qaKey)
-      )
-      .map((entry) => entry.attempt)
-  );
+  const entries = journal.entries();
+  const own = entries
+    .filter((entry) => entry.qaKey === qaKey)
+    .map((entry) => entry.attempt);
+  const derived = entries
+    .filter((entry) => isProof7KeyOf(qaKey, entry.qaKey))
+    .map((entry) => entry.attempt);
+  const latest = Math.max(0, ...own, ...derived);
   if (latest === 0) return 1;
-  return newAttempt ? latest + 1 : latest;
+  if (newAttempt) return latest + 1;
+  return includesScenario && own.length > 0 ? Math.max(...own) : latest;
+}
+
+/**
+ * A full run runs proof 7 under the scenario's attempt. If a proof-7-only
+ * `--new-attempt` moved proof 7 past it without it ever running on the scenario's
+ * attempt, proof 7 would find nothing journaled
+ * and create a second sandbox customer (a resend). Refuse instead.
+ */
+export function assertProof7AttemptAligned(
+  journal: Journal,
+  qaKey: string,
+  attempt: number
+): void {
+  const proof7 = journal
+    .entries()
+    .filter((entry) => isProof7KeyOf(qaKey, entry.qaKey))
+    .map((entry) => entry.attempt);
+  const newest = Math.max(0, ...proof7);
+  if (newest > attempt && !proof7.includes(attempt)) {
+    throw new HarnessRefusal(
+      'USAGE',
+      `proof 7 never ran on attempt ${attempt} but is on ${newest}; pass --new-attempt, or run --proof p7`
+    );
+  }
 }
 
 const realSleep = (ms: number) =>
@@ -143,6 +170,10 @@ export async function runHarness(
     throw new HarnessRefusal('USAGE', 'unknown run mode');
   }
   assertSandboxBaseUrl(config.baseUrl);
+  assertProofScope(config.proof, config.newAttempt);
+  const only = config.proof;
+  // A standalone proof run alone needs no shared customer, goal or funding.
+  const includesScenario = !only || !STANDALONE_PROOFS.includes(only);
   const mock = live ? null : createMockProvider();
   const token = live ? (config.apiKey ?? undefined) : MOCK_API_KEY;
   assertTestKey(token);
@@ -178,7 +209,15 @@ export async function runHarness(
   try {
     const state = emptyScenarioState();
     const capture = new ResponseCapture();
-    const attempt = currentAttempt(journal, qaKey, config.newAttempt);
+    const attempt = currentAttempt(
+      journal,
+      qaKey,
+      config.newAttempt,
+      includesScenario
+    );
+    if (!only && !config.newAttempt) {
+      assertProof7AttemptAligned(journal, qaKey, attempt);
+    }
     const gate = new MutationGate({
       mode: config.mode,
       journal,
@@ -225,8 +264,11 @@ export async function runHarness(
     const previousFetch = globalThis.fetch;
     globalThis.fetch = guarded; // the typed client calls the global; nothing bypasses the guard
     try {
-      await setupScenario(ctx);
-      for (const [id, defaultRunner, title] of PROOF_ORDER) {
+      if (includesScenario) await setupScenario(ctx);
+      const order = only
+        ? PROOF_ORDER.filter(([id]) => id === only)
+        : PROOF_ORDER;
+      for (const [id, defaultRunner, title] of order) {
         const runner = deps.proofRunners?.[id] ?? defaultRunner;
         try {
           proofs.push(await runner(ctx));

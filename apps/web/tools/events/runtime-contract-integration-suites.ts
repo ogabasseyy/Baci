@@ -134,8 +134,6 @@ export const runtimeIntegrationSuites: Readonly<Record<string, string>> = {
     'apps/web/src/app/api/payments/oxygen/plans/quote/route.test.ts',
   'apps/web/src/schemas/oxygen-selfie-status.ts':
     'apps/web/src/app/api/payments/oxygen/workflows/selfie-status/route.test.ts',
-  'apps/web/src/schemas/oxygen-session.ts':
-    'apps/web/src/app/api/payments/oxygen/session/route.test.ts',
   'apps/web/src/schemas/oxygen-webhook.ts':
     'apps/web/src/lib/payments/oxygen/webhook.test.ts',
   'apps/web/src/app/(storefront)/[slug]/(customer)/account/login/customer-login-page.tsx':

@@ -101,11 +101,11 @@ it('keeps every Oxygen endpoint on the dynamic origin without admitting unknown 
     'reconcile',
     'recovery',
     'residential-context',
-    'session',
     'webhook',
     'workflows',
     'workflows/actions',
     'workflows/phone-handoff',
+    'workflows/phone-recovery',
     'workflows/selfie-status',
   ];
   const paths = endpoints.map(
@@ -122,6 +122,11 @@ it('keeps every Oxygen endpoint on the dynamic origin without admitting unknown 
   );
   expect(rows).toHaveLength(endpoints.length);
   for (const row of rows) expect(row.decision).toBe('origin_dynamic');
+  expect(
+    isStorefrontRequiredApiSourcePath(
+      'apps/web/src/app/api/payments/oxygen/session/route.ts'
+    )
+  ).toBe(false);
   expect(
     isStorefrontRequiredApiSourcePath(
       'apps/web/src/app/api/payments/oxygen/unreviewed/route.ts'

@@ -160,6 +160,14 @@ shapes are therefore accepted and not hardened further:
 
 - A local composite action or reusable workflow referenced from outside
   `.github/actions` and `.github/workflows` is not followed.
+- A `github-script` dispatch whose parameters sit in an unrelated object
+  (`createWorkflowDispatch(params)`) is matched with any literal `workflow_id`
+  in the file rather than its own.
+- A parent-relative script path (`bash ../x.sh`) is not followed outside the
+  repository root.
+- The server-off test check reads test text heuristically: an all-inline
+  `import { type X }`, a trailing `//` comment, or a `)` inside a regex literal
+  in a live test can fool it.
 
 ## Ending the gate (cutover)
 

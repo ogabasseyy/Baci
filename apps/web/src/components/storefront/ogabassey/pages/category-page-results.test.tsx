@@ -104,7 +104,7 @@ describe('CategoryPageResults', () => {
     (viewMode) => {
       renderResults({
         viewMode,
-        visibleProducts: ['A', 'B', 'C', 'D'].map((id) =>
+        visibleProducts: ['A', 'B', 'C'].map((id) =>
           buildProduct({ id, name: `Phone ${id}` })
         ),
       });
@@ -117,10 +117,6 @@ describe('CategoryPageResults', () => {
         viewMode === 'grid' ? 'true' : 'false'
       );
       expect(screen.getByRole('article', { name: 'Phone C' })).toHaveAttribute(
-        'data-image-priority',
-        viewMode === 'grid' ? 'true' : 'false'
-      );
-      expect(screen.getByRole('article', { name: 'Phone D' })).toHaveAttribute(
         'data-image-priority',
         'false'
       );

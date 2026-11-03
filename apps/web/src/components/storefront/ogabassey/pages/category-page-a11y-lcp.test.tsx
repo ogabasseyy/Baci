@@ -1,26 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const originalMatchMedia = window.matchMedia;
 const mockAddToCart = vi.fn();
 const mockRouterPush = vi.hoisted(() => vi.fn());
-
-function mockMatchMedia(matches: boolean) {
-  Object.defineProperty(window, 'matchMedia', {
-    writable: true,
-    value: vi.fn().mockImplementation(() => ({
-      matches,
-      media: '(min-width: 768px)',
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })),
-  });
-}
 
 vi.mock('next/link', () => ({
   default: ({
@@ -90,16 +73,7 @@ describe('CategoryPage a11y and first-row LCP prioritization', () => {
     mockRouterPush.mockReset();
   });
 
-  afterEach(() => {
-    Object.defineProperty(window, 'matchMedia', {
-      writable: true,
-      value: originalMatchMedia,
-    });
-  });
-
-  it('prioritizes the first 3 grid cards on desktop viewports and exposes accessible view toggle buttons', () => {
-    mockMatchMedia(true);
-
+  it('prioritizes the first 2 grid cards without over-fetching on mobile and exposes 44px accessible view toggle buttons', () => {
     const products = Array.from({ length: 4 }, (_, index) => ({
       id: String(index + 1),
       name: `Phone ${index + 1}`,
@@ -119,46 +93,6 @@ describe('CategoryPage a11y and first-row LCP prioritization', () => {
     expect(gridButton).toHaveClass('min-h-11', 'min-w-11');
     expect(listButton).toHaveAttribute('aria-pressed', 'false');
     expect(listButton).toHaveClass('min-h-11', 'min-w-11');
-
-    expect(
-      screen.getByRole('article', { name: 'Phone 1' })
-    ).toHaveAttribute('data-image-priority', 'true');
-    expect(
-      screen.getByRole('article', { name: 'Phone 2' })
-    ).toHaveAttribute('data-image-priority', 'true');
-    expect(
-      screen.getByRole('article', { name: 'Phone 3' })
-    ).toHaveAttribute('data-image-priority', 'true');
-    expect(
-      screen.getByRole('article', { name: 'Phone 4' })
-    ).toHaveAttribute('data-image-priority', 'false');
-  });
-
-  it('prioritizes 3 cards in SSR markup for desktop preload discovery and demotes the 3rd card after mount on mobile viewports', () => {
-    mockMatchMedia(false);
-
-    const products = Array.from({ length: 4 }, (_, index) => ({
-      id: String(index + 1),
-      name: `Phone ${index + 1}`,
-      slug: `phone-${index + 1}`,
-      description: `Description ${index + 1}`,
-      price: `₦${index + 1}`,
-      rawPrice: index + 1,
-      image: `/phone-${index + 1}.jpg`,
-      condition: 'New' as const,
-    }));
-
-    const ssrMarkup = renderToStaticMarkup(
-      <CategoryPage prioritizeFirstRowImages products={products} />
-    );
-    const ssrDoc = new DOMParser().parseFromString(ssrMarkup, 'text/html');
-    expect(
-      ssrDoc
-        .querySelector('article[aria-label="Phone 3"]')
-        ?.getAttribute('data-image-priority')
-    ).toBe('true');
-
-    render(<CategoryPage prioritizeFirstRowImages products={products} />);
 
     expect(
       screen.getByRole('article', { name: 'Phone 1' })

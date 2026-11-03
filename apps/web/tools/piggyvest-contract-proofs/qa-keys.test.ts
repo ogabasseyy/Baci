@@ -70,6 +70,21 @@ describe('proof10Key', () => {
     expect(proof10Key('q'.repeat(64), 99).length).toBeLessThanOrEqual(64);
   });
 
+  it('refuses to mint attempt 0, 100 or beyond, or a non-integer, instead of wrapping', () => {
+    for (const attempt of [0, 100, 101, 1.5, Number.NaN]) {
+      expect(() => proof10Key('qa-customer-0001', attempt)).toThrow(RangeError);
+      expect(() => proof7Key('qa-customer-0001', attempt)).toThrow(RangeError);
+    }
+    // Every key it does mint is recognised by its own predicate.
+    for (let attempt = 1; attempt <= 99; attempt += 1)
+      expect(
+        isProof10KeyOf(
+          'qa-customer-0001',
+          proof10Key('qa-customer-0001', attempt)
+        )
+      ).toBe(true);
+  });
+
   it('is recognised only for its own QA key', () => {
     const key = proof10Key('qa-customer-0001', 1);
     expect(isProof10KeyOf('qa-customer-0001', key)).toBe(true);

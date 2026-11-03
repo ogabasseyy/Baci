@@ -1,0 +1,50 @@
+/**
+ * The ONE settle rule for every place that marks a money movement settled
+ * (a test funding, a measured deposit, a main -> goal transfer).
+ *
+ * A movement is settled only when the destination balance shows the FULL
+ * expected credit - the gross minus the fee the record shows - AND the next
+ * observation shows the balance unchanged. A balance that merely rose may be
+ * a first tranche, so a partial credit is never settled. A fee that has not
+ * been read, or whose record is not yet visible, is `null` and is never
+ * treated as a fee of 0 that gets locked in: callers re-read it until a
+ * record shows it, and until then only the full gross counts as complete.
+ */
+
+/** The credit a fully landed movement shows: gross minus the recorded fee. */
+export function expectedCreditKobo(
+  grossKobo: number,
+  feeKobo: number | null
+): number {
+  return grossKobo - (feeKobo ?? 0);
+}
+
+/** Did the destination show the full expected credit? An unread credit never did. */
+export function creditComplete(
+  creditedKobo: number | null,
+  grossKobo: number,
+  feeKobo: number | null
+): boolean {
+  return (
+    creditedKobo !== null &&
+    creditedKobo >= expectedCreditKobo(grossKobo, feeKobo)
+  );
+}
+
+/**
+ * Settled: the full credit is shown now AND the previous observation showed
+ * the same credit (nothing moved between the two polls).
+ */
+export function movementSettled(observation: {
+  creditedKobo: number | null;
+  previousCreditedKobo: number | null;
+  grossKobo: number;
+  feeKobo: number | null;
+}): boolean {
+  const { creditedKobo, previousCreditedKobo, grossKobo, feeKobo } =
+    observation;
+  return (
+    creditComplete(creditedKobo, grossKobo, feeKobo) &&
+    previousCreditedKobo === creditedKobo
+  );
+}

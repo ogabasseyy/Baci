@@ -20,6 +20,8 @@ export const PROOF_IDS = [
   'p5',
   'p6',
   'p7',
+  'p8',
+  'p9',
   'p10',
 ] as const;
 
@@ -32,11 +34,14 @@ export const STANDALONE_PROOFS: readonly (typeof PROOF_IDS)[number][] = ['p7'];
 
 /**
  * Proofs that only measure what other proofs in the same run did (proof 6
- * reads the transfer and the deposit that proofs 2 and 3 make), so --proof
+ * reads the transfer and the deposit that proofs 2 and 3 make; proofs 8 and 9
+ * read the transfers and the goal deposit those proofs leave), so --proof
  * refuses them: alone they would spend scenario mutations and measure nothing.
  */
 export const FULL_RUN_ONLY_PROOFS: readonly (typeof PROOF_IDS)[number][] = [
   'p6',
+  'p8',
+  'p9',
 ];
 
 /** The only modes that may send a state-changing request. Everything else fails closed. */

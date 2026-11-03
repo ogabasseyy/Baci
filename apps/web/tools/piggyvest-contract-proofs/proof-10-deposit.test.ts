@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AMOUNTS_KOBO } from './constants';
+import { MovementLedger } from './movement-ledger';
 import { creditedOnce, DEPOSIT_ONCE, stepDeposit } from './proof-10-deposit';
 import { ProofBuilder } from './proof-builder';
 import { setupScenario } from './scenario';
@@ -64,5 +65,40 @@ describe('S8 deposit step', () => {
       before
     );
     expect(answer(b.build(h.ctx))).toBe('unknown');
+  });
+
+  it('marks the movement settled when the full credit lands', async () => {
+    const h = makeHarness();
+    dispose = h.dispose;
+    await setupScenario(h.ctx);
+    const main = h.state.mainWalletId as string;
+    const ledger = new MovementLedger();
+    await stepDeposit(h.ctx, new ProofBuilder('p10', 'S8'), main, ledger);
+    expect(ledger.isQuiet(main)).toBe(true);
+  });
+
+  it('keeps a partially visible deposit unsettled in the ledger', async () => {
+    const h = makeHarness();
+    dispose = h.dispose;
+    await setupScenario(h.ctx);
+    const main = h.state.mainWalletId as string;
+    const funding = h.api.fundWallet.bind(h.api);
+    let funded = false;
+    h.api.fundWallet = async (...args) => {
+      funded = true;
+      return funding(...args);
+    };
+    const real = h.api.wallet.bind(h.api);
+    h.api.wallet = async (id) => {
+      const call = await real(id);
+      const data = (call.data ?? {}) as { balance?: number };
+      // 100,000 of the 170,000 net credit has not shown yet, and holds still.
+      return funded && typeof data.balance === 'number'
+        ? { ...call, data: { ...data, balance: data.balance - 100_000 } }
+        : call;
+    };
+    const ledger = new MovementLedger();
+    await stepDeposit(h.ctx, new ProofBuilder('p10', 'S8'), main, ledger);
+    expect(ledger.isQuiet(main)).toBe(false);
   });
 });

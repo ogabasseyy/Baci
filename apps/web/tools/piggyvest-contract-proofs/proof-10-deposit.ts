@@ -28,12 +28,13 @@ export async function stepDeposit(
   // inside this deposit's measurement.
   const quietBefore = ledger.isQuiet(main);
   const measured = await measureDeposit(ctx, main, gross, 'p10/deposit_main');
-  // Unmeasured, the credit may still land under a later baseline.
+  // Unmeasured or only partly credited, the rest may still land under a
+  // later baseline: settled needs the full expected credit (settle-rule.ts).
   ledger.append({
     from: null,
     to: main,
     amountKobo: gross,
-    settled: measured.kind === 'measured',
+    settled: measured.kind === 'measured' && measured.complete,
   });
   if (measured.kind === 'resumed') {
     b.note(

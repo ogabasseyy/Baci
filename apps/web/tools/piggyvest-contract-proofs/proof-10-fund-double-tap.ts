@@ -5,6 +5,7 @@ import { EARLIER_UNSETTLED, MovementLedger } from './movement-ledger';
 import { awaitTerminal, delta, readingOf, settledWallets } from './poll';
 import type { ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
+import { creditComplete } from './settle-rule';
 import { transferVerdict } from './verdict-rule';
 
 export {
@@ -123,7 +124,21 @@ export async function stepFundGoal(
     .value('fund_goal_main_delta_kobo', result.mainDeltaKobo)
     .value('fund_goal_goal_delta_kobo', result.goalDeltaKobo);
   const { mainDeltaKobo: main$, goalDeltaKobo: goal$ } = result;
-  record(watch.terminal === 'success' && main$ !== null && goal$ !== null);
+  // One transfer takes the amount plus, at most, the fee the record shows,
+  // on either side. A difference the record cannot explain is never "once".
+  const fee =
+    watch.terminal === 'success' && main$ !== null && goal$ !== null
+      ? await readTransferFeeKobo(ctx, sent.reference, main)
+      : null;
+  // Settled by the shared rule: the goal shows the full credit (the amount
+  // less the recorded fee) and the main debit covers at least the amount.
+  record(
+    watch.terminal === 'success' &&
+      main$ !== null &&
+      goal$ !== null &&
+      creditComplete(goal$, amount, fee) &&
+      -main$ >= amount
+  );
   if (watch.terminal !== 'success' || main$ === null || goal$ === null) {
     b.inconclusive('the goal funding did not reach a settled, measured result');
     b.finding(
@@ -143,9 +158,6 @@ export async function stepFundGoal(
     b.finding(FUND_GOAL, FUND_Q, 'unknown', EARLIER_UNSETTLED);
     return result;
   }
-  // One transfer takes the amount plus, at most, the fee the record shows,
-  // on either side. A difference the record cannot explain is never "once".
-  const fee = await readTransferFeeKobo(ctx, sent.reference, main);
   b.value('fund_goal_fee_from_record_kobo', fee);
   const verdict = transferVerdict(amount, -main$, goal$, fee);
   b.finding(FUND_GOAL, FUND_Q, verdict.answer, verdict.detail);

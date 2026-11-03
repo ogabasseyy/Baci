@@ -197,7 +197,6 @@ test('fails closed when the superseding comparison is incomplete', async () => {
     { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: intermediateSha }, status: 'ahead', total_commits: 1 },
     { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 0 },
     { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 101 },
-    { files: new Array(300).fill({ filename: 'apps/web/src/app/page.tsx' }), merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 1 },
     { files: [{ filename: 'apps/web/src/app/page.tsx' }], merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 2, commits: [{ sha: currentSha }] },
   ]) {
     await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl: async (url) => url.includes('/git/ref') ? response({ object: { sha: currentSha } }) : response(comparison), repository: 'ogabasseyy/Baci', token: 'test-token' }), /incomplete or non-ancestral superseding comparison|incomplete superseding commit list/);
@@ -266,7 +265,39 @@ test('fails closed on malformed identity, API responses, or response truncation'
   const truncFetch = async (u) => u.includes('/git/ref') ? response({ object: { sha: currentSha } }) :
     u.includes('/compare') ? response({ commits: [{ sha: currentSha }], files: new Array(300).fill({ filename: 'apps/web/src/app/page.tsx' }), merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 1 }) :
     response({ workflow_runs: [] });
-  await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl: truncFetch, repository: 'ogabasseyy/Baci', token: 'test-token' }), /incomplete or non-ancestral superseding comparison/);
+  // A file list at the API cap is treated as web-touching (never trusted as non-web-only), so
+  // the deployed-run check decides: nothing deployed => the ancestor may publish.
+  assert.deepEqual(await verifyCurrentMainDeployment({ expectedSha, fetchImpl: truncFetch, repository: 'ogabasseyy/Baci', token: 'test-token' }), { currentSha, expectedSha });
+});
+
+function pagedFetch({ totalCommits, deployedSha }) {
+  const shaFor = (i) => i.toString(16).padStart(40, '0');
+  const all = Array.from({ length: totalCommits }, (_, i) => ({ sha: shaFor(i + 1) }));
+  all[all.length - 1] = { sha: currentSha };
+  const urls = [];
+  const fetchImpl = async (u) => {
+    urls.push(u);
+    if (u.includes('/git/ref')) return response({ object: { sha: currentSha } });
+    if (u.includes('/compare/')) {
+      const page = Number(new URL(u).searchParams.get('page'));
+      return response({ commits: all.slice((page - 1) * 100, page * 100), files: new Array(300).fill({ filename: 'apps/web/src/app/page.tsx' }), merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: totalCommits });
+    }
+    if (u.includes('/jobs')) return response({ jobs: [{ conclusion: 'success', name: 'deploy-production' }], total_count: 1 });
+    const sha = u.match(/head_sha=([0-9a-f]{40})/)?.[1];
+    return response({ total_count: sha === deployedSha ? 1 : 0, workflow_runs: sha === deployedSha ? [{ conclusion: 'success', head_branch: 'main', head_sha: sha, id: 9, status: 'completed' }] : [] });
+  };
+  return { fetchImpl, urls };
+}
+
+test('bugfix: accepts an in-flight ancestor when main moved >100 commits and >=300 files', async () => {
+  const { fetchImpl, urls } = pagedFetch({ totalCommits: 250 });
+  assert.deepEqual(await verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 'test-token' }), { currentSha, expectedSha });
+  assert.equal(urls.filter((u) => u.includes('/compare/')).length, 3);
+});
+
+test('bugfix: still refuses a large-gap ancestor when a commit on a later page already deployed', async () => {
+  const { fetchImpl } = pagedFetch({ totalCommits: 250, deployedSha: (150).toString(16).padStart(40, '0') });
+  await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 'test-token' }), /superseded deployment SHA/);
 });
 
 test('rejects unsupported picomatch glob metacharacters and complex patterns', () => {

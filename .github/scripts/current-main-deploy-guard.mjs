@@ -183,6 +183,11 @@ async function hasSupersedingDeployment({
   return false;
 }
 
+const COMPARE_PAGE_SIZE = 100;
+const COMPARE_MAX_PAGES = 50;
+// GitHub's compare API lists at most 300 files; a list this long may be truncated.
+const COMPARE_FILE_LIMIT = 300;
+
 async function supersedingChangesCanProceed({
   apiRoot,
   currentSha,
@@ -191,24 +196,40 @@ async function supersedingChangesCanProceed({
   repository,
   token,
 }) {
-  const comparison = await githubJson(
-    fetchImpl,
-    `${apiRoot}/repos/${repository}/compare/${expectedSha}...${currentSha}?per_page=100&page=1`,
-    token
-  );
+  const compareUrl = (page) =>
+    `${apiRoot}/repos/${repository}/compare/${expectedSha}...${currentSha}?per_page=${COMPARE_PAGE_SIZE}&page=${page}`;
+  const comparison = await githubJson(fetchImpl, compareUrl(1), token);
+  // Ancestry (status ahead + merge base is the in-flight SHA) is what matters;
+  // how far main has moved is irrelevant, so the commit list is paginated
+  // rather than refusing large comparisons.
   if (
     comparison?.status !== 'ahead' ||
     comparison?.merge_base_commit?.sha?.toLowerCase() !== expectedSha.toLowerCase() ||
     !Number.isSafeInteger(comparison?.total_commits) ||
     comparison.total_commits < 1 ||
-    comparison.total_commits > 100 ||
-    !Array.isArray(comparison?.files) ||
-    comparison.files.length >= 300
+    !Array.isArray(comparison?.files)
   ) {
     throw new Error('incomplete or non-ancestral superseding comparison');
   }
-  let nonWebOnly = true;
-  for (const file of comparison.files) {
+  const pageCount = Math.ceil(comparison.total_commits / COMPARE_PAGE_SIZE);
+  if (pageCount > COMPARE_MAX_PAGES) {
+    throw new Error('incomplete or non-ancestral superseding comparison');
+  }
+  const commits = Array.isArray(comparison.commits) ? [...comparison.commits] : [];
+  const files = [...comparison.files];
+  for (let page = 2; page <= pageCount; page++) {
+    const next = await githubJson(fetchImpl, compareUrl(page), token);
+    if (!Array.isArray(next?.commits) || !Array.isArray(next?.files)) {
+      throw new Error('incomplete or non-ancestral superseding comparison');
+    }
+    commits.push(...next.commits);
+    files.push(...next.files);
+  }
+  comparison.commits = commits;
+  comparison.files = files;
+  // A file list at the API cap may be truncated, so it can never prove non-web-only.
+  let nonWebOnly = comparison.files.length < COMPARE_FILE_LIMIT;
+  for (const file of nonWebOnly ? comparison.files : []) {
     const paths = [file?.filename, file?.previous_filename].filter(Boolean);
     if (paths.length === 0 || paths.some((path) => isWebDeployPath(path))) {
       nonWebOnly = false;

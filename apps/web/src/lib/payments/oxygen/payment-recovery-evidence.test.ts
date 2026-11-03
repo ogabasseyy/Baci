@@ -8,7 +8,7 @@ import { decryptOxygenResponse } from './response-evidence';
 const workflow = '60000000-0000-4000-8000-000000000001';
 const command = '70000000-0000-4000-8000-000000000001';
 const key = 'ab'.repeat(32);
-it('encrypts the returned recovery URL before storage and binds it to its command', async () => {
+it('stores only the hosted origin in encrypted evidence and binds it to its command', async () => {
   const rpc = vi
     .fn()
     .mockResolvedValue({ data: { recorded: true }, error: null });
@@ -26,7 +26,7 @@ it('encrypts the returned recovery URL before storage and binds it to its comman
     capture: 'parsed',
     durationMs: 10,
     body: {
-      url: 'https://payment.hydrogenpay.com/?transactionId=private-link',
+      url: 'https://payment.hydrogenpay.com/private-path?transactionId=private-link',
       otp: '123456',
     },
   });
@@ -42,10 +42,12 @@ it('encrypts the returned recovery URL before storage and binds it to its comman
   );
   expect(recovered).toMatchObject({
     links: {
-      url: 'https://payment.hydrogenpay.com/?transactionId=private-link',
+      url: 'https://payment.hydrogenpay.com',
     },
   });
   expect(JSON.stringify(recovered)).not.toContain('123456');
+  expect(JSON.stringify(recovered)).not.toContain('private-path');
+  expect(JSON.stringify(recovered)).not.toContain('private-link');
   expect(() =>
     decryptOxygenResponse(payload.ciphertext, key, command, workflow, 1)
   ).toThrow();

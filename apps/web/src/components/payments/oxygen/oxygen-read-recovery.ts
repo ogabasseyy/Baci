@@ -9,6 +9,7 @@ export function pendingReadRecovery(
   | 'refresh_details'
   | 'refresh_eligibility'
   | 'refresh_payment_setup'
+  | 'validate_nin'
   | null {
   const pending = snapshot?.pending;
   if (
@@ -16,6 +17,16 @@ export function pendingReadRecovery(
     (pending?.status !== 'queued' && pending?.status !== 'executing')
   )
     return null;
+  // A queued command has not been dispatched; resuming it must reuse its key.
+  if (
+    pending.action === 'validate_nin' &&
+    pending.status === 'queued' &&
+    snapshot.state.applicationReference &&
+    !snapshot.state.bookingReference &&
+    snapshot.stage !== 'activated' &&
+    snapshot.stage !== 'reconciliation_required'
+  )
+    return 'validate_nin';
   if (
     pending.action === 'refresh_eligibility' &&
     pending.status === 'queued' &&

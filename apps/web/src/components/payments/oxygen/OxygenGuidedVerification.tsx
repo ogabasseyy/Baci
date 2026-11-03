@@ -9,6 +9,7 @@ import { OxygenSelfieConfirmedContext } from './OxygenPaymentSurfaceContext';
 import { OxygenSelfieButton } from './OxygenSelfieButton';
 import { OxygenVerificationActivity } from './OxygenVerificationActivity';
 import type { SubmitOxygenForm } from './OxygenVerificationForms';
+import { pendingReadRecovery } from './oxygen-read-recovery';
 import { oxygenVerificationHeading } from './oxygen-verification-heading';
 import { selfieLinkExpiration, selfieLinkExpired } from './selfie-link-expired';
 
@@ -192,19 +193,22 @@ export function OxygenGuidedVerification({
     );
   const selfie = selfieRequired && !expiredSelfie && state.selfieUrl;
   const ninRetry = ninRequired && snapshot.ninAttemptStatus === 'safe_retry';
+  const queuedNin = active && pendingReadRecovery(snapshot) === 'validate_nin';
   const retryStatus =
     ninRequired && snapshot.ninAttemptStatus !== 'first_attempt' && !ninRetry;
   const recoverable =
-    !selfie && (eligibilityFailed || review || ninRetry || retryStatus);
+    !selfie &&
+    (eligibilityFailed || review || ninRetry || retryStatus || queuedNin);
   async function retryCheck() {
-    if (busy || retryLock.current || snapshot.pending) return;
+    if (busy || retryLock.current || (snapshot.pending && !queuedNin)) return;
     retryLock.current = true;
     setRetrying(true);
-    const action = ninRetry
-      ? 'validate_nin'
-      : identityComplete && !state.eligible
-        ? 'refresh_eligibility'
-        : 'refresh_kyc';
+    const action =
+      ninRetry || queuedNin
+        ? 'validate_nin'
+        : identityComplete && !state.eligible
+          ? 'refresh_eligibility'
+          : 'refresh_kyc';
     attempts.current.set(action, 1);
     try {
       await submit({ action });
@@ -243,29 +247,31 @@ export function OxygenGuidedVerification({
         <p className="text-sm leading-relaxed text-gray-500">
           {selfie
             ? 'Opening Oxygen’s secure camera check. We’ll continue automatically when your selfie is confirmed.'
-            : retryStatus
-              ? 'We couldn’t confirm your saved status. Check for an update to continue.'
-              : ninPending
-                ? 'Your eligibility check is complete. We’re finishing your identity verification before showing your payment plans.'
-                : bankPending
-                  ? 'Your identity checks are complete. Oxygen has not confirmed your bank account yet. Your progress is saved.'
-                  : busy || retrying
-                    ? identityComplete
-                      ? 'We’re checking your available payment options with Oxygen.'
-                      : selfieConfirmed
-                        ? 'Your selfie is confirmed. We’re updating your identity checks with Oxygen.'
-                        : state.kyc?.bvn_status === 'DONE'
-                          ? 'Getting Oxygen’s secure camera check ready for you.'
-                          : 'We’re confirming your BVN with Oxygen.'
-                    : eligibilityFailed
-                      ? 'Oxygen is taking longer than expected. Your details and verification are saved. Try again to continue.'
-                      : review
-                        ? 'Oxygen is still processing your check. Your details are saved, and you can check again when you’re ready.'
+            : queuedNin
+              ? 'Continue your saved identity check. If it has already started, we’ll check its status.'
+              : retryStatus
+                ? 'We couldn’t confirm your saved status. Check for an update to continue.'
+                : ninPending
+                  ? 'Your eligibility check is complete. We’re finishing your identity verification before showing your payment plans.'
+                  : bankPending
+                    ? 'Your identity checks are complete. Oxygen has not confirmed your bank account yet. Your progress is saved.'
+                    : busy || retrying
+                      ? identityComplete
+                        ? 'We’re checking your available payment options with Oxygen.'
                         : selfieConfirmed
                           ? 'Your selfie is confirmed. We’re updating your identity checks with Oxygen.'
                           : state.kyc?.bvn_status === 'DONE'
                             ? 'Getting Oxygen’s secure camera check ready for you.'
-                            : 'We’re confirming your BVN with Oxygen.'}
+                            : 'We’re confirming your BVN with Oxygen.'
+                      : eligibilityFailed
+                        ? 'Oxygen is taking longer than expected. Your details and verification are saved. Try again to continue.'
+                        : review
+                          ? 'Oxygen is still processing your check. Your details are saved, and you can check again when you’re ready.'
+                          : selfieConfirmed
+                            ? 'Your selfie is confirmed. We’re updating your identity checks with Oxygen.'
+                            : state.kyc?.bvn_status === 'DONE'
+                              ? 'Getting Oxygen’s secure camera check ready for you.'
+                              : 'We’re confirming your BVN with Oxygen.'}
         </p>
       </div>
       {selfie ? (
@@ -274,16 +280,18 @@ export function OxygenGuidedVerification({
         <OxygenLoadingButton
           type="button"
           loading={busy || retrying}
-          disabled={Boolean(snapshot.pending)}
+          disabled={Boolean(snapshot.pending) && !queuedNin}
           pendingLabel="Checking your payment options…"
           onClick={() => void retryCheck()}
           className="w-full sm:w-auto sm:min-w-44"
         >
-          {ninRetry
-            ? 'Try NIN check again'
-            : retryStatus
-              ? 'Check for an update'
-              : 'Try again'}
+          {queuedNin
+            ? 'Continue NIN check'
+            : ninRetry
+              ? 'Try NIN check again'
+              : retryStatus
+                ? 'Check for an update'
+                : 'Try again'}
         </OxygenLoadingButton>
       ) : (
         <p role="status" className="sr-only">

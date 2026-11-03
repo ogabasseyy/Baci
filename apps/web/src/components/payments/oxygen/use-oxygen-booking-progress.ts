@@ -120,6 +120,7 @@ export function useOxygenBookingProgress(
           'refresh_details',
           'refresh_eligibility',
           'refresh_payment_setup',
+          'validate_nin',
         ].includes(pendingReadRecovery(snapshot) ?? '')
       )
         return;
@@ -128,7 +129,8 @@ export function useOxygenBookingProgress(
         action === 'refresh_kyc' ||
         action === 'refresh_details' ||
         action === 'refresh_eligibility' ||
-        action === 'refresh_payment_setup'
+        action === 'refresh_payment_setup' ||
+        action === 'validate_nin'
       )
         await submit({ action });
     },

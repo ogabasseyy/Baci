@@ -109,6 +109,10 @@ export function OxygenPendingConfirmation({
         <OxygenConfirmationNotice
           booking={snapshot?.pending?.action === 'book'}
           identityCheck={snapshot?.pending?.action === 'validate_nin'}
+          queuedIdentityCheck={pendingReadRecovery(snapshot) === 'validate_nin'}
+          identityError={
+            pendingReadRecovery(snapshot) === 'validate_nin' && Boolean(error)
+          }
           eligibilityCheck={
             snapshot?.pending?.action === 'refresh_eligibility' &&
             snapshot.pending.status !== 'queued'
@@ -120,6 +124,7 @@ export function OxygenPendingConfirmation({
               'refresh_details',
               'refresh_eligibility',
               'refresh_payment_setup',
+              'validate_nin',
             ].includes(pendingReadRecovery(snapshot) ?? '') && checkPending
               ? checkPending
               : refresh

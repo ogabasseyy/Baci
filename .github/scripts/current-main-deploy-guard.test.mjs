@@ -25,6 +25,7 @@ async function verifySupersededFile(
     fetchImpl: async (url) => {
       if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
       if (url.includes('/compare/')) return makeCompareResponse(filename, commits);
+      if (url.includes('/commits/')) return response({ files: [{ filename }] });
       if (url.includes('/jobs')) return response({ jobs });
       return response({ workflow_runs: workflowRuns });
     },
@@ -69,6 +70,7 @@ test('accepts an in-flight ancestor when no superseding commit has deployed yet'
       urls.push(url);
       if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
       if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx', [{ sha: intermediateSha }, { sha: currentSha }]);
+      if (url.includes('/commits/')) return response({ files: [{ filename: 'apps/web/src/app/page.tsx' }] });
       if (url.includes('/jobs')) return response({ jobs: [{ conclusion: 'success', name: 'deploy-production' }] });
       return response({ workflow_runs: [{ conclusion: 'success', head_sha: olderDeployedSha, id: 456, status: 'completed' }] });
     },
@@ -147,6 +149,7 @@ test('short-circuits lookups when newest superseding commit is already deployed'
       fetchImpl: async (url) => {
         if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
         if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx', [{ sha: intermediateSha }, { sha: currentSha }]);
+        if (url.includes('/commits/')) return response({ files: [{ filename: 'apps/web/src/app/page.tsx' }] });
         if (url.includes('/jobs')) return response({ jobs: [{ conclusion: 'success', name: 'deploy-production' }] });
         const match = url.match(/head_sha=([0-9a-f]{40})/);
         if (match) queriedShas.push(match[1]);
@@ -203,7 +206,7 @@ test('fails closed when the superseding comparison is incomplete', async () => {
 test('rejects every web path declared by the deploy filter', async (t) => {
   const deployment = YAML.parse(readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8'));
   for (const pattern of deployment.web) {
-    const candidate = pattern.endsWith('/**') ? `${pattern.slice(0, -3)}/nested/file.ts` : pattern;
+    const candidate = pattern.endsWith('/**') ? `${pattern.slice(0, -3)}/nested/file.ts` : pattern.replaceAll('*', 'example');
     await t.test(pattern, async () => {
       await assert.rejects(verifySupersededFile(candidate), /superseded deployment SHA/);
     });
@@ -223,11 +226,12 @@ test('gates Vercel deployment configuration in deploy and CI filters', () => {
   }
 });
 
-test('root public guide assets trigger web CI and production deployment', () => {
+test('root public guide assets trigger web CI and production deployment', async () => {
   const deployment = YAML.parse(readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8'));
   const ci = YAML.parse(readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8'));
   assert.ok(deployment.web.includes('public/guides/**'));
   assert.ok(ci.web.includes('public/guides/**'));
+  await assert.rejects(verifySupersededFile('public/guides/chatgpt-ads/01-pixel-setup.png'), /superseded deployment SHA/);
 });
 
 test('detects earlier successful deploy attempt when rerun is queued or failed', async () => {
@@ -261,6 +265,11 @@ test('fails closed on malformed identity, API responses, or response truncation'
   await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: currentSha, id: 1, status: 'completed' }], [{ sha: 'bad-sha' }]), /invalid superseding commit SHA/);
   await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'failure', head_sha: currentSha, id: 1, status: 'completed' }], [{ sha: currentSha }], [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [] }]), /incomplete or invalid workflow job steps response/);
   await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'failure', head_sha: currentSha, id: 1, status: 'completed' }], [{ sha: currentSha }], [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ name: 'Other step' }] }]), /missing Deploy to Vercel step/);
+  await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: null, head_sha: currentSha, id: 1, status: 'in_progress' }], [{ sha: currentSha }], [{ conclusion: null, name: 'deploy-production', status: 'in_progress', steps: [{ name: 'Other step' }] }]), /missing Deploy to Vercel step/);
+  const nonWebFetch = async (u) => u.includes('/git/ref') ? response({ object: { sha: currentSha } }) :
+    u.includes('/compare') ? makeCompareResponse('apps/web/src/app/page.tsx', [{ sha: intermediateSha }, { sha: currentSha }]) :
+    u.includes('/commits') ? response({ files: [{ filename: 'docs/ops.md' }] }) : response({ workflow_runs: [{ head_sha: currentSha, id: 10, run_attempt: 1, status: 'queued' }] });
+  await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl: nonWebFetch, repository: 'ogabasseyy/Baci', token: 'test-token' }), /does not deploy superseding web changes/);
 });
 
 test('production deploy is staged and binds the exact-main guard', () => {

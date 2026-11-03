@@ -9,14 +9,9 @@ const ROOT_WEB_FILES = new Set([
   'turbo.json', 'vercel.json',
 ]);
 const WEB_PREFIXES = [
-  '.github/actions/pnpm-install-cached/',
-  '.github/actions/postdeploy-migrations/',
-  'apps/web/',
-  'infra/cwv-runner/',
-  'packages/shared/',
-  'public/badges/',
-  'public/guides/',
-  'supabase/migrations/',
+  '.github/actions/pnpm-install-cached/', '.github/actions/postdeploy-migrations/',
+  'apps/web/', 'infra/cwv-runner/', 'packages/shared/', 'public/badges/',
+  'public/guides/', 'supabase/migrations/',
 ];
 const WEB_WORKFLOW_FILES = new Set([
   '.github/filters/deploy.yml', '.github/scripts/assert-guide-prebuilt.mjs',
@@ -59,12 +54,8 @@ function safeApiUrl(value) {
 }
 
 function isWebDeployPath(path) {
-  return (
-    ROOT_WEB_FILES.has(path) ||
-    WEB_WORKFLOW_FILES.has(path) ||
-    /^tsconfig[^/]*\.json$/.test(path) ||
-    WEB_PREFIXES.some((prefix) => path.startsWith(prefix))
-  );
+  return ROOT_WEB_FILES.has(path) || WEB_WORKFLOW_FILES.has(path) ||
+    /^tsconfig[^/]*\.json$/.test(path) || WEB_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
 async function githubJson(fetchImpl, url, token) {
@@ -126,13 +117,13 @@ async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, tok
     if (job.conclusion !== 'skipped') {
       if (Array.isArray(job.steps) && job.steps.length > 0) {
         const deployStep = job.steps.find((s) => s?.name === 'Deploy to Vercel (with retry)');
-        const attempted =
-          deployStep?.status === 'in_progress' ||
-          (Boolean(deployStep?.conclusion) && deployStep.conclusion !== 'skipped');
-        if (attempted) return true;
-        if (job.status === 'completed' && !deployStep) {
+        if (!deployStep) {
           throw new Error('missing Deploy to Vercel step in deploy-production job');
         }
+        const attempted =
+          deployStep.status === 'in_progress' ||
+          (Boolean(deployStep.conclusion) && deployStep.conclusion !== 'skipped');
+        if (attempted) return true;
       } else if (job.status === 'completed') {
         throw new Error('incomplete or invalid workflow job steps response');
       }
@@ -142,7 +133,8 @@ async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, tok
 }
 
 // Residual risk note: tracks canonical deploy.yml workflow runs on main. Manual emergency
-// runs executed outside GitHub Actions do not leave runs records.
+// runs executed outside GitHub Actions leave no workflow run records and are accepted as an
+// operational rollback window.
 async function hasSupersedingDeployment({
   apiRoot,
   fetchImpl,
@@ -210,6 +202,13 @@ async function supersedingChangesCanProceed({
   }
   if (nonWebOnly) {
     return true;
+  }
+  if (comparison.total_commits > 1) {
+    const headCommit = await githubJson(fetchImpl, `${apiRoot}/repos/${repository}/commits/${currentSha}`, token);
+    const files = Array.isArray(headCommit?.files) ? headCommit.files : [];
+    if (!files.some((f) => [f?.filename, f?.previous_filename].filter(Boolean).some(isWebDeployPath))) {
+      throw new Error(`current main ${currentSha} does not deploy superseding web changes`);
+    }
   }
   const supersedingShas = collectSupersedingShas(comparison, currentSha);
   const alreadyDeployed = await hasSupersedingDeployment({

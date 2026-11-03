@@ -4,6 +4,7 @@ import {
   type ReconciliationReport,
   runDailyReconciliation,
 } from './daily-reconciliation';
+import { sendReconciliationEmail } from './daily-reconciliation-email';
 import {
   pageReasonOf,
   renderReconciliationEmail,
@@ -49,23 +50,13 @@ export interface DailyReconciliationDeps {
   now: () => string;
 }
 
-async function defaultSendEmail(message: {
-  to: string;
-  subject: string;
-  textContent: string;
-  htmlContent: string;
-}) {
-  const { sendEmail } = await import('@/lib/zeptomail');
-  return await sendEmail({ ...message, emailType: 'notifications' });
-}
-
 function defaultDeps(): DailyReconciliationDeps {
   return {
     readRuntime: readPrimaryWalletSavingsRecoveryRuntime,
     createExecutor: createPrimaryWalletEvidenceExecutor,
     readProviderTransfer,
     retrieveWallet: retrievePiggyvestWallet,
-    sendEmail: defaultSendEmail,
+    sendEmail: sendReconciliationEmail,
     emitAlert: emitPiggyvestWebhookAlert,
     now: () => new Date().toISOString(),
   };

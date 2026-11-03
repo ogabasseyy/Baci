@@ -29,7 +29,8 @@ pages if the report email cannot be sent.
 | `PIGGYVEST_RECONCILIATION_ENABLED` | Must be exactly `true`. Anything else: the route answers `disabled` and does nothing. |
 | `PIGGYVEST_RECONCILIATION_REPORT_EMAIL` | Owner address the report is sent to. Missing or invalid pages instead. |
 
-It reuses the `PIGGYVEST_PRIMARY_*` settings and the evidence database login.
+The email goes out through the platform ZeptoMail token (`ZEPTOMAIL_TOKEN`) with
+a single attempt; a failed send pages. It reuses the `PIGGYVEST_PRIMARY_*` settings and the evidence database login.
 It runs even when the savings flags are off, so a rollback cannot hide a stuck
 transfer. Set values by REST upsert, not a pipe.
 

@@ -1,11 +1,9 @@
 import { createHash } from 'node:crypto';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   run: vi.fn(),
-  secret: 'placeholder',
 }));
-vi.mock('@/env', () => ({ getCronSecret: () => mocks.secret }));
 vi.mock('@/lib/piggyvest/daily-reconciliation-runtime', () => ({
   runPiggyvestDailyReconciliation: mocks.run,
 }));
@@ -18,9 +16,14 @@ const request = (headers: Record<string, string> = {}) =>
     headers,
   });
 
+const ORIGINAL_SECRET = process.env.CRON_SECRET;
+afterAll(() => {
+  process.env.CRON_SECRET = ORIGINAL_SECRET;
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.secret = SECRET;
+  process.env.CRON_SECRET = SECRET;
 });
 
 describe('GET /api/cron/piggyvest-daily-reconciliation', () => {
@@ -34,7 +37,7 @@ describe('GET /api/cron/piggyvest-daily-reconciliation', () => {
   });
 
   it('rejects every request when no cron secret is configured', async () => {
-    mocks.secret = '';
+    process.env.CRON_SECRET = '';
     const response = await GET(request({ authorization: 'Bearer ' }));
     expect(response.status).toBe(401);
     expect(mocks.run).not.toHaveBeenCalled();

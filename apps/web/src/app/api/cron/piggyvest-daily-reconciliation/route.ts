@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { getCronSecret } from '@/env';
 import { hasValidCronSecret } from '@/lib/cron-secret-auth';
 import { runPiggyvestDailyReconciliation } from '@/lib/piggyvest/daily-reconciliation-runtime';
 
@@ -10,7 +9,7 @@ export const maxDuration = 300;
 // on a mismatch. The response carries counts only, never wallet or transfer
 // detail.
 export async function GET(request: Request) {
-  if (!hasValidCronSecret(request.headers, getCronSecret())) {
+  if (!hasValidCronSecret(request.headers, process.env.CRON_SECRET)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {

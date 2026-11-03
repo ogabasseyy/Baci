@@ -246,7 +246,7 @@ describe('StartSavingsTransferModal', () => {
         '00000000000'
       );
       fireEvent.press(
-        screen.getByRole('button', { name: 'Show plan account' })
+        screen.getByRole('button', { name: 'Check plan readiness' })
       );
 
       await waitFor(() =>
@@ -274,7 +274,7 @@ describe('StartSavingsTransferModal', () => {
         screen.getByRole('checkbox', { name: 'Earn interest on this plan' })
       );
       fireEvent.press(
-        screen.getByRole('button', { name: 'Show plan account' })
+        screen.getByRole('button', { name: 'Check plan readiness' })
       );
 
       await waitFor(() =>

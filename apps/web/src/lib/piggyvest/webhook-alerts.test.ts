@@ -92,6 +92,32 @@ describe('emitPiggyvestWebhookAlert console line', () => {
   });
 });
 
+describe('emitPiggyvestWebhookAlertDelivered', () => {
+  it('resolves true only when the PostHog page was sent', async () => {
+    await expect(
+      alerts.emitPiggyvestWebhookAlertDelivered('PIGGYVEST_INFLOW_UNMAPPED', {
+        operationId: 'txn-delivered-1',
+      })
+    ).resolves.toBe(true);
+    expect(error).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves false, never rejects, when the PostHog send fails or rejects', async () => {
+    posthog.captureServerEvent.mockResolvedValueOnce(false);
+    await expect(
+      alerts.emitPiggyvestWebhookAlertDelivered('PIGGYVEST_INFLOW_UNMAPPED', {
+        operationId: 'txn-delivered-2',
+      })
+    ).resolves.toBe(false);
+    posthog.captureServerEvent.mockRejectedValueOnce(new Error('down'));
+    await expect(
+      alerts.emitPiggyvestWebhookAlertDelivered('PIGGYVEST_INFLOW_UNMAPPED', {
+        operationId: 'txn-delivered-3',
+      })
+    ).resolves.toBe(false);
+  });
+});
+
 describe('PiggyVest alert codes', () => {
   it('declares the money codes, reserves negative drift, and reuses transfer review for stale transfers', () => {
     expect([...alerts.PIGGYVEST_WEBHOOK_ALERT_CODES]).toEqual(EXPECTED_CODES);

@@ -30,9 +30,15 @@ it('unsubscribes the replaced authenticated controller without hiding the new co
     <SavingsScreen source={replacementSource} cancellation={replacement} />
   );
   await screen.findByRole('region', { name: 'Draft policy review' });
+  expect(
+    screen.queryByRole('region', { name: 'Customer savings' })
+  ).not.toBeNull();
   await act(async () => previous.invalidate());
   expect(
     screen.queryByRole('region', { name: 'Draft policy review' })
+  ).not.toBeNull();
+  expect(
+    screen.queryByRole('region', { name: 'Customer savings' })
   ).not.toBeNull();
   expect(screen.queryByText('NOT-REAL')).toBeNull();
   view.unmount();

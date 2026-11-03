@@ -49,11 +49,13 @@ const onAddSavings = jest.fn();
 function modal(
   currentGoal = goal,
   visible = true,
-  onRefreshWallet?: () => Promise<unknown>
+  onRefreshWallet?: () => Promise<unknown>,
+  addAmount = '',
+  walletBalance = 0
 ) {
   return (
     <WalletSavingsProgressModal
-      addAmount=""
+      addAmount={addAmount}
       colors={Colors.dark}
       goal={currentGoal}
       isAdding={false}
@@ -64,7 +66,7 @@ function modal(
       onFundWallet={onFundWallet}
       onRefreshWallet={onRefreshWallet}
       visible={visible}
-      walletBalance={0}
+      walletBalance={walletBalance}
     />
   );
 }
@@ -87,17 +89,36 @@ beforeEach(async () => {
   });
 });
 
-it('shows wallet guidance, never the plan account, with no amount and an empty ordinary wallet', async () => {
+it('shows wallet guidance, never the plan account, and keeps the wallet amount field', async () => {
   render(modal());
   await act(async () => {});
   expect(screen.getByText('Add from your wallet')).toBeOnTheScreen();
   expect(screen.queryByText('0000008907')).toBeNull();
   expect(screen.queryByText('FAAS (SANDBOX)')).toBeNull();
-  expect(screen.queryByLabelText('Savings top-up amount')).toBeNull();
-  expect(screen.queryByText(/Available in wallet/)).toBeNull();
+  expect(screen.getByLabelText('Savings top-up amount')).toBeOnTheScreen();
+  expect(screen.getByText(/Available in wallet/)).toBeOnTheScreen();
   expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
   expect(onFundWallet).not.toHaveBeenCalled();
   expect(onAddSavings).not.toHaveBeenCalled();
+});
+
+it('lets a manual plan with a funded wallet contribute from the wallet', async () => {
+  render(modal(goal, true, undefined, '500', 1000));
+  await act(async () => {});
+  fireEvent.press(
+    screen.getByRole('button', { name: 'Confirm savings top-up' })
+  );
+  expect(onAddSavings).toHaveBeenCalledTimes(1);
+  expect(onFundWallet).not.toHaveBeenCalled();
+  expect(screen.queryByText('0000008907')).toBeNull();
+});
+
+it('offers no wallet contribution for an auto-debit plan', async () => {
+  render(
+    modal({ ...goal, source_mode: 'auto_debit' }, true, undefined, '500', 1000)
+  );
+  await act(async () => {});
+  expect(screen.queryByLabelText('Savings top-up amount')).toBeNull();
 });
 
 it('refreshes wallet goal progress from the guidance panel', async () => {

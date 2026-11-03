@@ -31,6 +31,10 @@ vi.mock('./webhook-inbox', () => ({
 const mockAlert = vi.fn();
 vi.mock('./webhook-alerts', () => ({
   emitPiggyvestWebhookAlert: (...args: unknown[]) => mockAlert(...args),
+  emitPiggyvestWebhookAlertDelivered: async (...args: unknown[]) => {
+    mockAlert(...args);
+    return true;
+  },
 }));
 
 vi.mock('./inflow-ledger', () => ({
@@ -329,7 +333,10 @@ describe('processPiggyvestEvent', () => {
     ).rejects.toBe(unmapped);
     expect(mockAlert).toHaveBeenCalledExactlyOnceWith(
       'PIGGYVEST_INFLOW_UNMAPPED',
-      { eventType: inflowEvent.eventType, operationId: inflowEvent.eventId }
+      {
+        eventType: inflowEvent.eventType,
+        operationId: inflowEvent.eventData.transaction_id,
+      }
     );
     expect(mockResolve).toHaveBeenCalledWith(
       supabase,

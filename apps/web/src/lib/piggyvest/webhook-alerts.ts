@@ -94,6 +94,24 @@ function allowlistedDetail(
   return safe;
 }
 
+/**
+ * Same alert as `emitPiggyvestWebhookAlert`, but the returned promise settles
+ * with whether the PostHog page was delivered. It never rejects. The console
+ * line is always written first.
+ */
+export async function emitPiggyvestWebhookAlertDelivered(
+  code: PiggyvestWebhookAlertCode,
+  detail: PiggyvestWebhookAlertDetail = {}
+): Promise<boolean> {
+  const safe = allowlistedDetail(detail);
+  console.error(`[PiggyVest Webhook][ALERT] ${code} ${JSON.stringify(safe)}`);
+  try {
+    return (await sendPiggyvestMoneyAlert(code, safe)) === 'sent';
+  } catch {
+    return false;
+  }
+}
+
 export function emitPiggyvestWebhookAlert(
   code: PiggyvestWebhookAlertCode,
   detail: PiggyvestWebhookAlertDetail = {}

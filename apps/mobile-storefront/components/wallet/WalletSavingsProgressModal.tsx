@@ -241,14 +241,29 @@ export function WalletSavingsProgressModal({
           />
         ) : canAddToSavings && usesPlanFunding ? (
           visible ? (
-            <WalletSavingsPlanFunding
-              key={goal.id}
-              addAmount={addAmount}
-              colors={colors}
-              goal={goal}
-              onAddAmountChange={onAddAmountChange}
-              onRefreshWallet={onRefreshWallet}
-            />
+            <>
+              {goal.source_mode === 'manual' ? (
+                <WalletSavingsContributionFlow
+                  addAmount={addAmount}
+                  colors={colors}
+                  isAdding={isAdding}
+                  isFundPending={isFundPending}
+                  onAddAmountChange={onAddAmountChange}
+                  onAddSavings={onAddSavings}
+                  onFundWallet={onFundWallet}
+                  remainingAmount={amountLeft}
+                  walletBalance={walletBalance}
+                />
+              ) : null}
+              <WalletSavingsPlanFunding
+                key={goal.id}
+                addAmount={addAmount}
+                colors={colors}
+                goal={goal}
+                onAddAmountChange={onAddAmountChange}
+                onRefreshWallet={onRefreshWallet}
+              />
+            </>
           ) : null
         ) : canAddToSavings ? (
           <WalletSavingsContributionFlow

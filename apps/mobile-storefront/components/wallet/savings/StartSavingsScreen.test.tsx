@@ -326,7 +326,9 @@ describe('StartSavingsScreen', () => {
       screen.getByLabelText('BVN for plan account'),
       '00000000000'
     );
-    fireEvent.press(screen.getByRole('button', { name: 'Show plan account' }));
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Check plan readiness' })
+    );
 
     await waitFor(() =>
       expect(mockFetchSavingsPlanFunding).toHaveBeenCalledWith(

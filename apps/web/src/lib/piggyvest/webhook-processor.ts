@@ -278,7 +278,7 @@ export async function processPiggyvestEvent(
       });
       return 'processed';
     }
-    alertUnmappedInflow(error, event);
+    void alertUnmappedInflow(error, event);
     await resolvePiggyvestEvent(supabase, {
       eventId: event.eventId,
       claimToken: claimed.claimToken,

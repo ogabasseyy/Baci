@@ -77,7 +77,7 @@ test('accepts when the runs history has no deployed descendant, even without the
 
 test('fails closed when the runs history is longer than the page cap', async () => {
   const full = Array.from({ length: 100 }, (_, i) => ({ conclusion: 'cancelled', head_branch: 'main', head_sha: 'e'.repeat(40), id: 2000 + i, status: 'completed' }));
-  const fetchImpl = farAheadFetch({ pages: Array.from({ length: 12 }, () => full) });
+  const fetchImpl = farAheadFetch({ pages: Array.from({ length: 32 }, () => full) });
   await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /could not exhaust deployment run history/);
 });
 
@@ -113,11 +113,17 @@ test('routes a 101-commit compare with a truncated commit list through the run-b
   await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /superseded deployment SHA/);
 });
 
-test('bounds the run walk to runs created since the expected commit date', async () => {
+test('bugfix: does not trust the commit date, so a far-future committer date cannot hide a deployed descendant', async () => {
   const urls = [];
-  const fetchImpl = farAheadFetch({ runs: [expectedRun], urls });
-  await verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' });
-  assert.ok(urls.some((u) => u.includes('/runs?') && u.includes('created=%3E%3D2026-10-31')));
+  const base = farAheadFetch({
+    runs: [{ conclusion: 'success', head_branch: 'main', head_sha: intermediateSha, id: 3, status: 'completed' }, expectedRun],
+    compares: { [intermediateSha]: ahead },
+    jobs: { 3: deployedJob },
+    urls,
+  });
+  const fetchImpl = async (url) => (url.includes('/git/commits/') ? response({ committer: { date: '2099-01-01T00:00:00Z' } }) : base(url));
+  await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /superseded deployment SHA/);
+  assert.ok(!urls.some((u) => u.includes('created=')));
 });
 
 test('bugfix: an irregular historical run that is not a descendant cannot abort the guard', async () => {

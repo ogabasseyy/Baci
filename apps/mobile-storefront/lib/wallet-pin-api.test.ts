@@ -1,0 +1,103 @@
+import { createHash } from 'node:crypto';
+import {
+  fetchWalletPinStatus,
+  submitWalletPin,
+  verifyFundPin,
+} from './wallet-pin-api';
+
+const mockFetchJson = jest.fn();
+jest.mock('./storefront-customer-api-client', () => ({
+  createStorefrontCustomerApiClient: () => ({ fetchJson: mockFetchJson }),
+}));
+jest.mock('@/stores/auth-store', () => ({
+  useAuthStore: { getState: () => ({ user: { id: 'user-a' } }) },
+}));
+
+const proof = createHash('sha256').update('s5m-proof').digest('hex');
+const ids = {
+  merchantId: '11111111-1111-4111-8111-111111111111',
+  goalId: '22222222-2222-4222-8222-222222222222',
+  operationId: '33333333-3333-4333-8333-333333333333',
+};
+
+beforeEach(() => jest.clearAllMocks());
+
+describe('fetchWalletPinStatus', () => {
+  it('reads the status route for the signed-in user', async () => {
+    const status = {
+      primary: true,
+      hasPin: false,
+      resetRequired: false,
+      available: true,
+    };
+    mockFetchJson.mockResolvedValue(status);
+    await expect(fetchWalletPinStatus()).resolves.toEqual(status);
+    expect(mockFetchJson).toHaveBeenCalledWith({
+      path: '/api/storefront/customer/wallet-pin/status',
+      expectedUserId: 'user-a',
+    });
+  });
+
+  it('rejects an unreadable answer instead of guessing', async () => {
+    mockFetchJson.mockResolvedValue({ primary: true });
+    await expect(fetchWalletPinStatus()).rejects.toThrow('unavailable');
+  });
+});
+
+describe('submitWalletPin', () => {
+  it.each([
+    'set',
+    'reset',
+  ] as const)('posts the PIN to %s only', async (kind) => {
+    mockFetchJson.mockResolvedValue({ ok: true });
+    await submitWalletPin(kind, '4821');
+    expect(mockFetchJson).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: `/api/storefront/customer/wallet-pin/${kind}`,
+        method: 'POST',
+        includeCsrf: true,
+        body: { pin: '4821' },
+      })
+    );
+  });
+
+  it('keeps the server error code and copy', async () => {
+    mockFetchJson.mockRejectedValue(
+      Object.assign(new Error('A PIN is already set.'), {
+        code: 'PIN_ALREADY_SET',
+      })
+    );
+    await expect(submitWalletPin('set', '4821')).rejects.toMatchObject({
+      code: 'PIN_ALREADY_SET',
+      message: 'A PIN is already set.',
+    });
+  });
+});
+
+describe('verifyFundPin', () => {
+  const input = { ...ids, pin: '4821', amountKobo: 250000 };
+
+  it('binds the fund action to goal, operation and amount and returns the proof', async () => {
+    mockFetchJson.mockResolvedValue({ proof, expiresAt: 'soon' });
+    await expect(verifyFundPin(input)).resolves.toBe(proof);
+    expect(mockFetchJson).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: '/api/storefront/customer/savings/goal-pin/verify',
+        method: 'POST',
+        includeCsrf: true,
+        expectedUserId: 'user-a',
+        body: { ...input, action: 'fund' },
+      })
+    );
+  });
+
+  it('refuses a malformed proof', async () => {
+    mockFetchJson.mockResolvedValue({ proof: 'short', expiresAt: 'soon' });
+    await expect(verifyFundPin(input)).rejects.toThrow('unavailable');
+  });
+
+  it('never sends a PIN that is not 4 to 6 digits', async () => {
+    await expect(verifyFundPin({ ...input, pin: '12' })).rejects.toThrow();
+    expect(mockFetchJson).not.toHaveBeenCalled();
+  });
+});

@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, renderHook } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { Alert } from 'react-native';
 import { useStartSavingsSubmit } from './use-start-savings-submit';
 import { createInput } from './use-start-savings-submit.test-utils';
@@ -150,7 +151,41 @@ describe('submitBankTransferContribution primary routing', () => {
     expect(input.setShowSuccessModal).toHaveBeenCalledWith(true);
   });
 
-  it('refuses cleanly when a wallet PIN is required, keeping the id and not retrying', async () => {
+  it('opens the PIN sheet when a PIN is required, then retries the same id with the proof', async () => {
+    const proof = createHash('sha256').update('s5m-hook-proof').digest('hex');
+    mockAddPrimaryContribution
+      .mockRejectedValueOnce(
+        Object.assign(new Error('Please confirm your PIN to continue.'), {
+          code: 'PIN_PROOF_REQUIRED',
+        })
+      )
+      .mockResolvedValueOnce({ status: 'confirmed', operationId: 'op-uuid-1' });
+    const input = readyInput();
+    const { result } = renderHook(() => useStartSavingsSubmit(input));
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.submitBankTransferContribution();
+    });
+    await waitFor(() =>
+      expect(result.current.pinSheetProps.request).toMatchObject({
+        goalId: 'goal-1',
+        amountKobo: 2000000,
+      })
+    );
+    expect(Alert.alert).not.toHaveBeenCalled();
+    act(() => result.current.pinSheetProps.onProof(proof));
+    await act(async () => {
+      await pending;
+    });
+    expect(mockAddPrimaryContribution).toHaveBeenCalledTimes(2);
+    expect(mockAddPrimaryContribution).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pinProof: proof })
+    );
+    expect(mockAddSavingsContribution).not.toHaveBeenCalled();
+    expect(input.setShowSuccessModal).toHaveBeenCalledWith(true);
+  });
+
+  it('keeps the id and shows nothing when the PIN sheet is closed', async () => {
     mockAddPrimaryContribution.mockRejectedValue(
       Object.assign(new Error('Please confirm your PIN to continue.'), {
         code: 'PIN_PROOF_REQUIRED',
@@ -158,15 +193,20 @@ describe('submitBankTransferContribution primary routing', () => {
     );
     const input = readyInput();
     const { result } = renderHook(() => useStartSavingsSubmit(input));
-    await act(async () => {
-      await result.current.submitBankTransferContribution();
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.submitBankTransferContribution();
     });
-    const copy =
-      'Saving into goals from the app needs a wallet PIN, which is coming soon. Your money is still in your wallet.';
-    expect(input.setFormError).toHaveBeenCalledWith(copy);
-    expect(Alert.alert).toHaveBeenCalledWith('Contribution not recorded', copy);
+    await waitFor(() =>
+      expect(result.current.pinSheetProps.request).not.toBeNull()
+    );
+    act(() => result.current.pinSheetProps.onCancel());
+    await act(async () => {
+      await pending;
+    });
     expect(mockAddPrimaryContribution).toHaveBeenCalledTimes(1);
     expect(mockAddSavingsContribution).not.toHaveBeenCalled();
+    expect(Alert.alert).not.toHaveBeenCalled();
     expect(input.setInitialContributionIdempotencyKey).not.toHaveBeenCalledWith(
       null
     );

@@ -19,6 +19,7 @@ import { sanitizeWalletReturnTo } from '@/lib/sanitize-wallet-return-to';
 import { useAuthStore } from '@/stores/auth-store';
 import { SampleInterestPreview } from './SampleInterestPreview';
 import type { ContributionRail } from './savings/stored-contribution-operation';
+import { WalletPinSheet } from './savings/WalletPinSheet';
 import { useWalletAppearance } from './use-wallet-appearance';
 import { useWalletFundRedeemPanels } from './use-wallet-fund-redeem-panels';
 import { useWalletSavedCards } from './use-wallet-saved-cards';
@@ -162,6 +163,7 @@ export function WalletScreen({
     handleAddSavingsContribution,
     handleFundSavingsWallet,
     handleOpenSavings,
+    pinSheetProps,
   } = useWalletSavingsController({
     userId: user?.id,
     activeMerchantId,
@@ -290,6 +292,7 @@ export function WalletScreen({
         ownerId={customer?.id ?? user.id}
         presentation={presentation}
       />
+      <WalletPinSheet colors={colors} {...pinSheetProps} />
     </>
   );
 }

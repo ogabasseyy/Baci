@@ -59,3 +59,43 @@ describe('cache identity across an asynchronous login', () => {
     expect(renewed.expiresAtMs).toBeGreaterThan(currentTime);
   });
 });
+
+it('anchors the skew to login start when a slow login consumes the remaining safe lifetime', async () => {
+  let currentTime = T;
+  const gate = deferred<{ token: string; expiresAtMs: number }>();
+  const login = vi
+    .fn()
+    .mockImplementationOnce(() => gate.promise)
+    .mockImplementationOnce(async () => ({
+      token: 'syn-refreshed',
+      expiresAtMs: currentTime + 100_000,
+    }));
+  const cache = createOxygenTokenCache({
+    login,
+    now: () => currentTime,
+    expirySkewMs: 30_000,
+  });
+  const first = cache.getToken(KEY_A, { secret: SECRET_1 });
+  currentTime = T + 70_000;
+  gate.resolve({ token: 'syn-slow', expiresAtMs: T + 100_000 });
+  expect((await first).token).toBe('syn-slow');
+  expect(login).toHaveBeenCalledTimes(1);
+  expect((await cache.getToken(KEY_A, { secret: SECRET_1 })).token).toBe(
+    'syn-refreshed'
+  );
+  expect(login).toHaveBeenCalledTimes(2);
+});
+
+it('returns a short-lived login once without an automatic refresh loop after latency consumes its margin', async () => {
+  let currentTime = T;
+  const gate = deferred<{ token: string; expiresAtMs: number }>();
+  const login = vi.fn(() => gate.promise);
+  const cache = createOxygenTokenCache({ login, now: () => currentTime });
+  const first = cache.getToken(KEY_A, { secret: SECRET_1 });
+  const joined = cache.getToken(KEY_A, { secret: SECRET_1 });
+  currentTime = T + 4_000;
+  gate.resolve({ token: 'syn-short', expiresAtMs: T + 5_000 });
+  expect((await first).token).toBe('syn-short');
+  expect((await joined).token).toBe('syn-short');
+  expect(login).toHaveBeenCalledTimes(1);
+});

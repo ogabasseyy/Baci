@@ -53,7 +53,7 @@ export interface OxygenTokenCache {
 interface CacheEntry {
   token: string;
   expiresAtMs: number;
-  storedAtMs: number;
+  loginStartedAtMs: number;
 }
 
 const DEFAULT_EXPIRY_SKEW_MS = 60_000;
@@ -118,7 +118,8 @@ export function createOxygenTokenCache(
   }
 
   function isFresh(entry: CacheEntry, nowMs: number): boolean {
-    const lifetimeMs = entry.expiresAtMs - entry.storedAtMs;
+    // Include login latency when preserving the intended expiry margin.
+    const lifetimeMs = entry.expiresAtMs - entry.loginStartedAtMs;
     // Clamp keeps sub-skew tokens briefly usable instead of login-storming;
     // the floor at 0 keeps already-spent lifetimes fail-closed.
     const effectiveSkew = Math.max(
@@ -170,7 +171,7 @@ export function createOxygenTokenCache(
           getOrCreateInner(entries, key.environment).set(key.accountLabel, {
             token: result.token,
             expiresAtMs: result.expiresAtMs,
-            storedAtMs: now(),
+            loginStartedAtMs: freshCheckMs,
           });
         }
         resolveFlight({ token: result.token, expiresAtMs: result.expiresAtMs });

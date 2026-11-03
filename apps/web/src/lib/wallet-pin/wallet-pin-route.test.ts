@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { createHash } from 'node:crypto';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { POST as setRoute } from '@/app/api/storefront/customer/wallet-pin/set/route';
 import { GET as statusRoute } from '@/app/api/storefront/customer/wallet-pin/status/route';
@@ -77,22 +77,33 @@ it('refuses a failed CSRF check before reading the body or hashing', async () =>
   const res = await post({ pin: '482915' });
   expect(res.status).toBe(403);
   expect((await res.json()).code).toBe('CSRF_FAILED');
-  expect(mocks.limit).not.toHaveBeenCalled();
   expect(mocks.rpc).not.toHaveBeenCalled();
 });
 
-it('rate limits mutations with a stable code and Retry-After', async () => {
-  mocks.limit.mockResolvedValue({
-    allowed: false,
-    limit: 20,
-    remaining: 0,
-    resetTime: Date.now() + 30_000,
+it('normalises the shared CSRF response into the stable shape', async () => {
+  // The real checkCsrfProtection always attaches its own code-less response.
+  mocks.csrf.mockResolvedValue({
+    valid: false,
+    response: NextResponse.json(
+      { error: 'Invalid CSRF token' },
+      { status: 403 }
+    ),
   });
   const res = await post({ pin: '482915' });
-  expect(res.status).toBe(429);
-  expect((await res.json()).code).toBe('RATE_LIMITED');
-  expect(Number(res.headers.get('Retry-After'))).toBeGreaterThan(0);
+  expect(res.status).toBe(403);
+  expect(await res.json()).toEqual({
+    error: 'Please refresh and try again.',
+    code: 'CSRF_FAILED',
+  });
+  expect(res.headers.get('Cache-Control')).toBe('no-store');
   expect(mocks.rpc).not.toHaveBeenCalled();
+});
+
+it('leaves rate limiting to the proxy so a request is never counted twice', async () => {
+  mocks.rpc.mockResolvedValue({ data: { status: 'not_set' }, error: null });
+  await post({ pin: '482915' });
+  await get();
+  expect(mocks.limit).not.toHaveBeenCalled();
 });
 
 it('treats malformed JSON and invalid PINs as client errors', async () => {

@@ -30,8 +30,12 @@ server's primary-wallet configuration, never from the request):
   sign-in.
 
 Set, change and reset answer 503 `PIN_UNAVAILABLE` while the pepper or
-attestation key is unusable, and are limited to 10 requests a minute per
-caller. Stable refusal codes: `PIN_INCORRECT` (401, with attempts left),
+attestation key is unusable. Status reports `available: false` in the same
+situation, including when the pepper's attestation key row is missing or has
+been deleted as an emergency stop. Rate limiting is applied once, by the API
+proxy: set, change and reset share 10 requests a minute per caller, and status
+reads have their own separate allowance. A limited request gets the proxy's
+standard 429 response. A failed forgery check answers 403 `CSRF_FAILED`. Stable refusal codes: `PIN_INCORRECT` (401, with attempts left),
 `PIN_LOCKED` (423), `PIN_NOT_SET`, `PIN_ALREADY_SET`, `PIN_RESET_REQUIRED`
 (409), `REAUTHENTICATION_REQUIRED` (403). A PIN is never logged or returned.
 

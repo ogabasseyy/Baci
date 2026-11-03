@@ -113,7 +113,7 @@ describe('rate-limit route matching', () => {
   });
 
   it('puts the wallet PIN routes in their own fail-closed bucket', () => {
-    for (const leaf of ['set', 'change', 'reset', 'status'])
+    for (const leaf of ['set', 'change', 'reset'])
       expect(
         getRateLimitConfig(`/api/storefront/customer/wallet-pin/${leaf}`)
       ).toMatchObject({
@@ -124,6 +124,13 @@ describe('rate-limit route matching', () => {
           failClosedWithoutRedis: true,
         },
       });
+    // Status polling must not spend the hashing budget of the mutations.
+    expect(
+      getRateLimitConfig('/api/storefront/customer/wallet-pin/status')
+    ).toMatchObject({
+      pattern: '/api/storefront/customer/wallet-pin/status',
+      config: { maxRequests: 60, failClosedWithoutRedis: true },
+    });
     expect(
       getRateLimitConfig('/api/storefront/customer/wallet').pattern
     ).not.toBe('/api/storefront/customer/wallet-pin');

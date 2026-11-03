@@ -5,7 +5,6 @@ import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import { readPrimaryWalletRuntime } from '@/lib/piggyvest/primary-wallet-runtime';
-import { checkRateLimit } from '@/lib/rate-limit';
 import {
   readWalletPinStatus,
   type WalletPinOutcome,
@@ -81,40 +80,21 @@ type Prepared =
   | { response: NextResponse }
   | { context: WalletPinContext | null };
 
-// Auth first, then CSRF, then (mutations) the rate limit. The merchant comes
-// from the server's primary-wallet configuration and the customer from the
-// signed-in account, never from the request.
-async function prepare(
-  request: NextRequest,
-  mutation: boolean
-): Promise<Prepared> {
+// Auth first, then CSRF. Rate limiting is owned by the API proxy stage (the
+// /api/storefront/customer/wallet-pin buckets in rate-limit-routes.ts); doing
+// it here too would charge every mutation twice. The merchant comes from the
+// server's primary-wallet configuration and the customer from the signed-in
+// account, never from the request.
+async function prepare(request: NextRequest): Promise<Prepared> {
   const auth = await authenticateApiRequest(request);
   if (auth.error || !auth.user || !auth.supabase)
     return { response: refuse('Please sign in again.', 'UNAUTHORIZED', 401) };
   const csrf = await checkCsrfProtection(request);
+  // The shared check's own response has no stable code, so it is replaced.
   if (!csrf.valid)
     return {
-      response:
-        csrf.response ??
-        refuse('Please refresh and try again.', 'CSRF_FAILED', 403),
+      response: refuse('Please refresh and try again.', 'CSRF_FAILED', 403),
     };
-  if (mutation) {
-    const limit = await checkRateLimit(request);
-    if (!limit.allowed)
-      return {
-        response: refuse(
-          'Too many attempts. Please try again later.',
-          'RATE_LIMITED',
-          429,
-          {},
-          {
-            'Retry-After': String(
-              Math.max(0, Math.ceil((limit.resetTime - Date.now()) / 1000))
-            ),
-          }
-        ),
-      };
-  }
   const runtime = readPrimaryWalletRuntime();
   if (!runtime) return { context: null };
   const identity = await resolvePrimaryWalletIdentity({
@@ -146,7 +126,7 @@ export async function handleWalletPinStatus(
   request: NextRequest
 ): Promise<NextResponse> {
   try {
-    const prepared = await prepare(request, false);
+    const prepared = await prepare(request);
     if ('response' in prepared) return prepared.response;
     if (!prepared.context)
       return NextResponse.json(
@@ -177,7 +157,7 @@ export async function handleWalletPinMutation<T>(
   run: (context: WalletPinContext, input: T) => Promise<WalletPinOutcome>
 ): Promise<NextResponse> {
   try {
-    const prepared = await prepare(request, true);
+    const prepared = await prepare(request);
     if ('response' in prepared) return prepared.response;
     const parsed = schema.safeParse(await request.json().catch(() => null));
     if (!parsed.success)

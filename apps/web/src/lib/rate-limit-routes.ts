@@ -79,6 +79,12 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
     windowMs: 60_000,
     failClosedWithoutRedis: true,
   },
+  // Status reads do no hashing; keep them out of the mutation budget above.
+  '/api/storefront/customer/wallet-pin/status': {
+    maxRequests: 60,
+    windowMs: 60_000,
+    failClosedWithoutRedis: true,
+  },
   '/api/customers': { maxRequests: 20, windowMs: 60_000 },
   '/api/newsletter': { maxRequests: 5, windowMs: 900_000 },
   '/api/wallet': { maxRequests: 5, windowMs: 60_000 },

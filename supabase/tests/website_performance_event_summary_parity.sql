@@ -127,6 +127,7 @@ BEGIN
   END IF;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_website_summary(uuid, jsonb) TO PUBLIC; -- called after SET ROLE
 
 SET LOCAL ROLE authenticated;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);

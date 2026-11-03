@@ -51,13 +51,13 @@ describe('AnalyticsPixelProvider', () => {
     );
 
     expect(screen.getByText('G-STORE')).toBeInTheDocument();
-    expect(screen.getByText('fb-1')).toBeInTheDocument();
-    expect(screen.getByText('tt-1')).toBeInTheDocument();
+    expect(screen.queryByText('fb-1')).not.toBeInTheDocument();
+    expect(screen.queryByText('tt-1')).not.toBeInTheDocument();
     expect(screen.queryByText('snap-1')).not.toBeInTheDocument();
     expect(screen.queryByText('tw-1')).not.toBeInTheDocument();
   });
 
-  it('renders all supported merchant pixel types when all IDs are configured', () => {
+  it('leaves all advertising pixels to the persistent shell while rendering route-owned GA4', () => {
     render(
       <AnalyticsPixelProvider
         merchant={{
@@ -71,10 +71,10 @@ describe('AnalyticsPixelProvider', () => {
     );
 
     expect(screen.getByText('G-STORE')).toBeInTheDocument();
-    expect(screen.getByText('fb-1')).toBeInTheDocument();
-    expect(screen.getByText('tt-1')).toBeInTheDocument();
-    expect(screen.getByText('snap-1')).toBeInTheDocument();
-    expect(screen.getByText('tw-1')).toBeInTheDocument();
+    expect(screen.queryByText('fb-1')).not.toBeInTheDocument();
+    expect(screen.queryByText('tt-1')).not.toBeInTheDocument();
+    expect(screen.queryByText('snap-1')).not.toBeInTheDocument();
+    expect(screen.queryByText('tw-1')).not.toBeInTheDocument();
   });
 
   it('renders nothing when analytics IDs are empty or whitespace-only', () => {
@@ -96,4 +96,20 @@ describe('AnalyticsPixelProvider', () => {
 
     expect(container).toBeEmptyDOMElement();
   });
+});
+
+it('does not remount any advertising pixel on a route even when every merchant setting is configured', () => {
+  const view = render(
+    <AnalyticsPixelProvider
+      merchant={{
+        chatgpt_pixel_id: 'chatgpt-one',
+        facebook_pixel_id: 'facebook-one',
+        tiktok_pixel_id: 'TIKTOKONE',
+        snapchat_pixel_id: '11111111-1111-4111-8111-111111111111',
+        twitter_pixel_id: 'abc',
+        twitter_event_ids: { viewContent: 'tw-abc-view' },
+      }}
+    />
+  );
+  expect(view.container).toBeEmptyDOMElement();
 });

@@ -108,7 +108,9 @@ export default function UtilityHistoryScreen() {
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
-              onRefresh={refetch}
+              onRefresh={() => {
+                void refetch();
+              }}
               tintColor={BRAND.primary}
             />
           }

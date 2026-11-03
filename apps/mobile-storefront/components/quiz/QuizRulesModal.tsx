@@ -36,6 +36,7 @@ export function QuizRulesModal({
   const styles = createQuizLobbyStyles(colors);
   const insets = useSafeAreaInsets();
   const [accepted, setAccepted] = useState(false);
+  const isPlayLocked = requiresAcceptance && !accepted;
 
   useEffect(() => {
     if (!visible) setAccepted(false);
@@ -146,20 +147,28 @@ export function QuizRulesModal({
             </Pressable>
           ) : null}
 
-          <View style={styles.rulesActionBox}>
+          <View
+            style={
+              isPlayLocked ? styles.disabledButtonBox : styles.rulesActionBox
+            }
+          >
             <Pressable
               accessibilityLabel={
                 requiresAcceptance ? 'Accept and play quiz' : 'Close rules'
               }
               accessibilityRole="button"
-              accessibilityState={{
-                disabled: requiresAcceptance && !accepted,
-              }}
-              disabled={requiresAcceptance && !accepted}
+              accessibilityState={{ disabled: isPlayLocked }}
+              disabled={isPlayLocked}
               onPress={requiresAcceptance ? onConfirm : onClose}
               style={styles.primaryButton}
             >
-              <Text style={styles.primaryButtonText}>
+              <Text
+                style={
+                  isPlayLocked
+                    ? styles.disabledButtonText
+                    : styles.primaryButtonText
+                }
+              >
                 {requiresAcceptance ? 'Accept & play' : 'Got it'}
               </Text>
             </Pressable>

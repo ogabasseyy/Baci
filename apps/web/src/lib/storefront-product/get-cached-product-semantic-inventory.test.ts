@@ -92,8 +92,36 @@ describe('getCachedProductSemanticInventory', () => {
         stock: 7,
         category_slug: 'laptops',
         product_key_specs: { ram_gb: 16, storage_gb: 512 },
+        is_parent: null,
+        parent_product_id: null,
+        manage_stock: null,
       },
     ]);
+  });
+
+  it('keeps legacy stock when stock_quantity is zero (effective stock)', async () => {
+    const productsQuery = createProductsQuery({
+      data: [
+        {
+          slug: 'legacy-stock-phone',
+          name: 'Legacy Stock Phone',
+          price: 100000,
+          brand: 'Apple',
+          stock: 9,
+          stock_quantity: 0,
+          product_categories: [{ categories: { slug: 'smartphones' } }],
+        },
+      ],
+      error: null,
+    });
+    mockGetPublicSupabaseClient.mockReturnValue({
+      from: vi.fn(() => productsQuery),
+    });
+    const result = await getCachedProductSemanticInventory(
+      'merchant-1',
+      'smartphones'
+    );
+    expect(result[0]?.stock).toBe(9);
   });
 
   it('reaches the database again after a transient query failure', async () => {

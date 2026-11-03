@@ -1,16 +1,24 @@
 import 'server-only';
+import { piggyvestArchivedVerificationSecretsSchema } from '@/schemas/piggyvest/webhook-key-archive';
 import { primaryCardCustodyInboxSchemas as schemas } from '@/schemas/primary-wallet-card-custody-inbox';
 import type { createPrimaryCardCustodyExecutor } from './primary-wallet-card-custody-executor';
 import { verifyPiggyvestPayloadSignature } from './verify-piggyvest-payload-signature';
+import { acceptedWebhookSecrets } from './webhook-key-archive';
 
 export function createPrimaryCardCustodyInboxIntake(input: {
   configuration: unknown;
   capability: string;
   execute: ReturnType<typeof createPrimaryCardCustodyExecutor>;
+  /** Derived archive-sourced verification keys, validated and bounded. */
+  archivedSecrets?: readonly string[];
 }) {
   const config = schemas.runtime
     .or(schemas.intakeRuntime)
     .parse(input.configuration);
+  const archivedSecrets = piggyvestArchivedVerificationSecretsSchema.parse(
+    input.archivedSecrets
+  );
+  const verificationSecrets = acceptedWebhookSecrets(config, archivedSecrets);
   return async (rawBody: Uint8Array, signature: string | null) => {
     // No integration-deadline check: receipts complete transfers
     // dispatched before expiry, so post-expiry intake must still enqueue
@@ -21,13 +29,12 @@ export function createPrimaryCardCustodyInboxIntake(input: {
       signature === null ||
       payload.byteLength === 0 ||
       payload.byteLength > 65536 ||
-      ![config.webhookSecret, ...(config.retainedWebhookSecrets ?? [])].some(
-        (secret) =>
-          verifyPiggyvestPayloadSignature({
-            payload,
-            signature,
-            secret,
-          })
+      !verificationSecrets.some((secret) =>
+        verifyPiggyvestPayloadSignature({
+          payload,
+          signature,
+          secret,
+        })
       )
     )
       return 'invalid_signature' as const;

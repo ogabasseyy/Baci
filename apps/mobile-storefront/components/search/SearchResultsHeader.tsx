@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { type ReactNode, useEffect, useRef } from 'react';
+import type { TextInputInstance } from 'react-native';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppKeyboardDock from '@/components/ui/AppKeyboardDock';
@@ -38,7 +39,7 @@ export default function SearchResultsHeader({
   showMinLengthHint = false,
 }: SearchResultsHeaderProps) {
   const insets = useSafeAreaInsets();
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<TextInputInstance>(null);
   const focused = useRef(false);
   useEffect(() => {
     if (!autoFocus || focused.current) return;

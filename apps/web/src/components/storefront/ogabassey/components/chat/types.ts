@@ -48,6 +48,8 @@ export interface ChatMessage {
   merchantSlug?: string;
   /** Validated, temporary UI requested by server-owned commerce tool results. */
   uiEvents?: StorefrontAgentUiEvent[];
+  /** Server-owned account UI, only accepted for the attested storefront. */
+  orderAction?: 'orders';
   /**
    * @deprecated Use `santaActions` for new code. Kept only so older
    * Ogabassey chat message render paths can read previously shaped messages

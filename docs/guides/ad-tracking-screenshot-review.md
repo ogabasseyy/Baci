@@ -1,0 +1,38 @@
+# Ad tracking screenshot review checklist
+
+SHA-256 pins in tests detect binary changes. They do not determine whether an
+image is private or prove that a redaction is present. Before changing a pin,
+open the changed image at full size and confirm the checks below; keep this
+checklist aligned with the images used by the merchant guides.
+
+## Baci provider settings
+
+- [ ] `meta-settings.jpg`: the complete Pixel ID and Conversions API token
+      fields are visible and blank; no store domain is shown. The crop ends
+      before helper text below the token field.
+- [ ] `tiktok-settings.jpg`: Pixel ID and Access Token fields are blank; the
+      crop contains only those complete fields, with no save/disconnect controls
+      or saved-connection state.
+- [ ] `snapchat-pixel-settings.jpg`: Pixel ID is blank and the optional token
+      input shows only its placeholder; no store domain is shown.
+- [ ] `x-connection-settings.jpg`: no account identity or Pixel ID is shown;
+      credential fields are blank and the crop ends after the complete fields,
+      before any saved-connection state or buttons.
+
+## ChatGPT Ads provider screens
+
+- [ ] `01-pixel-setup.png`: Pixel ID and setup code are masked.
+- [ ] `02-successful-payment.png`: data source and attribution values are
+      masked.
+- [ ] `03-pixel-event.png`: the code example contains no account-specific
+      source value.
+- [ ] `04-capi-event.png`: the request code block is masked.
+- [ ] `05-create-capi-key.png`: account key name and character count are
+      masked; no generated key is visible.
+- [ ] `06-conversion-created.png`: account-specific fields are masked.
+
+For every image, check that no private value is visible. When a value is masked,
+confirm that the mask covers only the identifying or credential value, leaves
+its field label legible, and does not hide unrelated instructions or controls.
+Never describe an empty field as masked, and never update a digest solely to
+make a changed image pass tests.

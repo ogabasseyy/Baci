@@ -195,6 +195,25 @@ describe('resolvePaidInvoiceDocument', () => {
     ).toEqual({ kind: 'receipt', label: 'Download Receipt PDF' });
   });
 
+  it('treats blank provenance as absent like the archive gate', () => {
+    expect(
+      resolvePaidInvoiceDocument({
+        order: invoiceOrder({
+          payment_status: 'paid',
+          external_source: '   ',
+        }),
+      })
+    ).toEqual({ kind: 'invoice', label: 'Download Commercial Invoice PDF' });
+    expect(
+      resolvePaidInvoiceDocument({
+        order: invoiceOrder({
+          payment_status: 'paid',
+          import_job_id: '  ',
+        }),
+      })
+    ).toEqual({ kind: 'invoice', label: 'Download Commercial Invoice PDF' });
+  });
+
   it('offers the receipt once a paid order ships', () => {
     expect(
       resolvePaidInvoiceDocument({

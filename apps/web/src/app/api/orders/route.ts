@@ -5,7 +5,7 @@ import {
   computeAgenticOrderTax,
   isTaxComputeUuidError,
 } from '@/lib/agentic/checkout-order-tax';
-import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
+import { hasPermission } from '@/lib/api-auth';
 import { buildOrderTrackingLink } from '@/lib/build-order-tracking-link';
 import {
   ORDER_BINDING_RPC_NAMES,
@@ -98,6 +98,7 @@ import { normalizeMerchantRateOrderAddress } from '@/lib/shipping/normalize-merc
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
+import { authenticateOrderRequest } from './order-request-auth';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
   return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
@@ -442,7 +443,9 @@ export async function POST(request: NextRequest) {
   try {
     // Optional auth: supports web cookies and mobile Bearer tokens, but still
     // allows guest checkout when authentication is absent.
-    const auth = await authenticateApiRequest(request);
+    const orderAuth = await authenticateOrderRequest(request);
+    if (!orderAuth.ok) return orderAuth.response;
+    const { auth, requireRecoveryProof } = orderAuth;
     const supabase = auth.supabase ?? createClient(await cookies());
     const user = auth.user;
     let json: unknown;
@@ -522,6 +525,11 @@ export async function POST(request: NextRequest) {
           'shared_cart'
         );
         return access.error ? true : access.allowed;
+      },
+      {
+        userId: resolvedUserId,
+        paymentMethod: payment_method,
+        requireRecoveryProof,
       }
     );
     if (!cartAuthority.ok) return cartAuthority.response;
@@ -555,7 +563,6 @@ export async function POST(request: NextRequest) {
       const rejection = validateRedvaultRequest({
         merchantId: merchant_id,
         hasVoucherItem,
-        hasSharedCart: Boolean(shared_cart),
         discountCode: body.discount_code,
         useWallet: use_wallet_credit,
         useSavings: use_savings_credit,
@@ -1619,15 +1626,13 @@ export async function POST(request: NextRequest) {
         use_savings_credit ||
         use_wallet_credit ||
         hasVoucherItem ||
-        shared_cart ||
         (negotiationDiscount?.totalDiscount ?? 0) > 0
       ) {
         return NextResponse.json(
           {
             code: 'REDVAULT_COMBINATION_UNSUPPORTED',
-            error: shared_cart
-              ? 'Choose a different payment method for this shared cart.'
-              : 'REDVAULT cannot be combined with another discount or redemption',
+            error:
+              'REDVAULT cannot be combined with another discount or redemption',
           },
           { status: 400 }
         );
@@ -2236,6 +2241,9 @@ export async function POST(request: NextRequest) {
         customerEmail: customer_email,
         merchantId: merchant_id,
         userId: resolvedUserId,
+        sharedCart: shared_cart
+          ? { binding: shared_cart, principalId: sharedCartPrincipalId }
+          : undefined,
       });
       // The REDVAULT draft reserves inventory through the standard
       // order-creation path. Run the same best-effort product cache

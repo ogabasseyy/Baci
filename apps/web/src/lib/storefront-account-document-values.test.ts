@@ -240,4 +240,32 @@ describe('storefront account document values', () => {
       ])
     ).toThrow('Invalid order item price for item item-3');
   });
+
+  it('carries stored line ids for fulfillment matching', () => {
+    const [first, second] = buildOrderItems([
+      {
+        id: 'item-5',
+        line_id: 5,
+        product_id: 'prod-5',
+        variant_id: null,
+        variant_name: null,
+        name: 'Widget',
+        quantity: 1,
+        price: 50,
+      },
+      {
+        id: 'item-2',
+        line_id: null,
+        product_id: 'prod-2',
+        variant_id: null,
+        variant_name: null,
+        name: 'Gadget',
+        quantity: 1,
+        price: 25,
+      },
+    ]);
+
+    expect(first?.line_id).toBe(5);
+    expect(second?.line_id).toBeUndefined();
+  });
 });

@@ -36,7 +36,7 @@ export const clearCartStorage = (
 ): void => {
   // Fence any in-flight shared-cart work first: logout and cart clears must
   // invalidate late server responses even when storage itself is unavailable.
-  bumpCartSessionGeneration();
+  bumpCartSessionGeneration(merchantSlug ? { merchantSlug } : undefined);
   if (typeof window === 'undefined') return;
   try {
     // Clear cart for specific merchant + user combination

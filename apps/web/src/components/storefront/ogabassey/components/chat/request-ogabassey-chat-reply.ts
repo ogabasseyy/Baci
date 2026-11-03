@@ -9,6 +9,7 @@ import type { ChatMessage } from './types';
 const OGABASSEY_CHAT_SESSION_STORAGE_KEY = 'ogabassey_chat_session_id';
 
 interface OgabasseyChatReply {
+  action?: 'orders';
   events: StorefrontAgentUiEvent[];
   text: string;
   /** Server-attested tenant slug, when the response carried a valid one. */
@@ -67,7 +68,7 @@ export async function requestOgabasseyChatReply(
     method: 'POST',
     headers: {
       ...(!isSanta
-        ? { Accept: storefrontAgentUiContract.mediaType }
+        ? { Accept: storefrontAgentUiContract.mediaType, 'x-baci-chat-order-actions': '1' }
         : {}),
       'Content-Type': 'application/json',
       ...(storefrontSlug?.trim()
@@ -89,6 +90,7 @@ export async function requestOgabasseyChatReply(
   if (!response.ok) throw new Error('Chat service unavailable');
 
   const merchantSlug = readSantaMerchantSlug(response);
+  const action = !isSanta && storefrontSlug === 'ogabassey' && merchantSlug === storefrontSlug && response.headers.get('x-baci-chat-action') === 'orders' ? 'orders' as const : undefined;
   const responseText = await readResponseText(response);
   const contentType = response.headers?.get('content-type') ?? '';
   if (!contentType.includes(storefrontAgentUiContract.mediaType)) {
@@ -96,6 +98,7 @@ export async function requestOgabasseyChatReply(
       events: [],
       text: responseText,
       ...(merchantSlug ? { merchantSlug } : {}),
+      ...(action ? { action } : {}),
     };
   }
 
@@ -115,5 +118,6 @@ export async function requestOgabasseyChatReply(
     events: parsed.data.events,
     text: parsed.data.text,
     ...(merchantSlug ? { merchantSlug } : {}),
+    ...(action ? { action } : {}),
   };
 }

@@ -4,9 +4,6 @@ import { OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 export function validateRedvaultRequest(input: {
   merchantId: string;
   hasVoucherItem: boolean;
-  /** Shared-cart orders must close through the cart binding RPC; the
-   * REDVAULT draft path does not, so the combination is rejected. */
-  hasSharedCart?: boolean;
   discountCode?: string;
   useWallet?: boolean;
   useSavings?: boolean;
@@ -25,8 +22,7 @@ export function validateRedvaultRequest(input: {
     input.hasVoucherItem ||
     input.discountCode ||
     input.useWallet ||
-    input.useSavings ||
-    input.hasSharedCart
+    input.useSavings
   ) {
     return NextResponse.json(
       {

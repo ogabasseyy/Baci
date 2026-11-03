@@ -40,6 +40,32 @@ if bash "$script" unknown >"$fixture_root/unknown-log" 2>&1; then
 fi
 grep -q 'Unknown Android storefront release operation' "$fixture_root/unknown-log"
 
+# GitHub's Hermes tarball can use either owner prefix. React Native 0.86's
+# extraction rule only recognizes the older prefix until the release fix runs.
+hermes_workspace="$fixture_root/hermes-workspace"
+hermes_gradle="$hermes_workspace/node_modules/react-native/ReactAndroid/hermes-engine/build.gradle.kts"
+mkdir -p "$(dirname "$hermes_gradle")"
+cat > "$hermes_gradle" <<'GRADLE'
+if (this.path.startsWith("facebook-hermes-")) {
+  this.path = this.path.substringAfter("/")
+}
+GRADLE
+ln "$hermes_gradle" "$fixture_root/original-hermes-gradle"
+GITHUB_WORKSPACE="$hermes_workspace" bash "$script" fix-hermes
+grep -Fq 'this.path.startsWith("facebook-hermes-") || this.path.startsWith("meta-hermes-")' "$hermes_gradle"
+if grep -Fq 'meta-hermes-' "$fixture_root/original-hermes-gradle"; then
+  echo 'Expected shared dependency-store files to remain unchanged' >&2
+  exit 1
+fi
+# Repeated setup is safe, while an unknown upstream rule fails closed.
+GITHUB_WORKSPACE="$hermes_workspace" bash "$script" fix-hermes
+printf '%s\n' 'unknown Hermes extraction rule' > "$hermes_gradle"
+if GITHUB_WORKSPACE="$hermes_workspace" bash "$script" fix-hermes >"$fixture_root/hermes-log" 2>&1; then
+  echo 'Expected an unknown Hermes extraction rule to fail' >&2
+  exit 1
+fi
+grep -Fq 'unknown Hermes extraction rule' "$hermes_gradle"
+
 sdk_root="$fixture_root/sdk"
 mkdir -p "$sdk_root/cmdline-tools/20.0/bin"
 touch "$sdk_root/cmdline-tools/20.0/bin/sdkmanager"

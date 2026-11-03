@@ -2,10 +2,12 @@ import 'server-only';
 import { NextResponse } from 'next/server';
 import { dispatchPrimaryWalletPaidInterest } from './primary-wallet-paid-interest-dispatch';
 import { dispatchPrimaryWalletPaidInterestInbox } from './primary-wallet-paid-interest-inbox-intake';
+import type { WebhookKeyScope } from './webhook-key-archive';
 
 export async function primaryInterestWebhookResponse(input: {
   rawBody: Uint8Array;
   signature: string | null;
+  keyScope?: WebhookKeyScope;
 }): Promise<NextResponse | 'disabled' | null> {
   const receipt = await dispatchPrimaryWalletPaidInterestInbox(input);
   if (receipt === 'not_handled') return null;

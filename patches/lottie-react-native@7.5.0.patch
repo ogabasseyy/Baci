@@ -1,0 +1,34 @@
+diff --git a/android/build.gradle b/android/build.gradle
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -8,7 +8,7 @@
+     }
+ 
+     dependencies {
+-        classpath("com.android.tools.build:gradle:7.2.2")
++        classpath("com.android.tools.build:gradle:9.2.1")
+         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version")
+     }
+ }
+@@ -65,8 +65,8 @@
+     }
+ 
+     defaultConfig {
+-        minSdkVersion getExtOrDefault('minSdkVersion', 21)
+-        targetSdkVersion getExtOrDefault('targetSdkVersion', 31)
++        minSdk getExtOrDefault('minSdkVersion', 21)
++        targetSdk getExtOrDefault('targetSdkVersion', 31)
+         buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
+ 
+         ndk {
+@@ -107,8 +107,10 @@
+         main {
+             if (isNewArchitectureEnabled()) {
+                 java.srcDirs += ['src/newarch', "${project.buildDir}/generated/source/codegen/java"]
++                kotlin.srcDirs += ['src/newarch', "${project.buildDir}/generated/source/codegen/java"]
+             } else {
+                 java.srcDirs += ['src/oldarch']
++                kotlin.srcDirs += ['src/oldarch']
+             }
+         }
+     }

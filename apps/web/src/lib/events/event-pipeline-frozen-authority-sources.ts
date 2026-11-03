@@ -9,13 +9,13 @@ export const eventPipelineFrozenRoutes = {
   'apps/web/src/app/api/analytics/ads/route.ts':
     'dc74e421113d3447a816559282bcd0612c49d68d92403cafe5e9cb7001a35e50',
   'apps/web/src/app/api/analytics/facebook-capi/route.ts':
-    'f41e1de587645b8fdb2af8af180eb581b2bfeecae688670d7b5c7a80088b7c32',
+    'd3f90424593ade0d945da79006044a1132779217e1144dc006056d9060f0715c',
   'apps/web/src/app/api/analytics/ga4/route.ts':
     '9e9b8c3edb1636d2f27e9551568d5036778fce6ab54272f1fd3b77cfd0f88c9f',
   'apps/web/src/app/api/analytics/snapchat/route.ts':
-    '1a7898d59038b6a37e057e74da3907f4a42da9c25c7236e9d324d7b1516e4cd3',
+    '9c6c1db9696259aef5526a6913610377fd4d9b27c4bdd99d8516240a2b3a0b1c',
   'apps/web/src/app/api/analytics/tiktok/route.ts':
-    '4d59510f6a72ae25dd45c8cc8ea6762a709bf745286140a7a9e1aa4b64ee942e',
+    'f056ef330fc2a65f97e2cef6607c0fa3a1ab48149bd5941632eed38c1cee2283',
   'apps/web/src/app/api/platform/events/route.ts':
     '0e62bed087fd29cb290af99f39dbc8589f9739ff06adde55598045945df7b7b1',
   // Orders is an inherited event-pipeline entrypoint whose notification
@@ -114,8 +114,13 @@ export const eventPipelineFrozenRoutes = {
   // confirmed airport retries now count as quote replays; notification,
   // payment, tenant authorization, and privileged-client authority are
   // unchanged.
+  // Re-pinned for REDVAULT shared-cart checkout: the route forwards the
+  // verified cart principal to the scoped binding RPC. No service-role or
+  // notification authority is added.
+  // Re-pinned for explicit UBA recovery authentication and proof binding.
+  // The recovery changes add no privileged or notification authority.
   'apps/web/src/app/api/orders/route.ts':
-    '3b336bbab6fb055aa0efd668fa5be82ee517fe553131ba3102403c9d856828e5',
+    '7f2a55370ed2fe5aa372a1d42c5430d536c274c2ffccf668862bf04ae4e9e1cc',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

@@ -10,7 +10,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+import { isEntrypoint } from '../lib/is-entrypoint.mjs';
 
 const BATCH_SIZE = 100;
 
@@ -129,8 +130,7 @@ async function main() {
 }
 
 if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
+  isEntrypoint(import.meta.url)
 ) {
   await main();
 }

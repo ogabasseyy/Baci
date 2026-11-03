@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRef, useState } from 'react';
+import type { ScrollViewInstance } from 'react-native';
 import {
   ActivityIndicator,
   Modal,
@@ -42,7 +43,7 @@ export function CryptoSelectionModal({
 }: CryptoSelectionModalProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
-  const networkScrollRef = useRef<ScrollView>(null);
+  const networkScrollRef = useRef<ScrollViewInstance>(null);
 
   const [selectedCoin, setSelectedCoin] = useState<Stablecoin>('USDT');
   const [selectedNetwork, setSelectedNetwork] = useState<Network>('TRX');

@@ -13,6 +13,7 @@ import { asRoute } from '@/lib/routes';
 import { generateSlug } from '@/lib/seo-utils';
 import { buildStoreUrl } from '@/lib/store-url';
 import { buildInformationalClusterModel } from '@/lib/storefront-content/build-informational-cluster-model';
+import { loadClassifiedClusterPosts } from '@/lib/storefront-content/load-classified-cluster-posts';
 import { evaluateStorefrontSlugSafety } from '@/lib/storefront-slug-safety';
 import { isDomainIdentifier } from '@/lib/validation';
 import { StorefrontRouteNotFoundContent } from '../../../storefront-route-not-found-content';
@@ -130,22 +131,13 @@ async function renderBlogPostContent({
     postUrl,
   });
 
+  const [clusterPost] = await loadClassifiedClusterPosts(merchant.id, [post]);
   const clusterModel = await buildInformationalClusterModel({
     merchantId: merchant.id,
     merchantSlug: merchant.slug,
     storeUrl: baseUrl,
     countryCode: merchant.country,
-    post: {
-      slug: post.slug,
-      title: post.title,
-      excerpt: post.excerpt,
-      category: post.category,
-      tags: post.tags,
-      keywords: post.keywords,
-      featured_image_url: post.featured_image_url,
-      published_at: post.published_at,
-      reading_time_minutes: post.reading_time_minutes,
-    },
+    post: clusterPost,
   });
 
   const beforeChrome = (

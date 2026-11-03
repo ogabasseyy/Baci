@@ -101,6 +101,28 @@ export async function POST(request: NextRequest) {
         })
       : Promise.resolve<MerchantRateQuoteResult>({ quotes: [] });
 
+    if (data.merchant_rates_only) {
+      const result = await merchantQuotesPromise;
+      if (result.loadFailed) {
+        return NextResponse.json(
+          {
+            error: 'Store delivery options could not be loaded. Please retry.',
+          },
+          { status: 503 }
+        );
+      }
+      const response = buildMerchantOnlyQuoteResponse(
+        includeMerchantRateQuotes ? result.quotes : [],
+        data.sessionId
+      );
+      if (response.quotes.all.length === 0) {
+        response.warnings = [
+          'No store delivery or pickup rates match this address.',
+        ];
+      }
+      return NextResponse.json(toPublicQuoteResponse(response));
+    }
+
     // Every registered carrier (Topship/GIGL) is Nigerian and quotes are
     // NGN-denominated with a Nigeria origin. Both a merchant whose canonical
     // currency (payout_currency -> country -> NGN) is not NGN and a merchant

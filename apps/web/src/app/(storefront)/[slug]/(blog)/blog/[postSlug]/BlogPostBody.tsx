@@ -176,29 +176,32 @@ export async function BlogPostBody({
           Share this article:
         </span>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="outline" size="sm" className="min-h-11" asChild>
             <a
               href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(post.title)}&url=${encodeURIComponent(shareUrl)}`}
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="Share on Twitter (opens in new tab)"
             >
               Twitter
             </a>
           </Button>
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="outline" size="sm" className="min-h-11" asChild>
             <a
               href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`}
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="Share on LinkedIn (opens in new tab)"
             >
               LinkedIn
             </a>
           </Button>
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="outline" size="sm" className="min-h-11" asChild>
             <a
               href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="Share on Facebook (opens in new tab)"
             >
               Facebook
             </a>

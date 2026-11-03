@@ -49,11 +49,13 @@ function buildPresentation(
     hasUser: true,
     currencySymbol: '₦',
     redvaultSummary: null,
+    redvaultOrderReady: false,
     newsletterOptIn: false,
     setNewsletterOptIn: vi.fn(),
     handlePlaceOrder: vi.fn(),
     isProcessing: false,
     isPayForMeValid: true,
+    isDeliveryValid: true,
     merchantId: 'merchant-1',
     merchantCountry: 'NG',
     payoutCurrency: 'NGN',
@@ -103,6 +105,35 @@ describe('deriveCheckoutOrderSummaryPresentation', () => {
 
     expect(model.discount.visible).toBe(true);
     expect(model.showMobile).toBe(false);
+  });
+
+  it('keeps the confirmed REDVAULT amounts after its shared cart closes', () => {
+    const model = buildPresentation({
+      display: { ...display, displayItems: [], summarySubtotal: 0 },
+      amounts: { ...amounts, summaryOrderTotals: { total: 0, taxAmount: 0 } },
+      paymentMethod: 'uba_redvault',
+      redvaultOrderReady: true,
+      redvaultSummary: {
+        productSubtotalKobo: 10_000,
+        eligibleSubtotalKobo: 10_000,
+        ineligibleSubtotalKobo: 0,
+        discountKobo: 500,
+        taxKobo: 750,
+        shippingKobo: 0,
+        assuranceFeeKobo: 0,
+        giftWrappingKobo: 0,
+        payableKobo: 10_250,
+        mixedBasket: false,
+      },
+    });
+
+    expect(model.desktop).toMatchObject({
+      summarySubtotal: 100,
+      orderTotals: { total: 102.5, taxAmount: 7.5 },
+      discountAmount: 5,
+      deliveryCost: 0,
+      redvaultOrderReady: true,
+    });
   });
 
   it('uses the active cart as the discount source when cart and resumed order coexist', () => {

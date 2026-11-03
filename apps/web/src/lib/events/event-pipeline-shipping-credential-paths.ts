@@ -32,13 +32,23 @@ const recoveryPreparePath =
   'apps/web/src/lib/shipping/prepare-checkout-shipping-recovery.ts';
 const recoveryRoutePath =
   'apps/web/src/app/api/orders/[id]/shipping/checkout-recovery/route.ts';
+const externalWaybillPersistPath =
+  'apps/web/src/lib/shipping/persist-external-gigl-waybill.ts';
+const externalWaybillRoutePath =
+  'apps/web/src/app/api/orders/[id]/shipping/gigl-waybill/route.ts';
 
 export const eventPipelineShippingCredentialPaths = [
-  // Audited fixed-action recovery boundary: authenticated owner route, same
-  // paid fee, verified destination, DB snapshot/ownership/proof rechecks.
+  // Audited fixed-action recovery boundary: authenticated orders.fulfill +
+  // orders.edit route, same paid fee, verified destination, DB
+  // snapshot/permission/proof rechecks.
   // No generic route-to-signer path, service client, or sibling route grant.
   [recoveryPreparePath, proofPath, envPath],
   [recoveryRoutePath, recoveryPreparePath, proofPath, envPath],
+  // Audited fixed-action external waybill boundary: authenticated
+  // orders.fulfill/edit route, GIG account ownership and receiver match
+  // checked server-side, DB permission/proof/uniqueness rechecks, no charge.
+  [externalWaybillPersistPath, proofPath, envPath],
+  [externalWaybillRoutePath, externalWaybillPersistPath, proofPath, envPath],
   [proofPath, envPath],
   [persistRefreshedPath, proofPath, envPath],
   [persistAdminPath, proofPath, envPath],

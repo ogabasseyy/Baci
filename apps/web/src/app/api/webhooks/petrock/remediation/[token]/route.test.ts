@@ -75,7 +75,7 @@ describe('POST /api/webhooks/petrock/remediation/[token]', () => {
 
     const response = await POST(request, context());
 
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(200);
     expect(admin.orders.update).toHaveBeenCalledWith(
       expect.objectContaining({ next_poll_at: expect.any(String) })
     );
@@ -106,7 +106,7 @@ describe('POST /api/webhooks/petrock/remediation/[token]', () => {
       context()
     );
 
-    expect(response.status).toBe(202);
+    expect(response.status).toBe(200);
     expect(admin.orders.update).not.toHaveBeenCalled();
     expect(admin.insert).not.toHaveBeenCalled();
   });

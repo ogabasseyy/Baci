@@ -157,6 +157,13 @@ export async function triggerPurchaseConversion(
     // must retain merchant authority before reading provider credentials.
     if (isLegacyAnalyticsFanoutDisabled()) return;
 
+    const adTracking = order.ad_tracking;
+    if (
+      adTracking?.analyticsConsent !== true &&
+      adTracking?.marketingConsent !== true
+    )
+      return;
+
     // Fetch merchant's analytics configuration and feature toggle.
     const merchantAnalytics = await fetchAnalyticsPlatformConfig(
       supabase,
@@ -201,9 +208,6 @@ export async function triggerPurchaseConversion(
       });
       return;
     }
-
-    // Extract ad tracking data (cookies captured at checkout)
-    const adTracking = order.ad_tracking;
 
     // Build conversion data with proper type handling
     const orderTotal =
@@ -252,6 +256,8 @@ export async function triggerPurchaseConversion(
       eventId: stableEventId,
       // Privacy compliance (CCPA/GDPR)
       limitedDataUse: optionalBoolean(adTracking?.limitedDataUse),
+      analyticsConsent: adTracking?.analyticsConsent === true,
+      marketingConsent: adTracking?.marketingConsent === true,
     };
 
     // Send conversion and log results

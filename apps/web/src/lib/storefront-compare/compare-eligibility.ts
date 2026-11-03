@@ -1,6 +1,8 @@
 import { generateSlug } from '../seo-utils';
+import { brandAuthorityTaxonomy } from '../storefront-category/brand-authority-taxonomy';
 import { buildCanonicalBrandCompareSlug } from './compare-slugs';
 import type { PriceBandDefinition } from './compare-types';
+import { resolveCanonicalBrandKey } from './resolve-canonical-brand-key';
 
 const MIN_BRAND_COMPARE_PRODUCTS = 3;
 const MIN_PRICE_BAND_PRODUCTS = 6;
@@ -18,12 +20,16 @@ interface BrandCompareProductInput {
   name: string;
   brand?: string | null;
   price: number;
+  product_key_specs?: Record<string, unknown> | null;
 }
 
 interface NormalizedBrand {
   key: string;
   label: string;
 }
+
+/** Relation metadata, not product specifications. */
+const NON_SPEC_METADATA_KEYS = new Set(['created_at', 'updated_at']);
 
 function normalizeBrand(brand?: string | null): NormalizedBrand | null {
   const label = brand?.trim();
@@ -83,6 +89,13 @@ function normalizeComparableArray(value: unknown[]) {
   return value.map(String).sort((left, right) => left.localeCompare(right));
 }
 
+/** Serialize a spec value so set-like arrays compare order-insensitively. */
+function serializeSpecValue(value: unknown): string {
+  return JSON.stringify(
+    Array.isArray(value) ? normalizeComparableArray(value) : value
+  );
+}
+
 function compareProductKeySpecValues(left: unknown, right: unknown) {
   if (Array.isArray(left) && Array.isArray(right)) {
     return (
@@ -103,10 +116,15 @@ export function buildProductCompareCandidate(input: {
   const rightSpecs = input.rightProduct.product_key_specs ?? {};
   const overlappingKeys = Array.from(
     new Set([...Object.keys(leftSpecs), ...Object.keys(rightSpecs)])
-  ).filter((key) => key in leftSpecs && key in rightSpecs);
-  const differentiatingSpecCount = overlappingKeys.filter((key) =>
-    compareProductKeySpecValues(leftSpecs[key], rightSpecs[key])
-  ).length;
+  ).filter(
+    (key) =>
+      !NON_SPEC_METADATA_KEYS.has(key) && key in leftSpecs && key in rightSpecs
+  );
+  const differentiatingSpecCount = overlappingKeys.filter((key) => {
+    // Null/absent spec values are missing data, not a difference.
+    if (leftSpecs[key] == null || rightSpecs[key] == null) return false;
+    return compareProductKeySpecValues(leftSpecs[key], rightSpecs[key]);
+  }).length;
 
   return {
     leftProduct: input.leftProduct,
@@ -125,7 +143,14 @@ export function buildBrandCompareCandidate(input: {
   categorySlug: string;
   products: BrandCompareProductInput[];
 }) {
-  const brandsByKey = new Map<string, { label: string; count: number }>();
+  const brandsByKey = new Map<
+    string,
+    {
+      label: string;
+      count: number;
+      specValues: Map<string, Set<string>>;
+    }
+  >();
 
   for (const product of input.products) {
     const normalizedBrand = normalizeBrand(product.brand);
@@ -134,16 +159,43 @@ export function buildBrandCompareCandidate(input: {
       continue;
     }
 
-    const existing = brandsByKey.get(normalizedBrand.key);
+    // Group aliases (Redmi->Xiaomi, MacBook->Apple) under one canonical
+    // brand so a compare candidate can never pair a brand with itself.
+    const canonicalKey =
+      resolveCanonicalBrandKey(input.categorySlug, normalizedBrand.label) ||
+      normalizedBrand.key;
+    const canonicalEntry = brandAuthorityTaxonomy.getEntry(
+      input.categorySlug,
+      canonicalKey
+    );
+    const label = canonicalEntry?.brandQueryValue ?? normalizedBrand.label;
+
+    const existing = brandsByKey.get(canonicalKey);
 
     if (existing) {
       existing.count += 1;
+      for (const [key, value] of Object.entries(
+        product.product_key_specs ?? {}
+      )) {
+        if (NON_SPEC_METADATA_KEYS.has(key) || value == null) continue;
+        const values = existing.specValues.get(key) ?? new Set<string>();
+        values.add(serializeSpecValue(value));
+        existing.specValues.set(key, values);
+      }
       continue;
     }
 
-    brandsByKey.set(normalizedBrand.key, {
-      label: normalizedBrand.label,
+    const specValues = new Map<string, Set<string>>();
+    for (const [key, value] of Object.entries(
+      product.product_key_specs ?? {}
+    )) {
+      if (NON_SPEC_METADATA_KEYS.has(key) || value == null) continue;
+      specValues.set(key, new Set([serializeSpecValue(value)]));
+    }
+    brandsByKey.set(canonicalKey, {
+      label,
       count: 1,
+      specValues,
     });
   }
 
@@ -156,17 +208,24 @@ export function buildBrandCompareCandidate(input: {
     return null;
   }
 
-  const differentiatingSpecCount = Math.min(
-    leftBrandEntry[1].count + rightBrandEntry[1].count,
-    4
-  );
+  // Real spec differentiation: keys both brands carry whose value sets differ.
+  const differentiatingSpecCount = [...leftBrandEntry[1].specValues.keys()]
+    .filter((key) => rightBrandEntry[1].specValues.has(key))
+    .filter((key) => {
+      const leftValues = leftBrandEntry[1].specValues.get(key) ?? new Set();
+      const rightValues = rightBrandEntry[1].specValues.get(key) ?? new Set();
+      return (
+        leftValues.size !== rightValues.size ||
+        [...leftValues].some((value) => !rightValues.has(value))
+      );
+    }).length;
 
   return {
     leftBrand: leftBrandEntry[1].label,
     rightBrand: rightBrandEntry[1].label,
     canonicalSlug: buildCanonicalBrandCompareSlug(
-      leftBrandEntry[1].label,
-      rightBrandEntry[1].label
+      leftBrandEntry[0],
+      rightBrandEntry[0]
     ),
     leftBrandActiveCount: leftBrandEntry[1].count,
     rightBrandActiveCount: rightBrandEntry[1].count,
@@ -193,7 +252,11 @@ export function buildPriceBandCandidate(input: {
   const differentiatingSpecCount = Math.min(
     new Set(
       bandProducts
-        .map((product) => normalizeBrand(product.brand)?.key)
+        .map((product) =>
+          product.brand
+            ? resolveCanonicalBrandKey(input.categorySlug, product.brand)
+            : null
+        )
         .filter((brandKey): brandKey is string => Boolean(brandKey))
     ).size,
     4

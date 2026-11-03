@@ -113,6 +113,7 @@ export function getReceiptStyles({
   .cell-num { width: 28px; color: #9ca3af; text-align: center; }
   .cell-item { font-weight: 600; color: #111827; word-break: break-word; }
   .cell-item-description { margin-top: 3px; font-size: 11px; line-height: 1.4; font-weight: 500; color: #6b7280; }
+  .cell-line-meta { margin-top: 3px; font-size: 11px; line-height: 1.4; font-weight: 500; color: #6b7280; }
   .cell-qty { text-align: center; white-space: nowrap; padding-right: 12px; }
   .cell-price { text-align: right; white-space: nowrap; font-family: 'SF Mono', Menlo, Monaco, monospace; font-size: 12px; padding-right: 12px; }
   .cell-total { text-align: right; white-space: nowrap; font-family: 'SF Mono', Menlo, Monaco, monospace; font-size: 12px; font-weight: 700; color: #111827; }

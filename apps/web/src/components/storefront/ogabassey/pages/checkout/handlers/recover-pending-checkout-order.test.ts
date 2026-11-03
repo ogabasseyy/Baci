@@ -194,7 +194,7 @@ describe('recoverPendingCheckoutOrder', () => {
       .mockResolvedValueOnce(pendingResponse())
       .mockImplementationOnce(async () => {
         expect(input.context.clearPendingCheckoutOrder).not.toHaveBeenCalled();
-        return Response.json({});
+        return Response.json({ success: true, cancelled: true });
       });
     await expect(recoverPendingCheckoutOrder(input)).resolves.toEqual({
       kind: 'submit',

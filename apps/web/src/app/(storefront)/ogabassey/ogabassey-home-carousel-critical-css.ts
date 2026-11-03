@@ -16,10 +16,10 @@ div:has(>.ogabassey-ad-slot){display:flex;flex-direction:column;align-items:cent
 .ogabassey-ad-placeholder-text{font-size:9px;line-height:1.5;margin-bottom:.25rem}
 .ogabassey-ad-slot{position:relative;overflow:hidden}
 .ogabassey-ad-slot>div{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.ogabassey-home-products{max-width:1400px;margin:0 auto;padding:1.5rem .75rem;position:relative}
+.ogabassey-home-products{background:var(--ogabassey-surface,var(--store-background,#ffffff));color:var(--ogabassey-surface-text,var(--store-background-text,#111827));max-width:1400px;margin:0 auto;padding:1.5rem .75rem;position:relative}
 .ogabassey-home-products__header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem}
-.ogabassey-home-products__eyebrow{font-size:.75rem;font-weight:700;line-height:1rem;text-transform:uppercase;color:var(--ogabassey-shell-accent-text,#ff7377)}
-.ogabassey-home-products__title{color:var(--ogabassey-shell-text,#ffffff);font-size:1.25rem;font-weight:700;line-height:1.75rem;margin-top:.25rem}
+.ogabassey-home-products__eyebrow{font-size:.75rem;font-weight:700;line-height:1rem;text-transform:uppercase;color:color-mix(in srgb,var(--store-primary,#d62027) 65%,var(--ogabassey-surface-text,var(--store-background-text,#111827)))}
+.ogabassey-home-products__title{color:var(--ogabassey-surface-text,var(--store-background-text,#111827));font-size:1.25rem;font-weight:700;line-height:1.75rem;margin-top:.25rem}
 .ogabassey-home-products__view-all{display:none}
 .ogabassey-home-products__grid{display:grid;gap:.75rem;grid-template-columns:repeat(2,minmax(0,1fr))}
 .ogabassey-home-product-card{position:relative;background:var(--ogabassey-surface,#ffffff);border:1px solid var(--ogabassey-border,#f3f4f6);border-radius:1rem;content-visibility:auto;contain-intrinsic-size:auto 360px;display:flex;flex-direction:column;height:100%;padding:.75rem}
@@ -34,12 +34,12 @@ div:has(>.ogabassey-ad-slot){display:flex;flex-direction:column;align-items:cent
 [data-ogabassey-mobile-hero-panel] > [aria-hidden="true"]{opacity:0;z-index:0}
 [data-ogabassey-mobile-hero-panel] > [aria-hidden="false"]{opacity:1;z-index:10}
 [data-ogabassey-mobile-hero-panel]>[role="group"]>:first-child{grid-column:span 3/span 3;display:flex;flex-direction:column;justify-content:center;gap:.25rem;padding:1rem 1.25rem}
-[data-ogabassey-mobile-hero-panel] h2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;font-size:1.65rem;font-weight:800;line-height:1.05;color:var(--store-secondary-text,#111827)}
+[data-ogabassey-mobile-hero-panel] h2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;font-size:1.25rem;font-weight:800;line-height:1.05;color:var(--store-secondary-text,#111827)}
 [data-ogabassey-mobile-hero-panel] p{font-size:11px;font-weight:600;color:var(--store-secondary-text,#111827)}
 [data-ogabassey-mobile-hero-panel]>[role="group"]>:first-child>span:first-child{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:var(--store-primary,#d62027)}
 [data-ogabassey-mobile-hero-panel]>[role="group"]>:first-child>span:last-child{margin-top:.5rem;display:inline-flex;width:fit-content;align-items:center;border-radius:9999px;background:var(--store-primary,#d62027);padding:.375rem 1rem;font-size:11px;font-weight:700;color:var(--store-on-primary,#ffffff)}
-[data-ogabassey-mobile-hero-panel]>[role="group"]>:nth-child(2){position:relative;grid-column:span 2/span 2;display:flex;align-items:center;justify-content:center;padding:.5rem}
-[data-ogabassey-mobile-hero-panel] img{height:100%;width:100%;object-fit:contain;object-position:right;padding:.5rem}
+[data-ogabassey-mobile-hero-panel]>[role="group"]>:nth-child(2){position:relative;grid-column:span 2/span 2;display:flex;align-items:center;justify-content:center;padding:.25rem}
+[data-ogabassey-mobile-hero-panel] img{height:100%;width:100%;object-fit:contain;object-position:right;padding:.25rem}
 [data-ogabassey-mobile-hero-panel]>[role="group"]>a{position:absolute;inset:0}
 [data-ogabassey-mobile-hero]>:last-child:not([role="region"]),[data-ogabassey-home-hero-reserve-mobile]>:last-child{margin-top:.5rem;min-height:2.75rem;display:flex;align-items:center;gap:.5rem;padding:0 .25rem}
 [data-ogabassey-mobile-hero] [aria-label="Hero carousel slide controls"]{display:flex;flex:1;align-items:center;gap:.375rem}

@@ -80,4 +80,21 @@ describe('homepage carousel critical CSS', () => {
       )
     ).toMatchObject({ opacity: '1', 'z-index': '10' });
   });
+
+  it('locks mobile hero h2 typography and img padding so the slide-0 image always wins LCP area', () => {
+    expect(
+      declarationsFor('[data-ogabassey-mobile-hero-panel] h2')
+    ).toMatchObject({
+      '-webkit-line-clamp': '3',
+      'font-size': '1.25rem',
+      'line-height': '1.05',
+      overflow: 'hidden',
+    });
+    expect(
+      declarationsFor('[data-ogabassey-mobile-hero-panel] img')
+    ).toMatchObject({
+      'object-fit': 'contain',
+      padding: '.25rem',
+    });
+  });
 });

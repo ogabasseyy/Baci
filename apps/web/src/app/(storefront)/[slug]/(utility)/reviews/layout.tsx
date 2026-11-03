@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import CustomerAuthLayout from '@/app/(storefront)/[slug]/customer-auth-layout';
-import { StorefrontEagerFullCssLayout } from '@/app/(storefront)/storefront-eager-full-css-layout';
+import { StorefrontEagerUtilityCssLayout } from '@/app/(storefront)/storefront-eager-utility-css-layout';
 
 export default async function ReviewsLayout({
   children,
@@ -12,10 +12,10 @@ export default async function ReviewsLayout({
   const resolvedParams = await params;
 
   return (
-    <StorefrontEagerFullCssLayout>
+    <StorefrontEagerUtilityCssLayout>
       <CustomerAuthLayout params={{ slug: resolvedParams.slug.toLowerCase() }}>
         {children}
       </CustomerAuthLayout>
-    </StorefrontEagerFullCssLayout>
+    </StorefrontEagerUtilityCssLayout>
   );
 }

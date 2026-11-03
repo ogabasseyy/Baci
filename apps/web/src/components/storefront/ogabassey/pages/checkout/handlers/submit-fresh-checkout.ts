@@ -23,6 +23,7 @@ export interface PaymentAttemptTracker {
 }
 
 export interface SubmitFreshCheckoutOptions {
+  redvaultPreparedOnly?: boolean;
   redvaultPrepared: Omit<RedvaultPreparedInput, 'onPaymentStarted'>;
   lifecycle: BuildCheckoutOrderLifecycleOptionsInput;
   onRedvaultPaymentStarted: NonNullable<RedvaultPreparedInput['onPaymentStarted']>;
@@ -46,6 +47,7 @@ export interface SubmitFreshCheckoutOptions {
 
 /** Run the fresh-order path from prepared REDVAULT reuse through payment dispatch. */
 export async function submitFreshCheckout({
+  redvaultPreparedOnly,
   redvaultPrepared,
   lifecycle,
   onRedvaultPaymentStarted,
@@ -78,6 +80,9 @@ export async function submitFreshCheckout({
       },
     });
     if (preparedOrderHandled) return;
+    if (redvaultPreparedOnly) {
+      throw new Error('Prepared UBA order could not be continued. Please try again.');
+    }
 
     const options = buildCheckoutOrderLifecycleOptions(lifecycle);
     const onOrderCreated = options.onOrderCreated;

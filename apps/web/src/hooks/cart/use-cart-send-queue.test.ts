@@ -185,7 +185,10 @@ it('retries an unknown replacement outcome with the exact original command, rece
   );
   rerender();
   await waitFor(() =>
-    expect(finishImportOp).toHaveBeenCalledWith('stable-retry', { ok: true })
+    expect(finishImportOp).toHaveBeenCalledWith('stable-retry', {
+      ok: true,
+      snapshot: expect.anything(),
+    })
   );
   expect(vi.mocked(sendSharedCartCommand).mock.calls[0]).toEqual(
     vi.mocked(sendSharedCartCommand).mock.calls[1]

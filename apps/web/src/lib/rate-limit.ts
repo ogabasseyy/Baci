@@ -8,6 +8,7 @@ import { NextResponse } from 'next/server';
 import { checkLegacyBridgeRateLimit } from './legacy-bridge-rate-limit';
 import {
   getClientIdentifier,
+  getRateLimitBucketKey,
   getTrustedClientIdentifier,
 } from './rate-limit-client';
 import { rateLimitDiagnostics } from './rate-limit-diagnostics';
@@ -19,7 +20,11 @@ import { getRateLimitConfig } from './rate-limit-routes';
 import { getRedis } from './redis';
 
 export { cleanupRateLimitStore } from './rate-limit-memory';
-export { getClientIdentifier, getTrustedClientIdentifier };
+export {
+  getClientIdentifier,
+  getRateLimitBucketKey,
+  getTrustedClientIdentifier,
+};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -87,7 +92,7 @@ export function checkRateLimit(
   // pattern and would silently fall back to the generic 50/min default.
   const pathname = pathnameOverride ?? request.nextUrl.pathname;
   const { config, pattern } = getRateLimitConfig(pathname);
-  const clientIdentifier = getClientIdentifier(request);
+  const clientIdentifier = getRateLimitBucketKey(request);
 
   if (pathname === LEGACY_BRIDGE_PATH) {
     return checkLegacyBridgeRateLimit(
@@ -163,7 +168,7 @@ export function checkImeiPollRateLimit(
   request: NextRequest
 ): Promise<RateLimitResult> {
   return applyRateLimit(
-    getClientIdentifier(request),
+    getRateLimitBucketKey(request),
     '/api/storefront/imei-check/:lookupId:poll',
     IMEI_POLL_RATE_LIMIT
   );

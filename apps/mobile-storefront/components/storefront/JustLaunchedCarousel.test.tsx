@@ -98,7 +98,7 @@ describe('JustLaunchedCarousel', () => {
       id: 'new-xiaomi',
       slug: 'xiaomi-18-ultra',
       name: 'Xiaomi 18 Ultra',
-      created_at: '2026-06-24T08:00:00.000Z',
+      created_at: '2026-10-30T08:00:00.000Z',
     };
     mockUsePinned.mockReturnValue({ data: [a27] });
     mockUseProducts.mockReturnValue({

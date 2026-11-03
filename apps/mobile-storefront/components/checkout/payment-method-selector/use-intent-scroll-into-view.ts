@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
 import { useEffect } from 'react';
-import type { ScrollView, View } from 'react-native';
+import type { ScrollViewInstance, ViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /**
@@ -15,8 +15,8 @@ export const STEPPER_STACK_HEIGHT = 205;
 interface UseIntentScrollIntoViewParams {
   /** Changes whenever the selected/expanded intent changes. */
   expandedKey: string;
-  cardRef: RefObject<View | null>;
-  scrollRef?: RefObject<ScrollView | null>;
+  cardRef: RefObject<ViewInstance | null>;
+  scrollRef?: RefObject<ScrollViewInstance | null>;
   scrollOffsetRef?: RefObject<number>;
 }
 

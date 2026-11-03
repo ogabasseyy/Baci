@@ -35,6 +35,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('next/image', () => ({
+  // biome-ignore lint/performance/noImgElement: deterministic image stub
   default: (props: { alt: string }) => <img alt={props.alt} />,
 }));
 

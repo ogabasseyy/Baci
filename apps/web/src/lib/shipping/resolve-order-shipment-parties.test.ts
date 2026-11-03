@@ -39,6 +39,24 @@ describe('resolveOrderShipmentParties', () => {
     expect(items[0]).toMatchObject({ quantity: 2, value: 5000 });
   });
 
+  it('sends the current store phone, not the saved quote phone, for domestic bookings', () => {
+    const { sender } = resolveOrderShipmentParties({
+      bookingContext: { receiver: orderReceiver },
+      effectiveQuoteRequest: {
+        sessionId: 'session-1',
+        sender: { ...merchantSender, phone: '+23415781' },
+        receiver: orderReceiver,
+        items: [],
+        shipmentType: 'domestic',
+      },
+      isInternationalQuote: false,
+      merchantSender: { ...merchantSender, phone: '+2348146978921' },
+      orderItems: [{ name: 'Widget', quantity: 1, price: 5000 }],
+    });
+
+    expect(sender?.phone).toBe('+2348146978921');
+  });
+
   it('prefers the stored international receiver while keeping order contact fields', () => {
     const { receiver, sender, items } = resolveOrderShipmentParties({
       bookingContext: { receiver: orderReceiver },

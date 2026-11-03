@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import type { ScrollViewInstance } from 'react-native';
 import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -71,7 +72,7 @@ export function CheckoutPaymentStepView({
   // Owns the payment-step ScrollView + a live scroll offset so the intent
   // accordion can scroll the just-selected card back into view when a sibling
   // card collapses. Kept in a ref (not state) to avoid re-renders on scroll.
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<ScrollViewInstance>(null);
   const scrollOffsetRef = useRef(0);
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     scrollOffsetRef.current = event.nativeEvent.contentOffset.y;

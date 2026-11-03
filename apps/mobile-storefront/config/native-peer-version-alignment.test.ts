@@ -44,7 +44,7 @@ describe('bugfix: hoisted native peer versions', () => {
     expect(storefront.devDependencies['@react-native/jest-preset']).toBe(
       storefront.dependencies['react-native']
     );
-    expect(storefront.devDependencies['jest-expo']).toBe('57.0.4');
+    expect(storefront.devDependencies['jest-expo']).toBe('~58.0.12');
   });
 
   it('resolves one MMKV native peer graph in the workspace lockfile', () => {
@@ -69,7 +69,7 @@ describe('bugfix: hoisted native peer versions', () => {
     expect(patchHashes.size).toBe(1);
     expect(
       (mmkvSnapshots ?? []).every((line) =>
-        line.includes('react-native@0.86.2')
+        line.includes('react-native@0.88.0')
       )
     ).toBe(true);
   });

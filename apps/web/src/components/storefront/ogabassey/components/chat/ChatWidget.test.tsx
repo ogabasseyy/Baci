@@ -47,22 +47,15 @@ vi.mock('./use-ogabassey-chat', () => ({
   })),
 }));
 
-import { useOgabasseyChat } from './use-ogabassey-chat';
-import { useV2Theme } from '../../providers/v2-theme-context';
 import { useCart } from '@/hooks/cart';
+import { useV2Theme } from '../../providers/v2-theme-context';
 import { ChatWidget } from './ChatWidget';
+import { useOgabasseyChat } from './use-ogabassey-chat';
 
 function getChatAnchor(container: HTMLElement) {
   const anchor = container.querySelector('.ogabassey-chat-anchor');
   expect(anchor).not.toBeNull();
   return anchor as HTMLElement;
-}
-
-function expectMobileOffsetContract(anchor: HTMLElement) {
-  expect(anchor).toHaveAttribute('data-mobile-offset-cart', '6.75rem');
-  expect(anchor).toHaveAttribute('data-mobile-offset-default', '5.75rem');
-  expect(anchor).toHaveAttribute('data-mobile-offset-product', '6.25rem');
-  expect(anchor).toHaveAttribute('data-mobile-offset-screen', '1rem');
 }
 
 describe('ChatWidget - toggle button', () => {
@@ -107,14 +100,6 @@ describe('ChatWidget - toggle button', () => {
   it('renders the AI badge on the toggle button', () => {
     render(<ChatWidget />);
     expect(screen.getByText('AI')).toBeDefined();
-  });
-
-  it('exposes the mobile offset contract on the widget anchor', () => {
-    const { container } = render(<ChatWidget />);
-    const anchor = getChatAnchor(container);
-
-    expect(anchor).toHaveAttribute('data-mobile-offset', 'default');
-    expectMobileOffsetContract(anchor);
   });
 
   it('does not render chat window when isOpen is false', () => {
@@ -180,8 +165,9 @@ describe('ChatWidget - toggle button', () => {
 
     expect(anchor).toHaveClass('ogabassey-chat-anchor--hidden');
     expect(anchor).toHaveAttribute('data-mobile-offset', 'default');
-    expectMobileOffsetContract(anchor);
-    expect(screen.getByRole('button', { name: 'Toggle chat' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Toggle chat' })
+    ).toBeInTheDocument();
   });
 });
 
@@ -345,26 +331,6 @@ describe('ChatWidget - chat window when open', () => {
     expect(screen.getByText('I need a new phone.')).toBeDefined();
   });
 
-  it('shows "Online" status text in the header', () => {
-    vi.mocked(useOgabasseyChat).mockReturnValue({
-      isOpen: true,
-      setIsOpen: vi.fn(),
-      messages: [],
-      input: '',
-      setInput: vi.fn(),
-      isLoading: false,
-      proactiveMsg: null,
-      setProactiveMsg: vi.fn(),
-      messagesEndRef: { current: null },
-      handleSend: vi.fn(),
-      handleSubmit: vi.fn(),
-      handleAddSantaWishToCart: vi.fn(),
-    });
-
-    render(<ChatWidget />);
-    expect(screen.getByText('Online')).toBeDefined();
-  });
-
   it('shows loading indicator when isLoading is true', () => {
     vi.mocked(useOgabasseyChat).mockReturnValue({
       isOpen: true,
@@ -411,6 +377,9 @@ describe('ChatWidget - chat window when open', () => {
 
     render(<ChatWidget />);
     expect(screen.getByText(/Santa AI/)).toBeDefined();
+    const avatar = screen.getByRole('img', { name: 'Santa' });
+    expect(avatar).toHaveAttribute('width', '36');
+    expect(avatar).toHaveAttribute('height', '36');
   });
 });
 
@@ -491,16 +460,9 @@ describe('ChatWidget - proactive nudge bubble', () => {
     const user = userEvent.setup();
     render(<ChatWidget />);
 
-    // The dismiss button is inside the proactive bubble (contains an X icon)
-    const allButtons = screen.getAllByRole('button');
-    // The dismiss button is a small button inside the bubble (not the toggle)
-    const dismissButton = allButtons.find(
-      (btn) => btn !== screen.getByRole('button', { name: 'Toggle chat' })
+    await user.click(
+      screen.getByRole('button', { name: 'Dismiss chat suggestion' })
     );
-    expect(dismissButton).toBeDefined();
-    if (dismissButton) {
-      await user.click(dismissButton);
-    }
     expect(setProactiveMsg).toHaveBeenCalledWith(null);
   });
 });

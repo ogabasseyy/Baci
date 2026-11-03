@@ -1,0 +1,153 @@
+# Manual-order document notifications
+
+New manual orders (`recorded_by_user_id` set, no import job/external source) enqueue
+one invoice or paid receipt after their item batch is saved. Missing/invalid email,
+missing customer/items, cancelled/returned orders and inconsistent paid balances
+are not sent. Later full payment queues one receipt, as do late customer-contact
+corrections. Existing orders are excluded from automatic notification backfill.
+An order awaiting contact correction can appear in the receipts archive before
+its first email can be sent; that transient state is accepted (in-account
+download needs no email) rather than hidden.
+
+The existing CRON_SECRET-authenticated `/api/cron/order-notifications` worker sends
+a branded email with a PDF attachment and a website claim link. Ogabassey also
+gets optional app links; other tenants do not get Ogabassey promotion. Claim links
+store only the SHA-256 token hash, expire after 90 days and link only the matching
+merchant/customer's orders after purchase-email verification. Corrective retries
+rotate the token but keep the original 90-day bound once a send was accepted, so
+retained previous/delivered links cannot outlive it; only a never-mailed row or a
+corrected recipient (whose historical hashes are revoked) gets a fresh clock. Both legacy and v2
+redemption enforce the live `auth.users` email and confirmation state.
+
+Pre-dispatch failures use the existing bounded outbox retry policy. A response
+lost after dispatch, accepted send with failed marker persistence or stale
+dispatched lease is terminalized as `delivery_outcome_unknown`, not automatically
+resent. A provider `client_reference` is an audit correlation, not an idempotency key.
+
+Activation backfill is bounded by construction plus an abort budget:
+pre-existing orders carry `manual_document_notification_eligible = false`,
+so the postdeploy backfill only sees staff-recorded orders created during
+the deploy's own predeploy-to-postdeploy window that never got an outbox
+row: the scan mirrors the enqueue's full eligibility (provenance triple
+plus customer link, contactable recipient, shippable status, at least one
+item, and a payable balance state), so the 500-row fence counts callable
+rows, not rows that can never mail. Each scanned order runs the enqueue
+function (which re-validates and early-returns for ineligible rows), the
+`NOT EXISTS` anti-join makes retries idempotent, and the 120s statement
+timeout fails the migration loud rather than stalling postdeploy. Past a 500-row scan the migration
+aborts outright (it never silently strands rows): a gap that large means
+the predeploy-to-postdeploy window stretched far past minutes, so split
+the catch-up manually — run the enqueue calls in chunks, then re-apply —
+instead of burst-mailing it.
+
+## Corrections and resend
+
+At most one invoice and one receipt row exist per order, and a claim token never
+rotates after its send marker is set. A correction that re-triggers the queue
+automatically re-arms a skipped or failed row that never started dispatch, so
+the corrected document sends without staff action; sent rows and rows that may
+already have dispatched (`delivery_outcome_unknown`, dispatch started) stay
+terminal to preserve at-most-once delivery. Resending after a successful send
+is therefore deliberate:
+
+1. Delete the sent `order_notification_outbox` row; the claim, its order links,
+   and the dead claim URL cascade with it.
+2. Correct the order contact (`customer_email`/`customer_id`) on the order row.
+   The correction itself is a real change on a monitored column, so the update
+   trigger re-evaluates and queues a fresh row with a new claim token for the
+   corrected address. (Correcting first and deleting after would strand the
+   resend: the conflict handler leaves sent rows terminal, and a no-op touch
+   cannot retrigger the `IS DISTINCT FROM` update trigger.)
+
+Total corrections alone also re-evaluate eligibility; a paid order whose total
+now exceeds its payments additionally needs a consistent `payment_status`
+(which itself re-triggers) before the matching document queues. Redemption of
+a manual claim requires verified sign-in as the recipient the document was
+sent to; unlike import claims it does not require the `customers` row to
+agree, because the document already arrived as an email attachment.
+
+## Local verification
+
+With PostgreSQL tools on PATH, run:
+
+```sh
+bash supabase/tests/run-manual-order-document-tests.sh
+pnpm --filter @baci/web exec vitest run src/lib/manual-order-document-email.test.ts src/lib/send-manual-order-document.test.ts src/app/api/cron/order-notifications/order-notification-outbox-worker.test.ts
+```
+
+The SQL harness creates and destroys its own empty, socket-only PostgreSQL cluster
+using synthetic records. It replays the relevant claim/outbox migrations against
+a minimal domain fixture; it is not a full Supabase-history replay.
+
+## Release notes for support
+
+Verified-email redemption now gates legacy import claims too, not just manual
+claims: both public `redeem_receipt_claim*` routes delegate to the verified
+core, so pre-existing import-claim holders with unverified emails get 403
+`EMAIL_UNVERIFIED` where they previously could redeem. Tell affected
+customers to verify their purchase email address and retry the same link.
+
+## Activation
+
+The enqueue triggers ship DISABLED and are enabled automatically: migration
+20260930160300 is deferred to the postdeploy phase, so the deployer applies
+it after the new web revision is live and the previous revision has drained
+(305s), when no old cron binary with the all-or-nothing batch parser can
+still claim. Inside the migration the burst fence runs first (an abort leaves the
+triggers disabled with nothing mailed), then the triggers enable, then
+the backfill scans the disabled window. Enabling before the scan closes
+the concurrent-write gap: staff writes committed between the fence and
+the scan enqueue through the now-live triggers, and the backfill's
+anti-join skips them when the scan reaches them — every gap write fires
+a trigger while the scan only ever sees trigger-covered rows. Enabling
+is not retroactive, so without the backfill pre-enable orders would
+silently miss their documents. The backfill is re-runnable: orders that
+already have a manual row are skipped, and the enqueue function
+re-validates all eligibility. In environments without the deploy
+pipeline, run the statements in 20260930160300 manually as one
+transaction after verifying the new worker drains batches with no 5xx.
+Catch-up scope: the backfill mails post-rollout manual orders created
+while the triggers were disabled (each re-validated by the enqueue
+function); pre-rollout orders carry the flag as false and are never
+mailed. A long predeploy-to-postdeploy gap trips the 500-row abort
+instead of mailing the whole gap — keep the gap minutes-long, or split
+the catch-up manually per the migration error.
+
+Accepted Bearer [REDACTED] risk: the unauthenticated login-email GET returns the
+masked hint (`b***@domain`) to any token holder and records
+login-started activity for non-web sources only. Web logins record the
+same event through the CSRF-protected POST instead, so each surface is
+counted once. Token possession already grants the anon preview and
+redemption itself, so the masked fragment discloses nothing beyond what
+the Bearer [REDACTED] already conveys; the activity write is funnel telemetry, not
+an authorization decision. Versioned preview contract: app traffic uses
+`preview_receipt_claim_v3` (kind discriminator, never the recipient
+email), created predeploy by pure-addition migration 20260930160200
+alongside the service-role-only login-hint function. There is no
+missing-function fallback and no predeploy window for either: previous
+revisions keep calling the untouched legacy preview function, whose
+payload schema requires `customer_email` (narrowing or replacing it
+predeploy would 500 every claim preview on the old revision — evaluated
+and rejected). The legacy anon-direct narrowing lands postdeploy in
+20260930160800, after the drain, so direct PostgREST readers lose the
+address too; verify the email is gone from the legacy preview before
+treating the guarantee as live. The login-email GET output stays masked
+(`b***@domain`) on every path.
+
+This ordering matters because old revisions 500 the whole claimed batch
+(including unrelated shipped/delivered rows, which then wait for lease
+expiry) when a batch contains a manual event type. Watch the cron 5xx rate
+and outbox lock age while the new worker rolls out; any `manual_order_*`
+500 means an old revision is still draining, so hold further deploys until
+the batches clear. In steady state, alert on sustained growth of the
+`unparseable` summary counter: id-less rows and valid-but-unknown event
+types loop on the lease by design (never dead-lettered, so a future
+producer or a transient claim-payload bug cannot lose notifications), and
+only a dashboard alert surfaces a poison payload churning the cron.
+Shipping rows with dropped fields heal on the next parse once the producer
+is fixed; manual rows with dropped fields dead-letter on first sight and
+re-arm on the next order touch. No new email provider,
+cron schedule, app release or environment variable is required. Use a disposable
+staging merchant and test inbox to verify actual provider acceptance, PDF rendering,
+verified sign-in and account receipt access before a production release. No live
+mail or production migration is part of local verification.

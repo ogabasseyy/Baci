@@ -1,6 +1,7 @@
 'use client';
 
 import { AlertCircle, Loader2 } from 'lucide-react';
+import { CheckoutCartCapacityGate } from './CheckoutCartCapacityGate';
 
 type CheckoutResumeStatusProps =
   | { status: 'loading' | 'initializing' }
@@ -16,16 +17,7 @@ type CheckoutResumeStatusProps =
  * Blocking gate for resumed checkouts: renders the loading or recovery
  * state that applies, or nothing while the checkout form may render.
  */
-export function CheckoutResumeGate({
-  cartEmpty,
-  isAutoTriggerProcessing,
-  isLoadingResumedOrder,
-  onContactSupport,
-  onGoHome,
-  onRetry,
-  resumeOrderError,
-  resumeOrderId,
-}: {
+type CheckoutResumeGateProps = {
   cartEmpty: boolean;
   isAutoTriggerProcessing: boolean | null;
   isLoadingResumedOrder: boolean | null;
@@ -34,7 +26,32 @@ export function CheckoutResumeGate({
   onRetry: () => void;
   resumeOrderError: string | null | undefined;
   resumeOrderId: string | null | undefined;
+};
+export function CheckoutResumeGate({
+  capacityRecovery,
+  ...props
+}: CheckoutResumeGateProps & {
+  capacityRecovery?: { validatedResume: boolean; onReturnToCart(): void };
 }) {
+  const content = <CheckoutResumeGateContent {...props} />;
+  return capacityRecovery ? (
+    <CheckoutCartCapacityGate {...capacityRecovery}>
+      {content}
+    </CheckoutCartCapacityGate>
+  ) : (
+    content
+  );
+}
+function CheckoutResumeGateContent({
+  cartEmpty,
+  isAutoTriggerProcessing,
+  isLoadingResumedOrder,
+  onContactSupport,
+  onGoHome,
+  onRetry,
+  resumeOrderError,
+  resumeOrderId,
+}: CheckoutResumeGateProps) {
   if ((cartEmpty && isLoadingResumedOrder) || isAutoTriggerProcessing) {
     return (
       <CheckoutResumeStatus

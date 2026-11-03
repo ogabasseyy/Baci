@@ -209,66 +209,17 @@ interface VirtualAccountResult {
   error?: string;
 }
 
-export async function handleCreateVirtualAccount(
-  params: CreateVirtualAccountParams,
-  sessionId: string
+export function handleCreateVirtualAccount(
+  _params: CreateVirtualAccountParams,
+  _sessionId: string
 ): Promise<VirtualAccountResult> {
-  const scoped = await createCheckoutToolTenantClient(sessionId);
-  if (!scoped) {
-    return {
-      success: false,
-      error:
-        'Bank transfer payment is temporarily unavailable. Please use card payment at checkout or contact support.',
-    };
-  }
-
-  const { supabase } = scoped;
-  const merchantId = scoped.tenant.merchantId;
-
-  try {
-    // 1. Create the chat order first
-    const subtotal = params.items.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    );
-
-    const { data: order, error: orderError } = await supabase
-      .from('chat_orders')
-      .insert({
-        merchant_id: merchantId,
-        session_id: sessionId,
-        customer_email: params.customerEmail,
-        customer_name: params.customerName,
-        customer_phone: params.customerPhone || null,
-        items: params.items,
-        subtotal: subtotal,
-        status: 'pending_payment',
-      })
-      .select('id')
-      .single();
-
-    if (orderError || !order) {
-      console.error('[Chat Tools] Order creation error:', orderError);
-      return { success: false, error: 'Failed to create order' };
-    }
-
-    // Virtual account generation via Kuda API is not yet integrated.
-    // Block this flow to prevent customers from sending money to fake accounts.
-    // TODO: Replace with an actual Kuda virtual-account API call when ready.
-    console.warn(
-      '[Chat Tools] Virtual account creation blocked — Kuda API not integrated. Order:',
-      order.id
-    );
-    return {
-      success: false,
-      orderId: order.id,
-      error:
-        'Bank transfer payment is temporarily unavailable. Please use card payment at checkout or contact support.',
-    };
-  } catch (err) {
-    console.error('[Chat Tools] Virtual account error:', err);
-    return { success: false, error: 'Failed to generate payment account' };
-  }
+  // Account generation is not integrated. Do not create a pending order with
+  // model-supplied prices for a payment flow that cannot be completed.
+  return Promise.resolve({
+    success: false,
+    error:
+      'Bank transfer payment is temporarily unavailable. Please use card payment at checkout or contact support.',
+  });
 }
 
 // ============================================

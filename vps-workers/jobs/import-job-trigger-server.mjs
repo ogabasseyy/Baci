@@ -3,8 +3,9 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { config } from 'dotenv';
+import { isEntrypoint } from '../lib/is-entrypoint.mjs';
 
 const WORKER_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const DEFAULT_HOST = '127.0.0.1';
@@ -292,8 +293,7 @@ export function startImportJobTriggerServer({
 }
 
 if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
+  isEntrypoint(import.meta.url)
 ) {
   config({ path: fileURLToPath(new URL('../.env', import.meta.url)) });
   startImportJobTriggerServer();

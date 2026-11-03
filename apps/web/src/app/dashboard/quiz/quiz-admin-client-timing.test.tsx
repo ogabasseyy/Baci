@@ -58,9 +58,9 @@ describe('QuizAdminClient activation timing', () => {
   beforeEach(() => mockApiPost.mockReset());
 
   it.each([
-    { manual: false, seconds: 100 },
+    { manual: false, seconds: 900 },
     { manual: true, seconds: 150 },
-  ])('uses generated play time unless the immediate window was edited ($manual)', async ({
+  ])('uses the suggested test window unless the immediate window was edited ($manual)', async ({
     manual,
     seconds,
   }) => {

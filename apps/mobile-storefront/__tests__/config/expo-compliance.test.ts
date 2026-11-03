@@ -84,7 +84,7 @@ describe('Expo compliance', () => {
       }
 
       expect(typeof config.runtimeVersion).toBe('string');
-      expect(config.runtimeVersion).toBe(config.version);
+      expect(config.runtimeVersion).toBe(`${config.version}-ios-sdk58-rn0880`);
     } finally {
       if (originalFacebookAppId === undefined) {
         delete process.env.STOREFRONT_FACEBOOK_APP_ID;

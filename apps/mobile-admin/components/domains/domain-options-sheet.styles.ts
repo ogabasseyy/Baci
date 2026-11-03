@@ -79,6 +79,10 @@ export const domainOptionsSheetStyles = StyleSheet.create({
     fontSize: TYPOGRAPHY.size.xs,
     marginTop: 2,
   },
+  dismissalNotice: {
+    padding: SPACING.md,
+    gap: SPACING.sm,
+  },
   separator: {
     height: 1,
     marginVertical: SPACING.sm,

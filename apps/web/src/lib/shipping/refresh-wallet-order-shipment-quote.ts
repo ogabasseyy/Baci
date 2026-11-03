@@ -119,7 +119,7 @@ export async function refreshWalletOrderShipmentQuote(
       throw new OrderShipmentBookingError(
         senderResult.error,
         senderResult.status,
-        'MERCHANT_SENDER_REQUIRED'
+        senderResult.code ?? 'MERCHANT_SENDER_REQUIRED'
       );
     }
     sender = senderResult.sender;

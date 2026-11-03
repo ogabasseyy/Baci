@@ -83,6 +83,12 @@ vi.mock('@/lib/agentic/agentic-chat-tenant', () => ({
   resolveAgenticChatTenant: vi.fn(async () => mockTenant),
 }));
 
+// The fast catalog path is covered by its own route and flow tests. Keep the
+// provider-chain regression suite independent of catalog network access.
+vi.mock('./fast-catalog-flow', () => ({
+  tryFastCatalogChat: vi.fn(async () => null),
+}));
+
 vi.mock('@/env', () => ({
   getAiChatProvider: vi.fn(() => chatProvider),
   getAiChatModel: vi.fn(() => 'gemma4:e4b'),

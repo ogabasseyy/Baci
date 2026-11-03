@@ -1,9 +1,9 @@
-import { pathToFileURL } from 'node:url';
 import { config } from 'dotenv';
 import { fetchPostHogRemediationCandidates } from '../lib/posthog-error-events.mjs';
 import { enrichPostHogRemediationCandidate } from '../lib/posthog-issue-enrichment.mjs';
 import { runRemediationJobWithGlobalLock } from '../lib/remediation-global-lock.mjs';
 import { runRemediationWorker } from '../lib/remediation-worker.mjs';
+import { isEntrypoint } from '../lib/is-entrypoint.mjs';
 
 export function runPostHogErrorRemediator({
   autofixRunner,
@@ -66,8 +66,7 @@ async function main(remediationLock) {
 }
 
 if (
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
+  isEntrypoint(import.meta.url)
 ) {
   config({ path: new URL('../.env', import.meta.url), quiet: true });
   if (process.env.BACI_POSTHOG_REMEDIATION_ENABLED !== '1') {

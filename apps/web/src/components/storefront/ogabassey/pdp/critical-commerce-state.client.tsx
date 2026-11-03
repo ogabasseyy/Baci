@@ -11,8 +11,6 @@ import { useEffect, useState } from 'react';
 import {
   canonicalizeVariantAxis,
 } from '@/components/storefront/ogabassey/variant-attributes';
-import { pruneSelectionsByVariantAvailability } from '@/components/storefront/ogabassey/variant-selection-pruning';
-import { recoverHiddenSelectionsFromUniqueVariant } from '@/components/storefront/ogabassey/recover-hidden-variant-selections';
 import { useCriticalCommerceCartActions } from './critical-commerce-cart-actions.client';
 import {
   DEFAULT_CRITICAL_PRICE_CURRENCY,
@@ -21,6 +19,7 @@ import {
   pickInitialSelectedAttributes,
 } from './critical-commerce-selection';
 import { buildCriticalInitialVariantIntent } from './critical-commerce-initial-intent';
+import { completeCriticalSelectionChange } from './complete-critical-selection-change';
 import { useCriticalRouteOfferState } from './critical-commerce-route-offer';
 import {
   OgabasseyPdpCriticalCommerceContext,
@@ -228,17 +227,13 @@ export function OgabasseyPdpCriticalCommerceProvider({
       dismissRouteOffer();
     }
 
-    const nextSelection = recoverHiddenSelectionsFromUniqueVariant(
-      pruneSelectionsByVariantAvailability(
-        {
-          ...selectedAttributes,
-          [normalizedAxis]: value.trim(),
-        },
-        normalizedAxis,
-        variants
-      ),
+    const nextSelection = completeCriticalSelectionChange(
+      selectionCartProduct,
+      { ...selectedAttributes, [normalizedAxis]: value.trim() },
+      normalizedAxis,
       hiddenRequiredVariantAxes,
-      variants
+      renderableVariantAxes,
+      variantAxisOptions
     );
 
     setSelectedVariantId(undefined);

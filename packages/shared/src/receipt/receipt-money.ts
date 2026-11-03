@@ -2,6 +2,8 @@ import {
   MONEY_CURRENCY_LOCALES,
   normalizeMoneyCurrency,
 } from '../money/currency-locales';
+import type { MoneyFormatter } from '../money/money-formatter';
+import { MANUAL_ORDER_CURRENCY_CODE_PATTERN } from './manual-order-document-gates';
 import type { ReceiptMerchant, ReceiptOrder } from './types';
 
 // Narrow views of the receipt types so VAT presentation logic can be reused
@@ -173,4 +175,84 @@ export function getReceiptDisplaySubtotal(
   const displaySubtotal =
     order.total - order.tax_amount - order.shipping_fee + order.discount_amount;
   return displaySubtotal >= 0 ? displaySubtotal : order.subtotal;
+}
+
+// Narrow item view for shared line math: the single source both the HTML
+// preview renderer and the emailed/downloaded PDF renderer consume, so the
+// two can never disagree on line totals or detail labels again.
+export interface ReceiptLineItemLike {
+  price: number;
+  quantity: number;
+  line_extension_amount?: number | null;
+  unit_code?: string | null;
+  vat_rate?: number | null;
+  vat_amount?: number | null;
+  sellers_item_id?: string | null;
+}
+
+const RECEIPT_PRICE_FORMATTER_CACHE = new Map<string, Intl.NumberFormat>();
+
+// Cached en-NG currency formatter shared by receipt price renderers.
+// Malformed codes (legacy rows the sender would skip) degrade to NGN,
+// cached under the bad key so they rethrow once. NGN rethrows so a
+// broken default fails fast; well-formed-but-unassigned codes rethrow
+// for callers to render code-prefixed like the PDF.
+export function getReceiptPriceFormatter(currency: string): Intl.NumberFormat {
+  let formatter = RECEIPT_PRICE_FORMATTER_CACHE.get(currency);
+  if (!formatter) {
+    try {
+      formatter = new Intl.NumberFormat('en-NG', {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: 0,
+      });
+    } catch (error) {
+      if (currency === 'NGN') throw error;
+      if (MANUAL_ORDER_CURRENCY_CODE_PATTERN.test(currency)) throw error;
+      const fallback = getReceiptPriceFormatter('NGN');
+      RECEIPT_PRICE_FORMATTER_CACHE.set(currency, fallback);
+      return fallback;
+    }
+    RECEIPT_PRICE_FORMATTER_CACHE.set(currency, formatter);
+  }
+  return formatter;
+}
+
+// Hermes ships without ICU data for unassigned currency codes: prefix
+// the code like Node's ICU and the PDF, with fraction digits pinned
+// like the primary formatter so grouping and rounding match it exactly
+// on well-formed-but-unassigned codes.
+export function formatUnassignedCurrencyPrice(
+  code: string,
+  price: number
+): string {
+  return `${code} ${price.toLocaleString('en-NG', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
+
+export function getReceiptItemLineTotal(item: ReceiptLineItemLike): number {
+  return typeof item.line_extension_amount === 'number' &&
+    Number.isFinite(item.line_extension_amount)
+    ? item.line_extension_amount
+    : item.price * item.quantity;
+}
+
+export function getReceiptItemVatLines(
+  item: ReceiptLineItemLike,
+  formatMoney: MoneyFormatter
+): string[] {
+  const lines: string[] = [];
+  if (typeof item.vat_rate === 'number' && Number.isFinite(item.vat_rate)) {
+    lines.push(`VAT: ${item.vat_rate.toFixed(2)}%`);
+  }
+  if (typeof item.vat_amount === 'number' && Number.isFinite(item.vat_amount)) {
+    lines.push(formatMoney(item.vat_amount));
+  }
+  return lines;
+}
+
+export function getReceiptItemDetailLines(item: ReceiptLineItemLike): string[] {
+  const lines: string[] = [];
+  if (item.sellers_item_id) lines.push(`SKU: ${item.sellers_item_id}`);
+  if (item.unit_code) lines.push(`Unit: ${item.unit_code}`);
+  return lines;
 }

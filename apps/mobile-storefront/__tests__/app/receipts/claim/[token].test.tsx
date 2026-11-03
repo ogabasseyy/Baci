@@ -108,32 +108,47 @@ describe('ReceiptClaimScreen', () => {
     global.fetch = originalFetch;
   });
 
-  it('preserves the claim route and email hint when unauthenticated customers are sent to login', () => {
+  it('ignores a crafted email param and uses only the server-issued hint', async () => {
+    // A crafted link can carry any masked-shape address; the page must not
+    // render or forward it. The login redirect carries the token-scoped
+    // server hint instead.
     mockUseLocalSearchParams.mockReturnValue({
-      email: '  BasseyBJohn@Yahoo.CO.UK  ',
+      email: 'e***@evil.com',
       token: 'claim-token',
     });
     mockUseRequireAuth.mockReturnValue({
       isLoading: false,
       redirectTo: '/auth/login?returnTo=%2Freceipts%2Fclaim%2Fclaim-token',
     });
+    mockFetch.mockResolvedValue({
+      json: async () => ({ emailHint: 'b***@yahoo.co.uk' }),
+      ok: true,
+    });
 
     render(<ReceiptClaimScreen />);
 
-    expect(mockRedirect).toHaveBeenCalledWith({
-      href: '/auth/login?returnTo=%2Freceipts%2Fclaim%2Fclaim-token&email=basseybjohn%40yahoo.co.uk',
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://ogabassey.com/api/storefront/receipts/claims/claim-token/login-email?source=app',
+        expect.objectContaining({ method: 'GET' })
+      );
+      expect(mockRedirect).toHaveBeenCalledWith({
+        href: '/auth/login?returnTo=%2Freceipts%2Fclaim%2Fclaim-token&email=b***%40yahoo.co.uk',
+      });
     });
+    expect(mockRedirect).not.toHaveBeenCalledWith(
+      expect.objectContaining({ href: expect.stringContaining('evil') })
+    );
     expect(mockGetSession).not.toHaveBeenCalled();
-    expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('loads the login email hint from the claim token before redirecting unauthenticated customers', async () => {
+  it('loads the masked login email hint from the claim token before redirecting unauthenticated customers', async () => {
     mockUseRequireAuth.mockReturnValue({
       isLoading: false,
       redirectTo: '/auth/login?returnTo=%2Freceipts%2Fclaim%2Fclaim-token',
     });
     mockFetch.mockResolvedValue({
-      json: async () => ({ emailHint: '  BasseyBJohn@Yahoo.CO.UK  ' }),
+      json: async () => ({ emailHint: 'b***@yahoo.co.uk' }),
       ok: true,
     });
 
@@ -147,10 +162,34 @@ describe('ReceiptClaimScreen', () => {
         expect.objectContaining({ method: 'GET' })
       );
       expect(mockRedirect).toHaveBeenCalledWith({
-        href: '/auth/login?returnTo=%2Freceipts%2Fclaim%2Fclaim-token&email=basseybjohn%40yahoo.co.uk',
+        href: '/auth/login?returnTo=%2Freceipts%2Fclaim%2Fclaim-token&email=b***%40yahoo.co.uk',
       });
     });
     expect(mockGetSession).not.toHaveBeenCalled();
+  });
+
+  it('drops a full email address from the claim route instead of leaking it into the login redirect', async () => {
+    mockUseLocalSearchParams.mockReturnValue({
+      email: '  BasseyBJohn@Yahoo.CO.UK  ',
+      token: 'claim-token',
+    });
+    mockUseRequireAuth.mockReturnValue({
+      isLoading: false,
+      redirectTo: '/auth/login?returnTo=%2Freceipts%2Fclaim%2Fclaim-token',
+    });
+
+    render(<ReceiptClaimScreen />);
+
+    expect(screen.getByText('Preparing sign-in...')).toBeOnTheScreen();
+
+    await waitFor(() => {
+      expect(mockRedirect).toHaveBeenCalledWith({
+        href: '/auth/login?returnTo=%2Freceipts%2Fclaim%2Fclaim-token',
+      });
+    });
+    expect(mockRedirect).not.toHaveBeenCalledWith(
+      expect.objectContaining({ href: expect.stringContaining('email=') })
+    );
   });
 
   it('redeems the claim with the current bearer session and opens the API redirect path', async () => {

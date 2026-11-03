@@ -8,7 +8,7 @@ export const APPLE_IMEI_SERVICE_TIERS = {
     description: 'Check whether an Apple device has been activated',
     detail:
       'Checks if Apple says the device has been activated. Useful when a seller claims a device is brand new.',
-    price: 700,
+    price: 400,
     costUsd: 0.04,
     features: [
       'Activation Status',
@@ -38,7 +38,7 @@ export const APPLE_IMEI_SERVICE_TIERS = {
     description: 'Clean/lost iCloud status for iPhone and Mac',
     detail:
       'Checks if an iPhone or Mac is clean or marked lost in iCloud-related records.',
-    price: 3500,
+    price: 2100,
     costUsd: 0.22,
     features: ['Clean/Lost Status', 'iCloud Risk', 'iPhone & Mac Support'],
     checksIncluded: ['device', 'modelNumber', 'icloud'],
@@ -53,7 +53,7 @@ export const APPLE_IMEI_SERVICE_TIERS = {
     tagline: 'Apple model details',
     description: 'Basic Apple model information',
     detail: 'Basic Apple device information before running deeper paid checks.',
-    price: 800,
+    price: 500,
     costUsd: 0.05,
     features: ['Apple Model', 'Model Number', 'Device Family'],
     checksIncluded: ['device', 'modelNumber'],
@@ -68,7 +68,7 @@ export const APPLE_IMEI_SERVICE_TIERS = {
     tagline: 'Was it a store demo?',
     description: 'Check whether the device is a retail demo unit',
     detail: 'Checks whether the device appears to be a retail demo unit.',
-    price: 3300,
+    price: 1900,
     costUsd: 0.2,
     features: ['Demo Unit Status', 'Retail Demo Risk', 'Apple Device Info'],
     checksIncluded: ['device', 'modelNumber', 'demoUnit'],
@@ -84,7 +84,7 @@ export const APPLE_IMEI_SERVICE_TIERS = {
     description: 'Company or school management lock risk',
     detail:
       'Checks for mobile device management risk, common on company or school-owned devices.',
-    price: 5000,
+    price: 2900,
     costUsd: 0.3,
     features: ['MDM Status', 'Management Lock Risk', 'Apple Device Info'],
     checksIncluded: ['device', 'modelNumber', 'mdmStatus'],

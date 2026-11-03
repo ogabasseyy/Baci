@@ -70,6 +70,24 @@ const BRAND_AUTHORITY_ENTRIES: readonly BrandAuthorityEntry[] = [
     displayName: 'Oppo',
     minimumProducts: 5,
   },
+  {
+    brandKey: 'honor',
+    brandQueryValue: 'Honor',
+    categorySlug: 'smartphones',
+    displayName: 'Honor',
+    minimumProducts: 5,
+  },
+  {
+    brandAliases: ['MacBook'],
+    brandKey: 'apple',
+    brandQueryValue: 'Apple',
+    brandSlug: 'apple',
+    categorySlug: 'laptops',
+    displayName: 'Apple MacBook',
+    intro:
+      'Compare Apple MacBook Air and MacBook Pro laptops at {merchantName} across M-series and Intel configurations.',
+    minimumProducts: 5,
+  },
 ];
 
 function getBrandQueryValues(entry: BrandAuthorityEntry) {

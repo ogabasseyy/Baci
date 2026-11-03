@@ -1,4 +1,4 @@
-import { getBankNameFromCode } from './bank-codes';
+import { resolveMerchantBankName } from './bank-codes';
 import { escapeHtml } from './escape-html';
 import type { ReceiptMerchant, ReceiptOptions, ReceiptOrder } from './types';
 
@@ -116,15 +116,10 @@ function renderMerchantBankCard({
   ReceiptPaymentInstructionParams,
   'merchant' | 'brandAccent' | 'brandPrimary' | 'contactEmail' | 'contactPhone'
 >): string {
-  const rawBankName = merchant.bank_name?.trim();
-  const hasValidBankName =
-    rawBankName &&
-    rawBankName.toLowerCase() !== 'unknown' &&
-    rawBankName.toLowerCase() !== 'unknown bank' &&
-    rawBankName.toLowerCase() !== 'n/a';
-  const resolvedBankName = hasValidBankName
-    ? rawBankName
-    : getBankNameFromCode(merchant.bank_code) || '';
+  const resolvedBankName = resolveMerchantBankName(
+    merchant.bank_name,
+    merchant.bank_code
+  );
   if (!resolvedBankName) {
     return '';
   }

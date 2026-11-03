@@ -16,6 +16,9 @@ INSERT INTO auth.users(id) VALUES ('93000000-0000-4000-8000-000000000003');
 
 CREATE FUNCTION pg_temp.assert_true(condition boolean, message text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN IF condition IS DISTINCT FROM true THEN RAISE EXCEPTION '%', message; END IF; END $$;
+-- New functions are no longer executable by other roles by default; the
+-- assertions below run after SET LOCAL ROLE service_role.
+GRANT EXECUTE ON FUNCTION pg_temp.assert_true(boolean, text) TO PUBLIC;
 
 -- Fixtures run as the session role (staging tables revoke service_role).
 INSERT INTO public.merchants(id,email) VALUES ('93000000-0000-4000-8000-000000000001','wallet-binding@example.com');

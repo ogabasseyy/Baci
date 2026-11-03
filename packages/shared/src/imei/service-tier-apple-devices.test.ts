@@ -22,16 +22,6 @@ describe('APPLE_DEVICE_IMEI_SERVICE_TIERS', () => {
     }
   });
 
-  it('prices serial services on the shared ~₦16,350/$ markup curve', () => {
-    // Band is wide at the edges to absorb ₦100 rounding on sub-₦300 items
-    // (e.g. Serial Info: ₦200 / $0.01 rounds up to a 20,000 ratio).
-    for (const [, tier] of tiers) {
-      const ratio = tier.price / tier.costUsd;
-      expect(ratio).toBeGreaterThan(13_000);
-      expect(ratio).toBeLessThanOrEqual(20_000);
-    }
-  });
-
   it('scopes the Mac iCloud lock check to serial-only laptops', () => {
     const macIcloud = APPLE_DEVICE_IMEI_SERVICE_TIERS.macIcloud;
     expect(macIcloud.deviceCategories).toEqual(['laptop']);

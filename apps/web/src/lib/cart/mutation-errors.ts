@@ -1,6 +1,7 @@
 import type { CartErrorCode } from '@baci/shared/cart';
 
 const SAFE_MESSAGES: Record<CartErrorCode, string> = {
+  forbidden: 'This cart action is not allowed here.',
   cart_locked:
     'This cart is closed for checkout. Start a new cart to keep shopping.',
   expired: 'This cart has expired. Start a new cart to keep shopping.',

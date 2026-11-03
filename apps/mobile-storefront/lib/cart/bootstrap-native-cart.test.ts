@@ -1,5 +1,11 @@
 import { bootstrapNativeCart } from './bootstrap-native-cart';
 
+jest.mock('./client-credential', () => ({
+  cartClientCredentialHeaders: async () => ({
+    'x-baci-client-credential': '44444444-4444-4444-8444-444444444444',
+  }),
+}));
+
 const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
 
 const config = {
@@ -98,6 +104,22 @@ it('fails closed when the bootstrap reply names another merchant', async () => {
       jest.fn()
     )
   ).rejects.toMatchObject({ code: 'temporarily_unavailable' });
+});
+
+it('preserves quota exhaustion so the UI can ask the shopper to wait', async () => {
+  const fetcher = jest
+    .fn()
+    .mockResolvedValueOnce(jsonResponse({ token: 'csrf-token-1' }))
+    .mockResolvedValueOnce(jsonResponse({ code: 'quota_exceeded' }, 429));
+  await expect(
+    bootstrapNativeCart(
+      config,
+      storageWith(null) as never,
+      fetcher as never,
+      () => {},
+      jest.fn()
+    )
+  ).rejects.toMatchObject({ code: 'quota_exceeded' });
 });
 
 it('wraps transport failures as temporarily unavailable', async () => {

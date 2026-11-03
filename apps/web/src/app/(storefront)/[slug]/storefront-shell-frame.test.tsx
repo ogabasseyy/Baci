@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AnalyticsPixelProvider } from '@/components/analytics/analytics-pixel-provider';
 import { StorefrontCartProvider } from '@/hooks/cart/storefront-cart-provider';
 import type { StorefrontShellSnapshot } from '@/hooks/merchant/types';
 import { StorefrontShellFrame } from './storefront-shell-frame';
@@ -9,9 +10,29 @@ const notFound = vi.fn(() => {
   throw new Error('NEXT_NOT_FOUND');
 });
 
+vi.mock('@/components/analytics/twitter-pixel', () => ({
+  TwitterPixel: ({
+    pixelId,
+    eventIds,
+  }: {
+    pixelId: string;
+    eventIds?: Record<string, string | undefined>;
+  }) => (
+    <span data-testid="x-pixel" data-events={JSON.stringify(eventIds)}>
+      {pixelId}
+    </span>
+  ),
+}));
+
 vi.mock('@/components/analytics/chatgpt-pixel', () => ({
   ChatgptPixel: ({ pixelId }: { pixelId: string }) => (
     <span data-testid="chatgpt-pixel">{pixelId}</span>
+  ),
+}));
+
+vi.mock('@/components/analytics/facebook-pixel', () => ({
+  FacebookPixel: ({ pixelId }: { pixelId: string }) => (
+    <span data-testid="facebook-pixel">{pixelId}</span>
   ),
 }));
 
@@ -200,4 +221,117 @@ it('wires anonymous derived capability hints into the storefront cart', () => {
     sharedCartAccountsEnabled: false,
     sharedCartRealtimeEnabled: true,
   });
+});
+
+it('keeps one Meta Pixel on direct product landing and cart navigation', () => {
+  const props = {
+    preloadHeroLcpImages: false,
+    shellSnapshot: {
+      ...shellSnapshot,
+      merchant: {
+        ...shellSnapshot.merchant,
+        growth_integrations_enabled: true,
+        feature_settings: { facebook_pixel_id: '2099259280261589' },
+      },
+    } satisfies StorefrontShellSnapshot,
+  };
+  const view = render(
+    <StorefrontShellFrame {...props}>
+      <main>Product</main>
+    </StorefrontShellFrame>
+  );
+  expect(screen.getAllByTestId('facebook-pixel')).toHaveLength(1);
+  view.rerender(
+    <StorefrontShellFrame {...props}>
+      <main>Cart</main>
+    </StorefrontShellFrame>
+  );
+  expect(screen.getAllByTestId('facebook-pixel')).toHaveLength(1);
+});
+
+it('mounts the merchant X Pixel on a direct product landing independently of the homepage', () => {
+  render(
+    <StorefrontShellFrame
+      preloadHeroLcpImages={false}
+      shellSnapshot={{
+        ...shellSnapshot,
+        merchant: {
+          ...shellSnapshot.merchant,
+          growth_integrations_enabled: true,
+          feature_settings: {
+            twitter_pixel_id: 'abc',
+            twitter_event_ids: { viewContent: 'tw-abc-view' },
+          },
+        },
+      }}
+    >
+      <main>Direct product</main>
+    </StorefrontShellFrame>
+  );
+  expect(screen.getByTestId('x-pixel')).toHaveTextContent('abc');
+});
+
+vi.mock('@/components/analytics/tiktok-pixel', () => ({
+  TikTokPixel: ({ pixelId }: { pixelId: string }) => (
+    <span data-testid="tiktok-pixel">{pixelId}</span>
+  ),
+}));
+vi.mock('@/components/analytics/snapchat-pixel', () => ({
+  SnapchatPixel: ({ pixelId }: { pixelId: string }) => (
+    <span data-testid="snapchat-pixel">{pixelId}</span>
+  ),
+}));
+it('mounts all five merchant advertising pixels once across direct landing and navigation, preserving X event mapping', () => {
+  const settings = {
+    facebook_pixel_id: 'facebook-one',
+    chatgpt_pixel_id: 'chatgpt-one',
+    tiktok_pixel_id: 'TIKTOKONE',
+    snapchat_pixel_id: '11111111-1111-4111-8111-111111111111',
+    twitter_pixel_id: 'abc',
+    twitter_event_ids: {
+      viewContent: 'tw-abc-view',
+      purchase: 'tw-abc-purchase',
+    },
+  };
+  const snapshot = {
+    ...shellSnapshot,
+    chatgptPixelId: 'chatgpt-one',
+    merchant: {
+      ...shellSnapshot.merchant,
+      growth_integrations_enabled: true,
+      feature_settings: settings,
+    },
+  } as unknown as StorefrontShellSnapshot;
+  const view = render(
+    <StorefrontShellFrame preloadHeroLcpImages={false} shellSnapshot={snapshot}>
+      <AnalyticsPixelProvider merchant={settings} />
+      <main>Direct product</main>
+    </StorefrontShellFrame>
+  );
+  for (const id of [
+    'facebook-pixel',
+    'chatgpt-pixel',
+    'tiktok-pixel',
+    'snapchat-pixel',
+    'x-pixel',
+  ])
+    expect(screen.getAllByTestId(id)).toHaveLength(1);
+  expect(screen.getByTestId('x-pixel')).toHaveAttribute(
+    'data-events',
+    JSON.stringify(settings.twitter_event_ids)
+  );
+  view.rerender(
+    <StorefrontShellFrame preloadHeroLcpImages={false} shellSnapshot={snapshot}>
+      <AnalyticsPixelProvider merchant={settings} />
+      <main>Cart route</main>
+    </StorefrontShellFrame>
+  );
+  for (const id of [
+    'facebook-pixel',
+    'chatgpt-pixel',
+    'tiktok-pixel',
+    'snapchat-pixel',
+    'x-pixel',
+  ])
+    expect(screen.getAllByTestId(id)).toHaveLength(1);
 });

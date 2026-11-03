@@ -130,7 +130,7 @@ it('wires durable storage and documented provider adapters with a fixed environm
     mode: 'recover',
   });
   const adapter = mocks.provision.mock.calls[0][0];
-  await adapter.listWallets('customer');
+  await adapter.listWallets('customer', provisioningFixture.walletName);
   await adapter.retrieveWallet('wallet');
   await adapter.retrieveAccounts('wallet');
   await adapter.createWallet({
@@ -145,7 +145,15 @@ it('wires durable storage and documented provider adapters with a fixed environm
   };
   expect(mocks.list).toHaveBeenCalledWith(provider, {
     customerId: 'customer',
-    walletName: `baci-save:${provisioningFixture.scope.integrationId}:${provisioningFixture.goalId}`,
+    walletName: provisioningFixture.walletName,
+  });
+  // A wallet-bound intent may carry the legacy name: the listing must use
+  // the stored name it is given, never one rebuilt from the ids.
+  const legacyName = `baci-save:${provisioningFixture.scope.integrationId}:${provisioningFixture.goalId}`;
+  await adapter.listWallets('customer', legacyName);
+  expect(mocks.list).toHaveBeenLastCalledWith(provider, {
+    customerId: 'customer',
+    walletName: legacyName,
   });
   expect(mocks.wallet).toHaveBeenCalledWith(provider, 'wallet');
   expect(mocks.accounts).toHaveBeenCalledWith(provider, 'wallet');
@@ -153,4 +161,17 @@ it('wires durable storage and documented provider adapters with a fixed environm
     provider,
     expect.objectContaining({ enableInterestAccrual: false })
   );
+});
+it('master kill switch blocks new provisioning but not recovery', () => {
+  const env = {
+    NODE_ENV: 'test' as const,
+    PIGGYVEST_PRIMARY_SAVINGS_PROVISIONING_ENABLED: 'true',
+    PIGGYVEST_PRIMARY_GOAL_PROVISIONER_DB_PASSWORD: 'test-only-password',
+  };
+  expect(readPrimarySavingsProvisioningRuntime(env)).not.toBeNull();
+  const killed = { ...env, PIGGYVEST_KILL_SWITCH: 'true' };
+  expect(readPrimarySavingsProvisioningRuntime(killed)).toBeNull();
+  expect(
+    readPrimarySavingsProvisioningRuntime(killed, 'recover')
+  ).not.toBeNull();
 });

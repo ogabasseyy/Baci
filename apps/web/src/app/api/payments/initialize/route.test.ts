@@ -169,6 +169,8 @@ function createMockSupabase() {
               : null,
           error: null,
         });
+      if (name === 'get_order_paystack_split_retained_shipping_kobo')
+        return Promise.resolve({ data: 0, error: null });
       if (name === 'create_payment_transaction')
         return Promise.resolve(rpcTransactionResult);
       if (name === 'reserve_paystack_order_payment_account')
@@ -258,10 +260,7 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: () => ({
-    ...createMockSupabase(),
-    ...createMockAdminClient(),
-  }),
+  createClient: () => ({ ...createMockSupabase(), ...createMockAdminClient() }),
 }));
 
 // ---- Import handler AFTER mocks ----

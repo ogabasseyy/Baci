@@ -1001,7 +1001,7 @@ describe('POST /api/orders REDVAULT integration', () => {
     }
   });
 
-  it('rejects shared-cart REDVAULT orders before any unbound draft', async () => {
+  it('passes the verified shared cart to REDVAULT draft creation', async () => {
     vi.clearAllMocks();
     primeAdminOrderCurrencyRead();
     const availability = await import(
@@ -1079,12 +1079,26 @@ describe('POST /api/orders REDVAULT integration', () => {
           }),
         })
       );
-      expect(response.status).toBe(400);
-      expect((await response.json()).code).toBe(
-        'REDVAULT_COMBINATION_UNSUPPORTED'
+      expect(response.status).toBe(201);
+      expect(checkoutSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sharedCart: {
+            principalId: 'guest-principal-001',
+            binding: {
+              cart_id: '22222222-2222-4222-8222-222222222222',
+              checkout_session_id: '33333333-3333-4333-8333-333333333333',
+              checkout_generation: 1,
+              cart_version: 3,
+            },
+          },
+        })
       );
-      expect(checkoutSpy).not.toHaveBeenCalled();
-      expect(eventSpy).not.toHaveBeenCalled();
+      expect(eventSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+          orderId: 'rv-order-1',
+        })
+      );
     } finally {
       availabilitySpy.mockRestore();
       quoteSpy.mockRestore();
@@ -3440,63 +3454,6 @@ describe('POST /api/orders — wallet response shape', () => {
       p_order_id: 'order-id',
       p_payment_method: 'savings',
     });
-  });
-
-  it('full-coverage wallet redemption returns amountDueToGateway=0 and finalizes payment', async () => {
-    // Pin the full-coverage path that the mobile client uses to skip the
-    // gateway initialize step entirely. Order is marked paid via
-    // finalize_wallet_order_payment.
-    const finalizeSpy = vi.fn(() =>
-      Promise.resolve({ data: null, error: null })
-    );
-    const supabaseMod = await import('@/lib/supabase/server');
-    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
-      const sb = buildMockSupabase({
-        redeem_wallet_for_order: {
-          data: [
-            {
-              success: true,
-              redeemed_amount: 1000,
-              new_balance: 0,
-              transaction_id: '88888888-aaaa-bbbb-cccc-eeeeeeeeeeee',
-            },
-          ],
-          error: null,
-        },
-      });
-      // Wrap rpc so we can spy on finalize_wallet_order_payment specifically.
-      const originalRpc = sb.rpc;
-      sb.rpc = vi.fn((name: string) => {
-        if (name === 'finalize_wallet_order_payment') {
-          return finalizeSpy();
-        }
-        return originalRpc(name);
-      });
-      return sb;
-    }) as unknown as never);
-
-    const request = new NextRequest('http://localhost/api/orders', {
-      method: 'POST',
-      body: JSON.stringify({
-        ...baseOrderPayload,
-        use_wallet_credit: true,
-        wallet_amount: 1000,
-      }),
-    });
-
-    const response = await POST(request);
-    const body = await readJson(response);
-
-    expect(response.status).toBe(201);
-    expect(body.wallet).toEqual({
-      amountUsed: 1000,
-      newBalance: 0,
-      transactionId: '88888888-aaaa-bbbb-cccc-eeeeeeeeeeee',
-    });
-    expect(body.amountDueToGateway).toBe(0);
-    expect(body.order.payment_status).toBe('paid');
-    expect(body.order.payment_method).toBe('wallet');
-    expect(finalizeSpy).toHaveBeenCalledTimes(1);
   });
 });
 

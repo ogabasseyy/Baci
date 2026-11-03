@@ -15,6 +15,8 @@ interface ProductIndexCardProps {
   product: NormalizedProduct;
   modern?: boolean;
   footer?: ReactNode;
+  /** Opt in only for a measured first-screen LCP candidate. */
+  imagePriority?: boolean;
 }
 
 function hasRenderableImage(image?: string | null) {
@@ -85,6 +87,7 @@ export function ProductIndexCard({
   product,
   modern = false,
   footer,
+  imagePriority = false,
 }: ProductIndexCardProps) {
   const productPath = `${pathPrefix}${getProductUrl({
     id: product.id,
@@ -141,6 +144,8 @@ export function ProductIndexCard({
               alt={product.name}
               className={modern ? 'object-contain p-3' : 'object-cover'}
               fill
+              loading={imagePriority ? 'eager' : 'lazy'}
+              fetchPriority={imagePriority ? 'high' : 'auto'}
               sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
               src={product.image}
             />

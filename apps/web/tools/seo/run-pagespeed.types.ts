@@ -1,3 +1,5 @@
+import type { PageSpeedLcpDiagnostics } from './page-speed-lcp-diagnostics.types';
+
 export type PageSpeedStrategy = 'mobile' | 'desktop';
 
 export interface PageSpeedTarget {
@@ -18,6 +20,7 @@ export interface PageSpeedAuditResult {
   strategy: PageSpeedStrategy;
   passed: boolean;
   failures: PageSpeedFailure[];
+  lcpDiagnostics?: PageSpeedLcpDiagnostics;
   scores: Record<string, number | null>;
   vitals: Record<string, number | null>;
 }

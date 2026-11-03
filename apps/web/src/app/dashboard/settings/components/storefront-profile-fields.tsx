@@ -101,6 +101,34 @@ export function StorefrontProfileFields({
             )}
           </label>
         </div>
+        <div className="grid gap-2">
+          <label className="font-medium text-sm" htmlFor="phone">
+            Business phone (used for courier pickups)
+          </label>
+          <Input
+            id="phone"
+            type="tel"
+            autoComplete="tel"
+            aria-invalid={Boolean(errors.phone)}
+            aria-describedby={
+              errors.phone ? 'phone-hint phone-error' : 'phone-hint'
+            }
+            {...form.register('phone')}
+          />
+          <span id="phone-hint" className="text-muted-foreground text-sm">
+            Couriers call this number to collect your orders. Enter the full
+            number with its country code, for example +234 801 234 5678.
+          </span>
+          {errors.phone && (
+            <span
+              id="phone-error"
+              role="alert"
+              className="text-destructive text-sm"
+            >
+              {errors.phone.message}
+            </span>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

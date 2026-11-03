@@ -77,7 +77,7 @@ export function QuizLaunchDialog({
       <section
         aria-labelledby="launch-dialog-title"
         aria-modal="true"
-        className="w-full max-w-lg rounded-xl border bg-card p-6 shadow-2xl"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border bg-card p-6 shadow-2xl"
         role="dialog"
       >
         <p className="text-xs font-semibold uppercase tracking-widest text-primary">
@@ -112,7 +112,7 @@ export function QuizLaunchDialog({
             <label className="grid gap-2 font-medium">
               Regulatory basis
               <select
-                className="h-10 rounded-md border bg-background px-3"
+                className="h-10 min-w-0 rounded-md border bg-background px-3 text-base md:text-sm"
                 value={regulatoryBasis}
                 onChange={(event) =>
                   setRegulatoryBasis(
@@ -134,7 +134,7 @@ export function QuizLaunchDialog({
             <label className="grid gap-2 font-medium">
               Covered jurisdiction
               <input
-                className="h-10 rounded-md border bg-background px-3"
+                className="h-10 min-w-0 rounded-md border bg-background px-3 text-base md:text-sm"
                 maxLength={100}
                 onChange={(event) => setJurisdiction(event.target.value)}
                 placeholder="e.g. NG-LA"
@@ -144,7 +144,7 @@ export function QuizLaunchDialog({
             <label className="grid gap-2 font-medium">
               Evidence reference
               <input
-                className="h-10 rounded-md border bg-background px-3"
+                className="h-10 min-w-0 rounded-md border bg-background px-3 text-base md:text-sm"
                 maxLength={240}
                 onChange={(event) => setEvidenceReference(event.target.value)}
                 placeholder="Counsel memo, approved rules, permit, or filing reference"

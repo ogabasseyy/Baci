@@ -231,7 +231,7 @@ export const systemErrorStyleSheet = `
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+  @media (prefers-reduced-motion: reduce) {
   .baci-system-error-button {
     transition: none;
   }
@@ -240,4 +240,7 @@ export const systemErrorStyleSheet = `
     transform: none;
   }
 }
-`;
+`
+  .replace(/\s+/g, ' ')
+  .replace(/\s*([{};])\s*/g, '$1')
+  .trim();

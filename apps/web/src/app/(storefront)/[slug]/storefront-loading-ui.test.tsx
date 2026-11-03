@@ -173,4 +173,11 @@ describe('storefront-loading-ui', () => {
       screen.getByRole('status', { name: 'Loading utility page' })
     ).toBeInTheDocument();
   });
+
+  it('keeps HomeRouteLoading compact so LoadingBoundaryProvider does not serialize a full skeleton tree into initial RSC Flight', () => {
+    const html = renderToString(<HomeRouteLoading />);
+
+    expect(html).toContain('aria-label="Loading storefront homepage"');
+    expect(html.length).toBeLessThan(300);
+  });
 });

@@ -1,5 +1,5 @@
 import type { MutableRefObject } from 'react';
-import type { LayoutChangeEvent, ScrollView } from 'react-native';
+import type { LayoutChangeEvent, ScrollViewInstance } from 'react-native';
 import { SPACING } from '@/constants/Colors';
 import { detectNetwork } from '@/lib/network-utils';
 
@@ -75,7 +75,7 @@ export function scrollToAirtimePaymentSection({
   shouldScrollToPayment,
 }: {
   event: LayoutChangeEvent;
-  scrollViewRef: MutableRefObject<ScrollView | null>;
+  scrollViewRef: MutableRefObject<ScrollViewInstance | null>;
   setShouldScrollToPayment: (value: boolean) => void;
   shouldScrollToPayment: boolean;
 }) {

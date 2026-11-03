@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { LayoutChangeEvent, ScrollView } from 'react-native';
+import type { LayoutChangeEvent, ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SPACING } from '@/constants/Colors';
 import { NETWORK_PROVIDERS } from '@/constants/network-providers';
@@ -32,7 +32,7 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
   const insets = useSafeAreaInsets();
   const { dismissKeyboard, isKeyboardVisible, keyboardHeight } = useKeyboard();
   const customer = useAuthStore((state) => state.customer);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<ScrollViewInstance>(null);
   const prevIsRepeatPaymentReadyRef = useRef(isRepeatPaymentReady);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(
     initialProvider ??

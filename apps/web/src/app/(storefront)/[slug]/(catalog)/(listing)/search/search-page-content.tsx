@@ -80,8 +80,6 @@ export async function SearchPageContent({
   }
 
   const effectiveResult = searchResult ?? EMPTY_SEARCH_RESULT;
-  // The adapter echoes the sanitized query; fall back to the validated input
-  // when the search failed so the form and error copy keep the submission.
   const searchQuery = searchResult ? searchResult.query : query;
 
   const allProductsHref = `${pathPrefix}/products`;
@@ -226,7 +224,7 @@ export async function SearchPageContent({
                   ) : searchQuery ? (
                     effectiveResult.products.length > 0 ? (
                       <div className="mt-4 grid grid-cols-2 gap-4 xl:grid-cols-3">
-                        {effectiveResult.products.map((product) => (
+                        {effectiveResult.products.map((product, index) => (
                           <div key={product.id}>
                             <ProductIndexCard
                               formattedPrice={
@@ -237,6 +235,9 @@ export async function SearchPageContent({
                               }
                               pathPrefix={pathPrefix}
                               product={product}
+                              imagePriority={
+                                merchant.slug === 'ogabassey' && index < 2
+                              }
                               modern
                               footer={
                                 <SearchCompareButton

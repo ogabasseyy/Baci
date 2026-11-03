@@ -2,7 +2,6 @@ import { vi } from 'vitest';
 import type { CartItem } from '@/hooks/cart';
 import type { CheckoutScreenModelInput } from './derive-checkout-screen-model';
 import type { ResumedOrder } from './types';
-
 export const setField = vi.fn();
 export const setNewsletterOptIn = vi.fn();
 export const setPayWithWallet = vi.fn();
@@ -146,6 +145,8 @@ export function makeInput(
         onSelectAddress: vi.fn(),
         onSelectPlace: vi.fn(),
         onStreetChange: vi.fn(),
+        onCityChange: vi.fn(),
+        onStateChange: vi.fn(),
       },
     },
     method: {
@@ -222,7 +223,9 @@ export function makeInput(
       attempt: {
         resumeOrderId: options.resumedOrder?.id ?? null,
         resumedOrder: options.resumedOrder ?? null,
+        preferredGateway: null,
         isProcessing: false,
+        pendingCheckoutOrder: null,
       },
       delivery: deliverySession,
       financial: {
@@ -292,7 +295,7 @@ export function makeInput(
       formatCurrencyAuto: (amount: number) => `₦${amount}`,
     },
     actions: { onReturnToCart },
-    availability: { redvaultAvailable: false, sharedCartActive: false },
+    availability: { redvaultAvailable: false },
   };
   return defaults satisfies CheckoutScreenModelInput;
 }

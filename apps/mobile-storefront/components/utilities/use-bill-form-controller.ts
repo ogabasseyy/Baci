@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { LayoutChangeEvent, ScrollView } from 'react-native';
+import type { LayoutChangeEvent, ScrollViewInstance } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SPACING } from '@/constants/Colors';
 import { useKeyboard } from '@/hooks/use-keyboard';
@@ -74,7 +74,7 @@ export function useBillFormController({
   >(null);
   const [beneficiarySaveRequest, setBeneficiarySaveRequest] =
     useState<BillFormBeneficiarySaveRequest | null>(null);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<ScrollViewInstance>(null);
   const scheduleNextStepScroll = useNextStepScroll(scrollViewRef, () => {
     setShouldScrollToNextStep(false);
   });

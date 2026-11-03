@@ -140,6 +140,7 @@ describe('performImeiCheck', () => {
       error: null,
       keepRequestIdentity: false,
       lookupId: '11111111-1111-4111-8111-111111111111',
+      needsSignIn: false,
       needsWalletFunding: false,
       pending: null,
       result,

@@ -20,7 +20,7 @@ export function ProductDetailHeader({
       <div>
         <h1
           className="text-3xl lg:text-4xl font-bold font-headline"
-          style={{ color: 'var(--store-primary)' }}
+          style={{ color: 'var(--store-background-text)' }}
         >
           {product.name}
         </h1>
@@ -46,7 +46,7 @@ export function ProductDetailHeader({
         <div className="flex items-baseline gap-3 mt-2">
           <p
             className="text-3xl font-bold"
-            style={{ color: 'var(--store-secondary)' }}
+            style={{ color: 'var(--store-background-text)' }}
           >
             {formatCurrency(currentPrice)}
           </p>

@@ -70,6 +70,7 @@ describe('triggerPurchaseConversion currency', () => {
   ])('resolves currency precedence', async (orderCurrency, merchant, expected) => {
     await triggerPurchaseConversion(client(merchant), 'merchant-1', {
       currency: orderCurrency,
+      ad_tracking: { analyticsConsent: true },
       id: 'order-1',
       order_items: [],
       total: 100,

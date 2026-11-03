@@ -12,16 +12,19 @@ export async function discardOrphanedClaimTransaction({
   merchantId,
   supabase,
   transactionId,
+  userId,
 }: {
   context: 'join' | 'rejection';
   merchantId: string;
   supabase: SupabaseClient;
   transactionId: string;
+  userId: string;
 }): Promise<void> {
   const outcome = await cleanupOrphanVtuTransactionAfterKeyRace({
     merchantId,
     supabase,
     transactionId,
+    userId,
   });
   if (outcome === 'unresolved') {
     console.error(

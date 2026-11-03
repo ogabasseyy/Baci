@@ -3,9 +3,9 @@
  * Bounds low-value analytics rows plus pg_cron and pg_net response history.
  */
 
-import { pathToFileURL } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { config } from 'dotenv';
+import { isEntrypoint } from '../lib/is-entrypoint.mjs';
 
 config({ path: new URL('../.env', import.meta.url).pathname });
 
@@ -109,7 +109,7 @@ export async function runSupabaseRetentionCleanup({
 }
 
 const isMain =
-  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+  isEntrypoint(import.meta.url);
 
 if (isMain) {
   try {

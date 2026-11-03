@@ -35,6 +35,16 @@ and enrollment gates in the release sequence below.
   non-canonical stored values silently keep every cart surface
   disabled. (Trim + lowercase normalization in the web helper applies
   only to non-cart feature gates.)
+- Cloudflare visitor trust for anonymous cart quotas
+  (`apps/web/src/lib/cloudflare-peer.ts`): `CF-Connecting-IP` is only
+  used as a quota identity when the platform-verified peer is inside
+  Cloudflare's published egress ranges. Hard deploy prerequisite:
+  restrict origin ingress to the proxied Cloudflare zone
+  (Authenticated Origin Pulls or equivalent) so callers originating
+  from other Cloudflare egress (e.g. a Worker fetching the origin
+  directly) cannot present forged `CF-Connecting-IP`/`CF-Ray` headers.
+  Until that restriction is verifiably in place, treat this trust as
+  quota-shaping only — it is never an authentication signal.
 - Bounded retention: `cleanup_commerce_carts()` (final body in
   `20261015163000`, batching every statement to 1000 rows per call)
   deletes expired operations/creation requests/events, handoffs
@@ -96,14 +106,21 @@ and enrollment gates in the release sequence below.
    `CART_PROOF_ENVIRONMENT` shared by all its instances: proof issuance
    and verification fail closed without it, and distinct deployments
    must never share a value (or the master secret).
-3. Deploy compatible server adapters with enrollment still disabled.
-4. Activate terminal-cart retention explicitly (only with the release
+3. Before deploying the Cloudflare visitor-quota trust: verify the
+   origin is restricted to the proxied Cloudflare zone
+   (Authenticated Origin Pulls or equivalent) and confirm a
+   direct-to-origin request with forged `CF-Connecting-IP`/`CF-Ray`
+   headers is rejected or ignored; record the evidence. This is a
+   hard gate for that change, not a follow-up. Also wire an operator
+   alert on the `Cart quota store degraded` warning before rollout.
+4. Deploy compatible server adapters with enrollment still disabled.
+5. Activate terminal-cart retention explicitly (only with the release
    authorization): where pg_cron exists, run
    `SELECT cron.schedule('commerce-cart-terminal-purge', '37 * * * *', $cron$SELECT public.commerce_cart_purge_terminal_carts(interval '90 days', 500)$cron$);`
    Migration application alone never schedules this job.
-5. Pilot one controlled merchant (Ogabassey), run the acceptance matrix
+6. Pilot one controlled merchant (Ogabassey), run the acceptance matrix
    in `docs/qa/shared-cart-acceptance.md`, then a second merchant.
-6. Expand only after convergence, checkout-binding and isolation
+7. Expand only after convergence, checkout-binding and isolation
    evidence pass at the deployed revision.
 
 ## Signing keys
@@ -170,6 +187,48 @@ holder of that key from signing a forged issuance time.
 
 ## Telemetry redaction
 
+Anonymous cart calls carry the client quota credential in the
+`x-baci-client-credential` header. It is a quota identity, not an
+authentication secret, but a leaked value lets an attacker burn one
+shopper's quota bucket, so treat it like a session identifier: it is
+on the same proxy/APM redaction denylist below, and in-repo logging
+never records it (quota keys store only its SHA-256 hash).
+
+Abuse posture: credential budgets are always paired with a
+non-rotatable network backstop at 25x the primary limit. That
+backstop is a deliberate trade-off, not strict isolation — a hostile
+host sharing an egress with legitimate shoppers can still exhaust
+the shared backstop and deny them until the window resets, exactly
+as any finite per-network ceiling allows. The multiple is sized far
+above legitimate shared-egress volume; alert on sustained backstop
+denials rather than raising it silently. While the Redis quota
+store is degraded, the credential dimension is skipped and network
+identity alone applies, so the bounded per-instance memory store
+cannot be poisoned by credential churn.
+
+Privacy basis: the credential is a persistent random per-profile /
+per-install quota key. It exists solely so anonymous budgets follow
+the shopper instead of their network address. It is never used for
+authentication, advertising, or cross-merchant joins; clients
+store a separate credential per merchant and quota keys are
+merchant-salted SHA-256 hashes with the budget window as their
+retention, and the raw value is redacted from telemetry (below).
+Web handoff preview sends no credential (the merchant is learned
+from the preview itself) and uses the verified network identity;
+mobile handoff preview sends its per-merchant credential (the slug
+is known from app config). Either way, stored quota keys are never
+joinable across merchants: clients store a separate credential per
+merchant wherever the merchant is known, and every quota subject is
+a merchant-salted hash. Deleting site/app data rotates it.
+
+Accepted risk — Redis key cardinality: in the healthy-store path,
+each distinct credential creates its own quota key per merchant
+and operation (bounded per network by the backstop, e.g. 3,000
+bootstrap keys/hour/network/merchant, all TTL'd to their budget
+window). Alert on Redis key-count/memory growth alongside the
+degradation warning; revisit a cardinality guard only if key
+pressure is observed.
+
 The handoff preview endpoint (`GET /api/storefront/cart/handoff`)
 takes the pairing secret in the `x-handoff-token` header. Proxy, APM,
 and error-reporting pipelines in front of the cart routes must redact
@@ -177,11 +236,12 @@ that header exactly like `Authorization` before activation; in-repo
 logging never records request headers for these routes. This is an
 explicit pre-activation checklist item (not a documentation-only
 note): before any merchant is enrolled, verify against the deployed
-proxy and APM configuration that (1) `x-handoff-token` is on the
-header denylist alongside `Authorization`, and (2) a synthetic
-handoff preview request leaves no token value in proxy, APM, or
-error-reporting captures; record both checks in the activation
-evidence. Enrollment stays closed until they pass.
+proxy and APM configuration that (1) `x-handoff-token` and
+`x-baci-client-credential` are on the header denylist alongside
+`Authorization`, and (2) a synthetic handoff preview request and a
+synthetic bootstrap request leave no token or credential value in
+proxy, APM, or error-reporting captures; record both checks in the
+activation evidence. Enrollment stays closed until they pass.
 
 Preview RPC authority: both preview functions require the dedicated
 `commerce_cart_previewer` role and a server-signed `cart_handoff_id`
@@ -253,9 +313,15 @@ callers; no anonymous fallback or new production secret is introduced.
   against the real worker scheduler.
 - Quota degradation is an explicit pre-activation gate: when the
   Redis quota store is degraded, anonymous/enumeration operations
-  and the server-to-server legacy bridge fail closed, but
-  authenticated shopper operations (commands, snapshot,
-  checkout_prepare) deliberately fall back to per-instance in-memory
+  (create, handoff preview/redeem/issue, account link, session
+  revoke) and the server-to-server legacy bridge fail closed.
+  Bootstrap is the exception — it is a stateless proof mint and
+  degrades to a reduced per-instance ceiling
+  (`DEGRADED_BOOTSTRAP_LIMIT`) so a Redis outage cannot blank every
+  shopper's cart at the first step; proofs minted then still cannot
+  materialize carts because create stays fail-closed. Authenticated
+  shopper operations (commands, snapshot, checkout_prepare)
+  deliberately fall back to per-instance in-memory
   counters, so one valid proof's effective budget multiplies by the
   instance count for the outage duration. Before any merchant is
   enrolled, put an operator alert on the throttled

@@ -21,8 +21,8 @@ export const CART_SESSION_PROOF_VERSION = 'cp1';
 /** Absolute session-proof lifetime; renewal requires a live grant check. */
 export const CART_SESSION_PROOF_TTL_SECONDS = 7 * 24 * 60 * 60;
 /**
- * Expired proofs may only retire device access for one additional day
- * after expiry; beyond that a leaked proof loses revocation power too.
+ * Expired proofs may identify device retirement or an explicitly bound
+ * checkout reconciliation for one additional day, never normal cart access.
  */
 export const CART_REVOCATION_GRACE_SECONDS = 24 * 60 * 60;
 /** Clock-skew allowance before a future issuance time looks forged. */
@@ -264,5 +264,16 @@ export function verifyCartSessionProofForRevocation(
   proof: string,
   options: Parameters<typeof verifyCartProof>[1]
 ): CartSessionVerification {
+  return verifyCartProof(proof, options, true);
+}
+
+/** Expired checkout proofs identify only a checkout to reconcile, not a cart to use. */
+export function verifyCartSessionProofForCheckoutReconciliation(
+  proof: string,
+  options: Parameters<typeof verifyCartProof>[1] & { audience: string }
+): CartSessionVerification {
+  if (!options.audience.startsWith('baci:checkout-recovery:')) {
+    return { error: 'wrong_audience', ok: false };
+  }
   return verifyCartProof(proof, options, true);
 }

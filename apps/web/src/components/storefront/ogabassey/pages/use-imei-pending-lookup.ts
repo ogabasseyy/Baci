@@ -1,11 +1,12 @@
 'use client';
 
-import type { ImeiServiceTierKey } from '@baci/shared/imei';
+import type { ImeiDeviceCategory, ImeiServiceTierKey } from '@baci/shared/imei';
 import { useEffect, useState } from 'react';
 import { pollImeiCheck } from './imei-checker-request';
 import type { ImeiResult } from './imei-checker-types';
 import {
   clearPendingImeiLookup,
+  getPendingImeiStorage,
   loadPendingImeiLookup,
   type PendingImeiLookup,
   pendingImeiStorageKey,
@@ -16,6 +17,7 @@ const MAX_ACTIVE_POLL_MS = 5 * 60 * 1000;
 const PAUSED_POLL_MS = 60 * 1000;
 
 interface ActivePendingImeiLookup extends PendingImeiLookup {
+  canResume: boolean;
   pollAfterMs: number;
   scopeKey: string;
 }
@@ -26,6 +28,7 @@ type PendingTerminal =
       lookupId: string;
       result: ImeiResult;
       tier: ImeiServiceTierKey;
+      device?: ImeiDeviceCategory;
     }
   | { error: string; kind: 'error'; tier: ImeiServiceTierKey };
 
@@ -58,9 +61,11 @@ export function useImeiPendingLookup({
       setPending(null);
       return;
     }
-    const saved = loadPendingImeiLookup(localStorage, storageKey);
+    const saved = loadPendingImeiLookup(getPendingImeiStorage(), storageKey);
     setPending(
-      saved && scopeKey ? { ...saved, pollAfterMs: 0, scopeKey } : null
+      saved && scopeKey
+        ? { ...saved, canResume: true, pollAfterMs: 0, scopeKey }
+        : null
     );
   }, [scopeKey, storageKey]);
 
@@ -74,31 +79,36 @@ export function useImeiPendingLookup({
     }
 
     let cancelled = false;
-    const timer = setTimeout(async () => {
-      const outcome = await pollImeiCheck(pending.lookupId, merchantSlug);
-      if (cancelled) return;
+    const timer = setTimeout(
+      async () => {
+        const outcome = await pollImeiCheck(pending.lookupId, merchantSlug);
+        if (cancelled) return;
 
-      if (outcome.kind === 'pending' || outcome.kind === 'retry') {
-        setPending((current) =>
-          current ? { ...current, pollAfterMs: outcome.pollAfterMs } : current
+        if (outcome.kind === 'pending' || outcome.kind === 'retry') {
+          setPending((current) =>
+            current ? { ...current, pollAfterMs: outcome.pollAfterMs } : current
+          );
+          return;
+        }
+
+        if (storageKey)
+          clearPendingImeiLookup(getPendingImeiStorage(), storageKey);
+        setPending(null);
+        setPaused(false);
+        setTerminal(
+          outcome.kind === 'complete'
+            ? {
+                kind: 'complete',
+                lookupId: pending.lookupId,
+                result: outcome.result,
+                tier: pending.tier,
+                device: pending.device,
+              }
+            : { error: outcome.error, kind: 'error', tier: pending.tier }
         );
-        return;
-      }
-
-      if (storageKey) clearPendingImeiLookup(localStorage, storageKey);
-      setPending(null);
-      setPaused(false);
-      setTerminal(
-        outcome.kind === 'complete'
-          ? {
-              kind: 'complete',
-              lookupId: pending.lookupId,
-              result: outcome.result,
-              tier: pending.tier,
-            }
-          : { error: outcome.error, kind: 'error', tier: pending.tier }
-      );
-    }, isStale ? PAUSED_POLL_MS : pending.pollAfterMs);
+      },
+      isStale ? PAUSED_POLL_MS : pending.pollAfterMs
+    );
 
     return () => {
       cancelled = true;
@@ -108,7 +118,8 @@ export function useImeiPendingLookup({
 
   return {
     clear() {
-      if (storageKey) clearPendingImeiLookup(localStorage, storageKey);
+      if (storageKey)
+        clearPendingImeiLookup(getPendingImeiStorage(), storageKey);
       setPending(null);
       setPaused(false);
     },
@@ -116,15 +127,18 @@ export function useImeiPendingLookup({
       setTerminal(null);
     },
     paused,
+    canResume: pending?.canResume ?? false,
     pending,
     start({
       lookupId,
       pollAfterMs,
       tier,
+      device,
     }: {
       lookupId: string;
       pollAfterMs: number;
       tier: ImeiServiceTierKey;
+      device?: ImeiDeviceCategory;
     }) {
       if (!scopeKey || !merchantSlug) return;
       const next = {
@@ -133,17 +147,19 @@ export function useImeiPendingLookup({
         pollAfterMs,
         scopeKey,
         tier,
+        device,
       };
-      if (storageKey) {
-        savePendingImeiLookup(localStorage, storageKey, {
-          createdAt: next.createdAt,
-          lookupId,
-          tier,
-        });
-      }
+      const canResume = storageKey
+        ? savePendingImeiLookup(getPendingImeiStorage(), storageKey, {
+            createdAt: next.createdAt,
+            lookupId,
+            tier,
+            device,
+          })
+        : false;
       setTerminal(null);
       setPaused(false);
-      setPending(next);
+      setPending({ ...next, canResume });
     },
     terminal,
   };

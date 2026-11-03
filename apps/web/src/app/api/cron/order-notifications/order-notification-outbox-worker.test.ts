@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const sendNotification = vi.hoisted(() => vi.fn());
 const beginDispatch = vi.hoisted(() => vi.fn());
+const sendDocument = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/send-manual-order-document', () => ({
+  sendManualOrderDocument: sendDocument,
+}));
 vi.mock('@/lib/order-fulfillment-notification', () => ({
   sendOrderFulfillmentNotification: sendNotification,
 }));
@@ -15,20 +19,43 @@ import {
   processClaimedOrderNotificationRows,
 } from './order-notification-outbox-worker';
 
-function createSupabase(errors: unknown[]) {
-  const maybeSingle = vi.fn();
-  for (const error of errors) {
-    maybeSingle.mockResolvedValueOnce({
-      data: error ? null : { id: row.id },
-      error,
-    });
-  }
+function createSupabase(
+  errors: unknown[],
+  liveMetadata: Record<string, unknown> = {}
+) {
+  const updateErrors = [...errors];
+  const select = vi.fn();
+  // The sent path re-reads the live row (select metadata + updated_at)
+  // before the status update (select id); resolve each from its own source.
+  const maybeSingle = vi.fn(async () => {
+    const calls = select.mock.calls;
+    const lastSelect = calls[calls.length - 1]?.[0];
+    if (lastSelect === 'metadata' || lastSelect === 'metadata, updated_at') {
+      return {
+        data: {
+          id: row.id,
+          metadata: liveMetadata,
+          updated_at: '2026-10-03T00:00:00Z',
+        },
+        error: null,
+      };
+    }
+    // Lost-claim classify read: the re-armed row never started dispatch.
+    if (lastSelect === 'dispatch_started_at') {
+      return { data: { dispatch_started_at: null }, error: null };
+    }
+    const error = updateErrors.shift();
+    return { data: error ? null : { id: row.id }, error: error ?? null };
+  });
   const builder = {
+    eq: vi.fn(() => builder),
+    is: vi.fn(() => builder),
     match: vi.fn(() => builder),
     maybeSingle,
-    select: vi.fn(() => builder),
+    select,
     update: vi.fn(() => builder),
   };
+  select.mockImplementation(() => builder);
   return { client: { from: vi.fn(() => builder) }, builder };
 }
 
@@ -58,18 +85,16 @@ describe('order notification outbox worker', () => {
   });
 
   it('marks successful sends as sent while preserving existing metadata', async () => {
-    const { client, builder } = createSupabase([null]);
+    const { client, builder } = createSupabase([null], {
+      source: 'shipping_status_trigger',
+    });
     mockNotificationResult({
       status: 'sent',
       messageId: 'message-1',
     });
     const summary = createOrderNotificationCronSummary(1);
 
-    await processClaimedOrderNotificationRows(
-      client as never,
-      [{ ...row, metadata: { source: 'shipping_status_trigger' } }],
-      summary
-    );
+    await processClaimedOrderNotificationRows(client as never, [row], summary);
 
     expect(summary).toMatchObject({ sent: 1, retried: 0, skipped: 0 });
     expect(beginDispatch).toHaveBeenCalledWith(
@@ -116,6 +141,7 @@ describe('order notification outbox worker', () => {
     expect(summary).toMatchObject({ skipped: 1, retried: 0, sent: 0 });
     expect(builder.update).toHaveBeenCalledWith(
       expect.objectContaining({
+        next_attempt_at: null,
         skip_reason: 'missing_customer_email',
         status: 'skipped',
       })
@@ -194,7 +220,7 @@ describe('order notification outbox worker', () => {
 
     await processClaimedOrderNotificationRows(client as never, [row], summary);
 
-    expect(summary).toMatchObject({ sent: 1, retried: 0, skipped: 0 });
+    expect(summary).toMatchObject({ sent: 0, retried: 0, skipped: 1 });
     expect(builder.update).toHaveBeenLastCalledWith(
       expect.objectContaining({
         skip_reason: 'delivery_outcome_unknown',
@@ -204,6 +230,32 @@ describe('order notification outbox worker', () => {
   });
 
   it('normalizes rejected sent-marker writes before applying the safe fallback', async () => {
+    const { client, builder } = createSupabase([]);
+    builder.maybeSingle
+      .mockResolvedValueOnce({
+        data: { id: row.id, metadata: {}, updated_at: '2026-10-03T00:00:00Z' },
+        error: null,
+      })
+      .mockRejectedValueOnce(new Error('database connection reset'))
+      .mockResolvedValueOnce({ data: { id: row.id }, error: null });
+    mockNotificationResult({
+      status: 'sent',
+      messageId: 'message-1',
+    });
+    const summary = createOrderNotificationCronSummary(1);
+
+    await processClaimedOrderNotificationRows(client as never, [row], summary);
+
+    expect(summary).toMatchObject({ sent: 0, retried: 0, skipped: 1 });
+    expect(builder.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        skip_reason: 'delivery_outcome_unknown',
+        status: 'skipped',
+      })
+    );
+  });
+
+  it('terminalizes a sent email as outcome-unknown when the live re-read fails', async () => {
     const { client, builder } = createSupabase([]);
     builder.maybeSingle
       .mockRejectedValueOnce(new Error('database connection reset'))
@@ -216,12 +268,26 @@ describe('order notification outbox worker', () => {
 
     await processClaimedOrderNotificationRows(client as never, [row], summary);
 
-    expect(summary).toMatchObject({ sent: 1, retried: 0 });
+    expect(summary).toMatchObject({ sent: 0, retried: 0, skipped: 1 });
     expect(builder.update).toHaveBeenLastCalledWith(
       expect.objectContaining({
         skip_reason: 'delivery_outcome_unknown',
         status: 'skipped',
       })
     );
+  });
+
+  it('ends a superseded skip as a quiet retry when a correction re-armed the row', async () => {
+    const { client, builder } = createSupabase([]);
+    builder.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
+    mockNotificationResult({
+      status: 'skipped',
+      reason: 'order_validation_failed',
+    });
+    const summary = createOrderNotificationCronSummary(1);
+
+    await processClaimedOrderNotificationRows(client as never, [row], summary);
+
+    expect(summary).toMatchObject({ sent: 0, skipped: 0, retried: 1 });
   });
 });

@@ -52,7 +52,7 @@ describe('createPetrockClient', () => {
             Quantity: 1,
           },
         ],
-        product_uuid: '688',
+        product_id: 688,
       },
     ]);
   });

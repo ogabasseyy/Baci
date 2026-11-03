@@ -16,11 +16,13 @@ TRIP="$ROOT/.github/workflows/semgrep-tripwire.yml"
 # gate is tracked in #3622.
 CANONICAL=(
   '.github/scripts/muse-review/**'
+  '.github/scripts/muse-pin-update*'
   '.github/scripts/semgrep-sarif*'
   '.github/scripts/semgrep_sarif_*'
   '.github/workflows/security.yml'
   '.github/workflows/semgrep-tripwire.yml'
   '.github/workflows/muse-code-review.yml'
+  '.github/workflows/muse-code-pin-update.yml'
   '.github/workflows/muse-review-selftest.yml'
   '.github/CODEOWNERS'
 )

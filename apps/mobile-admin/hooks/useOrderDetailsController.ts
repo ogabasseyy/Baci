@@ -59,7 +59,6 @@ export function useOrderDetailsController() {
   const validatedParams = routeResult.success ? routeResult.data : null;
   const orderId = validatedParams?.id;
   const actionParam = validatedParams?.action;
-
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const { data: order, error, isLoading } = useOrder(orderId ?? '');
@@ -91,6 +90,7 @@ export function useOrderDetailsController() {
       providerLabel,
       shipmentFlowStep: uiState.shipmentFlowStep,
       showShipmentFlow: uiState.showShipmentFlow,
+      showStatusModal: uiState.showStatusModal,
       userId: user?.id,
     });
 
@@ -178,6 +178,7 @@ export function useOrderDetailsController() {
     queryClient,
     requiresShipmentDetails,
     riderPhone: uiState.riderPhone,
+    runAfterShipmentFlowDismissed: uiState.runAfterShipmentFlowDismissed,
     setFulfillmentDetails: uiState.setFulfillmentDetails,
     setFulfillmentItemIndex: uiState.setFulfillmentItemIndex,
     setIsShipmentSubmitting: uiState.setIsShipmentSubmitting,
@@ -185,7 +186,6 @@ export function useOrderDetailsController() {
     setRiderPhone: uiState.setRiderPhone,
     setShipmentFlowStep: uiState.setShipmentFlowStep,
     setShowShipmentFlow: uiState.setShowShipmentFlow,
-    setShowStatusModal: uiState.setShowStatusModal,
     setSuccessModal: uiState.setSuccessModal,
     shipmentFlowStep: uiState.shipmentFlowStep,
     showShipmentFlow: uiState.showShipmentFlow,

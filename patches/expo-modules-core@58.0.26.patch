@@ -1,0 +1,28 @@
+diff --git a/ios/Utilities/Utilities.swift b/ios/Utilities/Utilities.swift
+--- a/ios/Utilities/Utilities.swift
++++ b/ios/Utilities/Utilities.swift
+@@ -128,13 +128,20 @@
+    Returns the app's key window. On iOS and tvOS it is resolved from the foregrounded scene, so
+    callers presenting UI don't reach a window in a scene the user isn't looking at.
+    */
+-  @MainActor
+-  public static func keyWindow() -> UIWindow? {
++  nonisolated public static func keyWindow() -> UIWindow? {
++    // A synchronous off-main caller cannot safely resolve UIKit state.
++    guard Thread.isMainThread else { return nil }
++    return MainActor.assumeIsolated {
+ #if os(iOS) || os(tvOS)
+-    return SceneGeometry.keyWindow()
++      if let window = SceneGeometry.keyWindow() { return window }
++      guard UIApplication.shared.connectedScenes.isEmpty,
++            Bundle.main.object(forInfoDictionaryKey: "UIApplicationSceneManifest") == nil
++      else { return nil }
++      return UIApplication.shared.windows.first { $0.isKeyWindow }
+ #elseif os(macOS)
+-    return NSApplication.shared.keyWindow
++      return NSApplication.shared.keyWindow
+ #endif
++    }
+   }
+ 
+   nonisolated public func currentViewController() -> UIViewController? {

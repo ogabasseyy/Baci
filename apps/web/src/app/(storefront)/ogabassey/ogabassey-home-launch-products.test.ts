@@ -67,29 +67,59 @@ describe('ogabassey home launch products', () => {
           id: 'newer',
           name: 'New Arrival',
           slug: 'new-arrival',
-          created_at: '2026-06-24T00:00:00.000Z',
+          created_at: '2026-10-30T00:00:00.000Z',
         }),
         createRow({
           id: 'unrenderable',
           name: 'No Image',
           slug: 'no-image',
           images: [],
-          created_at: '2026-06-25T00:00:00.000Z',
+          created_at: '2026-10-31T00:00:00.000Z',
         }),
       ],
       pinnedProductRows: [
         createRow({
           id: 'pin',
-          name: 'Pinned A27',
-          slug: 'samsung-galaxy-a27-5g',
-          created_at: '2026-05-01T00:00:00.000Z',
+          name: 'Pinned iPhone Duo',
+          slug: 'iphone-duo',
+          created_at: '2026-10-25T00:00:00.000Z',
         }),
       ],
     });
 
     expect(products.map((product) => product.name)).toEqual([
       'New Arrival',
-      'Pinned A27',
+      'Pinned iPhone Duo',
+    ]);
+  });
+
+  it('hoists the first CDN-backed product to slide 0 when the top candidate uses a third-party image origin', () => {
+    const products = selectOgabasseyLaunchProducts({
+      launchCandidateRows: [
+        createRow({
+          id: 'external-lead',
+          name: 'External Image Phone',
+          slug: 'external-image-phone',
+          images: ['https://images.samsung.com/external-flip.jpg'],
+          created_at: '2026-10-31T00:00:00.000Z',
+        }),
+      ],
+      pinnedProductRows: [
+        createRow({
+          id: 'cdn-pin',
+          name: 'iPhone Duo',
+          slug: 'iphone-duo',
+          images: [
+            'https://cdn.ogabassey.com/core-assets/products/iphone-duo-night-sky-20261026.avif',
+          ],
+          created_at: '2026-10-25T00:00:00.000Z',
+        }),
+      ],
+    });
+
+    expect(products.map((product) => product.name)).toEqual([
+      'iPhone Duo',
+      'External Image Phone',
     ]);
   });
 
@@ -127,7 +157,7 @@ describe('ogabassey home launch products', () => {
     );
     expect(getCachedStorefrontProductsBySlugs).toHaveBeenCalledWith(
       'merchant-1',
-      expect.arrayContaining(['samsung-galaxy-a27-5g'])
+      expect.arrayContaining(['iphone-duo'])
     );
     expect(products.map((product) => product.name)).toEqual(['Launch Device']);
   });

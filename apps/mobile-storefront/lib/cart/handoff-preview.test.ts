@@ -20,6 +20,11 @@ jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(),
   deleteItemAsync: jest.fn(),
 }));
+jest.mock('./client-credential', () => ({
+  cartClientCredentialHeaders: async () => ({
+    'x-baci-client-credential': '44444444-4444-4444-8444-444444444444',
+  }),
+}));
 it('previews by public id plus pairing token, binds both merchant projections, and sends no session credential', async () => {
   const fetcher = jest.fn().mockResolvedValue(
     new Response(
@@ -50,7 +55,10 @@ it('previews by public id plus pairing token, binds both merchant projections, a
     credentials: 'omit',
     redirect: 'error',
   });
+  // Exactly the pairing token plus the anonymous quota credential:
+  // no session proof or Authorization may ride on a preview.
   expect(fetcher.mock.calls[0][1].headers).toEqual({
+    'x-baci-client-credential': '44444444-4444-4444-8444-444444444444',
     'x-handoff-token': 'ch1.fixture.token',
   });
   fetcher.mockResolvedValue(

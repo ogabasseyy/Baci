@@ -1,1 +1,1 @@
-export { StorefrontEagerFullCssLayout as default } from '@/app/(storefront)/storefront-eager-full-css-layout';
+export { StorefrontEagerListingCssLayout as default } from '@/app/(storefront)/storefront-eager-listing-css-layout';

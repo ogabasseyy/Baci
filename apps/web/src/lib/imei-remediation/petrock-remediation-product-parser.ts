@@ -32,6 +32,18 @@ const UNSAFE_PATTERNS: readonly [RegExp, string][] = [
 
 export function normalizePetrockRemediationCarrier(value: string) {
   const normalized = value.toLowerCase();
+  // Carrier brands are reused internationally; foreign services are not US matches.
+  if (
+    /mexico|nextel|iusacell|unefon|austria|croatia|bonbon|telering|germany|deutsch|hungary|poland|czech|netherlands|slovak|montenegro|romania|\bapac\b|\bemea\b/.test(
+      normalized
+    )
+  )
+    return null;
+  if (
+    /\buk\b|united kingdom/.test(normalized) &&
+    /t[- ]?mobile|orange|\bee\b/.test(normalized)
+  )
+    return 'EE UK';
   if (/at\s*&\s*t|\batt\b/.test(normalized)) return 'AT&T';
   if (/t[- ]?mobile|metro(?:pcs)?|sprint/.test(normalized)) {
     return 'T-Mobile US';
@@ -85,12 +97,22 @@ export function parsePetrockRemediationProduct(input: ProductInput) {
     pattern.test(productContext)
   );
   const carrier = normalizePetrockRemediationCarrier(productContext);
+  const modelScope = parseModelScope(input.name);
+  const ambiguousModel =
+    modelScope.kind === 'generic' &&
+    (/iphone\s*(?:\d{1,2}|x[rs]?|se)\b/i.test(input.name) ||
+      /\b(?:till|up\s*to|through|to)\s*(?:\d{1,2}|x[rs]?)\b(?!\s*(?:days?|hours?|hrs?|h\b|business|working))/i.test(
+        input.name
+      ));
+  const hasUsContext = /\busa?\b|united states/i.test(productContext);
   const excludedReason = !contractValid
     ? 'invalid_product_contract'
     : (unsafe?.[1] ??
-      (!carrier || !/unlock|factory|network/i.test(input.name)
-        ? 'unsupported_product'
-        : null));
+      (ambiguousModel
+        ? 'unverified_model_scope'
+        : !carrier || !/unlock|factory|network/i.test(input.name)
+          ? 'unsupported_product'
+          : null));
   const successRateMatch = input.name.match(/(\d{1,3}(?:\.\d+)?)\s*%/);
 
   return {
@@ -100,11 +122,13 @@ export function parsePetrockRemediationProduct(input: ProductInput) {
     excludedReason,
     fixtureVerified: false,
     isActive: false,
-    launchCarrier: PETROCK_REMEDIATION_LAUNCH_CARRIERS.includes(
-      carrier as (typeof PETROCK_REMEDIATION_LAUNCH_CARRIERS)[number]
-    ),
+    launchCarrier:
+      hasUsContext &&
+      PETROCK_REMEDIATION_LAUNCH_CARRIERS.includes(
+        carrier as (typeof PETROCK_REMEDIATION_LAUNCH_CARRIERS)[number]
+      ),
     manualDisabled: false,
-    modelScope: parseModelScope(input.name),
+    modelScope,
     orderFieldName: input.fields[0]?.name ?? null,
     productId: input.productId,
     rawName: input.name,

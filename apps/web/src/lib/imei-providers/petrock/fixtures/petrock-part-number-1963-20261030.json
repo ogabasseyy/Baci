@@ -1,0 +1,13 @@
+{
+  "productId": "1963",
+  "capturedAt": "2026-10-30",
+  "status": "success",
+  "costUsd": 0.12,
+  "provenance": "Owner-authorized single paid provider probe; terminal response read by the release operator. IMEI Number line omitted; order, reference and transport credentials omitted. Device and model number were absent in the captured response.",
+  "verifiedScope": {
+    "brand": "apple",
+    "device": "smartphone",
+    "input": "imei"
+  },
+  "replay": "Part Number: MFYC4J/A<br>Part Number Country: Japan<br>Part Type: Retail Unit"
+}

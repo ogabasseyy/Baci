@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import type { RefObject } from 'react';
+import type { TextInputInstance } from 'react-native';
 import {
   ActivityIndicator,
   Alert,
@@ -22,7 +23,7 @@ interface LoginPasswordStepProps {
   email: string;
   handlePasswordSignIn: () => void;
   isLoading: boolean;
-  otpInputRef: RefObject<TextInput | null>;
+  otpInputRef: RefObject<TextInputInstance | null>;
   password: string;
   passwordError: string | null;
   setAuthMethod: (value: LoginAuthMethod) => void;

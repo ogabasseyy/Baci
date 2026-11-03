@@ -145,7 +145,7 @@ export function QuizPrizeProductPicker({
             aria-expanded={isOpen}
             aria-label="Search prize product inventory"
             autoComplete="off"
-            className="h-11 w-full rounded-md border bg-background pl-9 pr-10 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-11 w-full rounded-md border bg-background pl-9 pr-10 text-base outline-none md:text-sm focus-visible:ring-2 focus-visible:ring-ring"
             disabled={disabled}
             id={`${listboxId}-input`}
             onChange={(event) => {

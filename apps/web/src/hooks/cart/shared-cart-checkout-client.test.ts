@@ -280,3 +280,35 @@ describe('reviewedCheckoutItems', () => {
     expect(partialPair?.[0].quizVoucherToken).toBeUndefined();
   });
 });
+
+describe('shared-cart-client checkout cart pin', () => {
+  it('rejects a review for a different cart than submitted', async () => {
+    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
+      jsonResponse({
+        replayed: false,
+        sessionReused: false,
+        snapshot: {
+          cartId: '99999999-9999-4999-8999-999999999999',
+          cartVersion: 3,
+          checkoutSessionId: '55555555-5555-4555-8555-555555555555',
+          estimates: {
+            currency: 'NGN',
+            lineCount: 1,
+            subtotalMinor: 25000,
+            unavailableCount: 0,
+          },
+          generation: 1,
+          lines: [],
+          merchantId: '11111111-1111-4111-8111-111111111111',
+        },
+      })
+    );
+    const result = await prepareSharedCartCheckout({
+      cartId: '22222222-2222-4222-8222-222222222222',
+      expectedVersion: 3,
+      operationId: 'prep-op-mismatch',
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('refresh_required');
+  });
+});

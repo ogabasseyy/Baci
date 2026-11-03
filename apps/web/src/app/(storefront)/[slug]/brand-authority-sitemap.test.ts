@@ -15,6 +15,17 @@ vi.mock(
   })
 );
 
+function rawProduct(name: string, brand: string, index = 0) {
+  return {
+    id: `${brand.toLowerCase()}-${index}-${name.toLowerCase().replaceAll(' ', '-')}`,
+    name,
+    brand,
+    price: 100_000,
+    stock: 5,
+    category_slug: 'smartphones',
+  };
+}
+
 describe('getBrandAuthoritySitemapEntries', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -48,7 +59,16 @@ describe('getBrandAuthoritySitemapEntries', () => {
         return {
           productCount: entry.brandKey === 'samsung' ? 5 : 0,
           latestUpdatedAt: '2026-07-21T00:00:00Z',
-          products: [],
+          products:
+            entry.brandKey === 'samsung'
+              ? [
+                  'Samsung Galaxy S24',
+                  'Samsung Galaxy S25',
+                  'Samsung Galaxy A56',
+                  'Samsung Galaxy A36',
+                  'Samsung Galaxy Z Fold 7',
+                ].map((name, index) => rawProduct(name, 'Samsung', index))
+              : [],
         };
       }
     );
@@ -76,13 +96,13 @@ describe('getBrandAuthoritySitemapEntries', () => {
         products:
           entry.brandKey === 'samsung'
             ? [
-                { name: 'Samsung Galaxy S24' },
-                { name: 'Samsung Galaxy S25' },
-                { name: 'Samsung Galaxy S26' },
-                { name: 'Samsung Galaxy A56' },
-                { name: 'Samsung Galaxy A36' },
-                { name: 'Samsung Galaxy Z Fold 7' },
-              ]
+                'Samsung Galaxy S24',
+                'Samsung Galaxy S25',
+                'Samsung Galaxy S26',
+                'Samsung Galaxy A56',
+                'Samsung Galaxy A36',
+                'Samsung Galaxy Z Fold 7',
+              ].map((name, index) => rawProduct(name, 'Samsung', index))
             : [],
       })
     );
@@ -111,12 +131,12 @@ describe('getBrandAuthoritySitemapEntries', () => {
         products:
           entry.brandKey === 'infinix'
             ? [
-                { name: 'Infinix Hot 70' },
-                { name: 'Infinix Hot 70 Pro' },
-                { name: 'Infinix Note 60' },
-                { name: 'Infinix Note 60 Pro' },
-                { name: 'Infinix Note 60 Pro Plus' },
-              ]
+                'Infinix Hot 70',
+                'Infinix Hot 70 Pro',
+                'Infinix Note 60',
+                'Infinix Note 60 Pro',
+                'Infinix Note 60 Pro Plus',
+              ].map((name, index) => rawProduct(name, 'Infinix', index))
             : [],
       })
     );
@@ -145,12 +165,12 @@ describe('getBrandAuthoritySitemapEntries', () => {
         products:
           entry.brandKey === 'samsung'
             ? [
-                { name: 'Samsung Galaxy S25' },
-                { name: 'Samsung Galaxy S26' },
-                { name: 'Samsung Galaxy A56' },
-                { name: 'Samsung Galaxy Z Fold 7' },
-                { name: 'Samsung Galaxy Z Flip 7' },
-              ]
+                'Samsung Galaxy S25',
+                'Samsung Galaxy S26',
+                'Samsung Galaxy A56',
+                'Samsung Galaxy Z Fold 7',
+                'Samsung Galaxy Z Flip 7',
+              ].map((name, index) => rawProduct(name, 'Samsung', index))
             : [],
       })
     );
@@ -179,12 +199,12 @@ describe('getBrandAuthoritySitemapEntries', () => {
         products:
           entry.brandKey === 'samsung'
             ? [
-                ...Array.from({ length: 48 }, (_, index) => ({
-                  name: `Samsung Other ${index}`,
-                })),
-                { name: 'Galaxy S24' },
-                { name: 'Galaxy S25' },
-                { name: 'Galaxy S26' },
+                ...Array.from({ length: 48 }, (_, index) =>
+                  rawProduct(`Samsung Other ${index}`, 'Samsung', index)
+                ),
+                rawProduct('Galaxy S24', 'Samsung', 48),
+                rawProduct('Galaxy S25', 'Samsung', 49),
+                rawProduct('Galaxy S26', 'Samsung', 50),
               ]
             : [],
       })

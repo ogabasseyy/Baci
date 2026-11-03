@@ -5,6 +5,10 @@
 /* stylelint-disable-next-line scss/at-rule-no-unknown -- Tailwind v4 config directive. */
 @config "../../../tailwind.storefront-home.config.mjs";
 
+@source "../../components/storefront/cookie-consent.tsx";
+@source "../../components/themed/themed-button.tsx";
+@source "../../components/ui/button.tsx";
+
 /*
   Homepage CSS entrypoint.
 
@@ -59,7 +63,6 @@
 @source "../../components/storefront/ogabassey/components/HomeProductGridCard.tsx";
 @source "../../components/storefront/ogabassey/components/ProductRatingRow.tsx";
 @source "../../components/storefront/ogabassey/components/Logo.tsx";
-@source "../../components/storefront/ogabassey/components/MobileFooter.tsx";
 @source "../../components/storefront/ogabassey/components/NativeProductAd.tsx";
 @source "../../components/storefront/ogabassey/components/OfflineNotice.tsx";
 @source "../../components/storefront/ogabassey/components/PopupSystem.tsx";

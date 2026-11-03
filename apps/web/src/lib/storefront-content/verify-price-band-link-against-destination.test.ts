@@ -1,0 +1,148 @@
+import { describe, expect, it } from 'vitest';
+import { verifyPriceBandLinkAgainstDestination } from './verify-price-band-link-against-destination';
+
+const links = [
+  {
+    href: 'https://store.test/smartphones/compare/apple-0-vs-samsung-0',
+    label: 'A vs B',
+  },
+  {
+    href: 'https://store.test/smartphones/best-under/under-500k',
+    label: 'Best Smartphones Under ₦500,000',
+  },
+];
+
+function product(id: string, brand: string, price: number) {
+  return {
+    slug: id,
+    name: id,
+    brand,
+    price,
+    category_slug: 'smartphones',
+    product_key_specs: {
+      chipset: brand,
+      ram_gb: brand === 'Samsung' ? 12 : 8,
+      storage_gb: brand === 'Samsung' ? 256 : 128,
+    },
+  };
+}
+
+describe('verifyPriceBandLinkAgainstDestination', () => {
+  it('drops the band link when the inferred brand is absent from the destination pool', () => {
+    const destinationPool = [
+      ...Array.from({ length: 3 }, (_, i) =>
+        product(`samsung-${i}`, 'Samsung', 320_000)
+      ),
+      ...Array.from({ length: 3 }, (_, i) =>
+        product(`tecno-${i}`, 'Tecno', 340_000)
+      ),
+      ...Array.from({ length: 3 }, (_, i) =>
+        product(`xiaomi-${i}`, 'Xiaomi', 360_000)
+      ),
+    ];
+    // Band is indexable on brand diversity alone, but carries no Apple
+    // products, so an Apple article must not keep the link.
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links: [links[1] as never],
+        compareProducts: destinationPool,
+        bandProducts: destinationPool,
+        inferredBrands: ['Apple'],
+      })
+    ).toEqual([]);
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links: [links[1] as never],
+        compareProducts: destinationPool,
+        bandProducts: destinationPool,
+        inferredBrands: ['Samsung'],
+      })
+    ).toEqual([links[1]]);
+  });
+
+  it('derives band indexability from the normalized band pool when supplied', () => {
+    const comparePool = [
+      ...Array.from({ length: 3 }, (_, i) =>
+        product(`apple-${i}`, 'Apple', 300_000)
+      ),
+      ...Array.from({ length: 3 }, (_, i) =>
+        product(`samsung-${i}`, 'Samsung', 320_000)
+      ),
+      ...Array.from({ length: 3 }, (_, i) =>
+        product(`tecno-${i}`, 'Tecno', 340_000)
+      ),
+    ];
+    // The destination-shaped pool has too few active rows for the band.
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links: [links[1] as never],
+        compareProducts: comparePool,
+        bandProducts: comparePool.slice(0, 2),
+      })
+    ).toEqual([]);
+  });
+
+  it('keeps the band link when the compare pool makes it indexable', () => {
+    const products = [
+      ...Array.from({ length: 3 }, (_, i) =>
+        product(`apple-${i}`, 'Apple', 300_000)
+      ),
+      ...Array.from({ length: 3 }, (_, i) =>
+        product(`samsung-${i}`, 'Samsung', 320_000)
+      ),
+      ...Array.from({ length: 3 }, (_, i) =>
+        product(`tecno-${i}`, 'Tecno', 340_000)
+      ),
+    ];
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links,
+        compareProducts: products,
+      })
+    ).toEqual(links);
+  });
+
+  it('drops the band link when the compare pool is below thresholds', () => {
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links,
+        compareProducts: [product('only-1', 'Apple', 300_000)],
+      })
+    ).toEqual([]);
+  });
+
+  it('drops the band link when no compare inventory is available', () => {
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links,
+        compareProducts: null,
+      })
+    ).toEqual([]);
+  });
+
+  it('drops unrecognized link shapes instead of keeping them unverified', () => {
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links: [{ href: 'https://shop.test/smartphones/guides/x', label: 'X' }],
+        compareProducts: [],
+      })
+    ).toEqual([]);
+  });
+
+  it('drops unverifiable compare links when no compare inventory is available', () => {
+    expect(
+      verifyPriceBandLinkAgainstDestination({
+        categorySlug: 'smartphones',
+        links: [links[0] as never],
+        compareProducts: null,
+      })
+    ).toEqual([]);
+  });
+});

@@ -1,0 +1,109 @@
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { OtpVerificationForm } from './OtpVerificationForm';
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-10-25T08:00:00Z'));
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+  );
+});
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+const props = () => ({
+  continueHref: '/ogabassey/imei-check',
+  code: '',
+  onCodeChange: vi.fn(),
+  onComplete: vi.fn().mockResolvedValue(undefined),
+  onResend: vi.fn().mockResolvedValue(true),
+  onChangeEmail: vi.fn(),
+  error: '',
+  isVerifying: false,
+  isSending: false,
+  verified: false,
+  sentAt: Date.now(),
+});
+
+it('shows an estimated one-hour window without blocking verification afterward', () => {
+  const handlers = props();
+  render(<OtpVerificationForm {...handlers} />);
+  expect(
+    screen.getByRole('textbox', { name: 'Email verification code' })
+  ).toHaveAttribute('autocomplete', 'one-time-code');
+  expect(screen.getByRole('timer')).toHaveTextContent('60:00');
+  act(() => {
+    vi.advanceTimersByTime(600000);
+  });
+  expect(screen.getByRole('textbox')).toBeEnabled();
+  act(() => {
+    vi.advanceTimersByTime(3000000);
+  });
+  expect(screen.getByRole('textbox')).toBeEnabled();
+  expect(screen.getByRole('status')).toHaveTextContent('may have expired');
+  expect(handlers.onResend).not.toHaveBeenCalled();
+});
+
+it('limits resends for 30 seconds after a customer code is sent', () => {
+  const handlers = props();
+  render(<OtpVerificationForm {...handlers} />);
+  expect(screen.getByRole('button', { name: /resend code/i })).toBeDisabled();
+  act(() => vi.advanceTimersByTime(30000));
+  expect(screen.getByRole('button', { name: /resend code/i })).toBeEnabled();
+});
+
+it('permits a fresh resend and server verification when the estimate is invalid', () => {
+  render(<OtpVerificationForm {...props()} sentAt={Number.NaN} />);
+  expect(screen.getByRole('textbox', { name: 'Email verification code' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Resend code' })).toBeEnabled();
+});
+
+it('keeps verification pending until the caller confirms success and blocks email switching', () => {
+  const handlers = props();
+  const view = render(
+    <OtpVerificationForm {...handlers} code="123456" isVerifying />
+  );
+  expect(screen.getByRole('status')).toHaveTextContent('Checking your code');
+  expect(
+    screen.getByRole('button', { name: 'Use a different email' })
+  ).toBeDisabled();
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Use a different email' })
+  );
+  expect(handlers.onChangeEmail).not.toHaveBeenCalled();
+  view.rerender(<OtpVerificationForm {...handlers} verified />);
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Signed in successfully'
+  );
+  expect(screen.getByRole('textbox')).toBeDisabled();
+  expect(screen.getByRole('link', { name: 'Continue' })).toHaveAttribute(
+    'href',
+    '/ogabassey/imei-check'
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Resend code' })
+  ).not.toBeInTheDocument();
+});
+
+
+it('uses storefront colors for the different-email action', () => {
+  render(<OtpVerificationForm {...props()} />);
+  const button = screen.getByRole('button', { name: 'Use a different email' });
+  expect(button).toHaveClass('bg-store-background', 'text-store-background-text', 'border-store-border');
+});
+
+it('starts the resend cooldown after a slow send response, independently of expiry', () => {
+  render(<OtpVerificationForm {...props()} sentAt={Date.now() - 90_000} resendSentAt={Date.now()} />);
+  expect(screen.getByRole('timer')).toHaveTextContent('58:30');
+  expect(screen.getByRole('button', { name: /resend/i })).toBeDisabled();
+  act(() => vi.advanceTimersByTime(30_000));
+  expect(screen.getByRole('button', { name: /resend/i })).toBeEnabled();
+});

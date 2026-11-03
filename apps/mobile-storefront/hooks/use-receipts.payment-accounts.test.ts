@@ -19,7 +19,12 @@ jest.mock('@/lib/api', () => ({
 }));
 jest.mock('@/lib/config', () => ({ CONFIG: { MERCHANT_SLUG: 'ogabassey' } }));
 jest.mock('@/lib/logger', () => ({
-  createLogger: () => ({ info: jest.fn(), warn: jest.fn() }),
+  createLogger: () => ({
+    info: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+    error: jest.fn(),
+  }),
 }));
 jest.mock('@/lib/supabase', () => ({
   supabase: {
@@ -110,7 +115,7 @@ describe('receipt payment-account history', () => {
 
     const detail = await queryDetail();
 
-    expect(detail.virtual_account).toEqual(
+    expect(detail?.virtual_account).toEqual(
       expect.objectContaining({
         account_number: '2222222222',
         provider: 'paystack',
@@ -143,7 +148,7 @@ describe('receipt payment-account history', () => {
 
     const detail = await queryDetail();
 
-    expect(detail.virtual_account?.account_number).toBe('1111111111');
+    expect(detail?.virtual_account?.account_number).toBe('1111111111');
   });
 
   it('keeps an expired Paystack account on a paid receipt', async () => {
@@ -168,7 +173,7 @@ describe('receipt payment-account history', () => {
 
     const detail = await queryDetail();
 
-    expect(detail.virtual_account).toEqual(
+    expect(detail?.virtual_account).toEqual(
       expect.objectContaining({
         account_number: '2222222222',
         provider: 'paystack',

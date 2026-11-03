@@ -62,6 +62,25 @@ describe('process-petrock-reconciliation', () => {
     );
   });
 
+  it('signals manual review without logging order details', async () => {
+    const runJob = vi.fn().mockResolvedValue({ body: { claimed: 0, remediation: { manualReview: 1, orderId: 'secret-order-id' } }, status: 503 });
+    const logger = { error: vi.fn(), info: vi.fn() };
+    const env = { BACI_WEB_BASE_URL: 'https://usebaci.com', IMEI_IDENTIFIER_ENCRYPTION_KEY: 'key', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'key', NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co', PETROCK_API_TOKEN: 'token', SUPABASE_SERVICE_ROLE_KEY: 'key', ZEPTOMAIL_TOKEN: 'token' };
+    await expect(runPetrockReconciliationCli({ env, logger, runJob })).resolves.toBe(1);
+    expect(logger.info).toHaveBeenCalledWith('[petrock-reconciliation] completed', expect.stringContaining('provider_submission_unresolved'));
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain('secret-order-id');
+  });
+
+  it('fails the CLI for diagnostic manual review and emits only aggregate attention data', async () => {
+    const runJob = vi.fn().mockResolvedValue({body: {claimed: 1, pending: 1, manualReview: 1, lookupId: 'private-lookup', providerBody: 'private-provider-body'}, status: 503});
+    const logger = {error: vi.fn(), info: vi.fn()};
+    const env = {BACI_WEB_BASE_URL: 'https://usebaci.com', IMEI_IDENTIFIER_ENCRYPTION_KEY: 'key', NEXT_PUBLIC_SUPABASE_ANON_KEY: 'key', NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co', PETROCK_API_TOKEN: 'token', SUPABASE_SERVICE_ROLE_KEY: 'key', ZEPTOMAIL_TOKEN: 'token'};
+    expect(await runPetrockReconciliationCli({env, logger, runJob})).toBe(1);
+    expect(logger.info).toHaveBeenCalledWith('[petrock-reconciliation] completed', JSON.stringify({claimed: 1, manualReview: 1, pending: 1, attention: 'provider_submission_unresolved', status: 503}));
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain('private-lookup');
+    expect(JSON.stringify(logger.info.mock.calls)).not.toContain('private-provider-body');
+  });
+
   it('fails closed before work when a direct-worker variable is missing', async () => {
     const runJob = vi.fn();
     const logger = { error: vi.fn(), info: vi.fn() };

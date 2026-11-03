@@ -11,8 +11,8 @@ function load(overrides = {}) {
       '-e',
       `
     const assert = require('node:assert/strict');
-    const { evalConfig } = require('@expo/config/build/evalConfig');
-    const { config } = evalConfig(require('node:path').resolve('app.config.ts'), { config: {} });
+    const { getConfig } = require('@expo/config');
+    const { exp: config } = getConfig(process.cwd());
     assert.equal(config.android.versionCode, 1234);
     assert.equal(config.owner, 'ogabassey-services-limited');
     assert.equal(config.extra.eas.projectId, 'c6c1897b-cac8-49b0-85f9-3d277aecc379');

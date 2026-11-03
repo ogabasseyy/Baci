@@ -234,6 +234,13 @@ export async function POST(request: NextRequest) {
         supabaseAdmin,
       }),
     });
+    if (result.kind === 'eligibility_failed') {
+      return errorResponse(
+        'This device no longer qualifies for the selected unlock',
+        'REMEDIATION_NOT_ELIGIBLE',
+        409
+      );
+    }
     if (result.kind === 'preflight_failed') {
       return errorResponse(
         'Unlock ordering is temporarily unavailable',

@@ -93,7 +93,10 @@ export function BrandAuthorityPageContent({
             <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
               {page.heading}
             </h1>
-            <p className="max-w-3xl text-base leading-7 text-store-background-text/70 sm:text-lg">
+            <p
+              className="max-w-3xl text-base leading-7 text-store-background-text/70 sm:text-lg"
+              data-cwv-lcp-copy="authority-hub"
+            >
               {page.intro}
             </p>
             <a

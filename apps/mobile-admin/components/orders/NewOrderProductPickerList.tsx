@@ -62,7 +62,7 @@ export function NewOrderProductPickerList({
               size="small"
               style={{ paddingVertical: 16 }}
             />
-          ) : null
+          ) : undefined
         }
         onEndReached={() => {
           if (!isPickingVariant && hasMoreProducts && !isFetchingMoreProducts) {

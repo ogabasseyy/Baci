@@ -1,11 +1,13 @@
 import {
   CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCaptureCheckoutFunnelEventOnce,
   mockCheckoutSubmissionState,
   render,
+  renderCheckoutWithStoreRates,
   screen,
   useCart,
   useMerchantSafe,
@@ -110,12 +112,10 @@ it.each([
     });
 
   try {
-    render(<CheckoutPage />);
+    renderCheckoutWithStoreRates();
     fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-    fireEvent.click(
-      screen.getByRole('button', { name: /continue to payment/i })
-    );
+    await continueToPaymentAfterPickupCheck();
     const gatewayRadio = (
       await screen.findAllByRole('radio', { name: new RegExp(gateway, 'i') })
     ).find((radio) => radio.getAttribute('value') === gateway);

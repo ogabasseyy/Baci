@@ -1,9 +1,0 @@
-@import "tailwindcss" source(none);
-
-@config "../../../tailwind.storefront.scoped.config.mjs";
-
-@source "./[slug]/(catalog)/(pdp)/[category]/[productSlug]/loading.tsx";
-@source "./[slug]/storefront-loading-ui.tsx";
-@source "../../components/storefront/ogabassey/storefront-loading-ui.tsx";
-@source "../../components/ui/skeleton.tsx";
-@source "../../components/ui/skeletons.tsx";

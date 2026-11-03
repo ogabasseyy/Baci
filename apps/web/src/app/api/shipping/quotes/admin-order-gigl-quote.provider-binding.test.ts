@@ -104,10 +104,7 @@ describe('Admin GIGL provider, persistence, binding, and wallet behavior', () =>
   });
 
   it('returns a safe price preview without persisting or binding a quote', async () => {
-    mocks.bindRpc.mockResolvedValue({
-      data: [{ available_balance: 1_000 }],
-      error: null,
-    });
+    mocks.bindRpc.mockResolvedValue({ data: 1_000, error: null });
     const response = await subject({ preview: true, receiver });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
@@ -116,9 +113,14 @@ describe('Admin GIGL provider, persistence, binding, and wallet behavior', () =>
       canBook: false,
     });
     expect(mocks.persistAdminGiglQuote).not.toHaveBeenCalled();
-    expect(mocks.bindRpc).toHaveBeenCalledWith('get_wallet_summary', {
-      p_merchant_id: merchantId,
-    });
+    expect(mocks.bindRpc).toHaveBeenCalledWith(
+      'get_merchant_shipping_wallet_balance',
+      { p_merchant_id: merchantId }
+    );
+    expect(mocks.bindRpc).not.toHaveBeenCalledWith(
+      'get_wallet_summary',
+      expect.anything()
+    );
     expect(mocks.bindRpc).not.toHaveBeenCalledWith(
       'bind_admin_gigl_quote',
       expect.anything()

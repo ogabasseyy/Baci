@@ -70,6 +70,13 @@ describe('submitFreshCheckout', () => {
     expect(input.handleError).not.toHaveBeenCalled();
   });
 
+  it('never creates an unbound replacement when a prepared-only continuation is not handled', async () => {
+    const input = options({ redvaultPreparedOnly: true });
+    await submitFreshCheckout(input);
+    expect(runCheckoutOrderLifecycle).not.toHaveBeenCalled();
+    expect(input.handleError).toHaveBeenCalledWith(expect.any(Error), expect.anything());
+  });
+
   it('forwards prepared REDVAULT payment starts before returning', async () => {
     vi.mocked(submitRedvaultPreparedOrder).mockImplementation(async (input) => {
       input.onPaymentStarted?.({

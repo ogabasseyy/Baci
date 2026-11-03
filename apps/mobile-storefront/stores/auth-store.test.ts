@@ -1,4 +1,5 @@
 // biome-ignore-all lint/correctness/noUndeclaredVariables: Jest globals are provided by jest-expo in this legacy store test.
+jest.mock('expo-secure-store');
 jest.mock('expo-crypto', () => ({
   randomUUID: jest.fn(() => 'test-generation'),
 }));
@@ -62,8 +63,8 @@ jest.mock('expo-auth-session', () => ({
   makeRedirectUri: mockMakeRedirectUri,
 }));
 
-jest.mock('expo-auth-session/build/QueryParams', () => ({
-  getQueryParams: mockGetQueryParams,
+jest.mock('../lib/auth/oauth-query-params', () => ({
+  getOAuthQueryParams: (input: string) => mockGetQueryParams(input),
 }));
 
 jest.mock('expo-web-browser', () => ({

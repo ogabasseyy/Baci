@@ -2,15 +2,37 @@ import 'server-only';
 import { Client } from 'pg';
 import { piggyvestPrimarySavingsRuntimeSchema } from '@/schemas/piggyvest-primary-savings-runtime';
 import { piggyvestPrimaryWalletStoreSchemas } from '@/schemas/piggyvest-primary-wallet-store';
+import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
+import { GOAL_COMPLETE_STATEMENTS } from './goal-complete-statements';
 
 const reserve =
-  'SELECT piggyvest_primary.reserve_savings($1::jsonb,$2::jsonb) AS result';
+  'SELECT piggyvest_primary.reserve_savings_with_pin($1::jsonb,$2::jsonb,$3::text) AS result';
 const manage =
   'SELECT piggyvest_primary.manage_savings($1::jsonb,$2::uuid,$3::text) AS result';
 const read =
   'SELECT piggyvest_primary.read_savings_status($1::jsonb,$2::uuid) AS result';
 const recover =
   'SELECT piggyvest_primary.read_pending_savings($1::jsonb,$2::uuid) AS result';
+const adopt =
+  'SELECT piggyvest_primary.adopt_pending_savings($1::jsonb,$2::uuid) AS result';
+// Allowed statements and their exact parameter counts.
+const parameterCounts = new Map<string, number>([
+  [reserve, 3],
+  [manage, 3],
+  [read, 2],
+  [recover, 2],
+  [adopt, 2],
+  [GOAL_CANCEL_STATEMENTS.issue, 2],
+  [GOAL_CANCEL_STATEMENTS.reserve, 3],
+  [GOAL_CANCEL_STATEMENTS.manage, 4],
+  [GOAL_CANCEL_STATEMENTS.status, 2],
+  [GOAL_CANCEL_STATEMENTS.checkIssued, 3],
+  [GOAL_COMPLETE_STATEMENTS.issue, 2],
+  [GOAL_COMPLETE_STATEMENTS.reserve, 3],
+  [GOAL_COMPLETE_STATEMENTS.manage, 4],
+  [GOAL_COMPLETE_STATEMENTS.status, 2],
+  [GOAL_COMPLETE_STATEMENTS.checkIssued, 3],
+]);
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication
     AND pg_has_role(SESSION_USER,'piggyvest_primary_authorizer','MEMBER')
@@ -26,11 +48,7 @@ export function createPrimaryWalletSavingsExecutor(configuration: unknown) {
     parameters: readonly string[]
   ): Promise<{ rows: unknown }> => {
     if (
-      (statement !== reserve &&
-        statement !== manage &&
-        statement !== read &&
-        statement !== recover) ||
-      parameters.length !== (statement === manage ? 3 : 2) ||
+      parameterCounts.get(statement) !== parameters.length ||
       parameters.some(
         (parameter) => typeof parameter !== 'string' || parameter.length > 8192
       )

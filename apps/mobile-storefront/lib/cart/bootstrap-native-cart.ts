@@ -1,4 +1,5 @@
 import { nativeCartReplySchema } from '@/schemas/cart';
+import { cartClientCredentialHeaders } from './client-credential';
 import { NativeCartError } from './native-cart-error';
 import type { CartSessionStorage } from './session-storage';
 import type {
@@ -48,12 +49,22 @@ export async function bootstrapNativeCart(
           'Content-Type': 'application/json',
           'x-csrf-token': raw.token,
           Cookie: `__Host-csrf-token=${raw.token}`,
+          ...(await cartClientCredentialHeaders(config.merchantSlug)),
         },
         body: JSON.stringify({ merchantSlug: config.merchantSlug }),
       }
     );
     const parsed = nativeCartReplySchema.safeParse(await created.json());
     assertCurrent();
+    // Quota exhaustion is the one bootstrap failure the shopper can act
+    // on; keep its code so the status panel can ask them to wait instead
+    // of showing a generic interruption. Other failures stay closed.
+    if (
+      created.status === 429 &&
+      parsed.success &&
+      parsed.data.code === 'quota_exceeded'
+    )
+      throw new NativeCartError('quota_exceeded');
     if (
       !created.ok ||
       !parsed.success ||

@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveRequestingOwnership } from './vtu-checkout-ownership';
 
-const { mockResolveVtuCustomer } = vi.hoisted(() => ({
-  mockResolveVtuCustomer: vi.fn(),
+const { mockFindCheckoutCustomerId } = vi.hoisted(() => ({
+  mockFindCheckoutCustomerId: vi.fn(),
 }));
 
-vi.mock('@/lib/vtu-customer-resolution', () => ({
-  resolveVtuCustomer: mockResolveVtuCustomer,
+vi.mock('@/lib/vtu-checkout-customer-rpcs', () => ({
+  findCheckoutCustomerId: mockFindCheckoutCustomerId,
 }));
 
 // Alias behavior is covered through the route suite; unit tests pin
@@ -40,7 +40,7 @@ describe('resolveRequestingOwnership', () => {
       data: { id: 'merchant-1' },
       error: null,
     });
-    mockResolveVtuCustomer.mockResolvedValue({ id: 'customer-1' });
+    mockFindCheckoutCustomerId.mockResolvedValue('customer-1');
 
     const result = await resolveRequestingOwnership(
       supabase,
@@ -54,15 +54,14 @@ describe('resolveRequestingOwnership', () => {
     });
     expect(from).toHaveBeenCalledWith('merchants');
     // Codex R86 P1: replay ownership resolution is read-only —
-    // linking here would write customers.user_id before the guards
-    // reject a mismatched replay.
-    expect(mockResolveVtuCustomer).toHaveBeenCalledWith({
-      linkEmailMatch: false,
-      merchantId: 'merchant-1',
-      strictLookups: true,
+    // the find RPC never links, so resolving BEFORE the replay
+    // guards cannot write customers.user_id ahead of a
+    // mismatched replay's rejection.
+    expect(mockFindCheckoutCustomerId).toHaveBeenCalledWith(
       supabase,
-      user,
-    });
+      'merchant-1',
+      'user-1'
+    );
   });
 
   it('returns nulls when the merchant is not found', async () => {
@@ -71,7 +70,7 @@ describe('resolveRequestingOwnership', () => {
     const result = await resolveRequestingOwnership(supabase, user, 'unknown');
 
     expect(result).toEqual({ customerId: null, merchantId: null });
-    expect(mockResolveVtuCustomer).not.toHaveBeenCalled();
+    expect(mockFindCheckoutCustomerId).not.toHaveBeenCalled();
   });
 
   it('throws (key kept) when the merchant lookup errors', async () => {
@@ -83,7 +82,7 @@ describe('resolveRequestingOwnership', () => {
     await expect(
       resolveRequestingOwnership(supabase, user, 'ogabassey')
     ).rejects.toThrow('Failed to resolve VTU merchant ownership: db down');
-    expect(mockResolveVtuCustomer).not.toHaveBeenCalled();
+    expect(mockFindCheckoutCustomerId).not.toHaveBeenCalled();
   });
 
   it('returns a null customer id when no customer row exists', async () => {
@@ -91,7 +90,7 @@ describe('resolveRequestingOwnership', () => {
       data: { id: 'merchant-1' },
       error: null,
     });
-    mockResolveVtuCustomer.mockResolvedValue(null);
+    mockFindCheckoutCustomerId.mockResolvedValue(null);
 
     const result = await resolveRequestingOwnership(
       supabase,

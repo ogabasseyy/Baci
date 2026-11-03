@@ -1,6 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    "checkers": 1,
     "tsBuildInfoFile": ".next/cache/tsconfig.build.tsbuildinfo"
   },
   "exclude": [

@@ -14,7 +14,6 @@ export interface VtuMerchantRow {
   id: string;
   slug: string;
   business_name: string | null;
-  paystack_subaccount_code: string | null;
 }
 
 interface ResolveVtuMerchantInput {
@@ -39,9 +38,13 @@ export async function resolveVtuMerchant({
     await withMerchantSlugAliasFallback(
       merchantSlug,
       (s) =>
+        // No paystack_subaccount_code: the column is revoked from
+        // authenticated/anon (S1 PR 2b column ACL), and no VTU
+        // caller consumes it — selecting it would 42501 the
+        // RLS-bound checkout (Phase 2, epic #3694).
         supabase
           .from('merchants')
-          .select('id, slug, business_name, paystack_subaccount_code')
+          .select('id, slug, business_name')
           .eq('slug', s)
           .maybeSingle(),
       { strict: strictLookups }

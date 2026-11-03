@@ -22,6 +22,11 @@ export function useCartStatusOnly(itemCount: number): boolean {
     (state) => state.mergeConflicts
   );
   if (status === 'ready' && !snapshot && itemCount === 0) return false;
+  // A sync error never owns the screen: the empty/loaded cart views
+  // already embed the status panel above their normal content, so the
+  // shopper keeps a way to keep shopping instead of a dead-end
+  // full-screen error with only a retry action.
+  if (status === 'error') return false;
   const panelHasContent = !(
     status === 'ready' &&
     snapshot &&

@@ -1,5 +1,9 @@
 import path from 'node:path';
 import type { NextConfig } from 'next';
+import {
+  BUILD_TYPESCRIPT_CONFIG,
+  BUILD_TYPESCRIPT_EXPERIMENTS,
+} from './src/config/build-typecheck';
 import { builderPreviewRouteHeaders } from './src/config/builder-preview-route-headers';
 import { CACHE_LIFE_PROFILES } from './src/config/cache-life-profiles';
 import { composePostHogNextConfig } from './src/config/compose-posthog-next-config';
@@ -117,14 +121,11 @@ function getPostHogRewriteRules() {
 }
 
 const nextConfig: NextConfig = {
-  typescript: {
-    tsconfigPath: 'tsconfig.build.json',
-    ignoreBuildErrors: false,
-  },
   ...getHostedDraftStandaloneOutput(process.env),
   allowedDevOrigins: ['127.0.0.1'],
   deploymentId: NEXT_DEPLOYMENT_ID,
   env: POSTHOG_PUBLIC_BUILD_ENV,
+  typescript: BUILD_TYPESCRIPT_CONFIG,
 
   // Keep heavy server-only packages external to reduce function bundle size and peak memory.
   // jsPDF stays external here so server PDF generators can use the package
@@ -339,9 +340,7 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '2mb',
     },
 
-    // TypeScript 7 has no JavaScript compiler API. Keep Next on its CLI path
-    // while the repository retains TypeScript 6 solely for API consumers.
-    useTypeScriptCli: true,
+    ...BUILD_TYPESCRIPT_EXPERIMENTS,
 
     // Bundle optimization - tree-shake large libraries
     optimizePackageImports: [

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { expect, vi } from 'vitest';
 import { CheckoutPage } from './checkout-page';
 
@@ -106,7 +106,9 @@ export async function placeBankTransferOrder() {
   render(<CheckoutPage />);
 
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  const continueButton = screen.getByRole('button', { name: /continue to payment/i });
+  await waitFor(() => expect(continueButton).toBeEnabled());
+  fireEvent.click(continueButton);
   fireEvent.click(await screen.findByText(/^Bank Transfer$/));
 
   const placeOrderButton = screen

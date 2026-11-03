@@ -226,6 +226,10 @@ body:has([data-blog-listing-filtered]) [data-blog-lcp-hero] {
 /* stylelint-disable-next-line scss/at-rule-no-unknown -- Tailwind v4 config directive. */
 @config "../../../tailwind.storefront-blog.config.mjs";
 
+@source "../../components/storefront/cookie-consent.tsx";
+@source "../../components/themed/themed-button.tsx";
+@source "../../components/ui/button.tsx";
+
 /*
   Blog CSS entrypoint.
 

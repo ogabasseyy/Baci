@@ -350,6 +350,33 @@ describe('executeDirectBookingAttempt', () => {
     expect(mockBookShipment).not.toHaveBeenCalled();
   });
 
+  it('keeps the invalid store phone code so the merchant knows what to fix', async () => {
+    mockGetMerchantSender.mockResolvedValue({
+      ok: false,
+      code: 'MERCHANT_SENDER_PHONE_INVALID',
+      error: 'Update your store phone number.',
+      status: 400,
+    });
+
+    await expect(
+      executeDirectBookingAttempt({
+        supabase: supabaseStub(),
+        merchantId: 'merchant-1',
+        merchantBusinessName: 'Merchant Store',
+        orderId: 'order-1',
+        quote,
+        quotePayload: payload,
+        usesStoredInternationalSender: false,
+        expectedShippingFee: 2500,
+      })
+    ).rejects.toMatchObject({
+      code: 'MERCHANT_SENDER_PHONE_INVALID',
+      message: 'Update your store phone number.',
+      status: 400,
+    });
+    expect(mockBookShipment).not.toHaveBeenCalled();
+  });
+
   it('scopes the post-claim item reload to the booking order', async () => {
     await executeDirectBookingAttempt({
       supabase: supabaseStub(),

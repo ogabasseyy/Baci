@@ -21,13 +21,22 @@ jest.mock('@/components/ui/HTMLRenderer', () => ({
   HTMLRenderer: () => null,
 }));
 
+const mockReducedMotion = jest.fn<() => boolean>(() => false);
+const mockAnimatedViewProps = jest.fn();
+
 jest.mock('react-native-reanimated', () => {
   const { View } =
     jest.requireActual<typeof import('react-native')>('react-native');
 
+  const React = jest.requireActual<typeof import('react')>('react');
+  const AnimatedView = (props: import('react-native').ViewProps) => {
+    mockAnimatedViewProps(props);
+    return React.createElement(View, props);
+  };
   return {
     __esModule: true,
-    default: { View },
+    default: { View: AnimatedView },
+    useReducedMotion: () => mockReducedMotion(),
     View,
     FadeInDown: {
       delay: () => ({
@@ -73,6 +82,23 @@ function createProps(
 describe('ProductDetailsBody', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockReducedMotion.mockReturnValue(false);
+  });
+
+  it('shows essential product content immediately when reduced motion disables entering animations', () => {
+    mockReducedMotion.mockReturnValue(true);
+    render(<ProductDetailsBody {...createProps()} />);
+    expect(screen.getByText(baseProduct.name)).toBeOnTheScreen();
+    expect(mockAnimatedViewProps).toHaveBeenCalledWith(
+      expect.objectContaining({ entering: undefined })
+    );
+  });
+
+  it('retains the entrance animation when motion is enabled', () => {
+    render(<ProductDetailsBody {...createProps()} />);
+    expect(mockAnimatedViewProps).toHaveBeenCalledWith(
+      expect.objectContaining({ entering: expect.any(Object) })
+    );
   });
 
   it('renders the product summary without an in-page negotiation CTA (negotiation lives in the cart)', () => {

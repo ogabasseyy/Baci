@@ -70,16 +70,34 @@ export function parsePetrockModelScope(
 
 export function normalizePetrockDeviceModel(
   model: string,
-  generation = ''
+  _generation = ''
 ): NormalizedPetrockDeviceModel {
-  const normalized = `${model} ${generation}`.trim().toLowerCase();
-  const iphone = normalized.match(/iphone\s*(\d{1,2})/i);
+  if (
+    !model.trim() ||
+    /^(?:unknown(?: device)?|n\/a|not available|null|none|undefined|(?:apple\s+)?iphone\s*\d{1,2},\d+)$/i.test(
+      model.trim()
+    )
+  ) {
+    return { canonical: '', family: 'unknown', series: null };
+  }
+  // Match the same trusted device description used by the database guard.
+  const normalized = model.trim().toLowerCase();
+  const iphone = normalized.match(/iphone\s*(\d{1,2})(?!\d)/i);
   const ipad = normalized.match(/ipad(?:\s+pro|\s+air)?\s*(\d{1,2})?/i);
   const samsung = normalized.match(/(?:samsung\s+)?galaxy\s+([a-z]\d{1,3})/i);
 
   if (iphone) {
+    // Exact sets need an unambiguous variant; ranges remain series-wide.
+    const exact = model
+      .trim()
+      .match(
+        /^(?:apple\s+)?iphone\s*(\d{1,2})(?:\s+(pro\s+max|pro|plus|mini))?(?:\s*\([a-z0-9-]+\))?$/i
+      );
+    const variant = exact?.[2]?.toLowerCase().replace(/\s+/g, '-');
     return {
-      canonical: `iphone-${iphone[1]}`,
+      canonical: exact
+        ? `iphone-${exact[1]}${variant ? `-${variant}` : ''}`
+        : '',
       family: 'iphone',
       series: Number(iphone[1]),
     };
@@ -116,11 +134,15 @@ export function matchesPetrockModelScope(
   if (scope.kind === 'generic') return true;
   if (scope.kind === 'range') {
     return (
+      model.family === 'iphone' &&
       model.series !== null &&
       model.series >= scope.min &&
       model.series <= scope.max
     );
   }
+  // These families lack a verified exact-variant canonical contract.
+  if (!model.canonical || model.family === 'ipad' || model.family === 'samsung')
+    return false;
   return scope.models.some(
     (candidate) => candidate.toLowerCase() === model.canonical
   );

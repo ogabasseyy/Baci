@@ -204,14 +204,14 @@ describe('Metro web runtime resolution', () => {
 
     const resolution = getResolver()(
       { resolveRequest: fallbackResolve },
-      'react',
+      'some-package',
       'web'
     );
 
     expect(resolution).toBe(fallbackResolution);
     expect(fallbackResolve).toHaveBeenCalledWith(
       expect.any(Object),
-      'react',
+      'some-package',
       'web'
     );
   });

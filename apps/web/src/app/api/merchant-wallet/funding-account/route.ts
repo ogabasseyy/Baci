@@ -1,6 +1,10 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
-import { authenticateApiRequest } from '@/lib/api-auth';
+import {
+  authenticateApiRequest,
+  getUserAccess,
+  hasPermission,
+} from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
   getMerchantWalletAccount,
@@ -36,14 +40,14 @@ async function authContext(
   return { supabase: auth.supabase, user: auth.user } as const;
 }
 
-async function ownerContext(request: NextRequest) {
+async function merchantContext(request: NextRequest) {
   const context = await authContext(request);
   if ('response' in context) return context;
-  return ownerContextAfterAuth(context);
+  return merchantContextAfterAuth(context);
 }
 
 export async function GET(request: NextRequest) {
-  const context = await ownerContext(request);
+  const context = await merchantContext(request);
   if ('response' in context) return context.response;
   try {
     return NextResponse.json({
@@ -72,14 +76,34 @@ export async function POST(request: NextRequest) {
   const parsed = merchantWalletFundingConsentSchema.safeParse(body);
   if (!parsed.success)
     return NextResponse.json({ error: 'Consent is required' }, { status: 400 });
-  const context = await ownerContextAfterAuth(auth);
+  const context = await merchantContextAfterAuth(auth);
   if ('response' in context) return context.response;
+  // The virtual account is opened in the business identity. Only the owner's
+  // login email may stand in for a missing merchant email: a staff email would
+  // register the merchant's account under that staff member's provider
+  // customer, and the stuck-request resume lookup would never find it.
+  const email =
+    context.merchant.email?.trim() ||
+    (context.isOwner ? context.user.email?.trim() : '') ||
+    '';
+  if (!email)
+    return NextResponse.json(
+      {
+        error: 'Add a business email before opening a funding account.',
+        code: 'MERCHANT_EMAIL_REQUIRED',
+      },
+      { status: 409 }
+    );
+  const identity = {
+    id: context.merchant.id,
+    email,
+    firstName: context.merchant.business_name,
+  };
   try {
-    const result = await requestMerchantWalletAccount(context.supabase, {
-      id: context.merchant.id,
-      email: context.merchant.email ?? context.user.email ?? '',
-      firstName: context.merchant.business_name,
-    });
+    const result = await requestMerchantWalletAccount(
+      context.supabase,
+      identity
+    );
     return NextResponse.json(
       { account: result.account, status: result.status },
       { status: result.status === 'pending' ? 202 : 200 }
@@ -90,11 +114,10 @@ export async function POST(request: NextRequest) {
       error.message === 'FUNDING_REQUEST_EXPIRED_RETRY'
     ) {
       try {
-        const result = await requestMerchantWalletAccount(context.supabase, {
-          id: context.merchant.id,
-          email: context.merchant.email ?? context.user.email ?? '',
-          firstName: context.merchant.business_name,
-        });
+        const result = await requestMerchantWalletAccount(
+          context.supabase,
+          identity
+        );
         return NextResponse.json(
           { account: result.account, status: result.status },
           { status: result.status === 'pending' ? 202 : 200 }
@@ -113,11 +136,19 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function ownerContextAfterAuth(auth: AuthContext) {
+// The owner and staff granted orders.fulfill may view and open the merchant's
+// wallet funding account. The merchant comes from the caller's access record,
+// never from the request.
+async function merchantContextAfterAuth(auth: AuthContext) {
+  const access = await getUserAccess(auth.supabase);
+  if (!access?.merchantId || !hasPermission(access, 'orders', 'fulfill'))
+    return {
+      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+    } as const;
   const { data: merchant, error } = await auth.supabase
     .from('merchants')
     .select('id, business_name, email')
-    .eq('user_id', auth.user.id)
+    .eq('id', access.merchantId)
     .maybeSingle();
   if (error)
     return {
@@ -130,5 +161,5 @@ async function ownerContextAfterAuth(auth: AuthContext) {
     return {
       response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
     } as const;
-  return { ...auth, merchant } as const;
+  return { ...auth, merchant, isOwner: access.isOwner } as const;
 }

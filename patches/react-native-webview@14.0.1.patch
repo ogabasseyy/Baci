@@ -1,0 +1,51 @@
+diff --git a/android/build.gradle b/android/build.gradle
+--- a/android/build.gradle
++++ b/android/build.gradle
+@@ -10,7 +10,7 @@
+     }
+     dependencies {
+         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${safeExtGet('kotlinVersion')}")
+-        classpath("com.android.tools.build:gradle:7.0.4")
++        classpath("com.android.tools.build:gradle:9.2.1")
+     }
+ }
+ 
+@@ -57,7 +57,10 @@
+ if (isNewArchitectureEnabled()) {
+     apply plugin: 'com.facebook.react'
+ }
+-apply plugin: 'kotlin-android'
++def builtInKotlinEnabled = !project.hasProperty('android.builtInKotlin') || project.property('android.builtInKotlin').toString().toBoolean()
++if (!builtInKotlinEnabled) {
++    apply plugin: 'org.jetbrains.kotlin.android'
++}
+ 
+ android {
+     if (supportsNamespace()) {
+@@ -73,11 +76,11 @@
+         }
+     }
+ 
+-    compileSdkVersion getExtOrIntegerDefault('compileSdkVersion')
++    compileSdk getExtOrIntegerDefault('compileSdkVersion')
+ 
+     defaultConfig {
+-        minSdkVersion getReactNativeWebViewMinSdkVersion()
+-        targetSdkVersion getExtOrIntegerDefault('targetSdkVersion')
++        minSdk getReactNativeWebViewMinSdkVersion()
++        targetSdk getExtOrIntegerDefault('targetSdkVersion')
+         buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
+     }
+ 
+diff --git a/index.d.ts b/index.d.ts
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -5,7 +5,7 @@
+ 
+ export type WebViewProps = IOSWebViewProps & AndroidWebViewProps & WindowsWebViewProps;
+ 
+-declare class WebView<P = undefined> extends Component<WebViewProps & P> {
++declare class WebView<P = Record<never, never>> extends Component<WebViewProps & P> {
+   /**
+    * Go back one page in the webview's history.
+    */

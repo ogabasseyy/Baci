@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -249,4 +251,12 @@ describe('useIntegrationSettings', () => {
     expect(result.current.settings?.facebook_pixel_id).toBe('loaded-px');
     expect(mockToast).not.toHaveBeenCalled();
   });
+});
+
+it('declares the integration hook as a client entrypoint before imports', () => {
+  const source = readFileSync(
+    resolve(process.cwd(), 'src/hooks/use-integration-settings.ts'),
+    'utf8'
+  );
+  expect(source.trimStart()).toMatch(/^'use client';/);
 });

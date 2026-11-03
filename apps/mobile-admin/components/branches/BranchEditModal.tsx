@@ -1,5 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { useRef } from 'react';
+import type { TextInputInstance } from 'react-native';
 import {
   ActivityIndicator,
   Modal,
@@ -56,7 +57,7 @@ export function BranchEditModal({
   canDeactivate,
   colors,
 }: BranchEditModalProps) {
-  const branchAddressRef = useRef<TextInput>(null);
+  const branchAddressRef = useRef<TextInputInstance>(null);
   const isBusy = isUpdating || isDeactivating;
   const isDeactivateDisabled = isBusy || !canDeactivate;
   const handleClose = isBusy ? undefined : onClose;

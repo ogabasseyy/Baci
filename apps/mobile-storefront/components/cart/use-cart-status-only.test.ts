@@ -9,6 +9,8 @@ it.each([
   [true, 'choice_required', 1, true],
   [true, 'loading', 0, true],
   [true, 'loading', 1, false],
+  [true, 'error', 0, false],
+  [true, 'error', 1, false],
   [true, 'ready', 0, false],
 ] as const)('uses enabled=%s, status=%s and count=%s to select the cart screen', (enabled, status, count, expected) => {
   useNativeSharedCartStore.setState({

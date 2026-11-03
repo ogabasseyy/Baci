@@ -42,6 +42,7 @@ export interface StorefrontAccountDocumentOrderRow {
   order_number: string;
   external_source?: string | null;
   import_job_id?: string | null;
+  recorded_by_user_id?: string | null;
   created_at: string;
   transaction_date?: string | null;
   updated_at: string | null;
@@ -89,11 +90,13 @@ export interface StorefrontAccountDocumentOrderRow {
 
 export interface StorefrontAccountDocumentItemRow {
   id: string;
+  line_id?: number | null;
   product_id: string | null;
   condition?: string | null;
   variant_id: string | null;
   variant_name: string | null;
   name: string;
+  item_description?: string | null;
   quantity: number | null;
   price: MoneyValue;
   assurance_fee?: MoneyValue;
@@ -118,6 +121,10 @@ export interface StorefrontAccountDocumentTransactionRow {
   gateway?: string | null;
   status?: string | null;
   transaction_type?: string | null;
+  // Staff-recorded method from get_customer_order_transactions: the RPC
+  // exposes it beside metadata, and the data layer casts its rows into
+  // this shape, so the projection merges it back for the PDF renderer.
+  payment_method?: string | null;
 }
 
 export interface StorefrontAccountDocumentPaymentAccountRow {
@@ -128,6 +135,7 @@ export interface StorefrontAccountDocumentPaymentAccountRow {
   account_name: string | null;
   created_at?: string | null;
   expires_at?: string | null;
+  id?: string | null;
   provider?: string | null;
 }
 

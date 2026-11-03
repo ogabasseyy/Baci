@@ -185,6 +185,21 @@ describe('ImeiResultSchema', () => {
     verdictType: 'safe' as const,
   };
 
+  it('preserves normalized identity and image matching metadata', () => {
+    const deviceProfile = {
+      version: 1,
+      brand: 'Apple',
+      model: 'iPhone 17 Pro Max',
+      color: 'Silver',
+      storage: '512GB',
+      imageMatch: 'color',
+    };
+    expect(
+      ImeiResultSchema.parse({ ...validImeiResult, deviceProfile })
+        .deviceProfile
+    ).toEqual(deviceProfile);
+  });
+
   it('accepts valid payloads', () => {
     expect(ImeiResultSchema.safeParse(validImeiResult).success).toBe(true);
   });

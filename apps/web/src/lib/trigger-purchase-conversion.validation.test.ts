@@ -61,6 +61,7 @@ describe('triggerPurchaseConversion item validation', () => {
   it('omits invalid items and reports their fields', async () => {
     await triggerPurchaseConversion(client(), 'merchant-1', {
       currency: 'NGN',
+      ad_tracking: { analyticsConsent: true },
       id: 'order-1',
       order_items: [{ name: '', price: 'bad', product_id: null, quantity: 0 }],
       total: 100,
@@ -78,6 +79,7 @@ describe('triggerPurchaseConversion item validation', () => {
 
   it('treats null money values as invalid', async () => {
     await triggerPurchaseConversion(client(), 'merchant-1', {
+      ad_tracking: { analyticsConsent: true },
       id: 'order-1',
       order_items: [
         { name: 'Phone', price: null, product_id: 'product-1', quantity: 1 },
@@ -99,6 +101,7 @@ describe('triggerPurchaseConversion item validation', () => {
         client(),
         'merchant-1',
         {
+          ad_tracking: { analyticsConsent: true },
           id: 'order-1',
           order_items: [{ name: '', price: -1, product_id: null, quantity: 0 }],
           total: 100,

@@ -5,6 +5,7 @@ export function createStorefrontDocumentSupabaseMock(options?: {
   canCancelResult?: { data: unknown; error: unknown };
   orderPatch?: Record<string, unknown>;
   paymentAccounts?: unknown[];
+  taxSubtotals?: unknown[];
   transactions?: unknown[];
 }) {
   type QueryResult = { data: unknown; error: unknown };
@@ -40,6 +41,15 @@ export function createStorefrontDocumentSupabaseMock(options?: {
     if (fn === 'get_customer_order_payment_accounts') {
       return Promise.resolve({
         data: options?.paymentAccounts ?? [],
+        error: null,
+      });
+    }
+    if (fn === 'get_customer_order_tax_subtotals') {
+      return Promise.resolve({
+        data: (options?.taxSubtotals ?? []).map((subtotal) => ({
+          ...(subtotal as Record<string, unknown>),
+          order_id: 'order-1',
+        })),
         error: null,
       });
     }
@@ -132,7 +142,6 @@ export function createStorefrontDocumentSupabaseMock(options?: {
             error: null,
           });
         case 'order_items':
-        case 'order_tax_subtotals':
           return tableQuery({ data: [], error: null });
         default:
           throw new Error(`Unexpected table: ${table}`);

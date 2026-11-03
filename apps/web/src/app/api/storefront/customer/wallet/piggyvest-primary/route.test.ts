@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   csrf: vi.fn(),
   runtime: vi.fn(),
+  onboardingRuntime: vi.fn(),
   identity: vi.fn(),
   onboard: vi.fn(),
   executor: vi.fn(),
@@ -17,6 +18,11 @@ const mocks = vi.hoisted(() => ({
   accounts: vi.fn(),
   verify: vi.fn(),
 }));
+// A durable intent exists unless a test says otherwise; the not-started
+// path is covered in get-route.presence.test.ts.
+vi.mock('@/lib/piggyvest/primary-wallet-presence', () => ({
+  hasPrimaryWalletOnboarding: vi.fn().mockResolvedValue(true),
+}));
 vi.mock('@/lib/piggyvest/primary-wallet-verification', () => ({
   verifyPrimaryWalletMapping: mocks.verify,
 }));
@@ -24,6 +30,7 @@ vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
 vi.mock('@/lib/piggyvest/primary-wallet-runtime', () => ({
   readPrimaryWalletRuntime: mocks.runtime,
+  readPrimaryWalletOnboardingRuntime: mocks.onboardingRuntime,
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-identity', () => ({
   resolvePrimaryWalletIdentity: mocks.identity,
@@ -79,6 +86,13 @@ beforeEach(() => {
       environment: 'production',
     },
     providerToken: 'test-token',
+  });
+  // Onboarding reads the same base runtime plus the payout wallet.
+  mocks.onboardingRuntime.mockImplementation(() => {
+    const runtime = mocks.runtime();
+    return runtime
+      ? { runtime, interestPayoutWalletId: '01JBZ8Q5W3X9R2K4M6N8P0T2V4' }
+      : null;
   });
   mocks.identity.mockResolvedValue({
     merchantId,

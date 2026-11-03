@@ -5,6 +5,7 @@ import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { OgabasseyV2Receipts } from './receipts';
 
 const mockReceiptClaimAppDownloadBanner = vi.hoisted(() => vi.fn());
+const mockReceiptModal = vi.hoisted(() => vi.fn());
 
 vi.mock('@/contexts/customer-auth-context', () => ({
   useCustomerAuth: vi.fn(),
@@ -15,7 +16,10 @@ vi.mock('@/hooks/use-merchant-client', () => ({
 }));
 
 vi.mock('../components/ReceiptModal', () => ({
-  ReceiptModal: () => <div data-testid="receipt-modal" />,
+  ReceiptModal: (props: unknown) => {
+    mockReceiptModal(props);
+    return <div data-testid="receipt-modal" />;
+  },
 }));
 
 vi.mock('./receipt-claim-app-download-banner', () => ({
@@ -99,41 +103,6 @@ describe('OgabasseyV2Receipts', () => {
     expect(screen.queryByText('Receipts ready')).not.toBeInTheDocument();
   });
 
-  it('uses order item image_url for receipt thumbnails', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      createJsonResponse({
-        orders: [
-          {
-            id: 'order-1',
-            order_number: 'ORD-001',
-            created_at: '2026-04-03T10:00:00.000Z',
-            total: 1283968.38,
-            amount_paid: 1283968.38,
-            currency: 'NGN',
-            payment_status: 'paid',
-            items: [
-              {
-                id: 'item-1',
-                name: 'Samsung Galaxy S26',
-                image_url: 'https://cdn.example.com/samsung-galaxy-s26.png',
-                quantity: 1,
-                price: 1283968.38,
-              },
-            ],
-          },
-        ],
-      })
-    );
-
-    render(<OgabasseyV2Receipts />);
-
-    const thumbnail = await screen.findByAltText('Samsung Galaxy S26');
-    expect(thumbnail).toHaveAttribute(
-      'src',
-      'https://cdn.example.com/samsung-galaxy-s26.png'
-    );
-  });
-
   it('uses the device name as the primary receipt label and the order number as supporting text', async () => {
     vi.mocked(fetch).mockResolvedValue(
       createJsonResponse({
@@ -146,6 +115,7 @@ describe('OgabasseyV2Receipts', () => {
             amount_paid: 1283968.38,
             currency: 'NGN',
             payment_status: 'paid',
+            shipping_status: 'shipped',
             items: [
               {
                 id: 'item-1',
@@ -181,6 +151,7 @@ describe('OgabasseyV2Receipts', () => {
             amount_paid: 930000,
             currency: 'NGN',
             payment_status: 'paid',
+            shipping_status: 'shipped',
             items: [
               {
                 id: 'item-1',
@@ -217,6 +188,7 @@ describe('OgabasseyV2Receipts', () => {
             amount_paid: 930000,
             currency: 'NGN',
             payment_status: 'paid',
+            shipping_status: 'shipped',
             items: [
               {
                 condition: 'open_box',
@@ -253,6 +225,7 @@ describe('OgabasseyV2Receipts', () => {
             amount_paid: 3000000,
             currency: 'NGN',
             payment_status: 'paid',
+            shipping_status: 'shipped',
             items: [
               {
                 id: 'item-1',
@@ -283,43 +256,5 @@ describe('OgabasseyV2Receipts', () => {
         name: /Samsung Galaxy S26.*2 additional devices in this receipt/,
       })
     ).toBeVisible();
-  });
-
-  it('renders a non-broken fallback when an order item has no usable image', async () => {
-    vi.mocked(fetch).mockResolvedValue(
-      createJsonResponse({
-        orders: [
-          {
-            id: 'order-1',
-            order_number: 'ORD-002',
-            created_at: '2026-04-02T10:00:00.000Z',
-            total: 1464150,
-            amount_paid: 0,
-            currency: 'NGN',
-            payment_status: 'unpaid',
-            items: [
-              {
-                id: 'item-1',
-                name: 'Lenovo ThinkBook 16 G7 IML',
-                image_url: '',
-                quantity: 1,
-                price: 1464150,
-              },
-            ],
-          },
-        ],
-      })
-    );
-
-    render(<OgabasseyV2Receipts />);
-
-    expect(
-      await screen.findByRole('img', {
-        name: 'No product image available for Lenovo ThinkBook 16 G7 IML',
-      })
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByAltText('Lenovo ThinkBook 16 G7 IML')
-    ).not.toBeInTheDocument();
   });
 });

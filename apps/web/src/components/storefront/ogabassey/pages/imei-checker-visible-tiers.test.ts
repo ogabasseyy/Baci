@@ -7,7 +7,7 @@ import {
 describe('getVisibleWebImeiServiceTierKeys', () => {
   it('returns the collapsed primary tiers for the smartphone/apple default', () => {
     const keys = getVisibleWebImeiServiceTierKeys('smartphone', 'apple', false);
-    expect(keys).toEqual(['full', 'activation', 'blacklist', 'carrier']);
+    expect(keys).toEqual(['full', 'basic', 'blacklist', 'carrier']);
   });
 
   it('returns the full non-apple brand list without collapsing (short-list rule)', () => {
@@ -47,4 +47,15 @@ describe('hasAdditionalWebImeiServiceTierKeys', () => {
       true
     );
   });
+});
+
+it('shows a sole advertised advanced check directly without inventing a recommended fallback', () => {
+  expect(
+    getVisibleWebImeiServiceTierKeys('smartphone', 'apple', false, [
+      'esimCompatibility',
+    ])
+  ).toEqual(['esimCompatibility']);
+  expect(
+    getVisibleWebImeiServiceTierKeys('smartphone', 'apple', false, [])
+  ).toEqual([]);
 });

@@ -93,3 +93,20 @@ index d6c010ef7..985ad34d1 100644
          }
        }
      }
+diff --git a/ios/turbomodule/NativeNitroModules+NewArch.mm b/ios/turbomodule/NativeNitroModules+NewArch.mm
+--- a/ios/turbomodule/NativeNitroModules+NewArch.mm
++++ b/ios/turbomodule/NativeNitroModules+NewArch.mm
+@@ -33,6 +33,13 @@
+   std::weak_ptr<react::CallInvoker> _callInvoker;
+ }
+ RCT_EXPORT_MODULE(NitroModules)
++
++// React Native >= 0.87 passes the runtime's CallInvoker directly.
++- (void)installJSIBindingsWithRuntime:(jsi::Runtime&)runtime
++                        callInvoker:(const std::shared_ptr<react::CallInvoker>&)callInvoker {
++  _callInvoker = callInvoker;
++  [self installJSIBindingsWithRuntime:runtime];
++}
+ 
+ - (void)installJSIBindingsWithRuntime:(jsi::Runtime&)runtime {
+   // 1. Get CallInvoker we cached statically

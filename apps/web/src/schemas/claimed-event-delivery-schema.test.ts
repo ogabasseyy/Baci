@@ -18,8 +18,10 @@ describe('claimedEventDeliverySchema', () => {
 
   it('rejects invalid destinations, UUIDs, and extra fields', () => {
     expect(
-      claimedEventDeliverySchema.safeParse({ ...delivery, destination: 'x' })
-        .success
+      claimedEventDeliverySchema.safeParse({
+        ...delivery,
+        destination: 'unsupported',
+      }).success
     ).toBe(false);
     expect(
       claimedEventDeliverySchema.safeParse({ ...delivery, id: 'bad' }).success

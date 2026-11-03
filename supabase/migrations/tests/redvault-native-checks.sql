@@ -9,6 +9,7 @@ BEGIN
   RAISE EXCEPTION 'expected error was absent: %', expected;
 END;
 $$;
+GRANT EXECUTE ON FUNCTION public.test_expect_error(text, text) TO PUBLIC; -- called after SET ROLE
 DO $$
 DECLARE caught boolean := false;
 BEGIN

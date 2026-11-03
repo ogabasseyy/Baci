@@ -11,7 +11,15 @@ const appRequire = createRequire(path.join(__dirname, 'package.json'));
 
 function resolveTestingLibraryReactPath() {
   try {
-    return require.resolve('@testing-library/react');
+    // ESM lets Vite apply the app's React aliases. CJS require() would load
+    // the testing library's separate hoisted peer and trigger invalid hooks.
+    const packageJsonPath = require.resolve(
+      '@testing-library/react/package.json'
+    );
+    const metadata = require(packageJsonPath) as { module?: string };
+    if (!metadata.module)
+      throw new Error('Testing Library must publish an ESM entry');
+    return path.resolve(path.dirname(packageJsonPath), metadata.module);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to resolve @testing-library/react: ${message}`);
@@ -79,7 +87,10 @@ export default defineConfig({
   resolve: {
     alias: [
       { find: '@', replacement: path.resolve(__dirname, './src') },
-      { find: '@testing-library/react', replacement: testingLibraryReactPath },
+      {
+        find: /^@testing-library\/react$/,
+        replacement: testingLibraryReactPath,
+      },
       { find: /^react$/, replacement: reactPath },
       { find: /^react\/jsx-runtime$/, replacement: reactJsxRuntimePath },
       { find: /^react\/jsx-dev-runtime$/, replacement: reactJsxDevRuntimePath },

@@ -95,7 +95,7 @@ export function EmailDomainRegistrationForm({
       <Pressable
         style={[styles.primaryButton, pending && styles.buttonDisabled]}
         disabled={pending}
-        onPress={submit}
+        onPress={() => submit()}
         accessibilityRole="button"
         accessibilityLabel="Add domain"
         accessibilityState={{ busy: pending, disabled: pending }}

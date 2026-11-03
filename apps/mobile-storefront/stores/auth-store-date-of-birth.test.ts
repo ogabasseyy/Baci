@@ -1,3 +1,6 @@
+// biome-ignore-all lint/correctness/noUndeclaredVariables: Jest globals are provided by jest-expo in this legacy store test.
+jest.mock('expo-secure-store');
+
 /**
  * Tests for auth-store — focused on OAuth checkout fix behaviors:
  * - Customer lookup by user_id (not email)
@@ -8,7 +11,6 @@
  * - cleanup() unsubscribes auth listener
  */
 
-// biome-ignore-all lint/correctness/noUndeclaredVariables: Jest globals are provided by jest-expo in this legacy store test.
 import { act } from '@testing-library/react-native';
 
 // ---------------------------------------------------------------------------
@@ -55,8 +57,8 @@ jest.mock('expo-auth-session', () => ({
   makeRedirectUri: mockMakeRedirectUri,
 }));
 
-jest.mock('expo-auth-session/build/QueryParams', () => ({
-  getQueryParams: mockGetQueryParams,
+jest.mock('../lib/auth/oauth-query-params', () => ({
+  getOAuthQueryParams: (input: string) => mockGetQueryParams(input),
 }));
 
 jest.mock('expo-web-browser', () => ({

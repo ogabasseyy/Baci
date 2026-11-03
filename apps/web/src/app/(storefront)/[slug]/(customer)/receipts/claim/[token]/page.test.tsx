@@ -6,7 +6,7 @@ import ReceiptClaimPage, {
 } from './page';
 
 const mockCreateClient = vi.fn();
-const mockLoadReceiptClaimPreviewWithLoginEmailHint = vi.fn();
+const mockLoadReceiptClaimPreview = vi.fn();
 const mockParseReceiptClaimToken = vi.fn();
 const mockRecordReceiptClaimClickBestEffort = vi.fn();
 
@@ -15,8 +15,8 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 vi.mock('@/lib/import-notifications/receipt-claim-preview', () => ({
-  loadReceiptClaimPreviewWithLoginEmailHint: (...args: unknown[]) =>
-    mockLoadReceiptClaimPreviewWithLoginEmailHint(...args),
+  loadReceiptClaimPreview: (...args: unknown[]) =>
+    mockLoadReceiptClaimPreview(...args),
   parseReceiptClaimToken: (...args: unknown[]) =>
     mockParseReceiptClaimToken(...args),
   recordReceiptClaimClickBestEffort: (...args: unknown[]) =>
@@ -26,19 +26,16 @@ vi.mock('@/lib/import-notifications/receipt-claim-preview', () => ({
 vi.mock('./receipt-claim-page-client', () => ({
   default: ({
     initialClaim,
-    initialEmailHint,
     initialError,
     token,
   }: {
     initialClaim: { customerName: string | null } | null;
-    initialEmailHint: string;
     initialError: string | null;
     token: string;
   }) => (
     <div>
       <span>token:{token}</span>
       <span>error:{initialError || 'none'}</span>
-      <span>email:{initialEmailHint || 'none'}</span>
       <span>name:{initialClaim?.customerName || 'none'}</span>
     </div>
   ),
@@ -53,14 +50,14 @@ describe('ReceiptClaimPage server wrapper', () => {
     vi.clearAllMocks();
     mockCreateClient.mockResolvedValue({ rpc: vi.fn() });
     mockParseReceiptClaimToken.mockReturnValue('claim-token');
-    mockLoadReceiptClaimPreviewWithLoginEmailHint.mockResolvedValue({
+    mockLoadReceiptClaimPreview.mockResolvedValue({
       claim: {
         claimed: false,
         customerName: 'Bassey John',
         devices: ['iPhone 16 Pro Max'],
+        documentKind: 'receipt',
         merchantName: 'Ogabassey',
       },
-      emailHint: 'bassey@example.com',
       ok: true,
     });
     mockRecordReceiptClaimClickBestEffort.mockResolvedValue(undefined);
@@ -70,13 +67,12 @@ describe('ReceiptClaimPage server wrapper', () => {
     render(await ReceiptClaimPreviewSection({ token: 'claim-token' }));
 
     expect(mockCreateClient).toHaveBeenCalledTimes(1);
-    expect(mockLoadReceiptClaimPreviewWithLoginEmailHint).toHaveBeenCalledWith({
+    expect(mockLoadReceiptClaimPreview).toHaveBeenCalledWith({
       supabase: { rpc: expect.any(Function) },
       token: 'claim-token',
     });
     expect(screen.getByText('token:claim-token')).toBeInTheDocument();
     expect(screen.getByText('error:none')).toBeInTheDocument();
-    expect(screen.getByText('email:bassey@example.com')).toBeInTheDocument();
     expect(screen.getByText('name:Bassey John')).toBeInTheDocument();
     expect(mockRecordReceiptClaimClickBestEffort).toHaveBeenCalledWith({
       supabase: { rpc: expect.any(Function) },
@@ -113,9 +109,7 @@ describe('ReceiptClaimPage server wrapper', () => {
     render(await ReceiptClaimPage(pageParams('bad token')));
 
     expect(mockCreateClient).not.toHaveBeenCalled();
-    expect(
-      mockLoadReceiptClaimPreviewWithLoginEmailHint
-    ).not.toHaveBeenCalled();
+    expect(mockLoadReceiptClaimPreview).not.toHaveBeenCalled();
     expect(screen.getByText('token:')).toBeInTheDocument();
     expect(
       screen.getByText('error:Invalid receipt claim link')
@@ -123,7 +117,7 @@ describe('ReceiptClaimPage server wrapper', () => {
   });
 
   it('passes preview errors through to the client shell', async () => {
-    mockLoadReceiptClaimPreviewWithLoginEmailHint.mockResolvedValue({
+    mockLoadReceiptClaimPreview.mockResolvedValue({
       error: 'Receipt claim link has expired',
       ok: false,
       status: 410,
@@ -141,9 +135,7 @@ describe('ReceiptClaimPage server wrapper', () => {
     const consoleError = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
-    mockLoadReceiptClaimPreviewWithLoginEmailHint.mockRejectedValue(
-      new Error('db failed')
-    );
+    mockLoadReceiptClaimPreview.mockRejectedValue(new Error('db failed'));
 
     render(await ReceiptClaimPreviewSection({ token: 'claim-token' }));
 

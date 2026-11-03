@@ -116,15 +116,11 @@ describe('OgabasseyStaticHomePageContent preload', () => {
     expect(mockPreloadHeroResources).toHaveBeenCalledWith(SHELL_SLIDE.imageUrl);
   });
 
-  it('renders a scanner-visible preload link for the committed hero image', async () => {
+  it('does not render a duplicate literal preload link alongside the preload hint', async () => {
     render(await OgabasseyStaticHomePageContent({ pathPrefix: '' }));
 
-    const link = document.querySelector(
-      'link[data-ogabassey-home-hero-preload="true"]'
-    );
-    expect(link).toBeInTheDocument();
-    expect(link?.getAttribute('rel')).toBe('preload');
-    expect(link?.getAttribute('as')).toBe('image');
-    expect(link?.getAttribute('fetchpriority')).toBe('high');
+    expect(
+      document.querySelector('link[data-ogabassey-home-hero-preload="true"]')
+    ).not.toBeInTheDocument();
   });
 });

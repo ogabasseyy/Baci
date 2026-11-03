@@ -87,3 +87,33 @@ describe('recordAnalyticsDomainEvent', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 });
+
+it('preserves explicit empty provider targets through both durable and internal observation payloads', async () => {
+  const rpc = vi.fn().mockResolvedValue({
+    data: [
+      {
+        already_enqueued: false,
+        domain_event_id: '019bbd89-8f5f-7f8c-a4fd-42b5d7e7a234',
+        queue_message_id: 42,
+      },
+    ],
+    error: null,
+  });
+  await recordAnalyticsDomainEvent(client(rpc), {
+    eventData: { product_id: 'one', targets: [] },
+    eventName: 'analytics.product_view.v1',
+    eventTimestamp: '2026-07-12T12:00:00.000Z',
+    eventType: 'product_view',
+    externalEventId: 'one',
+    merchantId: '019bbd89-8f5f-7f8c-a4fd-42b5d7e7a235',
+    source: 'web',
+    trustLevel: 'tenant_verified_client',
+  });
+  expect(rpc).toHaveBeenCalledWith(
+    'record_analytics_domain_event_v1',
+    expect.objectContaining({
+      p_event_data: { product_id: 'one', targets: [] },
+      p_domain_event_data: { product_id: 'one', targets: [] },
+    })
+  );
+});

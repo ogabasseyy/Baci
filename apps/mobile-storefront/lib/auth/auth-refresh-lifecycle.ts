@@ -1,4 +1,4 @@
-import { AppState, type AppStateStatus } from 'react-native';
+import { AppState } from 'react-native';
 
 type AuthRefreshController = {
   startAutoRefresh: () => void;
@@ -10,7 +10,7 @@ let activeCleanup: (() => void) | null = null;
 
 function syncRefreshState(
   auth: AuthRefreshController,
-  state: AppStateStatus
+  state: typeof AppState.currentState
 ): void {
   if (state === 'active') {
     auth.startAutoRefresh();

@@ -9,6 +9,7 @@ import type {
 } from './blog-page-content.test-utils.types';
 
 const hoistedMocks = vi.hoisted(() => ({
+  mockBlogClassificationRead: vi.fn(),
   mockBuildBlogClusterCollections: vi.fn(),
   mockDefaultBlogUi: vi.fn((props: MockDefaultBlogUiProps) => (
     <>
@@ -47,6 +48,7 @@ const hoistedMocks = vi.hoisted(() => ({
 }));
 
 export const {
+  mockBlogClassificationRead,
   mockBuildBlogClusterCollections,
   mockDefaultBlogUi,
   mockOgabasseyV2Blog,
@@ -73,6 +75,16 @@ export type {
 vi.mock('@/lib/cached-data', () => ({
   getCachedBlogListing: vi.fn(),
 }));
+
+vi.mock('@/lib/supabase/public', () => ({
+  createPublicClient: () => ({
+    rpc: () => ({
+      abortSignal: () => ({ retry: () => mockBlogClassificationRead() }),
+    }),
+  }),
+}));
+
+vi.mock('next/cache', () => ({ cacheLife: vi.fn(), cacheTag: vi.fn() }));
 
 vi.mock('./blog-category-hub', () => ({
   resolveBlogCategoryHub: vi.fn(),
@@ -222,6 +234,8 @@ export const mockResolveBlogCategoryHub = vi.mocked(
 );
 
 export function resetBlogPageContentMocks() {
+  mockBlogClassificationRead.mockReset();
+  mockBlogClassificationRead.mockResolvedValue({ data: [], error: null });
   mockGetCachedBlogListing.mockReset();
   mockGetCachedBlogListing.mockResolvedValue(buildListingResult());
   mockPreloadBlogListingFeaturedImage.mockClear();

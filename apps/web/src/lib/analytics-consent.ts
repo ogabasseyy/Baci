@@ -1,13 +1,12 @@
-// Shared by browser measurement and universal attribution utilities.
+import { parseCookiePreferences } from '@/components/storefront/parse-cookie-preferences';
+/** A malformed/incomplete choice must not grant tracking while the banner prompts again. */
 export function isAnalyticsAllowed(): boolean {
   if (typeof window === 'undefined') return false;
-
   try {
-    const consent = localStorage.getItem('baci-cookie-consent');
-    if (!consent) return false;
-
-    const parsed = JSON.parse(consent);
-    return parsed.analytics === true;
+    const raw = localStorage.getItem('baci-cookie-consent');
+    return raw
+      ? parseCookiePreferences(JSON.parse(raw))?.analytics === true
+      : false;
   } catch {
     return false;
   }

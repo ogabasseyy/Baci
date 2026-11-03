@@ -15,6 +15,12 @@ const queue = { group: 'production-prebuilt-deploy', 'cancel-in-progress': false
 for (const [index, release] of android.entries()) {
   test(`Android release ${index} refuses stale main builds before resource-heavy setup`, () => {
     const steps = release.jobs['build-and-deploy'].steps;
+    if (!release.on.push.branches) {
+      // Gated release (tag/dispatch only): no push-to-main build to refuse, the release gate runs first.
+      assert.equal(steps.findIndex(step => step.name === 'Refuse superseded main release before build'), -1);
+      assert.equal(steps[1].name, 'Refuse release sources that are not on main');
+      return;
+    }
     const guardIndex = steps.findIndex(step => step.name === 'Refuse superseded main release before build');
     assert.equal(guardIndex, 1);
     const guard = steps[guardIndex];

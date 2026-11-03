@@ -3,6 +3,10 @@ import { Suspense } from 'react';
 import { CatalogListingLoading } from '@/app/(storefront)/[slug]/storefront-loading-ui';
 import { getIndexableRobotsMetadata } from '@/lib/seo-utils';
 import { brandAuthorityPageRuntime } from './brand-authority-page-runtime';
+import {
+  type BrandAuthorityStaticParam,
+  resolveBrandAuthorityStaticParams,
+} from './brand-authority-static-params';
 
 interface BrandAuthorityPageRouteProps {
   params: Promise<{
@@ -10,6 +14,10 @@ interface BrandAuthorityPageRouteProps {
     category: string;
     brandSlug: string;
   }>;
+}
+
+export function generateStaticParams(): Promise<BrandAuthorityStaticParam[]> {
+  return resolveBrandAuthorityStaticParams();
 }
 
 export async function generateMetadata(

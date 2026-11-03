@@ -1,44 +1,52 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import z from 'zod';
 import { getPiggyvestApiConfig } from '@/env';
-import { redactEventDetails } from '@/lib/piggyvest/event-redaction';
-import { attributedWalletId } from '@/lib/piggyvest/plan-wallet-restrictions';
 import { createPiggyvestIntakeServiceClient } from '@/lib/piggyvest/server-intake-client';
-import { outflowReferenceCandidates } from '@/lib/piggyvest/transfer-outbox';
-import {
-  type RecordPiggyvestEventInput,
-  recordPiggyvestEvent,
-} from '@/lib/piggyvest/webhook-inbox';
-import { processPiggyvestEvent } from '@/lib/piggyvest/webhook-processor';
+import { emitPiggyvestWebhookAlert } from '@/lib/piggyvest/webhook-alerts';
+import { markCaptureProcessed } from '@/lib/piggyvest/webhook-capture';
+import { isPiggyvestCaptureDrainScheduled } from '@/lib/piggyvest/webhook-capture-attestation';
 import { readBoundedWebhookBody } from '@/lib/piggyvest/webhook-request';
-import { verifyPiggyvestWebhookSecrets } from '@/lib/piggyvest/webhook-secret-union';
+import { admitPiggyvestDelivery } from './ingress';
 import {
-  type PiggyvestWebhookEvent,
-  piggyvestWebhookEventSchema,
-} from '@/schemas/piggyvest/events';
-import { dispatchPrimaryPiggyvestIntake } from './primary-webhook-dispatch';
-import { quarantineAndAck } from './quarantine-and-ack';
+  isAuthorizationQuarantine,
+  isContentQuarantine,
+  isKeySetIncompleteRetry,
+  processVerifiedDelivery,
+} from './process-delivery';
 
 /**
- * Provider delivery contract (17 Sep 2026, quarantine slice 18 Sep 2026):
+ * Provider delivery contract (17 Sep 2026; durable capture, R5):
  * - At-least-once: up to 10 automatic retries, plus manual resends.
- *   The inbox collapses redeliveries on `event_id`.
- * - 2xx only after the event is durably recorded. A 5xx asks the
- *   provider to retry; anything else ends delivery.
  * - Signature is hex(HMAC-SHA512(secret, raw_body)) in
  *   `x-pvb-signature`, verified over the exact wire bytes.
+ * - Capture is always on. Any request that verifies under a CURRENT key is
+ *   durably stored (raw bytes, headers, signature, key version, receive
+ *   time) before the receiver answers 200, whatever the event type and
+ *   whatever financial-processing flags are set. See ingress.ts.
+ * - Processing is a separate step. When it does not complete after capture
+ *   the stored row stays pending either way; who retries depends on the
+ *   drain attestation (PIGGYVEST_WEBHOOK_CAPTURE_DRAIN_SCHEDULED, read per
+ *   request, exactly 'true'):
+ *   - attested: the drain retries the row, so the reply is a deferred 200;
+ *   - NOT attested: the provider's own redeliveries (up to 10) are the only
+ *     retry mechanism, so the reply stays 503. The redelivery finds the
+ *     still-pending row and re-runs processing, which is idempotent.
+ *   Fail toward retry: anything but exactly 'true' means not attested.
  *
  * Status mapping:
- * - No secret configured -> 503 (fail closed; nothing is accepted).
- * - Bad/missing signature -> 200 without processing (docs behavior;
- *   forged traffic must not consume the 10 retries).
- * - Authentic but unparseable/unknown/conflicting event, or a delivery
- *   signed by a key family unauthorized for legacy handling -> quarantine
- *   (durable receipt of a non-retryable observation) -> 200. Retries
- *   cannot fix these, so they must not burn the 10 attempts; nothing
- *   quarantined ever touches financial state.
- * - Completed processing -> 200.
- * - Inbox/quarantine write fails -> 503 so the provider retries.
+ * - No usable server key configuration -> 503 + alert.
+ * - Invalid signature, or a key revoked at ingress -> 401 + alert.
+ * - Capture write fails -> 503 + alert (the provider retries; no row).
+ * - Captured but processing incomplete -> 503 until the drain is attested,
+ *   200 deferred once it is (alert either way). The reply stays 503 even
+ *   when attested while the key set is incomplete (the capture is limited to
+ *   the families that loaded and replay cannot widen it) and for a resend of
+ *   a needs_review capture (the drain never claims it again). A successful
+ *   inline retry closes a needs_review capture as processed.
+ * - Captured, but the loaded key families cannot authorize the event while
+ *   the key set is incomplete -> 503 + alert even when the drain is
+ *   attested: the capture's recorded authority is immutable, so only the
+ *   provider's redelivery (verified under the full set) can recover it.
+ * - Everything else -> 200.
  */
 
 export function GET(): Response {
@@ -52,66 +60,6 @@ export function GET(): Response {
 }
 
 const noStore = { 'Cache-Control': 'no-store' };
-
-function toRecordInput(
-  event: PiggyvestWebhookEvent
-): RecordPiggyvestEventInput {
-  const base = {
-    eventId: event.eventId,
-    eventType: event.eventType,
-    eventCategory: event.eventCategory,
-    customerId: event.customer_id,
-    details: redactEventDetails(event),
-  };
-  switch (event.eventType) {
-    case 'bank-transfer.inflow.success':
-      return {
-        ...base,
-        walletId: event.pvb_wallet,
-        reference: event.pvb_reference,
-        amountKobo: event.eventData.amount,
-      };
-    case 'interest-payout.success':
-      return {
-        ...base,
-        // The credited plan wallet is the nested destination_wallet; the
-        // envelope pvb_wallet is the source accrued-interest wallet.
-        // Persist exactly the attribution the ledger acts on so a
-        // redelivery reusing the event id with a different destination
-        // surfaces as a conflict instead of a duplicate.
-        walletId: event.eventData.destination_wallet,
-        reference: event.pvb_reference,
-        amountKobo: event.eventData.amount,
-      };
-    case 'create-wallet.success':
-      return { ...base, walletId: event.pvb_wallet };
-    case 'restriction-created.success':
-    case 'restriction-lifted.success':
-      // Persist exactly the attribution the processor acts on: without it,
-      // a redelivery reusing the event id with a different wallet would
-      // compare null-to-null, classify as a duplicate, and flip the wrong
-      // wallet instead of quarantining as a conflict.
-      return { ...base, walletId: attributedWalletId(event) };
-    case 'bank-transfer.outflow.success':
-    case 'bank-transfer.outflow.failed':
-    case 'wallet-transfer.outflow.success': {
-      // Same rule for the ordered reference candidates the outflow matcher
-      // consumes: any change in set or order must surface as a conflict.
-      const references = outflowReferenceCandidates(event.eventData);
-      return {
-        ...base,
-        reference: references.length > 0 ? JSON.stringify(references) : null,
-      };
-    }
-    default:
-      return base;
-  }
-}
-
-const correlationSchema = z.object({
-  eventId: z.string().min(1).max(200).optional(),
-  eventType: z.string().min(1).max(200).optional(),
-});
 
 export async function POST(request: NextRequest): Promise<Response> {
   // Bounded read (64 KiB / 5 s) before anything else: the edge proxy only
@@ -137,136 +85,111 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
   }
   const rawBody: Buffer = bounded.body;
-  const signature = request.headers.get('x-pvb-signature');
-  const verification = verifyPiggyvestWebhookSecrets({ rawBody, signature });
-  if (verification.status === 'unconfigured') {
+
+  // One intake client per request, created only once a delivery needs it
+  // (a rejected request never constructs service authority).
+  let intakeClient:
+    | ReturnType<typeof createPiggyvestIntakeServiceClient>
+    | undefined;
+  const createClient = () => {
+    intakeClient ??= createPiggyvestIntakeServiceClient();
+    return intakeClient;
+  };
+
+  const admission = await admitPiggyvestDelivery({
+    request,
+    rawBody,
+    createClient,
+  });
+  if (admission.kind === 'rejected') return admission.response;
+  const { capture, signature, matchedSecret, families, incompleteKeySet } =
+    admission.delivery;
+
+  // An identical redelivery of a row already processed needs no work.
+  if (
+    capture.outcome === 'duplicate' &&
+    capture.processingState === 'processed'
+  ) {
     return NextResponse.json(
-      { error: 'Integration unavailable', code: 'PIGGYVEST_NOT_READY' },
-      { status: 503, headers: noStore }
-    );
-  }
-  if (verification.status === 'invalid') {
-    // Monitoring surface: every other terminal rejection in this route
-    // warns, and a silent invalid-signature path would hide both a
-    // provider-side signing outage and an active forgery campaign from
-    // the log drain alerts key on. Presence only — never the signature
-    // value or body bytes.
-    console.warn(
-      `[PiggyVest Webhook] Rejected delivery with invalid signature (signature header ${signature === null ? 'absent' : 'present'})`
-    );
-    return NextResponse.json(
-      { received: false, code: 'PIGGYVEST_INVALID_SIGNATURE' },
+      { received: true, duplicate: true },
       { status: 200, headers: noStore }
     );
   }
-  const matchedSecret = verification.secret;
 
-  let jsonPayload: unknown;
+  // Whatever happens below, the original request is already durable.
+  let processing: Response | null = null;
   try {
-    jsonPayload = JSON.parse(
-      new TextDecoder('utf-8', { fatal: true }).decode(rawBody)
+    // Runs even for duplicates: if the first delivery captured the request
+    // but crashed before the ledger write, the redelivery must still
+    // credit. The inbox claim and ledger dedupe keys make that safe.
+    processing = await processVerifiedDelivery(
+      { rawBody, signature, matchedSecret, families, incompleteKeySet },
+      { createClient, getPiggyvestConfig: getPiggyvestApiConfig }
     );
   } catch {
-    console.warn('[PiggyVest Webhook] Authentic delivery with invalid JSON');
-    return quarantineAndAck(
-      rawBody,
-      'unparseable',
-      {},
-      null,
-      createPiggyvestIntakeServiceClient
-    );
+    processing = null;
   }
-
-  const parsed = piggyvestWebhookEventSchema.safeParse(jsonPayload);
-  if (!parsed.success) {
-    console.warn('[PiggyVest Webhook] Authentic delivery, unknown event shape');
-    const correlation = correlationSchema.safeParse(jsonPayload);
-    return quarantineAndAck(
-      rawBody,
-      'unknown-event',
-      correlation.success ? correlation.data : {},
-      null,
-      createPiggyvestIntakeServiceClient
-    );
-  }
-
-  try {
-    // Specialized primary intakes claim their deliveries first (each gated
-    // on its own key family); null falls through to legacy processing.
-    const primary = await dispatchPrimaryPiggyvestIntake({
-      rawBody,
-      signature,
-      matchedSecret,
-      event: parsed.data,
-      families: verification.families,
+  if (processing && isKeySetIncompleteRetry(processing)) {
+    // Retryable regardless of the drain attestation: replay is bounded by
+    // the families recorded at admission and can never reach the handler
+    // this event needs, so the provider's redelivery is the only recovery.
+    emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_KEYS_UNCONFIGURED', {
+      captureId: capture.id,
+      reason: 'key set incomplete; event not authorized by the loaded families',
     });
-    if (primary === 'conflict') {
-      return quarantineAndAck(
-        rawBody,
-        'conflict',
-        { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
-        redactEventDetails(parsed.data),
-        createPiggyvestIntakeServiceClient
-      );
+    return processing;
+  }
+  if (processing && processing.status >= 200 && processing.status < 300) {
+    // A delivery quarantined for the wrong signing key family never ran a
+    // financial handler: acknowledge it, but leave the capture unresolved so
+    // a correctly signed redelivery of the same bytes is processed rather
+    // than short-circuited as an already-processed duplicate.
+    // The same holds for a body the parser rejected: a resend after the fix
+    // must be processed, not swallowed as a processed duplicate.
+    if (
+      !isAuthorizationQuarantine(processing) &&
+      !isContentQuarantine(processing)
+    ) {
+      await markCaptureProcessed(createClient(), capture.id);
     }
-    if (primary) return primary;
-    // Key-family binding: only the legacy secret authorizes legacy ledger
-    // writes. A delivery signed solely by a primary family key that no
-    // specialized intake claimed is quarantined, never legacy-processed —
-    // otherwise a compromised narrow key could forge unrelated events.
-    if (!verification.families.includes('legacy')) {
-      return quarantineAndAck(
-        rawBody,
-        'key-family',
-        { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
-        redactEventDetails(parsed.data),
-        createPiggyvestIntakeServiceClient
-      );
-    }
-    // Processing runs even for duplicates: if the first delivery recorded
-    // the inbox row but crashed before the ledger write, the redelivery
-    // must still credit. The claim makes concurrent attempts safe.
-    const outcome = await recordPiggyvestEvent(
-      createPiggyvestIntakeServiceClient(),
-      toRecordInput(parsed.data)
-    );
-    if (outcome === 'conflict') {
-      console.warn(
-        '[PiggyVest Webhook] Same-identity conflicting delivery quarantined'
-      );
-      return quarantineAndAck(
-        rawBody,
-        'conflict',
-        { eventId: parsed.data.eventId, eventType: parsed.data.eventType },
-        redactEventDetails(parsed.data),
-        createPiggyvestIntakeServiceClient
-      );
-    }
-    const processing = await processPiggyvestEvent(
-      createPiggyvestIntakeServiceClient(),
-      parsed.data,
-      {
-        piggyvestConfig: getPiggyvestApiConfig(),
-      }
-    );
-    if (processing !== 'processed') {
-      // Deferred is durable backlog, not a failure: the inbox row exists,
-      // nothing was marked processed, and no other processor can complete
-      // these events — 503 would burn provider attempts on every retry.
-      return NextResponse.json(
-        { received: true, deferred: true, duplicate: outcome === 'duplicate' },
-        { status: 200, headers: noStore }
-      );
-    }
+    return processing;
+  }
+  emitPiggyvestWebhookAlert('PIGGYVEST_WEBHOOK_PROCESSING_DEFERRED', {
+    captureId: capture.id,
+    reason: processing
+      ? `processing answered ${processing.status}; row kept for retry`
+      : 'processing threw; row kept for retry',
+  });
+  // The drain claims only pending rows (and ones whose lease expired), never
+  // needs_review: a resend of a dead-lettered capture has no drain behind it.
+  const drainCanRetry =
+    capture.processingState === 'pending' ||
+    capture.processingState === 'claimed';
+  if (
+    isPiggyvestCaptureDrainScheduled() &&
+    !incompleteKeySet &&
+    drainCanRetry
+  ) {
+    // The drain owns the retry; the provider can stop redelivering. Not
+    // while the key set is incomplete: the delivery was admitted with only
+    // the families that happened to load, the capture's recorded authority
+    // is immutable and replay cannot widen it, so the drain may never be
+    // able to finish this row. The provider's redelivery (verified under
+    // the full set once configuration is whole) is the reliable retry.
     return NextResponse.json(
-      { received: true, duplicate: outcome === 'duplicate' },
+      { received: true, captured: true, processing: 'deferred' },
       { status: 200, headers: noStore }
     );
-  } catch {
-    // Never leak storage internals; 503 asks the provider to redeliver.
-    return NextResponse.json(
-      { error: 'Event intake unavailable', code: 'PIGGYVEST_INBOX_ERROR' },
-      { status: 503, headers: noStore }
-    );
   }
+  // No drain yet: keep the provider's redeliveries as the retry mechanism.
+  // The reply carries no failure detail.
+  return NextResponse.json(
+    {
+      received: true,
+      captured: true,
+      processing: 'retry',
+      code: 'PIGGYVEST_PROCESSING_RETRY',
+    },
+    { status: 503, headers: noStore }
+  );
 }

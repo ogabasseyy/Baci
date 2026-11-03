@@ -58,6 +58,42 @@ describe('requestOgabasseyChatReply', () => {
     });
   });
 
+  it('accepts only the server-attested order action for the current storefront', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response('Choose an order.', { headers: {
+      'x-baci-santa-merchant-slug': 'ogabassey', 'x-baci-chat-action': 'orders',
+    } }));
+    await expect(requestOgabasseyChatReply(false, [], 'Track my order', 'ogabassey')).resolves.toMatchObject({ action: 'orders', merchantSlug: 'ogabassey' });
+    expect(vi.mocked(global.fetch).mock.calls[0]?.[1]?.headers).toMatchObject({ 'x-baci-chat-order-actions': '1' });
+  });
+
+  it.each([
+    { slug: 'other-store', action: 'orders' },
+    { slug: 'ogabassey', action: 'cancel-now' },
+    { slug: '', action: 'orders' },
+  ])('rejects action headers without a matching attested tenant and allowlisted action: %j', async ({ slug, action }) => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response('Choose an order.', { headers: {
+      'x-baci-santa-merchant-slug': slug, 'x-baci-chat-action': action,
+    } }));
+    const result = await requestOgabasseyChatReply(false, [], 'Track my order', 'ogabassey');
+    expect(result).not.toHaveProperty('action');
+  });
+
+  it('preserves an attested order action in the validated agent UI envelope', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify({ version: 1, events: [], text: 'Choose an order.' }), { headers: {
+      'Content-Type': storefrontAgentUiContract.mediaType, 'x-baci-santa-merchant-slug': 'ogabassey', 'x-baci-chat-action': 'orders',
+    } }));
+    await expect(requestOgabasseyChatReply(false, [], 'Track my order', 'ogabassey')).resolves.toMatchObject({ action: 'orders', merchantSlug: 'ogabassey' });
+  });
+
+  it('never accepts or requests order actions in Santa mode', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response('Hello.', { headers: {
+      'x-baci-santa-merchant-slug': 'ogabassey', 'x-baci-chat-action': 'orders',
+    } }));
+    const reply = await requestOgabasseyChatReply(true, [], 'Track my order', 'ogabassey');
+    expect(reply).not.toHaveProperty('action');
+    expect(vi.mocked(global.fetch).mock.calls[0]?.[1]?.headers).not.toHaveProperty('x-baci-chat-order-actions');
+  });
+
   it('sends product-card references with a follow-up question', async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(new Response('Checking.'));
 

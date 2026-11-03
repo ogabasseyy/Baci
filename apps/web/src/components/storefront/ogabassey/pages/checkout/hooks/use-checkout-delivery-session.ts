@@ -93,6 +93,8 @@ export function useCheckoutDeliverySession({
   const addressHandlers = useCheckoutDeliveryAddressHandlers({
     clearInferredLocationDebounce,
     merchantCountry: shippingInput.merchantCountry,
+    newAddressCity: shippingInput.newAddressCity,
+    newAddressState: shippingInput.newAddressState,
     resetQuotesForAddressChange: quotes.resetQuotesForAddressChange,
     scheduleInferredLocationUpdate,
     setFields: shippingInput.setCheckoutFields,
@@ -134,7 +136,7 @@ export function useCheckoutDeliverySession({
     deliveryMethod: shippingInput.deliveryMethod,
     doorDeliveryQuotes,
     fetchShippingQuotes: () => {
-      if (quotes.isNewDeliveryAddressReady) {
+      if (quotes.isNewDeliveryAddressReady || shippingInput.deliveryMethod === 'pickup') {
         quotes.fetchShippingQuotes(
           shippingInput.newAddressStreet,
           shippingInput.newAddressState,
@@ -142,7 +144,8 @@ export function useCheckoutDeliverySession({
           shippingInput.customerPhone,
           shippingInput.firstName,
           shippingInput.lastName,
-          shippingInput.customerEmail
+          shippingInput.customerEmail,
+          shippingInput.deliveryMethod === 'pickup' ? 'pickup_station' : 'door'
         );
       }
     },
@@ -193,6 +196,9 @@ export function useCheckoutDeliverySession({
   const rawIsDeliveryValid = (() => {
     if (!shippingInput.deliveryMethod) return false;
     if (eligibleDeliveryMethod !== shippingInput.deliveryMethod) return false;
+    if (shippingInput.deliveryMethod === 'pickup') {
+      return quotes.hasResolvedQuotes && !quotes.isLoadingQuotes;
+    }
     if (shippingInput.deliveryMethod === 'door') {
       return Boolean(
         quotes.selectedQuoteId && selectedQuoteMatchesDeliveryMethod

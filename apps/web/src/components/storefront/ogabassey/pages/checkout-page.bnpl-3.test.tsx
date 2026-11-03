@@ -5,14 +5,14 @@ import {
 } from './checkout-page-bnpl.test-support';
 import {
   act,
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   openCreditDirectCheckout,
   openCredPalCheckout,
   readCreditDirectPopupMarker,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   toast,
   useCart,
@@ -123,14 +123,12 @@ it('hands fresh Credit Direct success to server verification before cleanup', as
     });
 
   try {
-    render(<CheckoutPage />);
+    renderCheckoutWithStoreRates();
 
     fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
 
     fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-    fireEvent.click(
-      screen.getByRole('button', { name: /continue to payment/i })
-    );
+    await continueToPaymentAfterPickupCheck();
     fireEvent.click(
       await screen.findByRole('button', { name: /pay in installments/i })
     );

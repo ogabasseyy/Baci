@@ -8,7 +8,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {
-  loadReceiptClaimPreviewWithLoginEmailHint,
+  loadReceiptClaimPreview,
   parseReceiptClaimToken,
   recordReceiptClaimClickBestEffort,
 } from '@/lib/import-notifications/receipt-claim-preview';
@@ -65,7 +65,7 @@ function ReceiptClaimLoadingShell() {
 export async function ReceiptClaimPreviewSection({ token }: { token: string }) {
   try {
     const supabase = await createClient();
-    const preview = await loadReceiptClaimPreviewWithLoginEmailHint({
+    const preview = await loadReceiptClaimPreview({
       supabase,
       token,
     });
@@ -81,7 +81,6 @@ export async function ReceiptClaimPreviewSection({ token }: { token: string }) {
     return (
       <ReceiptClaimPageClient
         initialClaim={preview.ok ? preview.claim : null}
-        initialEmailHint={preview.ok ? preview.emailHint : ''}
         initialError={preview.ok ? null : preview.error}
         token={token}
       />
@@ -92,7 +91,6 @@ export async function ReceiptClaimPreviewSection({ token }: { token: string }) {
     return (
       <ReceiptClaimPageClient
         initialClaim={null}
-        initialEmailHint=""
         initialError="Failed to load receipt claim"
         token={token}
       />
@@ -111,7 +109,6 @@ export default async function ReceiptClaimPage({
       <Suspense fallback={<ReceiptClaimLoadingShell />}>
         <ReceiptClaimPageClient
           initialClaim={null}
-          initialEmailHint=""
           initialError="Invalid receipt claim link"
           token=""
         />

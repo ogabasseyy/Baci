@@ -7,6 +7,12 @@ import {
   verifyAnalyticsDeliveryAuthority,
 } from './verify-analytics-delivery-authority';
 
+// The whole-repository scan finishes in ~3 min on a web test shard but takes
+// ~26 min in the shared "Quality Gate - Test" job (parallel workers on a
+// 2-vCPU runner), where an 8-min limit failed every run before it could
+// report. Stay inside that job's 45-min timeout-minutes.
+const LIVE_REPOSITORY_SCAN_TIMEOUT_MS = 35 * 60_000;
+
 describe('analytics delivery authority repository contract', () => {
   it('enforces changed runtime size and colocated tests', () => {
     const good = 'apps/web/src/lib/analytics/good.ts';
@@ -167,9 +173,13 @@ describe('analytics delivery authority repository contract', () => {
     ).toThrow('repository unavailable');
   });
 
-  it('passes the live repository authority contract', () => {
-    expect(
-      verifyAnalyticsDeliveryAuthority(resolve(process.cwd(), '../..'))
-    ).toEqual([]);
-  }, 480_000);
+  it(
+    'passes the live repository authority contract',
+    () => {
+      expect(
+        verifyAnalyticsDeliveryAuthority(resolve(process.cwd(), '../..'))
+      ).toEqual([]);
+    },
+    LIVE_REPOSITORY_SCAN_TIMEOUT_MS
+  );
 });

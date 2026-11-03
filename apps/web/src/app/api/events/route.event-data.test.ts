@@ -54,7 +54,15 @@ describe('POST /api/events event data', () => {
   ])('builds event-specific data', async (input, eventData) => {
     await POST(eventRouteRequest({ ...input, event_id: 'event-1' }));
     expect(mocks.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ event_data: eventData }),
+      expect.objectContaining({
+        event_data: {
+          ...eventData,
+          ...(input.event_type === 'product_view' ||
+          input.event_type === 'search'
+            ? { targets: [] }
+            : {}),
+        },
+      }),
       expect.any(Object)
     );
   });
@@ -82,7 +90,10 @@ describe('POST /api/events event data', () => {
       })
     );
     const row = mocks.upsert.mock.calls[0]?.[0];
-    expect(row.event_data).toEqual({ product_id: 'sku-1' });
+    expect(row.event_data).toEqual({
+      product_id: 'sku-1',
+      targets: [],
+    });
     expect(Object.values(row.event_data)).not.toContain(undefined);
   });
 });

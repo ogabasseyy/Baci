@@ -65,7 +65,8 @@ function createSupabase(
       state_code: 'LA',
     },
     error: null,
-  }
+  },
+  savedQuoteSenderPhone = quoteSender.phone
 ) {
   const order = {
     id: 'order-1',
@@ -98,7 +99,7 @@ function createSupabase(
     quote_request: {
       sessionId: 'session-1',
       shipmentType: 'domestic',
-      sender: quoteSender,
+      sender: { ...quoteSender, phone: savedQuoteSenderPhone },
       receiver: {
         ...order.shipping_address,
         latitude: 6.5,
@@ -217,6 +218,39 @@ describe('bookOrderShipment sender selection', () => {
         }),
       })
     );
+  });
+
+  it('bugfix: refuses to book GIG with the truncated store phone (+23415781)', async () => {
+    // Saved quote and merchants.phone hold the same junk value, so the
+    // saved-quote phone gate passes and only the sender check can stop it.
+    const booking = bookOrderShipment(
+      createSupabase(
+        {
+          data: {
+            business_name: 'Merchant',
+            business_address: '2 Olaide Tomori Street, Ikeja, 100001',
+            phone: '+23415781',
+            registered_address: {
+              city: 'Ikeja',
+              postal_code: '100001',
+              state: null,
+              street: '2 Olaide Tomori Street',
+            },
+            state_code: 'LA',
+          },
+          error: null,
+        },
+        '+23415781'
+      ),
+      'merchant-1',
+      'order-1'
+    );
+
+    await expect(booking).rejects.toMatchObject({
+      code: 'MERCHANT_SENDER_PHONE_INVALID',
+      status: 400,
+    });
+    expect(shippingService.bookShipment).not.toHaveBeenCalled();
   });
 
   it('surfaces merchant lookup failures as retryable server errors', async () => {

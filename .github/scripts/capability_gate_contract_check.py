@@ -63,7 +63,7 @@ from capability_gate_contract_ci_checks import (
 from capability_gate_contract_workflow_checks import workflow_failures
 
 BASE_PINS = {
-    "vps-workers/baci-editorial-context/test_capability_gate_continuity.py": "b981be82472145ae31195997632575c2410ff222b6803fa9fb8d2668b1b57dcf",
+    "vps-workers/baci-editorial-context/test_capability_gate_continuity.py": "7ec8612c69ebda2f71cca449576e22ac420bac6d7474a2d87995c04b22920d1f",
     "vps-workers/baci-editorial-context/capability_gate_continuity.py": "0b481eabb3dc6528b0c4bd318092d38b2c9f0116fc251e4562a32969e1ece590",
     ".github/actions/capability-gate/action.yml": "257823346da306434103d77e3a4facbcee0e536ee8b342678e14a73aa9d0b8b9",
     # No self-pin: a self-hash is a fixed point. The checker's own baseline

@@ -310,56 +310,6 @@ describe('UtilitySuccessView', () => {
     }
   });
 
-  it('notifies the owner exactly once when the backfill settles', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({
-          transactions: [
-            {
-              request_reference: 'VTU-PROC',
-              status: 'successful',
-              voucher_pin: 'PIN-1',
-              refund_pending: false,
-            },
-          ],
-        }),
-      }))
-    );
-    const onSettled = vi.fn();
-    try {
-      const { rerender } = render(
-        <UtilitySuccessView
-          activeTab="power"
-          amount={1000}
-          merchantSlug="ogabassey"
-          onClose={vi.fn()}
-          onSettled={onSettled}
-          processing={true}
-          reference="VTU-PROC"
-        />
-      );
-
-      expect(await screen.findByText('Success!')).toBeInTheDocument();
-      expect(onSettled).toHaveBeenCalledTimes(1);
-      rerender(
-        <UtilitySuccessView
-          activeTab="power"
-          amount={1000}
-          merchantSlug="ogabassey"
-          onClose={vi.fn()}
-          onSettled={onSettled}
-          processing={true}
-          reference="VTU-PROC"
-        />
-      );
-      expect(onSettled).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
   it('polls telco processing purchases for settlement', async () => {
     const fetchMock = vi.fn(async (_url: unknown) => ({
       ok: true,

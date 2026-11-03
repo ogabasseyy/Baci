@@ -2,6 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { buildMerchantAnalyticsSettings } from './analytics-merchant-settings';
 
 describe('buildMerchantAnalyticsSettings', () => {
+  it('uses the public derived capability without private plan fields', () => {
+    expect(
+      buildMerchantAnalyticsSettings({
+        growth_integrations_enabled: true,
+        feature_settings: { facebook_pixel_id: '2099259280261589' },
+      })
+    ).toMatchObject({ facebook_pixel_id: '2099259280261589' });
+    expect(
+      buildMerchantAnalyticsSettings({
+        growth_integrations_enabled: false,
+        feature_settings: { facebook_pixel_id: '2099259280261589' },
+      })
+    ).toMatchObject({ facebook_pixel_id: null });
+  });
+
   it('reads the new ChatGPT pixel only from entitled canonical feature settings', () => {
     expect(
       buildMerchantAnalyticsSettings({

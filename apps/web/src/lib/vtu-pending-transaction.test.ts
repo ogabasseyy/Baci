@@ -80,100 +80,141 @@ type PrepareSupabase = Parameters<
 function createMockSupabase({
   merchant = {},
   settings = {},
+  settingsError = null,
+  settingsRows,
   customer = {},
+  linkRows,
   insertRow = {},
+  insertRpcRow,
 }: {
   customer?: Record<string, unknown>;
   insertRow?: Record<string, unknown>;
+  insertRpcRow?: Record<string, unknown>;
+  linkRows?: Record<string, unknown>[] | null;
   merchant?: Record<string, unknown>;
   settings?: Record<string, unknown>;
+  settingsError?: { message: string } | null;
+  settingsRows?: Record<string, unknown>[] | null;
 } = {}) {
+  const mergedSettings = {
+    vtu_enabled: true,
+    vtu_airtime_enabled: true,
+    paystack_enabled: true,
+    korapay_enabled: true,
+    ...settings,
+  };
+  const mergedCustomer = {
+    id: 'customer-1',
+    email: 'customer@example.com',
+    first_name: 'Ada',
+    last_name: 'Lovelace',
+    phone: '08012345678',
+    user_id: 'user-1',
+    ...customer,
+  };
+  const mergedInsert = {
+    id: 'vtu-1',
+    amount: 1000,
+    customer_identifier: null,
+    metadata: {},
+    request_reference: 'VTU-REF-123',
+    status: 'pending',
+    type: 'airtime',
+    ...insertRow,
+  };
   const single = vi.fn().mockResolvedValue({
     data: {
       id: 'merchant-1',
       slug: 'ogabassey',
       business_name: 'OgaBassey',
-      paystack_subaccount_code: null,
       ...merchant,
     },
     error: null,
   });
-  const settingsSingle = vi.fn().mockResolvedValue({
-    data: {
-      vtu_enabled: true,
-      vtu_airtime_enabled: true,
-      paystack_enabled: true,
-      korapay_enabled: true,
-      ...settings,
-    },
-    error: null,
-  });
   const maybeSingle = vi.fn().mockResolvedValue({
-    data: {
-      id: 'customer-1',
-      email: 'customer@example.com',
-      first_name: 'Ada',
-      last_name: 'Lovelace',
-      phone: '08012345678',
-      user_id: 'user-1',
-      ...customer,
-    },
+    data: mergedCustomer,
     error: null,
   });
   const insertSingle = vi.fn().mockResolvedValue({
-    data: {
-      id: 'vtu-1',
-      amount: 1000,
-      customer_identifier: null,
-      metadata: {},
-      request_reference: 'VTU-REF-123',
-      status: 'pending',
-      type: 'airtime',
-      ...insertRow,
-    },
+    data: mergedInsert,
     error: null,
   });
   const insert = vi.fn().mockReturnValue({
     select: vi.fn().mockReturnValue({ single: insertSingle }),
   });
+  // Phase 2 RPC boundary: settings ALWAYS come from the projection
+  // RPC (both callers); link/insert RPCs serve the RLS-bound flags.
+  const rpc = vi.fn((fn: string) => {
+    if (fn === 'get_vtu_checkout_settings') {
+      if (settingsError) {
+        return Promise.resolve({ data: null, error: settingsError });
+      }
+      return Promise.resolve({
+        data: settingsRows ?? [mergedSettings],
+        error: null,
+      });
+    }
+    if (fn === 'link_vtu_customer_by_email') {
+      return Promise.resolve({
+        data: linkRows ?? [mergedCustomer],
+        error: null,
+      });
+    }
+    if (fn === 'insert_prepared_vtu_transaction') {
+      return Promise.resolve({
+        data: [insertRpcRow ?? mergedInsert],
+        error: null,
+      });
+    }
+    throw new Error(`unexpected rpc ${fn}`);
+  });
 
-  const supabase = {
-    from: vi.fn((table: string) => {
-      if (table === 'merchants') {
-        return {
-          select: vi.fn().mockReturnValue({
-            // The merchant lookup is alias-aware and uses .maybeSingle();
-            // keep .single() too for any other caller. Same resolved value.
-            eq: vi.fn().mockReturnValue({ single, maybeSingle: single }),
+  const from = vi.fn((table: string) => {
+    if (table === 'merchants') {
+      return {
+        select: vi.fn().mockReturnValue({
+          // The merchant lookup is alias-aware and uses .maybeSingle();
+          // keep .single() too for any other caller. Same resolved value.
+          eq: vi.fn().mockReturnValue({ single, maybeSingle: single }),
+        }),
+      };
+    }
+    if (table === 'merchant_feature_settings') {
+      // Dead by design (Phase 2): settings come from the projection
+      // RPC. Any direct read throws loudly instead of passing.
+      throw new Error('direct merchant_feature_settings reads are removed');
+    }
+    if (table === 'customers') {
+      return {
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({ maybeSingle }),
           }),
-        };
-      }
-      if (table === 'merchant_feature_settings') {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({ single: settingsSingle }),
-          }),
-        };
-      }
-      if (table === 'customers') {
-        return {
-          select: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({ maybeSingle }),
-            }),
-          }),
-        };
-      }
-      return { insert };
-    }),
-  } as unknown as PrepareSupabase;
+        }),
+      };
+    }
+    return { insert };
+  });
 
-  return { insert, supabase };
+  const supabase = { from, rpc } as unknown as PrepareSupabase;
+
+  return { from, insert, rpc, supabase };
 }
 
-function prepareAirtime(supabase: PrepareSupabase, networkProvider = 'mtn') {
+function prepareAirtime(
+  supabase: PrepareSupabase,
+  networkProvider = 'mtn',
+  options?: {
+    insertViaRpc?: boolean;
+    insertSupabase?: PrepareSupabase;
+    linkCustomerViaRpc?: boolean;
+    requireCustomer?: boolean;
+    strictLookups?: boolean;
+  }
+) {
   return preparePendingVtuTransaction({
     supabase,
+    insertSupabase: options?.insertSupabase,
     user: {
       id: 'user-1',
       email_confirmed_at: '2026-01-01T00:00:00.000Z',
@@ -188,7 +229,10 @@ function prepareAirtime(supabase: PrepareSupabase, networkProvider = 'mtn') {
       source: 'checkout',
     },
     source: 'checkout',
-    requireCustomer: true,
+    requireCustomer: options?.requireCustomer ?? true,
+    strictLookups: options?.strictLookups,
+    linkCustomerViaRpc: options?.linkCustomerViaRpc,
+    insertViaRpc: options?.insertViaRpc,
   });
 }
 
@@ -1484,18 +1528,7 @@ describe('preparePendingVtuTransaction strictLookups', () => {
           };
         }
         if (table === 'merchant_feature_settings') {
-          return {
-            select: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                single: vi.fn().mockResolvedValue({
-                  data: settingsError
-                    ? null
-                    : { vtu_enabled: true, vtu_airtime_enabled: true },
-                  error: settingsError,
-                }),
-              }),
-            }),
-          };
+          throw new Error('direct merchant_feature_settings reads are removed');
         }
         return {
           select: vi.fn().mockReturnValue({
@@ -1509,6 +1542,17 @@ describe('preparePendingVtuTransaction strictLookups', () => {
             }),
           }),
         };
+      }),
+      rpc: vi.fn((fn: string) => {
+        if (fn !== 'get_vtu_checkout_settings') {
+          throw new Error(`unexpected rpc ${fn}`);
+        }
+        return Promise.resolve({
+          data: settingsError
+            ? null
+            : [{ vtu_enabled: true, vtu_airtime_enabled: true }],
+          error: settingsError,
+        });
       }),
     } as unknown as PrepareSupabase;
   }
@@ -1552,8 +1596,10 @@ describe('preparePendingVtuTransaction strictLookups', () => {
       settingsError: { message: 'timeout' },
     });
 
+    // Single prefix (the RPC wrapper throws raw; prepare adds the
+    // strict context once).
     await expect(prepareStrictAirtime(supabase)).rejects.toThrow(
-      /Failed to load VTU merchant settings/
+      'Failed to load VTU merchant settings: timeout'
     );
   });
 
@@ -1608,5 +1654,210 @@ describe('preparePendingVtuTransaction strictLookups', () => {
         requireCustomer: true,
       })
     ).rejects.toThrow('Merchant not found');
+  });
+});
+
+describe('preparePendingVtuTransaction RPC boundary (Phase 2, #3694)', () => {
+  const RPC_FLAGS = { linkCustomerViaRpc: true, insertViaRpc: true };
+
+  beforeEach(() => {
+    mockGetCurrentSlugForAliasStrict.mockReset();
+    mockGetCurrentSlugForAliasStrict.mockResolvedValue(null);
+  });
+
+  it('loads settings from the projection RPC with merchant+user scope', async () => {
+    const { rpc, supabase } = createMockSupabase();
+
+    await prepareAirtime(supabase, 'mtn', RPC_FLAGS);
+
+    expect(rpc).toHaveBeenCalledWith('get_vtu_checkout_settings', {
+      p_merchant_id: 'merchant-1',
+      p_user_id: 'user-1',
+    });
+  });
+
+  it('resolves the customer via the link RPC without touching customers', async () => {
+    const { from, rpc, supabase } = createMockSupabase();
+
+    const prepared = await prepareAirtime(supabase, 'mtn', RPC_FLAGS);
+
+    expect(rpc).toHaveBeenCalledWith('link_vtu_customer_by_email', {
+      p_merchant_id: 'merchant-1',
+      p_user_id: 'user-1',
+    });
+    expect(prepared.customer?.id).toBe('customer-1');
+    for (const call of (from as ReturnType<typeof vi.fn>).mock.calls) {
+      expect(call[0]).not.toBe('customers');
+    }
+  });
+
+  it('throws Customer-not-found when the link RPC returns zero rows', async () => {
+    const { supabase } = createMockSupabase({ linkRows: [] });
+
+    await expect(prepareAirtime(supabase, 'mtn', RPC_FLAGS)).rejects.toThrow(
+      'Customer account not found for this storefront'
+    );
+  });
+
+  it('throws VTU-disabled when settings are zero rows for a linked customer', async () => {
+    // Zero rows + resolved identity = the merchant genuinely has no
+    // settings row (never a stranger misread).
+    const { supabase } = createMockSupabase({ settingsRows: [] });
+
+    await expect(prepareAirtime(supabase, 'mtn', RPC_FLAGS)).rejects.toThrow(
+      'VTU is not enabled for this merchant'
+    );
+  });
+
+  it('throws Customer-not-found when settings are zero rows for a stranger', async () => {
+    // Identity resolves BEFORE the disabled verdict so strangers get
+    // the customer 404 (parity), not a misleading disabled error.
+    const { supabase } = createMockSupabase({
+      settingsRows: [],
+      linkRows: [],
+    });
+
+    await expect(prepareAirtime(supabase, 'mtn', RPC_FLAGS)).rejects.toThrow(
+      'Customer account not found for this storefront'
+    );
+  });
+
+  it('falls back to VTU-disabled on settings errors when not strict', async () => {
+    // Non-strict parity: today's ignored error reaches the disabled
+    // check via {} — never customer resolution.
+    const { supabase } = createMockSupabase({
+      settingsError: { message: 'timeout' },
+    });
+
+    await expect(
+      prepareAirtime(supabase, 'mtn', {
+        ...RPC_FLAGS,
+        strictLookups: false,
+      })
+    ).rejects.toThrow('VTU is not enabled for this merchant');
+  });
+
+  it('inserts through the RPC with ownership scope and no status param', async () => {
+    // Status is pinned pending server-side: no p_status exists to forge.
+    const { from, rpc, supabase } = createMockSupabase();
+
+    const prepared = await prepareAirtime(supabase, 'mtn', RPC_FLAGS);
+
+    const insertCall = (rpc as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([fn]) => fn === 'insert_prepared_vtu_transaction'
+    );
+    expect(insertCall).toBeDefined();
+    const params = insertCall?.[1] as Record<string, unknown>;
+    expect(params.p_merchant_id).toBe('merchant-1');
+    expect(params.p_customer_id).toBe('customer-1');
+    expect(params.p_user_id).toBe('user-1');
+    expect(params).not.toHaveProperty('p_status');
+    expect(prepared.transaction.id).toBe('vtu-1');
+    for (const call of (from as ReturnType<typeof vi.fn>).mock.calls) {
+      expect(call[0]).not.toBe('vtu_transactions');
+    }
+  });
+
+  it('inserts on the write client while reads stay on the read client', async () => {
+    // Codex P1: the settlement payload is server-computed money,
+    // so the insert RPC is service-role-only — reads (settings,
+    // link) stay on the authenticated client.
+    const user = createMockSupabase();
+    const admin = createMockSupabase();
+
+    await prepareAirtime(user.supabase, 'mtn', {
+      ...RPC_FLAGS,
+      insertSupabase: admin.supabase,
+    });
+
+    const userFns = (user.rpc as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([fn]) => fn
+    );
+    const adminFns = (admin.rpc as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([fn]) => fn
+    );
+    expect(userFns).toContain('get_vtu_checkout_settings');
+    expect(userFns).toContain('link_vtu_customer_by_email');
+    expect(userFns).not.toContain('insert_prepared_vtu_transaction');
+    expect(adminFns).toEqual(['insert_prepared_vtu_transaction']);
+  });
+
+  it('throws before the RPC insert when the link misses', async () => {
+    const { rpc, supabase } = createMockSupabase({ linkRows: [] });
+
+    await expect(prepareAirtime(supabase, 'mtn', RPC_FLAGS)).rejects.toThrow(
+      'Customer account not found for this storefront'
+    );
+    expect(
+      (rpc as ReturnType<typeof vi.fn>).mock.calls.some(
+        ([fn]) => fn === 'insert_prepared_vtu_transaction'
+      )
+    ).toBe(false);
+  });
+
+  it('sends byte-identical payloads through the RPC and direct paths', async () => {
+    // Highest-risk parity proof (Rev 2): the RPC must insert exactly
+    // what the direct insert sent — same input, both paths, mapped
+    // field-for-field (wallet split included).
+    function prepareWithWallet(
+      supabase: PrepareSupabase,
+      flags?: { insertViaRpc?: boolean; linkCustomerViaRpc?: boolean }
+    ) {
+      return preparePendingVtuTransaction({
+        supabase,
+        user: {
+          id: 'user-1',
+          email_confirmed_at: '2026-01-01T00:00:00.000Z',
+          email: 'customer@example.com',
+        } as unknown as Parameters<
+          typeof preparePendingVtuTransaction
+        >[0]['user'],
+        input: {
+          merchantSlug: 'ogabassey',
+          type: 'airtime',
+          amount: 1000,
+          walletAmount: 1000,
+          phoneNumber: '08012345678',
+          networkProvider: 'mtn',
+          source: 'checkout',
+        },
+        source: 'checkout',
+        requireCustomer: true,
+        linkCustomerViaRpc: flags?.linkCustomerViaRpc,
+        insertViaRpc: flags?.insertViaRpc,
+      });
+    }
+
+    const direct = createMockSupabase();
+    await prepareWithWallet(direct.supabase);
+    const directPayload = (direct.insert as ReturnType<typeof vi.fn>).mock
+      .calls[0]?.[0] as Record<string, unknown>;
+
+    const viaRpc = createMockSupabase();
+    await prepareWithWallet(viaRpc.supabase, RPC_FLAGS);
+    const rpcArgs = (viaRpc.rpc as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([fn]) => fn === 'insert_prepared_vtu_transaction'
+    )?.[1] as Record<string, unknown>;
+
+    expect(rpcArgs).toEqual({
+      p_merchant_id: directPayload.merchant_id,
+      p_customer_id: directPayload.customer_id,
+      p_user_id: 'user-1',
+      p_order_id: directPayload.order_id,
+      p_type: directPayload.type,
+      p_network_provider: directPayload.network_provider,
+      p_phone_number: directPayload.phone_number,
+      p_amount: directPayload.amount,
+      p_request_reference: directPayload.request_reference,
+      p_source: directPayload.source,
+      p_platform_commission: directPayload.platform_commission,
+      p_merchant_commission: directPayload.merchant_commission,
+      p_customer_cashback: directPayload.customer_cashback,
+      p_biller_name: directPayload.biller_name,
+      p_biller_item_code: directPayload.biller_item_code,
+      p_customer_identifier: directPayload.customer_identifier,
+      p_customer_name: directPayload.customer_name,
+      p_metadata: directPayload.metadata,
+    });
   });
 });

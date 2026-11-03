@@ -3,127 +3,89 @@ import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWarmAdminTabScreens } from './useWarmAdminTabScreens';
 
+const mocks = vi.hoisted(() => ({ prefetch: vi.fn() }));
+vi.mock('expo-router', () => ({ router: { prefetch: mocks.prefetch } }));
 type TabRoute = BottomTabBarProps['state']['routes'][number];
-
-function TestHarness({
-  activeRouteName,
-  dispatch,
-  routes,
-}: {
-  activeRouteName: string;
-  dispatch: BottomTabBarProps['navigation']['dispatch'];
-  routes: TabRoute[];
-}) {
-  useWarmAdminTabScreens({
-    activeRouteName,
-    navigation: { dispatch } as BottomTabBarProps['navigation'],
-    routes,
-  });
-
+const routes: TabRoute[] = [
+  { key: 'index-key', name: 'index', params: {} },
+  { key: 'orders-key', name: 'orders', params: { status: 'open' } },
+  { key: 'products-key', name: 'products', params: {} },
+];
+function Harness({ activeRouteName }: { activeRouteName: string }) {
+  useWarmAdminTabScreens({ activeRouteName, routes });
   return null;
 }
 
-function createRoutes(): TabRoute[] {
-  return [
-    { key: 'index-key', name: 'index', params: {} },
-    { key: 'orders-key', name: 'orders', params: { status: 'open' } },
-    { key: 'products-key', name: 'products', params: {} },
-  ] as TabRoute[];
-}
-
 describe('useWarmAdminTabScreens', () => {
-  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
-  const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
   let frameCallbacks: FrameRequestCallback[];
-
-  const flushAnimationFrameBatch = (timestamp: number) => {
-    frameCallbacks.splice(0).forEach((callback) => {
-      callback(timestamp);
-    });
-  };
-
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     frameCallbacks = [];
-    globalThis.requestAnimationFrame = vi.fn((callback) => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       frameCallbacks.push(callback);
       return frameCallbacks.length;
     });
-    globalThis.cancelAnimationFrame = vi.fn();
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
   });
-
   afterEach(() => {
     vi.useRealTimers();
-    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
-    globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    vi.unstubAllGlobals();
   });
-
-  it('preloads inactive admin tabs after the first paint settles', () => {
-    const dispatch = vi.fn();
-
-    render(
-      <TestHarness
-        activeRouteName="index"
-        dispatch={dispatch}
-        routes={createRoutes()}
-      />
-    );
-
-    expect(dispatch).not.toHaveBeenCalled();
-
-    flushAnimationFrameBatch(0);
-    flushAnimationFrameBatch(16);
+  const flush = () => {
+    frameCallbacks.splice(0).forEach((callback) => {
+      callback(0);
+    });
+    frameCallbacks.splice(0).forEach((callback) => {
+      callback(16);
+    });
     vi.runOnlyPendingTimers();
-
-    expect(dispatch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        payload: { name: 'orders', params: { status: 'open' } },
-        type: 'PRELOAD',
-      })
-    );
-    expect(dispatch).toHaveBeenCalledWith(
-      expect.objectContaining({
-        payload: { name: 'products', params: {} },
-        type: 'PRELOAD',
-      })
-    );
-    expect(dispatch).toHaveBeenCalledTimes(2);
+  };
+  it('prefetches inactive admin tabs after the first paint settles', () => {
+    render(<Harness activeRouteName="index" />);
+    expect(mocks.prefetch).not.toHaveBeenCalled();
+    flush();
+    expect(mocks.prefetch).toHaveBeenCalledWith({
+      pathname: '/(admin)/(tabs)/orders',
+      params: { status: 'open' },
+    });
+    expect(mocks.prefetch).toHaveBeenCalledTimes(1);
   });
-
-  it('does not warm the active tab or already warmed route keys twice', () => {
-    const dispatch = vi.fn();
-    const { rerender } = render(
-      <TestHarness
-        activeRouteName="index"
-        dispatch={dispatch}
-        routes={createRoutes()}
-      />
-    );
-
-    flushAnimationFrameBatch(0);
-    flushAnimationFrameBatch(16);
-    vi.runOnlyPendingTimers();
-    expect(dispatch).toHaveBeenCalledTimes(2);
-
-    rerender(
-      <TestHarness
-        activeRouteName="orders"
-        dispatch={dispatch}
-        routes={createRoutes()}
-      />
-    );
-
-    flushAnimationFrameBatch(32);
-    flushAnimationFrameBatch(48);
-    vi.runOnlyPendingTimers();
-
-    expect(dispatch).toHaveBeenCalledTimes(3);
-    expect(dispatch).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        payload: { name: 'index', params: {} },
-        type: 'PRELOAD',
-      })
-    );
+  it('does not prefetch active or already warmed routes again', () => {
+    const { rerender } = render(<Harness activeRouteName="index" />);
+    flush();
+    expect(mocks.prefetch).toHaveBeenCalledTimes(1);
+    rerender(<Harness activeRouteName="orders" />);
+    flush();
+    expect(mocks.prefetch).toHaveBeenCalledTimes(2);
+    expect(mocks.prefetch).toHaveBeenLastCalledWith({
+      pathname: '/(admin)/(tabs)/index',
+      params: {},
+    });
+  });
+  it('does not prefetch after the tab bar unmounts', () => {
+    const { unmount } = render(<Harness activeRouteName="index" />);
+    unmount();
+    flush();
+    expect(mocks.prefetch).not.toHaveBeenCalled();
+  });
+  it('retries a synchronous prefetch failure on the next tab change', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mocks.prefetch.mockImplementationOnce(() => {
+      throw new Error('unavailable');
+    });
+    const { rerender } = render(<Harness activeRouteName="index" />);
+    flush();
+    expect(mocks.prefetch).toHaveBeenCalledTimes(1);
+    rerender(<Harness activeRouteName="products" />);
+    flush();
+    rerender(<Harness activeRouteName="index" />);
+    flush();
+    expect(mocks.prefetch).toHaveBeenLastCalledWith({
+      pathname: '/(admin)/(tabs)/orders',
+      params: { status: 'open' },
+    });
+    expect(mocks.prefetch).toHaveBeenCalledTimes(3);
+    warn.mockRestore();
   });
 });

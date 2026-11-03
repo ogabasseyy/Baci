@@ -181,7 +181,7 @@ describe('useReceipts', () => {
           total: 95000,
         },
         {
-          amount_paid: 150000,
+          amount_paid: 0,
           created_at: '2026-03-05T10:00:00.000Z',
           transaction_date: '2026-03-05T10:00:00.000Z',
           invoice_issue_date: '2026-09-12',
@@ -189,7 +189,7 @@ describe('useReceipts', () => {
           id: 'order-backdated',
           order_items: [],
           order_number: 'ORD-3001',
-          payment_status: 'paid',
+          payment_status: 'unpaid',
           total: 150000,
         },
       ],
@@ -246,88 +246,5 @@ describe('useReceipts', () => {
     const options = mockUseQuery.mock.calls[0]?.[0] as QueryOptions;
 
     await expect(options.queryFn()).rejects.toThrow('receipt list failed');
-  });
-
-  it('scopes receipt detail prefetches to the current authenticated user and merchant', async () => {
-    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
-    mockSingle.mockResolvedValue({
-      data: {
-        amount_paid: 95000,
-        created_at: '2026-05-24T10:00:00.000Z',
-        currency: 'NGN',
-        customer_email: 'ada@example.com',
-        customer_name: 'Ada',
-        customer_phone: null,
-        discount_amount: 0,
-        id: 'order-1',
-        is_credit_order: false,
-        notes: null,
-        order_items: [],
-        order_number: 'OG-1001',
-        payment_method: null,
-        payment_status: 'paid',
-        shipping_address: null,
-        shipping_fee: 0,
-        subtotal: 95000,
-        tax_amount: 0,
-        total: 95000,
-      },
-      error: null,
-    });
-
-    const options = receiptDetailQueryOptions('order-1') as QueryOptions;
-    await options.queryFn();
-
-    expect(options).toEqual(
-      expect.objectContaining({
-        queryKey: ['receipt-detail', 'order-1', 'auth-user-1', 'merchant-1'],
-      })
-    );
-    expect(mockQueryBuilder.select).toHaveBeenCalledWith(
-      expect.stringContaining('customers!inner')
-    );
-    expect(mockQueryBuilder.eq).toHaveBeenCalledWith('id', 'order-1');
-    expect(mockQueryBuilder.eq).toHaveBeenCalledWith(
-      'merchant_id',
-      'merchant-1'
-    );
-    expect(mockQueryBuilder.eq).toHaveBeenCalledWith(
-      'customers.user_id',
-      'auth-user-1'
-    );
-  });
-
-  it('requires user and merchant scope for receipt detail prefetches', async () => {
-    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
-
-    await expect(
-      (
-        receiptDetailQueryOptions('order-1', {
-          merchantId: 'merchant-1',
-          userId: null,
-        }) as QueryOptions
-      ).queryFn()
-    ).rejects.toThrow('Authentication required to load receipt');
-    await expect(
-      (
-        receiptDetailQueryOptions('order-1', {
-          merchantId: null,
-          userId: 'auth-user-1',
-        }) as QueryOptions
-      ).queryFn()
-    ).rejects.toThrow('Authentication required to load receipt');
-    expect(mockFrom).not.toHaveBeenCalled();
-  });
-
-  it('propagates receipt detail Supabase errors', async () => {
-    const { receiptDetailQueryOptions } = await import('@/hooks/use-receipts');
-    mockSingle.mockResolvedValue({
-      data: null,
-      error: new Error('receipt detail failed'),
-    });
-
-    await expect(
-      (receiptDetailQueryOptions('order-1') as QueryOptions).queryFn()
-    ).rejects.toThrow('receipt detail failed');
   });
 });

@@ -18,6 +18,11 @@ describe('order-details.formatters', () => {
     expect(formatOrderDetailsPrice(12500, 'not-a-currency')).toContain('₦');
   });
 
+  it('shows kobo with two digits instead of one', () => {
+    expect(formatOrderDetailsPrice(48500.4, 'NGN')).toBe('₦48,500.40');
+    expect(formatOrderDetailsPrice(44850, 'NGN')).toBe('₦44,850');
+  });
+
   it('preserves a single decimal point in currency input', () => {
     expect(parseOrderDetailsCurrencyInput('₦12,500.00')).toBe('12500.00');
     expect(parseOrderDetailsCurrencyInput('₦1.2.3')).toBe('1.23');

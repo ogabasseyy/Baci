@@ -9,6 +9,10 @@ const VERDICT_MESSAGES = {
     "CAUTION - Find My iPhone is ON. You cannot reset this device without the owner's Apple ID. Ensure seller disables it before purchase.",
   icloudStatusIssue:
     'DO NOT BUY - iCloud status indicates this device may be marked lost or locked. Do not proceed without official proof.',
+  financeUnknown:
+    'CAUTION - The finance status is unclear. Verify it before buying.',
+  financeIssue:
+    'CAUTION - The report indicates a finance balance or overdue payment. Confirm the account is clear before buying.',
   incomplete:
     'INCOMPLETE DATA - Could not verify all device information. Proceed with caution.',
   mdmLocked:
@@ -92,6 +96,8 @@ export function hasRiskToken(
 }
 
 export function buildVerdict({
+  hasFinanceIssue,
+  hasFinanceUnknown,
   hasIcloudLockOn,
   hasIcloudStatusIssue,
   hasKnoxGuardIssue,
@@ -102,6 +108,8 @@ export function buildVerdict({
   isSimLocked,
   status,
 }: {
+  hasFinanceIssue?: boolean;
+  hasFinanceUnknown?: boolean;
   hasIcloudLockOn: boolean;
   hasIcloudStatusIssue: boolean;
   hasKnoxGuardIssue: boolean;
@@ -149,6 +157,14 @@ export function buildVerdict({
       text: VERDICT_MESSAGES.miAccountLocked,
       type: 'caution',
     };
+  }
+
+  if (hasFinanceIssue) {
+    return { text: VERDICT_MESSAGES.financeIssue, type: 'caution' };
+  }
+
+  if (hasFinanceUnknown) {
+    return { text: VERDICT_MESSAGES.financeUnknown, type: 'caution' };
   }
 
   if (isSimLocked) {

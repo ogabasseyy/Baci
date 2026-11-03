@@ -3,6 +3,7 @@ SET LOCAL TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
 CREATE FUNCTION pg_temp.assert_true(condition boolean, message text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN IF condition IS DISTINCT FROM true THEN RAISE EXCEPTION '%', message; END IF; END $$;
+GRANT EXECUTE ON FUNCTION pg_temp.assert_true(boolean, text) TO PUBLIC; -- called after SET ROLE
 
 INSERT INTO auth.users(id) VALUES ('94000000-0000-4000-8000-000000000003');
 INSERT INTO public.merchants(id,email,business_name,slug) VALUES

@@ -11,11 +11,13 @@ import { asRoute } from '@/lib/routes';
 interface GoogleAnalyticsSettings {
   google_analytics_id: string | null;
   ga4_api_secret: string | null;
+  ga4_api_secret_configured: boolean;
 }
 
 const SETTINGS_KEYS: (keyof GoogleAnalyticsSettings)[] = [
   'google_analytics_id',
   'ga4_api_secret',
+  'ga4_api_secret_configured',
 ];
 
 export default function GoogleAnalyticsPage() {
@@ -28,7 +30,7 @@ export default function GoogleAnalyticsPage() {
   const handleSave = async (measurementId: string, apiSecret: string) => {
     await saveSettings({
       google_analytics_id: measurementId || null,
-      ga4_api_secret: apiSecret || null,
+      ...(apiSecret.trim() ? { ga4_api_secret: apiSecret.trim() } : {}),
     });
   };
 
@@ -57,7 +59,8 @@ export default function GoogleAnalyticsPage() {
       <TrackingPixelSection
         platform="Google Analytics 4"
         pixelId={settings?.google_analytics_id || ''}
-        accessToken={settings?.ga4_api_secret || ''}
+        tokenConfigured={settings?.ga4_api_secret_configured === true}
+        onDisconnect={() => saveSettings({ ga4_api_secret: null })}
         pixelLabel="Measurement ID (G-XXXXXXXXXX)"
         tokenLabel="API Secret (Optional)"
         onSave={handleSave}

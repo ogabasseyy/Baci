@@ -5,13 +5,12 @@ import {
 } from './checkout-page-bnpl.test-support';
 import {
   act,
-  CheckoutPage,
   expect,
   fireEvent,
   it,
   mockCaptureClientEvent,
   openCredPalCheckout,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   toast,
   useCart,
@@ -72,7 +71,7 @@ it('shows Klump in installment checkout when the merchant enables it', async () 
     json: async () => ({}),
   } as Response);
 
-  render(<CheckoutPage />);
+  renderCheckoutWithStoreRates();
 
   fireEvent.click(screen.getByRole('button', { name: /pay in installments/i }));
 
@@ -131,7 +130,7 @@ it('hides Klump in installment checkout when the merchant disables it', async ()
     json: async () => ({}),
   } as Response);
 
-  render(<CheckoutPage />);
+  renderCheckoutWithStoreRates();
 
   expect(
     screen.queryByRole('button', { name: /pay in installments/i })

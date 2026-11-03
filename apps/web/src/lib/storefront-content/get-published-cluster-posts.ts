@@ -17,7 +17,7 @@ type StorefrontClusterGuideDatabase = {
     Tables: Record<string, never>;
     Views: Record<string, never>;
     Functions: {
-      get_storefront_cluster_guide_candidates_v1: {
+      get_storefront_cluster_guide_candidates_v2: {
         Args: {
           p_category_slug: string;
           p_cluster_rules: ReturnType<
@@ -86,7 +86,7 @@ export async function getPublishedClusterPosts(
   }) as SupabaseClient<StorefrontClusterGuideDatabase>;
   const request = buildStorefrontClusterGuideRequest(context);
   const guideQuery = supabase
-    .rpc('get_storefront_cluster_guide_candidates_v1', {
+    .rpc('get_storefront_cluster_guide_candidates_v2', {
       p_category_slug: request.p_category_slug,
       p_cluster_rules: request.p_cluster_rules,
       p_merchant_id: merchantId,

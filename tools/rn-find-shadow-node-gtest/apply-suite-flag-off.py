@@ -22,6 +22,14 @@ def main() -> int:
         return 2
     path = pathlib.Path(sys.argv[1])
     text = path.read_text(encoding="utf-8")
+    # RN 0.88 removed the flag; the upstream stress suite now covers the default.
+    if "fixFindShadowNodeByTagRaceCondition" not in text:
+        if "class FindShadowNodeByTagTest" in text and "ConcurrentFindAndCommitStress" in text:
+            print(f"ok: upstream unconditional ownership suite in {path}")
+            return 0
+        print(f"error: unrecognized ownership suite in {path}", file=sys.stderr)
+        return 1
+
     if MARKER in text and re.search(
         r"bool fixFindShadowNodeByTagRaceCondition\(\) override \{\s*"
         + re.escape(MARKER)

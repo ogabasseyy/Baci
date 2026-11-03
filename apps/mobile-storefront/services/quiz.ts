@@ -89,10 +89,12 @@ export async function fetchQuizEvents(
       quizEventsResponseSchema,
       options
     );
+    const receivedAtMs = Date.now();
     events.push(
       ...payload.events.map((event) => ({
         ...event,
         serverNow: payload.serverNow,
+        serverNowReceivedAtMs: receivedAtMs,
       }))
     );
 

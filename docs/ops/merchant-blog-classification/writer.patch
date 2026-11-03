@@ -1,0 +1,983 @@
+diff --git a/codex_content_agent/content_inventory.py b/codex_content_agent/content_inventory.py
+index 1e8f817b37..752d40fa3f 100644
+--- a/codex_content_agent/content_inventory.py
++++ b/codex_content_agent/content_inventory.py
+@@ -177,13 +177,17 @@ def main() -> int:
+     client = create_client(os.environ["SUPABASE_URL"], os.environ["SUPABASE_SERVICE_KEY"])
+     rows = load_inventory(
+         client.table("blog_posts")
+-        .select("id,title,slug,status,category,created_at,updated_at,published_at,intent,intent_source")
++        .select("id,title,slug,status,category,created_at,updated_at,published_at,intent,intent_source,classification_revision")
+         .eq("merchant_id", merchant)
+         .order("id")
+     )
++    from codex_content_agent.merchant_blog_classification import overlay_inventory
++
++    rows, classification_coverage = overlay_inventory(rows, merchant_id=merchant)
+     report = {
+         **summarize_inventory(rows, now=dt.datetime.now(dt.timezone.utc)),
+         "merchant_id": merchant,
++        "merchant_classification_coverage": classification_coverage,
+     }
+     now = dt.datetime.now(dt.timezone.utc)
+     report["release_workqueue"] = load_release_workqueue(
+diff --git a/codex_content_agent/merchant_blog_classification.py b/codex_content_agent/merchant_blog_classification.py
+new file mode 100644
+index 0000000000..0d628cc79a
+--- /dev/null
++++ b/codex_content_agent/merchant_blog_classification.py
+@@ -0,0 +1,300 @@
++"""Separate merchant blog taxonomy, written only through authenticated RPCs."""
++from __future__ import annotations
++
++import base64
++import hashlib
++import json
++import os
++import urllib.parse
++import urllib.error
++import urllib.request
++from pathlib import Path
++from typing import Any, Mapping
++
++CLASSIFIER_VERSION = "receipt-task-v1"
++TASK_INTENTS = {
++    "news": "news",
++    "comparison": "comparison",
++    "repair_support": "repair-guide",
++    "product_support": "buying-guide",
++}
++ALLOWED_INTENTS = frozenset({"news", "comparison", "repair-guide", "buying-guide"})
++ALLOWED_SOURCES = frozenset({"merchant_declared", "verified_receipt", "reviewed"})
++
++
++def intent_for_task(task_type: str) -> str | None:
++    return TASK_INTENTS.get(str(task_type or "").strip())
++
++
++def _decode_jwt_role(token: str) -> str | None:
++    try:
++        payload = token.split(".")[1]
++        payload += "=" * (-len(payload) % 4)
++        value = json.loads(base64.urlsafe_b64decode(payload.encode("ascii")))
++    except (IndexError, ValueError, TypeError, json.JSONDecodeError):
++        return None
++    return value.get("role") if isinstance(value, dict) else None
++
++
++def classification_credentials(
++    *, env: Mapping[str, str] | None = None, token_file: str | Path | None = None
++) -> dict[str, str] | None:
++    values = os.environ if env is None else env
++    url = str(values.get("SUPABASE_URL") or "").strip().rstrip("/")
++    key = str(values.get("SUPABASE_ANON_KEY") or values.get("SUPABASE_PUBLISHABLE_KEY") or "").strip()
++    token_path = token_file or values.get("MERCHANT_CLASSIFICATION_ACCESS_TOKEN_FILE")
++    try:
++        parsed_url = urllib.parse.urlsplit(url)
++    except ValueError:
++        return None
++    if (parsed_url.scheme != "https" or not parsed_url.hostname or parsed_url.username
++            or parsed_url.password or parsed_url.query or parsed_url.fragment):
++        return None
++    if (not url or not key or not token_path or key.startswith("sb_secret_")
++            or _decode_jwt_role(key) in {"service_role", "supabase_admin"}):
++        return None
++    try:
++        token = Path(token_path).read_text(encoding="utf-8").strip()
++    except OSError:
++        return None
++    if not token or _decode_jwt_role(token) != "authenticated":
++        return None
++    return {"url": url, "key": key, "token": token}
++
++
++def effective_classification(
++    row: dict[str, Any], classification: dict[str, Any] | None
++) -> dict[str, Any]:
++    result = dict(row)
++    current = classification if isinstance(classification, dict) else {}
++    classification_fields = ("intent", "source", "taxonomy_version", "classifier_version", "classified_at")
++    has_classification = any(current.get(field) is not None for field in classification_fields)
++    state = "missing"
++    if current.get("stale_at") is not None:
++        state = "stale"
++    elif current and has_classification:
++        state = "invalid"
++    valid = (
++        bool(current)
++        and has_classification
++        and current.get("stale_at") is None
++        and current.get("post_id") == row.get("id")
++        and current.get("stale_at") is None
++        and current.get("intent") in ALLOWED_INTENTS
++        and current.get("source") in ALLOWED_SOURCES
++        and current.get("taxonomy_version") == 1
++        and bool(str(current.get("classifier_version") or "").strip())
++    )
++    if valid:
++        revision = current.get("post_revision")
++        inventory_revision = row.get("classification_revision")
++        if not isinstance(revision, str) or not revision or not isinstance(inventory_revision, str) or not inventory_revision:
++            valid, state = False, "revision_unknown"
++        elif revision != inventory_revision:
++            valid, state = False, "stale_revision"
++        else:
++            state = "current"
++    result.update(
++        {
++            "effective_intent": current.get("intent") if valid else None,
++            "effective_intent_source": current.get("source") if valid else None,
++            "effective_intent_version": current.get("taxonomy_version") if valid else None,
++            "effective_intent_classifier_version": current.get("classifier_version") if valid else None,
++            "effective_intent_classified_at": current.get("classified_at") if valid else None,
++            "effective_intent_status": state,
++        }
++    )
++    return result
++
++
++def overlay_inventory(rows: list[dict[str, Any]], *, merchant_id: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
++    credentials = classification_credentials()
++    if credentials is None:
++        return [effective_classification(row, None) for row in rows], {
++            "status": "unavailable", "reason": "auth_not_configured", "classified_rows": 0,
++        }
++    try:
++        by_id: dict[str, dict[str, Any]] = {}
++        ids = [str(row.get("id") or "") for row in rows if row.get("id")]
++        for start in range(0, len(ids), 200):
++            for item in fetch_inventory_snapshot(credentials, merchant_id, ids[start:start + 200]):
++                if isinstance(item, dict) and item.get("post_id"):
++                    by_id[str(item["post_id"])] = item
++        result = [effective_classification(row, by_id.get(str(row.get("id") or ""))) for row in rows]
++        counts: dict[str, int] = {}
++        for item in result:
++            state = str(item.get("effective_intent_status") or "missing")
++            counts[state] = counts.get(state, 0) + 1
++        return result, {"status": "available", "classified_rows": sum(bool(item.get("effective_intent")) for item in result),
++                        "coverage_by_status": counts}
++    except (OSError, ValueError, RuntimeError, urllib.error.URLError, urllib.error.HTTPError) as error:
++        return [effective_classification(row, None) for row in rows], {
++            "status": "unavailable", "reason": type(error).__name__, "classified_rows": 0,
++        }
++
++
++def _rpc(credentials: dict[str, str], name: str, payload: dict[str, Any]) -> Any:
++    request = urllib.request.Request(
++        f"{credentials['url']}/rest/v1/rpc/{name}",
++        data=json.dumps(payload).encode("utf-8"),
++        headers={
++            "apikey": credentials["key"],
++            "Authorization": f"Bearer {credentials['token']}",
++            "Content-Type": "application/json",
++        },
++        method="POST",
++    )
++    opener = urllib.request.build_opener(_NoRedirectHandler)
++    with opener.open(request, timeout=20) as response:
++        return json.loads(response.read().decode("utf-8"))
++
++
++class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
++    def redirect_request(self, req: Any, fp: Any, code: int, msg: str,
++                         headers: Any, newurl: str) -> None:
++        return None
++
++
++def fetch_classification_context(
++    credentials: dict[str, str], merchant_id: str, post_ids: list[str]
++) -> list[dict[str, Any]]:
++    if not post_ids or len(post_ids) > 20:
++        raise ValueError("classification context requests must contain 1 to 20 post IDs")
++    result = _rpc(credentials, "get_merchant_blog_classification_context_v1", {
++        "p_merchant_id": merchant_id, "p_post_ids": post_ids,
++    })
++    if not isinstance(result, list):
++        raise ValueError("classification context returned invalid rows")
++    return result
++
++
++def fetch_inventory_snapshot(
++    credentials: dict[str, str], merchant_id: str, post_ids: list[str]
++) -> list[dict[str, Any]]:
++    if not post_ids or len(post_ids) > 200:
++        raise ValueError("inventory classification requests must contain 1 to 200 post IDs")
++    result = _rpc(credentials, "get_merchant_blog_classification_snapshot_v1", {
++        "p_merchant_id": merchant_id, "p_post_ids": post_ids,
++    })
++    if not isinstance(result, list):
++        raise ValueError("classification snapshot returned invalid rows")
++    return result
++
++
++def set_classification(
++    credentials: dict[str, str], *, merchant_id: str, post_id: str, intent: str,
++    fingerprint: str, evidence_sha256: str, source: str = "verified_receipt",
++) -> dict[str, Any]:
++    result = _rpc(credentials, "set_merchant_blog_classification_v1", {
++        "p_merchant_id": merchant_id, "p_post_id": post_id, "p_intent": intent,
++        "p_expected_fingerprint": fingerprint, "p_classifier_version": CLASSIFIER_VERSION,
++        "p_evidence_sha256": evidence_sha256, "p_source": source,
++    })
++    if not isinstance(result, dict):
++        raise ValueError("classification write returned invalid result")
++    if (result.get("status") != "current" or result.get("post_id") != post_id
++            or result.get("intent") != intent):
++        raise ValueError("classification write did not confirm the requested current result")
++    return result
++
++
++def propose_receipt_classification(receipt_path: Path, *, merchant_id: str) -> dict[str, Any]:
++    """Validate receipt and release artifacts; never treats receipt fields as authority alone."""
++    from codex_content_agent.editorial_release_controller import _load_artifacts
++    from codex_content_agent.release_policy import _receipt_matches_draft_contract
++    from codex_content_agent.release_receipt import load_valid_release_receipt
++
++    receipt = load_valid_release_receipt(receipt_path)
++    if receipt.get("merchant_id") != merchant_id:
++        return {"status": "rejected", "reason": "wrong_merchant"}
++    artifacts = _load_artifacts(receipt_path, receipt)
++    if not artifacts.get("valid"):
++        return {"status": "rejected", "reason": "artifact_integrity_failed"}
++    draft = artifacts.get("draft")
++    if not isinstance(draft, dict) or str(receipt_path.parent.name) != str(receipt.get("run_id")):
++        return {"status": "rejected", "reason": "post_contract_mismatch"}
++    task_type = str(draft.get("task_type") or "")
++    intent = intent_for_task(task_type)
++    if intent is None:
++        return {"status": "rejected", "reason": "unsupported_task"}
++    if task_type != receipt.get("task_type") or not _receipt_matches_draft_contract(receipt, draft, task_type):
++        return {"status": "rejected", "reason": "post_contract_mismatch"}
++    evidence = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
++    return {
++        "status": "proposed", "post_id": receipt["post_id"], "merchant_id": merchant_id,
++        "intent": intent, "evidence_sha256": evidence, "receipt_path": str(receipt_path),
++    }
++
++
++def _receipt_digest_matches(receipt_path: Path, expected_sha256: str) -> bool:
++    try:
++        return hashlib.sha256(receipt_path.read_bytes()).hexdigest() == expected_sha256
++    except OSError:
++        return False
++
++
++def _load_approved_receipt_artifacts(
++    receipt_path: Path, *, proposal: dict[str, Any], merchant_id: str
++) -> tuple[dict[str, Any] | None, dict[str, Any] | None, str | None]:
++    """Reconfirm the exact receipt approved before network context was fetched."""
++    from codex_content_agent.editorial_release_controller import _load_artifacts
++    from codex_content_agent.release_receipt import load_valid_release_receipt
++
++    expected_sha256 = str(proposal.get("evidence_sha256") or "")
++    if not expected_sha256 or not _receipt_digest_matches(receipt_path, expected_sha256):
++        return None, None, "receipt_changed"
++    try:
++        receipt = load_valid_release_receipt(receipt_path)
++    except (OSError, ValueError):
++        return None, None, "receipt_changed"
++    if not _receipt_digest_matches(receipt_path, expected_sha256):
++        return None, None, "receipt_changed"
++    if (receipt.get("merchant_id") != merchant_id
++            or receipt.get("post_id") != proposal.get("post_id")
++            or intent_for_task(str(receipt.get("task_type") or "")) != proposal.get("intent")):
++        return None, None, "post_contract_mismatch"
++    artifacts = _load_artifacts(receipt_path, receipt)
++    if not _receipt_digest_matches(receipt_path, expected_sha256):
++        return None, None, "receipt_changed"
++    if not artifacts.get("valid"):
++        return receipt, None, "artifact_integrity_failed"
++    return receipt, artifacts, None
++
++
++def classify_after_publish(receipt_path: Path, *, merchant_id: str, post_slug: str = "") -> dict[str, Any]:
++    """Best-effort post-publication classification; never raises into publish success."""
++    credentials = classification_credentials()
++    if credentials is None:
++        return {"status": "unavailable", "reason": "auth_not_configured"}
++    try:
++        proposal = propose_receipt_classification(receipt_path, merchant_id=merchant_id)
++        if proposal.get("status") != "proposed":
++            return proposal
++        context_rows = fetch_classification_context(credentials, merchant_id, [proposal["post_id"]])
++        row = next((item for item in context_rows if item.get("post_id") == proposal["post_id"]), None)
++        if not row or not row.get("input_fingerprint"):
++            return {"status": "unavailable", "reason": "context_missing"}
++        from codex_content_agent.release_policy import _draft_matches_current_post
++        _receipt, artifacts, receipt_error = _load_approved_receipt_artifacts(
++            receipt_path, proposal=proposal, merchant_id=merchant_id
++        )
++        if receipt_error:
++            return {"status": "rejected", "reason": receipt_error}
++        if not artifacts or not _draft_matches_current_post(
++            artifacts.get("draft", {}),
++            {"slug": row.get("slug"), "title": row.get("title"),
++             "category": row.get("category"), "content": row.get("content")},
++        ):
++            return {"status": "rejected", "reason": "current_post_mismatch"}
++        if not _receipt_digest_matches(receipt_path, str(proposal.get("evidence_sha256") or "")):
++            return {"status": "rejected", "reason": "receipt_changed"}
++        result = set_classification(
++            credentials, merchant_id=merchant_id, post_id=proposal["post_id"],
++            intent=proposal["intent"], fingerprint=row["input_fingerprint"],
++            evidence_sha256=proposal["evidence_sha256"],
++        )
++        from codex_content_agent.blog_revalidation import revalidate_blog_cache
++        revalidation = revalidate_blog_cache([post_slug or str(row.get("slug") or "")])
++        return {"status": "classified", "result": result, "revalidation": revalidation}
++    except (OSError, ValueError, RuntimeError, urllib.error.URLError, urllib.error.HTTPError) as error:
++        return {"status": "unavailable", "reason": type(error).__name__}
+diff --git a/codex_content_agent/outcome_dashboard.py b/codex_content_agent/outcome_dashboard.py
+index b56a3e9cfc..b241833be5 100644
+--- a/codex_content_agent/outcome_dashboard.py
++++ b/codex_content_agent/outcome_dashboard.py
+@@ -2,6 +2,7 @@
+
+ from __future__ import annotations
+ import argparse
++import hashlib
+ import datetime as dt
+ import json
+ import os
+@@ -54,11 +55,30 @@ def blog_url(post: dict[str, Any]) -> str:
+
+
+ def _dimension(post: dict[str, Any], name: str) -> tuple[str, str]:
+-    value = str(post.get(name) or "").strip()
+-    source = str(post.get(f"{name}_source") or f"blog_posts.{name}")
++    effective = name == "intent" and post.get("effective_intent")
++    value = str(post.get("effective_intent") if effective else post.get(name) or "").strip()
++    source = str(post.get("effective_intent_source") if effective else post.get(f"{name}_source") or f"blog_posts.{name}")
+     return (value, source) if value else ("unknown", "unavailable")
+
+
++def _classification_signature(posts: list[dict[str, Any]]) -> str:
++    records = [
++        {
++            "post_id": str(post.get("id") or ""),
++            "intent": post.get("effective_intent"),
++            "source": post.get("effective_intent_source"),
++            "taxonomy_version": post.get("effective_intent_version"),
++            "classifier_version": post.get("effective_intent_classifier_version"),
++            "classified_at": post.get("effective_intent_classified_at"),
++            "status": post.get("effective_intent_status", "unobserved"),
++        }
++        for post in posts
++    ]
++    records.sort(key=lambda item: item["post_id"])
++    payload = json.dumps(records, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
++    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
++
++
+ def _eligible(posts: list[dict[str, Any]], days: int, through: dt.date) -> list[dict[str, Any]]:
+     result = []
+     for post in posts:
+@@ -75,8 +95,8 @@ def _eligible(posts: list[dict[str, Any]], days: int, through: dt.date) -> list[
+
+
+ def _metrics(rows: list[dict[str, Any]]) -> dict[str, float | int | None]:
+-    clicks = sum(float(row.get("clicks") or 0) for row in rows)
+-    impressions = sum(float(row.get("impressions") or 0) for row in rows)
++    clicks = float(sum(float(row.get("clicks") or 0) for row in rows))
++    impressions = float(sum(float(row.get("impressions") or 0) for row in rows))
+     weighted = sum(
+         float(row.get("position") or 0) * float(row.get("impressions") or 0) for row in rows
+     )
+@@ -125,7 +145,7 @@ def build_outcome_dashboard(
+     cache = _scoped_cache(cache, site_url)
+     through = now.astimezone(GSC_TZ).date() - dt.timedelta(days=DATA_LAG_DAYS)
+     report: dict[str, Any] = {
+-        "schema_version": "content-outcome-dashboard-v2",
++        "schema_version": "content-outcome-dashboard-v3",
+         "generated_at": now.astimezone(dt.timezone.utc).isoformat(),
+         "measurement": {
+             "property": site_url,
+@@ -166,6 +186,8 @@ def build_outcome_dashboard(
+                 "status": "unavailable",
+                 "reason": "Page totals use page-only data. No bounded verified page-query export is configured; query dimensions suppress anonymized queries.",
+             },
++            "intent_basis": "current_classification_at_report_time",
++            "intent_cohort_comparison": "Compare cohorts across reports only when classification_signature matches.",
+         },
+         "query": {"status": query_status, "reason": query_reason},
+         "cohorts": [],
+@@ -205,8 +227,10 @@ def build_outcome_dashboard(
+                     "intent": intent,
+                     "dimension_sources": {
+                         "brand": _dimension(group[0], "brand")[1],
+-                        "intent": _dimension(group[0], "intent")[1],
++                        "intent": sorted({_dimension(post, "intent")[1] for post in group}),
++                        "intent_versions": sorted({str(post.get("effective_intent_version")) for post in group if post.get("effective_intent_version") is not None}),
+                     },
++                    "classification_signature": _classification_signature(group),
+                     "article_count": len(group),
+                     "visibility_status": "measured" if measured else "analytics_unavailable",
+                     "metrics": _metrics(selected) if measured else None,
+diff --git a/codex_content_agent/publisher.py b/codex_content_agent/publisher.py
+index f2ca9a1cd9..e4f79e5363 100644
+--- a/codex_content_agent/publisher.py
++++ b/codex_content_agent/publisher.py
+@@ -635,12 +635,22 @@ def main() -> None:
+         decision_source=decision_source,
+     )
+     if str(result.get("id") or "").strip():
+-        write_release_receipt(
++        receipt_path = write_release_receipt(
+             run_dir,
+             post=result,
+             draft_path=draft_path,
+             merchant_id=args.merchant_id,
+         )
++        # This taxonomy is an optional post-publish overlay. It must never turn
++        # a successful article write into a failed publication result.
++        try:
++            from codex_content_agent.merchant_blog_classification import classify_after_publish
++
++            result["classification"] = classify_after_publish(
++                receipt_path, merchant_id=args.merchant_id, post_slug=str(result.get("slug") or "")
++            )
++        except Exception as error:
++            result["classification"] = {"status": "unavailable", "reason": type(error).__name__}
+     print(result)
+
+
+diff --git a/scripts/backfill_merchant_blog_classifications.py b/scripts/backfill_merchant_blog_classifications.py
+new file mode 100644
+index 0000000000..f0ad436487
+--- /dev/null
++++ b/scripts/backfill_merchant_blog_classifications.py
+@@ -0,0 +1,105 @@
++"""Dry-run-first validation/apply of authenticated merchant article classifications."""
++from __future__ import annotations
++
++import argparse
++import json
++import os
++from pathlib import Path
++from typing import Any
++
++from codex_content_agent.merchant_blog_classification import (
++    _load_approved_receipt_artifacts,
++    _receipt_digest_matches,
++    classification_credentials,
++    fetch_classification_context,
++    propose_receipt_classification,
++    set_classification,
++)
++
++
++def run(run_root: Path, *, merchant_id: str, apply: bool = False, limit: int = 200) -> dict[str, Any]:
++    credentials = classification_credentials()
++    if credentials is None:
++        return {"status": "unavailable", "reason": "auth_not_configured", "receipt_count": 0,
++                "applied_count": 0, "rejected_count": 0, "unavailable_count": 1,
++                "proposals": []}
++    receipt_paths = sorted(run_root.glob("*/release-receipt.json"))[:max(0, min(limit, 500))]
++    proposals: list[dict[str, Any]] = []
++    for path in receipt_paths:
++        try:
++            proposal = propose_receipt_classification(path, merchant_id=merchant_id)
++        except Exception as error:
++            proposals.append({"receipt_path": str(path), "status": "rejected",
++                              "reason": type(error).__name__})
++            continue
++        if proposal.get("status") != "proposed":
++            proposals.append({"receipt_path": str(path), **proposal})
++            continue
++        proposal["receipt_path"] = str(path)
++        try:
++            rows = fetch_classification_context(credentials, merchant_id, [proposal["post_id"]])
++            context = next((row for row in rows if row.get("post_id") == proposal["post_id"]), None)
++            from codex_content_agent.release_policy import _draft_matches_current_post
++            _receipt, artifacts, receipt_error = _load_approved_receipt_artifacts(
++                path, proposal=proposal, merchant_id=merchant_id
++            )
++            if not context or not context.get("input_fingerprint"):
++                proposal.update(status="unavailable", reason="context_missing")
++            elif receipt_error:
++                proposal.update(status="rejected", reason=receipt_error)
++            elif not artifacts or not _draft_matches_current_post(
++                artifacts.get("draft", {}),
++                {"slug": context.get("slug"), "title": context.get("title"),
++                 "category": context.get("category"), "content": context.get("content")},
++            ):
++                proposal.update(status="rejected", reason="current_post_mismatch")
++            elif apply:
++                if not _receipt_digest_matches(path, str(proposal.get("evidence_sha256") or "")):
++                    proposal.update(status="rejected", reason="receipt_changed")
++                    proposals.append(proposal)
++                    continue
++                result = set_classification(
++                    credentials, merchant_id=merchant_id, post_id=proposal["post_id"],
++                    intent=proposal["intent"], fingerprint=context["input_fingerprint"],
++                    evidence_sha256=proposal["evidence_sha256"],
++                )
++                from codex_content_agent.blog_revalidation import revalidate_blog_cache
++                revalidation = revalidate_blog_cache([str(context.get("slug") or "")])
++                proposal.update(status="applied", result=result, revalidation=revalidation)
++        except Exception as error:
++            proposal.update(status="unavailable", reason=type(error).__name__)
++        proposals.append(proposal)
++    applied_count = sum(item.get("status") == "applied" for item in proposals)
++    rejected_count = sum(item.get("status") == "rejected" for item in proposals)
++    unavailable_count = sum(item.get("status") == "unavailable" for item in proposals)
++    if not apply:
++        status = "dry_run"
++    elif rejected_count or unavailable_count:
++        status = "partial" if applied_count else "failed"
++    else:
++        status = "applied" if applied_count else "no_candidates"
++    return {"status": status, "merchant_id": merchant_id, "receipt_count": len(receipt_paths),
++            "applied_count": applied_count, "rejected_count": rejected_count,
++            "unavailable_count": unavailable_count, "proposals": proposals}
++
++
++def main() -> int:
++    from dotenv import load_dotenv
++
++    root = Path(__file__).resolve().parents[1]
++    load_dotenv(root / ".env")
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("--run-root", type=Path, default=root / "runs")
++    parser.add_argument("--merchant-id", default=os.environ.get("OGABASSEY_MERCHANT_ID", ""))
++    parser.add_argument("--limit", type=int, default=200)
++    parser.add_argument("--apply", action="store_true", help="write through the authenticated classification RPC")
++    args = parser.parse_args()
++    if not args.merchant_id:
++        parser.error("--merchant-id or OGABASSEY_MERCHANT_ID is required")
++    report = run(args.run_root, merchant_id=args.merchant_id, apply=args.apply, limit=args.limit)
++    print(json.dumps(report, indent=2))
++    return 1 if args.apply and report.get("status") in {"unavailable", "partial", "failed"} else 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/tests/test_merchant_blog_classification.py b/tests/test_merchant_blog_classification.py
+new file mode 100644
+index 0000000000..0b0d67152b
+--- /dev/null
++++ b/tests/test_merchant_blog_classification.py
+@@ -0,0 +1,423 @@
++import unittest
++import datetime as dt
++import json
++import hashlib
++import sys
++import types
++from pathlib import Path
++from tempfile import TemporaryDirectory
++from unittest.mock import patch
++
++from codex_content_agent.merchant_blog_classification import (
++    classification_credentials,
++    effective_classification,
++    intent_for_task,
++    classify_after_publish,
++    propose_receipt_classification,
++    overlay_inventory,
++)
++sys.modules.setdefault("dotenv", types.SimpleNamespace(load_dotenv=lambda *_args, **_kwargs: None))
++from codex_content_agent.outcome_dashboard import _dimension
++from codex_content_agent.outcome_dashboard import build_outcome_dashboard
++
++
++class MerchantBlogClassificationTests(unittest.TestCase):
++    def test_supported_tasks_map_only_to_supported_taxonomy(self):
++        self.assertEqual(intent_for_task("news"), "news")
++        self.assertEqual(intent_for_task("comparison"), "comparison")
++        self.assertEqual(intent_for_task("repair_support"), "repair-guide")
++        self.assertEqual(intent_for_task("product_support"), "buying-guide")
++        self.assertIsNone(intent_for_task("unknown"))
++
++    def test_credentials_require_separate_authenticated_token_and_never_service_key(self):
++        env = {
++            "SUPABASE_URL": "https://db.example",
++            "SUPABASE_ANON_KEY": "anon",
++            "SUPABASE_SERVICE_KEY": "must-not-be-used",
++        }
++        self.assertIsNone(classification_credentials(env=env, token_file=None))
++
++    def test_service_key_is_not_a_classification_credential(self):
++        with TemporaryDirectory() as folder:
++            token_file = Path(folder) / "access-token"
++            token_file.write_text("eyJhbGciOiJub25lIn0.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.sig")
++            credentials = classification_credentials(
++                env={"SUPABASE_URL": "https://db.example", "SUPABASE_ANON_KEY": "anon",
++                     "SUPABASE_SERVICE_KEY": "secret"}, token_file=token_file,
++            )
++        self.assertIsNone(credentials)
++
++    def test_classification_credentials_require_safe_https_endpoint_and_public_key(self):
++        with TemporaryDirectory() as folder:
++            path = Path(folder) / "token"
++            path.write_text("eyJhbGciOiJub25lIn0.eyJyb2xlIjoiYXV0aGVudGljYXRlZCJ9.sig")
++            base = {"SUPABASE_URL": "https://db.example", "SUPABASE_ANON_KEY": "anon"}
++            self.assertIsNotNone(classification_credentials(env=base, token_file=path))
++            for changes in ({"SUPABASE_URL": "http://db.example"},
++                            {"SUPABASE_URL": "https://user:pass@db.example"},
++                            {"SUPABASE_ANON_KEY": "eyJhbGciOiJub25lIn0.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.sig"},
++                            {"SUPABASE_ANON_KEY": "sb_secret_not-public"}):
++                self.assertIsNone(classification_credentials(env={**base, **changes}, token_file=path))
++            self.assertIsNone(classification_credentials(
++                env={**base, "SUPABASE_URL": "https://[invalid"}, token_file=path))
++
++    def test_inventory_overlay_preserves_platform_columns_and_exposes_version(self):
++        row = {"id": "p1", "updated_at": "2026-10-25T10:00:00Z",
++               "classification_revision": "rev-1", "intent": None, "intent_source": None}
++        classification = {
++            "post_id": "p1", "intent": "comparison", "source": "verified_receipt",
++            "taxonomy_version": 1, "classifier_version": "receipt-v1",
++            "post_revision": "rev-1",
++        }
++        result = effective_classification(row, classification)
++        self.assertIsNone(result["intent"])
++        self.assertEqual(result["effective_intent"], "comparison")
++        self.assertEqual(result["effective_intent_source"], "verified_receipt")
++        self.assertEqual(result["effective_intent_version"], 1)
++        self.assertEqual(result["effective_intent_classifier_version"], "receipt-v1")
++
++    def test_overlay_rejects_stale_null_invalid_and_cross_post_records(self):
++        base = {"post_id": "p1", "intent": "comparison", "source": "verified_receipt",
++                "taxonomy_version": 1, "classifier_version": "v1", "stale_at": None,
++                "post_revision": "rev-1"}
++        row = {"id": "p1", "updated_at": "2026-10-25T10:00:00.123456+00:00",
++               "classification_revision": "rev-1", "intent": None}
++        self.assertEqual(effective_classification(row, base)["effective_intent"], "comparison")
++        for changes in ({"stale_at": "2026-10-25T11:00:00Z"}, {"intent": None},
++                        {"intent": "commercial"}, {"source": "unknown"},
++                        {"post_id": "other"}, {"taxonomy_version": 2},
++                        {"post_revision": "rev-2"}):
++            overlaid = effective_classification(row, {**base, **changes})
++            self.assertIsNone(overlaid["effective_intent"], changes)
++            self.assertIsNone(overlaid["intent"])
++
++    def test_snapshot_null_classification_is_missing_not_invalid(self):
++        row = {"id": "p1", "classification_revision": "rev-1", "intent": None}
++        snapshot = {"post_id": "p1", "intent": None, "source": None,
++                    "taxonomy_version": None, "classifier_version": None,
++                    "classified_at": None, "stale_at": None, "post_revision": "rev-1"}
++        result = effective_classification(row, snapshot)
++        self.assertIsNone(result["effective_intent"])
++        self.assertEqual(result["effective_intent_status"], "missing")
++        stale = effective_classification(row, {**snapshot, "stale_at": "2026-10-01T00:00:00Z"})
++        self.assertEqual(stale["effective_intent_status"], "stale")
++        malformed = effective_classification(row, {**snapshot, "intent": "freeform"})
++        self.assertEqual(malformed["effective_intent_status"], "invalid")
++
++    def test_revision_not_updated_at_controls_inventory_freshness(self):
++        classification = {"post_id": "p1", "intent": "news", "source": "reviewed",
++                          "taxonomy_version": 1, "classifier_version": "v1", "stale_at": None,
++                          "post_revision": "rev-a"}
++        row = {"id": "p1", "classification_revision": "rev-a",
++               "updated_at": "2026-10-25T11:00:00Z", "intent": None}
++        self.assertEqual(effective_classification(row, classification)["effective_intent"], "news")
++        row["classification_revision"] = "rev-b"
++        row["updated_at"] = "2026-10-25T10:00:00Z"
++        result = effective_classification(row, classification)
++        self.assertIsNone(result["effective_intent"])
++        self.assertEqual(result["effective_intent_status"], "stale_revision")
++
++    def test_inventory_uses_bounded_metadata_snapshot_batches(self):
++        rows = [{"id": f"p{i}", "updated_at": "2026-10-25T10:00:00Z", "intent": None}
++                for i in range(201)]
++        def snapshot(_credentials, _merchant_id, ids):
++            return [{"post_id": item, "intent": "news", "source": "reviewed",
++                     "taxonomy_version": 1, "classifier_version": "v1", "stale_at": None,
++                     "post_revision": "rev-1"} for item in ids]
++        for row in rows:
++            row["classification_revision"] = "rev-1"
++        with patch("codex_content_agent.merchant_blog_classification.classification_credentials",
++                   return_value={"url": "https://db.example", "key": "anon", "token": "jwt"}), \
++             patch("codex_content_agent.merchant_blog_classification.fetch_inventory_snapshot",
++                   side_effect=snapshot) as fetch:
++            result, coverage = overlay_inventory(rows, merchant_id="m1")
++        self.assertEqual([len(call.args[2]) for call in fetch.call_args_list], [200, 1])
++        self.assertEqual(coverage["classified_rows"], 201)
++        self.assertTrue(all(row["intent"] is None for row in result))
++
++    def test_inventory_coverage_counts_null_and_stale_snapshot_rows(self):
++        rows = [{"id": "p1", "classification_revision": "rev-1", "intent": None},
++                {"id": "p2", "classification_revision": "rev-2", "intent": None}]
++        snapshots = [
++            {"post_id": "p1", "intent": None, "source": None, "taxonomy_version": None,
++             "classifier_version": None, "classified_at": None, "stale_at": None,
++             "post_revision": "rev-1"},
++            {"post_id": "p2", "intent": "news", "source": "reviewed", "taxonomy_version": 1,
++             "classifier_version": "v1", "classified_at": "2026-10-01T00:00:00Z",
++             "stale_at": "2026-10-02T00:00:00Z", "post_revision": "rev-2"},
++        ]
++        with patch("codex_content_agent.merchant_blog_classification.classification_credentials",
++                   return_value={"url": "https://db.example", "key": "anon", "token": "jwt"}), \
++             patch("codex_content_agent.merchant_blog_classification.fetch_inventory_snapshot",
++                   return_value=snapshots):
++            result, coverage = overlay_inventory(rows, merchant_id="m1")
++        self.assertEqual(coverage["classified_rows"], 0)
++        self.assertEqual(coverage["coverage_by_status"], {"missing": 1, "stale": 1})
++        self.assertEqual([row["effective_intent_status"] for row in result], ["missing", "stale"])
++
++    def test_outcome_dimension_uses_effective_metadata_without_mutating_platform_fields(self):
++        post = {"intent": None, "intent_source": None, "effective_intent": "repair-guide",
++                "effective_intent_source": "verified_receipt", "effective_intent_version": 1}
++        self.assertEqual(_dimension(post, "intent"), ("repair-guide", "verified_receipt"))
++        self.assertIsNone(post["intent"])
++
++    def test_outcome_cohort_reports_mixed_classification_sources_and_versions(self):
++        now = dt.datetime(2026, 9, 20, 12, tzinfo=dt.timezone.utc)
++        posts = [
++            {"id": "a", "status": "published", "slug": "a", "published_at": "2026-09-10T12:00:00Z",
++             "effective_intent": "news", "effective_intent_source": "verified_receipt", "effective_intent_version": 1,
++             "effective_intent_classifier_version": "v1", "effective_intent_classified_at": "2026-09-10T12:00:00Z"},
++            {"id": "b", "status": "published", "slug": "b", "published_at": "2026-09-10T12:00:00Z",
++             "effective_intent": "news", "effective_intent_source": "reviewed", "effective_intent_version": 2,
++             "effective_intent_classifier_version": "v2", "effective_intent_classified_at": "2026-09-11T12:00:00Z"},
++        ]
++        cache = {"property": "sc-domain:ogabassey.com", "country_filter": "nga", "search_type": "web",
++                 "dimensions": ["page"], "days": {f"2026-09-{day:02d}":
++                 {"rows": [{"keys": ["https://ogabassey.com/blog/a"], "clicks": 0.0,
++                            "impressions": 0.0, "position": 0.0}],
++                  "status": "api_observed_paginated", "requested_data_state": "final"}
++                 for day in range(10, 17)}}
++        report = build_outcome_dashboard(posts, cache=cache, now=now,
++            site_url="sc-domain:ogabassey.com", query_status="ok")
++        group = report["cohorts"][0]["groups"][0]
++        self.assertEqual(group["dimension_sources"]["intent"], ["reviewed", "verified_receipt"])
++        self.assertEqual(group["dimension_sources"]["intent_versions"], ["1", "2"])
++        self.assertEqual(report["measurement"]["intent_basis"], "current_classification_at_report_time")
++        self.assertRegex(group["classification_signature"], r"^[a-f0-9]{64}$")
++        previous_signature = group["classification_signature"]
++        posts[0]["effective_intent_source"] = "reviewed"
++        changed = build_outcome_dashboard(posts, cache=cache, now=now,
++            site_url="sc-domain:ogabassey.com", query_status="ok")
++        self.assertNotEqual(changed["cohorts"][0]["groups"][0]["classification_signature"],
++                            previous_signature)
++
++    def test_classification_cas_failure_is_reported_as_unavailable(self):
++        with TemporaryDirectory() as folder:
++            receipt_path, _draft = _valid_receipt(Path(folder))
++            context = {"post_id": "post-1", "slug": "slug", "title": "Article",
++                       "category": "Phones", "content": "<p>Body</p>", "input_fingerprint": "b" * 64}
++            with patch("codex_content_agent.merchant_blog_classification.classification_credentials",
++                       return_value={"url": "https://db.example", "key": "anon", "token": "jwt"}), \
++                 patch("codex_content_agent.merchant_blog_classification.fetch_classification_context",
++                       return_value=[context]), \
++                 patch("codex_content_agent.merchant_blog_classification.set_classification",
++                       side_effect=RuntimeError("compare-and-set conflict")):
++                result = classify_after_publish(receipt_path, merchant_id="merchant-1")
++        self.assertEqual(result, {"status": "unavailable", "reason": "RuntimeError"})
++
++    def test_receipt_replacement_after_proposal_is_rejected_before_cas(self):
++        with TemporaryDirectory() as folder:
++            receipt_path, _draft = _valid_receipt(Path(folder))
++            proposal = propose_receipt_classification(receipt_path, merchant_id="merchant-1")
++
++            def replace_then_return_context(*_args):
++                changed_receipt = json.loads(receipt_path.read_text())
++                changed_receipt["task_type"] = "news"
++                receipt_path.write_text(json.dumps(changed_receipt))
++                return [{"post_id": "post-1", "slug": "slug", "title": "Article",
++                         "category": "Phones", "content": "<p>Body</p>",
++                         "input_fingerprint": "f" * 64}]
++
++            with patch("codex_content_agent.merchant_blog_classification.classification_credentials",
++                       return_value={"url": "https://db.example", "key": "anon", "token": "jwt"}), \
++                 patch("codex_content_agent.merchant_blog_classification.propose_receipt_classification",
++                       return_value=proposal), \
++                 patch("codex_content_agent.merchant_blog_classification.fetch_classification_context",
++                       side_effect=replace_then_return_context), \
++                 patch("codex_content_agent.merchant_blog_classification.set_classification") as setter:
++                result = classify_after_publish(receipt_path, merchant_id="merchant-1")
++        self.assertEqual(result, {"status": "rejected", "reason": "receipt_changed"})
++        setter.assert_not_called()
++
++    def test_receipt_replacement_during_current_post_check_is_rejected_before_cas(self):
++        with TemporaryDirectory() as folder:
++            receipt_path, _draft = _valid_receipt(Path(folder))
++            context = {"post_id": "post-1", "slug": "real-article-slug", "title": "Article",
++                       "category": "Phones", "content": "<p>Body</p>", "input_fingerprint": "f" * 64}
++
++            def replace_receipt(*_args):
++                receipt_path.write_text("{}")
++                return True
++
++            with patch("codex_content_agent.merchant_blog_classification.classification_credentials",
++                       return_value={"url": "https://db.example", "key": "anon", "token": "jwt"}), \
++                 patch("codex_content_agent.merchant_blog_classification.fetch_classification_context",
++                       return_value=[context]), \
++                 patch("codex_content_agent.release_policy._draft_matches_current_post",
++                       side_effect=replace_receipt), \
++                 patch("codex_content_agent.merchant_blog_classification.set_classification") as setter:
++                result = classify_after_publish(receipt_path, merchant_id="merchant-1")
++        self.assertEqual(result, {"status": "rejected", "reason": "receipt_changed"})
++        setter.assert_not_called()
++
++    def test_receipt_alone_cannot_authorize_classification(self):
++        receipt = {
++            "version": 2, "run_id": "run-1", "post_id": "post-1", "merchant_id": "merchant-1",
++            "task_type": "news", "canonical_topic_key": "topic", "target_product_ids": [],
++            "relationship_intent": "primary", "draft_sha256": "a" * 64,
++            "preflight_sha256": "b" * 64, "publish_guard_sha256": "c" * 64,
++            "image_provenance_sha256": "d" * 64, "created_at": "2026-10-25T00:00:00Z",
++        }
++        with TemporaryDirectory() as folder:
++            run_dir = Path(folder) / "run-1"
++            run_dir.mkdir()
++            receipt_path = run_dir / "release-receipt.json"
++            receipt_path.write_text(json.dumps(receipt))
++            self.assertEqual(propose_receipt_classification(receipt_path, merchant_id="other")["reason"],
++                             "wrong_merchant")
++            self.assertEqual(propose_receipt_classification(receipt_path, merchant_id="merchant-1")["reason"],
++                             "artifact_integrity_failed")
++
++    def test_receipt_task_must_match_draft_and_tampered_artifacts_are_rejected(self):
++        with TemporaryDirectory() as folder:
++            receipt_path, _draft = _valid_receipt(Path(folder))
++            receipt = json.loads(receipt_path.read_text())
++            receipt["task_type"] = "news"
++            receipt_path.write_text(json.dumps(receipt))
++            self.assertEqual(propose_receipt_classification(receipt_path, merchant_id="merchant-1")["reason"],
++                             "post_contract_mismatch")
++            draft_path = receipt_path.parent / "draft.json"
++            draft_path.write_text(draft_path.read_text() + " ")
++            self.assertEqual(propose_receipt_classification(receipt_path, merchant_id="merchant-1")["reason"],
++                             "artifact_integrity_failed")
++
++    def test_trusted_receipt_and_real_context_classify_then_revalidate_real_slug(self):
++        with TemporaryDirectory() as folder:
++            receipt_path, draft = _valid_receipt(Path(folder))
++            context = {"post_id": "post-1", "slug": "real-article-slug", "title": "Article",
++                       "category": "Phones", "content": "<p>Body</p>", "input_fingerprint": "f" * 64}
++            with patch("codex_content_agent.merchant_blog_classification.classification_credentials",
++                       return_value={"url": "https://db.example", "key": "anon", "token": "jwt"}), \
++                 patch("codex_content_agent.merchant_blog_classification.fetch_classification_context",
++                       return_value=[context]), \
++                 patch("codex_content_agent.merchant_blog_classification.set_classification",
++                       return_value={"status": "current", "post_id": "post-1", "intent": "buying-guide"}) as setter, \
++                 patch("codex_content_agent.blog_revalidation.revalidate_blog_cache",
++                       return_value={"status": "revalidated"}) as revalidate:
++                result = classify_after_publish(receipt_path, merchant_id="merchant-1")
++        self.assertEqual(result["status"], "classified")
++        self.assertEqual(setter.call_args.kwargs["fingerprint"], "f" * 64)
++        self.assertEqual(revalidate.call_args.args[0], ["real-article-slug"])
++
++    def test_setter_rejects_mismatched_acknowledgement(self):
++        with patch("codex_content_agent.merchant_blog_classification._rpc",
++                   return_value={"status": "current", "post_id": "other", "intent": "news"}):
++            with self.assertRaisesRegex(ValueError, "did not confirm"):
++                from codex_content_agent.merchant_blog_classification import set_classification
++                set_classification({}, merchant_id="m", post_id="p", intent="news",
++                                   fingerprint="a" * 64, evidence_sha256="b" * 64)
++
++    def test_backfill_dry_run_validates_receipt_and_context_without_writing(self):
++        from scripts.backfill_merchant_blog_classifications import run
++        with TemporaryDirectory() as folder:
++            root = Path(folder)
++            receipt_path, _draft = _valid_receipt(root)
++            context = {"post_id": "post-1", "slug": "real-article-slug", "title": "Article",
++                       "category": "Phones", "content": "<p>Body</p>", "input_fingerprint": "f" * 64}
++            with patch("scripts.backfill_merchant_blog_classifications.classification_credentials",
++                       return_value={"url": "https://db.example", "key": "anon", "token": "jwt"}), \
++                 patch("scripts.backfill_merchant_blog_classifications.fetch_classification_context",
++                       return_value=[context]), \
++                 patch("codex_content_agent.merchant_blog_classification.set_classification") as setter:
++                report = run(root, merchant_id="merchant-1")
++        self.assertEqual(report["status"], "dry_run")
++        self.assertEqual(report["proposals"][0]["status"], "proposed")
++        setter.assert_not_called()
++
++    def test_backfill_rejects_one_bad_receipt_without_aborting_batch(self):
++        from scripts.backfill_merchant_blog_classifications import run
++        with TemporaryDirectory() as folder:
++            root = Path(folder)
++            for name in ("a", "b"):
++                (root / name).mkdir()
++                (root / name / "release-receipt.json").write_text("{}")
++            with patch("scripts.backfill_merchant_blog_classifications.classification_credentials",
++                       return_value={"url": "https://db.example", "key": "anon", "token": "jwt"}), \
++                 patch("scripts.backfill_merchant_blog_classifications.propose_receipt_classification",
++                       side_effect=[ValueError("invalid"), {"status": "rejected", "reason": "integrity"}]):
++                result = run(root, merchant_id="merchant-1")
++        self.assertEqual(result["receipt_count"], 2)
++        self.assertEqual([item["status"] for item in result["proposals"]], ["rejected", "rejected"])
++
++    def test_backfill_apply_reports_failures_without_claiming_applied(self):
++        from scripts.backfill_merchant_blog_classifications import run
++        with TemporaryDirectory() as folder:
++            root = Path(folder)
++            (root / "bad").mkdir()
++            (root / "bad" / "release-receipt.json").write_text("{}")
++            with patch("scripts.backfill_merchant_blog_classifications.classification_credentials",
++                       return_value={"url": "https://db.example", "key": "anon", "token": "jwt"}), \
++                 patch("scripts.backfill_merchant_blog_classifications.propose_receipt_classification",
++                       return_value={"status": "rejected", "reason": "artifact_integrity_failed"}):
++                result = run(root, merchant_id="merchant-1", apply=True)
++        self.assertEqual(result["status"], "failed")
++        self.assertEqual(result["applied_count"], 0)
++        self.assertEqual(result["rejected_count"], 1)
++        self.assertEqual(result["unavailable_count"], 0)
++
++    def test_backfill_apply_exits_nonzero_for_partial_failure(self):
++        from scripts import backfill_merchant_blog_classifications as cli
++        with patch("sys.argv", ["backfill", "--run-root", "/tmp", "--merchant-id", "m", "--apply"]), \
++             patch.object(cli, "run", return_value={"status": "partial", "applied_count": 1,
++                                                      "rejected_count": 1, "unavailable_count": 0}):
++            self.assertEqual(cli.main(), 1)
++
++    def test_backfill_apply_revalidates_current_article_slug_after_cas(self):
++        from scripts.backfill_merchant_blog_classifications import run
++        with TemporaryDirectory() as folder:
++            root = Path(folder)
++            _valid_receipt(root)
++            context = {"post_id": "post-1", "slug": "real-article-slug", "title": "Article",
++                       "category": "Phones", "content": "<p>Body</p>", "input_fingerprint": "f" * 64}
++            with patch("scripts.backfill_merchant_blog_classifications.classification_credentials",
++                       return_value={"url": "https://db.example", "key": "anon", "token": "jwt"}), \
++                 patch("scripts.backfill_merchant_blog_classifications.fetch_classification_context",
++                       return_value=[context]), \
++                 patch("scripts.backfill_merchant_blog_classifications.set_classification",
++                       return_value={"status": "current", "post_id": "post-1", "intent": "buying-guide"}), \
++                 patch("codex_content_agent.blog_revalidation.revalidate_blog_cache",
++                       return_value={"status": "revalidated"}) as revalidate:
++                report = run(root, merchant_id="merchant-1", apply=True)
++        self.assertEqual(report["proposals"][0]["status"], "applied")
++        self.assertEqual(revalidate.call_args.args[0], ["real-article-slug"])
++
++
++def _valid_receipt(root: Path) -> tuple[Path, dict[str, object]]:
++    run_dir = root / "trusted-run"
++    (run_dir / "assets").mkdir(parents=True)
++    image = b"test-image-bytes"
++    (run_dir / "assets/featured.png").write_bytes(image)
++    draft: dict[str, object] = {
++        "task_type": "product_support", "canonical_topic_key": "support:phone",
++        "target_product_ids": ["product-1"], "title": "Article", "category": "Phones",
++        "content_html": "<p>Body</p>", "relationship_intent": "primary",
++        "featured_image": {"path": "assets/featured.png"},
++    }
++    draft_bytes = json.dumps(draft, sort_keys=True).encode()
++    provenance = {"version": 1, "images": [{"path": "assets/featured.png",
++                  "sha256": hashlib.sha256(image).hexdigest(),
++                  "provenance_type": "generated_illustration", "product_ids": [],
++                  "source_urls": [], "license_status": "not_applicable"}]}
++    preflight_bytes = b'{"status":"ok"}'
++    guard_bytes = b'{"status":"ok"}'
++    provenance_bytes = (json.dumps(provenance, sort_keys=True) + "\n").encode()
++    for name, data in (("draft.json", draft_bytes), ("preflight.json", preflight_bytes),
++                       ("publish-guard.json", guard_bytes), ("image-provenance.json", provenance_bytes)):
++        (run_dir / name).write_bytes(data)
++    receipt = {
++        "version": 2, "run_id": run_dir.name, "post_id": "post-1", "merchant_id": "merchant-1",
++        "task_type": "product_support", "canonical_topic_key": "support:phone",
++        "target_product_ids": ["product-1"], "relationship_intent": "primary",
++        "draft_sha256": hashlib.sha256(draft_bytes).hexdigest(),
++        "preflight_sha256": hashlib.sha256(preflight_bytes).hexdigest(),
++        "publish_guard_sha256": hashlib.sha256(guard_bytes).hexdigest(),
++        "image_provenance_sha256": hashlib.sha256(provenance_bytes).hexdigest(),
++        "created_at": "2026-10-25T00:00:00Z",
++    }
++    receipt_path = run_dir / "release-receipt.json"
++    receipt_path.write_text(json.dumps(receipt))
++    return receipt_path, draft
++
++
++if __name__ == "__main__":
++    unittest.main()

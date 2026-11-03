@@ -1,23 +1,23 @@
-import { formatCurrencyCompact } from '@/lib/currency';
 import { buildCategorySupportLinks } from '@/lib/storefront-compare/build-commercial-support-links';
+import { buildCuratedCompareSlugSet } from '@/lib/storefront-compare/compare-indexability-policy';
+import { loadCompareCategoryInventorySafely } from '@/lib/storefront-compare/load-compare-category-inventory-safely';
+import { loadMaintainedCompareRouteManifestSafely } from '@/lib/storefront-compare/load-maintained-compare-route-manifest-safely';
 import { loadCategoryScopedSemanticInventorySafely } from '@/lib/storefront-product/load-category-scoped-semantic-inventory-safely';
+import {
+  buildClusterFeaturedProducts,
+  type ClusterFeaturedInventoryProduct,
+} from './build-cluster-featured-products';
+import { buildClusterHubLinks } from './build-cluster-hub-links';
 import type {
   BuildInformationalClusterModelInput,
   InformationalClusterCategoryData,
   InformationalClusterModel,
 } from './content-cluster-types';
 import { inferContentClusterContext } from './infer-content-cluster-context';
+import { loadPriceBandDestinationPoolSafely } from './load-price-band-destination-pool-safely';
+import { verifyPriceBandLinkAgainstDestination } from './verify-price-band-link-against-destination';
 
-interface CategoryInventoryProduct {
-  slug: string;
-  name: string;
-  brand?: string | null;
-  price: number;
-  category_slug?: string | null;
-  product_key_specs?: Record<string, unknown> | null;
-  condition?: string | null;
-  stock?: number | null;
-}
+type CategoryInventoryProduct = ClusterFeaturedInventoryProduct;
 
 type OverrideCategoryProduct = NonNullable<
   InformationalClusterCategoryData['products']
@@ -48,51 +48,14 @@ function toCategoryInventoryProduct(
     brand: product.brand,
     price: product.price,
     category_slug: product.category_slug ?? categorySlug,
+    category_slugs: product.category_slugs ?? null,
     product_key_specs: product.product_key_specs ?? null,
     condition: product.condition ?? null,
     stock: product.stock ?? null,
+    is_parent: product.is_parent ?? null,
+    parent_product_id: product.parent_product_id ?? null,
+    manage_stock: product.manage_stock ?? null,
   };
-}
-
-function isInStock(product: CategoryInventoryProduct) {
-  return product.stock == null || product.stock > 0;
-}
-
-function buildProductHref(storeUrl: string, product: CategoryInventoryProduct) {
-  return product.category_slug
-    ? `${storeUrl}/${product.category_slug}/${product.slug}`
-    : `${storeUrl}/products/${product.slug}`;
-}
-
-function buildFeaturedProducts(
-  storeUrl: string,
-  inferredBrands: string[],
-  products: CategoryInventoryProduct[],
-  countryCode?: string | null
-) {
-  const inStockProducts = products.filter(isInStock);
-  const normalizedBrands = inferredBrands.map((brand) => brand.toLowerCase());
-  const preferredProducts =
-    normalizedBrands.length > 0
-      ? inStockProducts.filter((product) =>
-          normalizedBrands.includes((product.brand ?? '').trim().toLowerCase())
-        )
-      : [];
-  const selectedPool =
-    preferredProducts.length > 0 ? preferredProducts : inStockProducts;
-
-  return selectedPool
-    .slice()
-    .sort(
-      (left, right) =>
-        left.price - right.price || left.slug.localeCompare(right.slug)
-    )
-    .slice(0, 2)
-    .map((product) => ({
-      href: buildProductHref(storeUrl, product),
-      title: product.name,
-      description: `${product.brand ?? 'Storefront pick'} • ${formatCurrencyCompact(product.price, countryCode || 'NG')}`,
-    }));
 }
 
 export async function buildInformationalClusterModel(
@@ -135,12 +98,114 @@ export async function buildInformationalClusterModel(
       toCategoryInventoryProduct(categorySlug, product)
     );
   }
+
+  const destinationVerified =
+    input.categoryDataOverride?.destinationVerified === true;
+  const [
+    { brandHubLinks, familyHubLinks },
+    approvedCompareSlugs,
+    compareInventory,
+  ] = await Promise.all([
+    buildClusterHubLinks({
+      post: input.post,
+      inferredBrands: inferred.brands,
+      categorySlug,
+      categoryName,
+      storeUrl: input.storeUrl,
+      merchantId: input.merchantId,
+      products,
+      skipDestinationVerification: destinationVerified,
+    }),
+    destinationVerified ||
+    input.categoryDataOverride ||
+    inferred.brands.length === 0
+      ? Promise.resolve(undefined)
+      : loadMaintainedCompareRouteManifestSafely({
+          merchantId: input.merchantId,
+          categorySlug,
+          storeSlug: input.merchantSlug,
+          storeUrl: input.storeUrl,
+        }),
+    input.categoryDataOverride || inferred.brands.length === 0
+      ? Promise.resolve(null)
+      : loadCompareCategoryInventorySafely({
+          merchantId: input.merchantId,
+          categorySlug,
+        }),
+  ]);
   const commerceLinks = buildCategorySupportLinks({
     storeUrl: input.storeUrl,
     categorySlug,
     categoryName,
     products,
+    inferredBrands: inferred.brands,
+    preferredPriceBandSlugs: inferred.matchedPriceBands,
+    approvedCompareSlugs,
+    requireInferredBrandRelevance: true,
+    compareProducts: input.categoryDataOverride
+      ? undefined
+      : (compareInventory?.products ?? []),
   });
+
+  const hasBandLink = commerceLinks.some((link) =>
+    link.href.includes('/best-under/')
+  );
+  const bandDestinationPool =
+    input.categoryDataOverride?.destinationVerified === true || !hasBandLink
+      ? undefined
+      : await loadPriceBandDestinationPoolSafely({
+          merchantId: input.merchantId,
+          merchantSlug: input.merchantSlug,
+          categorySlug,
+        });
+  const verifiedCommerceLinks =
+    input.categoryDataOverride?.destinationVerified === true
+      ? commerceLinks
+      : verifyPriceBandLinkAgainstDestination({
+          categorySlug,
+          links: commerceLinks,
+          compareProducts: compareInventory?.products ?? null,
+          // Bands verify against the destination's own category-page pool;
+          // a failed load fails closed (empty pool drops band links).
+          bandProducts:
+            bandDestinationPool === undefined
+              ? undefined
+              : (bandDestinationPool ?? []),
+          curatedCompareSlugs: compareInventory
+            ? buildCuratedCompareSlugSet({
+                storeUrl: input.storeUrl,
+                categorySlug,
+                categoryName,
+                products: compareInventory.products,
+              })
+            : undefined,
+          inferredBrands: inferred.brands,
+        });
+
+  // Reserve slots for verified commerce links before hub links fill
+  // the final five-link slice; family hubs still cap at three.
+  const brandLinkBudget = Math.max(
+    0,
+    Math.min(brandHubLinks.length, 5 - verifiedCommerceLinks.length)
+  );
+  const familyLinkBudget = Math.max(
+    0,
+    Math.min(3, 5 - brandLinkBudget - verifiedCommerceLinks.length)
+  );
+  const combinedLinkCandidates = [
+    ...brandHubLinks.slice(0, brandLinkBudget),
+    ...familyHubLinks.slice(0, familyLinkBudget),
+    ...verifiedCommerceLinks,
+  ];
+
+  const seenHrefs = new Set<string>();
+  const finalCommerceLinks: Array<{ href: string; label: string }> = [];
+  for (const link of combinedLinkCandidates) {
+    if (!seenHrefs.has(link.href)) {
+      seenHrefs.add(link.href);
+      finalCommerceLinks.push(link);
+    }
+  }
 
   return {
     heading: `Continue shopping ${categoryName.toLowerCase()}`,
@@ -148,12 +213,14 @@ export async function buildInformationalClusterModel(
       href: `${input.storeUrl}/${categorySlug}`,
       label: `Shop more ${categoryName.toLowerCase()}`,
     },
-    commerceLinks: commerceLinks.slice(0, 3),
-    featuredProducts: buildFeaturedProducts(
+    commerceLinks: finalCommerceLinks.slice(0, 5),
+    featuredProducts: buildClusterFeaturedProducts(
       input.storeUrl,
+      categorySlug,
       inferred.brands,
       products,
-      input.countryCode
+      input.countryCode,
+      `${input.post.title} ${input.post.slug}`
     ),
   };
 }

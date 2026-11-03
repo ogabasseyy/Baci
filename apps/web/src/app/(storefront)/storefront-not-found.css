@@ -2,6 +2,8 @@
 @import "./storefront-foundation.css";
 @config "../../../tailwind.storefront-home.config.mjs";
 
+@source "../../components/storefront/cookie-consent.tsx";
+
 /* Next includes the not-found boundary on successful routes too. Never pull
    the full storefront stylesheet into that shared boundary. */
 @source "./[slug]/storefront-not-found-content.tsx";

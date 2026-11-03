@@ -52,25 +52,33 @@ describe('OgabasseyStaticHomePageContent hero preload ownership', () => {
     vi.clearAllMocks();
   });
 
-  it('skips the flight preload when live slide-0 matches the committed hint', async () => {
-    // Single preload owner: the first-flush committed slot already emits
-    // a scanner-visible <link> for this URL, so the flight hint would only
-    // duplicate it.
+  it('emits the deduped preload when live slide-0 matches the committed constant in standalone mode', async () => {
+    // Standalone composition (`omitCommittedHero` false): there is no upstream
+    // committed slot, so `OgabasseyHomeHeroPreloadLink` must still emit the
+    // single deduped `ReactDOM.preload` hint for the committed constant URL.
     mockPublishedShell(OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL);
     render(await OgabasseyStaticHomePageContent({ pathPrefix: '/ogabassey' }));
 
-    expect(mockPreloadHeroResources).not.toHaveBeenCalled();
+    expect(mockPreloadHeroResources).toHaveBeenCalledTimes(1);
+    expect(mockPreloadHeroResources).toHaveBeenCalledWith(
+      OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL
+    );
+    expect(
+      document.querySelector('link[data-ogabassey-home-hero-preload="true"]')
+    ).not.toBeInTheDocument();
   });
 
-  it('emits the flight preload when live slide-0 rotated away', async () => {
-    // The early committed hint covers a stale asset here, so the true LCP
-    // image still needs its hint.
+  it('emits the deduped preload when live slide-0 rotated away in standalone mode', async () => {
     mockPublishedShell(ROTATED_SLIDE.imageUrl);
     render(await OgabasseyStaticHomePageContent({ pathPrefix: '/ogabassey' }));
 
+    expect(mockPreloadHeroResources).toHaveBeenCalledTimes(1);
     expect(mockPreloadHeroResources).toHaveBeenCalledWith(
       ROTATED_SLIDE.imageUrl
     );
+    expect(
+      document.querySelector('link[data-ogabassey-home-hero-preload="true"]')
+    ).not.toBeInTheDocument();
   });
 
   it('emits no downstream hints when the committed slot owns the preload', async () => {

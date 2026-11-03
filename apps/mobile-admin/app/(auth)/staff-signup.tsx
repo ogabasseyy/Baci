@@ -1,12 +1,12 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import type { TextInputInstance } from 'react-native';
 import {
   ActivityIndicator,
   Alert,
   Pressable,
   StatusBar,
   Text,
-  type TextInput,
   View,
 } from 'react-native';
 import { AuthInput } from '@/components/auth/AuthInput';
@@ -44,8 +44,8 @@ export default function StaffSignupScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  const passwordRef = useRef<TextInput>(null);
-  const confirmRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
+  const confirmRef = useRef<TextInputInstance>(null);
 
   // Only a confirmed, still-valid invitation enables account creation.
   // biome-ignore lint/correctness/useExhaustiveDependencies: retryNonce intentionally starts a fresh verification attempt.

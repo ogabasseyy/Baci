@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import Colors from '@/constants/Colors';
 import type { ImeiResult } from '@/lib/validation';
+import { getVerdictColors } from './get-verdict-colors';
 import { ImeiCheckResultView } from './imei-check-result-view';
 
 jest.mock('@react-native-vector-icons/ionicons', () => ({
@@ -76,6 +77,122 @@ const baseProps = {
 };
 
 describe('ImeiCheckResultView', () => {
+  it.each([
+    'Blacklisted',
+    'Unknown',
+  ])('does not mount unlock assessment for %s blacklist evidence', (blacklistStatus) => {
+    render(
+      <ImeiCheckResultView
+        {...baseProps}
+        lookupId="lookup-1"
+        apiBaseUrl="https://ogabassey.com"
+        result={{ ...cleanResult, blacklistStatus, simLock: 'Locked' }}
+      />
+    );
+    expect(screen.queryByText('Unlock offer for lookup-1')).toBeNull();
+  });
+
+  it('shows colour and storage from the identified profile', () => {
+    render(
+      <ImeiCheckResultView
+        {...baseProps}
+        result={{
+          ...cleanResult,
+          deviceProfile: {
+            version: 1,
+            brand: 'Apple',
+            model: 'iPhone 17 Pro Max',
+            color: 'Silver',
+            storage: '512GB',
+            imageMatch: 'color',
+          },
+        }}
+      />
+    );
+    expect(screen.getByText('Silver · 512GB')).toBeTruthy();
+    expect(screen.getByText('Catalog illustration · Silver')).toBeTruthy();
+  });
+
+  it('does not render null colour in cached illustration captions', () => {
+    render(
+      <ImeiCheckResultView
+        {...baseProps}
+        result={{
+          ...cleanResult,
+          deviceProfile: {
+            version: 1,
+            brand: 'Apple',
+            model: 'iPhone 15',
+            color: null,
+            storage: null,
+            imageMatch: 'color',
+          },
+        }}
+      />
+    );
+    expect(screen.queryByText(/illustration · null/i)).toBeNull();
+    expect(
+      screen.getByText('Model illustration · colour may differ')
+    ).toBeTruthy();
+  });
+
+  it('shows caution when the report did not check the blacklist', () => {
+    render(
+      <ImeiCheckResultView
+        {...baseProps}
+        result={{
+          ...cleanResult,
+          status: 'Unknown',
+          blacklistStatus: 'Unknown',
+          score: 70,
+        }}
+      />
+    );
+    expect(screen.getByText('70%')).toHaveStyle({
+      color: getVerdictColors('caution', Colors.light).text,
+    });
+  });
+
+  it('does not show a safe cached verdict when the blacklist field reports risk', () => {
+    render(
+      <ImeiCheckResultView
+        {...baseProps}
+        result={{ ...cleanResult, blacklistStatus: 'Blacklisted' }}
+      />
+    );
+    expect(screen.getByText(/Blacklist risk detected/i)).toBeTruthy();
+    expect(screen.queryByText('SAFE TO BUY')).toBeNull();
+  });
+
+  it('replaces a cached safe verdict when finance is past due', () => {
+    render(
+      <ImeiCheckResultView
+        {...baseProps}
+        result={{ ...cleanResult, financeStatus: 'Past Due' }}
+      />
+    );
+    expect(
+      screen.getByText(/finance balance or overdue payment/i)
+    ).toBeTruthy();
+  });
+
+  it('uses caution for a cached clean status with a lock warning', () => {
+    render(
+      <ImeiCheckResultView
+        {...baseProps}
+        result={{
+          ...cleanResult,
+          status: 'Clean',
+          verdictType: 'caution',
+          verdict: 'Device locked',
+        }}
+      />
+    );
+    expect(screen.getByText('94%')).toHaveStyle({
+      color: getVerdictColors('caution', Colors.light).text,
+    });
+  });
+
   it('renders the device summary, IMEI, and trust score for a clean result', () => {
     render(<ImeiCheckResultView {...baseProps} />);
 
@@ -145,6 +262,7 @@ describe('ImeiCheckResultView', () => {
     render(
       <ImeiCheckResultView
         {...baseProps}
+        result={{ ...cleanResult, simLock: 'Locked' }}
         apiBaseUrl="https://shop.example.com"
         lookupId="11111111-1111-4111-8111-111111111111"
       />

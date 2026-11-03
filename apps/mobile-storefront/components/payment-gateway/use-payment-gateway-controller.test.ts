@@ -411,9 +411,15 @@ describe('usePaymentGatewayController', () => {
     const alertSpy = jest
       .spyOn(Alert, 'alert')
       .mockImplementation((_title, _message, buttons) => {
-        leavePress = buttons?.find(
+        const onPress = buttons?.find(
           (button) => button.text === 'Leave'
         )?.onPress;
+        leavePress =
+          typeof onPress === 'function'
+            ? () => {
+                onPress();
+              }
+            : undefined;
       });
     const { result } = renderHook(() => usePaymentGatewayController());
 
@@ -436,9 +442,15 @@ describe('usePaymentGatewayController', () => {
     const alertSpy = jest
       .spyOn(Alert, 'alert')
       .mockImplementation((_title, _message, buttons) => {
-        leavePress = buttons?.find(
+        const onPress = buttons?.find(
           (button) => button.text === 'Leave'
         )?.onPress;
+        leavePress =
+          typeof onPress === 'function'
+            ? () => {
+                onPress();
+              }
+            : undefined;
       });
     const { result } = renderHook(() => usePaymentGatewayController());
 
@@ -465,9 +477,15 @@ describe('usePaymentGatewayController', () => {
     const alertSpy = jest
       .spyOn(Alert, 'alert')
       .mockImplementation((_title, _message, buttons) => {
-        leavePress = buttons?.find(
+        const onPress = buttons?.find(
           (button) => button.text === 'Leave'
         )?.onPress;
+        leavePress =
+          typeof onPress === 'function'
+            ? () => {
+                onPress();
+              }
+            : undefined;
       });
     const { result } = renderHook(() => usePaymentGatewayController());
 
@@ -495,9 +513,15 @@ describe('usePaymentGatewayController', () => {
     const alertSpy = jest
       .spyOn(Alert, 'alert')
       .mockImplementation((_title, _message, buttons) => {
-        leavePress = buttons?.find(
+        const onPress = buttons?.find(
           (button) => button.text === 'Leave'
         )?.onPress;
+        leavePress =
+          typeof onPress === 'function'
+            ? () => {
+                onPress();
+              }
+            : undefined;
       });
     const { result } = renderHook(() => usePaymentGatewayController());
 

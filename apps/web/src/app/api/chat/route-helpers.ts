@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { buildStorefrontDisplayData } from '@/lib/agentic/storefront-display-data';
 import type { CurrencyConfig } from '@/lib/currency';
 import { DEFAULT_PLATFORM_CURRENCY_CONFIG } from '@/lib/resolve-merchant-currency';
@@ -11,6 +12,13 @@ export const CUSTOMER_CHAT_TIMEOUT_MS = 60_000;
 
 export const CUSTOMER_CHAT_FALLBACK_TEXT =
   "I'm sorry, our AI assistant is temporarily busy. Please use the store search, checkout, or WhatsApp support and we'll help you from there.";
+
+export function generateChatSessionId(ip: string): string {
+  return createHash('sha256')
+    .update(`${ip}-ogabassey-chat`)
+    .digest('hex')
+    .slice(0, 16);
+}
 
 function buildVpsChatSystemPrompt(
   merchantName: string | undefined,

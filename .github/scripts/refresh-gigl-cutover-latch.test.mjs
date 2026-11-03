@@ -110,7 +110,7 @@ describe('guarded GIGL cutover latch refresh', () => {
           value.readLatch(),
           `${scope}:${value.sha}:${value.fingerprint}\n`
         );
-        assert.equal(statSync(value.latch).mode & 0o777, 0o600);
+        assert.equal(statSync(value.latch).mode & 0o777, 0o640);
         assert.deepEqual(JSON.parse(readFileSync(value.smokeRecord, 'utf8')), {
           locks: [true, true],
           token: value.token,

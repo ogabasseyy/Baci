@@ -1,13 +1,14 @@
 'use client';
 
-import { useRef } from 'react';
 import {
   IMEI_DEVICE_CATEGORIES,
   type ImeiDeviceCategory,
 } from '@baci/shared/imei';
+import { useRef } from 'react';
 import { IMEI_DEVICE_ICONS } from './imei-checker-device-icons';
 
 interface ImeiCheckerDeviceTabsProps {
+  panelId?: string;
   selected: ImeiDeviceCategory;
   onSelect: (device: ImeiDeviceCategory) => void;
 }
@@ -35,6 +36,7 @@ function nextIndexForKey(
 /** Device-category tab strip (Phone/iPad/Mac/Watch) — mirrors the mobile checker's ImeiDeviceTabs. */
 export function ImeiCheckerDeviceTabs({
   selected,
+  panelId = 'imei-device-panel',
   onSelect,
 }: ImeiCheckerDeviceTabsProps) {
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -53,10 +55,12 @@ export function ImeiCheckerDeviceTabs({
           <button
             aria-label={`${category.label} checks`}
             aria-selected={isSelected}
-            className={`flex flex-col items-center gap-1 rounded-2xl border-2 px-2 py-3 transition-all ${
+            aria-controls={panelId}
+            id={`${panelId}-${category.id}-tab`}
+            className={`flex flex-col items-center gap-1 rounded-2xl border-2 px-2 py-3 text-store-foreground transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-current ${
               isSelected
-                ? 'border-[var(--store-primary)] bg-[var(--store-primary)]/5 text-[var(--store-primary)]'
-                : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200'
+                ? 'border-[var(--store-primary)] bg-[var(--store-primary)]/5'
+                : 'border-gray-100 bg-white hover:border-gray-200'
             }`}
             key={category.id}
             onClick={() => onSelect(category.id)}

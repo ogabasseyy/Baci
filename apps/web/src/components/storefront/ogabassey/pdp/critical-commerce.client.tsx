@@ -106,7 +106,6 @@ export function OgabasseyPdpCriticalCommerceSummary() {
     routeOfferMissingActive,
     selectedAttributes,
     variantAxisOptions,
-    variantCount,
     variants,
   } = useOgabasseyPdpCriticalCommerce();
 
@@ -124,7 +123,6 @@ export function OgabasseyPdpCriticalCommerceSummary() {
           renderableVariantAxes={renderableVariantAxes}
           selectedAttributes={selectedAttributes}
           variantAxisOptions={variantAxisOptions}
-          variantCount={variantCount}
           variants={variants}
         />
       </div>

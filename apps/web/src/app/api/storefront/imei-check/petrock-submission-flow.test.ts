@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ImeiAccessClient } from '@/lib/imei-access';
+import { recoverImeiLookupFailure } from './recover-imei-lookup-failure';
 
 const mocks = vi.hoisted(() => ({
   finalize: vi.fn(),
@@ -54,6 +56,52 @@ describe('submitPetrockLookup', () => {
     mocks.recordSubmission.mockResolvedValue(true);
     mocks.markUnknown.mockResolvedValue(true);
     mocks.finalize.mockResolvedValue(true);
+  });
+
+  it('refunds a durably committed debit whose response is lost without invoking the supplier', async () => {
+    mocks.redeem.mockRejectedValueOnce(new Error('response lost after commit'));
+    const provider = { submit: vi.fn() };
+    const client = {
+      readPaymentState: vi.fn().mockResolvedValue({
+        data: { debited: true, refunded: false },
+        error: null,
+      }),
+      rpc: vi.fn().mockResolvedValue({ data: true, error: null }),
+    } as unknown as ImeiAccessClient;
+    let debitSucceeded = false;
+    await expect(
+      submitPetrockLookup({
+        ...baseInput,
+        provider,
+        supabaseAdmin: client,
+        onDebitSucceeded: () => {
+          debitSucceeded = true;
+        },
+      })
+    ).rejects.toThrow('response lost after commit');
+    expect(debitSucceeded).toBe(false);
+    expect(provider.submit).not.toHaveBeenCalled();
+    const response = await recoverImeiLookupFailure({
+      activeLookup: {
+        amount: 700,
+        customerId: 'customer-1',
+        merchantId: 'merchant-1',
+        id: 'lookup-1',
+        provider: 'petrock',
+      },
+      debitSucceeded,
+      supabaseAdmin: client,
+    });
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({
+      code: 'PETROCK_NOT_SUBMITTED',
+    });
+    expect(client.rpc).toHaveBeenCalledWith(
+      'cancel_unsubmitted_petrock_imei_lookup',
+      { p_lookup_id: 'lookup-1' }
+    );
+    expect(mocks.markUnknown).not.toHaveBeenCalled();
+    expect(provider.submit).not.toHaveBeenCalled();
   });
 
   it('debits durably before placing and records an accepted order', async () => {

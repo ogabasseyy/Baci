@@ -64,18 +64,14 @@ const DEVICE_IMAGE_MAP: Record<string, string> = {
   'iPhone 8': 'iphone-8-select-2017',
 };
 
-// Fallback generic phone image
-const FALLBACK_IMAGE =
-  'https://store.storeimages.cdn-apple.com/1/as-images.apple.com/is/iphone-card-40-iphone16702702702702702702702702702702702_GEO_US?wid=400&hei=400&fmt=png&qlt=95';
-
 /**
  * Get device image URL from model name
  *
  * @param modelName - Device model name from SICKW API (e.g., "iPhone 15 Pro Max 256GB")
- * @returns Apple CDN image URL or fallback
+ * @returns Apple CDN image URL, or empty string for the caller’s phone icon
  */
 export function getDeviceImage(modelName: string): string {
-  if (!modelName) return FALLBACK_IMAGE;
+  if (!modelName) return '';
 
   // Normalize the model name
   const normalized = modelName.trim();
@@ -115,7 +111,7 @@ export function getDeviceImage(modelName: string): string {
     }
   }
 
-  return FALLBACK_IMAGE;
+  return '';
 }
 
 /**

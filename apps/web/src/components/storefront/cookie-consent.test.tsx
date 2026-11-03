@@ -12,12 +12,18 @@ vi.mock('next/link', () => ({
   default: ({
     children,
     href,
+    prefetch,
     ...rest
   }: {
     children: React.ReactNode;
     href: string;
+    prefetch?: boolean;
   }) => (
-    <a href={href} {...rest}>
+    <a
+      href={href}
+      data-prefetch={prefetch === undefined ? undefined : String(prefetch)}
+      {...rest}
+    >
       {children}
     </a>
   ),
@@ -50,8 +56,45 @@ describe('CookieConsent', () => {
       vi.advanceTimersByTime(1000);
     });
 
+    const policyLink = screen.getByRole('link', { name: /read our policy/i });
+    expect(policyLink).toHaveAttribute('href', '/privacy');
+    expect(policyLink).toHaveAttribute('data-prefetch', 'false');
+  });
+
+  it('mounts outside document flow before deferred utility styles arrive', () => {
+    render(<CookieConsent />);
+    act(() => vi.advanceTimersByTime(1000));
+
+    expect(screen.getByRole('dialog', { name: 'Cookie consent' })).toHaveStyle({
+      position: 'fixed',
+      bottom: '1rem',
+      width: 'auto',
+      zIndex: 50,
+    });
+  });
+
+  it('uses composited transitions and splits banner copy into smaller text blocks to avoid LCP hijacking', () => {
+    render(<CookieConsent />);
+    act(() => vi.advanceTimersByTime(1000));
+
+    const dialog = screen.getByRole('dialog', { name: 'Cookie consent' });
+    const card = dialog.firstElementChild;
+    expect(card).toHaveClass('transition-[opacity,transform]');
+    expect(card).not.toHaveClass('transition-all');
     expect(
-      screen.getByRole('link', { name: /read our policy/i })
-    ).toHaveAttribute('href', '/privacy');
+      screen.getByText('We use cookies to improve your experience.')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/By using our store, you agree to our/i)
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Customize' })).toHaveClass(
+      'min-h-11'
+    );
+    expect(screen.getByRole('button', { name: 'Necessary Only' })).toHaveClass(
+      'min-h-11'
+    );
+    expect(screen.getByRole('button', { name: 'Accept All' })).toHaveClass(
+      'min-h-11'
+    );
   });
 });

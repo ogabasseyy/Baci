@@ -1,4 +1,5 @@
 import { resetPendingCartDeviceRevocationsForTests } from '@/hooks/cart/shared-cart-session-revoke-client';
+import { fetchCustomerAuthMutation } from './customer-auth-mutation';
 import { getLiveCustomerIdentity } from './customer-live-identity';
 
 const CUSTOMER_AUTH_USER_KEY_PREFIX = 'baci-customer-auth-user';
@@ -101,9 +102,13 @@ export async function rollbackCustomerAuthSession(
 ): Promise<boolean> {
   markCustomerAuthRollbackPending(merchantSlug);
   try {
-    const response = await fetch('/api/storefront/auth/logout', {
-      method: 'POST',
-    });
+    const response = await fetchCustomerAuthMutation(
+      merchantSlug,
+      '/api/storefront/auth/logout',
+      {
+        method: 'POST',
+      }
+    );
     if (!response.ok) {
       console.error(
         `Auth switch rollback failed with status ${response.status}`

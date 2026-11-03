@@ -1,8 +1,51 @@
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { readStorefrontFile } from './storefront-css-partition-read';
 import { STOREFRONT_LCP_COPY_CSS } from './storefront-lcp-copy-css';
 
 describe('storefront CSS partitioning (route sheets)', () => {
+  it.each([
+    'storefront-home.css',
+    'storefront-pdp.css',
+    'storefront-listing.css',
+    'storefront-blog.css',
+    'storefront-utility.css',
+    'storefront-content.css',
+    'storefront-not-found.css',
+  ])('includes the shared consent prompt and button dependency closure in %s before it mounts', (file) => {
+    const content = readStorefrontFile(file);
+    expect(content).toContain(
+      '@source "../../components/storefront/cookie-consent.tsx";'
+    );
+    expect(content).toContain(
+      '@source "../../components/themed/themed-button.tsx";'
+    );
+    expect(content).toContain('@source "../../components/ui/button.tsx";');
+  });
+
+  it('keeps blog-post additive over the blog sheet consent closure', () => {
+    // [postSlug]/layout.tsx always imports storefront-blog.css (which owns
+    // the cookie-consent + themed-button + ui/button closure) immediately
+    // before storefront-blog-post.css, so the delta sheet must not re-emit
+    // those utilities.
+    const content = readStorefrontFile('storefront-blog-post.css');
+    expect(content).not.toContain('components/storefront/cookie-consent.tsx');
+    expect(content).not.toContain('components/themed/themed-button.tsx');
+    expect(content).not.toContain('components/ui/button.tsx');
+  });
+
+  it.each([
+    'storefront-listing.css',
+    'storefront-content.css',
+    'storefront-utility.css',
+  ])('includes the shared layout chrome in %s for semantic footer reservations', (file) => {
+    expect(readStorefrontFile(file)).toContain(
+      '@source "../../components/storefront/ogabassey/storefront-layout-chrome.tsx";'
+    );
+  });
+
   it('loads OgaBassey below-fold PDP styles through the deferred PDP stylesheet', () => {
     const deferredPdpCss = readStorefrontFile(
       'storefront-ogabassey-pdp-deferred.css'
@@ -19,9 +62,12 @@ describe('storefront CSS partitioning (route sheets)', () => {
     );
   });
 
-  it('validates OgaBassey category PDP route imports critical CSS in page, PDP CSS in renderer, and excludes PDP CSS from client', () => {
+  it('validates OgaBassey category PDP route imports critical CSS in page, shares PDP CSS across renderer and loading, and excludes PDP CSS from client', () => {
     const categoryPdpPage = readStorefrontFile(
       '[slug]/(catalog)/(pdp)/[category]/[productSlug]/page.tsx'
+    );
+    const categoryPdpLoading = readStorefrontFile(
+      '[slug]/(catalog)/(pdp)/[category]/[productSlug]/loading.tsx'
     );
     const defaultRenderer = readStorefrontFile(
       '[slug]/(catalog)/(pdp)/[category]/[productSlug]/default-product-page-renderer.tsx'
@@ -33,10 +79,31 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(categoryPdpPage).toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp-critical\.css['"];?/
     );
+    expect(categoryPdpLoading).toMatch(
+      /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp\.css['"];?/
+    );
+    expect(categoryPdpLoading).not.toMatch(
+      /storefront-ogabassey-pdp-loading\.css/
+    );
+    // The deduplicated loading sheet must stay deleted, not just unimported.
+    expect(
+      existsSync(
+        join(
+          dirname(fileURLToPath(import.meta.url)),
+          'storefront-ogabassey-pdp-loading.css'
+        )
+      )
+    ).toBe(false);
     expect(defaultRenderer).toMatch(
       /import\s+['"]@\/app\/\(storefront\)\/storefront-pdp\.css['"];?/
     );
     expect(defaultDetailClient).not.toMatch(/storefront-pdp\.css/);
+
+    const pdpCss = readStorefrontFile('storefront-pdp.css');
+    expect(pdpCss).toContain('@source "./[slug]/storefront-loading-ui.tsx";');
+    expect(pdpCss).toContain(
+      '@source "../../components/storefront/ogabassey/storefront-loading-ui.tsx";'
+    );
   });
 
   it('keeps homepage critical CSS off Tailwind and off the streamed Hero graph', () => {
@@ -84,52 +151,6 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(fullCss).toMatch(/@source\s+["']\.\/\[slug\]\/\(catalog\)["']/);
   });
 
-  it('defers shared listing styles but loads scoped blog styles before first paint', () => {
-    const listingLayout = readStorefrontFile(
-      '[slug]/(catalog)/(listing)/layout.tsx'
-    );
-    const utilityLayout = readStorefrontFile('[slug]/(utility)/layout.tsx');
-    const blogLayout = readStorefrontFile('[slug]/(blog)/layout.tsx');
-    const blogListingQuery = readStorefrontFile(
-      '[slug]/(blog)/blog/blog-listing-query-content.tsx'
-    );
-    const genericHome = readStorefrontFile(
-      '[slug]/(home)/generic-storefront-home-page.tsx'
-    );
-
-    expect(listingLayout).not.toMatch(
-      /import\s+['"]@\/app\/\(storefront\)\/storefront-full\.css['"]/
-    );
-    expect(utilityLayout).not.toMatch(
-      /import\s+['"]@\/app\/\(storefront\)\/storefront-full\.css['"]/
-    );
-    expect(blogLayout).toMatch(
-      /import\s+['"]@\/app\/\(storefront\)\/storefront-blog\.css['"]/
-    );
-    expect(listingLayout).toContain('StorefrontFullStyleLoader');
-    expect(utilityLayout).toContain('StorefrontFullStyleLoader');
-    expect(blogLayout).not.toContain('StorefrontBlogStyleLoader');
-    expect(utilityLayout).not.toContain('storefront-eager-full-css-layout');
-    expect(blogLayout).not.toContain('storefront-eager-blog-css-layout');
-    expect(blogListingQuery).not.toContain('storefront-eager-blog-css-layout');
-    expect(genericHome).not.toContain('storefront-eager-full-css-layout');
-    expect(genericHome).toContain('StorefrontFullStyleLoader');
-
-    const comparePage = readStorefrontFile(
-      '[slug]/(catalog)/(listing)/compare/page.tsx'
-    );
-    const compareLayout = readStorefrontFile(
-      '[slug]/(catalog)/(listing)/compare/layout.tsx'
-    );
-    expect(
-      comparePage.match(
-        /var\(--store-background,#ffffff\).*?var\(--store-background-text,#111827\)/g
-      )
-    ).toHaveLength(2);
-    expect(comparePage).not.toContain('storefront-eager-full-css-layout');
-    expect(compareLayout).toContain('StorefrontEagerFullCssLayout');
-  });
-
   it('locks committed LCP copy to the Inter fallback face without a render-blocking CSS file', () => {
     const lcpCopyCss = STOREFRONT_LCP_COPY_CSS;
     const slugLayout = readStorefrontFile('[slug]/layout.tsx');
@@ -160,22 +181,6 @@ describe('storefront CSS partitioning (route sheets)', () => {
     expect(lcpCopyCss).toContain(
       'body:has([data-compare-category-page]) [data-compare-hub-chrome]'
     );
-  });
-
-  it('keeps blog post renderer CSS off the listing stylesheet', () => {
-    const blogCss = readStorefrontFile('storefront-blog.css');
-    const blogPostCss = readStorefrontFile('storefront-blog-post.css');
-
-    expect(blogCss).not.toMatch(/components\/blog\/renderer/);
-    expect(blogCss).toMatch(/ogabassey-blog-lcp-hero/);
-    expect(blogCss).toMatch(
-      /@source\s+["'][^"']*components\/ui\/badge\.tsx["']/
-    );
-    expect(blogCss).toMatch(
-      /@source\s+["'][^"']*components\/ui\/card\.tsx["']/
-    );
-    expect(blogPostCss).toMatch(/components\/blog\/renderer/);
-    expect(blogPostCss).toMatch(/@source\s+["'][^"']*blog\/\[postSlug\]["']/);
   });
 
   it('keeps homepage product-card utilities deferred while retaining critical grid geometry selectors', () => {

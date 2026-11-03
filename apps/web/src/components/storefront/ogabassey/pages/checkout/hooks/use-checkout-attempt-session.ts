@@ -14,6 +14,7 @@ import { resolveCheckoutResumeContext } from '../resolve-checkout-resume-context
 import { usePaymentReturnReset } from '../use-payment-return-reset';
 import { useCheckoutResumeLifecycle } from './use-checkout-resume-lifecycle';
 import { useCheckoutSubmissionState } from './use-checkout-submission-state';
+import { useRedvaultUncertainRecovery } from './use-redvault-uncertain-recovery';
 import { useResumedCheckoutStartFunnel } from './use-resumed-checkout-start-funnel';
 
 interface SearchParams {
@@ -77,6 +78,15 @@ export function useCheckoutAttemptSession({
   const submission = useCheckoutSubmissionState({
     setCurrentStep: navigation.setCurrentStep,
     setCompletedSteps: navigation.setCompletedSteps,
+  });
+  useRedvaultUncertainRecovery({
+    merchantId,
+    merchantSlug,
+    isHydrated,
+    pendingOrder: pendingCheckoutOrder,
+    setPendingOrder: setPendingCheckoutOrder,
+    setIsProcessing: submission.setIsProcessing,
+    setCurrentStep: navigation.setCurrentStep,
   });
   const resumeContext = resolveCheckoutResumeContext({
     searchParams,

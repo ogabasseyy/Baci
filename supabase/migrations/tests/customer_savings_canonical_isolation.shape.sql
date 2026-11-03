@@ -5,6 +5,7 @@ BEGIN
     SELECT gen_random_uuid(),merchant_id,customer_id,product_id,variant_id,title,target_amount,status,source_mode,goal_kind,canonical_draft_id,canonical_draft_revision_id,canonical_actor_id,%L
     FROM public.customer_savings_goals WHERE id=%L', p_field, p_value, p_goal);
 END $$;
+GRANT EXECUTE ON FUNCTION pg_temp.insert_bad_canonical(uuid, text, text) TO PUBLIC; -- called after SET ROLE
 SET SESSION AUTHORIZATION savings_local_plan_writer;
 SELECT pg_temp.isolation_reject(format('SELECT pg_temp.insert_bad_canonical(%L,%L,%L)', :'canonical_goal', 'terms_accepted_at', '2026-09-13T00:00:00Z'), '23514');
 SELECT pg_temp.isolation_reject(format('SELECT pg_temp.insert_bad_canonical(%L,%L,%L)', :'canonical_goal', 'non_withdrawable_accepted_at', '2026-09-13T00:00:00Z'), '23514');

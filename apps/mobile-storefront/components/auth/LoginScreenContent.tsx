@@ -1,5 +1,6 @@
 import type { RefObject } from 'react';
-import { type TextInput, View } from 'react-native';
+import type { TextInputInstance } from 'react-native';
+import { View } from 'react-native';
 import { Logo } from '@/components/ui/Logo';
 import type Colors from '@/constants/Colors';
 import { type LoginAuthMethod, LoginEmailStep } from './LoginEmailStep';
@@ -17,6 +18,7 @@ interface LoginScreenContentProps {
   dismissAndNavigate: () => void;
   email: string;
   emailError: string | null;
+  emailHintGuidance: string;
   handleAppleSignIn: () => Promise<void>;
   handleContinue: () => void;
   handleGoogleSignIn: () => Promise<void>;
@@ -29,7 +31,7 @@ interface LoginScreenContentProps {
   isVerifyingRef: RefObject<boolean>;
   otp: string;
   otpError: string | null;
-  otpInputRef: RefObject<TextInput | null>;
+  otpInputRef: RefObject<TextInputInstance | null>;
   password: string;
   passwordError: string | null;
   setAuthMethod: (value: LoginAuthMethod) => void;
@@ -58,6 +60,7 @@ export function LoginScreenContent({
   colors,
   dismissAndNavigate,
   email,
+  emailHintGuidance,
   emailError,
   handleAppleSignIn,
   handleContinue,
@@ -104,6 +107,7 @@ export function LoginScreenContent({
           colors={colors}
           email={email}
           emailError={emailError}
+          emailHintGuidance={emailHintGuidance}
           isAppleLoading={isAppleLoading}
           isGoogleLoading={isGoogleLoading}
           isLoading={isLoading}

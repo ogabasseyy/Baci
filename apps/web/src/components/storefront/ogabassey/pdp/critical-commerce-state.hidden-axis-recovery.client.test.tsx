@@ -86,6 +86,33 @@ beforeEach(() => {
 });
 
 describe('OgabasseyPdpCriticalCommerceProvider hidden-axis recovery', () => {
+  it('recovers a hidden axis after completion makes the variant unique', () => {
+    const variants = [
+      { ...cartProduct.variants![0], attributes: { storage: '128GB', ram: '4GB', connectivity: 'WiFi' } },
+      { ...cartProduct.variants![1], attributes: { storage: '256GB', ram: '8GB', connectivity: '5G' } },
+      { ...cartProduct.variants![1], id: 'variant-third', price_override: 300000, attributes: { storage: '256GB', ram: '16GB', connectivity: 'WiFi' } },
+    ];
+    render(
+      <OgabasseyPdpCriticalCommerceProvider
+        cartProduct={{ ...cartProduct, variants }}
+        initialVariantSelection={{ attributes: { connectivity: 'WiFi', storage: '128GB', ram: '4GB' }, variantId: 'variant-black-128' }}
+        variantAxes={['storage', 'ram']}
+        variantCount={3}
+      >
+        <CriticalCommerceStateProbe />
+      </OgabasseyPdpCriticalCommerceProvider>
+    );
+    fireEvent.click(screen.getByRole('button', { name: /select 256gb storage/i }));
+    expect(screen.getByText('selected connectivity:5G')).toBeInTheDocument();
+    expect(screen.getByText('ready')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /add to cart/i }));
+    expect(cartMocks.addToCart).toHaveBeenCalledWith(
+      expect.objectContaining({ price: 278_418.6 }),
+      1,
+      expect.objectContaining({ variantId: 'variant-blue-256' })
+    );
+  });
+
   it('recovers a pruned hidden connectivity axis from the uniquely matching SKU', () => {
     render(
       <OgabasseyPdpCriticalCommerceProvider

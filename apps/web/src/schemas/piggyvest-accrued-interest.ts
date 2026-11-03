@@ -52,7 +52,9 @@ export const piggyvestAccruedInterestSchemas = {
           .object({
             hasNextPage: z.boolean(),
             endCursor: boundedText.nullable(),
-            previousCursor: boundedText.nullable(),
+            // The live sandbox omits previousCursor on this endpoint
+            // (staging, 2026-10-31); other PiggyVest lists send it.
+            previousCursor: boundedText.nullable().optional(),
           })
           .refine(
             (page) =>

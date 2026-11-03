@@ -19,6 +19,7 @@ describe('buildAnalyticsEventData', () => {
         'purchase'
       )
     ).toEqual({
+      targets: [],
       currency: 'NGN',
       custom_data: {
         campaign_variant: 'checkout-b',
@@ -44,7 +45,9 @@ describe('buildAnalyticsEventData', () => {
         },
         'custom_event'
       )
-    ).toEqual({ custom_data: { campaign_variant: 'b' } });
+    ).toEqual({
+      custom_data: { campaign_variant: 'b' },
+    });
   });
 
   it('preserves mobile product conversion contents from custom data', () => {
@@ -63,6 +66,7 @@ describe('buildAnalyticsEventData', () => {
         'add_to_cart'
       )
     ).toEqual({
+      targets: [],
       currency: 'NGN',
       custom_data: {
         campaign_variant: 'cart-b',

@@ -20,7 +20,6 @@ import { PRIMARY_ADMIN_TAB_ROUTE_NAMES } from './AdminFloatingTabBar.routes';
 import type { AdminFloatingTabOptions } from './AdminFloatingTabBarItem';
 import { AdminFloatingTabBarItem } from './AdminFloatingTabBarItem';
 import { animateAdminFloatingTabIndicator } from './AdminFloatingTabBarLiquidIndicator';
-import { createJumpToTabAction } from './create-jump-to-tab-action';
 import { useWarmAdminTabScreens } from './useWarmAdminTabScreens';
 
 const BAR_HORIZONTAL_MARGIN = 12;
@@ -31,7 +30,8 @@ const CAPSULE_HEIGHT = 38;
 
 export function AdminFloatingTabBar({
   descriptors,
-  navigation,
+  emitter,
+  navigateToTab,
   state,
 }: BottomTabBarProps) {
   const { colors, isDark } = useTheme();
@@ -76,7 +76,6 @@ export function AdminFloatingTabBar({
 
   useWarmAdminTabScreens({
     activeRouteName,
-    navigation,
     routes: visibleRoutes,
   });
 
@@ -176,7 +175,7 @@ export function AdminFloatingTabBar({
               triggerLightHaptic();
             }
 
-            const event = navigation.emit({
+            const event = emitter.emit({
               canPreventDefault: true,
               target: route.key,
               type: 'tabPress',
@@ -194,10 +193,7 @@ export function AdminFloatingTabBar({
             }
 
             if (!isFocused) {
-              navigation.dispatch({
-                ...createJumpToTabAction(route.name, route.params),
-                target: state.key,
-              });
+              navigateToTab(route.key);
             }
           };
 

@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   getLiveCustomerIdentity,
   hasUtilityPurchaseIdentityMoved,
   publishCustomerIdentity,
+  subscribeCustomerIdentityChange,
 } from './customer-live-identity';
 
 describe('customer-live-identity', () => {
@@ -20,6 +21,17 @@ describe('customer-live-identity', () => {
       merchantSlug: 'store-a',
       userId: null,
     });
+  });
+
+  it('notifies subscribers on each committed identity publication and stops after unsubscribe', () => {
+    const listener = vi.fn();
+    const unsubscribe = subscribeCustomerIdentityChange(listener);
+    publishCustomerIdentity({ id: 'u' }, { id: 'c' }, 'store-a');
+    publishCustomerIdentity(null, null, 'store-a');
+    expect(listener).toHaveBeenCalledTimes(2);
+    unsubscribe();
+    publishCustomerIdentity(null, null, 'store-a');
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 
   it('detects account and storefront moves against the submitter', () => {

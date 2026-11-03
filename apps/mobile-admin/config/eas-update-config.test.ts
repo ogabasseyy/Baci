@@ -10,7 +10,7 @@ describe('buildEasUpdateConfig', () => {
     const config = buildEasUpdateConfig({ APP_VERSION: '2.0.42' });
 
     expect(config.easProjectId).toBe(EAS_PROJECT_ID);
-    expect(config.runtimeVersion).toBe('2.0.42');
+    expect(config.runtimeVersion).toBe('2.0.42-sdk58-rn0880');
     expect(config.updates).toMatchObject({
       checkAutomatically: 'ON_LOAD',
       enableBsdiffPatchSupport: true,
@@ -25,7 +25,7 @@ describe('buildEasUpdateConfig', () => {
   });
 
   it('uses the shared app-version fallback when no release version is configured', () => {
-    expect(buildEasUpdateConfig({}).runtimeVersion).toBe('2.0.1');
+    expect(buildEasUpdateConfig({}).runtimeVersion).toBe('2.0.1-sdk58-rn0880');
   });
 
   it('embeds an explicit preview channel override', () => {

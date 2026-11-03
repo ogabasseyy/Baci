@@ -148,12 +148,12 @@ export function QuizAuthoringForm({
 
   return (
     <form className="rounded-lg border bg-card p-5 shadow-sm" onSubmit={submit}>
-      <fieldset disabled={disabled || isGenerating}>
-        <div className="grid gap-4 md:grid-cols-2">
+      <fieldset className="min-w-0" disabled={disabled || isGenerating}>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <label className="grid gap-2 text-sm font-medium">
             Quiz title
             <input
-              className="h-11 rounded-md border bg-background px-3 text-sm"
+              className="h-11 min-w-0 rounded-md border bg-background px-3 text-base md:text-sm"
               required
               value={title}
               onChange={(event) => setTitle(event.target.value)}
@@ -170,7 +170,7 @@ export function QuizAuthoringForm({
           <label className="grid gap-2 text-sm font-medium">
             Mode
             <select
-              className="h-11 rounded-md border bg-background px-3"
+              className="h-11 min-w-0 rounded-md border bg-background px-3 text-base md:text-sm"
               value={mode}
               onChange={(event) =>
                 setMode(event.target.value === 'live' ? 'live' : 'test')
@@ -187,7 +187,7 @@ export function QuizAuthoringForm({
           <label className="grid gap-2 text-sm font-medium">
             Difficulty
             <select
-              className="h-11 rounded-md border bg-background px-3"
+              className="h-11 min-w-0 rounded-md border bg-background px-3 text-base md:text-sm"
               value={difficulty}
               onChange={(event) => {
                 if (isQuizDifficulty(event.target.value))
@@ -202,7 +202,7 @@ export function QuizAuthoringForm({
           <label className="grid gap-2 text-sm font-medium">
             Time per question (seconds)
             <input
-              className="h-11 rounded-md border bg-background px-3"
+              className="h-11 min-w-0 rounded-md border bg-background px-3 text-base md:text-sm"
               min={5}
               max={60}
               type="number"
@@ -214,7 +214,7 @@ export function QuizAuthoringForm({
           <label className="grid gap-2 text-sm font-medium">
             Questions per topic
             <input
-              className="h-11 rounded-md border bg-background px-3"
+              className="h-11 min-w-0 rounded-md border bg-background px-3 text-base md:text-sm"
               min={1}
               max={20}
               type="number"

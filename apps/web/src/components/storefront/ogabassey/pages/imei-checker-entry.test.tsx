@@ -89,7 +89,7 @@ describe('OgabasseyImeiEntry', () => {
 
     fireEvent.click(
       screen.getByRole('radio', {
-        name: /network check, will my sim work\?, ₦1,000/i,
+        name: /network check, will my sim work\?, ₦600/i,
       })
     );
 

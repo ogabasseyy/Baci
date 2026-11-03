@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getPublishedClusterPosts } from './get-published-cluster-posts';
+import { inferContentClusterContext } from './infer-content-cluster-context';
 
 const mockRpc = vi.fn();
 const mockCreatePublicClient = vi.fn();
@@ -82,7 +83,7 @@ describe('getPublishedClusterPosts', () => {
     });
 
     expect(mockRpc).toHaveBeenCalledWith(
-      'get_storefront_cluster_guide_candidates_v1',
+      'get_storefront_cluster_guide_candidates_v2',
       expect.objectContaining({
         p_category_slug: 'smartphones',
         p_cluster_rules: expect.arrayContaining([
@@ -126,6 +127,34 @@ describe('getPublishedClusterPosts', () => {
       expect.objectContaining({
         p_search_query: expect.stringContaining('"psn card 50 gift card"'),
       })
+    );
+  });
+
+  it('carries persisted guide intent from the bounded candidate query into the resolver', async () => {
+    mockRpc.mockReturnValueOnce(
+      createRpcQuery({
+        data: [
+          {
+            slug: 'iphone-ownership',
+            title: 'Apple iPhone ownership',
+            excerpt: 'Information for owners.',
+            category: 'Smartphones',
+            tags: null,
+            keywords: null,
+            featured_image_url: null,
+            published_at: '2026-10-25T10:00:00Z',
+            reading_time_minutes: 4,
+            merchant_intent: 'repair-guide',
+            merchant_intent_source: 'reviewed',
+          },
+        ],
+        error: null,
+      })
+    );
+    const posts = await getPublishedClusterPosts('merchant-1', context);
+    expect(inferContentClusterContext(posts[0]).kind).toBe('troubleshooting');
+    expect(mockRpc.mock.calls[0][0]).toBe(
+      'get_storefront_cluster_guide_candidates_v2'
     );
   });
 

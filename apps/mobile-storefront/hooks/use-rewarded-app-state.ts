@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
 import { useEffect, useRef } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
+import { AppState } from 'react-native';
 import { setQuizRewardedFlowActive } from '@/lib/quiz-fullscreen-ownership';
 
 interface AbandonableRewardedSession {
@@ -20,8 +20,10 @@ interface AbandonableRewardedSession {
 export function useRewardedAppState(
   sessionRef: RefObject<AbandonableRewardedSession | null>,
   releaseOwnership: () => void
-): RefObject<AppStateStatus> {
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+): RefObject<typeof AppState.currentState> {
+  const appStateRef = useRef<typeof AppState.currentState>(
+    AppState.currentState
+  );
   const releaseRef = useRef(releaseOwnership);
   releaseRef.current = releaseOwnership;
   useEffect(() => {

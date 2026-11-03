@@ -125,6 +125,7 @@ export type SharedCartAction =
       products: Record<string, Product>;
     }
   | { type: 'link/snapshot'; generation: number; snapshot: CartSnapshot }
+  | { type: 'link/retry'; generation: number }
   | {
       type: 'command/enqueue';
       generation: number;

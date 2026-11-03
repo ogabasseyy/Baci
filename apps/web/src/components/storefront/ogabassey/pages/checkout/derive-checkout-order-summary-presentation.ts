@@ -28,11 +28,13 @@ interface DeriveCheckoutOrderSummaryPresentationInput {
   hasUser: boolean;
   currencySymbol: string;
   redvaultSummary: RedvaultQuoteSummary | null;
+  redvaultOrderReady: boolean;
   newsletterOptIn: boolean;
   setNewsletterOptIn: (value: boolean) => void;
   handlePlaceOrder: () => void | Promise<void>;
   isProcessing: boolean;
   isPayForMeValid: boolean;
+  isDeliveryValid: boolean;
   merchantId: string;
   merchantCountry: string | null;
   payoutCurrency: string | null;
@@ -56,11 +58,13 @@ export function deriveCheckoutOrderSummaryPresentation({
   hasUser,
   currencySymbol,
   redvaultSummary,
+  redvaultOrderReady,
   newsletterOptIn,
   setNewsletterOptIn,
   handlePlaceOrder,
   isProcessing,
   isPayForMeValid,
+  isDeliveryValid,
   merchantId,
   merchantCountry,
   payoutCurrency,
@@ -68,6 +72,10 @@ export function deriveCheckoutOrderSummaryPresentation({
   resumeOrderId,
   hasResumedOrder,
 }: DeriveCheckoutOrderSummaryPresentationInput) {
+  const confirmedRedvault =
+    paymentMethod === 'uba_redvault' && redvaultOrderReady
+      ? redvaultSummary
+      : null;
   const mobile: MobileOrderSummaryProps = {
     cart: display.mobileSummaryCart,
     cartTotal: display.summarySubtotal,
@@ -85,14 +93,27 @@ export function deriveCheckoutOrderSummaryPresentation({
   const desktop: DesktopOrderSummaryProps = {
     displayItems: display.displayItems,
     formatCurrencyAuto,
-    summarySubtotal: display.summarySubtotal,
-    orderTotals: amounts.summaryOrderTotals,
+    summarySubtotal: confirmedRedvault
+      ? confirmedRedvault.productSubtotalKobo / 100
+      : display.summarySubtotal,
+    orderTotals: confirmedRedvault
+      ? {
+          total: confirmedRedvault.payableKobo / 100,
+          taxAmount: confirmedRedvault.taxKobo / 100,
+        }
+      : amounts.summaryOrderTotals,
     taxLabel: amounts.summaryTaxLabel,
-    deliveryCost: amounts.summaryDeliveryCost,
-    discountAmount: amounts.summaryDiscountAmount,
+    deliveryCost: confirmedRedvault
+      ? confirmedRedvault.shippingKobo / 100
+      : amounts.summaryDeliveryCost,
+    discountAmount: confirmedRedvault
+      ? confirmedRedvault.discountKobo / 100
+      : amounts.summaryDiscountAmount,
     deliveryMethod: amounts.summaryDeliveryMethod,
     selectedQuoteId,
-    giftWrappingCost: amounts.summaryGiftWrappingCost,
+    giftWrappingCost: confirmedRedvault
+      ? confirmedRedvault.giftWrappingKobo / 100
+      : amounts.summaryGiftWrappingCost,
     paymentMethod,
     walletCurrencySupported: wallet.currencySupported,
     walletRedemptionAllowed: wallet.redemptionAllowed,
@@ -106,11 +127,13 @@ export function deriveCheckoutOrderSummaryPresentation({
     remainingAmount: wallet.remainingAmount,
     checkoutPayWithWallet: wallet.checkoutPayWithWallet,
     redvaultSummary,
+    redvaultOrderReady,
     newsletterOptIn,
     setNewsletterOptIn,
     handlePlaceOrder,
     isProcessing,
     isPayForMeValid,
+    isDeliveryValid,
   };
 
   return {

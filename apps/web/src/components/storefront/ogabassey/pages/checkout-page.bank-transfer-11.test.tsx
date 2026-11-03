@@ -1,10 +1,10 @@
 import {
-  CheckoutPage,
+  continueToPaymentAfterPickupCheck,
   expect,
   fireEvent,
   it,
   mockCheckoutSubmissionState,
-  render,
+  renderCheckoutWithStoreRates,
   screen,
   useAuthSafe,
   useMerchantSafe,
@@ -87,7 +87,7 @@ it('does not serialize an ordinary discount or wallet credit after selecting RED
       return Response.json({});
     });
 
-  render(<CheckoutPage />);
+  renderCheckoutWithStoreRates();
   await waitFor(() => {
     expect(
       fetchMock.mock.calls.some(([url]) =>
@@ -104,7 +104,7 @@ it('does not serialize an ordinary discount or wallet credit after selecting RED
   fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
 
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  await continueToPaymentAfterPickupCheck();
   fireEvent.click(await screen.findByRole('radio', { name: /pay with uba/i }));
   fireEvent.click(
     screen
@@ -175,10 +175,10 @@ it('retains a stored REDVAULT fence when switching payment methods', async () =>
       return Response.json({ states: ['Lagos'], locations: [] });
     });
 
-  render(<CheckoutPage />);
+  renderCheckoutWithStoreRates();
   fireEvent.click(screen.getByRole('button', { name: /delivery method/i }));
   fireEvent.click(screen.getByRole('button', { name: /store pickup/i }));
-  fireEvent.click(screen.getByRole('button', { name: /continue to payment/i }));
+  await continueToPaymentAfterPickupCheck();
   fireEvent.click(
     await screen.findByRole('radio', { name: /pay on delivery/i })
   );

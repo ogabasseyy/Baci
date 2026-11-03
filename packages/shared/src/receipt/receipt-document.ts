@@ -19,6 +19,8 @@ export interface ReceiptDocumentParams {
   isProforma: boolean;
   itemRows: string;
   logoHtml: string;
+  invoiceTermsHtml: string;
+  vatBreakdownHtml: string;
   paymentHistoryHtml: string;
   qrHtml: string;
   socialItems: string[];
@@ -45,6 +47,8 @@ export function renderReceiptDocument(params: ReceiptDocumentParams): string {
     isProforma,
     itemRows,
     logoHtml,
+    invoiceTermsHtml,
+    vatBreakdownHtml,
     paymentHistoryHtml,
     qrHtml,
     socialItems,
@@ -142,6 +146,8 @@ export function renderReceiptDocument(params: ReceiptDocumentParams): string {
       </div>
     </div>
 
+    ${invoiceTermsHtml}
+    ${vatBreakdownHtml}
     ${paymentHistoryHtml}
     ${bankDetailsHtml}
     ${qrHtml}

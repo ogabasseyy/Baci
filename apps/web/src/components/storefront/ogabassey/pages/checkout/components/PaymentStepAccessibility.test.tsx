@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import { PaymentStep } from './PaymentStep';
 
@@ -43,4 +43,18 @@ it('keeps collapsed payment controls out of the accessibility tree and focuses t
   rerender(<PaymentStep {...defaultProps} currentStep="payment" />);
   expect(screen.getByRole('radio', { name: /paystack/i })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Payment Method' })).toHaveFocus();
+});
+
+it('prevents placement when restored delivery validation fails', () => {
+  render(
+    <PaymentStep
+      {...defaultProps}
+      paymentMethod="paystack"
+      isDeliveryValid={false}
+    />
+  );
+  const placeOrder = screen.getByRole('button', { name: /place order/i });
+  expect(placeOrder).toBeDisabled();
+  fireEvent.click(placeOrder);
+  expect(defaultProps.handlePlaceOrder).not.toHaveBeenCalled();
 });

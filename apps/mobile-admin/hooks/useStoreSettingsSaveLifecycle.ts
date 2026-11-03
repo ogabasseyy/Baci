@@ -10,6 +10,7 @@ import {
   buildMerchantUpdatePayload,
   type StoreSettingsFormValues,
 } from '@/components/store-settings/store-settings-payload';
+import { validateStoreSettingsPhones } from '@/components/store-settings/validate-store-settings-phones';
 import type { StatusModalState } from '@/components/ui/StatusModal';
 import type { Merchant } from '@/hooks/useMerchant';
 import {
@@ -196,6 +197,18 @@ export function useStoreSettingsSaveLifecycle({
       return;
     }
 
+    const payload = buildMerchantUpdatePayload(baseline, formValues);
+    const phoneError = validateStoreSettingsPhones(payload);
+    if (phoneError) {
+      setStatusModal({
+        visible: true,
+        type: 'error',
+        title: 'Check phone number',
+        message: phoneError,
+      });
+      return;
+    }
+
     const saveToken = {
       id: ++nextSaveTokenIdRef.current,
       merchantId: merchant.id,
@@ -205,7 +218,7 @@ export function useStoreSettingsSaveLifecycle({
     markSavePending(saveToken);
     saveMutation.mutate({
       expectedUpdatedAt: syncedMerchantUpdatedAt,
-      payload: buildMerchantUpdatePayload(baseline, formValues),
+      payload,
       token: saveToken,
     });
   };

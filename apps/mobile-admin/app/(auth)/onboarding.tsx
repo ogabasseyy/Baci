@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   FlatList,
+  type FlatListProps,
   Pressable,
   StatusBar,
   StyleSheet,
@@ -15,7 +16,6 @@ import {
   useColorScheme,
   useWindowDimensions,
   View,
-  type ViewToken,
 } from 'react-native';
 import {
   SafeAreaView,
@@ -142,7 +142,13 @@ export default function OnboardingScreen() {
 
   const [viewableItemsChanged] = useState(
     () =>
-      ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      ({
+        viewableItems,
+      }: {
+        viewableItems: Parameters<
+          NonNullable<FlatListProps<unknown>['onViewableItemsChanged']>
+        >[0]['viewableItems'];
+      }) => {
         if (viewableItems && viewableItems.length > 0) {
           setCurrentIndex(viewableItems[0].index || 0);
         }

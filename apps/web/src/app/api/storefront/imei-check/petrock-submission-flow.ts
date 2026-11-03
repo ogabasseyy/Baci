@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { ImeiCheckField, ImeiDeviceCategory } from '@baci/shared/imei';
 import { NextResponse } from 'next/server';
+import type { ImeiRpcClient } from '@/lib/imei-access';
 import { encryptImeiIdentifier } from '@/lib/imei-identifier-crypto';
 import { redeemImeiWalletAndBeginProviderSubmission } from '@/lib/imei-lookup-fulfillment';
 import { PETROCK_DEFAULT_POLL_AFTER_MS } from '@/lib/imei-providers/petrock/petrock.constants';
@@ -18,9 +19,8 @@ import type {
   ImeiProviderBinding,
   ImeiProviderOutcome,
 } from '@/lib/imei-providers/types';
-import type { createAdminClient } from '@/lib/supabase/admin';
 
-type AdminClient = ReturnType<typeof createAdminClient>;
+type AdminClient = ImeiRpcClient;
 
 export function pendingPetrockResponse(lookupId: string) {
   return NextResponse.json(

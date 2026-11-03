@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import type { LayoutChangeEvent, ScrollView } from 'react-native';
+import type { LayoutChangeEvent, ScrollViewInstance } from 'react-native';
 import type { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import type { Biller, BillItem, useVTUBillers } from '@/hooks/use-vtu-billers';
@@ -42,7 +42,7 @@ export interface BillFormController {
   payment: ReturnType<typeof useUtilityPayment>;
   resetVerification: () => void;
   scheduleNextStepScroll: (nextStepY: number) => void;
-  scrollViewRef: RefObject<ScrollView | null>;
+  scrollViewRef: RefObject<ScrollViewInstance | null>;
   selectedBiller: Biller | null;
   selectedBillItemIdentifier: string | null;
   setProviderPickerExpanded: (isExpanded: boolean) => void;

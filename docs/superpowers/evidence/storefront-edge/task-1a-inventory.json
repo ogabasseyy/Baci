@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "04fc9201552df45a0fd6d6041204625b79d86729",
+  "originMainSha": "9cb5b510042e0ddfecb51a5144906a4020aa7cb0",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "b1f25f5e499832ede8654cb841ea9459da70d025b4e8ea9ff1bdfcfc2946571b",
-  "routingProxyInputSha256": "82a30a0a4833a91808e20d62faa32cda79a1ff0d17d2469a18cd5b382f00698f",
+  "routeTreeSha256": "60460b43717d9ca41ecbb7bd84def176e813b898545c69e0fadafe4ab560e13b",
+  "routingProxyInputSha256": "7106b41ab8c7f773aeb491f796834c9f830b8d3521c6d552860d2a75c6067623",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -914,6 +914,18 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/cart/checkout/reconcile/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/cart/checkout/reconcile",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/cart/checkout/reconcile/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/cart/commands/route.ts",
       "methods": [
         "OPTIONS",
@@ -1131,6 +1143,44 @@
       "routePattern": "/api/storefront/customer/savings/funding",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/customer/savings/funding/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/goal-cancel/route.ts",
+      "methods": [
+        "OPTIONS",
+        "PATCH",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/goal-cancel",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/goal-cancel/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/goal-complete/route.ts",
+      "methods": [
+        "OPTIONS",
+        "PATCH",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/goal-complete",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/goal-complete/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/savings/goal-pin/verify/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/savings/goal-pin/verify",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/savings/goal-pin/verify/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -1426,6 +1476,55 @@
     },
     {
       "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/change/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/change",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/change/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/reset/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/reset",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/reset/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/set/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/set",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/set/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/customer/wallet-pin/status/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/customer/wallet-pin/status",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/customer/wallet-pin/status/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
       "id": "api-route:storefront/discount/validate/route.ts",
       "methods": [
         "OPTIONS",
@@ -1453,6 +1552,8 @@
       "decision": "origin_dynamic",
       "id": "api-route:storefront/imei-check/route.ts",
       "methods": [
+        "GET",
+        "HEAD",
         "OPTIONS",
         "POST"
       ],
@@ -8634,5 +8735,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "b2698c77e3e84142ad08ae25633cc80e128f09a16bfd11f7067a5d564307b558"
+  "inventorySha256": "c1bfbe41eb10ee18cb01fc63f9ab3836469ca4c9275aef6be1325927bcb83b5a"
 }

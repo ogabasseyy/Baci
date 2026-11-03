@@ -199,4 +199,31 @@ describe('QuizEventsList', () => {
     expect(screen.getByText("OGABASSEY'S SUPERQUIZ")).toBeTruthy();
     expect(screen.getByText('No quiz events available.')).toBeTruthy();
   });
+
+  describe('bugfix: signed-out sign-in action looked like plain text', () => {
+    it('renders the sign-in action as a filled primary button', () => {
+      const onSignIn = jest.fn();
+      render(
+        <QuizEventsList
+          events={[]}
+          isSignedIn={false}
+          isStarting={false}
+          onSignIn={onSignIn}
+          onStart={jest.fn()}
+          styles={createQuizLobbyStyles(themeColors)}
+        />
+      );
+
+      const button = screen.getByRole('button', { name: 'Sign in to play' });
+      expect(button).toHaveStyle({
+        backgroundColor: themeColors.primary,
+        minHeight: 50,
+      });
+      expect(screen.getByText('Sign in to play')).toHaveStyle({
+        color: themeColors.primaryForeground,
+      });
+      fireEvent.press(button);
+      expect(onSignIn).toHaveBeenCalledTimes(1);
+    });
+  });
 });

@@ -1,4 +1,5 @@
 import { Alert } from 'react-native';
+import { getOAuthQueryParams } from '../lib/auth/oauth-query-params';
 import {
   type OAuthBrowserModule,
   openOAuthSession,
@@ -44,7 +45,6 @@ export function createOAuthActions(set: AuthStoreSet, get: AuthStoreGet) {
           await import('expo-web-browser')
         );
         const { makeRedirectUri } = await import('expo-auth-session');
-        const QueryParams = await import('expo-auth-session/build/QueryParams');
         const redirectUrl = makeRedirectUri();
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
@@ -72,7 +72,7 @@ export function createOAuthActions(set: AuthStoreSet, get: AuthStoreGet) {
             : { success: false, error: `Login failed: ${result.type}` };
         }
 
-        const { params, errorCode } = QueryParams.getQueryParams(result.url);
+        const { params, errorCode } = getOAuthQueryParams(result.url);
         if (errorCode) {
           set({ isLoading: false });
           return { success: false, error: errorCode };

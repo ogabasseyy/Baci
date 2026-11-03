@@ -1,3 +1,4 @@
+const resolveMobileReact = require('@baci/shared/resolve-mobile-react');
 const path = require('node:path');
 const { getDefaultConfig } = require('expo/metro-config');
 const { getPostHogExpoConfig } = require('posthog-react-native/metro');
@@ -83,6 +84,12 @@ config.resolver = {
     'react-native-reanimated': reanimatedPackageRoot,
     'react-native-screens': screensPackageRoot,
     'react-native-safe-area-context': safeAreaContextPackageRoot,
+  },
+  resolveRequest: (context, moduleName, platform) => {
+    return (
+      resolveMobileReact(context, moduleName, platform, projectRoot) ??
+      context.resolveRequest(context, moduleName, platform)
+    );
   },
   // 2026: Enable package exports as very new versions of native modules often require it
   unstable_enablePackageExports: true,

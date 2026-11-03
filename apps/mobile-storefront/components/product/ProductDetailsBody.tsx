@@ -1,5 +1,8 @@
 import { View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  FadeInDown,
+  useReducedMotion,
+} from 'react-native-reanimated';
 import type Colors from '@/constants/Colors';
 import type { Review, ReviewStats } from '@/hooks/use-reviews';
 import { isInternalSelectionAxis } from '@/lib/product-internal-selection-axes';
@@ -61,6 +64,7 @@ export function ProductDetailsBody({
   onMarkHelpful,
   colors,
 }: ProductDetailsBodyProps) {
+  const reducedMotion = useReducedMotion();
   const mergedVariantAttributes = mergeVariantAttributes(
     product.variant_attributes,
     product.variants
@@ -87,7 +91,7 @@ export function ProductDetailsBody({
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(200).duration(600)}
+      entering={reducedMotion ? undefined : FadeInDown.delay(200).duration(600)}
       style={[styles.detailsContainer, { backgroundColor: colors.background }]}
     >
       <ProductDetailsSummary

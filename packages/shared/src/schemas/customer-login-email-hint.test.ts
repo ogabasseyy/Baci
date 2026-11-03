@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   CustomerLoginEmailHintSchema,
+  maskCustomerLoginEmailHint,
   sanitizeCustomerLoginEmailHint,
+  sanitizeMaskedCustomerLoginEmailHint,
 } from './customer-login-email-hint';
 
 describe('CustomerLoginEmailHintSchema', () => {
@@ -46,5 +48,30 @@ describe('sanitizeCustomerLoginEmailHint', () => {
     expect(sanitizeCustomerLoginEmailHint(undefined)).toBe('');
     expect(sanitizeCustomerLoginEmailHint('')).toBe('');
     expect(sanitizeCustomerLoginEmailHint('https://evil.example')).toBe('');
+  });
+});
+
+describe('maskCustomerLoginEmailHint', () => {
+  it('masks the local part keeping first character and domain', () => {
+    expect(maskCustomerLoginEmailHint('  BasseyBJohn@Yahoo.CO.UK  ')).toBe(
+      'b***@yahoo.co.uk'
+    );
+  });
+
+  it('drops missing or invalid emails', () => {
+    expect(maskCustomerLoginEmailHint(null)).toBe('');
+    expect(maskCustomerLoginEmailHint('not-an-email')).toBe('');
+  });
+});
+
+describe('sanitizeMaskedCustomerLoginEmailHint', () => {
+  it('accepts masked hints and drops anything else', () => {
+    expect(sanitizeMaskedCustomerLoginEmailHint('b***@yahoo.co.uk')).toBe(
+      'b***@yahoo.co.uk'
+    );
+    expect(
+      sanitizeMaskedCustomerLoginEmailHint('basseybjohn@yahoo.co.uk')
+    ).toBe('');
+    expect(sanitizeMaskedCustomerLoginEmailHint(null)).toBe('');
   });
 });

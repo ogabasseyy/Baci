@@ -2,6 +2,7 @@
 
 import type { Dispatch, SetStateAction } from 'react';
 import { useState } from 'react';
+import { isCartCrossTabLockSupported } from './cart-cross-tab-lock';
 import { getMerchantSlugFromStorage } from './cart-storage';
 import type { CartItem } from './cart-types';
 import { getMerchantCartState } from './merchant-cart-storage';
@@ -64,8 +65,12 @@ export function useCartDelegationTransitions({
   if (propChangeReady && initialMerchantSlug !== prevInitialMerchantSlug) {
     setPrevInitialMerchantSlug(initialMerchantSlug);
     const slugToUse = initialMerchantSlug || getMerchantSlugFromStorage();
+    // Share the provider's full delegation predicate (including Web
+    // Locks support): without the lock check this branch would skip
+    // loading the new merchant's legacy cart while delegation stays off.
     const nextDelegated =
       sharedCartEnabled &&
+      isCartCrossTabLockSupported() &&
       merchantId !== null &&
       initialMerchantSlug !== null &&
       slugToUse === initialMerchantSlug;

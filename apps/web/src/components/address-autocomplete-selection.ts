@@ -19,6 +19,11 @@ export async function selectAddressPrediction(
   callbacks: SelectionCallbacks,
   shouldApplyResult: () => boolean
 ): Promise<void> {
+  if (!shouldApplyResult()) return;
+  // Details may complete a Google billing session even when a later edit makes
+  // its result obsolete. Reserve a fresh token for the next search immediately;
+  // the in-flight Details request still receives the original session token.
+  callbacks.setSessionToken(generateSessionToken());
   try {
     const isGeoapify =
       prediction.provider === 'geoapify' ||
@@ -45,7 +50,6 @@ export async function selectAddressPrediction(
     if (shouldApplyResult()) callbacks.onError?.(true);
   } finally {
     if (shouldApplyResult()) {
-      callbacks.setSessionToken(generateSessionToken());
       callbacks.setIsLoading(false);
     }
   }

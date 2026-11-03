@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 
 const require = createRequire(import.meta.url);
@@ -19,7 +20,7 @@ test('checked-in scene manifest resolves Expo scene startup on iOS 27', () => {
         UIWindowSceneSessionRoleApplication: [
           {
             UISceneConfigurationName: 'Default Configuration',
-            UISceneDelegateClassName: 'EXExpoAppSceneDelegate',
+            UISceneDelegateClassName: '$(PRODUCT_MODULE_NAME).SceneDelegate',
           },
         ],
       },
@@ -35,12 +36,19 @@ test('AppDelegate provides the React factory and preserves forwarded link callba
   );
   assert.match(source, /reactNativeFactory = factory/);
   assert.doesNotMatch(source, /window = UIWindow|factory\.startReactNative/);
-  assert.match(
-    source,
-    /RCTLinkingManager\.application\(app, open: url, options: options\)/
+  const delegate = readFileSync(
+    new URL('SceneDelegate.swift', nativeRoot),
+    'utf8'
   );
-  assert.match(
-    source,
-    /RCTLinkingManager\.application\(application, continue: userActivity/
+  assert.match(delegate, /class SceneDelegate: ExpoAppSceneDelegate/);
+  const expoDelegate = readFileSync(
+    join(
+      dirname(require.resolve('expo/package.json')),
+      'ios/Expo/ExpoAppSceneDelegate.swift'
+    ),
+    'utf8'
   );
+  assert.match(expoDelegate, /scene:openURLContexts:/);
+  assert.match(expoDelegate, /scene:continueUserActivity:/);
+  assert.match(expoDelegate, /RCTLinkingManager/);
 });

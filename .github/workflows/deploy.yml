@@ -21,8 +21,6 @@ on:
         type: boolean
 
 permissions:
-  # current-main-deploy-guard inspects workflow runs and jobs for superseding commits
-  actions: read
   contents: read
 
 concurrency:

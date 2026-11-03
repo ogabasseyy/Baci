@@ -16,7 +16,7 @@ function makeCompareResponse(filename, commits = [{ sha: currentSha }]) {
 
 async function verifySupersededFile(
   filename,
-  workflowRuns = [{ conclusion: 'success', head_sha: currentSha, status: 'completed' }],
+  workflowRuns = [{ conclusion: 'success', head_sha: currentSha, id: 123, status: 'completed' }],
   commits = [{ sha: currentSha }],
   jobs = [{ conclusion: 'success', name: 'deploy-production', status: 'completed' }]
 ) {
@@ -70,7 +70,7 @@ test('accepts an in-flight ancestor when no superseding commit has deployed yet'
       if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } });
       if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx', [{ sha: intermediateSha }, { sha: currentSha }]);
       if (url.includes('/jobs')) return response({ jobs: [{ conclusion: 'success', name: 'deploy-production' }] });
-      return response({ workflow_runs: [{ conclusion: 'success', head_sha: olderDeployedSha, status: 'completed' }] });
+      return response({ workflow_runs: [{ conclusion: 'success', head_sha: olderDeployedSha, id: 456, status: 'completed' }] });
     },
     repository: 'ogabasseyy/Baci',
     token: 'test-token',
@@ -81,7 +81,7 @@ test('accepts an in-flight ancestor when no superseding commit has deployed yet'
 
 test('rejects an ancestor when an intermediate superseding commit has deployed', async () => {
   await assert.rejects(
-    verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: intermediateSha, status: 'completed' }], [{ sha: intermediateSha }, { sha: currentSha }]),
+    verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: intermediateSha, id: 789, status: 'completed' }], [{ sha: intermediateSha }, { sha: currentSha }]),
     /superseded deployment SHA/
   );
 });
@@ -90,7 +90,7 @@ test('rejects an ancestor when a superseding commit failed after promote', async
   await assert.rejects(
     verifySupersededFile(
       'apps/web/src/app/page.tsx',
-      [{ conclusion: 'failure', head_sha: currentSha, status: 'completed' }],
+      [{ conclusion: 'failure', head_sha: currentSha, id: 123, status: 'completed' }],
       [{ sha: currentSha }],
       [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'success', name: 'Deploy to Vercel (with retry)' }] }]
     ),
@@ -101,18 +101,50 @@ test('rejects an ancestor when a superseding commit failed after promote', async
 test('accepts an ancestor when a superseding commit failed before promote', async () => {
   const result = await verifySupersededFile(
     'apps/web/src/app/page.tsx',
-    [{ conclusion: 'failure', head_sha: currentSha, status: 'completed' }],
+    [{ conclusion: 'failure', head_sha: currentSha, id: 123, status: 'completed' }],
     [{ sha: currentSha }],
     [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'failure', name: 'Deploy to Vercel (with retry)' }] }]
   );
   assert.deepEqual(result, { currentSha, expectedSha });
 });
 
-test('accepts an in-flight ancestor when superseding commit is queued or in_progress', async () => {
+test('accepts an in-flight ancestor when superseding commit is queued or in_progress without deploy', async () => {
   const result = await verifySupersededFile(
     'apps/web/src/app/page.tsx',
-    [{ conclusion: null, head_sha: currentSha, status: 'queued' }, { conclusion: 'cancelled', head_sha: intermediateSha, status: 'completed' }],
-    [{ sha: intermediateSha }, { sha: currentSha }]
+    [{ conclusion: null, head_sha: currentSha, id: 124, status: 'queued' }, { conclusion: 'cancelled', head_sha: intermediateSha, id: 125, status: 'completed' }],
+    [{ sha: intermediateSha }, { sha: currentSha }],
+    [{ conclusion: 'cancelled', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'cancelled', name: 'Deploy to Vercel (with retry)' }] }]
+  );
+  assert.deepEqual(result, { currentSha, expectedSha });
+});
+
+test('rejects an ancestor when a superseding run is in_progress but deploy-production completed', async () => {
+  await assert.rejects(
+    verifySupersededFile(
+      'apps/web/src/app/page.tsx',
+      [{ conclusion: null, head_sha: currentSha, id: 126, status: 'in_progress' }],
+      [{ sha: currentSha }],
+      [{ conclusion: 'success', name: 'deploy-production', status: 'completed' }]
+    ),
+    /superseded deployment SHA/
+  );
+});
+
+test('handles cancelled runs correctly based on whether deploy step succeeded', async () => {
+  await assert.rejects(
+    verifySupersededFile(
+      'apps/web/src/app/page.tsx',
+      [{ conclusion: 'cancelled', head_sha: currentSha, id: 127, status: 'completed' }],
+      [{ sha: currentSha }],
+      [{ conclusion: 'cancelled', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'success', name: 'Deploy to Vercel (with retry)' }] }]
+    ),
+    /superseded deployment SHA/
+  );
+  const result = await verifySupersededFile(
+    'apps/web/src/app/page.tsx',
+    [{ conclusion: 'cancelled', head_sha: currentSha, id: 128, status: 'completed' }],
+    [{ sha: currentSha }],
+    [{ conclusion: 'cancelled', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'cancelled', name: 'Deploy to Vercel (with retry)' }] }]
   );
   assert.deepEqual(result, { currentSha, expectedSha });
 });
@@ -128,7 +160,7 @@ test('short-circuits lookups when newest superseding commit is already deployed'
         if (url.includes('/jobs')) return response({ jobs: [{ conclusion: 'success', name: 'deploy-production' }] });
         const match = url.match(/head_sha=([0-9a-f]{40})/);
         if (match) queriedShas.push(match[1]);
-        return response({ workflow_runs: [{ conclusion: 'success', head_sha: currentSha, status: 'completed' }] });
+        return response({ workflow_runs: [{ conclusion: 'success', head_sha: currentSha, id: 129, status: 'completed' }] });
       },
       repository: 'ogabasseyy/Baci',
       token: 'test-token',
@@ -212,11 +244,11 @@ test('detects earlier successful deploy attempt when latest rerun failed', async
   await assert.rejects(
     verifySupersededFile(
       'apps/web/src/app/page.tsx',
-      [{ conclusion: 'failure', head_sha: currentSha, run_attempt: 2, status: 'completed' }],
+      [{ conclusion: 'failure', head_sha: currentSha, id: 130, run_attempt: 2, status: 'completed' }],
       [{ sha: currentSha }],
       [
         { conclusion: 'success', name: 'deploy-production', status: 'completed' },
-        { conclusion: 'failure', name: 'deploy-production', status: 'completed' },
+        { conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'failure', name: 'Deploy to Vercel (with retry)' }] },
       ]
     ),
     /superseded deployment SHA/
@@ -229,11 +261,14 @@ test('fails closed on malformed identity, API responses, or response truncation'
     [{ expectedSha, fetchImpl: async () => response({}, { ok: false, status: 503 }), repository: 'ogabasseyy/Baci', token: 'test-token' }, /GitHub lookup failed with status 503/],
     [{ expectedSha, fetchImpl: async () => response({ object: { sha: 'malformed' } }), repository: 'ogabasseyy/Baci', token: 'test-token' }, /invalid current main SHA/],
     [{ expectedSha, fetchImpl: async (url) => { if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } }); if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx'); return response({ workflow_runs: 'not-an-array' }); }, repository: 'ogabasseyy/Baci', token: 'test-token' }, /invalid workflow runs response/],
-    [{ expectedSha, fetchImpl: async (url) => { if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } }); if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx'); return response({ total_count: 105, workflow_runs: [{ conclusion: 'success', head_sha: currentSha, status: 'completed' }] }); }, repository: 'ogabasseyy/Baci', token: 'test-token' }, /incomplete or invalid workflow runs response/],
-    [{ expectedSha, fetchImpl: async (url) => { if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } }); if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx'); if (url.includes('/jobs')) return response({ jobs: [], total_count: 5 }); return response({ workflow_runs: [{ conclusion: 'success', head_sha: currentSha, status: 'completed' }] }); }, repository: 'ogabasseyy/Baci', token: 'test-token' }, /incomplete or invalid workflow jobs response/],
+    [{ expectedSha, fetchImpl: async (url) => { if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } }); if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx'); return response({ total_count: 105, workflow_runs: [{ conclusion: 'success', head_sha: currentSha, id: 1, status: 'completed' }] }); }, repository: 'ogabasseyy/Baci', token: 'test-token' }, /incomplete or invalid workflow runs response/],
+    [{ expectedSha, fetchImpl: async (url) => { if (url.includes('/git/ref/heads/main')) return response({ object: { sha: currentSha } }); if (url.includes('/compare/')) return makeCompareResponse('apps/web/src/app/page.tsx'); if (url.includes('/jobs')) return response({ jobs: [], total_count: 5 }); return response({ workflow_runs: [{ conclusion: 'success', head_sha: currentSha, id: 1, status: 'completed' }] }); }, repository: 'ogabasseyy/Baci', token: 'test-token' }, /incomplete or invalid workflow jobs response/],
   ]) await assert.rejects(verifyCurrentMainDeployment(args), re);
-  await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: 'bad-sha' }]), /invalid workflow run SHA/);
-  await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: currentSha }], [{ sha: 'bad-sha' }]), /invalid superseding commit SHA/);
+  await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: 'bad-sha', id: 1, status: 'completed' }]), /invalid workflow run SHA/);
+  await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: currentSha, id: null, status: 'completed' }]), /invalid workflow run id/);
+  await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'success', head_sha: currentSha, id: 1, status: 'completed' }], [{ sha: 'bad-sha' }]), /invalid superseding commit SHA/);
+  await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'failure', head_sha: currentSha, id: 1, status: 'completed' }], [{ sha: currentSha }], [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [] }]), /incomplete or invalid workflow job steps response/);
+  await assert.rejects(verifySupersededFile('apps/web/src/app/page.tsx', [{ conclusion: 'failure', head_sha: currentSha, id: 1, status: 'completed' }], [{ sha: currentSha }], [{ conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ name: 'Other step' }] }]), /missing Deploy to Vercel step/);
 });
 
 test('production deploy is staged and binds the exact-main guard', () => {
@@ -242,8 +277,7 @@ test('production deploy is staged and binds the exact-main guard', () => {
   assert.match(workflow, /DEPLOY_CURRENT_MAIN_GUARD: \.github\/scripts\/current-main-deploy-guard\.mjs/);
   assert.match(workflow, /deploy --yes --prebuilt --prod --skip-domain --archive=tgz/);
   const deployJob = workflow.slice(workflow.indexOf('  deploy-production:'));
-  assert.match(deployJob, /permissions:[\s\S]*?actions: read/);
-  assert.match(deployJob, /permissions:[\s\S]*?contents: read/);
+  for (const p of [/permissions:[\s\S]*?actions: read/, /permissions:[\s\S]*?contents: read/, /- name: Deploy to Vercel \(with retry\)/]) assert.match(deployJob, p);
   const prebuildGuard = deployJob.indexOf('- name: Verify exact-main deployment authority before build');
   assert.ok(prebuildGuard > 0, 'missing prebuild exact-main guard');
   const nodeSetup = deployJob.indexOf('- name: Setup Node.js for deployment authority guard');

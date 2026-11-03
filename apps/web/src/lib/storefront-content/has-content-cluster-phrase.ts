@@ -1,10 +1,4 @@
-import { applyJoinedTitleCorrections } from './apply-joined-title-corrections';
-import { normalizeContentCurrencyTokens } from './normalize-content-currency-tokens';
-
-export const normalizeClusterText = (v: string | null | undefined) =>
-  normalizeContentCurrencyTokens(
-    applyJoinedTitleCorrections(v?.toLowerCase().trim() ?? '')
-  );
+import { normalizeClusterText } from './normalize-cluster-text';
 
 const isPhraseBoundary = (v?: string): boolean => !v || /[^a-z0-9]/.test(v);
 

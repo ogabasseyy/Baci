@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { hasPhrase, normalizeClusterText } from './has-content-cluster-phrase';
+import { hasPhrase } from './has-content-cluster-phrase';
 
 describe('has-content-cluster-phrase', () => {
-  it('normalizes currency tokens and joined title corrections', () => {
-    expect(normalizeClusterText('  ₦500k  ')).toBe('ngn 500 k');
-  });
-
   it('matches phrases at word boundaries', () => {
     expect(hasPhrase('high-end gaming laptop review', 'gaming laptop')).toBe(
       true

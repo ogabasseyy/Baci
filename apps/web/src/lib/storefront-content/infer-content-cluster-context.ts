@@ -24,10 +24,8 @@ import type {
   InferredContentClusterContext,
   SupportedClusterCategory,
 } from './content-cluster-types';
-import {
-  hasPhrase,
-  normalizeClusterText as normalizeText,
-} from './has-content-cluster-phrase';
+import { hasPhrase } from './has-content-cluster-phrase';
+import { normalizeClusterText as normalizeText } from './normalize-cluster-text';
 import { tokenizeContentText } from './tokenize-content-text';
 
 const tokenize = (values: Array<string | null | undefined>) => [

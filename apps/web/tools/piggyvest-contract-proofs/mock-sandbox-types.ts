@@ -58,6 +58,8 @@ export interface MockOptions {
   customerPayoutWallet: 'accepted' | 'rejected';
   subAccountAcceptsPayout: boolean;
   subWalletInheritsPayout: boolean;
+  /** A sub-wallet created with no payout of its own pays itself (wins over inheritance). */
+  subWalletPaysItselfWhenUnset: boolean;
   payoutReadback: 'fields' | 'none' | 'accrual_only';
   /** Sub-wallet readbacks drop the payout field while the main wallet keeps it. */
   goalReadbackOmitsPayout: boolean;
@@ -99,6 +101,7 @@ export const DEFAULT_MOCK_OPTIONS: MockOptions = {
   customerPayoutWallet: 'accepted',
   subAccountAcceptsPayout: true,
   subWalletInheritsPayout: false,
+  subWalletPaysItselfWhenUnset: false,
   payoutReadback: 'fields',
   goalReadbackOmitsPayout: false,
 };

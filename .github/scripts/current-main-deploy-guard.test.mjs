@@ -242,8 +242,8 @@ test('detects earlier successful deploy attempt when rerun is queued or failed',
         [{ conclusion: status === 'queued' ? null : 'failure', head_sha: currentSha, id: 130, run_attempt, status }],
         [{ sha: currentSha }],
         [
+          { conclusion: 'cancelled', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'skipped', name: 'Deploy to Vercel (with retry)' }] },
           { conclusion: 'success', name: 'deploy-production', status: 'completed' },
-          { conclusion: 'failure', name: 'deploy-production', status: 'completed', steps: [{ conclusion: 'failure', name: 'Deploy to Vercel (with retry)' }] },
         ]
       ),
       /superseded deployment SHA/

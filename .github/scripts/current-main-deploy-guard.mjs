@@ -111,26 +111,28 @@ async function runHasDeployedProduction(fetchImpl, apiRoot, repository, run, tok
   ) {
     throw new Error('incomplete or invalid workflow jobs response');
   }
-  const deployJob = jobsBody.jobs.find((j) => j?.name === 'deploy-production');
-  if (!deployJob) {
+  const deployJobs = jobsBody.jobs.filter((j) => j?.name === 'deploy-production');
+  if (deployJobs.length === 0) {
     if (run.status === 'completed' || jobsBody.jobs.length > 0) {
       throw new Error('missing deploy-production job in workflow run');
     }
     return false;
   }
-  if (deployJob.conclusion === 'success') return true;
-  if (deployJob.conclusion !== 'skipped') {
-    if (Array.isArray(deployJob.steps) && deployJob.steps.length > 0) {
-      const deployStep = deployJob.steps.find((s) => s?.name === 'Deploy to Vercel (with retry)');
-      if (!deployStep) {
-        throw new Error('missing Deploy to Vercel step in deploy-production job');
+  for (const deployJob of deployJobs) {
+    if (deployJob.conclusion === 'success') return true;
+    if (deployJob.conclusion !== 'skipped') {
+      if (Array.isArray(deployJob.steps) && deployJob.steps.length > 0) {
+        const deployStep = deployJob.steps.find((s) => s?.name === 'Deploy to Vercel (with retry)');
+        if (!deployStep) {
+          throw new Error('missing Deploy to Vercel step in deploy-production job');
+        }
+        const attempted =
+          deployStep.status === 'in_progress' ||
+          (Boolean(deployStep.conclusion) && deployStep.conclusion !== 'skipped');
+        if (attempted) return true;
+      } else if (deployJob.status === 'completed') {
+        throw new Error('incomplete or invalid workflow job steps response');
       }
-      const attempted =
-        deployStep.status === 'in_progress' ||
-        (Boolean(deployStep.conclusion) && deployStep.conclusion !== 'skipped');
-      if (attempted) return true;
-    } else if (deployJob.status === 'completed') {
-      throw new Error('incomplete or invalid workflow job steps response');
     }
   }
   return false;

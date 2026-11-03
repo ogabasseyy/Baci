@@ -117,16 +117,16 @@ test('bugfix: fails closed when the superseding list contains the expected SHA',
   await assert.rejects(verify(farAheadFetch({ runs: [expectedRun], commitList: [expectedSha, currentSha] })), /incomplete superseding commit list/);
 });
 
-test('bugfix: counts every lookup against the request budget and fails closed', async () => {
-  const commitList = Array.from({ length: 169 }, (_, i) => hex(i + 10)).concat(currentSha);
-  const runs = commitList.map((sha, i) => run(sha, 9000 + i, 'cancelled'));
+test('bugfix: counts every lookup (runs and jobs) against the request budget and fails closed', async () => {
+  const commitList = Array.from({ length: 149 }, (_, i) => hex(i + 10)).concat(currentSha);
+  const runs = commitList.flatMap((sha, i) => [run(sha, 9000 + i, 'cancelled'), run(sha, 19000 + i, 'cancelled')]);
   const urls = [];
   await assert.rejects(verify(farAheadFetch({ runs, commitList, urls })), /request budget/);
   assert.ok(urls.length <= 332);
 });
 
 test('refuses, with a clear error, a gap beyond what the request budget can cover', async () => {
-  const commitList = Array.from({ length: 250 }, (_, i) => hex(i + 10)).concat(currentSha);
+  const commitList = Array.from({ length: 150 }, (_, i) => hex(i + 10)).concat(currentSha);
   await assert.rejects(verify(farAheadFetch({ runs: [], commitList })), /too many superseding commits/);
 });
 

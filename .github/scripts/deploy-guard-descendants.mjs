@@ -3,7 +3,7 @@ const PAGE_SIZE = 100;
 // Each superseding commit costs ~2 requests (runs + jobs). The guard runs up to ~3 times per
 // deploy and GITHUB_TOKEN allows ~1000 REST calls/hour/repository, so one scan gets a third of
 // that: ~150 superseding commits. Beyond it the guard refuses rather than judge a partial history.
-const MAX_PAGES = 2;
+const MAX_COMMITS = 150;
 const LOOKUP_CONCURRENCY = 5;
 const MAX_REQUESTS = 330;
 
@@ -18,7 +18,7 @@ export async function descendantAlreadyDeployed({ apiRoot, comparison, currentSh
     return fetchImpl(url, options);
   };
   const pages = Math.ceil(comparison.total_commits / PAGE_SIZE);
-  if (pages > MAX_PAGES) throw new Error('too many superseding commits for the request budget');
+  if (comparison.total_commits > MAX_COMMITS) throw new Error('too many superseding commits for the request budget');
   if (!Array.isArray(comparison.commits)) throw new Error('incomplete superseding commit list');
   const descendants = new Set();
   const add = (commits) => {

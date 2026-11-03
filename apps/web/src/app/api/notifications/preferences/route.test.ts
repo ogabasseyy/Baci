@@ -241,6 +241,9 @@ describe('PATCH /api/notifications/preferences shipment_event_preferences', () =
       merchant_id: MERCHANT_ID,
       in_app_enabled: false,
     });
+    expect(upsert.mock.invocationCallOrder[0]).toBeLessThan(
+      rpc.mock.invocationCallOrder[0]
+    );
   });
 
   it('bugfix: aborts instead of wiping saved toggles when the merge fails', async () => {

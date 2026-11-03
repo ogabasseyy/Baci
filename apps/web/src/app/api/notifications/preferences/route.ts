@@ -153,29 +153,6 @@ export async function PATCH(request: NextRequest) {
     if (body.follow_up_notifications_enabled !== undefined)
       updates.follow_up_notifications_enabled =
         body.follow_up_notifications_enabled;
-    if (body.shipment_event_preferences !== undefined) {
-      // Atomic jsonb merge in SQL so concurrent partial toggles never clobber
-      // each other (RLS applies: the function is SECURITY INVOKER).
-      const { data: mergedRow, error: mergeError } = await supabase.rpc(
-        'merge_shipment_event_preferences',
-        {
-          p_merchant_id: merchantId,
-          p_patch: body.shipment_event_preferences,
-        }
-      );
-      if (mergeError) {
-        console.error('Error merging shipment event preferences:', mergeError);
-        return NextResponse.json(
-          { error: 'Failed to update preferences' },
-          { status: 500 }
-        );
-      }
-      // Shipment-only update: the authorised RPC already returned the row, so
-      // staff are not sent through the owner-only table policies.
-      if (Object.keys(updates).length === 1 && mergedRow) {
-        return NextResponse.json(mergedRow);
-      }
-    }
     if (body.quiet_hours_start !== undefined)
       updates.quiet_hours_start = body.quiet_hours_start;
     if (body.quiet_hours_end !== undefined)
@@ -183,21 +160,48 @@ export async function PATCH(request: NextRequest) {
     if (body.quiet_hours_time_zone !== undefined)
       updates.quiet_hours_time_zone = body.quiet_hours_time_zone;
 
-    // Upsert preferences (create if not exists, update if exists)
-    const { data: updated, error: updateError } = await supabase
-      .from('notification_preferences')
-      .upsert(updates, { onConflict: 'merchant_id' })
-      .select(
-        'merchant_id, in_app_enabled, banner_enabled, follow_up_notifications_enabled, shipment_event_preferences, quiet_hours_start, quiet_hours_end, quiet_hours_time_zone, updated_at'
-      )
-      .single();
+    // Shipment-only updates skip the owner-only upsert entirely: the authorised
+    // RPC below saves and returns the row, so staff with settings.edit work.
+    let updated: unknown = null;
+    if (Object.keys(updates).length > 1) {
+      const { data: upserted, error: updateError } = await supabase
+        .from('notification_preferences')
+        .upsert(updates, { onConflict: 'merchant_id' })
+        .select(
+          'merchant_id, in_app_enabled, banner_enabled, follow_up_notifications_enabled, shipment_event_preferences, quiet_hours_start, quiet_hours_end, quiet_hours_time_zone, updated_at'
+        )
+        .single();
 
-    if (updateError) {
-      console.error('Error updating preferences:', updateError);
-      return NextResponse.json(
-        { error: 'Failed to update preferences' },
-        { status: 500 }
+      if (updateError) {
+        console.error('Error updating preferences:', updateError);
+        return NextResponse.json(
+          { error: 'Failed to update preferences' },
+          { status: 500 }
+        );
+      }
+      updated = upserted;
+    }
+
+    if (body.shipment_event_preferences !== undefined) {
+      // Atomic jsonb merge in SQL so concurrent partial toggles never clobber
+      // each other. It runs after the upsert so a failing upsert saves nothing.
+      // The function is SECURITY DEFINER and authorises the owner or staff
+      // with settings.edit itself.
+      const { data: mergedRow, error: mergeError } = await supabase.rpc(
+        'merge_shipment_event_preferences',
+        {
+          p_merchant_id: merchantId,
+          p_patch: body.shipment_event_preferences,
+        }
       );
+      if (mergeError || !mergedRow) {
+        console.error('Error merging shipment event preferences:', mergeError);
+        return NextResponse.json(
+          { error: 'Failed to update preferences' },
+          { status: 500 }
+        );
+      }
+      return NextResponse.json(mergedRow);
     }
 
     return NextResponse.json(updated);

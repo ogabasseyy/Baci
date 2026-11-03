@@ -299,7 +299,10 @@ BEGIN
   END IF;
   IF TG_OP = 'UPDATE' THEN
     -- In-place relink/correction of the waybill on the same shipment row.
-    IF upper(btrim(OLD.tracking_number)) IS NOT DISTINCT FROM upper(btrim(NEW.tracking_number)) THEN
+    -- First assignment of a waybill (NULL/empty -> value) is not a change.
+    IF nullif(btrim(OLD.tracking_number), '') IS NULL
+      OR upper(btrim(OLD.tracking_number)) IS NOT DISTINCT FROM upper(btrim(NEW.tracking_number))
+    THEN
       RETURN NEW;
     END IF;
   ELSIF NOT EXISTS (

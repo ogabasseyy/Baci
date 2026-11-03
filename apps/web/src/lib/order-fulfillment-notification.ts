@@ -242,9 +242,9 @@ export async function sendOrderFulfillmentNotification({
   if (
     (eventType === 'order_delivery_failed' || eventType === 'order_returned') &&
     trackingNumber &&
-    order.tracking_number &&
-    trackingNumber.trim().toUpperCase() !==
-      order.tracking_number.trim().toUpperCase()
+    (!order.tracking_number ||
+      trackingNumber.trim().toUpperCase() !==
+        order.tracking_number.trim().toUpperCase())
   ) {
     // The order moved on to a replacement shipment since this event was
     // queued: the previous parcel's failure/return is no longer the news.

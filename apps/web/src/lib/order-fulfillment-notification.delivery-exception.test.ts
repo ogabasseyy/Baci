@@ -36,7 +36,10 @@ const order = (shipping_status: string) => ({
   order_items: [{ name: 'Parcel', quantity: 1 }],
 });
 
-function supabaseFor(shippingStatus: string) {
+function supabaseFor(
+  shippingStatus: string,
+  overrides: Record<string, unknown> = {}
+) {
   const builderFor = (data: unknown) => {
     const b = {
       eq: vi.fn(() => b),
@@ -49,7 +52,7 @@ function supabaseFor(shippingStatus: string) {
     from: vi.fn((table: string) =>
       table === 'merchants'
         ? builderFor(merchant)
-        : builderFor(order(shippingStatus))
+        : builderFor({ ...order(shippingStatus), ...overrides })
     ),
   } as unknown as SupabaseClient;
 }
@@ -116,5 +119,18 @@ describe('delivery exception emails (GIG failed / returned)', () => {
       trackingNumber: 'w1',
     });
     expect(result).toMatchObject({ status: 'sent' });
+  });
+
+  it('bugfix: skips a stale return when the order tracking number was cleared', async () => {
+    const supabase = supabaseFor('shipped', { tracking_number: null });
+    const result = await sendOrderFulfillmentNotification({
+      eventType: 'order_returned',
+      merchantId: 'merchant-1',
+      orderId: 'order-1',
+      supabase,
+      trackingNumber: 'OLD-WAYBILL',
+    });
+    expect(result).toMatchObject({ status: 'skipped' });
+    expect(sendEmail).not.toHaveBeenCalled();
   });
 });

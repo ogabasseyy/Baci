@@ -12,15 +12,11 @@ import {
   createMemoryJournal,
   type Journal,
 } from './mutation-journal';
-import { runProof1 } from './proof-1-return-if-exist';
-import { runProof2 } from './proof-2-tsq';
-import { runProof3 } from './proof-3-goal-deposit';
-import { runProof4 } from './proof-4-withdrawal-counter';
-import { runProof5 } from './proof-5-interest';
-import { runProof6 } from './proof-6-fees';
-import { runProof7 } from './proof-7-interest-routing';
 import { emptyScenarioState, type ProofContext } from './proof-context';
-import { ProviderApi, qaIdentityFor } from './provider-ops';
+import type { ProofRunner } from './proof-extension';
+import { PROOF_ORDER } from './proof-order';
+import { qaIdentityFor } from './provider-ops';
+import { ProofApi } from './provider-ops-proofs';
 import { loadAllowlist } from './qa-allowlist';
 import { isProof7KeyOf } from './qa-keys';
 import { Redactor } from './redactor';
@@ -34,25 +30,7 @@ import {
 import { setupScenario } from './scenario';
 import type { ProofId, ProofResult } from './types';
 
-export type ProofRunner = (ctx: ProofContext) => Promise<ProofResult>;
-
-const PROOF_ORDER: ReadonlyArray<readonly [ProofId, ProofRunner, string]> = [
-  ['p1', runProof1, 'Create-customer re-POST with returnIfExist=true'],
-  [
-    'p2',
-    runProof2,
-    'Transaction status query (TSQ) for a wallet-to-wallet transfer',
-  ],
-  [
-    'p3',
-    runProof3,
-    "Bank deposit into a goal sub-wallet's own virtual account",
-  ],
-  ['p4', runProof4, 'Withdrawal counter (wallet-to-wallet vs bank outflow)'],
-  ['p5', runProof5, 'Interest visibility (development evidence only)'],
-  ['p6', runProof6, 'Fees on deposits and wallet transfers'],
-  ['p7', runProof7, 'Main-wallet interest routing at creation'],
-];
+export type { ProofRunner } from './proof-extension';
 
 export interface RunDeps {
   /** Live transport. Defaults to the global fetch captured BEFORE the guard is installed. */
@@ -211,7 +189,7 @@ export async function runHarness(
     const redactor = new Redactor();
     const ctx: ProofContext = {
       mode: config.mode,
-      api: new ProviderApi(
+      api: new ProofApi(
         { baseUrl: SANDBOX_ORIGIN, token: token ?? '' },
         capture,
         gate

@@ -4,8 +4,10 @@ import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
 import { GOAL_CANCEL_STATEMENTS as sql } from './goal-cancel-statements';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
+import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
 import { createSavingsVerifyQueryProvider } from './primary-wallet-savings-reconciliation-runtime';
+import { retrievePiggyvestWallet } from './wallets';
 import { emitPiggyvestWebhookAlert } from './webhook-alerts';
 
 type Execute = (
@@ -22,6 +24,10 @@ export function createGoalCancelEvidenceStore(input: {
   integrationId: string;
   environment: 'staging' | 'production';
   execute: Execute;
+  // Re-reads the goal wallet balance at PiggyVest (kobo) once a transfer is
+  // verified successful. Anything above 0 means money is still there (a
+  // credit landed between the snapshot and the transfer).
+  readGoalBalanceKobo?: (walletId: string) => Promise<number>;
 }) {
   async function run(statement: string, selection: string) {
     const result = await input.execute(statement, [
@@ -48,6 +54,42 @@ export function createGoalCancelEvidenceStore(input: {
       ...(typeof operationId === 'string' ? { operationId } : {}),
     });
   }
+  // Concludes a verified provider record. PiggyVest has already answered, so
+  // a database failure here (a raise inside the settle function, a malformed
+  // answer) is not a plain wait: a person is paged and the status path reports
+  // needs-review. The error is rethrown, so nothing is concluded and the next
+  // status check retries from the stored attempt.
+  async function conclude<T extends string>(
+    statement: string,
+    proof: object,
+    allowed: readonly T[],
+    kind: 'settle' | 'release'
+  ): Promise<T> {
+    const { status: _status, ...receipt } = proof as Record<string, unknown>;
+    let result: unknown;
+    try {
+      // Only a settlement carries the residual: the database never settles a
+      // goal as cancelled-at-zero while the provider wallet still holds money,
+      // and never sends a second transfer. The value can only make the
+      // database stricter (review), never looser.
+      let body: Record<string, unknown> = receipt;
+      if (kind === 'settle' && input.readGoalBalanceKobo) {
+        const residual = await input.readGoalBalanceKobo(
+          String(receipt.sourceWalletId)
+        );
+        if (Number.isSafeInteger(residual) && residual > 0)
+          body = { ...receipt, residualKobo: residual };
+      }
+      result = await run(statement, JSON.stringify(body));
+      if (!allowed.includes(result as T))
+        throw new Error('Goal cancel settlement unavailable');
+    } catch (error) {
+      flagConflict(`${kind}_failed`, receipt);
+      throw error;
+    }
+    if (result === 'conflict') flagConflict(`${kind}_conflict`, receipt);
+    return result as T;
+  }
   return {
     hasConflict: () => conflicted,
     async loadDispatched(operationId: string) {
@@ -65,34 +107,32 @@ export function createGoalCancelEvidenceStore(input: {
       const result = await run(sql.findByReference, reference);
       return result === null ? null : schemas.referenceMatch.parse(result);
     },
-    async settle(
-      proof: object
-    ): Promise<'confirmed' | 'duplicate' | 'conflict'> {
-      const { status: _status, ...receipt } = proof as Record<string, unknown>;
-      const result = await run(sql.settle, JSON.stringify(receipt));
-      if (
-        result !== 'confirmed' &&
-        result !== 'duplicate' &&
-        result !== 'conflict'
-      )
-        throw new Error('Goal cancel settlement unavailable');
-      if (result === 'conflict') flagConflict('settle_conflict', receipt);
-      return result;
-    },
-    async release(
-      proof: object
-    ): Promise<'released' | 'duplicate' | 'conflict'> {
-      const { status: _status, ...receipt } = proof as Record<string, unknown>;
-      const result = await run(sql.release, JSON.stringify(receipt));
-      if (
-        result !== 'released' &&
-        result !== 'duplicate' &&
-        result !== 'conflict'
-      )
-        throw new Error('Goal cancel settlement unavailable');
-      if (result === 'conflict') flagConflict('release_conflict', receipt);
-      return result;
-    },
+    settle: (proof: object) =>
+      conclude<'confirmed' | 'duplicate' | 'conflict'>(
+        sql.settle,
+        proof,
+        ['confirmed', 'duplicate', 'conflict'],
+        'settle'
+      ),
+    release: (proof: object) =>
+      conclude<'released' | 'duplicate' | 'conflict'>(
+        sql.release,
+        proof,
+        ['released', 'duplicate', 'conflict'],
+        'release'
+      ),
+  };
+}
+
+function goalBalanceReader(environment: unknown, token: string) {
+  return async (walletId: string) => {
+    const wallet = await retrievePiggyvestWallet(
+      { token, baseUrl: getPrimaryWalletProviderOrigin(environment) },
+      walletId
+    );
+    return schemas.wallet.shape.balance.parse(
+      (wallet as { balance?: unknown }).balance
+    );
   };
 }
 
@@ -118,6 +158,7 @@ export async function runGoalCancelOutflowReconciliation(input: {
     integrationId: configuration.integrationId,
     environment: configuration.environment,
     execute: createPrimaryWalletEvidenceExecutor(configuration),
+    readGoalBalanceKobo: goalBalanceReader(configuration.environment, token),
   });
   for (const reference of input.references) {
     if (!schemas.reference.safeParse(reference).success) continue;
@@ -157,6 +198,7 @@ export async function runGoalCancelReconciliation(input: {
     integrationId: configuration.integrationId,
     environment: configuration.environment,
     execute: createPrimaryWalletEvidenceExecutor(configuration),
+    readGoalBalanceKobo: goalBalanceReader(configuration.environment, token),
   });
   const outcome = await reconcilePrimaryWalletSavings(input.operationId, {
     ...store,

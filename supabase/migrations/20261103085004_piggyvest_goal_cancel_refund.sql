@@ -450,14 +450,21 @@ SET search_path = ''
 AS $$
   SELECT COALESCE(CASE
     WHEN proof IS NOT NULL AND pg_catalog.jsonb_typeof(proof) = 'object' THEN
-      (SELECT pg_catalog.count(*) FROM pg_catalog.jsonb_object_keys(proof)) = 7
+      (SELECT pg_catalog.count(*) FROM pg_catalog.jsonb_object_keys(proof)) BETWEEN 7 AND 8
       AND (proof ?& ARRAY['operationId', 'providerTransactionId', 'reference', 'amountKobo',
                           'sourceWalletId', 'destinationWalletId', 'businessId']) IS TRUE
       AND pg_catalog.jsonb_typeof(proof -> 'amountKobo') = 'number'
       AND COALESCE(proof ->> 'amountKobo', '') ~ '^[1-9][0-9]*$'
+      -- The optional eighth key is the goal wallet balance the caller re-read
+      -- at the provider after the transfer. It can only make settlement
+      -- stricter (review), never looser.
+      AND ((SELECT pg_catalog.count(*) FROM pg_catalog.jsonb_object_keys(proof)) = 7
+           OR (proof ? 'residualKobo'
+               AND pg_catalog.jsonb_typeof(proof -> 'residualKobo') = 'number'
+               AND COALESCE(proof ->> 'residualKobo', '') ~ '^[1-9][0-9]{0,9}$'))
       AND NOT EXISTS (
         SELECT 1 FROM pg_catalog.jsonb_each(proof) AS field
-         WHERE field.key <> 'amountKobo'
+         WHERE field.key NOT IN ('amountKobo', 'residualKobo')
            AND (pg_catalog.jsonb_typeof(field.value) IS DISTINCT FROM 'string'
                 OR pg_catalog.octet_length(field.value #>> '{}') NOT BETWEEN 1 AND 512))
     ELSE false END, false);
@@ -484,6 +491,10 @@ DECLARE
   v_now timestamptz;
   v_wallet_id uuid;
   v_wallet_balance numeric;
+  v_late boolean := false;
+  v_review boolean := false;
+  v_goal_amount numeric;
+  v_residual bigint := 0;
 BEGIN
   SELECT candidate.* INTO v_binding FROM piggyvest_primary.integrations AS candidate
     JOIN piggyvest_primary.inflow_authorities AS authority ON authority.integration_id = candidate.id
@@ -535,6 +546,7 @@ BEGIN
                   AND live.state IN ('reserved', 'dispatched', 'confirmed')) THEN
       RETURN 'conflict';
     END IF;
+    v_late := true;
   ELSIF v_operation.state <> 'dispatched' THEN
     RETURN 'conflict';
   END IF;
@@ -548,6 +560,28 @@ BEGIN
   END IF;
   -- The clock is read after the locks, so the action time is the transition.
   v_now := pg_catalog.clock_timestamp();
+  -- A goal wallet that still holds money at the provider after the transfer
+  -- (a credit landed between the balance snapshot and the transfer) is never
+  -- settled as cancelled-at-zero: it is kept open for review with that balance
+  -- recorded, and no second transfer is ever sent.
+  v_residual := COALESCE((proof ->> 'residualKobo')::bigint, 0);
+  -- A late success settles ONLY its own amount. The goal may have been funded
+  -- again after this attempt was released (the funding fence ignores released
+  -- attempts), so when funding was reserved after the dispatch, or any local
+  -- balance would remain once this refund is deducted, the goal stays open
+  -- with that balance, a review marker is written and the caller is told
+  -- 'conflict' so an operator is paged. The refund itself is still credited.
+  IF v_late THEN
+    SELECT goal.current_amount INTO v_goal_amount FROM public.customer_savings_goals AS goal
+     WHERE goal.id = v_operation.goal_id AND goal.customer_id = v_intent.customer_id
+       AND goal.merchant_id = v_intent.merchant_id FOR UPDATE;
+    v_review := EXISTS (SELECT 1 FROM piggyvest_primary.savings_operations AS funding
+                         WHERE funding.goal_id = v_operation.goal_id
+                           AND funding.state IN ('reserved', 'dispatched', 'confirmed')
+                           AND funding.created_at >= v_operation.dispatched_at)
+      OR COALESCE(v_goal_amount - v_operation.amount_kobo::numeric / 100, 0) > 0;
+  END IF;
+  v_review := v_review OR v_residual > 0;
   UPDATE piggyvest_primary.goal_cancel_operations
      SET state = 'confirmed', provider_transaction_id = proof ->> 'providerTransactionId',
          settled_at = v_now
@@ -573,20 +607,30 @@ BEGIN
   VALUES (v_wallet_id, v_intent.customer_id, v_intent.merchant_id, 'refund', 'completed',
     v_operation.amount_kobo::numeric / 100, v_wallet_balance,
     'piggyvest_goal_cancel', v_operation.id, 'Savings goal cancelled: refunded to main wallet');
-  -- The refund has reached the main wallet, so the goal no longer holds money.
-  -- A goal row that is gone or already spent does not undo a settled transfer.
+  -- The refund has reached the main wallet, so the goal no longer holds the
+  -- refunded money. A goal row that is gone or already spent does not undo a
+  -- settled transfer. Under review the goal stays open, drops by this refund's own
+  -- amount and keeps any residual the provider still holds.
   UPDATE public.customer_savings_goals AS goal
-     SET status = 'cancelled', cancelled_at = v_now, future_debits_cancelled_at = COALESCE(goal.future_debits_cancelled_at, v_now),
-         current_amount = 0, updated_at = v_now
+     SET status = CASE WHEN v_review THEN goal.status ELSE 'cancelled' END,
+         cancelled_at = CASE WHEN v_review THEN goal.cancelled_at ELSE v_now END,
+         future_debits_cancelled_at = CASE WHEN v_review THEN goal.future_debits_cancelled_at
+           ELSE COALESCE(goal.future_debits_cancelled_at, v_now) END,
+         current_amount = CASE
+           WHEN v_late THEN GREATEST(goal.current_amount - v_operation.amount_kobo::numeric / 100,
+                                     v_residual::numeric / 100)
+           ELSE v_residual::numeric / 100 END,
+         updated_at = v_now
    WHERE goal.id = v_operation.goal_id AND goal.customer_id = v_intent.customer_id
      AND goal.merchant_id = v_intent.merchant_id AND goal.status <> 'spent';
   IF FOUND THEN
     INSERT INTO public.customer_savings_events
       (goal_id, merchant_id, customer_id, event_type, actor_type, metadata)
     VALUES (v_operation.goal_id, v_intent.merchant_id, v_intent.customer_id,
-      'goal_cancelled_refunded', 'system',
+      CASE WHEN v_review THEN 'goal_cancel_needs_review' ELSE 'goal_cancelled_refunded' END, 'system',
       pg_catalog.jsonb_build_object('operation_id', v_operation.id, 'amount_kobo', v_operation.amount_kobo));
   END IF;
+  IF v_review THEN RETURN 'conflict'; END IF;
   RETURN 'confirmed';
 END;
 $$;
@@ -913,6 +957,73 @@ $$;
 CREATE TRIGGER block_legacy_contribution_on_primary_goal
   BEFORE INSERT OR UPDATE OF status ON public.customer_savings_contributions
   FOR EACH ROW EXECUTE FUNCTION piggyvest_primary.block_legacy_contribution_on_primary_goal();
+
+-- The daily reconciliation compares each goal wallet with what our records say
+-- it holds: confirmed funding MINUS confirmed cancel refunds. Without the
+-- subtraction a legitimately cancelled goal (an empty provider wallet) would
+-- look short forever and page the operator every day. A fully cancelled goal
+-- expects 0. This is the 20261103072500 definition with only the wallet
+-- query changed; its grants persist through CREATE OR REPLACE.
+CREATE OR REPLACE FUNCTION piggyvest_primary.read_daily_reconciliation(integration_id uuid,environment text,options jsonb)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE
+  stale_seconds integer;
+  business text;
+  as_of timestamptz;
+  stuck jsonb;
+  stuck_total integer;
+  wallets jsonb;
+  wallets_total integer;
+BEGIN
+  IF options IS NULL OR jsonb_typeof(options)<>'object'
+    OR (SELECT count(*) FROM jsonb_object_keys(options))<>1
+    OR COALESCE(jsonb_typeof(options->'staleAfterSeconds')='number',false) IS NOT TRUE
+    OR COALESCE((options->>'staleAfterSeconds') ~ '^[0-9]{2,6}$',false) IS NOT TRUE THEN
+    RAISE EXCEPTION 'invalid reconciliation options' USING ERRCODE='22023';
+  END IF;
+  stale_seconds:=(options->>'staleAfterSeconds')::integer;
+  IF stale_seconds NOT BETWEEN 60 AND 604800 THEN
+    RAISE EXCEPTION 'invalid reconciliation options' USING ERRCODE='22023';
+  END IF;
+  SELECT binding.business_id INTO business FROM piggyvest_primary.integrations binding
+    JOIN piggyvest_primary.inflow_authorities authority ON authority.integration_id=binding.id
+    WHERE binding.id=read_daily_reconciliation.integration_id AND binding.environment=read_daily_reconciliation.environment
+      AND binding.enabled AND authority.enabled AND authority.executor_login=SESSION_USER
+    FOR SHARE OF binding,authority;
+  IF NOT FOUND THEN RAISE EXCEPTION 'reconciliation authority unavailable' USING ERRCODE='42501'; END IF;
+  -- The clock is read only after the lock above is held.
+  as_of:=pg_catalog.clock_timestamp();
+  SELECT COALESCE(max(item.total),0)::integer,COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+      'operationId',item.id,'goalId',item.goal_id,'state',item.state,'amountKobo',item.amount_kobo,
+      'sourceWalletId',item.source_wallet_id,'destinationWalletId',item.destination_wallet_id,
+      'reference',item.reference,'ageSeconds',item.age) ORDER BY item.age DESC,item.id),'[]'::jsonb)
+    INTO stuck_total,stuck FROM (
+    SELECT operation.id,operation.goal_id,operation.state,operation.amount_kobo,operation.source_wallet_id,
+      operation.destination_wallet_id,operation.reference,
+      pg_catalog.floor(pg_catalog.date_part('epoch',as_of-operation.created_at))::bigint AS age,
+      count(*) OVER () AS total
+    FROM piggyvest_primary.savings_operations operation
+    WHERE operation.integration_id=read_daily_reconciliation.integration_id
+      AND operation.state IN ('reserved','dispatched')
+      AND operation.created_at<=as_of-pg_catalog.make_interval(secs=>stale_seconds)
+    ORDER BY age DESC,operation.id LIMIT 200) item;
+  SELECT COALESCE(max(item.total),0)::integer,COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+      'walletId',item.wallet_id,'expectedKobo',item.expected_kobo) ORDER BY item.wallet_id),'[]'::jsonb)
+    INTO wallets_total,wallets FROM (
+    SELECT movement.wallet_id,sum(movement.delta_kobo)::bigint AS expected_kobo,count(*) OVER () AS total
+    FROM (
+      SELECT operation.destination_wallet_id AS wallet_id,operation.amount_kobo AS delta_kobo
+        FROM piggyvest_primary.savings_operations operation
+       WHERE operation.integration_id=read_daily_reconciliation.integration_id AND operation.state='confirmed'
+      UNION ALL
+      SELECT cancel.source_wallet_id,-cancel.amount_kobo
+        FROM piggyvest_primary.goal_cancel_operations cancel
+       WHERE cancel.integration_id=read_daily_reconciliation.integration_id AND cancel.state='confirmed'
+    ) movement
+    GROUP BY movement.wallet_id ORDER BY movement.wallet_id LIMIT 500) item;
+  RETURN pg_catalog.jsonb_build_object('generatedAt',as_of,'staleAfterSeconds',stale_seconds,'businessId',business,
+    'stuck',stuck,'stuckTotal',stuck_total,'wallets',wallets,'walletsTotal',wallets_total);
+END $$;
 
 REVOKE ALL ON FUNCTION
   piggyvest_primary.goal_cancel_needs_review(uuid),

@@ -6,8 +6,8 @@ import {
   issuePrimaryWalletGoalCancel,
   submitPrimaryWalletGoalCancel,
 } from '@/lib/piggyvest/goal-cancel-runtime';
+import { isPiggyvestGoalCancelDisabled } from '@/lib/piggyvest/goal-cancel-switch';
 import { isCancellableOwnGoal } from '@/lib/piggyvest/goal-pin-fund-eligibility';
-import { isPiggyvestFeatureOn } from '@/lib/piggyvest/piggyvest-feature-on';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import { readPrimaryWalletSavingsRecoveryRuntime } from '@/lib/piggyvest/primary-wallet-savings-runtime';
 import { piggyvestGoalCancelSchemas as schemas } from '@/schemas/piggyvest-goal-cancel';
@@ -23,13 +23,12 @@ function refuse(error: string, code: string, status: number) {
 
 /**
  * Cancel a goal and refund the whole balance, interest included, to the main
- * wallet. The recovery runtime carries the credentials and ignores the
- * flags, so status checks keep resolving after a rollback. Starting or
- * submitting a cancel moves money, so those steps check the wallet and
- * savings flags and the master kill switch themselves and refuse while any
- * is off. It only ever moves money from the customer's own goal wallet to the
- * customer's own main wallet, behind a PIN proof bound to a server-issued
- * operation id.
+ * wallet. The recovery runtime carries the credentials and ignores the flags
+ * and the master kill switch, so a customer is never trapped in a goal: this
+ * only returns the customer's own money from their goal wallet to their own
+ * main wallet, behind a PIN proof bound to a server-issued operation id. The
+ * single exception is the cancel-only off switch (PIGGYVEST_GOAL_CANCEL_DISABLED),
+ * which refuses NEW issue/submit steps while status checks keep settling.
  */
 type IdentityInput = Parameters<typeof resolvePrimaryWalletIdentity>[0];
 type Caller = Pick<IdentityInput, 'supabase' | 'user'>;
@@ -50,23 +49,7 @@ async function guard(
   return { caller: { user: auth.user, supabase: auth.supabase } };
 }
 
-async function resolve(
-  caller: Caller,
-  merchantId: string,
-  movesMoney: boolean
-) {
-  if (
-    movesMoney &&
-    !(isPiggyvestFeatureOn('wallet') && isPiggyvestFeatureOn('deposit_to_goal'))
-  )
-    return {
-      ok: false as const,
-      error: refuse(
-        'Goal cancellation is temporarily unavailable.',
-        'SAVINGS_NOT_READY',
-        503
-      ),
-    };
+async function resolve(caller: Caller, merchantId: string) {
   const runtime = readPrimaryWalletSavingsRecoveryRuntime();
   if (runtime.merchantId !== merchantId)
     return {
@@ -129,8 +112,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!body.success)
     return refuse('Invalid cancellation request.', 'INVALID_INPUT', 400);
   const input = body.data;
+  if (isPiggyvestGoalCancelDisabled())
+    return refuse(
+      'Goal cancellation is temporarily unavailable.',
+      'SAVINGS_UNAVAILABLE',
+      503
+    );
   try {
-    const resolved = await resolve(guarded.caller, input.merchantId, true);
+    const resolved = await resolve(guarded.caller, input.merchantId);
     if (!resolved.ok) return resolved.error;
     const { runtime, identity, scope } = resolved;
     if (input.step === 'issue') {
@@ -259,7 +248,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   if (!body.success)
     return refuse('Invalid cancellation request.', 'INVALID_INPUT', 400);
   try {
-    const resolved = await resolve(guarded.caller, body.data.merchantId, false);
+    const resolved = await resolve(guarded.caller, body.data.merchantId);
     if (!resolved.ok) return resolved.error;
     const { runtime, scope } = resolved;
     const result = await checkPrimaryWalletGoalCancelStatus({

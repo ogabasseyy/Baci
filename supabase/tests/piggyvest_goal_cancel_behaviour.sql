@@ -478,6 +478,43 @@ BEGIN
     (SELECT available_balance FROM public.customer_wallets
       WHERE id = 'f3860000-0000-4000-8000-000000000008') = 1000,
     'the late-success probe left a wallet credit behind');
+  -- Release, fund again, then a late success: the refund settles only its own
+  -- amount (main wallet credited, local goal reduced by that amount), the goal
+  -- KEEPS the newer contribution and stays open, a review marker is written and
+  -- the answer is 'conflict' so the application pages an operator.
+  BEGIN
+    INSERT INTO piggyvest_primary.savings_operations (
+      id, integration_id, intent_id, goal_id, amount_kobo, source_wallet_id,
+      destination_wallet_id, reference, state, wallet_transaction_id)
+    VALUES ('f3860000-0000-4000-8000-0000000000f3', 'f3860000-0000-4000-8000-000000000006',
+      'f3860000-0000-4000-8000-000000000007', c_goal::uuid, 10000, 'synthetic-goalcancel-main',
+      'synthetic-goalcancel-goal-wallet', 'pvb-save-f3860000-0000-4000-8000-0000000000f3', 'confirmed',
+      'f3860000-0000-4000-8000-000000000009');
+    UPDATE public.customer_savings_goals SET current_amount = current_amount + 100
+     WHERE id = c_goal::uuid;
+    PERFORM pg_temp.gc_assert(
+      piggyvest_primary.settle_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',
+        pg_temp.gc_proof(v_op)) = 'conflict', 'a late success after new funding was not routed to review');
+    PERFORM pg_temp.gc_assert(pg_temp.gc_state(v_op) = 'confirmed'
+      AND (SELECT status FROM public.customer_savings_goals WHERE id = c_goal::uuid) = 'active'
+      AND (SELECT current_amount FROM public.customer_savings_goals WHERE id = c_goal::uuid) = 100,
+      'a late success zeroed or closed a goal that was funded again');
+    PERFORM pg_temp.gc_assert(
+      (SELECT available_balance FROM public.customer_wallets
+        WHERE id = 'f3860000-0000-4000-8000-000000000008') = 3500,
+      'a late success after new funding did not credit exactly its own amount');
+    PERFORM pg_temp.gc_assert(
+      EXISTS (SELECT 1 FROM public.customer_savings_events
+               WHERE goal_id = c_goal::uuid AND event_type = 'goal_cancel_needs_review')
+      AND NOT EXISTS (SELECT 1 FROM public.customer_savings_events
+               WHERE goal_id = c_goal::uuid AND event_type = 'goal_cancelled_refunded'),
+      'a late success after new funding wrote no review marker');
+    PERFORM pg_temp.gc_assert(
+      piggyvest_primary.settle_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',
+        pg_temp.gc_proof(v_op)) = 'duplicate', 'a replayed late success was not idempotent');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
   -- A proof with the wrong reference never settles it.
   PERFORM pg_temp.gc_assert(
     piggyvest_primary.settle_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',
@@ -519,6 +556,19 @@ BEGIN
   -- 14. The final attempt settles: attempt confirmed, goal cancelled, event written.
   v_issue := pg_temp.gc_issue_op();
   v_op := v_issue ->> 'operationId';
+  -- The goal wallet holds 250000 kobo of confirmed funding at the provider.
+  INSERT INTO piggyvest_primary.savings_operations (
+    id, integration_id, intent_id, goal_id, amount_kobo, source_wallet_id,
+    destination_wallet_id, reference, state, wallet_transaction_id)
+  VALUES ('f3860000-0000-4000-8000-0000000000f4', 'f3860000-0000-4000-8000-000000000006',
+    'f3860000-0000-4000-8000-000000000007', c_goal::uuid, 250000, 'synthetic-goalcancel-main',
+    'synthetic-goalcancel-goal-wallet', 'pvb-save-f3860000-0000-4000-8000-0000000000f4', 'confirmed',
+    'f3860000-0000-4000-8000-000000000009');
+  v_result := piggyvest_primary.read_daily_reconciliation(
+    'f3860000-0000-4000-8000-000000000006'::uuid, 'staging', '{"staleAfterSeconds":60}'::jsonb);
+  PERFORM pg_temp.gc_assert(v_result -> 'wallets' =
+    '[{"walletId":"synthetic-goalcancel-goal-wallet","expectedKobo":250000}]'::jsonb,
+    'funded goal expected balance wrong before the cancel: ' || (v_result -> 'wallets')::text);
   PERFORM pg_temp.gc_issue('final', 'goal_cancel', 1, pg_temp.gc_key(v_op));
   v_result := pg_temp.gc_reserve(v_op, pg_temp.gc_token('final'));
   PERFORM pg_temp.gc_assert(v_result ->> 'status' = 'claimed', 'final reserve');
@@ -526,6 +576,32 @@ BEGIN
   PERFORM pg_temp.gc_assert(v_result #>> '{reservation,reference}' = 'pvb-cancel-' || c_goal || '-1',
     'the reference suffix moved without a dispatched failure: ' || v_result::text);
   PERFORM pg_temp.gc_assert(piggyvest_primary.manage_goal_cancel(v_scope, v_op::uuid, 'dispatch', 250000), 'final dispatch');
+  -- A residual provider balance after the transfer (a credit landed between
+  -- the snapshot and the transfer) is never settled as cancelled-at-zero: the
+  -- refund is credited, the goal stays open with the residual recorded, a
+  -- review marker is written and the answer is 'conflict'. Rolled back.
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.goal_cancel_proof_valid(pg_temp.gc_proof(v_op) || '{"residualKobo":4200}'::jsonb)
+    AND NOT piggyvest_primary.goal_cancel_proof_valid(pg_temp.gc_proof(v_op) || '{"residualKobo":0}'::jsonb)
+    AND NOT piggyvest_primary.goal_cancel_proof_valid(pg_temp.gc_proof(v_op) || '{"residualKobo":"4200"}'::jsonb)
+    AND NOT piggyvest_primary.goal_cancel_proof_valid(pg_temp.gc_proof(v_op) || '{"other":"x"}'::jsonb),
+    'the optional residual key was validated wrongly');
+  BEGIN
+    PERFORM pg_temp.gc_assert(
+      piggyvest_primary.settle_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',
+        pg_temp.gc_proof(v_op) || '{"residualKobo":4200}'::jsonb) = 'conflict',
+      'a residual provider balance was settled as cancelled-at-zero');
+    PERFORM pg_temp.gc_assert(pg_temp.gc_state(v_op) = 'confirmed'
+      AND (SELECT status FROM public.customer_savings_goals WHERE id = c_goal::uuid) = 'active'
+      AND (SELECT current_amount FROM public.customer_savings_goals WHERE id = c_goal::uuid) = 42
+      AND (SELECT available_balance FROM public.customer_wallets
+            WHERE id = 'f3860000-0000-4000-8000-000000000008') = 3500
+      AND EXISTS (SELECT 1 FROM public.customer_savings_events
+                   WHERE goal_id = c_goal::uuid AND event_type = 'goal_cancel_needs_review'),
+      'a residual balance did not keep the goal open for review');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
   PERFORM pg_temp.gc_assert(
     piggyvest_primary.settle_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',
       pg_temp.gc_proof(v_op)) = 'confirmed', 'settlement refused');
@@ -542,6 +618,13 @@ BEGIN
           WHERE source_type = 'piggyvest_goal_cancel' AND source_id = v_op::uuid
             AND type = 'refund' AND status = 'completed' AND amount = 2500 AND balance_after = 3500) = 1,
     'settlement did not credit the main-wallet ledger once');
+  -- A confirmed refund lowers the expected provider balance: a fully
+  -- cancelled goal expects 0, so a legitimate cancel never reads as a shortfall.
+  v_result := piggyvest_primary.read_daily_reconciliation(
+    'f3860000-0000-4000-8000-000000000006'::uuid, 'staging', '{"staleAfterSeconds":60}'::jsonb);
+  PERFORM pg_temp.gc_assert(v_result -> 'wallets' =
+    '[{"walletId":"synthetic-goalcancel-goal-wallet","expectedKobo":0}]'::jsonb,
+    'a cancelled goal still expects its principal: ' || (v_result -> 'wallets')::text);
   PERFORM pg_temp.gc_assert(
     piggyvest_primary.settle_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',
       pg_temp.gc_proof(v_op)) = 'duplicate', 'a replayed settlement was not idempotent');

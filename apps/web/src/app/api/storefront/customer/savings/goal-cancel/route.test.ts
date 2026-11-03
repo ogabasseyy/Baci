@@ -14,9 +14,13 @@ const mocks = vi.hoisted(() => ({
   status: vi.fn(),
   gated: vi.fn(),
   featureOn: vi.fn(),
+  cancelDisabled: vi.fn(),
 }));
 vi.mock('@/lib/piggyvest/piggyvest-feature-on', () => ({
   isPiggyvestFeatureOn: mocks.featureOn,
+}));
+vi.mock('@/lib/piggyvest/goal-cancel-switch', () => ({
+  isPiggyvestGoalCancelDisabled: mocks.cancelDisabled,
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
@@ -51,6 +55,7 @@ const patch = (body: unknown) =>
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.featureOn.mockReturnValue(true);
+  mocks.cancelDisabled.mockReturnValue(false);
   mocks.auth.mockResolvedValue({ user: { id: 'u' }, supabase: {} });
   mocks.csrf.mockResolvedValue({ valid: true });
   mocks.recovery.mockReturnValue({
@@ -99,34 +104,41 @@ it('reads the recovery runtime for lookups but never the gated savings runtime',
   expect(mocks.gated).not.toHaveBeenCalled();
 });
 
-// The kill switch and the wallet/savings flags must stop new money movement:
-// the recovery runtime ignores them, so the route checks them itself.
+// S2 contract: cancel-to-main returns the customer's own money, so neither the
+// master kill switch nor the new-money flags may trap it.
 it.each([
   ['issue', issue],
   ['submit', submit],
-])('refuses the %s step with 503 when the flags or kill switch are off', async (_step, body) => {
+])('still dispatches the %s step when the kill switch and flags are off', async (_step, body) => {
   mocks.featureOn.mockReturnValue(false);
+  mocks.issue.mockResolvedValue({ status: 'issued', operationId });
+  mocks.submit.mockResolvedValue({ status: 'confirmed' });
+  expect((await post(body)).status).toBe(200);
+  expect(mocks.issue.mock.calls.length + mocks.submit.mock.calls.length).toBe(
+    1
+  );
+});
+
+// The one narrow emergency exception: a cancel-only off switch.
+it.each([
+  ['issue', issue],
+  ['submit', submit],
+])('refuses new %s steps with 503 SAVINGS_UNAVAILABLE when the cancel switch is on', async (_step, body) => {
+  mocks.cancelDisabled.mockReturnValue(true);
   const response = await post(body);
   expect(response.status).toBe(503);
-  expect((await response.json()).code).toBe('SAVINGS_NOT_READY');
+  expect((await response.json()).code).toBe('SAVINGS_UNAVAILABLE');
   expect(mocks.issue).not.toHaveBeenCalled();
   expect(mocks.submit).not.toHaveBeenCalled();
 });
 
-it('requires both the wallet and the deposit_to_goal flags to start a cancel', async () => {
-  mocks.featureOn.mockImplementation((feature: string) => feature !== 'wallet');
-  expect((await post(issue)).status).toBe(503);
-  mocks.featureOn.mockImplementation(
-    (feature: string) => feature !== 'deposit_to_goal'
-  );
-  expect((await post(issue)).status).toBe(503);
-  expect(mocks.issue).not.toHaveBeenCalled();
-});
-
-it('keeps the status check available when the flags are off', async () => {
-  mocks.featureOn.mockReturnValue(false);
+it('keeps settling a dispatched cancel through the status check when the cancel switch is on', async () => {
+  mocks.cancelDisabled.mockReturnValue(true);
   mocks.status.mockResolvedValue({ status: 'confirmed' });
-  expect((await patch({ merchantId, operationId })).status).toBe(200);
+  const response = await patch({ merchantId, operationId });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ status: 'confirmed', operationId });
+  expect(mocks.status).toHaveBeenCalledOnce();
 });
 
 it("issues the server operation id for the customer's own goal", async () => {

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import {
   createGoalCancelEvidenceStore,
   runGoalCancelOutflowReconciliation,
@@ -11,6 +11,11 @@ import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconcil
 vi.mock('server-only', () => ({}));
 const alert = vi.hoisted(() => vi.fn());
 vi.mock('./webhook-alerts', () => ({ emitPiggyvestWebhookAlert: alert }));
+const retrieveWallet = vi.hoisted(() => vi.fn());
+vi.mock('./wallets', () => ({ retrievePiggyvestWallet: retrieveWallet }));
+beforeEach(() => {
+  retrieveWallet.mockResolvedValue({ balance: 0 });
+});
 const evidenceExecute = vi.hoisted(() => vi.fn());
 vi.mock('./primary-wallet-evidence-executor', () => ({
   createPrimaryWalletEvidenceExecutor: () => evidenceExecute,
@@ -314,6 +319,126 @@ it('alerts on a webhook-driven settlement conflict too', async () => {
   ).toBe('pending');
   expect(alert).toHaveBeenCalledWith('PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW', {
     reason: 'settle_conflict',
+    operationId,
+  });
+});
+
+// A settlement that raises inside the database (for example a refund wallet
+// that belongs to another merchant) is not transient: PiggyVest already moved
+// the money. It must page a person and surface needs-review, while the next
+// status check still retries from the stored attempt.
+it.each([
+  ['successful', 'settle_failed'],
+  ['failed', 'release_failed'],
+] as const)('pages an operator when a verified %s record raises in the database', async (status, reason) => {
+  alert.mockClear();
+  evidenceExecute.mockReset();
+  evidenceExecute
+    .mockResolvedValueOnce({ rows: [{ result: reservation }] })
+    .mockRejectedValueOnce(new Error('refund wallet unavailable'));
+  const outcome = await runGoalCancelReconciliation({
+    configuration: inflowConfiguration,
+    providerToken: token,
+    operationId,
+    fetchImplementation: async () =>
+      new Response(JSON.stringify(record(status))),
+  });
+  expect(outcome).toEqual({ status: 'pending', needsReview: true });
+  expect(alert).toHaveBeenCalledOnce();
+  expect(alert).toHaveBeenCalledWith('PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW', {
+    reason,
+    operationId,
+  });
+});
+
+it('stays retryable after a settlement raise: the next check settles', async () => {
+  alert.mockClear();
+  evidenceExecute.mockReset();
+  evidenceExecute
+    .mockResolvedValueOnce({ rows: [{ result: reservation }] })
+    .mockRejectedValueOnce(new Error('connection reset'))
+    .mockResolvedValueOnce({ rows: [{ result: reservation }] })
+    .mockResolvedValueOnce({ rows: [{ result: 'confirmed' }] });
+  const run = () =>
+    runGoalCancelReconciliation({
+      configuration: inflowConfiguration,
+      providerToken: token,
+      operationId,
+      fetchImplementation: async () =>
+        new Response(JSON.stringify(record('successful'))),
+    });
+  expect(await run()).toEqual({ status: 'pending', needsReview: true });
+  expect(await run()).toEqual({ status: 'confirmed', needsReview: false });
+});
+
+// Coordinator item 4: once the transfer is verified, the goal wallet is
+// re-read. A balance above 0 (a credit landed between the snapshot and the
+// transfer) is sent with the settlement so the database keeps the goal open
+// for review instead of settling it at zero, and a person is paged.
+it('sends a residual provider balance with the settlement and pages an operator', async () => {
+  alert.mockClear();
+  evidenceExecute.mockReset();
+  retrieveWallet.mockReset();
+  retrieveWallet.mockResolvedValue({ balance: 4200 });
+  evidenceExecute
+    .mockResolvedValueOnce({ rows: [{ result: reservation }] })
+    .mockResolvedValueOnce({ rows: [{ result: 'conflict' }] });
+  const outcome = await runGoalCancelReconciliation({
+    configuration: inflowConfiguration,
+    providerToken: token,
+    operationId,
+    fetchImplementation: async () =>
+      new Response(JSON.stringify(record('successful'))),
+  });
+  expect(retrieveWallet).toHaveBeenCalledWith(
+    expect.objectContaining({ token }),
+    'goal-wallet'
+  );
+  const settleCall = evidenceExecute.mock.calls[1];
+  expect(JSON.parse(settleCall[1][2])).toMatchObject({
+    operationId,
+    residualKobo: 4200,
+  });
+  expect(outcome).toEqual({ status: 'pending', needsReview: true });
+  expect(alert).toHaveBeenCalledOnce();
+});
+
+it('sends no residual when the goal wallet is empty', async () => {
+  evidenceExecute.mockReset();
+  retrieveWallet.mockReset();
+  retrieveWallet.mockResolvedValue({ balance: 0 });
+  evidenceExecute
+    .mockResolvedValueOnce({ rows: [{ result: reservation }] })
+    .mockResolvedValueOnce({ rows: [{ result: 'confirmed' }] });
+  await runGoalCancelReconciliation({
+    configuration: inflowConfiguration,
+    providerToken: token,
+    operationId,
+    fetchImplementation: async () =>
+      new Response(JSON.stringify(record('successful'))),
+  });
+  expect(JSON.parse(evidenceExecute.mock.calls[1][1][2])).not.toHaveProperty(
+    'residualKobo'
+  );
+});
+
+it('pages and stays retryable when the goal balance cannot be re-read', async () => {
+  alert.mockClear();
+  evidenceExecute.mockReset();
+  retrieveWallet.mockReset();
+  retrieveWallet.mockRejectedValue(new Error('provider down'));
+  evidenceExecute.mockResolvedValueOnce({ rows: [{ result: reservation }] });
+  const outcome = await runGoalCancelReconciliation({
+    configuration: inflowConfiguration,
+    providerToken: token,
+    operationId,
+    fetchImplementation: async () =>
+      new Response(JSON.stringify(record('successful'))),
+  });
+  expect(outcome).toEqual({ status: 'pending', needsReview: true });
+  expect(evidenceExecute).toHaveBeenCalledTimes(1);
+  expect(alert).toHaveBeenCalledWith('PIGGYVEST_GOAL_CANCEL_NEEDS_REVIEW', {
+    reason: 'settle_failed',
     operationId,
   });
 });

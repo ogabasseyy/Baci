@@ -201,7 +201,7 @@ describe('runPaidOrderSideEffects failure paths', () => {
       };
       try {
         await executors.merchant_settlement({
-          gatewayResponse: { fees: 19_600 },
+          gatewayResponse: { fees: 19_600, subaccount: {} },
         });
         return { failedSteps: [], ranSteps: ['merchant_settlement'] };
       } catch (error) {

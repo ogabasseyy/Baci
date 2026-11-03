@@ -27,4 +27,7 @@ export const PERMANENT_PAID_ORDER_SIDE_EFFECT_ERRORS = [
   'financial_totals_inconsistent',
   'gateway_verification_terminal',
   'settlement_order_cancelled',
+  // The stored Paystack payload cannot prove whether the merchant's
+  // subaccount or Baci received the money; it needs manual reconciliation.
+  'paystack_settlement_collection_unknown',
 ] as const;

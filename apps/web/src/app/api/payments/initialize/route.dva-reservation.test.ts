@@ -67,6 +67,9 @@ function createAdminClientMock() {
           error: null,
         });
       }
+      if (name === 'get_order_paystack_split_retained_shipping_kobo') {
+        return Promise.resolve({ data: 0, error: null });
+      }
       if (name === 'create_payment_transaction') {
         mockCreatePaymentTransaction(args);
         return Promise.resolve({ data: null, error: null });

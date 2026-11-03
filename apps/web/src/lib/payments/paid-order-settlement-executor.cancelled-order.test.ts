@@ -30,7 +30,7 @@ const transaction: PaidOrderSideEffectTransaction = {
 
 const stepContext: StepContext = {
   consistency: { consistent: true },
-  gatewayResponse: { fees: 30_000 },
+  gatewayResponse: { fees: 30_000, subaccount: {} },
   order: {
     discount_amount: 0,
     gift_wrapping_fee: 0,

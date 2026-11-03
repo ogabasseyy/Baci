@@ -1,0 +1,111 @@
+import { describe, expect, it } from 'vitest';
+import { PERMANENT_PAID_ORDER_SIDE_EFFECT_ERRORS } from '@/lib/payments/paid-order-side-effect-retry-policy';
+import {
+  PAYSTACK_SETTLEMENT_COLLECTION_UNKNOWN,
+  resolveSettlementRpcRouting,
+} from '@/lib/payments/resolve-settlement-rpc-routing';
+
+const splitPayload = {
+  fees_split: {
+    integration: '5000',
+    params: { transaction_charge: '205000' },
+    subaccount: 27547088,
+  },
+  subaccount: { subaccount_code: 'ACCT_merchant' },
+};
+
+describe('resolveSettlementRpcRouting', () => {
+  it('routes a subaccount-split Paystack sale to the direct-split history recorder', () => {
+    // Arrange
+    const args = {
+      gatewayResponse: splitPayload,
+      isRedvaultDirectSettlement: false,
+      settlementGateway: 'paystack' as const,
+      useGiglSettlementRpc: false,
+    };
+
+    // Act
+    const routing = resolveSettlementRpcRouting(args);
+
+    // Assert
+    expect(routing).toEqual({
+      extraMetadata: {
+        paystack_collection: 'direct_split',
+        paystack_integration_share_kobo: 5000,
+        paystack_subaccount_code: 'ACCT_merchant',
+        paystack_subaccount_share_kobo: 27547088,
+        paystack_transaction_charge_kobo: 205000,
+      },
+      extraParams: { p_paystack_subaccount_code: 'ACCT_merchant' },
+      rpc: 'record_paystack_direct_split_settlement',
+    });
+  });
+
+  it('uses the GIGL direct-split recorder for a GIGL order', () => {
+    const routing = resolveSettlementRpcRouting({
+      gatewayResponse: splitPayload,
+      isRedvaultDirectSettlement: false,
+      settlementGateway: 'paystack',
+      useGiglSettlementRpc: true,
+    });
+
+    expect(routing.rpc).toBe('record_paystack_direct_split_settlement_gigl_v1');
+  });
+
+  it('keeps crediting the wallet, marked as Baci-collected, when Paystack shows no subaccount', () => {
+    const routing = resolveSettlementRpcRouting({
+      gatewayResponse: { subaccount: {} },
+      isRedvaultDirectSettlement: false,
+      settlementGateway: 'paystack',
+      useGiglSettlementRpc: false,
+    });
+
+    expect(routing).toEqual({
+      extraMetadata: { paystack_collection: 'integration' },
+      extraParams: {},
+      rpc: 'record_merchant_settlement',
+    });
+  });
+
+  it('throws before any routing when the Paystack payload cannot prove where the money went', () => {
+    expect(() =>
+      resolveSettlementRpcRouting({
+        gatewayResponse: { status: 'success' },
+        isRedvaultDirectSettlement: false,
+        settlementGateway: 'paystack',
+        useGiglSettlementRpc: false,
+      })
+    ).toThrow(PAYSTACK_SETTLEMENT_COLLECTION_UNKNOWN);
+  });
+
+  it('treats an unprovable Paystack collection as permanent so the drain stops retrying it', () => {
+    // The stored payload never changes, so retries cannot prove the
+    // collection mode; the row stays failed for manual reconciliation.
+    expect(PERMANENT_PAID_ORDER_SIDE_EFFECT_ERRORS).toContain(
+      PAYSTACK_SETTLEMENT_COLLECTION_UNKNOWN
+    );
+  });
+
+  it('keeps REDVAULT on its own recorder even when a subaccount is present', () => {
+    const routing = resolveSettlementRpcRouting({
+      gatewayResponse: splitPayload,
+      isRedvaultDirectSettlement: true,
+      settlementGateway: 'paystack',
+      useGiglSettlementRpc: true,
+    });
+
+    expect(routing.rpc).toBe('record_uba_redvault_direct_settlement_gigl_v1');
+    expect(routing.extraParams).toEqual({});
+  });
+
+  it('leaves Korapay on the wallet-crediting recorder without inspecting the payload', () => {
+    const routing = resolveSettlementRpcRouting({
+      gatewayResponse: null,
+      isRedvaultDirectSettlement: false,
+      settlementGateway: 'korapay',
+      useGiglSettlementRpc: false,
+    });
+
+    expect(routing.rpc).toBe('record_merchant_settlement');
+  });
+});

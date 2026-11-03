@@ -9,6 +9,7 @@
  * - Proper separation of concerns
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { customAlphabet } from 'nanoid';
 import { type NextRequest, NextResponse } from 'next/server';
 import z from 'zod';
@@ -52,6 +53,7 @@ import { initializeTransactionMetadata } from '@/lib/payments/initialize-transac
 import { persistPaystackDvaAssignment } from '@/lib/payments/persist-paystack-dva-assignment';
 import { redactPaymentLogValue } from '@/lib/payments/redact-payment-log-value';
 import { resolveChargeCurrency } from '@/lib/payments/resolve-charge-currency';
+import { resolvePaystackSplitTransactionCharge } from '@/lib/payments/resolve-paystack-split-transaction-charge';
 import {
   calculatePlatformFee as calculatePaystackFee,
   initializeTransaction as initializePaystackPayment,
@@ -879,10 +881,21 @@ async function initializePaystack(
   gatewaySettings: GatewaySettings,
   redirectUrl: string,
   reference: string,
-  merchantId: string
+  merchantId: string,
+  splitClient: Pick<SupabaseClient, 'rpc'>
 ): Promise<PaymentResult> {
   const amountInKobo = Math.round(data.amount * 100);
   const fees = calculatePaystackFee(amountInKobo);
+  // Baci keeps the platform fee plus any customer-paid GIG delivery fee;
+  // fail closed (throws) if the retained amount cannot be determined.
+  const { transactionChargeKobo, retainedShippingKobo } =
+    await resolvePaystackSplitTransactionCharge({
+      client: splitClient,
+      orderId: data.order_id,
+      merchantId,
+      amountKobo: amountInKobo,
+      platformFeeKobo: fees.platformFee,
+    });
 
   // 2026 Resilience: Ensure phone number is formatted to E.164 for Paystack compatibility
   const customerPhone = data.customer_phone
@@ -914,7 +927,7 @@ async function initializePaystack(
     reference,
     callback_url: redirectUrl,
     subaccount: merchant.paystack_subaccount_code as string,
-    transaction_charge: fees.platformFee,
+    transaction_charge: transactionChargeKobo,
     bearer: 'account',
     channels: getPaystackChannelsForCustomer(
       data,
@@ -931,6 +944,8 @@ async function initializePaystack(
       phone: customerPhone,
       phone_number: customerPhone,
       platform_fee: fees.platformFee / 100,
+      platform_fee_kobo: fees.platformFee,
+      retained_shipping_kobo: retainedShippingKobo,
       custom_fields: [
         {
           display_name: 'Phone Number',
@@ -1678,6 +1693,39 @@ export async function POST(request: NextRequest) {
               );
             }
 
+            // Paystack DVA payments to a subaccount give Baci nothing, so a
+            // customer-paid GIG delivery fee cannot be retained: card only.
+            const dvaAmountKobo = Math.round(paymentData.amount * 100);
+            let dvaRetainedShippingKobo: number;
+            try {
+              ({ retainedShippingKobo: dvaRetainedShippingKobo } =
+                await resolvePaystackSplitTransactionCharge({
+                  client: paymentDataClient,
+                  orderId: paymentData.order_id,
+                  merchantId,
+                  amountKobo: dvaAmountKobo,
+                  platformFeeKobo:
+                    calculatePaystackFee(dvaAmountKobo).platformFee,
+                }));
+            } catch (retentionError) {
+              console.error(
+                'Paystack DVA retained shipping check failed:',
+                retentionError
+              );
+              return createErrorResponse(
+                'Bank transfer is temporarily unavailable. Please pay by card.',
+                'PAYMENT_SPLIT_RESOLUTION_FAILED',
+                503
+              );
+            }
+            if (dvaRetainedShippingKobo > 0) {
+              return createErrorResponse(
+                'Bank transfer is not available for orders with GIG delivery yet. Please pay by card.',
+                'PAYMENT_METHOD_UNAVAILABLE_FOR_SHIPPING',
+                409
+              );
+            }
+
             const { createDedicatedVirtualAccount } = await import(
               '@/lib/agentic/paystack'
             );
@@ -1743,7 +1791,8 @@ export async function POST(request: NextRequest) {
               gatewaySettings,
               redirectUrl,
               reference,
-              merchantId
+              merchantId,
+              paymentDataClient
             );
           }
           break;

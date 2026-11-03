@@ -37,14 +37,17 @@ describe('storefront-gaming-laptop-taxonomy', () => {
     expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('laptop battery');
     expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('laptop keyboards');
     expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('keyboard');
+    expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('rog ally');
+    expect(EXCLUDED_GAMING_LAPTOP_SUBJECTS).toContain('steam deck');
   });
 
-  it('declares expected exempt phrases for desktop, monitor, and accessory contexts', () => {
+  it('declares expected exempt phrases for desktop, monitor, accessory, and battery contexts', () => {
     expect(GAMING_LAPTOP_EXEMPT_PHRASES.desktop).toContain('desktop-class');
     expect(GAMING_LAPTOP_EXEMPT_PHRASES.monitor).toContain('pairing');
     expect(GAMING_LAPTOP_EXEMPT_PHRASES.accessories).toContain(
       'with accessories'
     );
+    expect(GAMING_LAPTOP_EXEMPT_PHRASES.battery).toContain('battery life');
   });
 
   it('maps excluded subjects to monitors, desktops, and gaming categories', () => {

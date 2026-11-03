@@ -4,16 +4,8 @@ import { inferContentClusterContext } from './infer-content-cluster-context';
 describe('inferContentClusterContext - gaming laptops', () => {
   it('infers gaming-laptops categorySlug for gaming laptop articles under Gaming or Laptops', () => {
     for (const [title, category, tags] of [
-      [
-        'HP Omen 16: Specs & Price in Nigeria',
-        'Gaming',
-        ['gaming', 'omen', 'gaming laptop'],
-      ],
-      [
-        'Gaming Laptops: Alienware vs ROG',
-        'Gaming',
-        ['gaming', 'alienware', 'rog'],
-      ],
+      ['HP Omen 16 Specs in Nigeria', 'Gaming', ['omen', 'gaming laptop']],
+      ['Gaming Laptops: Alienware vs ROG', 'Gaming', ['alienware', 'rog']],
       ['Best Gaming Laptops in Nigeria', 'Laptops', ['laptops', 'budget']],
       ['ASUS ROG RTX 4060 Laptop Review', 'Laptops', ['laptops', 'asus']],
     ] as const) {
@@ -154,14 +146,16 @@ describe('inferContentClusterContext - gaming laptops', () => {
     }
   });
 
-  it('does not promote desktop articles without laptop evidence under Gaming or Laptops', () => {
-    for (const [category, tags, expected] of [
-      ['Gaming', ['gaming laptop', 'alienware'], 'gaming'],
-      ['Laptops', ['alienware'], 'laptops'],
+  it('does not promote desktop, handheld, or standalone GPU articles without laptop evidence under Gaming or Laptops', () => {
+    for (const [title, category, tags, expected] of [
+      ['Alienware Aurora R16', 'Gaming', ['alienware', 'laptop'], 'gaming'],
+      ['Alienware Aurora R16', 'Laptops', ['alienware'], 'laptops'],
+      ['GeForce RTX 4080 Buyer Guide', 'Gaming', ['laptops'], 'gaming'],
+      ['ASUS ROG Ally X Buying Guide', 'Gaming', ['laptops', 'rog'], 'gaming'],
     ] as const) {
       const res = inferContentClusterContext({
-        title: 'Alienware Aurora R16 Review',
-        excerpt: 'Desktop benchmarked.',
+        title,
+        excerpt: 'Benchmarked.',
         category,
         tags: [...tags],
         keywords: ['review'],
@@ -273,13 +267,14 @@ describe('inferContentClusterContext - gaming laptops', () => {
 
   it('preserves legitimate gaming-laptop guides with GPU, desktop-class, pairing, or incidental excerpt tokens', () => {
     for (const [title, kw, excerpt = 'Guide.'] of [
-      ['Best Gaming Laptops with RTX 4060 GPUs in Nigeria', 'gpu'],
-      ['Best Gaming Laptops for Desktop Replacement', 'desktop replacement'],
+      ['Gaming Laptops with RTX 4060 GPUs in Nigeria', 'gpu'],
+      ['Gaming Laptops: Desktop Replacement Guide', 'desktop replacement'],
       ['Alienware m16 Desktop-Class Review', 'desktop-class'],
-      ['Best Gaming Laptops and Monitor Pairings', 'monitors'],
-      ['Top 10 Gaming Laptops with Free Accessories', 'accessories'],
+      ['Gaming Laptops and Monitor Pairings', 'monitors'],
+      ['Gaming Laptops with Free Accessories', 'accessories'],
       ['Alienware m16 Laptop Buyer Guide', 'laptops', 'Covers keyboard.'],
       ['Best Gaming Laptops in Nigeria', 'gaming', 'Covers keyboards, GPUs.'],
+      ['ASUS ROG Gaming Laptop Battery Life Review', 'battery life'],
     ]) {
       const post = inferContentClusterContext({
         title,

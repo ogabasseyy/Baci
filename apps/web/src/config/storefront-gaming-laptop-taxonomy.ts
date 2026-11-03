@@ -21,6 +21,7 @@ export const GAMING_LAPTOP_EXEMPT_PHRASES = {
     'with accessories',
     'bundled accessories',
   ],
+  battery: ['battery life', 'battery test', 'battery performance'],
 } as const;
 
 export const EXCLUDED_GAMING_LAPTOP_SUBJECTS = [
@@ -41,6 +42,8 @@ export const EXCLUDED_GAMING_LAPTOP_SUBJECTS = [
   'gpus',
   'graphics card',
   'graphics cards',
+  'handheld',
+  'handhelds',
   'keyboard',
   'keyboards',
   'laptop adapter',
@@ -67,10 +70,24 @@ export const EXCLUDED_GAMING_LAPTOP_SUBJECTS = [
   'pc builds',
   'power adapter',
   'power adapters',
+  'rog ally',
+  'steam deck',
 ] as const;
 
 export const EXCLUDED_CATEGORY_MAP = [
   ['monitors', ['monitor', 'monitors']],
   ['desktops', ['desktop', 'desktops', 'aurora', 'pc build', 'pc builds']],
-  ['gaming', ['gpu', 'gpus', 'graphics card', 'graphics cards']],
+  [
+    'gaming',
+    [
+      'gpu',
+      'gpus',
+      'graphics card',
+      'graphics cards',
+      'rog ally',
+      'steam deck',
+      'handheld',
+      'handhelds',
+    ],
+  ],
 ] as const;

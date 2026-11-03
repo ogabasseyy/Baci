@@ -106,3 +106,19 @@ it('calls notFound when the merchant lookup has no match', async () => {
   expect(f.notFound).toHaveBeenCalledOnce();
   expect(f.head).not.toHaveBeenCalled();
 });
+
+it.each([
+  'new-template',
+  'ogabassey',
+])('keeps the native %s checkout when the published head is corrupt or mismatched', async (template) => {
+  f.merchant = { id: 'merchant', slug: 'qa1', template_id: template };
+  f.head.mockRejectedValue(Error('MERCHANT_MISMATCH'));
+  render(await ResolvedCheckoutPage(params('qa1')));
+  expect(
+    screen.getByText(
+      template === 'new-template'
+        ? 'Legacy demo checkout'
+        : 'Baci commerce checkout'
+    )
+  ).toBeVisible();
+});

@@ -50,7 +50,7 @@ it('marks hydrated HTML ready only from a committed bootstrap layout effect', ()
     "document.documentElement.dataset.baciHydration='ready'"
   );
 
-  expect(runtime).toContain("readiness:'react-commit/v1'");
+  expect(runtime).toContain(JSON.stringify({ readiness: 'react-commit/v1' }));
   expect(runtime).toContain('bridge.acknowledgeRenderCommit(data.route.epoch)');
   expect(runtime).toContain('onRecoverableError:failHydration');
   expect(commitEffect).toBeGreaterThanOrEqual(0);

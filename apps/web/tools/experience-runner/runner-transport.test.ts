@@ -220,3 +220,81 @@ describe('trusted runner control plane', () => {
     expect(() => runnerEndpoint(url)).toThrow();
   });
 });
+
+it('admits over 1024 sequential signed requests while retaining replay protection and expiry cleanup', async () => {
+  let time = 100000;
+  const execute = vi.fn(async () => ({
+    output: { ok: true },
+    wallMs: 1,
+    jobId: 'synthetic',
+  }));
+  const handler = createRunnerHandler({
+    key,
+    toolchainDigest,
+    now: () => time,
+    execute,
+  });
+  let original: Request | undefined;
+  const run = createRunnerExecutor({
+    endpoint,
+    key,
+    toolchainDigest,
+    now: () => time,
+    fetch: (url, init) => {
+      const r = new Request(url, init);
+      original ??= r.clone();
+      return handler(r);
+    },
+  });
+  for (let i = 0; i < 1100; i++) await run('prerender', {});
+  if (!original) throw Error('No signed request');
+  expect((await handler(original.clone())).status).toBe(409);
+  time += 60001;
+  for (let i = 0; i < 1100; i++) await run('prerender', {});
+  expect(execute).toHaveBeenCalledTimes(2200);
+  expect((await handler(original.clone())).status).toBe(409);
+});
+
+it('reserves nonce capacity per lane and reopens expired capacity without forgetting replayed requests', async () => {
+  let time = 100000;
+  let sequence = 0;
+  const handler = createRunnerHandler({
+    key,
+    toolchainDigest,
+    now: () => time,
+    execute: async () => ({ ok: true }),
+  });
+  const send = (
+    lane: 'public-render' | 'owner',
+    nonce = String(++sequence).padStart(64, '0'),
+    expiresAt = time + 60000
+  ) => {
+    const body = JSON.stringify({
+      version: 1,
+      lane,
+      nonce,
+      expiresAt,
+      toolchainDigest,
+      kind: 'prerender',
+      payload: {},
+    });
+    return handler(
+      new Request(endpoint, {
+        method: 'POST',
+        body,
+        headers: {
+          'x-baci-runner-signature': createHmac('sha256', key)
+            .update(`request\n${body}`)
+            .digest('hex'),
+        },
+      })
+    );
+  };
+  for (let i = 0; i < 4096; i++)
+    expect((await send('public-render')).status).toBe(200);
+  expect((await send('public-render')).status).toBe(429);
+  expect((await send('owner')).status).toBe(200);
+  expect((await send('owner', String(1).padStart(64, '0'))).status).toBe(409);
+  time += 60001;
+  expect((await send('public-render')).status).toBe(200);
+});

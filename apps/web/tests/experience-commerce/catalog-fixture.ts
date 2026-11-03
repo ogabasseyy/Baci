@@ -33,6 +33,7 @@ export async function prepareCommerceCatalog(
     '20261024072905_experience_private_foundation.sql',
     '20261024120000_experience_catalog_generations.sql',
     '20261024124000_experience_public_read_projection.sql',
+    '20261103203000_experience_public_manifest_order.sql',
     '20261024130000_experience_verified_snapshots.sql',
   ])
     await f.pool.query(migration(name));

@@ -10,6 +10,7 @@ export interface PreviewFile {
 }
 export interface PreviewInput {
   ownerId: string;
+  merchantId?: string;
   bindingId: string;
   buildDigest: string;
   files: PreviewFile[];
@@ -34,7 +35,7 @@ export function createPreviewVault(deps: {
   const launches = new Map<string, PreviewInput & { expiresAt: number }>();
   const resources = new Map<
     string,
-    { bindingId: string; expiresAt: number; file: PreviewFile }
+    { bindingId: string; scope: string; expiresAt: number; file: PreviewFile }
   >();
   const sweep = () => {
     const now = deps.now();
@@ -42,23 +43,53 @@ export function createPreviewVault(deps: {
     for (const [id, v] of resources)
       if (v.expiresAt <= now) resources.delete(id);
   };
+  const scopeOf = (input: PreviewInput) =>
+    input.merchantId
+      ? `merchant:${input.merchantId}`
+      : `owner:${input.ownerId}`;
+  const checkQuota = (scope: string, delta: number, resourceDelta = 0) => {
+    let scopedResources = resourceDelta;
+    let total = delta;
+    let scoped = delta;
+    for (const launch of launches.values()) {
+      const bytes = launch.files.reduce((n, f) => n + f.bytes.length, 0);
+      total += bytes;
+      if (scopeOf(launch) === scope) scoped += bytes;
+    }
+    for (const resource of resources.values()) {
+      total += resource.file.bytes.length;
+      if (resource.scope === scope) {
+        scoped += resource.file.bytes.length;
+        scopedResources++;
+      }
+    }
+    if (
+      total > 67108864 ||
+      scoped > 33554432 ||
+      resources.size + resourceDelta > 8192 ||
+      scopedResources > 2048
+    )
+      throw Error('QUOTA_EXCEEDED');
+  };
   return {
     origin: origin.origin,
     create(input: PreviewInput) {
       sweep();
+      const scope = scopeOf(input);
+      const scopedLaunches = [...launches.values()].filter(
+        (l) => scopeOf(l) === scope
+      );
       if (
         launches.size >= 32 ||
-        [...resources.values()].reduce((n, r) => n + r.file.bytes.length, 0) +
-          [...launches.values()].reduce(
-            (n, l) => n + l.files.reduce((a, f) => a + f.bytes.length, 0),
-            0
-          ) +
-          input.files.reduce((n, f) => n + f.bytes.length, 0) >
-          67108864 ||
+        scopedLaunches.length >= 8 ||
         input.files.length > 34 ||
         input.files.reduce((n, f) => n + f.bytes.length, 0) > 20971520
       )
         throw Error('QUOTA_EXCEEDED');
+      checkQuota(
+        scope,
+        input.files.reduce((n, f) => n + f.bytes.length, 0)
+      );
       for (const f of input.files)
         if (
           f.path === 'index.html' ||
@@ -79,10 +110,13 @@ export function createPreviewVault(deps: {
         throw Error('LAUNCH_EXPIRED');
       if (ownerId !== launch.ownerId) throw Error('NOT_FOUND');
       launches.delete(ref);
+      const scope = scopeOf(launch);
+      const pending: typeof resources = new Map();
       const listed = launch.files.map((file) => {
         const ticket = randomBytes(32).toString('hex');
-        resources.set(ticket, {
+        pending.set(ticket, {
           bindingId: launch.bindingId,
+          scope,
           expiresAt: launch.expiresAt,
           file,
         });
@@ -96,7 +130,7 @@ export function createPreviewVault(deps: {
       });
       const css = listed.find((f) => f.path === 'app.css');
       if (css) {
-        const resource = resources.get(css.ticket);
+        const resource = pending.get(css.ticket);
         if (!resource) throw Error('BUILD_FAILED');
         const urls = new Map<string, string>(
           listed
@@ -145,8 +179,9 @@ export function createPreviewVault(deps: {
           )
         );
       const ticket = randomBytes(32).toString('hex');
-      resources.set(ticket, {
+      pending.set(ticket, {
         bindingId: launch.bindingId,
+        scope,
         expiresAt: launch.expiresAt,
         file: {
           path: 'index.html',
@@ -155,6 +190,12 @@ export function createPreviewVault(deps: {
           digest: digestBytes(html),
         },
       });
+      checkQuota(
+        scope,
+        [...pending.values()].reduce((n, r) => n + r.file.bytes.length, 0),
+        pending.size
+      );
+      for (const [id, resource] of pending) resources.set(id, resource);
       return {
         buildDigest: launch.buildDigest,
         bindingId: launch.bindingId,
@@ -175,13 +216,7 @@ export function createPreviewVault(deps: {
       try {
         const html = await render(launch.resources);
         const bytes = Buffer.from(html);
-        if (
-          bytes.length > 4194304 ||
-          [...resources.values()].reduce((n, r) => n + r.file.bytes.length, 0) +
-            bytes.length >
-            67108864
-        )
-          throw Error('QUOTA_EXCEEDED');
+        if (bytes.length > 4194304) throw Error('QUOTA_EXCEEDED');
         if (
           launch.expiresAt <= deps.now() ||
           !(await deps.isActive(launch.bindingId)) ||
@@ -190,10 +225,16 @@ export function createPreviewVault(deps: {
         )
           throw Error('LAUNCH_EXPIRED');
         const originalTicket = new URL(launch.src).pathname.split('/')[2];
+        const original = resources.get(originalTicket);
+        if (!original) throw Error('LAUNCH_EXPIRED');
+        // Check after all awaits; replacing HTML charges only the byte delta.
+        sweep();
+        checkQuota(original.scope, bytes.length - original.file.bytes.length);
         resources.delete(originalTicket);
         const ticket = randomBytes(32).toString('hex');
         resources.set(ticket, {
           bindingId: launch.bindingId,
+          scope: original.scope,
           expiresAt: launch.expiresAt,
           file: {
             path: 'index.html',

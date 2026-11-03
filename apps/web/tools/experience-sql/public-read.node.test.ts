@@ -10,6 +10,7 @@ test('public read projection exposes only a current approved verified build and 
     for (const name of [
       '20261024072905_experience_private_foundation.sql',
       '20261024124000_experience_public_read_projection.sql',
+      '20261103203000_experience_public_manifest_order.sql',
     ])
       await f.pool.query(
         readFileSync(
@@ -17,6 +18,16 @@ test('public read projection exposes only a current approved verified build and 
           'utf8'
         )
       );
+    const definition = (
+      await f.pool.query(
+        "SELECT pg_get_functiondef('public.experience_public_manifest(text)'::regprocedure) value"
+      )
+    ).rows[0].value;
+    assert.equal(
+      (definition.match(/ORDER BY ordinal/gi) ?? []).length,
+      3,
+      'each projected array must explicitly preserve authored order'
+    );
     const m = randomUUID();
     const a = randomUUID();
     const j = randomUUID();
@@ -36,10 +47,14 @@ test('public read projection exposes only a current approved verified build and 
         digest,
         JSON.stringify({
           routes: [
+            { path: '/z', view: 'editorial' },
             { path: '/', view: 'home', secret: 'PRIVATE_ROUTE_SENTINEL' },
           ],
-          capabilities: ['catalog.read'],
-          assets: [],
+          capabilities: ['navigation', 'catalog.read'],
+          assets: [
+            { assetId: 'z', alt: 'Z' },
+            { assetId: 'a', alt: 'A' },
+          ],
           files: [{ content: 'PRIVATE_SOURCE_SENTINEL' }],
         }),
       ]
@@ -91,6 +106,15 @@ test('public read projection exposes only a current approved verified build and 
       await read("SELECT experience_public_manifest('synthetic-qa') value")
     ).rows[0].value;
     assert.equal(manifest.buildDigest, digest);
+    assert.deepEqual(
+      manifest.routes.map((r: { path: string }) => r.path),
+      ['/z', '/']
+    );
+    assert.deepEqual(
+      manifest.assets.map((a: { assetId: string }) => a.assetId),
+      ['z', 'a']
+    );
+    assert.deepEqual(manifest.capabilities, ['navigation', 'catalog.read']);
     assert.doesNotMatch(JSON.stringify(manifest), /PRIVATE_|files|source/);
     assert.equal(
       (

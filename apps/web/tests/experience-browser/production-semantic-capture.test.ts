@@ -1,7 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type { ExperienceManifest } from '@baci/shared/experience';
-import { expect, it } from 'vitest';
+import { expect, it as qualificationTest } from 'vitest';
+
+// Explicit opt-in: requires the separately provisioned local Colima/gVisor fixture.
+const it = qualificationTest.skipIf(
+  process.env.BACI_LOCAL_EXPERIENCE_QUALIFICATION !== '1'
+);
+
 import { verifyCompiledCandidate } from '../../src/lib/experience/compiled-candidate';
 import { digestBytes } from '../../src/lib/experience/manifest-digest';
 import {

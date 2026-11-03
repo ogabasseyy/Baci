@@ -48,6 +48,7 @@ export async function experienceDataFixture() {
       '20261024073533_experience_job_and_draft_lifecycle.sql',
       '20261024074638_experience_private_preview.sql',
       '20261024124000_experience_public_read_projection.sql',
+      '20261103203000_experience_public_manifest_order.sql',
       '20261024130000_experience_verified_snapshots.sql',
       '20261024171619_experience_owner_intents.sql',
       '20261024172102_experience_legacy_mode_guards.sql',

@@ -3,7 +3,12 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { build } from 'esbuild';
-import { expect, it } from 'vitest';
+import { expect, it as qualificationTest } from 'vitest';
+
+// Explicit opt-in: requires the separately provisioned local Colima/gVisor fixture.
+const it = qualificationTest.skipIf(
+  process.env.BACI_LOCAL_EXPERIENCE_QUALIFICATION !== '1'
+);
 
 const exec = promisify(execFile);
 it('pins the existing local Linux installation and executes the native runner with verified bytes', async () => {

@@ -26,7 +26,12 @@ export async function ResolvedCheckoutPage({
     notFound();
   }
 
-  const experience = await loadPublishedExperience(merchant);
+  let experience: Awaited<ReturnType<typeof loadPublishedExperience>> = null;
+  try {
+    experience = await loadPublishedExperience(merchant);
+  } catch {
+    // A corrupt custom head must not disable the native checkout.
+  }
   if (selectTrustedExperienceCheckout(merchant, experience) === 'legacy-demo') {
     return (
       <CheckoutThemeProvider>

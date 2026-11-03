@@ -81,6 +81,7 @@ export async function createPreviewLaunch(
     throw Error('NOT_FOUND');
   const ref = vault.create({
     ownerId: ctx.actorUserId,
+    merchantId: ctx.merchantId,
     bindingId: binding.data,
     buildDigest: build.data.build_digest,
     files,

@@ -152,7 +152,8 @@ export function createRunnerHandler(config: {
   const key = Uint8Array.from(config.key);
   validateConfig(key, config.toolchainDigest);
   const now = config.now ?? Date.now;
-  const consumed = new Map<string, number>();
+  const consumed = new Map<string, { expiry: number; lane: string }>();
+  const laneCounts = new Map<string, number>();
   let active = 0;
   let publicActive = 0;
   let readers = 0;
@@ -189,23 +190,31 @@ export function createRunnerHandler(config: {
       if (input.lane === 'public-render' && input.kind !== 'prerender')
         return new Response('{}', { status: 403, headers });
       const time = now();
-      for (const [nonce, expiry] of consumed)
-        if (expiry <= time) consumed.delete(nonce);
+      for (const [nonce, entry] of consumed) {
+        if (entry.expiry <= time) {
+          consumed.delete(nonce);
+          laneCounts.set(entry.lane, (laneCounts.get(entry.lane) ?? 1) - 1);
+        }
+      }
       if (
         input.expiresAt <= time ||
         input.expiresAt > time + 90000 ||
         input.toolchainDigest !== config.toolchainDigest ||
-        consumed.has(input.nonce) ||
-        consumed.size >= 1024
+        consumed.has(input.nonce)
       )
         return new Response('{}', { status: 409, headers });
+      // Reserve independent bounded replay capacity for each signed lane.
+      // Never evict unexpired nonces to admit traffic: that would permit replay.
+      if ((laneCounts.get(input.lane) ?? 0) >= 4096)
+        return new Response('{}', { status: 429, headers });
       if (active >= 2 || (input.lane === 'public-render' && publicActive >= 1))
         return new Response('{}', { status: 429, headers });
       active++;
       dispatched = true;
       publicDispatch = input.lane === 'public-render';
       if (publicDispatch) publicActive++;
-      consumed.set(input.nonce, input.expiresAt);
+      consumed.set(input.nonce, { expiry: input.expiresAt, lane: input.lane });
+      laneCounts.set(input.lane, (laneCounts.get(input.lane) ?? 0) + 1);
       const output = await config.execute(input.kind, input.payload);
       const body = JSON.stringify({ nonce: input.nonce, output });
       if (Buffer.byteLength(body) > OUTPUT_LIMIT)

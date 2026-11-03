@@ -159,10 +159,17 @@ test('compares the distinct SHAs of a runs page concurrently', async () => {
   const fetchImpl = async (url) => {
     if (!/\/compare\/a{40}\.\.\.[123]{40}/.test(url)) return base(url);
     inFlight++; peak = Math.max(peak, inFlight);
-    await new Promise((r) => setTimeout(r, 5));
+    await Promise.resolve();
     inFlight--;
     return base(url);
   };
   await verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' });
   assert.ok(peak > 1);
+});
+
+test('bugfix: the runs query has no server-side branch filter (capped at 1000 results)', async () => {
+  const urls = [];
+  await verifyCurrentMainDeployment({ expectedSha, fetchImpl: farAheadFetch({ runs: [expectedRun], urls }), repository: 'ogabasseyy/Baci', token: 't' });
+  assert.ok(urls.some((u) => u.includes('/deploy.yml/runs?')));
+  assert.ok(!urls.filter((u) => u.includes('/deploy.yml/runs?')).some((u) => u.includes('branch=')));
 });

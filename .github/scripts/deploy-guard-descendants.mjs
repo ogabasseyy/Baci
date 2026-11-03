@@ -10,7 +10,7 @@ export async function descendantAlreadyDeployed({ apiRoot, expectedSha, fetchImp
   for (let page = 1; page <= MAX_RUN_PAGES; page++) {
     const body = await githubJson(
       fetchImpl,
-      `${apiRoot}/repos/${repository}/actions/workflows/deploy.yml/runs?branch=main&per_page=${PAGE_SIZE}&page=${page}`,
+      `${apiRoot}/repos/${repository}/actions/workflows/deploy.yml/runs?per_page=${PAGE_SIZE}&page=${page}`,
       token
     );
     if (

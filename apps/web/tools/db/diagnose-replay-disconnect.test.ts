@@ -30,7 +30,7 @@ it('emits only allowlisted flags from the owned container', async () => {
   );
   expect(result).toBeInstanceOf(Error);
   expect((result as Error).message).toBe(
-    `${failure.message} (dbflags=111111001)`
+    `${failure.message} (dbflags=111111001,dbsignal=kill)`
   );
   expect(run).toHaveBeenCalledTimes(2);
 });
@@ -77,6 +77,30 @@ it('retains the original failure if state inspection fails and distinguishes una
     run
   );
   expect((result as Error).message).toBe(
-    `${failure.message} (dbflags=000000000)`
+    `${failure.message} (dbflags=000000000,dbsignal=none)`
   );
+});
+
+it.each([
+  [
+    'server process (PID 42) was terminated by signal 11: Segmentation fault',
+    'segv',
+  ],
+  ['server process (PID 42) was terminated by signal 6: Aborted', 'abort'],
+  ['server process terminated by signal 15', 'other'],
+  ['private secret signal 11', 'none'],
+])('classifies only fixed server process signal shapes', async (log, expectedSignal) => {
+  const run = vi
+    .fn()
+    .mockResolvedValueOnce({ stdout: 'false|0|0|running', stderr: '' })
+    .mockResolvedValueOnce({ stdout: log, stderr: '' });
+  const result = await diagnoseReplayDisconnect(
+    failure,
+    project,
+    expected,
+    inspect,
+    run
+  );
+  expect((result as Error).message).toContain(`dbsignal=${expectedSignal}`);
+  expect((result as Error).message).not.toContain(log);
 });

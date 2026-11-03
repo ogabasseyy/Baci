@@ -92,9 +92,23 @@ export async function diagnoseReplayDisconnect(
     ]
       .map((flag) => (flag ? '1' : '0'))
       .join('');
-    return new Error(`${failure.message} (dbflags=${flags})`, {
-      cause: failure,
-    });
+    const signal = /server process[^\n]*\bsignal\s+(\d+)\b/i.exec(logs)?.[1];
+    const signalClass =
+      signal === '9'
+        ? 'kill'
+        : signal === '11'
+          ? 'segv'
+          : signal === '6'
+            ? 'abort'
+            : signal
+              ? 'other'
+              : 'none';
+    return new Error(
+      `${failure.message} (dbflags=${flags},dbsignal=${signalClass})`,
+      {
+        cause: failure,
+      }
+    );
   } catch {
     return failure;
   }

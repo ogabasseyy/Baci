@@ -216,6 +216,22 @@ BEGIN
     RAISE EXCEPTION 'a replacement waybill must alert both the merchant and the customer';
   END IF;
   -- The booked GIG replacement keeps the order out of the early-shipped path.
+  UPDATE public.shipments SET status = 'failed' WHERE id = v_new_shipment;
+  DELETE FROM public.shipment_tracking_notification_outbox
+  WHERE shipment_id = f.shipment_id AND audience = 'customer'
+    AND notification_kind = 'cancelled';
+  INSERT INTO public.shipment_tracking_notification_outbox (
+    shipment_id, tracking_epoch_id, order_id, merchant_id, tracking_event_id,
+    audience, notification_kind
+  ) VALUES (
+    f.shipment_id, f.epoch_id, f.order_id, f.merchant_id, f.event_id,
+    'customer', 'cancelled'
+  );
+  IF (SELECT status FROM public.shipment_tracking_notification_outbox
+      WHERE shipment_id = f.shipment_id AND audience = 'customer'
+        AND notification_kind = 'cancelled') <> 'pending' THEN
+    RAISE EXCEPTION 'a failed replacement is not live: the cancellation must notify';
+  END IF;
   UPDATE public.shipments SET status = 'cancelled' WHERE id = v_new_shipment;
 END;
 $cancel$;
@@ -283,6 +299,13 @@ BEGIN
     OR (SELECT count(*) FROM public.order_notification_outbox
         WHERE order_id = v_order AND event_type = 'order_returned') <> 1 THEN
     RAISE EXCEPTION 'failed and returned GIG events must each queue one customer email';
+  END IF;
+
+  -- In-place waybill correction on the same shipment alerts both sides.
+  UPDATE public.shipments SET tracking_number = 'GIGL-MAP-003B' WHERE id = v_shipment;
+  IF (SELECT count(*) FROM public.shipment_tracking_notification_outbox
+      WHERE shipment_id = v_shipment AND notification_kind = 'waybill_changed') <> 2 THEN
+    RAISE EXCEPTION 'an in-place waybill change must alert both the merchant and the customer';
   END IF;
 END;
 $shipped$;

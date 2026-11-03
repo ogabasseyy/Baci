@@ -17,19 +17,30 @@ COMMENT ON COLUMN public.notification_preferences.shipment_event_preferences IS
   'Per-event merchant GIG shipment push toggles keyed pickup_scheduled, pickup_delayed, picked_up, out_for_delivery, delivered, failed, returned, cancelled. Missing key = default (on, except out_for_delivery which is off).';
 
 -- Atomic per-event merge so concurrent PATCHes of different toggles never
--- overwrite each other. SECURITY INVOKER: the caller's RLS still applies.
+-- overwrite each other. SECURITY DEFINER with an explicit check so staff with
+-- settings.edit (whom the route authorises) can save, as well as the owner.
 CREATE OR REPLACE FUNCTION public.merge_shipment_event_preferences(
   p_merchant_id uuid, p_patch jsonb
 )
 RETURNS void
-LANGUAGE sql SECURITY INVOKER SET search_path = ''
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
 AS $$
+BEGIN
+  IF coalesce(auth.role(), '') <> 'service_role'
+    AND NOT public.check_staff_permission(
+      (SELECT auth.uid()), p_merchant_id, 'settings', 'edit'
+    )
+  THEN
+    RAISE EXCEPTION 'not authorized to edit notification preferences'
+      USING ERRCODE = '42501';
+  END IF;
   INSERT INTO public.notification_preferences AS preferences (
     merchant_id, shipment_event_preferences
   ) VALUES (p_merchant_id, coalesce(p_patch, '{}'::jsonb))
   ON CONFLICT (merchant_id) DO UPDATE
   SET shipment_event_preferences =
     preferences.shipment_event_preferences || coalesce(p_patch, '{}'::jsonb);
+END;
 $$;
 REVOKE ALL ON FUNCTION public.merge_shipment_event_preferences(uuid, jsonb)
   FROM PUBLIC, anon;
@@ -104,7 +115,7 @@ AS $$
     JOIN public.shipments AS newer
       ON newer.order_id = cancelled.order_id
       AND newer.id <> cancelled.id
-      AND newer.status <> 'cancelled'
+      AND newer.status NOT IN ('cancelled', 'failed', 'returned')
       AND newer.created_at > cancelled.created_at
     WHERE cancelled.id = p_shipment_id
   );
@@ -257,14 +268,21 @@ DECLARE
 BEGIN
   IF NEW.provider IS DISTINCT FROM 'GIGL' OR NEW.order_id IS NULL
     OR NEW.status = 'cancelled'
-    OR NOT EXISTS (
-      SELECT 1 FROM public.shipments AS previous
-      WHERE previous.order_id = NEW.order_id
-        AND previous.id <> NEW.id
-        AND previous.provider = 'GIGL'
-        AND upper(btrim(previous.tracking_number)) <> upper(btrim(NEW.tracking_number))
-    )
   THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'UPDATE' THEN
+    -- In-place relink/correction of the waybill on the same shipment row.
+    IF upper(btrim(OLD.tracking_number)) IS NOT DISTINCT FROM upper(btrim(NEW.tracking_number)) THEN
+      RETURN NEW;
+    END IF;
+  ELSIF NOT EXISTS (
+    SELECT 1 FROM public.shipments AS previous
+    WHERE previous.order_id = NEW.order_id
+      AND previous.id <> NEW.id
+      AND previous.provider = 'GIGL'
+      AND upper(btrim(previous.tracking_number)) <> upper(btrim(NEW.tracking_number))
+  ) THEN
     RETURN NEW;
   END IF;
   SELECT monitor.tracking_epoch_id INTO v_epoch
@@ -278,7 +296,7 @@ BEGIN
     provider_event_key, raw_status, normalized_status, description, occurred_at
   ) VALUES (
     NEW.id, v_epoch, NEW.tracking_number, 'GIGL',
-    'waybill-changed:' || NEW.id::text, 'WAYBILL_CHANGED', 'booked',
+    'waybill-changed:' || NEW.id::text || ':' || upper(btrim(NEW.tracking_number)), 'WAYBILL_CHANGED', 'booked',
     'Tracking number changed', now()
   )
   ON CONFLICT (shipment_id, tracking_epoch_id, provider_event_key) DO NOTHING
@@ -301,7 +319,7 @@ REVOKE ALL ON FUNCTION private.notify_gigl_waybill_changed()
 
 DROP TRIGGER IF EXISTS zz_notify_gigl_waybill_changed ON public.shipments;
 CREATE TRIGGER zz_notify_gigl_waybill_changed
-  AFTER INSERT ON public.shipments
+  AFTER INSERT OR UPDATE OF tracking_number ON public.shipments
   FOR EACH ROW EXECUTE FUNCTION private.notify_gigl_waybill_changed();
 
 

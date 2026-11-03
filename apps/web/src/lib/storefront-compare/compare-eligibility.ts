@@ -165,6 +165,11 @@ export function buildBrandCompareCandidate(input: {
     const canonicalKey =
       resolveCanonicalBrandKey(input.categorySlug, normalizedBrand.label) ||
       normalizedBrand.key;
+
+    if (isNonBrandPlaceholderKey(canonicalKey)) {
+      continue;
+    }
+
     const canonicalEntry = brandAuthorityTaxonomy.getEntry(
       input.categorySlug,
       canonicalKey

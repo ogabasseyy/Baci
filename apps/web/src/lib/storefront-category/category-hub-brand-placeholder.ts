@@ -33,8 +33,8 @@ export function isNonBrandPlaceholderKey(keyOrBrand?: string | null): boolean {
   if (NON_BRAND_PLACEHOLDER_KEYS.has(slug)) return true;
 
   const stripped = slug
-    .replace(/^(brand|product)-/, '')
-    .replace(/-(brand|product)$/, '');
+    .replace(/^(brands?|products?)-/, '')
+    .replace(/-(brands?|products?)$/, '');
 
   return NON_BRAND_PLACEHOLDER_KEYS.has(stripped);
 }

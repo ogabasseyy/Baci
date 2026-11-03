@@ -203,4 +203,27 @@ describe('compare eligibility candidate builders', () => {
     expect(candidate.differentiatingSpecCount).toBe(0);
     expect(candidate.isIndexable).toBe(false);
   });
+
+  it('rejects canonical placeholder aliases (e.g. Game -> gaming) in brand compare', () => {
+    const candidate = buildBrandCompareCandidate({
+      categorySlug: 'gaming',
+      products: [
+        ...[0, 1, 2].map((i) => ({
+          slug: `game-${i}`,
+          name: `Game ${i}`,
+          brand: 'Game',
+          price: 50_000,
+          product_key_specs: { platform: 'PS5', genre: 'Action' },
+        })),
+        ...[0, 1, 2].map((i) => ({
+          slug: `playstation-${i}`,
+          name: `PlayStation ${i}`,
+          brand: 'PlayStation',
+          price: 500_000,
+          product_key_specs: { platform: 'PS5', storage_gb: 1000 },
+        })),
+      ],
+    });
+    expect(candidate).toBeNull();
+  });
 });

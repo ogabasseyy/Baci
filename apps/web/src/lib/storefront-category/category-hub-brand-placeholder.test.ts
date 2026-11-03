@@ -31,6 +31,11 @@ describe('isNonBrandPlaceholderKey', () => {
     expect(isNonBrandPlaceholderKey('other-brand')).toBe(true);
     expect(isNonBrandPlaceholderKey('unknown-brand')).toBe(true);
     expect(isNonBrandPlaceholderKey('brand-generic')).toBe(true);
+    expect(isNonBrandPlaceholderKey('Unbranded Products')).toBe(true);
+    expect(isNonBrandPlaceholderKey('Other Brands')).toBe(true);
+    expect(isNonBrandPlaceholderKey('Unknown Products')).toBe(true);
+    expect(isNonBrandPlaceholderKey('Generic Products')).toBe(true);
+    expect(isNonBrandPlaceholderKey('products-generic')).toBe(true);
   });
 
   it('preserves valid commercial brand names', () => {

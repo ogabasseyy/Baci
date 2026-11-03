@@ -80,30 +80,19 @@ DO $$ BEGIN
   RAISE EXCEPTION 'Anonymous draft read privilege granted' USING ERRCODE='P1002';
  END IF;
 END $$;
+-- Exercise the revoked RPC directly; capture the actual server SQLSTATE rather
+-- than running the denied invocation inside a PL/pgSQL exception handler.
+SAVEPOINT oxygen_anon_draft_call;
 \set ON_ERROR_STOP off
-DO $$ BEGIN
- BEGIN
-  /* OXYGEN_CI_ANON_DRAFT_PROBE */
-  RAISE WARNING 'OXYGEN_CI_ANON_BEFORE_CALL';
-  PERFORM public.oxygen_save_form_draft('efaa0000-0000-4000-8000-000000000041'::uuid,0::integer,'efaa0000-0000-4000-8000-000000000055'::uuid,repeat('encrypted-fixture',4)::text,repeat('address-fixture',4)::text,(now()+interval '1 day')::timestamptz);
-  RAISE EXCEPTION 'Anonymous draft save executed' USING ERRCODE='P1003';
- EXCEPTION WHEN insufficient_privilege THEN RAISE WARNING 'OXYGEN_CI_ANON_DENIED'; WHEN query_canceled OR assert_failure OR OTHERS THEN RAISE WARNING 'OXYGEN_CI_ANON_OTHER_ERROR'; RAISE EXCEPTION 'anonymous draft save unexpected SQLSTATE %', SQLSTATE USING ERRCODE=SQLSTATE; END;
-END $$;
-\echo OXYGEN_ANON_DRAFT_POST_DO
+SELECT public.oxygen_save_form_draft('efaa0000-0000-4000-8000-000000000041'::uuid,0::integer,'efaa0000-0000-4000-8000-000000000055'::uuid,repeat('encrypted-fixture',4)::text,repeat('address-fixture',4)::text,(now()+interval '1 day')::timestamptz);
 \set oxygen_anon_draft_state :SQLSTATE
-\if :ERROR
- \echo OXYGEN_ANON_DRAFT_SQLSTATE :oxygen_anon_draft_state
- ROLLBACK;
- \set ON_ERROR_STOP on
- SELECT pg_catalog.set_config('test.oxygen_anon_draft_state', :'oxygen_anon_draft_state', false);
- DO $$ DECLARE s text := current_setting('test.oxygen_anon_draft_state'); BEGIN
-  IF s !~ '^[0-9A-Z]{5}$' OR s = '00000' THEN
-   RAISE EXCEPTION 'Invalid diagnostic state' USING ERRCODE='P1005';
-  END IF;
-  RAISE EXCEPTION 'OXYGEN_ANON_DRAFT_SQLSTATE=%', s USING ERRCODE=s;
- END $$;
-\endif
 \set ON_ERROR_STOP on
+ROLLBACK TO SAVEPOINT oxygen_anon_draft_call;
+SELECT :'oxygen_anon_draft_state' = '42501' AS oxygen_anon_draft_denied \gset
+\if :oxygen_anon_draft_denied
+\else
+ DO $$ BEGIN RAISE EXCEPTION 'Anonymous draft save did not return insufficient privilege' USING ERRCODE='P1003'; END $$;
+\endif
 DO $$ BEGIN
  BEGIN
   PERFORM workflow_id FROM public.oxygen_form_drafts;

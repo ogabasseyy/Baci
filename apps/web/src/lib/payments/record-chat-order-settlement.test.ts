@@ -1,4 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+
+function reviewTable() {
+  const insert = vi.fn().mockResolvedValue({ error: null });
+  return { from: vi.fn(() => ({ insert })), insert };
+}
+
 import { recordChatOrderSettlement } from '@/lib/payments/record-chat-order-settlement';
 
 const base = {
@@ -12,6 +18,7 @@ const base = {
 
 describe('recordChatOrderSettlement', () => {
   it('records a Baci-owned chat DVA payment as a Baci-collected wallet credit', async () => {
+    const review = reviewTable();
     // Arrange
     const rpc = vi
       .fn()
@@ -21,7 +28,7 @@ describe('recordChatOrderSettlement', () => {
     await recordChatOrderSettlement({
       ...base,
       gatewayResponse: { subaccount: {} },
-      supabase: { rpc },
+      supabase: { from: review.from, rpc },
     });
 
     // Assert
@@ -40,6 +47,7 @@ describe('recordChatOrderSettlement', () => {
   });
 
   it('surfaces a recorder refusal returned as an RPC error instead of passing as success', async () => {
+    const review = reviewTable();
     // Arrange: supabase-js resolves RPC failures, it does not throw them.
     const rpc = vi.fn().mockResolvedValue({
       data: null,
@@ -59,7 +67,7 @@ describe('recordChatOrderSettlement', () => {
           },
           subaccount: { subaccount_code: 'ACCT_other' },
         },
-        supabase: { rpc },
+        supabase: { from: review.from, rpc },
       })
     ).rejects.toThrow(
       'chat_order_settlement_failed: record_paystack_direct_split_settlement: paystack_direct_settlement_subaccount_mismatch'
@@ -67,15 +75,58 @@ describe('recordChatOrderSettlement', () => {
   });
 
   it('records nothing when the Paystack payload proves neither collection mode', async () => {
+    const review = reviewTable();
     const rpc = vi.fn();
 
     await expect(
       recordChatOrderSettlement({
         ...base,
         gatewayResponse: { status: 'success' },
-        supabase: { rpc },
+        supabase: { from: review.from, rpc },
       })
     ).rejects.toThrow('paystack_settlement_collection_unknown');
     expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('files a durable merchant_settlement_failed review when settlement fails, since Paystack will not redeliver', async () => {
+    const review = reviewTable();
+    const rpc = vi.fn();
+
+    await expect(
+      recordChatOrderSettlement({
+        ...base,
+        gatewayResponse: { status: 'success' },
+        supabase: { from: review.from, rpc },
+      })
+    ).rejects.toThrow('paystack_settlement_collection_unknown');
+
+    expect(review.from).toHaveBeenCalledWith('reconciliation_review');
+    expect(review.insert).toHaveBeenCalledWith({
+      issue_type: 'merchant_settlement_failed',
+      metadata: {
+        error: 'paystack_settlement_collection_unknown',
+        gateway: 'paystack',
+        source: 'chat_order',
+      },
+      order_id: 'order-1',
+      paystack_ref: 'CHAT-REF123',
+      reason:
+        'Chat-order settlement was not recorded; reconcile it against the Paystack transaction.',
+    });
+  });
+
+  it('does not file a review when settlement succeeds', async () => {
+    const review = reviewTable();
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: 'settlement-1', error: null });
+
+    await recordChatOrderSettlement({
+      ...base,
+      gatewayResponse: { subaccount: {} },
+      supabase: { from: review.from, rpc },
+    });
+
+    expect(review.insert).not.toHaveBeenCalled();
   });
 });

@@ -70,9 +70,11 @@ gateway-origin guard (`20260724140000`).
   gateway, a missing/malformed subaccount code, a code that is not the
   merchant's registered subaccount, a REDVAULT order, an unknown order, or a
   cancelled/refunded order. The row records what Paystack actually paid: the
-  verified `fees_split.subaccount` share is `net_amount`, and Baci's share is
-  the rest (so a bank-transfer DVA records ₦0 for Baci, and a checkout from
-  before the GIG-fee fix does not book the delivery fee as Baci's). The GIGL
+  verified `fees_split.subaccount` share is `net_amount`, the verified
+  `fees_split.integration` share is Baci's `platform_fee`, and Paystack's own
+  fee stays in `gateway_fee` (so a bank-transfer DVA records ₦0 for Baci, and
+  a checkout from before the GIG-fee fix does not book the delivery fee as
+  Baci's). The GIGL
   variant also records the intended retention and
   `retained_shipping_collected_by_split` (whether Paystack's verified
   `transaction_charge` actually covered it).
@@ -112,6 +114,15 @@ No existing row is changed.
   the row waits for manual review). REDVAULT, Korapay and Juicyway are
   unchanged. A split to a subaccount that is not the merchant's registered
   one fails with the permanent `paystack_direct_settlement_subaccount_mismatch`.
+- A failed chat-order settlement files a `merchant_settlement_failed`
+  `reconciliation_review` row (the webhook is acknowledged and Paystack will
+  not redeliver), so nothing is lost silently.
+- `complete_merchant_invoice_partial_payment` (merchant invoice partial
+  payments through a Paystack order DVA) still credits through
+  `record_merchant_settlement_gigl_v1` without a `paystack_collection`
+  marker. Order DVAs split to the merchant's subaccount, so those credits are
+  deliberately counted as not spendable until reconciled; route that writer
+  through the classification when it is next touched.
 - The chat-order webhook path (`record-chat-order-settlement.ts`), the
   order-update-failure fallback (`record-order-update-failure-settlement.ts`)
   and the manual DVA reconcile script use the same classification, so

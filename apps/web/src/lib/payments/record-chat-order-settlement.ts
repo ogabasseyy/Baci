@@ -1,13 +1,29 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolveChatOrderSettlementRouting } from '@/lib/payments/resolve-chat-order-settlement-routing';
 
+type ChatSettlementSupabase = Pick<SupabaseClient, 'from' | 'rpc'>;
+
+const POSTGRES_UNIQUE_VIOLATION = '23505';
+
 /**
- * Records the settlement for a chat order converted on payment. supabase-js
- * returns RPC failures instead of throwing, so this throws on a returned
- * error: a recorder refusal (for example a subaccount that is not the
- * merchant's) must reach the caller's log, never pass as success.
+ * Records the settlement for a chat order converted on payment. Any failure
+ * (an unprovable Paystack payload, or a recorder refusal that supabase-js
+ * returns instead of throwing) files a durable merchant_settlement_failed
+ * review, because the webhook is acknowledged and Paystack will not
+ * redeliver, and then rethrows so the caller logs it.
  */
-export async function recordChatOrderSettlement(args: {
+export async function recordChatOrderSettlement(
+  args: ChatSettlementArgs
+): Promise<void> {
+  try {
+    await recordSettlement(args);
+  } catch (error) {
+    await fileSettlementReview(args, error);
+    throw error;
+  }
+}
+
+type ChatSettlementArgs = {
   gateway: string;
   gatewayResponse: unknown;
   grossAmount: number;
@@ -15,8 +31,39 @@ export async function recordChatOrderSettlement(args: {
   orderId: string;
   platformFee: number;
   reference: string;
-  supabase: Pick<SupabaseClient, 'rpc'>;
-}): Promise<void> {
+  supabase: ChatSettlementSupabase;
+};
+
+async function fileSettlementReview(
+  args: ChatSettlementArgs,
+  error: unknown
+): Promise<void> {
+  const { error: reviewError } = await args.supabase
+    .from('reconciliation_review')
+    .insert({
+      issue_type: 'merchant_settlement_failed',
+      metadata: {
+        error: error instanceof Error ? error.message : String(error),
+        gateway: args.gateway,
+        source: 'chat_order',
+      },
+      order_id: args.orderId,
+      paystack_ref: args.reference,
+      reason:
+        'Chat-order settlement was not recorded; reconcile it against the Paystack transaction.',
+    });
+  // An open review for this order already exists on a redelivery.
+  if (
+    reviewError &&
+    (reviewError as { code?: string }).code !== POSTGRES_UNIQUE_VIOLATION
+  ) {
+    throw new Error(
+      `chat_order_settlement_review_failed: ${reviewError.message}`
+    );
+  }
+}
+
+async function recordSettlement(args: ChatSettlementArgs): Promise<void> {
   // Baci-owned chat DVAs stay spendable; a subaccount split is history only.
   const routing = resolveChatOrderSettlementRouting({
     gateway: args.gateway,

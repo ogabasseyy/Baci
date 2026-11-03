@@ -62,6 +62,19 @@ BEGIN
   PERFORM pg_temp.check(v_row.net_amount = 80000 AND v_row.platform_fee = 0
       AND (v_row.metadata ->> 'requested_platform_fee')::numeric = 1200,
     'T4 history must record the verified merchant share');
+  -- Production DVA shape: Baci's share is 0 and Paystack's fee (300) stays
+  -- in gateway_fee, so platform_fee is 0 and gross = net + gateway + platform.
+  PERFORM pg_temp.seed_order(11, 835000);
+  v_id := public.record_paystack_direct_split_settlement(
+    pg_temp.merchant(), 'order', pg_temp.fid(2, 11), 'paystack', 'PDS-REF-11',
+    835000, 300, 2350, 'Order payment via paystack',
+    '{"paystack_subaccount_share_kobo":83470000,"paystack_integration_share_kobo":0}'::jsonb,
+    'ACCT_pdsfixture');
+  SELECT * INTO v_row FROM public.merchant_settlements WHERE id = v_id;
+  PERFORM pg_temp.check(v_row.net_amount = 834700 AND v_row.platform_fee = 0
+      AND v_row.gateway_fee = 300
+      AND v_row.gross_amount - v_row.gateway_fee - v_row.platform_fee = v_row.net_amount,
+    'T4 a DVA split must book Paystack''s fee as gateway fee, not Baci''s');
   v_caught := NULL;
   BEGIN
     PERFORM pg_temp.seed_order(10, 1000);

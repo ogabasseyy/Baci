@@ -24,6 +24,7 @@ AS $$
 DECLARE
   v_wallet_id uuid;
   v_share_text text := p_metadata ->> 'paystack_subaccount_share_kobo';
+  v_integration_text text := p_metadata ->> 'paystack_integration_share_kobo';
   v_net numeric(12,2);
   v_platform numeric(12,2);
   v_settlement_id uuid;
@@ -52,17 +53,26 @@ BEGIN
      OR p_platform_fee > p_gross_amount THEN
     RAISE EXCEPTION 'paystack_direct_settlement_amount_invalid';
   END IF;
-  -- Record what Paystack actually paid the merchant. The verified
-  -- fees_split.subaccount share is the truth (a bank-transfer DVA gives Baci
-  -- nothing; a checkout from before the GIG-fee fix gave Baci only its fee).
-  -- Baci's share is the rest, since bearer 'account' takes Paystack's fee from
-  -- it. Without a verified share, fall back to gross minus Baci's charge.
+  -- Record what Paystack actually paid. The verified fees_split.subaccount
+  -- share is the merchant's net (a bank-transfer DVA gives Baci nothing; a
+  -- checkout from before the GIG-fee fix gave Baci only its fee), and the
+  -- verified fees_split.integration share is Baci's platform fee. Paystack's
+  -- own fee stays in gateway_fee only. Without a verified Baci share, Baci's
+  -- share is the rest. Without a verified merchant share, fall back to gross
+  -- minus Baci's charge.
   IF v_share_text ~ '^[0-9]{1,15}$' THEN
     v_net := v_share_text::numeric / 100;
     IF v_net > p_gross_amount THEN
       RAISE EXCEPTION 'paystack_direct_settlement_amount_invalid';
     END IF;
-    v_platform := p_gross_amount - v_net;
+    IF v_integration_text ~ '^[0-9]{1,15}$' THEN
+      v_platform := v_integration_text::numeric / 100;
+      IF v_net + v_platform > p_gross_amount THEN
+        RAISE EXCEPTION 'paystack_direct_settlement_amount_invalid';
+      END IF;
+    ELSE
+      v_platform := p_gross_amount - v_net;
+    END IF;
   ELSE
     v_net := p_gross_amount - p_platform_fee;
     v_platform := p_platform_fee;

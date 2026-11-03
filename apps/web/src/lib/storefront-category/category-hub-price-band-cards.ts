@@ -1,9 +1,9 @@
 import { CATEGORY_HUB_DEFAULTS } from '@/config/category-hub-defaults';
-import { isProductAvailable } from '@/lib/storefront-category/category-hub-best-for-helpers';
 import type {
   CategoryHubCard,
   CategoryHubProduct,
 } from '@/lib/storefront-category/category-hub-types';
+import { isCategoryHubProductAvailable } from '@/lib/storefront-category/is-category-hub-product-available';
 import { buildPriceBandCandidate } from '@/lib/storefront-compare/compare-eligibility';
 import {
   getConfiguredPriceBands,
@@ -87,7 +87,9 @@ export function buildPriceBandCards(input: {
     merchantCurrency: input.merchantCurrency,
   });
 
-  const availableProducts = input.products.filter(isProductAvailable);
+  const availableProducts = input.products.filter(
+    isCategoryHubProductAvailable
+  );
 
   return curatedBands
     .map((band) => {

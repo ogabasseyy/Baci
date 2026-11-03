@@ -8,28 +8,37 @@ export function getErrorCode(error: unknown): string | undefined {
   return typeof code === 'string' ? code : undefined;
 }
 
+export type StoredOperationState = {
+  /** Id to submit with; null means mint a fresh one. */
+  operationId: string | null;
+  /** PiggyVest already confirmed it: complete without submitting again. */
+  confirmed: boolean;
+};
+
 /**
- * Returns the stored primary operation id if it can still be resubmitted, or
- * null when the server cancelled it or has no record of it (resubmitting a
- * cancelled id answers 'conflict' forever). Ambiguous failures keep the id so
- * a retry cannot double-spend.
+ * Resolves what to do with a stored primary operation id. Only an
+ * authoritative cancellation releases it (resubmitting a cancelled id answers
+ * 'conflict' forever). Absence from primary storage does NOT: the legacy
+ * fallback rail may hold the debit under the same id and dedupes by it.
+ * Ambiguous failures keep the id so a retry cannot double-spend.
  */
-export async function reusableStoredOperationId(input: {
+export async function resolveStoredOperation(input: {
   merchantId?: string;
   operationId: string | null | undefined;
   isPrimary: boolean;
-}): Promise<string | null> {
-  if (!input.operationId) return null;
-  if (!input.isPrimary) return input.operationId;
+}): Promise<StoredOperationState> {
+  const keep = { operationId: input.operationId ?? null, confirmed: false };
+  if (!input.operationId || !input.isPrimary) return keep;
   try {
     const result = await checkPiggyvestPrimarySavingsStatus({
       merchantId: input.merchantId,
       operationId: input.operationId,
     });
-    return result.status === 'cancelled' ? null : input.operationId;
-  } catch (error) {
-    return getErrorCode(error) === 'CONTRIBUTION_NOT_FOUND'
-      ? null
-      : input.operationId;
+    if (result.status === 'cancelled') {
+      return { operationId: null, confirmed: false };
+    }
+    return { ...keep, confirmed: result.status === 'confirmed' };
+  } catch {
+    return keep;
   }
 }

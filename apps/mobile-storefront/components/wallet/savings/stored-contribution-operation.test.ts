@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
   getErrorCode,
-  reusableStoredOperationId,
+  resolveStoredOperation,
 } from './stored-contribution-operation';
 
 const mockCheckStatus = jest.fn<(...args: unknown[]) => Promise<unknown>>();
@@ -11,45 +11,51 @@ jest.mock('@/lib/piggyvest-primary-savings-status', () => ({
 }));
 
 const run = (operationId: string | null, isPrimary = true) =>
-  reusableStoredOperationId({ merchantId: 'm1', operationId, isPrimary });
+  resolveStoredOperation({ merchantId: 'm1', operationId, isPrimary });
 
-describe('reusableStoredOperationId', () => {
+describe('resolveStoredOperation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('returns null without a stored id', async () => {
-    expect(await run(null)).toBeNull();
+  it('mints fresh without a stored id', async () => {
+    expect(await run(null)).toEqual({ operationId: null, confirmed: false });
     expect(mockCheckStatus).not.toHaveBeenCalled();
   });
 
   it('skips the status call for legacy customers', async () => {
-    expect(await run('op', false)).toBe('op');
+    expect(await run('op', false)).toEqual({
+      operationId: 'op',
+      confirmed: false,
+    });
     expect(mockCheckStatus).not.toHaveBeenCalled();
   });
 
-  it('keeps a pending or confirmed id', async () => {
+  it('keeps a pending id', async () => {
     mockCheckStatus.mockResolvedValue({ status: 'pending' });
-    expect(await run('op')).toBe('op');
+    expect(await run('op')).toEqual({ operationId: 'op', confirmed: false });
+  });
+
+  it('flags a confirmed id so it is not submitted again', async () => {
     mockCheckStatus.mockResolvedValue({ status: 'confirmed' });
-    expect(await run('op')).toBe('op');
+    expect(await run('op')).toEqual({ operationId: 'op', confirmed: true });
   });
 
   it('drops a cancelled id', async () => {
     mockCheckStatus.mockResolvedValue({ status: 'cancelled' });
-    expect(await run('op')).toBeNull();
+    expect(await run('op')).toEqual({ operationId: null, confirmed: false });
   });
 
-  it('drops an id the server has no record of', async () => {
+  it('keeps the id when primary has no record (legacy may hold it)', async () => {
     mockCheckStatus.mockRejectedValue(
       Object.assign(new Error('x'), { code: 'CONTRIBUTION_NOT_FOUND' })
     );
-    expect(await run('op')).toBeNull();
+    expect(await run('op')).toEqual({ operationId: 'op', confirmed: false });
   });
 
   it('keeps the id when the lookup is ambiguous', async () => {
     mockCheckStatus.mockRejectedValue(new Error('network'));
-    expect(await run('op')).toBe('op');
+    expect(await run('op')).toEqual({ operationId: 'op', confirmed: false });
   });
 });
 

@@ -15,7 +15,7 @@ import {
 } from './run-savings-goal-submission';
 import {
   getErrorCode,
-  reusableStoredOperationId,
+  resolveStoredOperation,
 } from './stored-contribution-operation';
 import { validateSavingsInput } from './validate-savings-input';
 
@@ -101,14 +101,14 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     setIsSubmitting(true);
     try {
       const isPrimary = isPiggyvestPrimaryMerchant(input.activeMerchantId);
-      const storedKey = await reusableStoredOperationId({
+      const stored = await resolveStoredOperation({
         merchantId: input.activeMerchantId,
         operationId: input.initialContributionIdempotencyKey,
         isPrimary,
       });
       if (!mountedRef.current) return;
-      const idempotencyKey = storedKey ?? Crypto.randomUUID();
-      if (!storedKey) {
+      const idempotencyKey = stored.operationId ?? Crypto.randomUUID();
+      if (!stored.operationId) {
         input.setInitialContributionIdempotencyKey(idempotencyKey);
       }
       // Primary customers move money main wallet -> goal through PiggyVest
@@ -117,15 +117,23 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       const contribute = isPrimary
         ? addPiggyvestPrimarySavingsContribution
         : addSavingsContribution;
-      const contributionResult = await contribute({
-        amount,
-        goalId,
-        idempotencyKey,
-        merchantId: input.activeMerchantId,
-        merchantSlug: input.activeMerchantSlug,
-      });
+      // A confirmed stored operation is complete: submitting it again could
+      // fall back to the legacy rail and debit twice.
+      const contributionResult: {
+        status?: unknown;
+        goalStatus?: unknown;
+        operationId?: string;
+      } = stored.confirmed
+        ? { status: 'confirmed', operationId: idempotencyKey }
+        : await contribute({
+            amount,
+            goalId,
+            idempotencyKey,
+            merchantId: input.activeMerchantId,
+            merchantSlug: input.activeMerchantSlug,
+          });
       if (!mountedRef.current) return;
-      const outcome = (contributionResult as { status?: unknown }).status;
+      const outcome = contributionResult.status;
       if (outcome === 'pending' || outcome === 'cancelled') {
         // Never "funded" until PiggyVest confirms. Pending keeps the stored
         // operation id so a retry cannot double-spend; cancelled releases it.
@@ -152,9 +160,11 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       // Completion reconciliation for the deferred path: the reminder was
       // retained at creation because the transfer was unconfirmed — now that
       // a confirmed contribution completes the goal, cancel it.
+      // The primary response carries no goalStatus, so a confirmed primary
+      // transfer that covers the target counts as completion.
       if (
-        'goalStatus' in contributionResult &&
-        contributionResult.goalStatus === 'completed'
+        contributionResult.goalStatus === 'completed' ||
+        (isPrimary && amount >= input.targetValue)
       ) {
         try {
           await cancelSavingsReminderNotification(goalId);

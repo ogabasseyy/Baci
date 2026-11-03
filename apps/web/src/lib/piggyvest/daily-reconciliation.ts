@@ -1,4 +1,9 @@
 import { piggyvestDailyReconciliationSchemas as schemas } from '@/schemas/piggyvest-daily-reconciliation';
+import {
+  confirmShortfalls,
+  readBalance,
+  unreadableBalance,
+} from './daily-reconciliation-balances';
 
 /**
  * The daily reconciliation. It only reads: our recorded transfers and
@@ -10,8 +15,10 @@ import { piggyvestDailyReconciliationSchemas as schemas } from '@/schemas/piggyv
  * What pages (status `attention`): any transfer still reserved or dispatched
  * past the cutoff; a goal wallet holding LESS at PiggyVest than the principal
  * we confirmed into it; a balance that could not be read; a list cut short.
- * A wallet holding MORE is normal while interest accrues, so it is listed
- * for review (`above_expected`) but does not page. A snapshot that cannot be
+ * A shortfall is re-read once before it counts. A wallet holding MORE is
+ * normal while interest accrues, so a small surplus is listed for review
+ * (`above_expected`); one at or above the surplus threshold pages
+ * (`above_expected_large`), as it may be an unmapped goal deposit. A snapshot that cannot be
  * loaded or parsed is `failed`: never reported as clean.
  */
 export type TransferReading =
@@ -26,11 +33,13 @@ export type BalanceKind =
   | 'match'
   | 'below_expected'
   | 'above_expected'
+  | 'above_expected_large'
   | 'unreadable';
 
 export type AttentionReason =
   | 'stuck_transfers'
   | 'balance_below_expected'
+  | 'balance_surplus_large'
   | 'balance_unreadable'
   | 'list_truncated'
   | 'read_deadline_reached';
@@ -85,6 +94,8 @@ export interface ReconciliationPorts {
   ) => Promise<Exclude<TransferReading, 'not_dispatched'>>;
   /** The provider's balance for a wallet, in kobo. */
   readWalletBalance: (walletId: string) => Promise<number>;
+  /** Surplus (kobo) at or above which a wallet pages; see the balances module. */
+  surplusPageKobo?: number;
   /** Used only to stamp a failed report, which has no database time. */
   now: () => string;
   /**
@@ -139,19 +150,6 @@ async function mapLimited<T, R>(
   return results;
 }
 
-function unreadableBalance(wallet: {
-  walletId: string;
-  expectedKobo: number;
-}): BalanceFinding {
-  return {
-    walletId: wallet.walletId,
-    expectedKobo: wallet.expectedKobo,
-    providerKobo: null,
-    differenceKobo: null,
-    kind: 'unreadable',
-  };
-}
-
 function stuckFinding(
   transfer: ReturnType<typeof schemas.stuckTransfer.parse>,
   reading: TransferReading
@@ -163,35 +161,6 @@ function stuckFinding(
     amountKobo: transfer.amountKobo,
     ageSeconds: transfer.ageSeconds,
     reading,
-  };
-}
-
-async function readBalance(
-  ports: ReconciliationPorts,
-  wallet: { walletId: string; expectedKobo: number }
-): Promise<BalanceFinding> {
-  let providerKobo: unknown;
-  try {
-    providerKobo = await ports.readWalletBalance(wallet.walletId);
-  } catch {
-    providerKobo = undefined;
-  }
-  if (
-    typeof providerKobo !== 'number' ||
-    !Number.isSafeInteger(providerKobo) ||
-    providerKobo < 0
-  )
-    return unreadableBalance(wallet);
-  const differenceKobo = providerKobo - wallet.expectedKobo;
-  let kind: BalanceKind = 'match';
-  if (differenceKobo < 0) kind = 'below_expected';
-  else if (differenceKobo > 0) kind = 'above_expected';
-  return {
-    walletId: wallet.walletId,
-    expectedKobo: wallet.expectedKobo,
-    providerKobo,
-    differenceKobo,
-    kind,
   };
 }
 
@@ -244,11 +213,17 @@ export async function runDailyReconciliation(
         transfer.state === 'reserved' ? 'not_dispatched' : 'uncertain'
       )
   );
-  const balances = await mapLimited(
+  const firstBalances = await mapLimited(
     snapshot.wallets,
     budget,
     (wallet) => readBalance(ports, wallet),
     unreadableBalance
+  );
+  const balances = await confirmShortfalls(
+    ports,
+    firstBalances,
+    snapshot.wallets,
+    () => !budget.expired()
   );
   const truncated = {
     stuck: snapshot.stuckTotal > snapshot.stuck.length,
@@ -259,6 +234,8 @@ export async function runDailyReconciliation(
     reasons.push('stuck_transfers');
   if (balances.some((balance) => balance.kind === 'below_expected'))
     reasons.push('balance_below_expected');
+  if (balances.some((balance) => balance.kind === 'above_expected_large'))
+    reasons.push('balance_surplus_large');
   if (balances.some((balance) => balance.kind === 'unreadable'))
     reasons.push('balance_unreadable');
   if (truncated.stuck || truncated.wallets) reasons.push('list_truncated');

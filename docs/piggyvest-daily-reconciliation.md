@@ -44,6 +44,9 @@ pages if the report email cannot be sent.
 | --- | --- |
 | `PIGGYVEST_RECONCILIATION_ENABLED` | Must be exactly `true`. Anything else: the route answers `disabled` and does nothing. |
 | `PIGGYVEST_RECONCILIATION_REPORT_EMAIL` | Owner address the report is sent to. Missing or invalid pages instead. |
+| `PIGGYVEST_RECONCILIATION_SURPLUS_PAGE_KOBO` | Optional. A goal wallet holding at least this many kobo MORE than recorded pages (it may be an unmapped goal deposit). Default `100000` (N1,000); a missing, zero, negative or non-integer value uses the default. Smaller surpluses stay an email review. |
+
+A balance below the record is read a second time (within the read budget) before it pages; it pages only if the shortfall persists. Report dates are UTC.
 
 The email goes out through the platform ZeptoMail token (`ZEPTOMAIL_TOKEN`) with
 a single attempt; a failed send pages. It reuses the `PIGGYVEST_PRIMARY_*` settings and the evidence database login.

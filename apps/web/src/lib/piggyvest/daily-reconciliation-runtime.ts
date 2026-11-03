@@ -80,12 +80,20 @@ export type DailyReconciliationResult =
       paged: boolean;
     };
 
-function buildPorts(runtime: Runtime, deps: DailyReconciliationDeps) {
+function buildPorts(
+  runtime: Runtime,
+  deps: DailyReconciliationDeps,
+  env: NodeJS.ProcessEnv
+) {
   const { environment, integrationId } = runtime.configuration;
   const token = runtime.providerToken;
   const baseUrl = getPrimaryWalletProviderOrigin(environment);
   const execute = deps.createExecutor(runtime.reconciliationConfiguration);
+  const surplus = schemas.surplusPageKobo.safeParse(
+    env.PIGGYVEST_RECONCILIATION_SURPLUS_PAGE_KOBO
+  );
   return {
+    surplusPageKobo: surplus.success ? surplus.data : undefined,
     loadSnapshot: async () => {
       const { rows } = await execute(SNAPSHOT_STATEMENT, [
         integrationId,
@@ -164,7 +172,7 @@ export async function runPiggyvestDailyReconciliation(
   } else {
     let ports: ReturnType<typeof buildPorts> | null = null;
     try {
-      ports = buildPorts(runtime, deps);
+      ports = buildPorts(runtime, deps, env);
     } catch {
       // Building the provider and database handles failed: not runnable.
       ports = null;

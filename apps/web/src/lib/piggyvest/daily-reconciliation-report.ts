@@ -40,12 +40,18 @@ function balanceLine(item: BalanceFinding): string {
     below_expected: 'BELOW what we recorded',
     above_expected:
       'above what we recorded (interest or an unrecorded credit, review)',
+    above_expected_large:
+      'a LARGE surplus over what we recorded (possibly an unmapped goal deposit, check today)',
   }[item.kind];
   return `- ${item.walletId}: PiggyVest ${formatKobo(item.providerKobo ?? 0)} vs recorded ${formatKobo(item.expectedKobo)}, difference ${formatKobo(item.differenceKobo ?? 0)}, ${label}.`;
 }
 
+/** The report date in UTC, so a failed and a snapshot report agree. */
 function dateOf(generatedAt: string): string {
-  return generatedAt.slice(0, 10);
+  const time = Date.parse(generatedAt);
+  return Number.isNaN(time)
+    ? generatedAt.slice(0, 10)
+    : new Date(time).toISOString().slice(0, 10);
 }
 
 export function renderReconciliationEmail(report: ReconciliationReport): {
@@ -111,5 +117,7 @@ export function pageReasonOf(report: ReconciliationReport): string | null {
     report.balances.filter((balance) => balance.kind === kind).length;
   const truncated = report.truncated.stuck || report.truncated.wallets;
   const deadline = report.deadlineReached ? ' deadline=reached' : '';
-  return `stuck=${report.stuckTotal} below_expected=${count('below_expected')} unreadable=${count('unreadable')} truncated=${truncated ? 'yes' : 'no'}${deadline}`;
+  const large = count('above_expected_large');
+  const surplus = large > 0 ? ` surplus_large=${large}` : '';
+  return `stuck=${report.stuckTotal} below_expected=${count('below_expected')} unreadable=${count('unreadable')} truncated=${truncated ? 'yes' : 'no'}${surplus}${deadline}`;
 }

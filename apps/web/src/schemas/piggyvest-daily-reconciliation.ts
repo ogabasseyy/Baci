@@ -42,6 +42,11 @@ export const piggyvestDailyReconciliationSchemas = {
   snapshotRows: z.array(z.strictObject({ result: snapshot })).length(1),
   // The owner address the report is emailed to.
   reportEmail: z.email().max(254),
+  // Surplus (kobo) that pages; anything unusable falls back to the default.
+  surplusPageKobo: z
+    .string()
+    .regex(/^[1-9]\d{0,12}$/)
+    .transform(Number),
 };
 
 export type PiggyvestReconciliationSnapshot = z.infer<typeof snapshot>;

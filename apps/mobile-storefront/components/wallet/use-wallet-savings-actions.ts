@@ -5,6 +5,10 @@ import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { addPiggyvestPrimarySavingsContribution } from '@/lib/piggyvest-primary-savings';
+import {
+  type PinProofRequester,
+  runWithPinProof,
+} from '@/lib/wallet-pin-proof';
 import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 import { checkPendingPrimarySavings } from './check-pending-primary-savings';
 import type { ContributionRail } from './savings/stored-contribution-operation';
@@ -22,6 +26,7 @@ export function createWalletSavingsActions({
   idempotencyKeyRef,
   operationRailRef,
   refetchWallet,
+  requestPinProof,
   savingsContributionAmount,
   spendableBalance,
   startWalletTopUp,
@@ -38,6 +43,8 @@ export function createWalletSavingsActions({
   // written before each request and cleared together with it.
   operationRailRef: { current: ContributionRail | null };
   refetchWallet: () => Promise<unknown>;
+  /** Opens the wallet PIN sheet; resolves a single-use proof or null. */
+  requestPinProof?: PinProofRequester;
   savingsContributionAmount: string;
   spendableBalance: number;
   startWalletTopUp?: () => void;
@@ -126,13 +133,26 @@ export function createWalletSavingsActions({
       addSavingsContribution:
         rail === 'primary'
           ? (input) =>
-              addPiggyvestPrimarySavingsContribution({
-                ...input,
-                // A fallback sends the id on legacy, so retries must follow it.
-                onRail: (sentOn) => {
-                  operationRailRef.current = sentOn;
+              // A clean "PIN needed" refusal opens the PIN sheet and retries
+              // the same stored id on the same rail with the proof.
+              runWithPinProof(
+                (pinProof) =>
+                  addPiggyvestPrimarySavingsContribution({
+                    ...input,
+                    ...(pinProof ? { pinProof } : {}),
+                    // A fallback sends the id on legacy, so retries must follow it.
+                    onRail: (sentOn) => {
+                      operationRailRef.current = sentOn;
+                    },
+                  }),
+                {
+                  merchantId: input.merchantId,
+                  goalId: input.goalId,
+                  operationId: input.idempotencyKey,
+                  amountKobo: Math.round(input.amount * 100),
                 },
-              })
+                requestPinProof
+              )
           : addSavingsContribution,
       cancelSavingsReminder: cancelSavingsReminderNotification,
       clearIdempotencyKey: releaseOperation,

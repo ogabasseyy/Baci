@@ -7,6 +7,7 @@ import {
 import { formatNgnCurrency } from '@/lib/format-ngn-currency';
 import type { Product } from '@/types/product';
 import { toSelectedProductChoice } from './savings/start-savings-controller.utils';
+import { shouldReportContributionFailure } from './wallet-contribution-failure';
 
 interface AddSavingsContributionParams {
   activeMerchantId?: string;
@@ -179,6 +180,7 @@ export async function addSavingsContributionToGoal({
       `Added ${formatNgnCurrency(amount)} to your savings goal.`
     );
   } catch (error) {
+    if (!shouldReportContributionFailure(error, clearIdempotencyKey)) return;
     Alert.alert(
       'Unable to add savings',
       error instanceof Error ? error.message : 'Please try again in a moment.'

@@ -9,6 +9,7 @@ import {
   runSavingsGoalSubmission,
   type UseStartSavingsSubmitInput,
 } from './run-savings-goal-submission';
+import { useWalletPinPrompt } from './use-wallet-pin-prompt';
 import { validateSavingsInput } from './validate-savings-input';
 
 export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
@@ -18,6 +19,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
   const submitInFlightRef = useRef(false);
   const contextRef = useRef({ active: true, key: '' });
   const mountedRef = useRef(true);
+  const { requestProof, sheetProps: pinSheetProps } = useWalletPinPrompt();
   const contextKey = JSON.stringify([
     input.activeMerchantId,
     input.activeMerchantSlug,
@@ -94,6 +96,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     try {
       await runBankTransferContribution(input, goalId, amount, {
         isMounted: () => mountedRef.current,
+        requestPinProof: requestProof,
       });
     } finally {
       submitInFlightRef.current = false;
@@ -143,6 +146,7 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     handleCopyFundingAccount,
     isAuthorizingCard,
     isSubmitting,
+    pinSheetProps,
     submitBankTransferContribution,
     openWalletFundingScreen: () => {
       // Fund enough for the first contribution, but never send Paystack below the provider minimum.

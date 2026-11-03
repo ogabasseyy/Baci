@@ -59,7 +59,16 @@ export function composeExperienceRuntime(
               )
       )
     );
-    cleanups.push(installExperienceOwnerRuntime(settings.owner));
+    cleanups.push(
+      installExperienceOwnerRuntime(
+        settings.dispatcher.readPerformance
+          ? {
+              ...settings.owner,
+              readPerformance: settings.dispatcher.readPerformance,
+            }
+          : settings.owner
+      )
+    );
     cleanups.push(installExperienceStorefrontRuntime(settings.storefront));
     cleanups.push(
       installExperienceEvidenceReader(

@@ -140,7 +140,7 @@ export function ExperienceFrame({
             'method' in data &&
             data.method === 'navigation.go'
           )
-            port.postMessage({ type: 'route', route: result.value });
+            channel.send({ type: 'route', route: result.value });
           const requestId =
             data && typeof data === 'object' && 'requestId' in data
               ? data.requestId

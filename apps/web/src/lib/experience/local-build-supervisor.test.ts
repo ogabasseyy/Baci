@@ -55,9 +55,9 @@ vi.mock('../../../tools/experience-runner/private-build-payload', () => ({
   packPrivateBuild: vi.fn((manifest) => manifest),
 }));
 vi.mock('./finalize-build', async (importOriginal) => {
-  const original = await importOriginal<typeof import('./finalize-build')>();
+  const original = await importOriginal();
   return {
-    ...original,
+    ...(original as Record<string, unknown>),
     finalizeExperienceBuild: f.finalize,
   };
 });

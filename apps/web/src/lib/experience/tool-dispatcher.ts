@@ -248,10 +248,15 @@ async function execute(
             ? 'missing-metrics'
             : performance.qualification.reason
         );
-      return requestExperiencePublication(ctx, input);
+      return requestExperiencePublication(
+        ctx,
+        input,
+        'publish',
+        deps.readPerformance
+      );
     }
     case 'rollback_experience':
-      return requestExperienceRollback(ctx, raw);
+      return requestExperienceRollback(ctx, raw, deps.readPerformance);
     case 'read_experience_evidence': {
       const v = experienceToolInputs.read_experience_evidence.parse(raw);
       const r = await ctx.supabase

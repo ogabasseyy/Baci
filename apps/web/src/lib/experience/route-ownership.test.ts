@@ -34,3 +34,20 @@ it('accepts nonconflicting editorial routes and preserves canonical product deci
   });
   expect(resolveExperienceRoute(routes, '/checkout')).toBeNull();
 });
+it('matches bounded literal and parameter segments without treating brackets as regex syntax', () => {
+  const routes = [
+    { path: '/pages/story/[chapter]', view: 'editorial' as const },
+    { path: '/pages/a[b]', view: 'editorial' as const },
+  ];
+  expect(resolveExperienceRoute(routes, '/pages/story/one')).toMatchObject({
+    params: { chapter: 'one' },
+  });
+  expect(resolveExperienceRoute(routes, '/pages/story/one/extra')).toBeNull();
+  expect(resolveExperienceRoute(routes, '/pages/a[b]')).toMatchObject({
+    params: {},
+  });
+  expect(resolveExperienceRoute(routes, '/pages/ab')).toBeNull();
+  expect(
+    resolveExperienceRoute(routes, `/pages/${'a'.repeat(1100)}`)
+  ).toBeNull();
+});

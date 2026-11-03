@@ -10,6 +10,12 @@ import {
 } from './publication-service';
 import { requestExperienceRollback } from './rollback-service';
 
+vi.mock('./performance-read', () => ({
+  readExperiencePerformance: vi.fn(async () => ({
+    qualification: { status: 'passed' },
+  })),
+}));
+
 const id = '11111111-1111-4111-8111-111111111111';
 function setup(
   scopes = ['storefront.read', 'storefront.write', 'storefront.publish']
@@ -17,7 +23,8 @@ function setup(
   const rpc = vi.fn(async (name: string) => ({
     data:
       name === 'experience_require_owner' ||
-      name === 'experience_authorize_read'
+      name === 'experience_authorize_read' ||
+      name === 'experience_authorize_publish'
         ? true
         : { status: 'confirmation-required' },
     error: null,

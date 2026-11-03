@@ -184,4 +184,9 @@ export const EXPECTED_BUILDER_PENDING_SOURCES = [
       'supabase/migrations/20261103161500_experience_https_build_origins.sql',
     sha256: '30691366a9257b7eae761285e6efb6693259b8892206fda7764e2ffac46ba5b4',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261103195300_experience_publish_scope_authorization.sql',
+    sha256: 'd797965c5c523f6300d6ce4b327702e21cf4bcb77d1c18f5ae3e9f7aceb73b95',
+  },
 ];

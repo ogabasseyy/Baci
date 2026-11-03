@@ -32,7 +32,9 @@ export async function requireExperienceOwner(
   const result = await (ctx.supabase as SupabaseClient).rpc(
     scope === 'storefront.write'
       ? 'experience_require_owner'
-      : 'experience_authorize_read',
+      : scope === 'storefront.publish'
+        ? 'experience_authorize_publish'
+        : 'experience_authorize_read',
     {
       p_merchant: ctx.merchantId,
       p_connection: ctx.identity?.connectionId ?? null,

@@ -42,6 +42,13 @@ export function createSharedCartCommandPort(
   const receipts = runtime.receiptStorage
     ? createSharedCartReceiptStore(runtime.receiptStorage)
     : null;
+  function retainCapacity() {
+    if (runtime.entries.size < 64) return;
+    for (const [id, entry] of runtime.entries) {
+      if (entry.isSettled()) runtime.entries.delete(id);
+      if (runtime.entries.size < 64) break;
+    }
+  }
   async function submit(
     input: PublicCartCommand,
     id: string,
@@ -58,6 +65,7 @@ export function createSharedCartCommandPort(
       return existing.signature === signature
         ? existing.promise
         : denied('IDEMPOTENCY_CONFLICT');
+    if (!runtime.entries.has(id)) retainCapacity();
     if (runtime.entries.size >= 64 && !runtime.entries.has(id))
       return denied('QUOTA_EXCEEDED');
     const generation = runtime.generation();
@@ -82,6 +90,7 @@ export function createSharedCartCommandPort(
       return prepared.signature === signature
         ? prepared.promise
         : denied('IDEMPOTENCY_CONFLICT');
+    if (!runtime.entries.has(id)) retainCapacity();
     if (runtime.entries.size >= 64 && !runtime.entries.has(id))
       return denied('QUOTA_EXCEEDED');
     const intent = sharedCartIntent(command, product, id);

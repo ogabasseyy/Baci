@@ -57,6 +57,7 @@ export async function experienceDataFixture() {
       '20261025060500_experience_upload_manifest_validation.sql',
       '20261028162326_experience_retry_build_quota.sql',
       '20261103161500_experience_https_build_origins.sql',
+      '20261103195300_experience_publish_scope_authorization.sql',
     ])
       await f.pool.query(
         readFileSync(

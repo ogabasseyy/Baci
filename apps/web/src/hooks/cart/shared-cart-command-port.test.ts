@@ -186,3 +186,64 @@ it('coalesces the same operation across host ports before product resolution com
   entries.get('same').deny();
   expect(await first).toEqual(await second);
 });
+
+it('admits more than 64 completed operations without evicting an in-flight observer', async () => {
+  const entries = new Map();
+  const pending = { isSettled: () => false };
+  entries.set('in-flight', pending);
+  const snapshot = { version: 1, currency: 'NGN', totalMinor: 0, lines: [] };
+  const port = createSharedCartCommandPort({
+    enabled: () => true,
+    generation: () => 1,
+    entries,
+    read: () => snapshot as never,
+    resolveProduct: async () => null,
+    enqueue: (id) =>
+      queueMicrotask(() =>
+        entries
+          .get(id)
+          .finish({ ok: true, snapshot, replayed: false, warnings: [] })
+      ),
+    admit: () => ({ allowed: true }),
+    loadContinuity: async () => 'shopper',
+    receiptStorage: null,
+  });
+  for (let i = 0; i < 80; i++)
+    expect(
+      await port.submit(
+        { kind: 'remove', lineId: '10000000-0000-4000-8000-000000000001' },
+        `settled-${i}`
+      )
+    ).toMatchObject({ status: 'ok' });
+  expect(entries.size).toBeLessThanOrEqual(64);
+  expect(entries.get('in-flight')).toBe(pending);
+});
+
+it('keeps the quota when every retained observer is still in flight', async () => {
+  const entries = new Map(
+    Array.from({ length: 64 }, (_, i) => [
+      `pending-${i}`,
+      { isSettled: () => false },
+    ])
+  );
+  const enqueue = vi.fn();
+  const port = createSharedCartCommandPort({
+    enabled: () => true,
+    generation: () => 1,
+    entries: entries as never,
+    read: () => null,
+    resolveProduct: async () => null,
+    enqueue,
+    admit: () => ({ allowed: true }),
+    loadContinuity: async () => 'shopper',
+    receiptStorage: null,
+  });
+  expect(
+    await port.submit(
+      { kind: 'remove', lineId: '10000000-0000-4000-8000-000000000001' },
+      'next'
+    )
+  ).toMatchObject({ code: 'QUOTA_EXCEEDED' });
+  expect(entries.size).toBe(64);
+  expect(enqueue).not.toHaveBeenCalled();
+});

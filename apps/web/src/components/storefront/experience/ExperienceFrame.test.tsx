@@ -8,18 +8,27 @@ const bindings = vi.hoisted(
       expire: () => void;
       binding: unknown;
       ready: () => void;
+      receive: (data: unknown, port: MessagePort) => void;
+      send: ReturnType<typeof vi.fn>;
     }>
 );
 vi.mock('./experience-launch-channel', () => ({
   bindExperiencePort: (
     _frame: unknown,
     _binding: unknown,
-    _receive: unknown,
+    _receive: (data: unknown, port: MessagePort) => void,
     expire: () => void,
     ready: () => void
   ) => {
-    bindings.push({ expire, binding: _binding, ready });
-    return { destroy: expire, send: vi.fn() };
+    const send = vi.fn();
+    bindings.push({
+      expire,
+      binding: _binding,
+      ready,
+      receive: _receive,
+      send,
+    });
+    return { destroy: expire, send };
   },
 }));
 
@@ -460,4 +469,54 @@ it('expires a private preview at its launch deadline', async () => {
   expect(screen.getByRole('alert')).toHaveTextContent(
     'Preview expired. Create a fresh owner launch.'
   );
+});
+
+it('sends SDK navigation results through epoch-tracking channel.send', async () => {
+  const route = {
+    epoch: 1,
+    routeId: 'home',
+    canonicalPath: '/',
+    params: {},
+    publicDataRevision: 'r',
+  };
+  const launch: ExperienceFrameLaunch = {
+    instanceId: 'sdk-nav',
+    nonce: 'n',
+    buildDigest: 'a'.repeat(64),
+    src: 'http://127.0.0.1:4101/private',
+    expiresAt: Date.now() + 600000,
+    canonicalBase: window.location.origin,
+    bootstrap: {
+      route,
+      catalog: { revision: 'r', products: [] },
+      capabilities: ['navigation'],
+    },
+    routes: [
+      { path: '/', view: 'home' },
+      { path: '/pages/story', view: 'editorial' },
+    ],
+  };
+  render(<ExperienceFrame launch={launch} isActive={async () => true} />);
+  const binding = bindings.at(-1);
+  if (!binding) throw Error('No channel');
+  const postMessage = vi.fn();
+  await act(async () => {
+    binding.receive(
+      {
+        protocol: 'baci-commerce/1',
+        requestId: 'nav',
+        instanceId: 'sdk-nav',
+        buildDigest: launch.buildDigest,
+        routeEpoch: 1,
+        capability: 'navigation',
+        method: 'navigation.go',
+        args: { path: '/pages/story' },
+      },
+      { postMessage } as unknown as MessagePort
+    );
+  });
+  expect(binding.send).toHaveBeenCalledWith({
+    type: 'route',
+    route: expect.objectContaining({ epoch: 2, canonicalPath: '/pages/story' }),
+  });
 });

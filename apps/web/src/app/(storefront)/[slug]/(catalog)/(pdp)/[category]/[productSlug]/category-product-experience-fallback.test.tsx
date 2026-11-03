@@ -2,7 +2,11 @@ import { cleanup, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-const f = vi.hoisted(() => ({ control: vi.fn(), load: vi.fn() }));
+const f = vi.hoisted(() => ({
+  control: vi.fn(),
+  load: vi.fn(),
+  manifest: vi.fn(),
+}));
 vi.mock('server-only', () => ({}));
 vi.mock(
   '@/components/storefront/experience/experience-server-boundary',
@@ -13,7 +17,7 @@ vi.mock(
   })
 );
 vi.mock('@/lib/experience/published-manifest', () => ({
-  loadPublishedExperience: async () => ({}),
+  loadPublishedExperience: f.manifest,
 }));
 vi.mock('@/lib/experience/storefront-runtime', () => ({
   getExperienceStorefrontRuntime: () => ({}),
@@ -26,6 +30,9 @@ import Page from './page';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  f.manifest.mockResolvedValue({
+    routes: [{ path: '/products/[handle]', view: 'product' }],
+  });
 });
 afterEach(cleanup);
 it.each([
@@ -69,4 +76,36 @@ it.each([
   ).toBeVisible();
   expect(screen.getByRole('main')).toHaveTextContent(expected);
   expect(f.load).not.toHaveBeenCalled();
+});
+
+it('continues the full native PDP when the experience only owns the home page', async () => {
+  f.manifest.mockResolvedValue({ routes: [{ path: '/', view: 'home' }] });
+  f.control.mockResolvedValue({
+    result: {
+      merchant: { id: 'm', slug: 'qa1', country: 'NG', payout_currency: 'NGN' },
+      product: {
+        id: 'p',
+        name: 'Native Device',
+        slug: 'device',
+        category_slug: 'devices',
+        price: 100,
+      },
+      categoryMismatch: false,
+      needsValuesRedirect: false,
+    },
+    loadProductResult: f.load,
+  });
+  f.load.mockImplementation(() => {
+    throw Error('NATIVE_PDP_CONTINUED');
+  });
+  await expect(
+    Page({
+      params: Promise.resolve({
+        slug: 'qa1',
+        category: 'devices',
+        productSlug: 'device',
+      }),
+      searchParams: Promise.resolve({}),
+    })
+  ).rejects.toThrow('NATIVE_PDP_CONTINUED');
 });

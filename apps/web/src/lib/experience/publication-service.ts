@@ -1,15 +1,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
+import { experienceLifecyclePublicationBinding } from '@/schemas/experience-publication';
 import { experienceToolInputs } from '@/schemas/experience-tools';
 import {
   type OwnerRequestContext,
   ownerRpcArgs,
   requireExperienceOwner,
 } from './authorization';
+import type { PerformanceReader } from './performance-read';
+import { requirePublicationPerformance } from './publication-performance';
 export async function requestExperiencePublication(
   ctx: OwnerRequestContext,
   input: unknown,
-  action: 'publish' | 'rollback' = 'publish'
+  action: 'publish' | 'rollback' = 'publish',
+  readPerformance?: PerformanceReader
 ) {
   const v =
     experienceToolInputs[
@@ -18,6 +22,7 @@ export async function requestExperiencePublication(
   const owner = await requireExperienceOwner(ctx, 'storefront.publish');
   if (owner.identity && !owner.identity.scopes.has('storefront.publish'))
     throw Error('INSUFFICIENT_SCOPE');
+  await requirePublicationPerformance(owner, v.buildId, readPerformance);
   const r = await owner.supabase.rpc('experience_request_lifecycle', {
     ...ownerRpcArgs(owner),
     p_action: action,
@@ -50,6 +55,13 @@ export async function confirmExperiencePublication(
   z.uuid().parse(id);
   const auth = await client.auth.getUser();
   if (auth.error || !auth.data.user) throw Error('NOT_FOUND');
+  const binding = experienceLifecyclePublicationBinding.parse(
+    await loadLifecycleApproval(client, id)
+  );
+  await requirePublicationPerformance(
+    { merchantId: binding.merchantId, supabase: client },
+    binding.buildId
+  );
   const r = await client.rpc('experience_confirm_publication', {
     p_intent: id,
   });

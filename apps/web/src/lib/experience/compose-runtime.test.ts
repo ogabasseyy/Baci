@@ -192,3 +192,16 @@ it('registers explicit HTTPS production ports without granting the local feature
     'https://artifacts.execution.test'
   );
 });
+
+it('shares the trusted performance reader with the owner-web publication boundary', async () => {
+  const f = fixture();
+  const read = vi.fn();
+  f.settings.dispatcher.readPerformance = read;
+  const cleanup = configureLocalExperienceBoot(f.settings);
+  try {
+    await registerExperienceStartup();
+    expect(getExperienceOwnerRuntime()?.readPerformance).toBe(read);
+  } finally {
+    cleanup();
+  }
+});

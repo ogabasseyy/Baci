@@ -5,6 +5,9 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { assertLocalQualificationHost } from './local-prerequisites.mjs';
+
+assertLocalQualificationHost();
 
 const app = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const scratch = path.resolve(

@@ -72,25 +72,20 @@ export function resolveExperienceRoute(
   } catch {
     return null;
   }
+  const parts = safe.split('/');
   for (const route of validateExperienceRoutes(routes)) {
-    const names: string[] = [];
-    const expression = route.path
-      .split('/')
-      .map((part) => {
-        if (/^\[[a-zA-Z][\w]*\]$/.test(part)) {
-          names.push(part.slice(1, -1));
-          return '([^/]+)';
-        }
-        return part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      })
-      .join('/');
-    const match = safe.match(new RegExp(`^${expression}$`));
-    if (match)
-      return {
-        view: route.view,
-        params: Object.fromEntries(names.map((n, i) => [n, match[i + 1]])),
-        canonicalPath: safe,
-      };
+    const pattern = route.path.split('/');
+    if (pattern.length !== parts.length) continue;
+    const params: Record<string, string> = {};
+    const matches = pattern.every((part, index) => {
+      if (/^\[[a-zA-Z][\w]*\]$/.test(part)) {
+        if (!parts[index]) return false;
+        params[part.slice(1, -1)] = parts[index];
+        return true;
+      }
+      return part === parts[index];
+    });
+    if (matches) return { view: route.view, params, canonicalPath: safe };
   }
   return null;
 }

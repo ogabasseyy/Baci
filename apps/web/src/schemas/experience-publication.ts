@@ -18,3 +18,8 @@ export const experienceApprovalRef = z.strictObject({
   expiresAt: z.iso.datetime({ offset: true }),
   status: z.literal('confirmation-required'),
 });
+export const experienceLifecyclePublicationBinding = z.object({
+  merchantId: z.uuid(),
+  buildId: z.uuid(),
+  action: z.enum(['publish', 'rollback']),
+});

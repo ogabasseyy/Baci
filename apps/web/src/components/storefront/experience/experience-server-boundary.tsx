@@ -58,6 +58,7 @@ export async function ExperienceServerBoundary({
                   nodes: snapshot.nodes,
                 }}
                 currentRevision={data.bootstrap.catalog.revision}
+                canonicalBase={data.launch.canonicalBase}
               />
             )}
             <ExperienceEngineFallback

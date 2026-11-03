@@ -51,3 +51,32 @@ it('does not promote a read-only outer token using a broader canonical connectio
   ).rejects.toThrow('INSUFFICIENT_SCOPE');
   expect(c.supabase.rpc).not.toHaveBeenCalled();
 });
+
+it('rechecks publish scope in the dedicated DB RPC instead of downgrading it to read', async () => {
+  const c = context();
+  await requireExperienceOwner(c as never, 'storefront.publish');
+  expect(c.supabase.rpc).toHaveBeenCalledWith('experience_authorize_publish', {
+    p_merchant: 'merchant',
+    p_connection: null,
+    p_version: null,
+  });
+});
+it('rejects a read-only connection before the publish DB check', async () => {
+  const c = context();
+  await expect(
+    requireExperienceOwner(
+      {
+        ...c,
+        identity: {
+          actorUserId: 'owner',
+          connectionId: 'c',
+          grantVersion: 1,
+          scopes: new Set(['storefront.read']),
+          allowedMerchantIds: ['merchant'],
+        },
+      } as never,
+      'storefront.publish'
+    )
+  ).rejects.toThrow('INSUFFICIENT_SCOPE');
+  expect(c.supabase.rpc).not.toHaveBeenCalled();
+});

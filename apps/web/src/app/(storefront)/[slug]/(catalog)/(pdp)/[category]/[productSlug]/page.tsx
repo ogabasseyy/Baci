@@ -1,6 +1,7 @@
 import '@/app/(storefront)/storefront-pdp-critical.css';
 import '@/app/(storefront)/storefront-pdp-critical-summary.css';
 import { ExperienceServerBoundary } from '@/components/storefront/experience/experience-server-boundary';
+import { experienceOwnsProductRoute } from '@/lib/experience/product-route-ownership';
 import { loadPublishedExperience } from '@/lib/experience/published-manifest';
 import { getExperienceStorefrontRuntime } from '@/lib/experience/storefront-runtime';
 import '@/app/(storefront)/storefront-pdp-description-critical.css';
@@ -624,9 +625,16 @@ export default async function CategoryProductPage({
     );
   }
 
+  const experience = getExperienceStorefrontRuntime()
+    ? await loadPublishedExperience(merchant)
+    : null;
   if (
-    getExperienceStorefrontRuntime() &&
-    (await loadPublishedExperience(merchant))
+    experience &&
+    (await experienceOwnsProductRoute(
+      experience.routes,
+      getProductUrl(product),
+      product.slug
+    ))
   )
     return (
       <ExperienceServerBoundary

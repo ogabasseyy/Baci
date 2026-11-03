@@ -1,4 +1,5 @@
 import { AMOUNTS_KOBO } from './constants';
+import { debitedOnce, readTransferFeeKobo } from './debit-once';
 import { pickString } from './loose-schemas';
 import {
   awaitTerminal,
@@ -116,19 +117,29 @@ export async function stepFundGoal(
     return result;
   }
   const debit = -main$;
-  // One transfer takes the amount, plus at most a fee: a debit outside this
-  // band proves the money did not move exactly once, whatever the goal got.
-  const oneDebit = debit >= amount && debit < amount * 2;
-  // A short goal credit with no fee read is not a verdict by itself: it may
-  // be a goal-side fee. It is unknown only while the debit is still plausible.
-  const goalShort = goal$ > 0 && goal$ < amount && oneDebit;
+  // One transfer takes the amount plus, at most, the fee the record shows. A
+  // debit the record cannot explain is never counted as "once".
+  const fee = await readTransferFeeKobo(ctx, sent.reference, main);
+  b.value('fund_goal_fee_from_record_kobo', fee);
+  const debitAnswer = debitedOnce(amount, debit, fee);
+  // A short goal credit with no fee read may be a goal-side fee: unknown only
+  // while the debit itself is not already impossible.
+  const goalShort = goal$ > 0 && goal$ < amount;
+  const answer: Answer =
+    debitAnswer === 'no' || goal$ <= 0 || goal$ > amount
+      ? 'no'
+      : goalShort || debitAnswer === 'unknown'
+        ? 'unknown'
+        : 'yes';
   b.finding(
     FUND_GOAL,
     FUND_Q,
-    goalShort ? 'unknown' : answerOf(goal$ === amount && oneDebit),
-    goalShort
-      ? 'the goal credit is below the amount and no fee was read'
-      : undefined
+    answer,
+    answer !== 'unknown'
+      ? undefined
+      : goalShort
+        ? 'the goal credit is below the amount and no fee was read'
+        : 'the main debit exceeds the amount and the record shows no fee that explains it'
   );
   return result;
 }

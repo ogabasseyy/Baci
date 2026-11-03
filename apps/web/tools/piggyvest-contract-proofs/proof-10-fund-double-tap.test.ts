@@ -117,6 +117,52 @@ describe('S8 fund goal with a short credit and a bad debit', () => {
   });
 });
 
+describe('S8 fund goal with unexplained extra debit', () => {
+  async function withExtraDebit(
+    extra: number,
+    options: Parameters<typeof makeHarness>[0] = {}
+  ) {
+    const h = makeHarness(options);
+    dispose = h.dispose;
+    await setupScenario(h.ctx);
+    const main = h.state.mainWalletId as string;
+    const real = h.ctx.api.verify.bind(h.ctx.api);
+    const mainWallet = h.mock.sandbox.wallet(main);
+    let taken = false;
+    h.ctx.api.verify = async (...args: Parameters<typeof real>) => {
+      const out = await real(...args);
+      if (mainWallet && !taken) {
+        taken = true;
+        mainWallet.balance -= extra;
+      }
+      return out;
+    };
+    const b = new ProofBuilder('p10', 'S8');
+    await stepFundGoal(h.ctx, b, main, h.state.goalWalletId as string);
+    return answer(b, h, FUND_GOAL);
+  }
+
+  it('answers unknown, not yes, when the debit exceeds the amount and no fee was read', async () => {
+    expect(await withExtraDebit(500)).toBe('unknown');
+  });
+
+  it('answers no when the recorded fee does not account for the extra debit', async () => {
+    expect(
+      await withExtraDebit(500, {
+        mock: { tsqShape: 'rich', transferFeeKobo: 100 },
+      })
+    ).toBe('no');
+  });
+
+  it('answers yes when the extra debit equals the recorded fee', async () => {
+    expect(
+      await withExtraDebit(100, {
+        mock: { tsqShape: 'rich', transferFeeKobo: 100 },
+      })
+    ).toBe('yes');
+  });
+});
+
 describe('S8 double tap', () => {
   it('does not repeat on the wire while the original funding is still pending', async () => {
     const { h, b, main, goal, fund } = await setup({

@@ -1,4 +1,5 @@
 import { AMOUNTS_KOBO } from './constants';
+import { debitedOnce, readTransferFeeKobo } from './debit-once';
 import { pickString } from './loose-schemas';
 import { delta, readingOf, settledWallets, statusOf } from './poll';
 import { answerOf, type ProofBuilder } from './proof-builder';
@@ -175,18 +176,28 @@ export async function stepTimeoutRetry(
   const debit = mainDelta === null ? null : -mainDelta;
   const resumed = sent.kind === 'resumed';
   const unmeasured = resumed || debit === null || rows === null;
+  const fee = unmeasured
+    ? null
+    : await readTransferFeeKobo(ctx, sent.reference, main);
+  b.value('timeout_fee_from_record_kobo', fee);
+  // A fee may ride on the debit only as far as the record shows it; a second
+  // booking would take 2x. The single matching record decides the rest.
+  const answer: Answer =
+    unmeasured || debit === null
+      ? 'unknown'
+      : rows !== 1
+        ? 'no'
+        : debitedOnce(amount, debit, fee);
   b.finding(
     TIMEOUT_BOOKED_ONCE,
     Q[TIMEOUT_BOOKED_ONCE],
-    unmeasured
-      ? 'unknown'
-      : // Same band as the fund step: a fee may ride on the debit, a second
-        // booking would take 2x; the single matching record decides the rest.
-        answerOf(rows === 1 && debit >= amount && debit < amount * 2),
+    answer,
     resumed
       ? 'the slot was booked in an earlier run, so this run has no pre-booking balance to compare'
       : rows === null
         ? 'the transaction list never showed the reference within the polling budget'
-        : undefined
+        : answer === 'unknown'
+          ? 'the main debit exceeds the amount and the record shows no fee that explains it'
+          : undefined
   );
 }

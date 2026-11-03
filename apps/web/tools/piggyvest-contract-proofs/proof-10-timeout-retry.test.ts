@@ -155,4 +155,40 @@ describe('S8 timeout on submit, then status check', () => {
     expect(result.values.timeout_not_found_checks).toBe(1);
     expect(answer(result, NOT_FOUND_UNCERTAIN)).toBe('unknown');
   });
+
+  async function bookedWithExtraDebit(
+    extra: number,
+    options: Parameters<typeof makeHarness>[0] = {}
+  ) {
+    const h = makeHarness(options);
+    dispose = h.dispose;
+    await setupScenario(h.ctx);
+    const main = h.state.mainWalletId as string;
+    const real = h.ctx.api.verify.bind(h.ctx.api);
+    const mainWallet = h.mock.sandbox.wallet(main);
+    let taken = false;
+    h.ctx.api.verify = async (...args: Parameters<typeof real>) => {
+      const out = await real(...args);
+      if (mainWallet && !taken && out.httpStatus === 200) {
+        taken = true;
+        mainWallet.balance -= extra;
+      }
+      return out;
+    };
+    const b = new ProofBuilder('p10', 'S8');
+    await stepTimeoutRetry(h.ctx, b, main, h.state.goalWalletId as string);
+    return answer(b.build(h.ctx), TIMEOUT_BOOKED_ONCE);
+  }
+
+  it('answers unknown when the debit exceeds the amount and no fee was read', async () => {
+    expect(await bookedWithExtraDebit(500)).toBe('unknown');
+  });
+
+  it('answers no when the recorded fee does not explain the extra debit', async () => {
+    expect(
+      await bookedWithExtraDebit(500, {
+        mock: { tsqShape: 'rich', transferFeeKobo: 100 },
+      })
+    ).toBe('no');
+  });
 });

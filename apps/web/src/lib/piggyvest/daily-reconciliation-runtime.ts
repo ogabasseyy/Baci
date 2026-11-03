@@ -9,6 +9,7 @@ import {
   pageReasonOf,
   renderReconciliationEmail,
 } from './daily-reconciliation-report';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 import { createPrimaryWalletEvidenceExecutor } from './primary-wallet-evidence-executor';
 import { getPrimaryWalletProviderOrigin } from './primary-wallet-provider-origin';
 import { readPrimaryWalletSavingsRecoveryRuntime } from './primary-wallet-savings-runtime';
@@ -144,7 +145,7 @@ export async function runPiggyvestDailyReconciliation(
   } = {}
 ): Promise<DailyReconciliationResult> {
   const env = options.env ?? process.env;
-  if (env.PIGGYVEST_RECONCILIATION_ENABLED !== 'true')
+  if (!isPiggyvestFeatureOn('daily_reconciliation', env))
     return { status: 'disabled' };
   const deps = { ...defaultDeps(), ...options.deps };
   let report: ReconciliationReport;

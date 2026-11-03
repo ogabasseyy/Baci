@@ -25,6 +25,17 @@ describe('runPiggyvestDailyReconciliation', () => {
       expect(fn).not.toHaveBeenCalled();
   });
 
+  it('does nothing while the PiggyVest master kill switch is on', async () => {
+    const { deps } = makeDeps();
+    const result = await runPiggyvestDailyReconciliation({
+      env: { ...env, PIGGYVEST_KILL_SWITCH: 'true' } as never,
+      deps,
+    });
+    expect(result).toEqual({ status: 'disabled' });
+    expect(deps.readRuntime).not.toHaveBeenCalled();
+    expect(deps.sendEmail).not.toHaveBeenCalled();
+  });
+
   it.each(['false', '1', 'TRUE', ''])('treats %j as off', async (value) => {
     const { deps } = makeDeps();
     expect(

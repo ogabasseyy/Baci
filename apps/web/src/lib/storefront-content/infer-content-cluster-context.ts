@@ -1,9 +1,11 @@
+import type { ClusterSupport } from '@/config/storefront-content-cluster-shared';
 import {
   CONTENT_CLUSTER_SUPPORT,
   CONTENT_KIND_TOKENS,
 } from '@/config/storefront-content-clusters';
 import {
   DEDICATED_GAMING_LAPTOP_TOKENS,
+  EXCLUDED_CATEGORY_MAP,
   EXCLUDED_GAMING_LAPTOP_SUBJECTS,
   GAMING_LAPTOP_EXEMPT_PHRASES,
 } from '@/config/storefront-gaming-laptop-taxonomy';
@@ -26,11 +28,11 @@ const normalizeText = (v: string | null | undefined) =>
     applyJoinedTitleCorrections(v?.toLowerCase().trim() ?? '')
   );
 
-const tokenize = (values: Array<string | null | undefined>) =>
-  Array.from(new Set(values.flatMap(tokenizeContentText)));
+const tokenize = (values: Array<string | null | undefined>) => [
+  ...new Set(values.flatMap(tokenizeContentText)),
+];
 
-const isPhraseBoundary = (v: string | undefined): boolean =>
-  v === undefined || /[^a-z0-9]/.test(v);
+const isPhraseBoundary = (v?: string): boolean => !v || /[^a-z0-9]/.test(v);
 
 function hasPhrase(haystack: string, needle: string) {
   const norm = normalizeText(needle);
@@ -49,10 +51,7 @@ function hasPhrase(haystack: string, needle: string) {
   }
 }
 
-type ClusterSupportEntry = [
-  SupportedClusterCategory,
-  (typeof CONTENT_CLUSTER_SUPPORT)[SupportedClusterCategory],
-];
+type SupportEntry = [SupportedClusterCategory, ClusterSupport];
 
 const hasGamingLaptopPhrase = (t: string) =>
   hasPhrase(t, 'gaming laptop') || hasPhrase(t, 'gaming laptops');
@@ -60,24 +59,17 @@ const hasGamingLaptopPhrase = (t: string) =>
 const hasLaptopPhrase = (t: string) =>
   hasPhrase(t, 'laptop') || hasPhrase(t, 'laptops') || hasGamingLaptopPhrase(t);
 
-const isExemptSubject = (s: string, t: string, hasGaming: boolean) => {
-  if (s === 'gpu' || s === 'gpus' || s.startsWith('graphics card')) {
-    return (
-      hasGaming &&
+const isExemptSubject = (s: string, t: string, hasGaming: boolean) =>
+  s === 'gpu' || s === 'gpus' || s.startsWith('graphics card')
+    ? hasGaming &&
       !hasPhrase(t, 'gaming laptop gpu') &&
       !hasPhrase(t, 'gaming laptop graphics card')
-    );
-  }
-  for (const k of ['desktop', 'monitor', 'accessories'] as const) {
-    if (s.startsWith(k.slice(0, 7))) {
-      return (
-        (k === 'desktop' || hasGaming) &&
-        GAMING_LAPTOP_EXEMPT_PHRASES[k].some((p) => hasPhrase(t, p))
+    : (['desktop', 'monitor', 'accessories'] as const).some(
+        (k) =>
+          s.startsWith(k.slice(0, 7)) &&
+          (k === 'desktop' || hasGaming) &&
+          GAMING_LAPTOP_EXEMPT_PHRASES[k].some((p) => hasPhrase(t, p))
       );
-    }
-  }
-  return false;
-};
 
 function hasExcludedGamingLaptopSubject(
   targetText: string,
@@ -102,16 +94,26 @@ const getSubjectTarget = (title?: string, excerpt?: string) =>
     ? (title ?? '')
     : [title, excerpt].filter(Boolean).join(' ');
 
-const EXCLUDED_CATEGORY_MAP: [SupportedClusterCategory, string[]][] = [
-  ['monitors', ['monitor', 'monitors']],
-  ['desktops', ['desktop', 'desktops', 'aurora', 'pc build', 'pc builds']],
-  ['gaming', ['gpu', 'gpus', 'graphics card', 'graphics cards']],
-];
-
 const getExcludedSubjectCategory = (t: string): SupportedClusterCategory =>
-  EXCLUDED_CATEGORY_MAP.find(([, phrases]) =>
+  (EXCLUDED_CATEGORY_MAP.find(([, phrases]) =>
     phrases.some((p) => hasPhrase(t, p))
-  )?.[0] ?? 'accessories';
+  )?.[0] as SupportedClusterCategory) ?? 'accessories';
+
+const hasLaptopSubjectEvidence = (
+  title?: string,
+  excerpt?: string,
+  haystack?: string
+) => {
+  const target = getSubjectTarget(title, excerpt);
+  if (hasLaptopPhrase(target)) return true;
+  if (!haystack || !hasLaptopPhrase(haystack)) return false;
+  const gameTitle =
+    hasPhrase(title ?? '', 'game') && !hasGamingLaptopPhrase(target);
+  return (
+    !gameTitle &&
+    !(hasPhrase(haystack, 'blade') && !hasPhrase(haystack, 'razer'))
+  );
+};
 
 function isDedicatedGamingLaptopContent(
   title: string,
@@ -125,9 +127,9 @@ function isDedicatedGamingLaptopContent(
     hasPhrase(title, t)
   );
   if (!hasDedicated) return false;
-  const combined = [title, excerpt].filter(Boolean).join(' ');
-  const target = hasLaptopPhrase(combined)
-    ? combined
+  const c = [title, excerpt].filter(Boolean).join(' ');
+  const target = hasLaptopPhrase(c)
+    ? c
     : hasLaptopPhrase(content)
       ? content
       : null;
@@ -137,6 +139,14 @@ function isDedicatedGamingLaptopContent(
   );
 }
 
+const EXPLICIT_CATEGORIES = (
+  Object.entries(CONTENT_CLUSTER_SUPPORT) as SupportEntry[]
+)
+  .flatMap(([categorySlug, support]) =>
+    support.categoryNames.map((name) => ({ categorySlug, name }))
+  )
+  .sort((left, right) => right.name.length - left.name.length);
+
 function inferCategorySlug(
   haystack: string,
   contentHaystack: string,
@@ -145,14 +155,9 @@ function inferCategorySlug(
   title?: string,
   excerpt?: string
 ): SupportedClusterCategory | null {
-  const explicitMatch = (
-    Object.entries(CONTENT_CLUSTER_SUPPORT) as ClusterSupportEntry[]
-  )
-    .flatMap(([categorySlug, support]) =>
-      support.categoryNames.map((name) => ({ categorySlug, name }))
-    )
-    .sort((left, right) => right.name.length - left.name.length)
-    .find(({ name }) => hasPhrase(explicitCategory, name));
+  const explicitMatch = EXPLICIT_CATEGORIES.find(({ name }) =>
+    hasPhrase(explicitCategory, name)
+  );
 
   if (explicitMatch) {
     const slug = explicitMatch.categorySlug;
@@ -171,9 +176,9 @@ function inferCategorySlug(
       if (!hasExcludedGamingLaptopSubject(target, true)) {
         return 'gaming-laptops';
       }
-      return getExcludedSubjectCategory(
-        title && hasExcludedGamingLaptopSubject(title, true) ? title : target
-      );
+      const s =
+        title && hasExcludedGamingLaptopSubject(title, true) ? title : target;
+      return getExcludedSubjectCategory(s);
     }
     return slug;
   }
@@ -182,10 +187,10 @@ function inferCategorySlug(
 
   for (const [slug, support] of Object.entries(
     CONTENT_CLUSTER_SUPPORT
-  ) as ClusterSupportEntry[]) {
+  ) as SupportEntry[]) {
     if (
       slug === 'gaming-laptops' &&
-      (!hasLaptopPhrase(haystack) ||
+      (!hasLaptopSubjectEvidence(title, excerpt, haystack) ||
         hasExcludedGamingLaptopSubject(getSubjectTarget(title, excerpt), true))
     ) {
       continue;
@@ -217,9 +222,7 @@ function resolveKind(
   haystack: string
 ): ContentClusterKind | null {
   const source = String(input.merchant_intent_source ?? '');
-  if (!VALID_MERCHANT_INTENT_SOURCES.has(source as never)) {
-    return inferredKind;
-  }
+  if (!VALID_MERCHANT_INTENT_SOURCES.has(source as never)) return inferredKind;
   if (input.merchant_intent === 'buying-guide') {
     return inferredKind === 'best-in-nigeria' &&
       hasPhrase(haystack, 'nigeria') &&
@@ -242,15 +245,15 @@ function inferBrands(
     : Object.values(CONTENT_CLUSTER_SUPPORT).flatMap((s) =>
         Object.entries(s.brandTokens)
       );
-  return Array.from(
-    new Set(
+  return [
+    ...new Set(
       dict
         .filter(([, a]) =>
           (a as readonly string[]).some((alias) => hasPhrase(haystack, alias))
         )
         .map(([brand]) => brand)
-    )
-  );
+    ),
+  ];
 }
 
 function inferPriceBands(
@@ -272,16 +275,14 @@ export function inferContentClusterContext(
     ...(input.tags ?? []),
     ...(input.keywords ?? []),
   ];
-  const contentHaystack = normalizeText(contentText.join(' '));
   const allText = [input.category, ...contentText];
   const haystack = normalizeText(allText.join(' '));
   const tokens = tokenize(allText);
-  const explicitCategory = normalizeText(input.category);
   const categorySlug = inferCategorySlug(
     haystack,
-    contentHaystack,
+    normalizeText(contentText.join(' ')),
     tokens,
-    explicitCategory,
+    normalizeText(input.category),
     normalizeText(input.title),
     normalizeText(input.excerpt)
   );

@@ -68,3 +68,9 @@ export const EXCLUDED_GAMING_LAPTOP_SUBJECTS = [
   'power adapter',
   'power adapters',
 ] as const;
+
+export const EXCLUDED_CATEGORY_MAP = [
+  ['monitors', ['monitor', 'monitors']],
+  ['desktops', ['desktop', 'desktops', 'aurora', 'pc build', 'pc builds']],
+  ['gaming', ['gpu', 'gpus', 'graphics card', 'graphics cards']],
+] as const;

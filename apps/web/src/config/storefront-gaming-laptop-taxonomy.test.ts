@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEDICATED_GAMING_LAPTOP_TOKENS,
+  EXCLUDED_CATEGORY_MAP,
   EXCLUDED_GAMING_LAPTOP_SUBJECTS,
   GAMING_LAPTOP_EXEMPT_PHRASES,
 } from './storefront-gaming-laptop-taxonomy';
@@ -44,5 +45,10 @@ describe('storefront-gaming-laptop-taxonomy', () => {
     expect(GAMING_LAPTOP_EXEMPT_PHRASES.accessories).toContain(
       'with accessories'
     );
+  });
+
+  it('maps excluded subjects to monitors, desktops, and gaming categories', () => {
+    const categories = EXCLUDED_CATEGORY_MAP.map(([c]) => c);
+    expect(categories).toEqual(['monitors', 'desktops', 'gaming']);
   });
 });

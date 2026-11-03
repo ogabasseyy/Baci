@@ -5,25 +5,17 @@ describe('inferContentClusterContext - gaming laptops', () => {
   it('infers gaming-laptops categorySlug for gaming laptop articles under Gaming or Laptops', () => {
     for (const [title, category, tags] of [
       [
-        'HP Omen 16 (2026): Price in Nigeria, Specs & Where to Buy',
+        'HP Omen 16: Specs & Price in Nigeria',
         'Gaming',
-        ['gaming', 'hp omen 16', 'gaming laptop'],
+        ['gaming', 'omen', 'gaming laptop'],
       ],
       [
-        'Gaming Laptops in Nigeria (2026): Alienware vs ROG vs Legion vs Omen',
+        'Gaming Laptops: Alienware vs ROG',
         'Gaming',
-        ['gaming', 'alienware', 'rog', 'legion', 'omen'],
+        ['gaming', 'alienware', 'rog'],
       ],
-      [
-        'Best Gaming Laptops in Nigeria (2026)',
-        'Laptops',
-        ['laptops', 'budget'],
-      ],
-      [
-        'ASUS ROG RTX 4060 Laptop Review and Price in Nigeria',
-        'Laptops',
-        ['laptops', 'asus'],
-      ],
+      ['Best Gaming Laptops in Nigeria', 'Laptops', ['laptops', 'budget']],
+      ['ASUS ROG RTX 4060 Laptop Review', 'Laptops', ['laptops', 'asus']],
     ] as const) {
       const post = inferContentClusterContext({
         title,
@@ -246,9 +238,16 @@ describe('inferContentClusterContext - gaming laptops', () => {
       [
         'Blade Vampire Action Game Review',
         'Action combat.',
-        ['blade', 'games'],
+        ['blade', 'laptop', 'gaming'],
         'blade',
         'not-gaming',
+      ],
+      [
+        'Razer Blade 16 Review: RTX 4070 Performance',
+        'Flagship mobile.',
+        ['razer', 'blade', 'laptop'],
+        'review',
+        'gaming-laptops',
       ],
       [
         'Hands-on with the new Nitro gaming laptop',

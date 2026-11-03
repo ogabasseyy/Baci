@@ -114,4 +114,25 @@ describe('buildStorefrontMetadataTitle', () => {
       absolute: 'Ogabassey',
     });
   });
+
+  it('compacts redundant platform list at end of base title and cleans orphan separator before suffix', () => {
+    const result = buildStorefrontMetadataTitle({
+      maxLength: 40,
+      suffix: 'Ogabassey',
+      title: 'Buy EA Sports FC 27 - (PS5, PS4, Xbox, Switch)',
+    });
+
+    expect(result.title).toBe('Buy EA Sports FC 27 | Ogabassey');
+    expect(result.title).not.toContain('- |');
+  });
+
+  it('preserves a platform parenthetical inside the suffix untouched', () => {
+    const result = buildStorefrontMetadataTitle({
+      maxLength: 60,
+      suffix: 'Gaming (PS5, PC)',
+      title: 'EA Sports FC 27 Championship Tournament Deluxe Edition',
+    });
+
+    expect(result.title).toContain('| Gaming (PS5, PC)');
+  });
 });

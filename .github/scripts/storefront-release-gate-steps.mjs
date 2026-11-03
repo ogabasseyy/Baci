@@ -66,6 +66,11 @@ export function otaGuardFailures(workflow, text, marker) {
   if (guardAt !== 1 || selectionAt === -1 || guardAt > selectionAt) {
     return [`${workflow} must run the "${OTA_GUARD_STEP}" step right after its checkout and before "${OTA_SELECTION_STEP}" in its export job`];
   }
+  // Step zero must be the checkout itself, or work could run before the guard and not be undone by it.
+  const first = job.split(/^ {6}- /m)[1] ?? '';
+  if (!/^\s*uses:\s*actions\/checkout@/m.test(first)) {
+    return [`${workflow} must start its export job with an actions/checkout step: nothing may run before the guard`];
+  }
   const guard = readStep(job, OTA_GUARD_STEP);
   const failures = [];
   if (!keepsOtaRefusal(guard.run, marker)) {
@@ -134,6 +139,9 @@ export function ciGateFailures(workflow, text, gateTests) {
   if (step === undefined) return [`${workflow} must run the "${CI_GATE_STEP}" step in its changes job`];
   if (CONDITION.test(step.text)) return [`${workflow} "${CI_GATE_STEP}" must run unconditionally in its changes job`];
   const command = step.text.match(/^\s*run:\s*(node --test .*)$/m)?.[1] ?? '';
+  if (/\|\||[;&|]|\bset\s+\+e\b/.test(command.slice('node --test '.length))) {
+    return [`${workflow} "${CI_GATE_STEP}" must run node --test alone so a failing test fails the step`];
+  }
   const listed = new Set(command.split(/\s+/));
   return gateTests
     .filter((file) => !listed.has(file))

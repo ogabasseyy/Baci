@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   findMissingServerOffTests,
   hasLiveAssertion,
+  importsModule,
   isPiggyvestSource,
   isShippedSource,
   serverOffTestPaths,
@@ -222,4 +223,20 @@ test('goal files are PiggyVest storefront files', () => {
   assert.equal(isPiggyvestSource(`${APP}/components/goals/GoalSheet.tsx`, ''), true);
   assert.equal(isPiggyvestSource(`${APP}/app/goal/index.tsx`, ''), true);
   assert.equal(isPiggyvestSource(`${APP}/components/goalkeeper/Mitt.tsx`, ''), false);
+});
+
+test('a type-only import does not load the module', () => {
+  const source = `${APP}/components/wallet/Sheet.tsx`;
+  const test = `${APP}/components/wallet/Sheet.server-off.test.tsx`;
+  assert.equal(importsModule(test, "import type { Sheet } from './Sheet';", source), false);
+  assert.equal(importsModule(test, "import type {\n  Sheet,\n} from './Sheet';", source), false);
+  assert.equal(importsModule(test, "export type { Sheet } from './Sheet';", source), false);
+  assert.equal(importsModule(test, "import { type Sheet, render } from './Sheet';", source), true);
+});
+
+test('spend files and files using wallet, savings or goal helpers are PiggyVest files', () => {
+  assert.equal(isPiggyvestSource(`${APP}/components/spend/SpendSheet.tsx`, ''), true);
+  assert.equal(isPiggyvestSource(`${APP}/hooks/use-pin.ts`, 'const proof = useWalletPinProof();'), true);
+  assert.equal(isPiggyvestSource(`${APP}/hooks/use-pin.ts`, 'const goal = useSavingsGoal();'), true);
+  assert.equal(isPiggyvestSource(`${APP}/components/Button.tsx`, 'export const Button = 1;'), false);
 });

@@ -247,3 +247,11 @@ test('the manual App Store submit must refuse commits that are not on main', () 
   ]);
 });
 
+
+test('the OTA export may not run anything before its checkout and guard', () => {
+  const ota = repository.readFile(OTA_WORKFLOW);
+  const first = ota.replace(/uses: actions\/checkout@\S+/, 'run: echo work before the guard');
+  assert.notEqual(first, ota, 'fixture must replace the checkout');
+  const failures = collectGateFailures(withFiles({ [OTA_WORKFLOW]: first }));
+  assert.deepEqual(failures, [`${OTA_WORKFLOW} must start its export job with an actions/checkout step: nothing may run before the guard`]);
+});

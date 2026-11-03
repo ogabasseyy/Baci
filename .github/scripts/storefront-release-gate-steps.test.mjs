@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { releaseGuardFailures, RELEASE_GUARD_STEP, storeSecretsUsed } from './storefront-release-gate-steps.mjs';
+import { ciGateFailures, releaseGuardFailures, RELEASE_GUARD_STEP, storeSecretsUsed } from './storefront-release-gate-steps.mjs';
 
 const GUARD = `          set -euo pipefail
           if ! git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/main; then
@@ -67,5 +67,20 @@ test('a neutered on-main guard fails the gate', () => {
     const failures = releaseGuardFailures('release.yml', release({ guard }), 'ship');
     assert.equal(failures.length, 1, label);
     assert.match(failures[0], /must refuse a RELEASE_SHA/, label);
+  }
+});
+
+const CI_WITH = (run) => `jobs:
+  changes:
+    steps:
+      - name: Test storefront release gate
+        ${run}
+`;
+
+test('the CI gate command may not swallow a failure', () => {
+  const ok = ciGateFailures('ci.yml', CI_WITH('run: node --test a.test.mjs'), ['a.test.mjs']);
+  assert.deepEqual(ok, []);
+  for (const run of ['run: node --test a.test.mjs || true', 'run: node --test a.test.mjs; true', 'run: node --test a.test.mjs | cat', 'run: node --test a.test.mjs &']) {
+    assert.equal(ciGateFailures('ci.yml', CI_WITH(run), ['a.test.mjs']).length, 1, run);
   }
 });

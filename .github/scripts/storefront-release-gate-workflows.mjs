@@ -116,7 +116,7 @@ export function dispatchOnlyFailures(name, text) {
 const STOREFRONT_APP = /apps\/mobile-storefront\b|@baci\/mobile-storefront\b|com\.ogabassey\.store\b/;
 const SHIPPING_TOOL =
   // A quoted or path-segment `fastlane` names a directory, not the tool.
-  /(?<![\w\x27"\/.-])fastlane(?![\w\x27"\/-])|upload-google-play|upload-testflight|\baltool\b|\bexpo\s+export\b|\beas(?:-cli(?:@[\w.^~-]+)?)?\s+(?:build|submit|update|workflow:run)\b/;
+  /(?<![\w\x27"\/.-])fastlane(?![\w\x27"\/-])|upload-google-play|upload-testflight|\baltool\b|\bexpo\s+export\b|\b(?:bundle|assemble|publish)\w*Release\b|\beas(?:-cli(?:@[\w.^~-]+)?)?\s+(?:build|submit|update|workflow:run)\b/;
 
 /** True when a workflow or action builds, uploads, submits or exports the storefront app. */
 export function shipsStorefront(text) {
@@ -173,8 +173,10 @@ export function readJobIds(text) {
   const ids = [];
   for (const line of lines.slice(jobsAt + 1)) {
     if (line.trim() !== '' && indentOf(line) === 0 && !line.trim().startsWith('#')) break;
-    const match = line.match(/^  ([\w-]+)\s*:\s*(?:#.*)?$/);
-    if (match) ids.push(match[1]);
+    const match = line.match(/^  (?:(['"])([^'"\s]+)\1|([\w-]+))\s*:\s*(?:#.*)?$/);
+    if (match) ids.push(match[2] ?? match[3]);
+    // Any other entry at job level is a job the reader cannot name: count it so a second job cannot hide.
+    else if (indentOf(line) === 2 && line.trim() !== '' && !line.trim().startsWith('#')) ids.push('(unreadable job entry)');
   }
   return ids;
 }

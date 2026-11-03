@@ -126,3 +126,25 @@ test('a storefront-scoped script run that cannot be resolved fails closed; other
     assert.deepEqual(expandReferences(yaml, reader(files)).missing, [], yaml);
   }
 });
+
+test('shell options before a script operand do not hide the script', () => {
+  const files = { 'release-helper': 'eas submit\n' };
+  for (const yaml of ['run: bash -e release-helper', 'run: sh -eu -x ./release-helper', 'run: bash -o pipefail release-helper']) {
+    assert.match(expandReferences(yaml, reader(files)).text, /eas submit/, yaml);
+  }
+});
+
+test('a script is read from both the working directory and the repository root', () => {
+  const files = { 'scripts/release': 'echo harmless\n', 'apps/mobile-storefront/scripts/release': 'fastlane ios release\n' };
+  const yaml = 'working-directory: apps/mobile-storefront\nrun: ./scripts/release\n';
+  assert.match(expandReferences(yaml, reader(files)).text, /fastlane ios release/);
+});
+
+test('a reference chain deeper than the expansion limit fails closed', () => {
+  const files = {};
+  for (let index = 0; index < 12; index += 1) files[`s${index}.sh`] = `bash s${index + 1}.sh\n`;
+  files['s12.sh'] = 'eas submit\n';
+  const { missing } = expandReferences('run: bash s0.sh', reader(files));
+  assert.equal(missing.length, 1);
+  assert.match(missing[0], /deeper than/);
+});

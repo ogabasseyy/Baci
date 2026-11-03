@@ -21,7 +21,9 @@ const NOT_SHIPPED = [
 ];
 const NOT_SHIPPED_DIRECTORIES = ['test-support/', 'scripts/', 'tools/'];
 const PIGGYVEST_NAME = /piggy[-_ ]?vest/i;
-const WALLET_PATH = /wallet|savings|goals?\b/i;
+const WALLET_PATH = /wallet|savings|goals?\b|(?:^|\/)spend/i;
+// Code that uses wallet, savings or goal helpers (useWalletPinProof, SavingsGoalCard) is PiggyVest code whatever its path.
+const WALLET_CODE = /\b(?:use)?(?:Wallet|Savings|Goals?)[A-Z]\w*/;
 
 /** True for storefront source that is bundled into the app. */
 export function isShippedSource(path) {
@@ -41,7 +43,7 @@ export function isPiggyvestSource(path, content) {
   const relative = path.startsWith(APP_PREFIX) ? path.slice(APP_PREFIX.length) : path;
   if (PIGGYVEST_NAME.test(relative) || WALLET_PATH.test(relative)) return true;
   const text = typeof content === 'function' ? content() : content;
-  return PIGGYVEST_NAME.test(text ?? '');
+  return PIGGYVEST_NAME.test(text ?? '') || WALLET_CODE.test(text ?? '');
 }
 
 /**
@@ -59,6 +61,8 @@ export function serverOffTestPaths(path) {
 // Static imports, re-exports, side-effect imports, require() and import().
 const MODULE_SPECIFIER =
   /\b(?:from\s*|import\s*\(\s*|require\s*\(\s*|^\s*import\s+)(['"])([^'"\n]+)\1/gm;
+// `import type ...` and `export type ... from` load nothing at runtime.
+const TYPE_ONLY = /\b(?:import|export)\s+type\b[\s\S]*?\bfrom\s*(['"])[^'"\n]+\1/g;
 const COMMENT = /\/\*[\s\S]*?\*\/|^\s*\/\/.*$/gm;
 
 function withoutExtension(file) {
@@ -69,7 +73,7 @@ function withoutExtension(file) {
 export function importsModule(testPath, testContent, source) {
   const target = withoutExtension(source);
   const accepted = new Set([target, ...(path.posix.basename(target) === 'index' ? [path.posix.dirname(target)] : [])]);
-  for (const match of (testContent ?? '').replace(COMMENT, '').matchAll(MODULE_SPECIFIER)) {
+  for (const match of (testContent ?? '').replace(COMMENT, '').replace(TYPE_ONLY, '').matchAll(MODULE_SPECIFIER)) {
     const specifier = match[2];
     let resolved;
     if (specifier.startsWith('@/')) resolved = `${APP_PREFIX}${specifier.slice(2)}`;

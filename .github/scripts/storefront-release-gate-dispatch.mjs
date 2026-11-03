@@ -7,7 +7,7 @@ import path from 'node:path';
 
 const GH_WORKFLOW_RUN = /\bgh\s+workflow\s+run\b/g;
 const REST_DISPATCH = /\/workflows\/(.*?)\/dispatches\b/g;
-const SCRIPT_DISPATCH = /\bcreateWorkflowDispatch\b/;
+const SCRIPT_DISPATCH = /\bcreateWorkflowDispatch\b/g;
 const WORKFLOW_ID = /\bworkflow_id\s*:\s*([^,\n}]*)/g;
 // `gh workflow run` flags that take the next argument as their value.
 const VALUE_FLAGS = new Set(['-f', '--raw-field', '-F', '--field', '-r', '--ref', '-R', '--repo']);
@@ -47,9 +47,12 @@ export function readDispatchTargets(text) {
     }
     for (const match of line.matchAll(REST_DISPATCH)) targets.push(unquote(match[1]));
   }
-  if (SCRIPT_DISPATCH.test(text)) {
+  const calls = [...text.matchAll(SCRIPT_DISPATCH)].length;
+  if (calls > 0) {
     const ids = [...text.matchAll(WORKFLOW_ID)].map((match) => unquote(match[1]));
-    targets.push(...(ids.length === 0 ? [''] : ids));
+    targets.push(...ids);
+    // Each call needs its own literal target: a call without one stays opaque.
+    for (let extra = ids.length; extra < calls; extra += 1) targets.push('');
   }
   return targets;
 }
@@ -58,6 +61,8 @@ export function readDispatchTargets(text) {
 // tag, a ref or a release starts them just as a dispatch does.
 const TAG_COMMAND = /\bgit\s+tag\b|\bgh\s+release\s+(?:create|edit|upload)\b/;
 const PUSH_TAG = /\bgit\s+push\b.*(?:--tags\b|--follow-tags\b|--mirror\b|\btag\s+\S|refs\/tags\/|\bv[\w.*${}-]*-storefront(?:-ios)?\b)/;
+// A pushed ref the gate cannot read (a variable) may be a release tag.
+const PUSH_UNRESOLVED = /\bgit\s+push\b[^\n;&|]*\$/;
 const REF_API = /\/git\/(?:refs|tags)\b|\bcreateRef\b|\bcreateTag\b|\bcreateRelease\b/;
 const RELEASE_API = /\b(?:gh\s+api|curl|fetch)\b.*\/releases\b(?!\/(?:latest|tags|download|\d+\/assets))/;
 const RELEASE_ACTION =
@@ -67,7 +72,7 @@ const RELEASE_ACTION =
 export function createsReleaseTag(text) {
   return logicalLines(text).some(
     (line) =>
-      TAG_COMMAND.test(line) || PUSH_TAG.test(line) || REF_API.test(line) || RELEASE_API.test(line) || RELEASE_ACTION.test(line)
+      TAG_COMMAND.test(line) || PUSH_TAG.test(line) || PUSH_UNRESOLVED.test(line) || REF_API.test(line) || RELEASE_API.test(line) || RELEASE_ACTION.test(line)
   );
 }
 

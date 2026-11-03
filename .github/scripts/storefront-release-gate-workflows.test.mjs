@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   dispatchOnlyFailures,
   readJob,
+  readJobIds,
   readStep,
   readStepNames,
   readWorkflowTriggers,
@@ -172,4 +173,17 @@ test('a fastlane path segment is not the fastlane tool', () => {
   assert.equal(shipsStorefront(`${app}path.join(projectRoot, 'fastlane', 'Fastfile')`), false);
   assert.equal(shipsStorefront(`${app}bundle exec fastlane ios release`), true);
   assert.equal(shipsStorefront(`${app}fastlane android deploy`), true);
+});
+
+test('native Gradle release builds count as shipping the storefront', () => {
+  const app = 'working-directory: apps/mobile-storefront/android\n';
+  for (const command of ['./gradlew bundleRelease', 'gradle assembleRelease --no-daemon', './gradlew app:bundleRelease -x lint']) {
+    assert.equal(shipsStorefront(`${app}run: ${command}`), true, command);
+  }
+  assert.equal(shipsStorefront(`${app}run: ./gradlew testDebugUnitTest`), false);
+});
+
+test('quoted or unreadable job entries are counted so a second job cannot hide', () => {
+  const text = "jobs:\n  ship:\n    steps: []\n  'publish':\n    steps: []\n  \"third\":\n    steps: []\n  ? odd\n  : steps: []\n";
+  assert.deepEqual(readJobIds(text), ['ship', 'publish', 'third', '(unreadable job entry)', '(unreadable job entry)']);
 });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { dispatchFailures, readDispatchTargets } from './storefront-release-gate-dispatch.mjs';
+import { createsReleaseTag, dispatchFailures, readDispatchTargets } from './storefront-release-gate-dispatch.mjs';
 
 const IOS = '.github/workflows/ios-storefront-release.yml';
 const ANDROID = '.github/workflows/android-storefront-release.yml';
@@ -97,4 +97,17 @@ test('ordinary git pushes and comments do not count as starting a release', () =
   ]) {
     assert.deepEqual(dispatchFailures('nightly.yml', text, GATED), [], text);
   }
+});
+
+test('each github-script dispatch call needs its own literal target', () => {
+  const mixed = "github.rest.actions.createWorkflowDispatch(params);\nawait github.rest.actions.createWorkflowDispatch({ workflow_id: 'security.yml' });";
+  assert.deepEqual(readDispatchTargets(mixed).sort(), ['', 'security.yml']);
+  assert.equal(dispatchFailures('w.yml', mixed, GATED).length, 1);
+});
+
+test('pushing a tag through a variable or an explicit ref fails closed', () => {
+  for (const line of ['git push origin "$TAG"', 'git push origin $TAG', 'git push origin HEAD:refs/tags/v1-storefront', 'git push origin "${TAG_NAME}"']) {
+    assert.equal(createsReleaseTag(`run: ${line}`), true, line);
+  }
+  assert.equal(createsReleaseTag('run: git push origin main'), false);
 });

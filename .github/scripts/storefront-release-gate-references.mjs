@@ -13,7 +13,7 @@ const SCRIPT_REFERENCE = /[\w@./-]+\.(?:sh|bash|zsh|mjs|cjs|js|ts|py|rb|rake)\b/
 // it resolves to a file (it may just as well be a directory or a glob).
 const EXECUTED_REFERENCE = new RegExp(
   [
-    String.raw`(?:^|[\s;&|(])(?:bash|sh|zsh|source|exec)\s+(?!-)["']?([\w@./-]*[\w@-])`,
+    String.raw`(?:^|[\s;&|(])(?:bash|sh|zsh|source|exec)\s+(?:-[\w-]+\s+(?:(?:pipefail|errexit|nounset|xtrace|posix)\s+)?)*["']?([\w@./-]*[\w@-])`,
     String.raw`(?:^|[\s;&|("'])(\.\/[\w@./-]*[\w@-])`,
   ].join('|'),
   'gm'
@@ -48,7 +48,11 @@ export function expandReferences(text, readFile) {
   const missing = [];
   const parts = [text];
   const visit = (source, depth, base = []) => {
-    if (depth > MAX_DEPTH) return;
+    if (depth > MAX_DEPTH) {
+      const label = `a reference chain deeper than ${MAX_DEPTH} levels`;
+      if (!missing.includes(label)) missing.push(label);
+      return;
+    }
     const directories = [...base, ...[...source.matchAll(WORKING_DIRECTORY)].map((match) => match[1].replace(/\/$/, ''))];
     // A caller workflow and the local action or reusable workflow it uses run
     // as one unit, so shipping split across the two files is still seen.
@@ -84,17 +88,20 @@ export function expandReferences(text, readFile) {
     for (const [reference, executed] of references) {
       // Actions and workflows are followed through `uses:` above.
       if (/^(?:\.\/)?\.github\/(?:actions|workflows)\//.test(reference)) continue;
-      const found = candidates(reference, directories).find((file) => readFile(file) !== undefined);
-      if (found === undefined) {
+      // Every place the reference could mean counts: the step's working directory and the root.
+      const foundAll = candidates(reference, directories).filter((file) => readFile(file) !== undefined);
+      if (foundAll.length === 0) {
         const normalized = reference.replace(/^\.\//, '');
         if (executed && normalized.startsWith('.github/') && !missing.includes(normalized)) missing.push(normalized);
         continue;
       }
-      if (seen.has(found) || GATE_OWN_FILE.test(found) || TEST_FILE.test(found)) continue;
-      seen.add(found);
-      const content = readFile(found).replace(COMMENT_LINE, '');
-      parts.push(content);
-      visit(content, depth + 1);
+      for (const found of foundAll) {
+        if (seen.has(found) || GATE_OWN_FILE.test(found) || TEST_FILE.test(found)) continue;
+        seen.add(found);
+        const content = readFile(found).replace(COMMENT_LINE, '');
+        parts.push(content);
+        visit(content, depth + 1, [path.posix.dirname(found)]);
+      }
     }
   };
   visit(text, 0);

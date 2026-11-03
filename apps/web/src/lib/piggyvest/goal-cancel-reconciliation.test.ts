@@ -1,10 +1,17 @@
 import { createHash } from 'node:crypto';
 import { expect, it, vi } from 'vitest';
-import { createGoalCancelEvidenceStore } from './goal-cancel-reconciliation';
+import {
+  createGoalCancelEvidenceStore,
+  runGoalCancelOutflowReconciliation,
+} from './goal-cancel-reconciliation';
 import { GOAL_CANCEL_STATEMENTS as sql } from './goal-cancel-statements';
 import { reconcilePrimaryWalletSavings } from './primary-wallet-savings-reconciliation';
 
 vi.mock('server-only', () => ({}));
+const evidenceExecute = vi.hoisted(() => vi.fn());
+vi.mock('./primary-wallet-evidence-executor', () => ({
+  createPrimaryWalletEvidenceExecutor: () => evidenceExecute,
+}));
 const integrationId = '11111111-1111-4111-8111-111111111111';
 const operationId = '66666666-6666-4666-8666-666666666666';
 const goalId = '55555555-5555-4555-8555-555555555555';
@@ -135,4 +142,89 @@ it.each([
       ([text]) => text === sql.settle || text === sql.release
     )
   ).toBe(false);
+});
+
+it('finds a dispatched or released-after-dispatch attempt by reference', async () => {
+  const { execute, store } = setup([{ operationId }, null]);
+  expect(await store.findByReference(reference)).toEqual({ operationId });
+  expect(await store.findByReference('pvb-cancel-unknown')).toBeNull();
+  expect(execute).toHaveBeenNthCalledWith(1, sql.findByReference, [
+    integrationId,
+    'staging',
+    reference,
+  ]);
+});
+
+it('refuses a malformed by-reference answer', async () => {
+  const { store } = setup([{ operationId: 'nope' }]);
+  await expect(store.findByReference(reference)).rejects.toThrow();
+});
+
+it('settles a released-after-dispatch attempt from a successful record (late success)', async () => {
+  // The database returns the released-but-dispatched row to the loader; the
+  // provider shows success, so the verified record is settled.
+  const { execute, store } = setup([reservation, 'confirmed']);
+  const outcome = await reconcilePrimaryWalletSavings(operationId, {
+    ...store,
+    queryProvider: async () => record('successful'),
+  });
+  expect(outcome).toEqual({ status: 'confirmed' });
+  expect(execute.mock.calls[1][0]).toBe(sql.settle);
+});
+
+it('treats a failed record for an already released attempt as released (duplicate)', async () => {
+  const { store } = setup([reservation, 'duplicate']);
+  expect(
+    await reconcilePrimaryWalletSavings(operationId, {
+      ...store,
+      queryProvider: async () => record('failed'),
+    })
+  ).toEqual({ status: 'cancelled' });
+});
+
+const inflowConfiguration = {
+  integrationId,
+  environment: 'staging',
+  database: {
+    host: 'db.example.com',
+    port: 5432,
+    name: 'postgres',
+    login: 'baci_piggyvest_primary_evidence',
+    password: createHash('sha256').update('s6-evidence-db').digest('hex'),
+    certificateAuthority: 'test-ca',
+  },
+};
+const token = createHash('sha256').update('s6-outflow-token').digest('hex');
+
+it('reconciles a goal cancel named by an outflow webhook reference without client polling', async () => {
+  evidenceExecute.mockReset();
+  evidenceExecute
+    .mockResolvedValueOnce({ rows: [{ result: { operationId } }] })
+    .mockResolvedValueOnce({ rows: [{ result: reservation }] })
+    .mockResolvedValueOnce({ rows: [{ result: 'confirmed' }] });
+  const outcome = await runGoalCancelOutflowReconciliation({
+    configuration: inflowConfiguration,
+    providerToken: token,
+    references: ['bad ref with spaces\n'.repeat(40), reference],
+    fetchImplementation: async () =>
+      new Response(JSON.stringify(record('successful'))),
+  });
+  expect(outcome).toBe('confirmed');
+  expect(evidenceExecute.mock.calls.map((call) => call[0])).toEqual([
+    sql.findByReference,
+    sql.readDispatched,
+    sql.settle,
+  ]);
+});
+
+it('reports unmatched when no reference names a goal cancel', async () => {
+  evidenceExecute.mockReset();
+  evidenceExecute.mockResolvedValue({ rows: [{ result: null }] });
+  expect(
+    await runGoalCancelOutflowReconciliation({
+      configuration: inflowConfiguration,
+      providerToken: token,
+      references: [reference],
+    })
+  ).toBe('unmatched');
 });

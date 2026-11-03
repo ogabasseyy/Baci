@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { beforeEach, expect, it, vi } from 'vitest';
 import {
   checkPrimaryWalletGoalCancelStatus,
+  isPrimaryWalletGoalCancelIssued,
   issuePrimaryWalletGoalCancel,
   submitPrimaryWalletGoalCancel,
 } from './goal-cancel-runtime';
@@ -204,7 +205,6 @@ const statusInput = {
 it.each([
   [null, 'not_found'],
   ['confirmed', 'confirmed'],
-  ['released', 'released'],
   ['issued', 'not_started'],
 ] as const)('status %s reports %s with no provider call', async (state, expected) => {
   dbAnswers(state);
@@ -245,4 +245,79 @@ it('maps a provider-reported failure to released', async () => {
   expect(await checkPrimaryWalletGoalCancelStatus(statusInput)).toEqual({
     status: 'released',
   });
+});
+
+// A released attempt that WAS dispatched can still succeed at the provider.
+// These start from the recorded 'released' state and exercise the status
+// path; the SQL suite proves the database loads and settles such a row.
+it('re-checks a released cancel and reports a late success as confirmed', async () => {
+  dbAnswers('released');
+  mocks.reconcile.mockResolvedValue({ status: 'confirmed' });
+  expect(await checkPrimaryWalletGoalCancelStatus(statusInput)).toEqual({
+    status: 'confirmed',
+  });
+  expect(mocks.reconcile).toHaveBeenCalledWith(
+    expect.objectContaining({ operationId })
+  );
+  expect(mocks.transfer).not.toHaveBeenCalled();
+});
+
+it.each([
+  [{ status: 'pending' }],
+  [{ status: 'cancelled' }],
+])('keeps a released cancel released when the re-check says %j', async (outcome) => {
+  dbAnswers('released');
+  mocks.reconcile.mockResolvedValue(outcome);
+  expect(await checkPrimaryWalletGoalCancelStatus(statusInput)).toEqual({
+    status: 'released',
+  });
+});
+
+it('answers released when the re-check of a released cancel throws', async () => {
+  dbAnswers('released');
+  mocks.reconcile.mockRejectedValue(new Error('provider down'));
+  expect(await checkPrimaryWalletGoalCancelStatus(statusInput)).toEqual({
+    status: 'released',
+  });
+});
+
+it('releases the reservation and sends nothing when the balance is above the ceiling', async () => {
+  mocks.retrieve.mockImplementation(async (_p: unknown, id: string) => ({
+    id,
+    api_customer_id: 'customer',
+    business_id: 'business',
+    currency: 'NGN',
+    status: 'active',
+    balance: id === 'goal-wallet' ? 10_000_000_000 : 10,
+  }));
+  dbAnswers({ status: 'claimed', reservation }, true);
+  expect(
+    await submitPrimaryWalletGoalCancel({
+      configuration,
+      scope,
+      providerToken,
+      goalId,
+      operationId,
+      pinProof,
+    })
+  ).toEqual({ status: 'too_large' });
+  expect(mocks.transfer).not.toHaveBeenCalled();
+  // The second statement is the 'cancel' transition, not a dispatch.
+  expect(mocks.execute.mock.calls[1][1][2]).toBe('cancel');
+});
+
+it('asks whether an operation id is live for the goal', async () => {
+  dbAnswers(true);
+  expect(
+    await isPrimaryWalletGoalCancelIssued({
+      configuration,
+      scope,
+      goalId,
+      operationId,
+    })
+  ).toBe(true);
+  expect(mocks.execute.mock.calls[0][1].slice(1)).toEqual([
+    goalId,
+    operationId,
+  ]);
 });

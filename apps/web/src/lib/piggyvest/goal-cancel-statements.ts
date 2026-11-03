@@ -11,6 +11,10 @@ export const GOAL_CANCEL_STATEMENTS = {
     'SELECT piggyvest_primary.read_goal_cancel_status($1::jsonb,$2::uuid) AS result',
   readDispatched:
     'SELECT piggyvest_primary.read_dispatched_goal_cancel($1::uuid,$2::text,$3::uuid) AS result',
+  checkIssued:
+    'SELECT piggyvest_primary.check_goal_cancel_issued($1::jsonb,$2::uuid,$3::uuid) AS result',
+  findByReference:
+    'SELECT piggyvest_primary.find_dispatched_goal_cancel_by_reference($1::uuid,$2::text,$3::text) AS result',
   settle:
     'SELECT piggyvest_primary.settle_goal_cancel($1::uuid,$2::text,$3::jsonb) AS result',
   release:

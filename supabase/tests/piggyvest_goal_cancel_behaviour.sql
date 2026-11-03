@@ -168,6 +168,15 @@ BEGIN
     (SELECT pg_catalog.count(*) FROM piggyvest_primary.goal_cancel_operations) = 1,
     'a second issue created a second row');
 
+  -- 1b. The PIN verify route pre-check: only a live issued id for this goal.
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.check_goal_cancel_issued(v_scope, c_goal::uuid, v_op::uuid),
+    'a live issued id was not recognised');
+  PERFORM pg_temp.gc_assert(
+    NOT piggyvest_primary.check_goal_cancel_issued(v_scope, c_goal::uuid, c_invented::uuid)
+    AND NOT piggyvest_primary.check_goal_cancel_issued(v_scope, c_invented::uuid, v_op::uuid),
+    'an invented operation or goal id was recognised');
+
   -- 2. No proof / garbage: refused; the issued id stays usable.
   v_result := pg_temp.gc_reserve(v_op, NULL);
   PERFORM pg_temp.gc_assert(v_result ->> 'status' = 'pin_refused' AND v_result ->> 'reason' = 'missing',
@@ -256,8 +265,12 @@ BEGIN
       'f3860000-0000-4000-8000-000000000007', c_goal::uuid, 100, 'synthetic-goalcancel-main',
       'synthetic-goalcancel-goal-wallet', 'pvb-save-f3860000-0000-4000-8000-0000000000f1', 'reserved',
       'f3860000-0000-4000-8000-000000000009');
-    RAISE EXCEPTION 'funding was reserved during a cancel';
-  EXCEPTION WHEN SQLSTATE 'P0001' THEN NULL;
+    -- A custom SQLSTATE the handler below does not catch: if the insert
+    -- succeeds the test fails here instead of passing by accident.
+    RAISE EXCEPTION 'funding was reserved during a cancel' USING ERRCODE = 'PVT00';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    PERFORM pg_temp.gc_assert(SQLERRM = 'savings goal is being cancelled',
+      'funding fence raised another error: ' || SQLERRM);
   END;
 
   -- 10. Dispatch records the provider balance as the amount, exactly once.
@@ -287,6 +300,41 @@ BEGIN
     'f3860000-0000-4000-8000-000000000006'::uuid, 'staging', v_op::uuid);
   PERFORM pg_temp.gc_assert(v_result ->> 'amountKobo' = '250000' AND v_result ->> 'businessId' = 'synthetic-goalcancel-business',
     'dispatched read: ' || COALESCE(v_result::text, 'null'));
+  -- The webhook path resolves the dispatched attempt by its provider reference.
+  v_result := piggyvest_primary.find_dispatched_goal_cancel_by_reference(
+    'f3860000-0000-4000-8000-000000000006'::uuid, 'staging', 'pvb-cancel-' || c_goal);
+  PERFORM pg_temp.gc_assert(v_result ->> 'operationId' = v_op, 'find by reference: ' || COALESCE(v_result::text, 'null'));
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.find_dispatched_goal_cancel_by_reference(
+      'f3860000-0000-4000-8000-000000000006'::uuid, 'staging', 'pvb-cancel-' || c_goal || '-9') IS NULL,
+    'find by reference matched an unknown reference');
+  -- A dispatched cancel blocks an order redemption of the goal (the trigger
+  -- fires before the foreign keys, so a synthetic order id is enough).
+  BEGIN
+    INSERT INTO public.customer_savings_redemptions
+      (goal_id, merchant_id, customer_id, order_id, amount, idempotency_key)
+    VALUES (c_goal::uuid, 'f3860000-0000-4000-8000-000000000002', 'f3860000-0000-4000-8000-000000000003',
+      'f3860000-0000-4000-8000-0000000000f3', 1, 'synthetic-goalcancel-redemption');
+    RAISE EXCEPTION 'a goal with a dispatched cancel was redeemed' USING ERRCODE = 'PVT00';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    PERFORM pg_temp.gc_assert(SQLERRM = 'savings_goal_cancel_in_progress',
+      'redemption guard raised another error: ' || SQLERRM);
+  END;
+  -- Customer and goal deletion wait for the unresolved cancel.
+  BEGIN
+    DELETE FROM public.customer_savings_goals WHERE id = c_goal::uuid;
+    RAISE EXCEPTION 'a goal with a dispatched cancel was deleted' USING ERRCODE = 'PVT00';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    PERFORM pg_temp.gc_assert(SQLERRM = 'cannot delete goal with unsettled goal cancellations',
+      'goal deletion guard raised another error: ' || SQLERRM);
+  END;
+  BEGIN
+    DELETE FROM public.customers WHERE id = 'f3860000-0000-4000-8000-000000000003';
+    RAISE EXCEPTION 'a customer with a dispatched cancel was deleted' USING ERRCODE = 'PVT00';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    PERFORM pg_temp.gc_assert(SQLERRM = 'cannot delete customer with unsettled goal cancellations',
+      'customer deletion guard raised another error: ' || SQLERRM);
+  END;
 
   -- 11. Settlement refuses any mismatch and a malformed proof.
   BEGIN
@@ -314,6 +362,16 @@ BEGIN
   PERFORM pg_temp.gc_assert(
     piggyvest_primary.release_failed_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',
       pg_temp.gc_proof(v_op, 'failed')) = 'duplicate', 'a replayed release was not idempotent');
+  -- The released attempt was dispatched, so reconciliation can still load it
+  -- (read and by-reference lookup), which is what makes a late success reachable.
+  v_result := piggyvest_primary.read_dispatched_goal_cancel(
+    'f3860000-0000-4000-8000-000000000006'::uuid, 'staging', v_op::uuid);
+  PERFORM pg_temp.gc_assert(v_result ->> 'operationId' = v_op AND v_result ->> 'amountKobo' = '250000',
+    'a released-but-dispatched attempt was not loadable: ' || COALESCE(v_result::text, 'null'));
+  v_result := piggyvest_primary.find_dispatched_goal_cancel_by_reference(
+    'f3860000-0000-4000-8000-000000000006'::uuid, 'staging', 'pvb-cancel-' || c_goal);
+  PERFORM pg_temp.gc_assert(v_result ->> 'operationId' = v_op,
+    'a released-but-dispatched attempt was not found by reference');
   -- A transfer the provider indexed late and then completed settles the
   -- released (but dispatched) attempt. Probed in a block that is rolled back.
   BEGIN
@@ -323,12 +381,20 @@ BEGIN
     PERFORM pg_temp.gc_assert(pg_temp.gc_state(v_op) = 'confirmed'
       AND (SELECT status FROM public.customer_savings_goals WHERE id = c_goal::uuid) = 'cancelled',
       'a late success did not cancel the goal');
+    PERFORM pg_temp.gc_assert(
+      (SELECT available_balance FROM public.customer_wallets
+        WHERE id = 'f3860000-0000-4000-8000-000000000008') = 3500,
+      'a late success did not credit the main wallet');
     RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
   EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
   END;
   PERFORM pg_temp.gc_assert(pg_temp.gc_state(v_op) = 'released'
     AND (SELECT status FROM public.customer_savings_goals WHERE id = c_goal::uuid) = 'active',
     'the late-success probe was not rolled back');
+  PERFORM pg_temp.gc_assert(
+    (SELECT available_balance FROM public.customer_wallets
+      WHERE id = 'f3860000-0000-4000-8000-000000000008') = 1000,
+    'the late-success probe left a wallet credit behind');
   -- A proof with the wrong reference never settles it.
   PERFORM pg_temp.gc_assert(
     piggyvest_primary.settle_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',
@@ -353,6 +419,10 @@ BEGIN
   PERFORM pg_temp.gc_assert(piggyvest_primary.manage_goal_cancel(v_scope, v_op2::uuid, 'cancel_stale', NULL),
     'a stale reservation was not released');
   PERFORM pg_temp.gc_assert(pg_temp.gc_state(v_op2) = 'released', 'stale release state');
+  PERFORM pg_temp.gc_assert(
+    piggyvest_primary.read_dispatched_goal_cancel(
+      'f3860000-0000-4000-8000-000000000006'::uuid, 'staging', v_op2::uuid) IS NULL,
+    'a released attempt that was never dispatched was loadable');
   v_issue := pg_temp.gc_issue_op();
   v_op := v_issue ->> 'operationId';
   UPDATE piggyvest_primary.goal_cancel_operations SET expires_at = pg_catalog.clock_timestamp() - interval '1 second'
@@ -383,6 +453,13 @@ BEGIN
     AND EXISTS (SELECT 1 FROM public.customer_savings_events WHERE goal_id = c_goal::uuid AND event_type = 'goal_cancelled_refunded'),
     'settlement did not confirm the attempt and cancel the goal together');
   PERFORM pg_temp.gc_assert(
+    (SELECT available_balance FROM public.customer_wallets
+      WHERE id = 'f3860000-0000-4000-8000-000000000008') = 3500
+    AND (SELECT pg_catalog.count(*) FROM public.customer_wallet_transactions
+          WHERE source_type = 'piggyvest_goal_cancel' AND source_id = v_op::uuid
+            AND type = 'refund' AND status = 'completed' AND amount = 2500 AND balance_after = 3500) = 1,
+    'settlement did not credit the main-wallet ledger once');
+  PERFORM pg_temp.gc_assert(
     piggyvest_primary.settle_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',
       pg_temp.gc_proof(v_op)) = 'duplicate', 'a replayed settlement was not idempotent');
   PERFORM pg_temp.gc_assert(
@@ -392,6 +469,12 @@ BEGIN
   PERFORM pg_temp.gc_assert(
     (SELECT pg_catalog.count(*) FROM public.customer_savings_events WHERE goal_id = c_goal::uuid AND event_type = 'goal_cancelled_refunded') = 1,
     'a replay wrote a second event');
+  PERFORM pg_temp.gc_assert(
+    (SELECT available_balance FROM public.customer_wallets
+      WHERE id = 'f3860000-0000-4000-8000-000000000008') = 3500
+    AND (SELECT pg_catalog.count(*) FROM public.customer_wallet_transactions
+          WHERE source_type = 'piggyvest_goal_cancel' AND source_id = v_op::uuid) = 1,
+    'a replayed settlement credited the wallet again');
 
   -- 15. After a confirmed cancel: the same id reads confirmed, a new cancel
   -- is refused, and funding stays fenced off.
@@ -409,8 +492,10 @@ BEGIN
       'f3860000-0000-4000-8000-000000000007', c_goal::uuid, 100, 'synthetic-goalcancel-main',
       'synthetic-goalcancel-goal-wallet', 'pvb-save-f3860000-0000-4000-8000-0000000000f2', 'reserved',
       'f3860000-0000-4000-8000-000000000009');
-    RAISE EXCEPTION 'funding was reserved after a cancel';
-  EXCEPTION WHEN SQLSTATE 'P0001' THEN NULL;
+    RAISE EXCEPTION 'funding was reserved after a cancel' USING ERRCODE = 'PVT00';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    PERFORM pg_temp.gc_assert(SQLERRM = 'savings goal is being cancelled',
+      'funding fence raised another error after a cancel: ' || SQLERRM);
   END;
 END
 $behaviour$;

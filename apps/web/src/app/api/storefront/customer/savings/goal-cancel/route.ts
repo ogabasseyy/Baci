@@ -181,6 +181,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           'NOTHING_TO_REFUND',
           409
         );
+      case 'too_large':
+        return refuse(
+          'This goal balance is above the automatic refund limit. Please contact support.',
+          'AMOUNT_TOO_LARGE',
+          409
+        );
       case 'expired':
         return refuse(
           'This cancellation expired. Please start again.',

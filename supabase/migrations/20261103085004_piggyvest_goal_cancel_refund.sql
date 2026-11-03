@@ -29,6 +29,21 @@
 --    confirmed and the goal cancelled in one transaction.
 --  * A trigger on savings_operations stops a funding reservation for a goal
 --    that has a cancel in flight or done, so money cannot be added mid-cancel.
+--  * A trigger on customer_savings_redemptions stops an order redemption of a
+--    goal that has a cancel in flight or done, so the balance can never be
+--    spent on an order and also refunded.
+--  * Settling credits the local main-wallet ledger (customer_wallets plus
+--    customer_wallet_transactions) in the SAME transaction as the
+--    confirmation, and the funding availability calculation counts a
+--    confirmed refund, so refunded money is spendable and fundable again.
+--  * The amount ceiling stays 9999999999 kobo: it is the bound the shared
+--    savings reconciliation schemas and the wallet ledger amount column
+--    already use. A larger provider balance is released before dispatch by
+--    the application, never left reserved.
+--  * Customer and goal deletion are blocked while a cancel is reserved or
+--    dispatched, because settlement needs the live customer and goal rows.
+--  * find_dispatched_goal_cancel_by_reference lets the outflow webhook path
+--    reconcile a dispatched cancel without any client polling.
 --
 -- The executor login gets EXECUTE on the new cancel wrapper only.
 -- consume_goal_pin_proof stays revoked from it (S7 re-grants for complete).
@@ -362,6 +377,9 @@ END;
 $$;
 
 -- Evidence role: the dispatched attempt as a reservation, for the provider re-query.
+-- A released attempt that WAS dispatched is returned too: the provider may
+-- index the transfer only after it was released, and that late success must
+-- still be reachable from reconciliation.
 CREATE FUNCTION piggyvest_primary.read_dispatched_goal_cancel(
   integration_id uuid,
   environment text,
@@ -399,7 +417,8 @@ BEGIN
      AND customer.user_id = intent.user_id
    WHERE op.id = read_dispatched_goal_cancel.operation_id
      AND op.integration_id = read_dispatched_goal_cancel.integration_id
-     AND op.state = 'dispatched' AND intent.state IN ('accepted', 'verified')
+     AND (op.state = 'dispatched' OR (op.state = 'released' AND op.dispatched_at IS NOT NULL))
+     AND intent.state IN ('accepted', 'verified')
      AND intent.provider_wallet_id = op.destination_wallet_id;
   RETURN v_reservation;
 END;
@@ -446,6 +465,8 @@ DECLARE
   v_operation piggyvest_primary.goal_cancel_operations%ROWTYPE;
   v_intent piggyvest_primary.onboarding_intents%ROWTYPE;
   v_now timestamptz;
+  v_wallet_id uuid;
+  v_wallet_balance numeric;
 BEGIN
   SELECT candidate.* INTO v_binding FROM piggyvest_primary.integrations AS candidate
     JOIN piggyvest_primary.inflow_authorities AS authority ON authority.integration_id = candidate.id
@@ -514,6 +535,27 @@ BEGIN
      SET state = 'confirmed', provider_transaction_id = proof ->> 'providerTransactionId',
          settled_at = v_now
    WHERE id = v_operation.id;
+  -- The refund has reached the main wallet at the provider, so the local
+  -- main-wallet ledger is credited in this same transaction (this branch runs
+  -- once per attempt: the state check above returns duplicate for a replay).
+  -- The merchant guard on the conflict arm refuses a wallet row of another
+  -- merchant instead of crediting it.
+  INSERT INTO public.customer_wallets (customer_id, merchant_id, available_balance, total_earned)
+  VALUES (v_intent.customer_id, v_intent.merchant_id, v_operation.amount_kobo::numeric / 100, 0)
+  ON CONFLICT (customer_id) DO UPDATE SET
+    available_balance = public.customer_wallets.available_balance + EXCLUDED.available_balance,
+    updated_at = v_now
+    WHERE public.customer_wallets.merchant_id = EXCLUDED.merchant_id
+  RETURNING id, available_balance INTO v_wallet_id, v_wallet_balance;
+  IF v_wallet_id IS NULL THEN
+    RAISE EXCEPTION 'refund wallet unavailable' USING ERRCODE = '42501';
+  END IF;
+  INSERT INTO public.customer_wallet_transactions
+    (wallet_id, customer_id, merchant_id, type, status, amount, balance_after,
+     source_type, source_id, description)
+  VALUES (v_wallet_id, v_intent.customer_id, v_intent.merchant_id, 'refund', 'completed',
+    v_operation.amount_kobo::numeric / 100, v_wallet_balance,
+    'piggyvest_goal_cancel', v_operation.id, 'Savings goal cancelled: refunded to main wallet');
   -- The refund has reached the main wallet, so the goal no longer holds money.
   -- A goal row that is gone or already spent does not undo a settled transfer.
   UPDATE public.customer_savings_goals AS goal
@@ -610,6 +652,194 @@ CREATE TRIGGER block_funding_during_goal_cancel
   BEFORE INSERT ON piggyvest_primary.savings_operations
   FOR EACH ROW EXECUTE FUNCTION piggyvest_primary.block_funding_during_goal_cancel();
 
+-- Funding availability now counts a confirmed refund (see the header). This is
+-- the 20261008090300 definition with one added statement; its grants persist.
+CREATE OR REPLACE FUNCTION piggyvest_primary.reserve_savings_before_interest(scope jsonb, request jsonb)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE
+  resolved_intent_id uuid := piggyvest_primary.assert_savings_scope(scope);
+  operation piggyvest_primary.savings_operations%ROWTYPE;
+  goal public.customer_savings_goals%ROWTYPE;
+  destination piggyvest_primary.savings_destinations%ROWTYPE;
+  amount bigint;
+  available_kobo numeric;
+  capacity_kobo numeric;
+  wallet_id uuid;
+  wallet_balance numeric;
+  transaction_id uuid:=pg_catalog.gen_random_uuid();
+  source_wallet text;
+  source_customer text;
+BEGIN
+  IF request IS NULL OR jsonb_typeof(request)<>'object' OR (SELECT count(*) FROM jsonb_object_keys(request))<>3
+    OR NOT request ?& ARRAY['goalId','operationId','amountKobo'] OR jsonb_typeof(request->'amountKobo') IS DISTINCT FROM 'number'
+    OR request->>'amountKobo' !~ '^[1-9][0-9]*$' THEN RAISE EXCEPTION 'invalid savings request' USING ERRCODE='22023'; END IF;
+  amount:=(request->>'amountKobo')::bigint;
+  IF amount>9999999999 THEN RAISE EXCEPTION 'savings amount outside ledger range' USING ERRCODE='22023'; END IF;
+  PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('primary-savings:' || resolved_intent_id::text,0));
+  SELECT * INTO operation FROM piggyvest_primary.savings_operations WHERE id=(request->>'operationId')::uuid FOR UPDATE;
+  IF FOUND THEN
+    IF operation.intent_id<>resolved_intent_id OR operation.goal_id<>(request->>'goalId')::uuid OR operation.amount_kobo<>amount THEN RETURN jsonb_build_object('status','conflict'); END IF;
+    RETURN jsonb_build_object('status',CASE WHEN operation.state='confirmed' THEN 'confirmed' WHEN operation.state='cancelled' THEN 'conflict' ELSE 'pending' END);
+  END IF;
+  SELECT candidate.* INTO goal FROM public.customer_savings_goals candidate
+    WHERE candidate.id=(request->>'goalId')::uuid AND candidate.customer_id=(scope->>'customerId')::uuid
+      AND candidate.merchant_id=(scope->>'merchantId')::uuid AND candidate.status='active' FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'savings goal unavailable' USING ERRCODE='42501'; END IF;
+  SELECT candidate.* INTO destination FROM piggyvest_primary.savings_destinations candidate
+    WHERE candidate.integration_id=(scope->>'integrationId')::uuid AND candidate.goal_id=goal.id AND candidate.intent_id=resolved_intent_id AND candidate.enabled FOR SHARE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'savings destination unavailable' USING ERRCODE='42501'; END IF;
+  SELECT provider_wallet_id,provider_customer_id INTO source_wallet,source_customer FROM piggyvest_primary.onboarding_intents WHERE id=resolved_intent_id;
+  IF source_wallet=destination.provider_wallet_id THEN RAISE EXCEPTION 'identical savings wallets' USING ERRCODE='22023'; END IF;
+  IF source_customer IS NULL THEN RAISE EXCEPTION 'savings customer unavailable' USING ERRCODE='42501'; END IF;
+  SELECT COALESCE(sum((financial_identity->>'amountKobo')::numeric),0) INTO available_kobo FROM piggyvest_primary.inflow_receipts WHERE inflow_receipts.intent_id=resolved_intent_id;
+  SELECT available_kobo-COALESCE(sum(amount_kobo),0) INTO available_kobo FROM piggyvest_primary.savings_operations WHERE savings_operations.intent_id=resolved_intent_id AND state<>'cancelled';
+  -- A confirmed goal-cancel refund is money back in the main wallet.
+  SELECT available_kobo+COALESCE(sum(refund.amount_kobo),0) INTO available_kobo FROM piggyvest_primary.goal_cancel_operations refund WHERE refund.intent_id=resolved_intent_id AND refund.state='confirmed';
+  SELECT (goal.target_amount-goal.current_amount)*100-COALESCE(sum(amount_kobo),0) INTO capacity_kobo FROM piggyvest_primary.savings_operations WHERE goal_id=goal.id AND state IN ('reserved','dispatched');
+  IF available_kobo<amount OR capacity_kobo<amount THEN RETURN jsonb_build_object('status','insufficient'); END IF;
+  UPDATE public.customer_wallets SET available_balance=available_balance-amount::numeric/100,updated_at=pg_catalog.clock_timestamp()
+    WHERE customer_id=(scope->>'customerId')::uuid AND merchant_id=(scope->>'merchantId')::uuid AND available_balance>=amount::numeric/100
+    RETURNING id,available_balance INTO wallet_id,wallet_balance;
+  IF NOT FOUND THEN RETURN jsonb_build_object('status','insufficient'); END IF;
+  INSERT INTO public.customer_wallet_transactions(id,wallet_id,customer_id,merchant_id,type,amount,balance_after,source_type,source_id,status,description)
+    VALUES(transaction_id,wallet_id,(scope->>'customerId')::uuid,(scope->>'merchantId')::uuid,'redemption',amount::numeric/100,wallet_balance,'piggyvest_primary_savings',(request->>'operationId')::uuid,'pending','Savings transfer pending');
+  INSERT INTO piggyvest_primary.savings_operations(id,integration_id,intent_id,goal_id,amount_kobo,source_wallet_id,destination_wallet_id,reference,state,wallet_transaction_id)
+    VALUES((request->>'operationId')::uuid,(scope->>'integrationId')::uuid,resolved_intent_id,goal.id,amount,source_wallet,destination.provider_wallet_id,'pvb-save-' || (request->>'operationId'),'reserved',transaction_id)
+    RETURNING * INTO operation;
+  RETURN jsonb_build_object('status','claimed','reservation',jsonb_build_object('operationId',operation.id,'goalId',goal.id,'amountKobo',amount,'sourceWalletId',source_wallet,'destinationWalletId',destination.provider_wallet_id,'reference',operation.reference,'businessId',scope->>'businessId','providerCustomerId',source_customer));
+END $$;
+
+-- Evidence role: resolves an outflow webhook reference to the cancel attempt
+-- (dispatched, or released after dispatch) so reconciliation needs no client.
+CREATE FUNCTION piggyvest_primary.find_dispatched_goal_cancel_by_reference(
+  integration_id uuid,
+  environment text,
+  reference text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  PERFORM binding.id FROM piggyvest_primary.integrations AS binding
+    JOIN piggyvest_primary.inflow_authorities AS authority ON authority.integration_id = binding.id
+   WHERE binding.id = find_dispatched_goal_cancel_by_reference.integration_id
+     AND binding.environment = find_dispatched_goal_cancel_by_reference.environment
+     AND binding.enabled AND authority.enabled AND authority.executor_login = SESSION_USER
+     FOR SHARE OF binding, authority;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'reconciliation authority unavailable' USING ERRCODE = '42501';
+  END IF;
+  SELECT pg_catalog.jsonb_build_object('operationId', op.id) INTO v_result
+    FROM piggyvest_primary.goal_cancel_operations AS op
+   WHERE op.integration_id = find_dispatched_goal_cancel_by_reference.integration_id
+     AND op.reference = find_dispatched_goal_cancel_by_reference.reference
+     AND (op.state = 'dispatched' OR (op.state = 'released' AND op.dispatched_at IS NOT NULL))
+   ORDER BY op.dispatched_at DESC
+   LIMIT 1;
+  RETURN v_result;
+END;
+$$;
+
+-- Authorizer role: true only for a live (issued, unexpired) operation this
+-- database issued for this integration, customer intent and goal. The PIN
+-- verify route asks before minting a proof, so an invented, expired or
+-- foreign operation id never holds a proof slot. The reserve step still makes
+-- the binding decision; this is a pre-check only.
+CREATE FUNCTION piggyvest_primary.check_goal_cancel_issued(scope jsonb, goal_id uuid, operation_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_intent_id uuid;
+BEGIN
+  IF goal_id IS NULL OR operation_id IS NULL THEN
+    RETURN false;
+  END IF;
+  v_intent_id := piggyvest_primary.assert_savings_scope(scope);
+  RETURN EXISTS (
+    SELECT 1 FROM piggyvest_primary.goal_cancel_operations AS op
+     WHERE op.id = check_goal_cancel_issued.operation_id
+       AND op.goal_id = check_goal_cancel_issued.goal_id
+       AND op.intent_id = v_intent_id
+       AND op.integration_id = (scope ->> 'integrationId')::uuid
+       AND op.state = 'issued' AND op.expires_at > pg_catalog.clock_timestamp());
+END;
+$$;
+
+-- Customer and goal deletion wait for an unresolved cancel: settlement needs
+-- the live customer row (ownership join) and goal row. Reserved attempts are
+-- released when stale and dispatched ones settle or release, so no account is
+-- locked for good.
+CREATE FUNCTION piggyvest_primary.block_unsettled_goal_cancel_customer_deletion()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM piggyvest_primary.goal_cancel_operations AS cancel
+    JOIN piggyvest_primary.onboarding_intents AS intent ON intent.id = cancel.intent_id
+    WHERE intent.customer_id = OLD.id AND cancel.state IN ('reserved', 'dispatched')
+  ) THEN
+    RAISE EXCEPTION 'cannot delete customer with unsettled goal cancellations' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN OLD;
+END;
+$$;
+CREATE TRIGGER primary_goal_cancel_block_unsettled_customer_deletion
+  BEFORE DELETE ON public.customers
+  FOR EACH ROW EXECUTE FUNCTION piggyvest_primary.block_unsettled_goal_cancel_customer_deletion();
+
+CREATE FUNCTION piggyvest_primary.block_unsettled_goal_cancel_goal_deletion()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM piggyvest_primary.goal_cancel_operations AS cancel
+    WHERE cancel.goal_id = OLD.id AND cancel.state IN ('reserved', 'dispatched')
+  ) THEN
+    RAISE EXCEPTION 'cannot delete goal with unsettled goal cancellations' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN OLD;
+END;
+$$;
+CREATE TRIGGER primary_goal_cancel_block_unsettled_goal_deletion
+  BEFORE DELETE ON public.customer_savings_goals
+  FOR EACH ROW EXECUTE FUNCTION piggyvest_primary.block_unsettled_goal_cancel_goal_deletion();
+
+-- An order redemption may not spend a goal whose cancel is reserved, dispatched
+-- or confirmed. The redemption function locks the goal row FOR UPDATE before
+-- this insert, and reserve / dispatch lock the same row, so the two are
+-- serialized on the goal.
+CREATE FUNCTION piggyvest_primary.block_redemption_during_goal_cancel()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF NEW.goal_id IS NOT NULL AND EXISTS (
+    SELECT 1 FROM piggyvest_primary.goal_cancel_operations AS cancel
+     WHERE cancel.goal_id = NEW.goal_id AND cancel.state IN ('reserved', 'dispatched', 'confirmed')) THEN
+    RAISE EXCEPTION 'savings_goal_cancel_in_progress' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER block_redemption_during_goal_cancel
+  BEFORE INSERT ON public.customer_savings_redemptions
+  FOR EACH ROW EXECUTE FUNCTION piggyvest_primary.block_redemption_during_goal_cancel();
+
 REVOKE ALL ON FUNCTION
   piggyvest_primary.issue_goal_cancel(jsonb, uuid),
   piggyvest_primary.reserve_goal_cancel_with_pin(jsonb, jsonb, text),
@@ -619,7 +849,12 @@ REVOKE ALL ON FUNCTION
   piggyvest_primary.goal_cancel_proof_valid(jsonb),
   piggyvest_primary.settle_goal_cancel(uuid, text, jsonb),
   piggyvest_primary.release_failed_goal_cancel(uuid, text, jsonb),
-  piggyvest_primary.block_funding_during_goal_cancel()
+  piggyvest_primary.block_funding_during_goal_cancel(),
+  piggyvest_primary.find_dispatched_goal_cancel_by_reference(uuid, text, text),
+  piggyvest_primary.check_goal_cancel_issued(jsonb, uuid, uuid),
+  piggyvest_primary.block_unsettled_goal_cancel_customer_deletion(),
+  piggyvest_primary.block_unsettled_goal_cancel_goal_deletion(),
+  piggyvest_primary.block_redemption_during_goal_cancel()
   FROM PUBLIC, anon, authenticated, service_role, piggyvest_primary_authorizer, piggyvest_primary_evidence;
 
 GRANT EXECUTE ON FUNCTION piggyvest_primary.issue_goal_cancel(jsonb, uuid)
@@ -630,6 +865,10 @@ GRANT EXECUTE ON FUNCTION piggyvest_primary.manage_goal_cancel(jsonb, uuid, text
   TO piggyvest_primary_authorizer;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.read_goal_cancel_status(jsonb, uuid)
   TO piggyvest_primary_authorizer;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.check_goal_cancel_issued(jsonb, uuid, uuid)
+  TO piggyvest_primary_authorizer;
+GRANT EXECUTE ON FUNCTION piggyvest_primary.find_dispatched_goal_cancel_by_reference(uuid, text, text)
+  TO piggyvest_primary_evidence;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.read_dispatched_goal_cancel(uuid, text, uuid)
   TO piggyvest_primary_evidence;
 GRANT EXECUTE ON FUNCTION piggyvest_primary.settle_goal_cancel(uuid, text, jsonb)

@@ -45,6 +45,12 @@ export function createGoalCancelEvidenceStore(input: {
         ? null
         : schemas.dispatchedReservation.parse(result);
     },
+    // Webhook path: the attempt (dispatched, or released after dispatch)
+    // whose provider reference an outflow event names, or null.
+    async findByReference(reference: string) {
+      const result = await run(sql.findByReference, reference);
+      return result === null ? null : schemas.referenceMatch.parse(result);
+    },
     async settle(
       proof: object
     ): Promise<'confirmed' | 'duplicate' | 'conflict'> {
@@ -72,6 +78,46 @@ export function createGoalCancelEvidenceStore(input: {
       return result;
     },
   };
+}
+
+/**
+ * Webhook-driven reconciliation of goal cancels: resolve each reference to a
+ * dispatched (or dispatched-then-released) cancel and run the same proof the
+ * client status path runs, so a cancel whose customer closed the app still
+ * settles. Returns 'unmatched' when no reference names a goal cancel.
+ */
+export async function runGoalCancelOutflowReconciliation(input: {
+  configuration: unknown;
+  providerToken: unknown;
+  references: readonly string[];
+  fetchImplementation?: typeof fetch;
+}): Promise<'confirmed' | 'cancelled' | 'pending' | 'unmatched'> {
+  const configuration = piggyvestPrimaryInflowRuntimeSchema.parse(
+    input.configuration
+  );
+  const token = piggyvestPrimaryWalletRuntimeSchema.shape.providerToken.parse(
+    input.providerToken
+  );
+  const store = createGoalCancelEvidenceStore({
+    integrationId: configuration.integrationId,
+    environment: configuration.environment,
+    execute: createPrimaryWalletEvidenceExecutor(configuration),
+  });
+  for (const reference of input.references) {
+    if (!schemas.reference.safeParse(reference).success) continue;
+    const match = await store.findByReference(reference);
+    if (!match) continue;
+    const outcome = await reconcilePrimaryWalletSavings(match.operationId, {
+      ...store,
+      queryProvider: createSavingsVerifyQueryProvider({
+        environment: configuration.environment,
+        token,
+        fetchImplementation: input.fetchImplementation,
+      }),
+    });
+    return outcome.status;
+  }
+  return 'unmatched';
 }
 
 /**

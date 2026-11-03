@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { getPrimaryCustomerSavingsFeatureSettings } from '@/app/api/storefront/customer/savings/customer-savings-feature-settings';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { isPrimaryWalletGoalCancelIssued } from '@/lib/piggyvest/goal-cancel-runtime';
 import { buildGoalPinBinding } from '@/lib/piggyvest/goal-pin-binding';
 import {
   isActiveOwnGoal,
@@ -105,6 +106,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         : await isActiveOwnGoal(ownership);
     if (!owned)
       return refuse('That savings goal was not found.', 'GOAL_NOT_FOUND', 404);
+    // A cancel proof is only minted for an operation id this database issued
+    // for this customer and goal and that has not expired, so an invented or
+    // foreign id can never hold one of the customer's live proof slots.
+    if (input.action === 'cancel') {
+      const issued = await isPrimaryWalletGoalCancelIssued({
+        configuration: runtime.configuration,
+        scope: {
+          merchantId: identity.merchantId,
+          customerId: identity.customerId,
+          userId: identity.userId,
+          integrationId: runtime.configuration.integrationId,
+          environment: runtime.configuration.environment,
+          businessId: runtime.businessId,
+        },
+        goalId: input.goalId,
+        operationId: input.operationId,
+      });
+      if (!issued)
+        return refuse(
+          'This cancellation is no longer valid. Please start again.',
+          'CANCEL_OPERATION_INVALID',
+          409
+        );
+    }
     const result = await verifyGoalPin({
       rpc: (name, args) => supabase.rpc(name, args),
       userId: identity.userId,

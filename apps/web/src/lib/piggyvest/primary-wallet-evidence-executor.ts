@@ -11,6 +11,7 @@ const statements = new Set([
   'SELECT piggyvest_primary.settle_savings($1::uuid,$2::text,$3::jsonb) AS result',
   'SELECT piggyvest_primary.release_failed_savings($1::uuid,$2::text,$3::jsonb) AS result',
   GOAL_CANCEL_STATEMENTS.readDispatched,
+  GOAL_CANCEL_STATEMENTS.findByReference,
   GOAL_CANCEL_STATEMENTS.settle,
   GOAL_CANCEL_STATEMENTS.release,
   'SELECT piggyvest_primary.read_daily_reconciliation($1::uuid,$2::text,$3::jsonb) AS result',
@@ -46,7 +47,10 @@ export function createPrimaryWalletEvidenceExecutor(configuration: unknown) {
       piggyvestPrimarySavingsTransferSchemas.request.shape.operationId.parse(
         parameters[2]
       );
-    else if (statement.includes('find_dispatched_savings_by_reference'))
+    else if (
+      statement === GOAL_CANCEL_STATEMENTS.findByReference ||
+      statement.includes('find_dispatched_savings_by_reference')
+    )
       piggyvestPrimarySavingsTransferSchemas.reserved.shape.reference.parse(
         parameters[2]
       );

@@ -191,3 +191,36 @@ it('treats an ambiguous 404 or 5xx from the transfer POST as pending', async () 
   expect(await submitGoalCancel(request, p)).toEqual({ status: 'pending' });
   expect(p.lookupTransfer).not.toHaveBeenCalled();
 });
+
+it('releases the reservation and sends nothing when the balance is above the dispatch ceiling', async () => {
+  const p = ports();
+  p.retrieveWallet.mockImplementation(async (id: string) => ({
+    id,
+    api_customer_id: 'customer',
+    business_id: 'business',
+    currency: 'NGN',
+    status: 'active',
+    balance: id === 'goal-wallet' ? 10_000_000_000 : 50,
+  }));
+  expect(await submitGoalCancel(request, p)).toEqual({ status: 'too_large' });
+  expect(p.cancelBeforeDispatch).toHaveBeenCalledWith(request.operationId);
+  expect(p.claimDispatch).not.toHaveBeenCalled();
+  expect(p.transfer).not.toHaveBeenCalled();
+});
+
+it('still dispatches a balance exactly at the ceiling', async () => {
+  const p = ports();
+  p.retrieveWallet.mockImplementation(async (id: string) => ({
+    id,
+    api_customer_id: 'customer',
+    business_id: 'business',
+    currency: 'NGN',
+    status: 'active',
+    balance: id === 'goal-wallet' ? 9_999_999_999 : 50,
+  }));
+  expect(await submitGoalCancel(request, p)).toEqual({ status: 'pending' });
+  expect(p.claimDispatch).toHaveBeenCalledWith(
+    request.operationId,
+    9_999_999_999
+  );
+});

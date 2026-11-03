@@ -59,6 +59,16 @@ export function createGoalCancelStore(input: {
       ]);
       return schemas.reservationRows.parse(result.rows)[0].result;
     },
+    // Pre-check for the PIN verify route: true only for a live issued id
+    // this database issued for this customer and goal.
+    async isLiveIssued(goalId: string, operationId: string) {
+      const result = await input.execute(sql.checkIssued, [
+        scope,
+        schemas.goalId.parse(goalId),
+        schemas.operationId.parse(operationId),
+      ]);
+      return schemas.acknowledgement.parse(result.rows)[0].result;
+    },
     async readStatus(operationId: string) {
       const result = await input.execute(sql.status, [
         scope,

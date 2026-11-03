@@ -25,6 +25,7 @@ const parameterCounts = new Map<string, number>([
   [GOAL_CANCEL_STATEMENTS.reserve, 3],
   [GOAL_CANCEL_STATEMENTS.manage, 4],
   [GOAL_CANCEL_STATEMENTS.status, 2],
+  [GOAL_CANCEL_STATEMENTS.checkIssued, 3],
 ]);
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication

@@ -167,6 +167,7 @@ it('admits the goal cancel read, settlement and release statements only', async 
   const execute = createPrimaryWalletEvidenceExecutor(config);
   for (const [text, selection] of [
     [GOAL_CANCEL_STATEMENTS.readDispatched, operationId],
+    [GOAL_CANCEL_STATEMENTS.findByReference, 'pvb-cancel-reference'],
     [GOAL_CANCEL_STATEMENTS.settle, JSON.stringify({ operationId })],
     [GOAL_CANCEL_STATEMENTS.release, JSON.stringify({ operationId })],
   ] as const) {
@@ -186,6 +187,13 @@ it('admits the goal cancel read, settlement and release statements only', async 
     ])
   ).rejects.toThrow();
   // The authorizer-side statements are not evidence statements.
+  await expect(
+    execute(GOAL_CANCEL_STATEMENTS.checkIssued, [
+      config.integrationId,
+      'staging',
+      operationId,
+    ])
+  ).rejects.toThrow();
   await expect(
     execute(GOAL_CANCEL_STATEMENTS.issue, [
       config.integrationId,

@@ -71,6 +71,24 @@ export async function issuePrimaryWalletGoalCancel(input: {
   return await store.issue(schemas.goalId.parse(input.goalId));
 }
 
+/**
+ * True only for a live issued operation id for this customer and goal. The
+ * PIN verify route asks before minting a proof; the database still decides at
+ * reservation time.
+ */
+export async function isPrimaryWalletGoalCancelIssued(input: {
+  configuration: unknown;
+  scope: unknown;
+  goalId: unknown;
+  operationId: unknown;
+}) {
+  const { store } = bind(input);
+  return await store.isLiveIssued(
+    schemas.goalId.parse(input.goalId),
+    schemas.operationId.parse(input.operationId)
+  );
+}
+
 /** Step 2: spend the PIN proof, reserve, and move the full balance once. */
 export async function submitPrimaryWalletGoalCancel(input: {
   configuration: unknown;
@@ -182,7 +200,23 @@ export async function checkPrimaryWalletGoalCancelStatus(input: {
   }
   if (state === null) return { status: 'not_found' as const };
   if (state === 'confirmed') return { status: 'confirmed' as const };
-  if (state === 'released') return { status: 'released' as const };
+  if (state === 'released') {
+    // A released attempt that WAS dispatched can still turn out to have
+    // succeeded at the provider (indexed late). Re-check it: a verified
+    // success settles it, anything else leaves it released.
+    try {
+      const outcome = await runGoalCancelReconciliation({
+        configuration: evidence,
+        providerToken: token,
+        operationId,
+      });
+      if (outcome.status === 'confirmed')
+        return { status: 'confirmed' as const };
+    } catch {
+      // The status answer below is still the recorded state.
+    }
+    return { status: 'released' as const };
+  }
   if (state === 'issued') return { status: 'not_started' as const };
   if (state === 'reserved') return { status: 'pending' as const };
   return publicStatus(

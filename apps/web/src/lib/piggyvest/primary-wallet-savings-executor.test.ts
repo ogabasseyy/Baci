@@ -121,7 +121,7 @@ it('permits the fixed scope-bound pending adoption statement', async () => {
     ])
   ).rejects.toThrow('Savings statement unavailable');
 });
-it('permits the four goal cancel statements with their exact parameter counts', async () => {
+it('permits the five goal cancel statements with their exact parameter counts', async () => {
   const execute = createPrimaryWalletSavingsExecutor(config);
   const id = '55555555-5555-4555-8555-555555555555';
   const cases = [
@@ -132,6 +132,7 @@ it('permits the four goal cancel statements with their exact parameter counts', 
       [JSON.stringify(scope), id, 'dispatch', '5'],
     ],
     [GOAL_CANCEL_STATEMENTS.status, [JSON.stringify(scope), id]],
+    [GOAL_CANCEL_STATEMENTS.checkIssued, [JSON.stringify(scope), id, id]],
   ] as const;
   for (const [text, parameters] of cases) {
     mocks.query.mockResolvedValueOnce({

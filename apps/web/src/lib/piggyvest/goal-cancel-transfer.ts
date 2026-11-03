@@ -1,6 +1,9 @@
 import 'server-only';
 import type { z } from 'zod';
-import { piggyvestGoalCancelSchemas as schemas } from '@/schemas/piggyvest-goal-cancel';
+import {
+  GOAL_CANCEL_MAX_AMOUNT_KOBO,
+  piggyvestGoalCancelSchemas as schemas,
+} from '@/schemas/piggyvest-goal-cancel';
 import { isDefinitiveNoTransferRejection } from './primary-wallet-savings-transfer';
 import type { TransferReferenceLookup } from './transfer-reference-lookup';
 
@@ -100,6 +103,7 @@ export async function submitGoalCancel(
         | 'busy'
         | 'unavailable'
         | 'empty'
+        | 'too_large'
         | 'released';
     }
 > {
@@ -128,6 +132,12 @@ export async function submitGoalCancel(
   if (amountKobo < 1) {
     await ports.cancelBeforeDispatch(request.operationId).catch(() => false);
     return { status: 'empty' };
+  }
+  if (amountKobo > GOAL_CANCEL_MAX_AMOUNT_KOBO) {
+    // Above the shared dispatch ceiling: release the reservation now so the
+    // attempt is never left reserved with the PIN already spent.
+    await ports.cancelBeforeDispatch(request.operationId).catch(() => false);
+    return { status: 'too_large' };
   }
   if (!(await ports.claimDispatch(request.operationId, amountKobo)))
     return { status: 'pending' };

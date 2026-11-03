@@ -34,7 +34,12 @@ BEGIN
     'piggyvest_primary.read_dispatched_goal_cancel(uuid,text,uuid)',
     'piggyvest_primary.settle_goal_cancel(uuid,text,jsonb)',
     'piggyvest_primary.release_failed_goal_cancel(uuid,text,jsonb)',
-    'piggyvest_primary.block_funding_during_goal_cancel()'
+    'piggyvest_primary.block_funding_during_goal_cancel()',
+    'piggyvest_primary.find_dispatched_goal_cancel_by_reference(uuid,text,text)',
+    'piggyvest_primary.check_goal_cancel_issued(jsonb,uuid,uuid)',
+    'piggyvest_primary.block_unsettled_goal_cancel_customer_deletion()',
+    'piggyvest_primary.block_unsettled_goal_cancel_goal_deletion()',
+    'piggyvest_primary.block_redemption_during_goal_cancel()'
   ] LOOP
     v_oid := v_signature::regprocedure;
     IF NOT (SELECT proc.prosecdef FROM pg_catalog.pg_proc AS proc WHERE proc.oid = v_oid) THEN
@@ -58,12 +63,13 @@ BEGIN
     END IF;
   END LOOP;
 
-  -- The executor login reaches the cancel only through the four wrappers.
+  -- The executor login reaches the cancel only through the five wrappers.
   FOREACH v_signature IN ARRAY ARRAY[
     'piggyvest_primary.issue_goal_cancel(jsonb,uuid)',
     'piggyvest_primary.reserve_goal_cancel_with_pin(jsonb,jsonb,text)',
     'piggyvest_primary.manage_goal_cancel(jsonb,uuid,text,bigint)',
-    'piggyvest_primary.read_goal_cancel_status(jsonb,uuid)'
+    'piggyvest_primary.read_goal_cancel_status(jsonb,uuid)',
+    'piggyvest_primary.check_goal_cancel_issued(jsonb,uuid,uuid)'
   ] LOOP
     IF NOT pg_catalog.has_function_privilege('piggyvest_primary_authorizer', v_signature::regprocedure, 'EXECUTE') THEN
       RAISE EXCEPTION '% must be executable by piggyvest_primary_authorizer', v_signature;
@@ -77,7 +83,8 @@ BEGIN
   FOREACH v_signature IN ARRAY ARRAY[
     'piggyvest_primary.read_dispatched_goal_cancel(uuid,text,uuid)',
     'piggyvest_primary.settle_goal_cancel(uuid,text,jsonb)',
-    'piggyvest_primary.release_failed_goal_cancel(uuid,text,jsonb)'
+    'piggyvest_primary.release_failed_goal_cancel(uuid,text,jsonb)',
+    'piggyvest_primary.find_dispatched_goal_cancel_by_reference(uuid,text,text)'
   ] LOOP
     IF NOT pg_catalog.has_function_privilege('piggyvest_primary_evidence', v_signature::regprocedure, 'EXECUTE') THEN
       RAISE EXCEPTION '% must be executable by piggyvest_primary_evidence', v_signature;
@@ -109,6 +116,24 @@ BEGIN
                   WHERE trg.tgrelid = 'piggyvest_primary.savings_operations'::regclass
                     AND trg.tgname = 'block_funding_during_goal_cancel' AND NOT trg.tgisinternal) THEN
     RAISE EXCEPTION 'funding fence trigger is missing';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger AS trg
+                  WHERE trg.tgrelid = 'public.customer_savings_redemptions'::regclass
+                    AND trg.tgname = 'block_redemption_during_goal_cancel' AND NOT trg.tgisinternal) THEN
+    RAISE EXCEPTION 'redemption fence trigger is missing';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger AS trg
+                  WHERE trg.tgrelid = 'public.customers'::regclass
+                    AND trg.tgname = 'primary_goal_cancel_block_unsettled_customer_deletion' AND NOT trg.tgisinternal)
+     OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger AS trg
+                  WHERE trg.tgrelid = 'public.customer_savings_goals'::regclass
+                    AND trg.tgname = 'primary_goal_cancel_block_unsettled_goal_deletion' AND NOT trg.tgisinternal) THEN
+    RAISE EXCEPTION 'deletion guard triggers are missing';
+  END IF;
+  -- Funding availability counts a confirmed refund.
+  IF pg_catalog.pg_get_functiondef('piggyvest_primary.reserve_savings_before_interest(jsonb,jsonb)'::regprocedure)
+     NOT LIKE '%goal_cancel_operations%' THEN
+    RAISE EXCEPTION 'funding availability does not count a confirmed goal cancel refund';
   END IF;
 END
 $catalog$;

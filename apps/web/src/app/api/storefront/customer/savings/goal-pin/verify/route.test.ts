@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   features: vi.fn(),
   goal: vi.fn(),
   cancellable: vi.fn(),
+  issued: vi.fn(),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
@@ -31,6 +32,9 @@ vi.mock(
 vi.mock('@/lib/piggyvest/goal-pin-fund-eligibility', () => ({
   isActiveOwnGoal: mocks.goal,
   isCancellableOwnGoal: mocks.cancellable,
+}));
+vi.mock('@/lib/piggyvest/goal-cancel-runtime', () => ({
+  isPrimaryWalletGoalCancelIssued: mocks.issued,
 }));
 vi.mock('@/lib/piggyvest/goal-pin-verify', () => ({
   verifyGoalPin: mocks.verify,
@@ -75,7 +79,12 @@ beforeEach(() => {
   });
   mocks.csrf.mockResolvedValue({ valid: true });
   mocks.runtime.mockReturnValue({ merchantId });
-  mocks.recovery.mockReturnValue({ merchantId });
+  mocks.recovery.mockReturnValue({
+    merchantId,
+    businessId: 'business',
+    configuration: { integrationId: 'integration', environment: 'staging' },
+  });
+  mocks.issued.mockResolvedValue(true);
   mocks.identity.mockResolvedValue({
     merchantId,
     customerId: 'c',
@@ -165,6 +174,34 @@ it('returns a proof for cancel bound to the goal and the server-issued operation
   );
   expect(mocks.cancellable).toHaveBeenCalledOnce();
   expect(mocks.goal).not.toHaveBeenCalled();
+});
+it('mints no cancel proof for an operation id that is not live for this customer and goal', async () => {
+  mocks.issued.mockResolvedValue(false);
+  const response = await call(cancel);
+  expect(response.status).toBe(409);
+  expect((await response.json()).code).toBe('CANCEL_OPERATION_INVALID');
+  expect(mocks.verify).not.toHaveBeenCalled();
+  expect(mocks.issued).toHaveBeenCalledWith(
+    expect.objectContaining({
+      goalId,
+      operationId,
+      scope: expect.objectContaining({
+        customerId: 'c',
+        merchantId,
+        integrationId: 'integration',
+      }),
+    })
+  );
+});
+it('does not ask the cancel store about a funding proof', async () => {
+  await call(fund);
+  expect(mocks.issued).not.toHaveBeenCalled();
+});
+it('fails closed when the live-operation check is unavailable', async () => {
+  mocks.issued.mockRejectedValue(new Error('database down'));
+  const response = await call(cancel);
+  expect(response.status).toBe(503);
+  expect(mocks.verify).not.toHaveBeenCalled();
 });
 it('keeps cancel working with the savings runtime, feature setting and flags off', async () => {
   mocks.runtime.mockReturnValue(null);

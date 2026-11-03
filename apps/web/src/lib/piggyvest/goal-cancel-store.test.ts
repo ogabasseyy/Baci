@@ -113,3 +113,19 @@ it('reads the attempt state, null when unknown', async () => {
     await store([{ result: 'dispatched' }]).store.readStatus(operationId)
   ).toBe('dispatched');
 });
+
+it('asks the fixed statement whether an operation id is live for the goal', async () => {
+  const { execute, store: s } = store([{ result: true }]);
+  expect(await s.isLiveIssued(goalId, operationId)).toBe(true);
+  expect(execute).toHaveBeenCalledWith(sql.checkIssued, [
+    scopeText,
+    goalId,
+    operationId,
+  ]);
+});
+
+it('refuses a malformed operation id before any statement runs', async () => {
+  const { execute, store: s } = store([{ result: true }]);
+  await expect(s.isLiveIssued(goalId, 'not-a-uuid')).rejects.toThrow();
+  expect(execute).not.toHaveBeenCalled();
+});

@@ -2,7 +2,9 @@ import { z } from 'zod';
 import { piggyvestProviderIdSchema } from './piggyvest-provider-id';
 
 const proof = z.string().regex(/^[0-9a-f]{64}$/);
-const amountKobo = z.int().positive().max(9999999999);
+// The shared ledger / reconciliation bound for one PiggyVest savings amount.
+export const GOAL_CANCEL_MAX_AMOUNT_KOBO = 9999999999;
+const amountKobo = z.int().positive().max(GOAL_CANCEL_MAX_AMOUNT_KOBO);
 
 // Cancel is two customer steps: the server issues a per-attempt operation id,
 // then the customer submits it with the PIN proof bound to that id. The
@@ -38,6 +40,7 @@ export const piggyvestGoalCancelSchemas = {
   }),
   operationId: z.uuid(),
   goalId: z.uuid(),
+  reference: z.string().min(1).max(200),
   pinProof: proof,
   amountKobo,
   reservation: cancelReservation,
@@ -48,6 +51,8 @@ export const piggyvestGoalCancelSchemas = {
     business_id: piggyvestProviderIdSchema,
     currency: z.literal('NGN'),
     status: z.literal('active'),
+    // Unbounded on purpose: a balance above the dispatch ceiling must parse so
+    // the transfer step can release the reservation cleanly (too_large).
     balance: z.int().nonnegative(),
   }),
   issueRows: z
@@ -110,4 +115,6 @@ export const piggyvestGoalCancelSchemas = {
     )
     .length(1),
   acknowledgement: z.array(z.strictObject({ result: z.boolean() })).length(1),
+  // Dispatched-or-released-after-dispatch attempt found by provider reference.
+  referenceMatch: z.strictObject({ operationId: z.uuid() }),
 };

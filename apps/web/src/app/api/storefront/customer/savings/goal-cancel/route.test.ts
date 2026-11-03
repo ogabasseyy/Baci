@@ -172,6 +172,7 @@ it.each([
   [{ status: 'pin_refused', reason: 'mismatch' }, 403, 'PIN_PROOF_REFUSED'],
   [{ status: 'released' }, 409, 'CANCEL_REJECTED'],
   [{ status: 'empty' }, 409, 'NOTHING_TO_REFUND'],
+  [{ status: 'too_large' }, 409, 'AMOUNT_TOO_LARGE'],
   [{ status: 'expired' }, 409, 'CANCEL_EXPIRED'],
   [{ status: 'busy' }, 409, 'CANCEL_BUSY'],
   [{ status: 'conflict' }, 409, 'CANCEL_CONFLICT'],

@@ -17,6 +17,16 @@ const noopLogger = {
 };
 
 describe('web cron worker', () => {
+  it('calls the Oxygen callback drain with the cron secret', async () => {
+    let authorization;
+    await runWebCron({
+      path: '/api/cron/oxygen-callback-reconciliation',
+      env: { BACI_WEB_BASE_URL: 'https://ogabassey.com', CRON_SECRET: 'secret' },
+      fetchFn: (_url, init) => { authorization = init.headers.Authorization; return new Response('{}'); },
+      logger: noopLogger,
+    });
+    assert.equal(authorization, 'Bearer secret');
+  });
   it('builds normalized URLs for allowlisted cron paths', () => {
     assert.equal(
       buildWebCronUrl({

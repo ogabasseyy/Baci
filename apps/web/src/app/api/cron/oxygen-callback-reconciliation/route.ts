@@ -6,7 +6,7 @@ import { reconcileOxygenCallbacks } from '@/lib/payments/oxygen/runtime-reconcil
 export const maxDuration = 120;
 const headers = { 'Cache-Control': 'no-store' };
 
-// A separate scheduler must invoke this endpoint; no scheduler is registered here.
+// The VPS schedule invokes this endpoint; the drain remains disabled by default.
 export async function GET(request: Request) {
   if (!hasValidCronSecret(request.headers, process.env.CRON_SECRET)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401, headers });

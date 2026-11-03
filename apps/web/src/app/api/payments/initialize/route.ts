@@ -9,6 +9,7 @@
  * - Proper separation of concerns
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { customAlphabet } from 'nanoid';
 import { type NextRequest, NextResponse } from 'next/server';
 import z from 'zod';
@@ -47,11 +48,13 @@ import {
   initializePayment as initializeKorapayPayment,
 } from '@/lib/korapay';
 import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings-defaults';
+import { checkPaystackDvaShippingEligibility } from '@/lib/payments/check-paystack-dva-shipping-eligibility';
 import { initializeRedvaultPaystackCheckout } from '@/lib/payments/initialize-redvault-paystack-checkout';
 import { initializeTransactionMetadata } from '@/lib/payments/initialize-transaction-metadata';
 import { persistPaystackDvaAssignment } from '@/lib/payments/persist-paystack-dva-assignment';
 import { redactPaymentLogValue } from '@/lib/payments/redact-payment-log-value';
 import { resolveChargeCurrency } from '@/lib/payments/resolve-charge-currency';
+import { resolvePaystackSplitTransactionCharge } from '@/lib/payments/resolve-paystack-split-transaction-charge';
 import {
   calculatePlatformFee as calculatePaystackFee,
   initializeTransaction as initializePaystackPayment,
@@ -879,10 +882,22 @@ async function initializePaystack(
   gatewaySettings: GatewaySettings,
   redirectUrl: string,
   reference: string,
-  merchantId: string
+  merchantId: string,
+  splitClient: Pick<SupabaseClient, 'rpc'>
 ): Promise<PaymentResult> {
   const amountInKobo = Math.round(data.amount * 100);
   const fees = calculatePaystackFee(amountInKobo);
+  // Baci keeps the platform fee plus any customer-paid GIG delivery fee;
+  // fail closed (throws) if the retained amount cannot be determined.
+  const { transactionChargeKobo, retainedShippingKobo } =
+    await resolvePaystackSplitTransactionCharge({
+      client: splitClient,
+      customerEmail: data.customer_email,
+      orderId: data.order_id,
+      merchantId,
+      amountKobo: amountInKobo,
+      platformFeeKobo: fees.platformFee,
+    });
 
   // 2026 Resilience: Ensure phone number is formatted to E.164 for Paystack compatibility
   const customerPhone = data.customer_phone
@@ -914,7 +929,7 @@ async function initializePaystack(
     reference,
     callback_url: redirectUrl,
     subaccount: merchant.paystack_subaccount_code as string,
-    transaction_charge: fees.platformFee,
+    transaction_charge: transactionChargeKobo,
     bearer: 'account',
     channels: getPaystackChannelsForCustomer(
       data,
@@ -931,6 +946,8 @@ async function initializePaystack(
       phone: customerPhone,
       phone_number: customerPhone,
       platform_fee: fees.platformFee / 100,
+      platform_fee_kobo: fees.platformFee,
+      retained_shipping_kobo: retainedShippingKobo,
       custom_fields: [
         {
           display_name: 'Phone Number',
@@ -961,7 +978,9 @@ async function initializePaystack(
     checkout_url: paystackData.authorization_url,
     reference,
     platformFee: fees.platformFee / 100,
-    merchantAmount: fees.merchantAmount / 100,
+    // The subaccount receives the amount minus Baci's whole charge, which
+    // now includes the retained GIG delivery fee.
+    merchantAmount: (fees.merchantAmount - retainedShippingKobo) / 100,
   };
 }
 
@@ -1678,6 +1697,25 @@ export async function POST(request: NextRequest) {
               );
             }
 
+            // A subaccount DVA gives Baci nothing, so an order that still
+            // owes Baci a GIG delivery fee must pay by card.
+            const dvaAmountKobo = Math.round(paymentData.amount * 100);
+            const dvaEligibility = await checkPaystackDvaShippingEligibility({
+              amountKobo: dvaAmountKobo,
+              client: await createServerSupabaseClient(),
+              customerEmail: paymentData.customer_email,
+              merchantId,
+              orderId: paymentData.order_id,
+              platformFeeKobo: calculatePaystackFee(dvaAmountKobo).platformFee,
+            });
+            if (!dvaEligibility.ok) {
+              return createErrorResponse(
+                dvaEligibility.message,
+                dvaEligibility.code,
+                dvaEligibility.status
+              );
+            }
+
             const { createDedicatedVirtualAccount } = await import(
               '@/lib/agentic/paystack'
             );
@@ -1743,7 +1781,8 @@ export async function POST(request: NextRequest) {
               gatewaySettings,
               redirectUrl,
               reference,
-              merchantId
+              merchantId,
+              await createServerSupabaseClient()
             );
           }
           break;

@@ -90,8 +90,29 @@ export async function POST(request: Request) {
         bank_account_name: string | null;
       };
 
-      const availableBalance = Number(wallet.available_balance);
       const minPayoutAmount = Number(wallet.min_payout_amount);
+
+      // Paystack-settled money cannot be paid out, so pay only the spendable
+      // balance (<= available_balance). Fail closed: never fall back to the
+      // raw available_balance when the RPC errors or returns junk.
+      const { data: spendableRaw, error: spendableError } = await supabase.rpc(
+        'get_merchant_wallet_spendable_balance',
+        { p_merchant_id: merchant.id }
+      );
+      const spendableBalance =
+        spendableRaw === null || spendableRaw === undefined
+          ? Number.NaN
+          : Number(spendableRaw);
+      if (spendableError || !Number.isFinite(spendableBalance)) {
+        results.failed++;
+        results.details.push({
+          merchantId: merchant.id,
+          status: 'failed',
+          error: 'Spendable balance unavailable',
+        });
+        continue;
+      }
+      const availableBalance = spendableBalance;
 
       // Skip if below minimum
       if (availableBalance < minPayoutAmount) {
@@ -99,7 +120,7 @@ export async function POST(request: Request) {
         results.details.push({
           merchantId: merchant.id,
           status: 'skipped',
-          error: `Balance ${availableBalance} below minimum ${minPayoutAmount}`,
+          error: `Spendable balance ${availableBalance} below minimum ${minPayoutAmount}`,
         });
         continue;
       }

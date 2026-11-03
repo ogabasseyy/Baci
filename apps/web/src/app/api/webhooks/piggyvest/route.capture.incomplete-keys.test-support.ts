@@ -4,6 +4,7 @@ import { drainPiggyvestWebhookCaptures } from '@/lib/piggyvest/webhook-capture-d
 import {
   isAuthorizationQuarantine,
   isKeySetIncompleteRetry,
+  isKillSwitchDeferred,
   processVerifiedDelivery,
 } from './process-delivery';
 import type { createFakeCaptureStore } from './route.capture-test-support';
@@ -87,6 +88,7 @@ export function replayDrain(store: ReturnType<typeof createFakeCaptureStore>) {
         status: response.status,
         authorizationQuarantine: isAuthorizationQuarantine(response),
         keySetIncomplete: isKeySetIncompleteRetry(response),
+        killSwitchDeferred: isKillSwitchDeferred(response),
       };
     },
   });

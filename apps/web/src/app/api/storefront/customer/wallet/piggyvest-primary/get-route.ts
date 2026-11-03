@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
+import { isPiggyvestFeatureFlagSet } from '@/lib/piggyvest/piggyvest-feature-on';
+import { isPiggyvestKilled } from '@/lib/piggyvest/piggyvest-kill-switch';
 import { createPrimaryWalletExecutor } from '@/lib/piggyvest/primary-wallet-executor';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import { readPrimaryWalletMapping } from '@/lib/piggyvest/primary-wallet-mapping';
@@ -7,7 +9,10 @@ import { hasPrimaryWalletOnboarding } from '@/lib/piggyvest/primary-wallet-prese
 import { getPrimaryWalletProviderOrigin } from '@/lib/piggyvest/primary-wallet-provider-origin';
 import { readPrimaryWalletReview } from '@/lib/piggyvest/primary-wallet-review';
 import { recoverPrimaryWalletRouting } from '@/lib/piggyvest/primary-wallet-routing-recovery';
-import { readPrimaryWalletRuntime } from '@/lib/piggyvest/primary-wallet-runtime';
+import {
+  readPrimaryWalletRuntime,
+  readPrimaryWalletRuntimeDrain,
+} from '@/lib/piggyvest/primary-wallet-runtime';
 import { readPrimaryWalletSnapshot } from '@/lib/piggyvest/primary-wallet-snapshot';
 import {
   notStartedPrimaryWalletSnapshot,
@@ -37,7 +42,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     );
   }
   try {
-    const runtime = readPrimaryWalletRuntime();
+    // Under the master kill switch the read-only view keeps working through
+    // the drain reader, so customers can still see their balance and goals.
+    // Routing recovery (which can promote a wallet) is new work and is skipped.
+    const killed = isPiggyvestKilled();
+    const runtime =
+      readPrimaryWalletRuntime() ??
+      (killed && isPiggyvestFeatureFlagSet('wallet')
+        ? readPrimaryWalletRuntimeDrain()
+        : null);
     if (!runtime || runtime.onboarding.merchantId !== parsed.data.merchantId) {
       return NextResponse.json(
         {
@@ -129,12 +142,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           { status: 409, headers: { 'Cache-Control': 'no-store' } }
         );
       }
-      const recovery = await recoverPrimaryWalletRouting({
-        scope,
-        execute,
-        retrieveWallet: (walletId) =>
-          retrievePiggyvestWallet(providerConfig, walletId),
-      }).catch(() => 'unavailable' as const);
+      // Recovery can promote a wallet, so it is new work: skipped when killed.
+      const recovery = killed
+        ? ('unavailable' as const)
+        : await recoverPrimaryWalletRouting({
+            scope,
+            execute,
+            retrieveWallet: (walletId) =>
+              retrievePiggyvestWallet(providerConfig, walletId),
+          }).catch(() => 'unavailable' as const);
       if (recovery === 'rejected') {
         // Recovery can reject for either an ownership contradiction or an
         // immutable routing contradiction. Re-read the persisted, scoped

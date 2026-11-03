@@ -1572,6 +1572,61 @@ function removeTrailingDuplicateSuffix(value: string, suffix: string): string {
   return normalizedValue;
 }
 
+const PLATFORM_ID_BY_ALIAS: Record<string, string> = {
+  ps5: 'ps5',
+  'playstation 5': 'ps5',
+  ps4: 'ps4',
+  'playstation 4': 'ps4',
+  ps3: 'ps3',
+  'playstation 3': 'ps3',
+  xbox: 'xbox',
+  'xbox one': 'xbox-one',
+  'xbox series x': 'xbox-series-x',
+  'xbox series s': 'xbox-series-s',
+  switch: 'switch',
+  'nintendo switch': 'switch',
+  'switch 2': 'switch-2',
+  'nintendo switch 2': 'switch-2',
+  pc: 'pc',
+  windows: 'pc',
+  steam: 'pc',
+};
+
+export function isRedundantPlatformListParenthetical(content: string): boolean {
+  const parts = content
+    .toLowerCase()
+    .split(/\s*(?:[,/&+;]|\band\b)\s*/u)
+    .map((part) => part.replace(/\s+/gu, ' ').trim());
+  if (parts.length < 2 || parts.some((part) => !part)) return false;
+
+  const identities = parts.map((part) =>
+    Object.hasOwn(PLATFORM_ID_BY_ALIAS, part)
+      ? PLATFORM_ID_BY_ALIAS[part]
+      : null
+  );
+  return (
+    identities.every((identity) => identity !== null) &&
+    new Set(identities).size >= 2
+  );
+}
+
+export function stripRedundantPlatformParentheticals(title: string): string {
+  let stripped = false;
+  const compacted = title.replace(
+    /\s*\(([^)]*)\)\s*(?=[,:;.!?]|$)|\s*\(([^)]*)\)\s*/gu,
+    (match, innerBeforePunct?: string, innerOther?: string) => {
+      const inner = innerBeforePunct ?? innerOther ?? '';
+      if (!isRedundantPlatformListParenthetical(inner)) {
+        return match;
+      }
+      stripped = true;
+      return innerBeforePunct !== undefined ? '' : ' ';
+    }
+  );
+
+  return stripped ? compacted.replace(/\s{2,}/gu, ' ').trim() : title;
+}
+
 /**
  * Generates a normalized SEO title with optional suffix and length cap.
  */
@@ -1620,13 +1675,43 @@ export function generateMetaTitle(
       const baseTitle = normalizedTitle
         .slice(0, normalizedTitle.length - suffixFragment.length)
         .trim();
+      const compactBaseTitle = stripRedundantPlatformParentheticals(baseTitle);
+      const effectiveBaseTitle =
+        compactBaseTitle && compactBaseTitle !== baseTitle
+          ? compactBaseTitle
+          : baseTitle;
+
+      if (
+        effectiveBaseTitle !== baseTitle &&
+        effectiveBaseTitle.length + suffixFragment.length <= maxLength
+      ) {
+        return `${effectiveBaseTitle}${suffixFragment}`;
+      }
+
       const allowedBaseLength =
         maxLength - suffixFragment.length - ELLIPSIS_LENGTH;
 
       if (allowedBaseLength > 0) {
-        return `${baseTitle.slice(0, allowedBaseLength)}${ELLIPSIS}${suffixFragment}`;
+        return `${effectiveBaseTitle.slice(0, allowedBaseLength)}${ELLIPSIS}${suffixFragment}`;
       }
     }
+  }
+
+  if (!suffix) {
+    const compactTitle = stripRedundantPlatformParentheticals(normalizedTitle);
+    const effectiveTitle =
+      compactTitle && compactTitle !== normalizedTitle
+        ? compactTitle
+        : normalizedTitle;
+
+    if (
+      effectiveTitle !== normalizedTitle &&
+      effectiveTitle.length <= maxLength
+    ) {
+      return effectiveTitle;
+    }
+
+    return `${effectiveTitle.slice(0, maxLength - ELLIPSIS_LENGTH)}${ELLIPSIS}`;
   }
 
   return `${normalizedTitle.slice(0, maxLength - ELLIPSIS_LENGTH)}${ELLIPSIS}`;

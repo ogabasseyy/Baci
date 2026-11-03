@@ -18,6 +18,8 @@ import {
   getIndexableRobotsMetadata,
   getProductUrl,
   getValidatedProductUrl,
+  isRedundantPlatformListParenthetical,
+  stripRedundantPlatformParentheticals,
 } from './seo-utils';
 import { makeSeoProduct as makeProduct } from './seo-utils-product-schema-test-helper';
 import type { MerchantTrustProfile } from './storefront-trust/merchant-trust-profile-types';
@@ -1415,6 +1417,349 @@ describe('generateMetaTitle', () => {
         maxLength: 70,
       })
     ).toBe('Restore your phone fast | Store');
+  });
+
+  describe('platform-list-only parenthetical compaction', () => {
+    it('compacts redundant platform list with suffix and returns full title without ellipsis', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2) - ₦112,000',
+          {
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - ₦112,000 | Ogabassey');
+    });
+
+    it('compacts (PS5 & Xbox Series X) when over maxLength', () => {
+      expect(
+        generateMetaTitle(
+          'Buy Monster Hunter Wilds (PS5 & Xbox Series X) at the Best Price Guaranteed',
+          {
+            maxLength: 70,
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe(
+        'Buy Monster Hunter Wilds at the Best Price Guaranteed | Ogabassey'
+      );
+    });
+
+    it('compacts (Nintendo Switch / Nintendo Switch 2) when over maxLength', () => {
+      expect(
+        generateMetaTitle(
+          'Buy The Legend of Zelda (Nintendo Switch / Nintendo Switch 2) Pre-Order Now',
+          {
+            maxLength: 70,
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe('Buy The Legend of Zelda Pre-Order Now | Ogabassey');
+    });
+
+    it('retains parenthetical untouched when short title already fits within maxLength', () => {
+      expect(
+        generateMetaTitle('EA Sports FC 27 (PS5, PS4)', {
+          maxLength: 60,
+        })
+      ).toBe('EA Sports FC 27 (PS5, PS4)');
+
+      expect(
+        generateMetaTitle('EA Sports FC 27 (PS5, PS4)', {
+          maxLength: 60,
+          suffix: 'Store',
+        })
+      ).toBe('EA Sports FC 27 (PS5, PS4) | Store');
+    });
+
+    it('preserves single-platform parentheticals even when over maxLength', () => {
+      const ps5 = generateMetaTitle(
+        'Buy EA Sports FC 27 (PS5) - Ultimate Edition With Lots of Extra Bonus Content',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(ps5).toContain('(PS5)');
+
+      const switchTitle = generateMetaTitle(
+        'The Legend of Zelda (Nintendo Switch) Tears of the Kingdom Special Edition Full Guide',
+        {
+          maxLength: 65,
+          suffix: 'Shop',
+        }
+      );
+      expect(switchTitle).toContain('(Nintendo Switch)');
+
+      const switch2 = generateMetaTitle(
+        'The Legend of Zelda (Nintendo Switch 2) Next Chapter Next-Gen Deluxe Set',
+        {
+          maxLength: 65,
+          suffix: 'Shop',
+        }
+      );
+      expect(switch2).toContain('(Nintendo Switch 2)');
+
+      const xbox = generateMetaTitle(
+        'Forza Motorsport (Xbox Series X) Premium Racing Championship Edition Deluxe Pack',
+        {
+          maxLength: 65,
+          suffix: 'Shop',
+        }
+      );
+      expect(xbox).toContain('(Xbox Series X)');
+    });
+
+    it('preserves single-platform synonym lists (fewer than 2 distinct identities) even when over maxLength', () => {
+      const ps5Synonyms = generateMetaTitle(
+        'EA Sports FC 27 (PS5 / PlayStation 5) Complete Season Pass and Pre-Order Bonus',
+        {
+          maxLength: 70,
+          suffix: 'Shop',
+        }
+      );
+      expect(ps5Synonyms).toContain('(PS5 / PlayStation 5)');
+
+      const pcSynonyms = generateMetaTitle(
+        'EA Sports FC 27 (PC / Windows / Steam) Complete Season Pass and Pre-Order Bonus',
+        {
+          maxLength: 70,
+          suffix: 'Shop',
+        }
+      );
+      expect(pcSynonyms).toContain('(PC / Windows / Steam)');
+    });
+
+    it('preserves mixed, unknown, edition, and condition qualifiers even when over maxLength', () => {
+      const mixed = generateMetaTitle(
+        'Sony PlayStation 5 (PS5, Disc Edition) Gaming Console with Extra DualSense Controller',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(mixed).toContain('(PS5, Disc Edition)');
+
+      const edition = generateMetaTitle(
+        'Sony PlayStation 5 Slim (Disc Edition) Gaming Console with Extra DualSense Controller',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(edition).toContain('(Disc Edition)');
+
+      const wifi = generateMetaTitle(
+        'Apple iPad Pro (Wi-Fi Only) 11-inch M4 Chip Liquid Retina Display Space Gray',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(wifi).toContain('(Wi-Fi Only)');
+
+      const refurbished = generateMetaTitle(
+        'Apple iPhone 14 Pro Max (Refurbished) 256GB Deep Purple Unlocked Grade A Best Deal',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(refurbished).toContain('(Refurbished)');
+    });
+
+    it('compacts unspaced parenthetical without token concatenation', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27(PS5, PS4) Edition Now Online at Best Price',
+          {
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe(
+        'Buy EA Sports FC 27 Edition Now Online at Best Price | Ogabassey'
+      );
+    });
+
+    it('compacts parenthetical before punctuation without leaving a leading space', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5, PS4): Best Price in Nigeria Today',
+          {
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe('Buy EA Sports FC 27: Best Price in Nigeria Today | Ogabassey');
+    });
+
+    it('slices compacted title to allowedBaseLength and appends ellipsis when still too long with suffix', () => {
+      const title = generateMetaTitle(
+        'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2) - Ultimate Championship Edition with Extra DLC and Season Pass',
+        {
+          maxLength: 70,
+          suffix: 'Ogabassey',
+        }
+      );
+      expect(title).toBe(
+        'Buy EA Sports FC 27 - Ultimate Championship Edition wit... | Ogabassey'
+      );
+      expect(title.length).toBeLessThanOrEqual(70);
+    });
+
+    it('preserves existing fallback slice behavior when suffix is overlong and allowedBaseLength <= 0', () => {
+      const title = generateMetaTitle(
+        'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2)',
+        {
+          maxLength: 20,
+          suffix: 'Very Long Merchant Suffix That Exceeds Max',
+        }
+      );
+      expect(title).toBe('Buy EA Sports FC ...');
+      expect(title.length).toBe(20);
+    });
+
+    it('handles genuine no-suffix path when title fits after compaction without ellipsis', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2) - Best Price',
+          {
+            maxLength: 50,
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - Best Price');
+    });
+
+    it('handles genuine no-suffix path when title is still too long after compaction', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2) - Ultimate Championship League Edition',
+          {
+            maxLength: 40,
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - Ultimate Champi...');
+    });
+
+    it('handles empty titles, fallbacks, and identity suffixes correctly', () => {
+      expect(generateMetaTitle('', { fallback: 'Default Title' })).toBe(
+        'Default Title'
+      );
+      expect(generateMetaTitle('')).toBe('');
+      expect(generateMetaTitle('Ogabassey', { suffix: 'Ogabassey' })).toBe(
+        'Ogabassey'
+      );
+    });
+  });
+
+  describe('isRedundantPlatformListParenthetical detector', () => {
+    it('returns true for multi-platform lists', () => {
+      expect(
+        isRedundantPlatformListParenthetical(
+          'PS5, PS4, Xbox, Switch & Switch 2'
+        )
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5 & Xbox Series X')).toBe(
+        true
+      );
+      expect(
+        isRedundantPlatformListParenthetical(
+          'Nintendo Switch / Nintendo Switch 2'
+        )
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('switch, pc')).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('playstation 4; xbox one; steam')
+      ).toBe(true);
+    });
+
+    it('returns false for single-platform parentheticals', () => {
+      expect(isRedundantPlatformListParenthetical('PS5')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Nintendo Switch')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Nintendo Switch 2')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox Series X')).toBe(false);
+    });
+
+    it('returns false for single-platform synonym lists with fewer than 2 distinct identities', () => {
+      expect(isRedundantPlatformListParenthetical('PS5 / PlayStation 5')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('PC / Windows / Steam')).toBe(
+        false
+      );
+    });
+
+    it('returns false for mixed, unknown, condition, or edition qualifiers', () => {
+      expect(isRedundantPlatformListParenthetical('PS5, Disc Edition')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Disc Edition')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Wi-Fi Only')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Refurbished')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS5, ')).toBe(false);
+    });
+  });
+
+  describe('stripRedundantPlatformParentheticals', () => {
+    it('strips redundant platform parentheticals and normalizes spacing and punctuation', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy EA Sports FC 27(PS5, PS4) Edition Now Online at Best Price'
+        )
+      ).toBe('Buy EA Sports FC 27 Edition Now Online at Best Price');
+
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy EA Sports FC 27 (PS5, PS4): Best Price in Nigeria Today'
+        )
+      ).toBe('Buy EA Sports FC 27: Best Price in Nigeria Today');
+
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy EA Sports FC 27 (PS5, PS4), Best Price'
+        )
+      ).toBe('Buy EA Sports FC 27, Best Price');
+
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy EA Sports FC 27 (PS5, PS4)! In Stock'
+        )
+      ).toBe('Buy EA Sports FC 27! In Stock');
+    });
+
+    it('preserves meaningful qualifiers unchanged', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'PlayStation 5 Console (Disc Edition)'
+        )
+      ).toBe('PlayStation 5 Console (Disc Edition)');
+
+      expect(
+        stripRedundantPlatformParentheticals('iPad Pro 11-inch (Wi-Fi Only)')
+      ).toBe('iPad Pro 11-inch (Wi-Fi Only)');
+
+      expect(
+        stripRedundantPlatformParentheticals('iPhone 13 128GB (Refurbished)')
+      ).toBe('iPhone 13 128GB (Refurbished)');
+    });
+
+    it('does not mutate unrelated punctuation spacing elsewhere in the string', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy Console (Disc Edition) : Best Price ... Guaranteed !'
+        )
+      ).toBe('Buy Console (Disc Edition) : Best Price ... Guaranteed !');
+
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy Game (PS5, PS4) : Best Price ... Guaranteed !'
+        )
+      ).toBe('Buy Game: Best Price ... Guaranteed !');
+    });
   });
 });
 

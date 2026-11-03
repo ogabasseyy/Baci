@@ -256,9 +256,14 @@ export async function stepDoubleTap(
   const secondSeen =
     (rowsAfter !== null && rowsAfter > 1) ||
     (extraDebit !== null && extraDebit !== 0);
+  // A usable list with fewer rows than the one already established is an
+  // inconsistent read (lag, paging), not evidence about the repeat.
+  const rowsShrank =
+    rowsBefore !== null && rowsAfter !== null && rowsAfter < rowsBefore;
   const answer: Answer = secondSeen
     ? 'no'
     : rowsBefore === null ||
+        rowsShrank ||
         rowsAfter === null ||
         extraDebit === null ||
         accepted

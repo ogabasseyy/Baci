@@ -31,6 +31,9 @@ describe('transferVerdict', () => {
     expect(v.answer).toBe('unknown');
     expect(v.detail).toContain('credit is below the amount');
   });
+  it('is no when the fee is deducted from BOTH wallets (counted once only)', () => {
+    expect(transferVerdict(1000, 1100, 900, 100).answer).toBe('no');
+  });
   it('is no for a double debit even when the credit is short', () => {
     expect(transferVerdict(1000, 2000, 900, null).answer).toBe('no');
   });

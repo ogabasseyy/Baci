@@ -42,6 +42,14 @@ export function transferVerdict(
   const credit = creditedOnce(amountKobo, creditKobo, feeKobo);
   if (debit === 'no' || credit === 'no')
     return { answer: 'no', detail: undefined };
+  // A recorded fee explains the difference ONCE across both wallets: a debit
+  // above the amount AND a credit below it would charge it twice.
+  const feeTwice =
+    feeKobo !== null &&
+    feeKobo !== 0 &&
+    debitKobo > amountKobo &&
+    creditKobo < amountKobo;
+  if (feeTwice) return { answer: 'no', detail: undefined };
   if (debit === 'yes' && credit === 'yes')
     return { answer: 'yes', detail: undefined };
   const parts: string[] = [];

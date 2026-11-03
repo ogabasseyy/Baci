@@ -1,0 +1,193 @@
+import { beforeEach, expect, it, vi } from 'vitest';
+import { PiggyvestApiError } from './client';
+import { submitGoalCancel } from './goal-cancel-transfer';
+
+vi.mock('server-only', () => ({}));
+const request = {
+  goalId: '00000000-0000-4000-8000-000000000001',
+  operationId: '00000000-0000-4000-8000-000000000002',
+};
+const reservation = {
+  ...request,
+  sourceWalletId: 'goal-wallet',
+  destinationWalletId: 'main-wallet',
+  businessId: 'business',
+  providerCustomerId: 'customer',
+  reference: 'pvb-cancel-00000000-0000-4000-8000-000000000001',
+};
+const BALANCE = 123456;
+function ports() {
+  return {
+    reserve: vi.fn().mockResolvedValue({ status: 'claimed', reservation }),
+    retrieveWallet: vi.fn(async (id: string) => ({
+      id,
+      api_customer_id: 'customer',
+      business_id: 'business',
+      currency: 'NGN',
+      status: 'active',
+      balance: id === 'goal-wallet' ? BALANCE : 50,
+    })),
+    claimDispatch: vi.fn().mockResolvedValue(true),
+    cancelBeforeDispatch: vi.fn().mockResolvedValue(true),
+    lookupTransfer: vi.fn().mockResolvedValue('not_found'),
+    releaseAfterRejection: vi.fn().mockResolvedValue(true),
+    transfer: vi.fn().mockResolvedValue({ accepted: true }),
+  };
+}
+beforeEach(() => vi.clearAllMocks());
+
+it('moves the full balance PiggyVest reports from the goal wallet to the main wallet', async () => {
+  const p = ports();
+  expect(await submitGoalCancel(request, p)).toEqual({ status: 'pending' });
+  expect(p.claimDispatch).toHaveBeenCalledWith(request.operationId, BALANCE);
+  expect(p.transfer).toHaveBeenCalledOnce();
+  expect(p.transfer).toHaveBeenCalledWith({
+    reservation,
+    amountKobo: BALANCE,
+  });
+  // The balance is read from the provider, never derived locally.
+  expect(p.retrieveWallet).toHaveBeenCalledWith('goal-wallet');
+  expect(p.retrieveWallet).toHaveBeenCalledWith('main-wallet');
+});
+
+it.each([
+  { status: 'pin_refused', reason: 'missing' },
+  { status: 'confirmed' },
+  { status: 'conflict' },
+  { status: 'expired' },
+  { status: 'busy' },
+])('returns %j without touching the provider', async (claim) => {
+  const p = ports();
+  p.reserve.mockResolvedValue(claim);
+  expect(await submitGoalCancel(request, p)).toEqual(claim);
+  expect(p.retrieveWallet).not.toHaveBeenCalled();
+  expect(p.transfer).not.toHaveBeenCalled();
+});
+
+it('never resends a replayed attempt that is already pending', async () => {
+  const p = ports();
+  p.reserve.mockResolvedValue({ status: 'pending' });
+  expect(await submitGoalCancel(request, p)).toEqual({ status: 'pending' });
+  expect(p.claimDispatch).not.toHaveBeenCalled();
+  expect(p.transfer).not.toHaveBeenCalled();
+});
+
+it('refuses a reservation that is not for the requested goal and attempt', async () => {
+  const p = ports();
+  p.reserve.mockResolvedValue({
+    status: 'claimed',
+    reservation: {
+      ...reservation,
+      goalId: '00000000-0000-4000-8000-0000000000ff',
+    },
+  });
+  await expect(submitGoalCancel(request, p)).rejects.toThrow(
+    'Goal cancel ownership unavailable'
+  );
+  expect(p.transfer).not.toHaveBeenCalled();
+});
+
+it.each([
+  ['a wallet owned by another provider customer', { api_customer_id: 'other' }],
+  ['a wallet in another business', { business_id: 'other-business' }],
+  ['an inactive wallet', { status: 'frozen' }],
+])('cancels before dispatch on %s', async (_name, override) => {
+  const p = ports();
+  p.retrieveWallet.mockImplementation(async (id: string) => ({
+    id,
+    api_customer_id: 'customer',
+    business_id: 'business',
+    currency: 'NGN',
+    status: 'active',
+    balance: BALANCE,
+    ...(id === 'goal-wallet' ? override : {}),
+  }));
+  expect(await submitGoalCancel(request, p)).toEqual({ status: 'unavailable' });
+  expect(p.cancelBeforeDispatch).toHaveBeenCalledWith(request.operationId);
+  expect(p.claimDispatch).not.toHaveBeenCalled();
+  expect(p.transfer).not.toHaveBeenCalled();
+});
+
+it('cancels before dispatch when the provider wallet read fails', async () => {
+  const p = ports();
+  p.retrieveWallet.mockRejectedValue(new Error('timeout'));
+  expect(await submitGoalCancel(request, p)).toEqual({ status: 'unavailable' });
+  expect(p.cancelBeforeDispatch).toHaveBeenCalledOnce();
+  expect(p.transfer).not.toHaveBeenCalled();
+});
+
+it('has nothing to refund when the goal wallet is empty', async () => {
+  const p = ports();
+  p.retrieveWallet.mockImplementation(async (id: string) => ({
+    id,
+    api_customer_id: 'customer',
+    business_id: 'business',
+    currency: 'NGN',
+    status: 'active',
+    balance: 0,
+  }));
+  expect(await submitGoalCancel(request, p)).toEqual({ status: 'empty' });
+  expect(p.cancelBeforeDispatch).toHaveBeenCalledOnce();
+  expect(p.transfer).not.toHaveBeenCalled();
+});
+
+it('stays pending without sending when the dispatch claim is lost', async () => {
+  const p = ports();
+  p.claimDispatch.mockResolvedValue(false);
+  expect(await submitGoalCancel(request, p)).toEqual({ status: 'pending' });
+  expect(p.transfer).not.toHaveBeenCalled();
+});
+
+it('holds pending and never resends after a timeout', async () => {
+  const p = ports();
+  p.transfer.mockRejectedValue(
+    new PiggyvestApiError('PIGGYVEST_NETWORK_ERROR', 'timeout')
+  );
+  expect(await submitGoalCancel(request, p)).toEqual({ status: 'pending' });
+  expect(p.transfer).toHaveBeenCalledOnce();
+  expect(p.releaseAfterRejection).not.toHaveBeenCalled();
+});
+
+it('releases only after a definitive rejection with no transfer found', async () => {
+  const p = ports();
+  p.transfer.mockRejectedValue(
+    new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'bad', 422)
+  );
+  expect(await submitGoalCancel(request, p)).toEqual({ status: 'released' });
+  expect(p.lookupTransfer).toHaveBeenCalledOnce();
+  expect(p.releaseAfterRejection).toHaveBeenCalledWith(request.operationId);
+});
+
+it.each([
+  'pending',
+  'submitted',
+  'failed',
+  'uncertain',
+] as const)('keeps a rejected attempt pending when the lookup says %s', async (lookup) => {
+  const p = ports();
+  p.transfer.mockRejectedValue(
+    new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'bad', 422)
+  );
+  p.lookupTransfer.mockResolvedValue(lookup);
+  expect(await submitGoalCancel(request, p)).toEqual({ status: 'pending' });
+  expect(p.releaseAfterRejection).not.toHaveBeenCalled();
+});
+
+it('keeps a rejected attempt pending when the lookup itself fails', async () => {
+  const p = ports();
+  p.transfer.mockRejectedValue(
+    new PiggyvestApiError('PIGGYVEST_AUTH_ERROR', 'no', 401)
+  );
+  p.lookupTransfer.mockRejectedValue(new Error('down'));
+  expect(await submitGoalCancel(request, p)).toEqual({ status: 'pending' });
+  expect(p.releaseAfterRejection).not.toHaveBeenCalled();
+});
+
+it('treats an ambiguous 404 or 5xx from the transfer POST as pending', async () => {
+  const p = ports();
+  p.transfer.mockRejectedValue(
+    new PiggyvestApiError('PIGGYVEST_REQUEST_ERROR', 'oops', 503)
+  );
+  expect(await submitGoalCancel(request, p)).toEqual({ status: 'pending' });
+  expect(p.lookupTransfer).not.toHaveBeenCalled();
+});

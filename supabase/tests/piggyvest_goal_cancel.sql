@@ -1,0 +1,116 @@
+-- REGRESSION TEST: privileges and shape of the goal cancel refund objects
+-- (migration 20261103085004_piggyvest_goal_cancel_refund).
+--
+-- Catalog checks only, never call-and-catch (a denied EXECUTE cannot be
+-- trapped on the replay image). Registered in the replay registry folder
+-- 20261103085004_piggyvest_goal_cancel_refund.
+
+BEGIN;
+
+DO $catalog$
+DECLARE
+  v_signature text;
+  v_oid regprocedure;
+  v_role text;
+BEGIN
+  -- The attempt table is row-level-secured and closed to every API role.
+  IF NOT COALESCE((SELECT class.relrowsecurity FROM pg_catalog.pg_class AS class
+                    WHERE class.oid = 'piggyvest_primary.goal_cancel_operations'::regclass), false) THEN
+    RAISE EXCEPTION 'goal_cancel_operations must have row level security';
+  END IF;
+  FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated', 'service_role',
+                                'piggyvest_primary_authorizer', 'piggyvest_primary_evidence'] LOOP
+    IF pg_catalog.has_table_privilege(v_role, 'piggyvest_primary.goal_cancel_operations',
+                                      'SELECT,INSERT,UPDATE,DELETE') THEN
+      RAISE EXCEPTION 'goal_cancel_operations must not be accessible to %', v_role;
+    END IF;
+  END LOOP;
+
+  FOREACH v_signature IN ARRAY ARRAY[
+    'piggyvest_primary.issue_goal_cancel(jsonb,uuid)',
+    'piggyvest_primary.reserve_goal_cancel_with_pin(jsonb,jsonb,text)',
+    'piggyvest_primary.manage_goal_cancel(jsonb,uuid,text,bigint)',
+    'piggyvest_primary.read_goal_cancel_status(jsonb,uuid)',
+    'piggyvest_primary.read_dispatched_goal_cancel(uuid,text,uuid)',
+    'piggyvest_primary.settle_goal_cancel(uuid,text,jsonb)',
+    'piggyvest_primary.release_failed_goal_cancel(uuid,text,jsonb)',
+    'piggyvest_primary.block_funding_during_goal_cancel()'
+  ] LOOP
+    v_oid := v_signature::regprocedure;
+    IF NOT (SELECT proc.prosecdef FROM pg_catalog.pg_proc AS proc WHERE proc.oid = v_oid) THEN
+      RAISE EXCEPTION '% must be SECURITY DEFINER', v_signature;
+    END IF;
+    IF NOT COALESCE((SELECT proc.proconfig @> ARRAY['search_path=""']
+                       FROM pg_catalog.pg_proc AS proc WHERE proc.oid = v_oid), false) THEN
+      RAISE EXCEPTION '% must pin an empty search_path', v_signature;
+    END IF;
+    FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated', 'service_role'] LOOP
+      IF pg_catalog.has_function_privilege(v_role, v_oid, 'EXECUTE') THEN
+        RAISE EXCEPTION '% must not be executable by %', v_signature, v_role;
+      END IF;
+    END LOOP;
+    IF EXISTS (
+      SELECT 1 FROM pg_catalog.pg_proc AS proc,
+             pg_catalog.aclexplode(COALESCE(proc.proacl, pg_catalog.acldefault('f', proc.proowner))) AS acl
+       WHERE proc.oid = v_oid AND acl.grantee = 0
+    ) THEN
+      RAISE EXCEPTION '% must not be executable by PUBLIC', v_signature;
+    END IF;
+  END LOOP;
+
+  -- The executor login reaches the cancel only through the four wrappers.
+  FOREACH v_signature IN ARRAY ARRAY[
+    'piggyvest_primary.issue_goal_cancel(jsonb,uuid)',
+    'piggyvest_primary.reserve_goal_cancel_with_pin(jsonb,jsonb,text)',
+    'piggyvest_primary.manage_goal_cancel(jsonb,uuid,text,bigint)',
+    'piggyvest_primary.read_goal_cancel_status(jsonb,uuid)'
+  ] LOOP
+    IF NOT pg_catalog.has_function_privilege('piggyvest_primary_authorizer', v_signature::regprocedure, 'EXECUTE') THEN
+      RAISE EXCEPTION '% must be executable by piggyvest_primary_authorizer', v_signature;
+    END IF;
+    IF pg_catalog.has_function_privilege('piggyvest_primary_evidence', v_signature::regprocedure, 'EXECUTE') THEN
+      RAISE EXCEPTION '% must not be executable by piggyvest_primary_evidence', v_signature;
+    END IF;
+  END LOOP;
+
+  -- Settlement and release belong to the evidence login only.
+  FOREACH v_signature IN ARRAY ARRAY[
+    'piggyvest_primary.read_dispatched_goal_cancel(uuid,text,uuid)',
+    'piggyvest_primary.settle_goal_cancel(uuid,text,jsonb)',
+    'piggyvest_primary.release_failed_goal_cancel(uuid,text,jsonb)'
+  ] LOOP
+    IF NOT pg_catalog.has_function_privilege('piggyvest_primary_evidence', v_signature::regprocedure, 'EXECUTE') THEN
+      RAISE EXCEPTION '% must be executable by piggyvest_primary_evidence', v_signature;
+    END IF;
+    IF pg_catalog.has_function_privilege('piggyvest_primary_authorizer', v_signature::regprocedure, 'EXECUTE') THEN
+      RAISE EXCEPTION '% must not be executable by piggyvest_primary_authorizer', v_signature;
+    END IF;
+  END LOOP;
+
+  -- The unbound consume path stays closed to the executor login: cancel is
+  -- reachable only through the operation-bound wrapper above.
+  IF pg_catalog.has_function_privilege('piggyvest_primary_authorizer',
+       'piggyvest_primary.consume_goal_pin_proof(jsonb,uuid,text,text)'::regprocedure, 'EXECUTE') THEN
+    RAISE EXCEPTION 'piggyvest_primary_authorizer must not execute consume_goal_pin_proof';
+  END IF;
+  IF pg_catalog.has_function_privilege('piggyvest_primary_authorizer',
+       'piggyvest_primary.reserve_savings(jsonb,jsonb)'::regprocedure, 'EXECUTE') THEN
+    RAISE EXCEPTION 'piggyvest_primary_authorizer must not execute reserve_savings directly';
+  END IF;
+
+  -- One live attempt per goal is a database rule, and funding is fenced.
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_indexes AS idx
+                  WHERE idx.schemaname = 'piggyvest_primary'
+                    AND idx.indexname = 'goal_cancel_one_live_per_goal_idx'
+                    AND idx.indexdef LIKE '%UNIQUE%') THEN
+    RAISE EXCEPTION 'one live cancel per goal index is missing';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_trigger AS trg
+                  WHERE trg.tgrelid = 'piggyvest_primary.savings_operations'::regclass
+                    AND trg.tgname = 'block_funding_during_goal_cancel' AND NOT trg.tgisinternal) THEN
+    RAISE EXCEPTION 'funding fence trigger is missing';
+  END IF;
+END
+$catalog$;
+
+ROLLBACK;

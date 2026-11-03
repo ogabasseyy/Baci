@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   features: vi.fn(),
   goal: vi.fn(),
+  cancellable: vi.fn(),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
@@ -29,6 +30,7 @@ vi.mock(
 );
 vi.mock('@/lib/piggyvest/goal-pin-fund-eligibility', () => ({
   isActiveOwnGoal: mocks.goal,
+  isCancellableOwnGoal: mocks.cancellable,
 }));
 vi.mock('@/lib/piggyvest/goal-pin-verify', () => ({
   verifyGoalPin: mocks.verify,
@@ -46,7 +48,14 @@ const fund = {
   operationId,
   amountKobo: 2000,
 };
-const cancel = { merchantId, pin: '482915', action: 'cancel', goalId };
+const cancel = {
+  merchantId,
+  pin: '482915',
+  action: 'cancel',
+  goalId,
+  operationId,
+};
+const complete = { merchantId, pin: '482915', action: 'complete', goalId };
 function call(body: unknown) {
   return POST(
     new NextRequest(
@@ -74,6 +83,7 @@ beforeEach(() => {
   });
   mocks.features.mockResolvedValue({ savingsEnabled: true });
   mocks.goal.mockResolvedValue(true);
+  mocks.cancellable.mockResolvedValue(true);
   mocks.verify.mockResolvedValue({
     status: 'verified',
     proof,
@@ -97,6 +107,7 @@ it.each([
   { ...fund, amountKobo: 0 },
   { ...fund, extra: 1 },
   { ...cancel, amountKobo: 5 },
+  { merchantId, pin: '482915', action: 'cancel', goalId },
   { merchantId, pin: '1234', action: 'spend', goalId },
 ])('rejects malformed input %j before any check', async (body) => {
   expect((await call(body)).status).toBe(400);
@@ -126,20 +137,56 @@ it('fails closed for funding when the savings runtime is off', async () => {
   expect(response.status).toBe(503);
   expect(mocks.verify).not.toHaveBeenCalled();
 });
-it.each([
-  'cancel',
-  'complete',
-] as const)('refuses %s before any PIN check until proofs bind to a server-issued operation', async (action) => {
-  const response = await call({ ...cancel, action });
+it('refuses complete before any PIN check until it binds to a server-issued operation', async () => {
+  const response = await call(complete);
   expect(response.status).toBe(400);
   expect((await response.json()).code).toBe('PIN_ACTION_NOT_AVAILABLE');
   expect(mocks.verify).not.toHaveBeenCalled();
   expect(mocks.goal).not.toHaveBeenCalled();
+  expect(mocks.cancellable).not.toHaveBeenCalled();
 });
-it('refuses cancel with the savings runtime off without a PIN check', async () => {
-  mocks.runtime.mockReturnValue(null);
+it('returns a proof for cancel bound to the goal and the server-issued operation id', async () => {
   const response = await call(cancel);
-  expect(response.status).toBe(400);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({
+    proof,
+    expiresAt: '2026-11-03T12:02:00Z',
+  });
+  expect(mocks.verify).toHaveBeenCalledWith(
+    expect.objectContaining({
+      binding: {
+        purpose: 'goal_cancel',
+        amountKobo: 1,
+        idempotencyKeySha256: createHash('sha256')
+          .update(`${goalId}:cancel:${operationId}`)
+          .digest('hex'),
+      },
+    })
+  );
+  expect(mocks.cancellable).toHaveBeenCalledOnce();
+  expect(mocks.goal).not.toHaveBeenCalled();
+});
+it('keeps cancel working with the savings runtime, feature setting and flags off', async () => {
+  mocks.runtime.mockReturnValue(null);
+  mocks.features.mockResolvedValue({ savingsEnabled: false });
+  const response = await call(cancel);
+  expect(response.status).toBe(200);
+  expect(mocks.runtime).not.toHaveBeenCalled();
+  expect(mocks.recovery).toHaveBeenCalledOnce();
+  expect(mocks.features).not.toHaveBeenCalled();
+});
+it("answers goal not found for a cancel of a goal that is not the customer's", async () => {
+  mocks.cancellable.mockResolvedValue(false);
+  const response = await call(cancel);
+  expect(response.status).toBe(404);
+  expect(mocks.verify).not.toHaveBeenCalled();
+});
+it('fails closed for cancel when the recovery configuration is unavailable', async () => {
+  mocks.recovery.mockImplementation(() => {
+    throw new Error('missing configuration');
+  });
+  const response = await call(cancel);
+  expect(response.status).toBe(503);
   expect(mocks.verify).not.toHaveBeenCalled();
 });
 it('refuses a request for a different merchant than the configured one', async () => {

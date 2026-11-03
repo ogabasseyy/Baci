@@ -2,6 +2,7 @@ import 'server-only';
 import { Client } from 'pg';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
 import { piggyvestPrimarySavingsTransferSchemas } from '@/schemas/piggyvest-primary-savings-transfer';
+import { GOAL_CANCEL_STATEMENTS } from './goal-cancel-statements';
 
 const statements = new Set([
   'SELECT piggyvest_primary.apply_inflow_environment($1::uuid,$2::text,$3::jsonb) AS result',
@@ -9,6 +10,9 @@ const statements = new Set([
   'SELECT piggyvest_primary.find_dispatched_savings_by_reference($1::uuid,$2::text,$3::text) AS result',
   'SELECT piggyvest_primary.settle_savings($1::uuid,$2::text,$3::jsonb) AS result',
   'SELECT piggyvest_primary.release_failed_savings($1::uuid,$2::text,$3::jsonb) AS result',
+  GOAL_CANCEL_STATEMENTS.readDispatched,
+  GOAL_CANCEL_STATEMENTS.settle,
+  GOAL_CANCEL_STATEMENTS.release,
 ]);
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication
@@ -34,7 +38,10 @@ export function createPrimaryWalletEvidenceExecutor(configuration: unknown) {
       )
     )
       throw new Error('Primary wallet evidence statement unavailable');
-    if (statement.includes('read_dispatched_savings'))
+    if (
+      statement === GOAL_CANCEL_STATEMENTS.readDispatched ||
+      statement.includes('read_dispatched_savings')
+    )
       piggyvestPrimarySavingsTransferSchemas.request.shape.operationId.parse(
         parameters[2]
       );

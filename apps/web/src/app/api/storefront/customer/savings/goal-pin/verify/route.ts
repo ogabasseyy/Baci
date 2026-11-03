@@ -3,10 +3,16 @@ import { getPrimaryCustomerSavingsFeatureSettings } from '@/app/api/storefront/c
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { buildGoalPinBinding } from '@/lib/piggyvest/goal-pin-binding';
-import { isActiveOwnGoal } from '@/lib/piggyvest/goal-pin-fund-eligibility';
+import {
+  isActiveOwnGoal,
+  isCancellableOwnGoal,
+} from '@/lib/piggyvest/goal-pin-fund-eligibility';
 import { verifyGoalPin } from '@/lib/piggyvest/goal-pin-verify';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
-import { readPrimaryWalletSavingsRuntime } from '@/lib/piggyvest/primary-wallet-savings-runtime';
+import {
+  readPrimaryWalletSavingsRecoveryRuntime,
+  readPrimaryWalletSavingsRuntime,
+} from '@/lib/piggyvest/primary-wallet-savings-runtime';
 import { piggyvestGoalPinSchemas } from '@/schemas/piggyvest-goal-pin';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -34,17 +40,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!parsed.success)
     return refuse('Please enter a valid PIN.', 'INVALID_INPUT', 400);
   const input = parsed.data;
-  // Cancel and complete proofs are not issued until they bind to a
-  // server-issued per-attempt operation id (S6/S7). Refuse before any PIN
-  // verification so no attempt is counted and no proof is minted.
-  if (input.action !== 'fund')
+  // A complete proof is not issued until it binds to a server-issued
+  // per-attempt operation id (S7). Refuse before any PIN verification so no
+  // attempt is counted and no proof is minted.
+  if (input.action === 'complete')
     return refuse(
       'This PIN check is not available yet.',
       'PIN_ACTION_NOT_AVAILABLE',
       400
     );
   try {
-    const runtime = readPrimaryWalletSavingsRuntime();
+    // Cancel-to-main stays available with the PiggyVest flags and the kill
+    // switch off, so its PIN check uses the recovery runtime, which reads
+    // neither. Funding still needs the enabled runtime.
+    const runtime =
+      input.action === 'cancel'
+        ? readPrimaryWalletSavingsRecoveryRuntime()
+        : readPrimaryWalletSavingsRuntime();
     if (!runtime || runtime.merchantId !== input.merchantId)
       return refuse(
         'PIN checks are temporarily unavailable.',
@@ -64,25 +76,33 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         409
       );
     const supabase = auth.supabase;
-    // A funding proof is only issued when the goal is an active goal of this
-    // customer and the customer savings feature is on.
-    const features = await getPrimaryCustomerSavingsFeatureSettings({
-      supabase,
-      merchantId: identity.merchantId,
-      customerId: identity.customerId,
-    });
-    if (!features.savingsEnabled)
-      return refuse(
-        'Savings is not enabled.',
-        'CUSTOMER_SAVINGS_DISABLED',
-        403
-      );
-    const owned = await isActiveOwnGoal({
+    // A funding proof is only issued for an active goal of this customer
+    // while the customer savings feature is on. A cancel proof does not
+    // depend on the feature setting (nobody is trapped in a goal) and is
+    // issued for an active or paused goal of this customer.
+    if (input.action === 'fund') {
+      const features = await getPrimaryCustomerSavingsFeatureSettings({
+        supabase,
+        merchantId: identity.merchantId,
+        customerId: identity.customerId,
+      });
+      if (!features.savingsEnabled)
+        return refuse(
+          'Savings is not enabled.',
+          'CUSTOMER_SAVINGS_DISABLED',
+          403
+        );
+    }
+    const ownership = {
       supabase,
       merchantId: identity.merchantId,
       customerId: identity.customerId,
       goalId: input.goalId,
-    });
+    };
+    const owned =
+      input.action === 'cancel'
+        ? await isCancellableOwnGoal(ownership)
+        : await isActiveOwnGoal(ownership);
     if (!owned)
       return refuse('That savings goal was not found.', 'GOAL_NOT_FOUND', 404);
     const result = await verifyGoalPin({

@@ -1,0 +1,2 @@
+supabase/tests/piggyvest_goal_cancel.sql
+supabase/tests/piggyvest_goal_cancel_behaviour.sql

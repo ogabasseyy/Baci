@@ -89,7 +89,8 @@ export async function runPrimaryWalletSavingsOutflowReconciliation(input: {
       if (outcome !== 'unmatched') return outcome;
     } catch (error) {
       console.warn(
-        `[PiggyVest Webhook] Goal ${kind.name} reconciliation skipped:`,
+        '[PiggyVest Webhook] Goal %s reconciliation skipped:',
+        kind.name,
         error instanceof Error ? error.message : error
       );
       if (

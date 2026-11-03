@@ -255,6 +255,11 @@ it('keeps a goal cancel reference retryable when its lookup fails', async () => 
     })
   ).toBe('pending');
   expect(warn).toHaveBeenCalled();
+  // The format string is a constant: the goal kind and the error text are
+  // arguments, so an injected "%s" can never forge the log line.
+  const [format, ...args] = warn.mock.calls[0] ?? [];
+  expect(format).toBe('[PiggyVest Webhook] Goal %s reconciliation skipped:');
+  expect(args).toHaveLength(2);
   warn.mockRestore();
 });
 it('does not fail a legacy outflow when the lookup fails for an unrelated reference', async () => {

@@ -28,11 +28,12 @@ BEGIN
   PERFORM pg_temp.gx_set_current(10000);
   v_issue := pg_temp.gx_issue_op();
   PERFORM pg_temp.gx_assert(v_issue ->> 'status' = 'issued', 'target reached: ' || v_issue::text);
-  PERFORM pg_temp.gx_set_current(2500);
-  -- A completed-status goal (target reached earlier) is eligible too.
-  UPDATE public.customer_savings_goals SET status = 'completed' WHERE id = c_goal::uuid;
+  -- The funded-goal trigger derives "completed" from funding, so a completed
+  -- goal exists only while funding covers the target; it is eligible too.
+  PERFORM pg_temp.gx_assert(pg_temp.gx_goal('status') = 'completed', 'the funded goal is not completed');
   v_issue := pg_temp.gx_issue_op();
   PERFORM pg_temp.gx_assert(v_issue ->> 'status' = 'issued', 'completed status: ' || v_issue::text);
+  PERFORM pg_temp.gx_set_current(2500);
   UPDATE public.customer_savings_goals SET status = 'active' WHERE id = c_goal::uuid;
   -- Maturity reached (today, UTC) is eligible, and the same id is reused.
   PERFORM pg_temp.gx_set_maturity(0);

@@ -1391,4 +1391,36 @@ GRANT EXECUTE ON FUNCTION piggyvest_primary.read_goal_purchase_request_alert(uui
 GRANT EXECUTE ON FUNCTION piggyvest_primary.mark_goal_purchase_request_alerted(uuid, text, uuid)
   TO piggyvest_primary_evidence;
 
+-- The funded-goal trigger derives "completed" from funding (current amount plus
+-- paid interest against the target) and walks the status back when funding falls
+-- short. Settling a goal complete moves the whole balance out, so funding is
+-- zero by design and the trigger would reopen the goal it just completed (and
+-- would again on any later no-op update of the row). A goal with a settled
+-- (confirmed) goal complete keeps the status settlement wrote. Everything else
+-- is unchanged from the original function.
+CREATE OR REPLACE FUNCTION piggyvest_primary.complete_funded_goal()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+DECLARE totals record; funded numeric;
+BEGIN
+  IF NEW.goal_kind<>'legacy' OR NEW.status NOT IN ('active','paused','completed') THEN RETURN NEW; END IF;
+  IF EXISTS (SELECT 1 FROM piggyvest_primary.goal_complete_operations AS done
+              WHERE done.goal_id=NEW.id AND done.state='confirmed') THEN
+    RETURN NEW;
+  END IF;
+  SELECT * INTO totals FROM piggyvest_primary.completion_totals(NEW.id,NEW.merchant_id,NEW.customer_id);
+  IF NOT FOUND THEN RETURN NEW; END IF;
+  funded:=NEW.current_amount*100+totals.paid_interest_kobo;
+  IF totals.paid_interest_kobo<0 OR NEW.target_amount<=0 THEN RETURN NEW; END IF;
+  IF funded>=NEW.target_amount*100 THEN
+    NEW.status:='completed';
+    NEW.completed_at:=coalesce(OLD.completed_at,clock_timestamp());
+  ELSIF OLD.status='completed' OR NEW.status='completed' THEN
+    NEW.status:=CASE WHEN OLD.status IN ('active','paused') THEN OLD.status ELSE 'paused' END;
+    NEW.completed_at:=NULL;
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION piggyvest_primary.complete_funded_goal()
+  FROM PUBLIC, anon, authenticated, service_role;
+
 COMMIT;

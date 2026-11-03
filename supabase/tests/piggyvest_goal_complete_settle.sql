@@ -111,6 +111,11 @@ BEGIN
     AND EXISTS (SELECT 1 FROM public.customer_savings_events
                  WHERE goal_id = c_goal::uuid AND event_type = 'goal_completed_to_wallet'),
     'settled state is wrong');
+  -- The funded-goal trigger must not reopen a settled completion, not even on
+  -- a later no-op update of the row (the paid-interest refresh does exactly that).
+  UPDATE public.customer_savings_goals SET status = status WHERE id = c_goal::uuid;
+  PERFORM pg_temp.gx_assert(pg_temp.gx_goal('status') = 'completed' AND pg_temp.gx_goal('completed_at') IS NOT NULL,
+    'a no-op update reopened a settled completion');
   PERFORM pg_temp.gx_assert((SELECT pg_catalog.count(*) FROM piggyvest_primary.goal_purchase_requests
       WHERE complete_operation_id = v_op::uuid AND goal_id = c_goal::uuid
         AND goal_title = 'Synthetic goal complete goal' AND target_amount = 10000

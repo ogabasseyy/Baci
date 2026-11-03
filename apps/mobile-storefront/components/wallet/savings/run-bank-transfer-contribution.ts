@@ -140,7 +140,7 @@ export async function runBankTransferContribution(
     // transfer that covers the target counts as completion.
     if (
       contributionResult.goalStatus === 'completed' ||
-      (isPrimary && amount >= input.targetValue)
+      (ctx.railRef.current?.rail === 'primary' && amount >= input.targetValue)
     ) {
       try {
         await cancelSavingsReminderNotification(goalId);

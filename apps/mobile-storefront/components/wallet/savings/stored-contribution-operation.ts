@@ -32,7 +32,8 @@ export type StoredOperationState = {
  *   any ambiguous error blocks (unknown) while keeping the id.
  * - unrecorded rail (older stored id): unknown, never assumed legacy. Ask
  *   primary first: confirmed or pending means it is a primary id; not found
- *   means it can only be legacy (resubmit there, same id); cancelled releases
+ *   (or SAVINGS_MERCHANT_NOT_PRIMARY, a merchant that cannot hold a primary
+ *   record) means it can only be legacy (resubmit there, same id); cancelled releases
  *   it; an ambiguous error blocks and keeps the id.
  */
 export async function resolveStoredOperation(input: {
@@ -60,9 +61,14 @@ export async function resolveStoredOperation(input: {
     if (result.status === 'cancelled') return released;
     return { ...keep, confirmed: result.status === 'confirmed' };
   } catch (error) {
-    if (getErrorCode(error) === 'CONTRIBUTION_NOT_FOUND') {
-      // Recorded primary: primary has no record, release. Unrecorded: only
-      // the legacy rail can hold it, so keep the id and resubmit there.
+    const code = getErrorCode(error);
+    if (
+      code === 'CONTRIBUTION_NOT_FOUND' ||
+      code === 'SAVINGS_MERCHANT_NOT_PRIMARY'
+    ) {
+      // Recorded primary: primary has no record (or this merchant can hold
+      // none), release. Unrecorded: only the legacy rail can hold it, so keep
+      // the id and resubmit there.
       return input.rail === 'primary'
         ? released
         : { operationId: input.operationId, rail: 'legacy', confirmed: false };

@@ -60,6 +60,29 @@ describe('resolveStoredOperation', () => {
     });
   });
 
+  it('treats SAVINGS_MERCHANT_NOT_PRIMARY like not found: unrecorded goes to legacy, recorded primary is released', async () => {
+    mockCheckStatus.mockRejectedValue(
+      Object.assign(new Error('x'), { code: 'SAVINGS_MERCHANT_NOT_PRIMARY' })
+    );
+    expect(await run('op', null)).toEqual({
+      operationId: 'op',
+      rail: 'legacy',
+      confirmed: false,
+    });
+    expect(await run('op', 'primary')).toEqual({
+      operationId: null,
+      rail: null,
+      confirmed: false,
+    });
+  });
+
+  it('keeps SAVINGS_NOT_READY ambiguous: the runtime may be off', async () => {
+    mockCheckStatus.mockRejectedValue(
+      Object.assign(new Error('x'), { code: 'SAVINGS_NOT_READY' })
+    );
+    expect(await run('op', null)).toMatchObject({ unknown: true });
+  });
+
   it('blocks an unrecorded id on an ambiguous status error', async () => {
     mockCheckStatus.mockRejectedValue(new Error('network'));
     expect(await run('op', null)).toEqual({

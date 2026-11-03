@@ -5,7 +5,7 @@ import { CONFIG } from '@/lib/config';
 import { pickMerchantId } from '@/lib/pick-merchant-id';
 import { useAuthStore } from '@/stores/auth-store';
 import { SavingsPlanCardContribution } from './savings/SavingsPlanCardContribution';
-import { SavingsPlanSetupAction } from './savings/SavingsPlanSetupAction';
+import { SavingsPlanStatusNote } from './savings/SavingsPlanStatusNote';
 import { SavingsPlanWalletNote } from './savings/SavingsPlanWalletNote';
 
 type Props = {
@@ -61,7 +61,7 @@ export function WalletSavingsPlanFunding({
         />
       ) : null}
       {manual ? (
-        <SavingsPlanSetupAction
+        <SavingsPlanStatusNote
           key={JSON.stringify([userId, activeMerchantId, goal.id])}
           colors={colors}
           goalId={goal.id}

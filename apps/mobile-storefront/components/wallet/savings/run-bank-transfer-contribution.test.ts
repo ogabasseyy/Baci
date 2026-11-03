@@ -22,8 +22,9 @@ jest.mock('@/lib/piggyvest-primary-savings-status', () => ({
 jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
   isPiggyvestPrimaryMerchant: (id?: string | null) => mockIsPrimary(id),
 }));
+const mockCancelReminder = jest.fn<(id: string) => Promise<boolean>>();
 jest.mock('@/services/savings-reminder-notifications', () => ({
-  cancelSavingsReminderNotification: jest.fn(async () => true),
+  cancelSavingsReminderNotification: (id: string) => mockCancelReminder(id),
 }));
 
 const run = (railRef: { current: unknown }, overrides = {}) => {
@@ -107,6 +108,31 @@ describe('runBankTransferContribution', () => {
     expect(mockAddPrimary).toHaveBeenCalledWith(
       expect.objectContaining({ idempotencyKey: 'old' })
     );
+  });
+
+  it('submits an unrecorded id on legacy for a merchant that is not primary', async () => {
+    mockIsPrimary.mockReturnValue(false);
+    mockCheckStatus.mockRejectedValue(
+      Object.assign(new Error('x'), { code: 'SAVINGS_MERCHANT_NOT_PRIMARY' })
+    );
+    const railRef = { current: null };
+    await run(railRef, { initialContributionIdempotencyKey: 'old' });
+    expect(mockAddPrimary).not.toHaveBeenCalled();
+    expect(mockAddSavings).toHaveBeenCalledWith(
+      expect.objectContaining({ idempotencyKey: 'old' })
+    );
+  });
+
+  it('cancels the reminder by the rail that handled it, not the rail started on', async () => {
+    mockAddPrimary.mockImplementation(async (arg) => {
+      (arg as { onRail?: (r: string) => void }).onRail?.('legacy');
+      return { goalStatus: 'active' };
+    });
+    await run({ current: null }, { targetValue: 20000 });
+    expect(mockCancelReminder).not.toHaveBeenCalled();
+    mockAddPrimary.mockResolvedValue({ status: 'confirmed' });
+    await run({ current: null }, { targetValue: 20000 });
+    expect(mockCancelReminder).toHaveBeenCalledWith('goal-1');
   });
 
   it('resubmits an unrecorded id on legacy when primary has no record', async () => {

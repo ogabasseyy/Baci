@@ -238,6 +238,34 @@ describe('buildCategoryHubBrandCards', () => {
     expect(cards[0]?.title).toBe('Konami');
     expect(cards[0]?.href).toBe('https://ogabassey.com/smartphones/konami-1');
   });
+
+  it('does not drop or displace fallback brands with all zero-price products', () => {
+    // Arrange: 4 brands where FreeBrand has 2 zero-price products, followed by BrandB, BrandC, and BrandD
+    const products = [
+      buildProduct('free-1', 'FreeBrand', 0),
+      buildProduct('free-2', 'FreeBrand', 0),
+      buildProduct('brand-b-1', 'BrandB', 100),
+      buildProduct('brand-c-1', 'BrandC', 100),
+      buildProduct('brand-d-1', 'BrandD', 100),
+    ];
+
+    // Act
+    const cards = buildCategoryHubBrandCards({
+      categorySlug: 'smartphones',
+      storeUrl: 'https://ogabassey.com',
+      products,
+    });
+
+    // Assert: FreeBrand should retain its representative card and not displace/reduce card count
+    expect(cards).toHaveLength(3);
+    expect(cards.map((card) => card.title)).toEqual([
+      'FreeBrand',
+      'BrandB',
+      'BrandC',
+    ]);
+    const freeCard = cards.find((card) => card.title === 'FreeBrand');
+    expect(freeCard?.href).toBe('https://ogabassey.com/smartphones/free-1');
+  });
 });
 
 describe('isNonBrandPlaceholderKey', () => {

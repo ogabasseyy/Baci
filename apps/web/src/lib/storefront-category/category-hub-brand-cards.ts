@@ -16,11 +16,7 @@ function pickFirstBrandProduct(
   brandKey: string
 ): CategoryHubProduct | null {
   const brandProducts = products
-    .filter(
-      (product) =>
-        product.price > 0 &&
-        generateSlug(product.brand?.trim() ?? '') === brandKey
-    )
+    .filter((product) => generateSlug(product.brand?.trim() ?? '') === brandKey)
     .sort(
       (left, right) =>
         left.price - right.price || left.name.localeCompare(right.name)

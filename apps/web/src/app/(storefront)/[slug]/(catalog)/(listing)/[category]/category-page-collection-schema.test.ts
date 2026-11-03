@@ -108,7 +108,7 @@ describe('toCollectionSchemaProduct', () => {
     ).toBe(true);
   });
 
-  it('defaults manage_stock to true when undefined', () => {
+  it('defaults manage_stock to false when undefined, following the normalized contract', () => {
     const productWithoutManageStock = makeCategoryProduct({
       id: 'legacy-prod',
       name: 'Legacy Product',
@@ -119,7 +119,7 @@ describe('toCollectionSchemaProduct', () => {
 
     expect(
       toCollectionSchemaProduct(productWithoutManageStock).manage_stock
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 

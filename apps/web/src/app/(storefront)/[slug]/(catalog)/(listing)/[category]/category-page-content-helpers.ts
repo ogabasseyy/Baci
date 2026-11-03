@@ -9,6 +9,7 @@ import {
 } from '@/lib/normalize-product';
 import type { Product as SeoProduct } from '@/lib/products';
 import { generateMetaDescription } from '@/lib/seo-utils';
+import { coerceStorefrontManageStock } from '@/lib/storefront-agent-availability';
 import { buildCategoryHubModel } from '@/lib/storefront-category/build-category-hub-model';
 import type {
   BrandAuthorityEntry,
@@ -172,7 +173,7 @@ export function toCollectionSchemaProduct(
     description: product.description,
     status: 'active',
     price: product.rawPrice,
-    manage_stock: product.manage_stock ?? true,
+    manage_stock: coerceStorefrontManageStock(product.manage_stock),
     stock: product.stock ?? 0,
     image: product.image,
     imageLarge: product.image,

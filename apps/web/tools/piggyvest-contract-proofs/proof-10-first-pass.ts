@@ -13,9 +13,9 @@ import {
   TIMEOUT_INDETERMINATE,
   TIMEOUT_TSQ_FIRST,
 } from './proof-10-timeout-retry';
-import { answerOf, ProofBuilder } from './proof-builder';
+import { ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
-import type { ProofResult } from './types';
+import type { Answer, ProofResult } from './types';
 
 const TITLE =
   'S8 first pass: onboard, deposit, create goal, fund, double tap, timeout retry';
@@ -40,6 +40,11 @@ const MUTATING: ReadonlyArray<readonly [string, string]> = [
   [TIMEOUT_BOOKED_ONCE, 'Was the timed-out transfer booked exactly once?'],
 ];
 
+/** Missing scenario state may be an unreadable setup, not a proven absence. */
+function unreadableAsUnknown(established: boolean): Answer {
+  return established ? 'yes' : 'unknown';
+}
+
 /**
  * Proof 10 (task S8): the owner's first sandbox pass as one section of the
  * evidence. It runs after the shared scenario (customer, main wallet, goal
@@ -57,7 +62,7 @@ export async function runProof10(ctx: ProofContext): Promise<ProofResult> {
   b.finding(
     ONBOARD,
     'Is there a QA customer with a main wallet that belongs to it?',
-    answerOf(
+    unreadableAsUnknown(
       state.customerId !== null && main !== null && state.authorized.has(main)
     )
   );
@@ -69,7 +74,11 @@ export async function runProof10(ctx: ProofContext): Promise<ProofResult> {
   b.finding(
     GOAL,
     'Is there a goal wallet, distinct from main, that belongs to the QA customer?',
-    answerOf(goal !== null && goal !== main && state.authorized.has(goal))
+    goal !== null && goal === main
+      ? 'no'
+      : unreadableAsUnknown(
+          goal !== null && goal !== main && state.authorized.has(goal)
+        )
   );
 
   if (mode === 'live-readonly' || !main || !goal) {

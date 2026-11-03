@@ -221,7 +221,7 @@ export async function stepDoubleTap(
     'double_tap_status_after',
     statusOf(await api.verify(reference, main))
   );
-  if (again.outcome === 'accepted') {
+  if (again.outcome !== 'rejected') {
     // The original's terminal status says nothing about the repeat: keep
     // observing for the whole polling budget, never stopping on that status.
     for (let poll = 0; poll < ctx.maxPolls; poll += 1) {
@@ -250,7 +250,9 @@ export async function stepDoubleTap(
   // show whether an accepted repeat settled or was deduplicated; a hidden or
   // lagging second booking looks identical to none. An accepted repeat is
   // therefore only ever `no` (a second row or debit was seen) or `unknown`.
-  const accepted = again.outcome === 'accepted';
+  // Only a definitive rejection can show deduplication; an accepted or
+  // indeterminate repeat may still have booked a hidden second transfer.
+  const accepted = again.outcome !== 'rejected';
   const secondSeen =
     (rowsAfter !== null && rowsAfter > 1) ||
     (extraDebit !== null && extraDebit !== 0);
@@ -269,7 +271,7 @@ export async function stepDoubleTap(
     answer !== 'unknown'
       ? undefined
       : accepted && rowsAfter !== null && extraDebit !== null
-        ? 'the provider accepted the repeat and no second record or debit appeared, but its settlement or deduplication cannot be established from the original status'
+        ? 'the repeat was accepted or its outcome is indeterminate and no second record or debit appeared, but its settlement or deduplication cannot be established from the original status'
         : 'the record list or the balances did not settle, so no count is published'
   );
 }

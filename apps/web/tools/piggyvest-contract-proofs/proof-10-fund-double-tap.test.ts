@@ -177,6 +177,19 @@ describe('S8 double tap', () => {
     expect(answer(b, h, TAP_ONCE)).toBe('unknown');
   });
 
+  it('stays unknown when the repeat response is lost and a hidden booking may exist', async () => {
+    const { h, b, main, goal, fund } = await setup({
+      mock: { duplicateReference: 'accept', tsqPendingPolls: 3 },
+      maxPolls: 6,
+    });
+    h.mock.sandbox.options.listLagReads = 8;
+    h.mock.sandbox.options.balanceLagReads = 8;
+    h.ctx.faults.loseNextResponse('/api/v1/transfer/wallet');
+    await stepDoubleTap(h.ctx, b, main, goal, fund);
+    expect(b.build(h.ctx).values.double_tap_wire_outcome).toBe('indeterminate');
+    expect(answer(b, h, TAP_ONCE)).toBe('unknown');
+  });
+
   it('does not repeat on the wire while the original funding is still pending', async () => {
     const { h, b, main, goal, fund } = await setup({
       mock: { tsqPendingPolls: 7 },

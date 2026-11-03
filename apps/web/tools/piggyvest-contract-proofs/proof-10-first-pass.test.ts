@@ -95,4 +95,16 @@ describe('proof 10: S8 sandbox first pass', () => {
     ).toBe('yes');
     expect(result.values.timeout_resend_attempts).toBe(0);
   });
+
+  it('reports unreadable onboarding evidence as unknown, never no', async () => {
+    const h = harness();
+    await setupScenario(h.ctx);
+    h.state.mainWalletId = null;
+    h.state.goalWalletId = null;
+    const result = await runProof10(h.ctx);
+    const answerOf = (id: string) =>
+      result.findings.find((f) => f.id === id)?.answer;
+    expect(answerOf('s8_onboard_customer_and_main_wallet')).toBe('unknown');
+    expect(answerOf('s8_goal_wallet_created')).toBe('unknown');
+  });
 });

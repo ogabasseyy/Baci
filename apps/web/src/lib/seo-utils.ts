@@ -1615,6 +1615,7 @@ export function isRedundantPlatformListParenthetical(content: string): boolean {
 export function stripRedundantPlatformParentheticals(title: string): string {
   let stripped = false;
   let strippedAtStart = false;
+  let strippedAtEnd = false;
   let compacted = title.replace(
     /\s*\(([^)]*)\)\s*(?=[,:;.!?]|$)|\s*\(([^)]*)\)\s*(?=\(([^)]*)\))|\s*\(([^)]*)\)\s*/gu,
     (
@@ -1636,6 +1637,12 @@ export function stripRedundantPlatformParentheticals(title: string): string {
       ) {
         strippedAtStart = true;
       }
+      if (
+        typeof offset === 'number' &&
+        title.slice(offset + match.length).trim().length === 0
+      ) {
+        strippedAtEnd = true;
+      }
       if (innerBeforePunct !== undefined) {
         return '';
       }
@@ -1652,6 +1659,10 @@ export function stripRedundantPlatformParentheticals(title: string): string {
 
   if (strippedAtStart) {
     compacted = compacted.replace(/^\s*(?:[,:;.!?]\s*|[-–—|/&]\s+)+/u, '');
+  }
+
+  if (strippedAtEnd) {
+    compacted = compacted.replace(/\s*[-–—,:;|/&]+\s*$/u, '');
   }
 
   return compacted.trim();

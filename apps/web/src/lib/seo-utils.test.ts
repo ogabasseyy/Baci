@@ -1699,6 +1699,32 @@ describe('generateMetaTitle', () => {
         })
       ).toBe('Ogabassey El...');
     });
+
+    it('strips orphan trailing separators before suffix or end of title when over length', () => {
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27 - (PS5, PS4, Xbox, Switch)', {
+          suffix: 'Ogabassey',
+          maxLength: 40,
+        })
+      ).toBe('Buy EA Sports FC 27 | Ogabassey');
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27, (PS5, PS4, Xbox, Switch)', {
+          suffix: 'Ogabassey',
+          maxLength: 40,
+        })
+      ).toBe('Buy EA Sports FC 27 | Ogabassey');
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27: (PS5, PS4, Xbox, Switch)', {
+          suffix: 'Ogabassey',
+          maxLength: 40,
+        })
+      ).toBe('Buy EA Sports FC 27 | Ogabassey');
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27 - (PS5, PS4, Xbox, Switch)', {
+          maxLength: 30,
+        })
+      ).toBe('Buy EA Sports FC 27');
+    });
   });
 
   describe('isRedundantPlatformListParenthetical detector', () => {
@@ -1879,6 +1905,44 @@ describe('generateMetaTitle', () => {
       expect(
         stripRedundantPlatformParentheticals('(PS5, PS4) (Disc Edition)')
       ).toBe('(Disc Edition)');
+    });
+
+    it('handles trailing redundant parentheticals without leaving orphan separators', () => {
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(stripRedundantPlatformParentheticals('Buy Game, (PS5, PS4)')).toBe(
+        'Buy Game'
+      );
+      expect(stripRedundantPlatformParentheticals('Buy Game: (PS5, PS4)')).toBe(
+        'Buy Game'
+      );
+      expect(stripRedundantPlatformParentheticals('Buy Game; (PS5, PS4)')).toBe(
+        'Buy Game'
+      );
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game | (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game / (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game & (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game – (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game — (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Spider-Man (PS5, PS4)')
+      ).toBe('Spider-Man');
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy Game - (Disc Edition) (PS5, PS4)'
+        )
+      ).toBe('Buy Game - (Disc Edition)');
     });
 
     it('does not remove leading punctuation when the stripped parenthetical is non-leading', () => {

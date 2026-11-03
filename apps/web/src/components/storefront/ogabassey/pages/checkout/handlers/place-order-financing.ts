@@ -1,6 +1,5 @@
 import { toast } from '@/hooks/use-toast';
 import { toCreditDirectItems } from '@/lib/checkout/credit-direct-items';
-import { openCredPalCheckout } from '@/lib/credpal';
 import { openCreditDirectCheckout } from '@/lib/credit-direct-client';
 import { writeCreditDirectPopupMarker } from '../credit-direct-popup-return';
 import { captureCreditDirectClientCompletion } from '../credit-direct-client-completion';
@@ -13,7 +12,7 @@ export async function routePlaceOrderFinancing(
   merchant: NonNullable<PlaceOrderOptions['merchant']>,
   order: LegacyPlacedOrder,
   paymentAmount: number,
-  trackingParam: string,
+  _trackingParam: string,
   orderItems: CheckoutOrderItem[]
 ): Promise<boolean> {
   const {
@@ -24,8 +23,6 @@ export async function routePlaceOrderFinancing(
     customerPhone,
     firstName,
     lastName,
-    clearCheckoutSession,
-    clearCart,
     routerPush,
     getHref,
     setIsProcessing,
@@ -117,51 +114,13 @@ export async function routePlaceOrderFinancing(
   }
 
   if (paymentMethod === 'credpal') {
-    const credpalKey = process.env.NEXT_PUBLIC_CREDPAL_KEY;
-    if (!credpalKey) {
-      toast({
-        title: 'CredPal Unavailable',
-        description:
-          'CredPal payment is not available at this time. Please select a different payment method.',
-        variant: 'destructive',
-      });
-      setIsProcessing(false);
-      isOrderInFlightRef.current = false;
-      return true;
-    }
-
-    await openCredPalCheckout({
-      key: credpalKey,
-      amount: paymentAmount,
-      product: cart.map((item) => item.name).join(', '),
-      customerEmail,
-      customerName: `${firstName} ${lastName}`.trim(),
-      customerPhone,
-      onSuccess: (data) => {
-        clearCheckoutSession();
-        clearCart();
-        routerPush(
-          getHref(
-            `/order-success?type=credpal&orderId=${order.id}&credpalRef=${data.order_no}${trackingParam}`
-          )
-        );
-      },
-      onError: (error: { message?: string }) => {
-        console.error('CredPal error:', error);
-        toast({
-          title: 'CredPal Failed',
-          description:
-            error.message || 'CredPal checkout failed. Please try again.',
-          variant: 'destructive',
-        });
-        setIsProcessing(false);
-        isOrderInFlightRef.current = false;
-      },
-      onClose: () => {
-        setIsProcessing(false);
-        isOrderInFlightRef.current = false;
-      },
+    toast({
+      title: 'CredPal Unavailable',
+      description: 'CredPal payment is not available. Please select a different payment method.',
+      variant: 'destructive',
     });
+    setIsProcessing(false);
+    isOrderInFlightRef.current = false;
     return true;
   }
 

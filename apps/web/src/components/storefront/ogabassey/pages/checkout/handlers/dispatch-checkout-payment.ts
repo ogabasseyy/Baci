@@ -181,7 +181,7 @@ export async function dispatchCheckoutPayment(
     return;
   } else if (paymentMethod === 'credpal') {
     await openCheckoutCredpal({
-      key: process.env.NEXT_PUBLIC_CREDPAL_KEY,
+      key: undefined,
       amount: paymentAmount,
       product: cart.map((item) => item.name).join(', '),
       customerEmail,

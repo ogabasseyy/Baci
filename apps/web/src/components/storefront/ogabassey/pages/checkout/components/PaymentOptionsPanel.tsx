@@ -4,7 +4,6 @@ import { useEffect } from 'react';
 import {
   BankTransferLogo,
   CreditDirectLogo,
-  CredPalLogo,
   JuicywayLogo,
   KorapayLogo,
   PaystackLogo,
@@ -202,21 +201,6 @@ export function PaymentOptionsPanel({
                 description="From 25% down payment. Repay the balance monthly."
                 icon={<span className="font-bold text-store-primary">O₂</span>} />
             )}
-            {featureSettings?.credpal_enabled === true &&
-              ngnOnlyRailsAvailable && (
-                <PaymentOptionCard
-                  method="credpal"
-                  paymentMethod={paymentMethod}
-                  setPaymentMethod={setPaymentMethod}
-                  title="CredPal"
-                  description="Pay in 3-6 monthly installments"
-                  badge={{
-                    label: 'Salary earners only',
-                    className: 'bg-store-primary/10 text-store-primary',
-                  }}
-                  icon={<CredPalLogo className="size-6" />}
-                />
-              )}
             {featureSettings?.credit_direct_enabled === true &&
               ngnOnlyRailsAvailable && (
                 <PaymentOptionCard

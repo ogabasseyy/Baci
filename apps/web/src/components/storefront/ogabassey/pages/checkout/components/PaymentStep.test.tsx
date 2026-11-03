@@ -556,7 +556,7 @@ describe('PaymentStep', () => {
   });
 
   describe('Pay in Installments Options', () => {
-    it('shows CredPal when enabled in feature settings', () => {
+    it('hides retired CredPal even when enabled in feature settings', () => {
       // Arrange
       const merchant = {
         feature_settings: { credpal_enabled: true } as FeatureSettings,
@@ -572,8 +572,8 @@ describe('PaymentStep', () => {
       );
 
       // Assert
-      expect(screen.getByText('CredPal')).toBeInTheDocument();
-      expect(screen.getByTestId('credpal-logo')).toBeInTheDocument();
+      expect(screen.queryByText('CredPal')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('credpal-logo')).not.toBeInTheDocument();
     });
 
     it('shows Credit Direct when enabled in feature settings', () => {
@@ -835,7 +835,7 @@ describe('PaymentStep', () => {
       expect(screen.queryByRole('button', { name: 'Pay in Installments' })).not.toBeInTheDocument();
     });
 
-    it('shows CredPal info when CredPal is selected', () => {
+    it('does not show retired CredPal instructions for a stale selection', () => {
       // Arrange
       const merchant = {
         feature_settings: { credpal_enabled: true } as FeatureSettings,
@@ -852,8 +852,8 @@ describe('PaymentStep', () => {
       );
 
       // Assert
-      expect(screen.getByText('How CredPal works')).toBeInTheDocument();
-      expect(screen.getByText(/quick approval in minutes/i)).toBeInTheDocument();
+      expect(screen.queryByText('How CredPal works')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Pay in Installments' })).not.toBeInTheDocument();
     });
 
     it('shows Credit Direct info when Credit Direct is selected', () => {
@@ -895,7 +895,7 @@ describe('PaymentStep', () => {
       expect(screen.getByText(/complete approval securely/i)).toBeInTheDocument();
     });
 
-    it('calls setPaymentMethod when CredPal is selected', () => {
+    it('never offers CredPal selection after retirement', () => {
       // Arrange
       const setPaymentMethod = vi.fn();
       const merchant = {
@@ -911,11 +911,8 @@ describe('PaymentStep', () => {
       );
 
       // Act
-      const credpalLabel = screen.getByText('CredPal').closest('label');
-      if (credpalLabel) fireEvent.click(credpalLabel);
-
-      // Assert
-      expect(setPaymentMethod).toHaveBeenCalledWith('credpal');
+      expect(screen.queryByText('CredPal')).not.toBeInTheDocument();
+      expect(setPaymentMethod).not.toHaveBeenCalledWith('credpal');
     });
 
     it('calls setPaymentMethod when Klump is selected', () => {

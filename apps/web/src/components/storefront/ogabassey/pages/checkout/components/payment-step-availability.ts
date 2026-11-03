@@ -171,11 +171,7 @@ export function isPaymentMethodAvailable({
     case 'pod':
       return featureSettings?.pay_on_delivery_enabled === true;
     case 'credpal':
-      // NGN-only Nigerian BNPL rail (see resolveChargeCurrency).
-      return (
-        featureSettings?.credpal_enabled === true &&
-        isNgnChargeCurrency(currency)
-      );
+      return false;
     case 'credit_direct':
       return isCreditDirectEligible({
         featureSettings,
@@ -212,7 +208,6 @@ export function hasAnyInstallmentOption({
 }): boolean {
   return Boolean(
     (isOxygenStorefrontStagingEnabled() && isNgnChargeCurrency(currency) && payableAmount > 0 && !isGatewayAmountDifferentFromOrderTotal(payableAmount, orderAmount)) ||
-    (featureSettings?.credpal_enabled && isNgnChargeCurrency(currency)) ||
       isCreditDirectEligible({
         featureSettings,
         currency,

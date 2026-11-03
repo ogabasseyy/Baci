@@ -1,5 +1,4 @@
 import creditDirectLogoSource from '@/assets/images/creditdirect.jpg';
-import credpalLogoSource from '@/assets/images/credpal.png';
 import type { PaymentMethod } from './types';
 
 export const PAYMENT_METHODS: PaymentMethod[] = [
@@ -48,14 +47,6 @@ export const PAYMENT_METHODS: PaymentMethod[] = [
     icon: 'wallet-outline',
     tab: 'installments',
     logoUrl: creditDirectLogoSource,
-  },
-  {
-    id: 'credpal',
-    label: 'CredPal',
-    description: 'Salary Earners Only',
-    icon: 'calendar-outline',
-    tab: 'installments',
-    logoUrl: credpalLogoSource,
   },
   {
     id: 'klump',

@@ -1373,9 +1373,19 @@ describe('POST /api/payments/initialize', () => {
   });
 
   describe('bnpl gateways', () => {
+    it('rejects retired CredPal before creating a transaction', async () => {
+      const res = await POST(makeRequest({ ...validBody, gateway: 'credpal' }));
+      expect(res.status).toBe(410);
+      expect(await res.json()).toMatchObject({ code: 'GATEWAY_RETIRED' });
+      expect(
+        rpcCalls.filter(({ name }) => name === 'create_payment_transaction')
+      ).toHaveLength(0);
+      expect(mockInitializePaystack).not.toHaveBeenCalled();
+      expect(mockInitializeKorapay).not.toHaveBeenCalled();
+    });
+
     it.each([
       'credit_direct',
-      'credpal',
     ] as const)('uses the request origin for %s BNPL launcher URLs', async (gateway) => {
       const res = await POST(makeRequest({ ...validBody, gateway }));
       const json = await res.json();

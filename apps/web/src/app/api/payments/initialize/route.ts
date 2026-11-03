@@ -63,6 +63,7 @@ import {
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
+import { retiredGatewayResponse } from './retired-gateway';
 
 // Types & Constants
 
@@ -1056,6 +1057,8 @@ export async function POST(request: NextRequest) {
     }
 
     const data = parseResult.data;
+    const retired = retiredGatewayResponse(data.gateway);
+    if (retired) return retired;
     const redvaultRequested = data.payment_method === 'uba_redvault';
     const redvaultCustomerAuth = redvaultRequested
       ? await authenticateApiRequest(request)

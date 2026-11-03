@@ -10,6 +10,12 @@
 -- wallet_transaction_id left empty (the column is already nullable).
 -- Refunds, savings holds and releases are separate paths and are untouched.
 --
+-- Row-variable hydration: the SELECT * ... INTO <record/row variable> and
+-- SELECT alias.* INTO statements below only load a whole row of the function's
+-- own table into a local PL/pgSQL variable (unchanged from the prior function
+-- bodies). They never return, log or expose columns to a caller, so they are
+-- not the client-facing select('*') the repository forbids.
+--
 -- A guard trigger then rejects any later attempt to write a deposit row
 -- (either deposit source) to the legacy wallet transaction history, so a future function edit
 -- cannot quietly bring the old behaviour back.

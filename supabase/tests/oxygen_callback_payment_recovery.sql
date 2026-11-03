@@ -27,7 +27,18 @@ INSERT INTO oxygen_private.provider_states(workflow_id,state) VALUES('efae0000-0
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efae0000-0000-4000-8000-000000000003',true);
 SELECT public.oxygen_callback('accept','response-evidence-fixture','{"kind":"transaction","bookedLoanReference":"efae0000-0000-4000-8000-000000000071","transactionReference":"callback-test","deduplicationKey":"callback-test"}');
+-- A replayed payment callback must reuse its durable inbox entry; it must not
+-- create another payment recovery command or a second inbox record.
+DO $$ DECLARE reply jsonb; BEGIN
+ reply:=public.oxygen_callback('accept','response-evidence-fixture','{"kind":"transaction","bookedLoanReference":"efae0000-0000-4000-8000-000000000071","transactionReference":"callback-test","deduplicationKey":"callback-test"}');
+ IF reply->>'result' IS DISTINCT FROM 'duplicate' THEN RAISE EXCEPTION 'Transaction replay not deduplicated'; END IF;
+END $$;
 RESET ROLE;
+DO $$ BEGIN
+ IF (SELECT count(*) FROM oxygen_private.callback_inbox WHERE partner_reference='response-evidence-fixture' AND deduplication_key='callback-test') <> 1 THEN
+  RAISE EXCEPTION 'Transaction replay created another inbox row';
+ END IF;
+END $$;
 SELECT set_config('test.callback.id',id::text,true),set_config('test.callback.retry',retry_key::text,true) FROM oxygen_private.callback_inbox WHERE partner_reference='response-evidence-fixture';
 INSERT INTO oxygen_private.payment_recovery(id,workflow_id,booking_reference,expected_version,idempotency_key,action,status,created_at) VALUES ('efae0000-0000-4000-8000-000000000096','efae0000-0000-4000-8000-000000000041','efae0000-0000-4000-8000-000000000071',3,'efae0000-0000-4000-8000-000000000095','check_status','executing',now()-interval '5 minutes');
 SET LOCAL ROLE authenticated;

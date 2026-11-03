@@ -26,3 +26,6 @@ declare module '*.mp3' {
   const value: number;
   export default value;
 }
+
+// TEMP CI lint probe, PR will be closed
+export const ciLintProbe   =   {a:1,  b:2}

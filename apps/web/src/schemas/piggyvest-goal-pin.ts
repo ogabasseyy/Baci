@@ -22,11 +22,14 @@ export const piggyvestGoalPinSchemas = {
       goalId: z.uuid(),
       operationId: z.uuid(),
     }),
+    // A complete proof is bound to the operation id the server issued for
+    // this attempt (issue_goal_complete), so it is required here too.
     z.strictObject({
       merchantId: z.uuid(),
       pin,
       action: z.literal('complete'),
       goalId: z.uuid(),
+      operationId: z.uuid(),
     }),
   ]),
   pinState: z.discriminatedUnion('status', [

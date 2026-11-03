@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
 import {
   generateMetaTitle,
+  getTrailingSeparatedSegment,
+  normalizePlainText,
+  stringsMatchCaseInsensitive,
   stripRedundantPlatformParentheticals,
 } from '@/lib/seo-utils';
 
@@ -76,20 +79,28 @@ export function buildStorefrontMetadataTitle(input: {
   });
   let effectiveTitle = fullTitle;
   if (fullTitle.length > maxLength) {
-    if (input.suffix) {
-      const normalizedSuffix = input.suffix.replace(/\s+/gu, ' ').trim();
-      const suffixFragment = ` | ${normalizedSuffix}`;
-      if (fullTitle.endsWith(suffixFragment)) {
-        const baseTitle = fullTitle
-          .slice(0, fullTitle.length - suffixFragment.length)
-          .trim();
-        const compactBaseTitle =
-          stripRedundantPlatformParentheticals(baseTitle);
-        effectiveTitle = compactBaseTitle
-          ? `${compactBaseTitle}${suffixFragment}`
-          : normalizedSuffix;
+    const normalizedSuffix = input.suffix
+      ? normalizePlainText(input.suffix)
+      : '';
+    if (normalizedSuffix) {
+      if (stringsMatchCaseInsensitive(fullTitle, normalizedSuffix)) {
+        effectiveTitle = fullTitle;
       } else {
-        effectiveTitle = stripRedundantPlatformParentheticals(fullTitle);
+        const trailingSegment = getTrailingSeparatedSegment(fullTitle);
+        if (
+          trailingSegment &&
+          stringsMatchCaseInsensitive(trailingSegment.suffix, normalizedSuffix)
+        ) {
+          const baseTitle = trailingSegment.base;
+          const suffixWithSeparator = fullTitle.slice(baseTitle.length);
+          const compactBaseTitle =
+            stripRedundantPlatformParentheticals(baseTitle);
+          effectiveTitle = compactBaseTitle
+            ? `${compactBaseTitle}${suffixWithSeparator}`
+            : normalizedSuffix;
+        } else {
+          effectiveTitle = stripRedundantPlatformParentheticals(fullTitle);
+        }
       }
     } else {
       effectiveTitle = stripRedundantPlatformParentheticals(fullTitle);

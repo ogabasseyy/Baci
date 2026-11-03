@@ -1493,7 +1493,7 @@ function validateMaxLength(value: number): number {
   return value;
 }
 
-function normalizePlainText(value: string): string {
+export function normalizePlainText(value: string): string {
   return stripHtmlTags(value).replace(/\s+/g, ' ').trim();
 }
 
@@ -1505,11 +1505,16 @@ function normalizePlainText(value: string): string {
 const META_TITLE_SEPARATORS = ['|', '–', '—', ':'] as const;
 const META_TITLE_SPACED_HYPHEN = ' - ';
 
-function stringsMatchCaseInsensitive(left: string, right: string): boolean {
+export function stringsMatchCaseInsensitive(
+  left: string,
+  right: string
+): boolean {
   return left.localeCompare(right, undefined, { sensitivity: 'base' }) === 0;
 }
 
-function getTrailingSeparatedSegment(value: string) {
+export function getTrailingSeparatedSegment(
+  value: string
+): { base: string; suffix: string } | null {
   const trimmedValue = value.trim();
 
   let bestIndex = -1;

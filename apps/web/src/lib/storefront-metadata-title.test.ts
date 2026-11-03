@@ -135,4 +135,27 @@ describe('buildStorefrontMetadataTitle', () => {
 
     expect(result.title).toContain('| Gaming (PS5, PC)');
   });
+
+  it('preserves a platform parenthetical inside a suffix when title already ends with that suffix behind a hyphen', () => {
+    const result = buildStorefrontMetadataTitle({
+      maxLength: 55,
+      suffix: 'Gaming (PS5, PC)',
+      title: 'EA Sports FC 27 Championship (PS5, PS4, Xbox) - Gaming (PS5, PC)',
+    });
+
+    expect(result.title).toBe(
+      'EA Sports FC 27 Championship | Gaming (PS5, PC)'
+    );
+    expect(result.title).toContain('Gaming (PS5, PC)');
+  });
+
+  it('preserves a platform parenthetical when title equals suffix', () => {
+    const result = buildStorefrontMetadataTitle({
+      maxLength: 30,
+      suffix: 'Gaming (PS5, PC)',
+      title: 'Gaming (PS5, PC)',
+    });
+
+    expect(result.title).toBe('Gaming (PS5, PC)');
+  });
 });

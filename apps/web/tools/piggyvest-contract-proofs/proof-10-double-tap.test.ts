@@ -36,7 +36,7 @@ describe('S8 double tap', () => {
     });
     h.mock.sandbox.options.listLagReads = 8;
     h.mock.sandbox.options.balanceLagReads = 8;
-    h.ctx.faults.loseNextResponse('/api/v1/transfer/wallet');
+    h.ctx.faults?.loseNextResponse('/api/v1/transfer/wallet');
     await stepDoubleTap(h.ctx, b, main, goal, fund);
     expect(b.build(h.ctx).values.double_tap_wire_outcome).toBe('indeterminate');
     expect(answer(b, h, TAP_ONCE)).toBe('unknown');

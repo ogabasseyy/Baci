@@ -1,11 +1,11 @@
 import { AMOUNTS_KOBO } from './constants';
 import { readTransferFeeKobo } from './debit-once';
 import { settledAfterMovement } from './movement';
+import { EARLIER_UNSETTLED, MovementLedger } from './movement-ledger';
 import { awaitTerminal, delta, readingOf, settledWallets } from './poll';
 import type { ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
 import { transferVerdict } from './verdict-rule';
-import { EARLIER_UNSETTLED, WalletsQuiet } from './wallet-quiet';
 
 export {
   stepDoubleTap,
@@ -34,6 +34,8 @@ export interface FundGoalResult {
   terminalSuccess: boolean;
   /** Settled main balance after the funding; null if it never settled. */
   mainBalanceKobo: number | null;
+  /** Settled goal balance after the funding; null if it never settled. */
+  goalBalanceKobo: number | null;
   mainDeltaKobo: number | null;
   goalDeltaKobo: number | null;
 }
@@ -43,7 +45,7 @@ export async function stepFundGoal(
   b: ProofBuilder,
   main: string,
   goal: string,
-  quiet: WalletsQuiet = new WalletsQuiet()
+  ledger: MovementLedger = new MovementLedger()
 ): Promise<FundGoalResult | null> {
   const { api, qa, redactor } = ctx;
   const amount = AMOUNTS_KOBO.s8FundGoal;
@@ -58,9 +60,11 @@ export async function stepFundGoal(
   redactor.register('R', sent.reference);
   // A send whose result is not read to completion may still move both
   // wallets under a later baseline.
-  const quietBefore = quiet.isQuiet(main, goal);
+  const quietBefore = ledger.isQuiet(main, goal);
+  const record = (settled: boolean) =>
+    ledger.append({ from: main, to: goal, amountKobo: amount, settled });
   if (sent.kind === 'resumed') {
-    quiet.markNotQuiet(main, goal);
+    record(false);
     b.note(
       `The S8 fund-goal slot was already used (${sent.priorOutcome}); it is never resent. Repeating it needs a full run without the --proof p10 filter, using --new-attempt.`
     );
@@ -78,11 +82,13 @@ export async function stepFundGoal(
     sendAccepted: sent.outcome === 'accepted',
     terminalSuccess: false,
     mainBalanceKobo: null,
+    goalBalanceKobo: null,
     mainDeltaKobo: null,
     goalDeltaKobo: null,
   };
   if (!sent.call.ok) {
-    if (sent.outcome !== 'rejected') quiet.markNotQuiet(main, goal);
+    // Only a definite decline proves nothing moved.
+    if (sent.outcome !== 'rejected') record(false);
     b.inconclusive('the goal funding transfer was not accepted');
     b.finding(FUND_GOAL, FUND_Q, 'unknown', 'the transfer was not accepted');
     return result;
@@ -103,6 +109,9 @@ export async function stepFundGoal(
   result.mainBalanceKobo = after.settled
     ? readingOf(after, main).balance
     : null;
+  result.goalBalanceKobo = after.settled
+    ? readingOf(after, goal).balance
+    : null;
   result.mainDeltaKobo = measured
     ? delta(readingOf(baseline, main).balance, readingOf(after, main).balance)
     : null;
@@ -114,8 +123,8 @@ export async function stepFundGoal(
     .value('fund_goal_main_delta_kobo', result.mainDeltaKobo)
     .value('fund_goal_goal_delta_kobo', result.goalDeltaKobo);
   const { mainDeltaKobo: main$, goalDeltaKobo: goal$ } = result;
+  record(watch.terminal === 'success' && main$ !== null && goal$ !== null);
   if (watch.terminal !== 'success' || main$ === null || goal$ === null) {
-    quiet.markNotQuiet(main, goal);
     b.inconclusive('the goal funding did not reach a settled, measured result');
     b.finding(
       FUND_GOAL,
@@ -130,7 +139,6 @@ export async function stepFundGoal(
   if (!quietBefore) {
     // The baseline may already include part of an earlier movement, or the
     // earlier one may land during the measurement: they cannot be separated.
-    quiet.markNotQuiet(main, goal);
     b.inconclusive('an earlier step left these wallets unsettled');
     b.finding(FUND_GOAL, FUND_Q, 'unknown', EARLIER_UNSETTLED);
     return result;

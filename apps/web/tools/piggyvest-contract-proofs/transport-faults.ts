@@ -46,6 +46,8 @@ export class TransportFaults {
       if (claimed) this.armed.splice(index, 1);
       const response = await base(input, init);
       if (!claimed) return response;
+      // The response is lost: release its unread body instead of leaking it.
+      await response.body?.cancel().catch(() => undefined);
       throw new TypeError('fetch failed');
     };
   }

@@ -17,8 +17,8 @@ A plain re-run never resends a mutation: every one has a journaled slot.
 
 ## Proof 10 (task S8): sandbox first pass
 
-Proof 10 runs after the shared scenario (QA customer, main wallet, goal wallet,
-funded main) and covers, in order:
+Proof 10 runs on its OWN scenario (QA customer, main wallet, goal wallet,
+funded main, created per attempt) and covers, in order:
 
 1. **Onboard**: the QA customer exists with a main wallet proven to belong to it.
 2. **Bank deposit credited once**: a sandbox test-funding deposit into the main
@@ -94,3 +94,8 @@ reference; that is a real finding, not a harness fault.
 
 The live evidence for S8 follows in a separate run; this change only adds and
 tests the scenarios.
+
+### How the S8 money verdicts stay conservative
+
+- One ledger of expected movements (`movement-ledger.ts`) is shared by the dedicated scenario's setup funding and every S8 step. A movement is settled only when both its source and destination balance were observed settled. A step that measures a wallet with any unsettled movement publishes `unknown` ("earlier movement on this wallet unsettled"); the raw deltas are still recorded.
+- Any verdict-edge case beyond this rule is an accepted limitation. Every non-`yes` verdict and its raw deltas are reviewed by a human before the evidence is signed off, so a false `no` cannot pass unnoticed.

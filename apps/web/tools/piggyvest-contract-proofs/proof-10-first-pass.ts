@@ -1,3 +1,4 @@
+import { MovementLedger } from './movement-ledger';
 import { DEPOSIT_ONCE, stepDeposit } from './proof-10-deposit';
 import {
   FUND_GOAL,
@@ -19,7 +20,6 @@ import { qaIdentityFor } from './provider-ops';
 import { proof10Key } from './qa-keys';
 import { setupScenario } from './scenario';
 import type { Answer, ProofResult } from './types';
-import { WalletsQuiet } from './wallet-quiet';
 
 const TITLE =
   'S8 first pass: onboard, deposit, create goal, fund, double tap, timeout retry';
@@ -59,7 +59,8 @@ function unreadableAsUnknown(established: boolean): Answer {
  */
 async function dedicatedContext(
   shared: ProofContext,
-  b: ProofBuilder
+  b: ProofBuilder,
+  ledger: MovementLedger
 ): Promise<ProofContext> {
   if (shared.mode === 'live-readonly') return shared;
   const qa = qaIdentityFor(proof10Key(shared.qa.qaKey, shared.attempt));
@@ -73,7 +74,9 @@ async function dedicatedContext(
     qa,
     state: { ...emptyScenarioState(), authorized: shared.state.authorized },
   };
-  await setupScenario(ctx);
+  // Its setup funding is a movement like any other: unsettled, it would
+  // land inside the deposit step's measurement.
+  await setupScenario(ctx, ledger);
   for (const note of ctx.state.notes) b.note(note);
   return ctx;
 }
@@ -87,7 +90,8 @@ async function dedicatedContext(
  */
 export async function runProof10(shared: ProofContext): Promise<ProofResult> {
   const b = new ProofBuilder('p10', TITLE);
-  const ctx = await dedicatedContext(shared, b);
+  const ledger = new MovementLedger();
+  const ctx = await dedicatedContext(shared, b, ledger);
   const { state, mode } = ctx;
   const main = state.mainWalletId;
   const goal = state.goalWalletId;
@@ -125,13 +129,12 @@ export async function runProof10(shared: ProofContext): Promise<ProofResult> {
     return b.build(ctx);
   }
 
-  // One flag per wallet for the whole sequence: every step that leaves an
-  // unsettled or unmeasured movement marks its wallets, and later steps
-  // publish unknown for money verdicts on them.
-  const quiet = new WalletsQuiet();
-  await stepDeposit(ctx, b, main, quiet);
-  const fund = await stepFundGoal(ctx, b, main, goal, quiet);
-  await stepDoubleTap(ctx, b, main, goal, fund, quiet);
-  await stepTimeoutRetry(ctx, b, main, goal, quiet);
+  // One ledger for the whole sequence (setup funding included): every step
+  // appends its movement, and a step measuring a wallet with an unsettled
+  // movement publishes unknown for its money verdicts.
+  await stepDeposit(ctx, b, main, ledger);
+  const fund = await stepFundGoal(ctx, b, main, goal, ledger);
+  await stepDoubleTap(ctx, b, main, goal, fund, ledger);
+  await stepTimeoutRetry(ctx, b, main, goal, ledger);
   return b.build(ctx);
 }

@@ -1,4 +1,5 @@
 import { pickString } from './loose-schemas';
+import { EARLIER_UNSETTLED, MovementLedger } from './movement-ledger';
 import { delta, readingOf, settledWallets, statusOf } from './poll';
 import type { FundGoalResult } from './proof-10-fund-double-tap';
 import { answerOf, type ProofBuilder } from './proof-builder';
@@ -6,7 +7,6 @@ import type { ProofContext } from './proof-context';
 import type { CallResult } from './provider-ops';
 import { pollSettled, usableList } from './read-rules';
 import type { Answer } from './types';
-import { EARLIER_UNSETTLED, WalletsQuiet } from './wallet-quiet';
 
 /**
  * S8, step 5: tap the funding action a second time. A double tap must yield
@@ -35,7 +35,7 @@ export async function stepDoubleTap(
   main: string,
   goal: string,
   fund: FundGoalResult | null,
-  quiet: WalletsQuiet = new WalletsQuiet()
+  ledger: MovementLedger = new MovementLedger()
 ): Promise<boolean> {
   const { api, qa } = ctx;
   if (
@@ -49,7 +49,7 @@ export async function stepDoubleTap(
     return true; // nothing was sent, so nothing is outstanding
   }
   const reference = fund.reference;
-  const quietBefore = quiet.isQuiet(main, goal);
+  const quietBefore = ledger.isQuiet(main, goal);
 
   // Tap 2, app path: the same slot (the idempotency key) must send nothing.
   const second = await api.transferWallet(
@@ -95,7 +95,12 @@ export async function stepDoubleTap(
     );
     b.inconclusive('S8 wire-level repeat already executed in an earlier run');
     b.finding(TAP_ONCE, TAP_ONCE_Q, 'unknown');
-    quiet.markNotQuiet(main, goal);
+    ledger.append({
+      from: main,
+      to: goal,
+      amountKobo: fund.amountKobo,
+      settled: false,
+    });
     return false; // nothing about the repeat was reconciled in this run
   }
   b.value('double_tap_wire_http_status', again.call.httpStatus).value(
@@ -114,9 +119,14 @@ export async function stepDoubleTap(
       await api.verify(reference, main);
     }
   }
-  const settled = await settledWallets(ctx, [main]);
+  // Both sides of the repeat: a second booking debits main AND credits goal,
+  // and either balance may lag the other.
+  const settled = await settledWallets(ctx, [main, goal]);
   const extraDebit = settled.settled
     ? delta(readingOf(settled, main).balance, fund.mainBalanceKobo)
+    : null;
+  const extraCredit = settled.settled
+    ? delta(fund.goalBalanceKobo, readingOf(settled, goal).balance)
     : null;
   const listed = await pollSettled(
     { ...ctx, maxPolls: again.outcome === 'rejected' ? 0 : ctx.maxPolls },
@@ -124,10 +134,9 @@ export async function stepDoubleTap(
     (list) => (countRows(list) ?? 0) > (rowsBefore ?? 0)
   );
   const rowsAfter = countRows(listed.value);
-  b.value('double_tap_rows_with_reference', rowsAfter).value(
-    'double_tap_extra_debit_kobo',
-    extraDebit
-  );
+  b.value('double_tap_rows_with_reference', rowsAfter)
+    .value('double_tap_extra_debit_kobo', extraDebit)
+    .value('double_tap_extra_goal_credit_kobo', extraCredit);
   b.note(
     'Double tap: the provider behaviour on a repeated reference is recorded only; production never resubmits a reference.'
   );
@@ -140,7 +149,8 @@ export async function stepDoubleTap(
   const accepted = again.outcome !== 'rejected';
   const secondSeen =
     (rowsAfter !== null && rowsAfter > 1) ||
-    (extraDebit !== null && extraDebit > 0);
+    (extraDebit !== null && extraDebit > 0) ||
+    (extraCredit !== null && extraCredit > 0);
   // A balance INCREASE (negative extra debit) is an unexplained credit, not a
   // second booking: it is never `no` and never a clean `yes`.
   const unexplainedCredit = extraDebit !== null && extraDebit < 0;
@@ -157,9 +167,10 @@ export async function stepDoubleTap(
           unexplainedCredit ||
           rowsAfter === null ||
           extraDebit === null ||
+          extraCredit === null ||
           accepted
         ? 'unknown'
-        : answerOf(rowsAfter === 1 && extraDebit === 0);
+        : answerOf(rowsAfter === 1 && extraDebit === 0 && extraCredit === 0);
   b.finding(
     TAP_ONCE,
     TAP_ONCE_Q,
@@ -172,14 +183,22 @@ export async function stepDoubleTap(
           ? 'the repeat was accepted or its outcome is indeterminate and no second record or debit appeared, but its settlement or deduplication cannot be established from the original status'
           : 'the record list or the balances did not settle, so no count is published'
   );
-  // Is every balance movement of the repeat reconciled? A rejected repeat
-  // with settled balances, or an accepted one whose debit was seen to land.
-  // An accepted repeat with no debit seen may still land later.
-  // An unexplained credit (negative extra debit) reconciles nothing.
-  const reconciled =
-    quietBefore &&
+  // The repeat is reconciled only when BOTH balances were observed: either
+  // both moved (an accepted booking that landed on each side) or, for a
+  // definite rejection, neither did. One side moving alone is a lagging side;
+  // an unexplained credit reconciles nothing.
+  const bothMoved =
     extraDebit !== null &&
-    (accepted ? extraDebit > 0 : extraDebit >= 0);
-  if (!reconciled) quiet.markNotQuiet(main, goal);
+    extraCredit !== null &&
+    extraDebit > 0 &&
+    extraCredit > 0;
+  const neitherMoved = extraDebit === 0 && extraCredit === 0;
+  const reconciled = bothMoved || (!accepted && neitherMoved);
+  ledger.append({
+    from: main,
+    to: goal,
+    amountKobo: fund.amountKobo,
+    settled: reconciled,
+  });
   return reconciled;
 }

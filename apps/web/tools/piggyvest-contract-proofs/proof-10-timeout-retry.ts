@@ -2,6 +2,7 @@ import { AMOUNTS_KOBO } from './constants';
 import { readTransferFeeKobo } from './debit-once';
 import { pickString } from './loose-schemas';
 import { settledAfterMovement } from './movement';
+import { EARLIER_UNSETTLED, MovementLedger } from './movement-ledger';
 import { delta, readingOf, settledWallets, statusOf } from './poll';
 import { answerOf, type ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
@@ -14,7 +15,6 @@ import {
 } from './tsq-follow-up';
 import type { Answer } from './types';
 import { transferVerdict } from './verdict-rule';
-import { EARLIER_UNSETTLED, WalletsQuiet } from './wallet-quiet';
 
 /**
  * S8, step 6: a timeout on submit. The request leaves and the provider may
@@ -61,14 +61,14 @@ export async function stepTimeoutRetry(
   b: ProofBuilder,
   main: string,
   goal: string,
-  /** Wallets an earlier mutation may still move are not quiet. */
-  quiet: WalletsQuiet = new WalletsQuiet()
+  /** Every earlier movement; an unsettled one makes its wallets not quiet. */
+  ledger: MovementLedger = new MovementLedger()
 ): Promise<void> {
   const { api, qa, faults, redactor } = ctx;
   if (!faults)
     return allUnknown(b, 'no transport fault injector is configured');
   const amount = AMOUNTS_KOBO.s8TimeoutTransfer;
-  const earlierSettled = quiet.isQuiet(main, goal);
+  const earlierSettled = ledger.isQuiet(main, goal);
   const baseline = await settledWallets(ctx, [main, goal]);
 
   faults.loseNextResponse('/api/v1/transfer/wallet');

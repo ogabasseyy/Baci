@@ -111,4 +111,17 @@ describe('TransportFaults', () => {
     await wrapped(new Request('https://x.test/api/v1/transfer/wallet'));
     expect(faults.pending()).toBe(1);
   });
+
+  it('cancels the unconsumed body of the lost response', async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream({ cancel });
+    const base = vi.fn(async () => new Response(body, { status: 202 }));
+    const faults = new TransportFaults();
+    const wrapped = faults.wrap(base as unknown as typeof fetch);
+    faults.loseNextResponse('/api/v1/transfer/wallet');
+    await expect(
+      wrapped('https://x.test/api/v1/transfer/wallet', { method: 'POST' })
+    ).rejects.toThrow(TypeError);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
 });

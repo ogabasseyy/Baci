@@ -1,9 +1,9 @@
 import { AMOUNTS_KOBO } from './constants';
 import { measureDeposit } from './deposit-measure';
+import { EARLIER_UNSETTLED, MovementLedger } from './movement-ledger';
 import type { ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
 import { creditedOnce } from './verdict-rule';
-import { WalletsQuiet } from './wallet-quiet';
 
 /**
  * S8, step 2: a bank deposit (the sandbox test-funding stand-in) into the main
@@ -21,14 +21,20 @@ export async function stepDeposit(
   ctx: ProofContext,
   b: ProofBuilder,
   main: string,
-  quiet: WalletsQuiet = new WalletsQuiet()
+  ledger: MovementLedger = new MovementLedger()
 ): Promise<void> {
   const gross = AMOUNTS_KOBO.s8DepositMain;
+  // Setup funding (or anything else) still unsettled on main would land
+  // inside this deposit's measurement.
+  const quietBefore = ledger.isQuiet(main);
   const measured = await measureDeposit(ctx, main, gross, 'p10/deposit_main');
-  if (measured.kind !== 'measured') {
-    // Unmeasured: the credit may still land under a later baseline.
-    quiet.markNotQuiet(main);
-  }
+  // Unmeasured, the credit may still land under a later baseline.
+  ledger.append({
+    from: null,
+    to: main,
+    amountKobo: gross,
+    settled: measured.kind === 'measured',
+  });
   if (measured.kind === 'resumed') {
     b.note(
       `The S8 deposit slot was already used (${measured.priorOutcome}); it is never resent. Repeating it needs a full run without the --proof p10 filter, using --new-attempt.`
@@ -51,6 +57,12 @@ export async function stepDeposit(
     .value('deposit_credited_kobo', measured.creditedKobo)
     .value('deposit_fee_from_record_kobo', fee)
     .value('deposit_row_found', measured.row !== null);
+  if (!quietBefore) {
+    // The raw values above stay published for the human review.
+    b.inconclusive('an earlier step left the main wallet unsettled');
+    b.finding(DEPOSIT_ONCE, QUESTION, 'unknown', EARLIER_UNSETTLED);
+    return;
+  }
   b.finding(
     DEPOSIT_ONCE,
     QUESTION,

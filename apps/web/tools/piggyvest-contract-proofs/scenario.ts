@@ -6,6 +6,7 @@ import {
   pickString,
   walletDataSchema,
 } from './loose-schemas';
+import { MovementLedger } from './movement-ledger';
 import type { ProofContext, WalletView } from './proof-context';
 import { discoverQaCustomer, verifiesCreatedCustomer } from './qa-discovery';
 import { okData, usableList } from './read-rules';
@@ -162,7 +163,10 @@ async function ensureGoalWallet(ctx: ProofContext): Promise<void> {
     state.notes.push('goal wallet unavailable after creation attempt');
 }
 
-async function ensureFundedMain(ctx: ProofContext): Promise<void> {
+async function ensureFundedMain(
+  ctx: ProofContext,
+  ledger: MovementLedger
+): Promise<void> {
   const { api, qa, state } = ctx;
   if (!state.mainWalletId) {
     state.notes.push('main wallet could not be identified; funding skipped');
@@ -185,7 +189,14 @@ async function ensureFundedMain(ctx: ProofContext): Promise<void> {
     AMOUNTS_KOBO.fundMain,
     'scenario/fund_main'
   );
+  const movement = {
+    from: null,
+    to: state.mainWalletId,
+    amountKobo: AMOUNTS_KOBO.fundMain,
+  };
   if (funded.kind === 'resumed') {
+    // Sent in an earlier run: this run never saw it settle.
+    ledger.append({ ...movement, settled: false });
     state.notes.push(
       `main funding slot resumed from journal (${funded.priorOutcome}); not re-funded`
     );
@@ -195,15 +206,23 @@ async function ensureFundedMain(ctx: ProofContext): Promise<void> {
     const now = walletDataSchema.safeParse(
       okData(await api.wallet(state.mainWalletId))
     );
-    if (now.success && now.data.balance > balance) return;
+    if (now.success && now.data.balance > balance) {
+      ledger.append({ ...movement, settled: true });
+      return;
+    }
     await ctx.sleep(ctx.pollIntervalMs);
   }
+  // The credit may still land under a later baseline.
+  ledger.append({ ...movement, settled: false });
   state.notes.push(
     'main wallet funding did not settle within the polling window'
   );
 }
 
-export async function setupScenario(ctx: ProofContext): Promise<void> {
+export async function setupScenario(
+  ctx: ProofContext,
+  ledger: MovementLedger = new MovementLedger()
+): Promise<void> {
   const { api, qa, state, mode, redactor } = ctx;
   redactor.register('Q', qa.qaKey);
   redactor.register('Q', qa.thirdPartyIdentifier);
@@ -260,5 +279,5 @@ export async function setupScenario(ctx: ProofContext): Promise<void> {
   if (mode === 'live-readonly') return;
   await ensureGoalWallet(ctx);
   assignRoles(ctx);
-  await ensureFundedMain(ctx);
+  await ensureFundedMain(ctx, ledger);
 }

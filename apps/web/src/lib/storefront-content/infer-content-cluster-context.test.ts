@@ -236,4 +236,48 @@ describe('inferContentClusterContext', () => {
     });
     expect(gamingLaptopsComparison.categorySlug).toBe('gaming-laptops');
   });
+
+  it('promotes Laptops category posts to gaming-laptops when title specifically covers gaming laptops', () => {
+    const gamingLaptopRoundup = inferContentClusterContext({
+      title: 'Best Gaming Laptops in Nigeria (2026)',
+      excerpt: 'Top portable gaming rigs for Nigerian gamers.',
+      category: 'Laptops',
+      tags: ['laptops', 'budget'],
+      keywords: ['buyer guide'],
+    });
+    expect(gamingLaptopRoundup.categorySlug).toBe('gaming-laptops');
+
+    const asusRogReview = inferContentClusterContext({
+      title: 'ASUS ROG RTX 4060 Laptop Review and Price in Nigeria',
+      excerpt: 'High refresh rate portable powerhouse reviewed.',
+      category: 'Laptops',
+      tags: ['laptops', 'asus'],
+      keywords: ['buyer guide'],
+    });
+    expect(asusRogReview.categorySlug).toBe('gaming-laptops');
+  });
+
+  it('keeps Gaming category for gaming monitors with msi and refresh rate tokens without promoting to gaming-laptops', () => {
+    const monitorPost = inferContentClusterContext({
+      title: 'MSI Optix 144Hz Gaming Monitor: Refresh Rate and Display Review',
+      excerpt:
+        'A comprehensive review of the 144Hz refresh rate IPS display from MSI.',
+      category: 'Gaming',
+      tags: ['gaming', 'msi', 'refresh rate', 'monitors'],
+      keywords: ['msi', 'refresh rate', 'gaming monitor'],
+    });
+    expect(monitorPost.categorySlug).toBe('gaming');
+  });
+
+  it('keeps Laptops category for student laptop guides mentioning gaming lines only in tags or excerpt', () => {
+    const studentLaptopGuide = inferContentClusterContext({
+      title: 'Best Student Laptops in Nigeria: 2026 Edition',
+      excerpt:
+        'Comparing lightweight notebooks for school against heavier Legion and Omen options.',
+      category: 'Laptops',
+      tags: ['laptops', 'students', 'legion', 'omen'],
+      keywords: ['buyer guide', 'school'],
+    });
+    expect(studentLaptopGuide.categorySlug).toBe('laptops');
+  });
 });

@@ -56,6 +56,38 @@ function hasPhrase(haystack: string, needle: string) {
   }
 }
 
+const DEDICATED_GAMING_LAPTOP_TOKENS = [
+  'omen',
+  'legion',
+  'alienware',
+  'rtx',
+  'geforce',
+  'rog',
+  'tuf',
+] as const;
+
+function isDedicatedGamingLaptopContent(
+  titleHaystack: string,
+  haystack: string
+): boolean {
+  if (
+    hasPhrase(titleHaystack, 'gaming laptop') ||
+    hasPhrase(titleHaystack, 'gaming laptops')
+  ) {
+    return true;
+  }
+
+  const hasDedicatedModelToken = DEDICATED_GAMING_LAPTOP_TOKENS.some((token) =>
+    hasPhrase(titleHaystack, token)
+  );
+  const hasLaptopToken =
+    hasPhrase(haystack, 'laptop') || hasPhrase(haystack, 'laptops');
+  const hasMonitorToken =
+    hasPhrase(titleHaystack, 'monitor') || hasPhrase(titleHaystack, 'monitors');
+
+  return hasDedicatedModelToken && hasLaptopToken && !hasMonitorToken;
+}
+
 function inferCategorySlug(
   haystack: string,
   tokens: string[],
@@ -75,30 +107,12 @@ function inferCategorySlug(
     .find(({ name }) => hasPhrase(explicitCategory, name));
 
   if (explicitMatch) {
-    if (explicitMatch.categorySlug === 'gaming') {
-      const gamingLaptopSupport = CONTENT_CLUSTER_SUPPORT['gaming-laptops'];
-      const hasGamingLaptopCategory = gamingLaptopSupport.categoryNames.some(
-        (name) => hasPhrase(haystack, name)
-      );
-      const gamingLaptopTokenCount = gamingLaptopSupport.articleTokens.filter(
-        (token) => tokens.includes(token) || hasPhrase(haystack, token)
-      ).length;
-
-      if (hasGamingLaptopCategory || gamingLaptopTokenCount >= 2) {
-        return 'gaming-laptops';
-      }
-    } else if (explicitMatch.categorySlug === 'laptops') {
-      const gamingLaptopSupport = CONTENT_CLUSTER_SUPPORT['gaming-laptops'];
-      const hasGamingLaptopInTitle =
-        title !== undefined &&
-        gamingLaptopSupport.categoryNames.some((name) =>
-          hasPhrase(title, name)
-        );
-      const gamingLaptopTokenCount = gamingLaptopSupport.articleTokens.filter(
-        (token) => tokens.includes(token) || hasPhrase(haystack, token)
-      ).length;
-
-      if (hasGamingLaptopInTitle || gamingLaptopTokenCount >= 2) {
+    if (
+      explicitMatch.categorySlug === 'gaming' ||
+      explicitMatch.categorySlug === 'laptops'
+    ) {
+      const titleHaystack = title ?? '';
+      if (isDedicatedGamingLaptopContent(titleHaystack, haystack)) {
         return 'gaming-laptops';
       }
     }

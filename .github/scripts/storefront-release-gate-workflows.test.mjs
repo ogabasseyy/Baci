@@ -187,3 +187,8 @@ test('quoted or unreadable job entries are counted so a second job cannot hide',
   const text = "jobs:\n  ship:\n    steps: []\n  'publish':\n    steps: []\n  \"third\":\n    steps: []\n  ? odd\n  : steps: []\n";
   assert.deepEqual(readJobIds(text), ['ship', 'publish', 'third', '(unreadable job entry)', '(unreadable job entry)']);
 });
+
+test('steps whose keys are quoted still count as steps', () => {
+  const text = '    steps:\n      - "name": Guard\n        "run": echo\n      - \'run\': echo hi\n      - "uses": actions/checkout@v4\n';
+  assert.deepEqual(readStepNames(text), ['Guard', '(unnamed step)', '(unnamed step)']);
+});

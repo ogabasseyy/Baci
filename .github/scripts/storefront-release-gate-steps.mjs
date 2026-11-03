@@ -8,7 +8,7 @@ const OTA_SELECTION_STEP = 'Validate and select reviewed source';
 export const RELEASE_GUARD_STEP = 'Refuse release sources that are not on main';
 const CHECKOUT_STEP = 'Checkout';
 export const CI_GATE_STEP = 'Test storefront release gate';
-const CONDITION = /^\s*(?:if|continue-on-error)\s*:/m;
+const CONDITION = /^\s*["']?(?:if|continue-on-error)["']?\s*:/m;
 
 // The refusal logic the OTA guard must keep, as exact script lines in order:
 // the SHA format check, the commit existence check, the marker lookup in the
@@ -154,6 +154,6 @@ const NON_STORE_SECRET = /^(?:GITHUB_TOKEN|(?:EXPO|NEXT)_PUBLIC_\w+)$/;
 
 /** The store-credential secrets (anything beyond the public client config) a workflow reads. */
 export function storeSecretsUsed(text) {
-  const names = [...text.matchAll(/\bsecrets\.(\w+)/g)].map((match) => match[1]);
+  const names = [...text.matchAll(/\bsecrets(?:\.(\w+)|\[\s*['"](\w+)['"]\s*\])/g)].map((match) => match[1] ?? match[2]);
   return [...new Set(names)].filter((name) => !NON_STORE_SECRET.test(name));
 }

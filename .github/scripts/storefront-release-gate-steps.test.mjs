@@ -84,3 +84,14 @@ test('the CI gate command may not swallow a failure', () => {
     assert.equal(ciGateFailures('ci.yml', CI_WITH(run), ['a.test.mjs']).length, 1, run);
   }
 });
+
+test('quoted keys and bracket notation do not hide a store secret or a guard condition', () => {
+  assert.deepEqual(storeSecretsUsed("env:\n  K: ${{ secrets['ASC_KEY'] }}\n  J: ${{ secrets[\"PLAY_JSON\"] }}"), ['ASC_KEY', 'PLAY_JSON']);
+});
+
+test('a quoted if or continue-on-error key on the guard step fails the gate', () => {
+  for (const key of ['"if": false', "'continue-on-error': true", '"continue-on-error": true']) {
+    const text = release().replace(`      - name: ${RELEASE_GUARD_STEP}\n`, `      - name: ${RELEASE_GUARD_STEP}\n        ${key}\n`);
+    assert.equal(releaseGuardFailures('release.yml', text, 'ship').length, 1, key);
+  }
+});

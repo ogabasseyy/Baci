@@ -152,9 +152,9 @@ export function readJob(text, id) {
   return lines.slice(start, end).join('\n');
 }
 
-const STEP_NAME = /^(\s*)- name:\s*(.+?)\s*$/;
+const STEP_NAME = /^(\s*)- ["']?name["']?:\s*(.+?)\s*$/;
 
-const STEP_START = /^\s*- (?:(name)|(?:run|uses|id|if|env|with|shell|working-directory|continue-on-error|timeout-minutes)):/;
+const STEP_START = /^\s*- ["']?(?:(name)|(?:run|uses|id|if|env|with|shell|working-directory|continue-on-error|timeout-minutes))["']?:/;
 export const UNNAMED_STEP = '(unnamed step)';
 
 /** Step names in file order; a step that does not start with `name:` shows as UNNAMED_STEP. */

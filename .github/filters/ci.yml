@@ -359,9 +359,6 @@ web:
   - 'biome.json'
   - '.npmrc'
   - 'pnpm-workspace.yaml'
-
-# PiggyVest legacy wallet runbook SQL. Gates the scratch-PostgreSQL step only,
-# so unrelated web changes do not install PostgreSQL.
 piggyvest_runbook:
   - 'docs/piggyvest-legacy-migration/**'
   - 'docs/piggyvest-legacy-migration-runbook.md'

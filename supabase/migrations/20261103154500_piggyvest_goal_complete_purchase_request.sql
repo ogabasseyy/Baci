@@ -767,7 +767,8 @@ BEGIN
     (complete_operation_id, integration_id, merchant_id, customer_id, goal_id, goal_title,
      target_amount, product_id, variant_id, amount_kobo, created_at)
   VALUES (v_operation.id, v_binding.id, v_intent.merchant_id, v_intent.customer_id, v_operation.goal_id,
-    v_goal.title, v_goal.target_amount, v_goal.product_id, v_goal.variant_id, v_operation.amount_kobo, v_now);
+    pg_catalog.left(COALESCE(NULLIF(pg_catalog.btrim(v_goal.title), ''), 'Savings goal'), 500),
+    v_goal.target_amount, v_goal.product_id, v_goal.variant_id, v_operation.amount_kobo, v_now);
   RETURN 'confirmed';
 END;
 $$;

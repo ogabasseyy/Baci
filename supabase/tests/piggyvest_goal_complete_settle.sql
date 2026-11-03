@@ -78,6 +78,26 @@ BEGIN
   PERFORM pg_temp.gx_assert(pg_temp.gx_settle(pg_temp.gx_proof(v_op)) = 'conflict', 'a reused transaction id settled');
   UPDATE piggyvest_primary.savings_operations SET provider_transaction_id = NULL;
 
+  -- 4b. A goal title of any shape never blocks settlement: an over-long title
+  -- is shortened and a blank one gets a default, so the money that already
+  -- moved at the provider is always credited locally.
+  BEGIN
+    UPDATE public.customer_savings_goals SET title = pg_catalog.repeat('x', 600) WHERE id = c_goal::uuid;
+    PERFORM pg_temp.gx_assert(pg_temp.gx_settle(pg_temp.gx_proof(v_op)) = 'confirmed', 'a long title blocked settlement');
+    PERFORM pg_temp.gx_assert((SELECT pg_catalog.char_length(goal_title) FROM piggyvest_primary.goal_purchase_requests) = 500,
+      'a long title was not shortened');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  BEGIN
+    UPDATE public.customer_savings_goals SET title = '   ' WHERE id = c_goal::uuid;
+    PERFORM pg_temp.gx_assert(pg_temp.gx_settle(pg_temp.gx_proof(v_op)) = 'confirmed', 'a blank title blocked settlement');
+    PERFORM pg_temp.gx_assert((SELECT goal_title FROM piggyvest_primary.goal_purchase_requests) = 'Savings goal',
+      'a blank title got no default');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+
   -- 5. The settlement: attempt confirmed, goal completed, wallet credited,
   -- purchase request saved, all in the one call.
   PERFORM pg_temp.gx_assert(pg_temp.gx_settle(pg_temp.gx_proof(v_op)) = 'confirmed', 'settlement refused');

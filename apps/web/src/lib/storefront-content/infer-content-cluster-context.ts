@@ -60,22 +60,24 @@ const hasGamingLaptopPhrase = (t: string) =>
 const hasLaptopPhrase = (t: string) =>
   hasPhrase(t, 'laptop') || hasPhrase(t, 'laptops') || hasGamingLaptopPhrase(t);
 
-const isExemptSubject = (s: string, t: string, hasGaming: boolean) =>
-  s === 'gpu' || s === 'gpus' || s.startsWith('graphics card')
-    ? hasGaming &&
+const isExemptSubject = (s: string, t: string, hasGaming: boolean) => {
+  if (s === 'gpu' || s === 'gpus' || s.startsWith('graphics card')) {
+    return (
+      hasGaming &&
       !hasPhrase(t, 'gaming laptop gpu') &&
       !hasPhrase(t, 'gaming laptop graphics card')
-    : s.startsWith('desktop')
-      ? GAMING_LAPTOP_EXEMPT_PHRASES.desktop.some((p) => hasPhrase(t, p))
-      : s.startsWith('monitor')
-        ? hasGaming &&
-          GAMING_LAPTOP_EXEMPT_PHRASES.monitor.some((p) => hasPhrase(t, p))
-        : s.startsWith('accessor')
-          ? hasGaming &&
-            GAMING_LAPTOP_EXEMPT_PHRASES.accessories.some((p) =>
-              hasPhrase(t, p)
-            )
-          : false;
+    );
+  }
+  for (const k of ['desktop', 'monitor', 'accessories'] as const) {
+    if (s.startsWith(k.slice(0, 7))) {
+      return (
+        (k === 'desktop' || hasGaming) &&
+        GAMING_LAPTOP_EXEMPT_PHRASES[k].some((p) => hasPhrase(t, p))
+      );
+    }
+  }
+  return false;
+};
 
 function hasExcludedGamingLaptopSubject(
   targetText: string,
@@ -100,6 +102,17 @@ const getSubjectTarget = (title?: string, excerpt?: string) =>
     ? (title ?? '')
     : [title, excerpt].filter(Boolean).join(' ');
 
+const EXCLUDED_CATEGORY_MAP: [SupportedClusterCategory, string[]][] = [
+  ['monitors', ['monitor', 'monitors']],
+  ['desktops', ['desktop', 'desktops', 'aurora', 'pc build', 'pc builds']],
+  ['gaming', ['gpu', 'gpus', 'graphics card', 'graphics cards']],
+];
+
+const getExcludedSubjectCategory = (t: string): SupportedClusterCategory =>
+  EXCLUDED_CATEGORY_MAP.find(([, phrases]) =>
+    phrases.some((p) => hasPhrase(t, p))
+  )?.[0] ?? 'accessories';
+
 function isDedicatedGamingLaptopContent(
   title: string,
   content: string,
@@ -118,9 +131,10 @@ function isDedicatedGamingLaptopContent(
     : hasLaptopPhrase(content)
       ? content
       : null;
-  return target
-    ? !hasExcludedGamingLaptopSubject(target, hasGamingLaptopPhrase(target))
-    : false;
+  return Boolean(
+    target &&
+      !hasExcludedGamingLaptopSubject(target, hasGamingLaptopPhrase(target))
+  );
 }
 
 function inferCategorySlug(
@@ -153,24 +167,24 @@ function inferCategorySlug(
       return 'gaming-laptops';
     }
     if (slug === 'gaming-laptops') {
-      return hasExcludedGamingLaptopSubject(
-        getSubjectTarget(title, excerpt),
-        true
-      )
-        ? 'laptops'
-        : 'gaming-laptops';
+      const target = getSubjectTarget(title, excerpt);
+      if (!hasExcludedGamingLaptopSubject(target, true)) {
+        return 'gaming-laptops';
+      }
+      return getExcludedSubjectCategory(
+        title && hasExcludedGamingLaptopSubject(title, true) ? title : target
+      );
     }
     return slug;
   }
 
-  let bestCategory: SupportedClusterCategory | null = null;
-  let bestScore = 0;
+  let best: { category: SupportedClusterCategory; score: number } | null = null;
 
-  for (const [categorySlug, support] of Object.entries(
+  for (const [slug, support] of Object.entries(
     CONTENT_CLUSTER_SUPPORT
   ) as ClusterSupportEntry[]) {
     if (
-      categorySlug === 'gaming-laptops' &&
+      slug === 'gaming-laptops' &&
       (!hasLaptopPhrase(haystack) ||
         hasExcludedGamingLaptopSubject(getSubjectTarget(title, excerpt), true))
     ) {
@@ -179,30 +193,22 @@ function inferCategorySlug(
     const score = support.articleTokens.filter(
       (token) => tokens.includes(token) || hasPhrase(haystack, token)
     ).length;
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestCategory = categorySlug;
-    }
+    if (score > (best?.score ?? 0)) best = { category: slug, score };
   }
 
-  return bestScore > 0 ? bestCategory : null;
+  return best?.category ?? null;
 }
 
 function inferKind(haystack: string): ContentClusterKind | null {
-  let bestKind: ContentClusterKind | null = null;
-  let bestScore = 0;
+  let best: { kind: ContentClusterKind; score: number } | null = null;
   for (const [kind, phrases] of Object.entries(CONTENT_KIND_TOKENS) as [
     ContentClusterKind,
     readonly string[],
   ][]) {
     const score = phrases.filter((p) => hasPhrase(haystack, p)).length;
-    if (score > bestScore) {
-      bestScore = score;
-      bestKind = kind;
-    }
+    if (score > (best?.score ?? 0)) best = { kind, score };
   }
-  return bestScore > 0 ? bestKind : null;
+  return best?.kind ?? null;
 }
 
 function resolveKind(
@@ -221,8 +227,7 @@ function resolveKind(
       ? inferredKind
       : 'buyer-guide';
   }
-  const intent =
-    typeof input.merchant_intent === 'string' ? input.merchant_intent : '';
+  const intent = String(input.merchant_intent ?? '');
   return Object.hasOwn(MERCHANT_INTENT_CLUSTER_KIND_MAP, intent)
     ? MERCHANT_INTENT_CLUSTER_KIND_MAP[intent]
     : inferredKind;
@@ -232,20 +237,16 @@ function inferBrands(
   categorySlug: SupportedClusterCategory | null,
   haystack: string
 ) {
-  const support = categorySlug ? CONTENT_CLUSTER_SUPPORT[categorySlug] : null;
-  const brandTokens = (
-    support
-      ? Object.entries(support.brandTokens)
-      : Object.values(CONTENT_CLUSTER_SUPPORT).flatMap((e) =>
-          Object.entries(e.brandTokens)
-        )
-  ) as [string, readonly string[]][];
-
+  const dict = categorySlug
+    ? Object.entries(CONTENT_CLUSTER_SUPPORT[categorySlug].brandTokens)
+    : Object.values(CONTENT_CLUSTER_SUPPORT).flatMap((s) =>
+        Object.entries(s.brandTokens)
+      );
   return Array.from(
     new Set(
-      brandTokens
-        .filter(([, aliases]) =>
-          aliases.some((alias) => hasPhrase(haystack, alias))
+      dict
+        .filter(([, a]) =>
+          (a as readonly string[]).some((alias) => hasPhrase(haystack, alias))
         )
         .map(([brand]) => brand)
     )
@@ -257,7 +258,6 @@ function inferPriceBands(
   haystack: string
 ) {
   if (!categorySlug) return [];
-
   return Object.entries(CONTENT_CLUSTER_SUPPORT[categorySlug].priceBandAliases)
     .filter(([, a]) => a.some((alias) => hasPhrase(haystack, alias)))
     .map(([slug]) => slug);
@@ -273,8 +273,9 @@ export function inferContentClusterContext(
     ...(input.keywords ?? []),
   ];
   const contentHaystack = normalizeText(contentText.join(' '));
-  const haystack = normalizeText([input.category, ...contentText].join(' '));
-  const tokens = tokenize([input.category, ...contentText]);
+  const allText = [input.category, ...contentText];
+  const haystack = normalizeText(allText.join(' '));
+  const tokens = tokenize(allText);
   const explicitCategory = normalizeText(input.category);
   const categorySlug = inferCategorySlug(
     haystack,

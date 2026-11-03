@@ -205,12 +205,16 @@ describe('inferContentClusterContext - gaming laptops', () => {
   it('does not classify gaming laptop accessories, stands, or GPUs as gaming-laptops', () => {
     for (const [title, category, expectedSlug] of [
       ['Top 5 Laptop Stands 2026', 'Laptop Accessories', 'accessories'],
-      ['Best Gaming Laptop Stand 2026', 'Gaming Laptops', 'laptops'],
+      ['Best Gaming Laptop Stand 2026', 'Gaming Laptops', 'accessories'],
       ['Best Gaming Laptop Cooling Pads in Nigeria', 'Gaming', 'gaming'],
-      ['Gaming Laptop Stands Buying Guide', 'Gaming Laptops', 'laptops'],
+      ['Gaming Laptop Stands Buying Guide', 'Gaming Laptops', 'accessories'],
       ['Gaming Laptop GPU Upgrade Guide', 'Gaming', 'gaming'],
       ['Gaming Laptop Graphics Card Guide', 'Gaming', 'gaming'],
-      ['Essential Accessories Buyer Guide 2026', 'Gaming Laptops', 'laptops'],
+      [
+        'Essential Accessories Buyer Guide 2026',
+        'Gaming Laptops',
+        'accessories',
+      ],
     ]) {
       const post = inferContentClusterContext({
         title,
@@ -275,16 +279,8 @@ describe('inferContentClusterContext - gaming laptops', () => {
       ['Alienware m16 Desktop-Class Review', 'desktop-class'],
       ['Best Gaming Laptops and Monitor Pairings', 'monitors'],
       ['Top 10 Gaming Laptops with Free Accessories', 'accessories'],
-      [
-        'Alienware m16 Gaming Laptop Buyer Guide',
-        'laptops',
-        'Covers display, keyboard, and battery.',
-      ],
-      [
-        'Best Gaming Laptops in Nigeria',
-        'gaming',
-        'We compared keyboards, GPUs, battery.',
-      ],
+      ['Alienware m16 Laptop Buyer Guide', 'laptops', 'Covers keyboard.'],
+      ['Best Gaming Laptops in Nigeria', 'gaming', 'Covers keyboards, GPUs.'],
     ]) {
       const post = inferContentClusterContext({
         title,

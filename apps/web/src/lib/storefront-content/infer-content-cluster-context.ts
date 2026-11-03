@@ -59,7 +59,8 @@ function hasPhrase(haystack: string, needle: string) {
 function inferCategorySlug(
   haystack: string,
   tokens: string[],
-  explicitCategory: string
+  explicitCategory: string,
+  title?: string
 ): SupportedClusterCategory | null {
   const explicitMatch = (
     Object.entries(CONTENT_CLUSTER_SUPPORT) as [
@@ -74,6 +75,33 @@ function inferCategorySlug(
     .find(({ name }) => hasPhrase(explicitCategory, name));
 
   if (explicitMatch) {
+    if (explicitMatch.categorySlug === 'gaming') {
+      const gamingLaptopSupport = CONTENT_CLUSTER_SUPPORT['gaming-laptops'];
+      const hasGamingLaptopCategory = gamingLaptopSupport.categoryNames.some(
+        (name) => hasPhrase(haystack, name)
+      );
+      const gamingLaptopTokenCount = gamingLaptopSupport.articleTokens.filter(
+        (token) => tokens.includes(token) || hasPhrase(haystack, token)
+      ).length;
+
+      if (hasGamingLaptopCategory || gamingLaptopTokenCount >= 2) {
+        return 'gaming-laptops';
+      }
+    } else if (explicitMatch.categorySlug === 'laptops') {
+      const gamingLaptopSupport = CONTENT_CLUSTER_SUPPORT['gaming-laptops'];
+      const hasGamingLaptopInTitle =
+        title !== undefined &&
+        gamingLaptopSupport.categoryNames.some((name) =>
+          hasPhrase(title, name)
+        );
+      const gamingLaptopTokenCount = gamingLaptopSupport.articleTokens.filter(
+        (token) => tokens.includes(token) || hasPhrase(haystack, token)
+      ).length;
+
+      if (hasGamingLaptopInTitle || gamingLaptopTokenCount >= 2) {
+        return 'gaming-laptops';
+      }
+    }
     return explicitMatch.categorySlug;
   }
 
@@ -215,7 +243,12 @@ export function inferContentClusterContext(
     ...(input.keywords ?? []),
   ]);
   const explicitCategory = normalizeText(input.category);
-  const categorySlug = inferCategorySlug(haystack, tokens, explicitCategory);
+  const categorySlug = inferCategorySlug(
+    haystack,
+    tokens,
+    explicitCategory,
+    normalizeText(input.title)
+  );
 
   return {
     categorySlug,

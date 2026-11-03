@@ -8,6 +8,7 @@ const { isDimensionToken } = modelTokenMatchers;
 const YEAR_TOKEN_PATTERN = /^(?:19|20)\d{2}$/u;
 const MODEL_FAMILY_ALIAS_TOKENS = new Set([
   'airpods',
+  'alienware',
   'buds',
   'legion',
   'laserjet',

@@ -16,7 +16,7 @@ const phoneBrands = {
 
 const laptopBrands = {
   hp: ['hp', 'elitebook', 'pavilion', 'omen'],
-  dell: ['dell', 'latitude', 'xps', 'inspiron'],
+  dell: ['dell', 'latitude', 'xps', 'inspiron', 'alienware'],
   lenovo: ['lenovo', 'thinkpad', 'legion'],
   apple: ['apple', 'macbook'],
   asus: ['asus', 'rog', 'tuf'],
@@ -74,7 +74,7 @@ export const CORE_CONTENT_CLUSTER_SUPPORT = {
     },
   },
   'gaming-laptops': {
-    categoryNames: ['gaming laptops', 'gaming-laptops'],
+    categoryNames: ['gaming laptops', 'gaming-laptops', 'gaming laptop'],
     articleTokens: [
       'gaming laptop',
       'rtx',
@@ -84,6 +84,7 @@ export const CORE_CONTENT_CLUSTER_SUPPORT = {
       'omen',
       'legion',
       'msi',
+      'alienware',
       'refresh rate',
     ],
     brandTokens: laptopBrands,

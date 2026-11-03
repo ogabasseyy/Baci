@@ -37,6 +37,7 @@ function tokenize(value: string) {
 }
 const MODEL_FAMILY_ALIAS_TOKENS = new Set([
   'airpods',
+  'alienware',
   'buds',
   'legion',
   'laserjet',

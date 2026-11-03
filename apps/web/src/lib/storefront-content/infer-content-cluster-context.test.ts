@@ -184,4 +184,56 @@ describe('inferContentClusterContext', () => {
       }).categorySlug
     ).toBe('nintendo-switch-2');
   });
+
+  it('does not infer gaming as a brand for generic gaming or game articles, but infers real gaming brands', () => {
+    const genericGaming = inferContentClusterContext({
+      title: 'Top Gaming Setups and Game Tips for 2026',
+      excerpt: 'Essential advice for console gaming and game performance.',
+      category: 'Gaming',
+      tags: ['gaming', 'game'],
+      keywords: ['gaming', 'game'],
+    });
+    expect(genericGaming.brands).toEqual([]);
+    expect(genericGaming.categorySlug).toBe('gaming');
+
+    const realBrandGaming = inferContentClusterContext({
+      title: 'PlayStation 5 vs Nintendo Switch vs Xbox Series X',
+      excerpt:
+        'Comparing the big three gaming consoles with Asus ROG Ally and Steam Deck.',
+      category: 'Gaming',
+      tags: ['ps5', 'switch', 'xbox', 'asus', 'steam'],
+      keywords: ['playstation', 'nintendo', 'xbox', 'rog', 'steam deck'],
+    });
+    expect(realBrandGaming.brands).toEqual(
+      expect.arrayContaining([
+        'playstation',
+        'nintendo',
+        'xbox',
+        'asus',
+        'steam',
+      ])
+    );
+    expect(realBrandGaming.brands).not.toContain('gaming');
+  });
+
+  it('infers gaming-laptops categorySlug for gaming laptop articles even when category is generic Gaming', () => {
+    const hpOmen = inferContentClusterContext({
+      title: 'HP Omen 16 (2026): Price in Nigeria, Specs & Where to Buy',
+      excerpt: null,
+      category: 'Gaming',
+      tags: ['gaming', 'hp omen 16', 'gaming laptop'],
+      keywords: ['buyer guide'],
+    });
+    expect(hpOmen.categorySlug).toBe('gaming-laptops');
+
+    const gamingLaptopsComparison = inferContentClusterContext({
+      title:
+        'Gaming Laptops in Nigeria (2026): Alienware vs ROG vs Legion vs Omen',
+      excerpt: null,
+      category: 'Gaming',
+      tags: ['gaming', 'alienware', 'rog', 'legion', 'omen'],
+      keywords: ['buyer guide'],
+    });
+    expect(gamingLaptopsComparison.categorySlug).toBe('gaming-laptops');
+  });
 });

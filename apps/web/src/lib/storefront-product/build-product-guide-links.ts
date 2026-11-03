@@ -1,13 +1,6 @@
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
-import { buildCommercialGuideDescription } from '@/lib/storefront-content/build-commercial-guide-description';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
-import type {
-  ContentClusterKind,
-  InformationalGuideLink,
-  PublishedClusterPost,
-  SupportedClusterCategory,
-} from '@/lib/storefront-content/content-cluster-types';
-import { inferContentClusterContext } from '@/lib/storefront-content/infer-content-cluster-context';
+import type { SupportedClusterCategory } from '@/lib/storefront-content/content-cluster-types';
 import type { BuildProductSemanticModelInput } from './product-semantic-types';
 
 function dedupeGuideLinks(links: ReturnType<typeof buildCommercialGuideLinks>) {
@@ -21,24 +14,6 @@ function dedupeGuideLinks(links: ReturnType<typeof buildCommercialGuideLinks>) {
     seen.add(link.href);
     return true;
   });
-}
-
-function inferPriorityGuideKind(
-  post: PublishedClusterPost
-): ContentClusterKind {
-  return inferContentClusterContext(post).kind ?? 'buyer-guide';
-}
-
-function buildPriorityProductGuideLinks(input: {
-  posts: PublishedClusterPost[];
-  storeUrl: string;
-}): InformationalGuideLink[] {
-  return input.posts.map((post) => ({
-    href: `${input.storeUrl}/blog/${post.slug}`,
-    title: post.title,
-    description: buildCommercialGuideDescription(post),
-    kind: inferPriorityGuideKind(post),
-  }));
 }
 
 export function buildProductGuideLinks(input: BuildProductSemanticModelInput) {
@@ -63,21 +38,24 @@ export function buildProductGuideLinks(input: BuildProductSemanticModelInput) {
     (post) => !priorityGuidePostSlugs.has(post.slug)
   );
 
+  const context = {
+    pageKind: 'product' as const,
+    categorySlug: input.categorySlug as SupportedClusterCategory,
+    brands: input.currentProduct.brand ? [input.currentProduct.brand] : [],
+    productNames: [input.currentProduct.name],
+    productSlugs: [input.currentProduct.slug],
+  };
+
   return dedupeGuideLinks([
-    ...buildPriorityProductGuideLinks({
+    ...buildCommercialGuideLinks({
       storeUrl: input.storeUrl,
       posts: priorityGuidePosts,
+      context,
     }),
     ...buildCommercialGuideLinks({
       storeUrl: input.storeUrl,
       posts: fallbackGuidePosts,
-      context: {
-        pageKind: 'product',
-        categorySlug: input.categorySlug as SupportedClusterCategory,
-        brands: input.currentProduct.brand ? [input.currentProduct.brand] : [],
-        productNames: [input.currentProduct.name],
-        productSlugs: [input.currentProduct.slug],
-      },
+      context,
     }),
   ]).slice(0, 3);
 }

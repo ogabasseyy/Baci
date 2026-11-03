@@ -1568,6 +1568,28 @@ describe('generateMetaTitle', () => {
       expect(refurbished).toContain('(Refurbished)');
     });
 
+    it('compacts Oxford-comma and pipe platform lists', () => {
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5, PS4, and Xbox) - Best Price in Nigeria',
+          {
+            maxLength: 60,
+            suffix: 'Store',
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - Best Price in Nigeria | Store');
+
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5 | PS4) - Best Price in Nigeria Today',
+          {
+            maxLength: 60,
+            suffix: 'Store',
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - Best Price in Nigeria Today | Store');
+    });
+
     it('compacts unspaced parenthetical without token concatenation', () => {
       expect(
         generateMetaTitle(
@@ -1670,6 +1692,13 @@ describe('generateMetaTitle', () => {
       expect(
         isRedundantPlatformListParenthetical('playstation 4; xbox one; steam')
       ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5, PS4, and Xbox')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('PS5, PS4, & Xbox')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('PS5 | PS4')).toBe(true);
     });
 
     it('returns false for single-platform parentheticals', () => {
@@ -1759,6 +1788,26 @@ describe('generateMetaTitle', () => {
           'Buy Game (PS5, PS4) : Best Price ... Guaranteed !'
         )
       ).toBe('Buy Game: Best Price ... Guaranteed !');
+    });
+
+    it('handles leading redundant parentheticals without leaving orphan punctuation', () => {
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4): Best Game Ever')
+      ).toBe('Best Game Ever');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4), Best Game Ever')
+      ).toBe('Best Game Ever');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) - Best Game Ever')
+      ).toBe('Best Game Ever');
+    });
+
+    it('localizes spacing normalization without collapsing double spaces elsewhere', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Deal  of the Day (PS5, PS4) Sale  Now'
+        )
+      ).toBe('Deal  of the Day Sale  Now');
     });
   });
 });

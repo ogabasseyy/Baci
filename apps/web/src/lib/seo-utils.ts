@@ -1595,7 +1595,7 @@ const PLATFORM_ID_BY_ALIAS: Record<string, string> = {
 export function isRedundantPlatformListParenthetical(content: string): boolean {
   const parts = content
     .toLowerCase()
-    .split(/\s*(?:[,/&+;]|\band\b)\s*/u)
+    .split(/\s*(?:[,/&+;|]|\band\b)(?:\s*(?:[,/&+;|]|\band\b))*\s*/u)
     .map((part) => part.replace(/\s+/gu, ' ').trim());
   if (parts.length < 2 || parts.some((part) => !part)) return false;
 
@@ -1612,7 +1612,7 @@ export function isRedundantPlatformListParenthetical(content: string): boolean {
 
 export function stripRedundantPlatformParentheticals(title: string): string {
   let stripped = false;
-  const compacted = title.replace(
+  let compacted = title.replace(
     /\s*\(([^)]*)\)\s*(?=[,:;.!?]|$)|\s*\(([^)]*)\)\s*/gu,
     (match, innerBeforePunct?: string, innerOther?: string) => {
       const inner = innerBeforePunct ?? innerOther ?? '';
@@ -1624,7 +1624,13 @@ export function stripRedundantPlatformParentheticals(title: string): string {
     }
   );
 
-  return stripped ? compacted.replace(/\s{2,}/gu, ' ').trim() : title;
+  if (!stripped) {
+    return title;
+  }
+
+  compacted = compacted.replace(/^[,\s:;.!?–—|-]+\s*/u, '');
+
+  return compacted.trim();
 }
 
 /**

@@ -1,5 +1,19 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn() }));
 vi.mock('@/lib/api-client', () => ({ fetchWithCsrf: mocks.fetch }));
@@ -20,6 +34,12 @@ beforeAll(() =>
   )
 );
 afterAll(() => vi.unstubAllGlobals());
+// input-otp schedules selection synchronization up to 50ms after input changes.
+afterEach(async () => {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  });
+});
 beforeEach(() => {
   mocks.fetch.mockReset();
 });

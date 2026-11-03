@@ -74,6 +74,24 @@ $$;
 REVOKE ALL ON FUNCTION private.gigl_merchant_event_enabled(uuid, text)
   FROM PUBLIC, anon, authenticated;
 
+CREATE OR REPLACE FUNCTION private.gigl_cancellation_superseded(p_shipment_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = ''
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.shipments AS cancelled
+    JOIN public.shipments AS newer
+      ON newer.order_id = cancelled.order_id
+      AND newer.id <> cancelled.id
+      AND newer.status <> 'cancelled'
+      AND newer.created_at > cancelled.created_at
+    WHERE cancelled.id = p_shipment_id
+  );
+$$;
+REVOKE ALL ON FUNCTION private.gigl_cancellation_superseded(uuid)
+  FROM PUBLIC, anon, authenticated;
+
 CREATE OR REPLACE FUNCTION private.gate_gigl_tracking_notification()
 RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
@@ -89,16 +107,7 @@ BEGIN
     NEW.skipped_at := now();
     NEW.skip_reason := 'merchant_preference_off';
   ELSIF NEW.audience = 'customer' AND NEW.notification_kind = 'cancelled'
-    AND EXISTS (
-      SELECT 1
-      FROM public.shipments AS cancelled
-      JOIN public.shipments AS newer
-        ON newer.order_id = cancelled.order_id
-        AND newer.id <> cancelled.id
-        AND newer.status <> 'cancelled'
-        AND newer.created_at > cancelled.created_at
-      WHERE cancelled.id = NEW.shipment_id
-    )
+    AND private.gigl_cancellation_superseded(NEW.shipment_id)
   THEN
     NEW.status := 'skipped';
     NEW.skipped_at := now();
@@ -141,7 +150,10 @@ BEGIN
     RETURN NEW;
   END IF;
   v_event_type := CASE NEW.notification_kind
+    -- A poll that first sees the parcel past pickup must still send "shipped".
     WHEN 'picked_up' THEN 'order_shipped'
+    WHEN 'transit_started' THEN 'order_shipped'
+    WHEN 'out_for_delivery' THEN 'order_shipped'
     WHEN 'delivery_attempt_failed' THEN 'order_delivery_failed'
     WHEN 'return_in_progress' THEN 'order_returned'
     ELSE NULL
@@ -178,7 +190,25 @@ BEGIN
       'fulfillment_tracking_token', v_order.tracking_token
     )
   )
-  ON CONFLICT (order_id, event_type, fulfillment_cycle_id) DO NOTHING;
+  ON CONFLICT (order_id, event_type, fulfillment_cycle_id) DO UPDATE
+  SET
+    status = 'pending',
+    attempt_count = 0,
+    next_attempt_at = now(),
+    locked_at = NULL,
+    locked_by = NULL,
+    last_error = NULL,
+    skip_reason = NULL,
+    skipped_at = NULL,
+    dispatch_started_at = NULL,
+    metadata = public.order_notification_outbox.metadata || EXCLUDED.metadata,
+    updated_at = now()
+  WHERE public.order_notification_outbox.status = 'failed'
+    OR (
+      public.order_notification_outbox.status = 'skipped'
+      AND public.order_notification_outbox.skip_reason
+        IS DISTINCT FROM 'delivery_outcome_unknown'
+    );
   RETURN NEW;
 END;
 $$;
@@ -250,6 +280,127 @@ DROP TRIGGER IF EXISTS zz_notify_gigl_waybill_changed ON public.shipments;
 CREATE TRIGGER zz_notify_gigl_waybill_changed
   AFTER INSERT ON public.shipments
   FOR EACH ROW EXECUTE FUNCTION private.notify_gigl_waybill_changed();
+
+
+-- 4c. Dispatch RPCs accept the new customer email event types ------------------
+CREATE OR REPLACE FUNCTION public.begin_order_notification_outbox_dispatch(
+  p_outbox_id uuid,
+  p_order_id uuid,
+  p_merchant_id uuid,
+  p_event_type text,
+  p_claim_owner text
+)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_auth_uid uuid := auth.uid();
+  v_auth_role text := coalesce(auth.role(), '');
+  v_updated_count integer := 0;
+BEGIN
+  IF p_event_type NOT IN (
+    'order_shipped', 'order_delivered', 'order_delivery_failed', 'order_returned'
+  ) THEN
+    RAISE EXCEPTION 'invalid order notification event type: %', p_event_type
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF v_auth_role IS DISTINCT FROM 'service_role' THEN
+    IF v_auth_uid IS NULL OR NOT (
+      EXISTS (
+        SELECT 1
+        FROM public.merchants AS merchants
+        WHERE merchants.id = p_merchant_id
+          AND merchants.user_id = v_auth_uid
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM public.staff_members AS staff_members
+        WHERE staff_members.merchant_id = p_merchant_id
+          AND staff_members.user_id = v_auth_uid
+          AND staff_members.status = 'active'
+      )
+    ) THEN
+      RAISE EXCEPTION 'not authorized to begin order notification dispatch'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  UPDATE public.order_notification_outbox AS outbox
+  SET
+    dispatch_started_at = now(),
+    updated_at = now()
+  WHERE outbox.id = p_outbox_id
+    AND outbox.order_id = p_order_id
+    AND outbox.merchant_id = p_merchant_id
+    AND outbox.event_type = p_event_type
+    AND outbox.status = 'processing'
+    AND outbox.locked_by = p_claim_owner
+    AND outbox.dispatch_started_at IS NULL;
+
+  GET DIAGNOSTICS v_updated_count = ROW_COUNT;
+  RETURN v_updated_count;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.reset_order_notification_outbox_dispatch(
+  p_outbox_id uuid,
+  p_order_id uuid,
+  p_merchant_id uuid,
+  p_event_type text,
+  p_claim_owner text
+)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_auth_uid uuid := auth.uid();
+  v_auth_role text := coalesce(auth.role(), '');
+  v_updated_count integer := 0;
+BEGIN
+  IF p_event_type NOT IN (
+    'order_shipped', 'order_delivered', 'order_delivery_failed', 'order_returned'
+  ) THEN
+    RAISE EXCEPTION 'invalid order notification event type: %', p_event_type
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF v_auth_role IS DISTINCT FROM 'service_role' THEN
+    IF v_auth_uid IS NULL OR NOT (
+      EXISTS (
+        SELECT 1 FROM public.merchants AS merchants
+        WHERE merchants.id = p_merchant_id AND merchants.user_id = v_auth_uid
+      )
+      OR EXISTS (
+        SELECT 1 FROM public.staff_members AS staff_members
+        WHERE staff_members.merchant_id = p_merchant_id
+          AND staff_members.user_id = v_auth_uid
+          AND staff_members.status = 'active'
+      )
+    ) THEN
+      RAISE EXCEPTION 'not authorized to reset order notification dispatch'
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  UPDATE public.order_notification_outbox AS outbox
+  SET dispatch_started_at = NULL, updated_at = now()
+  WHERE outbox.id = p_outbox_id
+    AND outbox.order_id = p_order_id
+    AND outbox.merchant_id = p_merchant_id
+    AND outbox.event_type = p_event_type
+    AND outbox.status = 'processing'
+    AND outbox.locked_by = p_claim_owner
+    AND outbox.dispatch_started_at IS NOT NULL;
+
+  GET DIAGNOSTICS v_updated_count = ROW_COUNT;
+  RETURN v_updated_count;
+END;
+$$;
 
 -- 5. No shipped email at booking for GIG orders -------------------------------------
 CREATE OR REPLACE FUNCTION public.enqueue_order_fulfillment_notification()
@@ -367,7 +518,16 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
   RETURN QUERY
-  WITH expired_delivery AS (
+  WITH superseded AS (
+    UPDATE public.shipment_tracking_notification_outbox AS outbox
+    SET status = 'skipped', skipped_at = now(), updated_at = now(),
+      skip_reason = 'superseded_by_newer_shipment'
+    WHERE outbox.status = 'pending'
+      AND outbox.audience = 'customer'
+      AND outbox.notification_kind = 'cancelled'
+      AND private.gigl_cancellation_superseded(outbox.shipment_id)
+    RETURNING outbox.id
+  ), expired_delivery AS (
     UPDATE public.shipment_tracking_notification_outbox AS outbox
     SET status = 'failed', locked_at = NULL, locked_by = NULL,
       next_attempt_at = now(),
@@ -383,6 +543,10 @@ BEGIN
     JOIN public.shipment_tracking_events AS event
       ON event.id = outbox.tracking_event_id
     WHERE outbox.attempt_count < outbox.max_attempts
+      AND NOT (
+        outbox.audience = 'customer' AND outbox.notification_kind = 'cancelled'
+        AND private.gigl_cancellation_superseded(outbox.shipment_id)
+      )
       AND (
         (outbox.status = 'pending' AND outbox.next_attempt_at <= now())
         OR (

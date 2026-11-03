@@ -72,14 +72,12 @@ $fixture$;
 
 -- 1. Policy rows ---------------------------------------------------------------
 SELECT is(
-  (SELECT count(*)::int FROM private.gigl_tracking_notification_policy
-   WHERE (raw_status, normalized_status, audience, notification_kind) IN (
-     ('DLP', NULL, 'merchant', 'pickup_delayed'),
-     (NULL, 'picked_up', 'customer', 'picked_up'),
-     (NULL, 'out_for_delivery', 'merchant', 'out_for_delivery'),
-     (NULL, 'delivered', 'merchant', 'delivered'),
-     (NULL, 'cancelled', 'customer', 'cancelled')
-   )),
+  (SELECT count(*)::int FROM private.gigl_tracking_notification_policy AS p
+   WHERE (p.raw_status IS NOT DISTINCT FROM 'DLP' AND p.audience = 'merchant' AND p.notification_kind = 'pickup_delayed')
+      OR (p.normalized_status IS NOT DISTINCT FROM 'picked_up' AND p.audience = 'customer' AND p.notification_kind = 'picked_up')
+      OR (p.normalized_status IS NOT DISTINCT FROM 'out_for_delivery' AND p.audience = 'merchant' AND p.notification_kind = 'out_for_delivery')
+      OR (p.normalized_status IS NOT DISTINCT FROM 'delivered' AND p.audience = 'merchant' AND p.notification_kind = 'delivered')
+      OR (p.normalized_status IS NOT DISTINCT FROM 'cancelled' AND p.audience = 'customer' AND p.notification_kind = 'cancelled')),
   5,
   'approved map adds DLP, customer picked_up, merchant out_for_delivery/delivered and customer cancelled'
 );

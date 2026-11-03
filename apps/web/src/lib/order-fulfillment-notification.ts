@@ -56,9 +56,11 @@ function isOrderInRequiredShippingStatus(
   }
 
   if (eventType === 'order_delivery_failed' || eventType === 'order_returned') {
-    // GIG reports these while the order is in flight; the order status is not
-    // the gate, the tracking event is.
-    return true;
+    // GIG reports these while the order is in flight. A late retry after the
+    // order was delivered or cancelled would contradict its final state.
+    return !['cancelled', 'canceled', 'completed', 'delivered'].includes(
+      shippingStatus
+    );
   }
 
   return shippingStatus === 'delivered' || shippingStatus === 'completed';

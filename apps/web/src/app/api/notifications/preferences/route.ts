@@ -155,11 +155,21 @@ export async function PATCH(request: NextRequest) {
         body.follow_up_notifications_enabled;
     if (body.shipment_event_preferences !== undefined) {
       // Merge so a partial toggle never wipes the other events' choices.
-      const { data: existing } = await supabase
+      const { data: existing, error: existingError } = await supabase
         .from('notification_preferences')
         .select('shipment_event_preferences')
         .eq('merchant_id', merchantId)
         .maybeSingle();
+      if (existingError) {
+        console.error(
+          'Error reading shipment event preferences:',
+          existingError
+        );
+        return NextResponse.json(
+          { error: 'Failed to update preferences' },
+          { status: 500 }
+        );
+      }
       updates.shipment_event_preferences = {
         ...(existing?.shipment_event_preferences &&
         typeof existing.shipment_event_preferences === 'object' &&

@@ -87,4 +87,18 @@ describe('buildStorefrontMetadataTitle', () => {
     expect(result.title).toBe('Apple Magic Keyboard... | Ogabassey');
     expect(result.title).toContain('| Ogabassey');
   });
+
+  it('compacts redundant platform parentheticals before applying word-boundary truncation', () => {
+    const result = buildStorefrontMetadataTitle({
+      maxLength: 45,
+      suffix: 'Store',
+      title: 'Buy EA Sports FC 27 (PS5, PS4, Xbox, Switch & Switch 2)',
+    });
+
+    expect(result.title).toBe('Buy EA Sports FC 27 | Store');
+    expect(result.title.length).toBeLessThanOrEqual(45);
+    expect(result.metadataTitle).toEqual({
+      absolute: 'Buy EA Sports FC 27 | Store',
+    });
+  });
 });

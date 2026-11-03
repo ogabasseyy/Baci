@@ -1,5 +1,8 @@
 import type { Metadata } from 'next';
-import { generateMetaTitle } from '@/lib/seo-utils';
+import {
+  generateMetaTitle,
+  stripRedundantPlatformParentheticals,
+} from '@/lib/seo-utils';
 
 const ELLIPSIS = '...';
 const ELLIPSIS_LENGTH = ELLIPSIS.length;
@@ -71,7 +74,15 @@ export function buildStorefrontMetadataTitle(input: {
     maxLength: Number.POSITIVE_INFINITY,
     suffix: input.suffix,
   });
-  const title = applyWordBoundaryMaxLength(fullTitle, maxLength, input.suffix);
+  const effectiveTitle =
+    fullTitle.length > maxLength
+      ? stripRedundantPlatformParentheticals(fullTitle)
+      : fullTitle;
+  const title = applyWordBoundaryMaxLength(
+    effectiveTitle,
+    maxLength,
+    input.suffix
+  );
 
   return {
     metadataTitle: { absolute: title },

@@ -55,11 +55,15 @@ SELECT
   (cw.available_balance IS NOT DISTINCT FROM COALESCE(l.ledger_balance, 0)
     AND COALESCE(l.pending_count, 0) = 0
     AND NOT COALESCE(l.migrated, false)
+    AND c.id IS NOT NULL
     AND cw.available_balance <= 99999999.99) AS eligible,
   -- 02-zero-out.sql rejects amounts above 99,999,999.99. Such a wallet is
   -- never eligible: raise it with the owner, do not credit it in PiggyVest.
   (cw.available_balance > 99999999.99) AS over_zero_out_limit,
   COALESCE(l.migrated, false) AS already_migrated,
+  -- false = no customers row for this wallet's customer and merchant. Such a
+  -- wallet is never eligible: nobody can be identified to credit.
+  (c.id IS NOT NULL) AS customer_found,
   cw.updated_at
 FROM public.customer_wallets cw
 LEFT JOIN public.customers c

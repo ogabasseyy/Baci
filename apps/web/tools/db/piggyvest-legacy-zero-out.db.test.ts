@@ -36,7 +36,8 @@ describe.skipIf(!binDir)('02-zero-out.sql against a scratch Postgres', () => {
   // of the same amount, so stored balance and ledger agree.
   const reset = (balances: [string, string][], extra = '') =>
     s.psql(
-      `DELETE FROM customer_wallet_transactions; DELETE FROM customer_wallets;
+      `DELETE FROM customer_wallet_transactions; DELETE FROM customer_wallets; DELETE FROM customers;
+       INSERT INTO customers (id, merchant_id, full_name) VALUES ('${C1}','${M}','One'),('${C2}','${M}','Two');
        ${balances
          .map(([w, b]) => {
            const c = w === W1 ? C1 : C2;
@@ -223,5 +224,43 @@ describe.skipIf(!binDir)('02-zero-out.sql against a scratch Postgres', () => {
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/exactly one declared/);
     expect(balance(W1)).toBe('500.00');
+  });
+
+  it('refuses a listed wallet that does not exist', () => {
+    reset([[W1, '500.00']]);
+    const r = run([row(W1, C1, '500.00'), row(W2, C2, '250.00')], 2, true);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/wallet missing/);
+    expect(balance(W1)).toBe('500.00');
+    expect(ledgerRows()).toBe('0');
+  });
+
+  it('refuses swapped customer ids against the wallet', () => {
+    reset([[W1, '500.00']]);
+    const r = run([row(W1, C2, '500.00')], 1, true);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/owner mismatch/);
+    expect(balance(W1)).toBe('500.00');
+  });
+
+  it('refuses a wallet whose merchant differs from the list', () => {
+    reset([[W1, '500.00']]);
+    s.psql(
+      `UPDATE customer_wallets SET merchant_id = '${C2}' WHERE id='${W1}'`
+    );
+    const r = run([row(W1, C1, '500.00')], 1, true);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/owner mismatch/);
+    expect(balance(W1)).toBe('500.00');
+  });
+
+  it('refuses a wallet whose customer is missing for the merchant', () => {
+    reset([[W1, '500.00']]);
+    s.psql(`DELETE FROM customers WHERE id='${C1}'`);
+    const r = run([row(W1, C1, '500.00')], 1, true);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/customer not found/);
+    expect(balance(W1)).toBe('500.00');
+    expect(ledgerRows()).toBe('0');
   });
 });

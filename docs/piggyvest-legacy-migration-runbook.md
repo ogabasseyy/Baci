@@ -12,8 +12,10 @@ Files:
 - `docs/piggyvest-legacy-migration/02-zero-out.sql` (the one update)
 
 Two runs of the update at the same time are not possible: the script takes a
-database lock first, so a second run waits for the first and then refuses a
-PiggyVest reference that was already used. The CI tests run the scripts on a
+database lock first, so a second run waits for the first. If the first run
+takes longer than 5 seconds the second stops with a lock timeout error and
+changes nothing; start it again only after the first has ended. Once it can
+run, it refuses a PiggyVest reference that was already used. The CI tests run the scripts on a
 scratch database with a simplified schema (no foreign keys or ledger triggers),
 so the ROLLBACK dry run in step 4 on the real database is the real check.
 
@@ -35,7 +37,7 @@ so the ROLLBACK dry run in step 4 on the real database is the real check.
 1. Run `01-balance-list.sql`. It only reads.
 2. Give the output to the coordinator. Only rows with `eligible` true may go
    on the list. A row with `matches_ledger` false, a non-zero `pending_count`,
-   `already_migrated` true or `over_zero_out_limit` true is excluded (the update cannot move more than
+   `already_migrated` true, `customer_found` false or `over_zero_out_limit` true is excluded (the update cannot move more than
    99,999,999.99; take such a balance to the owner): do not credit it and do not list it. Run the list again later,
    once its pending rows have settled and the balance matches the ledger.
    `already_migrated` true means the customer was moved and paid in
@@ -93,7 +95,9 @@ PiggyVest statement. Customers with no confirmed credit are left out of step 4.
 2. Run `01-balance-list.sql` again. The migrated customers must be gone.
 3. Each migrated wallet has one ledger row of source
    `piggyvest_legacy_migration` holding the amount, date and PiggyVest
-   reference. Keep the signed list and the output with this runbook record.
+   reference. Keep the signed list and the output with this runbook record only for the
+   30 days set in "Handling the list", then delete the names, emails and
+   phone numbers and keep wallet ids, amounts and references.
 4. Keep the pause from "Before you start" in force after the commit. A credit
    or refund that was already waiting on a wallet lock can still land on the
    zeroed wallet just after the commit, so the first re-run can look clean.

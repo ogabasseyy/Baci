@@ -14,6 +14,8 @@
 --   * a wallet that already has a migration ledger row is refused (no second run);
 --   * every wallet's stored balance must equal its ledger total (same formula
 --     as 01-balance-list.sql and public.backfill_wallet_balances());
+--   * every listed wallet's customer must exist in public.customers for the
+--     same merchant (the wallet's own ids alone prove nothing);
 --   * every wallet is changed, nothing else is touched;
 --   * runs are serialised by a transaction advisory lock, taken before the
 --     reference and already-migrated checks, so two overlapping runs cannot
@@ -107,6 +109,17 @@ BEGIN
      OR cw.available_balance IS DISTINCT FROM l.expected_balance;
   IF v_bad <> 0 THEN
     RAISE EXCEPTION 'balance or owner mismatch on % wallet(s); nothing changed', v_bad;
+  END IF;
+
+  -- The customer must exist for that merchant, like credit_customer_wallet.
+  SELECT count(*) INTO v_bad
+  FROM legacy_zero_out_list l
+  WHERE NOT EXISTS (
+    SELECT 1 FROM public.customers c
+    WHERE c.id = l.customer_id AND c.merchant_id = l.merchant_id
+  );
+  IF v_bad <> 0 THEN
+    RAISE EXCEPTION 'customer not found for the merchant on % wallet(s); nothing changed', v_bad;
   END IF;
 
   -- A pending row (reservation, redemption) can still credit the wallet back.

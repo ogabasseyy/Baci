@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   binDir,
   C1,
+  C2,
   docsDir,
   M,
   type Scratch,
@@ -40,14 +41,16 @@ describe.skipIf(!binDir)(
           .filter((l: string) => l.includes('|'))
           .map((l: string): [string, string[]] => {
             const c = l.split('|');
-            // wallet_id|...|legacy|ledger|matches|pending|eligible|over|migrated|updated
+            // wallet_id|...|legacy|ledger|matches|pending|eligible|over|migrated|customer_found|updated
             return [c[0], c.slice(6)];
           })
       );
     };
     const seed = (sql: string) =>
       s.psql(
-        `DELETE FROM customer_wallet_transactions; DELETE FROM customer_wallets; ${sql}`
+        `DELETE FROM customer_wallet_transactions; DELETE FROM customer_wallets;
+         INSERT INTO customers (id, merchant_id, full_name) VALUES ('${C1}','${M}','One') ON CONFLICT DO NOTHING;
+         ${sql}`
       );
 
     beforeAll(() => {
@@ -106,6 +109,24 @@ describe.skipIf(!binDir)(
          ${wallet(W3, '10.00')} ${tx(W3, 'credit', '10', 'completed')}`
       );
       expect(Object.keys(list())).toEqual([W3]);
+    });
+
+    it('marks a wallet with no matching customer ineligible and flagged', () => {
+      seed(
+        `${wallet(W1, '50.00')} ${tx(W1, 'credit', '50', 'completed')}
+         DELETE FROM customers;`
+      );
+      const r = list()[W1];
+      expect(r[4]).toBe('f');
+      expect(r[7]).toBe('f');
+    });
+
+    it('marks a wallet whose customer belongs to another merchant ineligible', () => {
+      seed(
+        `${wallet(W1, '50.00')} ${tx(W1, 'credit', '50', 'completed')}
+         UPDATE customers SET merchant_id = '${C2}';`
+      );
+      expect(list()[W1][4]).toBe('f');
     });
   }
 );

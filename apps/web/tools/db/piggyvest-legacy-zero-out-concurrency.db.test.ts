@@ -49,16 +49,19 @@ describe.skipIf(!binDir)('02-zero-out.sql overlapping runs', () => {
   afterAll(() => s?.stop());
 
   it('lets only one run use a PiggyVest reference', async () => {
-    const seed = [
-      [W1, C1, '500.00'],
-      [W2, C2, '250.00'],
-    ]
-      .map(
-        ([w, c, b]) =>
-          `INSERT INTO customer_wallets (id, customer_id, merchant_id, available_balance) VALUES ('${w}','${c}','${M}',${b});
+    const seed =
+      `INSERT INTO customers (id, merchant_id, full_name) VALUES ('${C1}','${M}','One'),('${C2}','${M}','Two');
+    ` +
+      [
+        [W1, C1, '500.00'],
+        [W2, C2, '250.00'],
+      ]
+        .map(
+          ([w, c, b]) =>
+            `INSERT INTO customer_wallets (id, customer_id, merchant_id, available_balance) VALUES ('${w}','${c}','${M}',${b});
            INSERT INTO customer_wallet_transactions (wallet_id, customer_id, merchant_id, type, amount, balance_after, status) VALUES ('${w}','${c}','${M}','credit',${b},${b},'completed');`
-      )
-      .join('\n');
+        )
+        .join('\n');
     expect(s.psql(seed).status).toBe(0);
     const fileA = join(s.dir, 'a.sql');
     const fileB = join(s.dir, 'b.sql');

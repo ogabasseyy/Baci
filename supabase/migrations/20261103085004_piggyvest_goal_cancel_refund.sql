@@ -10,8 +10,11 @@
 --  * goal_cancel_operations: one row per cancel ATTEMPT. The operation id is
 --    issued here (issue_goal_cancel) before any PIN is typed, so the PIN
 --    proof can be bound to it. The provider reference is per goal and action
---    ('pvb-cancel-<goalId>'), never per attempt, so a retry or double tap can
---    not move money twice at the provider. At most one attempt per goal may be
+--    ('pvb-cancel-<goalId>'), so a retry or double tap can not move money
+--    twice at the provider. Only after an attempt that WAS dispatched is
+--    released (the provider refused or reported the transfer failed) does the
+--    next reservation take a fresh suffix ('pvb-cancel-<goalId>-<n>'), because
+--    the provider may keep the failed record under the old reference. At most one attempt per goal may be
 --    reserved, dispatched or confirmed (partial unique index).
 --  * reserve_goal_cancel_with_pin: spends the goal_cancel PIN proof in the
 --    SAME transaction as the reservation. The proof binds
@@ -38,7 +41,9 @@ CREATE TABLE piggyvest_primary.goal_cancel_operations (
   intent_id uuid NOT NULL,
   goal_id uuid NOT NULL,
   state text NOT NULL CHECK (state IN ('issued', 'reserved', 'dispatched', 'confirmed', 'released')),
-  reference text NOT NULL CHECK (reference = 'pvb-cancel-' || goal_id::text),
+  reference text NOT NULL CHECK (
+    reference = 'pvb-cancel-' || goal_id::text
+    OR reference ~ ('^pvb-cancel-' || goal_id::text || '-[1-9][0-9]{0,5}$')),
   source_wallet_id text,
   destination_wallet_id text,
   amount_kobo bigint CHECK (amount_kobo IS NULL OR amount_kobo BETWEEN 1 AND 9999999999),
@@ -231,11 +236,20 @@ BEGIN
     IF v_outcome IS DISTINCT FROM 'consumed' THEN
       RAISE EXCEPTION 'pin_refused:%', COALESCE(v_outcome, 'invalid') USING ERRCODE = 'PVP01';
     END IF;
+    -- The reference is fixed here, under the intent lock, so the suffix counts
+    -- every dispatched attempt already released for this goal.
     UPDATE piggyvest_primary.goal_cancel_operations
        SET state = 'reserved', reserved_at = pg_catalog.clock_timestamp(),
            source_wallet_id = v_destination.provider_wallet_id,
-           destination_wallet_id = v_intent.provider_wallet_id
-     WHERE id = v_operation.id;
+           destination_wallet_id = v_intent.provider_wallet_id,
+           reference = 'pvb-cancel-' || v_goal.id::text || COALESCE((
+             SELECT '-' || pg_catalog.count(*)::text
+               FROM piggyvest_primary.goal_cancel_operations AS spent
+              WHERE spent.goal_id = v_goal.id AND spent.state = 'released'
+                AND spent.dispatched_at IS NOT NULL
+             HAVING pg_catalog.count(*) > 0), '')
+     WHERE id = v_operation.id
+     RETURNING * INTO v_operation;
     RETURN pg_catalog.jsonb_build_object(
       'status', 'claimed',
       'reservation', pg_catalog.jsonb_build_object(
@@ -414,7 +428,9 @@ AS $$
 $$;
 
 -- Settles the attempt from a verified successful provider record: the attempt
--- is confirmed and the goal is cancelled in one transaction.
+-- is confirmed and the goal is cancelled in one transaction. A released
+-- attempt that was dispatched also settles, because the provider may report
+-- the transfer successful after it was released.
 CREATE FUNCTION piggyvest_primary.settle_goal_cancel(
   integration_id uuid,
   environment text,
@@ -472,7 +488,18 @@ BEGIN
     END IF;
     RETURN 'conflict';
   END IF;
-  IF v_operation.state <> 'dispatched' THEN RETURN 'conflict'; END IF;
+  IF v_operation.state = 'released' AND v_operation.dispatched_at IS NOT NULL THEN
+    -- A late success: the provider indexed the transfer after it was released.
+    -- The money has moved, so the verified record settles it, unless another
+    -- attempt for the goal is already live.
+    IF EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_operations AS live
+                WHERE live.goal_id = v_operation.goal_id AND live.id <> v_operation.id
+                  AND live.state IN ('reserved', 'dispatched', 'confirmed')) THEN
+      RETURN 'conflict';
+    END IF;
+  ELSIF v_operation.state <> 'dispatched' THEN
+    RETURN 'conflict';
+  END IF;
   IF EXISTS (SELECT 1 FROM piggyvest_primary.goal_cancel_operations AS other
               WHERE other.integration_id = v_binding.id
                 AND other.provider_transaction_id = proof ->> 'providerTransactionId')

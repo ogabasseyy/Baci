@@ -60,7 +60,8 @@ async function releaseIfDefinitivelyRejected(
   error: unknown,
   ports: Pick<Ports, 'lookupTransfer' | 'releaseAfterRejection'>
 ): Promise<boolean> {
-  // The provider refused the only POST this reference gets. A lookup guards
+  // The provider refused the only POST this reference gets (a later attempt
+  // takes a fresh reference). A lookup guards
   // against contrary evidence: a TSQ 404 right after a submit is "not indexed
   // yet" as often as "never sent", so only a not_found lookup AFTER a
   // definitive refusal frees the attempt; anything else holds it pending.
@@ -79,7 +80,8 @@ async function releaseIfDefinitivelyRejected(
  * Cancels a goal by moving its full PiggyVest balance to the main wallet.
  *
  * The provider reference is per goal ('pvb-cancel-<goalId>'), so a double tap
- * or a retry can never move money twice. This function POSTs at most once per
+ * or a retry can never move money twice. It only takes a new suffix after a
+ * dispatched attempt was released, and the database assigns it. This function POSTs at most once per
  * reservation: a replay that finds the attempt already reserved or dispatched
  * returns pending and leaves the outcome to a status check, never a resend.
  * After a timeout or any ambiguous failure the attempt stays pending too.

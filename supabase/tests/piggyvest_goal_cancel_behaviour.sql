@@ -117,7 +117,7 @@ $$;
 CREATE FUNCTION pg_temp.gc_proof(p_op text, p_status text DEFAULT 'success') RETURNS jsonb LANGUAGE sql AS $$
   SELECT pg_catalog.jsonb_build_object(
     'operationId', p_op, 'providerTransactionId', 'synthetic-gc-txn-' || p_status || '-' || p_op,
-    'reference', 'pvb-cancel-f3860000-0000-4000-8000-000000000005',
+    'reference', (SELECT reference FROM piggyvest_primary.goal_cancel_operations WHERE id = p_op::uuid),
     'amountKobo', 250000, 'sourceWalletId', 'synthetic-goalcancel-goal-wallet',
     'destinationWalletId', 'synthetic-goalcancel-main', 'businessId', 'synthetic-goalcancel-business');
 $$;
@@ -306,25 +306,45 @@ BEGIN
     AND (SELECT status FROM public.customer_savings_goals WHERE id = c_goal::uuid) = 'active',
     'a refused settlement changed state');
 
-  -- 12. A failed provider record releases the attempt; the same reference can
-  -- be tried again by a NEW attempt with a new PIN proof.
+  -- 12. A failed provider record releases the attempt; a NEW attempt with a
+  -- new PIN proof and a fresh reference can be tried.
   PERFORM pg_temp.gc_assert(
     piggyvest_primary.release_failed_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',
       pg_temp.gc_proof(v_op, 'failed')) = 'released', 'failed record did not release');
   PERFORM pg_temp.gc_assert(
     piggyvest_primary.release_failed_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',
       pg_temp.gc_proof(v_op, 'failed')) = 'duplicate', 'a replayed release was not idempotent');
+  -- A transfer the provider indexed late and then completed settles the
+  -- released (but dispatched) attempt. Probed in a block that is rolled back.
+  BEGIN
+    PERFORM pg_temp.gc_assert(
+      piggyvest_primary.settle_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',
+        pg_temp.gc_proof(v_op)) = 'confirmed', 'a late success on a released attempt was not settled');
+    PERFORM pg_temp.gc_assert(pg_temp.gc_state(v_op) = 'confirmed'
+      AND (SELECT status FROM public.customer_savings_goals WHERE id = c_goal::uuid) = 'cancelled',
+      'a late success did not cancel the goal');
+    RAISE EXCEPTION 'probe done' USING ERRCODE = 'PVP99';
+  EXCEPTION WHEN SQLSTATE 'PVP99' THEN NULL;
+  END;
+  PERFORM pg_temp.gc_assert(pg_temp.gc_state(v_op) = 'released'
+    AND (SELECT status FROM public.customer_savings_goals WHERE id = c_goal::uuid) = 'active',
+    'the late-success probe was not rolled back');
+  -- A proof with the wrong reference never settles it.
   PERFORM pg_temp.gc_assert(
     piggyvest_primary.settle_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',
-      pg_temp.gc_proof(v_op)) = 'conflict', 'a released attempt was settled');
+      pg_temp.gc_proof(v_op) || pg_catalog.jsonb_build_object('reference', 'pvb-cancel-' || c_goal || '-1')) = 'conflict',
+    'a released attempt settled on another reference');
   v_result := pg_temp.gc_reserve(v_op, pg_temp.gc_token('exact'));
   PERFORM pg_temp.gc_assert(v_result ->> 'status' = 'conflict', 'a released id was reusable: ' || v_result::text);
   v_issue := pg_temp.gc_issue_op();
   v_op2 := v_issue ->> 'operationId';
   PERFORM pg_temp.gc_assert(v_issue ->> 'status' = 'issued' AND v_op2 <> v_op, 'no fresh attempt after release');
   PERFORM pg_temp.gc_issue('second', 'goal_cancel', 1, pg_temp.gc_key(v_op2));
-  PERFORM pg_temp.gc_assert(pg_temp.gc_reserve(v_op2, pg_temp.gc_token('second')) ->> 'status' = 'claimed',
-    'second attempt did not reserve');
+  v_result := pg_temp.gc_reserve(v_op2, pg_temp.gc_token('second'));
+  PERFORM pg_temp.gc_assert(v_result ->> 'status' = 'claimed', 'second attempt did not reserve');
+  -- The released attempt was dispatched, so the retry takes a fresh reference.
+  PERFORM pg_temp.gc_assert(v_result #>> '{reservation,reference}' = 'pvb-cancel-' || c_goal || '-1',
+    'a retry after a failed transfer reused the reference: ' || v_result::text);
 
   -- 13. A stale reservation (nothing sent) can be released; an issued id past
   -- its expiry is dead; neither frees a proof.
@@ -347,7 +367,11 @@ BEGIN
   v_issue := pg_temp.gc_issue_op();
   v_op := v_issue ->> 'operationId';
   PERFORM pg_temp.gc_issue('final', 'goal_cancel', 1, pg_temp.gc_key(v_op));
-  PERFORM pg_temp.gc_assert(pg_temp.gc_reserve(v_op, pg_temp.gc_token('final')) ->> 'status' = 'claimed', 'final reserve');
+  v_result := pg_temp.gc_reserve(v_op, pg_temp.gc_token('final'));
+  PERFORM pg_temp.gc_assert(v_result ->> 'status' = 'claimed', 'final reserve');
+  -- Attempts released without ever being dispatched do not advance the suffix.
+  PERFORM pg_temp.gc_assert(v_result #>> '{reservation,reference}' = 'pvb-cancel-' || c_goal || '-1',
+    'the reference suffix moved without a dispatched failure: ' || v_result::text);
   PERFORM pg_temp.gc_assert(piggyvest_primary.manage_goal_cancel(v_scope, v_op::uuid, 'dispatch', 250000), 'final dispatch');
   PERFORM pg_temp.gc_assert(
     piggyvest_primary.settle_goal_cancel('f3860000-0000-4000-8000-000000000006'::uuid, 'staging',

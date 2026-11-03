@@ -61,10 +61,7 @@ export function OrderSuccessContent() {
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
   const [payerDetailsCopied, setPayerDetailsCopied] = useState(false);
-  const [estimatedDeliveryDate] = useState(
-    () =>
-      new Date(Date.now() + DELIVERY_ESTIMATE_MS).toISOString().split('T')[0]
-  );
+  const [estimatedDeliveryDate, setEstimatedDeliveryDate] = useState<string>();
 
   // Helper for dynamic links
   const getHref = (path: string) =>
@@ -97,6 +94,11 @@ export function OrderSuccessContent() {
         return;
       }
       if (data) {
+        setEstimatedDeliveryDate(
+          new Date(Date.now() + DELIVERY_ESTIMATE_MS)
+            .toISOString()
+            .split('T')[0]
+        );
         setOrder(data);
       }
       setLoading(false);

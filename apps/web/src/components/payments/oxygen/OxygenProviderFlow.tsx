@@ -12,7 +12,7 @@ import { OxygenProviderStages } from './OxygenProviderStages';
 import { OxygenSignIn } from './OxygenSignIn';
 import { OxygenWorkflowError } from './OxygenWorkflowError';
 import type { OxygenProviderFlowProps } from './oxygen-provider-flow-types';
-import { pendingReadRecovery } from './oxygen-read-recovery';
+import { awaitingOxygenConfirmation } from './oxygen-read-recovery';
 import { submitOxygenVerificationForm } from './submit-oxygen-verification-form';
 import { useOxygenApprovedPayment } from './use-oxygen-approved-payment';
 import { useOxygenBookingProgress } from './use-oxygen-booking-progress';
@@ -152,11 +152,7 @@ function OxygenProviderSession({
     !snapshot?.executionEnabled ||
     Boolean(snapshot.pending && snapshot.pending.status !== 'queued');
   const approval = useOxygenApprovedPayment(snapshot, disabled, submit);
-  const awaitingConfirmation = Boolean(
-    snapshot?.stage === 'reconciliation_required' ||
-      pendingReadRecovery(snapshot) ||
-      ['indeterminate', 'executing'].includes(snapshot?.pending?.status ?? '')
-  );
+  const awaitingConfirmation = awaitingOxygenConfirmation(snapshot);
   useOxygenConfirmationUpdates(
     snapshot?.workflowId,
     awaitingConfirmation,
@@ -184,6 +180,7 @@ function OxygenProviderSession({
         busy={busy}
         error={error}
         refresh={refresh}
+        submit={submitForm}
         checkAddress={bookingProgress.checkAddress}
         checkPending={bookingProgress.checkPending}
         selfieConfirmed={selfieConfirmed}

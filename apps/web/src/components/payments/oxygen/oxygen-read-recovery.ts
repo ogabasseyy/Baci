@@ -12,6 +12,8 @@ export function pendingReadRecovery(
   | 'validate_nin'
   | 'selfie_link'
   | 'book'
+  | 'trigger_approval_otp'
+  | 'submit_address'
   | null {
   const pending = snapshot?.pending;
   if (
@@ -19,7 +21,25 @@ export function pendingReadRecovery(
     (pending?.status !== 'queued' && pending?.status !== 'executing')
   )
     return null;
+  // A queued address upload needs a new proof and a separate retirement step.
+  if (
+    pending.action === 'submit_address' &&
+    pending.status === 'queued' &&
+    snapshot.stage === 'booked' &&
+    snapshot.state.bookingReference &&
+    snapshot.state.booking?.status === 'BOOKED' &&
+    snapshot.state.kyc?.address_status === 'NOT_DONE'
+  )
+    return 'submit_address';
   // A queued command has not been dispatched; resuming it must reuse its key.
+  if (
+    pending.action === 'trigger_approval_otp' &&
+    pending.status === 'queued' &&
+    snapshot.stage === 'approval_required' &&
+    snapshot.state.bookingReference &&
+    snapshot.state.kyc?.address_status === 'DONE'
+  )
+    return 'trigger_approval_otp';
   if (
     pending.action === 'book' &&
     pending.status === 'queued' &&
@@ -78,4 +98,19 @@ export function pendingReadRecovery(
   )
     return 'refresh_details';
   return null;
+}
+
+/** Keep uncertain and non-resumable queued mutations on the status screen. */
+export function awaitingOxygenConfirmation(
+  snapshot: OxygenRuntimeSnapshot | null
+): boolean {
+  return Boolean(
+    snapshot?.stage === 'reconciliation_required' ||
+      pendingReadRecovery(snapshot) ||
+      (snapshot?.pending?.status === 'queued' &&
+        ['submit_address', 'trigger_approval_otp'].includes(
+          snapshot.pending.action
+        )) ||
+      ['indeterminate', 'executing'].includes(snapshot?.pending?.status ?? '')
+  );
 }

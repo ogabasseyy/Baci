@@ -8,6 +8,11 @@ import {
   type OxygenRuntimeSnapshot,
   oxygenRuntimeSnapshotSchema,
 } from '@/schemas/oxygen-runtime-view';
+import {
+  canReplaceQueuedAddress,
+  retireQueuedAddress,
+  selectOxygenActionKey,
+} from './oxygen-address-recovery';
 import { retireQueuedPhoneVerification } from './oxygen-phone-recovery';
 import {
   decodeOxygenResponse as decode,
@@ -94,6 +99,12 @@ export function useOxygenProvider(orderId: string) {
   ) {
     if (locked.current || !snapshot?.executionEnabled) return false;
     if (
+      command.action === 'submit_address' &&
+      snapshot.pending &&
+      !canReplaceQueuedAddress(snapshot)
+    )
+      return false;
+    if (
       snapshot.pending?.status === 'queued' &&
       snapshot.pending.action !== command.action &&
       !(
@@ -119,25 +130,20 @@ export function useOxygenProvider(orderId: string) {
       command.action
     );
     const pending = snapshot.pending;
-    const isNin = command.action === 'validate_nin';
-    const key =
-      pending?.status === 'queued' && pending.action === command.action
-        ? pending.idempotencyKey
-        : !(
-              pending?.status === 'executing' &&
-              pendingReadRecovery(snapshot) === command.action
-            ) &&
-            !(isNin && snapshot.ninAttemptStatus === 'safe_retry') &&
-            lastKey.current?.action === command.action &&
-            lastKey.current.version === snapshot.version
-          ? lastKey.current.key
-          : crypto.randomUUID();
+    const key = selectOxygenActionKey(
+      command.action,
+      snapshot,
+      lastKey.current,
+      pendingReadRecovery(snapshot)
+    );
     lastKey.current = {
       action: command.action,
       version: snapshot.version,
       key,
     };
     try {
+      if (command.action === 'submit_address' && pending)
+        await retireQueuedAddress(snapshot, command, file);
       if (
         command.action === 'resend_customer_otp' &&
         pending?.action === 'validate_customer' &&

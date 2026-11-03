@@ -122,6 +122,7 @@ export function useOxygenBookingProgress(
           'refresh_payment_setup',
           'validate_nin',
           'selfie_link',
+          'trigger_approval_otp',
         ].includes(pendingReadRecovery(snapshot) ?? '')
       )
         return;
@@ -132,7 +133,8 @@ export function useOxygenBookingProgress(
         action === 'refresh_eligibility' ||
         action === 'refresh_payment_setup' ||
         action === 'validate_nin' ||
-        action === 'selfie_link'
+        action === 'selfie_link' ||
+        action === 'trigger_approval_otp'
       )
         await submit({ action });
     },

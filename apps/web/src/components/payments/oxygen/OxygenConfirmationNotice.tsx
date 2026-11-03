@@ -5,6 +5,8 @@ import { OxygenLoadingButton } from './OxygenLoadingButton';
 /** An uncertain provider response is a saved waiting state, never a retry prompt. */
 export function OxygenConfirmationNotice({
   booking,
+  queuedApprovalCode = false,
+  approvalCodeError = false,
   queuedBooking = false,
   bookingTerms,
   bookingError = false,
@@ -18,6 +20,8 @@ export function OxygenConfirmationNotice({
   refresh,
 }: {
   booking: boolean;
+  queuedApprovalCode?: boolean;
+  approvalCodeError?: boolean;
   queuedBooking?: boolean;
   bookingTerms?: { equityPercentage: number; tenure: number };
   bookingError?: boolean;
@@ -46,34 +50,44 @@ export function OxygenConfirmationNotice({
                 : 'Taking a little longer'}
         </p>
         <h3 className="text-xl font-bold tracking-tight text-gray-900 sm:text-2xl">
-          {queuedBooking
-            ? 'Your payment plan is ready to continue'
-            : queuedSelfieCheck
-              ? 'Your selfie verification is ready to continue'
-              : queuedIdentityCheck
-                ? 'Your NIN check is ready to continue'
-                : booking
-                  ? 'Your payment plan is being confirmed'
-                  : identityCheck
-                    ? 'Your NIN verification needs confirmation'
-                    : eligibilityCheck
-                      ? 'Your payment options need confirmation'
-                      : 'Your application is being checked'}
+          {queuedApprovalCode
+            ? 'Your approval code request is ready to continue'
+            : queuedBooking
+              ? 'Your payment plan is ready to continue'
+              : queuedSelfieCheck
+                ? 'Your selfie verification is ready to continue'
+                : queuedIdentityCheck
+                  ? 'Your NIN check is ready to continue'
+                  : booking
+                    ? 'Your payment plan is being confirmed'
+                    : identityCheck
+                      ? 'Your NIN verification needs confirmation'
+                      : eligibilityCheck
+                        ? 'Your payment options need confirmation'
+                        : 'Your application is being checked'}
         </h3>
         <p className="text-sm leading-relaxed text-gray-600">
-          {queuedBooking && bookingTerms
-            ? `Continue your saved plan with ${bookingTerms.equityPercentage}% down over ${bookingTerms.tenure} months. If it has already started, we’ll check its status.`
-            : queuedSelfieCheck
-              ? 'Continue preparing your saved selfie verification. If it has already started, we’ll check its status.'
-              : queuedIdentityCheck
-                ? 'Continue your saved NIN check. If it has already started, we’ll check its status.'
-                : identityCheck
-                  ? 'Your code was accepted, but we couldn’t confirm the result of Oxygen’s NIN check. Your details are saved. Please don’t submit them again.'
-                  : eligibilityCheck
-                    ? 'We couldn’t confirm the result with Oxygen. Your application is saved. Checking for an update only reads your saved status; it does not repeat the check. Please contact the store for help.'
-                    : 'We’re waiting for confirmation from Oxygen. You don’t need to submit this step again.'}
+          {queuedApprovalCode
+            ? 'Continue your saved request to send an approval code. If it has already started, we’ll check its status.'
+            : queuedBooking && bookingTerms
+              ? `Continue your saved plan with ${bookingTerms.equityPercentage}% down over ${bookingTerms.tenure} months. If it has already started, we’ll check its status.`
+              : queuedSelfieCheck
+                ? 'Continue preparing your saved selfie verification. If it has already started, we’ll check its status.'
+                : queuedIdentityCheck
+                  ? 'Continue your saved NIN check. If it has already started, we’ll check its status.'
+                  : identityCheck
+                    ? 'Your code was accepted, but we couldn’t confirm the result of Oxygen’s NIN check. Your details are saved. Please don’t submit them again.'
+                    : eligibilityCheck
+                      ? 'We couldn’t confirm the result with Oxygen. Your application is saved. Checking for an update only reads your saved status; it does not repeat the check. Please contact the store for help.'
+                      : 'We’re waiting for confirmation from Oxygen. You don’t need to submit this step again.'}
         </p>
       </div>
+      {approvalCodeError && (
+        <p role="alert" className="text-sm text-red-700">
+          We couldn’t continue your code request. Your progress is saved; please
+          try again.
+        </p>
+      )}
       {bookingError && (
         <p role="alert" className="text-sm text-red-700">
           We couldn’t continue your payment plan. Your progress is saved; please
@@ -103,13 +117,15 @@ export function OxygenConfirmationNotice({
           className="w-full"
           onClick={() => void refresh()}
         >
-          {queuedBooking
-            ? 'Continue payment plan'
-            : queuedSelfieCheck
-              ? 'Continue selfie verification'
-              : queuedIdentityCheck
-                ? 'Continue NIN check'
-                : 'Check for an update'}
+          {queuedApprovalCode
+            ? 'Continue sending approval code'
+            : queuedBooking
+              ? 'Continue payment plan'
+              : queuedSelfieCheck
+                ? 'Continue selfie verification'
+                : queuedIdentityCheck
+                  ? 'Continue NIN check'
+                  : 'Check for an update'}
         </OxygenLoadingButton>
         <p className="text-xs leading-relaxed text-gray-500">
           You can close this window and return to your application later.

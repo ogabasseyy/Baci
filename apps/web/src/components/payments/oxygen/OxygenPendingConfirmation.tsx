@@ -6,8 +6,10 @@ import { OxygenAddressProgress } from './OxygenAddressProgress';
 import { OxygenApprovalUnconfirmed } from './OxygenApprovalUnconfirmed';
 import { OxygenConfirmationNotice } from './OxygenConfirmationNotice';
 import { OxygenLoanSummary } from './OxygenLoanSummary';
+import { OxygenQueuedAddressRecovery } from './OxygenQueuedAddressRecovery';
 import { OxygenSavedPlans } from './OxygenSavedPlans';
 import { OxygenSelfieButton } from './OxygenSelfieButton';
+import type { SubmitOxygenForm } from './OxygenVerificationForms';
 import { pendingReadRecovery } from './oxygen-read-recovery';
 import type { useOxygenProvider } from './use-oxygen-provider';
 
@@ -18,6 +20,7 @@ type Props = {
   busy: boolean;
   error: string;
   refresh: ReturnType<typeof useOxygenProvider>['refresh'];
+  submit?: SubmitOxygenForm;
   checkAddress?: () => Promise<void>;
   checkPending?: () => Promise<void>;
   selfieConfirmed: boolean;
@@ -30,6 +33,7 @@ export function OxygenPendingConfirmation({
   busy,
   error,
   refresh,
+  submit,
   checkAddress,
   checkPending,
   selfieConfirmed,
@@ -75,6 +79,22 @@ export function OxygenPendingConfirmation({
   if (
     awaitingConfirmation &&
     !needsSignIn &&
+    snapshot &&
+    submit &&
+    pendingReadRecovery(snapshot) === 'submit_address'
+  )
+    return (
+      <OxygenQueuedAddressRecovery
+        snapshot={snapshot}
+        busy={busy}
+        error={error}
+        refresh={refresh}
+        submit={submit}
+      />
+    );
+  if (
+    awaitingConfirmation &&
+    !needsSignIn &&
     snapshot?.pending?.action === 'approve_booking' &&
     snapshot.pending.status === 'indeterminate' &&
     s?.bookingReference
@@ -113,6 +133,7 @@ export function OxygenPendingConfirmation({
       <section className="px-6 pb-6" aria-label="Oxygen finance application">
         {snapshot?.workflowId &&
           snapshot.pending?.action !== 'approve_booking' &&
+          snapshot.pending?.action !== 'trigger_approval_otp' &&
           !(
             snapshot.pending?.action === 'book' &&
             snapshot.pending.status === 'queued'
@@ -149,6 +170,13 @@ export function OxygenPendingConfirmation({
         )}
         <OxygenConfirmationNotice
           booking={snapshot?.pending?.action === 'book'}
+          queuedApprovalCode={
+            pendingReadRecovery(snapshot) === 'trigger_approval_otp'
+          }
+          approvalCodeError={
+            pendingReadRecovery(snapshot) === 'trigger_approval_otp' &&
+            Boolean(error)
+          }
           queuedBooking={pendingReadRecovery(snapshot) === 'book'}
           bookingTerms={snapshot?.pending?.bookingTerms}
           bookingError={
@@ -179,6 +207,7 @@ export function OxygenPendingConfirmation({
                     'refresh_payment_setup',
                     'validate_nin',
                     'selfie_link',
+                    'trigger_approval_otp',
                   ].includes(pendingReadRecovery(snapshot) ?? '') &&
                   checkPending
                 ? checkPending

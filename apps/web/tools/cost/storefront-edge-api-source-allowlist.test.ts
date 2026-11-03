@@ -104,6 +104,7 @@ it('keeps every Oxygen endpoint on the dynamic origin without admitting unknown 
     'webhook',
     'workflows',
     'workflows/actions',
+    'workflows/address-recovery',
     'workflows/phone-handoff',
     'workflows/phone-recovery',
     'workflows/selfie-status',

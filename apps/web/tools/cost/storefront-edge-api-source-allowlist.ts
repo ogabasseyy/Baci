@@ -49,6 +49,7 @@ const STOREFRONT_API_SOURCE_PATHS = new Set([
   'payments/oxygen/webhook',
   'payments/oxygen/workflows',
   'payments/oxygen/workflows/actions',
+  'payments/oxygen/workflows/address-recovery',
   'payments/oxygen/workflows/phone-handoff',
   'payments/oxygen/workflows/phone-recovery',
   'payments/oxygen/workflows/selfie-status',

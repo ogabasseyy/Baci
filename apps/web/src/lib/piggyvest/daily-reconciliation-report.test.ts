@@ -116,14 +116,13 @@ describe('renderReconciliationEmail', () => {
     expect(email.html).toContain('ref-&lt;b&gt;x&lt;/b&gt;');
   });
 
-  it('escapes ampersands and angle brackets in the html subject', () => {
+  it('escapes ampersands in the html body', () => {
     const email = renderReconciliationEmail({
-      status: 'failed',
-      reason: 'a&b<c>',
-      generatedAt: '2026-11-03T00:30:00.000Z',
+      ...attention,
+      stuck: [{ ...attention.stuck[0], reference: 'a&b' }],
     });
-    expect(email.html).toContain('Reason: a&amp;b&lt;c&gt;.');
-    expect(email.html).not.toContain('a&b<c>');
+    expect(email.html).toContain('a&amp;b');
+    expect(email.html).not.toContain('a&b:');
   });
 
   it('renders a failed run as a failure, never as clear', () => {

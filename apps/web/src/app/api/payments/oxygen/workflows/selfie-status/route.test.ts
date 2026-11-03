@@ -9,8 +9,8 @@ const m = vi.hoisted(() => ({
   status: vi.fn(),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: m.auth }));
-vi.mock('@/lib/ensure-action-rate-limit', () => ({
-  ensureActionRateLimit: m.rate,
+vi.mock('@/lib/rate-limit', () => ({
+  checkOxygenProviderRateLimit: m.rate,
 }));
 vi.mock('@/lib/payments/oxygen/runtime-connection', () => ({
   connectOxygenRuntime: m.connect,
@@ -32,7 +32,7 @@ const request = () =>
 beforeEach(() => {
   vi.resetAllMocks();
   m.auth.mockResolvedValue({ user: { id: 'user' }, supabase: {} });
-  m.rate.mockResolvedValue(true);
+  m.rate.mockResolvedValue({ allowed: true });
   m.snapshot.mockResolvedValue({});
   m.connect.mockReturnValue({
     worker: vi.fn(),
@@ -51,8 +51,36 @@ it('checks ownership before connecting to Oxygen', async () => {
   expect(m.connect).not.toHaveBeenCalled();
 });
 it('rate limits status reads without connecting to Oxygen', async () => {
-  m.rate.mockResolvedValue(false);
+  m.rate.mockResolvedValue({ allowed: false });
   expect((await GET(request())).status).toBe(429);
+  expect(m.connect).not.toHaveBeenCalled();
+});
+it('uses the shared six-per-minute user and owned-workflow budget', async () => {
+  m.status.mockResolvedValue({ confirmed: false });
+  expect((await GET(request())).status).toBe(200);
+  expect(m.rate).toHaveBeenCalledWith(`user:${id}`, 'selfie-status', 6);
+  expect(m.rate).toHaveBeenCalledWith('user', 'selfie-status-user', 12);
+});
+it('denies provider access when the user-wide budget is exhausted', async () => {
+  m.rate.mockResolvedValueOnce({ allowed: false });
+  expect((await GET(request())).status).toBe(429);
+  expect(m.connect).not.toHaveBeenCalled();
+});
+it('denies provider access when only the workflow budget is exhausted', async () => {
+  m.rate
+    .mockResolvedValueOnce({ allowed: true })
+    .mockResolvedValueOnce({ allowed: false });
+  expect((await GET(request())).status).toBe(429);
+  expect(m.rate).toHaveBeenNthCalledWith(1, 'user', 'selfie-status-user', 12);
+  expect(m.rate).toHaveBeenNthCalledWith(2, `user:${id}`, 'selfie-status', 6);
+  expect(m.connect).not.toHaveBeenCalled();
+  expect(m.status).not.toHaveBeenCalled();
+});
+it('fails closed if the shared limiter throws', async () => {
+  m.rate.mockRejectedValue(new Error('private redis failure'));
+  const response = await GET(request());
+  expect(response.status).toBe(503);
+  expect(await response.text()).not.toContain('private redis failure');
   expect(m.connect).not.toHaveBeenCalled();
 });
 it('returns only confirmed selfie status and prevents caching', async () => {

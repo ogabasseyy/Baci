@@ -1,9 +1,9 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
-import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
 import { connectOxygenRuntime } from '@/lib/payments/oxygen/runtime-connection';
 import { readOxygenSnapshot } from '@/lib/payments/oxygen/runtime-service';
 import { readOxygenSelfieStatus } from '@/lib/payments/oxygen/selfie-status';
+import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
 import { oxygenSelfieStatusRequestSchema } from '@/schemas/oxygen-selfie-status';
 
 const headers = {
@@ -33,12 +33,26 @@ export async function GET(request: NextRequest) {
       { status: 404, headers }
     );
   }
-  if (
-    !(await ensureActionRateLimit(
-      `oxygen-selfie-status:${auth.user.id}:${input.data.workflowId}`,
-      { requests: 6, windowMs: 60_000 }
-    ))
-  )
+  let allowed: boolean;
+  try {
+    allowed = (
+      await checkOxygenProviderRateLimit(auth.user.id, 'selfie-status-user', 12)
+    ).allowed;
+    if (allowed)
+      allowed = (
+        await checkOxygenProviderRateLimit(
+          `${auth.user.id}:${input.data.workflowId}`,
+          'selfie-status',
+          6
+        )
+      ).allowed;
+  } catch {
+    return NextResponse.json(
+      { error: 'Unable to confirm selfie status right now' },
+      { status: 503, headers }
+    );
+  }
+  if (!allowed)
     return NextResponse.json(
       { error: 'Please wait before checking again' },
       { status: 429, headers }

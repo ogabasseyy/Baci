@@ -129,6 +129,10 @@ async function applyRateLimit(
     try {
       const upstashKey = `${identifier}:${pattern}`;
       const result = await limiter.limit(upstashKey);
+      // Upstash's default timeout returns success=true; sensitive budgets
+      // must treat that fallback as a distributed-backend failure.
+      if (config.failClosedWithoutRedis && result.reason === 'timeout')
+        throw new Error('Distributed rate limiter timed out');
       void rateLimitDiagnostics.report({
         backend: 'redis',
         reason: 'redis_success',

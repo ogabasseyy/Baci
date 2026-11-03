@@ -1,5 +1,4 @@
 import { notFound } from 'next/navigation';
-import { z } from 'zod';
 import { CheckoutThemeProvider } from '@/components/checkout-theme-provider';
 import { OxygenOrderConfirmationRedirect } from '@/components/payments/oxygen/OxygenOrderConfirmationRedirect';
 import { OxygenStorefrontCheckout } from '@/components/payments/oxygen/OxygenStorefrontCheckout';
@@ -11,6 +10,7 @@ import {
   getCachedMerchantByDomain,
 } from '@/lib/cached-data';
 import { isDomainIdentifier } from '@/lib/validation';
+import { oxygenCheckoutOrderSchema } from '@/schemas/oxygen-checkout-order';
 
 export async function CheckoutContent({
   params,
@@ -31,7 +31,11 @@ export async function CheckoutContent({
 
   const query = await searchParams;
   const oxygenOrderId = query?.oxygenOrderId;
-  if (oxygenOrderId && !z.uuid().safeParse(oxygenOrderId).success) notFound();
+  if (
+    oxygenOrderId &&
+    !oxygenCheckoutOrderSchema.shape.id.safeParse(oxygenOrderId).success
+  )
+    notFound();
 
   // Resume the existing order before choosing a fresh-checkout template.
   if (oxygenOrderId) {

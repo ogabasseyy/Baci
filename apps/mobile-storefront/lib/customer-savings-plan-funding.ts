@@ -57,7 +57,11 @@ async function primaryFunding(
     throw new Error(
       'This plan account needs review. Please contact support before trying again.'
     );
-  if (response.status === 'not_found') throw new Error(PLAN_NOT_SET_UP_MESSAGE);
+  if (response.status === 'not_found')
+    // Same code as the legacy 404, so callers read 'never set up' alike.
+    throw Object.assign(new Error(PLAN_NOT_SET_UP_MESSAGE), {
+      code: 'SAVINGS_WALLET_NOT_FOUND',
+    });
   return SavingsPlanFundingResponseSchema.parse(response);
 }
 

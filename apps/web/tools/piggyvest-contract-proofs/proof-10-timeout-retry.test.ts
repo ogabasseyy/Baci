@@ -268,4 +268,40 @@ describe('S8 timeout booking with a lagging balance', () => {
     const { result } = await run({}, false);
     expect(answer(result, TIMEOUT_BOOKED_ONCE)).toBe('unknown');
   });
+
+  it('answers unknown when the goal credit is short and no fee was read', async () => {
+    const h = makeHarness();
+    dispose = h.dispose;
+    await setupScenario(h.ctx);
+    const main = h.state.mainWalletId as string;
+    const goal = h.state.goalWalletId as string;
+    const goalWallet = h.mock.sandbox.wallet(goal);
+    const real = h.ctx.api.verify.bind(h.ctx.api);
+    let taken = false;
+    h.ctx.api.verify = async (...args: Parameters<typeof real>) => {
+      const out = await real(...args);
+      if (goalWallet && !taken && out.httpStatus === 200) {
+        taken = true;
+        goalWallet.balance -= 100;
+      }
+      return out;
+    };
+    const b = new ProofBuilder('p10', 'S8');
+    await stepTimeoutRetry(h.ctx, b, main, goal);
+    expect(answer(b.build(h.ctx), TIMEOUT_BOOKED_ONCE)).toBe('unknown');
+  });
+
+  it('answers unknown when the goal balance never shows the booking', async () => {
+    const h = makeHarness();
+    dispose = h.dispose;
+    await setupScenario(h.ctx);
+    const main = h.state.mainWalletId as string;
+    const goal = h.state.goalWalletId as string;
+    const goalWallet = h.mock.sandbox.wallet(goal);
+    if (goalWallet)
+      goalWallet.staleBalance = { value: goalWallet.balance, readsLeft: 500 };
+    const b = new ProofBuilder('p10', 'S8');
+    await stepTimeoutRetry(h.ctx, b, main, goal);
+    expect(answer(b.build(h.ctx), TIMEOUT_BOOKED_ONCE)).toBe('unknown');
+  });
 });

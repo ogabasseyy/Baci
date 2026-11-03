@@ -55,6 +55,10 @@ describe('proof 10: S8 sandbox first pass', () => {
       .slice(before)
       .map((c) => c.pathname);
     expect(paths).toEqual([
+      // proof 10 runs on its own customer: create, goal wallet, funding
+      '/api/v1/customers',
+      '/api/v1/wallet/sub-account',
+      '/api/v1/transfer/test/funding',
       '/api/v1/transfer/test/funding',
       '/api/v1/transfer/wallet', // fund goal
       '/api/v1/transfer/wallet', // wire-level second tap, same reference
@@ -99,8 +103,12 @@ describe('proof 10: S8 sandbox first pass', () => {
   it('reports unreadable onboarding evidence as unknown, never no', async () => {
     const h = harness();
     await setupScenario(h.ctx);
-    h.state.mainWalletId = null;
-    h.state.goalWalletId = null;
+    const real = h.ctx.api.customerWallets.bind(h.ctx.api);
+    h.ctx.api.customerWallets = async (...args: Parameters<typeof real>) => ({
+      ...(await real(...args)),
+      ok: false,
+      httpStatus: 500,
+    });
     const result = await runProof10(h.ctx);
     const answerOf = (id: string) =>
       result.findings.find((f) => f.id === id)?.answer;
@@ -116,5 +124,25 @@ describe('proof 10: S8 sandbox first pass', () => {
       result.findings.find((f) => f.id === 's8_timeout_transfer_booked_once')
         ?.answer
     ).toBe('unknown');
+  });
+
+  it('measures on its own wallets, so movement on the shared scenario wallets cannot bleed in', async () => {
+    const h = harness();
+    await setupScenario(h.ctx);
+    const sharedMain = h.state.mainWalletId as string;
+    const sharedGoal = h.state.goalWalletId as string;
+    const shared = h.mock.sandbox.wallet(sharedMain);
+    const real = h.ctx.api.verify.bind(h.ctx.api);
+    // Something earlier keeps crediting the shared main wallet.
+    h.ctx.api.verify = async (...args: Parameters<typeof real>) => {
+      if (shared) shared.balance += 777;
+      return real(...args);
+    };
+    const result = await runProof10(h.ctx);
+    for (const id of EXPECTED_YES) {
+      expect(result.findings.find((f) => f.id === id)?.answer, id).toBe('yes');
+    }
+    expect(h.state.mainWalletId).toBe(sharedMain);
+    expect(h.state.goalWalletId).toBe(sharedGoal);
   });
 });

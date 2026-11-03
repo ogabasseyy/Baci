@@ -18,7 +18,7 @@ import { PROOF_ORDER } from './proof-order';
 import { qaIdentityFor } from './provider-ops';
 import { ProofApi } from './provider-ops-proofs';
 import { loadAllowlist } from './qa-allowlist';
-import { isProof7KeyOf } from './qa-keys';
+import { isDerivedKeyOf, isProof7KeyOf } from './qa-keys';
 import { Redactor } from './redactor';
 import { ResponseCapture } from './response-capture';
 import { assertProofScope, type RunConfig } from './run-mode';
@@ -74,7 +74,7 @@ export function currentAttempt(
     .filter((entry) => entry.qaKey === qaKey)
     .map((entry) => entry.attempt);
   const derived = entries
-    .filter((entry) => isProof7KeyOf(qaKey, entry.qaKey))
+    .filter((entry) => isDerivedKeyOf(qaKey, entry.qaKey))
     .map((entry) => entry.attempt);
   const latest = Math.max(0, ...own, ...derived);
   if (latest === 0) return 1;

@@ -105,4 +105,13 @@ describe('S8 earlier movement bleeding into a later step', () => {
     expect(quiet.isQuiet(main, goal)).toBe(false);
     expect(detail(again, h, TAP_ONCE)?.answer).toBe('unknown');
   });
+
+  it('an unexplained credit during the repeat does not reconcile it', async () => {
+    const { h, b, main, goal, fund } = await setup();
+    const wallet = h.mock.sandbox.wallet(main);
+    if (wallet) wallet.balance += 500;
+    const quiet = new WalletsQuiet();
+    expect(await stepDoubleTap(h.ctx, b, main, goal, fund, quiet)).toBe(false);
+    expect(quiet.isQuiet(main, goal)).toBe(false);
+  });
 });

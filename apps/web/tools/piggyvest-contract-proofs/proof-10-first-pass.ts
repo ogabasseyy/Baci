@@ -14,7 +14,10 @@ import {
   TIMEOUT_TSQ_FIRST,
 } from './proof-10-timeout-retry';
 import { ProofBuilder } from './proof-builder';
-import type { ProofContext } from './proof-context';
+import { emptyScenarioState, type ProofContext } from './proof-context';
+import { qaIdentityFor } from './provider-ops';
+import { proof10Key } from './qa-keys';
+import { setupScenario } from './scenario';
 import type { Answer, ProofResult } from './types';
 import { WalletsQuiet } from './wallet-quiet';
 
@@ -47,14 +50,44 @@ function unreadableAsUnknown(established: boolean): Answer {
 }
 
 /**
+ * Proof 10 measures money on its own wallets. Anything proofs 1 to 9 left
+ * moving on the shared scenario's wallets (a late deposit, a pending
+ * transfer) could land inside its measurements, so it never uses them: its
+ * own QA customer, main wallet and goal wallet are created per attempt under
+ * a key derived from the selected one, and journaled like any other
+ * mutation. Read-only runs have nothing to measure and keep the shared view.
+ */
+async function dedicatedContext(
+  shared: ProofContext,
+  b: ProofBuilder
+): Promise<ProofContext> {
+  if (shared.mode === 'live-readonly') return shared;
+  const qa = qaIdentityFor(proof10Key(shared.qa.qaKey, shared.attempt));
+  for (const value of [qa.qaKey, qa.thirdPartyIdentifier, qa.goalWalletName]) {
+    shared.redactor.register('Q', value);
+  }
+  // The gate authorizes wallets through the shared set: the dedicated
+  // customer's wallets join it, nothing else changes.
+  const ctx: ProofContext = {
+    ...shared,
+    qa,
+    state: { ...emptyScenarioState(), authorized: shared.state.authorized },
+  };
+  await setupScenario(ctx);
+  for (const note of ctx.state.notes) b.note(note);
+  return ctx;
+}
+
+/**
  * Proof 10 (task S8): the owner's first sandbox pass as one section of the
  * evidence. It runs after the shared scenario (customer, main wallet, goal
  * wallet, funded main) and every mutation is journaled, capped and never
  * resent. A dry run proves the logic against the mock; the same code runs
  * unchanged against the live sandbox with --live-sandbox-mutations.
  */
-export async function runProof10(ctx: ProofContext): Promise<ProofResult> {
+export async function runProof10(shared: ProofContext): Promise<ProofResult> {
   const b = new ProofBuilder('p10', TITLE);
+  const ctx = await dedicatedContext(shared, b);
   const { state, mode } = ctx;
   const main = state.mainWalletId;
   const goal = state.goalWalletId;

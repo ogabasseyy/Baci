@@ -1,5 +1,5 @@
 import { AMOUNTS_KOBO } from './constants';
-import { debitedOnce, readTransferFeeKobo } from './debit-once';
+import { readTransferFeeKobo } from './debit-once';
 import { pickString } from './loose-schemas';
 import { settledAfterMovement } from './movement';
 import { delta, readingOf, settledWallets, statusOf } from './poll';
@@ -13,6 +13,7 @@ import {
   followUpAfterSubmit,
 } from './tsq-follow-up';
 import type { Answer } from './types';
+import { transferVerdict } from './verdict-rule';
 import { EARLIER_UNSETTLED, WalletsQuiet } from './wallet-quiet';
 
 /**
@@ -177,10 +178,16 @@ export async function stepTimeoutRetry(
   const after =
     sent.kind === 'resumed'
       ? null
-      : await settledAfterMovement(ctx, [main, goal], baseline, [main]);
+      : await settledAfterMovement(ctx, [main, goal], baseline, [main, goal]);
+  const measured = after !== null && baseline.settled && after.settled;
+  const moved = measured && after.moved;
   const mainDelta =
-    after && baseline.settled && after.settled && after.moved
+    after && moved
       ? delta(readingOf(baseline, main).balance, readingOf(after, main).balance)
+      : null;
+  const goalDelta =
+    after && moved
+      ? delta(readingOf(baseline, goal).balance, readingOf(after, goal).balance)
       : null;
   const listed = await pollSettled(
     ctx,
@@ -190,28 +197,35 @@ export async function stepTimeoutRetry(
   // The list can lag the status check and the balances: an empty but readable
   // list is not a measurement. Only a row actually found is counted.
   const rows = listed.settled ? countRows(listed.value, sent.reference) : null;
-  b.value('timeout_main_delta_kobo', mainDelta).value(
-    'timeout_rows_with_reference',
-    rows
-  );
+  b.value('timeout_main_delta_kobo', mainDelta)
+    .value('timeout_goal_delta_kobo', goalDelta)
+    .value('timeout_rows_with_reference', rows);
   // A resumed slot was booked BEFORE this run's baseline was read, so the
   // main delta is 0 by construction: it cannot show how often it was booked.
   const debit = mainDelta === null ? null : -mainDelta;
   const resumed = sent.kind === 'resumed';
   const unmeasured =
-    resumed || !earlierSettled || debit === null || rows === null;
+    resumed ||
+    !earlierSettled ||
+    debit === null ||
+    goalDelta === null ||
+    rows === null;
   const fee = unmeasured
     ? null
     : await readTransferFeeKobo(ctx, sent.reference, main);
   b.value('timeout_fee_from_record_kobo', fee);
-  // A fee may ride on the debit only as far as the record shows it; a second
-  // booking would take 2x. The single matching record decides the rest.
-  const answer: Answer =
-    unmeasured || debit === null
-      ? 'unknown'
-      : rows !== 1
-        ? 'no'
-        : debitedOnce(amount, debit, fee);
+  // The same rule as the funding step: the debit and the goal credit must
+  // both match ONE transfer (a recorded fee counts once across both). The
+  // single matching record decides whether it was booked once.
+  const verdict =
+    unmeasured || debit === null || goalDelta === null
+      ? null
+      : transferVerdict(amount, debit, goalDelta, fee);
+  const answer: Answer = unmeasured
+    ? 'unknown'
+    : rows !== 1
+      ? 'no'
+      : (verdict?.answer ?? 'unknown');
   b.finding(
     TIMEOUT_BOOKED_ONCE,
     Q[TIMEOUT_BOOKED_ONCE],
@@ -220,12 +234,12 @@ export async function stepTimeoutRetry(
       ? EARLIER_UNSETTLED
       : resumed
         ? 'the slot was booked in an earlier run, so this run has no pre-booking balance to compare'
-        : debit === null
-          ? 'the main balance never showed the booking within the polling budget'
+        : debit === null || goalDelta === null
+          ? 'the main and goal balances never showed the booking within the polling budget'
           : rows === null
             ? 'the transaction list never showed the reference within the polling budget'
             : answer === 'unknown'
-              ? 'the main debit exceeds the amount and the record shows no fee that explains it'
+              ? verdict?.detail
               : undefined
   );
 }

@@ -54,6 +54,7 @@ supplies, outside the repository:
 | `PVB_PROOF_API_KEY` | Sandbox test key (`test_key_...`). Fallback name: `PIGGYVEST_SAVINGS_FUNDING_API_SECRET`. A live key is refused. |
 | `PVB_PROOF_BASE_URL` | Optional. Must be exactly `https://staging.piggyvest.business`. |
 | Allowlist file | JSON, for example `{"qaCustomerIds": ["qa-s8-first-pass-01"]}`. Each id is 8 to 64 characters of letters, digits, `-` or `_`, chosen by the owner for this run. The harness derives a synthetic identity from it and touches only these customers. It must never name the screen-recording account. |
+| Proof 10 wallets | Proof 10 never measures on the shared scenario's wallets. Per attempt it creates its OWN QA customer (key derived from the selected allowlist id, `p10-<hash>-a<attempt>`), with its own main and goal wallets, journaled like every other mutation, so nothing proofs 1 to 9 do can land on the wallets it measures. No extra allowlist entry is needed. |
 | `PVB_PROOF_BANK_CODE`, `PVB_PROOF_BANK_ACCOUNT` | Only for a FULL run (proof 4's bank outflow). Not needed for `--proof p10`. |
 | `PVB_PROOF_BUSINESS_WALLET_ID` | Only for a FULL run (proofs 3, 7 and 8). Not needed for `--proof p10`. |
 

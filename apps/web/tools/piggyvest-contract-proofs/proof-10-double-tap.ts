@@ -175,8 +175,11 @@ export async function stepDoubleTap(
   // Is every balance movement of the repeat reconciled? A rejected repeat
   // with settled balances, or an accepted one whose debit was seen to land.
   // An accepted repeat with no debit seen may still land later.
+  // An unexplained credit (negative extra debit) reconciles nothing.
   const reconciled =
-    quietBefore && extraDebit !== null && (!accepted || extraDebit !== 0);
+    quietBefore &&
+    extraDebit !== null &&
+    (accepted ? extraDebit > 0 : extraDebit >= 0);
   if (!reconciled) quiet.markNotQuiet(main, goal);
   return reconciled;
 }

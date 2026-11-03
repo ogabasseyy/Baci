@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { PIGGYVEST_FEATURE_FLAGS } from './piggyvest-feature-flags';
 
 describe('feature flag registry', () => {
-  it('registers the new-money features', () => {
+  it('registers the new-money features and the read-only reconciliation switch', () => {
     expect(Object.keys(PIGGYVEST_FEATURE_FLAGS).sort()).toEqual(
       [
         'bank_inbox',
         'card_checkout',
         'card_signed_inbox',
         'card_custody',
+        'daily_reconciliation',
         'deposit_to_goal',
         'goal_provisioning',
         'inflows',

@@ -12,6 +12,10 @@ describe('isNonBrandPlaceholderKey', () => {
     for (const key of NON_BRAND_PLACEHOLDER_KEYS) {
       expect(isNonBrandPlaceholderKey(key)).toBe(true);
     }
+    expect(isNonBrandPlaceholderKey('unknown')).toBe(true);
+    expect(isNonBrandPlaceholderKey('no-brand')).toBe(true);
+    expect(isNonBrandPlaceholderKey('n-a')).toBe(true);
+    expect(isNonBrandPlaceholderKey('generic-brand')).toBe(true);
     expect(isNonBrandPlaceholderKey('apple')).toBe(false);
     expect(isNonBrandPlaceholderKey('samsung')).toBe(false);
   });

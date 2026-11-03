@@ -262,4 +262,28 @@ describe('buildCategoryHubBrandCards', () => {
     const freeCard = cards.find((card) => card.title === 'FreeBrand');
     expect(freeCard?.href).toBe('https://ogabassey.com/smartphones/free-1');
   });
+
+  it('does not generate a secondary compare link to placeholder brands', () => {
+    // Arrange: 3 products each for Apple and Gaming (a placeholder brand)
+    const products = [
+      ...Array.from({ length: 3 }, (_, index) =>
+        buildProduct(`apple-${index}`, 'Apple', 100 + index)
+      ),
+      ...Array.from({ length: 3 }, (_, index) =>
+        buildProduct(`gaming-${index}`, 'Gaming', 200 + index)
+      ),
+    ];
+
+    // Act
+    const cards = buildCategoryHubBrandCards({
+      categorySlug: 'smartphones',
+      storeUrl: 'https://ogabassey.com',
+      products,
+    });
+
+    // Assert: Apple card is present, Gaming is excluded, and Apple has no compare link with Gaming
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.title).toBe('Apple');
+    expect(cards[0]?.secondaryHref).toBeUndefined();
+  });
 });

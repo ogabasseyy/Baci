@@ -150,4 +150,35 @@ describe('compare eligibility candidate builders', () => {
     });
     expect(sonyFirst?.canonicalSlug).toBe('playstation-vs-xbox');
   });
+
+  it('rejects placeholder brands (Gaming, Generic, Unbranded, Other, Unknown) from candidate eligibility', () => {
+    const candidate = buildBrandCompareCandidate({
+      categorySlug: 'smartphones',
+      products: [
+        ...[0, 1, 2].map((i) => ({
+          slug: `gaming-phone-${i}`,
+          name: `Gaming Phone ${i}`,
+          brand: 'Gaming',
+          price: 500_000,
+          product_key_specs: {
+            ram_gb: 12,
+            storage_gb: 256,
+            refresh_rate: '144Hz',
+          },
+        })),
+        ...[0, 1, 2].map((i) => ({
+          slug: `generic-phone-${i}`,
+          name: `Generic Phone ${i}`,
+          brand: 'Generic',
+          price: 450_000,
+          product_key_specs: {
+            ram_gb: 8,
+            storage_gb: 128,
+            refresh_rate: '60Hz',
+          },
+        })),
+      ],
+    });
+    expect(candidate).toBeNull();
+  });
 });

@@ -1,5 +1,6 @@
 import { generateSlug } from '../seo-utils';
 import { brandAuthorityTaxonomy } from '../storefront-category/brand-authority-taxonomy';
+import { isNonBrandPlaceholderKey } from '../storefront-category/category-hub-brand-placeholder';
 import { buildCanonicalBrandCompareSlug } from './compare-slugs';
 import type { PriceBandDefinition } from './compare-types';
 import { resolveCanonicalBrandKey } from './resolve-canonical-brand-key';
@@ -40,7 +41,7 @@ function normalizeBrand(brand?: string | null): NormalizedBrand | null {
 
   const key = generateSlug(label);
 
-  if (!key) {
+  if (!key || isNonBrandPlaceholderKey(key)) {
     return null;
   }
 

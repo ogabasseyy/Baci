@@ -1,3 +1,5 @@
+import { generateSlug } from '@/lib/seo-utils';
+
 export const NON_BRAND_PLACEHOLDER_KEYS = new Set([
   'gaming',
   'generic',
@@ -8,13 +10,31 @@ export const NON_BRAND_PLACEHOLDER_KEYS = new Set([
   'n-a',
   'na',
   'generic-brand',
+  'brand-generic',
+  'unbranded-product',
+  'other-brand',
+  'unknown-brand',
 ]);
 
 /**
- * Returns true if the key is missing, empty, or matches a known non-brand placeholder slug.
- * Used across category hub brand cards, category hub brand utils, and compare eligibility.
+ * Returns true if the brand or key is missing, empty, or matches a known non-brand placeholder.
+ * Normalizes input via trimming and slugification so callers can pass either raw brand labels
+ * (e.g. ' Gaming ', 'N/A', 'Generic Brand') or pre-slugified keys (e.g. 'gaming', 'na').
+ * Also checks common prefix/suffix wrapper variants (e.g. 'unbranded-product', 'other-brand').
  */
-export function isNonBrandPlaceholderKey(key?: string | null): boolean {
-  if (!key) return true;
-  return NON_BRAND_PLACEHOLDER_KEYS.has(key);
+export function isNonBrandPlaceholderKey(keyOrBrand?: string | null): boolean {
+  if (!keyOrBrand) return true;
+  const trimmed = keyOrBrand.trim();
+  if (!trimmed) return true;
+
+  const slug = generateSlug(trimmed);
+  if (!slug) return true;
+
+  if (NON_BRAND_PLACEHOLDER_KEYS.has(slug)) return true;
+
+  const stripped = slug
+    .replace(/^(brand|product)-/, '')
+    .replace(/-(brand|product)$/, '');
+
+  return NON_BRAND_PLACEHOLDER_KEYS.has(stripped);
 }

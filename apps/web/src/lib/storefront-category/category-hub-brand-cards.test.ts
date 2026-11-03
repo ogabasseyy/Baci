@@ -197,6 +197,8 @@ describe('buildCategoryHubBrandCards', () => {
       buildProduct('na-2', 'NA', 100),
       buildProduct('unk-1', 'Unknown', 100),
       buildProduct('nobr-1', 'No-Brand', 100),
+      buildProduct('unbr-prod-1', 'Unbranded Product', 100),
+      buildProduct('oth-brand-1', 'Other Brand', 100),
       buildProduct('tecno-1', 'Tecno', 200),
       buildProduct('apple-1', 'Apple', 300),
     ];

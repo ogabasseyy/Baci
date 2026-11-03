@@ -45,9 +45,9 @@ export function buildCategoryHubBrandCards(input: {
   }
 
   const sortedBrands = countBrandsByActiveProduct(input.products);
-  const explicitAuthorityEntries = input.brandAuthorityEntries ?? [];
+  const explicitAuthorityEntries = input.brandAuthorityEntries;
   const eligibleAuthorityEntries =
-    explicitAuthorityEntries.length > 0
+    explicitAuthorityEntries !== undefined
       ? explicitAuthorityEntries
       : brandAuthorityTaxonomy.getEligibleEntries(
           input.categorySlug,

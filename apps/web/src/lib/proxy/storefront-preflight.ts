@@ -23,7 +23,7 @@ import {
   getGamingLaptopGraphicsHub,
 } from '@/lib/storefront-category/gaming-laptop-graphics-hubs';
 import { modelFamilyAuthorityTaxonomy } from '@/lib/storefront-category/model-family-authority-taxonomy';
-import { getConfiguredPriceBands } from '@/lib/storefront-compare/price-band-taxonomy';
+import { getConfiguredPriceBands } from '@/lib/storefront-compare/get-configured-price-bands';
 import { isStorefrontDocumentNavigation } from '@/lib/storefront-document-navigation';
 import { storefrontInternalPreflight } from '@/lib/storefront-internal-preflight';
 import { callStorefrontPreflightRpc } from '@/lib/storefront-preflight-rpc';

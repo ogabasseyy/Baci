@@ -3,15 +3,11 @@ import {
   CATEGORY_HUB_DEFAULTS,
   CATEGORY_HUB_PRIORITY_CATEGORIES,
 } from '@/config/category-hub-defaults';
-import {
-  buildBestForCards,
-  buildCategoryHubCards,
-} from '@/lib/storefront-category/category-hub-cards';
-import {
-  buildPriceBandCards,
-  validateCategoryHubPriceBandConfig,
-} from '@/lib/storefront-category/category-hub-price-band-cards';
+import { buildBestForCards } from '@/lib/storefront-category/category-hub-best-for-cards';
+import { buildCategoryHubCards } from '@/lib/storefront-category/category-hub-cards';
+import { buildPriceBandCards } from '@/lib/storefront-category/category-hub-price-band-cards';
 import type { CategoryHubProduct } from '@/lib/storefront-category/category-hub-types';
+import { validateCategoryHubPriceBandConfig } from '@/lib/storefront-category/validate-category-hub-price-band-config';
 
 function makeProduct(
   slug: string,

@@ -7,8 +7,6 @@ import type {
 } from '@/lib/storefront-category/category-hub-types';
 import { buildBestForCards } from './category-hub-best-for-cards';
 
-export { buildBestForCards };
-
 export function buildCategoryHubCards(input: {
   categorySlug: string;
   storeUrl: string;

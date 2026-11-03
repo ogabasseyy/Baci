@@ -7,7 +7,7 @@ import { compareByPriceAsc } from '@/lib/storefront-category/compare-by-price-as
 import { compareBySpecDescThenPriceAsc } from '@/lib/storefront-category/compare-by-spec-desc-then-price-asc';
 import { getCategoryHubSpecNumber } from '@/lib/storefront-category/get-category-hub-spec-number';
 import { pickRepresentativeCategoryHubProduct } from '@/lib/storefront-category/pick-representative-category-hub-product';
-import { isPriceBandCurrencySupported } from '@/lib/storefront-compare/price-band-taxonomy';
+import { isPriceBandCurrencySupported } from '@/lib/storefront-compare/is-price-band-currency-supported';
 
 export function buildExpansionBestForCards(input: {
   categorySlug: string;

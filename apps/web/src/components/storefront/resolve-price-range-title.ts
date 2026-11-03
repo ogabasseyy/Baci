@@ -18,19 +18,14 @@ export interface ResolvePriceRangeTitleParams {
 export function resolvePriceRangeTitle(
   params: ResolvePriceRangeTitleParams
 ): string {
-  const isNonNgnCurrency =
-    params.currencyCode != null &&
-    params.currencyCode.trim().toUpperCase() !== 'NGN';
-
-  const curatedPriceBand = isNonNgnCurrency
-    ? null
-    : (getCuratedPriceBands(params.categorySlug, {
-        merchantCurrency: params.currencyCode,
-      }).find(
-        (band) =>
-          params.rawPrice <= band.ceiling &&
-          (band.floor === undefined || params.rawPrice > band.floor)
-      ) ?? null);
+  const curatedPriceBand =
+    getCuratedPriceBands(params.categorySlug, {
+      merchantCurrency: params.currencyCode,
+    }).find(
+      (band) =>
+        params.rawPrice <= band.ceiling &&
+        (band.floor === undefined || params.rawPrice > band.floor)
+    ) ?? null;
 
   if (curatedPriceBand?.label) {
     return curatedPriceBand.label;

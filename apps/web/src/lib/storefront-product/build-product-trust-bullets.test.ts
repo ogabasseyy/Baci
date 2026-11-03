@@ -61,7 +61,7 @@ describe('buildProductTrustBullets', () => {
     ).toEqual(['Available in Open Box condition']);
   });
 
-  it('omits price-band bullet for legacy categories when currency is non-NGN', () => {
+  it('preserves price-band bullet for legacy categories with non-NGN currency per backwards compatibility contract', () => {
     expect(
       buildProductTrustBullets(
         makeInput({
@@ -71,12 +71,15 @@ describe('buildProductTrustBullets', () => {
           currentProduct: {
             slug: 'iphone-16e',
             name: 'iPhone 16e',
-            price: 450,
+            price: 450_000,
             condition: 'Open Box',
           },
         })
       )
-    ).toEqual(['Available in Open Box condition']);
+    ).toEqual([
+      'Available in Open Box condition',
+      'Listed in Best Smartphones Under ₦500,000',
+    ]);
   });
 
   it('includes price-band bullet for NGN-gated categories when currency is NGN', () => {

@@ -57,17 +57,17 @@ describe('resolvePriceRangeTitle', () => {
     expect(title).toBe('Gaming Laptops $700000 - $1100000');
   });
 
-  it('falls back to formatted range for legacy categories when currency is non-NGN', () => {
+  it('preserves curated band label for legacy categories with non-NGN currency per backwards compatibility contract', () => {
     const title = resolvePriceRangeTitle({
       categorySlug: 'smartphones',
       currencyCode: 'USD',
-      rawPrice: 450,
-      minPrice: 380,
-      maxPrice: 520,
+      rawPrice: 450_000,
+      minPrice: 380_000,
+      maxPrice: 520_000,
       productCategory: 'Smartphones',
       formatCurrency: (amount) => `$${amount}`,
     });
-    expect(title).toBe('Smartphones Under $520');
+    expect(title).toBe('Best Smartphones Under ₦500,000');
   });
 
   it('treats band floor as exclusive (rawPrice equal to floor does not match)', () => {

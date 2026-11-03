@@ -31,19 +31,13 @@ export function buildProductTrustBullets(
     );
   }
 
-  const isNonNgnCurrency =
-    input.merchantCurrency != null &&
-    input.merchantCurrency.trim().toUpperCase() !== 'NGN';
-
-  const containingBand = isNonNgnCurrency
-    ? null
-    : getCuratedPriceBands(input.categorySlug, {
-        merchantCurrency: input.merchantCurrency,
-      }).find(
-        (band) =>
-          input.currentProduct.price <= band.ceiling &&
-          (band.floor ? input.currentProduct.price > band.floor : true)
-      );
+  const containingBand = getCuratedPriceBands(input.categorySlug, {
+    merchantCurrency: input.merchantCurrency,
+  }).find(
+    (band) =>
+      input.currentProduct.price <= band.ceiling &&
+      (band.floor ? input.currentProduct.price > band.floor : true)
+  );
 
   if (containingBand) {
     bullets.push(

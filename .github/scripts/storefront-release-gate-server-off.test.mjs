@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   findMissingServerOffTests,
+  hasLiveAssertion,
   isPiggyvestSource,
   isShippedSource,
   serverOffTestPaths,
 } from './storefront-release-gate-server-off.mjs';
 
 const APP = 'apps/mobile-storefront';
+const LIVE = "\nit('off', () => { expect(1).toBe(1); });";
 
 test('counts only storefront source that ships in the app bundle', () => {
   for (const path of [
@@ -73,8 +75,8 @@ test('reports each new PiggyVest file that lacks its server-off test', () => {
     [`${APP}/app/wallet/savings/index.tsx`]: 'export default function Screen() {}',
     [`${APP}/lib/read-spend-error.ts`]: "export const code = 'PIGGYVEST_LIMIT';",
     [`${APP}/components/product/ProductCard.tsx`]: 'export function ProductCard() {}',
-    [`${APP}/hooks/use-wallet-pin-proof.server-off.test.tsx`]: "import { useWalletPinProof } from './use-wallet-pin-proof';",
-    [`${APP}/__tests__/app/wallet/savings/index.server-off.test.tsx`]: "import Screen from '@/app/wallet/savings';",
+    [`${APP}/hooks/use-wallet-pin-proof.server-off.test.tsx`]: `import { useWalletPinProof } from './use-wallet-pin-proof';${LIVE}`,
+    [`${APP}/__tests__/app/wallet/savings/index.server-off.test.tsx`]: `import Screen from '@/app/wallet/savings';${LIVE}`,
   };
   const newFiles = [...Object.keys(contents).slice(0, 5), `${APP}/components/wallet/WalletPinSheet.test.tsx`];
   const tracked = [...newFiles, ...Object.keys(contents).slice(5)];
@@ -109,11 +111,11 @@ test('a server-off test counts only when it imports the file it covers', () => {
   const sheet = `${APP}/components/wallet/WalletPinSheet.tsx`;
   const colocated = `${APP}/components/wallet/WalletPinSheet.server-off.test.tsx`;
   const mirrored = `${APP}/__tests__/components/wallet/WalletPinSheet.server-off.test.tsx`;
-  const check = (testContent, testPath = colocated) =>
+  const check = (testContent, testPath = colocated, live = LIVE) =>
     findMissingServerOffTests({
       newFiles: [sheet],
       tracked: [sheet, testPath],
-      readContent: (path) => (path === testPath ? testContent : 'export function WalletPinSheet() {}'),
+      readContent: (path) => (path === testPath ? testContent + live : 'export function WalletPinSheet() {}'),
     });
   for (const text of [
     "import { WalletPinSheet } from './WalletPinSheet';",
@@ -139,7 +141,7 @@ test('a server-off test counts only when it imports the file it covers', () => {
   const covered = findMissingServerOffTests({
     newFiles: [index],
     tracked: [index, indexTest],
-    readContent: (path) => (path === indexTest ? "import { Savings } from '@/components/wallet/savings';" : ''),
+    readContent: (path) => (path === indexTest ? `import { Savings } from '@/components/wallet/savings';${LIVE}` : ''),
   });
   assert.deepEqual(covered, []);
 });
@@ -152,4 +154,52 @@ test('a server-off test next to an app/ screen does not count: storefront screen
     readContent: () => '',
   });
   assert.deepEqual(missing, [{ file: screen, expected: `${APP}/__tests__/app/wallet/pin.server-off.test.tsx` }]);
+});
+
+test('a server-off test needs a live test with an assertion, not only an import or skipped tests', () => {
+  for (const text of [
+    "it('off', () => { expect(x).toBe(1); });",
+    "test('off', async () => { expect(await run()).toBeNull(); });",
+    "describe('off', () => { it.each([1, 2])('n %s', (n) => { expect(n).toBeTruthy(); }); });",
+    "it('off', () => { assert.equal(a, b); });",
+    "test.only('off', () => { expect(1).toBe(1); });",
+    "it('skipped', () => {});\nit('live', () => { expect(1).toBe(1); });",
+  ]) {
+    assert.equal(hasLiveAssertion(text), true, text);
+  }
+  for (const text of [
+    '',
+    "import { Sheet } from './Sheet';",
+    "it.skip('off', () => { expect(1).toBe(1); });",
+    "xit('off', () => { expect(1).toBe(1); });",
+    "test.skip('off', () => { expect(1).toBe(1); });",
+    "it.todo('off');",
+    "xtest('off', () => { expect(1).toBe(1); });",
+    "describe.skip('off', () => { it('a', () => { expect(1).toBe(1); }); });",
+    "xdescribe('off', () => { it('a', () => { expect(1).toBe(1); }); });",
+    "it('off', () => {});",
+    "it('off', () => { render(<Sheet />); });",
+    "// it('off', () => { expect(1).toBe(1); });",
+    "/* it('off', () => { expect(1).toBe(1); }); */",
+    "it('off', () => { /* expect(1).toBe(1) */ });",
+  ]) {
+    assert.equal(hasLiveAssertion(text), false, text);
+  }
+});
+
+test('an import-only or skipped test does not cover a PiggyVest file', () => {
+  const sheet = `${APP}/components/wallet/WalletPinSheet.tsx`;
+  const test = `${APP}/components/wallet/WalletPinSheet.server-off.test.tsx`;
+  for (const body of [
+    "import { WalletPinSheet } from './WalletPinSheet';",
+    "import { WalletPinSheet } from './WalletPinSheet';\nit.skip('off', () => { expect(WalletPinSheet).toBeDefined(); });",
+    "import { WalletPinSheet } from './WalletPinSheet';\nit('off', () => {});",
+  ]) {
+    const missing = findMissingServerOffTests({
+      newFiles: [sheet],
+      tracked: [sheet, test],
+      readContent: (path) => (path === test ? body : ''),
+    });
+    assert.deepEqual(missing, [{ file: sheet, expected: test, test }], body);
+  }
 });

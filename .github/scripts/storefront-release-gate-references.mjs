@@ -6,6 +6,7 @@
 import path from 'node:path';
 
 const SCRIPT_REFERENCE = /[\w@./-]+\.(?:sh|bash|zsh|mjs|cjs|js|ts|py|rb|rake)\b/g;
+const LOCAL_USES = /^\s*(?:-\s+)?uses:\s*['"]?\.\/(\.github\/(?:actions|workflows)\/[^\s'"#]+?)\/?['"]?\s*(?:#.*)?$/gm;
 const WORKING_DIRECTORY = /^\s*(?:-\s+)?working-directory:\s*(\S+)\s*$/gm;
 // The gate's own modules and every test file describe shipping commands as
 // data and are run only to check code, so they are not followed.
@@ -32,6 +33,22 @@ export function expandReferences(text, readFile) {
   const visit = (source, depth) => {
     if (depth > MAX_DEPTH) return;
     const directories = [...source.matchAll(WORKING_DIRECTORY)].map((match) => match[1].replace(/\/$/, ''));
+    // A caller workflow and the local action or reusable workflow it uses run
+    // as one unit, so shipping split across the two files is still seen.
+    for (const [, used] of source.matchAll(LOCAL_USES)) {
+      const found = [used, `${used}/action.yml`, `${used}/action.yaml`].find(
+        (file) => /\.ya?ml$/.test(file) && readFile(file) !== undefined
+      );
+      if (found === undefined) {
+        if (!missing.includes(used)) missing.push(used);
+        continue;
+      }
+      if (seen.has(found)) continue;
+      seen.add(found);
+      const content = readFile(found).replace(COMMENT_LINE, '');
+      parts.push(content);
+      visit(content, depth + 1);
+    }
     for (const [reference] of source.matchAll(SCRIPT_REFERENCE)) {
       const found = candidates(reference, directories).find((file) => readFile(file) !== undefined);
       if (found === undefined) {

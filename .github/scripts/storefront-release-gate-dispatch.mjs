@@ -54,9 +54,28 @@ export function readDispatchTargets(text) {
   return targets;
 }
 
+// The store release workflows also start from an owner tag push, so creating a
+// tag, a ref or a release starts them just as a dispatch does.
+const TAG_COMMAND = /\bgit\s+tag\b|\bgh\s+release\s+(?:create|edit|upload)\b/;
+const PUSH_TAG = /\bgit\s+push\b.*(?:--tags\b|--follow-tags\b|refs\/tags\/|\bv[\w.*${}-]*-storefront(?:-ios)?\b)/;
+const REF_API = /\/git\/(?:refs|tags)\b|\bcreateRef\b|\bcreateTag\b|\bcreateRelease\b/;
+const RELEASE_API = /\b(?:gh\s+api|curl|fetch)\b.*\/releases\b(?!\/(?:latest|tags|download|\d+\/assets))/;
+const RELEASE_ACTION =
+  /\buses:\s*(?:softprops\/action-gh-release|actions\/create-release|ncipollo\/release-action|marvinpinto\/action-automatic-releases)\b/;
+
+/** True when the text creates or pushes a tag, ref or release. */
+export function createsReleaseTag(text) {
+  return logicalLines(text).some(
+    (line) =>
+      TAG_COMMAND.test(line) || PUSH_TAG.test(line) || REF_API.test(line) || RELEASE_API.test(line) || RELEASE_ACTION.test(line)
+  );
+}
+
 /** Failures for a file that starts a gated workflow, or a workflow the gate cannot identify. */
 export function dispatchFailures(file, text, gatedWorkflows) {
-  const failures = [];
+  const failures = createsReleaseTag(text)
+    ? [`${file} creates a release tag, ref or release, which starts the gated storefront release workflows: tag releases are an owner action (see docs/runbooks/storefront-release-gate.md)`]
+    : [];
   for (const target of readDispatchTargets(text)) {
     const name = target.replace(/^\.github\/workflows\//, '');
     const gated = gatedWorkflows.find((workflow) => path.basename(workflow) === name);

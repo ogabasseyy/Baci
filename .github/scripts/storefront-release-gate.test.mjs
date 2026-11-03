@@ -48,11 +48,11 @@ test('the gate fails when a new PiggyVest mobile file lacks a server-off test', 
   ]);
   const placeholder = withFiles({ [PIN_SHEET]: 'export function WalletPinSheet() {}', [PIN_SHEET_SERVER_OFF]: "test('off', () => {});" });
   assert.deepEqual(collectGateFailures(placeholder), [
-    `${PIN_SHEET} is a new or changed PiggyVest storefront file whose server-off test ${PIN_SHEET_SERVER_OFF} does not import it (see ${GATE_RUNBOOK})`,
+    `${PIN_SHEET} is a new or changed PiggyVest storefront file whose server-off test ${PIN_SHEET_SERVER_OFF} does not import it or lacks a live test with an assertion (see ${GATE_RUNBOOK})`,
   ]);
   const covered = withFiles({
     [PIN_SHEET]: 'export function WalletPinSheet() {}',
-    [PIN_SHEET_SERVER_OFF]: "import { WalletPinSheet } from './WalletPinSheet';\ntest('off', () => {});",
+    [PIN_SHEET_SERVER_OFF]: "import { WalletPinSheet } from './WalletPinSheet';\ntest('off', () => { expect(WalletPinSheet).toBeDefined(); });",
   });
   assert.deepEqual(collectGateFailures(covered), []);
 });
@@ -186,4 +186,34 @@ test('CI must run every gate test, unconditionally, in its changes job', () => {
   const jobSkipped = ci.replace('  changes:\n    runs-on: ubuntu-24.04\n', "  changes:\n    if: github.event_name == 'push'\n    runs-on: ubuntu-24.04\n");
   assert.notEqual(jobSkipped, ci, 'fixture must add a job condition');
   assert.deepEqual(collectGateFailures(withFiles({ [CI]: jobSkipped })), [`${CI} changes job must run unconditionally`]);
+});
+
+test('shipping split across a caller workflow and a local composite action still fails the gate', () => {
+  const caller = [
+    'name: Nightly',
+    'on:',
+    '  workflow_dispatch:',
+    'jobs:',
+    '  ship:',
+    '    runs-on: ubuntu-24.04',
+    '    steps:',
+    '      - uses: ./.github/actions/zz-ship',
+    '        with:',
+    '          dir: apps/mobile-storefront',
+    '',
+  ].join('\n');
+  const action = "runs:\n  using: composite\n  steps:\n    - shell: bash\n      run: bundle exec fastlane ios release\n";
+  const failures = collectGateFailures(
+    withFiles({ '.github/workflows/zz-nightly.yml': caller, '.github/actions/zz-ship/action.yml': action })
+  );
+  assert.ok(
+    failures.includes('.github/workflows/zz-nightly.yml builds or ships the storefront app but is not covered by the storefront release gate'),
+    failures.join('\n')
+  );
+});
+
+test('a workflow that pushes a release tag fails the gate', () => {
+  const tagger = 'name: Tagger\non:\n  workflow_dispatch:\njobs:\n  tag:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: git push origin v999-storefront\n';
+  const failures = collectGateFailures(withFiles({ '.github/workflows/zz-tagger.yml': tagger }));
+  assert.equal(failures.filter((failure) => failure.startsWith('.github/workflows/zz-tagger.yml creates a release tag')).length, 1);
 });

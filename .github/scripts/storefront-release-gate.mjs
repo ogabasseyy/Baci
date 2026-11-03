@@ -114,7 +114,7 @@ function serverOffFailures(repository, baselineCommit) {
   }).map(({ file, expected, test }) =>
     test === undefined
       ? `${file} is a new or changed PiggyVest storefront file without a server-off test: add ${expected} (see ${GATE_RUNBOOK})`
-      : `${file} is a new or changed PiggyVest storefront file whose server-off test ${test} does not import it (see ${GATE_RUNBOOK})`
+      : `${file} is a new or changed PiggyVest storefront file whose server-off test ${test} does not import it or lacks a live test with an assertion (see ${GATE_RUNBOOK})`
   );
 }
 

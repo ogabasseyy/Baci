@@ -90,14 +90,23 @@ tested:
 4. **A server-off test for each new PiggyVest file.** The CI gate requires a
    `*.server-off.test.tsx` test for every new or changed storefront source file that is a
    PiggyVest file, and that test must import the file it covers (with a
-   relative path or the `@/` alias). The test shows the file behaves like
+   relative path or the `@/` alias) and declare at least one test that is not
+   skipped or todo and makes an assertion. The test shows the file behaves like
    production when the server keeps PiggyVest off. An empty placeholder test,
-   or one that imports something else, does not count.
+   an import with skipped tests, or one that imports something else, does not count.
 
 The gate also reads the scripts a workflow or action runs (for example
 `bash .github/scripts/x.sh`), and the scripts those run, as part of that
 workflow, so delegating a build, upload or dispatch to a script does not hide
-it. A `.github` script it cannot find fails the gate. Test files and the
+it. The same applies to a local composite action or reusable workflow a file
+uses (`uses: ./.github/actions/x`): it is read as part of the caller, so
+splitting the shipping across files does not hide it. A `.github` script,
+action or workflow it cannot find fails the gate.
+
+No workflow or action may create a release tag, a git ref or a GitHub release
+(`git tag`, `git push --tags` or a `v*-storefront` tag, `POST /git/refs`,
+`gh release create`, `createRelease`), because a tag push starts the gated
+release workflows. Only the owner pushes release tags. Test files and the
 gate's own modules are not followed. Each gated workflow keeps a single job,
 because its guards cover that one job.
 

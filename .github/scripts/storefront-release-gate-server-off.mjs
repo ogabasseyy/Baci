@@ -81,8 +81,21 @@ export function importsModule(testPath, testContent, source) {
   return false;
 }
 
+const SKIPPED_SUITE = /\b(?:xdescribe|describe\s*\.\s*skip|describe\s*\.\s*todo)\b/;
+const LIVE_TEST = /(?<![\w.$])(?:it|test)\s*(?:\.\s*(?:only|concurrent|each|failing)\b[^(]*)?\(/;
+const ASSERTION = /(?<![\w.$])expect\s*(?:\.\s*assertions?\s*)?\(|(?<![\w.$])assert\s*(?:\.\s*\w+)?\s*\(|\.(?:should|toMatchSnapshot)\b/;
+
 /**
- * Each new PiggyVest file without a server-off test that imports it, with the
+ * True when the test file declares at least one test that is not skipped or
+ * todo and makes an assertion: an import with a skipped or empty test proves nothing.
+ */
+export function hasLiveAssertion(testContent) {
+  const code = (testContent ?? '').replace(COMMENT, '');
+  return !SKIPPED_SUITE.test(code) && LIVE_TEST.test(code) && ASSERTION.test(code);
+}
+
+/**
+ * Each new PiggyVest file without a server-off test that imports it and runs a live assertion, with the
  * preferred test path, plus `test` when a test exists but does not import it.
  */
 export function findMissingServerOffTests({ newFiles, tracked, readContent }) {
@@ -94,7 +107,11 @@ export function findMissingServerOffTests({ newFiles, tracked, readContent }) {
     .flatMap((file) => {
       const accepted = serverOffTestPaths(file);
       const existing = accepted.filter((test) => present.has(test));
-      if (existing.some((test) => importsModule(test, readContent(test), file))) return [];
+      const covers = (test) => {
+        const content = readContent(test);
+        return importsModule(test, content, file) && hasLiveAssertion(content);
+      };
+      if (existing.some(covers)) return [];
       return [existing.length === 0 ? { file, expected: accepted[0] } : { file, expected: accepted[0], test: existing[0] }];
     });
 }

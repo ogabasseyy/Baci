@@ -58,3 +58,41 @@ test('fails closed on a dispatch target it cannot resolve to a workflow file nam
     assert.match(failures[0], /^train\.yml starts a workflow the storefront release gate cannot identify/, text);
   }
 });
+
+test('a file that creates a release tag or ref, or a release, fails because tags start the gated workflows', () => {
+  for (const text of [
+    'run: git tag v999-storefront "$GITHUB_SHA" && git push origin v999-storefront',
+    'run: git push origin v12-storefront-ios',
+    'run: git push origin "v${N}-storefront"',
+    'run: git push --tags',
+    'run: git push --follow-tags origin HEAD',
+    'run: git push origin HEAD:refs/tags/v1-storefront',
+    'run: git tag -a v1-storefront -m x',
+    'run: gh release create v999-storefront-ios --target main',
+    'run: gh release create "$TAG"',
+    'run: gh api -X POST repos/o/r/git/refs -f ref=refs/tags/v1-storefront -f sha=abc',
+    'run: gh api repos/o/r/git/tags -f tag=v1-storefront',
+    "script: await github.rest.git.createRef({ owner, repo, ref: 'refs/tags/v1-storefront', sha })",
+    'script: await github.rest.repos.createRelease({ owner, repo, tag_name: tag })',
+    'run: curl -X POST https://api.github.com/repos/o/r/releases -d "$body"',
+    'uses: softprops/action-gh-release@v2',
+    'uses: actions/create-release@v1',
+  ]) {
+    const failures = dispatchFailures('nightly.yml', text, GATED);
+    assert.equal(failures.length, 1, text);
+    assert.match(failures[0], /^nightly\.yml creates a release tag, ref or release/, text);
+  }
+});
+
+test('ordinary git pushes and comments do not count as starting a release', () => {
+  for (const text of [
+    'run: git push origin HEAD:refs/heads/preview',
+    'run: git push origin HEAD',
+    '# git tag v1-storefront\nrun: echo ok',
+    'run: gh release view v1 --json tagName',
+    'run: gh release download v1',
+    'run: gh api repos/o/r/releases/latest',
+  ]) {
+    assert.deepEqual(dispatchFailures('nightly.yml', text, GATED), [], text);
+  }
+});

@@ -21,9 +21,9 @@ function farAheadFetch({ runs, pages, commitList = [currentSha], total, jobs = {
     }
     const jobMatch = url.match(/\/runs\/(\d+)\/jobs/);
     if (jobMatch) { const j = jobs[jobMatch[1]] ?? []; return response({ jobs: j, total_count: j.length }); }
-    const page = Number(url.match(/[?&]page=(\d+)/)?.[1] ?? 1);
-    const list = pages ? (pages[page - 1] ?? []) : runs;
-    return midpoint ? midpoint(url, list) : response({ total_count: pages ? pages.flat().length : list.length, workflow_runs: list });
+    const sha = url.match(/head_sha=([0-9a-f]{40})/)?.[1];
+    const list = (pages ? pages.flat() : runs).filter((r) => !sha || r.head_sha === sha);
+    return midpoint ? midpoint(url, list) : response({ total_count: list.length, workflow_runs: list });
   };
 }
 const run = (sha, id, conclusion = 'success', status = 'completed', extra = {}) => ({ conclusion, head_branch: 'main', head_sha: sha, id, status, ...extra });
@@ -53,12 +53,6 @@ test('bugfix: checks runs older than the expected SHA run (main reset then resto
 
 test('accepts when no superseding commit deployed, even without the expected run listed', async () => {
   assert.deepEqual(await verify(farAheadFetch({ runs: [run(currentSha, 2, null, 'queued', { run_attempt: 1 })] })), accepted);
-});
-
-test('finds a deployed superseding commit on a later runs page', async () => {
-  const filler = Array.from({ length: 100 }, (_, i) => run(otherSha, 1000 + i, 'cancelled'));
-  const fetchImpl = farAheadFetch({ pages: [filler, [run(intermediateSha, 3), expectedRun]], commitList: [intermediateSha, currentSha], jobs: { 3: deployedJob } });
-  await assert.rejects(verify(fetchImpl), /superseded deployment SHA/);
 });
 
 test('detects a deployed commit that only appears on a later compare page', async () => {
@@ -99,7 +93,7 @@ test('bugfix: a malformed head_sha on a non-main run is ignored', async () => {
 });
 
 test('fails closed on a malformed head_sha for a main run', async () => {
-  await assert.rejects(verify(farAheadFetch({ runs: [{ ...run('garbage', 8) }, expectedRun] })), /invalid workflow run SHA/);
+  await assert.rejects(verify(farAheadFetch({ midpoint: () => response({ total_count: 1, workflow_runs: [run('garbage', 8)] }) })), /invalid workflow run SHA/);
 });
 
 test('bugfix: fails closed when a runs page is shorter than total_count says', async () => {
@@ -107,28 +101,25 @@ test('bugfix: fails closed when a runs page is shorter than total_count says', a
   await assert.rejects(verify(fetchImpl), /incomplete or invalid workflow runs response/);
 });
 
-test('fails closed when the runs history is longer than the page cap', async () => {
-  const full = Array.from({ length: 100 }, (_, i) => run(otherSha, 2000 + i, 'cancelled'));
-  await assert.rejects(verify(farAheadFetch({ pages: Array.from({ length: 32 }, () => full) })), /could not exhaust deployment run history/);
-});
 
-test('bugfix: a history that ends exactly on a full final page is exhausted, not an error', async () => {
-  const full = Array.from({ length: 100 }, (_, i) => run(otherSha, 3000 + i, 'cancelled'));
-  assert.deepEqual(await verify(farAheadFetch({ pages: Array.from({ length: 30 }, () => full) })), accepted);
-});
-
-test('bugfix: the runs query has no server-side branch filter (capped at 1000 results)', async () => {
+test('bugfix: only ever looks runs up by superseding head_sha (all-time history size is irrelevant)', async () => {
   const urls = [];
   await verify(farAheadFetch({ runs: [expectedRun], urls }));
-  const runUrls = urls.filter((u) => u.includes('/deploy.yml/runs?'));
-  assert.ok(runUrls.length > 0 && runUrls.every((u) => !u.includes('branch=')));
+  const runUrls = urls.filter((u) => u.includes('/deploy.yml/runs'));
+  assert.ok(runUrls.length > 0 && runUrls.every((u) => /head_sha=[0-9a-f]{40}/.test(u) && !u.includes('branch=')));
 });
 
-test('bugfix: counts job lookups against the request budget and fails closed', async () => {
+test('bugfix: fails closed when the paged superseding list omits currentSha', async () => {
+  await assert.rejects(verify(farAheadFetch({ runs: [expectedRun], commitList: [intermediateSha], total: 1 })), /incomplete superseding commit list/);
+});
+
+test('bugfix: fails closed when the superseding list contains the expected SHA', async () => {
+  await assert.rejects(verify(farAheadFetch({ runs: [expectedRun], commitList: [expectedSha, currentSha] })), /incomplete superseding commit list/);
+});
+
+test('bugfix: counts every lookup against the request budget and fails closed', async () => {
   const commitList = Array.from({ length: 900 }, (_, i) => hex(i + 10)).concat(currentSha);
-  const runs = commitList.slice(0, 100).map((sha, i) => run(sha, 100 + i, 'cancelled'));
-  const pages = Array.from({ length: 9 }, (_, p) => commitList.slice(p * 100, p * 100 + 100).map((sha, i) => run(sha, 10000 + p * 100 + i, 'cancelled')));
   const urls = [];
-  await assert.rejects(verify(farAheadFetch({ pages, commitList, urls, runs })), /request budget/);
+  await assert.rejects(verify(farAheadFetch({ runs: [], commitList, urls })), /request budget/);
   assert.ok(urls.length < 900);
 });

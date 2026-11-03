@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Deploy VPS workers to bassey@82.29.190.219
 # Usage: bash vps-workers/deploy.sh
-
 set -euo pipefail
 
 WORKER_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,7 +14,6 @@ source "$WORKER_ROOT/lib/install-remediation-cron-transition.sh"
 source "$WORKER_ROOT/lib/print-worker-env-reminder.sh"
 # shellcheck source=lib/install-worker-services.sh
 source "$WORKER_ROOT/lib/install-worker-services.sh"
-
 VPS="bassey@82.29.190.219"
 REMOTE_DIR="/home/bassey/baci-workers"
 REMEDIATION_DISABLED_MARKER="/home/bassey/.config/baci/remediation.disabled"

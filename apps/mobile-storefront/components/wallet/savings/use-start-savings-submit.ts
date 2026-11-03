@@ -6,6 +6,7 @@ import { setClipboardString } from '@/lib/clipboard';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { addPiggyvestPrimarySavingsContribution } from '@/lib/piggyvest-primary-savings';
+import { checkPiggyvestPrimarySavingsStatus } from '@/lib/piggyvest-primary-savings-status';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
 import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
@@ -57,6 +58,14 @@ function validateSavingsInput(
     ok: true,
     selectedProduct: input.selectedProduct,
   };
+}
+
+function getErrorCode(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return undefined;
+  }
+  const { code } = error as { code?: unknown };
+  return typeof code === 'string' ? code : undefined;
 }
 
 export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
@@ -124,6 +133,20 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     });
   };
 
+  const isStoredOperationDead = async (operationId: string) => {
+    try {
+      const result = await checkPiggyvestPrimarySavingsStatus({
+        merchantId: input.activeMerchantId,
+        operationId,
+      });
+      return result.status === 'cancelled';
+    } catch (error) {
+      // Only authoritative absence releases the id; ambiguous failures keep
+      // it so a retry cannot double-spend.
+      return getErrorCode(error) === 'CONTRIBUTION_NOT_FOUND';
+    }
+  };
+
   const submitBankTransferContribution = async () => {
     const goalId = input.createdGoalId;
     if (!goalId || submitInFlightRef.current) {
@@ -140,15 +163,22 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     submitInFlightRef.current = true;
     setIsSubmitting(true);
     try {
-      const idempotencyKey =
-        input.initialContributionIdempotencyKey ?? Crypto.randomUUID();
-      if (!input.initialContributionIdempotencyKey) {
+      const isPrimary = isPiggyvestPrimaryMerchant(input.activeMerchantId);
+      let storedKey = input.initialContributionIdempotencyKey;
+      if (storedKey && isPrimary && (await isStoredOperationDead(storedKey))) {
+        // The server cancelled (or never recorded) it: resubmitting the same
+        // id would answer 'conflict' forever, so start a fresh operation.
+        storedKey = null;
+      }
+      if (!mountedRef.current) return;
+      const idempotencyKey = storedKey ?? Crypto.randomUUID();
+      if (!storedKey) {
         input.setInitialContributionIdempotencyKey(idempotencyKey);
       }
       // Primary customers move money main wallet -> goal through PiggyVest
       // (stable operation id); the helper itself falls back to the legacy
       // rail on SAVINGS_NOT_READY. Legacy customers keep the legacy call.
-      const contribute = isPiggyvestPrimaryMerchant(input.activeMerchantId)
+      const contribute = isPrimary
         ? addPiggyvestPrimarySavingsContribution
         : addSavingsContribution;
       const contributionResult = await contribute({
@@ -208,6 +238,10 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       }
     } catch (error) {
       if (!mountedRef.current) return;
+      if (getErrorCode(error) === 'WALLET_UNAVAILABLE') {
+        // The server cancelled the reservation; the id can never be reused.
+        input.setInitialContributionIdempotencyKey(null);
+      }
       const message =
         error instanceof Error && error.message
           ? error.message

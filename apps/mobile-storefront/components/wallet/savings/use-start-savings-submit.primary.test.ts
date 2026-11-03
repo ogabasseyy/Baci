@@ -8,6 +8,7 @@ const mockAddSavingsContribution =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockAddPrimaryContribution =
   jest.fn<(...args: unknown[]) => Promise<unknown>>();
+const mockCheckStatus = jest.fn<(...args: unknown[]) => Promise<unknown>>();
 const mockIsPrimary = jest.fn<(merchantId?: string | null) => boolean>();
 
 jest.mock('expo-router', () => ({
@@ -23,6 +24,10 @@ jest.mock('@/lib/customer-savings', () => ({
 jest.mock('@/lib/piggyvest-primary-savings', () => ({
   addPiggyvestPrimarySavingsContribution: (...args: unknown[]) =>
     mockAddPrimaryContribution(...args),
+}));
+jest.mock('@/lib/piggyvest-primary-savings-status', () => ({
+  checkPiggyvestPrimarySavingsStatus: (...args: unknown[]) =>
+    mockCheckStatus(...args),
 }));
 jest.mock('@/lib/is-piggyvest-primary-merchant', () => ({
   isPiggyvestPrimaryMerchant: (merchantId?: string | null) =>
@@ -46,6 +51,10 @@ describe('submitBankTransferContribution primary routing', () => {
     jest.clearAllMocks();
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     mockIsPrimary.mockReturnValue(true);
+    mockCheckStatus.mockResolvedValue({
+      status: 'pending',
+      operationId: 'stored-op',
+    });
   });
 
   it('never calls the legacy contribution for a primary customer', async () => {
@@ -156,5 +165,97 @@ describe('submitBankTransferContribution primary routing', () => {
     expect(mockAddPrimaryContribution).not.toHaveBeenCalled();
     expect(mockAddSavingsContribution).toHaveBeenCalledTimes(1);
     expect(input.setShowSuccessModal).toHaveBeenCalledWith(true);
+  });
+
+  describe('stored operation recovery', () => {
+    const submitWithStored = async () => {
+      mockAddPrimaryContribution.mockResolvedValue({
+        status: 'confirmed',
+        operationId: 'op-uuid-1',
+      });
+      const input = readyInput({
+        initialContributionIdempotencyKey: 'stored-op',
+      });
+      const { result } = renderHook(() => useStartSavingsSubmit(input));
+      await act(async () => {
+        await result.current.submitBankTransferContribution();
+      });
+      return input;
+    };
+
+    it('checks the stored operation before resubmitting it', async () => {
+      await submitWithStored();
+      expect(mockCheckStatus).toHaveBeenCalledWith({
+        merchantId: 'merchant-1',
+        operationId: 'stored-op',
+      });
+      expect(mockAddPrimaryContribution).toHaveBeenCalledWith(
+        expect.objectContaining({ idempotencyKey: 'stored-op' })
+      );
+    });
+
+    it('starts a fresh operation when the stored one was cancelled', async () => {
+      mockCheckStatus.mockResolvedValue({
+        status: 'cancelled',
+        operationId: 'stored-op',
+      });
+      const input = await submitWithStored();
+      expect(input.setInitialContributionIdempotencyKey).toHaveBeenCalledWith(
+        'op-uuid-1'
+      );
+      expect(mockAddPrimaryContribution).toHaveBeenCalledWith(
+        expect.objectContaining({ idempotencyKey: 'op-uuid-1' })
+      );
+    });
+
+    it('starts a fresh operation when the server has no record of it', async () => {
+      mockCheckStatus.mockRejectedValue(
+        Object.assign(new Error('nf'), { code: 'CONTRIBUTION_NOT_FOUND' })
+      );
+      await submitWithStored();
+      expect(mockAddPrimaryContribution).toHaveBeenCalledWith(
+        expect.objectContaining({ idempotencyKey: 'op-uuid-1' })
+      );
+    });
+
+    it('keeps the stored operation when the status check is ambiguous', async () => {
+      mockCheckStatus.mockRejectedValue(new Error('network'));
+      await submitWithStored();
+      expect(mockAddPrimaryContribution).toHaveBeenCalledWith(
+        expect.objectContaining({ idempotencyKey: 'stored-op' })
+      );
+    });
+
+    it('does not check status for legacy customers', async () => {
+      mockIsPrimary.mockReturnValue(false);
+      mockAddSavingsContribution.mockResolvedValue({
+        goalStatus: 'active',
+        success: true,
+      });
+      const input = readyInput({
+        initialContributionIdempotencyKey: 'stored-op',
+      });
+      const { result } = renderHook(() => useStartSavingsSubmit(input));
+      await act(async () => {
+        await result.current.submitBankTransferContribution();
+      });
+      expect(mockCheckStatus).not.toHaveBeenCalled();
+    });
+
+    it('releases the operation on WALLET_UNAVAILABLE so a retry can start fresh', async () => {
+      mockAddPrimaryContribution.mockRejectedValue(
+        Object.assign(new Error('Wallet unavailable'), {
+          code: 'WALLET_UNAVAILABLE',
+        })
+      );
+      const input = readyInput();
+      const { result } = renderHook(() => useStartSavingsSubmit(input));
+      await act(async () => {
+        await result.current.submitBankTransferContribution();
+      });
+      expect(
+        input.setInitialContributionIdempotencyKey
+      ).toHaveBeenLastCalledWith(null);
+    });
   });
 });

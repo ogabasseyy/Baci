@@ -67,23 +67,13 @@ export async function reconcileOxygenCallbacks(
   for (const job of jobs) {
     if (job.workflowIds.length === 0) continue;
     // A callback must resolve to one workflow. The database quarantines
-    // ambiguous addresses; fail closed if a concurrent change produces more.
+    // ambiguous addresses; leave unexpected ambiguity for the next scan.
     if (job.workflowIds.length > 1) {
-      await callbackRpc(worker, partner, 'defer', {
-        id: job.id,
-        retryKey: job.retryKey,
-      });
       continue;
     }
     let complete = job.workflowIds.length > 0;
     for (const id of job.workflowIds) {
-      if (reads >= 2) {
-        await callbackRpc(worker, partner, 'defer', {
-          id: job.id,
-          retryKey: job.retryKey,
-        });
-        return;
-      }
+      if (reads >= 2) return;
       try {
         if (job.kind === 'transaction' && paymentCheck) {
           reads++;

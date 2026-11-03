@@ -144,3 +144,25 @@ test('bugfix: rejects a compare whose total_commits is not an integer', async ()
   const fetchImpl = async (url) => url.includes('/git/ref') ? response({ object: { sha: currentSha } }) : response({ status: 'ahead', merge_base_commit: { sha: expectedSha }, total_commits: '500', files: null });
   await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /incomplete or non-ancestral superseding comparison/);
 });
+
+test('bugfix: a history that ends exactly on a full final page is exhausted, not an error', async () => {
+  const full = Array.from({ length: 100 }, (_, i) => ({ conclusion: 'cancelled', head_branch: 'main', head_sha: 'e'.repeat(40), id: 3000 + i, status: 'completed' }));
+  const fetchImpl = farAheadFetch({ pages: Array.from({ length: 30 }, () => full) });
+  assert.deepEqual(await verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), { currentSha, expectedSha });
+});
+
+test('compares the distinct SHAs of a runs page concurrently', async () => {
+  let inFlight = 0;
+  let peak = 0;
+  const shas = ['1', '2', '3'].map((c) => c.repeat(40));
+  const base = farAheadFetch({ runs: shas.map((s, i) => ({ conclusion: 'cancelled', head_branch: 'main', head_sha: s, id: 50 + i, status: 'completed' })) });
+  const fetchImpl = async (url) => {
+    if (!/\/compare\/a{40}\.\.\.[123]{40}/.test(url)) return base(url);
+    inFlight++; peak = Math.max(peak, inFlight);
+    await new Promise((r) => setTimeout(r, 5));
+    inFlight--;
+    return base(url);
+  };
+  await verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' });
+  assert.ok(peak > 1);
+});

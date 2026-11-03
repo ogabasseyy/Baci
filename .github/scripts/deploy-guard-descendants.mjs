@@ -19,23 +19,25 @@ export async function descendantAlreadyDeployed({ apiRoot, expectedSha, fetchImp
     ) {
       throw new Error('incomplete or invalid workflow runs response');
     }
-    for (const run of body.workflow_runs) {
+    const runs = body.workflow_runs.filter((run) => {
       if (typeof run?.head_sha !== 'string' || !SHA_PATTERN.test(run.head_sha)) {
         throw new Error('invalid workflow run SHA');
       }
-      if (run.head_branch != null && run.head_branch !== 'main') continue;
-      const sha = run.head_sha.toLowerCase();
-      if (sha === expectedSha.toLowerCase()) continue;
-      if (!descendant.has(sha)) {
-        const cmp = await githubJson(fetchImpl, `${apiRoot}/repos/${repository}/compare/${expectedSha}...${sha}?per_page=1`, token);
-        if (typeof cmp?.status !== 'string' || typeof cmp?.merge_base_commit?.sha !== 'string') {
-          throw new Error('incomplete descendant comparison');
-        }
-        descendant.set(sha, cmp.status === 'ahead' && cmp.merge_base_commit.sha.toLowerCase() === expectedSha.toLowerCase());
+      return (run.head_branch == null || run.head_branch === 'main') && run.head_sha.toLowerCase() !== expectedSha.toLowerCase();
+    });
+    const fresh = [...new Set(runs.map((run) => run.head_sha.toLowerCase()))].filter((sha) => !descendant.has(sha));
+    await Promise.all(fresh.map(async (sha) => {
+      const cmp = await githubJson(fetchImpl, `${apiRoot}/repos/${repository}/compare/${expectedSha}...${sha}?per_page=1`, token);
+      if (typeof cmp?.status !== 'string' || typeof cmp?.merge_base_commit?.sha !== 'string') {
+        throw new Error('incomplete descendant comparison');
       }
-      if (descendant.get(sha) && (await runHasDeployedProduction(fetchImpl, apiRoot, repository, run, token))) return true;
+      descendant.set(sha, cmp.status === 'ahead' && cmp.merge_base_commit.sha.toLowerCase() === expectedSha.toLowerCase());
+    }));
+    for (const run of runs) {
+      if (descendant.get(run.head_sha.toLowerCase()) && (await runHasDeployedProduction(fetchImpl, apiRoot, repository, run, token))) return true;
     }
-    if (body.workflow_runs.length < PAGE_SIZE) return false;
+    const exhausted = typeof body.total_count === 'number' ? page * PAGE_SIZE >= body.total_count : body.workflow_runs.length < PAGE_SIZE;
+    if (exhausted || body.workflow_runs.length < PAGE_SIZE) return false;
   }
   throw new Error('could not exhaust deployment run history');
 }

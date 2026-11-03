@@ -5,14 +5,21 @@ import {
   renderReconciliationEmail,
 } from './daily-reconciliation-report';
 
-const base = {
+const base: {
+  generatedAt: string;
+  staleAfterSeconds: number;
+  stuckTotal: number;
+  stuck: [];
+  walletsTotal: number;
+  truncated: { stuck: boolean; wallets: boolean };
+} = {
   generatedAt: '2026-11-03T00:30:00.000+01:00',
   staleAfterSeconds: 1800,
   stuckTotal: 0,
   stuck: [],
   walletsTotal: 1,
   truncated: { stuck: false, wallets: false },
-} as const;
+};
 
 const large: ReconciliationReport = {
   ...base,

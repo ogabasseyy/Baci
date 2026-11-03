@@ -47,6 +47,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
       {
         onDeliveryStart: expect.any(Function),
         onDeliveryRejected: expect.any(Function),
+        recipientUserIds: [],
         requiredShipmentUpdateCapability: 1,
       }
     );
@@ -299,6 +300,26 @@ describe('processClaimedGiglTrackingNotifications', () => {
         expect.any(Object),
         'orders',
         expect.objectContaining({ recipientUserIds: recipients })
+      );
+    });
+
+    it('bugfix: fails closed when the claim omits recipient_user_ids', async () => {
+      const supabase = createGiglTrackingNotificationSupabase({
+        description: 'Picked up',
+        raw_status: 'MPIK',
+      });
+      await processClaimedGiglTrackingNotifications(
+        supabase as never,
+        [{ ...notification, recipient_user_ids: null }],
+        'worker'
+      );
+      expect(notifyMerchant).toHaveBeenCalledWith(
+        notification.merchant_id,
+        expect.any(String),
+        expect.any(String),
+        expect.any(Object),
+        'orders',
+        expect.objectContaining({ recipientUserIds: [] })
       );
     });
 

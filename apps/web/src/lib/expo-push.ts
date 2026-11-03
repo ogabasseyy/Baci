@@ -23,6 +23,7 @@ import {
   type PushChunkDelivery,
   sendPushNotificationChunks,
 } from './expo-push-chunk-delivery';
+import { restrictPushTokensToRecipients } from './expo-push-recipient-filter';
 import { excludeDeliveredTokens, withDeliveredTokens } from './expo-push-retry';
 import {
   createDeliveryStartBoundary,
@@ -167,17 +168,16 @@ export async function notifyMerchant(
     return { sent: 0, failed: 0, errors: [] };
   }
 
-  let baseTokenQuery = supabase
-    .from('push_tokens')
-    .select('token, platform')
-    .eq('merchant_id', merchantId)
-    .eq('is_active', true)
-    .eq('app_type', 'admin');
-  if (options?.recipientUserIds) {
-    baseTokenQuery = baseTokenQuery.in('user_id', options.recipientUserIds);
-  }
   const tokenQuery = filterPushTokensByShipmentUpdateCapability(
-    baseTokenQuery,
+    restrictPushTokensToRecipients(
+      supabase
+        .from('push_tokens')
+        .select('token, platform')
+        .eq('merchant_id', merchantId)
+        .eq('is_active', true)
+        .eq('app_type', 'admin'),
+      options?.recipientUserIds
+    ),
     options?.requiredShipmentUpdateCapability
   );
   const { data: fetchedTokens, error } = await tokenQuery;

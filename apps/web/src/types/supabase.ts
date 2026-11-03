@@ -17211,6 +17211,10 @@ export type Database = {
           terminal: boolean;
         }[];
       };
+      merge_shipment_event_preferences: {
+        Args: { p_merchant_id: string; p_patch: Json };
+        Returns: undefined;
+      };
       claim_shipment_tracking_notifications: {
         Args: { p_limit: number; p_worker_id: string };
         Returns: {

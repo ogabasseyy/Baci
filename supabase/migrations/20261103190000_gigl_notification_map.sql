@@ -16,6 +16,26 @@ ALTER TABLE public.notification_preferences
 COMMENT ON COLUMN public.notification_preferences.shipment_event_preferences IS
   'Per-event merchant GIG shipment push toggles keyed pickup_scheduled, pickup_delayed, picked_up, out_for_delivery, delivered, failed, returned, cancelled. Missing key = default (on, except out_for_delivery which is off).';
 
+-- Atomic per-event merge so concurrent PATCHes of different toggles never
+-- overwrite each other. SECURITY INVOKER: the caller's RLS still applies.
+CREATE OR REPLACE FUNCTION public.merge_shipment_event_preferences(
+  p_merchant_id uuid, p_patch jsonb
+)
+RETURNS void
+LANGUAGE sql SECURITY INVOKER SET search_path = ''
+AS $$
+  INSERT INTO public.notification_preferences AS preferences (
+    merchant_id, shipment_event_preferences
+  ) VALUES (p_merchant_id, coalesce(p_patch, '{}'::jsonb))
+  ON CONFLICT (merchant_id) DO UPDATE
+  SET shipment_event_preferences =
+    preferences.shipment_event_preferences || coalesce(p_patch, '{}'::jsonb);
+$$;
+REVOKE ALL ON FUNCTION public.merge_shipment_event_preferences(uuid, jsonb)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.merge_shipment_event_preferences(uuid, jsonb)
+  TO authenticated, service_role;
+
 -- 2. Policy rows ------------------------------------------------------------
 ALTER TABLE private.gigl_tracking_notification_policy
   DROP CONSTRAINT IF EXISTS gigl_tracking_notification_policy_notification_kind_check;
@@ -161,10 +181,13 @@ BEGIN
   IF v_event_type IS NULL THEN
     RETURN NEW;
   END IF;
+  -- Import synchronisation stays silent via the transaction-local flag, not
+  -- permanent import markers, so a later GIG fulfilment still notifies.
+  IF current_setting('baci.order_notification_outbox.suppress_enqueue', true) = 'true' THEN
+    RETURN NEW;
+  END IF;
   SELECT * INTO v_order FROM public.orders WHERE id = NEW.order_id;
-  IF NOT FOUND OR v_order.external_source IS NOT NULL
-    OR v_order.import_job_id IS NOT NULL
-  THEN
+  IF NOT FOUND THEN
     RETURN NEW;
   END IF;
   -- Never email "shipped" twice for the same fulfilment cycle.
@@ -527,6 +550,14 @@ BEGIN
       AND outbox.notification_kind = 'cancelled'
       AND private.gigl_cancellation_superseded(outbox.shipment_id)
     RETURNING outbox.id
+  ), muted AS (
+    UPDATE public.shipment_tracking_notification_outbox AS outbox
+    SET status = 'skipped', skipped_at = now(), updated_at = now(),
+      skip_reason = 'merchant_preference_off'
+    WHERE outbox.status = 'pending'
+      AND outbox.audience = 'merchant'
+      AND NOT private.gigl_merchant_event_enabled(outbox.merchant_id, outbox.notification_kind)
+    RETURNING outbox.id
   ), expired_delivery AS (
     UPDATE public.shipment_tracking_notification_outbox AS outbox
     SET status = 'failed', locked_at = NULL, locked_by = NULL,
@@ -543,6 +574,10 @@ BEGIN
     JOIN public.shipment_tracking_events AS event
       ON event.id = outbox.tracking_event_id
     WHERE outbox.attempt_count < outbox.max_attempts
+      AND NOT (
+        outbox.audience = 'merchant'
+        AND NOT private.gigl_merchant_event_enabled(outbox.merchant_id, outbox.notification_kind)
+      )
       AND NOT (
         outbox.audience = 'customer' AND outbox.notification_kind = 'cancelled'
         AND private.gigl_cancellation_superseded(outbox.shipment_id)

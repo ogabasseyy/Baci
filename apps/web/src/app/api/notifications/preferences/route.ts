@@ -154,30 +154,22 @@ export async function PATCH(request: NextRequest) {
       updates.follow_up_notifications_enabled =
         body.follow_up_notifications_enabled;
     if (body.shipment_event_preferences !== undefined) {
-      // Merge so a partial toggle never wipes the other events' choices.
-      const { data: existing, error: existingError } = await supabase
-        .from('notification_preferences')
-        .select('shipment_event_preferences')
-        .eq('merchant_id', merchantId)
-        .maybeSingle();
-      if (existingError) {
-        console.error(
-          'Error reading shipment event preferences:',
-          existingError
-        );
+      // Atomic jsonb merge in SQL so concurrent partial toggles never clobber
+      // each other (RLS applies: the function is SECURITY INVOKER).
+      const { error: mergeError } = await supabase.rpc(
+        'merge_shipment_event_preferences',
+        {
+          p_merchant_id: merchantId,
+          p_patch: body.shipment_event_preferences,
+        }
+      );
+      if (mergeError) {
+        console.error('Error merging shipment event preferences:', mergeError);
         return NextResponse.json(
           { error: 'Failed to update preferences' },
           { status: 500 }
         );
       }
-      updates.shipment_event_preferences = {
-        ...(existing?.shipment_event_preferences &&
-        typeof existing.shipment_event_preferences === 'object' &&
-        !Array.isArray(existing.shipment_event_preferences)
-          ? existing.shipment_event_preferences
-          : {}),
-        ...body.shipment_event_preferences,
-      };
     }
     if (body.quiet_hours_start !== undefined)
       updates.quiet_hours_start = body.quiet_hours_start;

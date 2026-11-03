@@ -123,9 +123,9 @@ async function processNotification(
         onDeliveryStart,
         onDeliveryRejected,
         requiredShipmentUpdateCapability: SHIPMENT_UPDATE_CAPABILITY,
-        ...(notification.recipient_user_ids
-          ? { recipientUserIds: notification.recipient_user_ids }
-          : {}),
+        // Fail closed: a missing projection delivers to nobody, never to
+        // every admin token.
+        recipientUserIds: notification.recipient_user_ids ?? [],
       }
     );
     return completeNotificationResult(

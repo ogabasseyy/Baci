@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { brandAuthorityTaxonomy } from '@/lib/storefront-category/brand-authority-taxonomy';
 import { buildCategoryHubBrandCards } from '@/lib/storefront-category/category-hub-brand-cards';
+import {
+  countBrandsByActiveProduct,
+  isNonBrandPlaceholderKey,
+  NON_BRAND_PLACEHOLDER_KEYS,
+} from '@/lib/storefront-category/category-hub-brand-utils';
 import type { CategoryHubProduct } from '@/lib/storefront-category/category-hub-types';
 
 function buildProduct(
@@ -183,5 +188,67 @@ describe('buildCategoryHubBrandCards', () => {
 
     // Assert
     expect(cards).toEqual([]);
+  });
+
+  it('excludes non-brand placeholders (gaming, generic, unbranded, other) from countBrandsByActiveProduct and brandCards', () => {
+    // Arrange
+    const products = [
+      buildProduct('game-1', 'Gaming', 100),
+      buildProduct('gen-1', 'generic', 100),
+      buildProduct('unbr-1', 'unbranded', 100),
+      buildProduct('oth-1', 'other', 100),
+      buildProduct('tecno-1', 'Tecno', 200),
+      buildProduct('apple-1', 'Apple', 300),
+    ];
+
+    // Act
+    const brandCounts = countBrandsByActiveProduct(products);
+    const cards = buildCategoryHubBrandCards({
+      categorySlug: 'smartphones',
+      storeUrl: 'https://ogabassey.com',
+      products,
+    });
+
+    // Assert
+    expect(brandCounts).toEqual([
+      { key: 'apple', label: 'Apple', count: 1 },
+      { key: 'tecno', label: 'Tecno', count: 1 },
+    ]);
+    expect(cards.map((card) => card.title)).toEqual(['Apple', 'Tecno']);
+    expect(
+      cards.some((card) => /gaming|generic|unbranded|other/i.test(card.title))
+    ).toBe(false);
+  });
+
+  it('resolves representative product card for fallback brands with leading/trailing whitespace via normalized brand key matching', () => {
+    // Arrange
+    const products = [buildProduct('konami-1', ' Konami ', 250)];
+
+    // Act
+    const brandCounts = countBrandsByActiveProduct(products);
+    const cards = buildCategoryHubBrandCards({
+      categorySlug: 'smartphones',
+      storeUrl: 'https://ogabassey.com',
+      products,
+    });
+
+    // Assert
+    expect(brandCounts).toEqual([{ key: 'konami', label: 'Konami', count: 1 }]);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.title).toBe('Konami');
+    expect(cards[0]?.href).toBe('https://ogabassey.com/smartphones/konami-1');
+  });
+});
+
+describe('isNonBrandPlaceholderKey', () => {
+  it('identifies placeholder keys and empty/null values', () => {
+    expect(isNonBrandPlaceholderKey(null)).toBe(true);
+    expect(isNonBrandPlaceholderKey(undefined)).toBe(true);
+    expect(isNonBrandPlaceholderKey('')).toBe(true);
+    for (const key of NON_BRAND_PLACEHOLDER_KEYS) {
+      expect(isNonBrandPlaceholderKey(key)).toBe(true);
+    }
+    expect(isNonBrandPlaceholderKey('apple')).toBe(false);
+    expect(isNonBrandPlaceholderKey('samsung')).toBe(false);
   });
 });

@@ -45,6 +45,7 @@ function makeProduct(
     compare_at_price: null,
     condition: 'new',
     stock: 10,
+    manage_stock: true,
     rating: 4.5,
     availability: 'InStock',
     available_conditions: [],

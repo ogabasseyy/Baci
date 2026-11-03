@@ -7,6 +7,18 @@ export interface BrandCountEntry {
   count: number;
 }
 
+export const NON_BRAND_PLACEHOLDER_KEYS = new Set([
+  'gaming',
+  'generic',
+  'unbranded',
+  'other',
+]);
+
+export function isNonBrandPlaceholderKey(key?: string | null): boolean {
+  if (!key) return true;
+  return NON_BRAND_PLACEHOLDER_KEYS.has(key);
+}
+
 function normalizeBrand(brand?: string | null) {
   const label = brand?.trim();
   if (!label) {
@@ -14,7 +26,7 @@ function normalizeBrand(brand?: string | null) {
   }
 
   const key = generateSlug(label);
-  if (!key) {
+  if (!key || NON_BRAND_PLACEHOLDER_KEYS.has(key)) {
     return null;
   }
 

@@ -143,6 +143,7 @@ const productIndex = {
       compare_at_price: null,
       condition: 'new',
       stock: 5,
+      manage_stock: true,
       rating: 0,
       availability: 'InStock' as const,
       available_conditions: [],

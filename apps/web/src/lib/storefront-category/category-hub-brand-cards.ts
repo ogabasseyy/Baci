@@ -13,10 +13,14 @@ const BRAND_CARD_FALLBACK_LIMIT = 5;
 
 function pickFirstBrandProduct(
   products: CategoryHubProduct[],
-  brand: string
+  brandKey: string
 ): CategoryHubProduct | null {
   const brandProducts = products
-    .filter((product) => product.brand === brand)
+    .filter(
+      (product) =>
+        product.price > 0 &&
+        generateSlug(product.brand?.trim() ?? '') === brandKey
+    )
     .sort(
       (left, right) =>
         left.price - right.price || left.name.localeCompare(right.name)
@@ -96,7 +100,7 @@ export function buildCategoryHubBrandCards(input: {
     const authorityEntry = authorityEntries.get(entry.key);
     const representative = authorityEntry
       ? null
-      : pickFirstBrandProduct(input.products, entry.label);
+      : pickFirstBrandProduct(input.products, entry.key);
     if (!authorityEntry && !representative) {
       return [];
     }

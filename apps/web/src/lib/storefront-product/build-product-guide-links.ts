@@ -1,4 +1,5 @@
 import { CONTENT_CLUSTER_SUPPORT } from '@/config/storefront-content-clusters';
+import { GAME_CATEGORY_PATTERN } from '@/config/storefront-game-category';
 import { generateSlug } from '@/lib/seo-utils';
 import { buildCommercialGuideLinks } from '@/lib/storefront-content/build-commercial-guide-links';
 import type {
@@ -9,9 +10,6 @@ import { getContextBrandKeys } from '@/lib/storefront-content/get-context-brand-
 import { getPostTokenGroups } from '@/lib/storefront-content/get-post-token-groups';
 import { inferContentClusterContext } from '@/lib/storefront-content/infer-content-cluster-context';
 import type { BuildProductSemanticModelInput } from './product-semantic-types';
-
-const GAME_CATEGORY_PATTERN =
-  /^(?:gaming(?:-accessories)?|portable-gaming|playstation-[45]|nintendo-switch(?:-2)?|xbox)$/u;
 
 function dedupeGuideLinks(links: ReturnType<typeof buildCommercialGuideLinks>) {
   const seen = new Set<string>();

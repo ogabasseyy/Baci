@@ -2,6 +2,7 @@ import {
   CONTENT_CLUSTER_SCORE,
   CONTENT_CLUSTER_SUPPORT,
 } from '@/config/storefront-content-clusters';
+import { GAME_CATEGORY_PATTERN } from '@/config/storefront-game-category';
 import { generateSlug } from '@/lib/seo-utils';
 import { buildCommercialGuideDescription } from './build-commercial-guide-description';
 import type {
@@ -31,8 +32,6 @@ const KIND_PREFERENCE: Record<CommercialGuidePageKind, ContentClusterKind[]> = {
 };
 
 const MODEL_FAMILY_CONTEXT_EXCLUSIONS = new Set(['and', 'or']);
-const GAME_CATEGORY_PATTERN =
-  /^(?:gaming(?:-accessories)?|portable-gaming|playstation-[45]|nintendo-switch(?:-2)?|xbox)$/u;
 function toPublishedTimestamp(value: string | null) {
   if (!value) {
     return 0;

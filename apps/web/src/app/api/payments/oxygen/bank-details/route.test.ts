@@ -35,11 +35,40 @@ beforeEach(() => {
   m.csrf.mockResolvedValue({ valid: true });
   m.rate.mockReturnValue({ allowed: true });
   m.auth.mockResolvedValue({ user: { id: 'user' }, supabase: {} });
-  m.connect.mockReturnValue({ provider: { call: m.call } });
+  m.connect.mockReturnValue({
+    provider: { call: m.call, environment: 'staging' },
+  });
   m.read.mockResolvedValue({
     stage: 'application_required',
+    environment: 'staging',
     checkoutPhone: '08000000001',
   });
+});
+it.each([
+  ['staging', 'production', 'banks'],
+  ['production', 'staging', 'resolve'],
+  ['staging', undefined, 'banks'],
+] as const)('rejects workflow %s with provider %s for %s before a provider call', async (workflowEnvironment, providerEnvironment, action) => {
+  m.read.mockResolvedValue({
+    stage: 'application_required',
+    environment: workflowEnvironment,
+    checkoutPhone: '08000000001',
+  });
+  m.connect.mockReturnValue({
+    provider: { call: m.call, environment: providerEnvironment },
+  });
+  const response = await POST(
+    request({
+      workflowId: id,
+      action,
+      ...(action === 'resolve'
+        ? { bank_code: '001', account_number: '0123456789' }
+        : {}),
+    })
+  );
+  expect(response.status).toBe(503);
+  expect(m.call).not.toHaveBeenCalled();
+  expect(await response.text()).not.toContain('0123456789');
 });
 it('requires authentication before touching provider credentials', async () => {
   m.auth.mockResolvedValue({ error: 'unauthorized' });
@@ -64,6 +93,24 @@ it('returns a bounded bank list', async () => {
   expect(await r.json()).toEqual({
     banks: [{ name: 'Test bank', code: '001' }],
   });
+});
+it('uses a provider bound to the same production workflow environment', async () => {
+  m.read.mockResolvedValue({
+    stage: 'application_required',
+    environment: 'production',
+    checkoutPhone: '08000000001',
+  });
+  m.connect.mockReturnValue({
+    provider: { call: m.call, environment: 'production' },
+  });
+  m.call.mockResolvedValue({
+    Status: '00',
+    Result: [{ Name: 'Test bank', SortCode: '001' }],
+  });
+  expect(
+    (await POST(request({ workflowId: id, action: 'banks' }))).status
+  ).toBe(200);
+  expect(m.call).toHaveBeenCalledOnce();
 });
 it('derives the phone from the owned checkout and returns only resolved account name', async () => {
   m.call.mockResolvedValue({

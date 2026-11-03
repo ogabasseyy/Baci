@@ -45,7 +45,8 @@ export async function POST(request: NextRequest) {
   if (snapshot.stage !== 'application_required')
     return fail(409, 'Bank setup unavailable at this stage');
   const connection = connectOxygenRuntime();
-  if (!connection) return fail(503, 'Bank lookup unavailable');
+  if (!connection || connection.provider.environment !== snapshot.environment)
+    return fail(503, 'Bank lookup unavailable');
   const providerStarted = performance.now();
   // Numeric phase durations only: never include account, workflow or token values.
   const responseHeaders = () => ({

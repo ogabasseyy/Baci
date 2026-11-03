@@ -241,6 +241,37 @@ BEGIN
   PERFORM pg_temp.gp_assert(pg_temp.gp_operations() = 1 AND pg_temp.gp_balance() = 950,
     'reused proof left a reservation');
 
+  -- Cancel and complete proofs are spent only for an active goal of this
+  -- customer and merchant; a foreign or missing goal leaves the proof unspent.
+  PERFORM pg_temp.gp_issue('cancel-ok', 'goal_cancel', 1, c_goal || ':cancel');
+  PERFORM pg_temp.gp_issue('cancel-foreign', 'goal_cancel', 1, c_other_goal || ':cancel');
+  BEGIN
+    PERFORM piggyvest_primary.consume_goal_pin_proof(
+      pg_catalog.current_setting('test.goalpin_scope')::jsonb,
+      c_other_goal::uuid, 'cancel', pg_temp.gp_token('cancel-foreign'));
+    RAISE EXCEPTION 'a proof was spent for a missing goal';
+  EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
+  END;
+  PERFORM pg_temp.gp_assert(NOT pg_temp.gp_spent('cancel-foreign'),
+    'a proof for a missing goal was spent');
+  PERFORM pg_temp.gp_assert(
+    piggyvest_primary.consume_goal_pin_proof(
+      pg_catalog.current_setting('test.goalpin_scope')::jsonb,
+      c_goal::uuid, 'cancel', pg_temp.gp_token('cancel-ok')) = 'consumed',
+    'cancel proof for the owned goal was not spent');
+  PERFORM pg_temp.gp_assert(pg_temp.gp_spent('cancel-ok'), 'the cancel proof is not marked spent');
+  -- The same proof cannot be spent twice, and a complete proof does not fit cancel.
+  PERFORM pg_temp.gp_assert(
+    piggyvest_primary.consume_goal_pin_proof(
+      pg_catalog.current_setting('test.goalpin_scope')::jsonb,
+      c_goal::uuid, 'cancel', pg_temp.gp_token('cancel-ok')) = 'used',
+    'a spent cancel proof was accepted again');
+  PERFORM pg_temp.gp_issue('complete-ok', 'goal_complete', 1, c_goal || ':complete');
+  PERFORM pg_temp.gp_assert(
+    piggyvest_primary.consume_goal_pin_proof(
+      pg_catalog.current_setting('test.goalpin_scope')::jsonb,
+      c_goal::uuid, 'cancel', pg_temp.gp_token('complete-ok')) = 'mismatch',
+    'a complete proof was accepted for cancel');
   -- A merchant switched off after issue: unavailable, rolled back.
   PERFORM pg_temp.gp_issue('switched-off', 'goal_fund', 5000, c_goal || ':' || c_op5);
   UPDATE wallet_pin_private.merchant_authorities SET enabled = false

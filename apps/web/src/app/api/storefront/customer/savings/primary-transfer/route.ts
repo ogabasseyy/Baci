@@ -158,6 +158,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         { status: 403 }
       );
     const { merchantId: _merchantId, pinProof, ...selection } = parsed.data;
+    // Judged after the not-ready and disabled answers so a merchant without
+    // primary savings still falls back to legacy funding.
+    if (!pinProof)
+      return NextResponse.json(
+        {
+          error: 'Please confirm your PIN to continue.',
+          code: 'PIN_PROOF_REQUIRED',
+        },
+        { status: 400, headers: { 'Cache-Control': 'no-store' } }
+      );
     const result = await submitPrimaryWalletSavings({
       configuration: runtime.configuration,
       reconciliationConfiguration: runtime.reconciliationConfiguration,

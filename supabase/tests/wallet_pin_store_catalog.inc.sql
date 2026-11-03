@@ -164,11 +164,13 @@ BEGIN
     );
   END LOOP;
 
-  -- The purpose domain starts with the three spend surfaces.
+  -- The purpose domain: the three spend surfaces plus the goal funding,
+  -- cancel and complete purposes added by 20261103012600.
   PERFORM pg_temp.wp_assert(
     (SELECT pg_catalog.array_agg(purpose ORDER BY purpose)
-       FROM wallet_pin_private.proof_purposes) = ARRAY['checkout', 'imei', 'vtu'],
-    'proof purposes are checkout, imei and vtu'
+       FROM wallet_pin_private.proof_purposes)
+      = ARRAY['checkout', 'goal_cancel', 'goal_complete', 'goal_fund', 'imei', 'vtu'],
+    'proof purposes are checkout, goal_cancel, goal_complete, goal_fund, imei and vtu'
   );
 
   -- A PIN row records the account that set it, as a foreign key with an

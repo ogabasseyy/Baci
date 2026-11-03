@@ -124,6 +124,20 @@ BEGIN
   -- Ownership of the scope (and the SESSION_USER authority) is checked here,
   -- at the transition, not only when the request was built.
   PERFORM piggyvest_primary.assert_savings_scope(scope);
+  -- The goal itself must be an active goal of this customer and merchant. It
+  -- is share-locked until the caller's transaction ends, so it cannot change
+  -- hands or state between this check and the caller's state change. A proof
+  -- is never spent for a foreign, missing or inactive goal.
+  PERFORM 1
+    FROM public.customer_savings_goals AS goal
+   WHERE goal.id = consume_goal_pin_proof.goal_id
+     AND goal.customer_id = (scope ->> 'customerId')::uuid
+     AND goal.merchant_id = (scope ->> 'merchantId')::uuid
+     AND goal.status = 'active'
+     FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'savings goal unavailable' USING ERRCODE = '42501';
+  END IF;
   v_purpose := 'goal_' || action;
   RETURN wallet_pin_private.consume_wallet_pin_proof(
     (scope ->> 'customerId')::uuid, (scope ->> 'merchantId')::uuid,

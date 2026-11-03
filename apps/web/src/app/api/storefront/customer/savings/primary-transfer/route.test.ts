@@ -164,12 +164,38 @@ it('returns pending and binds the request to the authenticated customer', async 
     })
   );
 });
-it('requires a PIN proof before any funding processing', async () => {
+it('requires a PIN proof before any funding processing once savings is ready', async () => {
   const { pinProof: _omitted, ...withoutProof } = body;
   const response = await POST(request(withoutProof));
   expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ code: 'PIN_PROOF_REQUIRED' });
+  expect(mocks.submit).not.toHaveBeenCalled();
+});
+it('keeps the not-ready answer ahead of the PIN requirement so legacy funding can take over', async () => {
+  const { pinProof: _omitted, ...withoutProof } = body;
+  mocks.runtime.mockReturnValue(null);
+  const response = await POST(request(withoutProof));
+  expect(response.status).toBe(503);
+  expect(await response.json()).toMatchObject({ code: 'SAVINGS_NOT_READY' });
+  expect(mocks.submit).not.toHaveBeenCalled();
+});
+it('keeps the savings-disabled answer ahead of the PIN requirement', async () => {
+  const { pinProof: _omitted, ...withoutProof } = body;
+  mocks.features.mockResolvedValue({
+    autoDebitEnabled: true,
+    paystackEnabled: true,
+    savingsEnabled: false,
+  });
+  const response = await POST(request(withoutProof));
+  expect(response.status).toBe(403);
+  expect(await response.json()).toMatchObject({
+    code: 'CUSTOMER_SAVINGS_DISABLED',
+  });
+});
+it('rejects a malformed PIN proof as invalid input', async () => {
+  const response = await POST(request({ ...body, pinProof: 'not-hex' }));
+  expect(response.status).toBe(400);
   expect(await response.json()).toMatchObject({ code: 'INVALID_INPUT' });
-  expect(mocks.runtime).not.toHaveBeenCalled();
   expect(mocks.submit).not.toHaveBeenCalled();
 });
 it('maps a refused PIN proof to a retry-with-PIN response and never reports a transfer', async () => {

@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-10-31T20:34:23+00:00",
-  "source_revision": "740122683e1c16979372ce963ca2aabd0b8f3fed",
-  "evidence_digest": "0768371803be406d0d4f5c025f46d9162c68f1769b19f3c3894586c642a76fae",
-  "claims_digest": "55262d91c0adc6264e692c92fb5e8608a885c79e68e215d1a6c8b16251b14f60",
-  "review_scope": "Source evidence only. Re-reviewed shipping after the booking sender change: for domestic order bookings, a blank or implausible store phone now stops booking with 400 MERCHANT_SENDER_PHONE_INVALID before any provider request; origin-missing, merchant-missing and lookup-failure codes are unchanged. The shipping claim and its merchant-configuration limitation remain accurate. Across this main integration all other cited capability and access-map sources are unchanged. Support-chat health, OAuth connected discovery, anonymous compatibility and refresh receipts retain their prior review. New-endpoint conversational and native acceptance remain pending. No production promotion; deployment, native acceptance and transaction readiness require separate verification.",
+  "reviewed_at": "2026-11-03T18:31:21+00:00",
+  "source_revision": "47e1c7cc288cd91dbe3f0e3c2e00765571233fde",
+  "evidence_digest": "50bcb1c7908c960e197a8b0f9dec55c9eadc9d9547ce40fb5a6671605bd68894",
+  "claims_digest": "287e1dc8f070d78be074050825faa51984cb6ecf9fa8328e6187502278bace85",
+  "review_scope": "Source evidence only. Re-reviewed the full-code storefront MCP candidate: authored-source build/prerender, private preview, signed runner transport and output delivery exist in source and remain explicitly uninstalled/disabled in production. Local synthetic auth/RLS, isolation and rollback proofs do not establish deployed ChatGPT access, merchant activation, publication or CWV qualification. Re-reviewed the map-cited agentic test-source inventory change: only repository/test file discovery changed; payment/provider authorization and DVA runtime behavior are unchanged. Other capability claims retain their prior limitations. GitHub review and exact-candidate CI, real host/TLS/scoped verifier qualification and separate rollout authorization remain required; benchmarks are parked.",
   "capabilities": [
     {
       "id": "payments",
@@ -197,6 +197,20 @@
         "apps/web/src/app/api/agentic/carts/route.ts",
         "apps/web/src/app/api/agentic/checkout_sessions/route.ts",
         "apps/web/src/app/api/agentic/orders/[id]/route.ts"
+      ]
+    },
+    {
+      "id": "custom-storefront-mcp",
+      "title": "Full-code storefront MCP foundations",
+      "status": "code_evidenced",
+      "claim": "Baci source implements custom React/CSS storefront upload, isolated build/prerender, inspection and private preview through MCP builder ports, reusing its commerce engine.",
+      "limitations": "Production composition is explicitly uninstalled/disabled by default. Local synthetic proofs are not deployed ChatGPT availability, merchant activation, permission to publish or CWV qualification. Existing auth/RLS, entitlement, owner approval and performance/private-apply gates still apply. Real runner/HTTPS delivery and scoped verifier provisioning require separate qualification and authorized rollout.",
+      "source_refs": [
+        "apps/web/builder-mcp-server/registry.ts",
+        "apps/web/src/lib/experience/production-integration.ts",
+        "apps/web/tools/experience-runner/linux-runner.ts",
+        "apps/web/tools/experience-runner/preview-delivery.ts",
+        "docs/connectors/experience-runner-delivery-qualification.md"
       ]
     },
     {

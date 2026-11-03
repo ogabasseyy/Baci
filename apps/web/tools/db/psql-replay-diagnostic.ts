@@ -3,7 +3,8 @@ import { supabaseCommandDiagnostic } from './supabase-command-diagnostic';
 export function boundedPsqlDiagnostic(
   commandName: string,
   stderr: readonly Buffer[],
-  stdout: readonly Buffer[] = []
+  stdout: readonly Buffer[] = [],
+  exitCode: number | null = null
 ): string {
   if (commandName === 'supabase') {
     return supabaseCommandDiagnostic(Buffer.concat(stderr).toString('utf8'));
@@ -69,5 +70,7 @@ export function boundedPsqlDiagnostic(
     .map((flag) => (flag ? '1' : '0'))
     .join('');
   const checkpoint = /^OXYGEN_ANON_DRAFT_POST_DO\r?$/m.test(stdoutText);
-  return ` (line=${line},shape=${shape}${checkpoint ? ',checkpoint=1' : ''})`;
+  const exit =
+    exitCode === 1 || exitCode === 2 || exitCode === 3 ? exitCode : 0;
+  return ` (line=${line},shape=${shape}${checkpoint ? ',checkpoint=1' : ''},exit=${exit})`;
 }

@@ -20,6 +20,28 @@ async function temporaryRoot() {
 }
 
 describe('replay diagnostics', () => {
+  it.each([
+    1, 2, 3, 7,
+  ])('reports only a bounded psql exit category for exit %i', async (exit) => {
+    const root = await temporaryRoot();
+    const psql = path.join(root, 'psql');
+    await writeFile(
+      psql,
+      `#!${process.execPath}\nprocess.stderr.write('psql:/private.sql:89: ERROR: private value\\n');process.exit(${exit});\n`,
+      { mode: 0o700 }
+    );
+    const run = replayCommandRuntime.create(root);
+    const expected = exit <= 3 ? exit : 0;
+    await expect(
+      applySupabaseReplaySql(() => run(psql, []), {
+        kind: 'sql-check',
+        ordinal: 189,
+        sqlPath: '/private.sql',
+      })
+    ).rejects.toThrow(
+      `Replay SQL check failed at ordinal 189: non-zero-exit (line=89,shape=0000,exit=${expected})`
+    );
+  });
   it('recovers only the fixed SQLSTATE from stdout without leaking values', async () => {
     const root = await temporaryRoot();
     const psql = path.join(root, 'psql');
@@ -59,7 +81,7 @@ describe('replay diagnostics', () => {
         sqlPath: '/private.sql',
       })
     ).rejects.toThrow(
-      /^Replay SQL check failed at ordinal 189: non-zero-exit \(line=89,shape=0000,checkpoint=1\)$/
+      /^Replay SQL check failed at ordinal 189: non-zero-exit \(line=89,shape=0000,checkpoint=1,exit=1\)$/
     );
   });
 
@@ -79,7 +101,7 @@ describe('replay diagnostics', () => {
         sqlPath: '/private.sql',
       })
     ).rejects.toThrow(
-      /^Replay SQL check failed at ordinal 189: non-zero-exit \(line=88,shape=1001\)$/
+      /^Replay SQL check failed at ordinal 189: non-zero-exit \(line=88,shape=1001,exit=1\)$/
     );
   });
 

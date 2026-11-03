@@ -1822,6 +1822,20 @@ describe('generateMetaTitle', () => {
       expect(
         stripRedundantPlatformParentheticals('(PS5, PS4) - Best Game Ever')
       ).toBe('Best Game Ever');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) / Best Game Ever')
+      ).toBe('Best Game Ever');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) & Best Game Ever')
+      ).toBe('Best Game Ever');
+    });
+
+    it('compacts adjacent redundant parentheticals without creating double spaces', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Game (PS5, PS4) (Xbox, PC) Edition'
+        )
+      ).toBe('Game Edition');
     });
 
     it('does not remove leading punctuation when the stripped parenthetical is non-leading', () => {

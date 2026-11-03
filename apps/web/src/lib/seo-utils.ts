@@ -1616,14 +1616,14 @@ export function stripRedundantPlatformParentheticals(title: string): string {
   let stripped = false;
   let strippedAtStart = false;
   let compacted = title.replace(
-    /\s*\(([^)]*)\)\s*(?=[,:;.!?]|$)|\s*\(([^)]*)\)\s*/gu,
+    /\s*\(([^)]*)\)\s*(?=[,:;.!?]|\s*\(|$)|\s*\(([^)]*)\)\s*/gu,
     (
       match,
-      innerBeforePunct?: string,
+      innerBeforePunctOrNext?: string,
       innerOther?: string,
       offset?: number
     ) => {
-      const inner = innerBeforePunct ?? innerOther ?? '';
+      const inner = innerBeforePunctOrNext ?? innerOther ?? '';
       if (!isRedundantPlatformListParenthetical(inner)) {
         return match;
       }
@@ -1634,7 +1634,7 @@ export function stripRedundantPlatformParentheticals(title: string): string {
       ) {
         strippedAtStart = true;
       }
-      return innerBeforePunct !== undefined ? '' : ' ';
+      return innerBeforePunctOrNext !== undefined ? '' : ' ';
     }
   );
 
@@ -1643,7 +1643,7 @@ export function stripRedundantPlatformParentheticals(title: string): string {
   }
 
   if (strippedAtStart) {
-    compacted = compacted.replace(/^[,\s:;.!?–—|-]+\s*/u, '');
+    compacted = compacted.replace(/^[,\s:;.!?–—|/&-]+\s*/u, '');
   }
 
   return compacted.trim();

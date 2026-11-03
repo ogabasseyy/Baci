@@ -68,7 +68,7 @@ beforeEach(() => {
   });
 });
 
-it('refreshes wallet goal data when the bank transfer account is refreshed', async () => {
+it('refreshes wallet goal data without ever looking up a goal bank account', async () => {
   const refreshWallet = jest.fn(async () => ({ isError: false }));
   render(
     <WalletContent
@@ -81,12 +81,12 @@ it('refreshes wallet goal data when the bank transfer account is refreshed', asy
 
   await act(async () => {
     fireEvent.press(
-      screen.getByRole('button', { name: 'Refresh savings account' })
+      screen.getByRole('button', { name: 'Refresh savings progress' })
     );
     await Promise.resolve();
   });
 
-  expect(fetchExistingSavingsPlanFunding).toHaveBeenCalledTimes(2);
+  expect(fetchExistingSavingsPlanFunding).not.toHaveBeenCalled();
   expect(refreshWallet).toHaveBeenCalledTimes(1);
 });
 
@@ -108,17 +108,19 @@ it('does not leak a late refresh failure or busy state after the customer change
   await act(async () => {});
 
   fireEvent.press(
-    screen.getByRole('button', { name: 'Refresh savings account' })
+    screen.getByRole('button', { name: 'Refresh savings progress' })
   );
   expect(
-    screen.getByRole('button', { name: 'Refresh savings account' })
+    screen.getByRole('button', { name: 'Refresh savings progress' })
   ).toBeDisabled();
 
   mockUserId = 'user-2';
+  // The auth store is mocked non-reactively, so hand the content a new refresh
+  // function to force the re-render a real sign-in change would cause.
   view.rerender(
     <WalletContent
       {...props}
-      onRefresh={refreshWallet}
+      onRefresh={jest.fn(async () => ({ isError: false }))}
       showSavingsProgress={true}
     />
   );
@@ -131,7 +133,7 @@ it('does not leak a late refresh failure or busy state after the customer change
 
   expect(screen.queryByText('Previous customer refresh failed')).toBeNull();
   expect(
-    screen.getByRole('button', { name: 'Refresh savings account' })
+    screen.getByRole('button', { name: 'Refresh savings progress' })
   ).not.toBeDisabled();
-  expect(screen.getByText('Refresh account')).toBeOnTheScreen();
+  expect(screen.getByText('Refresh progress')).toBeOnTheScreen();
 });

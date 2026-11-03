@@ -8,6 +8,9 @@ import {
 } from './piggyvest-primary-capability';
 import { createStorefrontCustomerApiClient } from './storefront-customer-api-client';
 
+export const PLAN_NOT_SET_UP_MESSAGE =
+  'This plan account has not been set up yet.';
+
 type Selection = {
   goalId: string;
   merchantId?: string | null;
@@ -55,7 +58,10 @@ async function primaryFunding(
       'This plan account needs review. Please contact support before trying again.'
     );
   if (response.status === 'not_found')
-    throw new Error('This plan account has not been set up yet.');
+    // Same code as the legacy 404, so callers read 'never set up' alike.
+    throw Object.assign(new Error(PLAN_NOT_SET_UP_MESSAGE), {
+      code: 'SAVINGS_WALLET_NOT_FOUND',
+    });
   return SavingsPlanFundingResponseSchema.parse(response);
 }
 

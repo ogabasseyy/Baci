@@ -50,7 +50,7 @@ export function WalletSavingsContributionFlow({
       : 'Enter an amount greater than zero.'
     : needsFunding
       ? usesPlanFunding
-        ? 'Use the plan transfer details for this staging goal. Do not send a real bank transfer; approved operators run test funding.'
+        ? 'Fund your wallet to add this amount to savings. This is a staging preview, so do not send real money.'
         : topUpBlocked
           ? 'Wallet top-ups are disabled in this hosted staging preview. You can add to this plan when the wallet already has funds.'
           : 'Fund your wallet to add this amount to savings.'
@@ -104,7 +104,7 @@ export function WalletSavingsContributionFlow({
             accessibilityRole="button"
             accessibilityLabel={
               usesPlanFunding
-                ? 'Open savings bank transfer details'
+                ? 'Fund wallet for savings'
                 : 'Continue to payment'
             }
             accessibilityState={{
@@ -137,10 +137,10 @@ export function WalletSavingsContributionFlow({
             >
               {isFundPending
                 ? usesPlanFunding
-                  ? 'Opening transfer details...'
+                  ? 'Opening wallet funding...'
                   : 'Opening payment...'
                 : usesPlanFunding
-                  ? 'View bank transfer details'
+                  ? 'Fund wallet'
                   : 'Continue to payment'}
             </Text>
           </Pressable>

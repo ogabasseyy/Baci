@@ -108,6 +108,20 @@ it('routes the contribution through legacy savings when primary is unconfigured'
   });
   expect(mockLegacyAdd).toHaveBeenCalledWith(input);
 });
+it('never falls back to legacy for an id already bound to primary', async () => {
+  mockFetchJson.mockRejectedValue(
+    Object.assign(new Error('unavailable'), { code: 'SAVINGS_NOT_READY' })
+  );
+  await expect(
+    addPiggyvestPrimarySavingsContribution({
+      ...input,
+      allowLegacyFallback: false,
+    })
+  ).rejects.toThrow(/checking your earlier contribution/i);
+  expect(mockRecover).not.toHaveBeenCalled();
+  expect(mockLegacyAdd).not.toHaveBeenCalled();
+});
+
 it('blocks legacy fallback while a primary operation is still pending', async () => {
   mockFetchJson.mockRejectedValue(
     Object.assign(new Error('unavailable'), { code: 'SAVINGS_NOT_READY' })

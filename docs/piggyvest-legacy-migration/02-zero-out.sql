@@ -143,17 +143,21 @@ BEGIN
   END IF;
 
   -- The customer must exist for that merchant, like credit_customer_wallet.
-  -- The matched customers rows are held FOR SHARE so none can be deleted or
+  -- Lock the matched customers rows FOR SHARE first so none can be deleted or
   -- moved to another merchant before the wallet updates below.
+  PERFORM 1
+  FROM public.customers c
+  JOIN legacy_zero_out_list l
+    ON l.customer_id = c.id AND l.merchant_id = c.merchant_id
+  ORDER BY c.id
+  FOR SHARE OF c;
+
+  -- Then check every listed row on its own (customer AND merchant together).
   SELECT count(*) INTO v_bad
   FROM legacy_zero_out_list l
-  WHERE l.customer_id NOT IN (
-    SELECT c.id
-    FROM public.customers c
-    JOIN legacy_zero_out_list l2
-      ON l2.customer_id = c.id AND l2.merchant_id = c.merchant_id
-    ORDER BY c.id
-    FOR SHARE OF c
+  WHERE NOT EXISTS (
+    SELECT 1 FROM public.customers c
+    WHERE c.id = l.customer_id AND c.merchant_id = l.merchant_id
   );
   IF v_bad <> 0 THEN
     RAISE EXCEPTION 'customer not found for the merchant on % wallet(s); nothing changed', v_bad;

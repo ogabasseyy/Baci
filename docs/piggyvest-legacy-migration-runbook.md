@@ -25,8 +25,11 @@ so the ROLLBACK dry run in step 4 on the real database is the real check.
 - The change that stops new PiggyVest money landing on the old wallet row is
   live. Otherwise a balance can change between the list and the update.
 - You hold the signed-off list approved by the owner and the coordinator.
-- Pause the old wallet spending paths for these customers if any are active,
-  so no customer spends while being moved.
+- Pause every old wallet spending path for these customers before step 2, and
+  verify that no spend path can debit their wallets (for example, try a test
+  spend on a staff wallet and confirm it is refused). Write the check and its
+  date in the record from step 3. Do not credit anyone in PiggyVest until this
+  is verified.
 - Drain in-flight VTU purchases. A purchase paid from the old wallet can still
   be refunded back into it after fulfilment fails, which would put money on a
   wallet that was already moved. Do not approve or credit a customer until

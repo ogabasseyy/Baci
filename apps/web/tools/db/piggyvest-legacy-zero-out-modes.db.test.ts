@@ -139,5 +139,26 @@ describe.skipIf(!binDir)(
       expect(balance(W1)).toBe('500.00');
       expect(ledgerRows()).toBe('0');
     });
+
+    it('refuses a cross-merchant row even when the customer matches another row', () => {
+      const M2 = 'bbbbbbbb-0000-4000-8000-00000000000b';
+      reset([
+        [W1, '500.00'],
+        [W2, '250.00'],
+      ]);
+      s.psql(
+        `UPDATE customer_wallets SET merchant_id='${M2}', customer_id='${C1}' WHERE id='${W2}'`
+      );
+      const r = run(
+        [row(W1, C1, '500.00'), `('${W2}','${M2}','${C1}',250.00,'PV-REF-X')`],
+        2,
+        true
+      );
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toMatch(/customer not found/);
+      expect(balance(W1)).toBe('500.00');
+      expect(balance(W2)).toBe('250.00');
+      expect(ledgerRows()).toBe('0');
+    });
   }
 );

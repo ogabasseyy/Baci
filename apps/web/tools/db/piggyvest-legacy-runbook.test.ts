@@ -171,6 +171,35 @@ describe('runbook review roles and working copy', () => {
   });
 });
 
+describe('zero-out customer check is per row', () => {
+  it('locks matched customers first, then counts rows with no matching customer', () => {
+    const body = code(zeroSql);
+    expect(body).toMatch(/FOR SHARE OF c/i);
+    expect(body).toMatch(
+      /WHERE NOT EXISTS \(\s*SELECT 1 FROM public\.customers c/i
+    );
+    expect(body).not.toMatch(/customer_id NOT IN/i);
+  });
+});
+
+describe('runbook spending pause', () => {
+  it('makes the pause mandatory and verified before any credit', () => {
+    expect(runbook).not.toMatch(
+      /Pause the old wallet spending paths for these customers if any/
+    );
+    expect(runbook).toMatch(/Pause every old wallet spending path/);
+    expect(runbook).toMatch(/verify[\s\S]{0,200}no spend path can debit/i);
+    const before = runbook.indexOf('## Before you start');
+    const credit = runbook.indexOf('## 2. Credit');
+    expect(
+      runbook.indexOf('Pause every old wallet spending path')
+    ).toBeGreaterThan(before);
+    expect(
+      runbook.indexOf('Pause every old wallet spending path')
+    ).toBeLessThan(credit);
+  });
+});
+
 describe('zero-out customer row lock', () => {
   it('locks the matched customers rows FOR SHARE before the wallet updates', () => {
     const body = code(zeroSql);

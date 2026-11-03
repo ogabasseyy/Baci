@@ -97,6 +97,26 @@ describe('classifyPaystackSettlementCollection', () => {
     ).toEqual({ mode: 'integration' });
   });
 
+  it('fails closed to unknown when an empty subaccount contradicts a positive merchant share', () => {
+    // Paystack's own split shows money went to a subaccount; crediting the
+    // Baci wallet would double-pay the sale.
+    for (const subaccount of [{}, null, { subaccount_code: '' }]) {
+      expect(
+        classifyPaystackSettlementCollection({
+          fees_split: { subaccount: 990_000 },
+          subaccount,
+        })
+      ).toEqual({ mode: 'unknown' });
+    }
+    // A zero or absent merchant share is consistent with Baci collecting it.
+    expect(
+      classifyPaystackSettlementCollection({
+        fees_split: { subaccount: 0 },
+        subaccount: {},
+      })
+    ).toEqual({ mode: 'integration' });
+  });
+
   it('fails closed to unknown when subaccount_code is present but not a string', () => {
     // A non-string code could still be a real split; crediting the Baci
     // wallet on that guess would fail open.

@@ -39,9 +39,17 @@ export function classifyPaystackSettlementCollection(
   if (!payload || !('subaccount' in payload)) {
     return { mode: 'unknown' };
   }
+  // "No subaccount" only proves Baci collected the money when Paystack's own
+  // split does not show a positive merchant share; a contradiction is unknown.
+  const feesSplit = asRecord(payload.fees_split);
+  const subaccountShareKobo = parseKobo(feesSplit?.subaccount);
+  const integration: PaystackSettlementCollection =
+    subaccountShareKobo !== null && subaccountShareKobo > 0
+      ? { mode: 'unknown' }
+      : { mode: 'integration' };
   const subaccountValue = payload.subaccount;
   if (subaccountValue === null) {
-    return { mode: 'integration' };
+    return integration;
   }
   const subaccount = asRecord(subaccountValue);
   if (!subaccount) {
@@ -59,14 +67,12 @@ export function classifyPaystackSettlementCollection(
   }
   const subaccountCode = typeof rawCode === 'string' ? rawCode.trim() : '';
   if (!subaccountCode) {
-    return { mode: 'integration' };
+    return integration;
   }
   // A named subaccount is not enough: the history row records what the
   // merchant's bank received, so Paystack's split must state the merchant
   // share. Zero is a valid, verified share (Baci's charge took the whole
   // payment); a missing or malformed one proves nothing either way.
-  const feesSplit = asRecord(payload.fees_split);
-  const subaccountShareKobo = parseKobo(feesSplit?.subaccount);
   if (subaccountShareKobo === null) {
     return { mode: 'unknown' };
   }

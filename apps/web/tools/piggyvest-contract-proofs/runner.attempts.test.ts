@@ -121,6 +121,49 @@ describe('runHarness: a new attempt for one QA customer never re-opens another',
   });
 });
 
+describe('runHarness: a proof-7-only new attempt never makes a full run recreate proof 7', () => {
+  it('refuses a full run whose scenario attempt trails the newest proof-7 attempt, with no sandbox call', async () => {
+    const mock = createMockProvider();
+    const dir = mkdtempSync(path.join(tmpdir(), 'pvb-attempts-p7-'));
+    const allowlist = path.join(dir, 'allowlist.json');
+    writeFileSync(
+      allowlist,
+      JSON.stringify({ qaCustomerIds: ['qa-customer-C1'] })
+    );
+    const base = {
+      ...liveConfig('--live-sandbox-mutations', {
+        allowlistPath: allowlist,
+        journalPath: path.join(dir, 'journal.jsonl'),
+        evidenceDir: path.join(dir, 'evidence'),
+      }),
+      qaCustomerId: 'qa-customer-C1',
+    };
+    const deps = {
+      sleep: noSleep,
+      fetchImpl: mock.fetch,
+      print: () => undefined,
+    };
+    const posts = () => mock.calls.filter((c) => c.method === 'POST').length;
+
+    await runHarness({ ...base, proof: 'p1' }, deps);
+    await runHarness({ ...base, proof: 'p7', newAttempt: true }, deps);
+    const before = posts();
+    const calls = mock.calls.length;
+
+    await expect(runHarness(base, deps)).rejects.toMatchObject({
+      name: 'HarnessRefusal',
+      code: 'USAGE',
+    });
+    expect(posts()).toBe(before);
+    expect(mock.calls.length).toBe(calls);
+
+    // The explicit way forward: --new-attempt opens one attempt for everything.
+    await expect(
+      runHarness({ ...base, newAttempt: true }, deps)
+    ).resolves.toMatchObject({ exitCode: expect.any(Number) });
+  });
+});
+
 describe('currentAttempt: QA keys sharing a long prefix stay separate', () => {
   const A = `${'q'.repeat(57)}AAAAAAA`;
   const B = `${'q'.repeat(57)}BBBBBBB`;

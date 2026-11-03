@@ -103,6 +103,30 @@ export function currentAttempt(
   return includesScenario && own.length > 0 ? Math.max(...own) : latest;
 }
 
+/**
+ * A full run runs proof 7 under the scenario's attempt. If a proof-7-only
+ * `--new-attempt` moved proof 7 past it without it ever running on the scenario's
+ * attempt, proof 7 would find nothing journaled
+ * and create a second sandbox customer (a resend). Refuse instead.
+ */
+export function assertProof7AttemptAligned(
+  journal: Journal,
+  qaKey: string,
+  attempt: number
+): void {
+  const proof7 = journal
+    .entries()
+    .filter((entry) => isProof7KeyOf(qaKey, entry.qaKey))
+    .map((entry) => entry.attempt);
+  const newest = Math.max(0, ...proof7);
+  if (newest > attempt && !proof7.includes(attempt)) {
+    throw new HarnessRefusal(
+      'USAGE',
+      `proof 7 never ran on attempt ${attempt} but is on ${newest}; pass --new-attempt, or run --proof p7`
+    );
+  }
+}
+
 const realSleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -164,6 +188,9 @@ export async function runHarness(
       config.newAttempt,
       includesScenario
     );
+    if (!only && !config.newAttempt) {
+      assertProof7AttemptAligned(journal, qaKey, attempt);
+    }
     const gate = new MutationGate({
       mode: config.mode,
       journal,

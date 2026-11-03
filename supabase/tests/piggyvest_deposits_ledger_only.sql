@@ -86,4 +86,12 @@ BEGIN
   END;
 END $$;
 
+-- The guard also covers a neutral row being relabelled as a deposit.
+SELECT pg_temp.check(
+  coalesce((SELECT pg_catalog.pg_get_triggerdef(t.oid) LIKE '%BEFORE INSERT OR UPDATE OF source_type ON%'
+              FROM pg_catalog.pg_trigger t
+             WHERE t.tgrelid = 'public.customer_wallet_transactions'::regclass
+               AND t.tgname = 'reject_piggyvest_deposit_wallet_credit'), false),
+  'deposit guard must fire on INSERT and on UPDATE OF source_type');
+
 ROLLBACK;

@@ -195,7 +195,7 @@ REVOKE ALL ON FUNCTION piggyvest_primary.reject_deposit_wallet_credit()
   FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE TRIGGER reject_piggyvest_deposit_wallet_credit
-  BEFORE INSERT ON public.customer_wallet_transactions
+  BEFORE INSERT OR UPDATE OF source_type ON public.customer_wallet_transactions
   FOR EACH ROW
   WHEN (NEW.source_type IN ('piggyvest_primary_inflow', 'piggyvest_primary_card_custody'))
   EXECUTE FUNCTION piggyvest_primary.reject_deposit_wallet_credit();

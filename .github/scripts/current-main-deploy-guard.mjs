@@ -183,6 +183,46 @@ async function hasSupersedingDeployment({
   return false;
 }
 
+const MAX_RUN_PAGES = 10;
+
+// Walks deploy.yml runs on main newest-first until the run for expectedSha, and reports
+// whether any strict descendant of expectedSha has deployed (or started deploying).
+async function descendantAlreadyDeployed({ apiRoot, expectedSha, fetchImpl, repository, token }) {
+  const checked = new Set();
+  for (let page = 1; page <= MAX_RUN_PAGES; page++) {
+    const body = await githubJson(
+      fetchImpl,
+      `${apiRoot}/repos/${repository}/actions/workflows/deploy.yml/runs?branch=main&per_page=100&page=${page}`,
+      token
+    );
+    if (!Array.isArray(body?.workflow_runs)) throw new Error('incomplete or invalid workflow runs response');
+    for (const run of body.workflow_runs) {
+      if (typeof run?.head_sha !== 'string' || !SHA_PATTERN.test(run.head_sha)) {
+        throw new Error('invalid workflow run SHA');
+      }
+      if (run.head_branch != null && run.head_branch !== 'main') continue;
+      const sha = run.head_sha.toLowerCase();
+      if (sha === expectedSha.toLowerCase()) return false;
+      if (!(await runHasDeployedProduction(fetchImpl, apiRoot, repository, run, token))) continue;
+      if (checked.has(sha)) return true;
+      checked.add(sha);
+      const cmp = await githubJson(
+        fetchImpl,
+        `${apiRoot}/repos/${repository}/compare/${expectedSha}...${sha}?per_page=1`,
+        token
+      );
+      if (
+        cmp?.status === 'ahead' &&
+        cmp?.merge_base_commit?.sha?.toLowerCase() === expectedSha.toLowerCase()
+      ) {
+        return true;
+      }
+    }
+    if (body.workflow_runs.length < 100) break;
+  }
+  throw new Error('could not locate deployment run for expected SHA');
+}
+
 async function supersedingChangesCanProceed({
   apiRoot,
   currentSha,
@@ -200,12 +240,18 @@ async function supersedingChangesCanProceed({
     comparison?.status !== 'ahead' ||
     comparison?.merge_base_commit?.sha?.toLowerCase() !== expectedSha.toLowerCase() ||
     !Number.isSafeInteger(comparison?.total_commits) ||
-    comparison.total_commits < 1 ||
-    comparison.total_commits > 100 ||
-    !Array.isArray(comparison?.files) ||
-    comparison.files.length >= 300
+    comparison.total_commits < 1
   ) {
     throw new Error('incomplete or non-ancestral superseding comparison');
+  }
+  // Ancestry is established. When the compare payload is capped (commit list or 300-file
+  // limit) we cannot enumerate it, so decide from deploy runs on main instead.
+  if (
+    comparison.total_commits > 100 ||
+    !Array.isArray(comparison.files) ||
+    comparison.files.length >= 300
+  ) {
+    return !(await descendantAlreadyDeployed({ apiRoot, expectedSha, fetchImpl, repository, token }));
   }
   let nonWebOnly = true;
   for (const file of comparison.files) {

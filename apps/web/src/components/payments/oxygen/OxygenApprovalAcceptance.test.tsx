@@ -40,6 +40,7 @@ async function setup() {
     'getBoundingClientRect'
   ).mockReturnValue({ left: 0, top: 0, width: 640, height: 360 } as DOMRect);
   const ref = '70000000-0000-4000-8000-000000000025';
+  mocks.fetch.mockClear();
   mocks.fetch.mockImplementation(async () =>
     Response.json({
       window: {
@@ -103,16 +104,42 @@ it('saves the drawing on acceptance, blocks duplicate saves and approves only af
   await waitFor(() =>
     expect(screen.getByRole('button', { name: /^Continue$/ })).toBeEnabled()
   );
+  let finishReload: (response: Response) => void = () => {};
+  mocks.fetch.mockImplementationOnce(
+    () =>
+      new Promise<Response>((resolve) => {
+        finishReload = resolve;
+      })
+  );
   fireEvent.click(screen.getByRole('button', { name: /^Continue$/ }));
-  await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
+  await waitFor(() => expect(mocks.fetch).toHaveBeenCalledTimes(2));
+  expect(screen.getByRole('textbox')).toBeDisabled();
+  expect(approve).not.toHaveBeenCalled();
+  await act(async () =>
+    finishReload(
+      Response.json({
+        window: {
+          bookingReference: ref,
+          sentAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 300000).toISOString(),
+        },
+      })
+    )
+  );
+  await waitFor(() => {
+    expect(screen.getByRole('textbox')).toBeEnabled();
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('readonly');
+  });
   fireEvent.change(screen.getByRole('textbox'), {
     target: { value: '123456' },
   });
-  expect(approve).toHaveBeenCalledExactlyOnceWith(
-    ref,
-    '123456',
-    expect.any(File),
-    expect.any(Function)
+  await waitFor(() =>
+    expect(approve).toHaveBeenCalledExactlyOnceWith(
+      ref,
+      '123456',
+      expect.any(File),
+      expect.any(Function)
+    )
   );
   expect(screen.queryByText('Code verified.')).toBeNull();
 });

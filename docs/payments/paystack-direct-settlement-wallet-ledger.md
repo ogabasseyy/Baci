@@ -124,13 +124,18 @@ No existing row is changed.
   for Paystack, `direct_split` → the new history recorders; `integration` →
   the existing wallet-crediting RPCs with `paystack_collection: 'integration'`;
   `unknown` → throws `paystack_settlement_collection_unknown` before any RPC
-  (never credit the wallet without proof). That error is retryable: the
-  paid-order drain re-verifies a stored Paystack payload that lacks the
-  `subaccount`/`fees_split` fields, so a retry classifies the sale from a
-  fresh payload, and the attempt cap plus stranded-row recovery bound it. A
-  direct split whose Paystack `amount` differs from the order transaction's
-  gross (for example a wallet-funding transfer bigger than the order) is also
-  `unknown`. REDVAULT, Korapay and Juicyway are
+  (never credit the wallet without proof). Two failure codes:
+  - `paystack_settlement_collection_unknown`: the payload lacks the
+    `subaccount`/`fees_split` fields. Retryable: the paid-order drain
+    re-verifies such a stored payload, so a retry classifies the sale from a
+    fresh one; the attempt cap and stranded-row recovery bound it.
+  - `paystack_settlement_collection_inconsistent`: the split fields are
+    present but contradict each other, or the split is for a different
+    amount than the sale (for example a wallet-funding transfer bigger than
+    the order). Permanent, because re-verifying cannot change it: manual
+    review.
+  Every settlement path (main executor, order-update-failure fallback, chat
+  orders, manual reconcile) passes the sale's gross for that amount check. REDVAULT, Korapay and Juicyway are
   unchanged. A split to a subaccount that is not the merchant's registered
   one fails with the permanent `paystack_direct_settlement_subaccount_mismatch`.
 - A failed chat-order settlement files a `merchant_settlement_failed`

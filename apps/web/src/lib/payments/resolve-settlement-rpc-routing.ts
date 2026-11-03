@@ -1,7 +1,23 @@
 import { classifyPaystackSettlementCollection } from '@/lib/payments/classify-paystack-settlement-collection';
 
+// The payload lacks Paystack's split fields: re-verifying can heal it, so the
+// drain retries it with a fresh payload.
 export const PAYSTACK_SETTLEMENT_COLLECTION_UNKNOWN =
   'paystack_settlement_collection_unknown';
+// The split fields are present but contradict each other or the sale:
+// re-verifying the same transaction cannot change that, so it is permanent.
+export const PAYSTACK_SETTLEMENT_COLLECTION_INCONSISTENT =
+  'paystack_settlement_collection_inconsistent';
+
+function hasPaystackSplitFields(gatewayResponse: unknown): boolean {
+  return (
+    gatewayResponse !== null &&
+    typeof gatewayResponse === 'object' &&
+    !Array.isArray(gatewayResponse) &&
+    'subaccount' in gatewayResponse &&
+    'fees_split' in gatewayResponse
+  );
+}
 
 export type SettlementRpcRouting = {
   extraMetadata: Record<string, string | number>;
@@ -41,13 +57,19 @@ export function resolveSettlementRpcRouting(args: {
   // Fail closed: never credit the Baci wallet without proof of where the
   // money went.
   const collection = classifyPaystackSettlementCollection(args.gatewayResponse);
+  if (collection.mode === 'unknown') {
+    throw new Error(
+      hasPaystackSplitFields(args.gatewayResponse)
+        ? PAYSTACK_SETTLEMENT_COLLECTION_INCONSISTENT
+        : PAYSTACK_SETTLEMENT_COLLECTION_UNKNOWN
+    );
+  }
   if (
-    collection.mode === 'unknown' ||
-    (collection.mode === 'direct_split' &&
-      args.grossAmountKobo !== undefined &&
-      collection.amountKobo !== args.grossAmountKobo)
+    collection.mode === 'direct_split' &&
+    args.grossAmountKobo !== undefined &&
+    collection.amountKobo !== args.grossAmountKobo
   ) {
-    throw new Error(PAYSTACK_SETTLEMENT_COLLECTION_UNKNOWN);
+    throw new Error(PAYSTACK_SETTLEMENT_COLLECTION_INCONSISTENT);
   }
   if (collection.mode === 'integration') {
     return {

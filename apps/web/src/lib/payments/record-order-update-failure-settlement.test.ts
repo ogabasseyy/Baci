@@ -268,4 +268,23 @@ describe('bugfix: the order-update-failure fallback credited Paystack split sale
     });
     expect(rpc).not.toHaveBeenCalled();
   });
+
+  it('fails closed when the verified split is for a different amount than this sale', async () => {
+    const { rpc, supabase } = supabaseWith();
+
+    // A consistent split, but for ₦25,000 rather than this ₦10,000 sale.
+    const result = await run(supabase, {
+      ...split,
+      amount: 2_500_000,
+      fees_split: { ...split.fees_split, subaccount: 2_480_000 },
+    });
+
+    expect(result).toEqual({
+      kind: 'settlement_failed',
+      error: expect.objectContaining({
+        message: 'paystack_settlement_collection_inconsistent',
+      }),
+    });
+    expect(rpc).not.toHaveBeenCalled();
+  });
 });

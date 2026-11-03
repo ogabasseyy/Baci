@@ -66,6 +66,7 @@ return async (ctx) => {
     richOrder.shipping_provider?.trim().toUpperCase() === 'GIGL';
   const routing = resolveSettlementRpcRouting({
     gatewayResponse: ctx.gatewayResponse,
+    grossAmountKobo: Math.round(grossAmount * 100),
     isRedvaultDirectSettlement: false,
     settlementGateway: 'paystack',
     useGiglSettlementRpc,

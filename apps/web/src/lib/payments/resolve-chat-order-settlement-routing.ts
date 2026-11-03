@@ -14,6 +14,9 @@ import {
 export function resolveChatOrderSettlementRouting(args: {
   gateway: string;
   gatewayResponse: unknown;
+  // The amount being settled: a verified split for any other amount fails
+  // closed rather than booking another transfer's shares to this sale.
+  grossAmountKobo?: number;
 }): SettlementRpcRouting {
   if (args.gateway !== 'paystack') {
     return {
@@ -24,6 +27,7 @@ export function resolveChatOrderSettlementRouting(args: {
   }
   return resolveSettlementRpcRouting({
     gatewayResponse: args.gatewayResponse,
+    grossAmountKobo: args.grossAmountKobo,
     isRedvaultDirectSettlement: false,
     settlementGateway: 'paystack',
     useGiglSettlementRpc: false,

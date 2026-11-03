@@ -156,4 +156,27 @@ describe('recordChatOrderSettlement', () => {
       })
     );
   });
+
+  it('fails closed and files a review when the verified split is for a different amount', async () => {
+    const review = reviewTable();
+    const rpc = vi.fn();
+
+    await expect(
+      recordChatOrderSettlement({
+        ...base,
+        gatewayResponse: {
+          amount: 3_000_000,
+          fees_split: {
+            integration: 0,
+            paystack: 37_500,
+            subaccount: 2_962_500,
+          },
+          subaccount: { subaccount_code: 'ACCT_store' },
+        },
+        supabase: { from: review.from, rpc } as never,
+      })
+    ).rejects.toThrow('paystack_settlement_collection_inconsistent');
+    expect(rpc).not.toHaveBeenCalled();
+    expect(review.insert).toHaveBeenCalled();
+  });
 });

@@ -145,7 +145,7 @@ describe('buildSettlementExecutor Paystack collection routing', () => {
           },
         })
       )
-    ).rejects.toThrow('paystack_settlement_collection_unknown');
+    ).rejects.toThrow('paystack_settlement_collection_inconsistent');
     expect(rpc).not.toHaveBeenCalled();
   });
 

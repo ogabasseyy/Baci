@@ -141,8 +141,8 @@ describe('buildScriptExecutors merchant_settlement', () => {
       await ex.merchant_settlement!({
         ...stepCtx,
         gatewayResponse: {
-          amount: 5_030_000,
-          fees_split: { integration: 0, paystack: 30_000, subaccount: 5_000_000 },
+          amount: 112_500,
+          fees_split: { integration: 0, paystack: 1_500, subaccount: 111_000 },
           subaccount: { subaccount_code: 'ACCT_store' },
         },
       });
@@ -165,8 +165,8 @@ describe('buildScriptExecutors merchant_settlement', () => {
       const splitCtx = {
         ...stepCtx,
         gatewayResponse: {
-          amount: 5_030_000,
-          fees_split: { integration: 0, paystack: 30_000, subaccount: 5_000_000 },
+          amount: 112_500,
+          fees_split: { integration: 0, paystack: 1_500, subaccount: 111_000 },
           subaccount: { subaccount_code: 'ACCT_store' },
         },
       };

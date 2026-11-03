@@ -72,6 +72,7 @@ export async function recordOrderUpdateFailureSettlement(
       args.gateway === 'paystack'
         ? resolveSettlementRpcRouting({
             gatewayResponse: args.gatewayResponse,
+            grossAmountKobo: Math.round(args.grossAmount * 100),
             isRedvaultDirectSettlement: false,
             settlementGateway: 'paystack',
             useGiglSettlementRpc: settlement.useGiglSettlementRpc,

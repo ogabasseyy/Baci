@@ -31,6 +31,9 @@ export const PERMANENT_PAID_ORDER_SIDE_EFFECT_ERRORS = [
   // drain re-verifies a stored Paystack payload that lacks the split fields
   // (drain-failed-paid-order-side-effect-row.ts), so a retry can classify it;
   // the attempt cap and stranded-row recovery bound the retries.
+  // Paystack's split fields contradict each other or the sale; re-verifying
+  // the same transaction cannot heal that, so it needs manual review.
+  'paystack_settlement_collection_inconsistent',
   // Paystack split the sale to a subaccount that is not the merchant's
   // registered one; the direct-split recorder refuses it for manual review.
   'paystack_direct_settlement_subaccount_mismatch',

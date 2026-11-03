@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PERMANENT_PAID_ORDER_SIDE_EFFECT_ERRORS } from '@/lib/payments/paid-order-side-effect-retry-policy';
 import {
+  PAYSTACK_SETTLEMENT_COLLECTION_INCONSISTENT,
   PAYSTACK_SETTLEMENT_COLLECTION_UNKNOWN,
   resolveSettlementRpcRouting,
 } from '@/lib/payments/resolve-settlement-rpc-routing';
@@ -95,6 +96,40 @@ describe('resolveSettlementRpcRouting', () => {
     expect(PERMANENT_PAID_ORDER_SIDE_EFFECT_ERRORS).toContain(
       'paystack_direct_settlement_subaccount_mismatch'
     );
+  });
+
+  it('fails permanently when the split fields are present but provably inconsistent', () => {
+    // Re-verifying the same transaction cannot change a contradiction, so it
+    // must not burn retries: it is a permanent error for manual review.
+    for (const gatewayResponse of [
+      { fees_split: {}, subaccount: {} },
+      { ...splitPayload, amount: 1 },
+      { fees_split: { subaccount: 990_000 }, subaccount: {} },
+    ]) {
+      expect(() =>
+        resolveSettlementRpcRouting({
+          gatewayResponse,
+          isRedvaultDirectSettlement: false,
+          settlementGateway: 'paystack',
+          useGiglSettlementRpc: false,
+        })
+      ).toThrow(PAYSTACK_SETTLEMENT_COLLECTION_INCONSISTENT);
+    }
+    expect(PERMANENT_PAID_ORDER_SIDE_EFFECT_ERRORS).toContain(
+      PAYSTACK_SETTLEMENT_COLLECTION_INCONSISTENT
+    );
+  });
+
+  it('fails permanently when a verified split is for a different amount than the sale', () => {
+    expect(() =>
+      resolveSettlementRpcRouting({
+        grossAmountKobo: 1_000,
+        gatewayResponse: splitPayload,
+        isRedvaultDirectSettlement: false,
+        settlementGateway: 'paystack',
+        useGiglSettlementRpc: false,
+      })
+    ).toThrow(PAYSTACK_SETTLEMENT_COLLECTION_INCONSISTENT);
   });
 
   it('keeps REDVAULT on its own recorder even when a subaccount is present', () => {

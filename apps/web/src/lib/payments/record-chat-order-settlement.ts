@@ -75,6 +75,7 @@ async function recordSettlement(args: ChatSettlementArgs): Promise<void> {
   const routing = resolveChatOrderSettlementRouting({
     gateway: args.gateway,
     gatewayResponse: args.gatewayResponse,
+    grossAmountKobo: Math.round(args.grossAmount * 100),
   });
   const { error } = await args.supabase.rpc(routing.rpc, {
     ...routing.extraParams,

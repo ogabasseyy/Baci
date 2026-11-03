@@ -73,3 +73,30 @@ it('fails closed when selfie host configuration contains an invalid value', () =
   vi.stubEnv('OXYGEN_STAGING_SELFIE_HOSTS', 'frame.example.test,*.evil.test');
   expect(readOxygenHostedOrigins()).toEqual({ hosted: [], selfie: [] });
 });
+
+it('reports a mismatched selfie allowlist without exposing configured hosts', async () => {
+  vi.resetModules();
+  const { readOxygenHostedOrigins: readFresh } = await import(
+    './oxygen-hosted-origins'
+  );
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  vi.stubEnv('OXYGEN_STAGING_HOSTED_HOSTS', 'payment.example.test');
+  vi.stubEnv('OXYGEN_STAGING_SELFIE_HOSTS', 'identity.example.test');
+  const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    expect(readFresh()).toEqual({
+      hosted: ['https://payment.example.test'],
+      selfie: [],
+    });
+    readFresh();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      'oxygen_selfie_host_configuration_mismatch'
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain(
+      'identity.example.test'
+    );
+  } finally {
+    warn.mockRestore();
+  }
+});

@@ -1,5 +1,7 @@
 import { resolveOxygenEnvironment } from './environment';
 
+let warnedSelfieHostMismatch = false;
+
 /** Public browser origins only. This module never reads credentials or tokens. */
 function parseHosts(raw: string | undefined): string[] | null {
   if (!raw) return [];
@@ -48,6 +50,14 @@ export function readOxygenHostedOrigins(): {
       : process.env.OXYGEN_STAGING_SELFIE_HOSTS
   );
   if (!hostedNames || !selfieNames) return { hosted: [], selfie: [] };
+  if (selfieNames.some((name) => !hostedNames.includes(name))) {
+    if (!warnedSelfieHostMismatch) {
+      console.error('oxygen_selfie_host_configuration_mismatch');
+      warnedSelfieHostMismatch = true;
+    }
+  } else {
+    warnedSelfieHostMismatch = false;
+  }
   return {
     hosted: hostedNames.map((name) => `https://${name}`),
     selfie: selfieNames

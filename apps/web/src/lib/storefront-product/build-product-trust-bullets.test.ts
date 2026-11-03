@@ -43,4 +43,42 @@ describe('buildProductTrustBullets', () => {
       )
     ).toEqual(['Available in Open Box condition']);
   });
+
+  it('omits price-band bullet for NGN-gated categories when currency is not passed to the ungated caller', () => {
+    expect(
+      buildProductTrustBullets(
+        makeInput({
+          categorySlug: 'gaming-laptops',
+          categoryName: 'Gaming Laptops',
+          currentProduct: {
+            slug: 'asus-rog',
+            name: 'ASUS ROG Strix',
+            price: 1_200_000,
+            condition: 'Open Box',
+          },
+        })
+      )
+    ).toEqual(['Available in Open Box condition']);
+  });
+
+  it('includes price-band bullet for NGN-gated categories when currency is NGN', () => {
+    expect(
+      buildProductTrustBullets(
+        makeInput({
+          categorySlug: 'gaming-laptops',
+          categoryName: 'Gaming Laptops',
+          merchantCurrency: 'NGN',
+          currentProduct: {
+            slug: 'asus-rog',
+            name: 'ASUS ROG Strix',
+            price: 1_200_000,
+            condition: 'Open Box',
+          },
+        })
+      )
+    ).toEqual([
+      'Available in Open Box condition',
+      'Listed in Best Gaming Laptops Under ₦1,500,000',
+    ]);
+  });
 });

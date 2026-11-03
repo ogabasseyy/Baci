@@ -140,6 +140,28 @@ describe('validateCategoryHubPriceBandConfig error branches', () => {
       expect(() => validateCategoryHubPriceBandConfig(category)).not.toThrow();
     }
   });
+
+  it('buildPriceBandCards returns [] instead of throwing when config validation fails', () => {
+    const testCategory = 'mismatched-config-test-category';
+    curatedBandsMap[testCategory] = [
+      { slug: 'under-100k', label: 'Under 100k', ceiling: 100_000 },
+    ];
+    categoryDefaultsMap[testCategory] = makeTestDefaults(['mismatched-slug']);
+
+    try {
+      expect(
+        buildPriceBandCards({
+          categorySlug: testCategory,
+          storeUrl: 'https://example.com',
+          products: [],
+          merchantCurrency: 'NGN',
+        })
+      ).toEqual([]);
+    } finally {
+      delete curatedBandsMap[testCategory];
+      delete categoryDefaultsMap[testCategory];
+    }
+  });
 });
 
 describe('buildPriceBandCards availability and price filtering', () => {

@@ -54,4 +54,5 @@ export interface BuildProductSemanticModelInput {
   guidePosts?: PublishedClusterPost[];
   priorityGuidePostSlugs?: string[];
   countryCode?: string | null;
+  merchantCurrency?: string | null;
 }

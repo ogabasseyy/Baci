@@ -13,9 +13,10 @@ export type PriceBandCandidate = ReturnType<typeof buildPriceBandCandidate>;
 
 export function buildCategoryPriceBandCandidates(
   categorySlug: string,
-  products: CommercialSupportProduct[]
+  products: CommercialSupportProduct[],
+  options?: { merchantCurrency?: string | null }
 ): PriceBandCandidate[] {
-  return getCuratedPriceBands(categorySlug).map((band) =>
+  return getCuratedPriceBands(categorySlug, options).map((band) =>
     buildPriceBandCandidate({ categorySlug, band, products })
   );
 }

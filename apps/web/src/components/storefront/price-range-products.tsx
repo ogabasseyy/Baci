@@ -34,7 +34,7 @@ export function PriceRangeProducts({
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant ?? null;
   const basePath = merchantContext?.basePath || '';
-  const { formatCurrency } = useCurrency();
+  const { formatCurrency, currencyCode } = useCurrency();
   const getFullProductUrl = (p: Product): string => {
     const productUrl = getProductUrl(p);
     return basePath ? `${basePath}${productUrl}` : productUrl;
@@ -211,7 +211,9 @@ export function PriceRangeProducts({
   // ("Compare and Buying Guides") instead — linking here risks pointing at a
   // thin band page that 404s.
   const curatedPriceBand =
-    getCuratedPriceBands(categorySlug).find(
+    getCuratedPriceBands(categorySlug, {
+      merchantCurrency: currencyCode,
+    }).find(
       (band) =>
         rawPrice <= band.ceiling &&
         (band.floor === undefined || rawPrice >= band.floor)

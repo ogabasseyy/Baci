@@ -77,7 +77,11 @@ export function buildPriceBandCards(input: {
     return [];
   }
 
-  validateCategoryHubPriceBandConfig(input.categorySlug);
+  try {
+    validateCategoryHubPriceBandConfig(input.categorySlug);
+  } catch {
+    return [];
+  }
 
   const curatedBands = getCuratedPriceBands(input.categorySlug, {
     merchantCurrency: input.merchantCurrency,

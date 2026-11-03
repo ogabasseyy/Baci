@@ -35,4 +35,31 @@ describe('buildCategoryPriceBandCandidates', () => {
   it('returns no candidates for an uncurated category', () => {
     expect(buildCategoryPriceBandCandidates('furniture', [])).toEqual([]);
   });
+
+  it('builds candidates for NGN-gated categories when currency is NGN and fails closed otherwise', () => {
+    const gamingProducts = [
+      product('asus-1', 'ASUS', 900_000),
+      product('asus-2', 'ASUS', 950_000),
+      product('hp-1', 'HP', 800_000),
+      product('dell-1', 'Dell', 850_000),
+      product('lenovo-1', 'Lenovo', 700_000),
+    ];
+
+    const ngnCandidates = buildCategoryPriceBandCandidates(
+      'gaming-laptops',
+      gamingProducts,
+      { merchantCurrency: 'NGN' }
+    );
+    expect(ngnCandidates.length).toBeGreaterThan(0);
+    expect(ngnCandidates[0]?.band.slug).toBe('under-1-5m');
+
+    expect(
+      buildCategoryPriceBandCandidates('gaming-laptops', gamingProducts)
+    ).toEqual([]);
+    expect(
+      buildCategoryPriceBandCandidates('gaming-laptops', gamingProducts, {
+        merchantCurrency: 'USD',
+      })
+    ).toEqual([]);
+  });
 });

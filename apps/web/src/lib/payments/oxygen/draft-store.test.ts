@@ -26,7 +26,11 @@ function query(data: unknown, error: { code: string } | null = null) {
 function client(...queries: ReturnType<typeof query>[]) {
   const from = vi.fn();
   for (const q of queries) from.mockReturnValueOnce(q);
-  return { from } as unknown as SupabaseClient;
+  const rpc = vi.fn(
+    async () =>
+      queries[2]?.maybeSingle() ?? { data: null, error: { code: '40001' } }
+  );
+  return { from, rpc } as unknown as SupabaseClient;
 }
 const owned = () =>
   query({ id, stage: 'application_required', environment: 'staging' });
@@ -87,16 +91,17 @@ it('returns a saved encrypted draft for its authenticated context and hides expi
 });
 it('stores ciphertext, not identifiers, and makes a lost-response replay idempotent', async () => {
   const write = query({ version: 1 });
+  const writer = client(owned(), query(null), write);
   expect(
-    await saveOxygenDraft(client(owned(), query(null), write), 'user', {
+    await saveOxygenDraft(writer, 'user', {
       workflowId: id,
       version: 0,
       idempotencyKey: mutation,
       draft,
     })
   ).toEqual({ version: 1 });
-  const row = write.insert.mock.calls[0][0];
-  expect(row.ciphertext).not.toContain('12345678901');
+  const row = vi.mocked(writer.rpc).mock.calls[0][1];
+  expect(row?.p_ciphertext).not.toContain('12345678901');
   expect(row).not.toHaveProperty('fields');
   const db = client(owned(), query(saved()));
   expect(
@@ -127,12 +132,16 @@ it('rejects stale versions, reused mutation keys with changed values and concurr
     })
   ).rejects.toMatchObject({ code: 'conflict' });
   await expect(
-    saveOxygenDraft(client(owned(), query(saved()), query(null)), 'user', {
-      workflowId: id,
-      version: 1,
-      idempotencyKey: crypto.randomUUID(),
-      draft,
-    })
+    saveOxygenDraft(
+      client(owned(), query(saved()), query(null, { code: '40001' })),
+      'user',
+      {
+        workflowId: id,
+        version: 1,
+        idempotencyKey: crypto.randomUUID(),
+        draft,
+      }
+    )
   ).rejects.toMatchObject({ code: 'conflict' });
 });
 it('fails closed when encryption configuration or storage is unavailable', async () => {

@@ -30,8 +30,10 @@ SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efaa0000-0000-4000-8000-000000000002',true);
 DO $$ BEGIN
  IF EXISTS (SELECT 1 FROM public.oxygen_form_drafts WHERE workflow_id='efaa0000-0000-4000-8000-000000000042') THEN RAISE EXCEPTION 'Stranger read rogue draft'; END IF;
- UPDATE public.oxygen_form_drafts SET version=2 WHERE workflow_id='efaa0000-0000-4000-8000-000000000042';
- IF FOUND THEN RAISE EXCEPTION 'Stranger updated rogue draft'; END IF;
+ BEGIN
+  PERFORM public.oxygen_save_form_draft('efaa0000-0000-4000-8000-000000000042',1,'efaa0000-0000-4000-8000-000000000052',repeat('encrypted-fixture',4),repeat('address-fixture',4),now()+interval '1 day');
+  RAISE EXCEPTION 'Stranger updated draft';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  DELETE FROM public.oxygen_form_drafts WHERE workflow_id='efaa0000-0000-4000-8000-000000000042';
  IF FOUND THEN RAISE EXCEPTION 'Stranger deleted rogue draft'; END IF;
 END $$;
@@ -45,23 +47,33 @@ END $$;
 RESET ROLE;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efaa0000-0000-4000-8000-000000000001',true);
-INSERT INTO public.oxygen_form_drafts(workflow_id,user_id,ciphertext,mutation_id)
-VALUES ('efaa0000-0000-4000-8000-000000000041','efaa0000-0000-4000-8000-000000000001',repeat('encrypted-fixture',4),'efaa0000-0000-4000-8000-000000000051');
+DO $$ BEGIN
+ BEGIN
+  PERFORM public.oxygen_save_form_draft('efaa0000-0000-4000-8000-000000000042',1,'efaa0000-0000-4000-8000-000000000055',repeat('encrypted-fixture',4),repeat('address-fixture',4),now()+interval '1 day');
+  RAISE EXCEPTION 'Owner overwrote rogue draft';
+ EXCEPTION WHEN serialization_failure THEN NULL; END;
+END $$;
+SELECT public.oxygen_save_form_draft('efaa0000-0000-4000-8000-000000000041',0,'efaa0000-0000-4000-8000-000000000051',repeat('encrypted-fixture',4),repeat('address-fixture',4),now()+interval '1 day');
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.oxygen_form_drafts WHERE workflow_id='efaa0000-0000-4000-8000-000000000041') <> 1 THEN RAISE EXCEPTION 'Owner must read draft'; END IF;
- UPDATE public.oxygen_form_drafts SET version=2 WHERE workflow_id='efaa0000-0000-4000-8000-000000000041' AND version=1;
- IF NOT FOUND THEN RAISE EXCEPTION 'Owner must update draft'; END IF;
+ PERFORM public.oxygen_save_form_draft('efaa0000-0000-4000-8000-000000000041',1,'efaa0000-0000-4000-8000-000000000052',repeat('encrypted-fixture',4),repeat('address-fixture',4),now()+interval '1 day');
  BEGIN
-  UPDATE public.oxygen_form_drafts SET version=4 WHERE workflow_id='efaa0000-0000-4000-8000-000000000041';
-  RAISE EXCEPTION 'Revision skip accepted';
- EXCEPTION WHEN SQLSTATE '22023' THEN NULL; END;
+  PERFORM public.oxygen_save_form_draft('efaa0000-0000-4000-8000-000000000041',1,'efaa0000-0000-4000-8000-000000000053',repeat('encrypted-fixture',4),repeat('address-fixture',4),now()+interval '1 day');
+  RAISE EXCEPTION 'Stale version accepted';
+ EXCEPTION WHEN serialization_failure THEN NULL; END;
+ BEGIN
+  UPDATE public.oxygen_form_drafts SET version=3 WHERE workflow_id='efaa0000-0000-4000-8000-000000000041';
+  RAISE EXCEPTION 'Direct write accepted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 
 SELECT set_config('request.jwt.claim.sub','efaa0000-0000-4000-8000-000000000002',true);
 DO $$ BEGIN
  IF EXISTS (SELECT 1 FROM public.oxygen_form_drafts WHERE workflow_id='efaa0000-0000-4000-8000-000000000041') THEN RAISE EXCEPTION 'Stranger read draft'; END IF;
- UPDATE public.oxygen_form_drafts SET version=3 WHERE workflow_id='efaa0000-0000-4000-8000-000000000041';
- IF FOUND THEN RAISE EXCEPTION 'Stranger updated draft'; END IF;
+ BEGIN
+  PERFORM public.oxygen_save_form_draft('efaa0000-0000-4000-8000-000000000041',1,'efaa0000-0000-4000-8000-000000000052',repeat('encrypted-fixture',4),repeat('address-fixture',4),now()+interval '1 day');
+  RAISE EXCEPTION 'Stranger updated draft';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  DELETE FROM public.oxygen_form_drafts WHERE workflow_id='efaa0000-0000-4000-8000-000000000041';
  IF FOUND THEN RAISE EXCEPTION 'Stranger deleted draft'; END IF;
  BEGIN
@@ -81,8 +93,10 @@ UPDATE public.oxygen_workflows SET stage='booked' WHERE id='efaa0000-0000-4000-8
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efaa0000-0000-4000-8000-000000000001',true);
 DO $$ BEGIN
- UPDATE public.oxygen_form_drafts SET version=3 WHERE workflow_id='efaa0000-0000-4000-8000-000000000041';
- IF FOUND THEN RAISE EXCEPTION 'Progressed application draft changed'; END IF;
+ BEGIN
+  PERFORM public.oxygen_save_form_draft('efaa0000-0000-4000-8000-000000000041',2,'efaa0000-0000-4000-8000-000000000052',repeat('encrypted-fixture',4),repeat('address-fixture',4),now()+interval '1 day');
+  RAISE EXCEPTION 'Progressed application draft changed';
+ EXCEPTION WHEN serialization_failure THEN NULL; END;
  DELETE FROM public.oxygen_form_drafts WHERE workflow_id='efaa0000-0000-4000-8000-000000000041';
  IF NOT FOUND THEN RAISE EXCEPTION 'Owner cannot discard draft'; END IF;
 END $$;
@@ -106,6 +120,10 @@ DO $$ BEGIN
 END $$;
 SET LOCAL ROLE anon;
 DO $$ BEGIN
+ BEGIN
+  PERFORM public.oxygen_save_form_draft('efaa0000-0000-4000-8000-000000000041',0,'efaa0000-0000-4000-8000-000000000055',repeat('encrypted-fixture',4),repeat('address-fixture',4),now()+interval '1 day');
+  RAISE EXCEPTION 'Anonymous draft save granted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN
   PERFORM workflow_id FROM public.oxygen_form_drafts;
   RAISE EXCEPTION 'Anonymous read granted';

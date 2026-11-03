@@ -327,6 +327,8 @@ jobs:
         run: node --test tools/test/loyalty-checkout-replay-local.test.mjs
       - name: Test merchant blog classification permissions and lifecycle
         run: bash supabase/tests/run-merchant-blog-classification.sh
+      - name: Test Oxygen draft and workflow lock ordering
+        run: PATH="/usr/lib/postgresql/18/bin:$PATH" bash supabase/tests/oxygen_draft_workflow_first_concurrency.sh
       # Every replay SQL suite is registered in
       # apps/web/tools/db/replay-registry/*/sql-checks.txt, one folder per
       # change, and --sql-check-registry expands them in sorted folder

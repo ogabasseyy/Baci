@@ -81,7 +81,7 @@ DO $$ BEGIN
  BEGIN
   UPDATE public.oxygen_form_drafts SET ciphertext=repeat('old-full-fixture',4),version=version+1 WHERE workflow_id='efaa0000-0000-4000-8000-000000000041';
   IF FOUND THEN RAISE EXCEPTION 'Stale writer restored identity'; END IF;
- EXCEPTION WHEN serialization_failure THEN NULL; END;
+ EXCEPTION WHEN serialization_failure OR insufficient_privilege THEN NULL; END;
 END $$;
 RESET ROLE;
 UPDATE oxygen_private.provider_states SET state=state||'{"kyc":{"address_status":"DONE"}}'::jsonb WHERE workflow_id='efaa0000-0000-4000-8000-000000000041';

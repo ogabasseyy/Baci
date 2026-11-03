@@ -21,7 +21,11 @@ function query(data: unknown) {
 function client(...queries: ReturnType<typeof query>[]) {
   const from = vi.fn();
   for (const q of queries) from.mockReturnValueOnce(q);
-  return { from } as unknown as SupabaseClient;
+  const rpc = vi.fn(
+    async () =>
+      queries[2]?.maybeSingle() ?? { data: null, error: { code: '40001' } }
+  );
+  return { from, rpc } as unknown as SupabaseClient;
 }
 const owned = () =>
   query({ id, stage: 'application_required', environment: 'staging' });
@@ -51,13 +55,20 @@ it('stores a separate encrypted residential-only copy for recovery after identit
     },
   };
   const write = query({ version: 1 });
-  await saveOxygenDraft(client(owned(), query(null), write), 'user', {
+  const writer = client(owned(), query(null), write);
+  await saveOxygenDraft(writer, 'user', {
     workflowId: id,
     version: 0,
     idempotencyKey: mutation,
     draft: full,
   });
-  const row = write.insert.mock.calls[0][0];
+  const args = vi.mocked(writer.rpc).mock.calls[0][1];
+  if (!args) throw new Error('Missing RPC arguments');
+  const row = {
+    residential_ciphertext: args.p_residential_ciphertext as string,
+    residential_version: 1,
+    mutation_id: mutation,
+  };
   const { decryptOxygenDraft } = await import('./draft-crypto');
   expect(
     decryptOxygenDraft(row.residential_ciphertext, key, {
@@ -123,4 +134,20 @@ it('reuses only address data from a minimized source in a local staging attempt'
   expect(
     await readOxygenDraftForLocalAttempt(db, 'user', id, sourceId)
   ).toEqual({ version: 0, draft: home });
+});
+
+it('persists through the workflow-first locking RPC instead of a direct table write', async () => {
+  const db = client(owned(), query(null));
+  const rpc = vi.fn().mockResolvedValue({ data: { version: 1 }, error: null });
+  Object.assign(db, { rpc });
+  await saveOxygenDraft(db, 'user', {
+    workflowId: id,
+    version: 0,
+    idempotencyKey: mutation,
+    draft: { step: 0, fields: { bvn: '12345678901' } },
+  });
+  expect(rpc).toHaveBeenCalledWith(
+    'oxygen_save_form_draft',
+    expect.objectContaining({ p_workflow_id: id, p_expected_version: 0 })
+  );
 });

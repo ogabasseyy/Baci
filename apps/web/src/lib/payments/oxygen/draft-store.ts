@@ -131,30 +131,22 @@ export async function saveOxygenDraft(
     key,
     { userId, workflowId: input.workflowId, version, purpose: 'residential' }
   );
-  const values = {
-    ciphertext,
-    residential_ciphertext: residentialCiphertext,
-    residential_version: version,
-    version,
-    mutation_id: input.idempotencyKey,
-    expires_at: new Date(Date.now() + 7 * 86400_000).toISOString(),
-  };
-  const result = row
-    ? await client
-        .from('oxygen_form_drafts')
-        .update(values)
-        .eq('workflow_id', input.workflowId)
-        .eq('version', input.version)
-        .select('version')
-        .maybeSingle()
-    : await client
-        .from('oxygen_form_drafts')
-        .insert({ ...values, workflow_id: input.workflowId, user_id: userId })
-        .select('version')
-        .maybeSingle();
-  if (result.error?.code === '23505' || (!result.error && !result.data))
+  const result = await client.rpc('oxygen_save_form_draft', {
+    p_workflow_id: input.workflowId,
+    p_expected_version: input.version,
+    p_mutation_id: input.idempotencyKey,
+    p_ciphertext: ciphertext,
+    p_residential_ciphertext: residentialCiphertext,
+    p_expires_at: new Date(Date.now() + 7 * 86400_000).toISOString(),
+  });
+  if (result.error?.code === '40001' || result.error?.code === '23505')
     throw new OxygenDraftError('conflict');
-  if (result.error || !result.data) throw new OxygenDraftError('unavailable');
+  if (result.error) throw new OxygenDraftError('unavailable');
+  const saved = z
+    .object({ version: z.number().int().positive() })
+    .safeParse(result.data);
+  if (!saved.success || saved.data.version !== version)
+    throw new OxygenDraftError('unavailable');
   return { version };
 }
 

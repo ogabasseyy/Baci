@@ -13,6 +13,7 @@ import {
   followUpAfterSubmit,
 } from './tsq-follow-up';
 import type { Answer } from './types';
+import { EARLIER_UNSETTLED, WalletsQuiet } from './wallet-quiet';
 
 /**
  * S8, step 6: a timeout on submit. The request leaves and the provider may
@@ -59,13 +60,14 @@ export async function stepTimeoutRetry(
   b: ProofBuilder,
   main: string,
   goal: string,
-  /** False while an earlier mutation may still move these wallets. */
-  earlierSettled = true
+  /** Wallets an earlier mutation may still move are not quiet. */
+  quiet: WalletsQuiet = new WalletsQuiet()
 ): Promise<void> {
   const { api, qa, faults, redactor } = ctx;
   if (!faults)
     return allUnknown(b, 'no transport fault injector is configured');
   const amount = AMOUNTS_KOBO.s8TimeoutTransfer;
+  const earlierSettled = quiet.isQuiet(main, goal);
   const baseline = await settledWallets(ctx, [main, goal]);
 
   faults.loseNextResponse('/api/v1/transfer/wallet');
@@ -215,7 +217,7 @@ export async function stepTimeoutRetry(
     Q[TIMEOUT_BOOKED_ONCE],
     answer,
     !earlierSettled
-      ? 'an earlier transfer had not settled, so its balance movement cannot be told apart from this one'
+      ? EARLIER_UNSETTLED
       : resumed
         ? 'the slot was booked in an earlier run, so this run has no pre-booking balance to compare'
         : debit === null

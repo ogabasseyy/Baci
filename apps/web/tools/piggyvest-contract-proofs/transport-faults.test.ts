@@ -89,4 +89,26 @@ describe('TransportFaults', () => {
     ]);
     expect(faults.pending()).toBe(0);
   });
+
+  it('reads the method from a Request input when init has none', async () => {
+    const base = vi.fn(async () => reply());
+    const faults = new TransportFaults();
+    const wrapped = faults.wrap(base as unknown as typeof fetch);
+    faults.loseNextResponse('/api/v1/transfer/wallet');
+    await expect(
+      wrapped(
+        new Request('https://x.test/api/v1/transfer/wallet', { method: 'POST' })
+      )
+    ).rejects.toThrow(TypeError);
+    expect(faults.pending()).toBe(0);
+  });
+
+  it('does not claim the fault for a GET Request input', async () => {
+    const base = vi.fn(async () => reply());
+    const faults = new TransportFaults();
+    const wrapped = faults.wrap(base as unknown as typeof fetch);
+    faults.loseNextResponse('/api/v1/transfer/wallet');
+    await wrapped(new Request('https://x.test/api/v1/transfer/wallet'));
+    expect(faults.pending()).toBe(1);
+  });
 });

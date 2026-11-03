@@ -3,6 +3,7 @@ import { measureDeposit } from './deposit-measure';
 import type { ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
 import { creditedOnce } from './verdict-rule';
+import { WalletsQuiet } from './wallet-quiet';
 
 /**
  * S8, step 2: a bank deposit (the sandbox test-funding stand-in) into the main
@@ -19,10 +20,15 @@ const QUESTION =
 export async function stepDeposit(
   ctx: ProofContext,
   b: ProofBuilder,
-  main: string
+  main: string,
+  quiet: WalletsQuiet = new WalletsQuiet()
 ): Promise<void> {
   const gross = AMOUNTS_KOBO.s8DepositMain;
   const measured = await measureDeposit(ctx, main, gross, 'p10/deposit_main');
+  if (measured.kind !== 'measured') {
+    // Unmeasured: the credit may still land under a later baseline.
+    quiet.markNotQuiet(main);
+  }
   if (measured.kind === 'resumed') {
     b.note(
       `The S8 deposit slot was already used (${measured.priorOutcome}); it is never resent. Repeating it needs a full run without the --proof p10 filter, using --new-attempt.`

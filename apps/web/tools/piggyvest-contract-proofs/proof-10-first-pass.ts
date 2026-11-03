@@ -16,6 +16,7 @@ import {
 import { ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
 import type { Answer, ProofResult } from './types';
+import { WalletsQuiet } from './wallet-quiet';
 
 const TITLE =
   'S8 first pass: onboard, deposit, create goal, fund, double tap, timeout retry';
@@ -91,13 +92,13 @@ export async function runProof10(ctx: ProofContext): Promise<ProofResult> {
     return b.build(ctx);
   }
 
-  await stepDeposit(ctx, b, main);
-  const fund = await stepFundGoal(ctx, b, main, goal);
-  const tapSettled = await stepDoubleTap(ctx, b, main, goal, fund);
-  // An unsettled funding can still move the wallets this step measures.
-  const earlierSettled =
-    tapSettled &&
-    (fund === null || (fund.terminalSuccess && fund.mainDeltaKobo !== null));
-  await stepTimeoutRetry(ctx, b, main, goal, earlierSettled);
+  // One flag per wallet for the whole sequence: every step that leaves an
+  // unsettled or unmeasured movement marks its wallets, and later steps
+  // publish unknown for money verdicts on them.
+  const quiet = new WalletsQuiet();
+  await stepDeposit(ctx, b, main, quiet);
+  const fund = await stepFundGoal(ctx, b, main, goal, quiet);
+  await stepDoubleTap(ctx, b, main, goal, fund, quiet);
+  await stepTimeoutRetry(ctx, b, main, goal, quiet);
   return b.build(ctx);
 }

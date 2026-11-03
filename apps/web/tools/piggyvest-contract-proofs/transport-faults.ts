@@ -25,7 +25,10 @@ export class TransportFaults {
 
   wrap(base: typeof fetch): typeof fetch {
     return async (input, init) => {
-      const method = (init?.method ?? 'GET').toUpperCase();
+      // fetch(Request) carries its method on the Request, not in init.
+      const method = (
+        init?.method ?? (input instanceof Request ? input.method : 'GET')
+      ).toUpperCase();
       const target =
         typeof input === 'string'
           ? input

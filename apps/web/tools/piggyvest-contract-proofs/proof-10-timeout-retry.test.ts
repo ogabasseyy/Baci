@@ -11,6 +11,7 @@ import {
 import { ProofBuilder } from './proof-builder';
 import { setupScenario } from './scenario';
 import { makeHarness } from './test-harness.test-support';
+import { WalletsQuiet } from './wallet-quiet';
 
 let dispose: (() => void) | null = null;
 afterEach(() => {
@@ -32,12 +33,14 @@ async function run(
   await setupScenario(h.ctx);
   const b = new ProofBuilder('p10', 'S8');
   const before = posts(h).length;
+  const quiet = new WalletsQuiet();
+  if (!earlierSettled) quiet.markNotQuiet(h.state.mainWalletId as string);
   await stepTimeoutRetry(
     h.ctx,
     b,
     h.state.mainWalletId as string,
     h.state.goalWalletId as string,
-    earlierSettled
+    quiet
   );
   return { h, b, result: b.build(h.ctx), before };
 }

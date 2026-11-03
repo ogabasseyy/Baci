@@ -40,5 +40,19 @@ export function boundedPsqlDiagnostic(
             : /duplicate key/i.test(errorLine)
               ? 'unique-violation'
               : null;
-  return ` (line=${line}${reason ? `,reason=${reason}` : ''})`;
+  if (reason) return ` (line=${line},reason=${reason})`;
+  // Expose only the shape of an otherwise unclassified diagnostic. In order:
+  // empty first-line message, ANSI escapes, wrapper marker on a later line,
+  // and a later line beginning with a SQLSTATE-shaped token. No text is logged.
+  const remainder = output.slice(match?.index ?? 0);
+  const laterLines = remainder.slice(errorLine.length);
+  const shape = [
+    /^\s*$/.test(errorLine.slice(match?.[0].length ?? 0)),
+    remainder.includes(String.fromCharCode(27)),
+    /anonymous draft save unexpected SQLSTATE/.test(laterLines),
+    /(?:^|\r?\n)\s*[0-9A-Z]{5}(?=[:\s]|$)/.test(laterLines),
+  ]
+    .map((flag) => (flag ? '1' : '0'))
+    .join('');
+  return ` (line=${line},shape=${shape})`;
 }

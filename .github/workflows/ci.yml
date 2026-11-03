@@ -123,7 +123,11 @@ jobs:
   quality-lint:
     name: Quality Gate - Lint
     needs: [changes]
-    if: needs.changes.outputs.web == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    # Mobile-only PRs never trip the web filter, so lint must also run for the
+    # mobile filters; otherwise the bypassable pre-commit hook is their only
+    # Biome gate. `turbo lint --affected` keeps the run scoped to the changed
+    # packages.
+    if: (needs.changes.outputs.web == 'true' || needs.changes.outputs.mobile_admin == 'true' || needs.changes.outputs.mobile_storefront == 'true') && needs.changes.outputs.test_plan_mode != 'config-smoke'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -684,6 +688,9 @@ jobs:
           MOBILE_QUALITY_RESULT: ${{ needs['mobile-quality'].result }}
           SILENT_REVERT_GUARD_RESULT: ${{ needs['silent-revert-guard'].result }}
           QUIZ_DB_CHANGED: ${{ needs.changes.outputs.quiz_db }}
+          WEB_CHANGED: ${{ needs.changes.outputs.web }}
+          MOBILE_ADMIN_CHANGED: ${{ needs.changes.outputs.mobile_admin }}
+          MOBILE_STOREFRONT_CHANGED: ${{ needs.changes.outputs.mobile_storefront }}
           TEST_PLAN_MODE: ${{ needs.changes.outputs.test_plan_mode }}
         run: |
           set -euo pipefail
@@ -704,6 +711,13 @@ jobs:
                 exit 1
               fi
             done
+          fi
+
+          # Same rule for lint: a skip is only success when no lintable
+          # web or mobile paths changed.
+          if [[ ( "$WEB_CHANGED" == "true" || "$MOBILE_ADMIN_CHANGED" == "true" || "$MOBILE_STOREFRONT_CHANGED" == "true" ) && "$TEST_PLAN_MODE" != "config-smoke" && "$LINT_RESULT" == "skipped" ]]; then
+            echo "Web or mobile paths changed but the lint gate was skipped"
+            exit 1
           fi
 
           for result in "$CWV_RUNNER_CONTRACTS_RESULT" "$LINT_RESULT" "$TYPECHECK_RESULT" "$TEST_RESULT" "$WEB_TEST_RESULT" "$MISC_RESULT" "$DB_REPLAY_RESULT" "$DISPOSABLE_SQL_RESULT" "$MOBILE_QUALITY_RESULT" "$SILENT_REVERT_GUARD_RESULT"; do

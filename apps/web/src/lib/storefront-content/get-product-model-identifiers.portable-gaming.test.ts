@@ -11,4 +11,27 @@ describe('getProductModelIdentifiers portable gaming', () => {
 
     expect(identifiers).toEqual(['rog ally x']);
   });
+
+  it('retains gaming laptop model family aliases in product slugs', () => {
+    const predator = getProductModelIdentifiers({
+      categorySlug: 'gaming-laptops',
+      brands: ['Acer'],
+      productSlugs: ['acer-predator-helios-16'],
+    });
+    expect(predator).toEqual(['predator helios 16']);
+
+    const nitro = getProductModelIdentifiers({
+      categorySlug: 'gaming-laptops',
+      brands: ['Acer'],
+      productSlugs: ['acer-nitro-v-15'],
+    });
+    expect(nitro).toEqual(['nitro 15']);
+
+    const aorus = getProductModelIdentifiers({
+      categorySlug: 'gaming-laptops',
+      brands: ['Gigabyte'],
+      productSlugs: ['gigabyte-aorus-16x'],
+    });
+    expect(aorus).toEqual(['aorus 16x']);
+  });
 });

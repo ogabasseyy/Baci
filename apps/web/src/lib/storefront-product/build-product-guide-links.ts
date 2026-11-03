@@ -86,6 +86,8 @@ export function buildProductGuideLinks(input: BuildProductSemanticModelInput) {
 
   const categorySlug = input.categorySlug as SupportedClusterCategory;
 
+  const priorityGuidePostSlugs = new Set(input.priorityGuidePostSlugs ?? []);
+
   const validGuidePosts = (input.guidePosts ?? []).filter((post) => {
     if (
       post.merchant_intent === 'news' &&
@@ -96,23 +98,18 @@ export function buildProductGuideLinks(input: BuildProductSemanticModelInput) {
       return false;
     }
 
-    if (
-      hasConfiguredPostBrandMismatch(
+    return true;
+  });
+
+  const priorityGuidePosts = validGuidePosts.filter(
+    (post) =>
+      priorityGuidePostSlugs.has(post.slug) &&
+      !hasConfiguredPostBrandMismatch(
         post,
         categorySlug,
         input.currentProduct.brand,
         input.currentProduct.name
       )
-    ) {
-      return false;
-    }
-
-    return true;
-  });
-
-  const priorityGuidePostSlugs = new Set(input.priorityGuidePostSlugs ?? []);
-  const priorityGuidePosts = validGuidePosts.filter((post) =>
-    priorityGuidePostSlugs.has(post.slug)
   );
   const fallbackGuidePosts = validGuidePosts.filter(
     (post) => !priorityGuidePostSlugs.has(post.slug)

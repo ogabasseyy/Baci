@@ -146,4 +146,15 @@ describe('inferContentClusterContext - gaming laptops', () => {
     });
     expect(laptopStandGuide.categorySlug).toBe('gaming');
   });
+
+  it('promotes legitimate gaming laptop roundups containing idiomatic phrases like "stand out" to gaming-laptops', () => {
+    const standOutRoundup = inferContentClusterContext({
+      title: 'Best Gaming Laptops in Nigeria That Stand Out in 2026',
+      excerpt: 'Top-tier portable gaming rigs reviewed and compared.',
+      category: 'Gaming',
+      tags: ['gaming', 'laptops'],
+      keywords: ['buyer guide'],
+    });
+    expect(standOutRoundup.categorySlug).toBe('gaming-laptops');
+  });
 });

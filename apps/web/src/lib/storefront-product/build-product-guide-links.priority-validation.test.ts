@@ -89,16 +89,6 @@ describe('buildProductGuideLinks - priority validation and ranking', () => {
 
     const links = buildProductGuideLinks(
       makeInput({
-        currentProduct: {
-          slug: 'iphone-16e',
-          name: 'iPhone 16e',
-          price: 450_000,
-          brand: 'Apple',
-          condition: 'new',
-          stock: 4,
-          category_slug: 'smartphones',
-          product_key_specs: {},
-        },
         priorityGuidePostSlugs: [mismatchedPriorityPost.slug],
         guidePosts: [mismatchedPriorityPost, matchingFallbackPost],
       })
@@ -111,16 +101,6 @@ describe('buildProductGuideLinks - priority validation and ranking', () => {
 
     const isolatedLinks = buildProductGuideLinks(
       makeInput({
-        currentProduct: {
-          slug: 'iphone-16e',
-          name: 'iPhone 16e',
-          price: 450_000,
-          brand: 'Apple',
-          condition: 'new',
-          stock: 4,
-          category_slug: 'smartphones',
-          product_key_specs: {},
-        },
         priorityGuidePostSlugs: [mismatchedPriorityPost.slug],
         guidePosts: [mismatchedPriorityPost],
       })
@@ -187,7 +167,7 @@ describe('buildProductGuideLinks - priority validation and ranking', () => {
       'https://ogabassey.com/blog/alienware-m16-gaming-laptop-review-and-guide'
     );
 
-    // On Acer Predator PDP: HP Omen guide is rejected, Acer Predator guide is prioritized
+    // On Acer Predator PDP: HP Omen priority guide is rejected, Acer Predator guide is returned
     const acerPdpLinks = buildProductGuideLinks(
       makeInput({
         categorySlug: 'gaming-laptops',
@@ -202,7 +182,7 @@ describe('buildProductGuideLinks - priority validation and ranking', () => {
           category_slug: 'gaming-laptops',
           product_key_specs: {},
         },
-        priorityGuidePostSlugs: [acerPredatorGuide.slug],
+        priorityGuidePostSlugs: [hpOmenGuide.slug],
         guidePosts: [hpOmenGuide, acerPredatorGuide],
       })
     );
@@ -269,6 +249,41 @@ describe('buildProductGuideLinks - priority validation and ranking', () => {
     expect(fallbackLinks).toHaveLength(1);
     expect(fallbackLinks[0].href).toBe(
       'https://ogabassey.com/blog/best-ps5-games-buyer-guide'
+    );
+  });
+
+  it('permits same-category guide with different brand as fallback when not flagged as priority', () => {
+    const samsungGuide = {
+      slug: 'samsung-galaxy-s26-ultra-buyer-guide',
+      title: 'Samsung Galaxy S26 Ultra Buyer Guide',
+      excerpt: 'Detailed review of Samsung Galaxy S26 Ultra.',
+      category: 'Smartphones',
+      tags: ['smartphones', 'samsung'],
+      keywords: ['buyer guide', 'samsung'],
+      featured_image_url: null,
+      published_at: '2026-04-01T00:00:00.000Z',
+      reading_time_minutes: 5,
+    };
+
+    // When flagged as priority on an Apple iPhone PDP, brand mismatch drops it from priority
+    const priorityLinks = buildProductGuideLinks(
+      makeInput({
+        priorityGuidePostSlugs: [samsungGuide.slug],
+        guidePosts: [samsungGuide],
+      })
+    );
+    expect(priorityLinks).toHaveLength(0);
+
+    // When provided solely as fallback, same-category guide is retained via category scoring
+    const fallbackLinks = buildProductGuideLinks(
+      makeInput({
+        priorityGuidePostSlugs: [],
+        guidePosts: [samsungGuide],
+      })
+    );
+    expect(fallbackLinks).toHaveLength(1);
+    expect(fallbackLinks[0].href).toBe(
+      'https://ogabassey.com/blog/samsung-galaxy-s26-ultra-buyer-guide'
     );
   });
 });

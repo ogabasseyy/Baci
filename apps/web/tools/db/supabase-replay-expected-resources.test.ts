@@ -41,7 +41,7 @@ describe('expectedSupabaseReplayResources', () => {
       'supabase_db_baci_replay_abc123',
     ]);
     expect(resources.containers[0]).toEqual({
-      image: 'public.ecr.aws/supabase/postgres:17.6.1.106',
+      image: 'public.ecr.aws/supabase/postgres:17.6.1.156',
       name: 'supabase_db_baci_replay_abc123',
     });
     expect(resources.volumes).toEqual(['supabase_db_baci_replay_abc123']);
@@ -119,7 +119,7 @@ describe('inspectSupabaseReplayResources', () => {
       .mockResolvedValueOnce({
         stderr: '',
         stdout: `${JSON.stringify({
-          Image: 'public.ecr.aws/supabase/postgres:17.6.1.106',
+          Image: 'public.ecr.aws/supabase/postgres:17.6.1.156',
           Labels: `${SUPABASE_PROJECT_LABEL}=${projectId}`,
           Names: `supabase_db_${projectId}`,
         })}\n`,
@@ -165,7 +165,7 @@ describe('inspectSupabaseReplayResources', () => {
       ],
     ]);
     expect(resources.containers[0]).toMatchObject({
-      image: 'public.ecr.aws/supabase/postgres:17.6.1.106',
+      image: 'public.ecr.aws/supabase/postgres:17.6.1.156',
       name: `supabase_db_${projectId}`,
     });
     expect(resources.volumes[0]?.labels[SUPABASE_PROJECT_LABEL]).toBe(

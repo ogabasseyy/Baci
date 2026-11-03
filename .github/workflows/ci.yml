@@ -302,8 +302,8 @@ jobs:
       - uses: ./.github/actions/pnpm-install-cached
       - name: Install Supabase replay toolchain
         env:
-          SUPABASE_CLI_SHA256: 01a3b8f5861d108a934937cae88e8d503093c3f7d3aa32d959f69b099b4f9ef3
-          SUPABASE_CLI_VERSION: 2.95.4
+          SUPABASE_CLI_SHA256: 31ee8a152e9c8c8eddae072c6bc7c9119748a96c8cdaf21a6d31c9ce7e62cc18
+          SUPABASE_CLI_VERSION: 2.111.0
         run: |
           set -euo pipefail
           sudo install -d /usr/share/postgresql-common/pgdg

@@ -36,12 +36,19 @@ export function OxygenWorkflowError({
       ['eligibility_required', 'kyc_required'].includes(snapshot.stage) &&
       oxygenEligibilityPrerequisites(snapshot.state)
   );
+  const retryNin = Boolean(
+    action === 'validate_nin' &&
+      snapshot?.executionEnabled &&
+      snapshot.ninRetryAllowed &&
+      !snapshot.pending
+  );
   const retryBreakdown = action === 'refresh_details' && !snapshot?.pending;
   return (
     <OxygenApplicationError
       activeLoan={activeLoan}
       action={action}
       retryBreakdown={retryBreakdown}
+      retryNin={retryNin}
       retryEligibility={retryEligibility}
       error={error}
       validated={snapshot?.state.validated}
@@ -49,11 +56,13 @@ export function OxygenWorkflowError({
       merchantSlug={merchantSlug}
       busy={busy}
       refresh={
-        retryEligibility
-          ? () => submit({ action: 'refresh_eligibility' })
-          : retryBreakdown
-            ? () => submit({ action: 'refresh_details' })
-            : refresh
+        retryNin
+          ? () => submit({ action: 'validate_nin' })
+          : retryEligibility
+            ? () => submit({ action: 'refresh_eligibility' })
+            : retryBreakdown
+              ? () => submit({ action: 'refresh_details' })
+              : refresh
       }
     />
   );

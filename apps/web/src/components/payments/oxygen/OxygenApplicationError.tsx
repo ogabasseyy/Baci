@@ -13,6 +13,7 @@ type Props = {
   activeLoan: boolean;
   action?: OxygenRuntimeAction['action'] | null;
   retryBreakdown?: boolean;
+  retryNin?: boolean;
   retryEligibility?: boolean;
   error: string;
   validated?: boolean;
@@ -27,6 +28,7 @@ export function OxygenApplicationError({
   activeLoan,
   action,
   retryBreakdown = false,
+  retryNin = false,
   retryEligibility = false,
   error,
   validated,
@@ -87,13 +89,15 @@ export function OxygenApplicationError({
           aria-busy={busy || retrying}
           onClick={() => void retry()}
         >
-          {retryEligibility
-            ? busy || retrying
-              ? 'Checking your payment options…'
-              : 'Try again'
-            : retryBreakdown
-              ? 'Retry payment breakdown'
-              : 'Check for an update'}
+          {retryNin
+            ? 'Try NIN check again'
+            : retryEligibility
+              ? busy || retrying
+                ? 'Checking your payment options…'
+                : 'Try again'
+              : retryBreakdown
+                ? 'Retry payment breakdown'
+                : 'Check for an update'}
         </button>
       )}
     </div>

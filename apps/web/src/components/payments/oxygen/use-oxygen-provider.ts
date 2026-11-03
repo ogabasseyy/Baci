@@ -125,7 +125,6 @@ export function useOxygenProvider(orderId: string) {
     return () => {
       alive.current = false;
     };
-    // The keyed session is recreated when the order changes.
   }, [orderId]);
   async function submit(
     command: OxygenRuntimeAction,
@@ -160,6 +159,7 @@ export function useOxygenProvider(orderId: string) {
               pending?.status === 'executing' &&
               pendingReadRecovery(snapshot) === command.action
             ) &&
+            !(command.action === 'validate_nin' && snapshot.ninRetryAllowed) &&
             lastKey.current?.action === command.action &&
             lastKey.current.version === snapshot.version
           ? lastKey.current.key

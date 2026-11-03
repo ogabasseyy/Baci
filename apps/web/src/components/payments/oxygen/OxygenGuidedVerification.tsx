@@ -75,7 +75,10 @@ export function OxygenGuidedVerification({
       error ||
       snapshot.pending ||
       state.eligible === false ||
-      eligibilityFailed
+      eligibilityFailed ||
+      (ninRequired &&
+        snapshot.ninRetryAllowed !== false &&
+        snapshot.ninRetryAllowed !== undefined)
     )
       return;
     const count = (key: string) => attempts.current.get(key) ?? 0;
@@ -138,6 +141,7 @@ export function OxygenGuidedVerification({
     selfieRequired,
     expiredSelfie,
     eligibilityFailed,
+    snapshot.ninRetryAllowed,
     submit,
   ]);
 
@@ -161,13 +165,17 @@ export function OxygenGuidedVerification({
       </div>
     );
   const selfie = selfieRequired && !expiredSelfie && state.selfieUrl;
-  const recoverable = !selfie && (eligibilityFailed || review);
+  const ninRetry = Boolean(ninRequired && snapshot.ninRetryAllowed);
+  const retryStatus = ninRequired && snapshot.ninRetryAllowed === null;
+  const recoverable =
+    !selfie && (eligibilityFailed || review || ninRetry || retryStatus);
   async function retryCheck() {
     if (busy || retryLock.current || snapshot.pending) return;
     retryLock.current = true;
     setRetrying(true);
-    const action =
-      identityComplete && !state.eligible
+    const action = ninRetry
+      ? 'validate_nin'
+      : identityComplete && !state.eligible
         ? 'refresh_eligibility'
         : 'refresh_kyc';
     attempts.current.set(action, 1);
@@ -208,27 +216,29 @@ export function OxygenGuidedVerification({
         <p className="text-sm leading-relaxed text-gray-500">
           {selfie
             ? 'Opening Oxygen’s secure camera check. We’ll continue automatically when your selfie is confirmed.'
-            : ninPending
-              ? 'Your eligibility check is complete. We’re finishing your identity verification before showing your payment plans.'
-              : bankPending
-                ? 'Your identity checks are complete. Oxygen has not confirmed your bank account yet. Your progress is saved.'
-                : busy || retrying
-                  ? identityComplete
-                    ? 'We’re checking your available payment options with Oxygen.'
-                    : selfieConfirmed
-                      ? 'Your selfie is confirmed. We’re updating your identity checks with Oxygen.'
-                      : state.kyc?.bvn_status === 'DONE'
-                        ? 'Getting Oxygen’s secure camera check ready for you.'
-                        : 'We’re confirming your BVN with Oxygen.'
-                  : eligibilityFailed
-                    ? 'Oxygen is taking longer than expected. Your details and verification are saved. Try again to continue.'
-                    : review
-                      ? 'Oxygen is still processing your check. Your details are saved, and you can check again when you’re ready.'
+            : retryStatus
+              ? 'We couldn’t confirm your saved status. Check for an update to continue.'
+              : ninPending
+                ? 'Your eligibility check is complete. We’re finishing your identity verification before showing your payment plans.'
+                : bankPending
+                  ? 'Your identity checks are complete. Oxygen has not confirmed your bank account yet. Your progress is saved.'
+                  : busy || retrying
+                    ? identityComplete
+                      ? 'We’re checking your available payment options with Oxygen.'
                       : selfieConfirmed
                         ? 'Your selfie is confirmed. We’re updating your identity checks with Oxygen.'
                         : state.kyc?.bvn_status === 'DONE'
                           ? 'Getting Oxygen’s secure camera check ready for you.'
-                          : 'We’re confirming your BVN with Oxygen.'}
+                          : 'We’re confirming your BVN with Oxygen.'
+                    : eligibilityFailed
+                      ? 'Oxygen is taking longer than expected. Your details and verification are saved. Try again to continue.'
+                      : review
+                        ? 'Oxygen is still processing your check. Your details are saved, and you can check again when you’re ready.'
+                        : selfieConfirmed
+                          ? 'Your selfie is confirmed. We’re updating your identity checks with Oxygen.'
+                          : state.kyc?.bvn_status === 'DONE'
+                            ? 'Getting Oxygen’s secure camera check ready for you.'
+                            : 'We’re confirming your BVN with Oxygen.'}
         </p>
       </div>
       {selfie ? (
@@ -242,7 +252,11 @@ export function OxygenGuidedVerification({
           onClick={() => void retryCheck()}
           className="w-full sm:w-auto sm:min-w-44"
         >
-          Try again
+          {ninRetry
+            ? 'Try NIN check again'
+            : retryStatus
+              ? 'Check for an update'
+              : 'Try again'}
         </OxygenLoadingButton>
       ) : (
         <p role="status" className="sr-only">

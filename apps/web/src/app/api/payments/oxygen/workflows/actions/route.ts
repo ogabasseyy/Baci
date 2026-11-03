@@ -8,6 +8,7 @@ import {
   oxygenStatementRequiredCode,
   oxygenStatementRequiredMessage,
 } from '@/lib/payments/oxygen/booking-rejection';
+import { readOxygenNinRetryStatus } from '@/lib/payments/oxygen/nin-retry-status';
 import {
   oxygenInvalidOtpCode,
   oxygenInvalidOtpMessage,
@@ -52,6 +53,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         ...snapshot,
+        ninRetryAllowed: await readOxygenNinRetryStatus(
+          auth.supabase,
+          snapshot
+        ),
         executionEnabled: snapshot.executionEnabled && Boolean(connection),
       },
       { headers }
@@ -151,7 +156,13 @@ export async function POST(request: NextRequest) {
         input.submission.workflowId
       );
     }
-    return NextResponse.json(snapshot, { headers });
+    return NextResponse.json(
+      {
+        ...snapshot,
+        ninRetryAllowed: await readOxygenNinRetryStatus(userClient, snapshot),
+      },
+      { headers }
+    );
   } catch (failure) {
     if (
       input.submission.command.action === 'validate_customer' &&

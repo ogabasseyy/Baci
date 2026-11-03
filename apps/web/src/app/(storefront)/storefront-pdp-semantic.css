@@ -121,7 +121,7 @@
   [data-ogabassey-pdp-server-spec-row] dt {
     color: color-mix(
       in srgb,
-      var(--store-background-text, #111827) 58%,
+      var(--store-background-text, #111827) 68%,
       transparent
     );
     font-size: 0.875rem;

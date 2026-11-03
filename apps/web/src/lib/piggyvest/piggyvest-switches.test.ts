@@ -9,7 +9,7 @@ import {
 } from './piggyvest-switches';
 
 const features = Object.keys(PIGGYVEST_FEATURE_FLAGS) as PiggyvestFeature[];
-const allOn: NodeJS.ProcessEnv = Object.fromEntries(
+const allOn: Record<string, string> = Object.fromEntries(
   features.map((feature) => [PIGGYVEST_FEATURE_FLAGS[feature], 'true'])
 );
 

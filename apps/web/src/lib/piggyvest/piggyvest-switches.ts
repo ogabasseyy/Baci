@@ -25,6 +25,9 @@ export const PIGGYVEST_FEATURE_FLAGS = {
   paid_interest_inbox: 'PIGGYVEST_PRIMARY_PAID_INTEREST_INBOX_ENABLED',
 } as const;
 
+/** Any string map works, so tests need not satisfy the full ProcessEnv shape. */
+export type PiggyvestSwitchEnv = Readonly<Record<string, string | undefined>>;
+
 export type PiggyvestFeature = keyof typeof PIGGYVEST_FEATURE_FLAGS;
 
 export const PIGGYVEST_ALWAYS_AVAILABLE_OPERATIONS = [
@@ -36,7 +39,7 @@ export type PiggyvestAlwaysAvailableOperation =
   (typeof PIGGYVEST_ALWAYS_AVAILABLE_OPERATIONS)[number];
 
 export function isPiggyvestKilled(
-  env: NodeJS.ProcessEnv = process.env
+  env: PiggyvestSwitchEnv = process.env
 ): boolean {
   const value = env[PIGGYVEST_KILL_SWITCH_ENV];
   return !(value === undefined || value === 'false');
@@ -44,7 +47,7 @@ export function isPiggyvestKilled(
 
 export function isPiggyvestFeatureOn(
   feature: PiggyvestFeature,
-  env: NodeJS.ProcessEnv = process.env
+  env: PiggyvestSwitchEnv = process.env
 ): boolean {
   return (
     !isPiggyvestKilled(env) && env[PIGGYVEST_FEATURE_FLAGS[feature]] === 'true'
@@ -53,7 +56,7 @@ export function isPiggyvestFeatureOn(
 
 export function isPiggyvestOperationAllowed(
   operation: PiggyvestFeature | PiggyvestAlwaysAvailableOperation,
-  env: NodeJS.ProcessEnv = process.env
+  env: PiggyvestSwitchEnv = process.env
 ): boolean {
   if (
     (PIGGYVEST_ALWAYS_AVAILABLE_OPERATIONS as readonly string[]).includes(

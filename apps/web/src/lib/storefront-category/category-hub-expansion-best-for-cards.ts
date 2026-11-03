@@ -1,4 +1,5 @@
 import { CATEGORY_HUB_DEFAULTS } from '@/config/category-hub-defaults';
+import { EXPANSION_BEST_FOR_THRESHOLDS } from '@/config/category-hub-expansion-best-for-thresholds';
 import type {
   CategoryHubCard,
   CategoryHubProduct,
@@ -41,14 +42,19 @@ export function buildExpansionBestForCards(input: {
 
   if (input.categorySlug === 'gaming-laptops') {
     const priorityDefaults = CATEGORY_HUB_DEFAULTS['gaming-laptops'];
+    const thresholds = EXPANSION_BEST_FOR_THRESHOLDS['gaming-laptops'];
     const highMemory = input.availableProducts.filter(
-      (p) => (getCategoryHubSpecNumber(p, 'ram_gb') ?? 0) >= 16
+      (p) => (getCategoryHubSpecNumber(p, 'ram_gb') ?? 0) >= thresholds.minRamGb
     );
     const under2m = isNgn
-      ? input.availableProducts.filter((p) => p.price <= 2_000_000)
+      ? input.availableProducts.filter(
+          (p) => p.price <= thresholds.maxUnder2mPriceNgn
+        )
       : [];
     const largeScreen = input.availableProducts.filter(
-      (p) => (getCategoryHubSpecNumber(p, 'screen_size_inches') ?? 0) >= 16
+      (p) =>
+        (getCategoryHubSpecNumber(p, 'screen_size_inches') ?? 0) >=
+        thresholds.minScreenSizeInches
     );
     return [
       makeCard(
@@ -76,14 +82,21 @@ export function buildExpansionBestForCards(input: {
 
   if (input.categorySlug === 'tablets') {
     const priorityDefaults = CATEGORY_HUB_DEFAULTS.tablets;
+    const thresholds = EXPANSION_BEST_FOR_THRESHOLDS.tablets;
     const budget = isNgn
-      ? input.availableProducts.filter((p) => p.price <= 250_000)
+      ? input.availableProducts.filter(
+          (p) => p.price <= thresholds.maxBudgetPriceNgn
+        )
       : [];
     const battery = input.availableProducts.filter(
-      (p) => (getCategoryHubSpecNumber(p, 'battery_mah') ?? 0) >= 7000
+      (p) =>
+        (getCategoryHubSpecNumber(p, 'battery_mah') ?? 0) >=
+        thresholds.minBatteryMah
     );
     const largeScreen = input.availableProducts.filter(
-      (p) => (getCategoryHubSpecNumber(p, 'screen_size_inches') ?? 0) >= 10.9
+      (p) =>
+        (getCategoryHubSpecNumber(p, 'screen_size_inches') ?? 0) >=
+        thresholds.minScreenSizeInches
     );
     return [
       isNgn
@@ -112,25 +125,32 @@ export function buildExpansionBestForCards(input: {
   if (input.categorySlug === 'audio') {
     if (!isNgn) return [];
     const priorityDefaults = CATEGORY_HUB_DEFAULTS.audio;
+    const thresholds = EXPANSION_BEST_FOR_THRESHOLDS.audio;
     return [
       makeCard(
         priorityDefaults.bestFor.budget.title,
         priorityDefaults.bestFor.budget.description,
-        input.availableProducts.filter((p) => p.price <= 100_000),
+        input.availableProducts.filter(
+          (p) => p.price <= thresholds.budgetMaxPriceNgn
+        ),
         compareByPriceAsc
       ),
       makeCard(
         priorityDefaults.bestFor.midrange.title,
         priorityDefaults.bestFor.midrange.description,
         input.availableProducts.filter(
-          (p) => p.price > 100_000 && p.price <= 500_000
+          (p) =>
+            p.price > thresholds.budgetMaxPriceNgn &&
+            p.price <= thresholds.midrangeMaxPriceNgn
         ),
         compareByPriceAsc
       ),
       makeCard(
         priorityDefaults.bestFor.premium.title,
         priorityDefaults.bestFor.premium.description,
-        input.availableProducts.filter((p) => p.price > 500_000),
+        input.availableProducts.filter(
+          (p) => p.price > thresholds.midrangeMaxPriceNgn
+        ),
         compareByPriceAsc
       ),
     ].filter((card): card is CategoryHubCard => Boolean(card));
@@ -139,25 +159,32 @@ export function buildExpansionBestForCards(input: {
   if (input.categorySlug === 'smartwatches') {
     if (!isNgn) return [];
     const priorityDefaults = CATEGORY_HUB_DEFAULTS.smartwatches;
+    const thresholds = EXPANSION_BEST_FOR_THRESHOLDS.smartwatches;
     return [
       makeCard(
         priorityDefaults.bestFor.budget.title,
         priorityDefaults.bestFor.budget.description,
-        input.availableProducts.filter((p) => p.price <= 150_000),
+        input.availableProducts.filter(
+          (p) => p.price <= thresholds.budgetMaxPriceNgn
+        ),
         compareByPriceAsc
       ),
       makeCard(
         priorityDefaults.bestFor.midrange.title,
         priorityDefaults.bestFor.midrange.description,
         input.availableProducts.filter(
-          (p) => p.price > 150_000 && p.price <= 400_000
+          (p) =>
+            p.price > thresholds.budgetMaxPriceNgn &&
+            p.price <= thresholds.midrangeMaxPriceNgn
         ),
         compareByPriceAsc
       ),
       makeCard(
         priorityDefaults.bestFor.premium.title,
         priorityDefaults.bestFor.premium.description,
-        input.availableProducts.filter((p) => p.price > 400_000),
+        input.availableProducts.filter(
+          (p) => p.price > thresholds.midrangeMaxPriceNgn
+        ),
         compareByPriceAsc
       ),
     ].filter((card): card is CategoryHubCard => Boolean(card));
@@ -166,25 +193,32 @@ export function buildExpansionBestForCards(input: {
   if (input.categorySlug === 'playstation-5') {
     if (!isNgn) return [];
     const priorityDefaults = CATEGORY_HUB_DEFAULTS['playstation-5'];
+    const thresholds = EXPANSION_BEST_FOR_THRESHOLDS['playstation-5'];
     return [
       makeCard(
         priorityDefaults.bestFor.under50k.title,
         priorityDefaults.bestFor.under50k.description,
-        input.availableProducts.filter((p) => p.price <= 50_000),
+        input.availableProducts.filter(
+          (p) => p.price <= thresholds.under50kMaxPriceNgn
+        ),
         compareByPriceAsc
       ),
       makeCard(
         priorityDefaults.bestFor.midTier.title,
         priorityDefaults.bestFor.midTier.description,
         input.availableProducts.filter(
-          (p) => p.price > 50_000 && p.price <= 120_000
+          (p) =>
+            p.price > thresholds.under50kMaxPriceNgn &&
+            p.price <= thresholds.midTierMaxPriceNgn
         ),
         compareByPriceAsc
       ),
       makeCard(
         priorityDefaults.bestFor.upperTier.title,
         priorityDefaults.bestFor.upperTier.description,
-        input.availableProducts.filter((p) => p.price >= 400_000),
+        input.availableProducts.filter(
+          (p) => p.price >= thresholds.upperTierMinPriceNgn
+        ),
         compareByPriceAsc
       ),
     ].filter((card): card is CategoryHubCard => Boolean(card));

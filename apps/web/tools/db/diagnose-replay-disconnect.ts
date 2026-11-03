@@ -92,7 +92,13 @@ export async function diagnoseReplayDisconnect(
     ]
       .map((flag) => (flag ? '1' : '0'))
       .join('');
-    const signal = /server process[^\n]*\bsignal\s+(\d+)\b/i.exec(logs)?.[1];
+    const probeMatch =
+      /server process[^\n]*\bsignal\s+(\d+)\b[\s\S]{0,2048}?Failed process was running:[\s\S]{0,8192}?OXYGEN_CI_ANON_DRAFT_PROBE/i.exec(
+        logs
+      );
+    const signal =
+      probeMatch?.[1] ??
+      /server process[^\n]*\bsignal\s+(\d+)\b/i.exec(logs)?.[1];
     const signalClass =
       signal === '9'
         ? 'kill'
@@ -104,7 +110,7 @@ export async function diagnoseReplayDisconnect(
               ? 'other'
               : 'none';
     return new Error(
-      `${failure.message} (dbflags=${flags},dbsignal=${signalClass})`,
+      `${failure.message} (dbflags=${flags},dbsignal=${signalClass},dbprobe=${probeMatch ? '1' : '0'})`,
       {
         cause: failure,
       }

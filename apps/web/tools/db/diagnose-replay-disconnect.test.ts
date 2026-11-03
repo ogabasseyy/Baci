@@ -30,7 +30,7 @@ it('emits only allowlisted flags from the owned container', async () => {
   );
   expect(result).toBeInstanceOf(Error);
   expect((result as Error).message).toBe(
-    `${failure.message} (dbflags=111111001,dbsignal=kill)`
+    `${failure.message} (dbflags=111111001,dbsignal=kill,dbprobe=0)`
   );
   expect(run).toHaveBeenCalledTimes(2);
 });
@@ -77,8 +77,28 @@ it('retains the original failure if state inspection fails and distinguishes una
     run
   );
   expect((result as Error).message).toBe(
-    `${failure.message} (dbflags=000000000,dbsignal=none)`
+    `${failure.message} (dbflags=000000000,dbsignal=none,dbprobe=0)`
   );
+});
+
+it('correlates the fixed SQL probe only with a backend signal detail', async () => {
+  const run = vi
+    .fn()
+    .mockResolvedValueOnce({ stdout: 'false|0|0|running', stderr: '' })
+    .mockResolvedValueOnce({
+      stdout:
+        'server process (PID 42) was terminated by signal 11\nDETAIL: Failed process was running: DO $$ BEGIN\n /* OXYGEN_CI_ANON_DRAFT_PROBE */ private-content\nEND $$;',
+      stderr: '',
+    });
+  const result = await diagnoseReplayDisconnect(
+    failure,
+    project,
+    expected,
+    inspect,
+    run
+  );
+  expect((result as Error).message).toContain('dbsignal=segv,dbprobe=1');
+  expect((result as Error).message).not.toContain('private-content');
 });
 
 it.each([

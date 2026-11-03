@@ -1575,29 +1575,40 @@ function removeTrailingDuplicateSuffix(value: string, suffix: string): string {
 const PLATFORM_ID_BY_ALIAS: Record<string, string> = {
   ps5: 'ps5',
   'playstation 5': 'ps5',
+  'ps5 pro': 'ps5',
+  'playstation 5 pro': 'ps5',
   ps4: 'ps4',
   'playstation 4': 'ps4',
   ps3: 'ps3',
   'playstation 3': 'ps3',
   xbox: 'xbox',
   'xbox one': 'xbox-one',
+  'xbox one x': 'xbox-one',
+  'xbox one s': 'xbox-one',
   'xbox series x': 'xbox-series-x',
   'xbox series s': 'xbox-series-s',
   switch: 'switch',
   'nintendo switch': 'switch',
+  'switch oled': 'switch',
+  'nintendo switch oled': 'switch',
+  'switch lite': 'switch',
+  'nintendo switch lite': 'switch',
   'switch 2': 'switch-2',
   'nintendo switch 2': 'switch-2',
   pc: 'pc',
   windows: 'pc',
   steam: 'pc',
+  'steam deck': 'pc',
 };
 
 export function isRedundantPlatformListParenthetical(content: string): boolean {
   const normalized = content
     .toLowerCase()
-    .replace(/\b(xbox\s+)?series\s+[xs]\s*[/|]\s*[xs]\b/gu, 'xbox series x');
+    .replace(/\b(xbox\s+)?series\s+[xs]\s*[-/|]\s*[xs]\b/gu, 'xbox series x');
   const parts = normalized
-    .split(/\s*(?:[,/&+;|]|\band\b)(?:\s*(?:[,/&+;|]|\band\b))*\s*/u)
+    .split(
+      /\s*(?:[,/&+;|]|\s*[-–—]\s*|\band\b)(?:\s*(?:[,/&+;|]|\s*[-–—]\s*|\band\b))*\s*/u
+    )
     .map((part) => part.replace(/\s+/gu, ' ').trim());
   if (parts.length < 2 || parts.some((part) => !part)) return false;
 
@@ -1656,6 +1667,8 @@ export function stripRedundantPlatformParentheticals(title: string): string {
   if (!stripped) {
     return title;
   }
+
+  compacted = compacted.replace(/(?:\s*[-–—,:;|/&]+\s*)+(?=[,:;.!?])/gu, '');
 
   if (strippedAtStart) {
     compacted = compacted.replace(/^\s*(?:[,:;.!?]\s*|[-–—|/&]\s+)+/u, '');

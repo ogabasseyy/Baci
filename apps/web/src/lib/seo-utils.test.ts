@@ -1725,6 +1725,35 @@ describe('generateMetaTitle', () => {
         })
       ).toBe('Buy EA Sports FC 27');
     });
+
+    it('handles titles with orphan separators before terminal punctuation when compacted', () => {
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27 - (PS5, PS4, Xbox, Switch).', {
+          suffix: 'Ogabassey',
+          maxLength: 40,
+        })
+      ).toBe('Buy EA Sports FC 27. | Ogabassey');
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27 - (PS5, PS4, Xbox, Switch).', {
+          maxLength: 30,
+        })
+      ).toBe('Buy EA Sports FC 27.');
+      expect(
+        generateMetaTitle('Buy EA Sports FC 27 - (PS5 - PS4)', {
+          suffix: 'Ogabassey',
+          maxLength: 40,
+        })
+      ).toBe('Buy EA Sports FC 27 | Ogabassey');
+      expect(
+        generateMetaTitle(
+          'Buy EA Sports FC 27 (PS5 Pro, Xbox Series X) - Best Deal',
+          {
+            suffix: 'Ogabassey',
+            maxLength: 50,
+          }
+        )
+      ).toBe('Buy EA Sports FC 27 - Best Deal | Ogabassey');
+    });
   });
 
   describe('isRedundantPlatformListParenthetical detector', () => {
@@ -1759,13 +1788,52 @@ describe('generateMetaTitle', () => {
       expect(isRedundantPlatformListParenthetical('PS5, Xbox Series X/S')).toBe(
         true
       );
+      expect(isRedundantPlatformListParenthetical('PS5 - PS4')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5 – PS4')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5 — PS4')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5-PS4')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('Xbox Series X - PS5')).toBe(
+        true
+      );
+      expect(
+        isRedundantPlatformListParenthetical('PS5 Pro, Xbox Series X')
+      ).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('PlayStation 5 Pro, Steam Deck')
+      ).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('Nintendo Switch OLED, Xbox One X')
+      ).toBe(true);
+      expect(isRedundantPlatformListParenthetical('Switch OLED, PS5')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('Steam Deck, Switch')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('Xbox One X, PS4')).toBe(
+        true
+      );
+      expect(isRedundantPlatformListParenthetical('Switch Lite, PS5')).toBe(
+        true
+      );
     });
 
     it('returns false for single-platform parentheticals', () => {
       expect(isRedundantPlatformListParenthetical('PS5')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PS5 Pro')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('PlayStation 5 Pro')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Steam Deck')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Xbox One X')).toBe(false);
       expect(isRedundantPlatformListParenthetical('Nintendo Switch')).toBe(
         false
       );
+      expect(isRedundantPlatformListParenthetical('Nintendo Switch OLED')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('Switch OLED')).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Switch Lite')).toBe(false);
       expect(isRedundantPlatformListParenthetical('Nintendo Switch 2')).toBe(
         false
       );
@@ -1780,6 +1848,13 @@ describe('generateMetaTitle', () => {
 
     it('returns false for single-platform synonym lists with fewer than 2 distinct identities', () => {
       expect(isRedundantPlatformListParenthetical('PS5 / PlayStation 5')).toBe(
+        false
+      );
+      expect(isRedundantPlatformListParenthetical('PS5, PS5 Pro')).toBe(false);
+      expect(
+        isRedundantPlatformListParenthetical('Nintendo Switch, Switch OLED')
+      ).toBe(false);
+      expect(isRedundantPlatformListParenthetical('Xbox One, Xbox One X')).toBe(
         false
       );
       expect(isRedundantPlatformListParenthetical('PC / Windows / Steam')).toBe(
@@ -1943,6 +2018,62 @@ describe('generateMetaTitle', () => {
           'Buy Game - (Disc Edition) (PS5, PS4)'
         )
       ).toBe('Buy Game - (Disc Edition)');
+    });
+
+    it('drops orphan separators before retained terminal punctuation', () => {
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4),')
+      ).toBe('Buy Game,');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4):')
+      ).toBe('Buy Game:');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4);')
+      ).toBe('Buy Game;');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4)!')
+      ).toBe('Buy Game!');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4)?')
+      ).toBe('Buy Game?');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game – (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game — (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game | (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game / (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game & (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game, (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game: (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game; (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game - (PS5 - PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Buy Game - (PS5 Pro, Xbox Series X).'
+        )
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Spider-Man - (PS5, PS4).')
+      ).toBe('Spider-Man.');
     });
 
     it('does not remove leading punctuation when the stripped parenthetical is non-leading', () => {

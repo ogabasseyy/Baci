@@ -68,6 +68,9 @@ describe('getCachedProductSemanticInventory', () => {
         'product_categories!inner(categories!inner(slug))'
       )
     );
+    expect(productsQuery.select).toHaveBeenCalledWith(
+      expect.stringContaining('manage_stock')
+    );
     expect(productsQuery.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
     expect(productsQuery.eq).toHaveBeenCalledWith('status', 'active');
     expect(productsQuery.eq).toHaveBeenCalledWith(
@@ -94,7 +97,7 @@ describe('getCachedProductSemanticInventory', () => {
         product_key_specs: { ram_gb: 16, storage_gb: 512 },
         is_parent: null,
         parent_product_id: null,
-        manage_stock: null,
+        manage_stock: undefined,
       },
     ]);
   });

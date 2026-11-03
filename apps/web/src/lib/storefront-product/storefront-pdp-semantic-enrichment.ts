@@ -11,12 +11,8 @@ import {
   resolveStorefrontReadResult,
   type StorefrontReadResult,
 } from '../storefront-read-result';
-import {
-  mergeProductCandidates,
-  type ProductSeoRow,
-  toProductSemanticCandidate,
-} from './get-product-seo-link-inventory-normalize';
 import type { ProductSemanticCandidate } from './product-semantic-types';
+import { parseInventory } from './storefront-pdp-semantic-candidate-parser';
 
 const PDP_SEMANTIC_ENRICHMENT_TOTAL_DEADLINE_MS = 5_000;
 const PDP_SEMANTIC_ENRICHMENT_TRACE_THRESHOLD_MS = 4_000;
@@ -111,74 +107,6 @@ function parseGuidePosts(value: Json | null): PublishedClusterPost[] | null {
   return posts.every((post): post is PublishedClusterPost => post !== null)
     ? posts
     : null;
-}
-
-function parseInventory(
-  value: Json | null,
-  categorySlug: string
-): ProductSemanticCandidate[] | null {
-  if (!Array.isArray(value)) return null;
-  const candidates = value.map((row) =>
-    toProductSemanticCandidateFromJson(row, categorySlug)
-  );
-  return candidates.every(
-    (candidate): candidate is ProductSemanticCandidate => candidate !== null
-  )
-    ? mergeProductCandidates(candidates)
-    : null;
-}
-
-function toProductSemanticCandidateFromJson(
-  value: Json,
-  categorySlug: string
-): ProductSemanticCandidate | null {
-  if (!isJsonObject(value)) return null;
-
-  const categoryValue = value.categories;
-  let categories: ProductSeoRow['categories'] = null;
-  if (categoryValue !== null && categoryValue !== undefined) {
-    if (!isJsonObject(categoryValue)) return null;
-    const joinedSlug = categoryValue.slug;
-    if (joinedSlug !== null && typeof joinedSlug !== 'string') return null;
-    categories = { slug: joinedSlug };
-  }
-
-  const price = value.price;
-  const stock = value.stock;
-  const stockQuantity = value.stock_quantity;
-  if (
-    price !== null &&
-    typeof price !== 'number' &&
-    typeof price !== 'string'
-  ) {
-    return null;
-  }
-  if (stock !== null && stock !== undefined && typeof stock !== 'number') {
-    return null;
-  }
-  if (
-    stockQuantity !== null &&
-    stockQuantity !== undefined &&
-    typeof stockQuantity !== 'number'
-  ) {
-    return null;
-  }
-
-  return toProductSemanticCandidate(
-    {
-      brand: typeof value.brand === 'string' ? value.brand : null,
-      categories,
-      category: typeof value.category === 'string' ? value.category : null,
-      condition: typeof value.condition === 'string' ? value.condition : null,
-      name: typeof value.name === 'string' ? value.name : null,
-      price,
-      product_key_specs: value.product_key_specs,
-      slug: typeof value.slug === 'string' ? value.slug : null,
-      stock,
-      stock_quantity: stockQuantity,
-    },
-    categorySlug
-  );
 }
 
 function mergeGuidePosts(

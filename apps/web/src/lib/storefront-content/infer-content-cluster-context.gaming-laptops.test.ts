@@ -261,4 +261,24 @@ describe('inferContentClusterContext - gaming laptops', () => {
       expect(post.categorySlug).toBe('gaming-laptops');
     }
   });
+
+  it('does not classify gaming laptop accessories or stands as gaming-laptops', () => {
+    const accessoryArticle = inferContentClusterContext({
+      title: 'Top 5 Ergonomic Laptop Stands to Buy in 2026',
+      excerpt: 'Stands for your gaming laptop workstation.',
+      category: 'Gaming Laptop Accessories',
+      tags: ['stands', 'accessories'],
+      keywords: ['stand'],
+    });
+    expect(accessoryArticle.categorySlug).not.toBe('gaming-laptops');
+
+    const standArticle = inferContentClusterContext({
+      title: 'Best Gaming Laptop Stand 2026',
+      excerpt: 'Keep your machine cool.',
+      category: 'Gaming Laptops',
+      tags: ['stands'],
+      keywords: ['stand'],
+    });
+    expect(standArticle.categorySlug).toBe('laptops');
+  });
 });

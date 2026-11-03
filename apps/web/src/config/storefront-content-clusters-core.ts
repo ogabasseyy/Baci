@@ -77,7 +77,7 @@ export const CORE_CONTENT_CLUSTER_SUPPORT = {
     },
   },
   'gaming-laptops': {
-    categoryNames: ['gaming laptops', 'gaming-laptops', 'gaming laptop'],
+    categoryNames: ['gaming laptops', 'gaming-laptops'],
     articleTokens: [
       'gaming laptop',
       'rtx',

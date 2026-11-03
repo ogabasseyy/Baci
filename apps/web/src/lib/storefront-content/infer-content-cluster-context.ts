@@ -41,9 +41,7 @@ function isPhraseBoundary(value: string | undefined): boolean {
 
 function hasPhrase(haystack: string, needle: string) {
   const normalizedNeedle = normalizeText(needle);
-  if (normalizedNeedle.length === 0) {
-    return false;
-  }
+  if (normalizedNeedle.length === 0) return false;
   let searchFrom = 0;
   for (;;) {
     const matchIndex = haystack.indexOf(normalizedNeedle, searchFrom);
@@ -140,18 +138,21 @@ function inferCategorySlug(
 
   if (explicitMatch) {
     if (
-      explicitMatch.categorySlug === 'gaming' ||
-      explicitMatch.categorySlug === 'laptops'
+      (explicitMatch.categorySlug === 'gaming' ||
+        explicitMatch.categorySlug === 'laptops') &&
+      isDedicatedGamingLaptopContent(
+        title ?? '',
+        contentHaystack,
+        excerpt ?? ''
+      )
     ) {
-      if (
-        isDedicatedGamingLaptopContent(
-          title ?? '',
-          contentHaystack,
-          excerpt ?? ''
-        )
-      ) {
-        return 'gaming-laptops';
-      }
+      return 'gaming-laptops';
+    }
+    if (
+      explicitMatch.categorySlug === 'gaming-laptops' &&
+      EXCLUDED_GAMING_LAPTOP_SUBJECTS.some((s) => hasPhrase(title ?? '', s))
+    ) {
+      return 'laptops';
     }
     return explicitMatch.categorySlug;
   }
@@ -255,9 +256,7 @@ function inferPriceBands(
   categorySlug: SupportedClusterCategory | null,
   haystack: string
 ) {
-  if (!categorySlug) {
-    return [];
-  }
+  if (!categorySlug) return [];
 
   return Object.entries(CONTENT_CLUSTER_SUPPORT[categorySlug].priceBandAliases)
     .filter(([, aliases]) =>

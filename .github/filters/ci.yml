@@ -363,3 +363,4 @@ piggyvest_runbook:
   - 'docs/piggyvest-legacy-migration/**'
   - 'docs/piggyvest-legacy-migration-runbook.md'
   - 'apps/web/tools/db/piggyvest-legacy*'
+  - 'supabase/migrations/*wallet*'

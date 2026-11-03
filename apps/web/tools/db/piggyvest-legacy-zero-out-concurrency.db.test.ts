@@ -29,19 +29,23 @@ VALUES ('${wallet}','${M}','${customer}',${amt},'PV-SHARED-REF');
     )
     .replace(
       'ROLLBACK;\n-- COMMIT;',
-      `${hold ? 'SELECT pg_sleep(2);\n' : ''}COMMIT;`
+      `${hold ? 'SELECT pg_sleep(3);\n' : ''}COMMIT;`
     );
 
 describe.skipIf(!binDir)('02-zero-out.sql overlapping runs', () => {
   let s: Scratch;
   const count = (sql: string) => Number(s.psql(sql).stdout.trim());
-  // Polls the server (no timers) until the condition query returns 1.
-  const waitFor = (sql: string) => {
-    for (let i = 0; i < 2000; i++) {
+  // Polls the server with a bounded number of checks, yielding to the event
+  // loop between them, until the condition query returns at least 1.
+  const waitFor = async (sql: string, running: () => string) => {
+    for (let i = 0; i < 400; i++) {
       if (count(sql) >= 1) return;
+      await new Promise<void>((next) => setImmediate(next));
     }
-    throw new Error(`condition never became true: ${sql}`);
+    throw new Error(`never became true: ${sql}; run A: ${running()}`);
   };
+  const runLock = `SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND granted
+    AND objsubid = 1 AND ((classid::bigint << 32) | objid::bigint) = hashtextextended('baci:piggyvest_legacy_zero_out', 0)`;
 
   beforeAll(() => {
     s = startScratch();
@@ -68,10 +72,12 @@ describe.skipIf(!binDir)('02-zero-out.sql overlapping runs', () => {
     writeFileSync(fileA, script(W1, C1, '500.00', true));
     writeFileSync(fileB, script(W2, C2, '250.00', false));
 
-    const a = s.psqlFileAsync(fileA);
-    waitFor(
-      `SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND granted`
-    );
+    let state = 'still running';
+    const a = s.psqlFileAsync(fileA).then((r) => {
+      state = `exit ${r.status}: ${r.stderr}`;
+      return r;
+    });
+    await waitFor(runLock, () => state);
     const b = s.psqlFileAsync(fileB);
     const [ra, rb] = await Promise.all([a, b]);
 
@@ -86,5 +92,28 @@ describe.skipIf(!binDir)('02-zero-out.sql overlapping runs', () => {
     expect(
       count(`SELECT available_balance FROM customer_wallets WHERE id = '${W2}'`)
     ).toBe(250);
+  }, 30_000);
+
+  it('fences the ledger table while a run is open', async () => {
+    expect(
+      s.psql(
+        `DELETE FROM customer_wallet_transactions; DELETE FROM customer_wallets;
+         INSERT INTO customer_wallets (id, customer_id, merchant_id, available_balance) VALUES ('${W1}','${C1}','${M}',500);
+         INSERT INTO customer_wallet_transactions (wallet_id, customer_id, merchant_id, type, amount, balance_after, status) VALUES ('${W1}','${C1}','${M}','credit',500,500,'completed');`
+      ).status
+    ).toBe(0);
+    const file = join(s.dir, 'fence.sql');
+    writeFileSync(file, script(W1, C1, '500.00', true));
+    let state = 'still running';
+    const a = s.psqlFileAsync(file).then((r) => {
+      state = `exit ${r.status}: ${r.stderr}`;
+      return r;
+    });
+    await waitFor(
+      `SELECT count(*) FROM pg_locks l JOIN pg_class c ON c.oid = l.relation
+       WHERE l.granted AND l.mode = 'ShareRowExclusiveLock' AND c.relname = 'customer_wallet_transactions'`,
+      () => state
+    );
+    expect((await a).status).toBe(0);
   }, 30_000);
 });

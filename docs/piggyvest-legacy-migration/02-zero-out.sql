@@ -21,9 +21,13 @@
 --     reference and already-migrated checks, so two overlapping runs cannot
 --     both pass the same PiggyVest reference check. The second run waits for
 --     the first to finish (up to the 5 second lock timeout, then it fails);
---   * assumption: balance-changing code updates the wallet row first, so the
---     wallet locks below also cover the ledger checks. The runbook's pause
---     covers any writer that does not.
+--   * the wallet ledger table is locked against new rows (SHARE ROW EXCLUSIVE)
+--     for the rest of the transaction, so a writer that adds a ledger row
+--     without touching the wallet row first cannot slip past the checks. It
+--     waits for in-flight writers (up to the 5 second lock timeout) and
+--     blocks new ones until the run ends. A writer that holds a wallet row and
+--     then needs the ledger can deadlock with the run; PostgreSQL aborts one
+--     of them, and nothing is changed if it is the run.
 -- It ends with ROLLBACK. Read the printed result, then swap the last two lines
 -- (delete ROLLBACK, uncomment the final COMMIT) and run it again. Nothing is
 -- saved until then.
@@ -88,6 +92,9 @@ BEGIN
   PERFORM pg_advisory_xact_lock(
     hashtextextended('baci:piggyvest_legacy_zero_out', 0)
   );
+
+  -- Fence the ledger: no new ledger rows until this transaction ends.
+  LOCK TABLE public.customer_wallet_transactions IN SHARE ROW EXCLUSIVE MODE;
 
   -- Lock every listed wallet in a fixed order before reading any value.
   PERFORM 1

@@ -11,6 +11,7 @@ Files:
 - `docs/piggyvest-legacy-migration/01-balance-list.sql` (read only)
 - `docs/piggyvest-legacy-migration/02-zero-out.sql` (the one update)
 
+The update also blocks new wallet ledger rows for the few seconds it runs.
 Two runs of the update at the same time are not possible: the script takes a
 database lock first, so a second run waits for the first. If the first run
 takes longer than 5 seconds the second stops with a lock timeout error and
@@ -54,6 +55,16 @@ folder that only the owner and the coordinator can open. Do not paste it into
 email or chat, and make no extra copies. Delete every copy, including the
 signed list, 30 days after step 5 is finished; keep only wallet ids, amounts
 and PiggyVest references in the runbook record.
+
+### Dry run on the real schema before any credit
+
+After the list is signed and BEFORE crediting anyone in PiggyVest, run
+`02-zero-out.sql` once as is (it ends with `ROLLBACK`) with the signed rows and
+placeholder references such as `DRY-RUN-1`, `DRY-RUN-2`. This checks the real
+production tables, constraints, triggers and balances while nothing has been
+paid yet. The CI tests use a simplified scratch schema and cannot do this. Do
+not continue to step 2 until this dry run passes; any error means fix the list
+and repeat.
 
 ## 2. Credit each customer by hand in PiggyVest
 

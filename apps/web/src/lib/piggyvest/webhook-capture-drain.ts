@@ -76,6 +76,8 @@ export interface DrainDeps {
     authorizationQuarantine?: boolean;
     contentQuarantine?: boolean;
     keySetIncomplete?: boolean;
+    /** The master kill switch deferred the delivery: no attempt is spent. */
+    killSwitchDeferred?: boolean;
   }>;
 }
 
@@ -171,6 +173,7 @@ async function drainRow(
 
   let completed = false;
   let keySetIncomplete = false;
+  let killSwitchDeferred = false;
   let authorizationQuarantine = false;
   let contentQuarantine = false;
   try {
@@ -190,8 +193,16 @@ async function drainRow(
       !authorizationQuarantine &&
       !contentQuarantine;
     keySetIncomplete = result.keySetIncomplete === true;
+    killSwitchDeferred = result.killSwitchDeferred === true;
   } catch {
     completed = false;
+  }
+  if (killSwitchDeferred) {
+    // The pause says nothing about the row: defer (attempt refunded, bounded
+    // backoff) so it can never exhaust MAX_DRAIN_ATTEMPTS and park while
+    // PiggyVest is paused, and credits once after the switch is lifted.
+    await settle(deps, row, 'deferred', 'KILL_SWITCH_ACTIVE');
+    return 'retried';
   }
   if (completed) {
     await settle(deps, row, 'processed', null);

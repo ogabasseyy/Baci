@@ -54,3 +54,27 @@ describe('readPiggyvestPlanFundingRuntime interest routing', () => {
     );
   });
 });
+
+describe('master kill switch', () => {
+  it('stops plan funding while the flag is on', () => {
+    expect(readPiggyvestPlanFundingRuntime(base)).not.toBeNull();
+    expect(
+      readPiggyvestPlanFundingRuntime({
+        ...base,
+        PIGGYVEST_KILL_SWITCH: 'true',
+      })
+    ).toBeNull();
+    expect(
+      readPiggyvestPlanFundingRuntime({ ...base, PIGGYVEST_KILL_SWITCH: 'x' })
+    ).toBeNull();
+  });
+
+  it('still accepts a whitespace-padded display flag as before the switch', () => {
+    expect(
+      readPiggyvestPlanFundingRuntime({
+        ...base,
+        PIGGYVEST_SAVINGS_FUNDING_DISPLAY_ENABLED: ' true ',
+      })
+    ).not.toBeNull();
+  });
+});

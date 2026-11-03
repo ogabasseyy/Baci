@@ -29,6 +29,7 @@ const SNAPSHOT_STATEMENT =
   'SELECT piggyvest_primary.read_daily_reconciliation($1::uuid,$2::text,$3::jsonb) AS result';
 
 type Runtime = ReturnType<typeof readPrimaryWalletSavingsRecoveryRuntime>;
+type NullableRuntime = Runtime | null;
 
 export interface DailyReconciliationDeps {
   readRuntime: (env: NodeJS.ProcessEnv) => Runtime;
@@ -79,10 +80,7 @@ export type DailyReconciliationResult =
       paged: boolean;
     };
 
-function buildPorts(
-  runtime: NonNullable<Runtime>,
-  deps: DailyReconciliationDeps
-) {
+function buildPorts(runtime: Runtime, deps: DailyReconciliationDeps) {
   const { environment, integrationId } = runtime.configuration;
   const token = runtime.providerToken;
   const baseUrl = getPrimaryWalletProviderOrigin(environment);
@@ -151,7 +149,7 @@ export async function runPiggyvestDailyReconciliation(
     return { status: 'disabled' };
   const deps = { ...defaultDeps(), ...options.deps };
   let report: ReconciliationReport;
-  let runtime: Runtime = null;
+  let runtime: NullableRuntime = null;
   try {
     runtime = deps.readRuntime(env);
   } catch {

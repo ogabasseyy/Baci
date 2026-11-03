@@ -4,6 +4,7 @@ import { Camera, CloudSun } from 'lucide-react';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { oxygenEligibilityPrerequisites } from '@/lib/payments/oxygen/eligibility-prerequisites';
 import type { OxygenRuntimeSnapshot } from '@/schemas/oxygen-runtime-view';
+import { OxygenEligibilityUnavailable } from './OxygenEligibilityUnavailable';
 import { OxygenLoadingButton } from './OxygenLoadingButton';
 import { OxygenSelfieConfirmedContext } from './OxygenPaymentSurfaceContext';
 import { OxygenSelfieButton } from './OxygenSelfieButton';
@@ -179,18 +180,7 @@ export function OxygenGuidedVerification({
       (identityComplete &&
         !state.eligible &&
         (attempts.current.get('refresh_eligibility') ?? 0) >= 3));
-  if (state.eligible === false)
-    return (
-      <div className="mx-auto grid max-w-md gap-3 py-8 text-center">
-        <h3 className="text-xl font-bold text-gray-900">
-          No installment plan is available right now
-        </h3>
-        <p className="text-sm leading-relaxed text-gray-500">
-          Your application is saved. You can close this window and choose
-          another payment method at checkout.
-        </p>
-      </div>
-    );
+  if (state.eligible === false) return <OxygenEligibilityUnavailable />;
   const selfie = selfieRequired && !expiredSelfie && state.selfieUrl;
   const ninRetry = ninRequired && snapshot.ninAttemptStatus === 'safe_retry';
   const queuedNin = active && pendingReadRecovery(snapshot) === 'validate_nin';

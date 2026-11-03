@@ -78,6 +78,9 @@ DO $$ BEGIN
 END $$;
 -- A historically exhausted exact-reference row is still quarantined when
 -- the candidate cannot be uniquely attributed at the time of redelivery.
+-- The current schema prevents duplicates; temporarily remove the index inside
+-- this rolled-back transaction to exercise the defensive legacy-data branch.
+DROP INDEX oxygen_private.oxygen_state_application_idx;
 UPDATE oxygen_private.provider_states SET state=jsonb_set(state,'{applicationReference}','"application-4"') WHERE workflow_id='efae0000-0000-4000-8000-000000000047';
 SET LOCAL ROLE authenticated;
 SELECT public.oxygen_callback('accept','response-evidence-fixture','{"kind":"address","phoneNumber":"08010000000","applicationReference":"application-4","addressValidated":true,"deduplicationKey":"legacy-nonunique","action":"reconcile_kyc"}');

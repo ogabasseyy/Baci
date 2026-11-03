@@ -4,13 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   csrf: vi.fn(),
-  rate: vi.fn(),
+  sharedRate: vi.fn(),
   rpc: vi.fn(),
 }));
 vi.mock('@/lib/api-auth', () => ({ authenticateApiRequest: mocks.auth }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: mocks.csrf }));
-vi.mock('@/lib/ensure-action-rate-limit', () => ({
-  ensureActionRateLimit: mocks.rate,
+vi.mock('@/lib/rate-limit', () => ({
+  checkOxygenProviderRateLimit: mocks.sharedRate,
 }));
 
 import { POST } from './route';
@@ -23,7 +23,7 @@ const request = (body: unknown) =>
   });
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.rate.mockResolvedValue(true);
+  mocks.sharedRate.mockResolvedValue({ allowed: true });
   mocks.csrf.mockResolvedValue({ valid: true });
   mocks.auth.mockResolvedValue({
     user: { id: 'user' },
@@ -31,6 +31,12 @@ beforeEach(() => {
   });
 });
 describe('Oxygen workflow draft route', () => {
+  it('uses the shared fail-closed limit for the authenticated customer', async () => {
+    mocks.sharedRate.mockResolvedValue({ allowed: false });
+    expect((await POST(request({ orderId, channel: 'web' }))).status).toBe(429);
+    expect(mocks.sharedRate).toHaveBeenCalledWith('user', 'workflow', 10);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
   it('creates or resumes only the authenticated order and advertises no execution', async () => {
     mocks.rpc.mockResolvedValue({
       data: {
@@ -89,7 +95,7 @@ describe('Oxygen workflow draft route', () => {
   it('enforces CSRF and rate limits before storage access', async () => {
     mocks.csrf.mockResolvedValue({ valid: false });
     expect((await POST(request({ orderId, channel: 'web' }))).status).toBe(403);
-    mocks.rate.mockResolvedValue(false);
+    mocks.sharedRate.mockResolvedValue({ allowed: false });
     expect((await POST(request({ orderId, channel: 'web' }))).status).toBe(429);
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
@@ -106,7 +112,7 @@ it('rejects an unauthenticated request before rate limit, CSRF, or JSON parsing'
     { method: 'POST', body: '{' }
   );
   expect((await POST(malformed)).status).toBe(401);
-  expect(mocks.rate).not.toHaveBeenCalled();
+  expect(mocks.sharedRate).not.toHaveBeenCalled();
   expect(mocks.csrf).not.toHaveBeenCalled();
   expect(mocks.rpc).not.toHaveBeenCalled();
 });

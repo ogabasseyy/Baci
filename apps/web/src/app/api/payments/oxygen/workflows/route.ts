@@ -1,8 +1,8 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
 import { projectWorkflow } from '@/lib/payments/oxygen/workflow';
+import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
 import {
   oxygenWorkflowRequestSchema,
   oxygenWorkflowSnapshotSchema,
@@ -15,10 +15,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   if (
-    !(await ensureActionRateLimit('oxygen-workflow', {
-      requests: 10,
-      windowMs: 60_000,
-    }))
+    !(await checkOxygenProviderRateLimit(auth.user.id, 'workflow', 10)).allowed
   ) {
     return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
   }

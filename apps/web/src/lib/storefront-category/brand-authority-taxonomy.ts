@@ -47,7 +47,6 @@ const BRAND_AUTHORITY_ENTRIES: readonly BrandAuthorityEntry[] = [
   ),
   createBrandAuthorityEntry('smartphones', 'oppo', 'Oppo', 'Oppo'),
   createBrandAuthorityEntry('smartphones', 'honor', 'Honor', 'Honor'),
-  createBrandAuthorityEntry('smartphones', 'vivo', 'vivo', 'vivo'),
 
   // laptops
   createBrandAuthorityEntry('laptops', 'apple', 'Apple', 'Apple MacBook', {

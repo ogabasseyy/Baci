@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { CATEGORY_HUB_DEFAULTS } from '@/config/category-hub-defaults';
+import {
+  CATEGORY_HUB_DEFAULTS,
+  CATEGORY_HUB_PRIORITY_CATEGORIES,
+} from '@/config/category-hub-defaults';
 import {
   buildBestForCards,
   buildCategoryHubCards,
@@ -47,18 +50,7 @@ const makeStock = (
 describe('Category Hub Expansion (Phase 3A)', () => {
   describe('slug-keyed price band copy resolution and reorder regression', () => {
     it('validates price band config slug-set equality across all priority categories', () => {
-      const categories = [
-        'smartphones',
-        'laptops',
-        'smart-tvs',
-        'gaming-laptops',
-        'tablets',
-        'audio',
-        'smartwatches',
-        'playstation-5',
-      ] as const;
-
-      for (const cat of categories) {
+      for (const cat of CATEGORY_HUB_PRIORITY_CATEGORIES) {
         expect(() => validateCategoryHubPriceBandConfig(cat)).not.toThrow();
       }
     });

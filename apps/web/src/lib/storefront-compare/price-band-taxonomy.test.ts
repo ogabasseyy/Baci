@@ -156,15 +156,19 @@ describe('price-band-taxonomy', () => {
   });
 
   describe('getCuratedPriceBands', () => {
-    it('returns configured bands when currency is NGN or options omitted', () => {
+    it('returns configured bands when currency is NGN', () => {
       expect(
         getCuratedPriceBands('gaming-laptops', { merchantCurrency: 'NGN' })
       ).toHaveLength(3);
-      expect(getCuratedPriceBands('gaming-laptops')).toHaveLength(3);
-      expect(getCuratedPriceBands('audio')).toHaveLength(3);
+      expect(
+        getCuratedPriceBands('audio', { merchantCurrency: 'ngn' })
+      ).toHaveLength(3);
+      expect(getConfiguredPriceBands('gaming-laptops')).toHaveLength(3);
     });
 
-    it('suppresses new-category bands when merchant currency is non-NGN or missing in options', () => {
+    it('suppresses new-category bands when merchant currency is non-NGN or options omitted', () => {
+      expect(getCuratedPriceBands('gaming-laptops')).toEqual([]);
+      expect(getCuratedPriceBands('audio')).toEqual([]);
       expect(
         getCuratedPriceBands('gaming-laptops', { merchantCurrency: 'USD' })
       ).toEqual([]);

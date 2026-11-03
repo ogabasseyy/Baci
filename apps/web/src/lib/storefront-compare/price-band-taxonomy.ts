@@ -146,10 +146,7 @@ export function getCuratedPriceBands(
   categorySlug: string,
   options?: { merchantCurrency?: string | null }
 ): PriceBandDefinition[] {
-  if (
-    options &&
-    !isPriceBandCurrencySupported(categorySlug, options.merchantCurrency)
-  ) {
+  if (!isPriceBandCurrencySupported(categorySlug, options?.merchantCurrency)) {
     return [];
   }
   return getConfiguredPriceBands(categorySlug);

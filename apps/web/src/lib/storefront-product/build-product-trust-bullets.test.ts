@@ -37,8 +37,8 @@ describe('buildProductTrustBullets', () => {
     expect(
       buildProductTrustBullets(
         makeInput({
-          categorySlug: 'playstation-5',
-          categoryName: 'PlayStation 5',
+          categorySlug: 'cameras',
+          categoryName: 'Cameras',
         })
       )
     ).toEqual(['Available in Open Box condition']);

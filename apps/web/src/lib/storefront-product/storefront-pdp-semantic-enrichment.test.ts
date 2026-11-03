@@ -423,7 +423,7 @@ describe('readStorefrontPdpSemanticEnrichment', () => {
             expect.objectContaining({
               slug: 'legacy-phone',
               stock: 0,
-              manage_stock: null,
+              manage_stock: undefined,
             }),
           ],
           guidePosts: [],

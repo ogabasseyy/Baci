@@ -100,11 +100,11 @@ export async function OgabasseyPdpSemanticSections({
     category_slug: categorySlug,
     product_key_specs: product.product_key_specs,
   };
-  const compareInventory = normalizedInventory.some(
+  const compareInventory = inventory.some(
     (candidate) => candidate.slug === currentProduct.slug
   )
-    ? normalizedInventory
-    : [currentProduct, ...normalizedInventory];
+    ? inventory
+    : [currentProduct, ...inventory];
   const productCompareLinks = buildCompareLinkGraph({
     storeUrl,
     categorySlug,

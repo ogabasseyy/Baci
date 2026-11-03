@@ -100,7 +100,7 @@ describe('getCachedProductSemanticInventory', () => {
         product_key_specs: { ram_gb: 16, storage_gb: 512 },
         is_parent: null,
         parent_product_id: null,
-        manage_stock: null,
+        manage_stock: undefined,
       },
     ]);
   });
@@ -256,7 +256,7 @@ describe('getCachedProductSemanticInventory', () => {
           product_categories: [{ categories: { slug: 'phones' } }],
         },
         expectedStock: 0,
-        expectedManageStock: null,
+        expectedManageStock: undefined,
       },
       {
         label: 'omitted manage_stock with positive stock',
@@ -269,7 +269,7 @@ describe('getCachedProductSemanticInventory', () => {
           product_categories: [{ categories: { slug: 'phones' } }],
         },
         expectedStock: 8,
-        expectedManageStock: null,
+        expectedManageStock: undefined,
       },
       {
         label:

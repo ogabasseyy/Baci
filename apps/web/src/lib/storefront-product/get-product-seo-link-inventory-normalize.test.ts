@@ -159,7 +159,7 @@ describe('toProductSemanticCandidate', () => {
           stock_quantity: 0,
         },
         expectedStock: 0,
-        expectedManageStock: null,
+        expectedManageStock: undefined,
       },
       {
         label: 'omitted manage_stock with positive stock',
@@ -171,7 +171,7 @@ describe('toProductSemanticCandidate', () => {
           stock_quantity: 9,
         },
         expectedStock: 9,
-        expectedManageStock: null,
+        expectedManageStock: undefined,
       },
       {
         label:

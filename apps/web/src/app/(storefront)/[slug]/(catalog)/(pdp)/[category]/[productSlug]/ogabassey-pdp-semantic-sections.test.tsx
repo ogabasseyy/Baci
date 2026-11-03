@@ -301,4 +301,45 @@ describe('OgabasseyPdpSemanticSections', () => {
       })
     );
   });
+
+  it('preserves candidate original category_slug for buildCompareLinkGraph so child-category comparisons are not approved for the parent route', async () => {
+    mockGetCachedProductSeoLinkData.mockResolvedValueOnce({
+      inventory: [
+        {
+          slug: 'gaming-laptop-1',
+          name: 'Gaming Laptop 1',
+          brand: 'Lenovo',
+          price: 2000000,
+          stock: 2,
+          category_slug: 'gaming-laptops',
+          product_key_specs: { ram_gb: 16, storage_gb: 512, cpu: 'i7' },
+        },
+      ],
+      guidePosts: [],
+      priorityGuidePostSlugs: [],
+    });
+
+    render(
+      await OgabasseyPdpSemanticSections({
+        categoryName: 'Laptops',
+        categorySlug: 'laptops',
+        merchant: {
+          id: 'merchant-1',
+          business_name: 'OgaBassey',
+        },
+        product,
+        productComparePathPrefix: '/ogabassey',
+        storeSlug: 'ogabassey',
+        storeUrl: 'https://ogabassey.com',
+      })
+    );
+
+    // Because gaming-laptop-1 retains category_slug: 'gaming-laptops' in compareInventory,
+    // buildCompareLinkGraph filters it out when categorySlug is 'laptops'
+    expect(mockProductSemanticSections).toHaveBeenCalledWith(
+      expect.objectContaining({
+        productCompareLinks: [],
+      })
+    );
+  });
 });

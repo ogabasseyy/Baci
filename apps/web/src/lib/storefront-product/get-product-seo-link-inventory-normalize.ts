@@ -81,7 +81,7 @@ export function toProductSemanticCandidate(
       getJoinedCategorySlug(product, fallbackCategorySlug) ??
       fallbackCategorySlug,
     product_key_specs: normalizeProductKeySpecs(product.product_key_specs),
-    manage_stock: product.manage_stock ?? null,
+    manage_stock: product.manage_stock,
   };
 }
 

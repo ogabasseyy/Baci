@@ -1,6 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { resolveOrderGiglSettlementRpc } from '@/lib/payments/resolve-order-gigl-settlement-rpc';
 import {
+  resolveSettlementRpcRouting,
+  type SettlementRpcRouting,
+} from '@/lib/payments/resolve-settlement-rpc-routing';
+import {
   extractVerifiedGatewayFeeNgn,
   type SupportedGateway,
 } from '@/lib/payments/verified-gateway-fee';
@@ -59,9 +63,28 @@ export async function recordOrderUpdateFailureSettlement(
   }
 
   const settlement = resolveOrderGiglSettlementRpc(orderEconomics);
+  // Same Paystack classification as the main settlement path: a verified
+  // split is history only, Baci-collected money is marked spendable, and an
+  // unprovable payload records nothing (fail closed).
+  let routing: SettlementRpcRouting;
+  try {
+    routing =
+      args.gateway === 'paystack'
+        ? resolveSettlementRpcRouting({
+            gatewayResponse: args.gatewayResponse,
+            grossAmountKobo: Math.round(args.grossAmount * 100),
+            isRedvaultDirectSettlement: false,
+            settlementGateway: 'paystack',
+            useGiglSettlementRpc: settlement.useGiglSettlementRpc,
+          })
+        : { extraMetadata: {}, extraParams: {}, rpc: settlement.settlementRpc };
+  } catch (error) {
+    return { kind: 'settlement_failed', error };
+  }
   const { error: fallbackSettlementError } = await args.supabase.rpc(
-    settlement.settlementRpc,
+    routing.rpc,
     {
+      ...routing.extraParams,
       p_merchant_id: args.merchantId,
       p_source_type: 'order',
       p_source_id: args.orderId,
@@ -75,6 +98,7 @@ export async function recordOrderUpdateFailureSettlement(
         [`${args.gateway}_reference`]: args.reference,
         verified_gateway_fee: gatewayFee,
         order_update_failed: true,
+        ...routing.extraMetadata,
         ...(settlement.hasEconomicsSnapshot
           ? {
               commerce_platform_fee: platformFee,

@@ -12,7 +12,7 @@ const transaction = {
 };
 const context: StepContext = {
   consistency: { consistent: true },
-  gatewayResponse: { fees: 0 },
+  gatewayResponse: { fees: 0, fees_split: null, subaccount: {} },
   transaction,
   order: {
     discount_amount: 0,

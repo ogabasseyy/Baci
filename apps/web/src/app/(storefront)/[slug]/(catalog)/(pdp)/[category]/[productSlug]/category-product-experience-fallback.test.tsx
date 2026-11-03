@@ -109,3 +109,27 @@ it('continues the full native PDP when the experience only owns the home page', 
     })
   ).rejects.toThrow('NATIVE_PDP_CONTINUED');
 });
+
+it('uses the validated native route slug when a product has no stored slug', async () => {
+  f.control.mockResolvedValue({
+    result: {
+      merchant: { id: 'm', slug: 'qa1', country: 'NG', payout_currency: 'NGN' },
+      product: { id: 'p', name: 'Device', category_slug: 'devices', price: 10 },
+      categoryMismatch: false,
+      needsValuesRedirect: false,
+    },
+    loadProductResult: f.load,
+  });
+  render(
+    await Page({
+      params: Promise.resolve({
+        slug: 'qa1',
+        category: 'devices',
+        productSlug: 'device',
+      }),
+      searchParams: Promise.resolve({}),
+    })
+  );
+  expect(screen.getByRole('heading', { name: 'Device' })).toBeVisible();
+  expect(f.load).not.toHaveBeenCalled();
+});

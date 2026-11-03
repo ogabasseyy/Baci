@@ -633,7 +633,7 @@ export default async function CategoryProductPage({
     (await experienceOwnsProductRoute(
       experience.routes,
       getProductUrl(product),
-      product.slug
+      product.slug ?? productSlug
     ))
   )
     return (

@@ -1,6 +1,7 @@
 import 'server-only';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
 import { piggyvestPrimarySavingsRuntimeSchema } from '@/schemas/piggyvest-primary-savings-runtime';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 import {
   readPrimaryWalletRuntime,
   readPrimaryWalletRuntimeDrain,
@@ -26,7 +27,7 @@ function readPrimaryWalletSavingsCore(env: NodeJS.ProcessEnv, drain: boolean) {
 export function readPrimaryWalletSavingsRuntime(
   env: NodeJS.ProcessEnv = process.env
 ) {
-  if (env.PIGGYVEST_PRIMARY_SAVINGS_ENABLED !== 'true') return null;
+  if (!isPiggyvestFeatureOn('deposit_to_goal', env)) return null;
   const { primary, configuration } = readPrimaryWalletSavingsCore(env, false);
   return {
     configuration,

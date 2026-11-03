@@ -1,4 +1,5 @@
 import 'server-only';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 const PREFIX = 'PIGGYVEST_SAVINGS_FUNDING_';
 
@@ -51,7 +52,7 @@ export function readPiggyvestPlanFundingRuntime(
   configuration: unknown;
   postgresConfiguration: unknown;
 } | null {
-  if (read('DISPLAY_ENABLED', env) !== 'true') return null;
+  if (!isPiggyvestFeatureOn('plan_funding', env)) return null;
   const allowlist =
     read('CUSTOMER_ALLOWLIST', env)
       ?.split(',')

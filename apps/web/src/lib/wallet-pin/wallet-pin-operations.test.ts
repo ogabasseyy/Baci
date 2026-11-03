@@ -37,7 +37,7 @@ function pepper() {
   return state.pepper;
 }
 function rpcOf(answers: Record<string, unknown>) {
-  return vi.fn((name: string) =>
+  return vi.fn((name: string, _args?: Record<string, unknown>) =>
     Promise.resolve({ data: answers[name] ?? null, error: null })
   );
 }

@@ -109,7 +109,8 @@ export async function setWalletPin(
     p_attestation: attestation,
   });
   const result = walletPinSchemas.setResult.parse(data);
-  return result.status === 'set' ? { status: 'ok' } : result;
+  if (result.status === 'set') return { status: 'ok' };
+  return { status: result.status };
 }
 
 export async function resetWalletPin(
@@ -135,7 +136,8 @@ export async function resetWalletPin(
     p_attestation: attestation,
   });
   const result = walletPinSchemas.resetResult.parse(data);
-  return result.status === 'reset' ? { status: 'ok' } : result;
+  if (result.status === 'reset') return { status: 'ok' };
+  return { status: result.status };
 }
 
 function refusalFromState(state: Exclude<WalletPinState, { status: 'set' }>) {

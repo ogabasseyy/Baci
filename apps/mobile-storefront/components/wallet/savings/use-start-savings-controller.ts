@@ -18,6 +18,7 @@ import type {
   SavingsSourceMode,
 } from './start-savings.types';
 import { readParam } from './start-savings-controller.utils';
+import { useInitialContributionOperation } from './use-initial-contribution-operation';
 import { useSavingsPlanFunding } from './use-savings-plan-funding';
 import { useStartSavingsAccountReset } from './use-start-savings-account-reset';
 import { useStartSavingsFormFlow } from './use-start-savings-form-flow';
@@ -52,10 +53,7 @@ export function useStartSavingsController() {
     useState(false);
   const [initialContributionAmount, setInitialContributionAmount] =
     useState('');
-  const [
-    initialContributionIdempotencyKey,
-    setInitialContributionIdempotencyKey,
-  ] = useState<string | null>(null);
+  const operation = useInitialContributionOperation();
   const [acceptsNonWithdrawableTerms, setAcceptsNonWithdrawableTerms] =
     useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -131,7 +129,8 @@ export function useStartSavingsController() {
   useStartSavingsAccountReset(userId, {
     setCreatedGoalId,
     setGoalIdempotencyKey,
-    setInitialContributionIdempotencyKey,
+    setInitialContributionIdempotencyKey:
+      operation.setInitialContributionIdempotencyKey,
     setFormError,
     setShowFundingModal,
     setShowPreviewModal,
@@ -142,7 +141,6 @@ export function useStartSavingsController() {
     fetchExistingPlanFunding,
     fetchPlanFunding,
     fundingError: planFundingError,
-    planFundingAccounts,
     planFundingPhase,
     planFundingStatusCode,
     planFundingRequiresBvn,
@@ -170,7 +168,7 @@ export function useStartSavingsController() {
     frequency,
     fundingAccount,
     setCreatedGoalId,
-    initialContributionIdempotencyKey,
+    ...operation,
     maturityDate,
     goalIdempotencyKey,
     setGoalIdempotencyKey,
@@ -180,7 +178,6 @@ export function useStartSavingsController() {
     selectedPaymentMethodId,
     selectedProduct,
     setFormError,
-    setInitialContributionIdempotencyKey,
     setShowFundingModal,
     setShowPreviewModal,
     setShowSuccessModal,
@@ -248,7 +245,6 @@ export function useStartSavingsController() {
     maturityDate,
     openWalletFundingScreen,
     paymentMethodsError,
-    planFundingAccounts,
     planFundingError,
     planFundingPhase,
     planFundingStatusCode,

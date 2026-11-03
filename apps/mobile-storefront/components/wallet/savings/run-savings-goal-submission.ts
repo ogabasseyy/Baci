@@ -19,6 +19,7 @@ import {
   isGoalIdempotencyMismatchError,
   isInsufficientWalletError,
 } from './start-savings-controller.utils';
+import type { ContributionRail } from './stored-contribution-operation';
 export type FundingAccount = {
   account_number: string;
 } | null;
@@ -36,6 +37,12 @@ export type UseStartSavingsSubmitInput = {
   setGoalIdempotencyKey: (value: string | null) => void;
   setCreatedGoalId?: (goalId: string | null) => void;
   initialContributionIdempotencyKey: string | null;
+  /** Rail recorded with the stored id; null when none was recorded. */
+  initialContributionRail?: ContributionRail | null;
+  setInitialContributionRail?: (
+    operationId: string,
+    rail: ContributionRail
+  ) => void;
   maturityDate: string;
   preferredDebitTime: string;
   refetch: () => Promise<unknown>;

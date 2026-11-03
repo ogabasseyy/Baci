@@ -37,6 +37,7 @@ export const deferredEvent = {
 export const inflowEvent = {
   eventId: '01K8TESTINFLOW001',
   eventType: 'bank-transfer.inflow.success',
+  eventData: { transaction_id: 'txn-synthetic-001' },
 } as const;
 
 export const restrictionCreatedEvent = {

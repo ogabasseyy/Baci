@@ -92,7 +92,10 @@ export async function OgabasseyPdpSemanticSections({
     brand: product.brand,
     condition: product.condition,
     price: product.price,
-    stock: resolveSemanticCandidateStock(product),
+    stock: resolveSemanticCandidateStock({
+      manage_stock: product.manage_stock,
+      stock: product.stock,
+    }),
     category_slug: product.category_slug ?? categorySlug,
     product_key_specs: product.product_key_specs,
   };

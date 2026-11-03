@@ -78,4 +78,37 @@ describe('OgabasseyPdpSemanticSections stock resolution', () => {
     const firstParagraph = callArgs?.model?.contextParagraphs?.[0] ?? '';
     expect(firstParagraph).not.toContain('out of stock');
   });
+
+  it('preserves effective allocated zero stock even when base pool stock_quantity is positive', async () => {
+    const allocatedSoldOutProduct = {
+      ...product,
+      manage_stock: true,
+      stock: 0,
+      stock_quantity: 12,
+    } as Product;
+
+    render(
+      await OgabasseyPdpSemanticSections({
+        categoryName: 'Laptops',
+        categorySlug: 'laptops',
+        merchant: {
+          id: 'merchant-1',
+          business_name: 'OgaBassey',
+          country: 'NG',
+          payout_currency: 'USD',
+          feature_settings: { blog_enabled: true },
+        },
+        product: allocatedSoldOutProduct,
+        productComparePathPrefix: '/ogabassey',
+        storeSlug: 'ogabassey',
+        storeUrl: 'https://ogabassey.com',
+      })
+    );
+
+    expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        currentProduct: expect.objectContaining({ stock: 0 }),
+      })
+    );
+  });
 });

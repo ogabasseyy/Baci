@@ -212,4 +212,40 @@ describe('ProductPageBelowFold semantic model stock resolution', () => {
       'Live stock, selected options and delivery timing should still be confirmed at checkout.'
     );
   });
+
+  it('preserves effective allocated zero stock even when base pool stock_quantity is positive', async () => {
+    const allocatedSoldOutProduct = {
+      ...(product as ProductPageBelowFoldProduct),
+      manage_stock: true,
+      stock: 0,
+      stock_quantity: 12,
+    };
+
+    const tree = (await ProductPageBelowFold({
+      baseUrl: 'https://ogabassey.com',
+      categoryName: 'Smartphones',
+      categorySlug: 'smartphones',
+      currency: 'NGN',
+      merchant,
+      product: allocatedSoldOutProduct,
+      productUrl: 'https://ogabassey.com/products/anchor-flagship',
+      slug: 'ogabassey',
+    })) as ReactElement;
+
+    const sections = directChildren(tree).find(
+      (child) => child.type === ProductSemanticSections
+    );
+    expect(sections).toBeDefined();
+    const model = (
+      sections?.props as {
+        model?: {
+          contextParagraphs?: string[];
+        };
+      }
+    ).model;
+
+    expect(model?.contextParagraphs?.[0]).toContain(
+      'Availability should be rechecked because this item may currently be out of stock.'
+    );
+  });
 });

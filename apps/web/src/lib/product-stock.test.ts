@@ -78,17 +78,25 @@ describe('matchesProductStockFilter', () => {
         infinite: true,
       },
       {
-        label: 'manage_stock: null (managed-default, not infinite)',
+        label: 'manage_stock: null (managed-default, sold out when zero)',
         item: { manage_stock: null, stock: 0, stock_quantity: 0 },
+        inStock: false,
+        outOfStock: true,
+        infinite: false,
+      },
+      {
+        label: 'manage_stock: null (managed-default, in stock when positive)',
+        item: { manage_stock: null, stock: 5, stock_quantity: 5 },
         inStock: true,
         outOfStock: false,
         infinite: false,
       },
       {
-        label: 'manage_stock: undefined (omitted column: not infinite)',
+        label:
+          'manage_stock: undefined (omitted column: tracked sold out when zero)',
         item: { stock: 0, stock_quantity: 0 },
-        inStock: true,
-        outOfStock: false,
+        inStock: false,
+        outOfStock: true,
         infinite: false,
       },
       {

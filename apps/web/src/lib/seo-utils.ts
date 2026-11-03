@@ -1616,14 +1616,16 @@ export function stripRedundantPlatformParentheticals(title: string): string {
   let stripped = false;
   let strippedAtStart = false;
   let compacted = title.replace(
-    /\s*\(([^)]*)\)\s*(?=[,:;.!?]|\s*\(|$)|\s*\(([^)]*)\)\s*/gu,
+    /\s*\(([^)]*)\)\s*(?=[,:;.!?]|$)|\s*\(([^)]*)\)\s*(?=\(([^)]*)\))|\s*\(([^)]*)\)\s*/gu,
     (
       match,
-      innerBeforePunctOrNext?: string,
+      innerBeforePunct?: string,
+      innerBeforeNext?: string,
+      innerNext?: string,
       innerOther?: string,
       offset?: number
     ) => {
-      const inner = innerBeforePunctOrNext ?? innerOther ?? '';
+      const inner = innerBeforePunct ?? innerBeforeNext ?? innerOther ?? '';
       if (!isRedundantPlatformListParenthetical(inner)) {
         return match;
       }
@@ -1634,7 +1636,13 @@ export function stripRedundantPlatformParentheticals(title: string): string {
       ) {
         strippedAtStart = true;
       }
-      return innerBeforePunctOrNext !== undefined ? '' : ' ';
+      if (innerBeforePunct !== undefined) {
+        return '';
+      }
+      if (innerBeforeNext !== undefined) {
+        return isRedundantPlatformListParenthetical(innerNext ?? '') ? '' : ' ';
+      }
+      return ' ';
     }
   );
 
@@ -1643,7 +1651,7 @@ export function stripRedundantPlatformParentheticals(title: string): string {
   }
 
   if (strippedAtStart) {
-    compacted = compacted.replace(/^[,\s:;.!?–—|/&-]+\s*/u, '');
+    compacted = compacted.replace(/^\s*(?:[,:;.!?]\s*|[-–—|/&]\s+)+/u, '');
   }
 
   return compacted.trim();
@@ -1698,18 +1706,20 @@ export function generateMetaTitle(
         .slice(0, normalizedTitle.length - suffixFragment.length)
         .trim();
       const compactBaseTitle = stripRedundantPlatformParentheticals(baseTitle);
-      const effectiveBaseTitle =
-        compactBaseTitle && compactBaseTitle !== baseTitle
-          ? compactBaseTitle
-          : baseTitle;
+      const isCompacted = compactBaseTitle !== baseTitle;
 
-      if (
-        effectiveBaseTitle !== baseTitle &&
-        effectiveBaseTitle.length + suffixFragment.length <= maxLength
-      ) {
-        return `${effectiveBaseTitle}${suffixFragment}`;
+      if (isCompacted) {
+        if (!compactBaseTitle) {
+          return normalizedSuffix.length <= maxLength
+            ? normalizedSuffix
+            : `${normalizedSuffix.slice(0, maxLength - ELLIPSIS_LENGTH)}${ELLIPSIS}`;
+        }
+        if (compactBaseTitle.length + suffixFragment.length <= maxLength) {
+          return `${compactBaseTitle}${suffixFragment}`;
+        }
       }
 
+      const effectiveBaseTitle = isCompacted ? compactBaseTitle : baseTitle;
       const allowedBaseLength =
         maxLength - suffixFragment.length - ELLIPSIS_LENGTH;
 
@@ -1721,18 +1731,18 @@ export function generateMetaTitle(
 
   if (!suffix) {
     const compactTitle = stripRedundantPlatformParentheticals(normalizedTitle);
-    const effectiveTitle =
-      compactTitle && compactTitle !== normalizedTitle
-        ? compactTitle
-        : normalizedTitle;
+    const isCompacted = compactTitle !== normalizedTitle;
 
-    if (
-      effectiveTitle !== normalizedTitle &&
-      effectiveTitle.length <= maxLength
-    ) {
-      return effectiveTitle;
+    if (isCompacted) {
+      if (!compactTitle) {
+        return '';
+      }
+      if (compactTitle.length <= maxLength) {
+        return compactTitle;
+      }
     }
 
+    const effectiveTitle = isCompacted ? compactTitle : normalizedTitle;
     return `${effectiveTitle.slice(0, maxLength - ELLIPSIS_LENGTH)}${ELLIPSIS}`;
   }
 

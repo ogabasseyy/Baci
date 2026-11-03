@@ -1681,6 +1681,24 @@ describe('generateMetaTitle', () => {
         'Ogabassey'
       );
     });
+
+    it('handles titles consisting solely of a redundant platform list when over length', () => {
+      expect(
+        generateMetaTitle('(PS5, PS4, Xbox, Switch)', {
+          suffix: 'Ogabassey',
+          maxLength: 30,
+        })
+      ).toBe('Ogabassey');
+      expect(
+        generateMetaTitle('(PS5, PS4, Xbox, Switch)', { maxLength: 20 })
+      ).toBe('');
+      expect(
+        generateMetaTitle('(PS5, PS4, Xbox, Switch)', {
+          suffix: 'Ogabassey Electronics Store',
+          maxLength: 15,
+        })
+      ).toBe('Ogabassey El...');
+    });
   });
 
   describe('isRedundantPlatformListParenthetical detector', () => {
@@ -1828,6 +1846,15 @@ describe('generateMetaTitle', () => {
       expect(
         stripRedundantPlatformParentheticals('(PS5, PS4) & Best Game Ever')
       ).toBe('Best Game Ever');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) -30% Deal Today')
+      ).toBe('-30% Deal Today');
+      expect(stripRedundantPlatformParentheticals('(PS5, PS4) /deal')).toBe(
+        '/deal'
+      );
+      expect(stripRedundantPlatformParentheticals('(PS5, PS4) &sons')).toBe(
+        '&sons'
+      );
     });
 
     it('compacts adjacent redundant parentheticals without creating double spaces', () => {
@@ -1836,6 +1863,22 @@ describe('generateMetaTitle', () => {
           'Game (PS5, PS4) (Xbox, PC) Edition'
         )
       ).toBe('Game Edition');
+    });
+
+    it('preserves single space before a preserved parenthetical following a redundant parenthetical', () => {
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Game (PS5, PS4) (Disc Edition) Edition'
+        )
+      ).toBe('Game (Disc Edition) Edition');
+      expect(
+        stripRedundantPlatformParentheticals(
+          'Game (PS5, PS4) (Refurbished) Edition'
+        )
+      ).toBe('Game (Refurbished) Edition');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5, PS4) (Disc Edition)')
+      ).toBe('(Disc Edition)');
     });
 
     it('does not remove leading punctuation when the stripped parenthetical is non-leading', () => {

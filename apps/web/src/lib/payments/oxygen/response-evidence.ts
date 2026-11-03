@@ -89,7 +89,9 @@ export function projectOxygenResponse(
               host: url.hostname.slice(0, 253),
               length: value.length,
             };
-          else links[path] = url.href;
+          // Hosted links can carry bearer credentials in both the path and
+          // query. Evidence needs the provider origin, not the usable link.
+          else links[path] = url.origin;
         } catch {
           rejectedLinks[path] = { reason: 'invalid', length: value.length };
         }

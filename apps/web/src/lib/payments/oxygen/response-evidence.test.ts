@@ -27,7 +27,7 @@ const response = {
     loan_reference: workflow,
     total_charges: 'unexpected',
     repayment_setup_link:
-      'https://hosted.example.test/setup?token=synthetic-private-link',
+      'https://hosted.example.test/synthetic-path-secret?token=synthetic-private-link#synthetic-fragment-secret',
     otp: '654321',
     signature: 'synthetic-signature',
     activity_token: 'synthetic-token',
@@ -40,11 +40,14 @@ it('preserves allowed response evidence before business validation without copyi
   expect(safe.terms.status).toBe('APPROVED');
   expect(safe.shape.total_charges).toBe('string');
   expect(safe.terms.total_charges).toBeUndefined();
-  expect(safe.links.repayment_setup_link).toContain('synthetic-private-link');
+  expect(safe.links.repayment_setup_link).toBe('https://hosted.example.test');
   for (const secret of [
     '654321',
     'synthetic-signature',
     'synthetic-token',
+    'synthetic-private-link',
+    'synthetic-path-secret',
+    'synthetic-fragment-secret',
     'synthetic-bvn',
     'private@example.test',
   ])
@@ -122,7 +125,7 @@ it('durably captures a successful HTTP response before returning it for validati
   expect(recovered).toEqual([
     expect.objectContaining({
       terms: { status: 'APPROVED', loan_reference: workflow },
-      links: { repayment_setup_link: response.body.repayment_setup_link },
+      links: { repayment_setup_link: 'https://hosted.example.test' },
     }),
   ]);
 });
@@ -210,7 +213,8 @@ it('captures documented recovery url responses and retains safe rejection metada
     },
     new Set(['payment.hydrogenpay.com'])
   );
-  expect(safe.links.url).toContain('transactionId=private');
+  expect(safe.links.url).toBe('https://payment.hydrogenpay.com');
+  expect(JSON.stringify(safe)).not.toContain('transactionId=private');
   const rejected = projectOxygenResponse(
     {
       ...response,

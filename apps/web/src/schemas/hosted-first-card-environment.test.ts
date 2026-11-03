@@ -26,6 +26,15 @@ describe('hostedFirstCardEnvironmentSchema', () => {
     );
   });
 
+  it('accepts the propagated kill switch without exposing it as public output', () => {
+    const result = hostedFirstCardEnvironmentSchema.safeParse({
+      ...valid,
+      PIGGYVEST_KILL_SWITCH: 'true',
+    });
+    expect(result.success).toBe(true);
+    expect(result.data).not.toHaveProperty('PIGGYVEST_KILL_SWITCH');
+  });
+
   it('refuses amounts above the staging ceiling', () => {
     const over = JSON.parse(config) as Record<string, unknown>;
     over.maximumAmountKobo = 10_001;

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { isPiggyvestKilled } from '@/lib/piggyvest/piggyvest-kill-switch';
 import { authorizesLegacyHandling } from '@/lib/piggyvest/primary-event-owner';
 import { primaryInterestWebhookResponse } from '@/lib/piggyvest/primary-interest-webhook-response';
 import { dispatchPrimaryWalletBankInboxIntake } from '@/lib/piggyvest/primary-wallet-bank-inbox-intake';
@@ -30,6 +31,16 @@ function retryable(code: string, error: string): Response {
   );
 }
 
+const MONEY_IN_EVENTS: ReadonlySet<string> = new Set([
+  'bank-transfer.inflow.success',
+  'wallet-transfer.outflow.success',
+  'interest-payout.success',
+]);
+
+function isMoneyInEvent(eventType: string): boolean {
+  return MONEY_IN_EVENTS.has(eventType);
+}
+
 export async function dispatchPrimaryPiggyvestIntake(input: {
   rawBody: Buffer;
   signature: string | null;
@@ -45,6 +56,15 @@ export async function dispatchPrimaryPiggyvestIntake(input: {
   keyScope?: WebhookKeyScope;
 }): Promise<Response | 'conflict' | null> {
   const { keyScope } = input;
+  // Under the master kill switch every money-in delivery is deferred, not
+  // dropped: the retryable 503 makes PiggyVest redeliver, and the deposit is
+  // recorded exactly once after the switch is lifted. Without this, a
+  // legacy-signed delivery would fall through to the legacy credit path.
+  if (isPiggyvestKilled(process.env) && isMoneyInEvent(input.event.eventType))
+    return retryable(
+      'PIGGYVEST_KILL_SWITCH_ACTIVE',
+      'PiggyVest intake paused; delivery will be retried'
+    );
   if (input.event.eventType === 'wallet-transfer.outflow.success') {
     if (input.families.includes('custody')) {
       const custody = await dispatchPrimaryCardSignedCustodyIntake({

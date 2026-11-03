@@ -9,7 +9,8 @@ import { PIGGYVEST_PRIMARY_CLIENT_BUILD_FLOOR_VARIABLES } from '@/schemas/piggyv
 // This sweep is an early warning, not the guarantee: the runtime gate and the
 // behaviour tests run with PIGGYVEST_KILL_SWITCH=true are the real protection.
 // Accepted limitation: further regex-shape evasions (aliases, env objects held
-// under other names) are not detected here.
+// under other names), trees outside the roots below and non-JavaScript tooling
+// (for example Python activation bundles) are not detected here.
 const webRoot = join(__dirname, '..', '..', '..');
 const repoRoot = join(webRoot, '..', '..');
 // Launch tooling that materializes an environment for a child process lives

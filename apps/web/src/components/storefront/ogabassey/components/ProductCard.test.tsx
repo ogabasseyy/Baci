@@ -260,7 +260,7 @@ describe('ProductCard', () => {
     expect(onAddToCart).not.toHaveBeenCalled();
   });
 
-  it('uses WCAG AA contrast-safe badge colors for New and non-New conditions', () => {
+  it('uses WCAG AA contrast-safe semantic badge classes for New and non-New conditions', () => {
     const { rerender } = render(
       <ProductCard
         product={mockProduct}
@@ -269,7 +269,9 @@ describe('ProductCard', () => {
       />
     );
 
-    expect(screen.getByText('New')).toHaveClass('bg-emerald-700');
+    expect(screen.getByText('New')).toHaveClass(
+      'ogabassey-product-card-badge--new'
+    );
 
     rerender(
       <ProductCard
@@ -279,6 +281,8 @@ describe('ProductCard', () => {
       />
     );
 
-    expect(screen.getByText('Open Box')).toHaveClass('bg-amber-700');
+    expect(screen.getByText('Open Box')).toHaveClass(
+      'ogabassey-product-card-badge--condition'
+    );
   });
 });

@@ -106,6 +106,11 @@ export function CategoryPageResults({
       ? FILTERED_GRID_CARD_CONTENT_VISIBILITY
       : FILTERED_LIST_CARD_CONTENT_VISIBILITY
     : '';
+  const isDesktopGrid =
+    typeof window === 'undefined' ||
+    typeof window.matchMedia !== 'function' ||
+    window.matchMedia('(min-width: 768px)').matches;
+  const prioritizedGridCardCount = isDesktopGrid ? 3 : 2;
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 md:px-6">
@@ -169,7 +174,8 @@ export function CategoryPageResults({
                       viewMode={viewMode}
                       imagePriority={
                         prioritizeFirstRowImages &&
-                        index < (viewMode === 'grid' ? 3 : 1)
+                        index <
+                          (viewMode === 'grid' ? prioritizedGridCardCount : 1)
                       }
                       contentVisibilityClassName={cardContentVisibilityClassName}
                     />

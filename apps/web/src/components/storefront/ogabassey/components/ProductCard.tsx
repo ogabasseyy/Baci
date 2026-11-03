@@ -61,17 +61,17 @@ function resolveProductCardBadge(
   const lower = badgeText.toLowerCase();
   const colorClass = platform
     ? /playstation|ps5|ps4/.test(lower)
-      ? 'bg-blue-600'
+      ? 'ogabassey-product-card-badge--playstation'
       : lower.includes('xbox')
-        ? 'bg-green-700'
+        ? 'ogabassey-product-card-badge--xbox'
         : /nintendo|switch/.test(lower)
-          ? 'bg-red-600'
+          ? 'ogabassey-product-card-badge--nintendo'
           : lower.includes('multi')
-            ? 'bg-purple-600'
-            : 'bg-amber-700'
+            ? 'ogabassey-product-card-badge--multi'
+            : 'ogabassey-product-card-badge--condition'
     : product.condition === 'New'
-      ? 'bg-emerald-700'
-      : 'bg-amber-700';
+      ? 'ogabassey-product-card-badge--new'
+      : 'ogabassey-product-card-badge--condition';
   return { colorClass, label: PLATFORM_LABELS[badgeText] ?? badgeText };
 }
 

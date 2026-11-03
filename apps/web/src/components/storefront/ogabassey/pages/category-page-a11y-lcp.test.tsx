@@ -96,7 +96,7 @@ describe('CategoryPage a11y and first-row LCP prioritization', () => {
     });
   });
 
-  it('prioritizes the first 3 grid cards and exposes accessible view toggle buttons', () => {
+  it('prioritizes the first 3 grid cards on desktop viewports and exposes accessible view toggle buttons', () => {
     mockMatchMedia(true);
 
     const products = Array.from({ length: 4 }, (_, index) => ({
@@ -128,6 +128,36 @@ describe('CategoryPage a11y and first-row LCP prioritization', () => {
     expect(
       screen.getByRole('article', { name: 'Phone 3' })
     ).toHaveAttribute('data-image-priority', 'true');
+    expect(
+      screen.getByRole('article', { name: 'Phone 4' })
+    ).toHaveAttribute('data-image-priority', 'false');
+  });
+
+  it('prioritizes only the first 2 grid cards on mobile viewports', () => {
+    mockMatchMedia(false);
+
+    const products = Array.from({ length: 4 }, (_, index) => ({
+      id: String(index + 1),
+      name: `Phone ${index + 1}`,
+      slug: `phone-${index + 1}`,
+      description: `Description ${index + 1}`,
+      price: `₦${index + 1}`,
+      rawPrice: index + 1,
+      image: `/phone-${index + 1}.jpg`,
+      condition: 'New' as const,
+    }));
+
+    render(<CategoryPage prioritizeFirstRowImages products={products} />);
+
+    expect(
+      screen.getByRole('article', { name: 'Phone 1' })
+    ).toHaveAttribute('data-image-priority', 'true');
+    expect(
+      screen.getByRole('article', { name: 'Phone 2' })
+    ).toHaveAttribute('data-image-priority', 'true');
+    expect(
+      screen.getByRole('article', { name: 'Phone 3' })
+    ).toHaveAttribute('data-image-priority', 'false');
     expect(
       screen.getByRole('article', { name: 'Phone 4' })
     ).toHaveAttribute('data-image-priority', 'false');

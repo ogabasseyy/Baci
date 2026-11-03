@@ -1,10 +1,8 @@
 import 'server-only';
 import { primaryWalletBankInboxSchemas as schemas } from '@/schemas/primary-wallet-bank-inbox';
-import {
-  isPiggyvestFeatureOn,
-  isPiggyvestKilled,
-  PIGGYVEST_FEATURE_FLAGS,
-} from './piggyvest-switches';
+import { PIGGYVEST_FEATURE_FLAGS } from './piggyvest-feature-flags';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
+import { isPiggyvestKilled } from './piggyvest-kill-switch';
 
 export type PrimaryWalletBankInboxSecrets = {
   webhookSecret: unknown;

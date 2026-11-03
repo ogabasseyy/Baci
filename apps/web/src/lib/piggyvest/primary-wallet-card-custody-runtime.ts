@@ -1,6 +1,6 @@
 import 'server-only';
 import { primaryWalletCardCustodySchemas as schemas } from '@/schemas/primary-wallet-card-custody';
-import { isPiggyvestFeatureOn } from './piggyvest-switches';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 export function readPrimaryCardCustodyRuntime(
   env: NodeJS.ProcessEnv = process.env,

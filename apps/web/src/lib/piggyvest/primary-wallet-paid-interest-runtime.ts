@@ -1,6 +1,6 @@
 import 'server-only';
 import { primaryWalletPaidInterestSchemas as schemas } from '@/schemas/primary-wallet-paid-interest';
-import { isPiggyvestFeatureOn } from './piggyvest-switches';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 export function readPrimaryWalletPaidInterestRuntime(
   env: NodeJS.ProcessEnv = process.env,

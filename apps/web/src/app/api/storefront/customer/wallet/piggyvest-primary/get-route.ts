@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
-import { isPiggyvestKilled } from '@/lib/piggyvest/piggyvest-switches';
+import { isPiggyvestKilled } from '@/lib/piggyvest/piggyvest-kill-switch';
 import { createPrimaryWalletExecutor } from '@/lib/piggyvest/primary-wallet-executor';
 import { resolvePrimaryWalletIdentity } from '@/lib/piggyvest/primary-wallet-identity';
 import { readPrimaryWalletMapping } from '@/lib/piggyvest/primary-wallet-mapping';
@@ -117,7 +117,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // unusable; a pending refresh re-reads it (read-only, never re-creating,
     // and against the payout wallet stored at creation) so setup can finish
     // without a second BVN submission. Ready wallets never pay for this.
-    if (snapshot.status === 'pending' && !killed) {
+    if (snapshot.status === 'pending') {
       const review = await readPrimaryWalletReview({ scope, execute });
       if (review === 'routing') {
         return NextResponse.json(
@@ -139,12 +139,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
           { status: 409, headers: { 'Cache-Control': 'no-store' } }
         );
       }
-      const recovery = await recoverPrimaryWalletRouting({
-        scope,
-        execute,
-        retrieveWallet: (walletId) =>
-          retrievePiggyvestWallet(providerConfig, walletId),
-      }).catch(() => 'unavailable' as const);
+      // Recovery can promote a wallet, so it is new work: skipped when killed.
+      const recovery = killed
+        ? ('unavailable' as const)
+        : await recoverPrimaryWalletRouting({
+            scope,
+            execute,
+            retrieveWallet: (walletId) =>
+              retrievePiggyvestWallet(providerConfig, walletId),
+          }).catch(() => 'unavailable' as const);
       if (recovery === 'rejected') {
         // Recovery can reject for either an ownership contradiction or an
         // immutable routing contradiction. Re-read the persisted, scoped

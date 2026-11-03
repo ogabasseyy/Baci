@@ -1,7 +1,7 @@
 import 'server-only';
 import { piggyvestInterestPayoutWalletIdSchema } from '@/schemas/piggyvest-primary-wallet-onboarding';
 import { piggyvestPrimaryWalletRuntimeSchema } from '@/schemas/piggyvest-primary-wallet-runtime';
-import { isPiggyvestFeatureOn } from './piggyvest-switches';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 export function readPrimaryWalletRuntime(env: NodeJS.ProcessEnv = process.env) {
   return parseRuntime(env, false);

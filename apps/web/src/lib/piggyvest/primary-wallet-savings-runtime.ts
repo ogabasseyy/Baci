@@ -1,7 +1,7 @@
 import 'server-only';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
 import { piggyvestPrimarySavingsRuntimeSchema } from '@/schemas/piggyvest-primary-savings-runtime';
-import { isPiggyvestFeatureOn } from './piggyvest-switches';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 import {
   readPrimaryWalletRuntime,
   readPrimaryWalletRuntimeDrain,

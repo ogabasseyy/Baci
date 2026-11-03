@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { PIGGYVEST_FEATURE_FLAGS } from './piggyvest-switches';
+import { PIGGYVEST_FEATURE_FLAGS } from './piggyvest-feature-flags';
 import { primaryWalletCardCheckoutFixture as fixture } from './primary-wallet-card-checkout.test-fixture';
 import {
   readPrimaryWalletCardCheckoutRuntime,

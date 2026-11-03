@@ -26,7 +26,7 @@ vi.mock('@/lib/piggyvest/primary-wallet-runtime', () => ({
   readPrimaryWalletRuntimeDrain: mocks.drain,
   readPrimaryWalletOnboardingRuntime: () => null,
 }));
-vi.mock('@/lib/piggyvest/piggyvest-switches', () => ({
+vi.mock('@/lib/piggyvest/piggyvest-kill-switch', () => ({
   isPiggyvestKilled: mocks.killed,
 }));
 vi.mock('@/lib/piggyvest/primary-wallet-identity', () => ({
@@ -202,6 +202,23 @@ describe('primary wallet GET under the master kill switch', () => {
     mocks.wallet.mockResolvedValue(wallet(null));
     const response = await GET(new NextRequest(url));
     expect(response.status).toBe(200);
+    expect(mocks.statements).not.toContain(
+      PRIMARY_WALLET_STATEMENTS.resolveRouting
+    );
+  });
+  it.each([
+    ['routing', 'INTEREST_ROUTING_REVIEW_REQUIRED'],
+    ['ownership', 'OWNERSHIP_REVIEW_REQUIRED'],
+  ] as const)('keeps the %s review hold visible while killed', async (review, code) => {
+    const runtime = mocks.runtime();
+    mocks.killed.mockReturnValue(true);
+    mocks.runtime.mockReturnValue(null);
+    mocks.drain.mockReturnValue(runtime);
+    mocks.wallet.mockResolvedValue(wallet(null));
+    mocks.review.mockResolvedValue(review);
+    const response = await GET(new NextRequest(url));
+    expect(response.status).toBe(409);
+    expect((await response.json()).code).toBe(code);
     expect(mocks.statements).not.toContain(
       PRIMARY_WALLET_STATEMENTS.resolveRouting
     );

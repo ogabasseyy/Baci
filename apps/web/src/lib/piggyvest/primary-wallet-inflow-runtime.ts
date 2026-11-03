@@ -1,6 +1,6 @@
 import 'server-only';
 import { piggyvestPrimaryInflowRuntimeSchema } from '@/schemas/piggyvest-primary-inflow-runtime';
-import { isPiggyvestFeatureOn } from './piggyvest-switches';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 export function readPrimaryWalletInflowRuntime(
   env: NodeJS.ProcessEnv = process.env

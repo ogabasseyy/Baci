@@ -1,6 +1,6 @@
 import 'server-only';
 import { primarySavingsProvisioningSchemas as schemas } from '@/schemas/primary-savings-provisioning';
-import { isPiggyvestFeatureOn } from './piggyvest-switches';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 import { provisionPrimarySavingsWallet } from './primary-savings-provisioning';
 import { createPrimarySavingsProvisioningExecutor } from './primary-savings-provisioning-executor';
 import { listPrimarySavingsProvisioningWallets } from './primary-savings-provisioning-pagination';

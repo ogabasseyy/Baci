@@ -1,6 +1,6 @@
 import 'server-only';
 import { primaryWalletPaidInterestInboxSchemas as schemas } from '@/schemas/primary-wallet-paid-interest-inbox';
-import { isPiggyvestFeatureOn } from './piggyvest-switches';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 export type PrimaryWalletPaidInterestInboxSecrets = {
   webhookSecret: unknown;

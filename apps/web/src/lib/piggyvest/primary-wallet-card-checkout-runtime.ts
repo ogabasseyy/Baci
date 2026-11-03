@@ -1,6 +1,6 @@
 import 'server-only';
 import { primaryWalletCardCheckoutRuntimeSchema } from '@/schemas/primary-wallet-card-checkout-runtime';
-import { isPiggyvestFeatureOn } from './piggyvest-switches';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 export function readPrimaryWalletCardCheckoutRuntime(
   env: NodeJS.ProcessEnv = process.env,

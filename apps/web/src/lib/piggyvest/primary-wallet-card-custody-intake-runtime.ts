@@ -1,6 +1,6 @@
 import 'server-only';
 import { primaryCardCustodyInboxSchemas as schemas } from '@/schemas/primary-wallet-card-custody-inbox';
-import { isPiggyvestFeatureOn } from './piggyvest-switches';
+import { isPiggyvestFeatureOn } from './piggyvest-feature-on';
 
 export type PrimaryCardCustodyIntakeSecrets = {
   webhookSecret: unknown;

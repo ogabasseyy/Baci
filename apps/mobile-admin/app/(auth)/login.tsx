@@ -41,6 +41,10 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const passwordRef = useRef<TextInputInstance>(null);
   const isKeyboardShown = useKeyboardShown();
+  // iOS reports the keyboard before it animates, so the form can move with
+  // it. Android reports it only afterwards, which would add a snap, so its
+  // layout is left as it was.
+  const anchorFormToTop = isKeyboardShown && isRuntimePlatform('ios');
 
   const handleGoogleSignIn = async () => {
     setError(null);
@@ -102,7 +106,7 @@ export default function LoginScreen() {
       <View
         style={[
           styles.contentContainer,
-          isKeyboardShown && styles.contentContainerKeyboardShown,
+          anchorFormToTop && styles.contentContainerKeyboardShown,
         ]}
       >
         {/* Baci Branding */}

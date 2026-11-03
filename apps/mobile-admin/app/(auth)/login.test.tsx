@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
+  isIos: true,
   isKeyboardShown: false,
   scrollEnabled: undefined as boolean | undefined,
 }));
@@ -93,7 +94,8 @@ vi.mock('@/components/auth/PasswordVisibilityToggle', () => ({
 }));
 vi.mock('@/components/BaciLogo', () => ({ BaciLogo: () => null }));
 vi.mock('@/config/runtime-platform', () => ({
-  isRuntimePlatform: () => true,
+  isRuntimePlatform: (platform: string) =>
+    platform === (state.isIos ? 'ios' : 'android'),
 }));
 vi.mock('@/context/OnboardingContext', () => ({
   useOnboarding: () => ({ resetOnboarding: vi.fn() }),
@@ -126,6 +128,7 @@ function formLayout() {
 
 describe('bugfix: login form jumped when switching fields with the keyboard open', () => {
   beforeEach(() => {
+    state.isIos = true;
     state.isKeyboardShown = false;
     state.scrollEnabled = undefined;
   });
@@ -147,5 +150,35 @@ describe('bugfix: login form jumped when switching fields with the keyboard open
     render(<LoginScreen />);
 
     expect(formLayout()?.getAttribute('data-justify')).toBe('flex-start');
+  });
+
+  it('keeps the form at the top through a field switch with the keyboard open', () => {
+    const { rerender } = render(<LoginScreen />);
+    expect(formLayout()?.getAttribute('data-justify')).toBe('center');
+
+    // Focusing the email field opens the keyboard.
+    state.isKeyboardShown = true;
+    rerender(<LoginScreen />);
+    expect(formLayout()?.getAttribute('data-justify')).toBe('flex-start');
+
+    // Moving to the password field reports the keyboard again (its height
+    // can change); the form must not move.
+    rerender(<LoginScreen />);
+    expect(formLayout()?.getAttribute('data-justify')).toBe('flex-start');
+    expect(state.scrollEnabled).toBe(true);
+
+    // Closing the keyboard re-centres the form.
+    state.isKeyboardShown = false;
+    rerender(<LoginScreen />);
+    expect(formLayout()?.getAttribute('data-justify')).toBe('center');
+  });
+
+  it('leaves the Android layout centred, since Android reports the keyboard only after it has opened', () => {
+    state.isIos = false;
+    state.isKeyboardShown = true;
+    render(<LoginScreen />);
+
+    expect(formLayout()?.getAttribute('data-justify')).toBe('center');
+    expect(state.scrollEnabled).toBe(true);
   });
 });

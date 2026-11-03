@@ -49,6 +49,15 @@ describe('useKeyboardShown', () => {
     expect(result.current).toBe(false);
   });
 
+  it('stays shown when the keyboard is reported again during a field switch', () => {
+    const { result } = renderHook(() => useKeyboardShown());
+
+    act(() => keyboard.listeners.get('keyboardWillShow')?.());
+    act(() => keyboard.listeners.get('keyboardWillShow')?.());
+
+    expect(result.current).toBe(true);
+  });
+
   it('uses the did-show and did-hide events on Android', () => {
     keyboard.isIos = false;
     const { result } = renderHook(() => useKeyboardShown());

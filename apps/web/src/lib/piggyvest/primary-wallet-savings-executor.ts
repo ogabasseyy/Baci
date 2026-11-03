@@ -4,13 +4,15 @@ import { piggyvestPrimarySavingsRuntimeSchema } from '@/schemas/piggyvest-primar
 import { piggyvestPrimaryWalletStoreSchemas } from '@/schemas/piggyvest-primary-wallet-store';
 
 const reserve =
-  'SELECT piggyvest_primary.reserve_savings($1::jsonb,$2::jsonb) AS result';
+  'SELECT piggyvest_primary.reserve_savings_with_pin($1::jsonb,$2::jsonb,$3::text) AS result';
 const manage =
   'SELECT piggyvest_primary.manage_savings($1::jsonb,$2::uuid,$3::text) AS result';
 const read =
   'SELECT piggyvest_primary.read_savings_status($1::jsonb,$2::uuid) AS result';
 const recover =
   'SELECT piggyvest_primary.read_pending_savings($1::jsonb,$2::uuid) AS result';
+const adopt =
+  'SELECT piggyvest_primary.adopt_pending_savings($1::jsonb,$2::uuid) AS result';
 const verify = `SELECT current_database() AS database_name, SESSION_USER AS login_name, CURRENT_USER AS role_name,
   (NOT role.rolsuper AND NOT role.rolbypassrls AND NOT role.rolcreaterole AND NOT role.rolcreatedb AND NOT role.rolreplication
     AND pg_has_role(SESSION_USER,'piggyvest_primary_authorizer','MEMBER')
@@ -29,8 +31,10 @@ export function createPrimaryWalletSavingsExecutor(configuration: unknown) {
       (statement !== reserve &&
         statement !== manage &&
         statement !== read &&
-        statement !== recover) ||
-      parameters.length !== (statement === manage ? 3 : 2) ||
+        statement !== recover &&
+        statement !== adopt) ||
+      parameters.length !==
+        (statement === manage || statement === reserve ? 3 : 2) ||
       parameters.some(
         (parameter) => typeof parameter !== 'string' || parameter.length > 8192
       )

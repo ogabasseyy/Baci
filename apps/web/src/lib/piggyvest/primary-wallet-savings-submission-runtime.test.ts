@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { submitPrimaryWalletSavings } from './primary-wallet-savings-submission-runtime';
 
@@ -82,6 +83,8 @@ beforeEach(() => {
   }));
   mocks.transfer.mockResolvedValue({ accepted: true });
 });
+const proof = createHash('sha256').update('s5-submission-proof').digest('hex');
+
 it('checks pending operations without repeating provider submission', async () => {
   mocks.reserve.mockResolvedValue({ status: 'pending' });
   reconciliation.mockResolvedValue({ status: 'confirmed' });
@@ -99,6 +102,7 @@ it('checks pending operations without repeating provider submission', async () =
       scope,
       request,
       providerToken: 'test-token',
+      pinProof: proof,
     })
   ).toEqual({ status: 'confirmed' });
   expect(mocks.transfer).not.toHaveBeenCalled();
@@ -115,6 +119,7 @@ it('submits only the reserved wallets, reference and integer kobo through the ex
       scope,
       request,
       providerToken: 'test-token',
+      pinProof: proof,
     })
   ).toEqual({ status: 'pending' });
   expect(mocks.transfer).toHaveBeenCalledWith(
@@ -137,6 +142,7 @@ it.each([
     scope: { ...scope, environment },
     request,
     providerToken: 'test-token',
+    pinProof: proof,
   });
   expect(mocks.retrieve).toHaveBeenCalledWith(
     { token: 'test-token', baseUrl },
@@ -158,6 +164,7 @@ it('refuses a substituted integration or business before provider submission', a
       scope: { ...scope, environment: 'production' },
       request,
       providerToken: 'test-token',
+      pinProof: proof,
     })
   ).rejects.toThrow();
   expect(mocks.reserve).not.toHaveBeenCalled();
@@ -181,7 +188,51 @@ it('does not dispatch stored reservations owned by another business', async () =
       scope,
       request,
       providerToken: 'test-token',
+      pinProof: proof,
     })
   ).rejects.toThrow();
   expect(mocks.transfer).not.toHaveBeenCalled();
+});
+
+it('refuses a funding request without a PIN proof before any store or provider contact', async () => {
+  await expect(
+    submitPrimaryWalletSavings({
+      configuration,
+      scope,
+      request,
+      providerToken: 'test-token',
+      pinProof: undefined,
+    })
+  ).rejects.toThrow();
+  expect(mocks.reserve).not.toHaveBeenCalled();
+  expect(mocks.transfer).not.toHaveBeenCalled();
+});
+it('passes an empty proof to the reservation so the database decides', async () => {
+  mocks.reserve.mockResolvedValue({ status: 'pin_refused', reason: 'missing' });
+  expect(
+    await submitPrimaryWalletSavings({
+      configuration,
+      scope,
+      request,
+      providerToken: 'test-token',
+      pinProof: '',
+    })
+  ).toEqual({ status: 'pin_refused', reason: 'missing' });
+  expect(mocks.reserve).toHaveBeenCalledWith(expect.anything(), '');
+  expect(mocks.transfer).not.toHaveBeenCalled();
+});
+it('passes the PIN proof to the reservation and stops without a transfer when the PIN is refused', async () => {
+  mocks.reserve.mockResolvedValue({ status: 'pin_refused', reason: 'used' });
+  expect(
+    await submitPrimaryWalletSavings({
+      configuration,
+      scope,
+      request,
+      providerToken: 'test-token',
+      pinProof: proof,
+    })
+  ).toEqual({ status: 'pin_refused', reason: 'used' });
+  expect(mocks.reserve).toHaveBeenCalledWith(request, proof);
+  expect(mocks.transfer).not.toHaveBeenCalled();
+  expect(mocks.claimDispatch).not.toHaveBeenCalled();
 });

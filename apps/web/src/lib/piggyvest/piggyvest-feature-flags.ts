@@ -16,6 +16,8 @@ export const PIGGYVEST_FEATURE_FLAGS = {
   prefunded_card_checkout_mutations:
     'PREFUNDED_CARD_CHECKOUT_MUTATIONS_ENABLED',
   prefunded_card_contributions: 'PREFUNDED_CARD_PUBLIC_ENABLED',
+  // Read-only daily stuck-transfer reconciliation report.
+  daily_reconciliation: 'PIGGYVEST_RECONCILIATION_ENABLED',
 } as const;
 
 export type PiggyvestFeature = keyof typeof PIGGYVEST_FEATURE_FLAGS;

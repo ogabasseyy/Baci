@@ -79,8 +79,8 @@ describe('OgabasseyPdpSemanticSections stock resolution', () => {
     expect(firstParagraph).not.toContain('out of stock');
   });
 
-  it('preserves effective allocated zero stock even when base pool stock_quantity is positive', async () => {
-    const allocatedSoldOutProduct = {
+  it('resolves positive stock when base pool stock_quantity is positive even if legacy stock is zero', async () => {
+    const productWithStockQuantity = {
       ...product,
       manage_stock: true,
       stock: 0,
@@ -98,7 +98,7 @@ describe('OgabasseyPdpSemanticSections stock resolution', () => {
           payout_currency: 'USD',
           feature_settings: { blog_enabled: true },
         },
-        product: allocatedSoldOutProduct,
+        product: productWithStockQuantity,
         productComparePathPrefix: '/ogabassey',
         storeSlug: 'ogabassey',
         storeUrl: 'https://ogabassey.com',
@@ -107,7 +107,7 @@ describe('OgabasseyPdpSemanticSections stock resolution', () => {
 
     expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(
       expect.objectContaining({
-        currentProduct: expect.objectContaining({ stock: 0 }),
+        currentProduct: expect.objectContaining({ stock: 12 }),
       })
     );
   });

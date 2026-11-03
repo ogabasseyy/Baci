@@ -213,8 +213,8 @@ describe('ProductPageBelowFold semantic model stock resolution', () => {
     );
   });
 
-  it('preserves effective allocated zero stock even when base pool stock_quantity is positive', async () => {
-    const allocatedSoldOutProduct = {
+  it('resolves positive stock when base pool stock_quantity is positive even if legacy stock is zero', async () => {
+    const productWithStockQuantity = {
       ...(product as ProductPageBelowFoldProduct),
       manage_stock: true,
       stock: 0,
@@ -227,7 +227,7 @@ describe('ProductPageBelowFold semantic model stock resolution', () => {
       categorySlug: 'smartphones',
       currency: 'NGN',
       merchant,
-      product: allocatedSoldOutProduct,
+      product: productWithStockQuantity,
       productUrl: 'https://ogabassey.com/products/anchor-flagship',
       slug: 'ogabassey',
     })) as ReactElement;
@@ -244,7 +244,7 @@ describe('ProductPageBelowFold semantic model stock resolution', () => {
       }
     ).model;
 
-    expect(model?.contextParagraphs?.[0]).toContain(
+    expect(model?.contextParagraphs?.[0]).not.toContain(
       'Availability should be rechecked because this item may currently be out of stock.'
     );
   });

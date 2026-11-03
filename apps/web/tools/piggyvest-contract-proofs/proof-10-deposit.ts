@@ -36,7 +36,7 @@ export async function stepDeposit(
   const measured = await measureDeposit(ctx, main, gross, 'p10/deposit_main');
   if (measured.kind === 'resumed') {
     b.note(
-      `The S8 deposit slot was already used (${measured.priorOutcome}); it is never resent. Use --new-attempt to repeat it.`
+      `The S8 deposit slot was already used (${measured.priorOutcome}); it is never resent. Repeating it needs a full run without the --proof p10 filter, using --new-attempt.`
     );
     b.inconclusive('S8 deposit already executed in an earlier run');
     b.finding(DEPOSIT_ONCE, QUESTION, 'unknown');

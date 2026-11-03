@@ -95,7 +95,41 @@ describe('S8 fund goal with fees', () => {
   });
 });
 
+describe('S8 fund goal with a short credit and a bad debit', () => {
+  it('answers no, not unknown, when the debit is outside one transfer', async () => {
+    const h = makeHarness();
+    dispose = h.dispose;
+    await setupScenario(h.ctx);
+    const main = h.state.mainWalletId as string;
+    const goal = h.state.goalWalletId as string;
+    const real = h.ctx.api.verify.bind(h.ctx.api);
+    const goalWallet = h.mock.sandbox.wallet(goal);
+    const mainWallet = h.mock.sandbox.wallet(main);
+    const b = new ProofBuilder('p10', 'S8');
+    h.ctx.api.verify = async (...args: Parameters<typeof real>) => {
+      const out = await real(...args);
+      if (goalWallet) goalWallet.balance -= 100;
+      if (mainWallet) mainWallet.balance -= AMOUNTS_KOBO.s8FundGoal;
+      return out;
+    };
+    await stepFundGoal(h.ctx, b, main, goal);
+    expect(answer(b, h, FUND_GOAL)).toBe('no');
+  });
+});
+
 describe('S8 double tap', () => {
+  it('does not repeat on the wire while the original funding is still pending', async () => {
+    const { h, b, main, goal, fund } = await setup({
+      mock: { tsqPendingPolls: 7 },
+      maxPolls: 6,
+    });
+    expect(fund?.terminalSuccess).toBe(false);
+    const before = transferPosts(h);
+    await stepDoubleTap(h.ctx, b, main, goal, fund);
+    expect(transferPosts(h)).toBe(before);
+    expect(answer(b, h, TAP_ONCE)).toBe('unknown');
+  });
+
   it('sends nothing on the second tap and the provider holds one transfer', async () => {
     const { h, b, main, goal, fund } = await setup();
     const before = transferPosts(h);

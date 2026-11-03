@@ -32,13 +32,17 @@ export class TransportFaults {
           : input instanceof URL
             ? input.href
             : input.url;
+      // Claim the fault synchronously, before any await: concurrent POSTs
+      // would otherwise share a stale index, so one fault could hit two
+      // requests or remove the wrong entry.
       const index =
         method === 'POST'
           ? this.armed.findIndex((needle) => target.includes(needle))
           : -1;
+      const claimed = index >= 0;
+      if (claimed) this.armed.splice(index, 1);
       const response = await base(input, init);
-      if (index < 0) return response;
-      this.armed.splice(index, 1);
+      if (!claimed) return response;
       throw new TypeError('fetch failed');
     };
   }

@@ -37,6 +37,8 @@ export interface FundGoalResult {
   reference: string;
   amountKobo: number;
   sendAccepted: boolean;
+  /** True only when the original funding reached a terminal success. */
+  terminalSuccess: boolean;
   /** Settled main balance after the funding; null if it never settled. */
   mainBalanceKobo: number | null;
   mainDeltaKobo: number | null;
@@ -62,7 +64,7 @@ export async function stepFundGoal(
   redactor.register('R', sent.reference);
   if (sent.kind === 'resumed') {
     b.note(
-      `The S8 fund-goal slot was already used (${sent.priorOutcome}); it is never resent. Use --new-attempt to repeat it.`
+      `The S8 fund-goal slot was already used (${sent.priorOutcome}); it is never resent. Repeating it needs a full run without the --proof p10 filter, using --new-attempt.`
     );
     b.inconclusive('S8 goal funding already executed in an earlier run');
     b.finding(FUND_GOAL, FUND_Q, 'unknown');
@@ -76,6 +78,7 @@ export async function stepFundGoal(
     reference: sent.reference,
     amountKobo: amount,
     sendAccepted: sent.outcome === 'accepted',
+    terminalSuccess: false,
     mainBalanceKobo: null,
     mainDeltaKobo: null,
     goalDeltaKobo: null,
@@ -102,6 +105,7 @@ export async function stepFundGoal(
   result.goalDeltaKobo = measured
     ? delta(readingOf(baseline, goal).balance, readingOf(after, goal).balance)
     : null;
+  result.terminalSuccess = watch.terminal === 'success';
   b.value('fund_goal_terminal', watch.terminal)
     .value('fund_goal_main_delta_kobo', result.mainDeltaKobo)
     .value('fund_goal_goal_delta_kobo', result.goalDeltaKobo);
@@ -112,15 +116,16 @@ export async function stepFundGoal(
     return result;
   }
   const debit = -main$;
-  // A goal credit short of the amount with no fee read is not a verdict: it
-  // may be a goal-side fee, so it is published as unknown, never as a failure.
-  const goalShort = goal$ > 0 && goal$ < amount;
+  // One transfer takes the amount, plus at most a fee: a debit outside this
+  // band proves the money did not move exactly once, whatever the goal got.
+  const oneDebit = debit >= amount && debit < amount * 2;
+  // A short goal credit with no fee read is not a verdict by itself: it may
+  // be a goal-side fee. It is unknown only while the debit is still plausible.
+  const goalShort = goal$ > 0 && goal$ < amount && oneDebit;
   b.finding(
     FUND_GOAL,
     FUND_Q,
-    goalShort
-      ? 'unknown'
-      : answerOf(goal$ === amount && debit >= amount && debit < amount * 2),
+    goalShort ? 'unknown' : answerOf(goal$ === amount && oneDebit),
     goalShort
       ? 'the goal credit is below the amount and no fee was read'
       : undefined
@@ -142,7 +147,13 @@ export async function stepDoubleTap(
   fund: FundGoalResult | null
 ): Promise<void> {
   const { api, qa } = ctx;
-  if (!fund?.sendAccepted || fund.mainBalanceKobo === null) {
+  if (
+    !fund?.sendAccepted ||
+    !fund.terminalSuccess ||
+    fund.mainBalanceKobo === null
+  ) {
+    // The wire repeat is only meaningful against a settled original: a still
+    // pending one would settle later and look like a second debit.
     return unknownTap(
       b,
       'no settled, accepted goal funding to tap a second time'

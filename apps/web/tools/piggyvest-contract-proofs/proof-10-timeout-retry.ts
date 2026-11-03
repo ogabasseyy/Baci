@@ -3,12 +3,14 @@ import { pickString } from './loose-schemas';
 import { delta, readingOf, settledWallets, statusOf } from './poll';
 import { answerOf, type ProofBuilder } from './proof-builder';
 import type { ProofContext } from './proof-context';
+import type { CallResult } from './provider-ops';
 import { pollSettled, usableList } from './read-rules';
 import {
   disposition,
   type FollowUpVerdict,
   followUpAfterSubmit,
 } from './tsq-follow-up';
+import type { Answer } from './types';
 
 /**
  * S8, step 6: a timeout on submit. The request leaves and the provider may
@@ -34,6 +36,15 @@ const Q = {
   [TIMEOUT_BOOKED_ONCE]:
     'Did the provider book the timed-out transfer exactly once?',
 } as const;
+
+function countRows(call: CallResult, reference: string): number {
+  const list = usableList(call);
+  return list
+    ? list.edges.filter(
+        (edge) => pickString(edge, ['third_party_reference']) === reference
+      ).length
+    : 0;
+}
 
 function allUnknown(b: ProofBuilder, reason: string): void {
   b.inconclusive(reason);
@@ -90,12 +101,16 @@ export async function stepTimeoutRetry(
   // Status checks on the SAME reference. No branch here can send a POST.
   const verdicts: FollowUpVerdict[] = [];
   let notFound = 0;
+  let firstNotFoundAt: number | null = null;
   for (let poll = 0; poll <= ctx.maxPolls; poll += 1) {
     const follow = followUpAfterSubmit(
       statusOf(await api.verify(sent.reference, main))
     );
     verdicts.push(follow.verdict);
-    if (follow.notFound) notFound += 1;
+    if (follow.notFound) {
+      notFound += 1;
+      firstNotFoundAt ??= verdicts.length - 1;
+    }
     if (follow.verdict === 'settled' || follow.verdict === 'failed') break;
     await ctx.sleep(ctx.pollIntervalMs);
   }
@@ -109,13 +124,23 @@ export async function stepTimeoutRetry(
     Q[TIMEOUT_TSQ_FIRST],
     answerOf(verdicts.length >= 1)
   );
+  // "Checking continued" needs at least one status check AFTER the first 404;
+  // a 404 on the very last check shows nothing about what came next.
+  const continued =
+    firstNotFoundAt !== null && firstNotFoundAt < verdicts.length - 1;
+  const notFoundAnswer: Answer =
+    notFound === 0 ? 'not_applicable' : continued ? 'yes' : 'unknown';
+  const notFoundReason =
+    notFound === 0
+      ? 'no 404 was seen; a live sandbox cannot force one, the mock covers it'
+      : continued
+        ? undefined
+        : 'the 404 was the last status check, so continued checking was not observed';
   b.finding(
     NOT_FOUND_UNCERTAIN,
     Q[NOT_FOUND_UNCERTAIN],
-    notFound === 0 ? 'not_applicable' : 'yes',
-    notFound === 0
-      ? 'no 404 was seen; a live sandbox cannot force one, the mock covers it'
-      : undefined
+    notFoundAnswer,
+    notFoundReason
   );
 
   if (outcome !== 'settled') {
@@ -136,14 +161,11 @@ export async function stepTimeoutRetry(
   const listed = await pollSettled(
     ctx,
     () => api.transactions({ wallet_id: main, limit: '50' }),
-    (call) => usableList(call) !== null
+    (call) => countRows(call, sent.reference) >= 1
   );
-  const list = usableList(listed.value);
-  const rows = list
-    ? list.edges.filter(
-        (edge) => pickString(edge, ['third_party_reference']) === sent.reference
-      ).length
-    : null;
+  // The list can lag the status check and the balances: an empty but readable
+  // list is not a measurement. Only a row actually found is counted.
+  const rows = listed.settled ? countRows(listed.value, sent.reference) : null;
   b.value('timeout_main_delta_kobo', mainDelta).value(
     'timeout_rows_with_reference',
     rows
@@ -163,6 +185,8 @@ export async function stepTimeoutRetry(
         answerOf(rows === 1 && debit >= amount && debit < amount * 2),
     resumed
       ? 'the slot was booked in an earlier run, so this run has no pre-booking balance to compare'
-      : undefined
+      : rows === null
+        ? 'the transaction list never showed the reference within the polling budget'
+        : undefined
   );
 }

@@ -127,4 +127,32 @@ describe('S8 timeout on submit, then status check', () => {
     expect(posts(h)).toHaveLength(before);
     expect(answer(b.build(h.ctx), TIMEOUT_BOOKED_ONCE)).toBe('unknown');
   });
+
+  it('waits for a lagging transaction list instead of publishing no', async () => {
+    const { result } = await run({ mock: { listLagReads: 1 } });
+    expect(answer(result, TIMEOUT_BOOKED_ONCE)).toBe('yes');
+    expect(result.values.timeout_rows_with_reference).toBe(1);
+  });
+
+  it('answers unknown when the list never shows the reference within the budget', async () => {
+    const { result } = await run({ mock: { listLagReads: 50 }, maxPolls: 3 });
+    expect(answer(result, TIMEOUT_BOOKED_ONCE)).toBe('unknown');
+    expect(result.values.timeout_rows_with_reference).toBeNull();
+  });
+
+  it('does not claim continued checking when the 404 was the last status check', async () => {
+    const h = makeHarness({ mock: { tsqNotFoundPolls: 99 } });
+    dispose = h.dispose;
+    await setupScenario(h.ctx);
+    const b = new ProofBuilder('p10', 'S8');
+    await stepTimeoutRetry(
+      { ...h.ctx, maxPolls: 0 },
+      b,
+      h.state.mainWalletId as string,
+      h.state.goalWalletId as string
+    );
+    const result = b.build(h.ctx);
+    expect(result.values.timeout_not_found_checks).toBe(1);
+    expect(answer(result, NOT_FOUND_UNCERTAIN)).toBe('unknown');
+  });
 });

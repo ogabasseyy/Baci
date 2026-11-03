@@ -91,3 +91,11 @@ describe('primary card trusted deployment configuration', () => {
     ).toBeNull();
   });
 });
+describe('master kill switch', () => {
+  it('stops new checkouts but the drain still resolves open ones', () => {
+    expect(readPrimaryWalletCardCheckoutRuntime(env)).not.toBeNull();
+    const killed = { ...env, PIGGYVEST_KILL_SWITCH: 'true' };
+    expect(readPrimaryWalletCardCheckoutRuntime(killed)).toBeNull();
+    expect(readPrimaryWalletCardCheckoutRuntimeDrain(killed)).not.toBeNull();
+  });
+});

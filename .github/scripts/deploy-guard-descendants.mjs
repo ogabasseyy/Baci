@@ -5,7 +5,7 @@ const MAX_RUN_PAGES = 10;
 // Walks deploy.yml runs on main newest-first until the run for expectedSha, and reports
 // whether any strict descendant of expectedSha has deployed (or started deploying).
 export async function descendantAlreadyDeployed({ apiRoot, expectedSha, fetchImpl, githubJson, repository, runHasDeployedProduction, token }) {
-  const checked = new Set();
+  const checked = new Map();
   for (let page = 1; page <= MAX_RUN_PAGES; page++) {
     const body = await githubJson(
       fetchImpl,
@@ -21,8 +21,8 @@ export async function descendantAlreadyDeployed({ apiRoot, expectedSha, fetchImp
       const sha = run.head_sha.toLowerCase();
       if (sha === expectedSha.toLowerCase()) return false;
       if (!(await runHasDeployedProduction(fetchImpl, apiRoot, repository, run, token))) continue;
-      if (checked.has(sha)) return true;
-      checked.add(sha);
+      if (checked.has(sha)) continue;
+      checked.set(sha, true);
       const cmp = await githubJson(
         fetchImpl,
         `${apiRoot}/repos/${repository}/compare/${expectedSha}...${sha}?per_page=1`,

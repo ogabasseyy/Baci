@@ -68,3 +68,9 @@ test('fails closed when a far-behind SHA is not an ancestor of main', async () =
   const fetchImpl = async (url) => url.includes('/git/ref') ? response({ object: { sha: currentSha } }) : response({ status: 'diverged', merge_base_commit: { sha: intermediateSha }, total_commits: 500, files: [] });
   await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), /incomplete or non-ancestral superseding comparison/);
 });
+
+test('bugfix: a repeated deployed run for a non-descendant SHA is not treated as a descendant', async () => {
+  const dup = (id) => ({ conclusion: 'success', head_branch: 'main', head_sha: olderDeployedSha, id, status: 'completed' });
+  const fetchImpl = farAheadFetch({ runs: [dup(4), dup(5), expectedRun], jobs: { 4: deployedJob, 5: deployedJob } });
+  assert.deepEqual(await verifyCurrentMainDeployment({ expectedSha, fetchImpl, repository: 'ogabasseyy/Baci', token: 't' }), { currentSha, expectedSha });
+});

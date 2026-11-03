@@ -51,7 +51,30 @@ DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM oxygen_private.commands WHERE workflow_id='efac0000-0000-4000-8000-000000000041') THEN RAISE EXCEPTION 'Selection created provider command'; END IF;
  IF (SELECT stage FROM public.oxygen_workflows WHERE id='efac0000-0000-4000-8000-000000000041')<>'reconciliation_required' THEN RAISE EXCEPTION 'Selection cleared hold'; END IF;
 END $$;
-UPDATE public.orders SET total=400001 WHERE id='efac0000-0000-4000-8000-000000000031';
+-- Neither another customer nor the merchant may edit financial terms once
+-- the Oxygen workflow is on hold with a saved provider booking.
+DO $$ BEGIN
+ BEGIN
+  UPDATE public.orders SET total=400001 WHERE id='efac0000-0000-4000-8000-000000000031';
+  RAISE EXCEPTION 'Cross-customer financial edit accepted';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT set_config('request.jwt.claim.sub','efac0000-0000-4000-8000-000000000003',true);
+DO $$ BEGIN
+ BEGIN
+  UPDATE public.orders SET total=400001 WHERE id='efac0000-0000-4000-8000-000000000031';
+  RAISE EXCEPTION 'Merchant financial edit accepted during Oxygen hold';
+ EXCEPTION WHEN check_violation THEN NULL; END;
+ IF (SELECT total FROM public.orders WHERE id='efac0000-0000-4000-8000-000000000031')<>400000 THEN
+  RAISE EXCEPTION 'Financial terms changed';
+ END IF;
+END $$;
+-- Model a historical cached quote from a different order amount without
+-- bypassing the live Oxygen order financial-edit fence.
+UPDATE oxygen_private.saved_plans
+ SET product_amount=400001,
+     state=jsonb_set(state,'{booking,product_amount}','400001'::jsonb)
+ WHERE workflow_id='efac0000-0000-4000-8000-000000000041';
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','efac0000-0000-4000-8000-000000000001',true);
 DO $$ DECLARE result jsonb; BEGIN

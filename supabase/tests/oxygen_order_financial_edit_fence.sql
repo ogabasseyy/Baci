@@ -79,12 +79,23 @@ DO $$ BEGIN
  BEGIN UPDATE public.orders SET discount_amount=1 WHERE id='efb10000-0000-4000-8000-000000000031'; RAISE EXCEPTION 'Discount changed'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
  BEGIN UPDATE public.orders SET total=101 WHERE id='efb10000-0000-4000-8000-000000000031'; RAISE EXCEPTION 'Total changed'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
  BEGIN UPDATE public.order_items SET quantity=2 WHERE id='efb10000-0000-4000-8000-000000000061'; RAISE EXCEPTION 'Item changed'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
- BEGIN DELETE FROM public.order_items WHERE id='efb10000-0000-4000-8000-000000000061'; RAISE EXCEPTION 'Item deleted'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
+ -- Authenticated has no item DELETE policy: RLS hides the row before the trigger.
+ DELETE FROM public.order_items WHERE id='efb10000-0000-4000-8000-000000000061';
+ IF FOUND THEN RAISE EXCEPTION 'Item deleted through RLS'; END IF;
  BEGIN INSERT INTO public.order_items(order_id,name,price,quantity) VALUES('efb10000-0000-4000-8000-000000000031','Extra',1,1); RAISE EXCEPTION 'Item inserted'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
  BEGIN UPDATE public.order_tax_subtotals SET tax_amount=1 WHERE id='efb10000-0000-4000-8000-000000000071'; RAISE EXCEPTION 'Tax updated'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
  BEGIN DELETE FROM public.order_tax_subtotals WHERE id='efb10000-0000-4000-8000-000000000071'; RAISE EXCEPTION 'Tax deleted'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
  BEGIN INSERT INTO public.order_tax_subtotals(order_id,vat_category_code,vat_rate,taxable_amount,tax_amount) VALUES('efb10000-0000-4000-8000-000000000031','S',7.5,100,7.5); RAISE EXCEPTION 'Tax changed'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
 END $$;
+-- Exercise the DELETE trigger separately under the backend role, retaining the
+-- bound merchant owner so the guard must return its exact financing error.
+RESET ROLE;
+SET LOCAL ROLE service_role;
+DO $$ BEGIN
+ BEGIN DELETE FROM public.order_items WHERE id='efb10000-0000-4000-8000-000000000061'; RAISE EXCEPTION 'Backend item deleted'; EXCEPTION WHEN check_violation THEN IF SQLERRM <> 'oxygen_financial_edit_locked' THEN RAISE; END IF; END;
+END $$;
+RESET ROLE;
+SET LOCAL ROLE authenticated;
 UPDATE public.order_tax_subtotals SET tax_amount=tax_amount WHERE id='efb10000-0000-4000-8000-000000000071';
 UPDATE public.orders SET notes='Nonfinancial note' WHERE id='efb10000-0000-4000-8000-000000000031';
 UPDATE public.order_items SET fulfillment_data='{"serial":"fixture"}' WHERE id='efb10000-0000-4000-8000-000000000061';
@@ -99,6 +110,7 @@ UPDATE public.order_tax_subtotals SET tax_amount=tax_amount WHERE id='efb10000-0
 DO $$ BEGIN
  BEGIN UPDATE public.orders SET total=101 WHERE id='efb10000-0000-4000-8000-000000000031'; RAISE EXCEPTION 'System changed financed total'; EXCEPTION WHEN insufficient_privilege THEN IF SQLERRM <> 'order_edit_forbidden' THEN RAISE; END IF; END;
  BEGIN UPDATE public.order_items SET price=101 WHERE id='efb10000-0000-4000-8000-000000000061'; RAISE EXCEPTION 'System changed financed item'; EXCEPTION WHEN insufficient_privilege THEN IF SQLERRM <> 'order_edit_forbidden' THEN RAISE; END IF; END;
+ BEGIN DELETE FROM public.order_items WHERE id='efb10000-0000-4000-8000-000000000061'; RAISE EXCEPTION 'System deleted financed item'; EXCEPTION WHEN insufficient_privilege THEN IF SQLERRM <> 'order_edit_forbidden' THEN RAISE; END IF; END;
  BEGIN INSERT INTO public.order_items(order_id,name,price,quantity) VALUES('efb10000-0000-4000-8000-000000000031','System extra',1,1); RAISE EXCEPTION 'System inserted financed item'; EXCEPTION WHEN insufficient_privilege THEN IF SQLERRM <> 'order_edit_forbidden' THEN RAISE; END IF; END;
  BEGIN INSERT INTO public.order_tax_subtotals(order_id,vat_category_code,vat_rate,taxable_amount,tax_amount) VALUES('efb10000-0000-4000-8000-000000000031','Z',0,1,0); RAISE EXCEPTION 'System inserted financed tax'; EXCEPTION WHEN insufficient_privilege THEN IF SQLERRM <> 'order_edit_forbidden' THEN RAISE; END IF; END;
 END $$;

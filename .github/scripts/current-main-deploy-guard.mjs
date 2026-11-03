@@ -33,11 +33,17 @@ function loadDeployPatterns() {
   return patterns;
 }
 
-export const DEPLOY_PATTERNS = loadDeployPatterns();
+let deployPatternsCache = null;
+export function getDeployPatterns() {
+  return (deployPatternsCache ??= loadDeployPatterns());
+}
+export const DEPLOY_PATTERNS = new Proxy([], {
+  get: (_, prop) => Reflect.get(getDeployPatterns(), prop),
+});
 
 function isWebDeployPath(path) {
   const normPath = path.replace(/\/+/g, '/');
-  return DEPLOY_PATTERNS.some((pat) => {
+  return getDeployPatterns().some((pat) => {
     if (pat.endsWith('/**')) return normPath.startsWith(pat.slice(0, -2));
     if (pat.includes('*')) {
       const [p, s] = pat.split('*');

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import YAML from 'yaml';
-import { DEPLOY_PATTERNS, verifyCurrentMainDeployment } from './current-main-deploy-guard.mjs';
+import { DEPLOY_PATTERNS, validateDeployPattern, verifyCurrentMainDeployment } from './current-main-deploy-guard.mjs';
 
 const [expectedSha, currentSha, intermediateSha, olderDeployedSha] = ['a', 'b', 'c', 'd'].map((c) => c.repeat(40));
 
@@ -266,6 +266,12 @@ test('fails closed on malformed identity, API responses, or response truncation'
     u.includes('/compare') ? response({ commits: [{ sha: currentSha }], files: new Array(300).fill({ filename: 'apps/web/src/app/page.tsx' }), merge_base_commit: { sha: expectedSha }, status: 'ahead', total_commits: 1 }) :
     response({ workflow_runs: [] });
   await assert.rejects(verifyCurrentMainDeployment({ expectedSha, fetchImpl: truncFetch, repository: 'ogabasseyy/Baci', token: 'test-token' }), /incomplete or non-ancestral superseding comparison/);
+});
+
+test('rejects unsupported picomatch glob metacharacters and complex patterns', () => {
+  for (const bad of ['apps/web/[a-z].ts', 'apps/web/{a,b}.ts', 'apps/web/?.ts', 'apps/web/(a|b).ts', 'apps/web/+a.ts', 'apps/web/@a.ts', '!apps/web/**']) {
+    assert.throws(() => validateDeployPattern(bad), /unsupported glob/);
+  }
 });
 
 test('production deploy is staged and binds the exact-main guard', () => {

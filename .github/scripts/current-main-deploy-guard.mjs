@@ -5,6 +5,12 @@ import { fileURLToPath } from 'node:url';
 const SHA_PATTERN = /^[0-9a-f]{40}$/i;
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
+export function validateDeployPattern(pat) {
+  if (/[!?{}[\]()+@]/.test(pat) || (pat.endsWith('/**') ? pat.slice(0, -3).includes('*') : pat.indexOf('*') !== pat.lastIndexOf('*'))) {
+    throw new Error(`unsupported glob: ${pat}`);
+  }
+}
+
 function loadDeployPatterns() {
   const text = readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8');
   const patterns = [];
@@ -16,9 +22,7 @@ function loadDeployPatterns() {
       section = line.startsWith('web:') ? 'web' : line.startsWith('migrations:') ? 'migrations' : null;
     } else if (section && /^\s*-\s*['"]?([^'"]+)['"]?/.test(line)) {
       const pat = line.match(/^\s*-\s*['"]?([^'"]+)['"]?/)[1];
-      if (pat.includes('!') || (pat.endsWith('/**') ? pat.slice(0, -3).includes('*') : pat.indexOf('*') !== pat.lastIndexOf('*'))) {
-        throw new Error(`unsupported glob: ${pat}`);
-      }
+      validateDeployPattern(pat);
       patterns.push(pat);
       section === 'web' ? webCount++ : migrationsCount++;
     } else if (section && line.trim() && !line.trim().startsWith('#')) {

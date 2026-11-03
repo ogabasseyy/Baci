@@ -55,3 +55,19 @@ it('gives cancel and complete different bindings for the same goal', () => {
 it('matches the marker used by the database spend function', () => {
   expect(GOAL_PIN_WHOLE_BALANCE_MARKER_KOBO).toBe(1);
 });
+
+// These literals are asserted verbatim by the SQL behaviour suite
+// (piggyvest_goal_pin_proofs_behaviour.sql), so the two sides cannot drift.
+it('matches the digests the database computes for the same key text', () => {
+  const digest = (input: Parameters<typeof buildGoalPinBinding>[0]) =>
+    buildGoalPinBinding(input).idempotencyKeySha256;
+  expect(
+    digest({ action: 'fund', goalId, operationId, amountKobo: 5000 })
+  ).toBe('05cb93fe83c97235778776801f1f9f4d602f7bc66cded386cb49d66312789811');
+  expect(digest({ action: 'cancel', goalId })).toBe(
+    '5fd298ab6c53da67ab0e70e3c51343e4667c2f24667eb4b1e3c335dd29e9e5e7'
+  );
+  expect(digest({ action: 'complete', goalId })).toBe(
+    '06c1da1b8fcf092edd91e05a10a3ea7c3f68a89fece21b85578b63e00abbd605'
+  );
+});

@@ -335,6 +335,19 @@ BEGIN
     AND pg_temp.gp_balance() = 900, 'the replay proof was not spent or the reservation changed');
   v_result := pg_temp.gp_call(c_op5, 5000, NULL);
   PERFORM pg_temp.gp_assert(v_result ->> 'status' = 'pending', 'replay after the proof was spent: ' || v_result::text);
+  -- Pinned vectors shared with goal-pin-binding.test.ts: the TypeScript
+  -- binding and the SQL key text must hash the same bytes to the same digest.
+  PERFORM pg_temp.gp_assert(
+    pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'UTF8')), 'hex')
+      = '05cb93fe83c97235778776801f1f9f4d602f7bc66cded386cb49d66312789811'
+    AND pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa:cancel', 'UTF8')), 'hex')
+      = '5fd298ab6c53da67ab0e70e3c51343e4667c2f24667eb4b1e3c335dd29e9e5e7'
+    AND pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa:complete', 'UTF8')), 'hex')
+      = '06c1da1b8fcf092edd91e05a10a3ea7c3f68a89fece21b85578b63e00abbd605',
+    'TypeScript and SQL goal PIN binding vectors drifted');
 END
 $behaviour$;
 

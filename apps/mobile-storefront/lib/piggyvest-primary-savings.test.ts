@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { beforeEach, expect, it, jest } from '@jest/globals';
 
 const mockFetchJson = jest.fn<(...args: unknown[]) => Promise<unknown>>();
@@ -161,4 +162,37 @@ it('constructs a fresh API client for every contribution', async () => {
   await addPiggyvestPrimarySavingsContribution(input);
   await addPiggyvestPrimarySavingsContribution(input);
   expect(mockCreateClient).toHaveBeenCalledTimes(2);
+});
+it('sends the PIN proof in the body only when one is given', async () => {
+  const pinProof = createHash('sha256').update('s5m-body-proof').digest('hex');
+  mockFetchJson.mockResolvedValue({
+    status: 'pending',
+    operationId: input.idempotencyKey,
+  });
+  await addPiggyvestPrimarySavingsContribution({ ...input, pinProof });
+  expect(mockFetchJson).toHaveBeenCalledWith(
+    expect.objectContaining({
+      body: expect.objectContaining({ pinProof, amountKobo: 2000 }),
+    })
+  );
+});
+it('rejects a malformed PIN proof before any request', async () => {
+  await expect(
+    addPiggyvestPrimarySavingsContribution({ ...input, pinProof: 'nope' })
+  ).rejects.toThrow();
+  expect(mockFetchJson).not.toHaveBeenCalled();
+});
+it('never forwards the PIN proof to the legacy rail', async () => {
+  const pinProof = createHash('sha256')
+    .update('s5m-legacy-proof')
+    .digest('hex');
+  mockFetchJson.mockRejectedValue(
+    Object.assign(new Error('not ready'), { code: 'PIGGYVEST_NOT_READY' })
+  );
+  mockRecover.mockResolvedValue(null);
+  mockLegacyAdd.mockResolvedValue({ legacy: true });
+  await addPiggyvestPrimarySavingsContribution({ ...input, pinProof });
+  expect(mockLegacyAdd).toHaveBeenCalledWith(
+    expect.not.objectContaining({ pinProof })
+  );
 });

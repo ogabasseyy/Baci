@@ -55,7 +55,7 @@ export function OxygenPhoneContinuation({
         </h1>
         <p className="text-sm text-muted-foreground">
           {failed
-            ? 'This link has expired or was already used. Return to your other device and generate a new QR code.'
+            ? 'We couldn’t open this link. Return to your other device and generate a new QR code.'
             : 'You’ll continue securely with Oxygen. Keep your application open on your other device.'}
         </p>
       </div>

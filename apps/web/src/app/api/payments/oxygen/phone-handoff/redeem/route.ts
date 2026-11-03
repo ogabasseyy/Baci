@@ -54,9 +54,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error:
-          'This link is unavailable. Scan a new QR code on your other device.',
+          'We couldn’t open this link. Return to your other device and generate a new QR code.',
       },
-      { status: 410, headers }
+      { status: 503, headers }
     );
   }
 }

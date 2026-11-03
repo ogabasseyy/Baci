@@ -10,7 +10,7 @@ beforeEach(() => {
   vi.resetAllMocks();
 });
 afterEach(() => window.history.replaceState(null, '', '/'));
-it('clears the capability fragment and displays a recovery message without retrying an expired link', async () => {
+it('clears the capability fragment and displays a recovery message without retrying the link', async () => {
   window.history.replaceState(
     null,
     '',
@@ -63,4 +63,41 @@ it('rejects an HTTPS phone redirect outside the configured selfie origins', asyn
     await screen.findByRole('heading', { name: 'Scan a new QR code' })
   ).toBeVisible();
   expect(window.location.pathname).toBe('/auth/oxygen-selfie');
+});
+
+it.each([
+  410, 503,
+])('does not claim expiry when redemption returns %s', async (status) => {
+  window.history.replaceState(
+    null,
+    '',
+    `/auth/oxygen-selfie#${'t'.repeat(43)}`
+  );
+  m.fetch.mockResolvedValue(new Response('{}', { status }));
+  render(<OxygenPhoneContinuation />);
+  const notice = await screen.findByRole('status');
+  await waitFor(() =>
+    expect(notice).toHaveTextContent('We couldn’t open this link')
+  );
+  expect(notice).not.toHaveTextContent(/expired|already used/i);
+  expect(notice).toHaveTextContent('generate a new QR code');
+  expect(m.fetch).toHaveBeenCalledTimes(1);
+});
+it('does not claim expiry when the network outcome is unknown', async () => {
+  window.history.replaceState(
+    null,
+    '',
+    `/auth/oxygen-selfie#${'t'.repeat(43)}`
+  );
+  m.fetch.mockRejectedValue(new Error('offline'));
+  render(<OxygenPhoneContinuation />);
+  await waitFor(() =>
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'We couldn’t open this link'
+    )
+  );
+  expect(screen.getByRole('status')).not.toHaveTextContent(
+    /expired|already used/i
+  );
+  expect(m.fetch).toHaveBeenCalledTimes(1);
 });

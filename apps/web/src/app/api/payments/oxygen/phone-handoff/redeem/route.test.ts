@@ -66,12 +66,16 @@ it('returns the exact exchanged target without caching it', async () => {
   });
   expect(m.redeem).toHaveBeenCalledTimes(1);
 });
-it('fails closed on disabled configuration and consumed/expired capability', async () => {
+it('reports an uncertain redemption without claiming the link expired', async () => {
   m.connect.mockReturnValueOnce(null);
   expect((await POST(request())).status).toBe(503);
   m.redeem.mockRejectedValueOnce(new Error('private provider data'));
   const response = await POST(request());
-  expect(response.status).toBe(410);
+  expect(response.status).toBe(503);
+  expect(await response.clone().json()).toEqual({
+    error:
+      'We couldn’t open this link. Return to your other device and generate a new QR code.',
+  });
   expect(JSON.stringify(await response.json())).not.toContain(
     'private provider data'
   );

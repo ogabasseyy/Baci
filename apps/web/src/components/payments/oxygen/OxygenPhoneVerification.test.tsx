@@ -1,7 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { OxygenPhoneVerification } from './OxygenPhoneVerification';
 import { rememberPhoneOtpSend } from './phone-otp-window';
+
+// These tests cover expiry and resend, not input-otp's selection behavior.
+vi.mock('@/components/ui/input-otp', () => ({ InputOTP: () => <input /> }));
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -81,15 +84,3 @@ it('an unconfirmed resend does not invent a new expiry window', async () => {
   expect(screen.queryByRole('timer')).toBeNull();
   expect(submit).toHaveBeenCalledTimes(1);
 });
-
-beforeAll(() => {
-  vi.stubGlobal(
-    'ResizeObserver',
-    class {
-      observe = vi.fn();
-      unobserve = vi.fn();
-      disconnect = vi.fn();
-    }
-  );
-});
-afterAll(() => vi.unstubAllGlobals());

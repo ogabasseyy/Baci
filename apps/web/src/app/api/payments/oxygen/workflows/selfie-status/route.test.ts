@@ -54,12 +54,36 @@ it('rate limits status reads without connecting to Oxygen', async () => {
   m.rate.mockResolvedValue({ allowed: false });
   expect((await GET(request())).status).toBe(429);
   expect(m.connect).not.toHaveBeenCalled();
+  expect(m.snapshot).not.toHaveBeenCalled();
+});
+it('limits authenticated users before invalid or foreign workflow lookups', async () => {
+  m.rate.mockResolvedValueOnce({ allowed: false });
+  const response = await GET(
+    new NextRequest(
+      'http://localhost:3000/api/payments/oxygen/workflows/selfie-status?workflowId=invalid'
+    )
+  );
+  expect(response.status).toBe(429);
+  expect(m.rate).toHaveBeenCalledWith('user', 'selfie-status-user', 12);
+  expect(m.snapshot).not.toHaveBeenCalled();
+});
+it('does not consume another workflow budget until ownership is verified', async () => {
+  m.snapshot.mockRejectedValueOnce(new Error('foreign'));
+  expect((await GET(request())).status).toBe(404);
+  expect(m.rate).toHaveBeenCalledTimes(1);
+  expect(m.rate).toHaveBeenCalledWith('user', 'selfie-status-user', 12);
 });
 it('uses the shared six-per-minute user and owned-workflow budget', async () => {
   m.status.mockResolvedValue({ confirmed: false });
   expect((await GET(request())).status).toBe(200);
   expect(m.rate).toHaveBeenCalledWith(`user:${id}`, 'selfie-status', 6);
   expect(m.rate).toHaveBeenCalledWith('user', 'selfie-status-user', 12);
+  expect(m.rate.mock.invocationCallOrder[0]).toBeLessThan(
+    m.snapshot.mock.invocationCallOrder[0]
+  );
+  expect(m.snapshot.mock.invocationCallOrder[0]).toBeLessThan(
+    m.rate.mock.invocationCallOrder[1]
+  );
 });
 it('denies provider access when the user-wide budget is exhausted', async () => {
   m.rate.mockResolvedValueOnce({ allowed: false });

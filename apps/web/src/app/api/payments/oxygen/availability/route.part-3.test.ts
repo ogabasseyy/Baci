@@ -16,7 +16,7 @@ import {
 describe('GET /api/payments/oxygen/availability', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getMocks().ensureActionRateLimit.mockResolvedValue(true);
+    getMocks().distributedRateLimit.mockResolvedValue({ allowed: true });
     getMocks().getMerchantForApiRequest.mockResolvedValue(null);
     mockProvenCustomer();
   });
@@ -60,7 +60,7 @@ describe('GET /api/payments/oxygen/availability', () => {
     const ids = [ORDER_ID, MERCHANT_ID, CUSTOMER_ID, SESSION_USER_ID];
     const bodies: unknown[] = [];
 
-    getMocks().ensureActionRateLimit.mockResolvedValueOnce(false);
+    getMocks().distributedRateLimit.mockResolvedValueOnce({ allowed: false });
     mockProvenCustomer();
     bodies.push(
       await (await GET(buildGetRequest(`?orderId=${ORDER_ID}`))).json()
@@ -110,7 +110,7 @@ describe('GET /api/payments/oxygen/availability', () => {
     }
   });
   it('returns key-exact shapes', async () => {
-    getMocks().ensureActionRateLimit.mockResolvedValueOnce(false);
+    getMocks().distributedRateLimit.mockResolvedValueOnce({ allowed: false });
     mockProvenCustomer();
     const limited = await (
       await GET(buildGetRequest(`?orderId=${ORDER_ID}`))

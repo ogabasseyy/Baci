@@ -4,13 +4,13 @@ import * as csrfModule from '@/lib/csrf';
 import type { MerchantContext } from '@/lib/get-merchant-for-api-request';
 
 const mocks = vi.hoisted(() => ({
-  ensureActionRateLimit: vi.fn(),
+  distributedRateLimit: vi.fn(),
   authenticateApiRequest: vi.fn(),
   getMerchantForApiRequest: vi.fn(),
 }));
 
-vi.mock('@/lib/ensure-action-rate-limit', () => ({
-  ensureActionRateLimit: mocks.ensureActionRateLimit,
+vi.mock('@/lib/rate-limit', () => ({
+  checkOxygenProviderRateLimit: mocks.distributedRateLimit,
 }));
 
 vi.mock('@/lib/api-auth', () => ({

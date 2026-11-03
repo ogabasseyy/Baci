@@ -17,6 +17,23 @@ export async function GET(request: NextRequest) {
       { error: 'Unauthorized' },
       { status: 401, headers }
     );
+  try {
+    const userLimit = await checkOxygenProviderRateLimit(
+      auth.user.id,
+      'selfie-status-user',
+      12
+    );
+    if (!userLimit.allowed)
+      return NextResponse.json(
+        { error: 'Please wait before checking again' },
+        { status: 429, headers }
+      );
+  } catch {
+    return NextResponse.json(
+      { error: 'Unable to confirm selfie status right now' },
+      { status: 503, headers }
+    );
+  }
   const input = oxygenSelfieStatusRequestSchema.safeParse({
     workflowId: request.nextUrl.searchParams.get('workflowId'),
   });
@@ -36,16 +53,12 @@ export async function GET(request: NextRequest) {
   let allowed: boolean;
   try {
     allowed = (
-      await checkOxygenProviderRateLimit(auth.user.id, 'selfie-status-user', 12)
+      await checkOxygenProviderRateLimit(
+        `${auth.user.id}:${input.data.workflowId}`,
+        'selfie-status',
+        6
+      )
     ).allowed;
-    if (allowed)
-      allowed = (
-        await checkOxygenProviderRateLimit(
-          `${auth.user.id}:${input.data.workflowId}`,
-          'selfie-status',
-          6
-        )
-      ).allowed;
   } catch {
     return NextResponse.json(
       { error: 'Unable to confirm selfie status right now' },

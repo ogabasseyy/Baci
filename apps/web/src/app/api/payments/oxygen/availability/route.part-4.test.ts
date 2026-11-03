@@ -19,7 +19,7 @@ import {
 describe('shared-decision consistency at both entry points', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getMocks().ensureActionRateLimit.mockResolvedValue(true);
+    getMocks().distributedRateLimit.mockResolvedValue({ allowed: true });
   });
   it.each([
     ['proven customer', 'oxygen_rollout_disabled'],

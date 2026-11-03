@@ -7,12 +7,13 @@ import {
   getMocks,
   mockProvenCustomer,
   ORDER_ID,
+  SESSION_USER_ID,
 } from './route.test-helpers';
 
 describe('GET /api/payments/oxygen/availability', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getMocks().ensureActionRateLimit.mockResolvedValue(true);
+    getMocks().distributedRateLimit.mockResolvedValue({ allowed: true });
     getMocks().getMerchantForApiRequest.mockResolvedValue(null);
     mockProvenCustomer();
   });
@@ -25,11 +26,11 @@ describe('GET /api/payments/oxygen/availability', () => {
     expect((await GET(buildGetRequest('?orderId=invalid', false))).status).toBe(
       401
     );
-    expect(getMocks().ensureActionRateLimit).not.toHaveBeenCalled();
+    expect(getMocks().distributedRateLimit).not.toHaveBeenCalled();
     expect(csrfSpy).not.toHaveBeenCalled();
   });
   it('rate-limits authenticated callers with the oxygen-availability bucket', async () => {
-    getMocks().ensureActionRateLimit.mockResolvedValueOnce(false);
+    getMocks().distributedRateLimit.mockResolvedValueOnce({ allowed: false });
     const supabase = mockProvenCustomer();
 
     const response = await GET(buildGetRequest(`?orderId=${ORDER_ID}`));
@@ -39,9 +40,10 @@ describe('GET /api/payments/oxygen/availability', () => {
     expect(body).toEqual({
       error: 'Too many Oxygen requests. Please try again shortly.',
     });
-    expect(getMocks().ensureActionRateLimit).toHaveBeenCalledWith(
-      'oxygen-availability',
-      { requests: 10, windowMs: 60_000 }
+    expect(getMocks().distributedRateLimit).toHaveBeenCalledWith(
+      SESSION_USER_ID,
+      'availability',
+      10
     );
     expect(csrfSpy).not.toHaveBeenCalled();
     expect(getMocks().authenticateApiRequest).toHaveBeenCalledOnce();
@@ -53,12 +55,13 @@ describe('GET /api/payments/oxygen/availability', () => {
 
     await GET(buildGetRequest(`?orderId=${ORDER_ID}`));
 
-    expect(getMocks().ensureActionRateLimit).toHaveBeenCalledWith(
-      'oxygen-availability',
-      expect.anything()
+    expect(getMocks().distributedRateLimit).toHaveBeenCalledWith(
+      SESSION_USER_ID,
+      'availability',
+      10
     );
-    for (const call of getMocks().ensureActionRateLimit.mock.calls) {
-      expect(call[0]).not.toBe('oxygen-initiation');
+    for (const call of getMocks().distributedRateLimit.mock.calls) {
+      expect(call[1]).not.toBe('initiation');
     }
   });
   it('calls the CSRF helper though it auto-passes safe methods', async () => {

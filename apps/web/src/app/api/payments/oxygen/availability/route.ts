@@ -1,10 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { ensureActionRateLimit } from '@/lib/ensure-action-rate-limit';
 import { decideOxygenNewInitiation } from '@/lib/payments/oxygen/availability';
 import { resolveOxygenOrderContext } from '@/lib/payments/oxygen/context';
 import { mapAvailabilityDecision } from '@/lib/payments/oxygen/initiation';
+import { checkOxygenProviderRateLimit } from '@/lib/rate-limit';
 import { oxygenAvailabilityQuerySchema } from '@/schemas/oxygen-requests';
 
 // GET /api/payments/oxygen/availability — authoritative display decision for
@@ -18,10 +18,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const allowed = await ensureActionRateLimit('oxygen-availability', {
-    requests: 10,
-    windowMs: 60_000,
-  });
+  let allowed: boolean;
+  try {
+    allowed = (
+      await checkOxygenProviderRateLimit(auth.user.id, 'availability', 10)
+    ).allowed;
+  } catch {
+    return NextResponse.json(
+      { error: 'Unable to check Oxygen availability' },
+      { status: 503 }
+    );
+  }
   if (!allowed) {
     return NextResponse.json(
       { error: 'Too many Oxygen requests. Please try again shortly.' },

@@ -21,7 +21,7 @@ import {
 describe('GET /api/payments/oxygen/availability', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getMocks().ensureActionRateLimit.mockResolvedValue(true);
+    getMocks().distributedRateLimit.mockResolvedValue({ allowed: true });
     getMocks().getMerchantForApiRequest.mockResolvedValue(null);
     mockProvenCustomer();
   });

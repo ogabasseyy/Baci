@@ -6,6 +6,7 @@ export const NON_BRAND_PLACEHOLDER_KEYS = new Set([
   'unknown',
   'no-brand',
   'n-a',
+  'na',
   'generic-brand',
 ]);
 

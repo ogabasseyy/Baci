@@ -193,6 +193,10 @@ describe('buildCategoryHubBrandCards', () => {
       buildProduct('gen-1', 'generic', 100),
       buildProduct('unbr-1', 'unbranded', 100),
       buildProduct('oth-1', 'other', 100),
+      buildProduct('na-1', 'N/A', 100),
+      buildProduct('na-2', 'NA', 100),
+      buildProduct('unk-1', 'Unknown', 100),
+      buildProduct('nobr-1', 'No-Brand', 100),
       buildProduct('tecno-1', 'Tecno', 200),
       buildProduct('apple-1', 'Apple', 300),
     ];
@@ -212,7 +216,9 @@ describe('buildCategoryHubBrandCards', () => {
     ]);
     expect(cards.map((card) => card.title)).toEqual(['Apple', 'Tecno']);
     expect(
-      cards.some((card) => /gaming|generic|unbranded|other/i.test(card.title))
+      cards.some((card) =>
+        /gaming|generic|unbranded|other|na|unknown|no-brand/i.test(card.title)
+      )
     ).toBe(false);
   });
 

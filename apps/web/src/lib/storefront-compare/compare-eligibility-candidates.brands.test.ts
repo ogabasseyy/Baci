@@ -151,14 +151,14 @@ describe('compare eligibility candidate builders', () => {
     expect(sonyFirst?.canonicalSlug).toBe('playstation-vs-xbox');
   });
 
-  it('rejects placeholder brands (Gaming, Generic, Unbranded, Other, Unknown) from candidate eligibility', () => {
+  it('rejects placeholder brands (Gaming, Generic, N/A, NA, Unknown) from candidate eligibility', () => {
     const candidate = buildBrandCompareCandidate({
       categorySlug: 'smartphones',
       products: [
         ...[0, 1, 2].map((i) => ({
           slug: `gaming-phone-${i}`,
           name: `Gaming Phone ${i}`,
-          brand: 'Gaming',
+          brand: i === 0 ? 'Gaming' : i === 1 ? 'N/A' : 'NA',
           price: 500_000,
           product_key_specs: {
             ram_gb: 12,

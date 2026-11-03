@@ -59,7 +59,7 @@ it('authenticates callbacks before touching the worker account', async () => {
   expect((await POST(request(false))).status).toBe(401);
   expect(m.worker).not.toHaveBeenCalled();
 });
-it('acknowledges only a durable event and schedules reconciliation afterwards', async () => {
+it('stores phone-only address hints without scheduling a provider read', async () => {
   expect((await POST(request(true))).status).toBe(200);
   expect(m.rpc).toHaveBeenCalledWith('oxygen_callback', {
     p_operation: 'accept',
@@ -68,11 +68,10 @@ it('acknowledges only a durable event and schedules reconciliation afterwards', 
       kind: 'address',
       phoneNumber: '2348012345678',
       addressValidated: true,
-      deduplicationKey: expect.stringMatching(/^address:[a-f0-9]{64}$/),
       action: 'reconcile_kyc',
     },
   });
-  expect(m.after).toHaveBeenCalledTimes(1);
+  expect(m.after).not.toHaveBeenCalled();
 });
 it('does not acknowledge failed persistence or schedule provider work', async () => {
   m.rpc.mockResolvedValue({ error: { code: 'unavailable' }, data: null });

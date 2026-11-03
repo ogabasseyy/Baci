@@ -37,6 +37,12 @@ SELECT public.oxygen_callback('accept','response-evidence-fixture','{"kind":"add
 SELECT public.oxygen_callback('accept','response-evidence-fixture','{"kind":"address","phoneNumber":"08010000000","applicationReference":"unknown"}');
 SELECT public.oxygen_callback('accept','response-evidence-fixture','{"kind":"address","phoneNumber":"08010000000"}');
 SELECT public.oxygen_callback('accept','response-evidence-fixture','{"kind":"address","phoneNumber":"08010000000"}');
+RESET ROLE;
+DO $$ BEGIN
+ IF (SELECT count(*) FROM oxygen_private.callback_inbox WHERE partner_reference='response-evidence-fixture' AND NOT event ? 'applicationReference' AND status='observed' AND resolution_error='missing_application_reference')<>2 THEN RAISE EXCEPTION 'Phone-only deliveries must be quarantined at acceptance'; END IF;
+END $$;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','efae0000-0000-4000-8000-000000000003',true);
 DO $$ DECLARE jobs jsonb; BEGIN
  jobs:=public.oxygen_callback('pending','response-evidence-fixture','{"kind":"address"}');
  IF jsonb_array_length(jobs)<>1 OR jobs->0->'workflowIds'<>'["efae0000-0000-4000-8000-000000000044"]'::jsonb THEN

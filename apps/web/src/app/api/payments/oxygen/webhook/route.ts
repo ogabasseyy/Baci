@@ -22,7 +22,10 @@ export async function POST(request: Request) {
       connection.partnerReference,
       event
     );
-    if (event.kind !== 'settlement')
+    if (
+      event.kind !== 'settlement' &&
+      !(event.kind === 'address' && !event.applicationReference)
+    )
       after(async () => {
         try {
           await reconcileOxygenCallbacks(

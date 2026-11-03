@@ -90,9 +90,34 @@ describe('Oxygen webhook contract', () => {
       kind: 'address',
       phoneNumber: '08000000000',
       addressValidated: true,
-      deduplicationKey: expect.stringMatching(/^address:[a-f0-9]{64}$/),
       action: 'reconcile_kyc',
     });
+  });
+  it('uses a stable address key only when the application reference is present', () => {
+    const base = {
+      webhook_type: 'address_status_update',
+      phone_number: '08000000000',
+      address_validated: true,
+    };
+    expect(parseOxygenWebhook(base)).not.toHaveProperty('deduplicationKey');
+    const first = parseOxygenWebhook({
+      ...base,
+      loan_request_reference: 'application-a',
+    });
+    const retry = parseOxygenWebhook({
+      ...base,
+      loan_request_reference: 'application-a',
+    });
+    const other = parseOxygenWebhook({
+      ...base,
+      loan_request_reference: 'application-b',
+    });
+    expect(first).toHaveProperty(
+      'deduplicationKey',
+      expect.stringMatching(/^address:[a-f0-9]{64}$/)
+    );
+    expect(first).toEqual(retry);
+    expect(first?.deduplicationKey).not.toBe(other?.deduplicationKey);
   });
   it.each([
     { ...transaction, amount_sent: '1.001' },

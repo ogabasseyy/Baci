@@ -14,17 +14,21 @@ export function parseOxygenWebhook(input: unknown) {
       kind: 'address' as const,
       phoneNumber: event.phone_number,
       addressValidated: event.address_validated,
-      deduplicationKey: `address:${createHash('sha256')
-        .update(
-          JSON.stringify([
-            event.phone_number,
-            event.loan_request_reference ?? null,
-            event.address_validated,
-          ])
-        )
-        .digest('hex')}`,
+      // A phone-only delivery has no provider event identity. Let the inbox
+      // assign a local per-delivery key so separate applications cannot collide.
       ...(event.loan_request_reference
-        ? { applicationReference: event.loan_request_reference }
+        ? {
+            applicationReference: event.loan_request_reference,
+            deduplicationKey: `address:${createHash('sha256')
+              .update(
+                JSON.stringify([
+                  event.phone_number,
+                  event.loan_request_reference,
+                  event.address_validated,
+                ])
+              )
+              .digest('hex')}`,
+          }
         : {}),
       action: 'reconcile_kyc' as const,
     };

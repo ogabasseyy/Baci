@@ -37,6 +37,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!parsed.success)
     return refuse('Please enter a valid PIN.', 'INVALID_INPUT', 400);
   const input = parsed.data;
+  // Cancel and complete proofs are not issued until they bind to a
+  // server-issued per-attempt operation id (S6/S7). Refuse before any PIN
+  // verification so no attempt is counted and no proof is minted.
+  if (input.action !== 'fund')
+    return refuse(
+      'This PIN check is not available yet.',
+      'PIN_ACTION_NOT_AVAILABLE',
+      400
+    );
   try {
     // Cancel back to the main wallet stays available when the feature flags
     // are off, so nobody is trapped; funding and completing never are.

@@ -85,7 +85,7 @@ describe('bugfix: setupScenario finds a goal wallet the sandbox renamed', () => 
 describe('bugfix: proof 7 finds a resumed goal variant the sandbox renamed', () => {
   const unset = {
     slot: 'v/unset',
-    nameSuffix: '-vunset',
+    walletName: 'pvbproof-goal-qa-customer-0001-vunset',
     payoutWalletId: null,
   };
 

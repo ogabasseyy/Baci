@@ -129,7 +129,7 @@ function collectSupersedingShas(comparison, currentSha) {
   return shas;
 }
 
-async function hasSupersedingSuccessfulDeploy({
+async function hasSupersedingDeployment({
   apiRoot,
   fetchImpl,
   repository,
@@ -138,19 +138,26 @@ async function hasSupersedingSuccessfulDeploy({
 }) {
   const runsBody = await githubJson(
     fetchImpl,
-    `${apiRoot}/repos/${repository}/actions/workflows/deploy.yml/runs?branch=main&status=success&per_page=50`,
+    `${apiRoot}/repos/${repository}/actions/workflows/deploy.yml/runs?branch=main&per_page=100`,
     token
   );
-  if (!Array.isArray(runsBody?.workflow_runs)) {
-    throw new Error('invalid workflow runs response');
+  if (
+    !Array.isArray(runsBody?.workflow_runs) ||
+    (typeof runsBody?.total_count === 'number' &&
+      runsBody.total_count > runsBody.workflow_runs.length)
+  ) {
+    throw new Error('incomplete or invalid workflow runs response');
   }
   for (const run of runsBody.workflow_runs) {
     if (typeof run?.head_sha !== 'string' || !SHA_PATTERN.test(run.head_sha)) {
       throw new Error('invalid workflow run SHA');
     }
     if (
-      (run.conclusion === undefined || run.conclusion === 'success') &&
-      supersedingShas.has(run.head_sha.toLowerCase())
+      supersedingShas.has(run.head_sha.toLowerCase()) &&
+      (run.conclusion === 'success' ||
+        (run.status === 'completed' &&
+          run.conclusion !== 'cancelled' &&
+          run.conclusion !== 'skipped'))
     ) {
       return true;
     }
@@ -195,7 +202,7 @@ async function supersedingChangesCanProceed({
     return true;
   }
   const supersedingShas = collectSupersedingShas(comparison, currentSha);
-  const alreadyDeployed = await hasSupersedingSuccessfulDeploy({
+  const alreadyDeployed = await hasSupersedingDeployment({
     apiRoot,
     fetchImpl,
     repository,

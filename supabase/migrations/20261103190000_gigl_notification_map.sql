@@ -36,12 +36,24 @@ BEGIN
     RAISE EXCEPTION 'not authorized to edit notification preferences'
       USING ERRCODE = '42501';
   END IF;
+  IF jsonb_typeof(p_patch) IS DISTINCT FROM 'object'
+    OR EXISTS (
+      SELECT 1 FROM jsonb_each(p_patch) AS entry(key, value)
+      WHERE entry.key NOT IN (
+        'pickup_scheduled', 'pickup_delayed', 'picked_up', 'out_for_delivery',
+        'delivered', 'failed', 'returned', 'cancelled', 'waybill_changed'
+      ) OR jsonb_typeof(entry.value) <> 'boolean'
+    )
+  THEN
+    RAISE EXCEPTION 'invalid shipment event preferences'
+      USING ERRCODE = '22023';
+  END IF;
   INSERT INTO public.notification_preferences AS preferences (
     merchant_id, shipment_event_preferences
-  ) VALUES (p_merchant_id, coalesce(p_patch, '{}'::jsonb))
+  ) VALUES (p_merchant_id, p_patch)
   ON CONFLICT (merchant_id) DO UPDATE
   SET shipment_event_preferences =
-    preferences.shipment_event_preferences || coalesce(p_patch, '{}'::jsonb)
+    preferences.shipment_event_preferences || p_patch
   RETURNING jsonb_build_object(
     'merchant_id', preferences.merchant_id,
     'in_app_enabled', preferences.in_app_enabled,

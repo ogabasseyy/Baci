@@ -47,7 +47,7 @@ describe('processClaimedGiglTrackingNotifications', () => {
       {
         onDeliveryStart: expect.any(Function),
         onDeliveryRejected: expect.any(Function),
-        recipientUserIds: [],
+        recipientUserIds: ['00000000-0000-4000-8000-0000000000a1'],
         requiredShipmentUpdateCapability: 1,
       }
     );
@@ -303,23 +303,21 @@ describe('processClaimedGiglTrackingNotifications', () => {
       );
     });
 
-    it('bugfix: fails closed when the claim omits recipient_user_ids', async () => {
+    it('bugfix: retries instead of broadcasting or dropping when the claim omits recipient_user_ids', async () => {
       const supabase = createGiglTrackingNotificationSupabase({
         description: 'Picked up',
         raw_status: 'MPIK',
       });
-      await processClaimedGiglTrackingNotifications(
+      const summary = await processClaimedGiglTrackingNotifications(
         supabase as never,
         [{ ...notification, recipient_user_ids: null }],
         'worker'
       );
-      expect(notifyMerchant).toHaveBeenCalledWith(
-        notification.merchant_id,
-        expect.any(String),
-        expect.any(String),
-        expect.any(Object),
-        'orders',
-        expect.objectContaining({ recipientUserIds: [] })
+      expect(summary).toMatchObject({ failed: 1, sent: 0 });
+      expect(notifyMerchant).not.toHaveBeenCalled();
+      expect(supabase.rpc).toHaveBeenCalledWith(
+        'complete_shipment_tracking_notification',
+        expect.objectContaining({ p_outcome: 'failed' })
       );
     });
 

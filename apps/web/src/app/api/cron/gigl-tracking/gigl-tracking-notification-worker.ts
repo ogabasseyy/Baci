@@ -39,6 +39,20 @@ type NotificationProcessingState = { rejectionCompleted: boolean };
 
 const SHIPMENT_UPDATE_CAPABILITY = 1;
 
+/**
+ * An explicit empty list means nobody qualifies (skip). A missing projection
+ * means the claim RPC predates the recipient column: fail so the row retries
+ * once the migration is live, never broadcast and never silently drop.
+ */
+function merchantRecipientUserIds(
+  notification: ClaimedGiglTrackingNotification
+): string[] {
+  if (!notification.recipient_user_ids) {
+    throw new Error('Merchant recipient projection missing from claim');
+  }
+  return notification.recipient_user_ids;
+}
+
 async function complete(
   supabase: WorkerSupabase,
   id: string,
@@ -123,9 +137,7 @@ async function processNotification(
         onDeliveryStart,
         onDeliveryRejected,
         requiredShipmentUpdateCapability: SHIPMENT_UPDATE_CAPABILITY,
-        // Fail closed: a missing projection delivers to nobody, never to
-        // every admin token.
-        recipientUserIds: notification.recipient_user_ids ?? [],
+        recipientUserIds: merchantRecipientUserIds(notification),
       }
     );
     return completeNotificationResult(

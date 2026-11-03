@@ -94,6 +94,7 @@ export interface BuildCommercialGuideLinksInput {
   storeUrl: string;
   posts: PublishedClusterPost[];
   context: BuildCommercialGuideLinksContext;
+  minScore?: number;
 }
 
 export interface InformationalClusterModel {

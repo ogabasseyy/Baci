@@ -66,10 +66,28 @@ const DEDICATED_GAMING_LAPTOP_TOKENS = [
   'tuf',
 ] as const;
 
+const EXCLUDED_GAMING_LAPTOP_SUBJECTS = [
+  'monitor',
+  'monitors',
+  'desktop',
+  'desktops',
+  'gpu',
+  'gpus',
+  'graphics card',
+  'graphics cards',
+] as const;
+
 function isDedicatedGamingLaptopContent(
   titleHaystack: string,
   haystack: string
 ): boolean {
+  const hasExcludedSubject = EXCLUDED_GAMING_LAPTOP_SUBJECTS.some((subject) =>
+    hasPhrase(titleHaystack, subject)
+  );
+  if (hasExcludedSubject) {
+    return false;
+  }
+
   if (
     hasPhrase(titleHaystack, 'gaming laptop') ||
     hasPhrase(titleHaystack, 'gaming laptops')
@@ -81,11 +99,12 @@ function isDedicatedGamingLaptopContent(
     hasPhrase(titleHaystack, token)
   );
   const hasLaptopToken =
-    hasPhrase(haystack, 'laptop') || hasPhrase(haystack, 'laptops');
-  const hasMonitorToken =
-    hasPhrase(titleHaystack, 'monitor') || hasPhrase(titleHaystack, 'monitors');
+    hasPhrase(titleHaystack, 'laptop') ||
+    hasPhrase(titleHaystack, 'laptops') ||
+    hasPhrase(haystack, 'gaming laptop') ||
+    hasPhrase(haystack, 'gaming laptops');
 
-  return hasDedicatedModelToken && hasLaptopToken && !hasMonitorToken;
+  return hasDedicatedModelToken && hasLaptopToken;
 }
 
 function inferCategorySlug(

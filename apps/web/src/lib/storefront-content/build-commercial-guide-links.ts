@@ -172,6 +172,14 @@ export function buildCommercialGuideLinks(
           inferred.brands.some((brand) =>
             normalizedBrands.includes(generateSlug(brand))
           ));
+      if (
+        input.context.pageKind === 'product' &&
+        normalizedBrands.length > 0 &&
+        inferred.brands.length > 0 &&
+        !hasBrandMatch
+      ) {
+        return null;
+      }
       if (hasBrandMatch) {
         score += CONTENT_CLUSTER_SCORE.brandMatch;
       }
@@ -271,7 +279,10 @@ export function buildCommercialGuideLinks(
         score += CONTENT_CLUSTER_SCORE.titleTokenMatch;
       }
 
-      if (score < CONTENT_CLUSTER_SCORE.categoryMatch) {
+      const passingScore =
+        input.minScore ?? CONTENT_CLUSTER_SCORE.categoryMatch;
+
+      if (score < passingScore) {
         return null;
       }
 
@@ -288,7 +299,10 @@ export function buildCommercialGuideLinks(
       };
     })
     .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
-    .filter((entry) => entry.score >= 4)
+    .filter(
+      (entry) =>
+        entry.score >= (input.minScore ?? CONTENT_CLUSTER_SCORE.categoryMatch)
+    )
     .sort(
       (left, right) =>
         right.score - left.score ||

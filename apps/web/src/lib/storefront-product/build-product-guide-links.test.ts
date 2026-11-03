@@ -294,4 +294,69 @@ describe('buildProductGuideLinks', () => {
       'https://ogabassey.com/blog/iphone-buying-guide'
     );
   });
+
+  it('rejects same-category mismatched-brand priority guide and yields to matching fallback guide', () => {
+    const mismatchedPriorityPost = {
+      slug: 'samsung-galaxy-s24-ultra-buyer-guide',
+      title: 'Samsung Galaxy S24 Ultra Buyer Guide',
+      excerpt: 'Complete buying guide for Samsung Galaxy S24 Ultra.',
+      category: 'Smartphones',
+      tags: ['smartphones', 'samsung'],
+      keywords: ['buyer guide'],
+      featured_image_url: null,
+      published_at: '2026-04-01T00:00:00.000Z',
+      reading_time_minutes: 5,
+    };
+    const matchingFallbackPost = {
+      slug: 'iphone-buying-guide',
+      title: 'iPhone Buying Guide',
+      excerpt: 'How to choose your Apple iPhone in Nigeria.',
+      category: 'Smartphones',
+      tags: ['smartphones', 'apple'],
+      keywords: ['buyer guide'],
+      featured_image_url: null,
+      published_at: '2026-04-10T00:00:00.000Z',
+      reading_time_minutes: 4,
+    };
+
+    const links = buildProductGuideLinks(
+      makeInput({
+        currentProduct: {
+          slug: 'iphone-16e',
+          name: 'iPhone 16e',
+          price: 450_000,
+          brand: 'Apple',
+          condition: 'new',
+          stock: 4,
+          category_slug: 'smartphones',
+          product_key_specs: {},
+        },
+        priorityGuidePostSlugs: [mismatchedPriorityPost.slug],
+        guidePosts: [mismatchedPriorityPost, matchingFallbackPost],
+      })
+    );
+
+    expect(links).toHaveLength(1);
+    expect(links[0].href).toBe(
+      'https://ogabassey.com/blog/iphone-buying-guide'
+    );
+
+    const isolatedLinks = buildProductGuideLinks(
+      makeInput({
+        currentProduct: {
+          slug: 'iphone-16e',
+          name: 'iPhone 16e',
+          price: 450_000,
+          brand: 'Apple',
+          condition: 'new',
+          stock: 4,
+          category_slug: 'smartphones',
+          product_key_specs: {},
+        },
+        priorityGuidePostSlugs: [mismatchedPriorityPost.slug],
+        guidePosts: [mismatchedPriorityPost],
+      })
+    );
+    expect(isolatedLinks).toEqual([]);
+  });
 });

@@ -280,4 +280,54 @@ describe('inferContentClusterContext', () => {
     });
     expect(studentLaptopGuide.categorySlug).toBe('laptops');
   });
+
+  it('keeps Gaming and Laptops categories for monitor articles even when title mentions gaming laptop setup', () => {
+    const gamingMonitorSetup = inferContentClusterContext({
+      title: 'Best Monitors for a Gaming Laptop Setup',
+      excerpt: 'Top external displays to pair with your mobile gaming rig.',
+      category: 'Gaming',
+      tags: ['gaming', 'monitors', 'gaming laptop'],
+      keywords: ['buyer guide'],
+    });
+    expect(gamingMonitorSetup.categorySlug).toBe('gaming');
+
+    const laptopMonitorSetup = inferContentClusterContext({
+      title: 'Top 5 Monitors for Your Gaming Laptop in 2026',
+      excerpt: 'High refresh rate external monitors for laptop gamers.',
+      category: 'Laptops',
+      tags: ['laptops', 'monitors', 'gaming laptop'],
+      keywords: ['buyer guide'],
+    });
+    expect(laptopMonitorSetup.categorySlug).toBe('laptops');
+  });
+
+  it('keeps Gaming and Laptops categories for desktop and GPU articles with dedicated gaming tokens and laptop metadata', () => {
+    const alienwareDesktop = inferContentClusterContext({
+      title: 'Alienware Aurora R16 Gaming Desktop Review',
+      excerpt: 'A prebuilt powerhouse with liquid cooling and RTX graphics.',
+      category: 'Laptops',
+      tags: ['laptops', 'alienware', 'gaming', 'desktop'],
+      keywords: ['buyer guide'],
+    });
+    expect(alienwareDesktop.categorySlug).toBe('laptops');
+
+    const rtxGpuGuide = inferContentClusterContext({
+      title: 'Nvidia RTX 5080 GPU Guide and Benchmark',
+      excerpt:
+        'Desktop graphics card performance comparison and Nigerian pricing.',
+      category: 'Gaming',
+      tags: ['gaming', 'rtx', 'laptop'],
+      keywords: ['buyer guide'],
+    });
+    expect(rtxGpuGuide.categorySlug).toBe('gaming');
+
+    const geforceGraphicsCard = inferContentClusterContext({
+      title: 'GeForce RTX 4080 Graphics Card Buyer Guide',
+      excerpt: 'Discrete graphics card buying advice for PC builders.',
+      category: 'Gaming',
+      tags: ['gaming', 'geforce', 'rtx', 'laptop'],
+      keywords: ['buyer guide'],
+    });
+    expect(geforceGraphicsCard.categorySlug).toBe('gaming');
+  });
 });

@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { showAppAlert } from '@/components/ui/show-app-alert';
 import { setClipboardString } from '@/lib/clipboard';
 import { addSavingsContribution } from '@/lib/customer-savings';
+import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
+import { addPiggyvestPrimarySavingsContribution } from '@/lib/piggyvest-primary-savings';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
 import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
@@ -143,7 +145,13 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
       if (!input.initialContributionIdempotencyKey) {
         input.setInitialContributionIdempotencyKey(idempotencyKey);
       }
-      const contributionResult = await addSavingsContribution({
+      // Primary customers move money main wallet -> goal through PiggyVest
+      // (stable operation id); the helper itself falls back to the legacy
+      // rail on SAVINGS_NOT_READY. Legacy customers keep the legacy call.
+      const contribute = isPiggyvestPrimaryMerchant(input.activeMerchantId)
+        ? addPiggyvestPrimarySavingsContribution
+        : addSavingsContribution;
+      const contributionResult = await contribute({
         amount,
         goalId,
         idempotencyKey,
@@ -151,10 +159,37 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
         merchantSlug: input.activeMerchantSlug,
       });
       if (!mountedRef.current) return;
+      const outcome = (contributionResult as { status?: unknown }).status;
+      if (outcome === 'pending' || outcome === 'cancelled') {
+        // Never "funded" until PiggyVest confirms. Pending keeps the stored
+        // operation id so a retry cannot double-spend; cancelled releases it.
+        if (outcome === 'cancelled') {
+          input.setInitialContributionIdempotencyKey(null);
+        }
+        input.setFormError(null);
+        showAppAlert({
+          title:
+            outcome === 'pending' ? 'Transfer pending' : 'Transfer cancelled',
+          message:
+            outcome === 'pending'
+              ? 'Your plan will update after PiggyVest confirms the transfer. No new payment has been started.'
+              : 'The transfer was cancelled and your reserved wallet funds were released. You can try again.',
+          variant: outcome === 'pending' ? 'info' : 'error',
+        });
+        try {
+          await input.refetch();
+        } catch {
+          // Refresh is best effort; the pending state is already shown.
+        }
+        return;
+      }
       // Completion reconciliation for the deferred path: the reminder was
       // retained at creation because the transfer was unconfirmed — now that
       // a confirmed contribution completes the goal, cancel it.
-      if (contributionResult.goalStatus === 'completed') {
+      if (
+        'goalStatus' in contributionResult &&
+        contributionResult.goalStatus === 'completed'
+      ) {
         try {
           await cancelSavingsReminderNotification(goalId);
         } catch {

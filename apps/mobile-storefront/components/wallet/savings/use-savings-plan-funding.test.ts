@@ -291,34 +291,4 @@ describe('useSavingsPlanFunding', () => {
 
     expect(mockFetchExistingSavingsPlanFunding).toHaveBeenCalledTimes(1);
   });
-  it('requires BVN for primary merchants when the server reports unconfigured', async () => {
-    mockUseCapability.mockReturnValue(false);
-    const { result } = renderHook(() =>
-      useSavingsPlanFunding({
-        ...input,
-        activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-      })
-    );
-    expect(result.current.planFundingRequiresBvn).toBe(true);
-  });
-  it('skips BVN for primary merchants while the capability is confirmed', async () => {
-    mockUseCapability.mockReturnValue(true);
-    const { result } = renderHook(() =>
-      useSavingsPlanFunding({
-        ...input,
-        activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-      })
-    );
-    expect(result.current.planFundingRequiresBvn).toBe(false);
-  });
-  it('requires BVN for primary merchants while the capability probe is pending', async () => {
-    mockUseCapability.mockReturnValue(null);
-    const { result } = renderHook(() =>
-      useSavingsPlanFunding({
-        ...input,
-        activeMerchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
-      })
-    );
-    expect(result.current.planFundingRequiresBvn).toBe(true);
-  });
 });

@@ -2,15 +2,20 @@ export const DEDICATED_GAMING_LAPTOP_TOKENS = [
   'alienware',
   'aorus',
   'blade',
+  'crosshair',
   'geforce',
   'katana',
   'legion',
   'nitro',
   'omen',
   'predator',
+  'raider',
   'rog',
   'rtx',
+  'stealth',
+  'titan',
   'tuf',
+  'vector',
 ] as const;
 
 export const EXCLUDED_HANDHELD_TOKENS = [
@@ -28,7 +33,9 @@ export const NON_EXEMPT_KEYBOARD_PHRASES = [
 
 export const NON_EXEMPT_GPU_PHRASES = [
   'gaming laptop gpu',
+  'gaming laptop gpus',
   'gaming laptop graphics card',
+  'gaming laptop graphics cards',
 ] as const;
 
 export const NON_EXEMPT_MONITOR_PHRASES = [

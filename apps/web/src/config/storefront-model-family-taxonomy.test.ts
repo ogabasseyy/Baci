@@ -16,6 +16,11 @@ describe('MODEL_FAMILY_ALIAS_TOKENS', () => {
     expect(MODEL_FAMILY_ALIAS_TOKENS.has('predator')).toBe(true);
     expect(MODEL_FAMILY_ALIAS_TOKENS.has('rog')).toBe(true);
     expect(MODEL_FAMILY_ALIAS_TOKENS.has('tuf')).toBe(true);
+    expect(MODEL_FAMILY_ALIAS_TOKENS.has('raider')).toBe(true);
+    expect(MODEL_FAMILY_ALIAS_TOKENS.has('stealth')).toBe(true);
+    expect(MODEL_FAMILY_ALIAS_TOKENS.has('titan')).toBe(true);
+    expect(MODEL_FAMILY_ALIAS_TOKENS.has('vector')).toBe(true);
+    expect(MODEL_FAMILY_ALIAS_TOKENS.has('crosshair')).toBe(true);
   });
 
   it('contains expected non-gaming hardware families', () => {

@@ -22,6 +22,11 @@ describe('storefront-gaming-laptop-taxonomy', () => {
     expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('legion');
     expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('rog');
     expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('tuf');
+    expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('raider');
+    expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('stealth');
+    expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('titan');
+    expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('vector');
+    expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('crosshair');
     expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('rtx');
     expect(DEDICATED_GAMING_LAPTOP_TOKENS).toContain('geforce');
   });

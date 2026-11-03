@@ -89,4 +89,41 @@ describe('inferContentClusterContext - gaming laptops promotion & demotion', () 
     });
     expect(bladeLaptop.categorySlug).toBe('gaming-laptops');
   });
+
+  it('excludes plural GPU subjects from laptop promotion under Gaming', () => {
+    for (const title of [
+      'Gaming Laptop GPU Upgrade Buyer Guide',
+      'Gaming Laptop GPUs Upgrade Buyer Guide',
+      'Gaming Laptop Graphics Card Guide',
+      'Gaming Laptop Graphics Cards Guide',
+    ]) {
+      const gpuPost = inferContentClusterContext({
+        title,
+        excerpt: 'Component upgrades and benchmarks for mobile chips.',
+        category: 'Gaming',
+        tags: ['gpu', 'gaming'],
+        keywords: ['upgrade'],
+      });
+      expect(gpuPost.categorySlug).toBe('gaming');
+    }
+  });
+
+  it('promotes MSI dedicated gaming laptop lines (raider, stealth, titan, vector, crosshair)', () => {
+    for (const [title, category] of [
+      ['MSI Raider GE78 Laptop Review', 'Laptops'],
+      ['MSI Stealth 16 Studio Laptop Review', 'Gaming'],
+      ['MSI Titan 18 HX Laptop Review', 'Laptops'],
+      ['MSI Vector 16 GP78 Laptop Review', 'Gaming'],
+      ['MSI Crosshair 17 Laptop Review', 'Laptops'],
+    ] as const) {
+      const guide = inferContentClusterContext({
+        title,
+        excerpt: 'High-performance mobile hardware tested.',
+        category,
+        tags: ['msi', 'gaming', 'laptop'],
+        keywords: ['review'],
+      });
+      expect(guide.categorySlug).toBe('gaming-laptops');
+    }
+  });
 });

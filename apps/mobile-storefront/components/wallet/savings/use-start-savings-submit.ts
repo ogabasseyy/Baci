@@ -6,7 +6,6 @@ import { setClipboardString } from '@/lib/clipboard';
 import { addSavingsContribution } from '@/lib/customer-savings';
 import { isPiggyvestPrimaryMerchant } from '@/lib/is-piggyvest-primary-merchant';
 import { addPiggyvestPrimarySavingsContribution } from '@/lib/piggyvest-primary-savings';
-import { checkPiggyvestPrimarySavingsStatus } from '@/lib/piggyvest-primary-savings-status';
 import { WALLET_TOP_UP_MIN_AMOUNT } from '@/lib/wallet-top-up-constants';
 import { cancelSavingsReminderNotification } from '@/services/savings-reminder-notifications';
 import { runSavingsCardAuthorization } from './run-savings-card-authorization';
@@ -14,59 +13,11 @@ import {
   runSavingsGoalSubmission,
   type UseStartSavingsSubmitInput,
 } from './run-savings-goal-submission';
-import { formatDateInput } from './start-savings.helpers';
-import type { SavingsProductChoice } from './start-savings.types';
-
-type SavingsInputValidation =
-  | {
-      formattedStartDate: string;
-      ok: true;
-      selectedProduct: SavingsProductChoice;
-    }
-  | { error: string; ok: false };
-
-function validateSavingsInput(
-  input: UseStartSavingsSubmitInput
-): SavingsInputValidation {
-  if (!input.selectedProduct) {
-    return { error: 'Select a product to save for.', ok: false };
-  }
-
-  if (
-    input.selectedProduct.requiresVariantSelection !== false ||
-    (input.selectedProduct.variantId !== null &&
-      (typeof input.selectedProduct.variantId !== 'string' ||
-        !input.selectedProduct.variantId.trim()))
-  ) {
-    return {
-      error: 'Select the exact device variant you want to save for.',
-      ok: false,
-    };
-  }
-
-  if (input.sourceMode === 'auto_debit' && !input.selectedPaymentMethodId) {
-    return { error: 'Select a saved card for auto debit.', ok: false };
-  }
-
-  const formattedStartDate = formatDateInput(input.startDate);
-  if (!formattedStartDate) {
-    return { error: 'Select a valid start date.', ok: false };
-  }
-
-  return {
-    formattedStartDate,
-    ok: true,
-    selectedProduct: input.selectedProduct,
-  };
-}
-
-function getErrorCode(error: unknown): string | undefined {
-  if (typeof error !== 'object' || error === null || !('code' in error)) {
-    return undefined;
-  }
-  const { code } = error as { code?: unknown };
-  return typeof code === 'string' ? code : undefined;
-}
+import {
+  getErrorCode,
+  reusableStoredOperationId,
+} from './stored-contribution-operation';
+import { validateSavingsInput } from './validate-savings-input';
 
 export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -133,20 +84,6 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     });
   };
 
-  const isStoredOperationDead = async (operationId: string) => {
-    try {
-      const result = await checkPiggyvestPrimarySavingsStatus({
-        merchantId: input.activeMerchantId,
-        operationId,
-      });
-      return result.status === 'cancelled';
-    } catch (error) {
-      // Only authoritative absence releases the id; ambiguous failures keep
-      // it so a retry cannot double-spend.
-      return getErrorCode(error) === 'CONTRIBUTION_NOT_FOUND';
-    }
-  };
-
   const submitBankTransferContribution = async () => {
     const goalId = input.createdGoalId;
     if (!goalId || submitInFlightRef.current) {
@@ -164,12 +101,11 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
     setIsSubmitting(true);
     try {
       const isPrimary = isPiggyvestPrimaryMerchant(input.activeMerchantId);
-      let storedKey = input.initialContributionIdempotencyKey;
-      if (storedKey && isPrimary && (await isStoredOperationDead(storedKey))) {
-        // The server cancelled (or never recorded) it: resubmitting the same
-        // id would answer 'conflict' forever, so start a fresh operation.
-        storedKey = null;
-      }
+      const storedKey = await reusableStoredOperationId({
+        merchantId: input.activeMerchantId,
+        operationId: input.initialContributionIdempotencyKey,
+        isPrimary,
+      });
       if (!mountedRef.current) return;
       const idempotencyKey = storedKey ?? Crypto.randomUUID();
       if (!storedKey) {

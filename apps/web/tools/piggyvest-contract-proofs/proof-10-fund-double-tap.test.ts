@@ -212,4 +212,18 @@ describe('S8 double tap', () => {
     expect(answer(b, h, TAP_ONCE)).toBe('unknown');
     expect(answer(b, h, TAP_SENDS_ONCE)).toBe('unknown');
   });
+
+  it('answers unknown, not yes, when an accepted repeat never reaches a terminal state', async () => {
+    const { h, b, main, goal, fund } = await setup({
+      mock: { duplicateReference: 'accept' },
+    });
+    const real = h.ctx.api.verify.bind(h.ctx.api);
+    h.ctx.api.verify = async (...args: Parameters<typeof real>) => ({
+      ...(await real(...args)),
+      data: { status: 'pending' },
+    });
+    await stepDoubleTap(h.ctx, b, main, goal, fund);
+    expect(b.build(h.ctx).values.double_tap_wire_outcome).toBe('accepted');
+    expect(answer(b, h, TAP_ONCE)).toBe('unknown');
+  });
 });

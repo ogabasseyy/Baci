@@ -89,15 +89,27 @@ export async function stepTimeoutRetry(
       sent.outcome
     );
   }
-  const indeterminate =
+  // A resumed slot sent nothing this run: only a journaled indeterminate
+  // outcome proves the lost response; any other prior state is unmeasured.
+  const indeterminateAnswer: Answer =
     sent.kind === 'sent'
-      ? sent.outcome === 'indeterminate' && sent.call.httpStatus === null
-      : sent.priorOutcome === 'indeterminate';
+      ? answerOf(
+          sent.outcome === 'indeterminate' && sent.call.httpStatus === null
+        )
+      : sent.priorOutcome === 'indeterminate'
+        ? 'yes'
+        : 'unknown';
   b.finding(
     TIMEOUT_INDETERMINATE,
     Q[TIMEOUT_INDETERMINATE],
-    answerOf(indeterminate)
+    indeterminateAnswer,
+    indeterminateAnswer === 'unknown'
+      ? 'the slot was resumed and its journaled outcome does not show a lost response'
+      : undefined
   );
+  if (indeterminateAnswer === 'unknown') {
+    b.inconclusive('S8 timeout submit was not observed in this run');
+  }
 
   // Status checks on the SAME reference. No branch here can send a POST.
   const verdicts: FollowUpVerdict[] = [];

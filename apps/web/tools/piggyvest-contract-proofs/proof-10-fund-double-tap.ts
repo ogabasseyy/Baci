@@ -226,12 +226,12 @@ export async function stepDoubleTap(
     'double_tap_status_after',
     statusOf(await api.verify(reference, main))
   );
+  let repeatPending = false;
   if (again.outcome === 'accepted') {
-    // An accepted repeat only progresses through status checks.
-    for (let poll = 0; poll < ctx.maxPolls; poll += 1) {
-      await ctx.sleep(ctx.pollIntervalMs);
-      await api.verify(reference, main);
-    }
+    // An accepted repeat is measured only once its status is terminal.
+    const watch = await awaitTerminal(ctx, reference, main);
+    b.value('double_tap_repeat_terminal', watch.terminal);
+    repeatPending = watch.terminal === 'timeout';
   }
   const settled = await settledWallets(ctx, [main]);
   const extraDebit = settled.settled
@@ -251,7 +251,10 @@ export async function stepDoubleTap(
     'Double tap: the provider behaviour on a repeated reference is recorded only; production never resubmits a reference.'
   );
   const answer: Answer =
-    rowsBefore === null || rowsAfter === null || extraDebit === null
+    repeatPending ||
+    rowsBefore === null ||
+    rowsAfter === null ||
+    extraDebit === null
       ? 'unknown'
       : answerOf(rowsAfter === 1 && extraDebit === 0);
   b.finding(
@@ -259,7 +262,9 @@ export async function stepDoubleTap(
     TAP_ONCE_Q,
     answer,
     answer === 'unknown'
-      ? 'the record list or the balances did not settle, so no count is published'
+      ? repeatPending
+        ? 'the accepted repeat never reached a terminal state, so no count is published'
+        : 'the record list or the balances did not settle, so no count is published'
       : undefined
   );
 }

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AMOUNTS_KOBO } from './constants';
+import { createMemoryJournal, type JournalEntry } from './mutation-journal';
 import {
   NOT_FOUND_UNCERTAIN,
   stepTimeoutRetry,
@@ -190,5 +191,58 @@ describe('S8 timeout on submit, then status check', () => {
         mock: { tsqShape: 'rich', transferFeeKobo: 100 },
       })
     ).toBe('no');
+  });
+});
+
+describe('S8 timeout slot resumed from the journal', () => {
+  async function resumedWith(
+    mutate: (entries: JournalEntry[]) => JournalEntry[]
+  ) {
+    const journal = createMemoryJournal();
+    const first = makeHarness({ journal });
+    await setupScenario(first.ctx);
+    await stepTimeoutRetry(
+      first.ctx,
+      new ProofBuilder('p10', 'S8'),
+      first.state.mainWalletId as string,
+      first.state.goalWalletId as string
+    );
+    const sandbox = first.mock.sandbox;
+    first.dispose();
+    const h = makeHarness({
+      journal: createMemoryJournal(mutate([...journal.entries()])),
+    });
+    dispose = h.dispose;
+    h.mock.sandbox.adopt(sandbox);
+    await setupScenario(h.ctx);
+    const b = new ProofBuilder('p10', 'S8');
+    const before = posts(h).length;
+    await stepTimeoutRetry(
+      h.ctx,
+      b,
+      h.state.mainWalletId as string,
+      h.state.goalWalletId as string
+    );
+    expect(posts(h)).toHaveLength(before);
+    return b.build(h.ctx);
+  }
+  const slotOutcome = (e: JournalEntry) =>
+    e.phase === 'outcome' && e.slot.includes('timeout_submit');
+
+  it('keeps yes when the journaled prior outcome is indeterminate', async () => {
+    const r = await resumedWith((e) => e);
+    expect(answer(r, TIMEOUT_INDETERMINATE)).toBe('yes');
+  });
+
+  it('answers unknown, not no, when the prior outcome was accepted', async () => {
+    const r = await resumedWith((e) =>
+      e.map((x) => (slotOutcome(x) ? { ...x, outcome: 'accepted' } : x))
+    );
+    expect(answer(r, TIMEOUT_INDETERMINATE)).toBe('unknown');
+  });
+
+  it('answers unknown, not no, when the prior run crashed before an outcome', async () => {
+    const r = await resumedWith((e) => e.filter((x) => !slotOutcome(x)));
+    expect(answer(r, TIMEOUT_INDETERMINATE)).toBe('unknown');
   });
 });

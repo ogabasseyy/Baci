@@ -87,8 +87,10 @@ DO $$ BEGIN
   RAISE EXCEPTION 'Anonymous draft save executed' USING ERRCODE='P1003';
  EXCEPTION WHEN insufficient_privilege THEN NULL; WHEN query_canceled OR assert_failure OR OTHERS THEN RAISE EXCEPTION 'anonymous draft save unexpected SQLSTATE %', SQLSTATE USING ERRCODE=SQLSTATE; END;
 END $$;
+\echo OXYGEN_ANON_DRAFT_POST_DO
 \set oxygen_anon_draft_state :SQLSTATE
 \if :ERROR
+ \echo OXYGEN_ANON_DRAFT_SQLSTATE :oxygen_anon_draft_state
  ROLLBACK;
  \set ON_ERROR_STOP on
  SELECT pg_catalog.set_config('test.oxygen_anon_draft_state', :'oxygen_anon_draft_state', false);

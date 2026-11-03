@@ -47,7 +47,8 @@ function sanitizedCommandName(command: string): string {
 function commandFailure(
   command: string,
   failure: FailureClass,
-  stderr: readonly Buffer[] = []
+  stderr: readonly Buffer[] = [],
+  stdout: readonly Buffer[] = []
 ): Error {
   const diagnostic =
     failure !== 'non-zero-exit'
@@ -56,7 +57,7 @@ function commandFailure(
         ? supabaseReplayFailureDiagnostic(
             Buffer.concat(stderr).toString('utf8')
           )
-        : boundedPsqlDiagnostic(sanitizedCommandName(command), stderr);
+        : boundedPsqlDiagnostic(sanitizedCommandName(command), stderr, stdout);
   return new Error(
     `${sanitizedCommandName(command)} failed: ${failure}${diagnostic}`
   );
@@ -157,7 +158,7 @@ function createReplayCommand(
             return;
           }
           if (code !== 0 || stdinFailed) {
-            reject(commandFailure(command, 'non-zero-exit', stderr));
+            reject(commandFailure(command, 'non-zero-exit', stderr, stdout));
             return;
           }
           resolve({

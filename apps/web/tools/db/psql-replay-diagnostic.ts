@@ -2,7 +2,8 @@ import { supabaseCommandDiagnostic } from './supabase-command-diagnostic';
 
 export function boundedPsqlDiagnostic(
   commandName: string,
-  stderr: readonly Buffer[]
+  stderr: readonly Buffer[],
+  stdout: readonly Buffer[] = []
 ): string {
   if (commandName === 'supabase') {
     return supabaseCommandDiagnostic(Buffer.concat(stderr).toString('utf8'));
@@ -27,6 +28,12 @@ export function boundedPsqlDiagnostic(
       errorLine
     )?.[1];
   if (wrappedState) return ` (line=${line},sqlstate=${wrappedState})`;
+  const stdoutText = Buffer.concat(stdout).toString('utf8');
+  const capturedState = /^OXYGEN_ANON_DRAFT_SQLSTATE ([0-9A-Z]{5})\r?$/m.exec(
+    stdoutText
+  )?.[1];
+  if (capturedState && capturedState !== '00000')
+    return ` (line=${line},sqlstate=${capturedState})`;
   // Test-only psql recovery emits this exact sentinel after capturing SQLSTATE
   // from the preceding failed statement. Only its five-character code escapes.
   const recoveredState = new RegExp(
@@ -61,5 +68,6 @@ export function boundedPsqlDiagnostic(
   ]
     .map((flag) => (flag ? '1' : '0'))
     .join('');
-  return ` (line=${line},shape=${shape})`;
+  const checkpoint = /^OXYGEN_ANON_DRAFT_POST_DO\r?$/m.test(stdoutText);
+  return ` (line=${line},shape=${shape}${checkpoint ? ',checkpoint=1' : ''})`;
 }

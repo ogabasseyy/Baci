@@ -107,6 +107,19 @@ export function useStartSavingsSubmit(input: UseStartSavingsSubmitInput) {
         isPrimary,
       });
       if (!mountedRef.current) return;
+      if (stored.unknown) {
+        // A settled transfer may hide behind a transient error; resubmitting
+        // could debit twice through the legacy fallback. Keep the id.
+        const message =
+          'Could not confirm your earlier transfer. Check again in a moment before trying another payment.';
+        input.setFormError(message);
+        showAppAlert({
+          title: 'Status unavailable',
+          message,
+          variant: 'error',
+        });
+        return;
+      }
       const idempotencyKey = stored.operationId ?? Crypto.randomUUID();
       if (!stored.operationId) {
         input.setInitialContributionIdempotencyKey(idempotencyKey);

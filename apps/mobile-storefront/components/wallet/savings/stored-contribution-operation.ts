@@ -13,6 +13,8 @@ export type StoredOperationState = {
   operationId: string | null;
   /** PiggyVest already confirmed it: complete without submitting again. */
   confirmed: boolean;
+  /** The status lookup failed ambiguously: do not submit anything yet. */
+  unknown?: boolean;
 };
 
 /**
@@ -20,7 +22,9 @@ export type StoredOperationState = {
  * authoritative cancellation releases it (resubmitting a cancelled id answers
  * 'conflict' forever). Absence from primary storage does NOT: the legacy
  * fallback rail may hold the debit under the same id and dedupes by it.
- * Ambiguous failures keep the id so a retry cannot double-spend.
+ * Ambiguous failures block submission (unknown) and keep the id: a settled
+ * transfer may be hiding behind a transient error, and resubmitting it could
+ * fall back to the legacy rail and debit twice.
  */
 export async function resolveStoredOperation(input: {
   merchantId?: string;
@@ -38,7 +42,8 @@ export async function resolveStoredOperation(input: {
       return { operationId: null, confirmed: false };
     }
     return { ...keep, confirmed: result.status === 'confirmed' };
-  } catch {
-    return keep;
+  } catch (error) {
+    if (getErrorCode(error) === 'CONTRIBUTION_NOT_FOUND') return keep;
+    return { ...keep, unknown: true };
   }
 }

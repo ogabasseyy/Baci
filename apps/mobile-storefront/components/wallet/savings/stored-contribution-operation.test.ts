@@ -53,9 +53,13 @@ describe('resolveStoredOperation', () => {
     expect(await run('op')).toEqual({ operationId: 'op', confirmed: false });
   });
 
-  it('keeps the id when the lookup is ambiguous', async () => {
+  it('flags an ambiguous lookup failure as unknown and keeps the id', async () => {
     mockCheckStatus.mockRejectedValue(new Error('network'));
-    expect(await run('op')).toEqual({ operationId: 'op', confirmed: false });
+    expect(await run('op')).toEqual({
+      operationId: 'op',
+      confirmed: false,
+      unknown: true,
+    });
   });
 });
 

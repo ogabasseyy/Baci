@@ -110,11 +110,15 @@ describe('submitBankTransferContribution stored operation recovery', () => {
     );
   });
 
-  it('keeps the stored operation when the status check is ambiguous', async () => {
+  it('blocks resubmission when the status check is ambiguous', async () => {
     mockCheckStatus.mockRejectedValue(new Error('network'));
-    await submitWith();
-    expect(mockAddPrimaryContribution).toHaveBeenCalledWith(
-      expect.objectContaining({ idempotencyKey: 'stored-op' })
+    const input = await submitWith();
+    expect(mockAddPrimaryContribution).not.toHaveBeenCalled();
+    expect(mockAddSavingsContribution).not.toHaveBeenCalled();
+    expect(input.setShowSuccessModal).not.toHaveBeenCalled();
+    expect(input.setInitialContributionIdempotencyKey).not.toHaveBeenCalled();
+    expect(input.setFormError).toHaveBeenCalledWith(
+      expect.stringContaining('status')
     );
   });
 

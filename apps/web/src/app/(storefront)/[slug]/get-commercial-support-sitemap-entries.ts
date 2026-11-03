@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { getCachedCategoryPageData } from '@/lib/cached-data';
 import { normalizeProductKeySpecs } from '@/lib/product-key-specs-normalize';
-import { isRawDbProductRecord, type RawDbProduct } from '@/lib/raw-db-product';
+import type { RawDbProduct } from '@/lib/raw-db-product';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { buildCommercialSupportDiscoveryLinks } from '@/lib/storefront-compare/build-compare-discovery-links';
 import { isStorefrontSitemapPublished } from '@/lib/storefront-seo/is-storefront-sitemap-published';
@@ -22,8 +22,52 @@ function isCategoryWithSlug(category: unknown): category is { slug: string } {
   );
 }
 
+function parseSitemapProductPrice(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value !== 'string') return null;
+  const cleaned = value.replace(/,/g, '').trim();
+  if (!cleaned) return null;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+interface SitemapProductRecord {
+  id: string;
+  name: string;
+  slug?: string;
+  brand?: string | null;
+  price: number | string;
+  stock?: number | string | null;
+  stock_quantity?: number | string | null;
+  manage_stock?: boolean | null;
+  has_condition_offers?: boolean;
+  categories?: RawDbProduct['categories'];
+  product_categories?: RawDbProduct['product_categories'];
+  category_slug?: string | null;
+  product_key_specs?: unknown;
+}
+
+function isSitemapProductRecord(
+  product: unknown
+): product is SitemapProductRecord {
+  if (!product || typeof product !== 'object') {
+    return false;
+  }
+  const candidate = product as Record<string, unknown>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.name === 'string' &&
+    ((typeof candidate.price === 'number' &&
+      Number.isFinite(candidate.price)) ||
+      (typeof candidate.price === 'string' &&
+        parseSitemapProductPrice(candidate.price) !== null))
+  );
+}
+
 function getRawProductCategorySlug(
-  product: RawDbProduct,
+  product: SitemapProductRecord,
   fallbackSlug: string
 ) {
   const rawDirectCategories: unknown[] = Array.isArray(product.categories)
@@ -98,12 +142,12 @@ export async function getCommercialSupportSitemapEntries(
         }
 
         const products = (categoryData.products ?? [])
-          .filter(isRawDbProductRecord)
+          .filter(isSitemapProductRecord)
           .map((product) => ({
             slug: product.slug || product.id,
             name: product.name,
-            brand: product.brand,
-            price: product.price,
+            brand: product.brand ?? null,
+            price: parseSitemapProductPrice(product.price) ?? 0,
             stock:
               typeof product.stock === 'number'
                 ? product.stock

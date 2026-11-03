@@ -76,7 +76,11 @@ function getCompareApprovalInventory(input: BuildProductSemanticModelInput) {
   const seenSlugs = new Set<string>();
 
   return [input.currentProduct, ...input.inventory]
-    .filter((product) => product.category_slug === input.categorySlug)
+    .filter(
+      (product) =>
+        (product.canonical_category_slug ?? product.category_slug) ===
+        input.categorySlug
+    )
     .filter((product) => {
       if (seenSlugs.has(product.slug)) {
         return false;

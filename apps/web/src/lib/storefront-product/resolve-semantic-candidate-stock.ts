@@ -1,4 +1,4 @@
-import { getEffectiveProductStock } from '@baci/shared';
+import { getEffectiveProductStock } from '@/lib/product-stock';
 
 export interface SemanticStockInput {
   manage_stock?: boolean | null;
@@ -8,18 +8,16 @@ export interface SemanticStockInput {
 
 /**
  * Resolves the semantic candidate `stock` value:
- * - `manage_stock === false` or `manage_stock === null`: returns `null`
- *   (unmanaged availability, consistent with the storefront for these two states).
- * - `manage_stock === true` or `manage_stock === undefined` (omitted projection):
- *   returns `getEffectiveProductStock(row)` (finite number; `0` = out of stock)
- *   so an omitted column never silently manufactures availability. This is an
- *   intentional projection-boundary difference: coerceStorefrontManageStock
- *   also treats undefined as unmanaged; this helper does not.
+ * - `manage_stock === false`: returns `null` (unmanaged availability,
+ *   aligning with the storefront PDP null-policy where only explicit FALSE
+ *   bypasses stock checks; see 20261008130001_search_price_options_null_stock_managed.sql).
+ * - `manage_stock === true`, `null`, or `undefined` (managed inventory):
+ *   returns `getEffectiveProductStock(row)` (finite number; `0` = out of stock).
  */
 export function resolveSemanticCandidateStock(
   row: SemanticStockInput
 ): number | null {
-  if (row.manage_stock === false || row.manage_stock === null) {
+  if (row.manage_stock === false) {
     return null;
   }
 

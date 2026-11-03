@@ -56,17 +56,17 @@ describe('getCachedProductSemanticInventory stock resolution', () => {
         expectedManageStock: false,
       },
       {
-        label: 'unmanaged with null',
+        label: 'managed with null',
         row: {
-          slug: 'unmanaged-null',
-          name: 'Unmanaged Null',
+          slug: 'managed-null',
+          name: 'Managed Null',
           price: 100,
           manage_stock: null,
           stock: 0,
           stock_quantity: 0,
           product_categories: [{ categories: { slug: 'phones' } }],
         },
-        expectedStock: null,
+        expectedStock: 0,
         expectedManageStock: null,
       },
       {

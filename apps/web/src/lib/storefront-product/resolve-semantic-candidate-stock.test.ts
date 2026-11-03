@@ -2,21 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { resolveSemanticCandidateStock } from './resolve-semantic-candidate-stock';
 
 describe('resolveSemanticCandidateStock', () => {
-  describe('unmanaged availability (manage_stock === false or null)', () => {
+  describe('unmanaged availability (manage_stock === false)', () => {
     it('returns null when manage_stock is false and stock is zero', () => {
       expect(
         resolveSemanticCandidateStock({
           manage_stock: false,
-          stock: 0,
-          stock_quantity: 0,
-        })
-      ).toBeNull();
-    });
-
-    it('returns null when manage_stock is null and stock is zero', () => {
-      expect(
-        resolveSemanticCandidateStock({
-          manage_stock: null,
           stock: 0,
           stock_quantity: 0,
         })
@@ -32,19 +22,9 @@ describe('resolveSemanticCandidateStock', () => {
         })
       ).toBeNull();
     });
-
-    it('returns null when manage_stock is null even with legacy positive stock', () => {
-      expect(
-        resolveSemanticCandidateStock({
-          manage_stock: null,
-          stock: 7,
-          stock_quantity: 0,
-        })
-      ).toBeNull();
-    });
   });
 
-  describe('tracked availability (manage_stock === true)', () => {
+  describe('tracked availability (manage_stock === true or null)', () => {
     it('returns 0 when manage_stock is true and stock is zero', () => {
       expect(
         resolveSemanticCandidateStock({
@@ -55,7 +35,17 @@ describe('resolveSemanticCandidateStock', () => {
       ).toBe(0);
     });
 
-    it('returns stock_quantity when positive', () => {
+    it('returns 0 when manage_stock is null and stock is zero (aligns with PDP policy)', () => {
+      expect(
+        resolveSemanticCandidateStock({
+          manage_stock: null,
+          stock: 0,
+          stock_quantity: 0,
+        })
+      ).toBe(0);
+    });
+
+    it('returns stock_quantity when manage_stock is true and positive', () => {
       expect(
         resolveSemanticCandidateStock({
           manage_stock: true,
@@ -63,6 +53,16 @@ describe('resolveSemanticCandidateStock', () => {
           stock_quantity: 15,
         })
       ).toBe(15);
+    });
+
+    it('returns stock_quantity when manage_stock is null and positive', () => {
+      expect(
+        resolveSemanticCandidateStock({
+          manage_stock: null,
+          stock: 0,
+          stock_quantity: 7,
+        })
+      ).toBe(7);
     });
 
     it('falls back to legacy positive stock when stock_quantity is zero', () => {
@@ -73,6 +73,16 @@ describe('resolveSemanticCandidateStock', () => {
           stock_quantity: 0,
         })
       ).toBe(8);
+    });
+
+    it('falls back to legacy positive stock when manage_stock is null', () => {
+      expect(
+        resolveSemanticCandidateStock({
+          manage_stock: null,
+          stock: 9,
+          stock_quantity: 0,
+        })
+      ).toBe(9);
     });
   });
 

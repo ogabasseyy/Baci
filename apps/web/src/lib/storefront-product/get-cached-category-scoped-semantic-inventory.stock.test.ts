@@ -57,10 +57,10 @@ describe('getCachedCategoryScopedSemanticInventory manage_stock resolution', () 
       expectedManageStock: false,
     },
     {
-      label: 'unmanaged with null',
+      label: 'managed with null',
       row: {
-        slug: 'unmanaged-null',
-        name: 'Unmanaged Null',
+        slug: 'managed-null',
+        name: 'Managed Null',
         price: 100,
         manage_stock: null,
         stock: 0,
@@ -69,7 +69,7 @@ describe('getCachedCategoryScopedSemanticInventory manage_stock resolution', () 
           { category_id: 'cat-laptops', categories: { slug: 'laptops' } },
         ],
       },
-      expectedStock: null,
+      expectedStock: 0,
       expectedManageStock: null,
     },
     {

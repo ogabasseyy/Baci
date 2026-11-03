@@ -75,11 +75,11 @@ describe('storefront-pdp-semantic-candidate-parser', () => {
       );
     });
 
-    it('resolves manage_stock: null with zero stock as stock: null (unmanaged)', () => {
+    it('resolves manage_stock: null with zero stock as stock: 0 (managed default)', () => {
       const candidate = toProductSemanticCandidateFromJson(
         {
-          slug: 'unmanaged-null-case',
-          name: 'Unmanaged Null Case',
+          slug: 'managed-null-case',
+          name: 'Managed Null Case',
           price: 5000,
           stock: 0,
           stock_quantity: 0,
@@ -91,8 +91,8 @@ describe('storefront-pdp-semantic-candidate-parser', () => {
 
       expect(candidate).toEqual(
         expect.objectContaining({
-          slug: 'unmanaged-null-case',
-          stock: null,
+          slug: 'managed-null-case',
+          stock: 0,
           manage_stock: null,
         })
       );

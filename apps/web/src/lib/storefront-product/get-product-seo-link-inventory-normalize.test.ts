@@ -110,16 +110,16 @@ describe('toProductSemanticCandidate', () => {
         expectedManageStock: false,
       },
       {
-        label: 'unmanaged with null and 0 stock',
+        label: 'managed with null and 0 stock',
         product: {
-          slug: 'unmanaged-null',
-          name: 'Unmanaged Null',
+          slug: 'managed-null',
+          name: 'Managed Null',
           price: 100,
           manage_stock: null,
           stock: 0,
           stock_quantity: 0,
         },
-        expectedStock: null,
+        expectedStock: 0,
         expectedManageStock: null,
       },
       {

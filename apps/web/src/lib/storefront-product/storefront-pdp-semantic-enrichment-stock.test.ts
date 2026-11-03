@@ -90,7 +90,7 @@ describe('storefront-pdp-semantic-enrichment manage_stock resolution', () => {
     });
   });
 
-  it('resolves manage_stock: null with zero stock as stock: null (unmanaged)', async () => {
+  it('resolves manage_stock: null with zero stock as stock: 0 (managed default)', async () => {
     const { client } = createClient({
       data: [
         {
@@ -127,7 +127,7 @@ describe('storefront-pdp-semantic-enrichment manage_stock resolution', () => {
         inventory: [
           expect.objectContaining({
             slug: 'null-manage-stock-phone',
-            stock: null,
+            stock: 0,
             manage_stock: null,
           }),
         ],

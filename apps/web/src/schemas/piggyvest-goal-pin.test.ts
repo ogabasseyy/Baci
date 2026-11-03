@@ -15,16 +15,21 @@ const fund = {
   operationId,
   amountKobo: 2000,
 };
-const cancel = { merchantId, pin: '123456', action: 'cancel', goalId };
+const cancel = {
+  merchantId,
+  pin: '123456',
+  action: 'cancel',
+  goalId,
+  operationId,
+};
+const complete = { merchantId, pin: '123456', action: 'complete', goalId };
 const { verifyRequest, pinState, verifyResult } = piggyvestGoalPinSchemas;
 
 describe('verifyRequest', () => {
   it('accepts a complete fund request and cancel and complete requests', () => {
     expect(verifyRequest.safeParse(fund).success).toBe(true);
     expect(verifyRequest.safeParse(cancel).success).toBe(true);
-    expect(
-      verifyRequest.safeParse({ ...cancel, action: 'complete' }).success
-    ).toBe(true);
+    expect(verifyRequest.safeParse(complete).success).toBe(true);
   });
 
   it.each([
@@ -36,6 +41,7 @@ describe('verifyRequest', () => {
   ])('rejects the PIN %j', (pin) => {
     expect(verifyRequest.safeParse({ ...fund, pin }).success).toBe(false);
     expect(verifyRequest.safeParse({ ...cancel, pin }).success).toBe(false);
+    expect(verifyRequest.safeParse({ ...complete, pin }).success).toBe(false);
   });
 
   it('accepts the PIN length limits of 4 and 6 digits', () => {
@@ -69,11 +75,22 @@ describe('verifyRequest', () => {
     expect(verifyRequest.safeParse(noAmount).success).toBe(false);
   });
 
-  it('refuses an amount or operation on cancel and complete', () => {
+  it('requires the server-issued operation id for cancel', () => {
+    const { operationId: _o, ...noOperation } = cancel;
+    expect(verifyRequest.safeParse(noOperation).success).toBe(false);
+    expect(
+      verifyRequest.safeParse({ ...cancel, operationId: 'not-a-uuid' }).success
+    ).toBe(false);
+  });
+
+  it('refuses an amount on cancel and complete, and an operation on complete', () => {
     expect(verifyRequest.safeParse({ ...cancel, amountKobo: 1 }).success).toBe(
       false
     );
-    expect(verifyRequest.safeParse({ ...cancel, operationId }).success).toBe(
+    expect(
+      verifyRequest.safeParse({ ...complete, amountKobo: 1 }).success
+    ).toBe(false);
+    expect(verifyRequest.safeParse({ ...complete, operationId }).success).toBe(
       false
     );
   });

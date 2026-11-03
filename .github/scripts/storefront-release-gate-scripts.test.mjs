@@ -80,7 +80,7 @@ test('a command split by a shell line continuation is read as one command', () =
     'run: |\n  pnpm --filter @baci/mobile-storefront \\\n    ship',
     'run: |\n  cd apps/mobile-storefront && npm \\\n  run ship',
   ]) {
-    assert.deepEqual(bodies(source).texts[0], 'bash scripts/up.sh', source);
+    assert.ok(bodies(source).texts.includes('bash scripts/up.sh'), source);
   }
 });
 

@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "reviewed_at": "2026-11-03T18:31:21+00:00",
-  "source_revision": "47e1c7cc288cd91dbe3f0e3c2e00765571233fde",
-  "evidence_digest": "50bcb1c7908c960e197a8b0f9dec55c9eadc9d9547ce40fb5a6671605bd68894",
-  "claims_digest": "287e1dc8f070d78be074050825faa51984cb6ecf9fa8328e6187502278bace85",
-  "review_scope": "Source evidence only. Re-reviewed the full-code storefront MCP candidate: authored-source build/prerender, private preview, signed runner transport and output delivery exist in source and remain explicitly uninstalled/disabled in production. Local synthetic auth/RLS, isolation and rollback proofs do not establish deployed ChatGPT access, merchant activation, publication or CWV qualification. Re-reviewed the map-cited agentic test-source inventory change: only repository/test file discovery changed; payment/provider authorization and DVA runtime behavior are unchanged. Other capability claims retain their prior limitations. GitHub review and exact-candidate CI, real host/TLS/scoped verifier qualification and separate rollout authorization remain required; benchmarks are parked.",
+  "reviewed_at": "2026-11-03T19:10:00+00:00",
+  "source_revision": "6bc50011e2b87e83b3159d38f6a35e311baa602b",
+  "evidence_digest": "8827498e6b11198dc3f4cb3ecdc9faef05967fb2bcc0eb8b360aa52d7b801950",
+  "claims_digest": "d0b64fc89c2216506751749f7b96f60b9168c8b5eb217e726163aabeb106e4e9",
+  "review_scope": "Source evidence only. Re-reviewed the full-code storefront MCP candidate: authored-source build/prerender, private preview, signed runner transport and output delivery exist in source and remain explicitly uninstalled/disabled in production. Local synthetic auth/RLS, isolation and rollback proofs do not establish deployed ChatGPT access, merchant activation, publication or CWV qualification. Re-reviewed the map-cited agentic test-source inventory change: only repository/test file discovery changed; payment/provider authorization and DVA runtime behavior are unchanged. Other capability claims retain their prior limitations. GitHub review and exact-candidate CI, real host/TLS/scoped verifier qualification and separate rollout authorization remain required; benchmarks are parked. Re-reviewed the publication performance/scope, native PDP ownership, cart observer retention and semantic/navigation corrections after integrating main 5dd047a7c6. The feature remains uninstalled/disabled; no production availability or CWV qualification is promoted.",
   "capabilities": [
     {
       "id": "payments",

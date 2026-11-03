@@ -44,6 +44,12 @@ describe('PRIMARY_WALLET_STATEMENTS', () => {
     );
   });
 
+  it('pins the rollout cohort membership statement', () => {
+    expect(PRIMARY_WALLET_STATEMENTS.readRolloutCohort).toBe(
+      'SELECT piggyvest_primary.read_rollout_cohort_membership($1::jsonb) AS result'
+    );
+  });
+
   it('keeps every statement fully parameterized', () => {
     for (const statement of Object.values(PRIMARY_WALLET_STATEMENTS)) {
       expect(statement).toMatch(

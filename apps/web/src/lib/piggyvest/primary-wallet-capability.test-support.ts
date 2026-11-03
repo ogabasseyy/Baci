@@ -1,4 +1,4 @@
-import type { PiggyvestPrimaryNotReadyCode } from '@/schemas/piggyvest-primary-wallet-capability';
+import type { PiggyvestPrimaryScopedRefusalCode } from '@/schemas/piggyvest-primary-wallet-capability';
 
 /** Both floors set: iOS 120, Android 700. */
 export const floors = {
@@ -15,7 +15,7 @@ export function client(platform?: string, build?: string): Headers {
 
 export const refused = (
   reason: string,
-  code: PiggyvestPrimaryNotReadyCode = 'PIGGYVEST_NOT_READY'
+  code: PiggyvestPrimaryScopedRefusalCode = 'PRIMARY_CARD_NOT_READY'
 ) => ({
   enabled: false,
   status: 'not_ready',

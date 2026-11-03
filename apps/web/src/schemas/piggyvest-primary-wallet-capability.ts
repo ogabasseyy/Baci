@@ -41,6 +41,25 @@ export type PiggyvestPrimaryNotReadyCode = z.infer<
   typeof piggyvestPrimaryNotReadyCodeSchema
 >;
 
+/**
+ * Codes a per-customer or per-build refusal may use. The base
+ * PIGGYVEST_NOT_READY is excluded on purpose: released storefront builds
+ * cache it as a merchant-wide negative (60s), so one customer's cohort or
+ * build refusal would reroute every other customer on the device to legacy.
+ * The feature codes fall back once per call without caching.
+ */
+export const PRIMARY_SCOPED_REFUSAL_CODES = [
+  'PRIMARY_CARD_NOT_READY',
+  'SAVINGS_NOT_READY',
+] as const;
+
+export const piggyvestPrimaryScopedRefusalCodeSchema = z.enum(
+  PRIMARY_SCOPED_REFUSAL_CODES
+);
+export type PiggyvestPrimaryScopedRefusalCode = z.infer<
+  typeof piggyvestPrimaryScopedRefusalCodeSchema
+>;
+
 export const piggyvestClientPlatformSchema = z.enum(['ios', 'android']);
 export type PiggyvestClientPlatform = z.infer<
   typeof piggyvestClientPlatformSchema

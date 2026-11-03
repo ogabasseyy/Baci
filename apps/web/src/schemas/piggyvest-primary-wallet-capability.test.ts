@@ -6,11 +6,13 @@ import {
   PIGGYVEST_CLIENT_PLATFORM_HEADER,
   PIGGYVEST_PRIMARY_CLIENT_BUILD_FLOOR_VARIABLES,
   PRIMARY_NOT_READY_CODES,
+  PRIMARY_SCOPED_REFUSAL_CODES,
   piggyvestClientBuildFloorSchema,
   piggyvestClientBuildSchema,
   piggyvestClientPlatformSchema,
   piggyvestPrimaryExistingOnboardingSchema,
   piggyvestPrimaryRolloutCohortRowsSchema,
+  piggyvestPrimaryScopedRefusalCodeSchema,
 } from './piggyvest-primary-wallet-capability';
 
 // The storefront app's own list of codes it treats as "use the legacy flow".
@@ -59,6 +61,18 @@ describe('PiggyVest primary client capability contract', () => {
     const mobile = mobileNotReadyCodes();
     expect(mobile.length).toBeGreaterThan(0);
     for (const code of PRIMARY_NOT_READY_CODES) expect(mobile).toContain(code);
+  });
+
+  it('never refuses a customer or build with the merchant-wide cacheable base code', () => {
+    // Mobile caches PIGGYVEST_NOT_READY merchant-wide for 60s, so a
+    // per-customer or per-build refusal must use a feature-scoped code.
+    expect(PRIMARY_SCOPED_REFUSAL_CODES).not.toContain('PIGGYVEST_NOT_READY');
+    for (const code of PRIMARY_SCOPED_REFUSAL_CODES)
+      expect(PRIMARY_NOT_READY_CODES).toContain(code);
+    expect(
+      piggyvestPrimaryScopedRefusalCodeSchema.safeParse('PIGGYVEST_NOT_READY')
+        .success
+    ).toBe(false);
   });
 
   // A formatting-only rewrite of the mobile list must not break this check.

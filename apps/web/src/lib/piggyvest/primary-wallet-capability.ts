@@ -5,11 +5,12 @@ import {
   PIGGYVEST_PRIMARY_CLIENT_BUILD_FLOOR_VARIABLES,
   type PiggyvestClientPlatform,
   type PiggyvestPrimaryExistingOnboarding,
-  type PiggyvestPrimaryNotReadyCode,
+  type PiggyvestPrimaryScopedRefusalCode,
   piggyvestClientBuildFloorSchema,
   piggyvestClientBuildSchema,
   piggyvestClientPlatformSchema,
   piggyvestPrimaryExistingOnboardingSchema,
+  piggyvestPrimaryScopedRefusalCodeSchema,
 } from '@/schemas/piggyvest-primary-wallet-capability';
 import {
   type PrimaryReadinessId,
@@ -36,7 +37,13 @@ export type PrimaryClientBuildFloors = Record<PiggyvestClientPlatform, number>;
  */
 export type PrimaryClientCapabilityVerdict =
   | { enabled: true }
-  | Exclude<PrimaryWalletCapabilityVerdict, { enabled: true }>;
+  | {
+      enabled: false;
+      status: 'not_ready';
+      code: PiggyvestPrimaryScopedRefusalCode;
+      reason: 'build_floor_unset' | 'client_build';
+    }
+  | PrimaryCapabilityUnavailable;
 
 /**
  * An onboarding admission carries its basis: `resume` is a customer with an
@@ -49,17 +56,23 @@ export type PrimaryWalletCapabilityVerdict =
   | {
       enabled: false;
       status: 'not_ready';
-      code: PiggyvestPrimaryNotReadyCode;
+      code: PiggyvestPrimaryScopedRefusalCode;
       reason: 'build_floor_unset' | 'client_build' | 'rollout_cohort';
     }
   | {
       enabled: false;
       status: 'not_ready';
-      code: PiggyvestPrimaryNotReadyCode;
+      code: PiggyvestPrimaryScopedRefusalCode;
       reason: 'readiness';
       missing: PrimaryReadinessId;
     }
-  | { enabled: false; status: 'unavailable'; code: 'PIGGYVEST_UNAVAILABLE' };
+  | PrimaryCapabilityUnavailable;
+
+type PrimaryCapabilityUnavailable = {
+  enabled: false;
+  status: 'unavailable';
+  code: 'PIGGYVEST_UNAVAILABLE';
+};
 
 const UNAVAILABLE = {
   enabled: false,
@@ -110,7 +123,7 @@ export function readPrimaryClientBuildFloors(
  */
 export function resolvePrimaryClientCapability(input: {
   headers: HeaderReader;
-  refusalCode: PiggyvestPrimaryNotReadyCode;
+  refusalCode: PiggyvestPrimaryScopedRefusalCode;
   env?: NodeJS.ProcessEnv;
 }): PrimaryClientCapabilityVerdict {
   const refuse = (reason: 'build_floor_unset' | 'client_build') =>
@@ -120,6 +133,13 @@ export function resolvePrimaryClientCapability(input: {
       code: input.refusalCode,
       reason,
     }) as const;
+  // Fail closed and retryable if a caller (e.g. through a cast) passes the
+  // merchant-wide cacheable base code: never answer a per-build refusal
+  // with it.
+  const code = piggyvestPrimaryScopedRefusalCodeSchema.safeParse(
+    input.refusalCode
+  );
+  if (!code.success) return UNAVAILABLE;
   const floors = readPrimaryClientBuildFloors(input.env);
   if (!floors) return refuse('build_floor_unset');
   const client = readPrimaryClientBuild(input.headers);
@@ -149,7 +169,7 @@ export function resolvePrimaryClientCapability(input: {
  */
 export async function resolvePrimaryOnboardingCapability(input: {
   headers: HeaderReader;
-  refusalCode: PiggyvestPrimaryNotReadyCode;
+  refusalCode: PiggyvestPrimaryScopedRefusalCode;
   readExistingOnboarding: () => Promise<PiggyvestPrimaryExistingOnboarding>;
   readCohortMembership: () => Promise<boolean>;
   registry?: PrimaryReadinessRegistry;

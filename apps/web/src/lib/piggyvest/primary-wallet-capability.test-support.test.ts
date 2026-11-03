@@ -25,7 +25,7 @@ describe('primary wallet capability test support', () => {
     expect(refused('client_build')).toEqual({
       enabled: false,
       status: 'not_ready',
-      code: 'PIGGYVEST_NOT_READY',
+      code: 'PRIMARY_CARD_NOT_READY',
       reason: 'client_build',
     });
   });

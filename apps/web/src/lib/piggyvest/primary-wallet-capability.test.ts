@@ -3,6 +3,7 @@ import {
   readPrimaryClientBuild,
   readPrimaryClientBuildFloors,
   resolvePrimaryClientCapability,
+  resolvePrimaryOnboardingCapability,
 } from './primary-wallet-capability';
 import {
   client,
@@ -108,5 +109,32 @@ describe('resolvePrimaryClientCapability', () => {
       expect(resolve(headers, env as NodeJS.ProcessEnv)).toEqual(
         refused('build_floor_unset', 'SAVINGS_NOT_READY')
       );
+  });
+});
+
+describe('refusal code scope', () => {
+  const unscoped = 'PIGGYVEST_NOT_READY' as unknown as 'SAVINGS_NOT_READY';
+
+  it('answers unavailable, never the cacheable base code, when the caller passes it', async () => {
+    expect(
+      resolvePrimaryClientCapability({
+        headers: client('ios', '1'),
+        env: floors,
+        refusalCode: unscoped,
+      })
+    ).toEqual({
+      enabled: false,
+      status: 'unavailable',
+      code: 'PIGGYVEST_UNAVAILABLE',
+    });
+    await expect(
+      resolvePrimaryOnboardingCapability({
+        headers: client('ios', '1'),
+        env: floors,
+        refusalCode: unscoped,
+        readExistingOnboarding: async () => 'none',
+        readCohortMembership: async () => false,
+      })
+    ).resolves.toMatchObject({ status: 'unavailable' });
   });
 });

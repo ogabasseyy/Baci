@@ -115,7 +115,7 @@ build-aware capability gate; no route calls it yet. When wired, it reads:
   (P9-mobile-build-header-pilot-removal); a later change may instead have
   the client send a contract number compiled into the bundle, so the gate
   keys on the JavaScript rather than the native build.
-- `piggyvest_primary.rollout_cohort` (migration 20261102214100), keyed by
+- `piggyvest_primary.rollout_cohort` (migration 20261103012500), keyed by
   merchant and customer. It ships empty and only a privileged operator adds
   rows. A customer with no primary onboarding may start one only while
   listed and while every readiness reader in
@@ -128,6 +128,16 @@ build-aware capability gate; no route calls it yet. When wired, it reads:
   Include
   `read_rollout_cohort_membership(jsonb)` in the restricted provisioner's
   verified grants; it returns only a boolean for the scoped customer.
+- Claim-time binding (route wiring PR, P4-capability-gate-routes). A `fresh`
+  verdict is a point-in-time read, not a token. The wiring must re-run
+  `resolvePrimaryOnboardingCapability` immediately before dispatching the
+  claim, and a follow-up migration must make `claim_onboarding(jsonb,text)`
+  re-check `rollout_cohort` membership inside its own transaction, so a
+  customer removed from the cohort between the gate and the claim cannot
+  create a backed wallet. Until both land no route calls the gate.
+- Refusal codes. Gate refusals are per customer or per build, so they use
+  only `PRIMARY_CARD_NOT_READY` or `SAVINGS_NOT_READY`, never the base
+  `PIGGYVEST_NOT_READY` that released storefront builds cache merchant-wide.
 
 ## Restricted database preparation
 

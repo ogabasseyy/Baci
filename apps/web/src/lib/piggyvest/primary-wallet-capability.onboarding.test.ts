@@ -40,7 +40,7 @@ function onboarding(overrides: OnboardingOverrides) {
   const verdict = resolvePrimaryOnboardingCapability({
     headers: overrides.headers ?? client('ios', '120'),
     env: overrides.env ?? floors,
-    refusalCode: 'PIGGYVEST_NOT_READY',
+    refusalCode: 'PRIMARY_CARD_NOT_READY',
     readExistingOnboarding,
     readCohortMembership,
     registry: readers,
@@ -128,7 +128,7 @@ describe('resolvePrimaryOnboardingCapability', () => {
     const verdict = resolvePrimaryOnboardingCapability({
       headers: client('android', '700'),
       env: floors,
-      refusalCode: 'PIGGYVEST_NOT_READY',
+      refusalCode: 'PRIMARY_CARD_NOT_READY',
       readExistingOnboarding: async () => 'none',
       readCohortMembership: async () => true,
     });

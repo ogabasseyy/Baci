@@ -207,6 +207,7 @@ test('fails closed when the superseding comparison is incomplete', async () => {
 test('rejects every web path declared by the deploy filter', async (t) => {
   const deployment = YAML.parse(readFileSync(new URL('../filters/deploy.yml', import.meta.url), 'utf8'));
   assert.deepEqual(DEPLOY_PATTERNS, [...deployment.web, ...deployment.migrations]);
+  assert.ok('length' in DEPLOY_PATTERNS && 0 in DEPLOY_PATTERNS && DEPLOY_PATTERNS.filter(Boolean).length === DEPLOY_PATTERNS.length);
   for (const pattern of deployment.web) {
     const candidate = pattern.endsWith('/**') ? `${pattern.slice(0, -3)}/nested/file.ts` : pattern.replaceAll('*', 'example');
     await t.test(pattern, async () => {

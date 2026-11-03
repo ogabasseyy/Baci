@@ -39,6 +39,7 @@ export function getDeployPatterns() {
 }
 export const DEPLOY_PATTERNS = new Proxy([], {
   get: (_, prop) => Reflect.get(getDeployPatterns(), prop),
+  has: (_, prop) => Reflect.has(getDeployPatterns(), prop),
 });
 
 function isWebDeployPath(path) {
@@ -47,7 +48,8 @@ function isWebDeployPath(path) {
     if (pat.endsWith('/**')) return normPath.startsWith(pat.slice(0, -2));
     if (pat.includes('*')) {
       const [p, s] = pat.split('*');
-      return normPath.startsWith(p) && normPath.endsWith(s) && !normPath.slice(p.length, -s.length || undefined).includes('/');
+      return normPath.length >= p.length + s.length && normPath.startsWith(p) && normPath.endsWith(s) &&
+        !normPath.slice(p.length, normPath.length - s.length).includes('/');
     }
     return normPath === pat;
   });

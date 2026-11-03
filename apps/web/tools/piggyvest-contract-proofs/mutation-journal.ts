@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import {
   closeSync,
   existsSync,
@@ -17,8 +16,9 @@ import { HarnessRefusal } from './safety-guards';
  * Local, append-only journal of mutation intents and outcomes.
  *
  * The intent is durably written BEFORE a request can be sent. Entries hold
- * no provider ids, balances or secrets: only the harness's own slot name,
- * the generated reference, the opaque QA key and the amount.
+ * no raw provider ids, balances or secrets: only the harness's own slot name,
+ * the generated reference, the opaque QA key, the amount and a short wallet
+ * digest (a consistency check, not a secret; see mutation-journal-references.ts).
  */
 
 export const JOURNAL_OUTCOMES = [
@@ -40,6 +40,11 @@ const entrySchema = z.strictObject({
   reference: z.string().regex(/^[A-Za-z0-9_-]{8,200}$/),
   qaKey: z.string().min(1).max(64),
   amountKobo: z.int().nonnegative().nullable(),
+  /** Digest of the wallet ids, in the order sent, the intent moves money between. */
+  walletsDigest: z
+    .string()
+    .regex(/^[0-9a-f]{16}$/)
+    .optional(),
   outcome: z.enum(JOURNAL_OUTCOMES).optional(),
   httpStatus: z.int().nullable().optional(),
 });
@@ -219,9 +224,12 @@ export function slotState(
       entry.qaKey === qaKey
   );
   for (const intent of [...intents].reverse()) {
+    // Matched on the slot too: a deliberate re-send shares its reference.
     const outcome = all.find(
       (entry) =>
-        entry.phase === 'outcome' && entry.reference === intent.reference
+        entry.phase === 'outcome' &&
+        entry.reference === intent.reference &&
+        entry.slot === intent.slot
     );
     if (!outcome?.outcome) {
       return {
@@ -238,24 +246,4 @@ export function slotState(
     };
   }
   return { kind: 'fresh' };
-}
-
-export function referenceInUse(journal: Journal, reference: string): boolean {
-  return journal.entries().some((entry) => entry.reference === reference);
-}
-
-export function newReference(
-  journal: Journal,
-  op: string,
-  runId: string,
-  random: () => string = () => randomBytes(4).toString('hex')
-): string {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const reference = `pvbproof-${runId}-${op}-${random()}`;
-    if (!referenceInUse(journal, reference)) return reference;
-  }
-  throw new HarnessRefusal(
-    'REFERENCE_REUSE',
-    'could not mint a unique reference'
-  );
 }

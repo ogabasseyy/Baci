@@ -138,3 +138,66 @@ describe('runbook late-credit guard', () => {
     expect(runbook).toMatch(/do NOT credit PiggyVest a second\s+time/);
   });
 });
+
+describe('runbook review roles and working copy', () => {
+  const workingCopy = '~/piggyvest-legacy/02-zero-out.filled.sql';
+
+  it('has no second person; the coordinator re-checks against the owner record', () => {
+    expect(runbook).not.toMatch(/second person/i);
+    expect(runbook).toMatch(
+      /coordinator re-checks every row against the owner's recorded credits/
+    );
+  });
+
+  it('uses one filled working copy outside the repo for dry run and commit', () => {
+    const dry = runbook.slice(
+      runbook.indexOf('### Dry run on the real schema'),
+      runbook.indexOf('## 2. Credit')
+    );
+    const step4 = runbook.slice(
+      runbook.indexOf('## 4. Dry run'),
+      runbook.indexOf('## 5. Commit')
+    );
+    const step5 = runbook.slice(
+      runbook.indexOf('## 5. Commit'),
+      runbook.indexOf('## If something')
+    );
+    for (const part of [dry, step4, step5]) {
+      expect(part).toContain(workingCopy);
+    }
+    expect(step5).not.toContain(
+      '-f docs/piggyvest-legacy-migration/02-zero-out.sql'
+    );
+  });
+});
+
+describe('zero-out customer row lock', () => {
+  it('locks the matched customers rows FOR SHARE before the wallet updates', () => {
+    const body = code(zeroSql);
+    const share = body.search(/FOR SHARE OF c/i);
+    expect(share).toBeGreaterThan(0);
+    expect(share).toBeLessThan(body.search(/UPDATE public\.customer_wallets/i));
+  });
+});
+
+describe('ci filter for the runbook gate', () => {
+  it('re-runs the runbook tests when CI scope plumbing changes', () => {
+    const filters = readFileSync(
+      resolve(__dirname, '../../../../.github/filters/ci.yml'),
+      'utf8'
+    );
+    const key = 'piggyvest_runbook:';
+    const start = filters.indexOf(key);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const rest = filters.slice(start + key.length);
+    const next = rest.search(/^\S.*:\s*$/m);
+    const block = next === -1 ? rest : rest.slice(0, next);
+    for (const p of [
+      '.github/filters/ci.yml',
+      '.github/workflows/ci.yml',
+      '.github/scripts/resolve-ci-change-scope.sh',
+    ]) {
+      expect(block).toContain(`'${p}'`);
+    }
+  });
+});

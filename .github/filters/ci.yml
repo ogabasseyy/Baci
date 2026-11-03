@@ -360,6 +360,9 @@ web:
   - '.npmrc'
   - 'pnpm-workspace.yaml'
 piggyvest_runbook:
+  - '.github/filters/ci.yml'
+  - '.github/workflows/ci.yml'
+  - '.github/scripts/resolve-ci-change-scope.sh'
   - 'docs/piggyvest-legacy-migration/**'
   - 'docs/piggyvest-legacy-migration-runbook.md'
   - 'apps/web/tools/db/piggyvest-legacy*'

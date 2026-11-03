@@ -60,8 +60,8 @@ and PiggyVest references in the runbook record.
 
 After the list is signed and BEFORE crediting anyone in PiggyVest, run
 `02-zero-out.sql` once as is (without the commit switch it always ends with `ROLLBACK`), using
-`psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f docs/piggyvest-legacy-migration/02-zero-out.sql`,
-with the signed rows and
+`psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f ~/piggyvest-legacy/02-zero-out.filled.sql`
+(the working copy described in step 4, outside the repository), with the signed rows and
 placeholder references such as `DRY-RUN-1`, `DRY-RUN-2`. This checks the real
 production tables, constraints, triggers and balances while nothing has been
 paid yet. The CI tests use a simplified scratch schema and cannot do this. Do
@@ -81,16 +81,19 @@ Only after the list is signed, and one customer at a time:
 ## 3. Record each credit
 
 Write one line per customer next to the signed list: wallet id, amount,
-PiggyVest reference and the date. A second person checks every line against the
-PiggyVest statement. Customers with no confirmed credit are left out of step 4.
+PiggyVest reference and the date. The owner credits and records every line;
+the coordinator then checks every line against the PiggyVest statement. Customers with no confirmed credit are left out of step 4.
 
 ## 4. Dry run the SQL update
 
-1. Copy `02-zero-out.sql`. Fill in one row per credited customer between the
-   marked lines: wallet id, merchant id, customer id, exact amount and the
+1. Copy `02-zero-out.sql` to the one working copy
+   `~/piggyvest-legacy/02-zero-out.filled.sql` (outside the repository; the
+   committed file stays empty). Fill in one row per credited customer between
+   the marked lines: wallet id, merchant id, customer id, exact amount and the
    PiggyVest reference.
-2. A second person reviews the rows against the recorded credits.
-3. Run the file as is, with `psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f 02-zero-out.sql`.
+2. The coordinator re-checks every row against the owner's recorded credits
+   before the commit run, and the owner confirms. Nobody else is involved.
+3. Run the working copy as is, with `psql -v ON_ERROR_STOP=1 "$DATABASE_URL" -f ~/piggyvest-legacy/02-zero-out.filled.sql`.
    Load all rows in ONE multi-row insert, and set the declared row count to
    the number of rows you actually load (credited customers only; customers
    left out in step 3 are not counted). Each PiggyVest reference may appear
@@ -102,8 +105,9 @@ PiggyVest statement. Customers with no confirmed credit are left out of step 4.
 
 ## 5. Commit and verify
 
-1. Run the same unmodified file with the commit switch (never edit the file):
-   `psql -v ON_ERROR_STOP=1 -v zero_out_mode=commit "$DATABASE_URL" -f docs/piggyvest-legacy-migration/02-zero-out.sql`.
+1. Run the same unmodified working copy with the commit switch (never edit it,
+   and never point the command at the empty committed file):
+   `psql -v ON_ERROR_STOP=1 -v zero_out_mode=commit "$DATABASE_URL" -f ~/piggyvest-legacy/02-zero-out.filled.sql`.
    A commit run refuses placeholder references such as `DRY-RUN-1`.
 2. Run `01-balance-list.sql` again. The migrated customers must be gone.
 3. Each migrated wallet has one ledger row of source

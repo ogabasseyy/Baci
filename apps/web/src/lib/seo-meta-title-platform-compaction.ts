@@ -48,16 +48,16 @@ export function isRedundantPlatformListParenthetical(content: string): boolean {
   const normalized = content
     .toLowerCase()
     .replace(
-      /\b(xbox\s+)?series\s+[xs]\s*(?:[-/|]|\s*&\s*|\s+and\s+)\s*[xs]\b/gu,
+      /\b(xbox\s+)?series\s+[xs]\s*(?:[-/|]|\s*&\s*|\s+(?:and|or)\s+)\s*[xs]\b/gu,
       'xbox series x'
     )
     .replace(
-      /\b(xbox\s+)?one\s+[xs]\s*(?:[-/|]|\s*&\s*|\s+and\s+)\s*[xs]\b/gu,
+      /\b(xbox\s+)?one\s+[xs]\s*(?:[-/|]|\s*&\s*|\s+(?:and|or)\s+)\s*[xs]\b/gu,
       'xbox one x'
     );
   const parts = normalized
     .split(
-      /\s*(?:[,/&+;|]|\s*[-–—]\s*|\band\b)(?:\s*(?:[,/&+;|]|\s*[-–—]\s*|\band\b))*\s*/u
+      /\s*(?:[,/&+;|]|\s*[-–—]\s*|\b(?:and|or)\b)(?:\s*(?:[,/&+;|]|\s*[-–—]\s*|\b(?:and|or)\b))*\s*/u
     )
     .map((part) => part.replace(/\s+/gu, ' ').trim());
   if (parts.length < 2 || parts.some((part) => !part)) return false;
@@ -94,7 +94,7 @@ export function stripRedundantPlatformParentheticals(title: string): string {
   let strippedAtStart = false;
   let strippedAtEnd = false;
   let compacted = title.replace(
-    /(?:\s*[-–—,:;|/&]+\s*|\s+\band\b\s+|\s*)\(([^()]*)\)\s*(?=[,:;.!?]|$)|(?:\s*[-–—,:;|/&]+\s*|\s+\band\b\s+|\s*)\(([^()]*)\)\s*(?=\(([^()]*)\))|(?:\s+\band\b\s+|\s*&\s*|\s*)\(([^()]*)\)\s*/gu,
+    /(?:\s*[-–—,:;|/&]+\s*|\s+\b(?:and|or)\b\s+|\s*)\(([^()]*)\)\s*(?=[,:;.!?]|$)|(?:\s*[-–—,:;|/&]+\s*|\s+\b(?:and|or)\b\s+|\s*)\(([^()]*)\)\s*(?=\(([^()]*)\))|(?:\s+\b(?:and|or)\b\s+|\s*&\s*|\s*)\(([^()]*)\)\s*/gu,
     (
       match,
       innerBeforePunctOrEnd?: string,
@@ -133,7 +133,7 @@ export function stripRedundantPlatformParentheticals(title: string): string {
         const remaining = title.slice(offset + match.length);
         if (
           remaining.trim().length === 0 ||
-          /^(?:[\s\-–—|/&]|\band\b)+$/u.test(remaining)
+          /^(?:[\s\-–—|/&]|\b(?:and|or)\b)+$/u.test(remaining)
         ) {
           strippedAtEnd = true;
         }
@@ -154,13 +154,16 @@ export function stripRedundantPlatformParentheticals(title: string): string {
 
   if (strippedAtStart) {
     compacted = compacted.replace(
-      /^\s*(?:[,:;.!?]\s*|[-–—|/&]\s+|\band\s+)+/u,
+      /^\s*(?:[,:;.!?]\s*|[-–—|/&]\s+|\b(?:and|or)\s+)+/u,
       ''
     );
   }
 
   if (strippedAtEnd) {
-    compacted = compacted.replace(/(?:\s*[-–—,:;|/&]+|\s+\band\b)\s*$/u, '');
+    compacted = compacted.replace(
+      /(?:\s*[-–—,:;|/&]+|\s+\b(?:and|or)\b)\s*$/u,
+      ''
+    );
   }
 
   return compacted.trim();

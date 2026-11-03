@@ -1445,6 +1445,20 @@ describe('generateMetaTitle', () => {
       );
     });
 
+    it('compacts (PS5 or Xbox) when over maxLength', () => {
+      expect(
+        generateMetaTitle(
+          'Buy Monster Hunter Wilds (PS5 or Xbox) at the Best Price Guaranteed',
+          {
+            maxLength: 70,
+            suffix: 'Ogabassey',
+          }
+        )
+      ).toBe(
+        'Buy Monster Hunter Wilds at the Best Price Guaranteed | Ogabassey'
+      );
+    });
+
     it('compacts (Nintendo Switch / Nintendo Switch 2) when over maxLength', () => {
       expect(
         generateMetaTitle(
@@ -2216,10 +2230,19 @@ describe('generateMetaTitle', () => {
         stripRedundantPlatformParentheticals('(PS5, PS4) and Best Game')
       ).toBe('Best Game');
       expect(
+        stripRedundantPlatformParentheticals('(PS5 or PS4) or Best Game')
+      ).toBe('Best Game');
+      expect(
         stripRedundantPlatformParentheticals('Buy Game and (PS5, PS4)')
       ).toBe('Buy Game');
       expect(
+        stripRedundantPlatformParentheticals('Buy Game or (PS5, PS4)')
+      ).toBe('Buy Game');
+      expect(
         stripRedundantPlatformParentheticals('Buy Game and (PS5, PS4).')
+      ).toBe('Buy Game.');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game or (PS5, PS4).')
       ).toBe('Buy Game.');
     });
 

@@ -1493,7 +1493,7 @@ function validateMaxLength(value: number): number {
   return value;
 }
 
-export function normalizePlainText(value: string): string {
+function normalizePlainText(value: string): string {
   return stripHtmlTags(value).replace(/\s+/g, ' ').trim();
 }
 
@@ -1505,14 +1505,11 @@ export function normalizePlainText(value: string): string {
 const META_TITLE_SEPARATORS = ['|', '–', '—', ':'] as const;
 const META_TITLE_SPACED_HYPHEN = ' - ';
 
-export function stringsMatchCaseInsensitive(
-  left: string,
-  right: string
-): boolean {
+function stringsMatchCaseInsensitive(left: string, right: string): boolean {
   return left.localeCompare(right, undefined, { sensitivity: 'base' }) === 0;
 }
 
-export function getTrailingSeparatedSegment(
+function getTrailingSeparatedSegment(
   value: string
 ): { base: string; suffix: string } | null {
   const trimmedValue = value.trim();

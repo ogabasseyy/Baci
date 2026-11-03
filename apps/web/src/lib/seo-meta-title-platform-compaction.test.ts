@@ -54,6 +54,11 @@ describe('seo-meta-title-platform-compaction', () => {
         true
       );
       expect(isRedundantPlatformListParenthetical('Xbox, PS5')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5 or Xbox')).toBe(true);
+      expect(isRedundantPlatformListParenthetical('PS5 or PS4')).toBe(true);
+      expect(
+        isRedundantPlatformListParenthetical('Xbox Series X or S, PS5')
+      ).toBe(true);
       expect(
         isRedundantPlatformListParenthetical('Xbox, Xbox Series X, PS5')
       ).toBe(true);
@@ -75,10 +80,14 @@ describe('seo-meta-title-platform-compaction', () => {
       expect(isRedundantPlatformListParenthetical('Xbox Series X and S')).toBe(
         false
       );
+      expect(isRedundantPlatformListParenthetical('Xbox Series X or S')).toBe(
+        false
+      );
       expect(isRedundantPlatformListParenthetical('Series X & S')).toBe(false);
       expect(isRedundantPlatformListParenthetical('Series S and X')).toBe(
         false
       );
+      expect(isRedundantPlatformListParenthetical('Series X or S')).toBe(false);
       expect(isRedundantPlatformListParenthetical('Nintendo Switch OLED')).toBe(
         false
       );
@@ -137,12 +146,18 @@ describe('seo-meta-title-platform-compaction', () => {
       expect(
         stripRedundantPlatformParentheticals('(PS5, PS4), Best Deals')
       ).toBe('Best Deals');
+      expect(
+        stripRedundantPlatformParentheticals('(PS5 or PS4) or Best Deals')
+      ).toBe('Best Deals');
     });
 
     it('strips platform lists at end and cleans trailing separators', () => {
       expect(stripRedundantPlatformParentheticals('Buy Game (PS5, PS4)')).toBe(
         'Buy Game'
       );
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5 or Xbox)')
+      ).toBe('Buy Game');
       expect(
         stripRedundantPlatformParentheticals('Buy Game - (PS5, PS4)')
       ).toBe('Buy Game');
@@ -151,6 +166,9 @@ describe('seo-meta-title-platform-compaction', () => {
       ).toBe('Buy Game');
       expect(
         stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) and')
+      ).toBe('Buy Game');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) or')
       ).toBe('Buy Game');
       expect(
         stripRedundantPlatformParentheticals('Buy Game (PS5, PS4) |')
@@ -177,6 +195,9 @@ describe('seo-meta-title-platform-compaction', () => {
       ).toBe('Buy Game Edition');
       expect(
         stripRedundantPlatformParentheticals('Buy Game & (PS5, PS4) Edition')
+      ).toBe('Buy Game Edition');
+      expect(
+        stripRedundantPlatformParentheticals('Buy Game or (PS5, PS4) Edition')
       ).toBe('Buy Game Edition');
     });
 

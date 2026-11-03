@@ -1,6 +1,7 @@
 import {
   execFileSync,
   type SpawnSyncReturns,
+  spawn,
   spawnSync,
 } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
@@ -59,6 +60,12 @@ export const M = '00000000-0000-4000-8000-0000000000aa';
 export const C1 = '00000000-0000-4000-8000-0000000000c1';
 export const C2 = '00000000-0000-4000-8000-0000000000c2';
 
+// The scratch schema is a deliberately loose stand-in. It has none of the
+// production foreign keys, the wallet total_earned/total_redeemed columns, the
+// wallet uniqueness rules or the ledger triggers (for example the AFTER INSERT
+// refund-status sync). These tests prove the SQL logic of the two runbook
+// scripts, not production constraint or trigger behaviour; the owner's dry run
+// (ROLLBACK first) is what exercises the real schema.
 const DDL = `
   CREATE TABLE customer_wallets (id uuid PRIMARY KEY, customer_id uuid NOT NULL, merchant_id uuid NOT NULL,
     available_balance numeric(12,2) DEFAULT 0, updated_at timestamptz DEFAULT now());
@@ -71,9 +78,13 @@ const DDL = `
   CREATE TABLE customers (id uuid PRIMARY KEY, merchant_id uuid NOT NULL, full_name text, email text, phone text);
   CREATE SCHEMA IF NOT EXISTS public;`;
 
+export type AsyncResult = { status: number | null; stderr: string };
+
 export type Scratch = {
   dir: string;
   psql: (sql: string, file?: string) => SpawnSyncReturns<string>;
+  // Runs a SQL file without blocking, so two sessions can overlap.
+  psqlFileAsync: (file: string) => Promise<AsyncResult>;
   stop: () => void;
 };
 
@@ -116,6 +127,31 @@ export const startScratch = (): Scratch => {
       ],
       { encoding: 'utf8' }
     );
+  const psqlFileAsync = (file: string) =>
+    new Promise<AsyncResult>((done) => {
+      const child = spawn(
+        bin('psql'),
+        [
+          '-h',
+          dir,
+          '-U',
+          role,
+          '-d',
+          'scratch',
+          '-v',
+          'ON_ERROR_STOP=1',
+          '-At',
+          '-f',
+          file,
+        ],
+        { stdio: ['ignore', 'ignore', 'pipe'] }
+      );
+      let stderr = '';
+      child.stderr.on('data', (d: Buffer) => {
+        stderr += d.toString();
+      });
+      child.on('close', (status) => done({ status, stderr }));
+    });
   try {
     execFileSync(
       bin('initdb'),
@@ -146,5 +182,5 @@ export const startScratch = (): Scratch => {
     stop();
     throw new Error(`scratch DDL failed: ${ddl.stderr}`);
   }
-  return { dir, psql, stop };
+  return { dir, psql, psqlFileAsync, stop };
 };

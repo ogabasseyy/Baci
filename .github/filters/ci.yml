@@ -307,9 +307,6 @@ web:
   - 'supabase/tests/shipping-quote-proof-postgres-test-harness.mjs'
   - '.github/scripts/shipping-recovery-ci-contract.test.mjs'
   - 'apps/web/**'
-  - 'docs/piggyvest-legacy-migration/**'
-  - 'docs/piggyvest-legacy-migration-runbook.md'
-  - 'docs/piggyvest-change-summaries/S10.md'
   - 'packages/tiktok-business/**'
   - '.github/scripts/shared-test-fixtures-boundary.ts'
   - '.github/scripts/shared-test-fixtures-boundary.test.mjs'
@@ -362,3 +359,10 @@ web:
   - 'biome.json'
   - '.npmrc'
   - 'pnpm-workspace.yaml'
+
+# PiggyVest legacy wallet runbook SQL. Gates the scratch-PostgreSQL step only,
+# so unrelated web changes do not install PostgreSQL.
+piggyvest_runbook:
+  - 'docs/piggyvest-legacy-migration/**'
+  - 'docs/piggyvest-legacy-migration-runbook.md'
+  - 'apps/web/tools/db/piggyvest-legacy*'

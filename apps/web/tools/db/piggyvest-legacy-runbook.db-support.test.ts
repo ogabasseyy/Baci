@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -35,7 +35,7 @@ describe('piggyvest legacy runbook db support', () => {
 
   it.skipIf(!binDir)(
     'starts a scratch database with the wallet tables and stops cleanly',
-    () => {
+    async () => {
       const scratch = startScratch();
       try {
         const res = scratch.psql(
@@ -43,6 +43,11 @@ describe('piggyvest legacy runbook db support', () => {
         );
         expect(res.status).toBe(0);
         expect(res.stdout.trim()).toBe('3');
+        const file = join(scratch.dir, 'one.sql');
+        writeFileSync(file, 'SELECT 1 / 0;');
+        const failed = await scratch.psqlFileAsync(file);
+        expect(failed.status).not.toBe(0);
+        expect(failed.stderr).toMatch(/division by zero/);
       } finally {
         scratch.stop();
       }

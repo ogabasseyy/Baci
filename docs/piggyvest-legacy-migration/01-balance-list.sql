@@ -4,9 +4,20 @@
 -- Output: one row per old in-app wallet that still holds money.
 -- Save the output as the coordinator list. Do not edit it by hand.
 -- Only rows with eligible = true may go on the signed list.
+-- already_migrated = true means the wallet already has a migration ledger row:
+-- the customer was paid in PiggyVest once. Such a row is never eligible, even
+-- when a late credit lets the stored balance and the ledger agree again.
+--
+-- PRIVACY: this output holds names, emails and phone numbers. Keep it in one
+-- restricted folder, share it only with the coordinator, never copy it into
+-- email or chat, and delete every copy 30 days after step 5 is finished.
 BEGIN READ ONLY;
 
-WITH ledger AS (
+WITH positive AS (
+  -- Only wallets that can appear in the result are aggregated below.
+  SELECT id FROM public.customer_wallets WHERE available_balance > 0
+),
+ledger AS (
   SELECT
     cwt.wallet_id,
     COALESCE(SUM(
@@ -24,8 +35,10 @@ WITH ledger AS (
         ELSE 0
       END
     ), 0) AS ledger_balance,
-    count(*) FILTER (WHERE cwt.status = 'pending') AS pending_count
+    count(*) FILTER (WHERE cwt.status = 'pending') AS pending_count,
+    bool_or(cwt.source_type = 'piggyvest_legacy_migration') AS migrated
   FROM public.customer_wallet_transactions cwt
+  JOIN positive p ON p.id = cwt.wallet_id
   GROUP BY cwt.wallet_id
 )
 SELECT
@@ -41,10 +54,12 @@ SELECT
   COALESCE(l.pending_count, 0) AS pending_count,
   (cw.available_balance IS NOT DISTINCT FROM COALESCE(l.ledger_balance, 0)
     AND COALESCE(l.pending_count, 0) = 0
+    AND NOT COALESCE(l.migrated, false)
     AND cw.available_balance <= 99999999.99) AS eligible,
   -- 02-zero-out.sql rejects amounts above 99,999,999.99. Such a wallet is
   -- never eligible: raise it with the owner, do not credit it in PiggyVest.
   (cw.available_balance > 99999999.99) AS over_zero_out_limit,
+  COALESCE(l.migrated, false) AS already_migrated,
   cw.updated_at
 FROM public.customer_wallets cw
 LEFT JOIN public.customers c

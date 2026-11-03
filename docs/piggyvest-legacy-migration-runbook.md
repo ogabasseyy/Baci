@@ -11,6 +11,12 @@ Files:
 - `docs/piggyvest-legacy-migration/01-balance-list.sql` (read only)
 - `docs/piggyvest-legacy-migration/02-zero-out.sql` (the one update)
 
+Two runs of the update at the same time are not possible: the script takes a
+database lock first, so a second run waits for the first and then refuses a
+PiggyVest reference that was already used. The CI tests run the scripts on a
+scratch database with a simplified schema (no foreign keys or ledger triggers),
+so the ROLLBACK dry run in step 4 on the real database is the real check.
+
 ## Before you start
 
 - The change that stops new PiggyVest money landing on the old wallet row is
@@ -28,12 +34,24 @@ Files:
 
 1. Run `01-balance-list.sql`. It only reads.
 2. Give the output to the coordinator. Only rows with `eligible` true may go
-   on the list. A row with `matches_ledger` false, a non-zero `pending_count`
-   or `over_zero_out_limit` true is excluded (the update cannot move more than
+   on the list. A row with `matches_ledger` false, a non-zero `pending_count`,
+   `already_migrated` true or `over_zero_out_limit` true is excluded (the update cannot move more than
    99,999,999.99; take such a balance to the owner): do not credit it and do not list it. Run the list again later,
    once its pending rows have settled and the balance matches the ledger.
+   `already_migrated` true means the customer was moved and paid in
+   PiggyVest before; a later credit made the wallet look normal again. Never
+   credit PiggyVest for it. Stop and ask the owner: the extra amount needs a
+   new reviewed change.
 3. The coordinator confirms each customer, wallet and amount, and the owner
    signs the list. Freeze it: a changed balance means a new list.
+
+### Handling the list (customer personal data)
+
+The output holds names, emails and phone numbers. Keep it in one restricted
+folder that only the owner and the coordinator can open. Do not paste it into
+email or chat, and make no extra copies. Delete every copy, including the
+signed list, 30 days after step 5 is finished; keep only wallet ids, amounts
+and PiggyVest references in the runbook record.
 
 ## 2. Credit each customer by hand in PiggyVest
 

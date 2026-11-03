@@ -40,7 +40,7 @@ describe.skipIf(!binDir)(
           .filter((l: string) => l.includes('|'))
           .map((l: string): [string, string[]] => {
             const c = l.split('|');
-            // wallet_id|...|legacy|ledger|matches|pending|eligible|over|updated
+            // wallet_id|...|legacy|ledger|matches|pending|eligible|over|migrated|updated
             return [c[0], c.slice(6)];
           })
       );
@@ -77,6 +77,35 @@ describe.skipIf(!binDir)(
       expect(r[2]).toBe('t');
       expect(r[4]).toBe('f');
       expect(r[5]).toBe('t');
+    });
+
+    it('marks a migrated wallet with a late credit ineligible and flagged', () => {
+      seed(
+        `${wallet(W1, '30.00')} ${tx(W1, 'credit', '100', 'completed')}
+         INSERT INTO customer_wallet_transactions (wallet_id, customer_id, merchant_id, type, amount, balance_after, source_type, status)
+         VALUES ('${W1}','${C1}','${M}','debit',100,0,'piggyvest_legacy_migration','completed');
+         ${tx(W1, 'credit', '30', 'completed')}`
+      );
+      const r = list()[W1];
+      // The ledger agrees (30 = 100 - 100 + 30), yet the owner already paid.
+      expect(r.slice(0, 3)).toEqual(['30.00', '30.00', 't']);
+      expect(r[4]).toBe('f');
+      expect(r[6]).toBe('t');
+    });
+
+    it('flags an untouched wallet as not migrated', () => {
+      seed(`${wallet(W1, '50.00')} ${tx(W1, 'credit', '50', 'completed')}`);
+      const r = list()[W1];
+      expect(r[4]).toBe('t');
+      expect(r[6]).toBe('f');
+    });
+
+    it('lists only positive-balance wallets', () => {
+      seed(
+        `${wallet(W1, '0.00')} ${tx(W1, 'credit', '10', 'completed')}
+         ${wallet(W3, '10.00')} ${tx(W3, 'credit', '10', 'completed')}`
+      );
+      expect(Object.keys(list())).toEqual([W3]);
     });
   }
 );

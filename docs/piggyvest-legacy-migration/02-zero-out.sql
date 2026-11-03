@@ -14,7 +14,14 @@
 --   * a wallet that already has a migration ledger row is refused (no second run);
 --   * every wallet's stored balance must equal its ledger total (same formula
 --     as 01-balance-list.sql and public.backfill_wallet_balances());
---   * every wallet is changed, nothing else is touched.
+--   * every wallet is changed, nothing else is touched;
+--   * runs are serialised by a transaction advisory lock, taken before the
+--     reference and already-migrated checks, so two overlapping runs cannot
+--     both pass the same PiggyVest reference check. The second run waits for
+--     the first to finish (up to the 5 second lock timeout, then it fails);
+--   * assumption: balance-changing code updates the wallet row first, so the
+--     wallet locks below also cover the ledger checks. The runbook's pause
+--     covers any writer that does not.
 -- It ends with ROLLBACK. Read the printed result, then swap the last two lines
 -- (delete ROLLBACK, uncomment the final COMMIT) and run it again. Nothing is
 -- saved until then.
@@ -74,6 +81,11 @@ BEGIN
   IF v_declared IS DISTINCT FROM v_expected THEN
     RAISE EXCEPTION 'row count mismatch: % declared, % loaded', v_declared, v_expected;
   END IF;
+
+  -- One migration run at a time. Held to the end of the transaction.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('baci:piggyvest_legacy_zero_out', 0)
+  );
 
   -- Lock every listed wallet in a fixed order before reading any value.
   PERFORM 1

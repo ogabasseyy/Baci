@@ -61,6 +61,24 @@ describe('buildProductTrustBullets', () => {
     ).toEqual(['Available in Open Box condition']);
   });
 
+  it('omits price-band bullet for legacy categories when currency is non-NGN', () => {
+    expect(
+      buildProductTrustBullets(
+        makeInput({
+          categorySlug: 'smartphones',
+          categoryName: 'Smartphones',
+          merchantCurrency: 'USD',
+          currentProduct: {
+            slug: 'iphone-16e',
+            name: 'iPhone 16e',
+            price: 450,
+            condition: 'Open Box',
+          },
+        })
+      )
+    ).toEqual(['Available in Open Box condition']);
+  });
+
   it('includes price-band bullet for NGN-gated categories when currency is NGN', () => {
     expect(
       buildProductTrustBullets(

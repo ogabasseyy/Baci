@@ -81,10 +81,10 @@ describe('resolveSettlementRpcRouting', () => {
     ).toThrow(PAYSTACK_SETTLEMENT_COLLECTION_UNKNOWN);
   });
 
-  it('treats an unprovable Paystack collection as permanent so the drain stops retrying it', () => {
-    // The stored payload never changes, so retries cannot prove the
-    // collection mode; the row stays failed for manual reconciliation.
-    expect(PERMANENT_PAID_ORDER_SIDE_EFFECT_ERRORS).toContain(
+  it('keeps an unprovable Paystack collection retryable so the drain can re-verify it', () => {
+    // The drain fetches a fresh Paystack payload for a stored one that lacks
+    // the split fields, so retrying can classify the sale.
+    expect(PERMANENT_PAID_ORDER_SIDE_EFFECT_ERRORS).not.toContain(
       PAYSTACK_SETTLEMENT_COLLECTION_UNKNOWN
     );
   });

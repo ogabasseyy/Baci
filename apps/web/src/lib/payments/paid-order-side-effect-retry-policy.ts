@@ -27,9 +27,10 @@ export const PERMANENT_PAID_ORDER_SIDE_EFFECT_ERRORS = [
   'financial_totals_inconsistent',
   'gateway_verification_terminal',
   'settlement_order_cancelled',
-  // The stored Paystack payload cannot prove whether the merchant's
-  // subaccount or Baci received the money; it needs manual reconciliation.
-  'paystack_settlement_collection_unknown',
+  // paystack_settlement_collection_unknown is deliberately NOT here: the
+  // drain re-verifies a stored Paystack payload that lacks the split fields
+  // (drain-failed-paid-order-side-effect-row.ts), so a retry can classify it;
+  // the attempt cap and stranded-row recovery bound the retries.
   // Paystack split the sale to a subaccount that is not the merchant's
   // registered one; the direct-split recorder refuses it for manual review.
   'paystack_direct_settlement_subaccount_mismatch',

@@ -1,6 +1,7 @@
 export type PaystackSettlementCollection =
   | {
       mode: 'direct_split';
+      amountKobo: number;
       subaccountCode: string;
       subaccountShareKobo: number;
       integrationShareKobo: number;
@@ -92,6 +93,7 @@ export function classifyPaystackSettlementCollection(
   }
   const params = asRecord(feesSplit?.params);
   return {
+    amountKobo,
     integrationShareKobo,
     mode: 'direct_split',
     subaccountCode,

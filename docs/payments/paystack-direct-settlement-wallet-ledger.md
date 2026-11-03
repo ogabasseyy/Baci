@@ -124,8 +124,13 @@ No existing row is changed.
   for Paystack, `direct_split` → the new history recorders; `integration` →
   the existing wallet-crediting RPCs with `paystack_collection: 'integration'`;
   `unknown` → throws `paystack_settlement_collection_unknown` before any RPC
-  (never credit the wallet without proof; a permanent side-effect error, so
-  the row waits for manual review). REDVAULT, Korapay and Juicyway are
+  (never credit the wallet without proof). That error is retryable: the
+  paid-order drain re-verifies a stored Paystack payload that lacks the
+  `subaccount`/`fees_split` fields, so a retry classifies the sale from a
+  fresh payload, and the attempt cap plus stranded-row recovery bound it. A
+  direct split whose Paystack `amount` differs from the order transaction's
+  gross (for example a wallet-funding transfer bigger than the order) is also
+  `unknown`. REDVAULT, Korapay and Juicyway are
   unchanged. A split to a subaccount that is not the merchant's registered
   one fails with the permanent `paystack_direct_settlement_subaccount_mismatch`.
 - A failed chat-order settlement files a `merchant_settlement_failed`
@@ -262,11 +267,11 @@ functions called from the existing paid-order side-effect graph (see
   book wallet-funded GIG shipments (spendable ₦0) until that mechanism or the
   reconciliation lands.
 - The reconciliation data migration above.
-- An operator repair path for side effects that failed with
-  `paystack_settlement_collection_unknown` or
-  `paystack_direct_settlement_subaccount_mismatch` (both permanent, so they
-  are not retried automatically): re-verify the transaction with Paystack and
-  re-run the settlement step.
+- An operator tool for side effects that stay failed after the drain's
+  re-verified retries (`paystack_settlement_collection_unknown`) or that
+  failed with the permanent `paystack_direct_settlement_subaccount_mismatch`.
+  Today the manual reconcile script re-verifies a reference and re-runs the
+  settlement step.
 - Storefront/agentic DVA payments give Baci ₦0 platform fee (subaccount DVA
   split). Card is unaffected. Decide whether DVA should use a split code.
 - Dashboard and mobile wallet screens: show direct-split rows as "Settled to

@@ -16,6 +16,7 @@ describe('classifyPaystackSettlementCollection', () => {
     });
 
     expect(result).toEqual({
+      amountKobo: 1_006_500,
       integrationShareKobo: 5000,
       mode: 'direct_split',
       subaccountCode: 'ACCT_abc',
@@ -37,6 +38,7 @@ describe('classifyPaystackSettlementCollection', () => {
         subaccount: { subaccount_code: 'ACCT_x' },
       })
     ).toEqual({
+      amountKobo: 83_500_000,
       integrationShareKobo: 0,
       mode: 'direct_split',
       subaccountCode: 'ACCT_x',
@@ -58,6 +60,7 @@ describe('classifyPaystackSettlementCollection', () => {
         subaccount: { subaccount_code: 'ACCT_x' },
       })
     ).toEqual({
+      amountKobo: 260_000,
       integrationShareKobo: 5_000,
       mode: 'direct_split',
       subaccountCode: 'ACCT_x',
@@ -81,6 +84,7 @@ describe('classifyPaystackSettlementCollection', () => {
         subaccount: { subaccount_code: 'ACCT_x' },
       })
     ).toEqual({
+      amountKobo: 500_000,
       integrationShareKobo: 480_000,
       mode: 'direct_split',
       subaccountCode: 'ACCT_x',

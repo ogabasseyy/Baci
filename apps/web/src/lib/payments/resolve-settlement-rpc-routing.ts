@@ -10,6 +10,9 @@ export type SettlementRpcRouting = {
 };
 
 export function resolveSettlementRpcRouting(args: {
+  // The sale's gross in kobo, when the caller knows it equals the amount
+  // Paystack collected: a split for any other amount is not this sale.
+  grossAmountKobo?: number;
   gatewayResponse: unknown;
   isRedvaultDirectSettlement: boolean;
   settlementGateway: 'juicyway' | 'korapay' | 'paystack';
@@ -38,7 +41,12 @@ export function resolveSettlementRpcRouting(args: {
   // Fail closed: never credit the Baci wallet without proof of where the
   // money went.
   const collection = classifyPaystackSettlementCollection(args.gatewayResponse);
-  if (collection.mode === 'unknown') {
+  if (
+    collection.mode === 'unknown' ||
+    (collection.mode === 'direct_split' &&
+      args.grossAmountKobo !== undefined &&
+      collection.amountKobo !== args.grossAmountKobo)
+  ) {
     throw new Error(PAYSTACK_SETTLEMENT_COLLECTION_UNKNOWN);
   }
   if (collection.mode === 'integration') {

@@ -209,6 +209,7 @@ export function buildSettlementExecutor(args: {
     }
     const routing = resolveSettlementRpcRouting({
       gatewayResponse: ctx.gatewayResponse,
+      grossAmountKobo,
       isRedvaultDirectSettlement:
         validatedArgs.orderPaymentMethod?.trim().toLowerCase() ===
         'uba_redvault',

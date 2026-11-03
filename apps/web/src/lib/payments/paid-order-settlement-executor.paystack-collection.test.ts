@@ -33,12 +33,12 @@ function contextWith(gatewayResponse: Record<string, unknown>): StepContext {
 }
 
 const splitResponse = {
-  amount: 1_795_000,
+  amount: 2_000_000,
   fees_split: {
     integration: '5000',
     params: { bearer: 'account', transaction_charge: '205000' },
     paystack: 30_000,
-    subaccount: 1_760_000,
+    subaccount: 1_965_000,
   },
   subaccount: { subaccount_code: 'ACCT_merchant1' },
 };
@@ -89,7 +89,7 @@ describe('buildSettlementExecutor Paystack collection routing', () => {
           paystack_integration_share_kobo: 5000,
           paystack_reference: 'PSK_REF',
           paystack_subaccount_code: 'ACCT_merchant1',
-          paystack_subaccount_share_kobo: 1_760_000,
+          paystack_subaccount_share_kobo: 1_965_000,
           paystack_transaction_charge_kobo: 205_000,
           verified_gateway_fee: 250,
         },
@@ -107,8 +107,8 @@ describe('buildSettlementExecutor Paystack collection routing', () => {
     // Bank-transfer DVA shape: no transaction_charge, Baci's share is 0.
     await buildSettlementExecutor({ ...baseArgs, supabase })(
       contextWith({
-        amount: 1_930_000,
-        fees_split: { integration: 0, paystack: 30_000, subaccount: 1_900_000 },
+        amount: 2_000_000,
+        fees_split: { integration: 0, paystack: 30_000, subaccount: 1_970_000 },
         subaccount: { subaccount_code: 'ACCT_x' },
       })
     );
@@ -121,11 +121,32 @@ describe('buildSettlementExecutor Paystack collection routing', () => {
           paystack_integration_share_kobo: 0,
           paystack_reference: 'PSK_REF',
           paystack_subaccount_code: 'ACCT_x',
-          paystack_subaccount_share_kobo: 1_900_000,
+          paystack_subaccount_share_kobo: 1_970_000,
           verified_gateway_fee: 250,
         },
       })
     );
+  });
+
+  it('fails closed when the verified split covers a different amount than this order transaction', async () => {
+    // A wallet-funded order can be completed by a transfer bigger or smaller
+    // than the order payment; its split shares are not this sale's history.
+    const { rpc, supabase } = setup();
+
+    await expect(
+      buildSettlementExecutor({ ...baseArgs, supabase })(
+        contextWith({
+          ...splitResponse,
+          // A consistent split, but for a ₦25,000 transfer, not this ₦20,000 sale.
+          amount: 2_500_000,
+          fees_split: {
+            ...splitResponse.fees_split,
+            subaccount: 2_465_000,
+          },
+        })
+      )
+    ).rejects.toThrow('paystack_settlement_collection_unknown');
+    expect(rpc).not.toHaveBeenCalled();
   });
 
   it('does not record direct-settled history when Paystack names a subaccount but proves no merchant share', async () => {
